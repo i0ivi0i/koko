@@ -7,6 +7,12 @@
 - 本机 PostgreSQL 正在运行
 - 项目根目录存在 `.env.local`
 
+如果未安装 `just`：
+
+```bash
+cargo install just
+```
+
 ## 本地配置
 
 `.env.local` 示例：
@@ -52,6 +58,13 @@ just dev
 
 ```bash
 just migrate
+```
+
+### 运行检查
+
+```bash
+just check
+just test
 ```
 
 ## 默认地址

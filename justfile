@@ -1,3 +1,5 @@
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
 default:
     @just --list
 
@@ -11,8 +13,7 @@ migrate:
     cargo run -p xtask -- migrate
 
 test:
-    cargo test
+    cargo run -p xtask -- test
 
 check:
-    cargo check -p koko-server
-    cargo check -p koko-web --target wasm32-unknown-unknown
+    cargo run -p xtask -- check

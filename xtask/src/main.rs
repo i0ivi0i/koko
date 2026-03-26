@@ -11,6 +11,8 @@ enum Command {
     Init,
     Dev,
     Migrate,
+    Test,
+    Check,
 }
 
 struct Cli {
@@ -36,13 +38,15 @@ fn run() -> Result<(), String> {
         Command::Init => run_init(root, cli.dry_run),
         Command::Dev => run_dev(root, cli.dry_run),
         Command::Migrate => run_migrate(root, cli.dry_run),
+        Command::Test => run_test(root, cli.dry_run),
+        Command::Check => run_check(root, cli.dry_run),
     }
 }
 
 fn parse_args() -> Result<Cli, String> {
     let mut args = std::env::args().skip(1);
     let Some(command) = args.next() else {
-        return Err("缺少子命令。可用命令: init, dev, migrate".into());
+        return Err("缺少子命令。可用命令: init, dev, migrate, test, check".into());
     };
 
     let mut dry_run = false;
@@ -57,6 +61,8 @@ fn parse_args() -> Result<Cli, String> {
         "init" => Command::Init,
         "dev" => Command::Dev,
         "migrate" => Command::Migrate,
+        "test" => Command::Test,
+        "check" => Command::Check,
         other => return Err(format!("不支持的子命令: {other}")),
     };
 
@@ -182,4 +188,28 @@ fn run_migrate(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
         .env("DATABASE_URL", &env.database_url);
 
     process::run(&migrate_run, dry_run)
+}
+
+fn run_test(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
+    let env = env::load_local_env(root)?;
+    let test = process::CommandSpec::new("cargo", ["test"])
+        .current_dir(root)
+        .env("DATABASE_URL", &env.database_url);
+
+    process::run(&test, dry_run)
+}
+
+fn run_check(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
+    let env = env::load_local_env(root)?;
+    let server_check = process::CommandSpec::new("cargo", ["check", "-p", "koko-server"])
+        .current_dir(root)
+        .env("DATABASE_URL", &env.database_url);
+    let web_check = process::CommandSpec::new(
+        "cargo",
+        ["check", "-p", "koko-web", "--target", "wasm32-unknown-unknown"],
+    )
+    .current_dir(root);
+
+    process::run(&server_check, dry_run)?;
+    process::run(&web_check, dry_run)
 }
