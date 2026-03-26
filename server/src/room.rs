@@ -13,6 +13,22 @@ impl PostgresRoomRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    pub async fn find_room(&self, room_id: RoomId) -> Result<Option<Room>, sqlx::Error> {
+        let row = sqlx::query!(
+            r#"
+            SELECT r.id, rc.code
+            FROM rooms r
+            JOIN room_codes rc ON rc.room_id = r.id
+            WHERE r.id = $1
+            "#,
+            room_id.0
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| Room::new(RoomId(row.id), RoomCode::parse(&row.code).unwrap())))
+    }
 }
 
 impl RoomRepository for PostgresRoomRepository {
