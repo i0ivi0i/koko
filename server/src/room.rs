@@ -4,6 +4,8 @@ use koko_core::{
     port::RoomRepository,
 };
 use sqlx::PgPool;
+use sqlx::types::time::OffsetDateTime;
+use time::Duration;
 
 pub struct PostgresRoomRepository {
     pool: PgPool,
@@ -167,6 +169,79 @@ impl RoomRepository for PostgresRoomRepository {
             "member" => Some(Role::Member),
             _ => None,
         }))
+    }
+
+    async fn set_role(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+        role: Role,
+    ) -> Result<(), DomainError> {
+        let role = match role {
+            Role::Owner => "owner",
+            Role::Admin => "admin",
+            Role::Member => "member",
+        };
+
+        sqlx::query!(
+            "UPDATE room_members SET role = $3 WHERE room_id = $1 AND profile_id = $2",
+            room_id.0,
+            profile_id.0,
+            role
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|_| DomainError::InsufficientRoomPermission)?;
+
+        Ok(())
+    }
+
+    async fn set_muted(&self, room_id: RoomId, profile_id: ProfileId, muted: bool) -> Result<(), DomainError> {
+        let until = if muted {
+            Some(OffsetDateTime::now_utc() + Duration::hours(24))
+        } else {
+            None
+        };
+
+        sqlx::query!(
+            "UPDATE room_members SET muted_until = $3 WHERE room_id = $1 AND profile_id = $2",
+            room_id.0,
+            profile_id.0,
+            until
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|_| DomainError::InsufficientRoomPermission)?;
+
+        Ok(())
+    }
+
+    async fn is_muted(&self, room_id: RoomId, profile_id: ProfileId) -> Result<bool, DomainError> {
+        let muted_until = sqlx::query_scalar!(
+            "SELECT muted_until FROM room_members WHERE room_id = $1 AND profile_id = $2",
+            room_id.0,
+            profile_id.0
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| DomainError::InsufficientRoomPermission)?;
+
+        Ok(muted_until
+            .flatten()
+            .is_some_and(|value| value > OffsetDateTime::now_utc()))
+    }
+
+    async fn remove_member(&self, room_id: RoomId, profile_id: ProfileId) -> Result<(), DomainError> {
+        sqlx::query!(
+            "DELETE FROM room_members WHERE room_id = $1 AND profile_id = $2",
+            room_id.0,
+            profile_id.0
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|_| DomainError::InsufficientRoomPermission)?;
+
+        Ok(())
     }
 }
 

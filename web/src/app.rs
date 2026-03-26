@@ -8,6 +8,7 @@ use koko_core::contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, JoinOrCreateRoomRequest,
     JoinOrCreateRoomResponse, MessageResponse, ResolveRoomRequest, ResolveRoomResponse,
     RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SendMessageRequest,
+    PromoteAdminRequest, GovernanceActorRequest,
     ServerWsEvent,
 };
 
@@ -25,6 +26,7 @@ struct ActiveRoom {
     display_name: String,
     room_id: String,
     room_code: String,
+    role: String,
     messages: Vec<MessageResponse>,
     members: Vec<RoomMemberResponse>,
 }
@@ -75,7 +77,54 @@ pub fn App() -> Element {
                 }
                 MemberSheet {
                     open: members_open(),
+                    current_role: room.role.clone(),
+                    current_profile_id: room.profile_id.clone(),
                     members: room.members.clone(),
+                    on_promote: move |target_profile_id: String| {
+                        if let Some(room) = room_state() {
+                            let mut room_state = room_state;
+                            spawn(async move {
+                                let _ = promote_member(&room.room_id, &room.profile_id, &target_profile_id).await;
+                                if let Ok(members) = fetch_room_members(&room.room_id).await {
+                                    room_state.with_mut(|state| {
+                                        if let Some(current) = state.as_mut() {
+                                            current.members = members;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    },
+                    on_mute: move |target_profile_id: String| {
+                        if let Some(room) = room_state() {
+                            let mut room_state = room_state;
+                            spawn(async move {
+                                let _ = mute_member(&room.room_id, &room.profile_id, &target_profile_id).await;
+                                if let Ok(members) = fetch_room_members(&room.room_id).await {
+                                    room_state.with_mut(|state| {
+                                        if let Some(current) = state.as_mut() {
+                                            current.members = members;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    },
+                    on_remove: move |target_profile_id: String| {
+                        if let Some(room) = room_state() {
+                            let mut room_state = room_state;
+                            spawn(async move {
+                                let _ = remove_member(&room.room_id, &room.profile_id, &target_profile_id).await;
+                                if let Ok(members) = fetch_room_members(&room.room_id).await {
+                                    room_state.with_mut(|state| {
+                                        if let Some(current) = state.as_mut() {
+                                            current.members = members;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    },
                     on_close: move |_| members_open.set(false),
                 }
             } else {
@@ -172,9 +221,23 @@ async fn join_room(code: &str) -> Result<ActiveRoom, String> {
         display_name: session.display_name,
         room_id: joined.room_id,
         room_code: joined.code,
+        role: joined.role,
         messages: messages.items,
         members: members.items,
     })
+}
+
+async fn fetch_room_members(room_id: &str) -> Result<Vec<RoomMemberResponse>, String> {
+    let members: RoomMembersResponse =
+        Request::get(&format!("{}/rooms/{room_id}/members", api_base()))
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
+
+    Ok(members.items)
 }
 
 async fn send_message(room_id: &str, sender_id: &str, content: &str) -> Result<MessageResponse, String> {
@@ -190,6 +253,46 @@ async fn send_message(room_id: &str, sender_id: &str, content: &str) -> Result<M
         .json()
         .await
         .map_err(|error| error.to_string())
+}
+
+async fn promote_member(room_id: &str, actor_profile_id: &str, target_profile_id: &str) -> Result<(), String> {
+    Request::post(&format!("{}/rooms/{room_id}/roles/promote", api_base()))
+        .json(&PromoteAdminRequest {
+            actor_profile_id: actor_profile_id.to_string(),
+            target_profile_id: target_profile_id.to_string(),
+        })
+        .map_err(|error| error.to_string())?
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+async fn mute_member(room_id: &str, actor_profile_id: &str, target_profile_id: &str) -> Result<(), String> {
+    Request::post(&format!("{}/rooms/{room_id}/members/{target_profile_id}/mute", api_base()))
+        .json(&GovernanceActorRequest {
+            actor_profile_id: actor_profile_id.to_string(),
+        })
+        .map_err(|error| error.to_string())?
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+async fn remove_member(room_id: &str, actor_profile_id: &str, target_profile_id: &str) -> Result<(), String> {
+    Request::post(&format!("{}/rooms/{room_id}/members/{target_profile_id}/remove", api_base()))
+        .json(&GovernanceActorRequest {
+            actor_profile_id: actor_profile_id.to_string(),
+        })
+        .map_err(|error| error.to_string())?
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 async fn listen_room_events(

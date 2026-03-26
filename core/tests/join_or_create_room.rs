@@ -64,6 +64,42 @@ impl RoomRepository for FakeRoomRepository {
         let guard = self.inner.lock().await;
         Ok(guard.members.get(&(room_id, profile_id)).copied())
     }
+
+    async fn set_role(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+        role: Role,
+    ) -> Result<(), koko_core::error::DomainError> {
+        self.ensure_member(room_id, profile_id, role).await
+    }
+
+    async fn set_muted(
+        &self,
+        _room_id: RoomId,
+        _profile_id: ProfileId,
+        _muted: bool,
+    ) -> Result<(), koko_core::error::DomainError> {
+        Ok(())
+    }
+
+    async fn is_muted(
+        &self,
+        _room_id: RoomId,
+        _profile_id: ProfileId,
+    ) -> Result<bool, koko_core::error::DomainError> {
+        Ok(false)
+    }
+
+    async fn remove_member(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+    ) -> Result<(), koko_core::error::DomainError> {
+        let mut guard = self.inner.lock().await;
+        guard.members.remove(&(room_id, profile_id));
+        Ok(())
+    }
 }
 
 #[tokio::test]

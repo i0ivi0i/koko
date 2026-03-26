@@ -28,6 +28,32 @@ pub trait RoomRepository {
         room_id: RoomId,
         profile_id: ProfileId,
     ) -> impl std::future::Future<Output = Result<Option<Role>, DomainError>> + Send;
+
+    fn set_role(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+        role: Role,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send;
+
+    fn set_muted(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+        muted: bool,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send;
+
+    fn is_muted(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+    ) -> impl std::future::Future<Output = Result<bool, DomainError>> + Send;
+
+    fn remove_member(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send;
 }
 
 /// 消息仓储抽象。

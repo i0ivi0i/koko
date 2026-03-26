@@ -16,6 +16,10 @@ pub async fn send_text_message(
         return Err(DomainError::SenderIsNotRoomMember);
     }
 
+    if room_repo.is_muted(room_id, sender_id).await? {
+        return Err(DomainError::SenderIsMuted);
+    }
+
     let content = MessageContent::parse(content)?;
     message_repo
         .save_text_message(room_id, sender_id, content)

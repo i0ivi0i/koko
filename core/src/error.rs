@@ -5,4 +5,8 @@ pub enum DomainError {
     EmptyDeviceKey,
     EmptyMessageContent,
     SenderIsNotRoomMember,
+    SenderIsMuted,
+    InsufficientRoomPermission,
+    TargetIsNotRoomMember,
+    CannotModerateRoomOwner,
 }

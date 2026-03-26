@@ -74,6 +74,23 @@ pub struct SendMessageRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PromoteAdminRequest {
+    pub actor_profile_id: String,
+    pub target_profile_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DemoteAdminRequest {
+    pub actor_profile_id: String,
+    pub target_profile_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GovernanceActorRequest {
+    pub actor_profile_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientWsEvent {
     SendMessage { content: String },

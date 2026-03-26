@@ -17,6 +17,7 @@ use koko_core::{
         BootstrapSessionRequest, BootstrapSessionResponse, JoinOrCreateRoomRequest,
         JoinOrCreateRoomResponse, MessageResponse, ResolveRoomRequest, ResolveRoomResponse,
         RoomMembersResponse, RoomMessagesResponse, RoomResponse, SendMessageRequest,
+        PromoteAdminRequest, DemoteAdminRequest, GovernanceActorRequest,
     },
     model::{ProfileId, Role, RoomCode, RoomId},
     port::RoomRepository,
@@ -158,6 +159,74 @@ pub async fn send_room_message(
     Ok(Json(response))
 }
 
+pub async fn promote_room_admin(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+    Json(request): Json<PromoteAdminRequest>,
+) -> Result<StatusCode, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let actor_id = parse_profile_id(&request.actor_profile_id)?;
+    let target_id = parse_profile_id(&request.target_profile_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+
+    koko_core::room::promote_admin(&room_repo, room_id, actor_id, target_id)
+        .await
+        .map_err(map_domain_error)?;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn demote_room_admin(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+    Json(request): Json<DemoteAdminRequest>,
+) -> Result<StatusCode, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let actor_id = parse_profile_id(&request.actor_profile_id)?;
+    let target_id = parse_profile_id(&request.target_profile_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+
+    koko_core::room::demote_admin(&room_repo, room_id, actor_id, target_id)
+        .await
+        .map_err(map_domain_error)?;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn mute_room_member(
+    State(state): State<AppState>,
+    Path((room_id, member_id)): Path<(String, String)>,
+    Json(request): Json<GovernanceActorRequest>,
+) -> Result<StatusCode, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let actor_id = parse_profile_id(&request.actor_profile_id)?;
+    let target_id = parse_profile_id(&member_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+
+    koko_core::room::mute_member(&room_repo, room_id, actor_id, target_id)
+        .await
+        .map_err(map_domain_error)?;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn remove_room_member(
+    State(state): State<AppState>,
+    Path((room_id, member_id)): Path<(String, String)>,
+    Json(request): Json<GovernanceActorRequest>,
+) -> Result<StatusCode, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let actor_id = parse_profile_id(&request.actor_profile_id)?;
+    let target_id = parse_profile_id(&member_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+
+    koko_core::room::remove_member(&room_repo, room_id, actor_id, target_id)
+        .await
+        .map_err(map_domain_error)?;
+
+    Ok(StatusCode::OK)
+}
+
 pub struct ApiError {
     status: StatusCode,
     message: &'static str,
@@ -225,5 +294,21 @@ fn message_to_response(message: koko_core::model::Message) -> MessageResponse {
         room_id: message.room_id.0.to_string(),
         sender_id: message.sender_id.0.to_string(),
         content: message.content.as_str().to_owned(),
+    }
+}
+
+fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {
+    use koko_core::error::DomainError;
+
+    match error {
+        DomainError::InvalidRoomCode => ApiError::bad_request("房间短码不合法"),
+        DomainError::EmptyDeviceKey => ApiError::bad_request("device_key 不能为空"),
+        DomainError::EmptyMessageContent => ApiError::bad_request("消息不能为空"),
+        DomainError::SenderIsNotRoomMember | DomainError::TargetIsNotRoomMember => {
+            ApiError::bad_request("目标成员不存在")
+        }
+        DomainError::SenderIsMuted => ApiError::bad_request("成员已被禁言"),
+        DomainError::InsufficientRoomPermission => ApiError::forbidden("房间权限不足"),
+        DomainError::CannotModerateRoomOwner => ApiError::forbidden("不能操作群主"),
     }
 }

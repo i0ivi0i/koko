@@ -17,6 +17,7 @@ struct FakeDeps {
 #[derive(Default)]
 struct FakeState {
     members: HashMap<(RoomId, ProfileId), Role>,
+    muted_members: HashMap<(RoomId, ProfileId), bool>,
     saved_messages: Vec<(RoomId, ProfileId, String)>,
 }
 
@@ -57,6 +58,36 @@ impl RoomRepository for FakeDeps {
     async fn role_of(&self, room_id: RoomId, profile_id: ProfileId) -> Result<Option<Role>, DomainError> {
         let guard = self.inner.lock().await;
         Ok(guard.members.get(&(room_id, profile_id)).copied())
+    }
+
+    async fn set_role(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+        role: Role,
+    ) -> Result<(), DomainError> {
+        self.ensure_member(room_id, profile_id, role).await
+    }
+
+    async fn set_muted(&self, room_id: RoomId, profile_id: ProfileId, muted: bool) -> Result<(), DomainError> {
+        let mut guard = self.inner.lock().await;
+        guard.muted_members.insert((room_id, profile_id), muted);
+        Ok(())
+    }
+
+    async fn is_muted(&self, room_id: RoomId, profile_id: ProfileId) -> Result<bool, DomainError> {
+        let guard = self.inner.lock().await;
+        Ok(guard
+            .muted_members
+            .get(&(room_id, profile_id))
+            .copied()
+            .unwrap_or(false))
+    }
+
+    async fn remove_member(&self, room_id: RoomId, profile_id: ProfileId) -> Result<(), DomainError> {
+        let mut guard = self.inner.lock().await;
+        guard.members.remove(&(room_id, profile_id));
+        Ok(())
     }
 }
 
@@ -119,4 +150,19 @@ async fn 空消息应失败() {
         .unwrap_err();
 
     assert_eq!(error, DomainError::EmptyMessageContent);
+}
+
+#[tokio::test]
+async fn 被禁言成员发送消息应失败() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let sender_id = ProfileId(Uuid::new_v4());
+    deps.add_member(room_id, sender_id, Role::Member).await;
+    deps.set_muted(room_id, sender_id, true).await.unwrap();
+
+    let error = send_text_message(&deps, &deps, room_id, sender_id, "hello")
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::SenderIsMuted);
 }
