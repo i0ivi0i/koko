@@ -1,0 +1,104 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalEnv {
+    pub database_url: String,
+    pub api_base: String,
+}
+
+pub fn workspace_root() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask 必须位于 workspace 根目录下一级")
+}
+
+pub fn load_local_env(root: &Path) -> Result<LocalEnv, String> {
+    let path = root.join(".env.local");
+    let content = fs::read_to_string(&path)
+        .map_err(|_| format!("未找到 {}。请在项目根目录创建 .env.local。", path.display()))?;
+
+    parse_local_env(&content, path)
+}
+
+fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
+    let mut database_url = None;
+    let mut api_base = None;
+
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+
+        match key.trim() {
+            "DATABASE_URL" => database_url = Some(value.trim().to_owned()),
+            "KOKO_API_BASE" => api_base = Some(value.trim().to_owned()),
+            _ => {}
+        }
+    }
+
+    Ok(LocalEnv {
+        database_url: database_url.ok_or_else(|| {
+            format!(
+                "{} 缺少 DATABASE_URL。请补齐数据库连接串。",
+                path.display()
+            )
+        })?,
+        api_base: api_base.ok_or_else(|| {
+            format!(
+                "{} 缺少 KOKO_API_BASE。请补齐后端地址。",
+                path.display()
+            )
+        })?,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{load_local_env, LocalEnv};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn load_local_env_parses_required_keys() {
+        let root = create_temp_root(
+            "DATABASE_URL=postgres://local\nKOKO_API_BASE=http://127.0.0.1:3000\n",
+        );
+
+        let env = load_local_env(&root).expect("应能读取 .env.local");
+
+        assert_eq!(
+            env,
+            LocalEnv {
+                database_url: "postgres://local".into(),
+                api_base: "http://127.0.0.1:3000".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn load_local_env_rejects_missing_database_url() {
+        let root = create_temp_root("KOKO_API_BASE=http://127.0.0.1:3000\n");
+
+        let error = load_local_env(&root).expect_err("缺少 DATABASE_URL 应失败");
+
+        assert!(error.contains("DATABASE_URL"));
+    }
+
+    fn create_temp_root(content: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("系统时间应晚于 Unix epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("koko-xtask-env-{unique}"));
+        fs::create_dir_all(&root).expect("应能创建临时目录");
+        fs::write(root.join(".env.local"), content).expect("应能写入 .env.local");
+        root
+    }
+}
