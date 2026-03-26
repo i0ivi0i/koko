@@ -4,7 +4,6 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -14,6 +13,11 @@ use crate::{
     session,
 };
 use koko_core::{
+    contract::{
+        BootstrapSessionRequest, BootstrapSessionResponse, JoinOrCreateRoomRequest,
+        JoinOrCreateRoomResponse, MessageResponse, ResolveRoomRequest, ResolveRoomResponse,
+        RoomMembersResponse, RoomMessagesResponse, RoomResponse, SendMessageRequest,
+    },
     model::{ProfileId, Role, RoomCode, RoomId},
     port::RoomRepository,
 };
@@ -62,7 +66,7 @@ pub async fn join_or_create_room(
     Ok(Json(JoinOrCreateRoomResponse {
         room_id: result.room.id.0.to_string(),
         code: result.room.code.as_str().to_owned(),
-        role: role_name(result.role),
+        role: role_name(result.role).to_owned(),
     }))
 }
 
@@ -95,68 +99,53 @@ pub async fn list_room_messages(
         .await
         .map_err(|_| ApiError::internal("消息历史读取失败"))?
         .into_iter()
-        .map(|message| MessageResponse {
-            message_id: message.id.0.to_string(),
-            sender_id: message.sender_id.0.to_string(),
-            content: message.content.as_str().to_owned(),
-        })
+        .map(message_to_response)
         .collect();
 
     Ok(Json(RoomMessagesResponse { items }))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct BootstrapSessionRequest {
-    pub device_key: String,
+pub async fn list_room_members(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+) -> Result<Json<RoomMembersResponse>, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    let items = room_repo
+        .list_members(room_id)
+        .await
+        .map_err(|_| ApiError::internal("成员列表读取失败"))?
+        .into_iter()
+        .map(|member| koko_core::contract::RoomMemberResponse {
+            profile_id: member.profile_id.0.to_string(),
+            display_name: session::build_display_name(&member.device_key),
+            role: role_name(member.role).to_owned(),
+        })
+        .collect();
+
+    Ok(Json(RoomMembersResponse { items }))
 }
 
-#[derive(Debug, Serialize)]
-pub struct BootstrapSessionResponse {
-    pub session_id: String,
-    pub profile_id: String,
-    pub display_name: String,
-}
+pub async fn send_room_message(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+    Json(request): Json<SendMessageRequest>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let sender_id = parse_profile_id(&request.sender_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
+    let message_repo = PostgresMessageRepository::new(state.pool);
+    let message = koko_core::chat::send_text_message(
+        &room_repo,
+        &message_repo,
+        room_id,
+        sender_id,
+        &request.content,
+    )
+    .await
+    .map_err(|_| ApiError::bad_request("消息发送失败"))?;
 
-#[derive(Debug, Deserialize)]
-pub struct ResolveRoomRequest {
-    pub code: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ResolveRoomResponse {
-    pub exists: bool,
-    pub room_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct JoinOrCreateRoomRequest {
-    pub profile_id: String,
-    pub code: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct JoinOrCreateRoomResponse {
-    pub room_id: String,
-    pub code: String,
-    pub role: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RoomResponse {
-    pub room_id: String,
-    pub code: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct MessageResponse {
-    pub message_id: String,
-    pub sender_id: String,
-    pub content: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RoomMessagesResponse {
-    pub items: Vec<MessageResponse>,
+    Ok(Json(message_to_response(message)))
 }
 
 pub struct ApiError {
@@ -217,5 +206,14 @@ fn role_name(role: Role) -> &'static str {
         Role::Owner => "owner",
         Role::Admin => "admin",
         Role::Member => "member",
+    }
+}
+
+fn message_to_response(message: koko_core::model::Message) -> MessageResponse {
+    MessageResponse {
+        message_id: message.id.0.to_string(),
+        room_id: message.room_id.0.to_string(),
+        sender_id: message.sender_id.0.to_string(),
+        content: message.content.as_str().to_owned(),
     }
 }

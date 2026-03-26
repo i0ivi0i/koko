@@ -12,10 +12,11 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use koko_core::{
+    contract::{ClientWsEvent, ServerWsEvent},
     model::{ProfileId, RoomId},
     port::RoomRepository,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -107,10 +108,10 @@ async fn handle_client_text(
     profile_id: ProfileId,
     text: &str,
 ) -> Option<String> {
-    let event: ClientEvent = serde_json::from_str(text).ok()?;
+    let event: ClientWsEvent = serde_json::from_str(text).ok()?;
 
     match event {
-        ClientEvent::SendMessage { content } => {
+        ClientWsEvent::SendMessage { content } => {
             let room_repo = PostgresRoomRepository::new(state.pool.clone());
             let message_repo = PostgresMessageRepository::new(state.pool.clone());
             let message = koko_core::chat::send_text_message(
@@ -123,7 +124,7 @@ async fn handle_client_text(
             .await
             .ok()?;
 
-            serde_json::to_string(&ServerEvent::MessageCreated {
+            serde_json::to_string(&ServerWsEvent::MessageCreated {
                 message_id: message.id.0.to_string(),
                 room_id: message.room_id.0.to_string(),
                 sender_id: message.sender_id.0.to_string(),
@@ -137,23 +138,6 @@ async fn handle_client_text(
 #[derive(Debug, Deserialize)]
 pub(crate) struct WsConnectQuery {
     profile_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ClientEvent {
-    SendMessage { content: String },
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ServerEvent {
-    MessageCreated {
-        message_id: String,
-        room_id: String,
-        sender_id: String,
-        content: String,
-    },
 }
 
 fn parse_profile_id(raw: &str) -> Result<ProfileId, ApiError> {

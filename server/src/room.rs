@@ -9,6 +9,12 @@ pub struct PostgresRoomRepository {
     pool: PgPool,
 }
 
+pub struct RoomMemberRecord {
+    pub profile_id: ProfileId,
+    pub device_key: String,
+    pub role: Role,
+}
+
 impl PostgresRoomRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -28,6 +34,39 @@ impl PostgresRoomRepository {
         .await?;
 
         Ok(row.map(|row| Room::new(RoomId(row.id), RoomCode::parse(&row.code).unwrap())))
+    }
+
+    pub async fn list_members(&self, room_id: RoomId) -> Result<Vec<RoomMemberRecord>, sqlx::Error> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT rm.profile_id, p.device_key, rm.role
+            FROM room_members rm
+            JOIN profiles p ON p.id = rm.profile_id
+            WHERE rm.room_id = $1
+            ORDER BY rm.created_at ASC
+            "#,
+            room_id.0
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| {
+                let role = match row.role.as_str() {
+                    "owner" => Role::Owner,
+                    "admin" => Role::Admin,
+                    "member" => Role::Member,
+                    _ => return None,
+                };
+
+                Some(RoomMemberRecord {
+                    profile_id: ProfileId(row.profile_id),
+                    device_key: row.device_key,
+                    role,
+                })
+            })
+            .collect())
     }
 }
 

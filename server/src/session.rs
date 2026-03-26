@@ -61,7 +61,7 @@ async fn find_or_create_profile(pool: &PgPool, device_key: &str) -> Result<Profi
     Ok(profile.id)
 }
 
-fn build_display_name(device_key: &str) -> String {
+pub(crate) fn build_display_name(device_key: &str) -> String {
     format!("访客-{}", device_key.trim().to_ascii_uppercase())
 }
 
