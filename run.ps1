@@ -163,7 +163,7 @@ Reset-LogFile $frontendStderr
 $backendCommand = @"
 Set-Location '$Root'
 `$env:DATABASE_URL = '$($env:DATABASE_URL)'
-cargo watch -x ""run -p koko-server""
+cargo watch -- cargo run --package koko-server --bin koko-server
 "@
 
 $frontendCommand = @"
@@ -184,12 +184,14 @@ if ($DryRun) {
 
 $backendProcess = Start-Process powershell `
     -ArgumentList "-NoLogo", "-Command", $backendCommand `
+    -WindowStyle Hidden `
     -PassThru `
     -RedirectStandardOutput $backendStdout `
     -RedirectStandardError $backendStderr
 
 $frontendProcess = Start-Process powershell `
     -ArgumentList "-NoLogo", "-Command", $frontendCommand `
+    -WindowStyle Hidden `
     -PassThru `
     -RedirectStandardOutput $frontendStdout `
     -RedirectStandardError $frontendStderr
