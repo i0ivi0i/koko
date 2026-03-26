@@ -3,4 +3,6 @@
 pub enum DomainError {
     InvalidRoomCode,
     EmptyDeviceKey,
+    EmptyMessageContent,
+    SenderIsNotRoomMember,
 }

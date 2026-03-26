@@ -1,6 +1,6 @@
 use crate::{
     error::DomainError,
-    model::{ProfileId, Role, Room, RoomCode, RoomId},
+    model::{Message, MessageContent, ProfileId, Role, Room, RoomCode, RoomId},
 };
 
 /// 房间仓储抽象。
@@ -28,4 +28,14 @@ pub trait RoomRepository {
         room_id: RoomId,
         profile_id: ProfileId,
     ) -> impl std::future::Future<Output = Result<Option<Role>, DomainError>> + Send;
+}
+
+/// 消息仓储抽象。
+pub trait MessageRepository {
+    fn save_text_message(
+        &self,
+        room_id: RoomId,
+        sender_id: ProfileId,
+        content: MessageContent,
+    ) -> impl std::future::Future<Output = Result<Message, DomainError>> + Send;
 }

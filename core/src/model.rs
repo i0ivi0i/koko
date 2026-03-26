@@ -35,6 +35,9 @@ pub struct ProfileId(pub Uuid);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RoomId(pub Uuid);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MessageId(pub Uuid);
+
 /// 匿名资料，绑定本地设备键。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
@@ -78,4 +81,32 @@ impl Room {
     pub fn new(id: RoomId, code: RoomCode) -> Self {
         Self { id, code }
     }
+}
+
+/// 文本消息内容。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageContent(String);
+
+impl MessageContent {
+    pub fn parse(input: &str) -> Result<Self, DomainError> {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return Err(DomainError::EmptyMessageContent);
+        }
+
+        Ok(Self(trimmed.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// 房间文本消息。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Message {
+    pub id: MessageId,
+    pub room_id: RoomId,
+    pub sender_id: ProfileId,
+    pub content: MessageContent,
 }
