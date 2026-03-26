@@ -1,1 +1,6 @@
-//! 核心错误定义占位模块。
+/// 核心领域错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DomainError {
+    InvalidRoomCode,
+    EmptyDeviceKey,
+}
