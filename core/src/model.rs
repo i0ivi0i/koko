@@ -32,6 +32,9 @@ pub struct SessionId(pub Uuid);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProfileId(pub Uuid);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RoomId(pub Uuid);
+
 /// 匿名资料，绑定本地设备键。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
@@ -54,5 +57,25 @@ impl Profile {
 
     pub fn device_key(&self) -> &str {
         &self.device_key
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Role {
+    Owner,
+    Admin,
+    Member,
+}
+
+/// 房间最小领域对象。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Room {
+    pub id: RoomId,
+    pub code: RoomCode,
+}
+
+impl Room {
+    pub fn new(id: RoomId, code: RoomCode) -> Self {
+        Self { id, code }
     }
 }
