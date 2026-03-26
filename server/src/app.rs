@@ -4,11 +4,12 @@ use axum::{
 };
 use sqlx::PgPool;
 
-use crate::http;
+use crate::{http, ws::RealtimeHub};
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
+    pub realtime: RealtimeHub,
 }
 
 pub fn build_app(pool: PgPool) -> Router {
@@ -18,5 +19,9 @@ pub fn build_app(pool: PgPool) -> Router {
         .route("/rooms/join-or-create", post(http::join_or_create_room))
         .route("/rooms/{room_id}", get(http::get_room))
         .route("/rooms/{room_id}/messages", get(http::list_room_messages))
-        .with_state(AppState { pool })
+        .route("/ws/rooms/{room_id}", get(crate::ws::connect))
+        .with_state(AppState {
+            pool,
+            realtime: RealtimeHub::default(),
+        })
 }

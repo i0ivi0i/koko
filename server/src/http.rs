@@ -185,6 +185,13 @@ impl ApiError {
             message,
         }
     }
+
+    pub(crate) fn forbidden(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            message,
+        }
+    }
 }
 
 impl IntoResponse for ApiError {
