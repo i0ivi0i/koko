@@ -1,4 +1,5 @@
 mod env;
+mod process;
 
 use std::process::ExitCode;
 
@@ -60,14 +61,26 @@ fn parse_args() -> Result<Cli, String> {
 
 fn run_init(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let env = env::load_local_env(root)?;
-    if dry_run {
-        println!("[dry-run] 已读取 .env.local");
-        println!("[dry-run] DATABASE_URL={}", env.database_url);
-        println!("[dry-run] KOKO_API_BASE={}", env.api_base);
-        return Ok(());
-    }
+    process::require_command(
+        "sqlx",
+        "请先执行 cargo install sqlx-cli --no-default-features --features native-tls,postgres",
+    )?;
+    process::require_command("cargo-watch", "请先执行 cargo install cargo-watch")?;
+    process::require_command("dx", "请先执行 cargo install dioxus-cli")?;
 
-    Err("init 尚未实现".into())
+    println!("已读取 .env.local");
+    println!("DATABASE_URL={}", env.database_url);
+    println!("KOKO_API_BASE={}", env.api_base);
+
+    let database_create = process::CommandSpec::new("sqlx", ["database", "create"])
+        .current_dir(root)
+        .env("DATABASE_URL", &env.database_url);
+    let migrate_run = process::CommandSpec::new("sqlx", ["migrate", "run"])
+        .current_dir(root)
+        .env("DATABASE_URL", &env.database_url);
+
+    process::run(&database_create, dry_run)?;
+    process::run(&migrate_run, dry_run)
 }
 
 fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
@@ -83,10 +96,17 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
 
 fn run_migrate(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let env = env::load_local_env(root)?;
-    if dry_run {
-        println!("[dry-run] migrate 将使用 DATABASE_URL={}", env.database_url);
-        return Ok(());
-    }
+    process::require_command(
+        "sqlx",
+        "请先执行 cargo install sqlx-cli --no-default-features --features native-tls,postgres",
+    )?;
 
-    Err("migrate 尚未实现".into())
+    println!("已读取 .env.local");
+    println!("DATABASE_URL={}", env.database_url);
+
+    let migrate_run = process::CommandSpec::new("sqlx", ["migrate", "run"])
+        .current_dir(root)
+        .env("DATABASE_URL", &env.database_url);
+
+    process::run(&migrate_run, dry_run)
 }
