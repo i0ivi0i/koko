@@ -63,7 +63,7 @@ function Invoke-Step {
 Import-EnvFile "$Root\.env.local"
 
 if (-not $env:DATABASE_URL) {
-    throw "当前环境为 local，未找到 DATABASE_URL。请在项目根目录创建 .env.local，或参考 .env.example 补齐配置。"
+    throw "当前环境为 local，未找到 DATABASE_URL。请在项目根目录创建 .env.local 并补齐配置。"
 }
 
 Ensure-Command "sqlx" "cargo install sqlx-cli --no-default-features --features native-tls,postgres"

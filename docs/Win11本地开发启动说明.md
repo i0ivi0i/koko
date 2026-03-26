@@ -8,16 +8,14 @@
 
 ## 本地配置
 
-参考根目录 [`.env.example`](D:\100-工作\200-交易\量化交易\koko\.env.example)：
+`.env.local` 示例：
 
 ```env
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/koko_local
 KOKO_API_BASE=http://127.0.0.1:3000
 ```
 
-开发环境实际只读取：
-
-- `.env.local`
+开发环境实际只读取 `.env.local`。
 
 ## 一键启动
 
