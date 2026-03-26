@@ -3,6 +3,7 @@
 ## 前置条件
 
 - 已安装 Rust 工具链
+- 已安装 `just`
 - 本机 PostgreSQL 正在运行
 - 项目根目录存在 `.env.local`
 
@@ -21,8 +22,8 @@ KOKO_API_BASE=http://127.0.0.1:3000
 
 ### 首次初始化
 
-```powershell
-.\run.ps1 -Init
+```bash
+just init
 ```
 
 会执行：
@@ -36,8 +37,8 @@ KOKO_API_BASE=http://127.0.0.1:3000
 
 ### 日常启动
 
-```powershell
-.\run.ps1
+```bash
+just dev
 ```
 
 会执行：
@@ -49,14 +50,8 @@ KOKO_API_BASE=http://127.0.0.1:3000
 
 ### 单独迁移
 
-```powershell
-.\run.ps1 -Migrate
-```
-
-如果 PowerShell 执行策略拦截：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run.ps1
+```bash
+just migrate
 ```
 
 ## 默认地址
@@ -69,4 +64,5 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1
 - 开发环境只使用 `.env.local`
 - 生产环境不要依赖 `.env.local`
 - 生产环境应改用系统环境变量或服务器 env file
-- `run.ps1` 默认是开发启动器，不再承担每次初始化职责
+- `just` 是开发入口
+- `xtask` 负责环境读取、初始化和开发进程编排
