@@ -61,16 +61,22 @@ function Invoke-Step {
 }
 
 Import-EnvFile "$Root\.env"
+Import-EnvFile "$Root\.env.local"
 
 if (-not $env:DATABASE_URL) {
-    throw "缺少 DATABASE_URL，请先在项目根目录放置 .env"
+    throw "当前环境为 local，未找到 DATABASE_URL。请在项目根目录创建 .env.local，或参考 .env.example 补齐配置。"
 }
 
 Ensure-Command "sqlx" "cargo install sqlx-cli --no-default-features --features native-tls,postgres"
 Ensure-Command "cargo-watch" "cargo install cargo-watch"
 Ensure-Command "dx" "cargo install dioxus-cli"
 
+Invoke-Step "sqlx database create"
 Invoke-Step "sqlx migrate run"
+
+if (-not $env:KOKO_API_BASE) {
+    $env:KOKO_API_BASE = "http://127.0.0.1:3000"
+}
 
 $backendCommand = @"
 Set-Location '$Root'
@@ -80,7 +86,7 @@ cargo watch -x ""run -p koko-server""
 
 $frontendCommand = @"
 Set-Location '$Root\web'
-`$env:KOKO_API_BASE = 'http://127.0.0.1:3000'
+`$env:KOKO_API_BASE = '$($env:KOKO_API_BASE)'
 dx serve --platform web --port 8080 --addr 127.0.0.1
 "@
 
