@@ -15,12 +15,9 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/koko_local
 KOKO_API_BASE=http://127.0.0.1:3000
 ```
 
-开发环境实际读取：
+开发环境实际只读取：
 
-- `.env`
 - `.env.local`
-
-其中 `.env.local` 优先级更高。
 
 ## 一键启动
 
@@ -55,6 +52,6 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1
 
 ## 当前约定
 
-- 开发环境使用 `.env.local`
+- 开发环境只使用 `.env.local`
 - 生产环境不要依赖 `.env.local`
 - 生产环境应改用系统环境变量或服务器 env file

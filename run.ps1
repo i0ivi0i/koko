@@ -60,7 +60,6 @@ function Invoke-Step {
     Invoke-Expression $Command
 }
 
-Import-EnvFile "$Root\.env"
 Import-EnvFile "$Root\.env.local"
 
 if (-not $env:DATABASE_URL) {
