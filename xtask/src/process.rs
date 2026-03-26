@@ -1,6 +1,9 @@
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc::Sender;
+use std::thread::{self, JoinHandle};
+
+use crate::logging::LogEvent;
 
 pub struct CommandSpec {
     program: String,
@@ -72,6 +75,36 @@ pub fn run(spec: &CommandSpec, dry_run: bool) -> Result<(), String> {
     ))
 }
 
+pub fn spawn_logged(
+    name: &'static str,
+    spec: &CommandSpec,
+    sender: Sender<LogEvent>,
+) -> Result<ManagedChild, String> {
+    let mut command = base_command(spec);
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("启动 {name} 失败: {error}"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| format!("{name} 标准输出管道不可用"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| format!("{name} 标准错误管道不可用"))?;
+
+    let stdout_handle = spawn_reader(name, stdout, sender.clone());
+    let stderr_handle = spawn_reader(name, stderr, sender);
+
+    Ok(ManagedChild {
+        child,
+        readers: vec![stdout_handle, stderr_handle],
+    })
+}
+
 fn command_exists(name: &str) -> bool {
     let paths = match std::env::var_os("PATH") {
         Some(paths) => paths,
@@ -81,26 +114,7 @@ fn command_exists(name: &str) -> bool {
     std::env::split_paths(&paths).any(|dir| candidate_paths(&dir, name).iter().any(|path| path.is_file()))
 }
 
-fn candidate_paths(dir: &Path, name: &str) -> Vec<PathBuf> {
-    if cfg!(windows) {
-        let executable = OsStr::new(name);
-        let ext = OsStr::new("exe");
-
-        let path = Path::new(name);
-        let mut candidates = vec![dir.join(path)];
-        if path.extension().is_none() {
-            candidates.push(dir.join(path).with_extension(ext));
-        }
-        if executable == OsStr::new("cargo") {
-            candidates.push(dir.join("cargo.cmd"));
-        }
-        candidates
-    } else {
-        vec![dir.join(name)]
-    }
-}
-
-fn format_command(spec: &CommandSpec) -> String {
+pub fn format_command(spec: &CommandSpec) -> String {
     let mut parts = Vec::new();
 
     if let Some(current_dir) = &spec.current_dir {
@@ -113,4 +127,88 @@ fn format_command(spec: &CommandSpec) -> String {
     parts.push(spec.program.clone());
     parts.extend(spec.args.iter().cloned());
     parts.join(" ")
+}
+
+pub struct ManagedChild {
+    child: Child,
+    readers: Vec<JoinHandle<()>>,
+}
+
+impl ManagedChild {
+    pub fn try_wait(&mut self) -> Result<Option<ExitStatus>, String> {
+        self.child
+            .try_wait()
+            .map_err(|error| format!("读取子进程状态失败: {error}"))
+    }
+
+    pub fn stop(&mut self) -> Result<(), String> {
+        if self.try_wait()?.is_none() {
+            self.child
+                .kill()
+                .map_err(|error| format!("停止子进程失败: {error}"))?;
+            self.child
+                .wait()
+                .map_err(|error| format!("等待子进程退出失败: {error}"))?;
+        }
+
+        while let Some(reader) = self.readers.pop() {
+            let _ = reader.join();
+        }
+
+        Ok(())
+    }
+}
+
+fn candidate_paths(dir: &Path, name: &str) -> Vec<PathBuf> {
+    let mut candidates = vec![dir.join(name)];
+
+    if cfg!(windows) {
+        let path = Path::new(name);
+        if path.extension().is_none() {
+            candidates.push(dir.join(path).with_extension("exe"));
+        }
+        if name == "cargo" {
+            candidates.push(dir.join("cargo.exe"));
+            candidates.push(dir.join("cargo.cmd"));
+        }
+        if name == "cargo-watch" {
+            candidates.push(dir.join("cargo-watch.exe"));
+        }
+        if name == "dx" {
+            candidates.push(dir.join("dx.exe"));
+        }
+    }
+
+    candidates
+}
+
+fn base_command(spec: &CommandSpec) -> Command {
+    let mut command = Command::new(&spec.program);
+    command.args(&spec.args);
+    if let Some(current_dir) = &spec.current_dir {
+        command.current_dir(current_dir);
+    }
+    for (key, value) in &spec.envs {
+        command.env(key, value);
+    }
+    command
+}
+
+fn spawn_reader<R>(
+    source: &'static str,
+    reader: R,
+    sender: Sender<LogEvent>,
+) -> JoinHandle<()>
+where
+    R: std::io::Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let reader = std::io::BufReader::new(reader);
+        for line in std::io::BufRead::lines(reader).map_while(Result::ok) {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let _ = sender.send(LogEvent::new(source, line));
+        }
+    })
 }
