@@ -17,12 +17,40 @@ KOKO_API_BASE=http://127.0.0.1:3000
 
 开发环境实际只读取 `.env.local`。
 
-## 一键启动
+## 命令模式
 
-在项目根目录执行：
+### 首次初始化
+
+```powershell
+.\run.ps1 -Init
+```
+
+会执行：
+
+- 自动安装缺失的开发工具：
+  - `sqlx`
+  - `cargo-watch`
+  - `dx`
+- 自动创建数据库
+- 自动执行 migration
+
+### 日常启动
 
 ```powershell
 .\run.ps1
+```
+
+会执行：
+
+- 启动后端热更新
+- 启动前端开发服务器
+- 在当前终端聚合显示前后端日志
+- 按 `Ctrl+C` 时自动停止前后端子进程
+
+### 单独迁移
+
+```powershell
+.\run.ps1 -Migrate
 ```
 
 如果 PowerShell 执行策略拦截：
@@ -30,18 +58,6 @@ KOKO_API_BASE=http://127.0.0.1:3000
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
-
-`run.ps1` 会自动执行：
-
-- 检查 `DATABASE_URL`
-- 自动安装缺失的开发工具：
-  - `sqlx`
-  - `cargo-watch`
-  - `dx`
-- 自动创建数据库
-- 自动执行 migration
-- 启动后端热更新
-- 启动前端开发服务器
 
 ## 默认地址
 
@@ -53,3 +69,4 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1
 - 开发环境只使用 `.env.local`
 - 生产环境不要依赖 `.env.local`
 - 生产环境应改用系统环境变量或服务器 env file
+- `run.ps1` 默认是开发启动器，不再承担每次初始化职责
