@@ -1,8 +1,8 @@
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
@@ -82,11 +82,14 @@ async fn 同一设备键重复引导应复用同一资料(pool: PgPool) {
 
     assert_eq!(first_payload["profile_id"], second_payload["profile_id"]);
 
-    let profile_count = sqlx::query_scalar!("SELECT COUNT(*) AS count FROM profiles WHERE device_key = $1", "repeat-device")
-        .fetch_one(&pool)
-        .await
-        .unwrap()
-        .unwrap();
+    let profile_count = sqlx::query_scalar!(
+        "SELECT COUNT(*) AS count FROM profiles WHERE device_key = $1",
+        "repeat-device"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap();
 
     assert_eq!(profile_count, 1);
 }

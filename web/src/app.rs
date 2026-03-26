@@ -2,22 +2,16 @@ use dioxus::prelude::*;
 use futures_util::StreamExt;
 use gloo_net::{
     http::Request,
-    websocket::{futures::WebSocket, Message},
+    websocket::{Message, futures::WebSocket},
 };
 use koko_core::contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, JoinOrCreateRoomRequest,
-    JoinOrCreateRoomResponse, MessageResponse, ResolveRoomRequest, ResolveRoomResponse,
-    RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SendMessageRequest,
-    PromoteAdminRequest, GovernanceActorRequest,
-    ServerWsEvent,
+    BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
+    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
+    ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,
+    RoomMessagesResponse, SendMessageRequest, ServerWsEvent,
 };
 
-use crate::{
-    chat::ChatScreen,
-    member::MemberSheet,
-    room::RoomEntryScreen,
-    theme::APP_STYLE,
-};
+use crate::{chat::ChatScreen, member::MemberSheet, room::RoomEntryScreen, theme::APP_STYLE};
 
 #[derive(Clone, PartialEq)]
 struct ActiveRoom {
@@ -162,17 +156,18 @@ pub fn App() -> Element {
 }
 
 async fn join_room(code: &str) -> Result<ActiveRoom, String> {
-    let session: BootstrapSessionResponse = Request::post(&format!("{}/session/bootstrap", api_base()))
-        .json(&BootstrapSessionRequest {
-            device_key: format!("web-{}", code.to_ascii_lowercase()),
-        })
-        .map_err(|error| error.to_string())?
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
+    let session: BootstrapSessionResponse =
+        Request::post(&format!("{}/session/bootstrap", api_base()))
+            .json(&BootstrapSessionRequest {
+                device_key: format!("web-{}", code.to_ascii_lowercase()),
+            })
+            .map_err(|error| error.to_string())?
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
 
     let _: ResolveRoomResponse = Request::post(&format!("{}/rooms/resolve", api_base()))
         .json(&ResolveRoomRequest {
@@ -186,34 +181,37 @@ async fn join_room(code: &str) -> Result<ActiveRoom, String> {
         .await
         .map_err(|error| error.to_string())?;
 
-    let joined: JoinOrCreateRoomResponse = Request::post(&format!("{}/rooms/join-or-create", api_base()))
-        .json(&JoinOrCreateRoomRequest {
-            profile_id: session.profile_id.clone(),
-            code: code.to_ascii_uppercase(),
-        })
-        .map_err(|error| error.to_string())?
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
+    let joined: JoinOrCreateRoomResponse =
+        Request::post(&format!("{}/rooms/join-or-create", api_base()))
+            .json(&JoinOrCreateRoomRequest {
+                profile_id: session.profile_id.clone(),
+                code: code.to_ascii_uppercase(),
+            })
+            .map_err(|error| error.to_string())?
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
 
-    let messages: RoomMessagesResponse = Request::get(&format!("{}/rooms/{}/messages", api_base(), joined.room_id))
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
+    let messages: RoomMessagesResponse =
+        Request::get(&format!("{}/rooms/{}/messages", api_base(), joined.room_id))
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
 
-    let members: RoomMembersResponse = Request::get(&format!("{}/rooms/{}/members", api_base(), joined.room_id))
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
+    let members: RoomMembersResponse =
+        Request::get(&format!("{}/rooms/{}/members", api_base(), joined.room_id))
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
 
     Ok(ActiveRoom {
         session_id: session.session_id,
@@ -240,7 +238,11 @@ async fn fetch_room_members(room_id: &str) -> Result<Vec<RoomMemberResponse>, St
     Ok(members.items)
 }
 
-async fn send_message(room_id: &str, sender_id: &str, content: &str) -> Result<MessageResponse, String> {
+async fn send_message(
+    room_id: &str,
+    sender_id: &str,
+    content: &str,
+) -> Result<MessageResponse, String> {
     Request::post(&format!("{}/rooms/{room_id}/messages", api_base()))
         .json(&SendMessageRequest {
             sender_id: sender_id.to_string(),
@@ -255,7 +257,11 @@ async fn send_message(room_id: &str, sender_id: &str, content: &str) -> Result<M
         .map_err(|error| error.to_string())
 }
 
-async fn promote_member(room_id: &str, actor_profile_id: &str, target_profile_id: &str) -> Result<(), String> {
+async fn promote_member(
+    room_id: &str,
+    actor_profile_id: &str,
+    target_profile_id: &str,
+) -> Result<(), String> {
     Request::post(&format!("{}/rooms/{room_id}/roles/promote", api_base()))
         .json(&PromoteAdminRequest {
             actor_profile_id: actor_profile_id.to_string(),
@@ -269,28 +275,42 @@ async fn promote_member(room_id: &str, actor_profile_id: &str, target_profile_id
     Ok(())
 }
 
-async fn mute_member(room_id: &str, actor_profile_id: &str, target_profile_id: &str) -> Result<(), String> {
-    Request::post(&format!("{}/rooms/{room_id}/members/{target_profile_id}/mute", api_base()))
-        .json(&GovernanceActorRequest {
-            actor_profile_id: actor_profile_id.to_string(),
-        })
-        .map_err(|error| error.to_string())?
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
+async fn mute_member(
+    room_id: &str,
+    actor_profile_id: &str,
+    target_profile_id: &str,
+) -> Result<(), String> {
+    Request::post(&format!(
+        "{}/rooms/{room_id}/members/{target_profile_id}/mute",
+        api_base()
+    ))
+    .json(&GovernanceActorRequest {
+        actor_profile_id: actor_profile_id.to_string(),
+    })
+    .map_err(|error| error.to_string())?
+    .send()
+    .await
+    .map_err(|error| error.to_string())?;
 
     Ok(())
 }
 
-async fn remove_member(room_id: &str, actor_profile_id: &str, target_profile_id: &str) -> Result<(), String> {
-    Request::post(&format!("{}/rooms/{room_id}/members/{target_profile_id}/remove", api_base()))
-        .json(&GovernanceActorRequest {
-            actor_profile_id: actor_profile_id.to_string(),
-        })
-        .map_err(|error| error.to_string())?
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
+async fn remove_member(
+    room_id: &str,
+    actor_profile_id: &str,
+    target_profile_id: &str,
+) -> Result<(), String> {
+    Request::post(&format!(
+        "{}/rooms/{room_id}/members/{target_profile_id}/remove",
+        api_base()
+    ))
+    .json(&GovernanceActorRequest {
+        actor_profile_id: actor_profile_id.to_string(),
+    })
+    .map_err(|error| error.to_string())?
+    .send()
+    .await
+    .map_err(|error| error.to_string())?;
 
     Ok(())
 }
@@ -322,13 +342,17 @@ async fn listen_room_events(
             room_id,
             sender_id,
             content,
-        }) = serde_json::from_str::<ServerWsEvent>(&text) else {
+        }) = serde_json::from_str::<ServerWsEvent>(&text)
+        else {
             continue;
         };
 
         room_state.with_mut(|state| {
             if let Some(room) = state.as_mut()
-                && !room.messages.iter().any(|item| item.message_id == message_id)
+                && !room
+                    .messages
+                    .iter()
+                    .any(|item| item.message_id == message_id)
             {
                 room.messages.push(MessageResponse {
                     message_id,

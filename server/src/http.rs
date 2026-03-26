@@ -1,23 +1,20 @@
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use uuid::Uuid;
 
 use crate::{
-    app::AppState,
-    chat::PostgresMessageRepository,
-    room::PostgresRoomRepository,
-    session,
+    app::AppState, chat::PostgresMessageRepository, room::PostgresRoomRepository, session,
 };
 use koko_core::{
     contract::{
-        BootstrapSessionRequest, BootstrapSessionResponse, JoinOrCreateRoomRequest,
-        JoinOrCreateRoomResponse, MessageResponse, ResolveRoomRequest, ResolveRoomResponse,
-        RoomMembersResponse, RoomMessagesResponse, RoomResponse, SendMessageRequest,
-        PromoteAdminRequest, DemoteAdminRequest, GovernanceActorRequest,
+        BootstrapSessionRequest, BootstrapSessionResponse, DemoteAdminRequest,
+        GovernanceActorRequest, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse,
+        PromoteAdminRequest, ResolveRoomRequest, ResolveRoomResponse, RoomMembersResponse,
+        RoomMessagesResponse, RoomResponse, SendMessageRequest,
     },
     model::{ProfileId, Role, RoomCode, RoomId},
     port::RoomRepository,
@@ -40,7 +37,8 @@ pub async fn resolve_room(
     State(state): State<AppState>,
     Json(request): Json<ResolveRoomRequest>,
 ) -> Result<Json<ResolveRoomResponse>, ApiError> {
-    let code = RoomCode::parse(&request.code).map_err(|_| ApiError::bad_request("房间短码不合法"))?;
+    let code =
+        RoomCode::parse(&request.code).map_err(|_| ApiError::bad_request("房间短码不合法"))?;
     let room_repo = PostgresRoomRepository::new(state.pool);
     let room = room_repo
         .find_by_code(&code)
@@ -57,7 +55,8 @@ pub async fn join_or_create_room(
     State(state): State<AppState>,
     Json(request): Json<JoinOrCreateRoomRequest>,
 ) -> Result<Json<JoinOrCreateRoomResponse>, ApiError> {
-    let code = RoomCode::parse(&request.code).map_err(|_| ApiError::bad_request("房间短码不合法"))?;
+    let code =
+        RoomCode::parse(&request.code).map_err(|_| ApiError::bad_request("房间短码不合法"))?;
     let profile_id = parse_profile_id(&request.profile_id)?;
     let room_repo = PostgresRoomRepository::new(state.pool);
     let result = koko_core::room::join_or_create_room(&room_repo, profile_id, code)

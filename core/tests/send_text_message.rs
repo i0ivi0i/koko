@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use koko_core::{
+    chat::send_text_message,
     error::DomainError,
     model::{MessageContent, MessageId, ProfileId, Role, RoomId},
     port::{MessageRepository, RoomRepository},
-    chat::send_text_message,
 };
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -55,7 +55,11 @@ impl RoomRepository for FakeDeps {
         Ok(())
     }
 
-    async fn role_of(&self, room_id: RoomId, profile_id: ProfileId) -> Result<Option<Role>, DomainError> {
+    async fn role_of(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+    ) -> Result<Option<Role>, DomainError> {
         let guard = self.inner.lock().await;
         Ok(guard.members.get(&(room_id, profile_id)).copied())
     }
@@ -69,7 +73,12 @@ impl RoomRepository for FakeDeps {
         self.ensure_member(room_id, profile_id, role).await
     }
 
-    async fn set_muted(&self, room_id: RoomId, profile_id: ProfileId, muted: bool) -> Result<(), DomainError> {
+    async fn set_muted(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+        muted: bool,
+    ) -> Result<(), DomainError> {
         let mut guard = self.inner.lock().await;
         guard.muted_members.insert((room_id, profile_id), muted);
         Ok(())
@@ -84,7 +93,11 @@ impl RoomRepository for FakeDeps {
             .unwrap_or(false))
     }
 
-    async fn remove_member(&self, room_id: RoomId, profile_id: ProfileId) -> Result<(), DomainError> {
+    async fn remove_member(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+    ) -> Result<(), DomainError> {
         let mut guard = self.inner.lock().await;
         guard.members.remove(&(room_id, profile_id));
         Ok(())

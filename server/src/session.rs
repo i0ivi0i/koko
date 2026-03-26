@@ -14,7 +14,10 @@ pub struct BootstrapSession {
     pub display_name: String,
 }
 
-pub async fn bootstrap_session(pool: &PgPool, device_key: &str) -> Result<BootstrapSession, ApiError> {
+pub async fn bootstrap_session(
+    pool: &PgPool,
+    device_key: &str,
+) -> Result<BootstrapSession, ApiError> {
     if device_key.trim().is_empty() {
         return Err(ApiError::bad_request("device_key 不能为空"));
     }

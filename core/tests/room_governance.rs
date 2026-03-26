@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use koko_core::{
     chat::send_text_message,
@@ -38,7 +41,9 @@ impl RoomRepository for FakeDeps {
     async fn create_room(&self, owner_id: ProfileId, code: RoomCode) -> Result<Room, DomainError> {
         let room = Room::new(RoomId(Uuid::new_v4()), code);
         let mut guard = self.inner.lock().await;
-        guard.rooms_by_code.insert(room.code.as_str().to_owned(), room.clone());
+        guard
+            .rooms_by_code
+            .insert(room.code.as_str().to_owned(), room.clone());
         guard.members.insert((room.id, owner_id), Role::Owner);
         Ok(room)
     }
@@ -54,7 +59,11 @@ impl RoomRepository for FakeDeps {
         Ok(())
     }
 
-    async fn role_of(&self, room_id: RoomId, profile_id: ProfileId) -> Result<Option<Role>, DomainError> {
+    async fn role_of(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+    ) -> Result<Option<Role>, DomainError> {
         let guard = self.inner.lock().await;
         Ok(guard.members.get(&(room_id, profile_id)).copied())
     }
@@ -90,7 +99,11 @@ impl RoomRepository for FakeDeps {
         Ok(guard.muted.contains(&(room_id, profile_id)))
     }
 
-    async fn remove_member(&self, room_id: RoomId, profile_id: ProfileId) -> Result<(), DomainError> {
+    async fn remove_member(
+        &self,
+        room_id: RoomId,
+        profile_id: ProfileId,
+    ) -> Result<(), DomainError> {
         let mut guard = self.inner.lock().await;
         guard.members.remove(&(room_id, profile_id));
         guard.muted.remove(&(room_id, profile_id));
@@ -123,9 +136,14 @@ async fn 群主应能提升成员为管理员() {
     deps.seed_member(room_id, owner_id, Role::Owner).await;
     deps.seed_member(room_id, member_id, Role::Member).await;
 
-    promote_admin(&deps, room_id, owner_id, member_id).await.unwrap();
+    promote_admin(&deps, room_id, owner_id, member_id)
+        .await
+        .unwrap();
 
-    assert_eq!(deps.role_of(room_id, member_id).await.unwrap(), Some(Role::Admin));
+    assert_eq!(
+        deps.role_of(room_id, member_id).await.unwrap(),
+        Some(Role::Admin)
+    );
 }
 
 #[tokio::test]
@@ -137,7 +155,9 @@ async fn 管理员不应能提升其他成员为管理员() {
     deps.seed_member(room_id, admin_id, Role::Admin).await;
     deps.seed_member(room_id, member_id, Role::Member).await;
 
-    let error = promote_admin(&deps, room_id, admin_id, member_id).await.unwrap_err();
+    let error = promote_admin(&deps, room_id, admin_id, member_id)
+        .await
+        .unwrap_err();
 
     assert_eq!(error, DomainError::InsufficientRoomPermission);
 }
@@ -151,9 +171,13 @@ async fn 被禁言成员不应继续发送消息() {
     deps.seed_member(room_id, owner_id, Role::Owner).await;
     deps.seed_member(room_id, member_id, Role::Member).await;
 
-    mute_member(&deps, room_id, owner_id, member_id).await.unwrap();
+    mute_member(&deps, room_id, owner_id, member_id)
+        .await
+        .unwrap();
 
-    let error = send_text_message(&deps, &deps, room_id, member_id, "hello").await.unwrap_err();
+    let error = send_text_message(&deps, &deps, room_id, member_id, "hello")
+        .await
+        .unwrap_err();
 
     assert_eq!(error, DomainError::SenderIsMuted);
 }
@@ -167,7 +191,9 @@ async fn 群主应能移除普通成员() {
     deps.seed_member(room_id, owner_id, Role::Owner).await;
     deps.seed_member(room_id, member_id, Role::Member).await;
 
-    remove_member(&deps, room_id, owner_id, member_id).await.unwrap();
+    remove_member(&deps, room_id, owner_id, member_id)
+        .await
+        .unwrap();
 
     assert_eq!(deps.role_of(room_id, member_id).await.unwrap(), None);
 }

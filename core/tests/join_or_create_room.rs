@@ -22,13 +22,18 @@ struct FakeState {
 impl FakeRoomRepository {
     async fn seed_room(&self, room: Room, profile_id: ProfileId, role: Role) {
         let mut guard = self.inner.lock().await;
-        guard.rooms_by_code.insert(room.code.as_str().to_owned(), room.clone());
+        guard
+            .rooms_by_code
+            .insert(room.code.as_str().to_owned(), room.clone());
         guard.members.insert((room.id, profile_id), role);
     }
 }
 
 impl RoomRepository for FakeRoomRepository {
-    async fn find_by_code(&self, code: &RoomCode) -> Result<Option<Room>, koko_core::error::DomainError> {
+    async fn find_by_code(
+        &self,
+        code: &RoomCode,
+    ) -> Result<Option<Room>, koko_core::error::DomainError> {
         let guard = self.inner.lock().await;
         Ok(guard.rooms_by_code.get(code.as_str()).cloned())
     }
@@ -40,7 +45,9 @@ impl RoomRepository for FakeRoomRepository {
     ) -> Result<Room, koko_core::error::DomainError> {
         let room = Room::new(RoomId(Uuid::new_v4()), code);
         let mut guard = self.inner.lock().await;
-        guard.rooms_by_code.insert(room.code.as_str().to_owned(), room.clone());
+        guard
+            .rooms_by_code
+            .insert(room.code.as_str().to_owned(), room.clone());
         guard.members.insert((room.id, owner_id), Role::Owner);
         Ok(room)
     }
@@ -121,7 +128,8 @@ async fn 短码已存在时应加入已有房间() {
     let existing_room = Room::new(RoomId(Uuid::new_v4()), RoomCode::parse("1A234").unwrap());
     let owner_id = ProfileId(Uuid::new_v4());
     let joiner_id = ProfileId(Uuid::new_v4());
-    repo.seed_room(existing_room.clone(), owner_id, Role::Owner).await;
+    repo.seed_room(existing_room.clone(), owner_id, Role::Owner)
+        .await;
 
     let result = join_or_create_room(&repo, joiner_id, RoomCode::parse("1A234").unwrap())
         .await

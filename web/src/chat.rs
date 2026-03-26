@@ -89,7 +89,11 @@ pub fn ChatScreen(
 
 #[component]
 fn MessageBubble(incoming: bool, sender: String, text: String, time: String) -> Element {
-    let row_class = if incoming { "message-row incoming" } else { "message-row outgoing" };
+    let row_class = if incoming {
+        "message-row incoming"
+    } else {
+        "message-row outgoing"
+    };
     let bubble_class = if incoming {
         "message-bubble incoming"
     } else {

@@ -5,8 +5,8 @@ use std::{
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         Path, Query, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::{IntoResponse, Response},
 };
@@ -21,10 +21,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
-    app::AppState,
-    chat::PostgresMessageRepository,
-    http::ApiError,
-    room::PostgresRoomRepository,
+    app::AppState, chat::PostgresMessageRepository, http::ApiError, room::PostgresRoomRepository,
 };
 
 #[derive(Clone, Default)]
@@ -43,7 +40,8 @@ impl RealtimeHub {
 
     fn channel(&self, room_id: RoomId) -> broadcast::Sender<String> {
         let mut rooms = self.inner.lock().unwrap();
-        rooms.entry(room_id.0)
+        rooms
+            .entry(room_id.0)
             .or_insert_with(|| broadcast::channel(128).0)
             .clone()
     }

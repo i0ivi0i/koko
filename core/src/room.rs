@@ -18,7 +18,10 @@ pub async fn join_or_create_room(
     code: RoomCode,
 ) -> Result<JoinRoomResult, DomainError> {
     if let Some(room) = repo.find_by_code(&code).await? {
-        let role = repo.role_of(room.id, profile_id).await?.unwrap_or(Role::Member);
+        let role = repo
+            .role_of(room.id, profile_id)
+            .await?
+            .unwrap_or(Role::Member);
         repo.ensure_member(room.id, profile_id, role).await?;
         return Ok(JoinRoomResult { room, role });
     }
