@@ -1850,6 +1850,7 @@ dependencies = [
 name = "koko-core"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "tokio",
  "uuid",
 ]
@@ -1867,6 +1868,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tower",
+ "tower-http",
  "uuid",
 ]
 
@@ -1875,7 +1877,10 @@ name = "koko-web"
 version = "0.1.0"
 dependencies = [
  "dioxus",
+ "futures-util",
+ "gloo-net",
  "koko-core",
+ "serde_json",
 ]
 
 [[package]]

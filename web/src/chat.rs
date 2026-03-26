@@ -1,12 +1,18 @@
 use dioxus::prelude::*;
+use koko_core::contract::MessageResponse;
 
 use crate::ui::Avatar;
 
 #[component]
 pub fn ChatScreen(
     room_code: String,
+    profile_id: String,
+    display_name: String,
+    messages: Vec<MessageResponse>,
+    member_count: usize,
     on_back: EventHandler<()>,
     on_open_members: EventHandler<()>,
+    on_send: EventHandler<String>,
 ) -> Element {
     let mut draft = use_signal(String::new);
 
@@ -33,7 +39,7 @@ pub fn ChatScreen(
                         Avatar { label: room_code.clone() }
                         div {
                             div { style: "font-size: 16px; font-weight: 670;", "房间 {room_code.clone()}" }
-                            div { class: "message-meta", "58 位成员在线 · 匿名群聊" }
+                            div { class: "message-meta", "{member_count} 位成员 · {display_name}" }
                         }
                     }
                     button {
@@ -44,23 +50,13 @@ pub fn ChatScreen(
                 }
 
                 section { class: "chat-scroll",
-                    MessageBubble {
-                        incoming: true,
-                        sender: "M".to_string(),
-                        text: "这个房间空着的时候，第一个进来的人就会成为群主。".to_string(),
-                        time: "10:21".to_string(),
-                    }
-                    MessageBubble {
-                        incoming: false,
-                        sender: "Y".to_string(),
-                        text: "这样挺像闯进一个空房间，语义很顺。".to_string(),
-                        time: "10:23".to_string(),
-                    }
-                    MessageBubble {
-                        incoming: true,
-                        sender: "K".to_string(),
-                        text: "前端先按 Telegram iOS 深色壳做，后面再接真实后端契约。".to_string(),
-                        time: "10:25".to_string(),
+                    for message in messages {
+                        MessageBubble {
+                            incoming: message.sender_id != profile_id,
+                            sender: message.sender_id.clone(),
+                            text: message.content.clone(),
+                            time: "刚刚".to_string(),
+                        }
                     }
                 }
 
@@ -75,7 +71,13 @@ pub fn ChatScreen(
                         }
                         button {
                             class: "telegram-button",
-                            onclick: move |_| draft.set(String::new()),
+                            onclick: move |_| {
+                                let content = draft().trim().to_string();
+                                if !content.is_empty() {
+                                    on_send.call(content);
+                                    draft.set(String::new());
+                                }
+                            },
                             "发送"
                         }
                     }

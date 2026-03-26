@@ -1,7 +1,11 @@
 use dioxus::prelude::*;
 
 #[component]
-pub fn RoomEntryScreen(on_enter: EventHandler<String>) -> Element {
+pub fn RoomEntryScreen(
+    loading: bool,
+    error_message: Option<String>,
+    on_enter: EventHandler<String>,
+) -> Element {
     let mut code = use_signal(|| "1A234".to_string());
 
     rsx! {
@@ -24,6 +28,9 @@ pub fn RoomEntryScreen(on_enter: EventHandler<String>) -> Element {
                     p { class: "eyebrow", "Join or Create" }
                     h2 { style: "margin: 0; font-size: 28px;", "输入房间短码" }
                     p { class: "subhead", "第一版默认深色主题，视觉基准贴近 Telegram iOS。" }
+                    if let Some(message) = error_message {
+                        p { style: "margin: 0; color: #ff8d8d;", "{message}" }
+                    }
                     input {
                         class: "room-input",
                         maxlength: 5,
@@ -40,7 +47,7 @@ pub fn RoomEntryScreen(on_enter: EventHandler<String>) -> Element {
                         button {
                             class: "telegram-button",
                             onclick: move |_| on_enter.call(code()),
-                            "进入房间"
+                            if loading { "进入中..." } else { "进入房间" }
                         }
                     }
                 }

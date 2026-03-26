@@ -145,7 +145,17 @@ pub async fn send_room_message(
     .await
     .map_err(|_| ApiError::bad_request("消息发送失败"))?;
 
-    Ok(Json(message_to_response(message)))
+    let response = message_to_response(message);
+    let event = serde_json::to_string(&koko_core::contract::ServerWsEvent::MessageCreated {
+        message_id: response.message_id.clone(),
+        room_id: response.room_id.clone(),
+        sender_id: response.sender_id.clone(),
+        content: response.content.clone(),
+    })
+    .map_err(|_| ApiError::internal("消息广播序列化失败"))?;
+    state.realtime.publish(room_id, event);
+
+    Ok(Json(response))
 }
 
 pub struct ApiError {

@@ -33,11 +33,11 @@ pub struct RealtimeHub {
 }
 
 impl RealtimeHub {
-    fn subscribe(&self, room_id: RoomId) -> broadcast::Receiver<String> {
+    pub(crate) fn subscribe(&self, room_id: RoomId) -> broadcast::Receiver<String> {
         self.channel(room_id).subscribe()
     }
 
-    fn publish(&self, room_id: RoomId, payload: String) {
+    pub(crate) fn publish(&self, room_id: RoomId, payload: String) {
         let _ = self.channel(room_id).send(payload);
     }
 

@@ -1,9 +1,10 @@
 use dioxus::prelude::*;
+use koko_core::contract::RoomMemberResponse;
 
 use crate::ui::{Avatar, RoleBadge};
 
 #[component]
-pub fn MemberSheet(open: bool, on_close: EventHandler<()>) -> Element {
+pub fn MemberSheet(open: bool, members: Vec<RoomMemberResponse>, on_close: EventHandler<()>) -> Element {
     if !open {
         return rsx! {};
     }
@@ -21,9 +22,12 @@ pub fn MemberSheet(open: bool, on_close: EventHandler<()>) -> Element {
                 }
 
                 div { class: "member-list",
-                    MemberRow { name: "Milo".to_string(), role: "群主".to_string() }
-                    MemberRow { name: "Anya".to_string(), role: "管理员".to_string() }
-                    MemberRow { name: "Kai".to_string(), role: "成员".to_string() }
+                    for member in members {
+                        MemberRow {
+                            name: member.display_name,
+                            role: member.role,
+                        }
+                    }
                 }
             }
         }
