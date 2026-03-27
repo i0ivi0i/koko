@@ -1,4 +1,4 @@
-__KOKO_DOMAIN__ {
+__KOKO_CHAT_SITE_ADDRESS__ {
     root * /opt/koko/web
     file_server
 
@@ -7,7 +7,7 @@ __KOKO_DOMAIN__ {
     reverse_proxy /ws* 127.0.0.1:3000
 }
 
-__KOKO_ADMIN_DOMAIN__ {
+__KOKO_ADMIN_SITE_ADDRESS__ {
     root * /opt/koko/admin
     file_server
 

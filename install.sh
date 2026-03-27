@@ -15,6 +15,10 @@ KOKO_DB_NAME="${KOKO_DB_NAME:-koko}"
 KOKO_DB_USER="${KOKO_DB_USER:-koko}"
 KOKO_DB_PASSWORD="${KOKO_DB_PASSWORD:-}"
 KOKO_BIND="${KOKO_BIND:-127.0.0.1:3000}"
+KOKO_PUBLIC_BASE_URL="${KOKO_PUBLIC_BASE_URL:-}"
+KOKO_ADMIN_BASE_URL="${KOKO_ADMIN_BASE_URL:-}"
+KOKO_CHAT_SITE_ADDRESS="${KOKO_CHAT_SITE_ADDRESS:-}"
+KOKO_ADMIN_SITE_ADDRESS="${KOKO_ADMIN_SITE_ADDRESS:-}"
 
 INSTALL_ROOT="/opt/koko"
 CONFIG_DIR="/etc/koko"
@@ -131,7 +135,7 @@ prompt_value() {
 }
 
 ensure_domains() {
-    KOKO_DOMAIN="$(prompt_value "聊天域名" "${KOKO_DOMAIN}")"
+    KOKO_DOMAIN="$(prompt_value "聊天域名或公网 IPv4" "${KOKO_DOMAIN}")"
 }
 
 ensure_passwords() {
@@ -141,9 +145,46 @@ ensure_passwords() {
 }
 
 derive_defaults() {
+    if is_ipv4_address "${KOKO_DOMAIN}"; then
+        if [[ -z "${KOKO_ADMIN_DOMAIN}" ]]; then
+            KOKO_ADMIN_DOMAIN="${KOKO_DOMAIN}"
+        fi
+        KOKO_PUBLIC_BASE_URL="http://${KOKO_DOMAIN}"
+        KOKO_ADMIN_BASE_URL="http://${KOKO_ADMIN_DOMAIN}:8081"
+        KOKO_CHAT_SITE_ADDRESS="http://${KOKO_DOMAIN}"
+        KOKO_ADMIN_SITE_ADDRESS="http://${KOKO_ADMIN_DOMAIN}:8081"
+        return
+    fi
+
     if [[ -z "${KOKO_ADMIN_DOMAIN}" ]]; then
         KOKO_ADMIN_DOMAIN="admin.${KOKO_DOMAIN}"
     fi
+
+    KOKO_PUBLIC_BASE_URL="https://${KOKO_DOMAIN}"
+    KOKO_ADMIN_BASE_URL="https://${KOKO_ADMIN_DOMAIN}"
+    KOKO_CHAT_SITE_ADDRESS="${KOKO_DOMAIN}"
+    KOKO_ADMIN_SITE_ADDRESS="${KOKO_ADMIN_DOMAIN}"
+}
+
+is_ipv4_address() {
+    local value="$1"
+    local IFS='.'
+    local parts
+
+    read -r -a parts <<< "${value}"
+    if [[ "${#parts[@]}" -ne 4 ]]; then
+        return 1
+    fi
+
+    for part in "${parts[@]}"; do
+        if [[ ! "${part}" =~ ^[0-9]+$ ]]; then
+            return 1
+        fi
+
+        if (( part < 0 || part > 255 )); then
+            return 1
+        fi
+    done
 }
 
 derive_release_base() {
@@ -233,8 +274,8 @@ write_config_if_missing() {
     cat > "${CONFIG_FILE}" <<EOF
 DATABASE_URL=postgresql://${KOKO_DB_USER}:${KOKO_DB_PASSWORD}@127.0.0.1:5432/${KOKO_DB_NAME}
 SERVER_BIND=${KOKO_BIND}
-KOKO_PUBLIC_BASE_URL=https://${KOKO_DOMAIN}
-KOKO_ADMIN_BASE_URL=https://${KOKO_ADMIN_DOMAIN}
+KOKO_PUBLIC_BASE_URL=${KOKO_PUBLIC_BASE_URL}
+KOKO_ADMIN_BASE_URL=${KOKO_ADMIN_BASE_URL}
 KOKO_ADMIN_USER=${KOKO_ADMIN_USER}
 KOKO_ADMIN_PASSWORD=${KOKO_ADMIN_PASSWORD}
 EOF
@@ -301,7 +342,7 @@ EOF
 
 render_caddy_template() {
     cat <<EOF
-${KOKO_DOMAIN} {
+${KOKO_CHAT_SITE_ADDRESS} {
     root * /opt/koko/web
     file_server
 
@@ -310,7 +351,7 @@ ${KOKO_DOMAIN} {
     reverse_proxy /ws* 127.0.0.1:3000
 }
 
-${KOKO_ADMIN_DOMAIN} {
+${KOKO_ADMIN_SITE_ADDRESS} {
     root * /opt/koko/admin
     file_server
 
@@ -323,8 +364,8 @@ print_summary() {
     local mode="$1"
     echo
     echo "koko ${mode}完成。"
-    echo "聊天前台: https://${KOKO_DOMAIN}"
-    echo "后台前端: https://${KOKO_ADMIN_DOMAIN}"
+    echo "聊天前台: ${KOKO_PUBLIC_BASE_URL}"
+    echo "后台前端: ${KOKO_ADMIN_BASE_URL}"
     echo "配置文件: ${CONFIG_FILE}"
     echo "服务状态: systemctl status koko-server"
     echo "服务日志: journalctl -u koko-server -f"
