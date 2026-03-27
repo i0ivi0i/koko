@@ -33,6 +33,10 @@ pub async fn bootstrap_session(
     }))
 }
 
+pub async fn root_status() -> &'static str {
+    "koko 服务运行中"
+}
+
 #[tracing::instrument(skip(state, request), fields(code = %request.code))]
 pub async fn resolve_room(
     State(state): State<AppState>,

@@ -217,6 +217,8 @@ fn backend_dev_spec(
     env: &env::LocalEnv,
     use_sccache: bool,
 ) -> process::CommandSpec {
+    let target_dir = dev_target_dir(root, "dev-server");
+
     apply_sccache(
         process::CommandSpec::new(
             "cargo",
@@ -236,9 +238,12 @@ fn backend_dev_spec(
     )
     .env("DATABASE_URL", &env.database_url)
     .env("RUST_LOG", &env.rust_log)
+    .env("CARGO_TARGET_DIR", &target_dir)
 }
 
 fn frontend_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::CommandSpec {
+    let target_dir = dev_target_dir(root, "dev-web");
+
     process::CommandSpec::new(
         "dx",
         [
@@ -253,6 +258,7 @@ fn frontend_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::Co
     )
     .current_dir(&root.join("web"))
     .env("KOKO_API_BASE", &env.api_base)
+    .env("CARGO_TARGET_DIR", &target_dir)
 }
 
 fn apply_sccache(spec: process::CommandSpec, use_sccache: bool) -> process::CommandSpec {
@@ -261,6 +267,10 @@ fn apply_sccache(spec: process::CommandSpec, use_sccache: bool) -> process::Comm
     } else {
         spec
     }
+}
+
+fn dev_target_dir(root: &std::path::Path, name: &str) -> String {
+    root.join("target").join(name).display().to_string()
 }
 
 #[cfg(test)]
@@ -310,5 +320,37 @@ mod tests {
         let formatted = process::format_command(&command);
 
         assert!(!formatted.contains("RUSTC_WRAPPER=sccache"));
+    }
+
+    #[test]
+    fn backend_dev_command_should_use_dedicated_target_dir() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://127.0.0.1:3000".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = backend_dev_spec(root, &env, false);
+        let formatted = process::format_command(&command);
+        let expected = format!("CARGO_TARGET_DIR={}", dev_target_dir(root, "dev-server"));
+
+        assert!(formatted.contains(&expected));
+    }
+
+    #[test]
+    fn frontend_dev_command_should_use_dedicated_target_dir() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://127.0.0.1:3000".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = frontend_dev_spec(root, &env);
+        let formatted = process::format_command(&command);
+        let expected = format!("CARGO_TARGET_DIR={}", dev_target_dir(root, "dev-web"));
+
+        assert!(formatted.contains(&expected));
     }
 }

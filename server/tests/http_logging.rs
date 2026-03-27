@@ -7,6 +7,24 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[sqlx::test(migrations = "../migrations")]
+async fn 根路径应返回服务状态(pool: PgPool) {
+    let app = koko_server::app::build_app(pool);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn 响应应自动附带请求_id(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
     let owner_id = Uuid::new_v4();
