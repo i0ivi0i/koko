@@ -1,0 +1,19 @@
+[Unit]
+Description=Koko IM Server
+After=network.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=koko
+Group=koko
+WorkingDirectory=/opt/koko
+EnvironmentFile=/etc/koko/koko.env
+ExecStart=/usr/local/bin/koko-server
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

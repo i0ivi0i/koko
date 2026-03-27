@@ -1,0 +1,15 @@
+__KOKO_DOMAIN__ {
+    root * /opt/koko/web
+    file_server
+
+    reverse_proxy /session* 127.0.0.1:3000
+    reverse_proxy /rooms* 127.0.0.1:3000
+    reverse_proxy /ws* 127.0.0.1:3000
+}
+
+__KOKO_ADMIN_DOMAIN__ {
+    root * /opt/koko/admin
+    file_server
+
+    reverse_proxy /admin* 127.0.0.1:3000
+}
