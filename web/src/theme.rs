@@ -42,13 +42,15 @@ body {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   padding: 24px;
+  overflow: hidden;
 }
 
 .telegram-frame {
   width: min(1280px, 100%);
-  min-height: calc(100vh - 48px);
+  height: 100%;
+  min-height: 0;
   margin: 0 auto;
   border: 1px solid var(--line);
   border-radius: 36px;
@@ -203,7 +205,8 @@ body {
 }
 
 .chat-main-view {
-  min-height: calc(100vh - 48px);
+  height: 100%;
+  min-height: 0;
   background:
     radial-gradient(circle at top, rgba(67, 132, 244, 0.14), transparent 22%),
     linear-gradient(180deg, rgba(14, 23, 35, 0.94), rgba(8, 13, 21, 0.98));
@@ -262,6 +265,7 @@ body {
 
 .chat-wall {
   flex: 1;
+  min-height: 0;
   padding: 18px 16px 12px;
   display: flex;
   flex-direction: column;
@@ -516,6 +520,7 @@ body {
 
 @media (max-width: 980px) {
   .app-shell {
+    height: 100vh;
     padding: 0;
   }
 
@@ -617,5 +622,23 @@ mod tests {
         assert!(block.contains("width: 42px;"));
         assert!(block.contains("padding: 0;"));
         assert!(block.contains("border-radius: 50%;"));
+    }
+
+    #[test]
+    fn chat_layout_should_be_constrained_to_viewport_instead_of_page_scroll() {
+        let app_shell = css_block(".app-shell {");
+        assert!(app_shell.contains("height: 100vh;"));
+        assert!(app_shell.contains("overflow: hidden;"));
+
+        let telegram_frame = css_block(".telegram-frame {");
+        assert!(telegram_frame.contains("height: 100%;"));
+        assert!(telegram_frame.contains("min-height: 0;"));
+
+        let chat_main = css_block(".chat-main-view {");
+        assert!(chat_main.contains("height: 100%;"));
+        assert!(chat_main.contains("min-height: 0;"));
+
+        let chat_wall = css_block(".chat-wall {");
+        assert!(chat_wall.contains("min-height: 0;"));
     }
 }
