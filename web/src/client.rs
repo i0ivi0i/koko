@@ -4,8 +4,8 @@ use gloo_net::{
     websocket::{Message, futures::WebSocket},
 };
 use koko_contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, JoinOrCreateRoomRequest,
-    JoinOrCreateRoomResponse, MessageResponse, ResolveRoomRequest, ResolveRoomResponse,
+    BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
+    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
     RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SendMessageRequest,
     ServerWsEvent,
 };
@@ -24,7 +24,7 @@ pub enum MemberAction {
 #[derive(Debug, PartialEq)]
 struct MemberActionRequest {
     path: String,
-    body: serde_json::Value,
+    body: String,
 }
 
 pub fn api_base() -> &'static str {
@@ -53,6 +53,7 @@ fn build_room_messages_path(room_id: &str, before_message_id: Option<&str>) -> S
 }
 
 pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
+    let normalized_code = code.to_ascii_uppercase();
     let session: BootstrapSessionResponse =
         Request::post(&format!("{}/session/bootstrap", api_base()))
             .json(&BootstrapSessionRequest {
@@ -66,23 +67,11 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
             .await
             .map_err(|error| error.to_string())?;
 
-    let _: ResolveRoomResponse = Request::post(&format!("{}/rooms/resolve", api_base()))
-        .json(&ResolveRoomRequest {
-            code: code.to_ascii_uppercase(),
-        })
-        .map_err(|error| error.to_string())?
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
-
     let joined: JoinOrCreateRoomResponse =
         Request::post(&format!("{}/rooms/join-or-create", api_base()))
             .json(&JoinOrCreateRoomRequest {
                 profile_id: session.profile_id.clone(),
-                code: code.to_ascii_uppercase(),
+                code: normalized_code,
             })
             .map_err(|error| error.to_string())?
             .send()
@@ -161,22 +150,25 @@ fn build_member_action_request(
     match action {
         MemberAction::Promote => MemberActionRequest {
             path: format!("/rooms/{room_id}/roles/promote"),
-            body: serde_json::json!({
-                "actor_profile_id": actor_profile_id,
-                "target_profile_id": target_profile_id,
-            }),
+            body: serde_json::to_string(&PromoteAdminRequest {
+                actor_profile_id: actor_profile_id.to_owned(),
+                target_profile_id: target_profile_id.to_owned(),
+            })
+            .expect("治理请求序列化不应失败"),
         },
         MemberAction::Mute => MemberActionRequest {
             path: format!("/rooms/{room_id}/members/{target_profile_id}/mute"),
-            body: serde_json::json!({
-                "actor_profile_id": actor_profile_id,
-            }),
+            body: serde_json::to_string(&GovernanceActorRequest {
+                actor_profile_id: actor_profile_id.to_owned(),
+            })
+            .expect("治理请求序列化不应失败"),
         },
         MemberAction::Remove => MemberActionRequest {
             path: format!("/rooms/{room_id}/members/{target_profile_id}/remove"),
-            body: serde_json::json!({
-                "actor_profile_id": actor_profile_id,
-            }),
+            body: serde_json::to_string(&GovernanceActorRequest {
+                actor_profile_id: actor_profile_id.to_owned(),
+            })
+            .expect("治理请求序列化不应失败"),
         },
     }
 }
@@ -209,7 +201,8 @@ pub async fn run_member_action(
     let request = build_member_action_request(action, room_id, actor_profile_id, target_profile_id);
 
     Request::post(&format!("{}{}", api_base(), request.path))
-        .json(&request.body)
+        .header("content-type", "application/json")
+        .body(request.body)
         .map_err(|error| error.to_string())?
         .send()
         .await
@@ -256,7 +249,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use koko_contract::{GovernanceActorRequest, PromoteAdminRequest};
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -289,10 +282,11 @@ mod tests {
         assert_eq!(request.path, "/rooms/room-1/roles/promote");
         assert_eq!(
             request.body,
-            json!({
-                "actor_profile_id": "owner-1",
-                "target_profile_id": "member-1"
+            serde_json::to_string(&PromoteAdminRequest {
+                actor_profile_id: "owner-1".into(),
+                target_profile_id: "member-1".into(),
             })
+            .unwrap()
         );
     }
 
@@ -304,9 +298,10 @@ mod tests {
         assert_eq!(request.path, "/rooms/room-1/members/member-1/mute");
         assert_eq!(
             request.body,
-            json!({
-                "actor_profile_id": "admin-1"
+            serde_json::to_string(&GovernanceActorRequest {
+                actor_profile_id: "admin-1".into(),
             })
+            .unwrap()
         );
     }
 

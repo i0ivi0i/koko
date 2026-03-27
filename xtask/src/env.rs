@@ -31,39 +31,25 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
     let mut web_bind = None;
     let mut rust_log = None;
 
-    for raw_line in content.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
+    for item in dotenvy::from_read_iter(content.as_bytes()) {
+        let (key, value) =
+            item.map_err(|error| format!("解析 {} 失败: {error}", path.display()))?;
 
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-
-        match key.trim() {
-            "DATABASE_URL" => database_url = Some(value.trim().to_owned()),
-            "KOKO_API_BASE" => api_base = Some(value.trim().to_owned()),
-            "SERVER_BIND" => server_bind = Some(value.trim().to_owned()),
-            "WEB_BIND" => web_bind = Some(value.trim().to_owned()),
-            "RUST_LOG" => rust_log = Some(value.trim().to_owned()),
+        match key.as_str() {
+            "DATABASE_URL" => database_url = Some(value),
+            "KOKO_API_BASE" => api_base = Some(value),
+            "SERVER_BIND" => server_bind = Some(value),
+            "WEB_BIND" => web_bind = Some(value),
+            "RUST_LOG" => rust_log = Some(value),
             _ => {}
         }
     }
 
     Ok(LocalEnv {
-        database_url: database_url.ok_or_else(|| {
-            format!(
-                "{} 缺少 DATABASE_URL。请补齐数据库连接串。",
-                path.display()
-            )
-        })?,
-        api_base: api_base.ok_or_else(|| {
-            format!(
-                "{} 缺少 KOKO_API_BASE。请补齐后端地址。",
-                path.display()
-            )
-        })?,
+        database_url: database_url
+            .ok_or_else(|| format!("{} 缺少 DATABASE_URL。请补齐数据库连接串。", path.display()))?,
+        api_base: api_base
+            .ok_or_else(|| format!("{} 缺少 KOKO_API_BASE。请补齐后端地址。", path.display()))?,
         server_bind: server_bind.unwrap_or_else(|| "0.0.0.0:3000".to_owned()),
         web_bind: web_bind.unwrap_or_else(|| "0.0.0.0:8080".to_owned()),
         rust_log: rust_log.unwrap_or_else(|| "info,tower_http=info,sqlx=warn".to_owned()),
@@ -72,7 +58,7 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_local_env, LocalEnv};
+    use super::{LocalEnv, load_local_env};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -129,6 +115,21 @@ mod tests {
 
         assert_eq!(env.server_bind, "0.0.0.0:3000");
         assert_eq!(env.web_bind, "0.0.0.0:8088");
+    }
+
+    #[test]
+    fn load_local_env_should_parse_quoted_values() {
+        let root = create_temp_root(
+            "DATABASE_URL=\"postgres://local\"\nKOKO_API_BASE=\"http://192.168.1.7:3000\"\nSERVER_BIND=\"0.0.0.0:3000\"\nWEB_BIND=\"0.0.0.0:8088\"\nRUST_LOG=\"debug,tower_http=info\"\n",
+        );
+
+        let env = load_local_env(&root).expect("应能解析带引号的 .env.local");
+
+        assert_eq!(env.database_url, "postgres://local");
+        assert_eq!(env.api_base, "http://192.168.1.7:3000");
+        assert_eq!(env.server_bind, "0.0.0.0:3000");
+        assert_eq!(env.web_bind, "0.0.0.0:8088");
+        assert_eq!(env.rust_log, "debug,tower_http=info");
     }
 
     fn create_temp_root(content: &str) -> PathBuf {
