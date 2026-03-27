@@ -360,8 +360,10 @@ body {
   border: 0;
   background: transparent;
   color: var(--text);
-  resize: vertical;
+  resize: none;
+  overflow-y: auto;
   outline: none;
+  line-height: 1.45;
 }
 
 .composer-attach {
@@ -372,14 +374,39 @@ body {
 .composer-send-button {
   border: 0;
   flex-shrink: 0;
-  padding: 0 18px;
+  width: 42px;
   height: 42px;
-  border-radius: 999px;
+  padding: 0;
+  border-radius: 50%;
   background: linear-gradient(180deg, #2791ff 0%, #2e73ff 100%);
   color: #fff;
   font: inherit;
   font-weight: 640;
   cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
+}
+
+.composer-send-icon {
+  font-size: 18px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.composer-send-button.is-idle {
+  opacity: 0.42;
+  background: rgba(92, 120, 162, 0.16);
+  color: rgba(240, 246, 255, 0.82);
+  cursor: default;
+}
+
+.composer-send-button.is-ready:hover {
+  transform: translateY(-1px) scale(1.02);
+}
+
+.composer-send-button:disabled {
+  pointer-events: none;
 }
 
 .avatar {
@@ -552,6 +579,17 @@ body {
 mod tests {
     use super::APP_STYLE;
 
+    fn css_block(selector: &str) -> String {
+        let start = APP_STYLE
+            .find(selector)
+            .unwrap_or_else(|| panic!("找不到样式块: {selector}"));
+        let tail = &APP_STYLE[start..];
+        let end = tail
+            .find("\n}")
+            .unwrap_or_else(|| panic!("样式块未闭合: {selector}"));
+        tail[..end].to_string()
+    }
+
     #[test]
     fn member_sheet_style_should_keep_card_and_overlay_separate() {
         assert!(!APP_STYLE.contains(".entry-card,\n.chat-panel,\n.member-sheet {"));
@@ -564,5 +602,20 @@ mod tests {
         assert!(APP_STYLE.contains("display: flex;\n  flex-direction: column;"));
         assert!(APP_STYLE.contains(".member-list {\n  display: flex;"));
         assert!(APP_STYLE.contains("flex: 1;\n  min-height: 0;\n  overflow: auto;"));
+    }
+
+    #[test]
+    fn composer_style_should_disable_native_resize_handle() {
+        let block = css_block(".chat-composer-input {");
+        assert!(block.contains("resize: none;"));
+        assert!(block.contains("overflow-y: auto;"));
+    }
+
+    #[test]
+    fn composer_send_button_should_use_round_icon_style() {
+        let block = css_block(".composer-send-button {");
+        assert!(block.contains("width: 42px;"));
+        assert!(block.contains("padding: 0;"));
+        assert!(block.contains("border-radius: 50%;"));
     }
 }

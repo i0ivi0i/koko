@@ -15,6 +15,14 @@ pub fn ChatScreen(
     on_send: EventHandler<String>,
 ) -> Element {
     let mut draft = use_signal(String::new);
+    let draft_value = draft();
+    let send_disabled = draft_value.trim().is_empty();
+    let composer_rows = draft_value.lines().count().max(1).min(4);
+    let send_button_class = if send_disabled {
+        "composer-send-button is-idle"
+    } else {
+        "composer-send-button is-ready"
+    };
 
     rsx! {
         div { class: "telegram-frame chat-main-view",
@@ -52,15 +60,23 @@ pub fn ChatScreen(
 
             footer { class: "chat-bottom-bar",
                 div { class: "chat-composer-pill",
-                    button { class: "icon-button composer-attach", "+" }
+                    button {
+                        class: "icon-button composer-attach",
+                        "aria-label": "更多操作",
+                        "+"
+                    }
                     textarea {
                         class: "composer-input chat-composer-input",
-                        value: "{draft()}",
+                        value: "{draft_value}",
+                        rows: "{composer_rows}",
+                        "enterkeyhint": "send",
                         placeholder: "消息",
                         oninput: move |event| draft.set(event.value()),
                     }
                     button {
-                        class: "composer-send-button",
+                        class: "{send_button_class}",
+                        "aria-label": "发送消息",
+                        disabled: send_disabled,
                         onclick: move |_| {
                             let content = draft().trim().to_string();
                             if !content.is_empty() {
@@ -68,7 +84,7 @@ pub fn ChatScreen(
                                 draft.set(String::new());
                             }
                         },
-                        "发送"
+                        span { class: "composer-send-icon", "↑" }
                     }
                 }
             }
@@ -133,5 +149,32 @@ mod tests {
         assert!(html.contains("chat-topbar"));
         assert!(html.contains("chat-composer-pill"));
         assert!(!html.contains("chat-sidebar"));
+    }
+
+    #[test]
+    fn chat_screen_should_render_idle_send_button_state() {
+        #[component]
+        fn TestChatShell() -> Element {
+            rsx! {
+                ChatScreen {
+                    room_code: "1A234".to_string(),
+                    profile_id: "self".to_string(),
+                    display_name: "匿名用户".to_string(),
+                    messages: vec![],
+                    member_count: 3,
+                    on_back: move |_| {},
+                    on_open_members: move |_| {},
+                    on_send: move |_| {},
+                }
+            }
+        }
+
+        let mut dom = VirtualDom::new(TestChatShell);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+
+        assert!(html.contains("composer-send-button is-idle"));
+        assert!(html.contains("aria-label=\"发送消息\""));
+        assert!(html.contains("disabled"));
     }
 }
