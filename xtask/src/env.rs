@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 pub struct LocalEnv {
     pub database_url: String,
     pub api_base: String,
+    pub rust_log: String,
 }
 
 pub fn workspace_root() -> &'static Path {
@@ -24,6 +25,7 @@ pub fn load_local_env(root: &Path) -> Result<LocalEnv, String> {
 fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
     let mut database_url = None;
     let mut api_base = None;
+    let mut rust_log = None;
 
     for raw_line in content.lines() {
         let line = raw_line.trim();
@@ -38,6 +40,7 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
         match key.trim() {
             "DATABASE_URL" => database_url = Some(value.trim().to_owned()),
             "KOKO_API_BASE" => api_base = Some(value.trim().to_owned()),
+            "RUST_LOG" => rust_log = Some(value.trim().to_owned()),
             _ => {}
         }
     }
@@ -55,6 +58,7 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
                 path.display()
             )
         })?,
+        rust_log: rust_log.unwrap_or_else(|| "info,tower_http=info,sqlx=warn".to_owned()),
     })
 }
 
@@ -78,6 +82,7 @@ mod tests {
             LocalEnv {
                 database_url: "postgres://local".into(),
                 api_base: "http://127.0.0.1:3000".into(),
+                rust_log: "info,tower_http=info,sqlx=warn".into(),
             }
         );
     }
@@ -89,6 +94,17 @@ mod tests {
         let error = load_local_env(&root).expect_err("缺少 DATABASE_URL 应失败");
 
         assert!(error.contains("DATABASE_URL"));
+    }
+
+    #[test]
+    fn load_local_env_missing_rust_log_should_use_dev_default() {
+        let root = create_temp_root(
+            "DATABASE_URL=postgres://local\nKOKO_API_BASE=http://127.0.0.1:3000\n",
+        );
+
+        let env = load_local_env(&root).expect("应能读取 .env.local");
+
+        assert_eq!(env.rust_log, "info,tower_http=info,sqlx=warn");
     }
 
     fn create_temp_root(content: &str) -> PathBuf {

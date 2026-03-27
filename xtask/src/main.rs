@@ -112,7 +112,8 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
         ],
     )
     .current_dir(root)
-    .env("DATABASE_URL", &env.database_url);
+    .env("DATABASE_URL", &env.database_url)
+    .env("RUST_LOG", &env.rust_log);
     let frontend = process::CommandSpec::new(
         "dx",
         ["serve", "--platform", "web", "--port", "8080", "--addr", "127.0.0.1"],
@@ -123,6 +124,7 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     if dry_run {
         println!("[dry-run] 后端命令: {}", process::format_command(&backend));
         println!("[dry-run] 前端命令: {}", process::format_command(&frontend));
+        println!("[dry-run] RUST_LOG={}", env.rust_log);
         println!("[dry-run] 日志模式: 终端聚合");
         return Ok(());
     }

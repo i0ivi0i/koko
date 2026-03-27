@@ -1,9 +1,15 @@
 use axum::{
+    extract::Request,
     Router,
     routing::{get, post},
 };
 use sqlx::PgPool;
+use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::request_id::MakeRequestUuid;
+use tower_http::trace::{DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer};
+use tower_http::ServiceBuilderExt;
+use tracing::{Level, info_span};
 
 use crate::{http, ws::RealtimeHub};
 
@@ -41,11 +47,30 @@ pub fn build_app(pool: PgPool) -> Router {
             post(http::remove_room_member),
         )
         .route("/ws/rooms/{room_id}", get(crate::ws::connect))
+        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
+            ServiceBuilder::new()
+                .set_x_request_id(MakeRequestUuid)
+                .layer(
+                    TraceLayer::new_for_http()
+                        .make_span_with(|request: &Request<_>| {
+                            let request_id = request
+                                .headers()
+                                .get("x-request-id")
+                                .and_then(|value| value.to_str().ok())
+                                .unwrap_or("-");
+                            info_span!(
+                                "http.request",
+                                request_id = %request_id,
+                                method = %request.method(),
+                                path = %request.uri().path()
+                            )
+                        })
+                        .on_request(DefaultOnRequest::new().level(Level::INFO))
+                        .on_response(DefaultOnResponse::new().level(Level::INFO))
+                        .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
+                )
+                .propagate_x_request_id(),
         )
         .with_state(AppState {
             pool,

@@ -13,7 +13,9 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio-native-tls", "postgres", 
 time = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "net"] }
 tower = { version = "0.5.2", features = ["util"] }
-tower-http = { version = "0.6.8", features = ["cors"] }
+tower-http = { version = "0.6.8", features = ["cors", "request-id", "trace", "util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
