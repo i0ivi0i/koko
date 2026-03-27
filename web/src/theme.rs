@@ -283,6 +283,28 @@ body {
   font-size: 12px;
 }
 
+.history-load-more-button {
+  align-self: center;
+  padding: 10px 16px;
+  border: 1px solid rgba(150, 175, 214, 0.08);
+  border-radius: 999px;
+  background: rgba(18, 28, 41, 0.82);
+  color: rgba(233, 241, 255, 0.92);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 140ms ease, opacity 140ms ease;
+}
+
+.history-load-more-button:hover {
+  background: rgba(27, 40, 59, 0.92);
+}
+
+.history-load-more-button:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+
 .message-row {
   display: flex;
 }
@@ -640,5 +662,12 @@ mod tests {
 
         let chat_wall = css_block(".chat-wall {");
         assert!(chat_wall.contains("min-height: 0;"));
+    }
+
+    #[test]
+    fn load_older_button_should_use_centered_capsule_style() {
+        let block = css_block(".history-load-more-button {");
+        assert!(block.contains("align-self: center;"));
+        assert!(block.contains("border-radius: 999px;"));
     }
 }

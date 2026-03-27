@@ -9,9 +9,12 @@ pub fn ChatScreen(
     profile_id: String,
     display_name: String,
     messages: Vec<MessageResponse>,
+    has_more_messages: bool,
+    loading_more_messages: bool,
     member_count: usize,
     on_back: EventHandler<()>,
     on_open_members: EventHandler<()>,
+    on_load_older: EventHandler<()>,
     on_send: EventHandler<String>,
 ) -> Element {
     let mut draft = use_signal(String::new);
@@ -47,6 +50,18 @@ pub fn ChatScreen(
             }
 
             section { class: "chat-wall",
+                if has_more_messages {
+                    button {
+                        class: "history-load-more-button",
+                        disabled: loading_more_messages,
+                        onclick: move |_| on_load_older.call(()),
+                        if loading_more_messages {
+                            "正在加载更早消息..."
+                        } else {
+                            "加载更早消息"
+                        }
+                    }
+                }
                 div { class: "chat-date-chip", "今天" }
                 for message in messages {
                     MessageBubble {
@@ -133,9 +148,12 @@ mod tests {
                     profile_id: "self".to_string(),
                     display_name: "匿名用户".to_string(),
                     messages: vec![],
+                    has_more_messages: false,
+                    loading_more_messages: false,
                     member_count: 3,
                     on_back: move |_| {},
                     on_open_members: move |_| {},
+                    on_load_older: move |_| {},
                     on_send: move |_| {},
                 }
             }
@@ -161,9 +179,12 @@ mod tests {
                     profile_id: "self".to_string(),
                     display_name: "匿名用户".to_string(),
                     messages: vec![],
+                    has_more_messages: false,
+                    loading_more_messages: false,
                     member_count: 3,
                     on_back: move |_| {},
                     on_open_members: move |_| {},
+                    on_load_older: move |_| {},
                     on_send: move |_| {},
                 }
             }
@@ -176,5 +197,34 @@ mod tests {
         assert!(html.contains("composer-send-button is-idle"));
         assert!(html.contains("aria-label=\"发送消息\""));
         assert!(html.contains("disabled"));
+    }
+
+    #[test]
+    fn chat_screen_should_render_load_older_entry_when_history_remains() {
+        #[component]
+        fn TestChatShell() -> Element {
+            rsx! {
+                ChatScreen {
+                    room_code: "1A234".to_string(),
+                    profile_id: "self".to_string(),
+                    display_name: "匿名用户".to_string(),
+                    messages: vec![],
+                    has_more_messages: true,
+                    loading_more_messages: false,
+                    member_count: 3,
+                    on_back: move |_| {},
+                    on_open_members: move |_| {},
+                    on_load_older: move |_| {},
+                    on_send: move |_| {},
+                }
+            }
+        }
+
+        let mut dom = VirtualDom::new(TestChatShell);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+
+        assert!(html.contains("history-load-more-button"));
+        assert!(html.contains("加载更早消息"));
     }
 }

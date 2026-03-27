@@ -14,6 +14,7 @@ pub fn App() -> Element {
     let mut members_open = use_signal(|| false);
     let mut room_state = use_signal(|| None::<ActiveRoom>);
     let loading = use_signal(|| false);
+    let mut loading_older_messages = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
 
     rsx! {
@@ -31,9 +32,48 @@ pub fn App() -> Element {
                     on_back: move |_| {
                         room_state.with_mut(state::leave_room);
                         members_open.set(false);
+                        loading_older_messages.set(false);
                         error_message.set(None);
                     },
                     on_open_members: move |_| members_open.set(true),
+                    has_more_messages: room.has_more_messages,
+                    loading_more_messages: loading_older_messages(),
+                    on_load_older: move |_| {
+                        if loading_older_messages() {
+                            return;
+                        }
+                        if let Some(current_room) = room_state() {
+                            let Some(before_message_id) = state::earliest_message_id(&current_room) else {
+                                return;
+                            };
+                            let room_id = current_room.room_id.clone();
+                            let mut room_state = room_state;
+                            let mut loading_older_messages = loading_older_messages;
+
+                            spawn(async move {
+                                loading_older_messages.set(true);
+
+                                if let Ok(response) = client::fetch_room_messages(
+                                    &room_id,
+                                    Some(&before_message_id),
+                                )
+                                .await
+                                {
+                                    room_state.with_mut(|state| {
+                                        if let Some(room) = state.as_mut() {
+                                            state::prepend_messages(
+                                                room,
+                                                response.items,
+                                                response.has_more,
+                                            );
+                                        }
+                                    });
+                                }
+
+                                loading_older_messages.set(false);
+                            });
+                        }
+                    },
                     on_send: move |content: String| {
                         if let Some(current_room) = room_state() {
                             let mut room_state = room_state;
@@ -96,6 +136,7 @@ pub fn App() -> Element {
                                     let room = state::apply_joined_room(snapshot);
                                     let room_id = room.room_id.clone();
                                     let profile_id = room.profile_id.clone();
+                                    loading_older_messages.set(false);
                                     room_state.set(Some(room));
                                     spawn(client::listen_room_events(
                                         room_id,

@@ -11,6 +11,7 @@ pub struct ActiveRoom {
     pub room_code: String,
     pub role: String,
     pub messages: Vec<MessageResponse>,
+    pub has_more_messages: bool,
     pub members: Vec<RoomMemberResponse>,
 }
 
@@ -18,6 +19,7 @@ pub struct ActiveRoomSnapshot {
     pub session: BootstrapSessionResponse,
     pub joined: JoinOrCreateRoomResponse,
     pub messages: Vec<MessageResponse>,
+    pub has_more_messages: bool,
     pub members: Vec<RoomMemberResponse>,
 }
 
@@ -30,6 +32,7 @@ pub fn apply_joined_room(snapshot: ActiveRoomSnapshot) -> ActiveRoom {
         room_code: snapshot.joined.code,
         role: snapshot.joined.role,
         messages: snapshot.messages,
+        has_more_messages: snapshot.has_more_messages,
         members: snapshot.members,
     }
 }
@@ -45,6 +48,37 @@ pub fn append_message_if_missing(room: &mut ActiveRoom, message: MessageResponse
 
     room.messages.push(message);
     true
+}
+
+pub fn prepend_messages(
+    room: &mut ActiveRoom,
+    messages: Vec<MessageResponse>,
+    has_more: bool,
+) -> usize {
+    let mut older_messages: Vec<MessageResponse> = messages
+        .into_iter()
+        .filter(|message| {
+            !room
+                .messages
+                .iter()
+                .any(|existing| existing.message_id == message.message_id)
+        })
+        .collect();
+    let inserted = older_messages.len();
+
+    if inserted > 0 {
+        older_messages.append(&mut room.messages);
+        room.messages = older_messages;
+    }
+
+    room.has_more_messages = has_more;
+    inserted
+}
+
+pub fn earliest_message_id(room: &ActiveRoom) -> Option<String> {
+    room.messages
+        .first()
+        .map(|message| message.message_id.clone())
 }
 
 pub fn replace_members(room: &mut ActiveRoom, members: Vec<RoomMemberResponse>) {
@@ -90,12 +124,14 @@ mod tests {
                 role: "owner".into(),
             },
             messages: vec![message("msg-1")],
+            has_more_messages: true,
             members: vec![member("profile-1")],
         });
 
         assert_eq!(room.room_code, "1A234");
         assert_eq!(room.role, "owner");
         assert_eq!(room.messages.len(), 1);
+        assert!(room.has_more_messages);
         assert_eq!(room.members.len(), 1);
     }
 
@@ -109,6 +145,7 @@ mod tests {
             room_code: "1A234".into(),
             role: "owner".into(),
             messages: vec![message("msg-1")],
+            has_more_messages: false,
             members: vec![member("profile-1")],
         };
 
@@ -126,6 +163,7 @@ mod tests {
             room_code: "1A234".into(),
             role: "owner".into(),
             messages: vec![message("msg-1")],
+            has_more_messages: false,
             members: vec![member("profile-1")],
         };
 
@@ -145,11 +183,44 @@ mod tests {
             room_code: "1A234".into(),
             role: "owner".into(),
             messages: vec![message("msg-1")],
+            has_more_messages: false,
             members: vec![member("profile-1")],
         });
 
         leave_room(&mut state);
 
         assert!(state.is_none());
+    }
+
+    #[test]
+    fn prepend_messages_should_insert_older_messages_once_and_update_has_more() {
+        let mut room = ActiveRoom {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+            room_id: "room-1".into(),
+            room_code: "1A234".into(),
+            role: "owner".into(),
+            messages: vec![message("msg-3"), message("msg-4")],
+            has_more_messages: true,
+            members: vec![member("profile-1")],
+        };
+
+        let inserted = prepend_messages(
+            &mut room,
+            vec![message("msg-1"), message("msg-2"), message("msg-3")],
+            false,
+        );
+
+        assert_eq!(inserted, 2);
+        assert_eq!(
+            room.messages
+                .iter()
+                .map(|item| item.message_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["msg-1", "msg-2", "msg-3", "msg-4"]
+        );
+        assert!(!room.has_more_messages);
+        assert_eq!(earliest_message_id(&room).as_deref(), Some("msg-1"));
     }
 }

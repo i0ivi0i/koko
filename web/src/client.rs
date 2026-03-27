@@ -12,6 +12,8 @@ use koko_contract::{
 
 use crate::state::ActiveRoomSnapshot;
 
+const MESSAGE_PAGE_LIMIT: u16 = 40;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemberAction {
     Promote,
@@ -39,6 +41,15 @@ pub fn build_room_ws_url(api_base: &str, room_id: &str, profile_id: &str) -> Str
     };
 
     format!("{ws_base}/ws/rooms/{room_id}?profile_id={profile_id}")
+}
+
+fn build_room_messages_path(room_id: &str, before_message_id: Option<&str>) -> String {
+    match before_message_id {
+        Some(anchor) => format!(
+            "/rooms/{room_id}/messages?before_message_id={anchor}&limit={MESSAGE_PAGE_LIMIT}"
+        ),
+        None => format!("/rooms/{room_id}/messages?limit={MESSAGE_PAGE_LIMIT}"),
+    }
 }
 
 pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
@@ -81,14 +92,17 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
             .await
             .map_err(|error| error.to_string())?;
 
-    let messages: RoomMessagesResponse =
-        Request::get(&format!("{}/rooms/{}/messages", api_base(), joined.room_id))
-            .send()
-            .await
-            .map_err(|error| error.to_string())?
-            .json()
-            .await
-            .map_err(|error| error.to_string())?;
+    let messages: RoomMessagesResponse = Request::get(&format!(
+        "{}{}",
+        api_base(),
+        build_room_messages_path(&joined.room_id, None)
+    ))
+    .send()
+    .await
+    .map_err(|error| error.to_string())?
+    .json()
+    .await
+    .map_err(|error| error.to_string())?;
 
     let members: RoomMembersResponse =
         Request::get(&format!("{}/rooms/{}/members", api_base(), joined.room_id))
@@ -103,8 +117,26 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
         session,
         joined,
         messages: messages.items,
+        has_more_messages: messages.has_more,
         members: members.items,
     })
+}
+
+pub async fn fetch_room_messages(
+    room_id: &str,
+    before_message_id: Option<&str>,
+) -> Result<RoomMessagesResponse, String> {
+    Request::get(&format!(
+        "{}{}",
+        api_base(),
+        build_room_messages_path(room_id, before_message_id)
+    ))
+    .send()
+    .await
+    .map_err(|error| error.to_string())?
+    .json()
+    .await
+    .map_err(|error| error.to_string())
 }
 
 pub async fn fetch_room_members(room_id: &str) -> Result<Vec<RoomMemberResponse>, String> {
@@ -275,6 +307,22 @@ mod tests {
             json!({
                 "actor_profile_id": "admin-1"
             })
+        );
+    }
+
+    #[test]
+    fn room_messages_path_should_include_default_limit() {
+        assert_eq!(
+            build_room_messages_path("room-1", None),
+            "/rooms/room-1/messages?limit=40"
+        );
+    }
+
+    #[test]
+    fn room_messages_path_should_include_anchor_and_limit() {
+        assert_eq!(
+            build_room_messages_path("room-1", Some("msg-9")),
+            "/rooms/room-1/messages?before_message_id=msg-9&limit=40"
         );
     }
 }

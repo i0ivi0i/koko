@@ -50,9 +50,16 @@ pub struct MessageResponse {
     pub content: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct RoomMessagesQuery {
+    pub before_message_id: Option<String>,
+    pub limit: Option<u16>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RoomMessagesResponse {
     pub items: Vec<MessageResponse>,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -150,6 +157,37 @@ mod tests {
 
         let json = serde_json::to_string(&value).unwrap();
         let decoded: ServerWsEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn room_messages_query_should_roundtrip_with_anchor_and_limit() {
+        let value = RoomMessagesQuery {
+            before_message_id: Some("msg-9".into()),
+            limit: Some(40),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: RoomMessagesQuery = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn room_messages_response_should_roundtrip_has_more_flag() {
+        let value = RoomMessagesResponse {
+            items: vec![MessageResponse {
+                message_id: "msg-1".into(),
+                room_id: "room-1".into(),
+                sender_id: "profile-1".into(),
+                content: "hello".into(),
+            }],
+            has_more: true,
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: RoomMessagesResponse = serde_json::from_str(&json).unwrap();
 
         assert_eq!(decoded, value);
     }

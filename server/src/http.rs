@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -8,7 +8,7 @@ use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, DemoteAdminRequest, GovernanceActorRequest,
     JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
     ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,
-    RoomMessagesResponse, RoomResponse, SendMessageRequest, ServerWsEvent,
+    RoomMessagesQuery, RoomMessagesResponse, RoomResponse, SendMessageRequest, ServerWsEvent,
 };
 use uuid::Uuid;
 
@@ -17,9 +17,12 @@ use crate::{
     session,
 };
 use koko_core::{
-    model::{ProfileId, Role, RoomCode, RoomId},
+    model::{MessageId, ProfileId, Role, RoomCode, RoomId},
     port::RoomRepository,
 };
+
+const DEFAULT_MESSAGE_PAGE_LIMIT: usize = 40;
+const MAX_MESSAGE_PAGE_LIMIT: u16 = 100;
 
 pub async fn bootstrap_session(
     State(state): State<AppState>,
@@ -98,18 +101,22 @@ pub async fn get_room(
 pub async fn list_room_messages(
     State(state): State<AppState>,
     Path(room_id): Path<String>,
+    Query(query): Query<RoomMessagesQuery>,
 ) -> Result<Json<RoomMessagesResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
+    let before_message_id = parse_optional_message_id(query.before_message_id.as_deref())?;
+    let limit = normalize_message_page_limit(query.limit);
     let message_repo = PostgresMessageRepository::new(state.pool);
-    let items = message_repo
-        .list_room_messages(room_id)
+    let page = message_repo
+        .list_room_messages(room_id, before_message_id, limit)
         .await
-        .map_err(|_| ApiError::internal("消息历史读取失败"))?
-        .into_iter()
-        .map(message_to_response)
-        .collect();
+        .map_err(map_list_messages_error)?;
+    let items = page.items.into_iter().map(message_to_response).collect();
 
-    Ok(Json(RoomMessagesResponse { items }))
+    Ok(Json(RoomMessagesResponse {
+        items,
+        has_more: page.has_more,
+    }))
 }
 
 pub async fn list_room_members(
@@ -287,6 +294,22 @@ fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {
         .map_err(|_| ApiError::bad_request("room_id 不合法"))
 }
 
+fn parse_optional_message_id(raw: Option<&str>) -> Result<Option<MessageId>, ApiError> {
+    raw.map(|value| {
+        Uuid::parse_str(value)
+            .map(MessageId)
+            .map_err(|_| ApiError::bad_request("before_message_id 不合法"))
+    })
+    .transpose()
+}
+
+fn normalize_message_page_limit(limit: Option<u16>) -> usize {
+    match limit {
+        Some(0) | None => DEFAULT_MESSAGE_PAGE_LIMIT,
+        Some(value) => value.min(MAX_MESSAGE_PAGE_LIMIT) as usize,
+    }
+}
+
 fn role_name(role: Role) -> &'static str {
     match role {
         Role::Owner => "owner",
@@ -317,5 +340,16 @@ fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {
         DomainError::SenderIsMuted => ApiError::bad_request("成员已被禁言"),
         DomainError::InsufficientRoomPermission => ApiError::forbidden("房间权限不足"),
         DomainError::CannotModerateRoomOwner => ApiError::forbidden("不能操作群主"),
+    }
+}
+
+fn map_list_messages_error(error: crate::message_repo::ListRoomMessagesError) -> ApiError {
+    match error {
+        crate::message_repo::ListRoomMessagesError::InvalidAnchor => {
+            ApiError::bad_request("before_message_id 不存在或不属于当前房间")
+        }
+        crate::message_repo::ListRoomMessagesError::Query(_) => {
+            ApiError::internal("消息历史读取失败")
+        }
     }
 }

@@ -146,6 +146,7 @@ async fn 房间详情与消息历史接口应返回已创建房间信息(pool: P
     let messages_body = to_bytes(messages.into_body(), usize::MAX).await.unwrap();
     let messages_payload: Value = serde_json::from_slice(&messages_body).unwrap();
     assert_eq!(messages_payload["items"], json!([]));
+    assert_eq!(messages_payload["has_more"], false);
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -282,4 +283,246 @@ async fn 发送消息接口应返回新消息(pool: PgPool) {
 
     assert_eq!(payload["content"], "hello over http");
     assert_eq!(payload["sender_id"], owner_id.to_string());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 消息历史接口应只返回最新一页并标记是否还有更早消息(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "page-owner").await;
+    insert_room_with_owner(&pool, room_id, owner_id, "5E678").await;
+    insert_message(
+        &pool,
+        Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+        room_id,
+        owner_id,
+        "message-1",
+        "2026-03-27T00:00:01Z",
+    )
+    .await;
+    insert_message(
+        &pool,
+        Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
+        room_id,
+        owner_id,
+        "message-2",
+        "2026-03-27T00:00:02Z",
+    )
+    .await;
+    insert_message(
+        &pool,
+        Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap(),
+        room_id,
+        owner_id,
+        "message-3",
+        "2026-03-27T00:00:03Z",
+    )
+    .await;
+    insert_message(
+        &pool,
+        Uuid::parse_str("00000000-0000-0000-0000-000000000004").unwrap(),
+        room_id,
+        owner_id,
+        "message-4",
+        "2026-03-27T00:00:04Z",
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/rooms/{room_id}/messages?limit=2"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["has_more"], true);
+    assert_eq!(payload["items"].as_array().unwrap().len(), 2);
+    assert_eq!(payload["items"][0]["content"], "message-3");
+    assert_eq!(payload["items"][1]["content"], "message-4");
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 消息历史接口应按时间与消息id稳定分页(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let anchor_id = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+
+    insert_profile(&pool, owner_id, "anchor-owner").await;
+    insert_room_with_owner(&pool, room_id, owner_id, "6F789").await;
+    insert_message(
+        &pool,
+        Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+        room_id,
+        owner_id,
+        "older-1",
+        "2026-03-27T00:00:01Z",
+    )
+    .await;
+    insert_message(
+        &pool,
+        Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
+        room_id,
+        owner_id,
+        "older-2",
+        "2026-03-27T00:00:02Z",
+    )
+    .await;
+    insert_message(
+        &pool,
+        anchor_id,
+        room_id,
+        owner_id,
+        "anchor",
+        "2026-03-27T00:00:02Z",
+    )
+    .await;
+    insert_message(
+        &pool,
+        Uuid::parse_str("00000000-0000-0000-0000-000000000004").unwrap(),
+        room_id,
+        owner_id,
+        "latest",
+        "2026-03-27T00:00:03Z",
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/rooms/{room_id}/messages?before_message_id={anchor_id}&limit=2"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["has_more"], false);
+    assert_eq!(payload["items"].as_array().unwrap().len(), 2);
+    assert_eq!(payload["items"][0]["content"], "older-1");
+    assert_eq!(payload["items"][1]["content"], "older-2");
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let owner_id = Uuid::new_v4();
+    let other_owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let other_room_id = Uuid::new_v4();
+    let other_message_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "owner-a").await;
+    insert_profile(&pool, other_owner_id, "owner-b").await;
+    insert_room_with_owner(&pool, room_id, owner_id, "7G890").await;
+    insert_room_with_owner(&pool, other_room_id, other_owner_id, "8H901").await;
+    insert_message(
+        &pool,
+        other_message_id,
+        other_room_id,
+        other_owner_id,
+        "other-room-message",
+        "2026-03-27T00:00:01Z",
+    )
+    .await;
+
+    let malformed = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/rooms/{room_id}/messages?before_message_id=not-a-uuid&limit=2"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+
+    let cross_room = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/rooms/{room_id}/messages?before_message_id={other_message_id}&limit=2"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cross_room.status(), StatusCode::BAD_REQUEST);
+}
+
+async fn insert_profile(pool: &PgPool, profile_id: Uuid, device_key: &str) {
+    sqlx::query("INSERT INTO profiles (id, device_key) VALUES ($1, $2)")
+        .bind(profile_id)
+        .bind(device_key)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn insert_room_with_owner(pool: &PgPool, room_id: Uuid, owner_id: Uuid, code: &str) {
+    sqlx::query("INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)")
+        .bind(room_id)
+        .bind(owner_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    sqlx::query("INSERT INTO room_codes (room_id, code) VALUES ($1, $2)")
+        .bind(room_id)
+        .bind(code)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    sqlx::query("INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)")
+        .bind(room_id)
+        .bind(owner_id)
+        .bind("owner")
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn insert_message(
+    pool: &PgPool,
+    message_id: Uuid,
+    room_id: Uuid,
+    sender_id: Uuid,
+    content: &str,
+    created_at: &str,
+) {
+    sqlx::query(
+        "INSERT INTO messages (id, room_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, $5::timestamptz)",
+    )
+    .bind(message_id)
+    .bind(room_id)
+    .bind(sender_id)
+    .bind(content)
+    .bind(created_at)
+    .execute(pool)
+    .await
+    .unwrap();
 }
