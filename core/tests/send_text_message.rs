@@ -3,9 +3,12 @@ use std::{collections::HashMap, sync::Arc};
 use koko_core::{
     chat::send_text_message,
     error::DomainError,
-    model::{MessageContent, MessageId, ProfileId, Role, RoomId},
+    model::{
+        GlobalChatPolicy, MessageContent, MessageId, ProfileId, Role, RoomGovernanceState, RoomId,
+    },
     port::{MessageRepository, RoomRepository},
 };
+use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -14,11 +17,24 @@ struct FakeDeps {
     inner: Arc<Mutex<FakeState>>,
 }
 
-#[derive(Default)]
 struct FakeState {
     members: HashMap<(RoomId, ProfileId), Role>,
     muted_members: HashMap<(RoomId, ProfileId), bool>,
     saved_messages: Vec<(RoomId, ProfileId, String)>,
+    global_chat_policy: GlobalChatPolicy,
+    governance: HashMap<RoomId, RoomGovernanceState>,
+}
+
+impl Default for FakeState {
+    fn default() -> Self {
+        Self {
+            members: HashMap::new(),
+            muted_members: HashMap::new(),
+            saved_messages: Vec::new(),
+            global_chat_policy: GlobalChatPolicy::default(),
+            governance: HashMap::new(),
+        }
+    }
 }
 
 impl FakeDeps {
@@ -102,6 +118,32 @@ impl RoomRepository for FakeDeps {
         guard.members.remove(&(room_id, profile_id));
         Ok(())
     }
+
+    async fn global_chat_policy(&self) -> Result<GlobalChatPolicy, DomainError> {
+        let guard = self.inner.lock().await;
+        Ok(guard.global_chat_policy.clone())
+    }
+
+    async fn set_global_chat_policy(&self, policy: GlobalChatPolicy) -> Result<(), DomainError> {
+        let mut guard = self.inner.lock().await;
+        guard.global_chat_policy = policy;
+        Ok(())
+    }
+
+    async fn governance_state(&self, room_id: RoomId) -> Result<RoomGovernanceState, DomainError> {
+        let guard = self.inner.lock().await;
+        Ok(guard.governance.get(&room_id).cloned().unwrap_or_default())
+    }
+
+    async fn set_governance_state(
+        &self,
+        room_id: RoomId,
+        state: RoomGovernanceState,
+    ) -> Result<(), DomainError> {
+        let mut guard = self.inner.lock().await;
+        guard.governance.insert(room_id, state);
+        Ok(())
+    }
 }
 
 impl MessageRepository for FakeDeps {
@@ -120,6 +162,7 @@ impl MessageRepository for FakeDeps {
             room_id,
             sender_id,
             content,
+            created_at: OffsetDateTime::now_utc(),
         })
     }
 }

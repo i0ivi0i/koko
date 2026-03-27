@@ -1,8 +1,9 @@
 use crate::{
     error::DomainError,
-    model::{ProfileId, Role, Room, RoomCode, RoomId},
+    model::{GlobalChatPolicy, ProfileId, Role, Room, RoomCode, RoomGovernanceState, RoomId},
     port::RoomRepository,
 };
+use time::OffsetDateTime;
 
 /// 入房或建房后的最小结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,10 +19,17 @@ pub async fn join_or_create_room(
     code: RoomCode,
 ) -> Result<JoinRoomResult, DomainError> {
     if let Some(room) = repo.find_by_code(&code).await? {
-        let role = repo
-            .role_of(room.id, profile_id)
+        let current_role = repo.role_of(room.id, profile_id).await?;
+        if repo
+            .governance_state(room.id)
             .await?
-            .unwrap_or(Role::Member);
+            .is_banned_at(OffsetDateTime::now_utc())
+            && current_role.is_none()
+        {
+            return Err(DomainError::RoomTemporarilyBanned);
+        }
+
+        let role = current_role.unwrap_or(Role::Member);
         repo.ensure_member(room.id, profile_id, role).await?;
         return Ok(JoinRoomResult { room, role });
     }
@@ -31,6 +39,41 @@ pub async fn join_or_create_room(
         room,
         role: Role::Owner,
     })
+}
+
+pub async fn get_global_chat_policy(
+    repo: &impl RoomRepository,
+) -> Result<GlobalChatPolicy, DomainError> {
+    repo.global_chat_policy().await
+}
+
+pub async fn update_global_chat_policy(
+    repo: &impl RoomRepository,
+    max_message_length: usize,
+) -> Result<GlobalChatPolicy, DomainError> {
+    let policy = GlobalChatPolicy::new(max_message_length)?;
+    repo.set_global_chat_policy(policy.clone()).await?;
+    Ok(policy)
+}
+
+pub async fn ban_room_until(
+    repo: &impl RoomRepository,
+    room_id: RoomId,
+    banned_until: OffsetDateTime,
+    ban_reason: Option<String>,
+) -> Result<RoomGovernanceState, DomainError> {
+    let state = RoomGovernanceState::active_ban(banned_until, ban_reason);
+    repo.set_governance_state(room_id, state.clone()).await?;
+    Ok(state)
+}
+
+pub async fn unban_room(
+    repo: &impl RoomRepository,
+    room_id: RoomId,
+) -> Result<RoomGovernanceState, DomainError> {
+    let state = RoomGovernanceState::unbanned();
+    repo.set_governance_state(room_id, state.clone()).await?;
+    Ok(state)
 }
 
 pub async fn promote_admin(

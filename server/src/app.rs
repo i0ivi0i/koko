@@ -17,11 +17,22 @@ use crate::{http, ws::RealtimeHub};
 pub struct AppState {
     pub pool: PgPool,
     pub realtime: RealtimeHub,
+    pub admin_token: Option<String>,
 }
 
 pub fn build_app(pool: PgPool) -> Router {
+    build_app_with_admin_token(pool, std::env::var("KOKO_ADMIN_TOKEN").ok())
+}
+
+pub fn build_app_with_admin_token(pool: PgPool, admin_token: Option<String>) -> Router {
     Router::new()
         .route("/", get(http::root_status))
+        .route(
+            "/admin/policy",
+            get(http::get_global_chat_policy).post(http::update_global_chat_policy),
+        )
+        .route("/admin/rooms/{room_id}/ban", post(http::ban_room))
+        .route("/admin/rooms/{room_id}/unban", post(http::unban_room))
         .route("/session/bootstrap", post(http::bootstrap_session))
         .route("/rooms/resolve", post(http::resolve_room))
         .route("/rooms/join-or-create", post(http::join_or_create_room))
@@ -81,5 +92,6 @@ pub fn build_app(pool: PgPool) -> Router {
         .with_state(AppState {
             pool,
             realtime: RealtimeHub::default(),
+            admin_token,
         })
 }

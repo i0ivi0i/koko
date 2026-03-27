@@ -99,6 +99,29 @@ pub struct GovernanceActorRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GlobalChatPolicyResponse {
+    pub max_message_length: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UpdateGlobalChatPolicyRequest {
+    pub max_message_length: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BanRoomRequest {
+    pub banned_until: String,
+    pub ban_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RoomGovernanceStateResponse {
+    pub room_id: String,
+    pub banned_until: Option<String>,
+    pub ban_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientWsEvent {
     SendMessage { content: String },
@@ -192,6 +215,18 @@ mod tests {
 
         let json = serde_json::to_string(&value).unwrap();
         let decoded: RoomMessagesResponse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn global_chat_policy_response_should_roundtrip() {
+        let value = GlobalChatPolicyResponse {
+            max_message_length: 2000,
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: GlobalChatPolicyResponse = serde_json::from_str(&json).unwrap();
 
         assert_eq!(decoded, value);
     }

@@ -1,6 +1,9 @@
 use crate::{
     error::DomainError,
-    model::{Message, MessageContent, ProfileId, Role, Room, RoomCode, RoomId},
+    model::{
+        GlobalChatPolicy, Message, MessageContent, ProfileId, Role, Room, RoomCode,
+        RoomGovernanceState, RoomId,
+    },
 };
 
 /// 房间仓储抽象。
@@ -53,6 +56,26 @@ pub trait RoomRepository {
         &self,
         room_id: RoomId,
         profile_id: ProfileId,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send;
+
+    fn global_chat_policy(
+        &self,
+    ) -> impl std::future::Future<Output = Result<GlobalChatPolicy, DomainError>> + Send;
+
+    fn set_global_chat_policy(
+        &self,
+        policy: GlobalChatPolicy,
+    ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send;
+
+    fn governance_state(
+        &self,
+        room_id: RoomId,
+    ) -> impl std::future::Future<Output = Result<RoomGovernanceState, DomainError>> + Send;
+
+    fn set_governance_state(
+        &self,
+        room_id: RoomId,
+        state: RoomGovernanceState,
     ) -> impl std::future::Future<Output = Result<(), DomainError>> + Send;
 }
 

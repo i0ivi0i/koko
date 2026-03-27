@@ -1,16 +1,18 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use koko_contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, DemoteAdminRequest, GovernanceActorRequest,
-    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
-    ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,
+    BanRoomRequest, BootstrapSessionRequest, BootstrapSessionResponse, DemoteAdminRequest,
+    GlobalChatPolicyResponse, GovernanceActorRequest, JoinOrCreateRoomRequest,
+    JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest, ResolveRoomRequest,
+    ResolveRoomResponse, RoomGovernanceStateResponse, RoomMemberResponse, RoomMembersResponse,
     RoomMessagesQuery, RoomMessagesResponse, RoomResponse, SendMessageRequest, ServerWsEvent,
+    UpdateGlobalChatPolicyRequest,
 };
-use time::format_description::well_known::Rfc3339;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
 use crate::{
@@ -40,6 +42,43 @@ pub async fn bootstrap_session(
 
 pub async fn root_status() -> &'static str {
     "koko 服务运行中"
+}
+
+pub async fn get_global_chat_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<GlobalChatPolicyResponse>, ApiError> {
+    require_admin(&state, &headers)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    let policy = koko_core::room::get_global_chat_policy(&room_repo)
+        .await
+        .map_err(map_domain_error)?;
+
+    Ok(Json(GlobalChatPolicyResponse {
+        max_message_length: u32::try_from(policy.max_message_length())
+            .map_err(|_| ApiError::internal("全局策略读取失败"))?,
+    }))
+}
+
+pub async fn update_global_chat_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateGlobalChatPolicyRequest>,
+) -> Result<Json<GlobalChatPolicyResponse>, ApiError> {
+    require_admin(&state, &headers)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    let policy = koko_core::room::update_global_chat_policy(
+        &room_repo,
+        usize::try_from(request.max_message_length)
+            .map_err(|_| ApiError::bad_request("最大消息长度不合法"))?,
+    )
+    .await
+    .map_err(map_domain_error)?;
+
+    Ok(Json(GlobalChatPolicyResponse {
+        max_message_length: u32::try_from(policy.max_message_length())
+            .map_err(|_| ApiError::internal("全局策略更新失败"))?,
+    }))
 }
 
 #[tracing::instrument(skip(state, request), fields(code = %request.code))]
@@ -72,7 +111,7 @@ pub async fn join_or_create_room(
     let room_repo = PostgresRoomRepository::new(state.pool);
     let result = koko_core::room::join_or_create_room(&room_repo, profile_id, code)
         .await
-        .map_err(|_| ApiError::internal("入房失败"))?;
+        .map_err(map_domain_error)?;
 
     Ok(Json(JoinOrCreateRoomResponse {
         room_id: result.room.id.0.to_string(),
@@ -159,7 +198,7 @@ pub async fn send_room_message(
         &request.content,
     )
     .await
-    .map_err(|_| ApiError::bad_request("消息发送失败"))?;
+    .map_err(map_domain_error)?;
 
     let response = message_to_response(message);
     let event = serde_json::to_string(&ServerWsEvent::MessageCreated {
@@ -243,6 +282,62 @@ pub async fn remove_room_member(
     Ok(StatusCode::OK)
 }
 
+pub async fn ban_room(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<String>,
+    Json(request): Json<BanRoomRequest>,
+) -> Result<Json<RoomGovernanceStateResponse>, ApiError> {
+    require_admin(&state, &headers)?;
+    let room_id = parse_room_id(&room_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    if room_repo
+        .find_room(room_id)
+        .await
+        .map_err(|_| ApiError::internal("房间查询失败"))?
+        .is_none()
+    {
+        return Err(ApiError::not_found("房间不存在"));
+    }
+    let banned_until = OffsetDateTime::parse(&request.banned_until, &Rfc3339)
+        .map_err(|_| ApiError::bad_request("banned_until 不合法"))?;
+    let governance_state =
+        koko_core::room::ban_room_until(&room_repo, room_id, banned_until, request.ban_reason)
+            .await
+            .map_err(map_domain_error)?;
+
+    Ok(Json(governance_state_to_response(
+        room_id,
+        governance_state,
+    )?))
+}
+
+pub async fn unban_room(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<String>,
+) -> Result<Json<RoomGovernanceStateResponse>, ApiError> {
+    require_admin(&state, &headers)?;
+    let room_id = parse_room_id(&room_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    if room_repo
+        .find_room(room_id)
+        .await
+        .map_err(|_| ApiError::internal("房间查询失败"))?
+        .is_none()
+    {
+        return Err(ApiError::not_found("房间不存在"));
+    }
+    let governance_state = koko_core::room::unban_room(&room_repo, room_id)
+        .await
+        .map_err(map_domain_error)?;
+
+    Ok(Json(governance_state_to_response(
+        room_id,
+        governance_state,
+    )?))
+}
+
 pub struct ApiError {
     status: StatusCode,
     message: &'static str,
@@ -273,6 +368,13 @@ impl ApiError {
     pub(crate) fn forbidden(message: &'static str) -> Self {
         Self {
             status: StatusCode::FORBIDDEN,
+            message,
+        }
+    }
+
+    pub(crate) fn unauthorized(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
             message,
         }
     }
@@ -333,6 +435,43 @@ fn message_to_response(message: koko_core::model::Message) -> MessageResponse {
     }
 }
 
+fn require_admin(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    let Some(expected) = state.admin_token.as_deref() else {
+        return Err(ApiError::internal("未配置管理令牌"));
+    };
+
+    let provided = headers
+        .get("x-admin-token")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| ApiError::unauthorized("缺少管理令牌"))?;
+
+    if provided != expected {
+        return Err(ApiError::unauthorized("管理令牌无效"));
+    }
+
+    Ok(())
+}
+
+fn governance_state_to_response(
+    room_id: RoomId,
+    state: koko_core::model::RoomGovernanceState,
+) -> Result<RoomGovernanceStateResponse, ApiError> {
+    let banned_until = state
+        .banned_until
+        .map(|value| {
+            value
+                .format(&Rfc3339)
+                .map_err(|_| ApiError::internal("房间治理状态格式化失败"))
+        })
+        .transpose()?;
+
+    Ok(RoomGovernanceStateResponse {
+        room_id: room_id.0.to_string(),
+        banned_until,
+        ban_reason: state.ban_reason,
+    })
+}
+
 fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {
     use koko_core::error::DomainError;
 
@@ -340,6 +479,9 @@ fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {
         DomainError::InvalidRoomCode => ApiError::bad_request("房间短码不合法"),
         DomainError::EmptyDeviceKey => ApiError::bad_request("device_key 不能为空"),
         DomainError::EmptyMessageContent => ApiError::bad_request("消息不能为空"),
+        DomainError::InvalidMaxMessageLength => ApiError::bad_request("最大消息长度不合法"),
+        DomainError::MessageTooLong => ApiError::bad_request("消息超过长度限制"),
+        DomainError::RoomTemporarilyBanned => ApiError::forbidden("房间暂时封禁"),
         DomainError::SenderIsNotRoomMember | DomainError::TargetIsNotRoomMember => {
             ApiError::bad_request("目标成员不存在")
         }

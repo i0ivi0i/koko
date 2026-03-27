@@ -6,10 +6,14 @@ use std::{
 use koko_core::{
     chat::send_text_message,
     error::DomainError,
-    model::{MessageContent, MessageId, ProfileId, Role, Room, RoomCode, RoomId},
+    model::{
+        GlobalChatPolicy, MessageContent, MessageId, ProfileId, Role, Room, RoomCode,
+        RoomGovernanceState, RoomId,
+    },
     port::{MessageRepository, RoomRepository},
     room::{mute_member, promote_admin, remove_member},
 };
+use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -18,17 +22,46 @@ struct FakeDeps {
     inner: Arc<Mutex<FakeState>>,
 }
 
-#[derive(Default)]
 struct FakeState {
     rooms_by_code: HashMap<String, Room>,
     members: HashMap<(RoomId, ProfileId), Role>,
     muted: HashSet<(RoomId, ProfileId)>,
+    global_chat_policy: GlobalChatPolicy,
+    governance: HashMap<RoomId, RoomGovernanceState>,
+}
+
+impl Default for FakeState {
+    fn default() -> Self {
+        Self {
+            rooms_by_code: HashMap::new(),
+            members: HashMap::new(),
+            muted: HashSet::new(),
+            global_chat_policy: GlobalChatPolicy::default(),
+            governance: HashMap::new(),
+        }
+    }
 }
 
 impl FakeDeps {
     async fn seed_member(&self, room_id: RoomId, profile_id: ProfileId, role: Role) {
         let mut guard = self.inner.lock().await;
         guard.members.insert((room_id, profile_id), role);
+    }
+
+    async fn set_max_message_length(&self, max_message_length: usize) {
+        let mut guard = self.inner.lock().await;
+        guard.global_chat_policy = GlobalChatPolicy::new(max_message_length).unwrap();
+    }
+
+    async fn ban_room(&self, room_id: RoomId) {
+        let mut guard = self.inner.lock().await;
+        guard.governance.insert(
+            room_id,
+            RoomGovernanceState::active_ban(
+                OffsetDateTime::now_utc() + time::Duration::hours(1),
+                None,
+            ),
+        );
     }
 }
 
@@ -109,6 +142,32 @@ impl RoomRepository for FakeDeps {
         guard.muted.remove(&(room_id, profile_id));
         Ok(())
     }
+
+    async fn global_chat_policy(&self) -> Result<GlobalChatPolicy, DomainError> {
+        let guard = self.inner.lock().await;
+        Ok(guard.global_chat_policy.clone())
+    }
+
+    async fn set_global_chat_policy(&self, policy: GlobalChatPolicy) -> Result<(), DomainError> {
+        let mut guard = self.inner.lock().await;
+        guard.global_chat_policy = policy;
+        Ok(())
+    }
+
+    async fn governance_state(&self, room_id: RoomId) -> Result<RoomGovernanceState, DomainError> {
+        let guard = self.inner.lock().await;
+        Ok(guard.governance.get(&room_id).cloned().unwrap_or_default())
+    }
+
+    async fn set_governance_state(
+        &self,
+        room_id: RoomId,
+        state: RoomGovernanceState,
+    ) -> Result<(), DomainError> {
+        let mut guard = self.inner.lock().await;
+        guard.governance.insert(room_id, state);
+        Ok(())
+    }
 }
 
 impl MessageRepository for FakeDeps {
@@ -123,6 +182,7 @@ impl MessageRepository for FakeDeps {
             room_id,
             sender_id,
             content,
+            created_at: OffsetDateTime::now_utc(),
         })
     }
 }
@@ -196,4 +256,34 @@ async fn 群主应能移除普通成员() {
         .unwrap();
 
     assert_eq!(deps.role_of(room_id, member_id).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn 超过全局最大消息长度时应拒绝发送() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    deps.seed_member(room_id, member_id, Role::Member).await;
+    deps.set_max_message_length(4).await;
+
+    let error = send_text_message(&deps, &deps, room_id, member_id, "hello")
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::MessageTooLong);
+}
+
+#[tokio::test]
+async fn 房间被封禁时应拒绝发送消息() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    deps.seed_member(room_id, member_id, Role::Member).await;
+    deps.ban_room(room_id).await;
+
+    let error = send_text_message(&deps, &deps, room_id, member_id, "hello")
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::RoomTemporarilyBanned);
 }

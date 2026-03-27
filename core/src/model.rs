@@ -2,6 +2,8 @@ use crate::error::DomainError;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+pub const DEFAULT_MAX_MESSAGE_LENGTH: usize = 2000;
+
 /// 房间短码，固定为四个数字加一个英文字母。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RoomCode(String);
@@ -98,6 +100,18 @@ impl MessageContent {
         Ok(Self(trimmed.to_owned()))
     }
 
+    pub fn parse_with_limit(input: &str, max_length: usize) -> Result<Self, DomainError> {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return Err(DomainError::EmptyMessageContent);
+        }
+        if trimmed.chars().count() > max_length {
+            return Err(DomainError::MessageTooLong);
+        }
+
+        Ok(Self(trimmed.to_owned()))
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -111,4 +125,63 @@ pub struct Message {
     pub sender_id: ProfileId,
     pub content: MessageContent,
     pub created_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GlobalChatPolicy {
+    max_message_length: usize,
+}
+
+impl GlobalChatPolicy {
+    pub fn new(max_message_length: usize) -> Result<Self, DomainError> {
+        if max_message_length == 0 {
+            return Err(DomainError::InvalidMaxMessageLength);
+        }
+
+        Ok(Self { max_message_length })
+    }
+
+    pub fn max_message_length(&self) -> usize {
+        self.max_message_length
+    }
+}
+
+impl Default for GlobalChatPolicy {
+    fn default() -> Self {
+        Self {
+            max_message_length: DEFAULT_MAX_MESSAGE_LENGTH,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoomGovernanceState {
+    pub banned_until: Option<OffsetDateTime>,
+    pub ban_reason: Option<String>,
+}
+
+impl RoomGovernanceState {
+    pub fn active_ban(banned_until: OffsetDateTime, ban_reason: Option<String>) -> Self {
+        Self {
+            banned_until: Some(banned_until),
+            ban_reason,
+        }
+    }
+
+    pub fn unbanned() -> Self {
+        Self {
+            banned_until: None,
+            ban_reason: None,
+        }
+    }
+
+    pub fn is_banned_at(&self, now: OffsetDateTime) -> bool {
+        self.banned_until.is_some_and(|until| until > now)
+    }
+}
+
+impl Default for RoomGovernanceState {
+    fn default() -> Self {
+        Self::unbanned()
+    }
 }

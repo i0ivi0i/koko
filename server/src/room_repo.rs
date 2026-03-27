@@ -1,6 +1,6 @@
 use koko_core::{
     error::DomainError,
-    model::{ProfileId, Role, Room, RoomCode, RoomId},
+    model::{GlobalChatPolicy, ProfileId, Role, Room, RoomCode, RoomGovernanceState, RoomId},
     port::RoomRepository,
 };
 use sqlx::PgPool;
@@ -256,6 +256,87 @@ impl RoomRepository for PostgresRoomRepository {
         .execute(&self.pool)
         .await
         .map_err(|_| DomainError::InsufficientRoomPermission)?;
+
+        Ok(())
+    }
+
+    async fn global_chat_policy(&self) -> Result<GlobalChatPolicy, DomainError> {
+        let row = sqlx::query!(
+            "SELECT max_message_length FROM global_chat_policy WHERE singleton = TRUE"
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| DomainError::InvalidMaxMessageLength)?;
+
+        let max_message_length = row
+            .and_then(|row| usize::try_from(row.max_message_length).ok())
+            .unwrap_or_else(|| GlobalChatPolicy::default().max_message_length());
+
+        GlobalChatPolicy::new(max_message_length).map_err(|_| DomainError::InvalidMaxMessageLength)
+    }
+
+    async fn set_global_chat_policy(&self, policy: GlobalChatPolicy) -> Result<(), DomainError> {
+        let max_message_length = i32::try_from(policy.max_message_length())
+            .map_err(|_| DomainError::InvalidMaxMessageLength)?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO global_chat_policy (singleton, max_message_length, updated_at)
+            VALUES (TRUE, $1, NOW())
+            ON CONFLICT (singleton)
+            DO UPDATE SET
+                max_message_length = EXCLUDED.max_message_length,
+                updated_at = NOW()
+            "#,
+            max_message_length
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|_| DomainError::InvalidMaxMessageLength)?;
+
+        Ok(())
+    }
+
+    async fn governance_state(&self, room_id: RoomId) -> Result<RoomGovernanceState, DomainError> {
+        let row = sqlx::query!(
+            "SELECT banned_until, ban_reason FROM room_governance_state WHERE room_id = $1",
+            room_id.0
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| DomainError::InvalidRoomCode)?;
+
+        Ok(match row {
+            Some(row) => RoomGovernanceState {
+                banned_until: row.banned_until,
+                ban_reason: row.ban_reason,
+            },
+            None => RoomGovernanceState::unbanned(),
+        })
+    }
+
+    async fn set_governance_state(
+        &self,
+        room_id: RoomId,
+        state: RoomGovernanceState,
+    ) -> Result<(), DomainError> {
+        sqlx::query!(
+            r#"
+            INSERT INTO room_governance_state (room_id, banned_until, ban_reason, updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (room_id)
+            DO UPDATE SET
+                banned_until = EXCLUDED.banned_until,
+                ban_reason = EXCLUDED.ban_reason,
+                updated_at = NOW()
+            "#,
+            room_id.0,
+            state.banned_until,
+            state.ban_reason
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|_| DomainError::InvalidRoomCode)?;
 
         Ok(())
     }

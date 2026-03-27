@@ -4,19 +4,57 @@ use axum::{
 };
 use serde_json::json;
 use sqlx::PgPool;
+use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+const TEST_ADMIN_TOKEN: &str = "test-admin-token";
+
+fn with_admin(request: Request<Body>) -> Request<Body> {
+    let (mut parts, body) = request.into_parts();
+    parts.headers.insert(
+        "x-admin-token",
+        TEST_ADMIN_TOKEN.parse().expect("测试令牌头应合法"),
+    );
+    Request::from_parts(parts, body)
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 管理接口缺少管理令牌时应拒绝访问(pool: PgPool) {
+    let app =
+        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/policy")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "max_message_length": 4,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
 #[sqlx::test(migrations = "../migrations")]
 async fn 提升管理员接口应更新成员角色(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app =
+        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
     seed_room(&pool, room_id, owner_id, member_id).await;
 
     let response = app
-        .oneshot(
+        .oneshot(with_admin(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/roles/promote"))
@@ -29,7 +67,7 @@ async fn 提升管理员接口应更新成员角色(pool: PgPool) {
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+        ))
         .await
         .unwrap();
 
@@ -49,7 +87,8 @@ async fn 提升管理员接口应更新成员角色(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 禁言后发送消息应失败(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app =
+        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -57,7 +96,7 @@ async fn 禁言后发送消息应失败(pool: PgPool) {
 
     let mute = app
         .clone()
-        .oneshot(
+        .oneshot(with_admin(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/mute"))
@@ -69,7 +108,7 @@ async fn 禁言后发送消息应失败(pool: PgPool) {
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+        ))
         .await
         .unwrap();
 
@@ -98,14 +137,15 @@ async fn 禁言后发送消息应失败(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 移除成员接口应删除成员关系(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app =
+        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
     seed_room(&pool, room_id, owner_id, member_id).await;
 
     let response = app
-        .oneshot(
+        .oneshot(with_admin(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/remove"))
@@ -117,7 +157,7 @@ async fn 移除成员接口应删除成员关系(pool: PgPool) {
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+        ))
         .await
         .unwrap();
 
@@ -134,6 +174,187 @@ async fn 移除成员接口应删除成员关系(pool: PgPool) {
     .unwrap();
 
     assert_eq!(count, 0);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
+    let app =
+        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let room_id = Uuid::new_v4();
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    seed_room(&pool, room_id, owner_id, member_id).await;
+
+    let update_policy = app
+        .clone()
+        .oneshot(with_admin(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/policy")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "max_message_length": 4,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(update_policy.status(), StatusCode::OK);
+
+    let send = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "sender_id": member_id.to_string(),
+                        "content": "hello",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(send.status(), StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查看权限(
+    pool: PgPool,
+) {
+    let app =
+        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let room_id = Uuid::new_v4();
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let joiner_id = Uuid::new_v4();
+    seed_room(&pool, room_id, owner_id, member_id).await;
+    insert_profile(&pool, joiner_id, "joiner-device").await;
+
+    let banned_until = (OffsetDateTime::now_utc() + Duration::hours(1))
+        .format(&Rfc3339)
+        .unwrap();
+
+    let ban = app
+        .clone()
+        .oneshot(with_admin(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/admin/rooms/{room_id}/ban"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "banned_until": banned_until,
+                        "ban_reason": "spam cleanup",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(ban.status(), StatusCode::OK);
+
+    let existing_member_join = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/rooms/join-or-create")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "profile_id": member_id.to_string(),
+                        "code": "8H901",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(existing_member_join.status(), StatusCode::OK);
+
+    let join = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/rooms/join-or-create")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "profile_id": joiner_id.to_string(),
+                        "code": "8H901",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(join.status(), StatusCode::FORBIDDEN);
+
+    let send = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "sender_id": owner_id.to_string(),
+                        "content": "still talking",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(send.status(), StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 封禁不存在的房间应返回四零四(pool: PgPool) {
+    let app =
+        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let room_id = Uuid::new_v4();
+    let banned_until = (OffsetDateTime::now_utc() + Duration::hours(1))
+        .format(&Rfc3339)
+        .unwrap();
+
+    let response = app
+        .oneshot(with_admin(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/admin/rooms/{room_id}/ban"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "banned_until": banned_until,
+                        "ban_reason": "missing room",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 async fn seed_room(pool: &PgPool, room_id: Uuid, owner_id: Uuid, member_id: Uuid) {
@@ -173,6 +394,17 @@ async fn seed_room(pool: &PgPool, room_id: Uuid, owner_id: Uuid, member_id: Uuid
         "owner",
         member_id,
         "member"
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_profile(pool: &PgPool, profile_id: Uuid, device_key: &str) {
+    sqlx::query!(
+        "INSERT INTO profiles (id, device_key) VALUES ($1, $2)",
+        profile_id,
+        device_key
     )
     .execute(pool)
     .await
