@@ -60,13 +60,12 @@ pub fn App() -> Element {
                                 .await
                                 {
                                     room_state.with_mut(|state| {
-                                        if let Some(room) = state.as_mut() {
-                                            state::prepend_messages(
-                                                room,
-                                                response.items,
-                                                response.has_more,
-                                            );
-                                        }
+                                        state::prepend_messages_if_room_matches(
+                                            state,
+                                            &room_id,
+                                            response.items,
+                                            response.has_more,
+                                        );
                                     });
                                 }
 

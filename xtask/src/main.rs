@@ -4,6 +4,7 @@ mod process;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
+use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 use std::process::ExitCode;
 
@@ -128,6 +129,7 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
 
     let (sender, receiver) = mpsc::channel();
     let mut backend_child = process::spawn_logged("server", &backend, sender.clone())?;
+    wait_for_backend_ready(&env.server_bind, &receiver, &mut backend_child, &stop)?;
     let mut frontend_child = process::spawn_logged("web", &frontend, sender)?;
 
     println!("开发服务已启动。按 Ctrl+C 停止。");
@@ -301,6 +303,57 @@ fn dev_target_dir(root: &std::path::Path, name: &str) -> String {
     root.join("target").join(name).display().to_string()
 }
 
+fn wait_for_backend_ready(
+    server_bind: &str,
+    receiver: &mpsc::Receiver<logging::LogEvent>,
+    backend_child: &mut process::ManagedChild,
+    stop: &AtomicBool,
+) -> Result<(), String> {
+    let probe_addr = backend_probe_addr(server_bind)?;
+    let timeout = Duration::from_secs(120);
+    let started = std::time::Instant::now();
+
+    loop {
+        while let Ok(event) = receiver.recv_timeout(Duration::from_millis(200)) {
+            logging::print_event(&event);
+        }
+
+        if stop.load(Ordering::SeqCst) {
+            return Err("启动已取消".into());
+        }
+
+        if is_backend_ready(probe_addr) {
+            return Ok(());
+        }
+
+        if let Some(status) = backend_child.try_wait()? {
+            return Err(format!("后端在就绪前已退出，退出码: {:?}", status.code()));
+        }
+
+        if started.elapsed() >= timeout {
+            return Err(format!("等待后端就绪超时: {probe_addr}"));
+        }
+    }
+}
+
+fn backend_probe_addr(server_bind: &str) -> Result<SocketAddr, String> {
+    let addr: SocketAddr = server_bind
+        .parse()
+        .map_err(|error| format!("SERVER_BIND 不合法: {error}"))?;
+
+    Ok(match addr {
+        SocketAddr::V4(v4) if v4.ip().is_unspecified() => {
+            SocketAddr::from(([127, 0, 0, 1], v4.port()))
+        }
+        SocketAddr::V6(v6) if v6.ip().is_unspecified() => SocketAddr::from(([127, 0, 0, 1], v6.port())),
+        _ => addr,
+    })
+}
+
+fn is_backend_ready(addr: SocketAddr) -> bool {
+    TcpStream::connect_timeout(&addr, Duration::from_millis(250)).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,6 +468,22 @@ mod tests {
         assert_eq!(
             frontend_entry_url("http://192.168.1.7:3000", "0.0.0.0:8088"),
             "http://192.168.1.7:8088"
+        );
+    }
+
+    #[test]
+    fn backend_probe_addr_should_map_unspecified_bind_to_loopback() {
+        assert_eq!(
+            backend_probe_addr("0.0.0.0:3000").unwrap().to_string(),
+            "127.0.0.1:3000"
+        );
+    }
+
+    #[test]
+    fn backend_probe_addr_should_keep_specific_bind() {
+        assert_eq!(
+            backend_probe_addr("192.168.1.7:3000").unwrap().to_string(),
+            "192.168.1.7:3000"
         );
     }
 }

@@ -75,6 +75,23 @@ pub fn prepend_messages(
     inserted
 }
 
+pub fn prepend_messages_if_room_matches(
+    state: &mut Option<ActiveRoom>,
+    room_id: &str,
+    messages: Vec<MessageResponse>,
+    has_more: bool,
+) -> usize {
+    let Some(room) = state.as_mut() else {
+        return 0;
+    };
+
+    if room.room_id != room_id {
+        return 0;
+    }
+
+    prepend_messages(room, messages, has_more)
+}
+
 pub fn earliest_message_id(room: &ActiveRoom) -> Option<String> {
     room.messages
         .first()
@@ -222,5 +239,34 @@ mod tests {
         );
         assert!(!room.has_more_messages);
         assert_eq!(earliest_message_id(&room).as_deref(), Some("msg-1"));
+    }
+
+    #[test]
+    fn prepend_messages_if_room_matches_should_ignore_stale_room_response() {
+        let mut state = Some(ActiveRoom {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+            room_id: "room-b".into(),
+            room_code: "1A234".into(),
+            role: "owner".into(),
+            messages: vec![message("msg-9")],
+            has_more_messages: true,
+            members: vec![member("profile-1")],
+        });
+
+        let inserted =
+            prepend_messages_if_room_matches(&mut state, "room-a", vec![message("msg-1")], false);
+
+        assert_eq!(inserted, 0);
+        let room = state.as_ref().unwrap();
+        assert_eq!(
+            room.messages
+                .iter()
+                .map(|item| item.message_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["msg-9"]
+        );
+        assert!(room.has_more_messages);
     }
 }
