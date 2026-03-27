@@ -4,8 +4,8 @@ set -euo pipefail
 
 REPO_OWNER="${KOKO_REPO_OWNER:-i0ivi0i}"
 REPO_NAME="${KOKO_REPO_NAME:-koko}"
-RELEASE_BASE="${KOKO_RELEASE_BASE:-https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download}"
 KOKO_VERSION="${KOKO_VERSION:-latest}"
+RELEASE_BASE="${KOKO_RELEASE_BASE:-}"
 
 KOKO_DOMAIN="${KOKO_DOMAIN:-}"
 KOKO_ADMIN_DOMAIN="${KOKO_ADMIN_DOMAIN:-}"
@@ -28,10 +28,11 @@ TMP_ROOT=""
 main() {
     require_linux
     require_root
-    detect_supported_distro
+detect_supported_distro
     ensure_domains
     ensure_passwords
     derive_defaults
+    derive_release_base
     install_packages
     ensure_user_and_dirs
     TMP_ROOT="$(mktemp -d)"
@@ -112,6 +113,18 @@ ensure_passwords() {
 derive_defaults() {
     if [[ -z "${KOKO_ADMIN_DOMAIN}" ]]; then
         KOKO_ADMIN_DOMAIN="admin.${KOKO_DOMAIN}"
+    fi
+}
+
+derive_release_base() {
+    if [[ -n "${RELEASE_BASE}" ]]; then
+        return
+    fi
+
+    if [[ "${KOKO_VERSION}" == "latest" ]]; then
+        RELEASE_BASE="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download"
+    else
+        RELEASE_BASE="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${KOKO_VERSION}"
     fi
 }
 

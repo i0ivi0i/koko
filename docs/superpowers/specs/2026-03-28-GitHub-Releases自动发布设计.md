@@ -66,13 +66,19 @@
 
 - `dx build --platform web --release --package koko-web`
 
-根据 Dioxus 官方文档，web 构建应输出到配置的 `out_dir`；如果未配置，需要在仓库中明确指定，避免 workflow 依赖 CLI 默认值。
+发布层直接采用 Dioxus 默认 release 产物目录：
+
+- `target/dx/koko-web/release/web/public`
 
 ### 后台前端
 
 同样使用：
 
 - `dx build --platform web --release --package koko-admin`
+
+后台静态产物目录为：
+
+- `target/dx/koko-admin/release/web/public`
 
 ### 迁移
 
@@ -85,7 +91,6 @@
 第一版建议增加这些非业务文件：
 
 - `.github/workflows/release.yml`
-- `Dioxus.toml`
 - `scripts/package-release.ps1`
 
 职责：
@@ -96,10 +101,6 @@
   - 构建 server/web/admin
   - 调用打包脚本
   - 创建并上传 Release 资产
-
-- `Dioxus.toml`
-  - 显式定义 web/admin 的构建输出目录
-  - 避免 workflow 依赖隐式默认值
 
 - `scripts/package-release.ps1`
   - 统一打包四类产物
@@ -155,7 +156,6 @@
 这轮只做：
 
 - 自动发布工作流
-- 显式 web/admin 输出目录
 - 本地/CI 共用打包脚本
 
 这轮不做：

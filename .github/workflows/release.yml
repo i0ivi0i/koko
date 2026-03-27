@@ -1,0 +1,46 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --locked
+
+      - name: Build server
+        run: cargo build --release -p koko-server
+
+      - name: Build web
+        run: dx build --platform web --release --package koko-web
+
+      - name: Build admin
+        run: dx build --platform web --release --package koko-admin
+
+      - name: Package release assets
+        shell: pwsh
+        run: ./scripts/package-release.ps1 -Version "${{ github.ref_name }}"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/release-artifacts/${{ github.ref_name }}/*.tar.gz
