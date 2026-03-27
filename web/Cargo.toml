@@ -9,3 +9,6 @@ futures-util = "0.3"
 gloo-net = "0.6.0"
 koko-contract = { path = "../contract" }
 serde_json = "1"
+
+[dev-dependencies]
+dioxus-ssr = "0.7.3"

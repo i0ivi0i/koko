@@ -17,69 +17,58 @@ pub fn ChatScreen(
     let mut draft = use_signal(String::new);
 
     rsx! {
-        div { class: "telegram-frame chat-layout",
-            aside { class: "chat-sidebar",
-                p { class: "eyebrow", "群聊" }
-                div { class: "thread-list",
-                    div { class: "thread-item active",
-                        div { class: "thread-title", "房间 {room_code.clone()}" }
-                        div { class: "thread-preview", "知道短码就能进来聊天" }
+        div { class: "telegram-frame chat-main-view",
+            header { class: "chat-topbar",
+                div { class: "chat-topbar-leading",
+                    button {
+                        class: "icon-button chat-back-button",
+                        onclick: move |_| on_back.call(()),
+                        "←"
                     }
-                    div { class: "thread-item",
-                        div { class: "thread-title", "最近访问" }
-                        div { class: "thread-preview", "2B345 · 昨天活跃" }
+                    Avatar { label: room_code.clone() }
+                    div { class: "chat-topbar-meta",
+                        div { class: "chat-topbar-title", "房间 {room_code.clone()}" }
+                        div { class: "chat-topbar-subtitle", "{member_count} 位成员 · {display_name}" }
+                    }
+                }
+                button {
+                    class: "ghost-button chat-topbar-action",
+                    onclick: move |_| on_open_members.call(()),
+                    "成员"
+                }
+            }
+
+            section { class: "chat-wall",
+                div { class: "chat-date-chip", "今天" }
+                for message in messages {
+                    MessageBubble {
+                        incoming: message.sender_id != profile_id,
+                        sender: message.sender_id.clone(),
+                        text: message.content.clone(),
+                        time: "刚刚".to_string(),
                     }
                 }
             }
 
-            main { class: "chat-panel",
-                header { class: "chat-toolbar",
-                    div { class: "toolbar-meta",
-                        button { class: "icon-button", onclick: move |_| on_back.call(()), "←" }
-                        Avatar { label: room_code.clone() }
-                        div {
-                            div { style: "font-size: 16px; font-weight: 670;", "房间 {room_code.clone()}" }
-                            div { class: "message-meta", "{member_count} 位成员 · {display_name}" }
-                        }
+            footer { class: "chat-bottom-bar",
+                div { class: "chat-composer-pill",
+                    button { class: "icon-button composer-attach", "+" }
+                    textarea {
+                        class: "composer-input chat-composer-input",
+                        value: "{draft()}",
+                        placeholder: "消息",
+                        oninput: move |event| draft.set(event.value()),
                     }
                     button {
-                        class: "ghost-button",
-                        onclick: move |_| on_open_members.call(()),
-                        "成员"
-                    }
-                }
-
-                section { class: "chat-scroll",
-                    for message in messages {
-                        MessageBubble {
-                            incoming: message.sender_id != profile_id,
-                            sender: message.sender_id.clone(),
-                            text: message.content.clone(),
-                            time: "刚刚".to_string(),
-                        }
-                    }
-                }
-
-                footer { class: "composer-shell",
-                    div { class: "composer-row",
-                        button { class: "icon-button", "+", }
-                        textarea {
-                            class: "composer-input",
-                            value: "{draft()}",
-                            placeholder: "输入消息",
-                            oninput: move |event| draft.set(event.value()),
-                        }
-                        button {
-                            class: "telegram-button",
-                            onclick: move |_| {
-                                let content = draft().trim().to_string();
-                                if !content.is_empty() {
-                                    on_send.call(content);
-                                    draft.set(String::new());
-                                }
-                            },
-                            "发送"
-                        }
+                        class: "composer-send-button",
+                        onclick: move |_| {
+                            let content = draft().trim().to_string();
+                            if !content.is_empty() {
+                                on_send.call(content);
+                                draft.set(String::new());
+                            }
+                        },
+                        "发送"
                     }
                 }
             }
@@ -95,20 +84,54 @@ fn MessageBubble(incoming: bool, sender: String, text: String, time: String) -> 
         "message-row outgoing"
     };
     let bubble_class = if incoming {
-        "message-bubble incoming"
+        "message-card incoming"
     } else {
-        "message-bubble outgoing"
+        "message-card outgoing"
     };
 
     rsx! {
         div { class: "{row_class}",
             div { class: "{bubble_class}",
                 if incoming {
-                    div { class: "message-meta", style: "text-align: left; margin-top: 0; margin-bottom: 6px; color: #6fb3ff;", "{sender}" }
+                    div { class: "message-sender", "{sender}" }
                 }
                 div { class: "message-text", "{text}" }
                 div { class: "message-meta", "{time}" }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dioxus::prelude::{Element, VirtualDom, rsx};
+
+    #[test]
+    fn chat_screen_should_render_single_column_telegram_shell() {
+        #[component]
+        fn TestChatShell() -> Element {
+            rsx! {
+                ChatScreen {
+                    room_code: "1A234".to_string(),
+                    profile_id: "self".to_string(),
+                    display_name: "匿名用户".to_string(),
+                    messages: vec![],
+                    member_count: 3,
+                    on_back: move |_| {},
+                    on_open_members: move |_| {},
+                    on_send: move |_| {},
+                }
+            }
+        }
+
+        let mut dom = VirtualDom::new(TestChatShell);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+
+        assert!(html.contains("chat-main-view"));
+        assert!(html.contains("chat-topbar"));
+        assert!(html.contains("chat-composer-pill"));
+        assert!(!html.contains("chat-sidebar"));
     }
 }
