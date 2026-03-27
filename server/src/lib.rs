@@ -1,7 +1,7 @@
 pub mod app;
-pub mod chat;
 pub mod http;
 pub mod logging;
-pub mod room;
+pub mod message_repo;
+pub mod room_repo;
 pub mod session;
 pub mod ws;

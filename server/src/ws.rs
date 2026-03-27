@@ -21,7 +21,8 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
-    app::AppState, chat::PostgresMessageRepository, http::ApiError, room::PostgresRoomRepository,
+    app::AppState, http::ApiError, message_repo::PostgresMessageRepository,
+    room_repo::PostgresRoomRepository,
 };
 
 #[derive(Clone, Default)]

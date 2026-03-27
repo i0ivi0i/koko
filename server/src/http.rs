@@ -13,7 +13,8 @@ use koko_contract::{
 use uuid::Uuid;
 
 use crate::{
-    app::AppState, chat::PostgresMessageRepository, room::PostgresRoomRepository, session,
+    app::AppState, message_repo::PostgresMessageRepository, room_repo::PostgresRoomRepository,
+    session,
 };
 use koko_core::{
     model::{ProfileId, Role, RoomCode, RoomId},
