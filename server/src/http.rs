@@ -33,6 +33,7 @@ pub async fn bootstrap_session(
     }))
 }
 
+#[tracing::instrument(skip(state, request), fields(code = %request.code))]
 pub async fn resolve_room(
     State(state): State<AppState>,
     Json(request): Json<ResolveRoomRequest>,
@@ -51,6 +52,7 @@ pub async fn resolve_room(
     }))
 }
 
+#[tracing::instrument(skip(state, request), fields(code = %request.code, profile_id = %request.profile_id))]
 pub async fn join_or_create_room(
     State(state): State<AppState>,
     Json(request): Json<JoinOrCreateRoomRequest>,
@@ -126,6 +128,7 @@ pub async fn list_room_members(
     Ok(Json(RoomMembersResponse { items }))
 }
 
+#[tracing::instrument(skip(state, request), fields(room_id = %room_id, sender_id = %request.sender_id))]
 pub async fn send_room_message(
     State(state): State<AppState>,
     Path(room_id): Path<String>,

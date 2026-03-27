@@ -20,6 +20,8 @@ cargo install just
 ```env
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/koko_local
 KOKO_API_BASE=http://127.0.0.1:3000
+# 可选，不写时开发模式默认使用 info,tower_http=info,sqlx=warn
+RUST_LOG=info,tower_http=info,sqlx=warn
 ```
 
 开发环境实际只读取 `.env.local`。
