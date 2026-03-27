@@ -4,13 +4,26 @@ use gloo_net::{
     websocket::{Message, futures::WebSocket},
 };
 use koko_contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
-    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
-    ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,
-    RoomMessagesResponse, SendMessageRequest, ServerWsEvent,
+    BootstrapSessionRequest, BootstrapSessionResponse, JoinOrCreateRoomRequest,
+    JoinOrCreateRoomResponse, MessageResponse, ResolveRoomRequest, ResolveRoomResponse,
+    RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SendMessageRequest,
+    ServerWsEvent,
 };
 
 use crate::state::ActiveRoomSnapshot;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemberAction {
+    Promote,
+    Mute,
+    Remove,
+}
+
+#[derive(Debug, PartialEq)]
+struct MemberActionRequest {
+    path: String,
+    body: serde_json::Value,
+}
 
 pub fn api_base() -> &'static str {
     option_env!("KOKO_API_BASE").unwrap_or("http://127.0.0.1:3000")
@@ -107,6 +120,35 @@ pub async fn fetch_room_members(room_id: &str) -> Result<Vec<RoomMemberResponse>
     Ok(members.items)
 }
 
+fn build_member_action_request(
+    action: MemberAction,
+    room_id: &str,
+    actor_profile_id: &str,
+    target_profile_id: &str,
+) -> MemberActionRequest {
+    match action {
+        MemberAction::Promote => MemberActionRequest {
+            path: format!("/rooms/{room_id}/roles/promote"),
+            body: serde_json::json!({
+                "actor_profile_id": actor_profile_id,
+                "target_profile_id": target_profile_id,
+            }),
+        },
+        MemberAction::Mute => MemberActionRequest {
+            path: format!("/rooms/{room_id}/members/{target_profile_id}/mute"),
+            body: serde_json::json!({
+                "actor_profile_id": actor_profile_id,
+            }),
+        },
+        MemberAction::Remove => MemberActionRequest {
+            path: format!("/rooms/{room_id}/members/{target_profile_id}/remove"),
+            body: serde_json::json!({
+                "actor_profile_id": actor_profile_id,
+            }),
+        },
+    }
+}
+
 pub async fn send_message(
     room_id: &str,
     sender_id: &str,
@@ -126,60 +168,20 @@ pub async fn send_message(
         .map_err(|error| error.to_string())
 }
 
-pub async fn promote_member(
+pub async fn run_member_action(
+    action: MemberAction,
     room_id: &str,
     actor_profile_id: &str,
     target_profile_id: &str,
 ) -> Result<(), String> {
-    Request::post(&format!("{}/rooms/{room_id}/roles/promote", api_base()))
-        .json(&PromoteAdminRequest {
-            actor_profile_id: actor_profile_id.to_string(),
-            target_profile_id: target_profile_id.to_string(),
-        })
+    let request = build_member_action_request(action, room_id, actor_profile_id, target_profile_id);
+
+    Request::post(&format!("{}{}", api_base(), request.path))
+        .json(&request.body)
         .map_err(|error| error.to_string())?
         .send()
         .await
         .map_err(|error| error.to_string())?;
-
-    Ok(())
-}
-
-pub async fn mute_member(
-    room_id: &str,
-    actor_profile_id: &str,
-    target_profile_id: &str,
-) -> Result<(), String> {
-    Request::post(&format!(
-        "{}/rooms/{room_id}/members/{target_profile_id}/mute",
-        api_base()
-    ))
-    .json(&GovernanceActorRequest {
-        actor_profile_id: actor_profile_id.to_string(),
-    })
-    .map_err(|error| error.to_string())?
-    .send()
-    .await
-    .map_err(|error| error.to_string())?;
-
-    Ok(())
-}
-
-pub async fn remove_member(
-    room_id: &str,
-    actor_profile_id: &str,
-    target_profile_id: &str,
-) -> Result<(), String> {
-    Request::post(&format!(
-        "{}/rooms/{room_id}/members/{target_profile_id}/remove",
-        api_base()
-    ))
-    .json(&GovernanceActorRequest {
-        actor_profile_id: actor_profile_id.to_string(),
-    })
-    .map_err(|error| error.to_string())?
-    .send()
-    .await
-    .map_err(|error| error.to_string())?;
 
     Ok(())
 }
@@ -222,6 +224,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -243,6 +246,35 @@ mod tests {
         assert_eq!(
             url,
             "wss://example.com/ws/rooms/room-1?profile_id=profile-1"
+        );
+    }
+
+    #[test]
+    fn promote_action_should_build_role_endpoint_and_full_body() {
+        let request =
+            build_member_action_request(MemberAction::Promote, "room-1", "owner-1", "member-1");
+
+        assert_eq!(request.path, "/rooms/room-1/roles/promote");
+        assert_eq!(
+            request.body,
+            json!({
+                "actor_profile_id": "owner-1",
+                "target_profile_id": "member-1"
+            })
+        );
+    }
+
+    #[test]
+    fn mute_action_should_build_member_endpoint_and_actor_body() {
+        let request =
+            build_member_action_request(MemberAction::Mute, "room-1", "admin-1", "member-1");
+
+        assert_eq!(request.path, "/rooms/room-1/members/member-1/mute");
+        assert_eq!(
+            request.body,
+            json!({
+                "actor_profile_id": "admin-1"
+            })
         );
     }
 }
