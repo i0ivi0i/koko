@@ -1,0 +1,248 @@
+use futures_util::StreamExt;
+use gloo_net::{
+    http::Request,
+    websocket::{Message, futures::WebSocket},
+};
+use koko_core::contract::{
+    BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
+    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
+    ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,
+    RoomMessagesResponse, SendMessageRequest, ServerWsEvent,
+};
+
+use crate::state::ActiveRoomSnapshot;
+
+pub fn api_base() -> &'static str {
+    option_env!("KOKO_API_BASE").unwrap_or("http://127.0.0.1:3000")
+}
+
+pub fn build_room_ws_url(api_base: &str, room_id: &str, profile_id: &str) -> String {
+    let ws_base = if let Some(rest) = api_base.strip_prefix("https://") {
+        format!("wss://{rest}")
+    } else if let Some(rest) = api_base.strip_prefix("http://") {
+        format!("ws://{rest}")
+    } else {
+        api_base.to_string()
+    };
+
+    format!("{ws_base}/ws/rooms/{room_id}?profile_id={profile_id}")
+}
+
+pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
+    let session: BootstrapSessionResponse =
+        Request::post(&format!("{}/session/bootstrap", api_base()))
+            .json(&BootstrapSessionRequest {
+                device_key: format!("web-{}", code.to_ascii_lowercase()),
+            })
+            .map_err(|error| error.to_string())?
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
+
+    let _: ResolveRoomResponse = Request::post(&format!("{}/rooms/resolve", api_base()))
+        .json(&ResolveRoomRequest {
+            code: code.to_ascii_uppercase(),
+        })
+        .map_err(|error| error.to_string())?
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .json()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let joined: JoinOrCreateRoomResponse =
+        Request::post(&format!("{}/rooms/join-or-create", api_base()))
+            .json(&JoinOrCreateRoomRequest {
+                profile_id: session.profile_id.clone(),
+                code: code.to_ascii_uppercase(),
+            })
+            .map_err(|error| error.to_string())?
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
+
+    let messages: RoomMessagesResponse =
+        Request::get(&format!("{}/rooms/{}/messages", api_base(), joined.room_id))
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
+
+    let members: RoomMembersResponse =
+        Request::get(&format!("{}/rooms/{}/members", api_base(), joined.room_id))
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
+
+    Ok(ActiveRoomSnapshot {
+        session,
+        joined,
+        messages: messages.items,
+        members: members.items,
+    })
+}
+
+pub async fn fetch_room_members(room_id: &str) -> Result<Vec<RoomMemberResponse>, String> {
+    let members: RoomMembersResponse =
+        Request::get(&format!("{}/rooms/{room_id}/members", api_base()))
+            .send()
+            .await
+            .map_err(|error| error.to_string())?
+            .json()
+            .await
+            .map_err(|error| error.to_string())?;
+
+    Ok(members.items)
+}
+
+pub async fn send_message(
+    room_id: &str,
+    sender_id: &str,
+    content: &str,
+) -> Result<MessageResponse, String> {
+    Request::post(&format!("{}/rooms/{room_id}/messages", api_base()))
+        .json(&SendMessageRequest {
+            sender_id: sender_id.to_string(),
+            content: content.to_string(),
+        })
+        .map_err(|error| error.to_string())?
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .json()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+pub async fn promote_member(
+    room_id: &str,
+    actor_profile_id: &str,
+    target_profile_id: &str,
+) -> Result<(), String> {
+    Request::post(&format!("{}/rooms/{room_id}/roles/promote", api_base()))
+        .json(&PromoteAdminRequest {
+            actor_profile_id: actor_profile_id.to_string(),
+            target_profile_id: target_profile_id.to_string(),
+        })
+        .map_err(|error| error.to_string())?
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+pub async fn mute_member(
+    room_id: &str,
+    actor_profile_id: &str,
+    target_profile_id: &str,
+) -> Result<(), String> {
+    Request::post(&format!(
+        "{}/rooms/{room_id}/members/{target_profile_id}/mute",
+        api_base()
+    ))
+    .json(&GovernanceActorRequest {
+        actor_profile_id: actor_profile_id.to_string(),
+    })
+    .map_err(|error| error.to_string())?
+    .send()
+    .await
+    .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+pub async fn remove_member(
+    room_id: &str,
+    actor_profile_id: &str,
+    target_profile_id: &str,
+) -> Result<(), String> {
+    Request::post(&format!(
+        "{}/rooms/{room_id}/members/{target_profile_id}/remove",
+        api_base()
+    ))
+    .json(&GovernanceActorRequest {
+        actor_profile_id: actor_profile_id.to_string(),
+    })
+    .map_err(|error| error.to_string())?
+    .send()
+    .await
+    .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+pub async fn listen_room_events<F>(room_id: String, profile_id: String, mut on_message: F)
+where
+    F: FnMut(MessageResponse) + 'static,
+{
+    let ws_url = build_room_ws_url(api_base(), &room_id, &profile_id);
+
+    let Ok(socket) = WebSocket::open(&ws_url) else {
+        return;
+    };
+    let (_, mut stream) = socket.split();
+
+    while let Some(next) = stream.next().await {
+        let Ok(Message::Text(text)) = next else {
+            continue;
+        };
+
+        let Ok(ServerWsEvent::MessageCreated {
+            message_id,
+            room_id,
+            sender_id,
+            content,
+        }) = serde_json::from_str::<ServerWsEvent>(&text)
+        else {
+            continue;
+        };
+
+        on_message(MessageResponse {
+            message_id,
+            room_id,
+            sender_id,
+            content,
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_base_should_fall_back_to_local_server() {
+        assert_eq!(api_base(), "http://127.0.0.1:3000");
+    }
+
+    #[test]
+    fn ws_url_should_convert_http_to_ws() {
+        let url = build_room_ws_url("http://127.0.0.1:3000", "room-1", "profile-1");
+        assert_eq!(
+            url,
+            "ws://127.0.0.1:3000/ws/rooms/room-1?profile_id=profile-1"
+        );
+    }
+
+    #[test]
+    fn ws_url_should_convert_https_to_wss() {
+        let url = build_room_ws_url("https://example.com", "room-1", "profile-1");
+        assert_eq!(
+            url,
+            "wss://example.com/ws/rooms/room-1?profile_id=profile-1"
+        );
+    }
+}
