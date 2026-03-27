@@ -33,18 +33,19 @@ main() {
     require_linux
     require_root
     detect_supported_distro
+    TMP_ROOT="$(mktemp -d)"
+    trap cleanup EXIT
     ensure_domains
     ensure_passwords
     derive_defaults
     derive_release_base
+    echo "系统环境检查通过。"
     install_packages
     ensure_user_and_dirs
-    TMP_ROOT="$(mktemp -d)"
-    trap cleanup EXIT
 
     local mode
     mode="$(detect_mode)"
-    echo "koko ${mode}开始。"
+    echo "开始$(mode_label "${mode}")。"
 
     if [[ "${mode}" == "upgrade" ]]; then
         backup_current_release
@@ -57,9 +58,10 @@ main() {
     apply_migrations
     install_service
     install_caddyfile
-    systemctl daemon-reload
-    systemctl enable --now koko-server
-    systemctl reload caddy
+    echo "正在启动服务..."
+    run_quiet "刷新 systemd 配置" systemctl daemon-reload
+    run_quiet "启动 koko-server" systemctl enable --now koko-server
+    run_quiet "重载 Caddy" systemctl reload caddy
     write_version
     print_summary "${mode}"
 }
@@ -68,6 +70,42 @@ cleanup() {
     if [[ -n "${TMP_ROOT}" && -d "${TMP_ROOT}" ]]; then
         rm -rf "${TMP_ROOT}"
     fi
+}
+
+mode_label() {
+    local mode="$1"
+    case "${mode}" in
+        install) printf '首次安装' ;;
+        upgrade) printf '升级' ;;
+        *) printf '%s' "${mode}" ;;
+    esac
+}
+
+step_log_file() {
+    if [[ -n "${TMP_ROOT}" ]]; then
+        mktemp "${TMP_ROOT}/step.XXXXXX.log"
+    else
+        mktemp
+    fi
+}
+
+run_quiet() {
+    local step_name="$1"
+    shift
+
+    local log_file
+    log_file="$(step_log_file)"
+
+    echo "正在${step_name}..."
+    if "$@" >"${log_file}" 2>&1; then
+        rm -f "${log_file}"
+        return
+    fi
+
+    echo "${step_name}失败。" >&2
+    echo "以下是关键错误输出：" >&2
+    tail -n 40 "${log_file}" >&2 || true
+    exit 1
 }
 
 require_linux() {
@@ -135,7 +173,7 @@ prompt_value() {
 }
 
 ensure_domains() {
-    KOKO_DOMAIN="$(prompt_value "聊天域名或公网 IPv4" "${KOKO_DOMAIN}")"
+    KOKO_DOMAIN="$(prompt_value "聊天入口（域名或公网 IPv4）" "${KOKO_DOMAIN}")"
 }
 
 ensure_passwords() {
@@ -201,11 +239,11 @@ derive_release_base() {
 
 install_packages() {
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y curl ca-certificates postgresql caddy
+    run_quiet "安装系统依赖" bash -lc "apt-get update && apt-get install -y curl ca-certificates postgresql caddy"
 }
 
 ensure_user_and_dirs() {
+    echo "正在准备运行目录..."
     id -u koko >/dev/null 2>&1 || useradd --system --home "${INSTALL_ROOT}" --shell /usr/sbin/nologin koko
     mkdir -p "${INSTALL_ROOT}/web" "${INSTALL_ROOT}/admin" "${INSTALL_ROOT}/migrations" "${CONFIG_DIR}" "${BACKUP_ROOT}"
     chown -R koko:koko "${INSTALL_ROOT}"
@@ -232,6 +270,7 @@ backup_current_release() {
 }
 
 download_release_assets() {
+    echo "正在下载发布包..."
     fetch_asset "koko-server-linux-x86_64.tar.gz" "${TMP_ROOT}/server.tar.gz"
     fetch_asset "koko-web.tar.gz" "${TMP_ROOT}/web.tar.gz"
     fetch_asset "koko-admin.tar.gz" "${TMP_ROOT}/admin.tar.gz"
@@ -243,11 +282,12 @@ fetch_asset() {
     local output_path="$2"
     local asset_url="${RELEASE_BASE}/${asset_name}"
 
-    echo "下载 ${asset_name}"
-    curl -fsSL "${asset_url}" -o "${output_path}"
+    echo "  - ${asset_name}"
+    run_quiet "下载 ${asset_name}" curl -fsSL "${asset_url}" -o "${output_path}"
 }
 
 install_release_assets() {
+    echo "正在安装发布内容..."
     rm -rf "${TMP_ROOT}/server" "${TMP_ROOT}/web" "${TMP_ROOT}/admin" "${TMP_ROOT}/migrations"
     mkdir -p "${TMP_ROOT}/server" "${TMP_ROOT}/web" "${TMP_ROOT}/admin" "${TMP_ROOT}/migrations"
 
@@ -267,10 +307,11 @@ install_release_assets() {
 
 write_config_if_missing() {
     if [[ -f "${CONFIG_FILE}" ]]; then
-        echo "保留现有配置 ${CONFIG_FILE}"
+        echo "检测到现有配置，保持不变：${CONFIG_FILE}"
         return
     fi
 
+    echo "正在写入服务配置..."
     cat > "${CONFIG_FILE}" <<EOF
 DATABASE_URL=postgresql://${KOKO_DB_USER}:${KOKO_DB_PASSWORD}@127.0.0.1:5432/${KOKO_DB_NAME}
 SERVER_BIND=${KOKO_BIND}
@@ -283,31 +324,35 @@ EOF
 }
 
 ensure_database() {
+    echo "正在初始化数据库..."
     runuser -u postgres -- psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${KOKO_DB_USER}'" | grep -q 1 || \
-        runuser -u postgres -- psql -c "CREATE USER ${KOKO_DB_USER} WITH PASSWORD '${KOKO_DB_PASSWORD}';"
+        run_quiet "创建数据库用户" runuser -u postgres -- psql -q -c "CREATE USER ${KOKO_DB_USER} WITH PASSWORD '${KOKO_DB_PASSWORD}';"
 
     runuser -u postgres -- psql -tc "SELECT 1 FROM pg_database WHERE datname='${KOKO_DB_NAME}'" | grep -q 1 || \
-        runuser -u postgres -- psql -c "CREATE DATABASE ${KOKO_DB_NAME} OWNER ${KOKO_DB_USER};"
+        run_quiet "创建数据库" runuser -u postgres -- psql -q -c "CREATE DATABASE ${KOKO_DB_NAME} OWNER ${KOKO_DB_USER};"
 }
 
 apply_migrations() {
     local database_url
     database_url="$(grep '^DATABASE_URL=' "${CONFIG_FILE}" | cut -d= -f2-)"
 
+    echo "正在执行数据库迁移..."
     shopt -s nullglob
     for migration in "${INSTALL_ROOT}"/migrations/*.sql; do
-        echo "执行迁移 $(basename "${migration}")"
-        PGPASSWORD="${KOKO_DB_PASSWORD}" psql "${database_url}" -v ON_ERROR_STOP=1 -f "${migration}"
+        echo "  - $(basename "${migration}")"
+        run_quiet "执行迁移 $(basename "${migration}")" bash -lc "PGPASSWORD='${KOKO_DB_PASSWORD}' psql '${database_url}' -q -v ON_ERROR_STOP=1 -f '${migration}'"
     done
     shopt -u nullglob
 }
 
 install_service() {
+    echo "正在写入系统服务配置..."
     render_service_template > "${SERVICE_PATH}"
     chmod 0644 "${SERVICE_PATH}"
 }
 
 install_caddyfile() {
+    echo "正在写入 Caddy 配置..."
     render_caddy_template > "${CADDYFILE_PATH}"
 }
 
@@ -363,7 +408,7 @@ EOF
 print_summary() {
     local mode="$1"
     echo
-    echo "koko ${mode}完成。"
+    echo "$(mode_label "${mode}")完成。"
     echo "聊天前台: ${KOKO_PUBLIC_BASE_URL}"
     echo "后台前端: ${KOKO_ADMIN_BASE_URL}"
     echo "配置文件: ${CONFIG_FILE}"
