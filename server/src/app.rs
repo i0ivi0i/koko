@@ -21,6 +21,7 @@ pub struct AppState {
 
 pub fn build_app(pool: PgPool) -> Router {
     Router::new()
+        .route("/", get(http::root_status))
         .route("/session/bootstrap", post(http::bootstrap_session))
         .route("/rooms/resolve", post(http::resolve_room))
         .route("/rooms/join-or-create", post(http::join_or_create_room))
