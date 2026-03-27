@@ -249,7 +249,6 @@ fn frontend_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::Co
             "8080",
             "--addr",
             "127.0.0.1",
-            "--hot-patch",
         ],
     )
     .current_dir(&root.join("web"))
@@ -269,7 +268,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn frontend_dev_command_should_enable_hotpatch() {
+    fn frontend_dev_command_should_not_enable_hotpatch_by_default() {
         let root = std::path::Path::new("D:/koko");
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
@@ -280,7 +279,7 @@ mod tests {
         let command = frontend_dev_spec(root, &env);
         let formatted = process::format_command(&command);
 
-        assert!(formatted.contains("--hot-patch"));
+        assert!(!formatted.contains("--hot-patch"));
     }
 
     #[test]
