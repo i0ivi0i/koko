@@ -82,6 +82,9 @@ fn run_init(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     println!("已读取 .env.local");
     println!("DATABASE_URL={}", env.database_url);
     println!("KOKO_API_BASE={}", env.api_base);
+    if env.admin_password_generated {
+        println!("已自动生成本地后台密码，并写回 .env.local。");
+    }
 
     let database_create = process::CommandSpec::new("sqlx", ["database", "create"])
         .current_dir(root)
@@ -120,6 +123,9 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
         println!("已启用 sccache 编译缓存。");
     } else {
         println!("未检测到 sccache，继续使用默认 rustc。");
+    }
+    if env.admin_password_generated {
+        println!("已自动生成本地后台密码，并写回 .env.local。");
     }
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -405,6 +411,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
             admin_bind: "0.0.0.0:8081".into(),
@@ -423,6 +431,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
             admin_bind: "0.0.0.0:8081".into(),
@@ -441,6 +451,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
             admin_bind: "0.0.0.0:8081".into(),
@@ -459,6 +471,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
             admin_bind: "0.0.0.0:8081".into(),
@@ -478,6 +492,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
             admin_bind: "0.0.0.0:8081".into(),
@@ -497,6 +513,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://192.168.1.7:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:9090".into(),
             admin_bind: "0.0.0.0:8081".into(),
@@ -524,6 +542,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://192.168.1.7:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
             admin_bind: "0.0.0.0:8081".into(),

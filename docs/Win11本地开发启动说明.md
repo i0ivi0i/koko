@@ -39,6 +39,7 @@ RUST_LOG=info,tower_http=info,sqlx=warn
 ```
 
 开发环境实际只读取 `.env.local`。
+如果 `.env.local` 缺少 `KOKO_ADMIN_PASSWORD`，`just init` / `just dev` 第一次会自动生成并写回该文件。
 
 含义：
 
