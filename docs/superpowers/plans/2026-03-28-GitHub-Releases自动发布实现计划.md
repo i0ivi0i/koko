@@ -61,7 +61,7 @@ Expected:
 ### Task 3: 让 install.sh 和发布流程对齐
 
 **Files:**
-- Modify: `deploy/install.sh`
+- Modify: `install.sh`
 
 - [x] **Step 1: 检查 install.sh 的资产命名与 workflow 一致**
 
@@ -81,6 +81,6 @@ Expected:
 - [ ] **Step 4: 提交**
 
 ```bash
-git add .github/workflows/release.yml scripts/package-release.ps1 deploy/install.sh docs/superpowers/specs/2026-03-28-GitHub-Releases自动发布设计.md docs/superpowers/plans/2026-03-28-GitHub-Releases自动发布实现计划.md
+git add .github/workflows/release.yml scripts/package-release.ps1 install.sh docs/superpowers/specs/2026-03-28-GitHub-Releases自动发布设计.md docs/superpowers/plans/2026-03-28-GitHub-Releases自动发布实现计划.md
 git commit -m "发布: 新增 GitHub Releases 自动发布流程"
 ```

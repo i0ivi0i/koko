@@ -2,7 +2,7 @@
 
 **目标**
 
-让 `koko` 在打出版本标签后，自动构建并发布原生安装所需的 release 产物到 GitHub Releases，供现有 [install.sh](D:/100-工作/200-交易/量化交易/koko/deploy/install.sh) 下载和安装。
+让 `koko` 在打出版本标签后，自动构建并发布原生安装所需的 release 产物到 GitHub Releases，供现有 [install.sh](D:/100-工作/200-交易/量化交易/koko/install.sh) 下载和安装。
 
 ## 设计原则
 
@@ -46,7 +46,7 @@
    - 内容：
      - `migrations/*.sql`
 
-这些名字必须和 [install.sh](D:/100-工作/200-交易/量化交易/koko/deploy/install.sh) 里当前下载逻辑保持一致。
+这些名字必须和 [install.sh](D:/100-工作/200-交易/量化交易/koko/install.sh) 里当前下载逻辑保持一致。
 
 ## 构建策略
 
@@ -124,7 +124,7 @@
 
 ## 与 install.sh 的关系
 
-当前 [install.sh](D:/100-工作/200-交易/量化交易/koko/deploy/install.sh) 已经依赖：
+当前 [install.sh](D:/100-工作/200-交易/量化交易/koko/install.sh) 已经依赖：
 
 - `koko-server-linux-x86_64.tar.gz`
 - `koko-web.tar.gz`

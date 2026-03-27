@@ -28,7 +28,7 @@ TMP_ROOT=""
 main() {
     require_linux
     require_root
-detect_supported_distro
+    detect_supported_distro
     ensure_domains
     ensure_passwords
     derive_defaults
@@ -97,11 +97,41 @@ detect_supported_distro() {
     esac
 }
 
-ensure_domains() {
-    if [[ -z "${KOKO_DOMAIN}" ]]; then
-        echo "缺少 KOKO_DOMAIN。示例: env KOKO_DOMAIN=chat.example.com bash install.sh" >&2
+prompt_value() {
+    local prompt_label="$1"
+    local current_value="${2:-}"
+    local default_value="${3:-}"
+    local prompt_suffix=""
+    local value="${current_value}"
+
+    if [[ -n "${value}" ]]; then
+        printf '%s\n' "${value}"
+        return
+    fi
+
+    if [[ ! -r /dev/tty ]]; then
+        echo "缺少 ${prompt_label}，并且当前没有可交互终端。" >&2
         exit 1
     fi
+
+    if [[ -n "${default_value}" ]]; then
+        prompt_suffix=" [默认: ${default_value}]"
+    fi
+
+    while [[ -z "${value}" ]]; do
+        printf '%s%s: ' "${prompt_label}" "${prompt_suffix}" > /dev/tty
+        IFS= read -r value < /dev/tty
+
+        if [[ -z "${value}" && -n "${default_value}" ]]; then
+            value="${default_value}"
+        fi
+    done
+
+    printf '%s\n' "${value}"
+}
+
+ensure_domains() {
+    KOKO_DOMAIN="$(prompt_value "聊天域名" "${KOKO_DOMAIN}")"
 }
 
 ensure_passwords() {
