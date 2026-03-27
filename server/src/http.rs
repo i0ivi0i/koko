@@ -4,18 +4,19 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use koko_contract::{
+    BootstrapSessionRequest, BootstrapSessionResponse, DemoteAdminRequest, GovernanceActorRequest,
+    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
+    ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,
+    RoomMessagesResponse, RoomResponse, SendMessageRequest, ServerWsEvent,
+};
 use uuid::Uuid;
 
 use crate::{
-    app::AppState, chat::PostgresMessageRepository, room::PostgresRoomRepository, session,
+    app::AppState, message_repo::PostgresMessageRepository, room_repo::PostgresRoomRepository,
+    session,
 };
 use koko_core::{
-    contract::{
-        BootstrapSessionRequest, BootstrapSessionResponse, DemoteAdminRequest,
-        GovernanceActorRequest, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse,
-        PromoteAdminRequest, ResolveRoomRequest, ResolveRoomResponse, RoomMembersResponse,
-        RoomMessagesResponse, RoomResponse, SendMessageRequest,
-    },
     model::{ProfileId, Role, RoomCode, RoomId},
     port::RoomRepository,
 };
@@ -122,7 +123,7 @@ pub async fn list_room_members(
         .await
         .map_err(|_| ApiError::internal("成员列表读取失败"))?
         .into_iter()
-        .map(|member| koko_core::contract::RoomMemberResponse {
+        .map(|member| RoomMemberResponse {
             profile_id: member.profile_id.0.to_string(),
             display_name: session::build_display_name(&member.device_key),
             role: role_name(member.role).to_owned(),
@@ -153,7 +154,7 @@ pub async fn send_room_message(
     .map_err(|_| ApiError::bad_request("消息发送失败"))?;
 
     let response = message_to_response(message);
-    let event = serde_json::to_string(&koko_core::contract::ServerWsEvent::MessageCreated {
+    let event = serde_json::to_string(&ServerWsEvent::MessageCreated {
         message_id: response.message_id.clone(),
         room_id: response.room_id.clone(),
         sender_id: response.sender_id.clone(),

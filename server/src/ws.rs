@@ -11,8 +11,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures_util::{SinkExt, StreamExt};
+use koko_contract::{ClientWsEvent, ServerWsEvent};
 use koko_core::{
-    contract::{ClientWsEvent, ServerWsEvent},
     model::{ProfileId, RoomId},
     port::RoomRepository,
 };
@@ -21,7 +21,8 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
-    app::AppState, chat::PostgresMessageRepository, http::ApiError, room::PostgresRoomRepository,
+    app::AppState, http::ApiError, message_repo::PostgresMessageRepository,
+    room_repo::PostgresRoomRepository,
 };
 
 #[derive(Clone, Default)]

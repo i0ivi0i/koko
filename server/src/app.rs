@@ -1,14 +1,14 @@
 use axum::{
-    extract::Request,
     Router,
+    extract::Request,
     routing::{get, post},
 };
 use sqlx::PgPool;
 use tower::ServiceBuilder;
+use tower_http::ServiceBuilderExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::request_id::MakeRequestUuid;
 use tower_http::trace::{DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer};
-use tower_http::ServiceBuilderExt;
 use tracing::{Level, info_span};
 
 use crate::{http, ws::RealtimeHub};
@@ -48,7 +48,12 @@ pub fn build_app(pool: PgPool) -> Router {
             post(http::remove_room_member),
         )
         .route("/ws/rooms/{room_id}", get(crate::ws::connect))
-        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)

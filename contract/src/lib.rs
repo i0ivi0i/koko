@@ -106,3 +106,51 @@ pub enum ServerWsEvent {
         content: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_session_response_should_roundtrip() {
+        let value = BootstrapSessionResponse {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: BootstrapSessionResponse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn join_room_response_should_roundtrip() {
+        let value = JoinOrCreateRoomResponse {
+            room_id: "room-1".into(),
+            code: "1A234".into(),
+            role: "owner".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: JoinOrCreateRoomResponse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn server_ws_event_should_roundtrip() {
+        let value = ServerWsEvent::MessageCreated {
+            message_id: "msg-1".into(),
+            room_id: "room-1".into(),
+            sender_id: "profile-1".into(),
+            content: "hello".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ServerWsEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+}
