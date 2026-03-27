@@ -1,28 +1,29 @@
 use axum::{
-    body::Body,
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use sqlx::PgPool;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-const TEST_ADMIN_TOKEN: &str = "test-admin-token";
+const TEST_ADMIN_AUTHORIZATION: &str = "Basic YWRtaW46RWUxMjM0NTY3ODkr";
 
 fn with_admin(request: Request<Body>) -> Request<Body> {
     let (mut parts, body) = request.into_parts();
     parts.headers.insert(
-        "x-admin-token",
-        TEST_ADMIN_TOKEN.parse().expect("测试令牌头应合法"),
+        "authorization",
+        TEST_ADMIN_AUTHORIZATION
+            .parse()
+            .expect("测试 Basic Auth 头应合法"),
     );
     Request::from_parts(parts, body)
 }
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 管理接口缺少管理令牌时应拒绝访问(pool: PgPool) {
-    let app =
-        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let app = koko_server::app::build_app(pool.clone());
 
     let response = app
         .oneshot(
@@ -46,8 +47,7 @@ async fn 管理接口缺少管理令牌时应拒绝访问(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 提升管理员接口应更新成员角色(pool: PgPool) {
-    let app =
-        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let app = koko_server::app::build_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -87,8 +87,7 @@ async fn 提升管理员接口应更新成员角色(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 禁言后发送消息应失败(pool: PgPool) {
-    let app =
-        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let app = koko_server::app::build_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -137,8 +136,7 @@ async fn 禁言后发送消息应失败(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 移除成员接口应删除成员关系(pool: PgPool) {
-    let app =
-        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let app = koko_server::app::build_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -178,8 +176,7 @@ async fn 移除成员接口应删除成员关系(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
-    let app =
-        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let app = koko_server::app::build_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -230,8 +227,7 @@ async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
 async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查看权限(
     pool: PgPool,
 ) {
-    let app =
-        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let app = koko_server::app::build_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -329,8 +325,7 @@ async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查�
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 封禁不存在的房间应返回四零四(pool: PgPool) {
-    let app =
-        koko_server::app::build_app_with_admin_token(pool.clone(), Some(TEST_ADMIN_TOKEN.into()));
+    let app = koko_server::app::build_app(pool.clone());
     let room_id = Uuid::new_v4();
     let banned_until = (OffsetDateTime::now_utc() + Duration::hours(1))
         .format(&Rfc3339)
@@ -355,6 +350,142 @@ async fn 封禁不存在的房间应返回四零四(pool: PgPool) {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 后台概览接口应返回核心统计(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let room_id = Uuid::new_v4();
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    seed_room(&pool, room_id, owner_id, member_id).await;
+
+    sqlx::query!(
+        r#"
+        INSERT INTO messages (id, room_id, sender_id, content, created_at)
+        VALUES ($1, $2, $3, $4, NOW() - INTERVAL '1 hour')
+        "#,
+        Uuid::new_v4(),
+        room_id,
+        owner_id,
+        "overview message",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = app
+        .oneshot(with_admin(
+            Request::builder()
+                .method("GET")
+                .uri("/admin/overview")
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(payload["total_rooms"], 1);
+    assert_eq!(payload["total_memberships"], 2);
+    assert_eq!(payload["active_rooms_24h"], 1);
+    assert_eq!(payload["messages_24h"], 1);
+    assert_eq!(payload["online_connections"], 0);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 后台房间列表与详情接口应返回封禁和最近消息信息(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let room_id = Uuid::new_v4();
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    seed_room(&pool, room_id, owner_id, member_id).await;
+
+    sqlx::query!(
+        r#"
+        INSERT INTO messages (id, room_id, sender_id, content, created_at)
+        VALUES ($1, $2, $3, $4, NOW() - INTERVAL '5 minute')
+        "#,
+        Uuid::new_v4(),
+        room_id,
+        owner_id,
+        "detail message",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let banned_until = (OffsetDateTime::now_utc() + Duration::hours(1))
+        .format(&Rfc3339)
+        .unwrap();
+
+    let ban = app
+        .clone()
+        .oneshot(with_admin(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/admin/rooms/{room_id}/ban"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "banned_until": banned_until,
+                        "ban_reason": "ops freeze",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(ban.status(), StatusCode::OK);
+
+    let list = app
+        .clone()
+        .oneshot(with_admin(
+            Request::builder()
+                .method("GET")
+                .uri("/admin/rooms?code=8H901")
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(list.status(), StatusCode::OK);
+    let list_body = to_bytes(list.into_body(), usize::MAX).await.unwrap();
+    let list_payload: Value = serde_json::from_slice(&list_body).unwrap();
+    assert_eq!(list_payload["items"].as_array().unwrap().len(), 1);
+    assert_eq!(list_payload["items"][0]["room_id"], room_id.to_string());
+    assert_eq!(list_payload["items"][0]["code"], "8H901");
+    assert_eq!(list_payload["items"][0]["member_count"], 2);
+    assert_eq!(list_payload["items"][0]["ban_reason"], "ops freeze");
+    assert!(list_payload["items"][0]["last_message_at"].as_str().is_some());
+    assert!(list_payload["items"][0]["banned_until"].as_str().is_some());
+
+    let detail = app
+        .oneshot(with_admin(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/admin/rooms/{room_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(detail.status(), StatusCode::OK);
+    let detail_body = to_bytes(detail.into_body(), usize::MAX).await.unwrap();
+    let detail_payload: Value = serde_json::from_slice(&detail_body).unwrap();
+    assert_eq!(detail_payload["room_id"], room_id.to_string());
+    assert_eq!(detail_payload["code"], "8H901");
+    assert_eq!(detail_payload["member_count"], 2);
+    assert_eq!(detail_payload["ban_reason"], "ops freeze");
+    assert!(detail_payload["last_message_at"].as_str().is_some());
+    assert!(detail_payload["banned_until"].as_str().is_some());
 }
 
 async fn seed_room(pool: &PgPool, room_id: Uuid, owner_id: Uuid, member_id: Uuid) {

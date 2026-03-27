@@ -1,16 +1,19 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{StatusCode, header},
+    middleware::Next,
     response::{IntoResponse, Response},
 };
+use headers::{Authorization, HeaderMapExt, authorization::Basic};
 use koko_contract::{
-    BanRoomRequest, BootstrapSessionRequest, BootstrapSessionResponse, DemoteAdminRequest,
-    GlobalChatPolicyResponse, GovernanceActorRequest, JoinOrCreateRoomRequest,
-    JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest, ResolveRoomRequest,
-    ResolveRoomResponse, RoomGovernanceStateResponse, RoomMemberResponse, RoomMembersResponse,
-    RoomMessagesQuery, RoomMessagesResponse, RoomResponse, SendMessageRequest, ServerWsEvent,
-    UpdateGlobalChatPolicyRequest,
+    AdminOverviewResponse, AdminRoomDetailResponse, AdminRoomListQuery, AdminRoomListResponse,
+    AdminRoomListItem, BanRoomRequest, BootstrapSessionRequest, BootstrapSessionResponse,
+    DemoteAdminRequest, GlobalChatPolicyResponse, GovernanceActorRequest,
+    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
+    ResolveRoomRequest, ResolveRoomResponse, RoomGovernanceStateResponse, RoomMemberResponse,
+    RoomMembersResponse, RoomMessagesQuery, RoomMessagesResponse, RoomResponse,
+    SendMessageRequest, ServerWsEvent, UpdateGlobalChatPolicyRequest,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
@@ -26,6 +29,11 @@ use koko_core::{
 
 const DEFAULT_MESSAGE_PAGE_LIMIT: usize = 40;
 const MAX_MESSAGE_PAGE_LIMIT: u16 = 100;
+const DEFAULT_ADMIN_ROOM_LIMIT: usize = 50;
+const MAX_ADMIN_ROOM_LIMIT: u16 = 200;
+const ADMIN_USERNAME: &str = "admin";
+const ADMIN_PASSWORD: &str = "Ee123456789+";
+const ADMIN_BASIC_REALM: &str = "Basic realm=\"koko-admin\", charset=\"UTF-8\"";
 
 pub async fn bootstrap_session(
     State(state): State<AppState>,
@@ -44,11 +52,51 @@ pub async fn root_status() -> &'static str {
     "koko 服务运行中"
 }
 
+pub async fn require_admin_basic_auth(
+    request: axum::extract::Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let Some(Authorization(basic)) = request.headers().typed_get::<Authorization<Basic>>() else {
+        return Err(ApiError::unauthorized("缺少后台认证"));
+    };
+
+    if basic.username() != ADMIN_USERNAME || basic.password() != ADMIN_PASSWORD {
+        return Err(ApiError::unauthorized("后台认证无效"));
+    }
+
+    Ok(next.run(request).await)
+}
+
+pub async fn get_admin_overview(
+    State(state): State<AppState>,
+) -> Result<Json<AdminOverviewResponse>, ApiError> {
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
+    let message_repo = PostgresMessageRepository::new(state.pool);
+
+    Ok(Json(AdminOverviewResponse {
+        total_rooms: room_repo
+            .total_rooms()
+            .await
+            .map_err(|_| ApiError::internal("后台房间统计失败"))?,
+        total_memberships: room_repo
+            .total_memberships()
+            .await
+            .map_err(|_| ApiError::internal("后台成员统计失败"))?,
+        active_rooms_24h: message_repo
+            .active_rooms_24h()
+            .await
+            .map_err(|_| ApiError::internal("后台活跃房间统计失败"))?,
+        messages_24h: message_repo
+            .messages_24h()
+            .await
+            .map_err(|_| ApiError::internal("后台消息统计失败"))?,
+        online_connections: state.realtime.online_connections(),
+    }))
+}
+
 pub async fn get_global_chat_policy(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<GlobalChatPolicyResponse>, ApiError> {
-    require_admin(&state, &headers)?;
     let room_repo = PostgresRoomRepository::new(state.pool);
     let policy = koko_core::room::get_global_chat_policy(&room_repo)
         .await
@@ -62,10 +110,8 @@ pub async fn get_global_chat_policy(
 
 pub async fn update_global_chat_policy(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<UpdateGlobalChatPolicyRequest>,
 ) -> Result<Json<GlobalChatPolicyResponse>, ApiError> {
-    require_admin(&state, &headers)?;
     let room_repo = PostgresRoomRepository::new(state.pool);
     let policy = koko_core::room::update_global_chat_policy(
         &room_repo,
@@ -79,6 +125,68 @@ pub async fn update_global_chat_policy(
         max_message_length: u32::try_from(policy.max_message_length())
             .map_err(|_| ApiError::internal("全局策略更新失败"))?,
     }))
+}
+
+pub async fn list_admin_rooms(
+    State(state): State<AppState>,
+    Query(query): Query<AdminRoomListQuery>,
+) -> Result<Json<AdminRoomListResponse>, ApiError> {
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    let items = room_repo
+        .list_admin_rooms(
+            query.code.as_deref(),
+            normalize_admin_room_limit(query.limit),
+        )
+        .await
+        .map_err(|_| ApiError::internal("后台房间列表读取失败"))?
+        .into_iter()
+        .map(admin_room_to_list_item)
+        .collect();
+
+    Ok(Json(AdminRoomListResponse { items }))
+}
+
+pub async fn get_admin_room_detail(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+) -> Result<Json<AdminRoomDetailResponse>, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room = room_repo
+        .admin_room_detail(room_id)
+        .await
+        .map_err(|_| ApiError::internal("后台房间详情读取失败"))?
+        .ok_or_else(|| ApiError::not_found("房间不存在"))?;
+
+    Ok(Json(AdminRoomDetailResponse {
+        room_id: room.room_id.0.to_string(),
+        code: room.code,
+        member_count: room.member_count,
+        last_message_at: format_optional_datetime(room.last_message_at)?,
+        banned_until: format_optional_datetime(room.banned_until)?,
+        ban_reason: room.ban_reason,
+    }))
+}
+
+pub async fn list_admin_room_members(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+) -> Result<Json<RoomMembersResponse>, ApiError> {
+    let room_id = parse_room_id(&room_id)?;
+    let room_repo = PostgresRoomRepository::new(state.pool);
+    let items = room_repo
+        .list_members(room_id)
+        .await
+        .map_err(|_| ApiError::internal("后台成员列表读取失败"))?
+        .into_iter()
+        .map(|member| RoomMemberResponse {
+            profile_id: member.profile_id.0.to_string(),
+            display_name: session::build_display_name(&member.device_key),
+            role: role_name(member.role).to_owned(),
+        })
+        .collect();
+
+    Ok(Json(RoomMembersResponse { items }))
 }
 
 #[tracing::instrument(skip(state, request), fields(code = %request.code))]
@@ -284,11 +392,9 @@ pub async fn remove_room_member(
 
 pub async fn ban_room(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(room_id): Path<String>,
     Json(request): Json<BanRoomRequest>,
 ) -> Result<Json<RoomGovernanceStateResponse>, ApiError> {
-    require_admin(&state, &headers)?;
     let room_id = parse_room_id(&room_id)?;
     let room_repo = PostgresRoomRepository::new(state.pool);
     if room_repo
@@ -314,10 +420,8 @@ pub async fn ban_room(
 
 pub async fn unban_room(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(room_id): Path<String>,
 ) -> Result<Json<RoomGovernanceStateResponse>, ApiError> {
-    require_admin(&state, &headers)?;
     let room_id = parse_room_id(&room_id)?;
     let room_repo = PostgresRoomRepository::new(state.pool);
     if room_repo
@@ -382,7 +486,14 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, self.message).into_response()
+        let mut response = (self.status, self.message).into_response();
+        if self.status == StatusCode::UNAUTHORIZED {
+            response.headers_mut().insert(
+                header::WWW_AUTHENTICATE,
+                header::HeaderValue::from_static(ADMIN_BASIC_REALM),
+            );
+        }
+        response
     }
 }
 
@@ -414,6 +525,13 @@ fn normalize_message_page_limit(limit: Option<u16>) -> usize {
     }
 }
 
+fn normalize_admin_room_limit(limit: Option<u16>) -> usize {
+    match limit {
+        Some(0) | None => DEFAULT_ADMIN_ROOM_LIMIT,
+        Some(value) => value.min(MAX_ADMIN_ROOM_LIMIT) as usize,
+    }
+}
+
 fn role_name(role: Role) -> &'static str {
     match role {
         Role::Owner => "owner",
@@ -435,23 +553,6 @@ fn message_to_response(message: koko_core::model::Message) -> MessageResponse {
     }
 }
 
-fn require_admin(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
-    let Some(expected) = state.admin_token.as_deref() else {
-        return Err(ApiError::internal("未配置管理令牌"));
-    };
-
-    let provided = headers
-        .get("x-admin-token")
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| ApiError::unauthorized("缺少管理令牌"))?;
-
-    if provided != expected {
-        return Err(ApiError::unauthorized("管理令牌无效"));
-    }
-
-    Ok(())
-}
-
 fn governance_state_to_response(
     room_id: RoomId,
     state: koko_core::model::RoomGovernanceState,
@@ -470,6 +571,27 @@ fn governance_state_to_response(
         banned_until,
         ban_reason: state.ban_reason,
     })
+}
+
+fn admin_room_to_list_item(room: crate::room_repo::AdminRoomRecord) -> AdminRoomListItem {
+    AdminRoomListItem {
+        room_id: room.room_id.0.to_string(),
+        code: room.code,
+        member_count: room.member_count,
+        last_message_at: format_optional_datetime(room.last_message_at).unwrap_or(None),
+        banned_until: format_optional_datetime(room.banned_until).unwrap_or(None),
+        ban_reason: room.ban_reason,
+    }
+}
+
+fn format_optional_datetime(value: Option<OffsetDateTime>) -> Result<Option<String>, ApiError> {
+    value
+        .map(|value| {
+            value
+                .format(&Rfc3339)
+                .map_err(|_| ApiError::internal("时间格式化失败"))
+        })
+        .transpose()
 }
 
 fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {

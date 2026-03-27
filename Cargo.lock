@@ -1925,6 +1925,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "koko-admin"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "dioxus",
+ "dioxus-ssr",
+ "gloo-net",
+ "js-sys",
+ "koko-contract",
+ "serde",
+]
+
+[[package]]
 name = "koko-contract"
 version = "0.1.0"
 dependencies = [
@@ -1948,6 +1961,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures-util",
+ "headers",
  "koko-contract",
  "koko-core",
  "serde",

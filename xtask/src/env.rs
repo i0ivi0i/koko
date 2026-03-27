@@ -7,6 +7,7 @@ pub struct LocalEnv {
     pub api_base: String,
     pub server_bind: String,
     pub web_bind: String,
+    pub admin_bind: String,
     pub rust_log: String,
 }
 
@@ -29,6 +30,7 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
     let mut api_base = None;
     let mut server_bind = None;
     let mut web_bind = None;
+    let mut admin_bind = None;
     let mut rust_log = None;
 
     for item in dotenvy::from_read_iter(content.as_bytes()) {
@@ -40,6 +42,7 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
             "KOKO_API_BASE" => api_base = Some(value),
             "SERVER_BIND" => server_bind = Some(value),
             "WEB_BIND" => web_bind = Some(value),
+            "ADMIN_BIND" => admin_bind = Some(value),
             "RUST_LOG" => rust_log = Some(value),
             _ => {}
         }
@@ -52,6 +55,7 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
             .ok_or_else(|| format!("{} 缺少 KOKO_API_BASE。请补齐后端地址。", path.display()))?,
         server_bind: server_bind.unwrap_or_else(|| "0.0.0.0:3000".to_owned()),
         web_bind: web_bind.unwrap_or_else(|| "0.0.0.0:8080".to_owned()),
+        admin_bind: admin_bind.unwrap_or_else(|| "0.0.0.0:8081".to_owned()),
         rust_log: rust_log.unwrap_or_else(|| "info,tower_http=info,sqlx=warn".to_owned()),
     })
 }
@@ -78,6 +82,7 @@ mod tests {
                 api_base: "http://127.0.0.1:3000".into(),
                 server_bind: "0.0.0.0:3000".into(),
                 web_bind: "0.0.0.0:8080".into(),
+                admin_bind: "0.0.0.0:8081".into(),
                 rust_log: "info,tower_http=info,sqlx=warn".into(),
             }
         );
@@ -102,25 +107,27 @@ mod tests {
 
         assert_eq!(env.server_bind, "0.0.0.0:3000");
         assert_eq!(env.web_bind, "0.0.0.0:8080");
+        assert_eq!(env.admin_bind, "0.0.0.0:8081");
         assert_eq!(env.rust_log, "info,tower_http=info,sqlx=warn");
     }
 
     #[test]
     fn load_local_env_should_accept_custom_bind_addresses() {
         let root = create_temp_root(
-            "DATABASE_URL=postgres://local\nKOKO_API_BASE=http://192.168.1.7:3000\nSERVER_BIND=0.0.0.0:3000\nWEB_BIND=0.0.0.0:8088\n",
+            "DATABASE_URL=postgres://local\nKOKO_API_BASE=http://192.168.1.7:3000\nSERVER_BIND=0.0.0.0:3000\nWEB_BIND=0.0.0.0:8088\nADMIN_BIND=0.0.0.0:8089\n",
         );
 
         let env = load_local_env(&root).expect("应能读取自定义绑定地址");
 
         assert_eq!(env.server_bind, "0.0.0.0:3000");
         assert_eq!(env.web_bind, "0.0.0.0:8088");
+        assert_eq!(env.admin_bind, "0.0.0.0:8089");
     }
 
     #[test]
     fn load_local_env_should_parse_quoted_values() {
         let root = create_temp_root(
-            "DATABASE_URL=\"postgres://local\"\nKOKO_API_BASE=\"http://192.168.1.7:3000\"\nSERVER_BIND=\"0.0.0.0:3000\"\nWEB_BIND=\"0.0.0.0:8088\"\nRUST_LOG=\"debug,tower_http=info\"\n",
+            "DATABASE_URL=\"postgres://local\"\nKOKO_API_BASE=\"http://192.168.1.7:3000\"\nSERVER_BIND=\"0.0.0.0:3000\"\nWEB_BIND=\"0.0.0.0:8088\"\nADMIN_BIND=\"0.0.0.0:8089\"\nRUST_LOG=\"debug,tower_http=info\"\n",
         );
 
         let env = load_local_env(&root).expect("应能解析带引号的 .env.local");
@@ -129,6 +136,7 @@ mod tests {
         assert_eq!(env.api_base, "http://192.168.1.7:3000");
         assert_eq!(env.server_bind, "0.0.0.0:3000");
         assert_eq!(env.web_bind, "0.0.0.0:8088");
+        assert_eq!(env.admin_bind, "0.0.0.0:8089");
         assert_eq!(env.rust_log, "debug,tower_http=info");
     }
 

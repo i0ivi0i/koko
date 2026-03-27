@@ -101,10 +101,12 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let use_sccache = process::has_command("sccache");
     let backend = backend_dev_spec(root, &env, use_sccache);
     let frontend = frontend_dev_spec(root, &env);
+    let admin = admin_dev_spec(root, &env);
 
     if dry_run {
         println!("[dry-run] 后端命令: {}", process::format_command(&backend));
         println!("[dry-run] 前端命令: {}", process::format_command(&frontend));
+        println!("[dry-run] 后台命令: {}", process::format_command(&admin));
         println!("[dry-run] RUST_LOG={}", env.rust_log);
         println!(
             "[dry-run] 编译缓存: {}",
@@ -130,13 +132,16 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let (sender, receiver) = mpsc::channel();
     let mut backend_child = process::spawn_logged("server", &backend, sender.clone())?;
     wait_for_backend_ready(&env.server_bind, &receiver, &mut backend_child, &stop)?;
-    let mut frontend_child = process::spawn_logged("web", &frontend, sender)?;
+    let mut frontend_child = process::spawn_logged("web", &frontend, sender.clone())?;
+    let mut admin_child = process::spawn_logged("admin", &admin, sender)?;
 
     println!("开发服务已启动。按 Ctrl+C 停止。");
     println!("后端监听: {}", env.server_bind);
     println!("前端监听: {}", env.web_bind);
+    println!("后台监听: {}", env.admin_bind);
     println!("后端入口: {}", env.api_base);
     println!("前端入口: {}", frontend_entry_url(&env.api_base, &env.web_bind));
+    println!("后台入口: {}", frontend_entry_url(&env.api_base, &env.admin_bind));
 
     loop {
         while let Ok(event) = receiver.recv_timeout(Duration::from_millis(200)) {
@@ -157,10 +162,16 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
             println!("前端进程已退出，退出码: {:?}", status.code());
             break;
         }
+
+        if let Some(status) = admin_child.try_wait()? {
+            println!("后台进程已退出，退出码: {:?}", status.code());
+            break;
+        }
     }
 
     backend_child.stop()?;
     frontend_child.stop()?;
+    admin_child.stop()?;
 
     for event in receiver.try_iter() {
         logging::print_event(&event);
@@ -211,9 +222,18 @@ fn run_check(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
         .current_dir(root),
         use_sccache,
     );
+    let admin_check = apply_sccache(
+        process::CommandSpec::new(
+            "cargo",
+            ["check", "-p", "koko-admin", "--target", "wasm32-unknown-unknown"],
+        )
+        .current_dir(root),
+        use_sccache,
+    );
 
     process::run(&server_check, dry_run)?;
-    process::run(&web_check, dry_run)
+    process::run(&web_check, dry_run)?;
+    process::run(&admin_check, dry_run)
 }
 
 fn backend_dev_spec(
@@ -263,6 +283,27 @@ fn frontend_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::Co
         ],
     )
     .current_dir(&root.join("web"))
+    .env("KOKO_API_BASE", &env.api_base)
+    .env("CARGO_TARGET_DIR", &target_dir)
+}
+
+fn admin_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::CommandSpec {
+    let target_dir = dev_target_dir(root, "dev-admin");
+    let (admin_host, admin_port) = split_socket_addr(&env.admin_bind);
+
+    process::CommandSpec::new(
+        "dx",
+        [
+            "serve",
+            "--platform",
+            "web",
+            "--port",
+            &admin_port,
+            "--addr",
+            &admin_host,
+        ],
+    )
+    .current_dir(&root.join("admin"))
     .env("KOKO_API_BASE", &env.api_base)
     .env("CARGO_TARGET_DIR", &target_dir)
 }
@@ -366,6 +407,7 @@ mod tests {
             api_base: "http://127.0.0.1:3000".into(),
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
+            admin_bind: "0.0.0.0:8081".into(),
             rust_log: "info".into(),
         };
 
@@ -383,6 +425,7 @@ mod tests {
             api_base: "http://127.0.0.1:3000".into(),
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
+            admin_bind: "0.0.0.0:8081".into(),
             rust_log: "info".into(),
         };
 
@@ -400,6 +443,7 @@ mod tests {
             api_base: "http://127.0.0.1:3000".into(),
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
+            admin_bind: "0.0.0.0:8081".into(),
             rust_log: "info".into(),
         };
 
@@ -417,6 +461,7 @@ mod tests {
             api_base: "http://127.0.0.1:3000".into(),
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
+            admin_bind: "0.0.0.0:8081".into(),
             rust_log: "info".into(),
         };
 
@@ -435,6 +480,7 @@ mod tests {
             api_base: "http://127.0.0.1:3000".into(),
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:8080".into(),
+            admin_bind: "0.0.0.0:8081".into(),
             rust_log: "info".into(),
         };
 
@@ -453,6 +499,7 @@ mod tests {
             api_base: "http://192.168.1.7:3000".into(),
             server_bind: "0.0.0.0:3000".into(),
             web_bind: "0.0.0.0:9090".into(),
+            admin_bind: "0.0.0.0:8081".into(),
             rust_log: "info".into(),
         };
 
@@ -469,6 +516,27 @@ mod tests {
             frontend_entry_url("http://192.168.1.7:3000", "0.0.0.0:8088"),
             "http://192.168.1.7:8088"
         );
+    }
+
+    #[test]
+    fn admin_dev_command_should_use_admin_bind_and_target_dir() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://192.168.1.7:3000".into(),
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:8080".into(),
+            admin_bind: "0.0.0.0:8081".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = admin_dev_spec(root, &env);
+        let formatted = process::format_command(&command);
+
+        assert!(formatted.contains("admin"));
+        assert!(formatted.contains("--addr 0.0.0.0"));
+        assert!(formatted.contains("--port 8081"));
+        assert!(formatted.contains(&format!("CARGO_TARGET_DIR={}", dev_target_dir(root, "dev-admin"))));
     }
 
     #[test]

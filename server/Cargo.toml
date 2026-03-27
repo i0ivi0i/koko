@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 axum = { version = "0.8.4", features = ["json", "ws"] }
 futures-util = "0.3"
+headers = "0.4"
 koko-contract = { path = "../contract" }
 koko-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }

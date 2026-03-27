@@ -122,6 +122,46 @@ pub struct RoomGovernanceStateResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdminOverviewResponse {
+    pub total_rooms: u64,
+    pub total_memberships: u64,
+    pub active_rooms_24h: u64,
+    pub messages_24h: u64,
+    pub online_connections: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AdminRoomListQuery {
+    pub code: Option<String>,
+    pub limit: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdminRoomListItem {
+    pub room_id: String,
+    pub code: String,
+    pub member_count: u64,
+    pub last_message_at: Option<String>,
+    pub banned_until: Option<String>,
+    pub ban_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdminRoomListResponse {
+    pub items: Vec<AdminRoomListItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdminRoomDetailResponse {
+    pub room_id: String,
+    pub code: String,
+    pub member_count: u64,
+    pub last_message_at: Option<String>,
+    pub banned_until: Option<String>,
+    pub ban_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientWsEvent {
     SendMessage { content: String },
@@ -227,6 +267,22 @@ mod tests {
 
         let json = serde_json::to_string(&value).unwrap();
         let decoded: GlobalChatPolicyResponse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn admin_overview_response_should_roundtrip() {
+        let value = AdminOverviewResponse {
+            total_rooms: 3,
+            total_memberships: 8,
+            active_rooms_24h: 2,
+            messages_24h: 12,
+            online_connections: 4,
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: AdminOverviewResponse = serde_json::from_str(&json).unwrap();
 
         assert_eq!(decoded, value);
     }

@@ -20,7 +20,7 @@ cargo install just
 如果要启用编译缓存：
 
 ```bash
-cargo install sccache
+winget install Mozilla.sccache
 ```
 
 ## 本地配置
@@ -32,6 +32,7 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/koko_local
 KOKO_API_BASE=http://192.168.100.229:3000
 SERVER_BIND=0.0.0.0:3000
 WEB_BIND=0.0.0.0:8080
+ADMIN_BIND=0.0.0.0:8081
 # 可选，不写时开发模式默认使用 info,tower_http=info,sqlx=warn
 RUST_LOG=info,tower_http=info,sqlx=warn
 ```
@@ -46,6 +47,8 @@ RUST_LOG=info,tower_http=info,sqlx=warn
   后端监听地址。局域网联调建议用 `0.0.0.0:3000`。
 - `WEB_BIND`
   前端开发服务器监听地址。局域网联调建议用 `0.0.0.0:8080`。
+- `ADMIN_BIND`
+  后台前端开发服务器监听地址。局域网联调建议用 `0.0.0.0:8081`。
 
 ## 命令模式
 
@@ -57,10 +60,7 @@ just init
 
 会执行：
 
-- 自动安装缺失的开发工具：
-  - `sqlx`
-  - `cargo-watch`
-  - `dx`
+- 检查 `sqlx`、`cargo-watch`、`dx` 是否已安装
 - 自动创建数据库
 - 自动执行 migration
 
@@ -74,9 +74,10 @@ just dev
 
 - 启动后端热更新
 - 启动前端开发服务器
+- 启动后台前端开发服务器
 - 若本机已安装 `sccache`，会自动启用编译缓存
-- 在当前终端聚合显示前后端日志
-- 按 `Ctrl+C` 时自动停止前后端子进程
+- 在当前终端聚合显示服务日志
+- 按 `Ctrl+C` 时自动停止后端、前端、后台子进程
 
 ### 单独迁移
 
@@ -95,12 +96,19 @@ just test
 
 - 本机前端：`http://127.0.0.1:8080`
 - 局域网前端：`http://192.168.100.229:8080`
+- 本机后台：`http://127.0.0.1:8081`
+- 局域网后台：`http://192.168.100.229:8081`
 - 本机后端：`http://127.0.0.1:3000`
 - 局域网后端：`http://192.168.100.229:3000`
 
+后台认证方式：
+
+- 浏览器访问后台后，输入固定后台密码：`Ee123456789+`
+- 后台请求仍然通过 HTTP Basic Auth 调用 `/admin/*`
+
 如果你的局域网 IP 变化了，需要同步更新 `.env.local` 里的 `KOKO_API_BASE`。
 
-如果局域网其他设备仍然打不开，请检查 Windows 防火墙是否拦截了 `3000` 和 `8080` 端口。
+如果局域网其他设备仍然打不开，请检查 Windows 防火墙是否拦截了 `3000`、`8080` 和 `8081` 端口。
 
 ## 当前约定
 

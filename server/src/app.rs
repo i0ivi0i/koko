@@ -1,6 +1,7 @@
 use axum::{
     Router,
     extract::Request,
+    middleware,
     routing::{get, post},
 };
 use sqlx::PgPool;
@@ -17,22 +18,40 @@ use crate::{http, ws::RealtimeHub};
 pub struct AppState {
     pub pool: PgPool,
     pub realtime: RealtimeHub,
-    pub admin_token: Option<String>,
+}
+
+impl AppState {
+    pub fn online_connection_opened(&self) {
+        self.realtime.connection_opened();
+    }
+
+    pub fn online_connection_closed(&self) {
+        self.realtime.connection_closed();
+    }
 }
 
 pub fn build_app(pool: PgPool) -> Router {
-    build_app_with_admin_token(pool, std::env::var("KOKO_ADMIN_TOKEN").ok())
-}
+    let state = AppState {
+        pool,
+        realtime: RealtimeHub::default(),
+    };
 
-pub fn build_app_with_admin_token(pool: PgPool, admin_token: Option<String>) -> Router {
-    Router::new()
-        .route("/", get(http::root_status))
+    let admin_routes = Router::new()
+        .route("/overview", get(http::get_admin_overview))
         .route(
-            "/admin/policy",
+            "/policy",
             get(http::get_global_chat_policy).post(http::update_global_chat_policy),
         )
-        .route("/admin/rooms/{room_id}/ban", post(http::ban_room))
-        .route("/admin/rooms/{room_id}/unban", post(http::unban_room))
+        .route("/rooms", get(http::list_admin_rooms))
+        .route("/rooms/{room_id}", get(http::get_admin_room_detail))
+        .route("/rooms/{room_id}/members", get(http::list_admin_room_members))
+        .route("/rooms/{room_id}/ban", post(http::ban_room))
+        .route("/rooms/{room_id}/unban", post(http::unban_room))
+        .route_layer(middleware::from_fn(http::require_admin_basic_auth));
+
+    Router::new()
+        .route("/", get(http::root_status))
+        .nest("/admin", admin_routes)
         .route("/session/bootstrap", post(http::bootstrap_session))
         .route("/rooms/resolve", post(http::resolve_room))
         .route("/rooms/join-or-create", post(http::join_or_create_room))
@@ -89,9 +108,5 @@ pub fn build_app_with_admin_token(pool: PgPool, admin_token: Option<String>) -> 
                 )
                 .propagate_x_request_id(),
         )
-        .with_state(AppState {
-            pool,
-            realtime: RealtimeHub::default(),
-            admin_token,
-        })
+        .with_state(state)
 }

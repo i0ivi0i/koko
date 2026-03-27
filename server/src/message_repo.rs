@@ -25,6 +25,32 @@ impl PostgresMessageRepository {
         Self { pool }
     }
 
+    pub async fn messages_24h(&self) -> Result<u64, sqlx::Error> {
+        let count = sqlx::query_scalar!(
+            "SELECT COUNT(*) AS count FROM messages WHERE created_at >= NOW() - INTERVAL '24 hours'"
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0);
+
+        Ok(u64::try_from(count).unwrap_or_default())
+    }
+
+    pub async fn active_rooms_24h(&self) -> Result<u64, sqlx::Error> {
+        let count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(DISTINCT room_id) AS count
+            FROM messages
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0);
+
+        Ok(u64::try_from(count).unwrap_or_default())
+    }
+
     pub async fn list_room_messages(
         &self,
         room_id: RoomId,

@@ -17,6 +17,15 @@ pub struct RoomMemberRecord {
     pub role: Role,
 }
 
+pub struct AdminRoomRecord {
+    pub room_id: RoomId,
+    pub code: String,
+    pub member_count: u64,
+    pub last_message_at: Option<OffsetDateTime>,
+    pub banned_until: Option<OffsetDateTime>,
+    pub ban_reason: Option<String>,
+}
+
 impl PostgresRoomRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -72,6 +81,103 @@ impl PostgresRoomRepository {
                 })
             })
             .collect())
+    }
+
+    pub async fn total_rooms(&self) -> Result<u64, sqlx::Error> {
+        let count = sqlx::query_scalar!("SELECT COUNT(*) AS count FROM rooms")
+            .fetch_one(&self.pool)
+            .await?
+            .unwrap_or(0);
+
+        Ok(u64::try_from(count).unwrap_or_default())
+    }
+
+    pub async fn total_memberships(&self) -> Result<u64, sqlx::Error> {
+        let count = sqlx::query_scalar!("SELECT COUNT(*) AS count FROM room_members")
+            .fetch_one(&self.pool)
+            .await?
+            .unwrap_or(0);
+
+        Ok(u64::try_from(count).unwrap_or_default())
+    }
+
+    pub async fn list_admin_rooms(
+        &self,
+        code: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<AdminRoomRecord>, sqlx::Error> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT
+                r.id,
+                rc.code,
+                COUNT(DISTINCT rm.profile_id) AS member_count,
+                MAX(m.created_at) AS last_message_at,
+                rgs.banned_until,
+                rgs.ban_reason
+            FROM rooms r
+            JOIN room_codes rc ON rc.room_id = r.id
+            LEFT JOIN room_members rm ON rm.room_id = r.id
+            LEFT JOIN messages m ON m.room_id = r.id
+            LEFT JOIN room_governance_state rgs ON rgs.room_id = r.id
+            WHERE ($1::text IS NULL OR rc.code ILIKE '%' || $1 || '%')
+            GROUP BY r.id, rc.code, rgs.banned_until, rgs.ban_reason
+            ORDER BY MAX(m.created_at) DESC NULLS LAST, rc.code ASC
+            LIMIT $2
+            "#,
+            code,
+            i64::try_from(limit).unwrap_or(50)
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| AdminRoomRecord {
+                room_id: RoomId(row.id),
+                code: row.code,
+                member_count: u64::try_from(row.member_count.unwrap_or(0)).unwrap_or_default(),
+                last_message_at: row.last_message_at,
+                banned_until: row.banned_until,
+                ban_reason: row.ban_reason,
+            })
+            .collect())
+    }
+
+    pub async fn admin_room_detail(
+        &self,
+        room_id: RoomId,
+    ) -> Result<Option<AdminRoomRecord>, sqlx::Error> {
+        let row = sqlx::query!(
+            r#"
+            SELECT
+                r.id,
+                rc.code,
+                COUNT(DISTINCT rm.profile_id) AS member_count,
+                MAX(m.created_at) AS last_message_at,
+                rgs.banned_until,
+                rgs.ban_reason
+            FROM rooms r
+            JOIN room_codes rc ON rc.room_id = r.id
+            LEFT JOIN room_members rm ON rm.room_id = r.id
+            LEFT JOIN messages m ON m.room_id = r.id
+            LEFT JOIN room_governance_state rgs ON rgs.room_id = r.id
+            WHERE r.id = $1
+            GROUP BY r.id, rc.code, rgs.banned_until, rgs.ban_reason
+            "#,
+            room_id.0
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| AdminRoomRecord {
+            room_id: RoomId(row.id),
+            code: row.code,
+            member_count: u64::try_from(row.member_count.unwrap_or(0)).unwrap_or_default(),
+            last_message_at: row.last_message_at,
+            banned_until: row.banned_until,
+            ban_reason: row.ban_reason,
+        }))
     }
 }
 

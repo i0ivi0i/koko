@@ -1,6 +1,9 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use axum::{
@@ -29,6 +32,7 @@ use crate::{
 #[derive(Clone, Default)]
 pub struct RealtimeHub {
     inner: Arc<Mutex<HashMap<Uuid, broadcast::Sender<String>>>>,
+    online_connections: Arc<AtomicUsize>,
 }
 
 impl RealtimeHub {
@@ -38,6 +42,18 @@ impl RealtimeHub {
 
     pub(crate) fn publish(&self, room_id: RoomId, payload: String) {
         let _ = self.channel(room_id).send(payload);
+    }
+
+    pub(crate) fn online_connections(&self) -> u64 {
+        self.online_connections.load(Ordering::Relaxed) as u64
+    }
+
+    pub(crate) fn connection_opened(&self) {
+        self.online_connections.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn connection_closed(&self) {
+        self.online_connections.fetch_sub(1, Ordering::Relaxed);
     }
 
     fn channel(&self, room_id: RoomId) -> broadcast::Sender<String> {
@@ -74,6 +90,7 @@ pub(crate) async fn connect(
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState, room_id: RoomId, profile_id: ProfileId) {
+    state.online_connection_opened();
     let (mut sender, mut receiver) = socket.split();
     let mut room_events = state.realtime.subscribe(room_id);
 
@@ -100,6 +117,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, room_id: RoomId, prof
             }
         }
     }
+
+    state.online_connection_closed();
 }
 
 async fn handle_client_text(
