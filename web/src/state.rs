@@ -1,4 +1,4 @@
-use koko_core::contract::{
+use koko_contract::{
     BootstrapSessionResponse, JoinOrCreateRoomResponse, MessageResponse, RoomMemberResponse,
 };
 

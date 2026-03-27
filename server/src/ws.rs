@@ -11,8 +11,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures_util::{SinkExt, StreamExt};
+use koko_contract::{ClientWsEvent, ServerWsEvent};
 use koko_core::{
-    contract::{ClientWsEvent, ServerWsEvent},
     model::{ProfileId, RoomId},
     port::RoomRepository,
 };

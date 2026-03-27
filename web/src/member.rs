@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use koko_core::contract::RoomMemberResponse;
+use koko_contract::RoomMemberResponse;
 
 use crate::ui::{Avatar, RoleBadge};
 

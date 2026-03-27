@@ -3,7 +3,7 @@ use gloo_net::{
     http::Request,
     websocket::{Message, futures::WebSocket},
 };
-use koko_core::contract::{
+use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
     JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
     ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,

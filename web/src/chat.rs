@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use koko_core::contract::MessageResponse;
+use koko_contract::MessageResponse;
 
 use crate::ui::Avatar;
 
