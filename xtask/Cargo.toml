@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+command-group = "5"
 ctrlc = "3"
 dotenvy = "0.15"
+duct = "1.1"
+which = "7"
