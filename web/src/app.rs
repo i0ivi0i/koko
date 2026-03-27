@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     chat::ChatScreen,
-    client,
+    client::{self, MemberAction},
     member::MemberSheet,
     room::RoomEntryScreen,
     state::{self, ActiveRoom},
@@ -63,62 +63,17 @@ pub fn App() -> Element {
                     members: room.members.clone(),
                     on_promote: move |target_profile_id: String| {
                         if let Some(room) = room_state() {
-                            let mut room_state = room_state;
-                            spawn(async move {
-                                let _ = client::promote_member(
-                                    &room.room_id,
-                                    &room.profile_id,
-                                    &target_profile_id,
-                                )
-                                .await;
-                                if let Ok(members) = client::fetch_room_members(&room.room_id).await {
-                                    room_state.with_mut(|state| {
-                                        if let Some(current) = state.as_mut() {
-                                            state::replace_members(current, members);
-                                        }
-                                    });
-                                }
-                            });
+                            spawn_member_action(room_state, room, target_profile_id, MemberAction::Promote);
                         }
                     },
                     on_mute: move |target_profile_id: String| {
                         if let Some(room) = room_state() {
-                            let mut room_state = room_state;
-                            spawn(async move {
-                                let _ = client::mute_member(
-                                    &room.room_id,
-                                    &room.profile_id,
-                                    &target_profile_id,
-                                )
-                                .await;
-                                if let Ok(members) = client::fetch_room_members(&room.room_id).await {
-                                    room_state.with_mut(|state| {
-                                        if let Some(current) = state.as_mut() {
-                                            state::replace_members(current, members);
-                                        }
-                                    });
-                                }
-                            });
+                            spawn_member_action(room_state, room, target_profile_id, MemberAction::Mute);
                         }
                     },
                     on_remove: move |target_profile_id: String| {
                         if let Some(room) = room_state() {
-                            let mut room_state = room_state;
-                            spawn(async move {
-                                let _ = client::remove_member(
-                                    &room.room_id,
-                                    &room.profile_id,
-                                    &target_profile_id,
-                                )
-                                .await;
-                                if let Ok(members) = client::fetch_room_members(&room.room_id).await {
-                                    room_state.with_mut(|state| {
-                                        if let Some(current) = state.as_mut() {
-                                            state::replace_members(current, members);
-                                        }
-                                    });
-                                }
-                            });
+                            spawn_member_action(room_state, room, target_profile_id, MemberAction::Remove);
                         }
                     },
                     on_close: move |_| members_open.set(false),
@@ -164,4 +119,24 @@ pub fn App() -> Element {
             }
         }
     }
+}
+
+fn spawn_member_action(
+    mut room_state: Signal<Option<ActiveRoom>>,
+    room: ActiveRoom,
+    target_profile_id: String,
+    action: MemberAction,
+) {
+    spawn(async move {
+        let _ =
+            client::run_member_action(action, &room.room_id, &room.profile_id, &target_profile_id)
+                .await;
+        if let Ok(members) = client::fetch_room_members(&room.room_id).await {
+            room_state.with_mut(|state| {
+                if let Some(current) = state.as_mut() {
+                    state::replace_members(current, members);
+                }
+            });
+        }
+    });
 }
