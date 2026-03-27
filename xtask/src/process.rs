@@ -124,12 +124,24 @@ pub fn format_command(spec: &CommandSpec) -> String {
         parts.push(format!("cd {}", current_dir.display()));
     }
     for (key, value) in &spec.envs {
-        parts.push(format!("{key}={value}"));
+        let display_value = if is_sensitive_env(key) {
+            "<redacted>"
+        } else {
+            value.as_str()
+        };
+        parts.push(format!("{key}={display_value}"));
     }
 
     parts.push(spec.program.clone());
     parts.extend(spec.args.iter().cloned());
     parts.join(" ")
+}
+
+fn is_sensitive_env(key: &str) -> bool {
+    matches!(key, "DATABASE_URL")
+        || key.contains("PASSWORD")
+        || key.contains("TOKEN")
+        || key.contains("SECRET")
 }
 
 pub struct ManagedChild {
@@ -340,5 +352,21 @@ mod tests {
     fn windows_process_test_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    #[test]
+    fn format_command_should_redact_sensitive_env_values() {
+        let spec = CommandSpec::new("cargo", ["run"])
+            .env("DATABASE_URL", "postgres://postgres:secret@127.0.0.1:5432/koko")
+            .env("KOKO_ADMIN_PASSWORD", "local-admin-password")
+            .env("RUST_LOG", "info");
+
+        let formatted = format_command(&spec);
+
+        assert!(formatted.contains("DATABASE_URL=<redacted>"));
+        assert!(formatted.contains("KOKO_ADMIN_PASSWORD=<redacted>"));
+        assert!(formatted.contains("RUST_LOG=info"));
+        assert!(!formatted.contains("secret"));
+        assert!(!formatted.contains("local-admin-password"));
     }
 }

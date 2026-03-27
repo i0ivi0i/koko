@@ -267,6 +267,7 @@ fn backend_dev_spec(
         use_sccache,
     )
     .env("DATABASE_URL", &env.database_url)
+    .env("KOKO_ADMIN_PASSWORD", &env.admin_password)
     .env("SERVER_BIND", &env.server_bind)
     .env("RUST_LOG", &env.rust_log)
     .env("CARGO_TARGET_DIR", &target_dir)
@@ -484,6 +485,26 @@ mod tests {
         let expected = format!("CARGO_TARGET_DIR={}", dev_target_dir(root, "dev-server"));
 
         assert!(formatted.contains(&expected));
+    }
+
+    #[test]
+    fn backend_dev_command_should_export_local_admin_password() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://127.0.0.1:3000".into(),
+            admin_password: "local-admin-password".into(),
+            admin_password_generated: false,
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:8080".into(),
+            admin_bind: "0.0.0.0:8081".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = backend_dev_spec(root, &env, false);
+        let formatted = process::format_command(&command);
+
+        assert!(formatted.contains("KOKO_ADMIN_PASSWORD=<redacted>"));
     }
 
     #[test]
