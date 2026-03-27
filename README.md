@@ -91,6 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/i0ivi0i/koko/main/install.sh | sudo
 安装时脚本会交互询问：
 
 - 聊天入口（域名或公网 IPv4）
+- 后台密码（可留空自动生成）
 
 访问规则：
 
@@ -101,10 +102,10 @@ curl -fsSL https://raw.githubusercontent.com/i0ivi0i/koko/main/install.sh | sudo
   - 聊天前台：`http://你的IPv4`
   - 后台前端：`http://你的IPv4:8081`
 
-后台第一版默认：
+后台默认用户名：
 
 - 用户名：`admin`
-- 密码：`Ee123456789+`
+- 密码：安装时设置；如果留空，脚本会自动生成一次强密码并在安装完成时显示一次
 
 安装后可在这里修改：
 

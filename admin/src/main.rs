@@ -480,7 +480,10 @@ mod tests {
 
     #[test]
     fn basic_auth_header_should_encode_admin_password() {
-        assert_eq!(basic_auth_header("Ee123456789+"), "Basic YWRtaW46RWUxMjM0NTY3ODkr");
+        assert_eq!(
+            basic_auth_header("test-admin-password"),
+            "Basic YWRtaW46dGVzdC1hZG1pbi1wYXNzd29yZA=="
+        );
     }
 
     #[test]

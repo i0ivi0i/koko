@@ -14,10 +14,40 @@ use tracing::{Level, info_span};
 
 use crate::{http, ws::RealtimeHub};
 
+const DEFAULT_ADMIN_USERNAME: &str = "admin";
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
     pub realtime: RealtimeHub,
+}
+
+#[derive(Clone)]
+pub struct AdminAuthConfig {
+    pub username: String,
+    pub password: Option<String>,
+}
+
+impl AdminAuthConfig {
+    pub fn from_env() -> Self {
+        Self {
+            username: std::env::var("KOKO_ADMIN_USER")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_ADMIN_USERNAME.to_owned()),
+            password: std::env::var("KOKO_ADMIN_PASSWORD")
+                .ok()
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty()),
+        }
+    }
+
+    pub fn configured(username: impl Into<String>, password: impl Into<String>) -> Self {
+        Self {
+            username: username.into(),
+            password: Some(password.into()),
+        }
+    }
 }
 
 impl AppState {
@@ -31,6 +61,10 @@ impl AppState {
 }
 
 pub fn build_app(pool: PgPool) -> Router {
+    build_app_with_admin_auth(pool, AdminAuthConfig::from_env())
+}
+
+pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> Router {
     let state = AppState {
         pool,
         realtime: RealtimeHub::default(),
@@ -47,7 +81,10 @@ pub fn build_app(pool: PgPool) -> Router {
         .route("/rooms/{room_id}/members", get(http::list_admin_room_members))
         .route("/rooms/{room_id}/ban", post(http::ban_room))
         .route("/rooms/{room_id}/unban", post(http::unban_room))
-        .route_layer(middleware::from_fn(http::require_admin_basic_auth));
+        .route_layer(middleware::from_fn_with_state(
+            admin_auth,
+            http::require_admin_basic_auth,
+        ));
 
     Router::new()
         .route("/", get(http::root_status))

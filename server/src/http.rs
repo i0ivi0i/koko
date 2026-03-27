@@ -19,7 +19,9 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
 use crate::{
-    app::AppState, message_repo::PostgresMessageRepository, room_repo::PostgresRoomRepository,
+    app::{AdminAuthConfig, AppState},
+    message_repo::PostgresMessageRepository,
+    room_repo::PostgresRoomRepository,
     session,
 };
 use koko_core::{
@@ -31,8 +33,6 @@ const DEFAULT_MESSAGE_PAGE_LIMIT: usize = 40;
 const MAX_MESSAGE_PAGE_LIMIT: u16 = 100;
 const DEFAULT_ADMIN_ROOM_LIMIT: usize = 50;
 const MAX_ADMIN_ROOM_LIMIT: u16 = 200;
-const ADMIN_USERNAME: &str = "admin";
-const ADMIN_PASSWORD: &str = "Ee123456789+";
 const ADMIN_BASIC_REALM: &str = "Basic realm=\"koko-admin\", charset=\"UTF-8\"";
 
 pub async fn bootstrap_session(
@@ -53,14 +53,19 @@ pub async fn root_status() -> &'static str {
 }
 
 pub async fn require_admin_basic_auth(
+    State(admin_auth): State<AdminAuthConfig>,
     request: axum::extract::Request,
     next: Next,
 ) -> Result<Response, ApiError> {
+    let Some(expected_password) = admin_auth.password.as_deref() else {
+        return Err(ApiError::service_unavailable("后台密码未配置"));
+    };
+
     let Some(Authorization(basic)) = request.headers().typed_get::<Authorization<Basic>>() else {
         return Err(ApiError::unauthorized("缺少后台认证"));
     };
 
-    if basic.username() != ADMIN_USERNAME || basic.password() != ADMIN_PASSWORD {
+    if basic.username() != admin_auth.username || basic.password() != expected_password {
         return Err(ApiError::unauthorized("后台认证无效"));
     }
 
@@ -479,6 +484,13 @@ impl ApiError {
     pub(crate) fn unauthorized(message: &'static str) -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
+            message,
+        }
+    }
+
+    pub(crate) fn service_unavailable(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
             message,
         }
     }

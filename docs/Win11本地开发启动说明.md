@@ -33,6 +33,7 @@ KOKO_API_BASE=http://192.168.100.229:3000
 SERVER_BIND=0.0.0.0:3000
 WEB_BIND=0.0.0.0:8080
 ADMIN_BIND=0.0.0.0:8081
+KOKO_ADMIN_PASSWORD=local-admin-password
 # 可选，不写时开发模式默认使用 info,tower_http=info,sqlx=warn
 RUST_LOG=info,tower_http=info,sqlx=warn
 ```
@@ -49,6 +50,8 @@ RUST_LOG=info,tower_http=info,sqlx=warn
   前端开发服务器监听地址。局域网联调建议用 `0.0.0.0:8080`。
 - `ADMIN_BIND`
   后台前端开发服务器监听地址。局域网联调建议用 `0.0.0.0:8081`。
+- `KOKO_ADMIN_PASSWORD`
+  后台接口 Basic Auth 密码。后台前端登录时输入的就是这个值。
 
 ## 命令模式
 
@@ -103,7 +106,7 @@ just test
 
 后台认证方式：
 
-- 浏览器访问后台后，输入固定后台密码：`Ee123456789+`
+- 浏览器访问后台后，输入 `.env.local` 中的 `KOKO_ADMIN_PASSWORD`
 - 后台请求仍然通过 HTTP Basic Auth 调用 `/admin/*`
 
 如果你的局域网 IP 变化了，需要同步更新 `.env.local` 里的 `KOKO_API_BASE`。

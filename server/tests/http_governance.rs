@@ -8,7 +8,15 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-const TEST_ADMIN_AUTHORIZATION: &str = "Basic YWRtaW46RWUxMjM0NTY3ODkr";
+const TEST_ADMIN_PASSWORD: &str = "test-admin-password";
+const TEST_ADMIN_AUTHORIZATION: &str = "Basic YWRtaW46dGVzdC1hZG1pbi1wYXNzd29yZA==";
+
+fn build_admin_app(pool: PgPool) -> axum::Router {
+    koko_server::app::build_app_with_admin_auth(
+        pool,
+        koko_server::app::AdminAuthConfig::configured("admin", TEST_ADMIN_PASSWORD),
+    )
+}
 
 fn with_admin(request: Request<Body>) -> Request<Body> {
     let (mut parts, body) = request.into_parts();
@@ -23,7 +31,7 @@ fn with_admin(request: Request<Body>) -> Request<Body> {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 管理接口缺少管理令牌时应拒绝访问(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
 
     let response = app
         .oneshot(
@@ -46,8 +54,32 @@ async fn 管理接口缺少管理令牌时应拒绝访问(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn 提升管理员接口应更新成员角色(pool: PgPool) {
+async fn 后台密码未配置时管理接口应返回五零三(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
+
+    let response = app
+        .oneshot(with_admin(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/policy")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "max_message_length": 4,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 提升管理员接口应更新成员角色(pool: PgPool) {
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -87,7 +119,7 @@ async fn 提升管理员接口应更新成员角色(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 禁言后发送消息应失败(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -136,7 +168,7 @@ async fn 禁言后发送消息应失败(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 移除成员接口应删除成员关系(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -176,7 +208,7 @@ async fn 移除成员接口应删除成员关系(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -227,7 +259,7 @@ async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
 async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查看权限(
     pool: PgPool,
 ) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -325,7 +357,7 @@ async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查�
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 封禁不存在的房间应返回四零四(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let banned_until = (OffsetDateTime::now_utc() + Duration::hours(1))
         .format(&Rfc3339)
@@ -354,7 +386,7 @@ async fn 封禁不存在的房间应返回四零四(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 后台概览接口应返回核心统计(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -398,7 +430,7 @@ async fn 后台概览接口应返回核心统计(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 后台房间列表与详情接口应返回封禁和最近消息信息(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();

@@ -10,7 +10,8 @@ RELEASE_BASE="${KOKO_RELEASE_BASE:-}"
 KOKO_DOMAIN="${KOKO_DOMAIN:-}"
 KOKO_ADMIN_DOMAIN="${KOKO_ADMIN_DOMAIN:-}"
 KOKO_ADMIN_USER="${KOKO_ADMIN_USER:-admin}"
-KOKO_ADMIN_PASSWORD="${KOKO_ADMIN_PASSWORD:-Ee123456789+}"
+KOKO_ADMIN_PASSWORD="${KOKO_ADMIN_PASSWORD:-}"
+KOKO_ADMIN_PASSWORD_GENERATED=0
 KOKO_DB_NAME="${KOKO_DB_NAME:-koko}"
 KOKO_DB_USER="${KOKO_DB_USER:-koko}"
 KOKO_DB_PASSWORD="${KOKO_DB_PASSWORD:-}"
@@ -172,14 +173,60 @@ prompt_value() {
     printf '%s\n' "${value}"
 }
 
+prompt_secret() {
+    local prompt_label="$1"
+    local allow_empty="${2:-false}"
+    local value=""
+
+    if [[ ! -r /dev/tty ]]; then
+        printf '\n'
+        return
+    fi
+
+    while true; do
+        printf '%s: ' "${prompt_label}" > /dev/tty
+        IFS= read -r -s value < /dev/tty
+        printf '\n' > /dev/tty
+
+        if [[ -n "${value}" || "${allow_empty}" == "true" ]]; then
+            break
+        fi
+    done
+
+    printf '%s\n' "${value}"
+}
+
+validate_safe_password() {
+    local label="$1"
+    local value="$2"
+
+    if [[ ! "${value}" =~ ^[A-Za-z0-9._~!@#%^+=:-]+$ ]]; then
+        echo "${label} 只允许字母、数字和常见安全符号（不支持空格、引号、反引号）。" >&2
+        exit 1
+    fi
+}
+
 ensure_domains() {
     KOKO_DOMAIN="$(prompt_value "聊天入口（域名或公网 IPv4）" "${KOKO_DOMAIN}")"
 }
 
 ensure_passwords() {
+    if [[ -z "${KOKO_ADMIN_PASSWORD}" ]]; then
+        KOKO_ADMIN_PASSWORD="$(prompt_secret "后台密码（留空自动生成）" "true")"
+    fi
+
+    if [[ -z "${KOKO_ADMIN_PASSWORD}" ]]; then
+        KOKO_ADMIN_PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+        KOKO_ADMIN_PASSWORD_GENERATED=1
+    fi
+
+    validate_safe_password "后台密码" "${KOKO_ADMIN_PASSWORD}"
+
     if [[ -z "${KOKO_DB_PASSWORD}" ]]; then
         KOKO_DB_PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
     fi
+
+    validate_safe_password "数据库密码" "${KOKO_DB_PASSWORD}"
 }
 
 derive_defaults() {
@@ -411,6 +458,12 @@ print_summary() {
     echo "$(mode_label "${mode}")完成。"
     echo "聊天前台: ${KOKO_PUBLIC_BASE_URL}"
     echo "后台前端: ${KOKO_ADMIN_BASE_URL}"
+    echo "后台用户名: ${KOKO_ADMIN_USER}"
+    if [[ "${KOKO_ADMIN_PASSWORD_GENERATED}" == "1" ]]; then
+        echo "后台密码（本次自动生成，仅显示一次）: ${KOKO_ADMIN_PASSWORD}"
+    else
+        echo "后台密码: 已设置，如需修改请编辑 ${CONFIG_FILE}"
+    fi
     echo "配置文件: ${CONFIG_FILE}"
     echo "服务状态: systemctl status koko-server"
     echo "服务日志: journalctl -u koko-server -f"
