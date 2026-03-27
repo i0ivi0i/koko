@@ -131,8 +131,10 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let mut frontend_child = process::spawn_logged("web", &frontend, sender)?;
 
     println!("开发服务已启动。按 Ctrl+C 停止。");
-    println!("后端: http://127.0.0.1:3000");
-    println!("前端: http://127.0.0.1:8080");
+    println!("后端监听: {}", env.server_bind);
+    println!("前端监听: {}", env.web_bind);
+    println!("后端入口: {}", env.api_base);
+    println!("前端入口: {}", frontend_entry_url(&env.api_base, &env.web_bind));
 
     loop {
         while let Ok(event) = receiver.recv_timeout(Duration::from_millis(200)) {
@@ -237,12 +239,14 @@ fn backend_dev_spec(
         use_sccache,
     )
     .env("DATABASE_URL", &env.database_url)
+    .env("SERVER_BIND", &env.server_bind)
     .env("RUST_LOG", &env.rust_log)
     .env("CARGO_TARGET_DIR", &target_dir)
 }
 
 fn frontend_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::CommandSpec {
     let target_dir = dev_target_dir(root, "dev-web");
+    let (web_host, web_port) = split_socket_addr(&env.web_bind);
 
     process::CommandSpec::new(
         "dx",
@@ -251,14 +255,38 @@ fn frontend_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::Co
             "--platform",
             "web",
             "--port",
-            "8080",
+            &web_port,
             "--addr",
-            "127.0.0.1",
+            &web_host,
         ],
     )
     .current_dir(&root.join("web"))
     .env("KOKO_API_BASE", &env.api_base)
     .env("CARGO_TARGET_DIR", &target_dir)
+}
+
+fn split_socket_addr(bind: &str) -> (String, String) {
+    let Some((host, port)) = bind.rsplit_once(':') else {
+        return ("0.0.0.0".to_owned(), "8080".to_owned());
+    };
+
+    (host.to_owned(), port.to_owned())
+}
+
+fn frontend_entry_url(api_base: &str, web_bind: &str) -> String {
+    let host = api_base
+        .split("://")
+        .nth(1)
+        .unwrap_or(api_base)
+        .split('/')
+        .next()
+        .unwrap_or(api_base)
+        .split(':')
+        .next()
+        .unwrap_or("127.0.0.1");
+    let (_, port) = split_socket_addr(web_bind);
+
+    format!("http://{host}:{port}")
 }
 
 fn apply_sccache(spec: process::CommandSpec, use_sccache: bool) -> process::CommandSpec {
@@ -283,6 +311,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:8080".into(),
             rust_log: "info".into(),
         };
 
@@ -298,6 +328,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:8080".into(),
             rust_log: "info".into(),
         };
 
@@ -313,6 +345,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:8080".into(),
             rust_log: "info".into(),
         };
 
@@ -328,6 +362,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:8080".into(),
             rust_log: "info".into(),
         };
 
@@ -344,6 +380,8 @@ mod tests {
         let env = env::LocalEnv {
             database_url: "postgres://local".into(),
             api_base: "http://127.0.0.1:3000".into(),
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:8080".into(),
             rust_log: "info".into(),
         };
 
@@ -352,5 +390,31 @@ mod tests {
         let expected = format!("CARGO_TARGET_DIR={}", dev_target_dir(root, "dev-web"));
 
         assert!(formatted.contains(&expected));
+    }
+
+    #[test]
+    fn frontend_dev_command_should_respect_custom_web_bind() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://192.168.1.7:3000".into(),
+            server_bind: "0.0.0.0:3000".into(),
+            web_bind: "0.0.0.0:9090".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = frontend_dev_spec(root, &env);
+        let formatted = process::format_command(&command);
+
+        assert!(formatted.contains("--addr 0.0.0.0"));
+        assert!(formatted.contains("--port 9090"));
+    }
+
+    #[test]
+    fn frontend_entry_url_should_follow_api_host_and_web_port() {
+        assert_eq!(
+            frontend_entry_url("http://192.168.1.7:3000", "0.0.0.0:8088"),
+            "http://192.168.1.7:8088"
+        );
     }
 }

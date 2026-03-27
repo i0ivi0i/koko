@@ -29,12 +29,23 @@ cargo install sccache
 
 ```env
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/koko_local
-KOKO_API_BASE=http://127.0.0.1:3000
+KOKO_API_BASE=http://192.168.100.229:3000
+SERVER_BIND=0.0.0.0:3000
+WEB_BIND=0.0.0.0:8080
 # 可选，不写时开发模式默认使用 info,tower_http=info,sqlx=warn
 RUST_LOG=info,tower_http=info,sqlx=warn
 ```
 
 开发环境实际只读取 `.env.local`。
+
+含义：
+
+- `KOKO_API_BASE`
+  前端编译时写入的后端地址。要给局域网其他设备访问时，这里应填你电脑的局域网 IP。
+- `SERVER_BIND`
+  后端监听地址。局域网联调建议用 `0.0.0.0:3000`。
+- `WEB_BIND`
+  前端开发服务器监听地址。局域网联调建议用 `0.0.0.0:8080`。
 
 ## 命令模式
 
@@ -80,10 +91,16 @@ just check
 just test
 ```
 
-## 默认地址
+## 开发入口
 
-- 后端：`http://127.0.0.1:3000`
-- 前端：`http://127.0.0.1:8080`
+- 本机前端：`http://127.0.0.1:8080`
+- 局域网前端：`http://192.168.100.229:8080`
+- 本机后端：`http://127.0.0.1:3000`
+- 局域网后端：`http://192.168.100.229:3000`
+
+如果你的局域网 IP 变化了，需要同步更新 `.env.local` 里的 `KOKO_API_BASE`。
+
+如果局域网其他设备仍然打不开，请检查 Windows 防火墙是否拦截了 `3000` 和 `8080` 端口。
 
 ## 当前约定
 
