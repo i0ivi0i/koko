@@ -63,7 +63,7 @@ jobs:
 
       - name: Package release assets
         shell: pwsh
-        run: ./scripts/package-release.ps1 -Version "${{ github.ref_name }}"
+        run: ./package-release.ps1 -Version "${{ github.ref_name }}"
 
       - name: Create release
         uses: softprops/action-gh-release@v2

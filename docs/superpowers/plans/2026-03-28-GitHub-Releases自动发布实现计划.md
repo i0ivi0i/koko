@@ -31,7 +31,7 @@
 ### Task 2: 增加统一打包脚本
 
 **Files:**
-- Create: `scripts/package-release.ps1`
+- Create: `package-release.ps1`
 
 - [x] **Step 1: 写失败测试思路并先手动验证缺文件会失败**
 
@@ -51,7 +51,7 @@
 
 Run:
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version v0.0.0-test -DryRun
+powershell -ExecutionPolicy Bypass -File .\package-release.ps1 -Version v0.0.0-test -DryRun
 ```
 
 Expected:
@@ -81,6 +81,6 @@ Expected:
 - [ ] **Step 4: 提交**
 
 ```bash
-git add .github/workflows/release.yml scripts/package-release.ps1 install.sh docs/superpowers/specs/2026-03-28-GitHub-Releases自动发布设计.md docs/superpowers/plans/2026-03-28-GitHub-Releases自动发布实现计划.md
+git add .github/workflows/release.yml package-release.ps1 install.sh docs/superpowers/specs/2026-03-28-GitHub-Releases自动发布设计.md docs/superpowers/plans/2026-03-28-GitHub-Releases自动发布实现计划.md
 git commit -m "发布: 新增 GitHub Releases 自动发布流程"
 ```

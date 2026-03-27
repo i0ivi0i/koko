@@ -91,7 +91,7 @@
 第一版建议增加这些非业务文件：
 
 - `.github/workflows/release.yml`
-- `scripts/package-release.ps1`
+- `package-release.ps1`
 
 职责：
 
@@ -102,7 +102,7 @@
   - 调用打包脚本
   - 创建并上传 Release 资产
 
-- `scripts/package-release.ps1`
+- `package-release.ps1`
   - 统一打包四类产物
   - 让本地和 CI 复用同一套打包逻辑
 

@@ -55,7 +55,7 @@ function Resolve-FirstExistingPath {
     return $Candidates[0]
 }
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$repoRoot = Resolve-Path $PSScriptRoot
 $releaseRoot = Join-Path $repoRoot "target\\release-artifacts\\$Version"
 $stagingRoot = Join-Path $repoRoot "target\\release-staging\\$Version"
 
