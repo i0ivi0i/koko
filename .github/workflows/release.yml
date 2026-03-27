@@ -11,6 +11,22 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/koko_release
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: koko_release
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d koko_release"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout
@@ -26,6 +42,15 @@ jobs:
 
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply migrations
+        run: |
+          for migration in migrations/*.sql; do
+            PGPASSWORD=postgres psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
 
       - name: Build server
         run: cargo build --release -p koko-server
