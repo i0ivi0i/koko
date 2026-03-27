@@ -1,4 +1,5 @@
 use crate::error::DomainError;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 /// 房间短码，固定为四个数字加一个英文字母。
@@ -109,4 +110,5 @@ pub struct Message {
     pub room_id: RoomId,
     pub sender_id: ProfileId,
     pub content: MessageContent,
+    pub created_at: OffsetDateTime,
 }

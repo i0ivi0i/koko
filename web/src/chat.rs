@@ -68,7 +68,7 @@ pub fn ChatScreen(
                         incoming: message.sender_id != profile_id,
                         sender: message.sender_id.clone(),
                         text: message.content.clone(),
-                        time: "刚刚".to_string(),
+                        time: format_message_time(&message.created_at),
                     }
                 }
             }
@@ -131,6 +131,26 @@ fn MessageBubble(incoming: bool, sender: String, text: String, time: String) -> 
             }
         }
     }
+}
+
+fn format_message_time(created_at: &str) -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let date = js_sys::Date::new(&created_at.into());
+        if !date.get_time().is_nan() {
+            return format!("{:02}:{:02}", date.get_hours(), date.get_minutes());
+        }
+    }
+
+    parse_utc_hh_mm(created_at).unwrap_or_else(|| "刚刚".to_string())
+}
+
+fn parse_utc_hh_mm(created_at: &str) -> Option<String> {
+    let time = created_at.split('T').nth(1)?;
+    let mut parts = time.split(':');
+    let hours = parts.next()?;
+    let minutes = parts.next()?;
+    Some(format!("{hours}:{minutes}"))
 }
 
 #[cfg(test)]
@@ -226,5 +246,45 @@ mod tests {
 
         assert!(html.contains("history-load-more-button"));
         assert!(html.contains("加载更早消息"));
+    }
+
+    #[test]
+    fn chat_screen_should_render_message_time_from_response() {
+        #[component]
+        fn TestChatShell() -> Element {
+            rsx! {
+                ChatScreen {
+                    room_code: "1A234".to_string(),
+                    profile_id: "self".to_string(),
+                    display_name: "匿名用户".to_string(),
+                    messages: vec![MessageResponse {
+                        message_id: "msg-1".into(),
+                        room_id: "room-1".into(),
+                        sender_id: "other".into(),
+                        content: "hello".into(),
+                        created_at: "2026-03-27T12:34:56Z".into(),
+                    }],
+                    has_more_messages: false,
+                    loading_more_messages: false,
+                    member_count: 3,
+                    on_back: move |_| {},
+                    on_open_members: move |_| {},
+                    on_load_older: move |_| {},
+                    on_send: move |_| {},
+                }
+            }
+        }
+
+        let mut dom = VirtualDom::new(TestChatShell);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+
+        assert!(html.contains("12:34"));
+        assert!(!html.contains(">刚刚<"));
+    }
+
+    #[test]
+    fn format_message_time_should_extract_hh_mm_from_rfc3339() {
+        assert_eq!(format_message_time("2026-03-27T08:09:10Z"), "08:09");
     }
 }

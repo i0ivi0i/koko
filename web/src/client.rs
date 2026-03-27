@@ -232,6 +232,7 @@ where
             room_id,
             sender_id,
             content,
+            created_at,
         }) = serde_json::from_str::<ServerWsEvent>(&text)
         else {
             continue;
@@ -242,6 +243,7 @@ where
             room_id,
             sender_id,
             content,
+            created_at,
         });
     }
 }

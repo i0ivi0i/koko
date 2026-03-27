@@ -17,6 +17,7 @@ use koko_core::{
     port::RoomRepository,
 };
 use serde::Deserialize;
+use time::format_description::well_known::Rfc3339;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -128,6 +129,7 @@ async fn handle_client_text(
                 room_id: message.room_id.0.to_string(),
                 sender_id: message.sender_id.0.to_string(),
                 content: message.content.as_str().to_owned(),
+                created_at: message.created_at.format(&Rfc3339).ok()?,
             })
             .ok()
         }

@@ -116,6 +116,7 @@ mod tests {
             room_id: "room-1".into(),
             sender_id: "profile-1".into(),
             content: "hello".into(),
+            created_at: "2026-03-27T12:34:56Z".into(),
         }
     }
 

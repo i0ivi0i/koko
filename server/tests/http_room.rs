@@ -283,6 +283,7 @@ async fn 发送消息接口应返回新消息(pool: PgPool) {
 
     assert_eq!(payload["content"], "hello over http");
     assert_eq!(payload["sender_id"], owner_id.to_string());
+    assert!(payload["created_at"].as_str().is_some());
 }
 
 #[sqlx::test(migrations = "../migrations")]

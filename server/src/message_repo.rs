@@ -4,6 +4,7 @@ use koko_core::{
     port::MessageRepository,
 };
 use sqlx::PgPool;
+use time::OffsetDateTime;
 
 pub struct PagedMessages {
     pub items: Vec<Message>,
@@ -72,6 +73,7 @@ impl PostgresMessageRepository {
                 room_id: RoomId(row.room_id),
                 sender_id: ProfileId(row.sender_id),
                 content: MessageContent::parse(&row.content).unwrap(),
+                created_at: row.created_at,
             })
             .collect()
         } else {
@@ -95,6 +97,7 @@ impl PostgresMessageRepository {
                 room_id: RoomId(row.room_id),
                 sender_id: ProfileId(row.sender_id),
                 content: MessageContent::parse(&row.content).unwrap(),
+                created_at: row.created_at,
             })
             .collect()
         };
@@ -124,22 +127,27 @@ impl MessageRepository for PostgresMessageRepository {
             room_id,
             sender_id,
             content,
+            created_at: OffsetDateTime::UNIX_EPOCH,
         };
 
-        sqlx::query!(
+        let row = sqlx::query!(
             r#"
             INSERT INTO messages (id, room_id, sender_id, content)
             VALUES ($1, $2, $3, $4)
+            RETURNING created_at
             "#,
             message.id.0,
             message.room_id.0,
             message.sender_id.0,
             message.content.as_str()
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await
         .map_err(|_| DomainError::EmptyMessageContent)?;
 
-        Ok(message)
+        Ok(Message {
+            created_at: row.created_at,
+            ..message
+        })
     }
 }

@@ -48,6 +48,7 @@ pub struct MessageResponse {
     pub room_id: String,
     pub sender_id: String,
     pub content: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -111,6 +112,7 @@ pub enum ServerWsEvent {
         room_id: String,
         sender_id: String,
         content: String,
+        created_at: String,
     },
 }
 
@@ -153,6 +155,7 @@ mod tests {
             room_id: "room-1".into(),
             sender_id: "profile-1".into(),
             content: "hello".into(),
+            created_at: "2026-03-27T12:34:56Z".into(),
         };
 
         let json = serde_json::to_string(&value).unwrap();
@@ -182,6 +185,7 @@ mod tests {
                 room_id: "room-1".into(),
                 sender_id: "profile-1".into(),
                 content: "hello".into(),
+                created_at: "2026-03-27T12:34:56Z".into(),
             }],
             has_more: true,
         };

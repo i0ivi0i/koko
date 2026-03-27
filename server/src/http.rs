@@ -10,6 +10,7 @@ use koko_contract::{
     ResolveRoomRequest, ResolveRoomResponse, RoomMemberResponse, RoomMembersResponse,
     RoomMessagesQuery, RoomMessagesResponse, RoomResponse, SendMessageRequest, ServerWsEvent,
 };
+use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
 use crate::{
@@ -166,6 +167,7 @@ pub async fn send_room_message(
         room_id: response.room_id.clone(),
         sender_id: response.sender_id.clone(),
         content: response.content.clone(),
+        created_at: response.created_at.clone(),
     })
     .map_err(|_| ApiError::internal("消息广播序列化失败"))?;
     state.realtime.publish(room_id, event);
@@ -324,6 +326,10 @@ fn message_to_response(message: koko_core::model::Message) -> MessageResponse {
         room_id: message.room_id.0.to_string(),
         sender_id: message.sender_id.0.to_string(),
         content: message.content.as_str().to_owned(),
+        created_at: message
+            .created_at
+            .format(&Rfc3339)
+            .expect("消息时间应可格式化为 RFC3339"),
     }
 }
 
