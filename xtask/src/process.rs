@@ -114,6 +114,10 @@ fn command_exists(name: &str) -> bool {
     std::env::split_paths(&paths).any(|dir| candidate_paths(&dir, name).iter().any(|path| path.is_file()))
 }
 
+pub fn has_command(name: &str) -> bool {
+    command_exists(name)
+}
+
 pub fn format_command(spec: &CommandSpec) -> String {
     let mut parts = Vec::new();
 

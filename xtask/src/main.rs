@@ -97,36 +97,26 @@ fn run_dev(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let env = env::load_local_env(root)?;
     process::require_command("cargo-watch", "请先执行 cargo install cargo-watch")?;
     process::require_command("dx", "请先执行 cargo install dioxus-cli")?;
-
-    let backend = process::CommandSpec::new(
-        "cargo",
-        [
-            "watch",
-            "--",
-            "cargo",
-            "run",
-            "--package",
-            "koko-server",
-            "--bin",
-            "koko-server",
-        ],
-    )
-    .current_dir(root)
-    .env("DATABASE_URL", &env.database_url)
-    .env("RUST_LOG", &env.rust_log);
-    let frontend = process::CommandSpec::new(
-        "dx",
-        ["serve", "--platform", "web", "--port", "8080", "--addr", "127.0.0.1"],
-    )
-    .current_dir(&root.join("web"))
-    .env("KOKO_API_BASE", &env.api_base);
+    let use_sccache = process::has_command("sccache");
+    let backend = backend_dev_spec(root, &env, use_sccache);
+    let frontend = frontend_dev_spec(root, &env);
 
     if dry_run {
         println!("[dry-run] 后端命令: {}", process::format_command(&backend));
         println!("[dry-run] 前端命令: {}", process::format_command(&frontend));
         println!("[dry-run] RUST_LOG={}", env.rust_log);
+        println!(
+            "[dry-run] 编译缓存: {}",
+            if use_sccache { "sccache" } else { "默认 rustc" }
+        );
         println!("[dry-run] 日志模式: 终端聚合");
         return Ok(());
+    }
+
+    if use_sccache {
+        println!("已启用 sccache 编译缓存。");
+    } else {
+        println!("未检测到 sccache，继续使用默认 rustc。");
     }
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -194,24 +184,132 @@ fn run_migrate(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
 
 fn run_test(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let env = env::load_local_env(root)?;
-    let test = process::CommandSpec::new("cargo", ["test"])
-        .current_dir(root)
-        .env("DATABASE_URL", &env.database_url);
+    let test =
+        apply_sccache(process::CommandSpec::new("cargo", ["test"]).current_dir(root), process::has_command("sccache"))
+            .env("DATABASE_URL", &env.database_url);
 
     process::run(&test, dry_run)
 }
 
 fn run_check(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
     let env = env::load_local_env(root)?;
-    let server_check = process::CommandSpec::new("cargo", ["check", "-p", "koko-server"])
-        .current_dir(root)
-        .env("DATABASE_URL", &env.database_url);
-    let web_check = process::CommandSpec::new(
-        "cargo",
-        ["check", "-p", "koko-web", "--target", "wasm32-unknown-unknown"],
+    let use_sccache = process::has_command("sccache");
+    let server_check = apply_sccache(
+        process::CommandSpec::new("cargo", ["check", "-p", "koko-server"]).current_dir(root),
+        use_sccache,
     )
-    .current_dir(root);
+    .env("DATABASE_URL", &env.database_url);
+    let web_check = apply_sccache(
+        process::CommandSpec::new(
+            "cargo",
+            ["check", "-p", "koko-web", "--target", "wasm32-unknown-unknown"],
+        )
+        .current_dir(root),
+        use_sccache,
+    );
 
     process::run(&server_check, dry_run)?;
     process::run(&web_check, dry_run)
+}
+
+fn backend_dev_spec(
+    root: &std::path::Path,
+    env: &env::LocalEnv,
+    use_sccache: bool,
+) -> process::CommandSpec {
+    apply_sccache(
+        process::CommandSpec::new(
+            "cargo",
+            [
+                "watch",
+                "--",
+                "cargo",
+                "run",
+                "--package",
+                "koko-server",
+                "--bin",
+                "koko-server",
+            ],
+        )
+        .current_dir(root),
+        use_sccache,
+    )
+    .env("DATABASE_URL", &env.database_url)
+    .env("RUST_LOG", &env.rust_log)
+}
+
+fn frontend_dev_spec(root: &std::path::Path, env: &env::LocalEnv) -> process::CommandSpec {
+    process::CommandSpec::new(
+        "dx",
+        [
+            "serve",
+            "--platform",
+            "web",
+            "--port",
+            "8080",
+            "--addr",
+            "127.0.0.1",
+            "--hot-patch",
+        ],
+    )
+    .current_dir(&root.join("web"))
+    .env("KOKO_API_BASE", &env.api_base)
+}
+
+fn apply_sccache(spec: process::CommandSpec, use_sccache: bool) -> process::CommandSpec {
+    if use_sccache {
+        spec.env("RUSTC_WRAPPER", "sccache")
+    } else {
+        spec
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frontend_dev_command_should_enable_hotpatch() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://127.0.0.1:3000".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = frontend_dev_spec(root, &env);
+        let formatted = process::format_command(&command);
+
+        assert!(formatted.contains("--hot-patch"));
+    }
+
+    #[test]
+    fn backend_dev_command_should_use_sccache_when_available() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://127.0.0.1:3000".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = backend_dev_spec(root, &env, true);
+        let formatted = process::format_command(&command);
+
+        assert!(formatted.contains("RUSTC_WRAPPER=sccache"));
+    }
+
+    #[test]
+    fn backend_dev_command_should_not_require_sccache() {
+        let root = std::path::Path::new("D:/koko");
+        let env = env::LocalEnv {
+            database_url: "postgres://local".into(),
+            api_base: "http://127.0.0.1:3000".into(),
+            rust_log: "info".into(),
+        };
+
+        let command = backend_dev_spec(root, &env, false);
+        let formatted = process::format_command(&command);
+
+        assert!(!formatted.contains("RUSTC_WRAPPER=sccache"));
+    }
 }

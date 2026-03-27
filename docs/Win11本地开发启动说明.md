@@ -7,10 +7,20 @@
 - 本机 PostgreSQL 正在运行
 - 项目根目录存在 `.env.local`
 
+可选但推荐：
+
+- 安装 `sccache` 作为开发态编译缓存
+
 如果未安装 `just`：
 
 ```bash
 cargo install just
+```
+
+如果要启用编译缓存：
+
+```bash
+cargo install sccache
 ```
 
 ## 本地配置
@@ -53,6 +63,8 @@ just dev
 
 - 启动后端热更新
 - 启动前端开发服务器
+- 前端默认开启 Dioxus `hot-patch`
+- 若本机已安装 `sccache`，会自动启用编译缓存
 - 在当前终端聚合显示前后端日志
 - 按 `Ctrl+C` 时自动停止前后端子进程
 
@@ -81,3 +93,4 @@ just test
 - 生产环境应改用系统环境变量或服务器 env file
 - `just` 是开发入口
 - `xtask` 负责环境读取、初始化和开发进程编排
+- `sccache` 只用于开发态加速，不参与生产部署
