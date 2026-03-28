@@ -2093,13 +2093,14 @@ version = "0.1.0"
 dependencies = [
  "dioxus",
  "dioxus-ssr",
- "futures-channel",
- "futures-util",
  "gloo-net",
  "gloo-storage",
  "js-sys",
  "koko-contract",
+ "serde",
+ "serde-wasm-bindgen",
  "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]

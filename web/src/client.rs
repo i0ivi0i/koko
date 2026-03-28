@@ -1,27 +1,30 @@
-use dioxus::prelude::spawn;
-use futures_channel::mpsc::{UnboundedSender, unbounded};
-use futures_util::{
-    SinkExt, StreamExt,
-    future::{Either, select},
-};
-use gloo_net::{
-    http::Request,
-    websocket::{Message, futures::WebSocket},
-};
+use gloo_net::http::Request;
 #[cfg(target_arch = "wasm32")]
 use gloo_storage::{LocalStorage, Storage};
+#[cfg(target_arch = "wasm32")]
+use js_sys::Function;
+#[cfg(test)]
+use koko_contract::ClientRealtimeQuery;
 use koko_contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, ClientWsEvent, GovernanceActorRequest,
-    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
-    RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SESSION_HEADER_NAME,
-    SendMessageRequest, ServerWsEvent,
+    BootstrapSessionRequest, BootstrapSessionResponse, ClientRealtimeCommand,
+    GovernanceActorRequest, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse,
+    PromoteAdminRequest, RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse,
+    SESSION_HEADER_NAME, SendMessageRequest, ServerRealtimeEvent,
 };
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::*};
 
 use crate::state::ActiveRoomSnapshot;
 
 #[cfg(target_arch = "wasm32")]
 const DEVICE_TOKEN_STORAGE_KEY: &str = "koko.device_token";
 const MESSAGE_PAGE_LIMIT: u16 = 40;
+#[cfg(test)]
+const SOCKET_IO_COMMAND_EVENT_NAME: &str = "command";
+#[cfg(test)]
+const SOCKET_IO_QUERY_EVENT_NAME: &str = "query";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemberAction {
@@ -36,17 +39,76 @@ struct MemberActionRequest {
     body: String,
 }
 
+#[cfg(target_arch = "wasm32")]
+#[derive(serde::Serialize)]
+struct SocketIoConnectAuth {
+    session_id: String,
+    room_id: String,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(module = "/socketio-bridge.mjs")]
+extern "C" {
+    type SocketIoBridge;
+
+    #[wasm_bindgen(catch, js_name = connectRoomSocket)]
+    fn js_connect_room_socket(
+        base_url: &str,
+        auth: JsValue,
+        on_event: &Function,
+    ) -> Result<SocketIoBridge, JsValue>;
+
+    #[wasm_bindgen(method, catch, js_name = emitCommand)]
+    fn js_emit_command(this: &SocketIoBridge, payload: JsValue) -> Result<(), JsValue>;
+
+    #[wasm_bindgen(method, catch, js_name = disconnect)]
+    fn js_disconnect(this: &SocketIoBridge) -> Result<(), JsValue>;
+}
+
+#[cfg(target_arch = "wasm32")]
+struct SocketIoRoomConnection {
+    bridge: SocketIoBridge,
+    _event_callback: Closure<dyn FnMut(JsValue)>,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl SocketIoRoomConnection {
+    fn send_command(&self, command: &ClientRealtimeCommand) -> Result<(), String> {
+        let payload = serde_wasm_bindgen::to_value(command).map_err(|error| error.to_string())?;
+        self.bridge
+            .js_emit_command(payload)
+            .map_err(js_error_to_string)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Drop for SocketIoRoomConnection {
+    fn drop(&mut self) {
+        let _ = self.bridge.js_disconnect();
+    }
+}
+
 #[derive(Clone)]
 pub struct RoomConnection {
-    outbound: UnboundedSender<String>,
+    #[cfg(target_arch = "wasm32")]
+    inner: Rc<SocketIoRoomConnection>,
 }
 
 impl RoomConnection {
     pub fn send_message(&self, content: &str) -> Result<(), String> {
-        let payload = build_send_message_event(content)?;
-        self.outbound
-            .unbounded_send(payload)
-            .map_err(|_| "实时连接已关闭".to_string())
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.inner
+                .send_command(&ClientRealtimeCommand::SendMessage {
+                    content: content.to_string(),
+                })
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = content;
+            Err(socket_io_runtime_unavailable_message().to_string())
+        }
     }
 }
 
@@ -54,16 +116,8 @@ pub fn api_base() -> &'static str {
     option_env!("KOKO_API_BASE").unwrap_or("http://127.0.0.1:3000")
 }
 
-pub fn build_room_ws_url(api_base: &str, room_id: &str, session_id: &str) -> String {
-    let ws_base = if let Some(rest) = api_base.strip_prefix("https://") {
-        format!("wss://{rest}")
-    } else if let Some(rest) = api_base.strip_prefix("http://") {
-        format!("ws://{rest}")
-    } else {
-        api_base.to_string()
-    };
-
-    format!("{ws_base}/ws/rooms/{room_id}?session_id={session_id}")
+pub fn build_socket_io_url(api_base: &str) -> String {
+    api_base.trim_end_matches('/').to_string()
 }
 
 fn build_room_messages_path(room_id: &str, before_message_id: Option<&str>) -> String {
@@ -274,56 +328,115 @@ pub async fn run_member_action(
 pub fn connect_room_events<F>(
     room_id: String,
     session_id: String,
-    mut on_message: F,
+    #[allow(unused_mut)] mut on_message: F,
 ) -> Result<RoomConnection, String>
 where
     F: FnMut(MessageResponse) + 'static,
 {
-    let ws_url = build_room_ws_url(api_base(), &room_id, &session_id);
-    let socket = WebSocket::open(&ws_url).map_err(|error| error.to_string())?;
-    let (mut sender, mut receiver) = socket.split();
-    let (outbound, mut outbound_messages) = unbounded::<String>();
-
-    spawn(async move {
-        loop {
-            match select(outbound_messages.next(), receiver.next()).await {
-                Either::Left((Some(payload), _)) => {
-                    if sender.send(Message::Text(payload)).await.is_err() {
-                        break;
-                    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let auth = serde_wasm_bindgen::to_value(&SocketIoConnectAuth {
+            session_id,
+            room_id,
+        })
+        .map_err(|error| error.to_string())?;
+        let on_event = Closure::wrap(Box::new(move |payload: JsValue| {
+            if let Ok(event) = serde_wasm_bindgen::from_value::<ServerRealtimeEvent>(payload) {
+                if let Some(message) = decode_message_created_realtime_event(event) {
+                    on_message(message);
                 }
-                Either::Left((None, _)) => break,
-                Either::Right((Some(Ok(Message::Text(text))), _)) => {
-                    if let Some(message) = decode_message_created_event(&text) {
-                        on_message(message);
-                    }
-                }
-                Either::Right((Some(Ok(_)), _)) => {}
-                Either::Right((Some(Err(_)), _)) | Either::Right((None, _)) => break,
             }
-        }
-    });
+        }) as Box<dyn FnMut(JsValue)>);
 
-    Ok(RoomConnection { outbound })
+        let bridge = js_connect_room_socket(
+            &build_socket_io_url(api_base()),
+            auth,
+            on_event.as_ref().unchecked_ref::<Function>(),
+        )
+        .map_err(js_error_to_string)?;
+
+        Ok(RoomConnection {
+            inner: Rc::new(SocketIoRoomConnection {
+                bridge,
+                _event_callback: on_event,
+            }),
+        })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (room_id, session_id, on_message);
+        Err(socket_io_runtime_unavailable_message().to_string())
+    }
 }
 
-fn build_send_message_event(content: &str) -> Result<String, String> {
-    serde_json::to_string(&ClientWsEvent::SendMessage {
-        content: content.to_string(),
+#[cfg(test)]
+fn build_realtime_command_payload(
+    command: &ClientRealtimeCommand,
+) -> Result<(&'static str, String), String> {
+    serde_json::to_string(command)
+        .map(|payload| (SOCKET_IO_COMMAND_EVENT_NAME, payload))
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+fn build_realtime_query_payload(
+    query: &ClientRealtimeQuery,
+) -> Result<(&'static str, String), String> {
+    serde_json::to_string(query)
+        .map(|payload| (SOCKET_IO_QUERY_EVENT_NAME, payload))
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+fn decode_room_snapshot_event(
+    text: &str,
+    session: BootstrapSessionResponse,
+) -> Option<ActiveRoomSnapshot> {
+    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
+
+    let ServerRealtimeEvent::RoomSnapshot {
+        room_id,
+        code,
+        role,
+        messages,
+        has_more_messages,
+        members,
+    } = event
+    else {
+        return None;
+    };
+
+    Some(ActiveRoomSnapshot {
+        session,
+        joined: JoinOrCreateRoomResponse {
+            room_id,
+            code,
+            role,
+        },
+        messages,
+        has_more_messages,
+        members,
     })
-    .map_err(|error| error.to_string())
 }
 
+#[cfg(test)]
 fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
-    let event = serde_json::from_str::<ServerWsEvent>(text).ok()?;
+    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
+    decode_message_created_realtime_event(event)
+}
 
-    let ServerWsEvent::MessageCreated {
+fn decode_message_created_realtime_event(event: ServerRealtimeEvent) -> Option<MessageResponse> {
+    let ServerRealtimeEvent::MessageCreated {
         message_id,
         room_id,
         sender_id,
         content,
         created_at,
-    } = event;
+    } = event
+    else {
+        return None;
+    };
 
     Some(MessageResponse {
         message_id,
@@ -334,10 +447,30 @@ fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
     })
 }
 
+#[cfg(any(test, not(target_arch = "wasm32")))]
+fn socket_io_runtime_unavailable_message() -> &'static str {
+    "Socket.IO 客户端仅支持 wasm32 浏览器运行时"
+}
+
+#[cfg(target_arch = "wasm32")]
+fn js_error_to_string(error: JsValue) -> String {
+    error
+        .as_string()
+        .or_else(|| {
+            js_sys::JSON::stringify(&error)
+                .ok()
+                .and_then(|value| value.as_string())
+        })
+        .unwrap_or_else(|| "Socket.IO 客户端桥接失败".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koko_contract::{ClientWsEvent, GovernanceActorRequest, PromoteAdminRequest};
+    use koko_contract::{
+        BootstrapSessionResponse, ClientRealtimeCommand, ClientRealtimeQuery,
+        GovernanceActorRequest, PromoteAdminRequest, ServerRealtimeEvent,
+    };
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -345,21 +478,15 @@ mod tests {
     }
 
     #[test]
-    fn ws_url_should_convert_http_to_ws() {
-        let url = build_room_ws_url("http://127.0.0.1:3000", "room-1", "session-1");
-        assert_eq!(
-            url,
-            "ws://127.0.0.1:3000/ws/rooms/room-1?session_id=session-1"
-        );
+    fn socket_io_url_should_keep_http_origin() {
+        let url = build_socket_io_url("http://127.0.0.1:3000/");
+        assert_eq!(url, "http://127.0.0.1:3000");
     }
 
     #[test]
-    fn ws_url_should_convert_https_to_wss() {
-        let url = build_room_ws_url("https://example.com", "room-1", "session-1");
-        assert_eq!(
-            url,
-            "wss://example.com/ws/rooms/room-1?session_id=session-1"
-        );
+    fn socket_io_url_should_keep_https_origin() {
+        let url = build_socket_io_url("https://example.com");
+        assert_eq!(url, "https://example.com");
     }
 
     #[test]
@@ -418,12 +545,15 @@ mod tests {
     }
 
     #[test]
-    fn send_message_event_should_encode_ws_payload() {
-        let payload = build_send_message_event("hello").unwrap();
+    fn send_message_event_should_encode_canonical_command_payload() {
+        let (_, payload) = build_realtime_command_payload(&ClientRealtimeCommand::SendMessage {
+            content: "hello".into(),
+        })
+        .unwrap();
 
         assert_eq!(
             payload,
-            serde_json::to_string(&ClientWsEvent::SendMessage {
+            serde_json::to_string(&ClientRealtimeCommand::SendMessage {
                 content: "hello".into(),
             })
             .unwrap()
@@ -431,8 +561,96 @@ mod tests {
     }
 
     #[test]
+    fn realtime_command_should_encode_to_socketio_command_event() {
+        let (event_name, payload) =
+            build_realtime_command_payload(&ClientRealtimeCommand::SendMessage {
+                content: "hello".into(),
+            })
+            .unwrap();
+
+        assert_eq!(event_name, SOCKET_IO_COMMAND_EVENT_NAME);
+        assert_eq!(
+            payload,
+            serde_json::to_string(&ClientRealtimeCommand::SendMessage {
+                content: "hello".into(),
+            })
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn realtime_query_should_encode_to_socketio_query_event() {
+        let (event_name, payload) =
+            build_realtime_query_payload(&ClientRealtimeQuery::LoadOlderMessages {
+                before_message_id: Some("msg-9".into()),
+                limit: Some(20),
+            })
+            .unwrap();
+
+        assert_eq!(event_name, SOCKET_IO_QUERY_EVENT_NAME);
+        assert_eq!(
+            payload,
+            serde_json::to_string(&ClientRealtimeQuery::LoadOlderMessages {
+                before_message_id: Some("msg-9".into()),
+                limit: Some(20),
+            })
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn socketio_runtime_unavailable_message_should_be_explicit() {
+        assert_eq!(
+            socket_io_runtime_unavailable_message(),
+            "Socket.IO 客户端仅支持 wasm32 浏览器运行时"
+        );
+    }
+
+    #[test]
+    fn room_snapshot_event_should_decode_to_active_room_snapshot() {
+        let payload = serde_json::to_string(&ServerRealtimeEvent::RoomSnapshot {
+            room_id: "room-1".into(),
+            code: "1A234".into(),
+            role: "owner".into(),
+            messages: vec![MessageResponse {
+                message_id: "msg-1".into(),
+                room_id: "room-1".into(),
+                sender_id: "profile-1".into(),
+                content: "hello".into(),
+                created_at: "2026-03-28T10:00:00Z".into(),
+            }],
+            has_more_messages: true,
+            members: vec![RoomMemberResponse {
+                profile_id: "profile-1".into(),
+                display_name: "user-1".into(),
+                role: "owner".into(),
+            }],
+        })
+        .unwrap();
+
+        let snapshot = decode_room_snapshot_event(
+            &payload,
+            BootstrapSessionResponse {
+                session_id: "session-1".into(),
+                profile_id: "profile-1".into(),
+                display_name: "user-1".into(),
+                device_token: "device-1".into(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.session.session_id, "session-1");
+        assert_eq!(snapshot.joined.room_id, "room-1");
+        assert_eq!(snapshot.joined.code, "1A234");
+        assert_eq!(snapshot.joined.role, "owner");
+        assert_eq!(snapshot.messages.len(), 1);
+        assert!(snapshot.has_more_messages);
+        assert_eq!(snapshot.members.len(), 1);
+    }
+
+    #[test]
     fn message_created_event_should_decode_to_message_response() {
-        let payload = serde_json::to_string(&ServerWsEvent::MessageCreated {
+        let payload = serde_json::to_string(&ServerRealtimeEvent::MessageCreated {
             message_id: "msg-1".into(),
             room_id: "room-1".into(),
             sender_id: "profile-1".into(),
