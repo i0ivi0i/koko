@@ -11,7 +11,7 @@ use koko_core::{
         RoomGovernanceState, RoomId,
     },
     port::{MessageRepository, RoomRepository},
-    room::{mute_member, promote_admin, remove_member},
+    room::{ensure_can_manage_member, mute_member, promote_admin, remove_member},
 };
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
@@ -207,6 +207,40 @@ async fn 群主应能提升成员为管理员() {
 }
 
 #[tokio::test]
+async fn 群主应具备治理管理员的权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let owner_id = ProfileId(Uuid::new_v4());
+    let admin_id = ProfileId(Uuid::new_v4());
+    deps.seed_member(room_id, owner_id, Role::Owner).await;
+    deps.seed_member(room_id, admin_id, Role::Admin).await;
+
+    let (actor_role, target_role) = ensure_can_manage_member(&deps, room_id, owner_id, admin_id)
+        .await
+        .unwrap();
+
+    assert_eq!(actor_role, Role::Owner);
+    assert_eq!(target_role, Role::Admin);
+}
+
+#[tokio::test]
+async fn 管理员应具备治理普通成员的权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let admin_id = ProfileId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    deps.seed_member(room_id, admin_id, Role::Admin).await;
+    deps.seed_member(room_id, member_id, Role::Member).await;
+
+    let (actor_role, target_role) = ensure_can_manage_member(&deps, room_id, admin_id, member_id)
+        .await
+        .unwrap();
+
+    assert_eq!(actor_role, Role::Admin);
+    assert_eq!(target_role, Role::Member);
+}
+
+#[tokio::test]
 async fn 管理员不应能提升其他成员为管理员() {
     let deps = FakeDeps::default();
     let room_id = RoomId(Uuid::new_v4());
@@ -237,6 +271,39 @@ async fn 非成员不应伪装群主提升管理员() {
         .unwrap_err();
 
     assert_eq!(error, DomainError::SenderIsNotRoomMember);
+}
+
+#[tokio::test]
+async fn 非成员不应具备治理权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let owner_id = ProfileId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    let outsider_id = ProfileId(Uuid::new_v4());
+    deps.seed_member(room_id, owner_id, Role::Owner).await;
+    deps.seed_member(room_id, member_id, Role::Member).await;
+
+    let error = ensure_can_manage_member(&deps, room_id, outsider_id, member_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::SenderIsNotRoomMember);
+}
+
+#[tokio::test]
+async fn 任何人都不应具备治理群主的权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let admin_id = ProfileId(Uuid::new_v4());
+    let owner_id = ProfileId(Uuid::new_v4());
+    deps.seed_member(room_id, admin_id, Role::Admin).await;
+    deps.seed_member(room_id, owner_id, Role::Owner).await;
+
+    let error = ensure_can_manage_member(&deps, room_id, admin_id, owner_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::CannotModerateRoomOwner);
 }
 
 #[tokio::test]

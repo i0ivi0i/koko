@@ -7,6 +7,7 @@ use koko_core::{
         GlobalChatPolicy, MessageContent, MessageId, ProfileId, Role, RoomGovernanceState, RoomId,
     },
     port::{MessageRepository, RoomRepository},
+    room::{ensure_can_read_room, ensure_can_send_message},
 };
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
@@ -41,6 +42,17 @@ impl FakeDeps {
     async fn add_member(&self, room_id: RoomId, profile_id: ProfileId, role: Role) {
         let mut guard = self.inner.lock().await;
         guard.members.insert((room_id, profile_id), role);
+    }
+
+    async fn ban_room(&self, room_id: RoomId) {
+        let mut guard = self.inner.lock().await;
+        guard.governance.insert(
+            room_id,
+            RoomGovernanceState::active_ban(
+                OffsetDateTime::now_utc() + time::Duration::hours(1),
+                None,
+            ),
+        );
     }
 }
 
@@ -182,12 +194,53 @@ async fn 房间成员应能发送文本消息() {
 }
 
 #[tokio::test]
+async fn 房间成员应具备读取权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    deps.add_member(room_id, member_id, Role::Member).await;
+
+    let role = ensure_can_read_room(&deps, room_id, member_id)
+        .await
+        .unwrap();
+
+    assert_eq!(role, Role::Member);
+}
+
+#[tokio::test]
+async fn 正常成员应具备发送权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    deps.add_member(room_id, member_id, Role::Member).await;
+
+    let role = ensure_can_send_message(&deps, room_id, member_id)
+        .await
+        .unwrap();
+
+    assert_eq!(role, Role::Member);
+}
+
+#[tokio::test]
 async fn 非成员发送消息应失败() {
     let deps = FakeDeps::default();
     let room_id = RoomId(Uuid::new_v4());
     let stranger_id = ProfileId(Uuid::new_v4());
 
     let error = send_text_message(&deps, &deps, room_id, stranger_id, "hello")
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::SenderIsNotRoomMember);
+}
+
+#[tokio::test]
+async fn 非成员不应具备读取权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let stranger_id = ProfileId(Uuid::new_v4());
+
+    let error = ensure_can_read_room(&deps, room_id, stranger_id)
         .await
         .unwrap_err();
 
@@ -221,4 +274,19 @@ async fn 被禁言成员发送消息应失败() {
         .unwrap_err();
 
     assert_eq!(error, DomainError::SenderIsMuted);
+}
+
+#[tokio::test]
+async fn 房间被封禁时成员不应具备发送权限() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    deps.add_member(room_id, member_id, Role::Member).await;
+    deps.ban_room(room_id).await;
+
+    let error = ensure_can_send_message(&deps, room_id, member_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::RoomTemporarilyBanned);
 }

@@ -47,6 +47,61 @@ pub async fn get_global_chat_policy(
     repo.global_chat_policy().await
 }
 
+/// 确认调用者具备读取房间的权限。
+pub async fn ensure_can_read_room(
+    repo: &impl RoomRepository,
+    room_id: RoomId,
+    profile_id: ProfileId,
+) -> Result<Role, DomainError> {
+    repo.role_of(room_id, profile_id)
+        .await?
+        .ok_or(DomainError::SenderIsNotRoomMember)
+}
+
+/// 确认调用者具备发送消息的权限。
+pub async fn ensure_can_send_message(
+    repo: &impl RoomRepository,
+    room_id: RoomId,
+    sender_id: ProfileId,
+) -> Result<Role, DomainError> {
+    let role = ensure_can_read_room(repo, room_id, sender_id).await?;
+
+    if repo
+        .governance_state(room_id)
+        .await?
+        .is_banned_at(OffsetDateTime::now_utc())
+    {
+        return Err(DomainError::RoomTemporarilyBanned);
+    }
+
+    if repo.is_muted(room_id, sender_id).await? {
+        return Err(DomainError::SenderIsMuted);
+    }
+
+    Ok(role)
+}
+
+/// 确认调用者具备治理目标成员的基础权限。
+pub async fn ensure_can_manage_member(
+    repo: &impl RoomRepository,
+    room_id: RoomId,
+    actor_id: ProfileId,
+    target_id: ProfileId,
+) -> Result<(Role, Role), DomainError> {
+    let actor_role = actor_role(repo, room_id, actor_id).await?;
+    let target_role = target_role(repo, room_id, target_id).await?;
+
+    if target_role == Role::Owner {
+        return Err(DomainError::CannotModerateRoomOwner);
+    }
+
+    match actor_role {
+        Role::Owner => Ok((actor_role, target_role)),
+        Role::Admin if target_role == Role::Member => Ok((actor_role, target_role)),
+        _ => Err(DomainError::InsufficientRoomPermission),
+    }
+}
+
 pub async fn update_global_chat_policy(
     repo: &impl RoomRepository,
     max_message_length: usize,
@@ -82,14 +137,9 @@ pub async fn promote_admin(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = actor_role(repo, room_id, actor_id).await?;
+    let (actor_role, _) = ensure_can_manage_member(repo, room_id, actor_id, target_id).await?;
     if actor_role != Role::Owner {
         return Err(DomainError::InsufficientRoomPermission);
-    }
-
-    let target_role = target_role(repo, room_id, target_id).await?;
-    if target_role == Role::Owner {
-        return Err(DomainError::CannotModerateRoomOwner);
     }
 
     repo.set_role(room_id, target_id, Role::Admin).await
@@ -101,14 +151,9 @@ pub async fn demote_admin(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = actor_role(repo, room_id, actor_id).await?;
+    let (actor_role, _) = ensure_can_manage_member(repo, room_id, actor_id, target_id).await?;
     if actor_role != Role::Owner {
         return Err(DomainError::InsufficientRoomPermission);
-    }
-
-    let target_role = target_role(repo, room_id, target_id).await?;
-    if target_role == Role::Owner {
-        return Err(DomainError::CannotModerateRoomOwner);
     }
 
     repo.set_role(room_id, target_id, Role::Member).await
@@ -120,18 +165,7 @@ pub async fn mute_member(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = actor_role(repo, room_id, actor_id).await?;
-    let target_role = target_role(repo, room_id, target_id).await?;
-
-    match actor_role {
-        Role::Owner => {}
-        Role::Admin if target_role == Role::Member => {}
-        _ => return Err(DomainError::InsufficientRoomPermission),
-    }
-
-    if target_role == Role::Owner {
-        return Err(DomainError::CannotModerateRoomOwner);
-    }
+    let _ = ensure_can_manage_member(repo, room_id, actor_id, target_id).await?;
 
     repo.set_muted(room_id, target_id, true).await
 }
@@ -142,18 +176,7 @@ pub async fn remove_member(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = actor_role(repo, room_id, actor_id).await?;
-    let target_role = target_role(repo, room_id, target_id).await?;
-
-    match actor_role {
-        Role::Owner => {}
-        Role::Admin if target_role == Role::Member => {}
-        _ => return Err(DomainError::InsufficientRoomPermission),
-    }
-
-    if target_role == Role::Owner {
-        return Err(DomainError::CannotModerateRoomOwner);
-    }
+    let _ = ensure_can_manage_member(repo, room_id, actor_id, target_id).await?;
 
     repo.remove_member(room_id, target_id).await
 }

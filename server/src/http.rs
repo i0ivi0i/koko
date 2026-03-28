@@ -23,10 +23,7 @@ use crate::{
     room_repo::PostgresRoomRepository,
     session,
 };
-use koko_core::{
-    model::{MessageId, ProfileId, Role, RoomCode, RoomId},
-    port::RoomRepository,
-};
+use koko_core::model::{MessageId, ProfileId, Role, RoomCode, RoomId};
 
 const DEFAULT_MESSAGE_PAGE_LIMIT: usize = 40;
 const MAX_MESSAGE_PAGE_LIMIT: u16 = 100;
@@ -523,14 +520,9 @@ async fn require_room_member(
 ) -> Result<session::AuthenticatedSession, ApiError> {
     let session = require_authenticated_session(headers, pool).await?;
     let room_repo = PostgresRoomRepository::new(pool.clone());
-    let role = room_repo
-        .role_of(room_id, session.profile_id)
+    koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
         .await
-        .map_err(|_| ApiError::internal("房间成员校验失败"))?;
-
-    if role.is_none() {
-        return Err(ApiError::forbidden("不是房间成员"));
-    }
+        .map_err(map_domain_error)?;
 
     Ok(session)
 }
@@ -632,7 +624,7 @@ fn format_optional_datetime(value: Option<OffsetDateTime>) -> Result<Option<Stri
         .transpose()
 }
 
-fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {
+pub(crate) fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {
     use koko_core::error::DomainError;
 
     match error {

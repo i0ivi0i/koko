@@ -15,10 +15,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use koko_contract::{ClientWsEvent, ServerWsEvent};
-use koko_core::{
-    model::{ProfileId, RoomId},
-    port::RoomRepository,
-};
+use koko_core::model::{ProfileId, RoomId};
 use serde::Deserialize;
 use time::format_description::well_known::Rfc3339;
 use tokio::sync::broadcast;
@@ -75,14 +72,9 @@ pub(crate) async fn connect(
     let session = session::authenticate_session(&state.pool, &query.session_id).await?;
     let room_repo = PostgresRoomRepository::new(state.pool.clone());
 
-    let role = room_repo
-        .role_of(room_id, session.profile_id)
+    koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
         .await
-        .map_err(|_| ApiError::internal("房间成员校验失败"))?;
-
-    if role.is_none() {
-        return Err(ApiError::forbidden("不是房间成员"));
-    }
+        .map_err(crate::http::map_domain_error)?;
 
     Ok(ws
         .on_upgrade(move |socket| handle_socket(socket, state, room_id, session.profile_id))
