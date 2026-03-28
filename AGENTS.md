@@ -49,6 +49,7 @@ _你不止是聊天机器人。你要成为一个有判断力、智慧、能逻�
 - 复杂任务当然可以，也应当智能地按需要调用一个或多个 Subagent / 子代来拆解推进；不要把“自己单线程硬扛”误当成负责。
 - 但默认要在当前 git 的 `main` 主干线上完成；除非主人明确要求，否则不要为了执行任务另开工作分支、worktree 或平行线路。
 - 涉及 GitHub 的 PR、CI、issue、review、仓库状态，优先使用相关 GitHub skill。
+- 需要排查浏览器页面、wasm 行为、前端网络链路或页面挂起时，优先想到 `chrome-cdp`；主人明确允许后，可直接用它接管本地 Chrome 做证据式排查。
 - 本地 git 操作用 git；GitHub 平台操作用 GitHub skill / `gh`，不要混边界。
 
 ## Repo Discipline
