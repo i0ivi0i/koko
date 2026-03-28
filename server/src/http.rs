@@ -39,12 +39,13 @@ pub async fn bootstrap_session(
     State(state): State<AppState>,
     Json(request): Json<BootstrapSessionRequest>,
 ) -> Result<Json<BootstrapSessionResponse>, ApiError> {
-    let session = session::bootstrap_session(&state.pool, &request.device_key).await?;
+    let session = session::bootstrap_session(&state.pool, request.device_token.as_deref()).await?;
 
     Ok(Json(BootstrapSessionResponse {
         session_id: session.session_id.to_string(),
         profile_id: session.profile_id.to_string(),
         display_name: session.display_name,
+        device_token: session.device_token,
     }))
 }
 
@@ -186,7 +187,7 @@ pub async fn list_admin_room_members(
         .into_iter()
         .map(|member| RoomMemberResponse {
             profile_id: member.profile_id.0.to_string(),
-            display_name: session::build_display_name(&member.device_key),
+            display_name: session::build_display_name(member.profile_id),
             role: role_name(member.role).to_owned(),
         })
         .collect();
@@ -285,7 +286,7 @@ pub async fn list_room_members(
         .into_iter()
         .map(|member| RoomMemberResponse {
             profile_id: member.profile_id.0.to_string(),
-            display_name: session::build_display_name(&member.device_key),
+            display_name: session::build_display_name(member.profile_id),
             role: role_name(member.role).to_owned(),
         })
         .collect();
@@ -611,7 +612,7 @@ fn map_domain_error(error: koko_core::error::DomainError) -> ApiError {
 
     match error {
         DomainError::InvalidRoomCode => ApiError::bad_request("房间短码不合法"),
-        DomainError::EmptyDeviceKey => ApiError::bad_request("device_key 不能为空"),
+        DomainError::EmptyDeviceKey => ApiError::bad_request("device_token 不合法"),
         DomainError::EmptyMessageContent => ApiError::bad_request("消息不能为空"),
         DomainError::InvalidMaxMessageLength => ApiError::bad_request("最大消息长度不合法"),
         DomainError::MessageTooLong => ApiError::bad_request("消息超过长度限制"),

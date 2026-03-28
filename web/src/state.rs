@@ -135,6 +135,7 @@ mod tests {
                 session_id: "session-1".into(),
                 profile_id: "profile-1".into(),
                 display_name: "user-1".into(),
+                device_token: "anon-token-1".into(),
             },
             joined: JoinOrCreateRoomResponse {
                 room_id: "room-1".into(),

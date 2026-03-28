@@ -17,10 +17,7 @@ async fn 引导会话接口应返回会话与资料信息(pool: PgPool) {
                 .uri("/session/bootstrap")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({
-                        "device_key": "device-1",
-                    })
-                    .to_string(),
+                    json!({}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -34,11 +31,18 @@ async fn 引导会话接口应返回会话与资料信息(pool: PgPool) {
 
     assert!(payload["session_id"].as_str().is_some());
     assert!(payload["profile_id"].as_str().is_some());
-    assert_eq!(payload["display_name"], "访客-DEVICE-1");
+    assert!(payload["device_token"].as_str().is_some());
+    assert!(payload["display_name"].as_str().unwrap().starts_with("访客-"));
+    assert!(
+        !payload["display_name"]
+            .as_str()
+            .unwrap()
+            .contains("anon-")
+    );
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn 同一设备键重复引导应复用同一资料(pool: PgPool) {
+async fn 同一后端签发设备令牌重复引导应复用同一资料(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
 
     let first = app
@@ -48,12 +52,7 @@ async fn 同一设备键重复引导应复用同一资料(pool: PgPool) {
                 .method("POST")
                 .uri("/session/bootstrap")
                 .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "device_key": "repeat-device",
-                    })
-                    .to_string(),
-                ))
+                .body(Body::from(json!({}).to_string()))
                 .unwrap(),
         )
         .await
@@ -69,7 +68,7 @@ async fn 同一设备键重复引导应复用同一资料(pool: PgPool) {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "device_key": "repeat-device",
+                        "device_token": first_payload["device_token"],
                     })
                     .to_string(),
                 ))
@@ -81,10 +80,12 @@ async fn 同一设备键重复引导应复用同一资料(pool: PgPool) {
     let second_payload: Value = serde_json::from_slice(&second_body).unwrap();
 
     assert_eq!(first_payload["profile_id"], second_payload["profile_id"]);
+    assert_eq!(first_payload["device_token"], second_payload["device_token"]);
+    assert_eq!(first_payload["display_name"], second_payload["display_name"]);
 
     let profile_count = sqlx::query_scalar!(
         "SELECT COUNT(*) AS count FROM profiles WHERE device_key = $1",
-        "repeat-device"
+        first_payload["device_token"].as_str().unwrap()
     )
     .fetch_one(&pool)
     .await
@@ -92,4 +93,34 @@ async fn 同一设备键重复引导应复用同一资料(pool: PgPool) {
     .unwrap();
 
     assert_eq!(profile_count, 1);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 客户端伪造设备令牌时服务端应签发新的匿名身份(pool: PgPool) {
+    let app = koko_server::app::build_app(pool);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/session/bootstrap")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "device_token": "forged-client-token",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+
+    let issued_token = payload["device_token"].as_str().unwrap();
+    assert_ne!(issued_token, "forged-client-token");
+    assert!(issued_token.starts_with("anon-"));
 }

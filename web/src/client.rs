@@ -3,6 +3,8 @@ use gloo_net::{
     http::Request,
     websocket::{Message, futures::WebSocket},
 };
+#[cfg(target_arch = "wasm32")]
+use gloo_storage::{LocalStorage, Storage};
 use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
     JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
@@ -12,6 +14,8 @@ use koko_contract::{
 
 use crate::state::ActiveRoomSnapshot;
 
+#[cfg(target_arch = "wasm32")]
+const DEVICE_TOKEN_STORAGE_KEY: &str = "koko.device_token";
 const MESSAGE_PAGE_LIMIT: u16 = 40;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,7 +61,7 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
     let session: BootstrapSessionResponse =
         Request::post(&format!("{}/session/bootstrap", api_base()))
             .json(&BootstrapSessionRequest {
-                device_key: format!("web-{}", code.to_ascii_lowercase()),
+                device_token: bootstrap_device_token(),
             })
             .map_err(|error| error.to_string())?
             .send()
@@ -66,6 +70,7 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
             .json()
             .await
             .map_err(|error| error.to_string())?;
+    persist_bootstrap_device_token(&session.device_token);
 
     let joined: JoinOrCreateRoomResponse =
         Request::post(&format!("{}/rooms/join-or-create", api_base()))
@@ -109,6 +114,39 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
         has_more_messages: messages.has_more,
         members: members.items,
     })
+}
+
+fn bootstrap_device_token() -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        return sanitize_bootstrap_device_token(
+            LocalStorage::get::<String>(DEVICE_TOKEN_STORAGE_KEY)
+                .ok()
+                .as_deref(),
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        None
+    }
+}
+
+fn persist_bootstrap_device_token(device_token: &str) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(device_token) = sanitize_bootstrap_device_token(Some(device_token)) {
+        let _ = LocalStorage::set(DEVICE_TOKEN_STORAGE_KEY, device_token);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = device_token;
+}
+
+fn sanitize_bootstrap_device_token(stored: Option<&str>) -> Option<String> {
+    stored
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
 }
 
 pub async fn fetch_room_messages(
@@ -321,5 +359,19 @@ mod tests {
             build_room_messages_path("room-1", Some("msg-9")),
             "/rooms/room-1/messages?before_message_id=msg-9&limit=40"
         );
+    }
+
+    #[test]
+    fn sanitize_bootstrap_device_token_should_keep_existing_issued_token() {
+        let device_token = sanitize_bootstrap_device_token(Some("anon-issued-token"));
+
+        assert_eq!(device_token.as_deref(), Some("anon-issued-token"));
+    }
+
+    #[test]
+    fn sanitize_bootstrap_device_token_should_ignore_blank_storage() {
+        let device_token = sanitize_bootstrap_device_token(Some("   "));
+
+        assert_eq!(device_token, None);
     }
 }

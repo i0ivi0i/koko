@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BootstrapSessionRequest {
-    pub device_key: String,
+    pub device_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -10,6 +10,7 @@ pub struct BootstrapSessionResponse {
     pub session_id: String,
     pub profile_id: String,
     pub display_name: String,
+    pub device_token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -189,6 +190,7 @@ mod tests {
             session_id: "session-1".into(),
             profile_id: "profile-1".into(),
             display_name: "user-1".into(),
+            device_token: "anon-device-1".into(),
         };
 
         let json = serde_json::to_string(&value).unwrap();
