@@ -529,6 +529,174 @@ async fn 被禁言成员通过socketio发送消息应被领域规则拒绝(pool:
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn http发送消息后socketio客户端应收到_message_created广播(pool: PgPool) {
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "socketio-http-owner").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, "4D570").await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = connect_socket_io(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = next_socket_io_event(&mut socket).await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+
+    let response = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "http to socketio",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let event = next_socket_io_event(&mut socket).await;
+    assert_eq!(event.0, "event");
+    assert_eq!(event.1["type"], "message_created");
+    assert_eq!(event.1["room_id"], room_id.to_string());
+    assert_eq!(event.1["sender_id"], owner_id.to_string());
+    assert_eq!(event.1["content"], "http to socketio");
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn socketio切房后不应继续收到旧房间广播(pool: PgPool) {
+    let profile_id = Uuid::new_v4();
+    let owner_a_id = Uuid::new_v4();
+    let owner_b_id = Uuid::new_v4();
+    let room_a_id = Uuid::new_v4();
+    let room_b_id = Uuid::new_v4();
+    let profile_session_id = Uuid::new_v4();
+    let owner_a_session_id = Uuid::new_v4();
+    let owner_b_session_id = Uuid::new_v4();
+
+    insert_profile(&pool, profile_id, "switch-member").await;
+    insert_profile(&pool, owner_a_id, "switch-owner-a").await;
+    insert_profile(&pool, owner_b_id, "switch-owner-b").await;
+    insert_session(&pool, profile_session_id, profile_id).await;
+    insert_session(&pool, owner_a_session_id, owner_a_id).await;
+    insert_session(&pool, owner_b_session_id, owner_b_id).await;
+    insert_room_with_owner(&pool, room_a_id, owner_a_id, "4D571").await;
+    insert_room_with_owner(&pool, room_b_id, owner_b_id, "4D572").await;
+    insert_member(&pool, room_a_id, profile_id, "member").await;
+    insert_member(&pool, room_b_id, profile_id, "member").await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = connect_socket_io(
+        address,
+        json!({
+            "session_id": profile_session_id.to_string(),
+            "room_id": room_a_id.to_string(),
+        }),
+    )
+    .await;
+
+    let initial_snapshot = next_socket_io_event(&mut socket).await;
+    assert_eq!(initial_snapshot.0, "event");
+    assert_eq!(initial_snapshot.1["type"], "room_snapshot");
+    assert_eq!(initial_snapshot.1["room_id"], room_a_id.to_string());
+
+    send_socket_io_command(
+        &mut socket,
+        json!({
+            "type": "join_room",
+            "code": "4D572",
+        }),
+    )
+    .await;
+
+    let switched_snapshot = next_socket_io_event(&mut socket).await;
+    assert_eq!(switched_snapshot.0, "event");
+    assert_eq!(switched_snapshot.1["type"], "room_snapshot");
+    assert_eq!(switched_snapshot.1["room_id"], room_b_id.to_string());
+
+    let old_room_response = http_app
+        .clone()
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_a_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "old room should stay silent",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_a_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(old_room_response.status(), StatusCode::OK);
+
+    assert_no_socket_io_event(&mut socket, Duration::from_millis(250)).await;
+
+    let new_room_response = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_b_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "new room should arrive",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_b_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(new_room_response.status(), StatusCode::OK);
+
+    let new_room_event = next_socket_io_event(&mut socket).await;
+    assert_eq!(new_room_event.0, "event");
+    assert_eq!(new_room_event.1["type"], "message_created");
+    assert_eq!(new_room_event.1["room_id"], room_b_id.to_string());
+    assert_eq!(new_room_event.1["content"], "new room should arrive");
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn 发送消息接口应忽略客户端伪造的_sender_id并使用会话身份(
     pool: PgPool,
 ) {
@@ -990,4 +1158,18 @@ async fn next_socket_io_event(
         let event_payload = packet[1].clone();
         return (event_name, event_payload);
     }
+}
+
+async fn assert_no_socket_io_event(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    wait_for: Duration,
+) {
+    let result = timeout(wait_for, next_socket_io_event(socket)).await;
+    assert!(
+        result.is_err(),
+        "unexpected socket.io event: {:?}",
+        result.unwrap()
+    );
 }

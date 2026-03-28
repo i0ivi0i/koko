@@ -85,7 +85,6 @@ fn build_app_with_admin_auth_and_realtime(
     let state = AppState { pool, realtime };
     let (socket_io_layer, socket_io) = SocketIo::builder().with_state(state.clone()).build_layer();
     crate::ws::configure_socket_io(&socket_io);
-    state.realtime.attach_socket_io(socket_io);
 
     let admin_routes = Router::new()
         .route("/overview", get(http::get_admin_overview))
