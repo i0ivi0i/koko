@@ -22,5 +22,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
-rust_socketio = "0.6.0"
+rust_socketio = { version = "0.6.0", features = ["async"] }
 tokio-tungstenite = "0.28"
