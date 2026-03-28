@@ -14,10 +14,10 @@ use gloo_timers::future::TimeoutFuture;
 #[cfg(target_arch = "wasm32")]
 use gloo_storage::{LocalStorage, Storage};
 use koko_contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, ClientWsEvent, GovernanceActorRequest,
-    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
-    RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SESSION_HEADER_NAME,
-    SendMessageRequest, ServerWsEvent,
+    BootstrapSessionRequest, BootstrapSessionResponse, ClientRealtimeCommand,
+    GovernanceActorRequest, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse,
+    PromoteAdminRequest, RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse,
+    SESSION_HEADER_NAME, SendMessageRequest, ServerRealtimeEvent,
 };
 use std::{
     future::Future,
@@ -622,7 +622,7 @@ fn reconnect_delay() -> Pin<Box<dyn Future<Output = ()> + 'static>> {
 
 fn build_send_command(content: &str) -> Result<RealtimeCommand, String> {
     let content = content.to_string();
-    let wire_payload = serde_json::to_string(&ClientWsEvent::SendMessage {
+    let wire_payload = serde_json::to_string(&ClientRealtimeCommand::SendMessage {
         content: content.clone(),
     })
     .map_err(|error| error.to_string())?;
@@ -634,15 +634,17 @@ fn build_send_command(content: &str) -> Result<RealtimeCommand, String> {
 }
 
 fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
-    let event = serde_json::from_str::<ServerWsEvent>(text).ok()?;
+    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
 
-    let ServerWsEvent::MessageCreated {
+    let ServerRealtimeEvent::MessageCreated {
         message_id,
         room_id,
         sender_id,
         content,
         created_at,
-    } = event;
+    } = event else {
+        return None;
+    };
 
     Some(MessageResponse {
         message_id,
@@ -656,7 +658,9 @@ fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koko_contract::{ClientWsEvent, GovernanceActorRequest, PromoteAdminRequest, ServerWsEvent};
+    use koko_contract::{
+        ClientRealtimeCommand, GovernanceActorRequest, PromoteAdminRequest, ServerRealtimeEvent,
+    };
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -745,7 +749,7 @@ mod tests {
 
         assert_eq!(
             payload,
-            serde_json::to_string(&ClientWsEvent::SendMessage {
+            serde_json::to_string(&ClientRealtimeCommand::SendMessage {
                 content: "hello".into(),
             })
             .unwrap()
@@ -754,7 +758,7 @@ mod tests {
 
     #[test]
     fn message_created_event_should_decode_to_message_response() {
-        let payload = serde_json::to_string(&ServerWsEvent::MessageCreated {
+        let payload = serde_json::to_string(&ServerRealtimeEvent::MessageCreated {
             message_id: "msg-1".into(),
             room_id: "room-1".into(),
             sender_id: "profile-1".into(),
@@ -824,7 +828,7 @@ mod tests {
         assert_eq!(
             command,
             RealtimeCommand::SendMessage {
-                wire_payload: serde_json::to_string(&ClientWsEvent::SendMessage {
+                wire_payload: serde_json::to_string(&ClientRealtimeCommand::SendMessage {
                     content: "hello".into(),
                 })
                 .unwrap(),
@@ -855,7 +859,7 @@ mod tests {
         assert_eq!(
             outbound_messages.next().now_or_never().flatten(),
             Some(RealtimeCommand::SendMessage {
-                wire_payload: serde_json::to_string(&ClientWsEvent::SendMessage {
+                wire_payload: serde_json::to_string(&ClientRealtimeCommand::SendMessage {
                     content: "hello".into(),
                 })
                 .unwrap(),

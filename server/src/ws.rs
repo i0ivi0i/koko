@@ -16,8 +16,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use koko_contract::{
-    ClientRealtimeCommand, ClientRealtimeQuery, ClientWsEvent, RoomMemberResponse,
-    ServerRealtimeEvent, ServerWsEvent,
+    ClientRealtimeCommand, ClientRealtimeQuery, RoomMemberResponse, ServerRealtimeEvent,
 };
 use koko_core::model::{ProfileId, RoomCode, RoomId};
 use socketioxide::{
@@ -332,14 +331,15 @@ async fn handle_legacy_client_text(
     profile_id: ProfileId,
     text: &str,
 ) -> Option<ServerRealtimeEvent> {
-    let event: ClientWsEvent = serde_json::from_str(text).ok()?;
+    let event: ClientRealtimeCommand = serde_json::from_str(text).ok()?;
 
     match event {
-        ClientWsEvent::SendMessage { content } => {
+        ClientRealtimeCommand::SendMessage { content } => {
             send_message_event(state, room_id, profile_id, &content)
                 .await
                 .ok()
         }
+        ClientRealtimeCommand::JoinRoom { .. } => None,
     }
 }
 
@@ -464,21 +464,8 @@ fn emit_socket_error(socket: &SocketRef, message: &'static str) {
 }
 
 fn encode_legacy_event(event: ServerRealtimeEvent) -> Option<String> {
-    match event {
-        ServerRealtimeEvent::MessageCreated {
-            message_id,
-            room_id,
-            sender_id,
-            content,
-            created_at,
-        } => serde_json::to_string(&ServerWsEvent::MessageCreated {
-            message_id,
-            room_id,
-            sender_id,
-            content,
-            created_at,
-        })
-        .ok(),
+    match &event {
+        ServerRealtimeEvent::MessageCreated { .. } => serde_json::to_string(&event).ok(),
         _ => None,
     }
 }
