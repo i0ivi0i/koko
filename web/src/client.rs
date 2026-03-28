@@ -11,11 +11,11 @@ use koko_contract::{
     PromoteAdminRequest, RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse,
     SESSION_HEADER_NAME, ServerRealtimeEvent,
 };
-use std::{
-    sync::{Arc, Mutex},
-};
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
 #[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
@@ -41,6 +41,8 @@ struct MemberActionRequest {
 #[derive(Clone)]
 pub struct RoomRealtimeClient {
     state: Arc<Mutex<RealtimeState>>,
+    ready: Arc<Mutex<bool>>,
+    pending_commands: Arc<Mutex<Vec<String>>>,
     transport: RealtimeTransport,
 }
 
@@ -61,11 +63,19 @@ impl RoomRealtimeClient {
         }
 
         let command_json = build_send_command_json(content)?;
-        self.transport.emit_command(&command_json)
+        dispatch_or_queue_command(
+            self.state(),
+            *self.ready.lock().unwrap(),
+            &self.pending_commands,
+            command_json,
+            |command| self.transport.emit_command(command),
+        )
     }
 
     pub fn close(&self) {
         store_realtime_state(&self.state, RealtimeState::Closed);
+        *self.ready.lock().unwrap() = false;
+        self.pending_commands.lock().unwrap().clear();
         self.transport.close();
     }
 
@@ -101,7 +111,10 @@ enum RealtimeState {
 
 impl RealtimeState {
     pub fn allows_send(self) -> bool {
-        matches!(self, Self::Connecting | Self::Connected | Self::Reconnecting)
+        matches!(
+            self,
+            Self::Connecting | Self::Connected | Self::Reconnecting
+        )
     }
 }
 
@@ -368,13 +381,12 @@ where
 {
     let observer = into_message_observer(on_message);
     let error_observer: ErrorObserver = Arc::new(Mutex::new(Box::new(on_error)));
-    let realtime =
-        connect_room_events_with_observer(
-            room_id.clone(),
-            session_id.clone(),
-            observer.clone(),
-            error_observer,
-        )?;
+    let realtime = connect_room_events_with_observer(
+        room_id.clone(),
+        session_id.clone(),
+        observer.clone(),
+        error_observer,
+    )?;
 
     Ok(JoinedRoomClient {
         realtime: Some(realtime),
@@ -388,8 +400,12 @@ fn connect_room_events_with_observer(
     on_error: ErrorObserver,
 ) -> Result<RoomRealtimeClient, String> {
     let state = Arc::new(Mutex::new(RealtimeState::Connecting));
+    let ready = Arc::new(Mutex::new(false));
+    let pending_commands = Arc::new(Mutex::new(Vec::new()));
     let transport = create_realtime_transport(
         state.clone(),
+        ready.clone(),
+        pending_commands.clone(),
         room_id.clone(),
         session_id.clone(),
         on_message.clone(),
@@ -398,6 +414,8 @@ fn connect_room_events_with_observer(
 
     Ok(RoomRealtimeClient {
         state,
+        ready,
+        pending_commands,
         transport,
     })
 }
@@ -428,6 +446,8 @@ fn store_realtime_state(state: &Arc<Mutex<RealtimeState>>, next: RealtimeState) 
 
 fn create_realtime_transport(
     state: Arc<Mutex<RealtimeState>>,
+    ready: Arc<Mutex<bool>>,
+    pending_commands: Arc<Mutex<Vec<String>>>,
     room_id: String,
     session_id: String,
     on_message: MessageObserver,
@@ -436,6 +456,7 @@ fn create_realtime_transport(
     #[cfg(target_arch = "wasm32")]
     {
         let state_for_status = state.clone();
+        let ready_for_status = ready.clone();
         let room_for_status = room_id.clone();
         let session_for_status = session_id.clone();
         let observer_for_status = on_message.clone();
@@ -449,6 +470,9 @@ fn create_realtime_transport(
             };
 
             store_realtime_state(&state_for_status, next_state);
+            if !matches!(next_state, RealtimeState::Connected) {
+                *ready_for_status.lock().unwrap() = false;
+            }
             if matches!(next_state, RealtimeState::Connected) {
                 synchronize_recent_messages(
                     &room_for_status,
@@ -459,7 +483,19 @@ fn create_realtime_transport(
         }) as Box<dyn FnMut(String)>);
 
         let observer_for_events = on_message.clone();
+        let ready_for_events = ready.clone();
+        let pending_for_events = pending_commands.clone();
+        let socket_handle = Rc::new(RefCell::new(None::<JsValue>));
+        let socket_handle_for_events = socket_handle.clone();
         let on_event = Closure::wrap(Box::new(move |payload: String| {
+            if is_room_snapshot_event(&payload) {
+                *ready_for_events.lock().unwrap() = true;
+                if let Some(socket) = socket_handle_for_events.borrow().clone() {
+                    let _ = flush_pending_commands(&pending_for_events, |command| {
+                        js_emit_command(&socket, command).map_err(js_error_to_string)
+                    });
+                }
+            }
             if let Some(message) = decode_message_created_event(&payload) {
                 notify_message(&observer_for_events, message);
             }
@@ -480,6 +516,7 @@ fn create_realtime_transport(
             on_error.as_ref().unchecked_ref(),
         )
         .map_err(js_error_to_string)?;
+        *socket_handle.borrow_mut() = Some(socket.clone());
 
         return Ok(RealtimeTransport::SocketIo(Rc::new(SocketIoBridge {
             socket,
@@ -491,7 +528,15 @@ fn create_realtime_transport(
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let _ = (state, room_id, session_id, on_message, on_error);
+        let _ = (
+            state,
+            ready,
+            pending_commands,
+            room_id,
+            session_id,
+            on_message,
+            on_error,
+        );
         Err("官方 Socket.IO 浏览器客户端仅在 wasm 环境可用".into())
     }
 }
@@ -531,6 +576,13 @@ fn build_send_command_json(content: &str) -> Result<String, String> {
     .map_err(|error| error.to_string())
 }
 
+fn is_room_snapshot_event(text: &str) -> bool {
+    matches!(
+        serde_json::from_str::<ServerRealtimeEvent>(text),
+        Ok(ServerRealtimeEvent::RoomSnapshot { .. })
+    )
+}
+
 fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
     let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
 
@@ -540,7 +592,8 @@ fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
         sender_id,
         content,
         created_at,
-    } = event else {
+    } = event
+    else {
         return None;
     };
 
@@ -553,12 +606,60 @@ fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
     })
 }
 
+fn dispatch_or_queue_command<F>(
+    state: RealtimeState,
+    ready: bool,
+    pending_commands: &Arc<Mutex<Vec<String>>>,
+    command_json: String,
+    emit_now: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&str) -> Result<(), String>,
+{
+    if matches!(state, RealtimeState::Disconnected | RealtimeState::Closed) {
+        return Err("实时连接不可用".into());
+    }
+
+    if matches!(state, RealtimeState::Connected) && ready {
+        return emit_now(&command_json);
+    }
+
+    pending_commands.lock().unwrap().push(command_json);
+    Ok(())
+}
+
+fn flush_pending_commands<F>(
+    pending_commands: &Arc<Mutex<Vec<String>>>,
+    mut emit: F,
+) -> Result<(), String>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
+    let mut queued = {
+        let mut guard = pending_commands.lock().unwrap();
+        std::mem::take(&mut *guard)
+    };
+
+    let mut emitted = 0usize;
+    while emitted < queued.len() {
+        if let Err(error) = emit(&queued[emitted]) {
+            let mut guard = pending_commands.lock().unwrap();
+            guard.extend(queued.drain(emitted..));
+            return Err(error);
+        }
+        emitted += 1;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use koko_contract::{
         ClientRealtimeCommand, GovernanceActorRequest, PromoteAdminRequest, ServerRealtimeEvent,
     };
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -666,6 +767,21 @@ mod tests {
     }
 
     #[test]
+    fn room_snapshot_event_should_be_detected_as_ready_signal() {
+        let payload = serde_json::to_string(&ServerRealtimeEvent::RoomSnapshot {
+            room_id: "room-1".into(),
+            code: "1A234".into(),
+            role: "member".into(),
+            messages: vec![],
+            has_more_messages: false,
+            members: vec![],
+        })
+        .unwrap();
+
+        assert!(is_room_snapshot_event(&payload));
+    }
+
+    #[test]
     fn realtime_state_should_allow_send_while_socketio_can_buffer() {
         assert!(!RealtimeState::Disconnected.allows_send());
         assert!(RealtimeState::Connecting.allows_send());
@@ -675,21 +791,96 @@ mod tests {
     }
 
     #[test]
-    fn joined_room_client_should_reject_send_without_realtime() {
-        let client = JoinedRoomClient {
-            realtime: None,
-        };
+    fn dispatch_or_queue_command_should_queue_while_connected_but_not_ready() {
+        let pending = Arc::new(Mutex::new(Vec::new()));
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let emitted_for_closure = emitted.clone();
 
-        assert_eq!(
-            client.send_message("hello").unwrap_err(),
-            "实时连接不可用"
+        let result = dispatch_or_queue_command(
+            RealtimeState::Connected,
+            false,
+            &pending,
+            "queued-command".into(),
+            move |command| {
+                emitted_for_closure
+                    .lock()
+                    .unwrap()
+                    .push(command.to_string());
+                Ok(())
+            },
         );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(pending.lock().unwrap().as_slice(), ["queued-command"]);
+        assert!(emitted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn flush_pending_commands_should_emit_in_order_and_clear_queue() {
+        let pending = Arc::new(Mutex::new(vec![
+            "first-command".to_string(),
+            "second-command".to_string(),
+        ]));
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let emitted_for_closure = emitted.clone();
+
+        let result = flush_pending_commands(&pending, move |command| {
+            emitted_for_closure
+                .lock()
+                .unwrap()
+                .push(command.to_string());
+            Ok(())
+        });
+
+        assert_eq!(result, Ok(()));
+        assert!(pending.lock().unwrap().is_empty());
+        assert_eq!(
+            emitted.lock().unwrap().as_slice(),
+            ["first-command", "second-command"]
+        );
+    }
+
+    #[test]
+    fn flush_pending_commands_should_requeue_remaining_commands_after_failure() {
+        let pending = Arc::new(Mutex::new(vec![
+            "first-command".to_string(),
+            "second-command".to_string(),
+        ]));
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let emitted_for_closure = emitted.clone();
+
+        let result = flush_pending_commands(&pending, move |command| {
+            emitted_for_closure
+                .lock()
+                .unwrap()
+                .push(command.to_string());
+            if command == "first-command" {
+                return Err("emit failed".into());
+            }
+            Ok(())
+        });
+
+        assert_eq!(result, Err("emit failed".into()));
+        assert_eq!(
+            pending.lock().unwrap().as_slice(),
+            ["first-command", "second-command"]
+        );
+        assert_eq!(emitted.lock().unwrap().as_slice(), ["first-command"]);
+    }
+
+    #[test]
+    fn joined_room_client_should_reject_send_without_realtime() {
+        let client = JoinedRoomClient { realtime: None };
+
+        assert_eq!(client.send_message("hello").unwrap_err(), "实时连接不可用");
     }
 
     #[test]
     fn close_should_move_client_to_closed_state() {
         let client = RoomRealtimeClient {
             state: Arc::new(Mutex::new(RealtimeState::Connected)),
+            ready: Arc::new(Mutex::new(true)),
+            pending_commands: Arc::new(Mutex::new(Vec::new())),
             transport: RealtimeTransport::Unavailable,
         };
 
@@ -713,23 +904,20 @@ mod tests {
     fn room_realtime_client_should_fail_when_transport_is_unavailable() {
         let realtime = RoomRealtimeClient {
             state: Arc::new(Mutex::new(RealtimeState::Connected)),
+            ready: Arc::new(Mutex::new(true)),
+            pending_commands: Arc::new(Mutex::new(Vec::new())),
             transport: RealtimeTransport::Unavailable,
         };
         let client = JoinedRoomClient {
             realtime: Some(realtime),
         };
 
-        assert_eq!(
-            client.send_message("hello").unwrap_err(),
-            "实时连接不可用"
-        );
+        assert_eq!(client.send_message("hello").unwrap_err(), "实时连接不可用");
     }
 
     #[test]
     fn joined_room_client_close_should_be_safe_without_realtime() {
-        let client = JoinedRoomClient {
-            realtime: None,
-        };
+        let client = JoinedRoomClient { realtime: None };
 
         client.close();
     }
@@ -738,6 +926,8 @@ mod tests {
     fn joined_room_client_close_should_close_underlying_realtime_client() {
         let realtime = RoomRealtimeClient {
             state: Arc::new(Mutex::new(RealtimeState::Connected)),
+            ready: Arc::new(Mutex::new(true)),
+            pending_commands: Arc::new(Mutex::new(Vec::new())),
             transport: RealtimeTransport::Unavailable,
         };
         let client = JoinedRoomClient {
