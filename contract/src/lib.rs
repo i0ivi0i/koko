@@ -154,7 +154,11 @@ pub enum ClientRealtimeCommand {
     SendMessage { content: String },
 }
 
-pub type ClientWsEvent = ClientRealtimeCommand;
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ClientWsEvent {
+    SendMessage { content: String },
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -196,7 +200,17 @@ pub enum ServerRealtimeEvent {
     },
 }
 
-pub type ServerWsEvent = ServerRealtimeEvent;
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ServerWsEvent {
+    MessageCreated {
+        message_id: String,
+        room_id: String,
+        sender_id: String,
+        content: String,
+        created_at: String,
+    },
+}
 
 #[cfg(test)]
 mod tests {
@@ -245,6 +259,58 @@ mod tests {
         let decoded: ServerWsEvent = serde_json::from_str(&json).unwrap();
 
         assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn legacy_client_ws_event_should_keep_send_message_wire_format() {
+        let value = ClientWsEvent::SendMessage {
+            content: "hello".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+
+        assert_eq!(json, r#"{"type":"send_message","content":"hello"}"#);
+        assert_eq!(serde_json::from_str::<ClientWsEvent>(&json).unwrap(), value);
+    }
+
+    #[test]
+    fn legacy_client_ws_event_should_reject_join_room_payload() {
+        let json = r#"{"type":"join_room","code":"1A234"}"#;
+
+        assert!(serde_json::from_str::<ClientWsEvent>(json).is_err());
+    }
+
+    #[test]
+    fn legacy_server_ws_event_should_keep_message_created_wire_format() {
+        let value = ServerWsEvent::MessageCreated {
+            message_id: "msg-1".into(),
+            room_id: "room-1".into(),
+            sender_id: "profile-1".into(),
+            content: "hello".into(),
+            created_at: "2026-03-27T12:34:56Z".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+
+        assert_eq!(
+            json,
+            r#"{"type":"message_created","message_id":"msg-1","room_id":"room-1","sender_id":"profile-1","content":"hello","created_at":"2026-03-27T12:34:56Z"}"#
+        );
+        assert_eq!(serde_json::from_str::<ServerWsEvent>(&json).unwrap(), value);
+    }
+
+    #[test]
+    fn legacy_server_ws_event_should_reject_room_snapshot_payload() {
+        let json = r#"{"type":"room_snapshot","room_id":"room-1","code":"1A234","role":"owner","messages":[],"has_more_messages":false,"members":[]}"#;
+
+        assert!(serde_json::from_str::<ServerWsEvent>(json).is_err());
+    }
+
+    #[test]
+    fn legacy_server_ws_event_should_reject_governance_result_payload() {
+        let json = r#"{"type":"governance_result","room_id":"room-1","action":"promote_admin","success":true,"reason":null}"#;
+
+        assert!(serde_json::from_str::<ServerWsEvent>(json).is_err());
     }
 
     #[test]

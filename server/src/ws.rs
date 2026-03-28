@@ -122,7 +122,6 @@ async fn handle_client_text(
     let event: ClientWsEvent = serde_json::from_str(text).ok()?;
 
     match event {
-        ClientWsEvent::JoinRoom { .. } => None,
         ClientWsEvent::SendMessage { content } => {
             let room_repo = PostgresRoomRepository::new(state.pool.clone());
             let message_repo = PostgresMessageRepository::new(state.pool.clone());

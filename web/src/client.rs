@@ -317,22 +317,21 @@ fn build_send_message_event(content: &str) -> Result<String, String> {
 fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
     let event = serde_json::from_str::<ServerWsEvent>(text).ok()?;
 
-    match event {
-        ServerWsEvent::MessageCreated {
-            message_id,
-            room_id,
-            sender_id,
-            content,
-            created_at,
-        } => Some(MessageResponse {
-            message_id,
-            room_id,
-            sender_id,
-            content,
-            created_at,
-        }),
-        _ => None,
-    }
+    let ServerWsEvent::MessageCreated {
+        message_id,
+        room_id,
+        sender_id,
+        content,
+        created_at,
+    } = event;
+
+    Some(MessageResponse {
+        message_id,
+        room_id,
+        sender_id,
+        content,
+        created_at,
+    })
 }
 
 #[cfg(test)]
