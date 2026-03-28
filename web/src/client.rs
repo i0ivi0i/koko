@@ -12,7 +12,10 @@ use koko_contract::{
     SESSION_HEADER_NAME, SendMessageRequest, ServerRealtimeEvent,
 };
 #[cfg(target_arch = "wasm32")]
-use std::rc::Rc;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::*};
 
@@ -47,6 +50,22 @@ struct SocketIoConnectAuth {
 }
 
 #[cfg(target_arch = "wasm32")]
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum SocketIoStatusEvent {
+    Connected,
+    Disconnected { message: Option<String> },
+    Error { message: String },
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+struct SocketIoConnectionState {
+    connected: Cell<bool>,
+    last_error: RefCell<Option<String>>,
+}
+
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(module = "/socketio-bridge.mjs")]
 extern "C" {
     type SocketIoBridge;
@@ -56,6 +75,7 @@ extern "C" {
         base_url: &str,
         auth: JsValue,
         on_event: &Function,
+        on_status: &Function,
     ) -> Result<SocketIoBridge, JsValue>;
 
     #[wasm_bindgen(method, catch, js_name = emitCommand)]
@@ -68,12 +88,28 @@ extern "C" {
 #[cfg(target_arch = "wasm32")]
 struct SocketIoRoomConnection {
     bridge: SocketIoBridge,
+    state: Rc<SocketIoConnectionState>,
     _event_callback: Closure<dyn FnMut(JsValue)>,
+    _status_callback: Closure<dyn FnMut(JsValue)>,
 }
 
 #[cfg(target_arch = "wasm32")]
 impl SocketIoRoomConnection {
+    fn is_connected(&self) -> bool {
+        self.state.connected.get()
+    }
+
+    fn last_error(&self) -> Option<String> {
+        self.state.last_error.borrow().clone()
+    }
+
     fn send_command(&self, command: &ClientRealtimeCommand) -> Result<(), String> {
+        if !self.is_connected() {
+            return Err(self
+                .last_error()
+                .unwrap_or_else(|| "Socket.IO 实时连接尚未建立".to_string()));
+        }
+
         let payload = serde_wasm_bindgen::to_value(command).map_err(|error| error.to_string())?;
         self.bridge
             .js_emit_command(payload)
@@ -340,10 +376,56 @@ where
             room_id,
         })
         .map_err(|error| error.to_string())?;
+        let connection_state = Rc::new(SocketIoConnectionState::default());
+        let event_state = connection_state.clone();
         let on_event = Closure::wrap(Box::new(move |payload: JsValue| {
             if let Ok(event) = serde_wasm_bindgen::from_value::<ServerRealtimeEvent>(payload) {
-                if let Some(message) = decode_message_created_realtime_event(event) {
-                    on_message(message);
+                match event {
+                    ServerRealtimeEvent::MessageCreated {
+                        message_id,
+                        room_id,
+                        sender_id,
+                        content,
+                        created_at,
+                    } => on_message(MessageResponse {
+                        message_id,
+                        room_id,
+                        sender_id,
+                        content,
+                        created_at,
+                    }),
+                    ServerRealtimeEvent::RoomSnapshot { .. }
+                    | ServerRealtimeEvent::MemberChanged { .. }
+                    | ServerRealtimeEvent::GovernanceResult { .. } => {}
+                }
+            } else {
+                event_state
+                    .last_error
+                    .replace(Some("Socket.IO 客户端收到无法识别的实时事件".to_string()));
+            }
+        }) as Box<dyn FnMut(JsValue)>);
+        let status_state = connection_state.clone();
+        let on_status = Closure::wrap(Box::new(move |payload: JsValue| {
+            match serde_wasm_bindgen::from_value::<SocketIoStatusEvent>(payload) {
+                Ok(SocketIoStatusEvent::Connected) => {
+                    status_state.connected.set(true);
+                    status_state.last_error.replace(None);
+                }
+                Ok(SocketIoStatusEvent::Disconnected { message }) => {
+                    status_state.connected.set(false);
+                    status_state.last_error.replace(Some(
+                        message.unwrap_or_else(|| "Socket.IO 连接已断开".to_string()),
+                    ));
+                }
+                Ok(SocketIoStatusEvent::Error { message }) => {
+                    status_state.connected.set(false);
+                    status_state.last_error.replace(Some(message));
+                }
+                Err(_) => {
+                    status_state.connected.set(false);
+                    status_state
+                        .last_error
+                        .replace(Some("Socket.IO 客户端状态事件解析失败".to_string()));
                 }
             }
         }) as Box<dyn FnMut(JsValue)>);
@@ -352,13 +434,16 @@ where
             &build_socket_io_url(api_base()),
             auth,
             on_event.as_ref().unchecked_ref::<Function>(),
+            on_status.as_ref().unchecked_ref::<Function>(),
         )
         .map_err(js_error_to_string)?;
 
         Ok(RoomConnection {
             inner: Rc::new(SocketIoRoomConnection {
                 bridge,
+                state: connection_state,
                 _event_callback: on_event,
+                _status_callback: on_status,
             }),
         })
     }
@@ -426,6 +511,7 @@ fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
     decode_message_created_realtime_event(event)
 }
 
+#[cfg(test)]
 fn decode_message_created_realtime_event(event: ServerRealtimeEvent) -> Option<MessageResponse> {
     let ServerRealtimeEvent::MessageCreated {
         message_id,

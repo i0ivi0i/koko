@@ -21,6 +21,7 @@ pub fn App() -> Element {
     rsx! {
         document::Title { "Koko" }
         document::Style { "{APP_STYLE}" }
+        document::Script { src: "https://cdn.socket.io/4.8.1/socket.io.min.js" }
 
         div { class: "app-shell",
             if let Some(room) = room_state() {
