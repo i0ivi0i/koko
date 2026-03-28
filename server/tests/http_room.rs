@@ -418,6 +418,59 @@ async fn socketio握手端点应已装配到现有应用(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn socketio握手端点跨源_get_应返回_cors_响应头(pool: PgPool) {
+    let app = koko_server::app::build_app(pool);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/socket.io/?EIO=4&transport=polling")
+                .header("origin", "http://127.0.0.1:8317")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("access-control-allow-origin")
+            .and_then(|value| value.to_str().ok()),
+        Some("*")
+    );
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn socketio握手端点跨源_options_不应被误判为坏握手(pool: PgPool) {
+    let app = koko_server::app::build_app(pool);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/socket.io/?EIO=4&transport=polling")
+                .header("origin", "http://127.0.0.1:8317")
+                .header("access-control-request-method", "GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_ne!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response
+            .headers()
+            .get("access-control-allow-origin")
+            .and_then(|value| value.to_str().ok()),
+        Some("*")
+    );
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn socketio入房后服务端应可直接通过socketioxide房间广播(pool: PgPool) {
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();

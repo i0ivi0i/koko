@@ -166,12 +166,7 @@ fn build_app_with_admin_auth_and_realtime(
             post(http::remove_room_member),
         )
         .route("/ws/rooms/{room_id}", get(crate::ws::connect))
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        );
+        ;
 
     let app = if enable_socket_io {
         let (socket_io_layer, socket_io) =
@@ -184,6 +179,12 @@ fn build_app_with_admin_auth_and_realtime(
     };
 
     let app = app
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)
