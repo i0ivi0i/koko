@@ -67,24 +67,30 @@ pub fn build_app(pool: PgPool) -> Router {
         AdminAuthConfig::from_env(),
         RealtimeHub::default(),
     )
+    .0
 }
 
 pub fn build_app_with_realtime(pool: PgPool, realtime: RealtimeHub) -> Router {
-    build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), realtime)
+    build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), realtime).0
 }
 
 pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> Router {
-    build_app_with_admin_auth_and_realtime(pool, admin_auth, RealtimeHub::default())
+    build_app_with_admin_auth_and_realtime(pool, admin_auth, RealtimeHub::default()).0
+}
+
+pub fn build_app_with_socket_io(pool: PgPool) -> (Router, SocketIo) {
+    build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), RealtimeHub::default())
 }
 
 fn build_app_with_admin_auth_and_realtime(
     pool: PgPool,
     admin_auth: AdminAuthConfig,
     realtime: RealtimeHub,
-) -> Router {
+) -> (Router, SocketIo) {
     let state = AppState { pool, realtime };
     let (socket_io_layer, socket_io) = SocketIo::builder().with_state(state.clone()).build_layer();
     crate::ws::configure_socket_io(&socket_io);
+    state.realtime.attach_socket_io(socket_io.clone());
 
     let admin_routes = Router::new()
         .route("/overview", get(http::get_admin_overview))
@@ -105,7 +111,7 @@ fn build_app_with_admin_auth_and_realtime(
             http::require_admin_basic_auth,
         ));
 
-    Router::new()
+    let app = Router::new()
         .route("/", get(http::root_status))
         .nest("/admin", admin_routes)
         .route("/session/bootstrap", post(http::bootstrap_session))
@@ -164,5 +170,7 @@ fn build_app_with_admin_auth_and_realtime(
                 )
                 .propagate_x_request_id(),
         )
-        .with_state(state)
+        .with_state(state);
+
+    (app, socket_io)
 }

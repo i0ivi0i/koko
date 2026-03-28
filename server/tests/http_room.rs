@@ -414,6 +414,59 @@ async fn socketio握手端点应已装配到现有应用(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn socketio入房后服务端应可直接通过socketioxide房间广播(pool: PgPool) {
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "socketio-room-owner").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, "4D573").await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (app, io) = koko_server::app::build_app_with_socket_io(pool.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = connect_socket_io(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = next_socket_io_event(&mut socket).await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+
+    io.to(room_id.to_string())
+        .emit(
+            "event",
+            &ServerRealtimeEvent::MessageCreated {
+                message_id: Uuid::new_v4().to_string(),
+                room_id: room_id.to_string(),
+                sender_id: owner_id.to_string(),
+                content: "socketioxide direct".into(),
+                created_at: "2026-03-28T12:00:00Z".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let event = next_socket_io_event(&mut socket).await;
+    assert_eq!(event.0, "event");
+    assert_eq!(event.1["type"], "message_created");
+    assert_eq!(event.1["room_id"], room_id.to_string());
+    assert_eq!(event.1["content"], "socketioxide direct");
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn http发送消息后realtime_adapter应收到_message_created(pool: PgPool) {
     let realtime = koko_server::ws::RealtimeHub::default();
     let app = koko_server::app::build_app_with_realtime(pool.clone(), realtime.clone());

@@ -24,7 +24,7 @@ use socketioxide::{
     extract::{Data, Extension, SocketRef, State as SocketState},
     handler::ConnectHandler,
 };
-use tokio::sync::{broadcast, watch};
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
@@ -46,17 +46,27 @@ const DEFAULT_SNAPSHOT_LIMIT: Option<u16> = Some(40);
 
 #[derive(Clone, Default)]
 pub struct RealtimeHub {
-    inner: Arc<Mutex<HashMap<Uuid, broadcast::Sender<ServerRealtimeEvent>>>>,
+    legacy_inner: Arc<Mutex<HashMap<Uuid, broadcast::Sender<ServerRealtimeEvent>>>>,
+    socket_io: Arc<Mutex<Option<SocketIo>>>,
     online_connections: Arc<AtomicUsize>,
 }
 
 impl RealtimeHub {
+    pub fn attach_socket_io(&self, io: SocketIo) {
+        *self.socket_io.lock().unwrap() = Some(io);
+    }
+
     pub fn subscribe(&self, room_id: RoomId) -> broadcast::Receiver<ServerRealtimeEvent> {
-        self.channel(room_id).subscribe()
+        self.legacy_channel(room_id).subscribe()
     }
 
     pub(crate) async fn publish(&self, room_id: RoomId, event: ServerRealtimeEvent) {
-        let _ = self.channel(room_id).send(event);
+        let io = self.socket_io.lock().unwrap().clone();
+        if let Some(io) = io {
+            let _ = io.to(socket_room_name(room_id)).emit(SOCKET_IO_EVENT_NAME, &event).await;
+        }
+
+        let _ = self.legacy_channel(room_id).send(event);
     }
 
     pub(crate) fn online_connections(&self) -> u64 {
@@ -71,8 +81,8 @@ impl RealtimeHub {
         self.online_connections.fetch_sub(1, Ordering::Relaxed);
     }
 
-    fn channel(&self, room_id: RoomId) -> broadcast::Sender<ServerRealtimeEvent> {
-        let mut rooms = self.inner.lock().unwrap();
+    fn legacy_channel(&self, room_id: RoomId) -> broadcast::Sender<ServerRealtimeEvent> {
+        let mut rooms = self.legacy_inner.lock().unwrap();
         rooms
             .entry(room_id.0)
             .or_insert_with(|| broadcast::channel(128).0)
@@ -85,18 +95,14 @@ struct SocketSession {
     profile_id: ProfileId,
     initial_room_id: Option<RoomId>,
     joined_room_id: Arc<Mutex<Option<RoomId>>>,
-    room_updates: watch::Sender<Option<RoomId>>,
 }
 
 impl SocketSession {
     fn new(profile_id: ProfileId, initial_room_id: Option<RoomId>) -> Self {
-        let (room_updates, _) = watch::channel(None);
-
         Self {
             profile_id,
             initial_room_id,
             joined_room_id: Arc::new(Mutex::new(None)),
-            room_updates,
         }
     }
 
@@ -110,17 +116,11 @@ impl SocketSession {
 
     fn clear_room_id(&self) {
         *self.joined_room_id.lock().unwrap() = None;
-        let _ = self.room_updates.send(None);
     }
 
     fn activate_room(&self, room_id: RoomId) {
         let mut guard = self.joined_room_id.lock().unwrap();
         *guard = Some(room_id);
-        let _ = self.room_updates.send(Some(room_id));
-    }
-
-    fn subscribe_room_updates(&self) -> watch::Receiver<Option<RoomId>> {
-        self.room_updates.subscribe()
     }
 }
 
@@ -181,11 +181,6 @@ async fn on_socket_io_connection(
     SocketState(state): SocketState<AppState>,
 ) {
     state.online_connection_opened();
-    tokio::spawn(forward_socket_room_events(
-        socket.clone(),
-        state.realtime.clone(),
-        session.subscribe_room_updates(),
-    ));
 
     if let Some(room_id) = session.initial_room_id() {
         if let Err(error) = emit_room_snapshot(
@@ -372,6 +367,9 @@ async fn emit_room_snapshot(
     let current_room_id = session.room_id();
     let is_room_transition = current_room_id != Some(room_id);
     if is_room_transition {
+        if let Some(current_room_id) = current_room_id {
+            socket.leave(socket_room_name(current_room_id));
+        }
         session.clear_room_id();
     }
 
@@ -426,6 +424,7 @@ async fn emit_room_snapshot(
         .map_err(|_| ApiError::internal("房间快照发送失败"))?;
 
     if is_room_transition {
+        socket.join(socket_room_name(room_id));
         session.activate_room(room_id);
     }
 
@@ -457,49 +456,6 @@ async fn send_message_event(
 
 fn emit_socket_error(socket: &SocketRef, message: &'static str) {
     let _ = socket.emit(SOCKET_IO_ERROR_NAME, message);
-}
-
-async fn forward_socket_room_events(
-    socket: SocketRef,
-    realtime: RealtimeHub,
-    mut room_updates: watch::Receiver<Option<RoomId>>,
-) {
-    let mut active_room_id = *room_updates.borrow();
-    let mut room_events = active_room_id.map(|room_id| realtime.subscribe(room_id));
-
-    loop {
-        match room_events.as_mut() {
-            Some(receiver) => {
-                tokio::select! {
-                    changed = room_updates.changed() => {
-                        if changed.is_err() {
-                            break;
-                        }
-                        active_room_id = *room_updates.borrow();
-                        room_events = active_room_id.map(|room_id| realtime.subscribe(room_id));
-                    }
-                    outbound = receiver.recv() => match outbound {
-                        Ok(event) => {
-                            if socket.emit(SOCKET_IO_EVENT_NAME, &event).is_err() {
-                                break;
-                            }
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                        Err(broadcast::error::RecvError::Closed) => {
-                            room_events = active_room_id.map(|room_id| realtime.subscribe(room_id));
-                        }
-                    }
-                }
-            }
-            None => {
-                if room_updates.changed().await.is_err() {
-                    break;
-                }
-                active_room_id = *room_updates.borrow();
-                room_events = active_room_id.map(|room_id| realtime.subscribe(room_id));
-            }
-        }
-    }
 }
 
 fn encode_legacy_event(event: ServerRealtimeEvent) -> Option<String> {
@@ -541,4 +497,8 @@ fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {
     Uuid::parse_str(raw)
         .map(RoomId)
         .map_err(|_| ApiError::bad_request("room_id 不合法"))
+}
+
+fn socket_room_name(room_id: RoomId) -> String {
+    room_id.0.to_string()
 }
