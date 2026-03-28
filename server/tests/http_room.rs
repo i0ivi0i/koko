@@ -2,16 +2,19 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use futures_util::{SinkExt, StreamExt};
 use koko_contract::ServerRealtimeEvent;
 use koko_core::model::RoomId;
+use rust_socketio::{
+    ClientBuilder as SocketIoClientBuilder, Payload as SocketIoPayload, TransportType,
+    client::Client as SocketIoClient,
+};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::panic::AssertUnwindSafe;
 use tokio::net::TcpListener;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio::time::{Duration, timeout};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -431,7 +434,7 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = connect_socket_io(
+    let mut socket = SocketIoTestClient::connect(
         address,
         json!({
             "session_id": owner_session_id.to_string(),
@@ -440,7 +443,7 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
     )
     .await;
 
-    let room_snapshot = next_socket_io_event(&mut socket).await;
+    let room_snapshot = socket.next_event().await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
@@ -457,14 +460,13 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
         )
         .await;
 
-    let event = next_socket_io_event(&mut socket).await;
+    let event = socket.next_event().await;
     assert_eq!(event.0, "event");
     assert_eq!(event.1["type"], "message_created");
     assert_eq!(event.1["room_id"], room_id.to_string());
     assert_eq!(event.1["content"], "socketioxide direct");
 
-    close_socket_io(&mut socket).await;
-    drop(socket);
+    socket.close().await;
     shutdown_test_server(server).await;
 }
 
@@ -555,7 +557,7 @@ async fn 被禁言成员通过socketio发送消息应被领域规则拒绝(pool:
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = connect_socket_io(
+    let mut socket = SocketIoTestClient::connect(
         address,
         json!({
             "session_id": member_session_id.to_string(),
@@ -564,21 +566,19 @@ async fn 被禁言成员通过socketio发送消息应被领域规则拒绝(pool:
     )
     .await;
 
-    let room_snapshot = next_socket_io_event(&mut socket).await;
+    let room_snapshot = socket.next_event().await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
     assert_eq!(room_snapshot.1["room_id"], room_id.to_string());
 
-    send_socket_io_command(
-        &mut socket,
-        json!({
+    socket
+        .send_command(json!({
             "type": "send_message",
             "content": "muted over socketio",
-        }),
-    )
-    .await;
+        }))
+        .await;
 
-    let error_event = next_socket_io_event(&mut socket).await;
+    let error_event = socket.next_event().await;
     assert_eq!(error_event.0, "error");
     assert_eq!(error_event.1, Value::String("成员已被禁言".into()));
 
@@ -593,8 +593,7 @@ async fn 被禁言成员通过socketio发送消息应被领域规则拒绝(pool:
 
     assert_eq!(message_count, 0);
 
-    close_socket_io(&mut socket).await;
-    drop(socket);
+    socket.close().await;
     shutdown_test_server(server).await;
 }
 
@@ -616,7 +615,7 @@ async fn http发送消息后socketio客户端应收到_message_created广播(poo
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = connect_socket_io(
+    let mut socket = SocketIoTestClient::connect(
         address,
         json!({
             "session_id": owner_session_id.to_string(),
@@ -625,7 +624,7 @@ async fn http发送消息后socketio客户端应收到_message_created广播(poo
     )
     .await;
 
-    let room_snapshot = next_socket_io_event(&mut socket).await;
+    let room_snapshot = socket.next_event().await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
@@ -648,14 +647,15 @@ async fn http发送消息后socketio客户端应收到_message_created广播(poo
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let event = next_socket_io_event(&mut socket).await;
+    let event = socket.next_event().await;
     assert_eq!(event.0, "event");
     assert_eq!(event.1["type"], "message_created");
     assert_eq!(event.1["room_id"], room_id.to_string());
     assert_eq!(event.1["sender_id"], owner_id.to_string());
     assert_eq!(event.1["content"], "http to socketio");
 
-    server.abort();
+    socket.close().await;
+    shutdown_test_server(server).await;
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -688,7 +688,7 @@ async fn socketio切房后不应继续收到旧房间广播(pool: PgPool) {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = connect_socket_io(
+    let mut socket = SocketIoTestClient::connect(
         address,
         json!({
             "session_id": profile_session_id.to_string(),
@@ -697,21 +697,19 @@ async fn socketio切房后不应继续收到旧房间广播(pool: PgPool) {
     )
     .await;
 
-    let initial_snapshot = next_socket_io_event(&mut socket).await;
+    let initial_snapshot = socket.next_event().await;
     assert_eq!(initial_snapshot.0, "event");
     assert_eq!(initial_snapshot.1["type"], "room_snapshot");
     assert_eq!(initial_snapshot.1["room_id"], room_a_id.to_string());
 
-    send_socket_io_command(
-        &mut socket,
-        json!({
+    socket
+        .send_command(json!({
             "type": "join_room",
             "code": "4D572",
-        }),
-    )
-    .await;
+        }))
+        .await;
 
-    let switched_snapshot = next_socket_io_event(&mut socket).await;
+    let switched_snapshot = socket.next_event().await;
     assert_eq!(switched_snapshot.0, "event");
     assert_eq!(switched_snapshot.1["type"], "room_snapshot");
     assert_eq!(switched_snapshot.1["room_id"], room_b_id.to_string());
@@ -736,7 +734,7 @@ async fn socketio切房后不应继续收到旧房间广播(pool: PgPool) {
         .unwrap();
     assert_eq!(old_room_response.status(), StatusCode::OK);
 
-    assert_no_socket_io_event(&mut socket, Duration::from_millis(250)).await;
+    socket.assert_no_event(Duration::from_millis(250)).await;
 
     let new_room_response = http_app
         .oneshot(with_session(
@@ -757,13 +755,14 @@ async fn socketio切房后不应继续收到旧房间广播(pool: PgPool) {
         .unwrap();
     assert_eq!(new_room_response.status(), StatusCode::OK);
 
-    let new_room_event = next_socket_io_event(&mut socket).await;
+    let new_room_event = socket.next_event().await;
     assert_eq!(new_room_event.0, "event");
     assert_eq!(new_room_event.1["type"], "message_created");
     assert_eq!(new_room_event.1["room_id"], room_b_id.to_string());
     assert_eq!(new_room_event.1["content"], "new room should arrive");
 
-    server.abort();
+    socket.close().await;
+    shutdown_test_server(server).await;
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -1159,107 +1158,88 @@ async fn insert_message(
     .unwrap();
 }
 
-async fn connect_socket_io(
-    address: SocketAddr,
-    auth: Value,
-) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
-    let (mut socket, _) = connect_async(format!(
-        "ws://{address}/socket.io/?EIO=4&transport=websocket"
-    ))
-    .await
-    .unwrap();
+type SocketIoEvent = (String, Value);
 
-    let open_packet = timeout(Duration::from_secs(1), socket.next())
-        .await
-        .expect("应收到 engine.io open packet")
-        .expect("socket 不应提前关闭")
-        .expect("open packet 不应出错");
-    let Message::Text(open_packet) = open_packet else {
-        panic!("expected text open packet");
-    };
-    assert!(
-        open_packet.starts_with("0{"),
-        "unexpected open packet: {open_packet}"
-    );
-
-    socket
-        .send(Message::Text(format!("40{}", auth).into()))
-        .await
-        .unwrap();
-
-    socket
+struct SocketIoTestClient {
+    socket: SocketIoClient,
+    events: UnboundedReceiver<SocketIoEvent>,
 }
 
-async fn send_socket_io_command(
-    socket: &mut tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
-    command: Value,
-) {
-    socket
-        .send(Message::Text(format!("42[\"command\",{}]", command).into()))
+impl SocketIoTestClient {
+    async fn connect(address: SocketAddr, auth: Value) -> Self {
+        let (tx, rx) = unbounded_channel();
+        let url = format!("http://{address}");
+        let socket = tokio::task::spawn_blocking(move || {
+            let event_tx = tx.clone();
+            let error_tx = tx;
+            SocketIoClientBuilder::new(url)
+                .namespace("/")
+                .transport_type(TransportType::Websocket)
+                .reconnect(false)
+                .reconnect_on_disconnect(false)
+                .auth(auth)
+                .on("event", move |payload, _| {
+                    let _ = event_tx.send(("event".to_owned(), payload_to_value(payload)));
+                })
+                .on("error", move |payload, _| {
+                    let _ = error_tx.send(("error".to_owned(), payload_to_value(payload)));
+                })
+                .connect()
+        })
         .await
-        .unwrap();
-}
+        .expect("socketio 测试客户端连接任务不应 panic")
+        .expect("rust_socketio 客户端应连接成功");
 
-async fn next_socket_io_event(
-    socket: &mut tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
-) -> (String, Value) {
-    loop {
-        let message = timeout(Duration::from_secs(1), socket.next())
+        Self { socket, events: rx }
+    }
+
+    async fn send_command(&self, command: Value) {
+        let socket = self.socket.clone();
+        tokio::task::spawn_blocking(move || socket.emit("command", command))
+            .await
+            .expect("socketio command 发送任务不应 panic")
+            .expect("socketio command 发送应成功");
+    }
+
+    async fn next_event(&mut self) -> SocketIoEvent {
+        timeout(Duration::from_secs(1), self.events.recv())
             .await
             .expect("应收到 socket.io 消息")
-            .expect("socket 不应提前关闭")
-            .expect("socket.io 消息不应出错");
+            .expect("socket.io 事件通道不应提前关闭")
+    }
 
-        let Message::Text(text) = message else {
-            continue;
-        };
-
-        if text == "2" {
-            socket.send(Message::Text("3".into())).await.unwrap();
-            continue;
+    async fn assert_no_event(&mut self, wait_for: Duration) {
+        match timeout(wait_for, self.events.recv()).await {
+            Err(_) => {}
+            Ok(Some(event)) => panic!("unexpected socket.io event: {event:?}"),
+            Ok(None) => panic!("socket.io 事件通道不应提前关闭"),
         }
+    }
 
-        if text.starts_with("0{") || text.starts_with("40") {
-            continue;
-        }
-
-        let Some(payload) = text.strip_prefix("42") else {
-            continue;
-        };
-        let packet: Value = serde_json::from_str(payload).unwrap();
-        let event_name = packet[0]
-            .as_str()
-            .expect("socket.io event name 应为字符串")
-            .to_owned();
-        let event_payload = packet[1].clone();
-        return (event_name, event_payload);
+    async fn close(self) {
+        let socket = self.socket;
+        tokio::task::spawn_blocking(move || socket.disconnect())
+            .await
+            .expect("socketio 客户端断开任务不应 panic")
+            .expect("socketio 客户端断开应成功");
     }
 }
 
-async fn assert_no_socket_io_event(
-    socket: &mut tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
-    wait_for: Duration,
-) {
-    let result = timeout(wait_for, next_socket_io_event(socket)).await;
-    assert!(
-        result.is_err(),
-        "unexpected socket.io event: {:?}",
-        result.unwrap()
-    );
-}
-
-async fn close_socket_io(
-    socket: &mut tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
-) {
-    let _ = socket.send(Message::Close(None)).await;
+fn payload_to_value(payload: SocketIoPayload) -> Value {
+    match payload {
+        SocketIoPayload::Text(mut values) => {
+            if values.len() == 1 {
+                values.remove(0)
+            } else {
+                Value::Array(values)
+            }
+        }
+        SocketIoPayload::Binary(bytes) => {
+            Value::Array(bytes.iter().copied().map(Value::from).collect())
+        }
+        #[allow(deprecated)]
+        SocketIoPayload::String(text) => serde_json::from_str(&text).unwrap_or(Value::String(text)),
+    }
 }
 
 async fn shutdown_test_server(server: tokio::task::JoinHandle<()>) {
