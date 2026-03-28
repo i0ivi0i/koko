@@ -21,6 +21,11 @@ pub fn App() -> Element {
     rsx! {
         document::Title { "Koko" }
         document::Style { "{APP_STYLE}" }
+        document::Script {
+            src: "/assets/socketio-bridge.js",
+            defer: true,
+            r#type: "module",
+        }
 
         div { class: "app-shell",
             if let Some(room) = room_state() {
@@ -80,11 +85,9 @@ pub fn App() -> Element {
                         }
                     },
                     on_send: move |content: String| {
-                        if let Some(current_room) = room_state() {
+                        if room_state().is_some() {
                             send_room_message(
-                                room_state,
                                 room_client,
-                                current_room,
                                 content,
                             );
                         }
@@ -130,8 +133,6 @@ pub fn App() -> Element {
                                     let room = state::apply_joined_room(snapshot);
                                     let room_id = room.room_id.clone();
                                     let session_id = room.session_id.clone();
-                                    loading_older_messages.set(false);
-                                    room_state.set(Some(room));
                                     let connection = client::connect_joined_room(
                                         room_id.clone(),
                                         session_id,
@@ -144,8 +145,17 @@ pub fn App() -> Element {
                                                 );
                                             });
                                         },
+                                        move |error| show_runtime_error(error),
                                     );
-                                    room_client.set(Some(connection));
+
+                                    match connection {
+                                        Ok(connection) => {
+                                            loading_older_messages.set(false);
+                                            room_state.set(Some(room));
+                                            room_client.set(Some(connection));
+                                        }
+                                        Err(error) => error_message.set(Some(error)),
+                                    }
                                 }
                                 Err(error) => error_message.set(Some(error)),
                             }
@@ -160,24 +170,32 @@ pub fn App() -> Element {
 }
 
 fn send_room_message(
-    mut room_state: Signal<Option<ActiveRoom>>,
     room_client: Signal<Option<client::JoinedRoomClient>>,
-    room: ActiveRoom,
     content: String,
 ) {
     if let Some(client) = room_client() {
-        let _ = client.send_message(&content);
-        return;
+        if let Err(error) = client.send_message(&content) {
+            show_runtime_error(error);
+        }
+    }
+}
+
+fn show_runtime_error(message: String) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let script = format!(
+            "window.alert({});",
+            serde_json::to_string(&message).expect("错误消息序列化不应失败")
+        );
+        spawn(async move {
+            let _ = document::eval(&script).await;
+        });
     }
 
-    let room_id = room.room_id.clone();
-    spawn(async move {
-        if let Ok(message) = client::send_message(&room.room_id, &room.session_id, &content).await {
-            room_state.with_mut(|state| {
-                state::append_message_if_room_matches(state, &room_id, message);
-            });
-        }
-    });
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = message;
+    }
 }
 
 fn spawn_member_action(
