@@ -46,8 +46,29 @@ pub fn append_message_if_missing(room: &mut ActiveRoom, message: MessageResponse
         return false;
     }
 
-    room.messages.push(message);
+    let insert_at = room
+        .messages
+        .iter()
+        .position(|existing| message.created_at <= existing.created_at)
+        .unwrap_or(room.messages.len());
+    room.messages.insert(insert_at, message);
     true
+}
+
+pub fn append_message_if_room_matches(
+    state: &mut Option<ActiveRoom>,
+    room_id: &str,
+    message: MessageResponse,
+) -> bool {
+    let Some(room) = state.as_mut() else {
+        return false;
+    };
+
+    if room.room_id != room_id {
+        return false;
+    }
+
+    append_message_if_missing(room, message)
 }
 
 pub fn prepend_messages(
@@ -111,12 +132,16 @@ mod tests {
     use super::*;
 
     fn message(id: &str) -> MessageResponse {
+        message_at(id, "2026-03-27T12:34:56Z")
+    }
+
+    fn message_at(id: &str, created_at: &str) -> MessageResponse {
         MessageResponse {
             message_id: id.to_string(),
             room_id: "room-1".into(),
             sender_id: "profile-1".into(),
             content: "hello".into(),
-            created_at: "2026-03-27T12:34:56Z".into(),
+            created_at: created_at.into(),
         }
     }
 
@@ -173,6 +198,37 @@ mod tests {
     }
 
     #[test]
+    fn append_message_should_keep_timeline_sorted_when_gap_message_arrives_late() {
+        let mut room = ActiveRoom {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+            room_id: "room-1".into(),
+            room_code: "1A234".into(),
+            role: "owner".into(),
+            messages: vec![
+                message_at("msg-2", "2026-03-27T12:35:00Z"),
+                message_at("msg-3", "2026-03-27T12:36:00Z"),
+            ],
+            has_more_messages: false,
+            members: vec![member("profile-1")],
+        };
+
+        assert!(append_message_if_missing(
+            &mut room,
+            message_at("msg-1", "2026-03-27T12:34:00Z")
+        ));
+
+        assert_eq!(
+            room.messages
+                .iter()
+                .map(|item| item.message_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["msg-1", "msg-2", "msg-3"]
+        );
+    }
+
+    #[test]
     fn replace_members_should_swap_member_list() {
         let mut room = ActiveRoom {
             session_id: "session-1".into(),
@@ -190,6 +246,35 @@ mod tests {
 
         assert_eq!(room.members.len(), 2);
         assert_eq!(room.members[0].profile_id, "profile-2");
+    }
+
+    #[test]
+    fn append_message_if_room_matches_should_ignore_stale_room_response() {
+        let mut state = Some(ActiveRoom {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+            room_id: "room-b".into(),
+            room_code: "1A234".into(),
+            role: "owner".into(),
+            messages: vec![message("msg-9")],
+            has_more_messages: false,
+            members: vec![member("profile-1")],
+        });
+
+        let appended = append_message_if_room_matches(&mut state, "room-a", message("msg-1"));
+
+        assert!(!appended);
+        assert_eq!(
+            state
+                .as_ref()
+                .unwrap()
+                .messages
+                .iter()
+                .map(|item| item.message_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["msg-9"]
+        );
     }
 
     #[test]

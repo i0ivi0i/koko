@@ -13,7 +13,7 @@ use crate::{
 pub fn App() -> Element {
     let mut members_open = use_signal(|| false);
     let mut room_state = use_signal(|| None::<ActiveRoom>);
-    let mut room_connection = use_signal(|| None::<client::RoomConnection>);
+    let mut room_connection = use_signal(|| None::<client::RoomRealtimeClient>);
     let loading = use_signal(|| false);
     let mut loading_older_messages = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
@@ -31,6 +31,9 @@ pub fn App() -> Element {
                     messages: room.messages.clone(),
                     member_count: room.members.len(),
                     on_back: move |_| {
+                        if let Some(connection) = room_connection() {
+                            connection.close();
+                        }
                         room_state.with_mut(state::leave_room);
                         room_connection.set(None);
                         members_open.set(false);
@@ -130,13 +133,15 @@ pub fn App() -> Element {
                                     loading_older_messages.set(false);
                                     room_state.set(Some(room));
                                     let connection = client::connect_room_events(
-                                        room_id,
+                                        room_id.clone(),
                                         session_id,
                                         move |message| {
                                             room_state.with_mut(|state| {
-                                                if let Some(room) = state.as_mut() {
-                                                    state::append_message_if_missing(room, message);
-                                                }
+                                                state::append_message_if_room_matches(
+                                                    state,
+                                                    &room_id,
+                                                    message,
+                                                );
                                             });
                                         },
                                     )
@@ -157,22 +162,20 @@ pub fn App() -> Element {
 
 fn send_room_message(
     mut room_state: Signal<Option<ActiveRoom>>,
-    room_connection: Signal<Option<client::RoomConnection>>,
+    room_connection: Signal<Option<client::RoomRealtimeClient>>,
     room: ActiveRoom,
     content: String,
 ) {
     if let Some(connection) = room_connection() {
-        if connection.send_message(&content).is_ok() {
-            return;
-        }
+        let _ = connection.send_message(&content);
+        return;
     }
 
+    let room_id = room.room_id.clone();
     spawn(async move {
         if let Ok(message) = client::send_message(&room.room_id, &room.session_id, &content).await {
             room_state.with_mut(|state| {
-                if let Some(current) = state.as_mut() {
-                    state::append_message_if_missing(current, message);
-                }
+                state::append_message_if_room_matches(state, &room_id, message);
             });
         }
     });

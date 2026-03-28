@@ -1,6 +1,7 @@
 use dioxus::prelude::spawn;
 use futures_channel::mpsc::{UnboundedSender, unbounded};
 use futures_util::{
+    FutureExt,
     SinkExt, StreamExt,
     future::{Either, select},
 };
@@ -9,6 +10,8 @@ use gloo_net::{
     websocket::{Message, futures::WebSocket},
 };
 #[cfg(target_arch = "wasm32")]
+use gloo_timers::future::TimeoutFuture;
+#[cfg(target_arch = "wasm32")]
 use gloo_storage::{LocalStorage, Storage};
 use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, ClientWsEvent, GovernanceActorRequest,
@@ -16,12 +19,18 @@ use koko_contract::{
     RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SESSION_HEADER_NAME,
     SendMessageRequest, ServerWsEvent,
 };
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 use crate::state::ActiveRoomSnapshot;
 
 #[cfg(target_arch = "wasm32")]
 const DEVICE_TOKEN_STORAGE_KEY: &str = "koko.device_token";
 const MESSAGE_PAGE_LIMIT: u16 = 40;
+const RECONNECT_DELAY_MS: u32 = 1_500;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemberAction {
@@ -37,18 +46,74 @@ struct MemberActionRequest {
 }
 
 #[derive(Clone)]
-pub struct RoomConnection {
-    outbound: UnboundedSender<String>,
+pub struct RoomRealtimeClient {
+    outbound: UnboundedSender<RealtimeCommand>,
+    state: Arc<Mutex<RealtimeState>>,
+    room_id: String,
+    session_id: String,
+    on_message: MessageObserver,
 }
 
-impl RoomConnection {
+impl RoomRealtimeClient {
     pub fn send_message(&self, content: &str) -> Result<(), String> {
-        let payload = build_send_message_event(content)?;
-        self.outbound
-            .unbounded_send(payload)
-            .map_err(|_| "实时连接已关闭".to_string())
+        if should_fallback_to_http(self.state()) {
+            self.spawn_http_fallback(content.to_string());
+            return Ok(());
+        }
+
+        let command = build_send_command(content)?;
+        if self.outbound.unbounded_send(command).is_err() {
+            self.spawn_http_fallback(content.to_string());
+        }
+
+        Ok(())
+    }
+
+    pub fn close(&self) {
+        store_realtime_state(&self.state, RealtimeState::Closed);
+        let _ = self.outbound.unbounded_send(RealtimeCommand::Close);
+    }
+
+    fn state(&self) -> RealtimeState {
+        *self.state.lock().unwrap()
+    }
+
+    fn spawn_http_fallback(&self, content: String) {
+        spawn_http_message_delivery(
+            self.room_id.clone(),
+            self.session_id.clone(),
+            content,
+            self.on_message.clone(),
+        );
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RealtimeState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Closed,
+}
+
+impl RealtimeState {
+    pub fn allows_send(self) -> bool {
+        matches!(self, Self::Connected)
+    }
+}
+
+fn should_fallback_to_http(state: RealtimeState) -> bool {
+    !state.allows_send()
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum RealtimeCommand {
+    SendMessage { wire_payload: String, content: String },
+    Close,
+}
+
+type MessageObserver = Arc<Mutex<Box<dyn FnMut(MessageResponse)>>>;
 
 pub fn api_base() -> &'static str {
     option_env!("KOKO_API_BASE").unwrap_or("http://127.0.0.1:3000")
@@ -274,44 +339,243 @@ pub async fn run_member_action(
 pub fn connect_room_events<F>(
     room_id: String,
     session_id: String,
-    mut on_message: F,
-) -> Result<RoomConnection, String>
+    on_message: F,
+) -> Result<RoomRealtimeClient, String>
 where
     F: FnMut(MessageResponse) + 'static,
 {
     let ws_url = build_room_ws_url(api_base(), &room_id, &session_id);
-    let socket = WebSocket::open(&ws_url).map_err(|error| error.to_string())?;
-    let (mut sender, mut receiver) = socket.split();
-    let (outbound, mut outbound_messages) = unbounded::<String>();
+    let (outbound, mut outbound_messages) = unbounded::<RealtimeCommand>();
+    let state = Arc::new(Mutex::new(RealtimeState::Connecting));
+    let state_handle = state.clone();
+    let on_message: MessageObserver = Arc::new(Mutex::new(Box::new(on_message)));
+    let actor_message_handler = on_message.clone();
+    let actor_room_id = room_id.clone();
+    let actor_session_id = session_id.clone();
 
     spawn(async move {
+        let mut next_state = RealtimeState::Connecting;
+
         loop {
-            match select(outbound_messages.next(), receiver.next()).await {
-                Either::Left((Some(payload), _)) => {
-                    if sender.send(Message::Text(payload)).await.is_err() {
+            store_realtime_state(&state_handle, next_state);
+
+            let socket = match WebSocket::open(&ws_url) {
+                Ok(socket) => socket,
+                Err(_) => {
+                    if wait_before_reconnect(
+                        &mut outbound_messages,
+                        &state_handle,
+                        &actor_room_id,
+                        &actor_session_id,
+                        actor_message_handler.clone(),
+                    )
+                    .await
+                    {
                         break;
                     }
+                    next_state = RealtimeState::Reconnecting;
+                    continue;
                 }
-                Either::Left((None, _)) => break,
-                Either::Right((Some(Ok(Message::Text(text))), _)) => {
-                    if let Some(message) = decode_message_created_event(&text) {
-                        on_message(message);
-                    }
-                }
-                Either::Right((Some(Ok(_)), _)) => {}
-                Either::Right((Some(Err(_)), _)) | Either::Right((None, _)) => break,
+            };
+
+            store_realtime_state(&state_handle, RealtimeState::Connected);
+            let (mut sender, mut receiver) = socket.split();
+            synchronize_recent_messages(
+                &actor_room_id,
+                &actor_session_id,
+                actor_message_handler.clone(),
+            );
+            let should_stop = drive_connected_socket(
+                &mut sender,
+                &mut receiver,
+                &mut outbound_messages,
+                &state_handle,
+                &actor_room_id,
+                &actor_session_id,
+                actor_message_handler.clone(),
+            )
+            .await;
+
+            if should_stop {
+                break;
             }
+
+            next_state = transition_after_disconnect(state_handle.clone());
+            if !matches!(next_state, RealtimeState::Closed)
+                && wait_before_reconnect(
+                    &mut outbound_messages,
+                    &state_handle,
+                    &actor_room_id,
+                    &actor_session_id,
+                    actor_message_handler.clone(),
+                )
+                    .await
+            {
+                break;
+            }
+        }
+
+        if !matches!(read_realtime_state(&state_handle), RealtimeState::Closed) {
+            store_realtime_state(&state_handle, RealtimeState::Disconnected);
         }
     });
 
-    Ok(RoomConnection { outbound })
+    Ok(RoomRealtimeClient {
+        outbound,
+        state,
+        room_id,
+        session_id,
+        on_message,
+    })
 }
 
-fn build_send_message_event(content: &str) -> Result<String, String> {
-    serde_json::to_string(&ClientWsEvent::SendMessage {
-        content: content.to_string(),
+async fn drive_connected_socket(
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    receiver: &mut futures_util::stream::SplitStream<WebSocket>,
+    outbound_messages: &mut futures_channel::mpsc::UnboundedReceiver<RealtimeCommand>,
+    state: &Arc<Mutex<RealtimeState>>,
+    room_id: &str,
+    session_id: &str,
+    on_message: MessageObserver,
+) -> bool {
+    loop {
+        match select(outbound_messages.next(), receiver.next()).await {
+            Either::Left((Some(RealtimeCommand::SendMessage { wire_payload, content }), _)) => {
+                if sender.send(Message::Text(wire_payload)).await.is_err() {
+                    store_realtime_state(state, RealtimeState::Reconnecting);
+                    spawn_http_message_delivery(
+                        room_id.to_owned(),
+                        session_id.to_owned(),
+                        content,
+                        on_message.clone(),
+                    );
+                    return false;
+                }
+            }
+            Either::Left((Some(RealtimeCommand::Close), _)) => {
+                store_realtime_state(state, RealtimeState::Closed);
+                let _ = sender.close().await;
+                return true;
+            }
+            Either::Left((None, _)) => {
+                store_realtime_state(state, RealtimeState::Closed);
+                let _ = sender.close().await;
+                return true;
+            }
+            Either::Right((Some(Ok(Message::Text(text))), _)) => {
+                if let Some(message) = decode_message_created_event(&text) {
+                    notify_message(&on_message, message);
+                }
+            }
+            Either::Right((Some(Ok(_)), _)) => {}
+            Either::Right((Some(Err(_)), _)) | Either::Right((None, _)) => {
+                store_realtime_state(state, RealtimeState::Reconnecting);
+                return false;
+            }
+        }
+    }
+}
+
+async fn wait_before_reconnect(
+    outbound_messages: &mut futures_channel::mpsc::UnboundedReceiver<RealtimeCommand>,
+    state: &Arc<Mutex<RealtimeState>>,
+    room_id: &str,
+    session_id: &str,
+    on_message: MessageObserver,
+) -> bool {
+    let delay = reconnect_delay().fuse();
+    futures_util::pin_mut!(delay);
+
+    loop {
+        match select(delay, outbound_messages.next()).await {
+            Either::Left(((), _)) => return false,
+            Either::Right((Some(RealtimeCommand::SendMessage { content, .. }), next_delay)) => {
+                spawn_http_message_delivery(
+                    room_id.to_owned(),
+                    session_id.to_owned(),
+                    content,
+                    on_message.clone(),
+                );
+                delay = next_delay;
+            }
+            Either::Right((Some(RealtimeCommand::Close), _)) | Either::Right((None, _)) => {
+                store_realtime_state(state, RealtimeState::Closed);
+                return true;
+            }
+        }
+    }
+}
+
+fn synchronize_recent_messages(room_id: &str, session_id: &str, on_message: MessageObserver) {
+    let room_id = room_id.to_owned();
+    let session_id = session_id.to_owned();
+
+    spawn(async move {
+        if let Ok(response) = fetch_room_messages(&room_id, &session_id, None).await {
+            for message in response.items {
+                notify_message(&on_message, message);
+            }
+        }
+    });
+}
+
+fn spawn_http_message_delivery(
+    room_id: String,
+    session_id: String,
+    content: String,
+    on_message: MessageObserver,
+) {
+    spawn(async move {
+        if let Ok(message) = send_message(&room_id, &session_id, &content).await {
+            notify_message(&on_message, message);
+        }
+    });
+}
+
+fn notify_message(on_message: &MessageObserver, message: MessageResponse) {
+    let mut callback = on_message.lock().unwrap();
+    (*callback)(message);
+}
+
+fn transition_after_disconnect(state: Arc<Mutex<RealtimeState>>) -> RealtimeState {
+    match read_realtime_state(&state) {
+        RealtimeState::Closed => RealtimeState::Closed,
+        _ => RealtimeState::Reconnecting,
+    }
+}
+
+fn store_realtime_state(state: &Arc<Mutex<RealtimeState>>, next: RealtimeState) {
+    *state.lock().unwrap() = next;
+}
+
+fn read_realtime_state(state: &Arc<Mutex<RealtimeState>>) -> RealtimeState {
+    *state.lock().unwrap()
+}
+
+fn reconnect_delay() -> Pin<Box<dyn Future<Output = ()> + 'static>> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        Box::pin(TimeoutFuture::new(RECONNECT_DELAY_MS))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = RECONNECT_DELAY_MS;
+        Box::pin(async {})
+    }
+}
+
+fn build_send_command(content: &str) -> Result<RealtimeCommand, String> {
+    let content = content.to_string();
+    let wire_payload = serde_json::to_string(&ClientWsEvent::SendMessage {
+        content: content.clone(),
     })
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+
+    Ok(RealtimeCommand::SendMessage {
+        wire_payload,
+        content,
+    })
 }
 
 fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
@@ -337,9 +601,7 @@ fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koko_contract::{
-        ClientWsEvent, GovernanceActorRequest, PromoteAdminRequest, ServerWsEvent,
-    };
+    use koko_contract::{ClientWsEvent, GovernanceActorRequest, PromoteAdminRequest, ServerWsEvent};
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -421,7 +683,10 @@ mod tests {
 
     #[test]
     fn send_message_event_should_encode_ws_payload() {
-        let payload = build_send_message_event("hello").unwrap();
+        let payload = match build_send_command("hello").unwrap() {
+            RealtimeCommand::SendMessage { wire_payload, .. } => wire_payload,
+            RealtimeCommand::Close => unreachable!("发送消息测试不应生成关闭命令"),
+        };
 
         assert_eq!(
             payload,
@@ -450,5 +715,66 @@ mod tests {
         assert_eq!(message.sender_id, "profile-1");
         assert_eq!(message.content, "hello");
         assert_eq!(message.created_at, "2026-03-28T10:00:00Z");
+    }
+
+    #[test]
+    fn realtime_state_should_only_allow_send_when_connected() {
+        assert!(!RealtimeState::Disconnected.allows_send());
+        assert!(!RealtimeState::Connecting.allows_send());
+        assert!(RealtimeState::Connected.allows_send());
+        assert!(!RealtimeState::Reconnecting.allows_send());
+        assert!(!RealtimeState::Closed.allows_send());
+    }
+
+    #[test]
+    fn disconnect_transition_should_preserve_closed_state() {
+        let closed = Arc::new(Mutex::new(RealtimeState::Closed));
+        let connected = Arc::new(Mutex::new(RealtimeState::Connected));
+
+        assert_eq!(transition_after_disconnect(closed), RealtimeState::Closed);
+        assert_eq!(
+            transition_after_disconnect(connected),
+            RealtimeState::Reconnecting
+        );
+    }
+
+    #[test]
+    fn reconnecting_state_should_use_http_fallback() {
+        assert!(should_fallback_to_http(RealtimeState::Reconnecting));
+        assert!(should_fallback_to_http(RealtimeState::Connecting));
+        assert!(should_fallback_to_http(RealtimeState::Disconnected));
+        assert!(!should_fallback_to_http(RealtimeState::Connected));
+    }
+
+    #[test]
+    fn close_should_move_client_to_closed_state() {
+        let (outbound, _) = unbounded::<RealtimeCommand>();
+        let client = RoomRealtimeClient {
+            outbound,
+            state: Arc::new(Mutex::new(RealtimeState::Connected)),
+            room_id: "room-1".into(),
+            session_id: "session-1".into(),
+            on_message: Arc::new(Mutex::new(Box::new(|_| {}))),
+        };
+
+        client.close();
+
+        assert_eq!(client.state(), RealtimeState::Closed);
+    }
+
+    #[test]
+    fn send_command_should_keep_wire_payload_and_original_content() {
+        let command = build_send_command("hello").unwrap();
+
+        assert_eq!(
+            command,
+            RealtimeCommand::SendMessage {
+                wire_payload: serde_json::to_string(&ClientWsEvent::SendMessage {
+                    content: "hello".into(),
+                })
+                .unwrap(),
+                content: "hello".into(),
+            }
+        );
     }
 }

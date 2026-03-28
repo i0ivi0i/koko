@@ -2097,6 +2097,7 @@ dependencies = [
  "futures-util",
  "gloo-net",
  "gloo-storage",
+ "gloo-timers",
  "js-sys",
  "koko-contract",
  "serde_json",
