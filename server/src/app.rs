@@ -164,9 +164,7 @@ fn build_app_with_admin_auth_and_realtime(
         .route(
             "/rooms/{room_id}/members/{member_id}/remove",
             post(http::remove_room_member),
-        )
-        .route("/ws/rooms/{room_id}", get(crate::ws::connect))
-        ;
+        );
 
     let app = if enable_socket_io {
         let (socket_io_layer, socket_io) =

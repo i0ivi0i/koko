@@ -1,273 +1,526 @@
-use std::net::SocketAddr;
-
-use futures_util::{SinkExt, StreamExt};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
+use koko_contract::ServerRealtimeEvent;
+use koko_core::model::RoomId;
+use rust_socketio::{
+    ClientBuilder as SocketIoClientBuilder, Payload as SocketIoPayload, TransportType,
+    client::Client as SocketIoClient,
+};
 use serde_json::{Value, json};
-use sqlx::PgPool;
-use tokio::net::TcpListener;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use sqlx::{PgPool, postgres::PgPoolOptions};
+use std::{net::SocketAddr, panic::AssertUnwindSafe};
+use tokio::{
+    net::TcpListener,
+    sync::{
+        OnceCell,
+        mpsc::{UnboundedReceiver, unbounded_channel},
+    },
+    time::{Duration, timeout},
+};
+use tower::ServiceExt;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../migrations")]
-async fn 房间成员发送消息后其他成员应收到广播(pool: PgPool) {
+const SESSION_HEADER: &str = "x-koko-session-id";
+static MIGRATIONS_READY: OnceCell<()> = OnceCell::const_new();
+
+#[tokio::test]
+async fn socketio入房后服务端应可直接通过socketioxide房间广播() {
+    let pool = test_pool().await;
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
+
+    insert_profile(&pool, owner_id, "socketio-room-owner").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (app, handles) = koko_server::app::build_app_with_test_handles(pool.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+
+    handles
+        .publish_room_event(
+            RoomId(room_id),
+            ServerRealtimeEvent::MessageCreated {
+                message_id: Uuid::new_v4().to_string(),
+                room_id: room_id.to_string(),
+                sender_id: owner_id.to_string(),
+                content: "socketioxide direct".into(),
+                created_at: "2026-03-28T12:00:00Z".into(),
+            },
+        )
+        .await;
+
+    let event = socket.next_event().await;
+    assert_eq!(event.0, "event");
+    assert_eq!(event.1["type"], "message_created");
+    assert_eq!(event.1["room_id"], room_id.to_string());
+    assert_eq!(event.1["content"], "socketioxide direct");
+
+    socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
+async fn 共享realtimehub重复挂载到两套socketio应用应立即失败() {
+    let pool = test_pool().await;
+    let shared = koko_server::ws::RealtimeHub::default();
+
+    let _first = koko_server::app::build_app_with_realtime(pool.clone(), shared.clone());
+
+    let duplicate = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        koko_server::app::build_app_with_realtime(pool, shared)
+    }));
+
+    assert!(duplicate.is_err(), "重复挂载应立即失败");
+}
+
+#[tokio::test]
+async fn 被禁言成员通过socketio发送消息应被领域规则拒绝() {
+    let pool = test_pool().await;
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
-    let owner_session_id = Uuid::new_v4();
     let member_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
 
-    sqlx::query!(
-        "INSERT INTO profiles (id, device_key) VALUES ($1, $2), ($3, $4)",
-        owner_id,
-        "owner-device",
-        member_id,
-        "member-device"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO sessions (id, profile_id) VALUES ($1, $2), ($3, $4)",
-        owner_session_id,
-        owner_id,
-        member_session_id,
-        member_id
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)",
-        room_id,
-        owner_id
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO room_codes (room_id, code) VALUES ($1, $2)",
-        room_id,
-        "1A234"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3), ($1, $4, $5)",
-        room_id,
-        owner_id,
-        "owner",
-        member_id,
-        "member"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    insert_profile(&pool, owner_id, "socketio-owner").await;
+    insert_profile(&pool, member_id, "socketio-member").await;
+    insert_session(&pool, member_session_id, member_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
+    insert_member(&pool, room_id, member_id, "member").await;
+    mute_member_until_future(&pool, room_id, member_id).await;
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let app = koko_server::app::build_app(pool);
+    let app = koko_server::app::build_app(pool.clone());
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let owner_url = ws_url(address, room_id, owner_id, owner_session_id);
-    let member_url = ws_url(address, room_id, member_id, member_session_id);
+    let mut socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": member_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
 
-    let (mut owner_socket, _) = connect_async(owner_url).await.unwrap();
-    let (mut member_socket, _) = connect_async(member_url).await.unwrap();
+    let room_snapshot = socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+    assert_eq!(room_snapshot.1["room_id"], room_id.to_string());
 
-    owner_socket
-        .send(Message::Text(
-            json!({
-                "type": "send_message",
-                "content": "hello",
-            })
-            .to_string()
-            .into(),
-        ))
-        .await
-        .unwrap();
+    socket
+        .send_command(json!({
+            "type": "send_message",
+            "content": "muted over socketio",
+        }))
+        .await;
 
-    let message = member_socket.next().await.unwrap().unwrap();
-    let Message::Text(text) = message else {
-        panic!("expected text message");
-    };
-    let payload: Value = serde_json::from_str(&text).unwrap();
+    let error_event = socket.next_event().await;
+    assert_eq!(error_event.0, "error");
+    assert_eq!(error_event.1, Value::String("成员已被禁言".into()));
 
-    assert_eq!(payload["type"], "message_created");
-    assert_eq!(payload["room_id"], room_id.to_string());
-    assert_eq!(payload["sender_id"], owner_id.to_string());
-    assert_eq!(payload["content"], "hello");
+    let message_count = sqlx::query_scalar!(
+        "SELECT COUNT(*) AS count FROM messages WHERE room_id = $1",
+        room_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap();
 
-    server.abort();
+    assert_eq!(message_count, 0);
+
+    socket.close().await;
+    shutdown_test_server(server).await;
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn ws发送方也应收到自己的消息广播(pool: PgPool) {
+#[tokio::test]
+async fn http发送消息后socketio客户端应收到_message_created广播() {
+    let pool = test_pool().await;
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
     let owner_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
 
-    sqlx::query!(
-        "INSERT INTO profiles (id, device_key) VALUES ($1, $2)",
-        owner_id,
-        "owner-device"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO sessions (id, profile_id) VALUES ($1, $2)",
-        owner_session_id,
-        owner_id
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)",
-        room_id,
-        owner_id
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO room_codes (room_id, code) VALUES ($1, $2)",
-        room_id,
-        "1A236"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)",
-        room_id,
-        owner_id,
-        "owner"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    insert_profile(&pool, owner_id, "socketio-http-owner").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let app = koko_server::app::build_app(pool);
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let owner_url = ws_url(address, room_id, owner_id, owner_session_id);
-    let (mut owner_socket, _) = connect_async(owner_url).await.unwrap();
+    let mut socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
 
-    owner_socket
-        .send(Message::Text(
-            json!({
-                "type": "send_message",
-                "content": "hello-self",
-            })
-            .to_string()
-            .into(),
+    let room_snapshot = socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+
+    let response = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "http to socketio",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_session_id,
         ))
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
 
-    let message = owner_socket.next().await.unwrap().unwrap();
-    let Message::Text(text) = message else {
-        panic!("expected text message");
-    };
-    let payload: Value = serde_json::from_str(&text).unwrap();
+    let event = socket.next_event().await;
+    assert_eq!(event.0, "event");
+    assert_eq!(event.1["type"], "message_created");
+    assert_eq!(event.1["room_id"], room_id.to_string());
+    assert_eq!(event.1["sender_id"], owner_id.to_string());
+    assert_eq!(event.1["content"], "http to socketio");
 
-    assert_eq!(payload["type"], "message_created");
-    assert_eq!(payload["room_id"], room_id.to_string());
-    assert_eq!(payload["sender_id"], owner_id.to_string());
-    assert_eq!(payload["content"], "hello-self");
-
-    server.abort();
+    socket.close().await;
+    shutdown_test_server(server).await;
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn ws握手应忽略客户端伪造的_profile_id并使用会话身份(pool: PgPool) {
-    let owner_id = Uuid::new_v4();
-    let outsider_id = Uuid::new_v4();
-    let room_id = Uuid::new_v4();
-    let outsider_session_id = Uuid::new_v4();
+#[tokio::test]
+async fn socketio切房后不应继续收到旧房间广播() {
+    let pool = test_pool().await;
+    let profile_id = Uuid::new_v4();
+    let owner_a_id = Uuid::new_v4();
+    let owner_b_id = Uuid::new_v4();
+    let room_a_id = Uuid::new_v4();
+    let room_b_id = Uuid::new_v4();
+    let profile_session_id = Uuid::new_v4();
+    let owner_a_session_id = Uuid::new_v4();
+    let owner_b_session_id = Uuid::new_v4();
+    let room_a_code = unique_room_code(room_a_id);
+    let room_b_code = unique_room_code(room_b_id);
 
-    sqlx::query!(
-        "INSERT INTO profiles (id, device_key) VALUES ($1, $2), ($3, $4)",
-        owner_id,
-        "owner-device",
-        outsider_id,
-        "outsider-device"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO sessions (id, profile_id) VALUES ($1, $2)",
-        outsider_session_id,
-        outsider_id
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)",
-        room_id,
-        owner_id
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO room_codes (room_id, code) VALUES ($1, $2)",
-        room_id,
-        "1A235"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    sqlx::query!(
-        "INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)",
-        room_id,
-        owner_id,
-        "owner"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    insert_profile(&pool, profile_id, "switch-member").await;
+    insert_profile(&pool, owner_a_id, "switch-owner-a").await;
+    insert_profile(&pool, owner_b_id, "switch-owner-b").await;
+    insert_session(&pool, profile_session_id, profile_id).await;
+    insert_session(&pool, owner_a_session_id, owner_a_id).await;
+    insert_session(&pool, owner_b_session_id, owner_b_id).await;
+    insert_room_with_owner(&pool, room_a_id, owner_a_id, &room_a_code).await;
+    insert_room_with_owner(&pool, room_b_id, owner_b_id, &room_b_code).await;
+    insert_member(&pool, room_a_id, profile_id, "member").await;
+    insert_member(&pool, room_b_id, profile_id, "member").await;
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let app = koko_server::app::build_app(pool);
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let response = connect_async(ws_url(address, room_id, owner_id, outsider_session_id))
+    let mut socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": profile_session_id.to_string(),
+            "room_id": room_a_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+    assert_eq!(room_snapshot.1["room_id"], room_a_id.to_string());
+
+    socket
+        .send_command(json!({
+            "type": "join_room",
+            "code": room_b_code,
+        }))
+        .await;
+
+    let switched_snapshot = socket.next_event().await;
+    assert_eq!(switched_snapshot.0, "event");
+    assert_eq!(switched_snapshot.1["type"], "room_snapshot");
+    assert_eq!(switched_snapshot.1["room_id"], room_b_id.to_string());
+
+    let owner_a_send = http_app
+        .clone()
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_a_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "old room should not arrive",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_a_session_id,
+        ))
         .await
-        .expect_err("非成员会话不应伪装成房间成员接入");
+        .unwrap();
+    assert_eq!(owner_a_send.status(), StatusCode::OK);
 
-    assert!(
-        response.to_string().contains("403"),
-        "握手失败原因应包含 403，实际为: {response}"
-    );
+    socket.assert_no_event(Duration::from_millis(200)).await;
 
-    server.abort();
+    let owner_b_send = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_b_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "new room should arrive",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_b_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(owner_b_send.status(), StatusCode::OK);
+
+    let new_room_event = socket.next_event().await;
+    assert_eq!(new_room_event.0, "event");
+    assert_eq!(new_room_event.1["type"], "message_created");
+    assert_eq!(new_room_event.1["room_id"], room_b_id.to_string());
+    assert_eq!(new_room_event.1["content"], "new room should arrive");
+
+    socket.close().await;
+    shutdown_test_server(server).await;
 }
 
-fn ws_url(address: SocketAddr, room_id: Uuid, profile_id: Uuid, session_id: Uuid) -> String {
-    format!("ws://{address}/ws/rooms/{room_id}?profile_id={profile_id}&session_id={session_id}")
+type SocketIoEvent = (String, Value);
+
+struct SocketIoTestClient {
+    socket: SocketIoClient,
+    events: UnboundedReceiver<SocketIoEvent>,
+}
+
+impl SocketIoTestClient {
+    async fn connect(address: SocketAddr, auth: Value) -> Self {
+        let (tx, rx) = unbounded_channel();
+        let url = format!("http://{address}");
+        let socket = tokio::task::spawn_blocking(move || {
+            let event_tx = tx.clone();
+            let error_tx = tx;
+            SocketIoClientBuilder::new(url)
+                .namespace("/")
+                .transport_type(TransportType::Websocket)
+                .reconnect(false)
+                .reconnect_on_disconnect(false)
+                .auth(auth)
+                .on("event", move |payload, _| {
+                    let _ = event_tx.send(("event".to_owned(), payload_to_value(payload)));
+                })
+                .on("error", move |payload, _| {
+                    let _ = error_tx.send(("error".to_owned(), payload_to_value(payload)));
+                })
+                .connect()
+        })
+        .await
+        .expect("socketio 测试客户端连接任务不应 panic")
+        .expect("rust_socketio 客户端应连接成功");
+
+        Self { socket, events: rx }
+    }
+
+    async fn send_command(&self, command: Value) {
+        let socket = self.socket.clone();
+        tokio::task::spawn_blocking(move || socket.emit("command", command))
+            .await
+            .expect("socketio command 发送任务不应 panic")
+            .expect("socketio command 发送应成功");
+    }
+
+    async fn next_event(&mut self) -> SocketIoEvent {
+        timeout(Duration::from_secs(1), self.events.recv())
+            .await
+            .expect("应收到 socket.io 消息")
+            .expect("socket.io 事件通道不应提前关闭")
+    }
+
+    async fn assert_no_event(&mut self, wait_for: Duration) {
+        match timeout(wait_for, self.events.recv()).await {
+            Err(_) => {}
+            Ok(Some(event)) => panic!("unexpected socket.io event: {event:?}"),
+            Ok(None) => panic!("socket.io 事件通道不应提前关闭"),
+        }
+    }
+
+    async fn close(self) {
+        let socket = self.socket;
+        tokio::task::spawn_blocking(move || socket.disconnect())
+            .await
+            .expect("socketio 客户端断开任务不应 panic")
+            .expect("socketio 客户端断开应成功");
+    }
+}
+
+fn payload_to_value(payload: SocketIoPayload) -> Value {
+    match payload {
+        SocketIoPayload::Text(mut values) => {
+            if values.len() == 1 {
+                values.remove(0)
+            } else {
+                Value::Array(values)
+            }
+        }
+        SocketIoPayload::Binary(bytes) => {
+            Value::Array(bytes.iter().copied().map(Value::from).collect())
+        }
+        #[allow(deprecated)]
+        SocketIoPayload::String(text) => serde_json::from_str(&text).unwrap_or(Value::String(text)),
+    }
+}
+
+async fn shutdown_test_server(server: tokio::task::JoinHandle<()>) {
+    server.abort();
+    let _ = server.await;
+}
+
+async fn test_pool() -> PgPool {
+    let database_url =
+        std::env::var("DATABASE_URL").expect("socketio 集成测试依赖 DATABASE_URL 指向本地测试库");
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await
+        .expect("应能连接本地测试库");
+
+    MIGRATIONS_READY
+        .get_or_init(|| async {
+            sqlx::migrate!("../migrations")
+                .run(&pool)
+                .await
+                .expect("应能初始化测试库迁移");
+        })
+        .await;
+
+    pool
+}
+
+fn with_session(request: Request<Body>, session_id: Uuid) -> Request<Body> {
+    let (mut parts, body) = request.into_parts();
+    parts.headers.insert(
+        SESSION_HEADER,
+        session_id.to_string().parse().expect("测试会话头应合法"),
+    );
+    Request::from_parts(parts, body)
+}
+
+async fn insert_profile(pool: &PgPool, profile_id: Uuid, device_key: &str) {
+    sqlx::query("INSERT INTO profiles (id, device_key) VALUES ($1, $2)")
+        .bind(profile_id)
+        .bind(format!("{device_key}-{profile_id}"))
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn insert_session(pool: &PgPool, session_id: Uuid, profile_id: Uuid) {
+    sqlx::query("INSERT INTO sessions (id, profile_id) VALUES ($1, $2)")
+        .bind(session_id)
+        .bind(profile_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn insert_member(pool: &PgPool, room_id: Uuid, profile_id: Uuid, role: &str) {
+    sqlx::query("INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)")
+        .bind(room_id)
+        .bind(profile_id)
+        .bind(role)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn mute_member_until_future(pool: &PgPool, room_id: Uuid, profile_id: Uuid) {
+    sqlx::query(
+        "UPDATE room_members SET muted_until = NOW() + INTERVAL '1 hour' WHERE room_id = $1 AND profile_id = $2",
+    )
+    .bind(room_id)
+    .bind(profile_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_room_with_owner(pool: &PgPool, room_id: Uuid, owner_id: Uuid, code: &str) {
+    sqlx::query("INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)")
+        .bind(room_id)
+        .bind(owner_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    sqlx::query("INSERT INTO room_codes (room_id, code) VALUES ($1, $2)")
+        .bind(room_id)
+        .bind(code)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    sqlx::query("INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)")
+        .bind(room_id)
+        .bind(owner_id)
+        .bind("owner")
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+fn unique_room_code(seed: Uuid) -> String {
+    let bytes = seed.as_bytes();
+    let letter = (b'A' + (bytes[1] % 26)) as char;
+    format!(
+        "{}{}{}{}{}",
+        bytes[0] % 10,
+        letter,
+        bytes[2] % 10,
+        bytes[3] % 10,
+        bytes[4] % 10
+    )
 }

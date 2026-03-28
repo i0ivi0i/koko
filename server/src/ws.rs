@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     sync::OnceLock,
     sync::{
         Arc, Mutex,
@@ -7,14 +6,6 @@ use std::{
     },
 };
 
-use axum::{
-    extract::{
-        Path, Query, State,
-        ws::{Message, WebSocket, WebSocketUpgrade},
-    },
-    response::{IntoResponse, Response},
-};
-use futures_util::{SinkExt, StreamExt};
 use koko_contract::{
     ClientRealtimeCommand, ClientRealtimeQuery, RoomMemberResponse, ServerRealtimeEvent,
 };
@@ -24,7 +15,6 @@ use socketioxide::{
     extract::{Data, Extension, SocketRef, State as SocketState},
     handler::ConnectHandler,
 };
-use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
@@ -46,7 +36,6 @@ const DEFAULT_SNAPSHOT_LIMIT: Option<u16> = Some(40);
 
 #[derive(Clone, Default)]
 pub struct RealtimeHub {
-    legacy_inner: Arc<Mutex<HashMap<Uuid, broadcast::Sender<ServerRealtimeEvent>>>>,
     socket_io: Arc<OnceLock<SocketIo>>,
     online_connections: Arc<AtomicUsize>,
 }
@@ -58,10 +47,6 @@ impl RealtimeHub {
             .expect("同一个 RealtimeHub 不应重复绑定多套 socket.io 应用");
     }
 
-    pub fn subscribe(&self, room_id: RoomId) -> broadcast::Receiver<ServerRealtimeEvent> {
-        self.legacy_channel(room_id).subscribe()
-    }
-
     pub(crate) async fn publish(&self, room_id: RoomId, event: ServerRealtimeEvent) {
         if let Some(io) = self.socket_io.get().cloned() {
             let _ = io
@@ -69,8 +54,6 @@ impl RealtimeHub {
                 .emit(SOCKET_IO_EVENT_NAME, &event)
                 .await;
         }
-
-        let _ = self.legacy_channel(room_id).send(event);
     }
 
     pub(crate) fn online_connections(&self) -> u64 {
@@ -83,14 +66,6 @@ impl RealtimeHub {
 
     pub(crate) fn connection_closed(&self) {
         self.online_connections.fetch_sub(1, Ordering::Relaxed);
-    }
-
-    fn legacy_channel(&self, room_id: RoomId) -> broadcast::Sender<ServerRealtimeEvent> {
-        let mut rooms = self.legacy_inner.lock().unwrap();
-        rooms
-            .entry(room_id.0)
-            .or_insert_with(|| broadcast::channel(128).0)
-            .clone()
     }
 }
 
@@ -136,25 +111,6 @@ struct SocketIoAuth {
 
 pub(crate) fn configure_socket_io(io: &SocketIo) {
     io.ns("/", on_socket_io_connection.with(authenticate_socket_io));
-}
-
-pub(crate) async fn connect(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-    Path(room_id): Path<String>,
-    Query(query): Query<WsConnectQuery>,
-) -> Result<Response, ApiError> {
-    let room_id = parse_room_id(&room_id)?;
-    let session = session::authenticate_session(&state.pool, &query.session_id).await?;
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
-
-    koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
-        .await
-        .map_err(map_domain_error)?;
-
-    Ok(ws
-        .on_upgrade(move |socket| handle_legacy_socket(socket, state, room_id, session.profile_id))
-        .into_response())
 }
 
 async fn authenticate_socket_io(
@@ -285,64 +241,6 @@ async fn on_socket_io_query(
     }
 }
 
-async fn handle_legacy_socket(
-    socket: WebSocket,
-    state: AppState,
-    room_id: RoomId,
-    profile_id: ProfileId,
-) {
-    state.online_connection_opened();
-    let (mut sender, mut receiver) = socket.split();
-    let mut room_events = state.realtime.subscribe(room_id);
-
-    loop {
-        tokio::select! {
-            inbound = receiver.next() => match inbound {
-                Some(Ok(Message::Text(text))) => {
-                    if let Some(event) = handle_legacy_client_text(&state, room_id, profile_id, &text).await {
-                        state.realtime.publish(room_id, event).await;
-                    }
-                }
-                Some(Ok(Message::Close(_))) | None => break,
-                Some(Ok(_)) => {}
-                Some(Err(_)) => break,
-            },
-            outbound = room_events.recv() => match outbound {
-                Ok(event) => {
-                    let Some(payload) = encode_legacy_event(event) else {
-                        continue;
-                    };
-                    if sender.send(Message::Text(payload.into())).await.is_err() {
-                        break;
-                    }
-                }
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    }
-
-    state.online_connection_closed();
-}
-
-async fn handle_legacy_client_text(
-    state: &AppState,
-    room_id: RoomId,
-    profile_id: ProfileId,
-    text: &str,
-) -> Option<ServerRealtimeEvent> {
-    let event: ClientRealtimeCommand = serde_json::from_str(text).ok()?;
-
-    match event {
-        ClientRealtimeCommand::SendMessage { content } => {
-            send_message_event(state, room_id, profile_id, &content)
-                .await
-                .ok()
-        }
-        ClientRealtimeCommand::JoinRoom { .. } => None,
-    }
-}
-
 async fn resolve_socket_room_by_code(
     state: &AppState,
     session: &SocketSession,
@@ -461,18 +359,6 @@ async fn send_message_event(
 
 fn emit_socket_error(socket: &SocketRef, message: &'static str) {
     let _ = socket.emit(SOCKET_IO_ERROR_NAME, message);
-}
-
-fn encode_legacy_event(event: ServerRealtimeEvent) -> Option<String> {
-    match &event {
-        ServerRealtimeEvent::MessageCreated { .. } => serde_json::to_string(&event).ok(),
-        _ => None,
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub(crate) struct WsConnectQuery {
-    session_id: String,
 }
 
 enum SnapshotQuery {
