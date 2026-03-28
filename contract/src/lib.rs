@@ -157,7 +157,9 @@ pub enum ClientRealtimeCommand {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientRealtimeQuery {
-    LoadRecentMessages { limit: Option<u16> },
+    LoadRecentMessages {
+        limit: Option<u16>,
+    },
     LoadOlderMessages {
         before_message_id: Option<String>,
         limit: Option<u16>,
@@ -228,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn server_realtime_message_created_event_should_roundtrip_raw_ws_wire_format() {
+    fn server_realtime_message_created_event_should_roundtrip_canonical_wire_format() {
         let value = ServerRealtimeEvent::MessageCreated {
             message_id: "msg-1".into(),
             room_id: "room-1".into(),
@@ -244,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn client_realtime_send_message_should_keep_raw_ws_wire_format() {
+    fn client_realtime_send_message_should_keep_canonical_wire_format() {
         let value = ClientRealtimeCommand::SendMessage {
             content: "hello".into(),
         };
@@ -252,7 +254,10 @@ mod tests {
         let json = serde_json::to_string(&value).unwrap();
 
         assert_eq!(json, r#"{"type":"send_message","content":"hello"}"#);
-        assert_eq!(serde_json::from_str::<ClientRealtimeCommand>(&json).unwrap(), value);
+        assert_eq!(
+            serde_json::from_str::<ClientRealtimeCommand>(&json).unwrap(),
+            value
+        );
     }
 
     #[test]
@@ -268,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn server_realtime_message_created_event_should_keep_raw_ws_wire_format() {
+    fn server_realtime_message_created_event_should_keep_canonical_wire_format() {
         let value = ServerRealtimeEvent::MessageCreated {
             message_id: "msg-1".into(),
             room_id: "room-1".into(),
@@ -283,7 +288,10 @@ mod tests {
             json,
             r#"{"type":"message_created","message_id":"msg-1","room_id":"room-1","sender_id":"profile-1","content":"hello","created_at":"2026-03-27T12:34:56Z"}"#
         );
-        assert_eq!(serde_json::from_str::<ServerRealtimeEvent>(&json).unwrap(), value);
+        assert_eq!(
+            serde_json::from_str::<ServerRealtimeEvent>(&json).unwrap(),
+            value
+        );
     }
 
     #[test]
