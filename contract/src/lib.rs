@@ -149,13 +149,34 @@ pub struct AdminRoomDetailResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum ClientWsEvent {
+pub enum ClientRealtimeCommand {
+    JoinRoom { code: String },
     SendMessage { content: String },
+}
+
+pub type ClientWsEvent = ClientRealtimeCommand;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ClientRealtimeQuery {
+    LoadRecentMessages { limit: Option<u16> },
+    LoadOlderMessages {
+        before_message_id: Option<String>,
+        limit: Option<u16>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum ServerWsEvent {
+pub enum ServerRealtimeEvent {
+    RoomSnapshot {
+        room_id: String,
+        code: String,
+        role: String,
+        messages: Vec<MessageResponse>,
+        has_more_messages: bool,
+        members: Vec<RoomMemberResponse>,
+    },
     MessageCreated {
         message_id: String,
         room_id: String,
@@ -163,7 +184,19 @@ pub enum ServerWsEvent {
         content: String,
         created_at: String,
     },
+    MemberChanged {
+        room_id: String,
+        member: RoomMemberResponse,
+    },
+    GovernanceResult {
+        room_id: String,
+        action: String,
+        success: bool,
+        reason: Option<String>,
+    },
 }
+
+pub type ServerWsEvent = ServerRealtimeEvent;
 
 #[cfg(test)]
 mod tests {
@@ -210,6 +243,128 @@ mod tests {
 
         let json = serde_json::to_string(&value).unwrap();
         let decoded: ServerWsEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn client_realtime_command_join_room_should_roundtrip() {
+        let value = ClientRealtimeCommand::JoinRoom {
+            code: "1A234".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ClientRealtimeCommand = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn client_realtime_command_send_message_should_roundtrip() {
+        let value = ClientRealtimeCommand::SendMessage {
+            content: "hello".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ClientRealtimeCommand = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn client_realtime_query_load_recent_messages_should_roundtrip() {
+        let value = ClientRealtimeQuery::LoadRecentMessages { limit: Some(20) };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ClientRealtimeQuery = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn client_realtime_query_load_older_messages_should_roundtrip() {
+        let value = ClientRealtimeQuery::LoadOlderMessages {
+            before_message_id: Some("msg-9".into()),
+            limit: Some(40),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ClientRealtimeQuery = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn server_realtime_event_room_snapshot_should_roundtrip() {
+        let value = ServerRealtimeEvent::RoomSnapshot {
+            room_id: "room-1".into(),
+            code: "1A234".into(),
+            role: "owner".into(),
+            messages: vec![MessageResponse {
+                message_id: "msg-1".into(),
+                room_id: "room-1".into(),
+                sender_id: "profile-1".into(),
+                content: "hello".into(),
+                created_at: "2026-03-27T12:34:56Z".into(),
+            }],
+            has_more_messages: true,
+            members: vec![RoomMemberResponse {
+                profile_id: "profile-1".into(),
+                display_name: "user-1".into(),
+                role: "owner".into(),
+            }],
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ServerRealtimeEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn server_realtime_event_message_created_should_roundtrip() {
+        let value = ServerRealtimeEvent::MessageCreated {
+            message_id: "msg-1".into(),
+            room_id: "room-1".into(),
+            sender_id: "profile-1".into(),
+            content: "hello".into(),
+            created_at: "2026-03-27T12:34:56Z".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ServerRealtimeEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn server_realtime_event_member_changed_should_roundtrip() {
+        let value = ServerRealtimeEvent::MemberChanged {
+            room_id: "room-1".into(),
+            member: RoomMemberResponse {
+                profile_id: "profile-1".into(),
+                display_name: "user-1".into(),
+                role: "admin".into(),
+            },
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ServerRealtimeEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn server_realtime_event_governance_result_should_roundtrip() {
+        let value = ServerRealtimeEvent::GovernanceResult {
+            room_id: "room-1".into(),
+            action: "promote_admin".into(),
+            success: true,
+            reason: None,
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ServerRealtimeEvent = serde_json::from_str(&json).unwrap();
 
         assert_eq!(decoded, value);
     }
