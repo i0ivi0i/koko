@@ -1,4 +1,9 @@
-use futures_util::StreamExt;
+use dioxus::prelude::spawn;
+use futures_channel::mpsc::{UnboundedSender, unbounded};
+use futures_util::{
+    SinkExt, StreamExt,
+    future::{Either, select},
+};
 use gloo_net::{
     http::Request,
     websocket::{Message, futures::WebSocket},
@@ -6,7 +11,7 @@ use gloo_net::{
 #[cfg(target_arch = "wasm32")]
 use gloo_storage::{LocalStorage, Storage};
 use koko_contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
+    BootstrapSessionRequest, BootstrapSessionResponse, ClientWsEvent, GovernanceActorRequest,
     JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
     RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SESSION_HEADER_NAME,
     SendMessageRequest, ServerWsEvent,
@@ -29,6 +34,20 @@ pub enum MemberAction {
 struct MemberActionRequest {
     path: String,
     body: String,
+}
+
+#[derive(Clone)]
+pub struct RoomConnection {
+    outbound: UnboundedSender<String>,
+}
+
+impl RoomConnection {
+    pub fn send_message(&self, content: &str) -> Result<(), String> {
+        let payload = build_send_message_event(content)?;
+        self.outbound
+            .unbounded_send(payload)
+            .map_err(|_| "实时连接已关闭".to_string())
+    }
 }
 
 pub fn api_base() -> &'static str {
@@ -252,47 +271,73 @@ pub async fn run_member_action(
     Ok(())
 }
 
-pub async fn listen_room_events<F>(room_id: String, session_id: String, mut on_message: F)
+pub fn connect_room_events<F>(
+    room_id: String,
+    session_id: String,
+    mut on_message: F,
+) -> Result<RoomConnection, String>
 where
     F: FnMut(MessageResponse) + 'static,
 {
     let ws_url = build_room_ws_url(api_base(), &room_id, &session_id);
+    let socket = WebSocket::open(&ws_url).map_err(|error| error.to_string())?;
+    let (mut sender, mut receiver) = socket.split();
+    let (outbound, mut outbound_messages) = unbounded::<String>();
 
-    let Ok(socket) = WebSocket::open(&ws_url) else {
-        return;
-    };
-    let (_, mut stream) = socket.split();
+    spawn(async move {
+        loop {
+            match select(outbound_messages.next(), receiver.next()).await {
+                Either::Left((Some(payload), _)) => {
+                    if sender.send(Message::Text(payload)).await.is_err() {
+                        break;
+                    }
+                }
+                Either::Left((None, _)) => break,
+                Either::Right((Some(Ok(Message::Text(text))), _)) => {
+                    if let Some(message) = decode_message_created_event(&text) {
+                        on_message(message);
+                    }
+                }
+                Either::Right((Some(Ok(_)), _)) => {}
+                Either::Right((Some(Err(_)), _)) | Either::Right((None, _)) => break,
+            }
+        }
+    });
 
-    while let Some(next) = stream.next().await {
-        let Ok(Message::Text(text)) = next else {
-            continue;
-        };
+    Ok(RoomConnection { outbound })
+}
 
-        let Ok(ServerWsEvent::MessageCreated {
-            message_id,
-            room_id,
-            sender_id,
-            content,
-            created_at,
-        }) = serde_json::from_str::<ServerWsEvent>(&text)
-        else {
-            continue;
-        };
+fn build_send_message_event(content: &str) -> Result<String, String> {
+    serde_json::to_string(&ClientWsEvent::SendMessage {
+        content: content.to_string(),
+    })
+    .map_err(|error| error.to_string())
+}
 
-        on_message(MessageResponse {
-            message_id,
-            room_id,
-            sender_id,
-            content,
-            created_at,
-        });
-    }
+fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
+    let event = serde_json::from_str::<ServerWsEvent>(text).ok()?;
+
+    let ServerWsEvent::MessageCreated {
+        message_id,
+        room_id,
+        sender_id,
+        content,
+        created_at,
+    } = event;
+
+    Some(MessageResponse {
+        message_id,
+        room_id,
+        sender_id,
+        content,
+        created_at,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koko_contract::{GovernanceActorRequest, PromoteAdminRequest};
+    use koko_contract::{ClientWsEvent, GovernanceActorRequest, PromoteAdminRequest};
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -370,5 +415,38 @@ mod tests {
         let device_token = sanitize_bootstrap_device_token(Some("   "));
 
         assert_eq!(device_token, None);
+    }
+
+    #[test]
+    fn send_message_event_should_encode_ws_payload() {
+        let payload = build_send_message_event("hello").unwrap();
+
+        assert_eq!(
+            payload,
+            serde_json::to_string(&ClientWsEvent::SendMessage {
+                content: "hello".into(),
+            })
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn message_created_event_should_decode_to_message_response() {
+        let payload = serde_json::to_string(&ServerWsEvent::MessageCreated {
+            message_id: "msg-1".into(),
+            room_id: "room-1".into(),
+            sender_id: "profile-1".into(),
+            content: "hello".into(),
+            created_at: "2026-03-28T10:00:00Z".into(),
+        })
+        .unwrap();
+
+        let message = decode_message_created_event(&payload).unwrap();
+
+        assert_eq!(message.message_id, "msg-1");
+        assert_eq!(message.room_id, "room-1");
+        assert_eq!(message.sender_id, "profile-1");
+        assert_eq!(message.content, "hello");
+        assert_eq!(message.created_at, "2026-03-28T10:00:00Z");
     }
 }

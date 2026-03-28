@@ -107,6 +107,94 @@ async fn 房间成员发送消息后其他成员应收到广播(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn ws发送方也应收到自己的消息广播(pool: PgPool) {
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+
+    sqlx::query!(
+        "INSERT INTO profiles (id, device_key) VALUES ($1, $2)",
+        owner_id,
+        "owner-device"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query!(
+        "INSERT INTO sessions (id, profile_id) VALUES ($1, $2)",
+        owner_session_id,
+        owner_id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query!(
+        "INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)",
+        room_id,
+        owner_id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query!(
+        "INSERT INTO room_codes (room_id, code) VALUES ($1, $2)",
+        room_id,
+        "1A236"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query!(
+        "INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)",
+        room_id,
+        owner_id,
+        "owner"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool);
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let owner_url = ws_url(address, room_id, owner_id, owner_session_id);
+    let (mut owner_socket, _) = connect_async(owner_url).await.unwrap();
+
+    owner_socket
+        .send(Message::Text(
+            json!({
+                "type": "send_message",
+                "content": "hello-self",
+            })
+            .to_string()
+            .into(),
+        ))
+        .await
+        .unwrap();
+
+    let message = owner_socket.next().await.unwrap().unwrap();
+    let Message::Text(text) = message else {
+        panic!("expected text message");
+    };
+    let payload: Value = serde_json::from_str(&text).unwrap();
+
+    assert_eq!(payload["type"], "message_created");
+    assert_eq!(payload["room_id"], room_id.to_string());
+    assert_eq!(payload["sender_id"], owner_id.to_string());
+    assert_eq!(payload["content"], "hello-self");
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn ws握手应忽略客户端伪造的_profile_id并使用会话身份(pool: PgPool) {
     let owner_id = Uuid::new_v4();
     let outsider_id = Uuid::new_v4();
