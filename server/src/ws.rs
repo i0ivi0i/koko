@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    sync::OnceLock,
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -47,13 +48,15 @@ const DEFAULT_SNAPSHOT_LIMIT: Option<u16> = Some(40);
 #[derive(Clone, Default)]
 pub struct RealtimeHub {
     legacy_inner: Arc<Mutex<HashMap<Uuid, broadcast::Sender<ServerRealtimeEvent>>>>,
-    socket_io: Arc<Mutex<Option<SocketIo>>>,
+    socket_io: Arc<OnceLock<SocketIo>>,
     online_connections: Arc<AtomicUsize>,
 }
 
 impl RealtimeHub {
     pub fn attach_socket_io(&self, io: SocketIo) {
-        *self.socket_io.lock().unwrap() = Some(io);
+        self.socket_io
+            .set(io)
+            .expect("同一个 RealtimeHub 不应重复绑定多套 socket.io 应用");
     }
 
     pub fn subscribe(&self, room_id: RoomId) -> broadcast::Receiver<ServerRealtimeEvent> {
@@ -61,9 +64,11 @@ impl RealtimeHub {
     }
 
     pub(crate) async fn publish(&self, room_id: RoomId, event: ServerRealtimeEvent) {
-        let io = self.socket_io.lock().unwrap().clone();
-        if let Some(io) = io {
-            let _ = io.to(socket_room_name(room_id)).emit(SOCKET_IO_EVENT_NAME, &event).await;
+        if let Some(io) = self.socket_io.get().cloned() {
+            let _ = io
+                .to(socket_room_name(room_id))
+                .emit(SOCKET_IO_EVENT_NAME, &event)
+                .await;
         }
 
         let _ = self.legacy_channel(room_id).send(event);

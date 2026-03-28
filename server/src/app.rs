@@ -14,6 +14,8 @@ use tower_http::trace::{DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, T
 use tracing::{Level, info_span};
 
 use crate::{http, ws::RealtimeHub};
+use koko_contract::ServerRealtimeEvent;
+use koko_core::model::RoomId;
 
 const DEFAULT_ADMIN_USERNAME: &str = "admin";
 
@@ -21,6 +23,17 @@ const DEFAULT_ADMIN_USERNAME: &str = "admin";
 pub struct AppState {
     pub pool: PgPool,
     pub realtime: RealtimeHub,
+}
+
+#[derive(Clone)]
+pub struct TestHandles {
+    realtime: RealtimeHub,
+}
+
+impl TestHandles {
+    pub async fn publish_room_event(&self, room_id: RoomId, event: ServerRealtimeEvent) {
+        self.realtime.publish(room_id, event).await;
+    }
 }
 
 #[derive(Clone)]
@@ -78,7 +91,7 @@ pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> R
     build_app_with_admin_auth_and_realtime(pool, admin_auth, RealtimeHub::default()).0
 }
 
-pub fn build_app_with_socket_io(pool: PgPool) -> (Router, SocketIo) {
+pub fn build_app_with_test_handles(pool: PgPool) -> (Router, TestHandles) {
     build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), RealtimeHub::default())
 }
 
@@ -86,7 +99,7 @@ fn build_app_with_admin_auth_and_realtime(
     pool: PgPool,
     admin_auth: AdminAuthConfig,
     realtime: RealtimeHub,
-) -> (Router, SocketIo) {
+) -> (Router, TestHandles) {
     let state = AppState { pool, realtime };
     let (socket_io_layer, socket_io) = SocketIo::builder().with_state(state.clone()).build_layer();
     crate::ws::configure_socket_io(&socket_io);
@@ -170,7 +183,12 @@ fn build_app_with_admin_auth_and_realtime(
                 )
                 .propagate_x_request_id(),
         )
-        .with_state(state);
+        .with_state(state.clone());
 
-    (app, socket_io)
+    (
+        app,
+        TestHandles {
+            realtime: state.realtime.clone(),
+        },
+    )
 }

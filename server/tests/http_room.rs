@@ -8,6 +8,7 @@ use koko_core::model::RoomId;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::net::SocketAddr;
+use std::panic::AssertUnwindSafe;
 use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
@@ -425,7 +426,7 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let (app, io) = koko_server::app::build_app_with_socket_io(pool.clone());
+    let (app, handles) = koko_server::app::build_app_with_test_handles(pool.clone());
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
@@ -443,10 +444,10 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
-    io.to(room_id.to_string())
-        .emit(
-            "event",
-            &ServerRealtimeEvent::MessageCreated {
+    handles
+        .publish_room_event(
+            RoomId(room_id),
+            ServerRealtimeEvent::MessageCreated {
                 message_id: Uuid::new_v4().to_string(),
                 room_id: room_id.to_string(),
                 sender_id: owner_id.to_string(),
@@ -454,8 +455,7 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
                 created_at: "2026-03-28T12:00:00Z".into(),
             },
         )
-        .await
-        .unwrap();
+        .await;
 
     let event = next_socket_io_event(&mut socket).await;
     assert_eq!(event.0, "event");
@@ -464,6 +464,19 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
     assert_eq!(event.1["content"], "socketioxide direct");
 
     server.abort();
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 共享realtimehub重复挂载到两套socketio应用应立即失败(pool: PgPool) {
+    let shared = koko_server::ws::RealtimeHub::default();
+
+    let _first = koko_server::app::build_app_with_realtime(pool.clone(), shared.clone());
+
+    let duplicate = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        koko_server::app::build_app_with_realtime(pool, shared)
+    }));
+
+    assert!(duplicate.is_err(), "重复挂载应立即失败");
 }
 
 #[sqlx::test(migrations = "../migrations")]
