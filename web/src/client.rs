@@ -54,6 +54,14 @@ pub struct RoomRealtimeClient {
     on_message: MessageObserver,
 }
 
+#[derive(Clone)]
+pub struct JoinedRoomClient {
+    room_id: String,
+    session_id: String,
+    on_message: MessageObserver,
+    realtime: Option<RoomRealtimeClient>,
+}
+
 impl RoomRealtimeClient {
     pub fn send_message(&self, content: &str) -> Result<(), String> {
         if should_fallback_to_http(self.state()) {
@@ -85,6 +93,33 @@ impl RoomRealtimeClient {
             content,
             self.on_message.clone(),
         );
+    }
+}
+
+impl JoinedRoomClient {
+    pub fn send_message(&self, content: &str) -> Result<(), String> {
+        if let Some(realtime) = &self.realtime {
+            return realtime.send_message(content);
+        }
+
+        let content = content.trim();
+        if content.is_empty() {
+            return Err("消息不能为空".into());
+        }
+
+        spawn_http_message_delivery(
+            self.room_id.clone(),
+            self.session_id.clone(),
+            content.to_owned(),
+            self.on_message.clone(),
+        );
+        Ok(())
+    }
+
+    pub fn close(&self) {
+        if let Some(realtime) = &self.realtime {
+            realtime.close();
+        }
     }
 }
 
@@ -200,6 +235,13 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
         has_more_messages: messages.has_more,
         members: members.items,
     })
+}
+
+fn into_message_observer<F>(on_message: F) -> MessageObserver
+where
+    F: FnMut(MessageResponse) + 'static,
+{
+    Arc::new(Mutex::new(Box::new(on_message)))
 }
 
 fn bootstrap_device_token() -> Option<String> {
@@ -336,19 +378,32 @@ pub async fn run_member_action(
     Ok(())
 }
 
-pub fn connect_room_events<F>(
-    room_id: String,
-    session_id: String,
-    on_message: F,
-) -> Result<RoomRealtimeClient, String>
+pub fn connect_joined_room<F>(room_id: String, session_id: String, on_message: F) -> JoinedRoomClient
 where
     F: FnMut(MessageResponse) + 'static,
 {
+    let observer = into_message_observer(on_message);
+    let realtime =
+        connect_room_events_with_observer(room_id.clone(), session_id.clone(), observer.clone())
+            .ok();
+
+    JoinedRoomClient {
+        room_id,
+        session_id,
+        on_message: observer,
+        realtime,
+    }
+}
+
+fn connect_room_events_with_observer(
+    room_id: String,
+    session_id: String,
+    on_message: MessageObserver,
+) -> Result<RoomRealtimeClient, String> {
     let ws_url = build_room_ws_url(api_base(), &room_id, &session_id);
     let (outbound, mut outbound_messages) = unbounded::<RealtimeCommand>();
     let state = Arc::new(Mutex::new(RealtimeState::Connecting));
     let state_handle = state.clone();
-    let on_message: MessageObserver = Arc::new(Mutex::new(Box::new(on_message)));
     let actor_message_handler = on_message.clone();
     let actor_room_id = room_id.clone();
     let actor_session_id = session_id.clone();
@@ -776,5 +831,70 @@ mod tests {
                 content: "hello".into(),
             }
         );
+    }
+
+    #[test]
+    fn joined_room_client_send_message_should_delegate_to_realtime_client() {
+        let (outbound, mut outbound_messages) = unbounded::<RealtimeCommand>();
+        let realtime = RoomRealtimeClient {
+            outbound,
+            state: Arc::new(Mutex::new(RealtimeState::Connected)),
+            room_id: "room-1".into(),
+            session_id: "session-1".into(),
+            on_message: Arc::new(Mutex::new(Box::new(|_| {}))),
+        };
+        let client = JoinedRoomClient {
+            room_id: "room-1".into(),
+            session_id: "session-1".into(),
+            on_message: Arc::new(Mutex::new(Box::new(|_| {}))),
+            realtime: Some(realtime),
+        };
+
+        client.send_message("hello").unwrap();
+
+        assert_eq!(
+            outbound_messages.next().now_or_never().flatten(),
+            Some(RealtimeCommand::SendMessage {
+                wire_payload: serde_json::to_string(&ClientWsEvent::SendMessage {
+                    content: "hello".into(),
+                })
+                .unwrap(),
+                content: "hello".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn joined_room_client_close_should_be_safe_without_realtime() {
+        let client = JoinedRoomClient {
+            room_id: "room-1".into(),
+            session_id: "session-1".into(),
+            on_message: Arc::new(Mutex::new(Box::new(|_| {}))),
+            realtime: None,
+        };
+
+        client.close();
+    }
+
+    #[test]
+    fn joined_room_client_close_should_close_underlying_realtime_client() {
+        let (outbound, _) = unbounded::<RealtimeCommand>();
+        let realtime = RoomRealtimeClient {
+            outbound,
+            state: Arc::new(Mutex::new(RealtimeState::Connected)),
+            room_id: "room-1".into(),
+            session_id: "session-1".into(),
+            on_message: Arc::new(Mutex::new(Box::new(|_| {}))),
+        };
+        let client = JoinedRoomClient {
+            room_id: "room-1".into(),
+            session_id: "session-1".into(),
+            on_message: Arc::new(Mutex::new(Box::new(|_| {}))),
+            realtime: Some(realtime.clone()),
+        };
+
+        client.close();
+
+        assert_eq!(realtime.state(), RealtimeState::Closed);
     }
 }
