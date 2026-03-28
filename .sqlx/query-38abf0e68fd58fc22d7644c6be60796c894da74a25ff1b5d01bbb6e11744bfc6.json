@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                r.id,\n                rc.code,\n                COUNT(DISTINCT rm.profile_id) AS member_count,\n                MAX(m.created_at) AS last_message_at,\n                rgs.banned_until,\n                rgs.ban_reason\n            FROM rooms r\n            JOIN room_codes rc ON rc.room_id = r.id\n            LEFT JOIN room_members rm ON rm.room_id = r.id\n            LEFT JOIN messages m ON m.room_id = r.id\n            LEFT JOIN room_governance_state rgs ON rgs.room_id = r.id\n            WHERE ($1::text IS NULL OR rc.code ILIKE '%' || $1 || '%')\n            GROUP BY r.id, rc.code, rgs.banned_until, rgs.ban_reason\n            ORDER BY MAX(m.created_at) DESC NULLS LAST, rc.code ASC\n            LIMIT $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "member_count",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_message_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "banned_until",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "ban_reason",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "38abf0e68fd58fc22d7644c6be60796c894da74a25ff1b5d01bbb6e11744bfc6"
+}

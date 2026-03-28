@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO messages (id, room_id, sender_id, content, created_at)\n        VALUES ($1, $2, $3, $4, NOW() - INTERVAL '5 minute')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c8505d04d4d44d4df2bdf589ed4a951e7ec5177a87f2b1bd04e930e013efb797"
+}

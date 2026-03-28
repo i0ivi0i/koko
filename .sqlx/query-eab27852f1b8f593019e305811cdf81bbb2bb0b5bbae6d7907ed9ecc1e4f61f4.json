@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO global_chat_policy (singleton, max_message_length, updated_at)\n            VALUES (TRUE, $1, NOW())\n            ON CONFLICT (singleton)\n            DO UPDATE SET\n                max_message_length = EXCLUDED.max_message_length,\n                updated_at = NOW()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eab27852f1b8f593019e305811cdf81bbb2bb0b5bbae6d7907ed9ecc1e4f61f4"
+}

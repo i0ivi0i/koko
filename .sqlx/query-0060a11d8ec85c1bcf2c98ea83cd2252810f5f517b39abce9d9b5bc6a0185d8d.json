@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profiles (id, device_key) VALUES ($1, $2), ($3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0060a11d8ec85c1bcf2c98ea83cd2252810f5f517b39abce9d9b5bc6a0185d8d"
+}
