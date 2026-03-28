@@ -23,6 +23,15 @@ pub struct ActiveRoomSnapshot {
     pub members: Vec<RoomMemberResponse>,
 }
 
+pub struct RoomRealtimeSnapshot {
+    pub room_id: String,
+    pub room_code: String,
+    pub role: String,
+    pub messages: Vec<MessageResponse>,
+    pub has_more_messages: bool,
+    pub members: Vec<RoomMemberResponse>,
+}
+
 pub fn apply_joined_room(snapshot: ActiveRoomSnapshot) -> ActiveRoom {
     ActiveRoom {
         session_id: snapshot.session.session_id,
@@ -121,6 +130,26 @@ pub fn earliest_message_id(room: &ActiveRoom) -> Option<String> {
 
 pub fn replace_members(room: &mut ActiveRoom, members: Vec<RoomMemberResponse>) {
     room.members = members;
+}
+
+pub fn replace_room_snapshot_if_room_matches(
+    state: &mut Option<ActiveRoom>,
+    snapshot: RoomRealtimeSnapshot,
+) -> bool {
+    let Some(room) = state.as_mut() else {
+        return false;
+    };
+
+    if room.room_id != snapshot.room_id {
+        return false;
+    }
+
+    room.room_code = snapshot.room_code;
+    room.role = snapshot.role;
+    room.messages = snapshot.messages;
+    room.has_more_messages = snapshot.has_more_messages;
+    room.members = snapshot.members;
+    true
 }
 
 pub fn leave_room(state: &mut Option<ActiveRoom>) {
@@ -246,6 +275,53 @@ mod tests {
 
         assert_eq!(room.members.len(), 2);
         assert_eq!(room.members[0].profile_id, "profile-2");
+    }
+
+    #[test]
+    fn replace_room_snapshot_if_room_matches_should_refresh_room_state() {
+        let mut state = Some(ActiveRoom {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+            room_id: "room-1".into(),
+            room_code: "1A234".into(),
+            role: "member".into(),
+            messages: vec![message("msg-1")],
+            has_more_messages: true,
+            members: vec![member("profile-1")],
+        });
+
+        let replaced = replace_room_snapshot_if_room_matches(
+            &mut state,
+            RoomRealtimeSnapshot {
+                room_id: "room-1".into(),
+                room_code: "9Z999".into(),
+                role: "owner".into(),
+                messages: vec![message("msg-2"), message("msg-3")],
+                has_more_messages: false,
+                members: vec![member("profile-2"), member("profile-3")],
+            },
+        );
+
+        assert!(replaced);
+        let room = state.as_ref().unwrap();
+        assert_eq!(room.room_code, "9Z999");
+        assert_eq!(room.role, "owner");
+        assert_eq!(
+            room.messages
+                .iter()
+                .map(|item| item.message_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["msg-2", "msg-3"]
+        );
+        assert!(!room.has_more_messages);
+        assert_eq!(
+            room.members
+                .iter()
+                .map(|item| item.profile_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["profile-2", "profile-3"]
+        );
     }
 
     #[test]

@@ -1,5 +1,3 @@
-#[cfg(target_arch = "wasm32")]
-use dioxus::prelude::spawn;
 use gloo_net::http::Request;
 #[cfg(target_arch = "wasm32")]
 use gloo_storage::{LocalStorage, Storage};
@@ -19,7 +17,7 @@ use std::sync::{Arc, Mutex};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
-use crate::state::ActiveRoomSnapshot;
+use crate::state::{ActiveRoomSnapshot, RoomRealtimeSnapshot};
 
 #[cfg(target_arch = "wasm32")]
 const DEVICE_TOKEN_STORAGE_KEY: &str = "koko.device_token";
@@ -119,6 +117,7 @@ impl RealtimeState {
 }
 
 type MessageObserver = Arc<Mutex<Box<dyn FnMut(MessageResponse)>>>;
+type SnapshotObserver = Arc<Mutex<Box<dyn FnMut(RoomRealtimeSnapshot)>>>;
 type ErrorObserver = Arc<Mutex<Box<dyn FnMut(String)>>>;
 
 #[derive(Clone)]
@@ -373,6 +372,7 @@ pub fn connect_joined_room<F, E>(
     room_id: String,
     session_id: String,
     on_message: F,
+    on_snapshot: impl FnMut(RoomRealtimeSnapshot) + 'static,
     on_error: E,
 ) -> Result<JoinedRoomClient, String>
 where
@@ -380,11 +380,13 @@ where
     E: FnMut(String) + 'static,
 {
     let observer = into_message_observer(on_message);
+    let snapshot_observer: SnapshotObserver = Arc::new(Mutex::new(Box::new(on_snapshot)));
     let error_observer: ErrorObserver = Arc::new(Mutex::new(Box::new(on_error)));
     let realtime = connect_room_events_with_observer(
         room_id.clone(),
         session_id.clone(),
         observer.clone(),
+        snapshot_observer,
         error_observer,
     )?;
 
@@ -397,6 +399,7 @@ fn connect_room_events_with_observer(
     room_id: String,
     session_id: String,
     on_message: MessageObserver,
+    on_snapshot: SnapshotObserver,
     on_error: ErrorObserver,
 ) -> Result<RoomRealtimeClient, String> {
     let state = Arc::new(Mutex::new(RealtimeState::Connecting));
@@ -409,6 +412,7 @@ fn connect_room_events_with_observer(
         room_id.clone(),
         session_id.clone(),
         on_message.clone(),
+        on_snapshot,
         on_error,
     )?;
 
@@ -421,23 +425,15 @@ fn connect_room_events_with_observer(
 }
 
 #[cfg(target_arch = "wasm32")]
-fn synchronize_recent_messages(room_id: &str, session_id: &str, on_message: MessageObserver) {
-    let room_id = room_id.to_owned();
-    let session_id = session_id.to_owned();
-
-    spawn(async move {
-        if let Ok(response) = fetch_room_messages(&room_id, &session_id, None).await {
-            for message in response.items {
-                notify_message(&on_message, message);
-            }
-        }
-    });
-}
-
-#[cfg(target_arch = "wasm32")]
 fn notify_message(on_message: &MessageObserver, message: MessageResponse) {
     let mut callback = on_message.lock().unwrap();
     (*callback)(message);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn notify_snapshot(on_snapshot: &SnapshotObserver, snapshot: RoomRealtimeSnapshot) {
+    let mut callback = on_snapshot.lock().unwrap();
+    (*callback)(snapshot);
 }
 
 fn store_realtime_state(state: &Arc<Mutex<RealtimeState>>, next: RealtimeState) {
@@ -451,15 +447,13 @@ fn create_realtime_transport(
     room_id: String,
     session_id: String,
     on_message: MessageObserver,
+    on_snapshot: SnapshotObserver,
     on_error: ErrorObserver,
 ) -> Result<RealtimeTransport, String> {
     #[cfg(target_arch = "wasm32")]
     {
         let state_for_status = state.clone();
         let ready_for_status = ready.clone();
-        let room_for_status = room_id.clone();
-        let session_for_status = session_id.clone();
-        let observer_for_status = on_message.clone();
         let on_status = Closure::wrap(Box::new(move |status: String| {
             let next_state = match status.as_str() {
                 "connected" => RealtimeState::Connected,
@@ -473,23 +467,18 @@ fn create_realtime_transport(
             if !matches!(next_state, RealtimeState::Connected) {
                 *ready_for_status.lock().unwrap() = false;
             }
-            if matches!(next_state, RealtimeState::Connected) {
-                synchronize_recent_messages(
-                    &room_for_status,
-                    &session_for_status,
-                    observer_for_status.clone(),
-                );
-            }
         }) as Box<dyn FnMut(String)>);
 
         let observer_for_events = on_message.clone();
+        let snapshot_for_events = on_snapshot.clone();
         let ready_for_events = ready.clone();
         let pending_for_events = pending_commands.clone();
         let socket_handle = Rc::new(RefCell::new(None::<JsValue>));
         let socket_handle_for_events = socket_handle.clone();
         let on_event = Closure::wrap(Box::new(move |payload: String| {
-            if is_room_snapshot_event(&payload) {
+            if let Some(snapshot) = decode_room_snapshot_event(&payload) {
                 *ready_for_events.lock().unwrap() = true;
+                notify_snapshot(&snapshot_for_events, snapshot);
                 if let Some(socket) = socket_handle_for_events.borrow().clone() {
                     let _ = flush_pending_commands(&pending_for_events, |command| {
                         js_emit_command(&socket, command).map_err(js_error_to_string)
@@ -535,6 +524,7 @@ fn create_realtime_transport(
             room_id,
             session_id,
             on_message,
+            on_snapshot,
             on_error,
         );
         Err("官方 Socket.IO 浏览器客户端仅在 wasm 环境可用".into())
@@ -576,11 +566,29 @@ fn build_send_command_json(content: &str) -> Result<String, String> {
     .map_err(|error| error.to_string())
 }
 
-fn is_room_snapshot_event(text: &str) -> bool {
-    matches!(
-        serde_json::from_str::<ServerRealtimeEvent>(text),
-        Ok(ServerRealtimeEvent::RoomSnapshot { .. })
-    )
+fn decode_room_snapshot_event(text: &str) -> Option<RoomRealtimeSnapshot> {
+    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
+
+    let ServerRealtimeEvent::RoomSnapshot {
+        room_id,
+        code,
+        role,
+        messages,
+        has_more_messages,
+        members,
+    } = event
+    else {
+        return None;
+    };
+
+    Some(RoomRealtimeSnapshot {
+        room_id,
+        room_code: code,
+        role,
+        messages,
+        has_more_messages,
+        members,
+    })
 }
 
 fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
@@ -767,7 +775,7 @@ mod tests {
     }
 
     #[test]
-    fn room_snapshot_event_should_be_detected_as_ready_signal() {
+    fn room_snapshot_event_should_decode_when_snapshot_arrives() {
         let payload = serde_json::to_string(&ServerRealtimeEvent::RoomSnapshot {
             room_id: "room-1".into(),
             code: "1A234".into(),
@@ -778,7 +786,39 @@ mod tests {
         })
         .unwrap();
 
-        assert!(is_room_snapshot_event(&payload));
+        assert!(decode_room_snapshot_event(&payload).is_some());
+    }
+
+    #[test]
+    fn room_snapshot_event_should_decode_to_realtime_snapshot() {
+        let payload = serde_json::to_string(&ServerRealtimeEvent::RoomSnapshot {
+            room_id: "room-1".into(),
+            code: "1A234".into(),
+            role: "owner".into(),
+            messages: vec![MessageResponse {
+                message_id: "msg-1".into(),
+                room_id: "room-1".into(),
+                sender_id: "profile-1".into(),
+                content: "hello".into(),
+                created_at: "2026-03-28T10:00:00Z".into(),
+            }],
+            has_more_messages: true,
+            members: vec![RoomMemberResponse {
+                profile_id: "profile-1".into(),
+                display_name: "user-1".into(),
+                role: "owner".into(),
+            }],
+        })
+        .unwrap();
+
+        let snapshot = decode_room_snapshot_event(&payload).unwrap();
+
+        assert_eq!(snapshot.room_id, "room-1");
+        assert_eq!(snapshot.room_code, "1A234");
+        assert_eq!(snapshot.role, "owner");
+        assert_eq!(snapshot.messages.len(), 1);
+        assert!(snapshot.has_more_messages);
+        assert_eq!(snapshot.members.len(), 1);
     }
 
     #[test]

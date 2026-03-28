@@ -145,6 +145,14 @@ pub fn App() -> Element {
                                                 );
                                             });
                                         },
+                                        move |snapshot| {
+                                            room_state.with_mut(|state| {
+                                                state::replace_room_snapshot_if_room_matches(
+                                                    state,
+                                                    snapshot,
+                                                );
+                                            });
+                                        },
                                         move |error| show_runtime_error(error),
                                     );
 
