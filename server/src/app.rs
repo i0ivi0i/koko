@@ -79,31 +79,45 @@ pub fn build_app(pool: PgPool) -> Router {
         pool,
         AdminAuthConfig::from_env(),
         RealtimeHub::default(),
+        true,
     )
     .0
 }
 
 pub fn build_app_with_realtime(pool: PgPool, realtime: RealtimeHub) -> Router {
-    build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), realtime).0
+    build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), realtime, true).0
 }
 
 pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> Router {
-    build_app_with_admin_auth_and_realtime(pool, admin_auth, RealtimeHub::default()).0
+    build_app_with_admin_auth_and_realtime(pool, admin_auth, RealtimeHub::default(), true).0
+}
+
+pub fn build_http_app_without_socket_io(pool: PgPool) -> Router {
+    build_app_with_admin_auth_and_realtime(
+        pool,
+        AdminAuthConfig::from_env(),
+        RealtimeHub::default(),
+        false,
+    )
+    .0
 }
 
 pub fn build_app_with_test_handles(pool: PgPool) -> (Router, TestHandles) {
-    build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), RealtimeHub::default())
+    build_app_with_admin_auth_and_realtime(
+        pool,
+        AdminAuthConfig::from_env(),
+        RealtimeHub::default(),
+        true,
+    )
 }
 
 fn build_app_with_admin_auth_and_realtime(
     pool: PgPool,
     admin_auth: AdminAuthConfig,
     realtime: RealtimeHub,
+    enable_socket_io: bool,
 ) -> (Router, TestHandles) {
     let state = AppState { pool, realtime };
-    let (socket_io_layer, socket_io) = SocketIo::builder().with_state(state.clone()).build_layer();
-    crate::ws::configure_socket_io(&socket_io);
-    state.realtime.attach_socket_io(socket_io.clone());
 
     let admin_routes = Router::new()
         .route("/overview", get(http::get_admin_overview))
@@ -157,8 +171,19 @@ fn build_app_with_admin_auth_and_realtime(
                 .allow_origin(Any)
                 .allow_methods(Any)
                 .allow_headers(Any),
-        )
-        .layer(socket_io_layer)
+        );
+
+    let app = if enable_socket_io {
+        let (socket_io_layer, socket_io) =
+            SocketIo::builder().with_state(state.clone()).build_layer();
+        crate::ws::configure_socket_io(&socket_io);
+        state.realtime.attach_socket_io(socket_io.clone());
+        app.layer(socket_io_layer)
+    } else {
+        app
+    };
+
+    let app = app
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)

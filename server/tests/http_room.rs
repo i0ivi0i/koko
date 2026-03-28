@@ -168,7 +168,7 @@ async fn 公开房间短码解析接口不应继续暴露房间存在性(pool: P
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 房间详情与消息历史接口应返回已创建房间信息(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = koko_server::app::build_http_app_without_socket_io(pool.clone());
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
     let session_id = Uuid::new_v4();
@@ -249,7 +249,7 @@ async fn 房间详情与消息历史接口应返回已创建房间信息(pool: P
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 成员列表接口应返回成员和角色(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = koko_server::app::build_http_app_without_socket_io(pool.clone());
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
@@ -319,7 +319,7 @@ async fn 成员列表接口应返回成员和角色(pool: PgPool) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 发送消息接口应返回新消息(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = koko_server::app::build_http_app_without_socket_io(pool.clone());
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
     let session_id = Uuid::new_v4();
@@ -463,7 +463,9 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播(po
     assert_eq!(event.1["room_id"], room_id.to_string());
     assert_eq!(event.1["content"], "socketioxide direct");
 
-    server.abort();
+    close_socket_io(&mut socket).await;
+    drop(socket);
+    shutdown_test_server(server).await;
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -591,7 +593,9 @@ async fn 被禁言成员通过socketio发送消息应被领域规则拒绝(pool:
 
     assert_eq!(message_count, 0);
 
-    server.abort();
+    close_socket_io(&mut socket).await;
+    drop(socket);
+    shutdown_test_server(server).await;
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -778,6 +782,7 @@ async fn 发送消息接口应忽略客户端伪造的_sender_id并使用会话�
     insert_room_with_owner(&pool, room_id, owner_id, "7G890").await;
 
     let response = app
+        .clone()
         .oneshot(with_session(
             Request::builder()
                 .method("POST")
@@ -797,11 +802,12 @@ async fn 发送消息接口应忽略客户端伪造的_sender_id并使用会话�
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    drop(app);
 }
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 消息历史接口应只返回最新一页并标记是否还有更早消息(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = koko_server::app::build_http_app_without_socket_io(pool.clone());
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
     let session_id = Uuid::new_v4();
@@ -847,6 +853,7 @@ async fn 消息历史接口应只返回最新一页并标记是否还有更早�
     .await;
 
     let response = app
+        .clone()
         .oneshot(with_session(
             Request::builder()
                 .method("GET")
@@ -866,11 +873,12 @@ async fn 消息历史接口应只返回最新一页并标记是否还有更早�
     assert_eq!(payload["items"].as_array().unwrap().len(), 2);
     assert_eq!(payload["items"][0]["content"], "message-3");
     assert_eq!(payload["items"][1]["content"], "message-4");
+    drop(app);
 }
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 消息历史接口应按时间与消息id稳定分页(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = koko_server::app::build_http_app_without_socket_io(pool.clone());
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
     let anchor_id = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
@@ -917,6 +925,7 @@ async fn 消息历史接口应按时间与消息id稳定分页(pool: PgPool) {
     .await;
 
     let response = app
+        .clone()
         .oneshot(with_session(
             Request::builder()
                 .method("GET")
@@ -938,11 +947,12 @@ async fn 消息历史接口应按时间与消息id稳定分页(pool: PgPool) {
     assert_eq!(payload["items"].as_array().unwrap().len(), 2);
     assert_eq!(payload["items"][0]["content"], "older-1");
     assert_eq!(payload["items"][1]["content"], "older-2");
+    drop(app);
 }
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = koko_server::app::build_http_app_without_socket_io(pool.clone());
     let owner_id = Uuid::new_v4();
     let other_owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
@@ -982,6 +992,7 @@ async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
     assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
 
     let cross_room = app
+        .clone()
         .oneshot(with_session(
             Request::builder()
                 .method("GET")
@@ -995,11 +1006,12 @@ async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(cross_room.status(), StatusCode::BAD_REQUEST);
+    drop(app);
 }
 
 #[sqlx::test(migrations = "../migrations")]
 async fn 房间读取接口应拒绝非成员会话(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
+    let app = koko_server::app::build_http_app_without_socket_io(pool.clone());
     let owner_id = Uuid::new_v4();
     let outsider_id = Uuid::new_v4();
     let session_id = Uuid::new_v4();
@@ -1039,6 +1051,7 @@ async fn 房间读取接口应拒绝非成员会话(pool: PgPool) {
     assert_eq!(messages.status(), StatusCode::FORBIDDEN);
 
     let members = app
+        .clone()
         .oneshot(with_session(
             Request::builder()
                 .method("GET")
@@ -1050,6 +1063,7 @@ async fn 房间读取接口应拒绝非成员会话(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(members.status(), StatusCode::FORBIDDEN);
+    drop(app);
 }
 
 async fn insert_profile(pool: &PgPool, profile_id: Uuid, device_key: &str) {
@@ -1238,4 +1252,17 @@ async fn assert_no_socket_io_event(
         "unexpected socket.io event: {:?}",
         result.unwrap()
     );
+}
+
+async fn close_socket_io(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+) {
+    let _ = socket.send(Message::Close(None)).await;
+}
+
+async fn shutdown_test_server(server: tokio::task::JoinHandle<()>) {
+    server.abort();
+    let _ = server.await;
 }
