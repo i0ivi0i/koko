@@ -2,8 +2,11 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
+use koko_contract::ServerRealtimeEvent;
+use koko_core::model::RoomId;
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use tokio::time::{Duration, timeout};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -379,6 +382,84 @@ async fn 发送消息接口应返回新消息(pool: PgPool) {
     assert_eq!(payload["content"], "hello over http");
     assert_eq!(payload["sender_id"], owner_id.to_string());
     assert!(payload["created_at"].as_str().is_some());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn socketio握手端点应已装配到现有应用(pool: PgPool) {
+    let app = koko_server::app::build_app(pool);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/socket.io/?EIO=4&transport=polling")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        payload.starts_with("0{"),
+        "unexpected handshake payload: {payload}"
+    );
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn http发送消息后realtime_adapter应收到_message_created(pool: PgPool) {
+    let realtime = koko_server::ws::RealtimeHub::default();
+    let app = koko_server::app::build_app_with_realtime(pool.clone(), realtime.clone());
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "owner-device").await;
+    insert_session(&pool, session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, "4D568").await;
+
+    let mut events = realtime.subscribe(RoomId(room_id));
+
+    let response = app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "hello over http and socketio",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            session_id,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+
+    let event = timeout(Duration::from_secs(1), events.recv())
+        .await
+        .expect("应收到 realtime 事件")
+        .expect("realtime 通道不应关闭");
+
+    assert_eq!(
+        event,
+        ServerRealtimeEvent::MessageCreated {
+            message_id: payload["message_id"].as_str().unwrap().to_owned(),
+            room_id: room_id.to_string(),
+            sender_id: owner_id.to_string(),
+            content: "hello over http and socketio".into(),
+            created_at: payload["created_at"].as_str().unwrap().to_owned(),
+        }
+    );
 }
 
 #[sqlx::test(migrations = "../migrations")]

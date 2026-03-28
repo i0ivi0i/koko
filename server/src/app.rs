@@ -4,6 +4,7 @@ use axum::{
     middleware,
     routing::{get, post},
 };
+use socketioxide::SocketIo;
 use sqlx::PgPool;
 use tower::ServiceBuilder;
 use tower_http::ServiceBuilderExt;
@@ -61,14 +62,30 @@ impl AppState {
 }
 
 pub fn build_app(pool: PgPool) -> Router {
-    build_app_with_admin_auth(pool, AdminAuthConfig::from_env())
+    build_app_with_admin_auth_and_realtime(
+        pool,
+        AdminAuthConfig::from_env(),
+        RealtimeHub::default(),
+    )
+}
+
+pub fn build_app_with_realtime(pool: PgPool, realtime: RealtimeHub) -> Router {
+    build_app_with_admin_auth_and_realtime(pool, AdminAuthConfig::from_env(), realtime)
 }
 
 pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> Router {
-    let state = AppState {
-        pool,
-        realtime: RealtimeHub::default(),
-    };
+    build_app_with_admin_auth_and_realtime(pool, admin_auth, RealtimeHub::default())
+}
+
+fn build_app_with_admin_auth_and_realtime(
+    pool: PgPool,
+    admin_auth: AdminAuthConfig,
+    realtime: RealtimeHub,
+) -> Router {
+    let state = AppState { pool, realtime };
+    let (socket_io_layer, socket_io) = SocketIo::builder().with_state(state.clone()).build_layer();
+    crate::ws::configure_socket_io(&socket_io);
+    state.realtime.attach_socket_io(socket_io);
 
     let admin_routes = Router::new()
         .route("/overview", get(http::get_admin_overview))
@@ -123,6 +140,7 @@ pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> R
                 .allow_methods(Any)
                 .allow_headers(Any),
         )
+        .layer(socket_io_layer)
         .layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)

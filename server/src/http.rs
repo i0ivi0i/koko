@@ -12,7 +12,7 @@ use koko_contract::{
     DemoteAdminRequest, GlobalChatPolicyResponse, GovernanceActorRequest, JoinOrCreateRoomRequest,
     JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest, RoomGovernanceStateResponse,
     RoomMemberResponse, RoomMembersResponse, RoomMessagesQuery, RoomMessagesResponse, RoomResponse,
-    SESSION_HEADER_NAME, SendMessageRequest, ServerWsEvent, UpdateGlobalChatPolicyRequest,
+    SESSION_HEADER_NAME, SendMessageRequest, ServerRealtimeEvent, UpdateGlobalChatPolicyRequest,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
@@ -300,15 +300,14 @@ pub async fn send_room_message(
     .map_err(map_domain_error)?;
 
     let response = message_to_response(message);
-    let event = serde_json::to_string(&ServerWsEvent::MessageCreated {
+    let event = ServerRealtimeEvent::MessageCreated {
         message_id: response.message_id.clone(),
         room_id: response.room_id.clone(),
         sender_id: response.sender_id.clone(),
         content: response.content.clone(),
         created_at: response.created_at.clone(),
-    })
-    .map_err(|_| ApiError::internal("消息广播序列化失败"))?;
-    state.realtime.publish(room_id, event);
+    };
+    state.realtime.publish(room_id, event).await;
 
     Ok(Json(response))
 }
@@ -486,6 +485,10 @@ impl ApiError {
             message,
         }
     }
+
+    pub(crate) fn message(&self) -> &'static str {
+        self.message
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -539,7 +542,7 @@ fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {
         .map_err(|_| ApiError::bad_request("room_id 不合法"))
 }
 
-fn parse_optional_message_id(raw: Option<&str>) -> Result<Option<MessageId>, ApiError> {
+pub(crate) fn parse_optional_message_id(raw: Option<&str>) -> Result<Option<MessageId>, ApiError> {
     raw.map(|value| {
         Uuid::parse_str(value)
             .map(MessageId)
@@ -548,7 +551,7 @@ fn parse_optional_message_id(raw: Option<&str>) -> Result<Option<MessageId>, Api
     .transpose()
 }
 
-fn normalize_message_page_limit(limit: Option<u16>) -> usize {
+pub(crate) fn normalize_message_page_limit(limit: Option<u16>) -> usize {
     match limit {
         Some(0) | None => DEFAULT_MESSAGE_PAGE_LIMIT,
         Some(value) => value.min(MAX_MESSAGE_PAGE_LIMIT) as usize,
@@ -562,7 +565,7 @@ fn normalize_admin_room_limit(limit: Option<u16>) -> usize {
     }
 }
 
-fn role_name(role: Role) -> &'static str {
+pub(crate) fn role_name(role: Role) -> &'static str {
     match role {
         Role::Owner => "owner",
         Role::Admin => "admin",
@@ -570,7 +573,7 @@ fn role_name(role: Role) -> &'static str {
     }
 }
 
-fn message_to_response(message: koko_core::model::Message) -> MessageResponse {
+pub(crate) fn message_to_response(message: koko_core::model::Message) -> MessageResponse {
     MessageResponse {
         message_id: message.id.0.to_string(),
         room_id: message.room_id.0.to_string(),
@@ -642,7 +645,9 @@ pub(crate) fn map_domain_error(error: koko_core::error::DomainError) -> ApiError
     }
 }
 
-fn map_list_messages_error(error: crate::message_repo::ListRoomMessagesError) -> ApiError {
+pub(crate) fn map_list_messages_error(
+    error: crate::message_repo::ListRoomMessagesError,
+) -> ApiError {
     match error {
         crate::message_repo::ListRoomMessagesError::InvalidAnchor => {
             ApiError::bad_request("before_message_id 不存在或不属于当前房间")
