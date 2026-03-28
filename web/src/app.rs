@@ -55,6 +55,7 @@ pub fn App() -> Element {
 
                                 if let Ok(response) = client::fetch_room_messages(
                                     &room_id,
+                                    &current_room.session_id,
                                     Some(&before_message_id),
                                 )
                                 .await
@@ -79,7 +80,7 @@ pub fn App() -> Element {
                             spawn(async move {
                                 if let Ok(message) = client::send_message(
                                     &current_room.room_id,
-                                    &current_room.profile_id,
+                                    &current_room.session_id,
                                     &content,
                                 )
                                 .await
@@ -134,12 +135,12 @@ pub fn App() -> Element {
                                 Ok(snapshot) => {
                                     let room = state::apply_joined_room(snapshot);
                                     let room_id = room.room_id.clone();
-                                    let profile_id = room.profile_id.clone();
+                                    let session_id = room.session_id.clone();
                                     loading_older_messages.set(false);
                                     room_state.set(Some(room));
                                     spawn(client::listen_room_events(
                                         room_id,
-                                        profile_id,
+                                        session_id,
                                         move |message| {
                                             room_state.with_mut(|state| {
                                                 if let Some(room) = state.as_mut() {
@@ -169,9 +170,9 @@ fn spawn_member_action(
 ) {
     spawn(async move {
         let _ =
-            client::run_member_action(action, &room.room_id, &room.profile_id, &target_profile_id)
+            client::run_member_action(action, &room.room_id, &room.session_id, &target_profile_id)
                 .await;
-        if let Ok(members) = client::fetch_room_members(&room.room_id).await {
+        if let Ok(members) = client::fetch_room_members(&room.room_id, &room.session_id).await {
             room_state.with_mut(|state| {
                 if let Some(current) = state.as_mut() {
                     state::replace_members(current, members);

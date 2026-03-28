@@ -7,10 +7,13 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+const SESSION_HEADER: &str = "x-koko-session-id";
+
 #[sqlx::test(migrations = "../migrations")]
 async fn 入房或建房接口应返回房间与当前角色(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
     let profile_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
 
     sqlx::query!(
         "INSERT INTO profiles (id, device_key) VALUES ($1, $2)",
@@ -20,22 +23,23 @@ async fn 入房或建房接口应返回房间与当前角色(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
+    insert_session(&pool, session_id, profile_id).await;
 
     let response = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri("/rooms/join-or-create")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "profile_id": profile_id.to_string(),
                         "code": "1A234",
                     })
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
 
@@ -50,7 +54,50 @@ async fn 入房或建房接口应返回房间与当前角色(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn 房间详情与消息历史接口应返回已创建房间信息(pool: PgPool) {
+async fn 入房接口应忽略客户端伪造的_profile_id并使用会话身份(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let actual_profile_id = Uuid::new_v4();
+    let forged_profile_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+
+    insert_profile(&pool, actual_profile_id, "join-actual-device").await;
+    insert_profile(&pool, forged_profile_id, "join-forged-device").await;
+    insert_session(&pool, session_id, actual_profile_id).await;
+
+    let response = app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri("/rooms/join-or-create")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "profile_id": forged_profile_id.to_string(),
+                        "code": "9J012",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            session_id,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+    let room_id = Uuid::parse_str(payload["room_id"].as_str().unwrap()).unwrap();
+
+    let owner_id = sqlx::query_scalar!("SELECT owner_profile_id FROM rooms WHERE id = $1", room_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(owner_id, actual_profile_id);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 公开房间短码解析接口不应继续暴露房间存在性(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
@@ -93,7 +140,6 @@ async fn 房间详情与消息历史接口应返回已创建房间信息(pool: P
     .unwrap();
 
     let resolve = app
-        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -109,21 +155,64 @@ async fn 房间详情与消息历史接口应返回已创建房间信息(pool: P
         )
         .await
         .unwrap();
-    assert_eq!(resolve.status(), StatusCode::OK);
-    let resolve_body = to_bytes(resolve.into_body(), usize::MAX).await.unwrap();
-    let resolve_payload: Value = serde_json::from_slice(&resolve_body).unwrap();
-    assert_eq!(resolve_payload["exists"], true);
-    assert_eq!(resolve_payload["room_id"], room_id.to_string());
+    assert_eq!(resolve.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 房间详情与消息历史接口应返回已创建房间信息(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let owner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+
+    sqlx::query!(
+        "INSERT INTO profiles (id, device_key) VALUES ($1, $2)",
+        owner_id,
+        "room-device-2"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    insert_session(&pool, session_id, owner_id).await;
+
+    sqlx::query!(
+        "INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)",
+        room_id,
+        owner_id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query!(
+        "INSERT INTO room_codes (room_id, code) VALUES ($1, $2)",
+        room_id,
+        "2B345"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query!(
+        "INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)",
+        room_id,
+        owner_id,
+        "owner"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let room = app
         .clone()
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("GET")
                 .uri(format!("/rooms/{room_id}"))
                 .body(Body::empty())
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
     assert_eq!(room.status(), StatusCode::OK);
@@ -133,13 +222,14 @@ async fn 房间详情与消息历史接口应返回已创建房间信息(pool: P
     assert_eq!(room_payload["code"], "2B345");
 
     let messages = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("GET")
                 .uri(format!("/rooms/{room_id}/messages"))
                 .body(Body::empty())
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
     assert_eq!(messages.status(), StatusCode::OK);
@@ -155,6 +245,7 @@ async fn 成员列表接口应返回成员和角色(pool: PgPool) {
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
 
     sqlx::query!(
         "INSERT INTO profiles (id, device_key) VALUES ($1, $2), ($3, $4)",
@@ -166,6 +257,7 @@ async fn 成员列表接口应返回成员和角色(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
+    insert_session(&pool, session_id, owner_id).await;
 
     sqlx::query!(
         "INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)",
@@ -198,13 +290,14 @@ async fn 成员列表接口应返回成员和角色(pool: PgPool) {
     .unwrap();
 
     let response = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("GET")
                 .uri(format!("/rooms/{room_id}/members"))
                 .body(Body::empty())
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
 
@@ -221,6 +314,7 @@ async fn 发送消息接口应返回新消息(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
 
     sqlx::query!(
         "INSERT INTO profiles (id, device_key) VALUES ($1, $2)",
@@ -230,6 +324,7 @@ async fn 发送消息接口应返回新消息(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
+    insert_session(&pool, session_id, owner_id).await;
 
     sqlx::query!(
         "INSERT INTO rooms (id, owner_profile_id) VALUES ($1, $2)",
@@ -260,20 +355,20 @@ async fn 发送消息接口应返回新消息(pool: PgPool) {
     .unwrap();
 
     let response = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/messages"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "sender_id": owner_id.to_string(),
                         "content": "hello over http",
                     })
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
 
@@ -287,12 +382,51 @@ async fn 发送消息接口应返回新消息(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn 发送消息接口应忽略客户端伪造的_sender_id并使用会话身份(
+    pool: PgPool,
+) {
+    let app = koko_server::app::build_app(pool.clone());
+    let owner_id = Uuid::new_v4();
+    let outsider_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "message-owner").await;
+    insert_profile(&pool, outsider_id, "message-outsider").await;
+    insert_session(&pool, session_id, outsider_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, "7G890").await;
+
+    let response = app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "sender_id": owner_id.to_string(),
+                        "content": "forged sender",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            session_id,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn 消息历史接口应只返回最新一页并标记是否还有更早消息(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
 
     insert_profile(&pool, owner_id, "page-owner").await;
+    insert_session(&pool, session_id, owner_id).await;
     insert_room_with_owner(&pool, room_id, owner_id, "5E678").await;
     insert_message(
         &pool,
@@ -332,13 +466,14 @@ async fn 消息历史接口应只返回最新一页并标记是否还有更早�
     .await;
 
     let response = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("GET")
                 .uri(format!("/rooms/{room_id}/messages?limit=2"))
                 .body(Body::empty())
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
 
@@ -358,8 +493,10 @@ async fn 消息历史接口应按时间与消息id稳定分页(pool: PgPool) {
     let owner_id = Uuid::new_v4();
     let room_id = Uuid::new_v4();
     let anchor_id = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+    let session_id = Uuid::new_v4();
 
     insert_profile(&pool, owner_id, "anchor-owner").await;
+    insert_session(&pool, session_id, owner_id).await;
     insert_room_with_owner(&pool, room_id, owner_id, "6F789").await;
     insert_message(
         &pool,
@@ -399,7 +536,7 @@ async fn 消息历史接口应按时间与消息id稳定分页(pool: PgPool) {
     .await;
 
     let response = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("GET")
                 .uri(format!(
@@ -407,7 +544,8 @@ async fn 消息历史接口应按时间与消息id稳定分页(pool: PgPool) {
                 ))
                 .body(Body::empty())
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
 
@@ -429,9 +567,11 @@ async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
     let room_id = Uuid::new_v4();
     let other_room_id = Uuid::new_v4();
     let other_message_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
 
     insert_profile(&pool, owner_id, "owner-a").await;
     insert_profile(&pool, other_owner_id, "owner-b").await;
+    insert_session(&pool, session_id, owner_id).await;
     insert_room_with_owner(&pool, room_id, owner_id, "7G890").await;
     insert_room_with_owner(&pool, other_room_id, other_owner_id, "8H901").await;
     insert_message(
@@ -446,7 +586,7 @@ async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
 
     let malformed = app
         .clone()
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("GET")
                 .uri(format!(
@@ -454,13 +594,14 @@ async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
                 ))
                 .body(Body::empty())
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
     assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
 
     let cross_room = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("GET")
                 .uri(format!(
@@ -468,10 +609,66 @@ async fn 非法或跨房间锚点应返回四百(pool: PgPool) {
                 ))
                 .body(Body::empty())
                 .unwrap(),
-        )
+            session_id,
+        ))
         .await
         .unwrap();
     assert_eq!(cross_room.status(), StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn 房间读取接口应拒绝非成员会话(pool: PgPool) {
+    let app = koko_server::app::build_app(pool.clone());
+    let owner_id = Uuid::new_v4();
+    let outsider_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "read-owner").await;
+    insert_profile(&pool, outsider_id, "read-outsider").await;
+    insert_session(&pool, session_id, outsider_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, "1K234").await;
+
+    let room = app
+        .clone()
+        .oneshot(with_session(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/rooms/{room_id}"))
+                .body(Body::empty())
+                .unwrap(),
+            session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(room.status(), StatusCode::FORBIDDEN);
+
+    let messages = app
+        .clone()
+        .oneshot(with_session(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .body(Body::empty())
+                .unwrap(),
+            session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(messages.status(), StatusCode::FORBIDDEN);
+
+    let members = app
+        .oneshot(with_session(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/rooms/{room_id}/members"))
+                .body(Body::empty())
+                .unwrap(),
+            session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(members.status(), StatusCode::FORBIDDEN);
 }
 
 async fn insert_profile(pool: &PgPool, profile_id: Uuid, device_key: &str) {
@@ -481,6 +678,24 @@ async fn insert_profile(pool: &PgPool, profile_id: Uuid, device_key: &str) {
         .execute(pool)
         .await
         .unwrap();
+}
+
+async fn insert_session(pool: &PgPool, session_id: Uuid, profile_id: Uuid) {
+    sqlx::query("INSERT INTO sessions (id, profile_id) VALUES ($1, $2)")
+        .bind(session_id)
+        .bind(profile_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+fn with_session(request: Request<Body>, session_id: Uuid) -> Request<Body> {
+    let (mut parts, body) = request.into_parts();
+    parts.headers.insert(
+        SESSION_HEADER,
+        session_id.to_string().parse().expect("测试会话头应合法"),
+    );
+    Request::from_parts(parts, body)
 }
 
 async fn insert_room_with_owner(pool: &PgPool, room_id: Uuid, owner_id: Uuid, code: &str) {

@@ -8,8 +8,8 @@ use gloo_storage::{LocalStorage, Storage};
 use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, GovernanceActorRequest,
     JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
-    RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SendMessageRequest,
-    ServerWsEvent,
+    RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse, SESSION_HEADER_NAME,
+    SendMessageRequest, ServerWsEvent,
 };
 
 use crate::state::ActiveRoomSnapshot;
@@ -35,7 +35,7 @@ pub fn api_base() -> &'static str {
     option_env!("KOKO_API_BASE").unwrap_or("http://127.0.0.1:3000")
 }
 
-pub fn build_room_ws_url(api_base: &str, room_id: &str, profile_id: &str) -> String {
+pub fn build_room_ws_url(api_base: &str, room_id: &str, session_id: &str) -> String {
     let ws_base = if let Some(rest) = api_base.strip_prefix("https://") {
         format!("wss://{rest}")
     } else if let Some(rest) = api_base.strip_prefix("http://") {
@@ -44,7 +44,7 @@ pub fn build_room_ws_url(api_base: &str, room_id: &str, profile_id: &str) -> Str
         api_base.to_string()
     };
 
-    format!("{ws_base}/ws/rooms/{room_id}?profile_id={profile_id}")
+    format!("{ws_base}/ws/rooms/{room_id}?session_id={session_id}")
 }
 
 fn build_room_messages_path(room_id: &str, before_message_id: Option<&str>) -> String {
@@ -74,8 +74,8 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
 
     let joined: JoinOrCreateRoomResponse =
         Request::post(&format!("{}/rooms/join-or-create", api_base()))
+            .header(SESSION_HEADER_NAME, &session.session_id)
             .json(&JoinOrCreateRoomRequest {
-                profile_id: session.profile_id.clone(),
                 code: normalized_code,
             })
             .map_err(|error| error.to_string())?
@@ -91,6 +91,7 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
         api_base(),
         build_room_messages_path(&joined.room_id, None)
     ))
+    .header(SESSION_HEADER_NAME, &session.session_id)
     .send()
     .await
     .map_err(|error| error.to_string())?
@@ -100,6 +101,7 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
 
     let members: RoomMembersResponse =
         Request::get(&format!("{}/rooms/{}/members", api_base(), joined.room_id))
+            .header(SESSION_HEADER_NAME, &session.session_id)
             .send()
             .await
             .map_err(|error| error.to_string())?
@@ -151,6 +153,7 @@ fn sanitize_bootstrap_device_token(stored: Option<&str>) -> Option<String> {
 
 pub async fn fetch_room_messages(
     room_id: &str,
+    session_id: &str,
     before_message_id: Option<&str>,
 ) -> Result<RoomMessagesResponse, String> {
     Request::get(&format!(
@@ -158,6 +161,7 @@ pub async fn fetch_room_messages(
         api_base(),
         build_room_messages_path(room_id, before_message_id)
     ))
+    .header(SESSION_HEADER_NAME, session_id)
     .send()
     .await
     .map_err(|error| error.to_string())?
@@ -166,9 +170,13 @@ pub async fn fetch_room_messages(
     .map_err(|error| error.to_string())
 }
 
-pub async fn fetch_room_members(room_id: &str) -> Result<Vec<RoomMemberResponse>, String> {
+pub async fn fetch_room_members(
+    room_id: &str,
+    session_id: &str,
+) -> Result<Vec<RoomMemberResponse>, String> {
     let members: RoomMembersResponse =
         Request::get(&format!("{}/rooms/{room_id}/members", api_base()))
+            .header(SESSION_HEADER_NAME, session_id)
             .send()
             .await
             .map_err(|error| error.to_string())?
@@ -182,43 +190,37 @@ pub async fn fetch_room_members(room_id: &str) -> Result<Vec<RoomMemberResponse>
 fn build_member_action_request(
     action: MemberAction,
     room_id: &str,
-    actor_profile_id: &str,
     target_profile_id: &str,
 ) -> MemberActionRequest {
     match action {
         MemberAction::Promote => MemberActionRequest {
             path: format!("/rooms/{room_id}/roles/promote"),
             body: serde_json::to_string(&PromoteAdminRequest {
-                actor_profile_id: actor_profile_id.to_owned(),
                 target_profile_id: target_profile_id.to_owned(),
             })
             .expect("治理请求序列化不应失败"),
         },
         MemberAction::Mute => MemberActionRequest {
             path: format!("/rooms/{room_id}/members/{target_profile_id}/mute"),
-            body: serde_json::to_string(&GovernanceActorRequest {
-                actor_profile_id: actor_profile_id.to_owned(),
-            })
-            .expect("治理请求序列化不应失败"),
+            body: serde_json::to_string(&GovernanceActorRequest {})
+                .expect("治理请求序列化不应失败"),
         },
         MemberAction::Remove => MemberActionRequest {
             path: format!("/rooms/{room_id}/members/{target_profile_id}/remove"),
-            body: serde_json::to_string(&GovernanceActorRequest {
-                actor_profile_id: actor_profile_id.to_owned(),
-            })
-            .expect("治理请求序列化不应失败"),
+            body: serde_json::to_string(&GovernanceActorRequest {})
+                .expect("治理请求序列化不应失败"),
         },
     }
 }
 
 pub async fn send_message(
     room_id: &str,
-    sender_id: &str,
+    session_id: &str,
     content: &str,
 ) -> Result<MessageResponse, String> {
     Request::post(&format!("{}/rooms/{room_id}/messages", api_base()))
+        .header(SESSION_HEADER_NAME, session_id)
         .json(&SendMessageRequest {
-            sender_id: sender_id.to_string(),
             content: content.to_string(),
         })
         .map_err(|error| error.to_string())?
@@ -233,12 +235,13 @@ pub async fn send_message(
 pub async fn run_member_action(
     action: MemberAction,
     room_id: &str,
-    actor_profile_id: &str,
+    session_id: &str,
     target_profile_id: &str,
 ) -> Result<(), String> {
-    let request = build_member_action_request(action, room_id, actor_profile_id, target_profile_id);
+    let request = build_member_action_request(action, room_id, target_profile_id);
 
     Request::post(&format!("{}{}", api_base(), request.path))
+        .header(SESSION_HEADER_NAME, session_id)
         .header("content-type", "application/json")
         .body(request.body)
         .map_err(|error| error.to_string())?
@@ -249,11 +252,11 @@ pub async fn run_member_action(
     Ok(())
 }
 
-pub async fn listen_room_events<F>(room_id: String, profile_id: String, mut on_message: F)
+pub async fn listen_room_events<F>(room_id: String, session_id: String, mut on_message: F)
 where
     F: FnMut(MessageResponse) + 'static,
 {
-    let ws_url = build_room_ws_url(api_base(), &room_id, &profile_id);
+    let ws_url = build_room_ws_url(api_base(), &room_id, &session_id);
 
     let Ok(socket) = WebSocket::open(&ws_url) else {
         return;
@@ -298,32 +301,30 @@ mod tests {
 
     #[test]
     fn ws_url_should_convert_http_to_ws() {
-        let url = build_room_ws_url("http://127.0.0.1:3000", "room-1", "profile-1");
+        let url = build_room_ws_url("http://127.0.0.1:3000", "room-1", "session-1");
         assert_eq!(
             url,
-            "ws://127.0.0.1:3000/ws/rooms/room-1?profile_id=profile-1"
+            "ws://127.0.0.1:3000/ws/rooms/room-1?session_id=session-1"
         );
     }
 
     #[test]
     fn ws_url_should_convert_https_to_wss() {
-        let url = build_room_ws_url("https://example.com", "room-1", "profile-1");
+        let url = build_room_ws_url("https://example.com", "room-1", "session-1");
         assert_eq!(
             url,
-            "wss://example.com/ws/rooms/room-1?profile_id=profile-1"
+            "wss://example.com/ws/rooms/room-1?session_id=session-1"
         );
     }
 
     #[test]
     fn promote_action_should_build_role_endpoint_and_full_body() {
-        let request =
-            build_member_action_request(MemberAction::Promote, "room-1", "owner-1", "member-1");
+        let request = build_member_action_request(MemberAction::Promote, "room-1", "member-1");
 
         assert_eq!(request.path, "/rooms/room-1/roles/promote");
         assert_eq!(
             request.body,
             serde_json::to_string(&PromoteAdminRequest {
-                actor_profile_id: "owner-1".into(),
                 target_profile_id: "member-1".into(),
             })
             .unwrap()
@@ -332,16 +333,12 @@ mod tests {
 
     #[test]
     fn mute_action_should_build_member_endpoint_and_actor_body() {
-        let request =
-            build_member_action_request(MemberAction::Mute, "room-1", "admin-1", "member-1");
+        let request = build_member_action_request(MemberAction::Mute, "room-1", "member-1");
 
         assert_eq!(request.path, "/rooms/room-1/members/member-1/mute");
         assert_eq!(
             request.body,
-            serde_json::to_string(&GovernanceActorRequest {
-                actor_profile_id: "admin-1".into(),
-            })
-            .unwrap()
+            serde_json::to_string(&GovernanceActorRequest {}).unwrap()
         );
     }
 

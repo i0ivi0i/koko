@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const SESSION_HEADER_NAME: &str = "x-koko-session-id";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BootstrapSessionRequest {
     pub device_token: Option<String>,
@@ -14,19 +16,7 @@ pub struct BootstrapSessionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ResolveRoomRequest {
-    pub code: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ResolveRoomResponse {
-    pub exists: bool,
-    pub room_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct JoinOrCreateRoomRequest {
-    pub profile_id: String,
     pub code: String,
 }
 
@@ -78,26 +68,21 @@ pub struct RoomMembersResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SendMessageRequest {
-    pub sender_id: String,
     pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PromoteAdminRequest {
-    pub actor_profile_id: String,
     pub target_profile_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DemoteAdminRequest {
-    pub actor_profile_id: String,
     pub target_profile_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct GovernanceActorRequest {
-    pub actor_profile_id: String,
-}
+pub struct GovernanceActorRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GlobalChatPolicyResponse {

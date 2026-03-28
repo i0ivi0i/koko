@@ -15,6 +15,12 @@ pub struct BootstrapSession {
     pub device_token: String,
 }
 
+#[derive(Clone, Copy)]
+pub struct AuthenticatedSession {
+    pub session_id: SessionId,
+    pub profile_id: ProfileId,
+}
+
 pub async fn bootstrap_session(
     pool: &PgPool,
     device_token: Option<&str>,
@@ -36,6 +42,29 @@ pub async fn bootstrap_session(
         profile_id: issued_identity.profile_id.0,
         display_name: build_display_name(issued_identity.profile_id),
         device_token: issued_identity.device_token,
+    })
+}
+
+pub async fn authenticate_session(
+    pool: &PgPool,
+    raw_session_id: &str,
+) -> Result<AuthenticatedSession, ApiError> {
+    let session_id = Uuid::parse_str(raw_session_id)
+        .map(SessionId)
+        .map_err(|_| ApiError::unauthorized("会话认证无效"))?;
+
+    let record = sqlx::query!(
+        "SELECT profile_id FROM sessions WHERE id = $1",
+        session_id.0
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal("会话查询失败"))?
+    .ok_or_else(|| ApiError::unauthorized("会话认证无效"))?;
+
+    Ok(AuthenticatedSession {
+        session_id,
+        profile_id: ProfileId(record.profile_id),
     })
 }
 
@@ -119,9 +148,8 @@ mod tests {
 
     #[test]
     fn build_display_name_should_hide_private_device_token() {
-        let display_name = build_display_name(ProfileId(uuid!(
-            "12345678-1234-5678-9abc-def012345678"
-        )));
+        let display_name =
+            build_display_name(ProfileId(uuid!("12345678-1234-5678-9abc-def012345678")));
 
         assert_eq!(display_name, "访客-12345678");
         assert!(!display_name.contains("anon-"));

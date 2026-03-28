@@ -78,7 +78,10 @@ pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> R
         )
         .route("/rooms", get(http::list_admin_rooms))
         .route("/rooms/{room_id}", get(http::get_admin_room_detail))
-        .route("/rooms/{room_id}/members", get(http::list_admin_room_members))
+        .route(
+            "/rooms/{room_id}/members",
+            get(http::list_admin_room_members),
+        )
         .route("/rooms/{room_id}/ban", post(http::ban_room))
         .route("/rooms/{room_id}/unban", post(http::unban_room))
         .route_layer(middleware::from_fn_with_state(
@@ -90,7 +93,6 @@ pub fn build_app_with_admin_auth(pool: PgPool, admin_auth: AdminAuthConfig) -> R
         .route("/", get(http::root_status))
         .nest("/admin", admin_routes)
         .route("/session/bootstrap", post(http::bootstrap_session))
-        .route("/rooms/resolve", post(http::resolve_room))
         .route("/rooms/join-or-create", post(http::join_or_create_room))
         .route(
             "/rooms/{room_id}/roles/promote",

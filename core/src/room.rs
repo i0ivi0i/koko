@@ -82,12 +82,12 @@ pub async fn promote_admin(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = member_role(repo, room_id, actor_id).await?;
+    let actor_role = actor_role(repo, room_id, actor_id).await?;
     if actor_role != Role::Owner {
         return Err(DomainError::InsufficientRoomPermission);
     }
 
-    let target_role = member_role(repo, room_id, target_id).await?;
+    let target_role = target_role(repo, room_id, target_id).await?;
     if target_role == Role::Owner {
         return Err(DomainError::CannotModerateRoomOwner);
     }
@@ -101,12 +101,12 @@ pub async fn demote_admin(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = member_role(repo, room_id, actor_id).await?;
+    let actor_role = actor_role(repo, room_id, actor_id).await?;
     if actor_role != Role::Owner {
         return Err(DomainError::InsufficientRoomPermission);
     }
 
-    let target_role = member_role(repo, room_id, target_id).await?;
+    let target_role = target_role(repo, room_id, target_id).await?;
     if target_role == Role::Owner {
         return Err(DomainError::CannotModerateRoomOwner);
     }
@@ -120,8 +120,8 @@ pub async fn mute_member(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = member_role(repo, room_id, actor_id).await?;
-    let target_role = member_role(repo, room_id, target_id).await?;
+    let actor_role = actor_role(repo, room_id, actor_id).await?;
+    let target_role = target_role(repo, room_id, target_id).await?;
 
     match actor_role {
         Role::Owner => {}
@@ -142,8 +142,8 @@ pub async fn remove_member(
     actor_id: ProfileId,
     target_id: ProfileId,
 ) -> Result<(), DomainError> {
-    let actor_role = member_role(repo, room_id, actor_id).await?;
-    let target_role = member_role(repo, room_id, target_id).await?;
+    let actor_role = actor_role(repo, room_id, actor_id).await?;
+    let target_role = target_role(repo, room_id, target_id).await?;
 
     match actor_role {
         Role::Owner => {}
@@ -158,7 +158,17 @@ pub async fn remove_member(
     repo.remove_member(room_id, target_id).await
 }
 
-async fn member_role(
+async fn actor_role(
+    repo: &impl RoomRepository,
+    room_id: RoomId,
+    profile_id: ProfileId,
+) -> Result<Role, DomainError> {
+    repo.role_of(room_id, profile_id)
+        .await?
+        .ok_or(DomainError::SenderIsNotRoomMember)
+}
+
+async fn target_role(
     repo: &impl RoomRepository,
     room_id: RoomId,
     profile_id: ProfileId,

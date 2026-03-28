@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 const TEST_ADMIN_PASSWORD: &str = "test-admin-password";
 const TEST_ADMIN_AUTHORIZATION: &str = "Basic YWRtaW46dGVzdC1hZG1pbi1wYXNzd29yZA==";
+const SESSION_HEADER: &str = "x-koko-session-id";
 
 fn build_admin_app(pool: PgPool) -> axum::Router {
     koko_server::app::build_app_with_admin_auth(
@@ -83,22 +84,24 @@ async fn 提升管理员接口应更新成员角色(pool: PgPool) {
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
     seed_room(&pool, room_id, owner_id, member_id).await;
+    insert_session(&pool, owner_session_id, owner_id).await;
 
     let response = app
-        .oneshot(with_admin(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/roles/promote"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "actor_profile_id": owner_id.to_string(),
                         "target_profile_id": member_id.to_string(),
                     })
                     .to_string(),
                 ))
                 .unwrap(),
+            owner_session_id,
         ))
         .await
         .unwrap();
@@ -118,27 +121,63 @@ async fn 提升管理员接口应更新成员角色(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn 提升管理员接口应忽略客户端伪造的_actor_profile_id并使用会话身份(
+    pool: PgPool,
+) {
+    let app = build_admin_app(pool.clone());
+    let room_id = Uuid::new_v4();
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let outsider_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+    seed_room(&pool, room_id, owner_id, member_id).await;
+    insert_profile(&pool, outsider_id, "outsider-device").await;
+    insert_session(&pool, session_id, outsider_id).await;
+
+    let response = app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/roles/promote"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "actor_profile_id": owner_id.to_string(),
+                        "target_profile_id": member_id.to_string(),
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            session_id,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn 禁言后发送消息应失败(pool: PgPool) {
     let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+    let member_session_id = Uuid::new_v4();
     seed_room(&pool, room_id, owner_id, member_id).await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_session(&pool, member_session_id, member_id).await;
 
     let mute = app
         .clone()
-        .oneshot(with_admin(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/mute"))
                 .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "actor_profile_id": owner_id.to_string(),
-                    })
-                    .to_string(),
-                ))
+                .body(Body::from(json!({}).to_string()))
                 .unwrap(),
+            owner_session_id,
         ))
         .await
         .unwrap();
@@ -146,20 +185,20 @@ async fn 禁言后发送消息应失败(pool: PgPool) {
     assert_eq!(mute.status(), StatusCode::OK);
 
     let send = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/messages"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "sender_id": member_id.to_string(),
                         "content": "still talking",
                     })
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+            member_session_id,
+        ))
         .await
         .unwrap();
 
@@ -172,21 +211,19 @@ async fn 移除成员接口应删除成员关系(pool: PgPool) {
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
     seed_room(&pool, room_id, owner_id, member_id).await;
+    insert_session(&pool, owner_session_id, owner_id).await;
 
     let response = app
-        .oneshot(with_admin(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/remove"))
                 .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "actor_profile_id": owner_id.to_string(),
-                    })
-                    .to_string(),
-                ))
+                .body(Body::from(json!({}).to_string()))
                 .unwrap(),
+            owner_session_id,
         ))
         .await
         .unwrap();
@@ -212,7 +249,9 @@ async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
+    let member_session_id = Uuid::new_v4();
     seed_room(&pool, room_id, owner_id, member_id).await;
+    insert_session(&pool, member_session_id, member_id).await;
 
     let update_policy = app
         .clone()
@@ -235,20 +274,20 @@ async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
     assert_eq!(update_policy.status(), StatusCode::OK);
 
     let send = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/messages"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "sender_id": member_id.to_string(),
                         "content": "hello",
                     })
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+            member_session_id,
+        ))
         .await
         .unwrap();
 
@@ -264,8 +303,14 @@ async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查�
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
     let joiner_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+    let member_session_id = Uuid::new_v4();
+    let joiner_session_id = Uuid::new_v4();
     seed_room(&pool, room_id, owner_id, member_id).await;
     insert_profile(&pool, joiner_id, "joiner-device").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_session(&pool, member_session_id, member_id).await;
+    insert_session(&pool, joiner_session_id, joiner_id).await;
 
     let banned_until = (OffsetDateTime::now_utc() + Duration::hours(1))
         .format(&Rfc3339)
@@ -294,20 +339,20 @@ async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查�
 
     let existing_member_join = app
         .clone()
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri("/rooms/join-or-create")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "profile_id": member_id.to_string(),
                         "code": "8H901",
                     })
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+            member_session_id,
+        ))
         .await
         .unwrap();
 
@@ -315,40 +360,40 @@ async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查�
 
     let join = app
         .clone()
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri("/rooms/join-or-create")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "profile_id": joiner_id.to_string(),
                         "code": "8H901",
                     })
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+            joiner_session_id,
+        ))
         .await
         .unwrap();
 
     assert_eq!(join.status(), StatusCode::FORBIDDEN);
 
     let send = app
-        .oneshot(
+        .oneshot(with_session(
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/messages"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "sender_id": owner_id.to_string(),
                         "content": "still talking",
                     })
                     .to_string(),
                 ))
                 .unwrap(),
-        )
+            owner_session_id,
+        ))
         .await
         .unwrap();
 
@@ -495,7 +540,11 @@ async fn 后台房间列表与详情接口应返回封禁和最近消息信息(p
     assert_eq!(list_payload["items"][0]["code"], "8H901");
     assert_eq!(list_payload["items"][0]["member_count"], 2);
     assert_eq!(list_payload["items"][0]["ban_reason"], "ops freeze");
-    assert!(list_payload["items"][0]["last_message_at"].as_str().is_some());
+    assert!(
+        list_payload["items"][0]["last_message_at"]
+            .as_str()
+            .is_some()
+    );
     assert!(list_payload["items"][0]["banned_until"].as_str().is_some());
 
     let detail = app
@@ -572,4 +621,24 @@ async fn insert_profile(pool: &PgPool, profile_id: Uuid, device_key: &str) {
     .execute(pool)
     .await
     .unwrap();
+}
+
+async fn insert_session(pool: &PgPool, session_id: Uuid, profile_id: Uuid) {
+    sqlx::query!(
+        "INSERT INTO sessions (id, profile_id) VALUES ($1, $2)",
+        session_id,
+        profile_id
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+fn with_session(request: Request<Body>, session_id: Uuid) -> Request<Body> {
+    let (mut parts, body) = request.into_parts();
+    parts.headers.insert(
+        SESSION_HEADER,
+        session_id.to_string().parse().expect("测试会话头应合法"),
+    );
+    Request::from_parts(parts, body)
 }

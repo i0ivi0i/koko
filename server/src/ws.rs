@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 use crate::{
     app::AppState, http::ApiError, message_repo::PostgresMessageRepository,
-    room_repo::PostgresRoomRepository,
+    room_repo::PostgresRoomRepository, session,
 };
 
 #[derive(Clone, Default)]
@@ -72,11 +72,11 @@ pub(crate) async fn connect(
     Query(query): Query<WsConnectQuery>,
 ) -> Result<Response, ApiError> {
     let room_id = parse_room_id(&room_id)?;
-    let profile_id = parse_profile_id(&query.profile_id)?;
+    let session = session::authenticate_session(&state.pool, &query.session_id).await?;
     let room_repo = PostgresRoomRepository::new(state.pool.clone());
 
     let role = room_repo
-        .role_of(room_id, profile_id)
+        .role_of(room_id, session.profile_id)
         .await
         .map_err(|_| ApiError::internal("房间成员校验失败"))?;
 
@@ -85,7 +85,7 @@ pub(crate) async fn connect(
     }
 
     Ok(ws
-        .on_upgrade(move |socket| handle_socket(socket, state, room_id, profile_id))
+        .on_upgrade(move |socket| handle_socket(socket, state, room_id, session.profile_id))
         .into_response())
 }
 
@@ -157,13 +157,7 @@ async fn handle_client_text(
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct WsConnectQuery {
-    profile_id: String,
-}
-
-fn parse_profile_id(raw: &str) -> Result<ProfileId, ApiError> {
-    Uuid::parse_str(raw)
-        .map(ProfileId)
-        .map_err(|_| ApiError::bad_request("profile_id 不合法"))
+    session_id: String,
 }
 
 fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {

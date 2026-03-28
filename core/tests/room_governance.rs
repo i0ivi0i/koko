@@ -223,6 +223,23 @@ async fn 管理员不应能提升其他成员为管理员() {
 }
 
 #[tokio::test]
+async fn 非成员不应伪装群主提升管理员() {
+    let deps = FakeDeps::default();
+    let room_id = RoomId(Uuid::new_v4());
+    let owner_id = ProfileId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+    let outsider_id = ProfileId(Uuid::new_v4());
+    deps.seed_member(room_id, owner_id, Role::Owner).await;
+    deps.seed_member(room_id, member_id, Role::Member).await;
+
+    let error = promote_admin(&deps, room_id, outsider_id, member_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, DomainError::SenderIsNotRoomMember);
+}
+
+#[tokio::test]
 async fn 被禁言成员不应继续发送消息() {
     let deps = FakeDeps::default();
     let room_id = RoomId(Uuid::new_v4());
