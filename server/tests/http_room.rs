@@ -2,11 +2,15 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
+use futures_util::{SinkExt, StreamExt};
 use koko_contract::ServerRealtimeEvent;
 use koko_core::model::RoomId;
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -463,6 +467,68 @@ async fn http发送消息后realtime_adapter应收到_message_created(pool: PgPo
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn 被禁言成员通过socketio发送消息应被领域规则拒绝(pool: PgPool) {
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let member_session_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "socketio-owner").await;
+    insert_profile(&pool, member_id, "socketio-member").await;
+    insert_session(&pool, member_session_id, member_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, "4D569").await;
+    insert_member(&pool, room_id, member_id, "member").await;
+    mute_member_until_future(&pool, room_id, member_id).await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = connect_socket_io(
+        address,
+        json!({
+            "session_id": member_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = next_socket_io_event(&mut socket).await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+    assert_eq!(room_snapshot.1["room_id"], room_id.to_string());
+
+    send_socket_io_command(
+        &mut socket,
+        json!({
+            "type": "send_message",
+            "content": "muted over socketio",
+        }),
+    )
+    .await;
+
+    let error_event = next_socket_io_event(&mut socket).await;
+    assert_eq!(error_event.0, "error");
+    assert_eq!(error_event.1, Value::String("成员已被禁言".into()));
+
+    let message_count = sqlx::query_scalar!(
+        "SELECT COUNT(*) AS count FROM messages WHERE room_id = $1",
+        room_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(message_count, 0);
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn 发送消息接口应忽略客户端伪造的_sender_id并使用会话身份(
     pool: PgPool,
 ) {
@@ -770,6 +836,27 @@ async fn insert_session(pool: &PgPool, session_id: Uuid, profile_id: Uuid) {
         .unwrap();
 }
 
+async fn insert_member(pool: &PgPool, room_id: Uuid, profile_id: Uuid, role: &str) {
+    sqlx::query("INSERT INTO room_members (room_id, profile_id, role) VALUES ($1, $2, $3)")
+        .bind(room_id)
+        .bind(profile_id)
+        .bind(role)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn mute_member_until_future(pool: &PgPool, room_id: Uuid, profile_id: Uuid) {
+    sqlx::query(
+        "UPDATE room_members SET muted_until = NOW() + INTERVAL '1 hour' WHERE room_id = $1 AND profile_id = $2",
+    )
+    .bind(room_id)
+    .bind(profile_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 fn with_session(request: Request<Body>, session_id: Uuid) -> Request<Body> {
     let (mut parts, body) = request.into_parts();
     parts.headers.insert(
@@ -822,4 +909,85 @@ async fn insert_message(
     .execute(pool)
     .await
     .unwrap();
+}
+
+async fn connect_socket_io(
+    address: SocketAddr,
+    auth: Value,
+) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+    let (mut socket, _) = connect_async(format!(
+        "ws://{address}/socket.io/?EIO=4&transport=websocket"
+    ))
+    .await
+    .unwrap();
+
+    let open_packet = timeout(Duration::from_secs(1), socket.next())
+        .await
+        .expect("应收到 engine.io open packet")
+        .expect("socket 不应提前关闭")
+        .expect("open packet 不应出错");
+    let Message::Text(open_packet) = open_packet else {
+        panic!("expected text open packet");
+    };
+    assert!(
+        open_packet.starts_with("0{"),
+        "unexpected open packet: {open_packet}"
+    );
+
+    socket
+        .send(Message::Text(format!("40{}", auth).into()))
+        .await
+        .unwrap();
+
+    socket
+}
+
+async fn send_socket_io_command(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    command: Value,
+) {
+    socket
+        .send(Message::Text(format!("42[\"command\",{}]", command).into()))
+        .await
+        .unwrap();
+}
+
+async fn next_socket_io_event(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+) -> (String, Value) {
+    loop {
+        let message = timeout(Duration::from_secs(1), socket.next())
+            .await
+            .expect("应收到 socket.io 消息")
+            .expect("socket 不应提前关闭")
+            .expect("socket.io 消息不应出错");
+
+        let Message::Text(text) = message else {
+            continue;
+        };
+
+        if text == "2" {
+            socket.send(Message::Text("3".into())).await.unwrap();
+            continue;
+        }
+
+        if text.starts_with("0{") || text.starts_with("40") {
+            continue;
+        }
+
+        let Some(payload) = text.strip_prefix("42") else {
+            continue;
+        };
+        let packet: Value = serde_json::from_str(payload).unwrap();
+        let event_name = packet[0]
+            .as_str()
+            .expect("socket.io event name 应为字符串")
+            .to_owned();
+        let event_payload = packet[1].clone();
+        return (event_name, event_payload);
+    }
 }
