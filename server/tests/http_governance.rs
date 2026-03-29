@@ -174,8 +174,7 @@ async fn 禁言后发送消息应失败(pool: PgPool) {
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/mute"))
-                .header("content-type", "application/json")
-                .body(Body::from(json!({}).to_string()))
+                .body(Body::empty())
                 .unwrap(),
             owner_session_id,
         ))
@@ -220,8 +219,7 @@ async fn 移除成员接口应删除成员关系(pool: PgPool) {
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/remove"))
-                .header("content-type", "application/json")
-                .body(Body::from(json!({}).to_string()))
+                .body(Body::empty())
                 .unwrap(),
             owner_session_id,
         ))

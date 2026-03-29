@@ -9,9 +9,9 @@ use headers::{Authorization, HeaderMapExt, authorization::Basic};
 use koko_contract::{
     AdminOverviewResponse, AdminRoomDetailResponse, AdminRoomListItem, AdminRoomListQuery,
     AdminRoomListResponse, BanRoomRequest, BootstrapSessionRequest, BootstrapSessionResponse,
-    DemoteAdminRequest, GlobalChatPolicyResponse, GovernanceActorRequest, JoinOrCreateRoomRequest,
-    JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest, RoomGovernanceStateResponse,
-    RoomMemberResponse, RoomMembersResponse, RoomMessagesQuery, RoomMessagesResponse, RoomResponse,
+    DemoteAdminRequest, GlobalChatPolicyResponse, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse,
+    MessageResponse, PromoteAdminRequest, RoomGovernanceStateResponse, RoomMemberResponse,
+    RoomMembersResponse, RoomMessagesQuery, RoomMessagesResponse, RoomResponse,
     SESSION_HEADER_NAME, SendMessageRequest, ServerRealtimeEvent, UpdateGlobalChatPolicyRequest,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -361,10 +361,8 @@ pub async fn mute_room_member(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((room_id, member_id)): Path<(String, String)>,
-    Json(request): Json<GovernanceActorRequest>,
 ) -> Result<StatusCode, ApiError> {
     let room_id = parse_room_id(&room_id)?;
-    let _ = request;
     let session = require_authenticated_session(&headers, &state.pool).await?;
     let target_id = parse_profile_id(&member_id)?;
     let room_repo = PostgresRoomRepository::new(state.pool.clone());
@@ -381,10 +379,8 @@ pub async fn remove_room_member(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((room_id, member_id)): Path<(String, String)>,
-    Json(request): Json<GovernanceActorRequest>,
 ) -> Result<StatusCode, ApiError> {
     let room_id = parse_room_id(&room_id)?;
-    let _ = request;
     let session = require_authenticated_session(&headers, &state.pool).await?;
     let target_id = parse_profile_id(&member_id)?;
     let room_repo = PostgresRoomRepository::new(state.pool.clone());

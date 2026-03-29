@@ -2177,6 +2177,8 @@ dependencies = [
  "gloo-storage",
  "js-sys",
  "koko-contract",
+ "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "wasm-bindgen",
 ]

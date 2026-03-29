@@ -90,9 +90,6 @@ pub struct DemoteAdminRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct GovernanceActorRequest {}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GlobalChatPolicyResponse {
     pub max_message_length: u32,
 }

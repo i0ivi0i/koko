@@ -1,13 +1,16 @@
-use gloo_net::http::Request;
+use gloo_net::http::{Request, RequestBuilder, Response};
 #[cfg(target_arch = "wasm32")]
 use gloo_storage::{LocalStorage, Storage};
 #[cfg(target_arch = "wasm32")]
 use js_sys::Function;
 use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, ClientRealtimeCommand,
-    GovernanceActorRequest, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse,
-    PromoteAdminRequest, RoomMessagesResponse, SESSION_HEADER_NAME, ServerRealtimeEvent,
+    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
+    RoomMessagesResponse, SESSION_HEADER_NAME, ServerRealtimeEvent,
 };
+use serde::de::DeserializeOwned;
+#[cfg(target_arch = "wasm32")]
+use serde_wasm_bindgen::{from_value as from_js_value, to_value as to_js_value};
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 #[cfg(target_arch = "wasm32")]
@@ -32,14 +35,14 @@ pub enum MemberAction {
 #[derive(Debug, PartialEq)]
 struct MemberActionRequest {
     path: String,
-    body: String,
+    body: Option<String>,
 }
 
 #[derive(Clone)]
 pub struct RoomRealtimeClient {
     state: Arc<Mutex<RealtimeState>>,
     ready: Arc<Mutex<bool>>,
-    pending_commands: Arc<Mutex<Vec<String>>>,
+    pending_commands: Arc<Mutex<Vec<ClientRealtimeCommand>>>,
     transport: RealtimeTransport,
 }
 
@@ -59,12 +62,12 @@ impl RoomRealtimeClient {
             return Err("实时连接不可用".into());
         }
 
-        let command_json = build_send_command_json(content)?;
+        let command = build_send_command(content);
         dispatch_or_queue_command(
             self.state(),
             *self.ready.lock().unwrap(),
             &self.pending_commands,
-            command_json,
+            command,
             |command| self.transport.emit_command(command),
         )
     }
@@ -129,12 +132,12 @@ enum RealtimeTransport {
 }
 
 impl RealtimeTransport {
-    fn emit_command(&self, command_json: &str) -> Result<(), String> {
+    fn emit_command(&self, command: &ClientRealtimeCommand) -> Result<(), String> {
         match self {
             #[cfg(target_arch = "wasm32")]
-            Self::SocketIo(bridge) => bridge.emit_command(command_json),
+            Self::SocketIo(bridge) => bridge.emit_command(command),
             Self::Unavailable => {
-                let _ = command_json;
+                let _ = command;
                 Err("实时连接不可用".into())
             }
         }
@@ -151,15 +154,16 @@ impl RealtimeTransport {
 #[cfg(target_arch = "wasm32")]
 struct SocketIoBridge {
     socket: JsValue,
-    _on_event: Closure<dyn FnMut(String)>,
+    _on_event: Closure<dyn FnMut(JsValue)>,
     _on_status: Closure<dyn FnMut(String)>,
     _on_error: Closure<dyn FnMut(String)>,
 }
 
 #[cfg(target_arch = "wasm32")]
 impl SocketIoBridge {
-    fn emit_command(&self, command_json: &str) -> Result<(), String> {
-        js_emit_command(&self.socket, command_json).map_err(js_error_to_string)
+    fn emit_command(&self, command: &ClientRealtimeCommand) -> Result<(), String> {
+        let value = to_js_value(command).map_err(|error| error.to_string())?;
+        js_emit_command(&self.socket, &value).map_err(js_error_to_string)
     }
 
     fn close(&self) {
@@ -186,7 +190,7 @@ fn build_room_messages_path(room_id: &str, before_message_id: Option<&str>) -> S
 
 pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
     let normalized_code = code.to_ascii_uppercase();
-    let session: BootstrapSessionResponse =
+    let session: BootstrapSessionResponse = parse_json_response(
         Request::post(&format!("{}/session/bootstrap", api_base()))
             .json(&BootstrapSessionRequest {
                 device_token: bootstrap_device_token(),
@@ -194,13 +198,12 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
             .map_err(|error| error.to_string())?
             .send()
             .await
-            .map_err(|error| error.to_string())?
-            .json()
-            .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?,
+    )
+    .await?;
     persist_bootstrap_device_token(&session.device_token);
 
-    let joined: JoinOrCreateRoomResponse =
+    let joined: JoinOrCreateRoomResponse = parse_json_response(
         Request::post(&format!("{}/rooms/join-or-create", api_base()))
             .header(SESSION_HEADER_NAME, &session.session_id)
             .json(&JoinOrCreateRoomRequest {
@@ -209,10 +212,9 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
             .map_err(|error| error.to_string())?
             .send()
             .await
-            .map_err(|error| error.to_string())?
-            .json()
-            .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?,
+    )
+    .await?;
 
     Ok(build_joined_room_snapshot(session, joined))
 }
@@ -275,18 +277,18 @@ pub async fn fetch_room_messages(
     session_id: &str,
     before_message_id: Option<&str>,
 ) -> Result<RoomMessagesResponse, String> {
-    Request::get(&format!(
-        "{}{}",
-        api_base(),
-        build_room_messages_path(room_id, before_message_id)
-    ))
-    .header(SESSION_HEADER_NAME, session_id)
-    .send()
+    parse_json_response(
+        Request::get(&format!(
+            "{}{}",
+            api_base(),
+            build_room_messages_path(room_id, before_message_id)
+        ))
+        .header(SESSION_HEADER_NAME, session_id)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?,
+    )
     .await
-    .map_err(|error| error.to_string())?
-    .json()
-    .await
-    .map_err(|error| error.to_string())
 }
 
 fn build_member_action_request(
@@ -297,20 +299,18 @@ fn build_member_action_request(
     match action {
         MemberAction::Promote => MemberActionRequest {
             path: format!("/rooms/{room_id}/roles/promote"),
-            body: serde_json::to_string(&PromoteAdminRequest {
+            body: Some(serde_json::to_string(&PromoteAdminRequest {
                 target_profile_id: target_profile_id.to_owned(),
             })
-            .expect("治理请求序列化不应失败"),
+            .expect("治理请求序列化不应失败")),
         },
         MemberAction::Mute => MemberActionRequest {
             path: format!("/rooms/{room_id}/members/{target_profile_id}/mute"),
-            body: serde_json::to_string(&GovernanceActorRequest {})
-                .expect("治理请求序列化不应失败"),
+            body: None,
         },
         MemberAction::Remove => MemberActionRequest {
             path: format!("/rooms/{room_id}/members/{target_profile_id}/remove"),
-            body: serde_json::to_string(&GovernanceActorRequest {})
-                .expect("治理请求序列化不应失败"),
+            body: None,
         },
     }
 }
@@ -323,14 +323,13 @@ pub async fn run_member_action(
 ) -> Result<(), String> {
     let request = build_member_action_request(action, room_id, target_profile_id);
 
-    let response = Request::post(&format!("{}{}", api_base(), request.path))
+    let response = send_request(
+        Request::post(&format!("{}{}", api_base(), request.path))
         .header(SESSION_HEADER_NAME, session_id)
-        .header("content-type", "application/json")
-        .body(request.body)
-        .map_err(|error| error.to_string())?
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
+        ,
+        request.body,
+    )
+    .await?;
 
     ensure_member_action_succeeded(response).await
 }
@@ -425,7 +424,7 @@ fn store_realtime_state(state: &Arc<Mutex<RealtimeState>>, next: RealtimeState) 
 fn create_realtime_transport(
     state: Arc<Mutex<RealtimeState>>,
     ready: Arc<Mutex<bool>>,
-    pending_commands: Arc<Mutex<Vec<String>>>,
+    pending_commands: Arc<Mutex<Vec<ClientRealtimeCommand>>>,
     room_id: String,
     session_id: String,
     on_message: MessageObserver,
@@ -459,23 +458,23 @@ fn create_realtime_transport(
         let pending_for_events = pending_commands.clone();
         let socket_handle = Rc::new(RefCell::new(None::<JsValue>));
         let socket_handle_for_events = socket_handle.clone();
-        let on_event = Closure::wrap(Box::new(move |payload: String| {
-            if let Some(snapshot) = decode_room_snapshot_event(&payload) {
+        let on_event = Closure::wrap(Box::new(move |payload: JsValue| {
+            if let Some(snapshot) = decode_room_snapshot_event_value(&payload) {
                 *ready_for_events.lock().unwrap() = true;
                 notify_snapshot(&snapshot_for_events, snapshot);
                 if let Some(socket) = socket_handle_for_events.borrow().clone() {
                     let _ = flush_pending_commands(&pending_for_events, |command| {
-                        js_emit_command(&socket, command).map_err(js_error_to_string)
+                        emit_command_to_socket(&socket, command)
                     });
                 }
             }
-            if let Some(snapshot) = decode_room_members_snapshot_event(&payload) {
+            if let Some(snapshot) = decode_room_members_snapshot_event_value(&payload) {
                 notify_members_snapshot(&members_snapshot_for_events, snapshot);
             }
-            if let Some(message) = decode_message_created_event(&payload) {
+            if let Some(message) = decode_message_created_event_value(&payload) {
                 notify_message(&observer_for_events, message);
             }
-        }) as Box<dyn FnMut(String)>);
+        }) as Box<dyn FnMut(JsValue)>);
 
         let observer_for_error = on_error.clone();
         let on_error = Closure::wrap(Box::new(move |error: String| {
@@ -541,22 +540,71 @@ extern "C" {
     ) -> Result<JsValue, JsValue>;
 
     #[wasm_bindgen(catch, js_name = emitCommand)]
-    fn js_emit_command(socket: &JsValue, command_json: &str) -> Result<(), JsValue>;
+    fn js_emit_command(socket: &JsValue, command: &JsValue) -> Result<(), JsValue>;
 
     #[wasm_bindgen(js_name = closeSocket)]
     fn js_close_socket(socket: &JsValue);
 }
 
-fn build_send_command_json(content: &str) -> Result<String, String> {
-    serde_json::to_string(&ClientRealtimeCommand::SendMessage {
+fn build_send_command(content: &str) -> ClientRealtimeCommand {
+    ClientRealtimeCommand::SendMessage {
         content: content.to_string(),
-    })
-    .map_err(|error| error.to_string())
+    }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+fn build_send_command_json(content: &str) -> Result<String, String> {
+    serde_json::to_string(&build_send_command(content)).map_err(|error| error.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn emit_command_to_socket(socket: &JsValue, command: &ClientRealtimeCommand) -> Result<(), String> {
+    let value = to_js_value(command).map_err(|error| error.to_string())?;
+    js_emit_command(socket, &value).map_err(js_error_to_string)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn decode_socket_event_value(value: &JsValue) -> Option<ServerRealtimeEvent> {
+    from_js_value(value.clone()).ok()
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 fn decode_room_snapshot_event(text: &str) -> Option<RoomRealtimeSnapshot> {
     let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
+    decode_room_snapshot(event)
+}
 
+#[cfg(target_arch = "wasm32")]
+fn decode_room_snapshot_event_value(value: &JsValue) -> Option<RoomRealtimeSnapshot> {
+    let event = decode_socket_event_value(value)?;
+    decode_room_snapshot(event)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
+    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
+    decode_message_created(event)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn decode_message_created_event_value(value: &JsValue) -> Option<MessageResponse> {
+    let event = decode_socket_event_value(value)?;
+    decode_message_created(event)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn decode_room_members_snapshot_event(text: &str) -> Option<RoomMembersRealtimeSnapshot> {
+    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
+    decode_room_members_snapshot(event)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn decode_room_members_snapshot_event_value(value: &JsValue) -> Option<RoomMembersRealtimeSnapshot> {
+    let event = decode_socket_event_value(value)?;
+    decode_room_members_snapshot(event)
+}
+
+fn decode_room_snapshot(event: ServerRealtimeEvent) -> Option<RoomRealtimeSnapshot> {
     let ServerRealtimeEvent::RoomSnapshot {
         room_id,
         code,
@@ -579,9 +627,7 @@ fn decode_room_snapshot_event(text: &str) -> Option<RoomRealtimeSnapshot> {
     })
 }
 
-fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
-    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
-
+fn decode_message_created(event: ServerRealtimeEvent) -> Option<MessageResponse> {
     let ServerRealtimeEvent::MessageCreated {
         message_id,
         room_id,
@@ -602,9 +648,7 @@ fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
     })
 }
 
-fn decode_room_members_snapshot_event(text: &str) -> Option<RoomMembersRealtimeSnapshot> {
-    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
-
+fn decode_room_members_snapshot(event: ServerRealtimeEvent) -> Option<RoomMembersRealtimeSnapshot> {
     let ServerRealtimeEvent::RoomMembersSnapshot {
         room_id,
         role,
@@ -624,31 +668,31 @@ fn decode_room_members_snapshot_event(text: &str) -> Option<RoomMembersRealtimeS
 fn dispatch_or_queue_command<F>(
     state: RealtimeState,
     ready: bool,
-    pending_commands: &Arc<Mutex<Vec<String>>>,
-    command_json: String,
+    pending_commands: &Arc<Mutex<Vec<ClientRealtimeCommand>>>,
+    command: ClientRealtimeCommand,
     emit_now: F,
 ) -> Result<(), String>
 where
-    F: FnOnce(&str) -> Result<(), String>,
+    F: FnOnce(&ClientRealtimeCommand) -> Result<(), String>,
 {
     if matches!(state, RealtimeState::Disconnected | RealtimeState::Closed) {
         return Err("实时连接不可用".into());
     }
 
     if matches!(state, RealtimeState::Connected) && ready {
-        return emit_now(&command_json);
+        return emit_now(&command);
     }
 
-    pending_commands.lock().unwrap().push(command_json);
+    pending_commands.lock().unwrap().push(command);
     Ok(())
 }
 
 fn flush_pending_commands<F>(
-    pending_commands: &Arc<Mutex<Vec<String>>>,
+    pending_commands: &Arc<Mutex<Vec<ClientRealtimeCommand>>>,
     mut emit: F,
 ) -> Result<(), String>
 where
-    F: FnMut(&str) -> Result<(), String>,
+    F: FnMut(&ClientRealtimeCommand) -> Result<(), String>,
 {
     let mut queued = {
         let mut guard = pending_commands.lock().unwrap();
@@ -668,6 +712,35 @@ where
     Ok(())
 }
 
+async fn send_request(
+    builder: RequestBuilder,
+    body: Option<String>,
+) -> Result<Response, String> {
+    let request = match body {
+        Some(body) => builder
+            .header("content-type", "application/json")
+            .body(body)
+            .map_err(|error| error.to_string())?,
+        None => builder.build().map_err(|error| error.to_string())?,
+    };
+
+    request.send().await.map_err(|error| error.to_string())
+}
+
+async fn parse_json_response<T>(response: Response) -> Result<T, String>
+where
+    T: DeserializeOwned,
+{
+    if !response.ok() {
+        let status = response.status();
+        let status_text = response.status_text();
+        let body = response.text().await.unwrap_or_default();
+        return Err(http_error_message(status, &status_text, &body));
+    }
+
+    response.json().await.map_err(|error| error.to_string())
+}
+
 async fn ensure_member_action_succeeded(response: gloo_net::http::Response) -> Result<(), String> {
     if response.ok() {
         return Ok(());
@@ -676,10 +749,10 @@ async fn ensure_member_action_succeeded(response: gloo_net::http::Response) -> R
     let status_text = response.status_text();
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
-    Err(member_action_error_message(status, &status_text, &body))
+    Err(http_error_message(status, &status_text, &body))
 }
 
-fn member_action_error_message(status: u16, status_text: &str, body: &str) -> String {
+fn http_error_message(status: u16, status_text: &str, body: &str) -> String {
     let message = body.trim();
 
     if !message.is_empty() {
@@ -697,8 +770,7 @@ fn member_action_error_message(status: u16, status_text: &str, body: &str) -> St
 mod tests {
     use super::*;
     use koko_contract::{
-        ClientRealtimeCommand, GovernanceActorRequest, PromoteAdminRequest, RoomMemberResponse,
-        ServerRealtimeEvent,
+        ClientRealtimeCommand, PromoteAdminRequest, RoomMemberResponse, ServerRealtimeEvent,
     };
     use std::sync::{Arc, Mutex};
 
@@ -726,22 +798,27 @@ mod tests {
         assert_eq!(request.path, "/rooms/room-1/roles/promote");
         assert_eq!(
             request.body,
-            serde_json::to_string(&PromoteAdminRequest {
+            Some(serde_json::to_string(&PromoteAdminRequest {
                 target_profile_id: "member-1".into(),
             })
-            .unwrap()
+            .unwrap())
         );
     }
 
     #[test]
-    fn mute_action_should_build_member_endpoint_and_actor_body() {
+    fn mute_action_should_build_member_endpoint_without_body() {
         let request = build_member_action_request(MemberAction::Mute, "room-1", "member-1");
 
         assert_eq!(request.path, "/rooms/room-1/members/member-1/mute");
-        assert_eq!(
-            request.body,
-            serde_json::to_string(&GovernanceActorRequest {}).unwrap()
-        );
+        assert_eq!(request.body, None);
+    }
+
+    #[test]
+    fn remove_action_should_build_member_endpoint_without_body() {
+        let request = build_member_action_request(MemberAction::Remove, "room-1", "member-1");
+
+        assert_eq!(request.path, "/rooms/room-1/members/member-1/remove");
+        assert_eq!(request.body, None);
     }
 
     #[test]
@@ -763,7 +840,7 @@ mod tests {
     #[test]
     fn member_action_failure_should_prefer_response_body() {
         assert_eq!(
-            member_action_error_message(403, "Forbidden", "房间权限不足"),
+            http_error_message(403, "Forbidden", "房间权限不足"),
             "房间权限不足"
         );
     }
@@ -771,14 +848,14 @@ mod tests {
     #[test]
     fn member_action_failure_without_body_should_fall_back_to_status_text() {
         assert_eq!(
-            member_action_error_message(404, "Not Found", ""),
+            http_error_message(404, "Not Found", ""),
             "Not Found"
         );
     }
 
     #[test]
     fn member_action_failure_without_body_or_status_text_should_include_status_code() {
-        assert_eq!(member_action_error_message(500, "", ""), "请求失败 (500)");
+        assert_eq!(http_error_message(500, "", ""), "请求失败 (500)");
     }
 
     #[test]
@@ -944,26 +1021,29 @@ mod tests {
             RealtimeState::Connected,
             false,
             &pending,
-            "queued-command".into(),
+            build_send_command("queued-command"),
             move |command| {
                 emitted_for_closure
                     .lock()
                     .unwrap()
-                    .push(command.to_string());
+                    .push(command.clone());
                 Ok(())
             },
         );
 
         assert_eq!(result, Ok(()));
-        assert_eq!(pending.lock().unwrap().as_slice(), ["queued-command"]);
+        assert_eq!(
+            pending.lock().unwrap().as_slice(),
+            &[build_send_command("queued-command")]
+        );
         assert!(emitted.lock().unwrap().is_empty());
     }
 
     #[test]
     fn flush_pending_commands_should_emit_in_order_and_clear_queue() {
         let pending = Arc::new(Mutex::new(vec![
-            "first-command".to_string(),
-            "second-command".to_string(),
+            build_send_command("first-command"),
+            build_send_command("second-command"),
         ]));
         let emitted = Arc::new(Mutex::new(Vec::new()));
         let emitted_for_closure = emitted.clone();
@@ -972,7 +1052,7 @@ mod tests {
             emitted_for_closure
                 .lock()
                 .unwrap()
-                .push(command.to_string());
+                .push(command.clone());
             Ok(())
         });
 
@@ -980,15 +1060,18 @@ mod tests {
         assert!(pending.lock().unwrap().is_empty());
         assert_eq!(
             emitted.lock().unwrap().as_slice(),
-            ["first-command", "second-command"]
+            &[
+                build_send_command("first-command"),
+                build_send_command("second-command"),
+            ]
         );
     }
 
     #[test]
     fn flush_pending_commands_should_requeue_remaining_commands_after_failure() {
         let pending = Arc::new(Mutex::new(vec![
-            "first-command".to_string(),
-            "second-command".to_string(),
+            build_send_command("first-command"),
+            build_send_command("second-command"),
         ]));
         let emitted = Arc::new(Mutex::new(Vec::new()));
         let emitted_for_closure = emitted.clone();
@@ -997,8 +1080,8 @@ mod tests {
             emitted_for_closure
                 .lock()
                 .unwrap()
-                .push(command.to_string());
-            if command == "first-command" {
+                .push(command.clone());
+            if *command == build_send_command("first-command") {
                 return Err("emit failed".into());
             }
             Ok(())
@@ -1007,9 +1090,15 @@ mod tests {
         assert_eq!(result, Err("emit failed".into()));
         assert_eq!(
             pending.lock().unwrap().as_slice(),
-            ["first-command", "second-command"]
+            &[
+                build_send_command("first-command"),
+                build_send_command("second-command"),
+            ]
         );
-        assert_eq!(emitted.lock().unwrap().as_slice(), ["first-command"]);
+        assert_eq!(
+            emitted.lock().unwrap().as_slice(),
+            &[build_send_command("first-command")]
+        );
     }
 
     #[test]

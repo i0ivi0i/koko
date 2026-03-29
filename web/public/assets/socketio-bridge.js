@@ -73,15 +73,15 @@ export function createRoomSocket(apiBase, sessionId, roomId, onEvent, onStatus, 
   });
 
   socket.on("event", (payload) => {
-    onEvent(JSON.stringify(payload));
+    onEvent(payload);
   });
 
   socket.connect();
   return socket;
 }
 
-export function emitCommand(socket, commandJson) {
-  socket.emit("command", JSON.parse(commandJson));
+export function emitCommand(socket, commandPayload) {
+  socket.emit("command", commandPayload);
 }
 
 export function closeSocket(socket) {

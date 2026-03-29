@@ -375,8 +375,7 @@ async fn 成员被移除后不应继续收到房间广播() {
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/remove"))
-                .header("content-type", "application/json")
-                .body(Body::from(json!({}).to_string()))
+                .body(Body::empty())
                 .unwrap(),
             owner_session_id,
         ))
@@ -526,8 +525,7 @@ async fn 禁言成员后在线房间成员应收到带禁言状态的_room_membe
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/mute"))
-                .header("content-type", "application/json")
-                .body(Body::from(json!({}).to_string()))
+                .body(Body::empty())
                 .unwrap(),
             owner_session_id,
         ))
@@ -594,8 +592,7 @@ async fn 移除成员后在线剩余成员应收到更新后的_room_members_sna
             Request::builder()
                 .method("POST")
                 .uri(format!("/rooms/{room_id}/members/{member_id}/remove"))
-                .header("content-type", "application/json")
-                .body(Body::from(json!({}).to_string()))
+                .body(Body::empty())
                 .unwrap(),
             owner_session_id,
         ))
