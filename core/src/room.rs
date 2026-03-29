@@ -102,6 +102,33 @@ pub async fn ensure_can_manage_member(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MemberActionCapabilities {
+    pub can_promote: bool,
+    pub can_mute: bool,
+    pub can_remove: bool,
+}
+
+pub fn member_action_capabilities(
+    actor_id: ProfileId,
+    actor_role: Role,
+    target_id: ProfileId,
+    target_role: Role,
+) -> MemberActionCapabilities {
+    if actor_id == target_id || target_role == Role::Owner {
+        return MemberActionCapabilities::default();
+    }
+
+    let can_manage = matches!(actor_role, Role::Owner)
+        || matches!((actor_role, target_role), (Role::Admin, Role::Member));
+
+    MemberActionCapabilities {
+        can_promote: actor_role == Role::Owner && target_role == Role::Member,
+        can_mute: can_manage,
+        can_remove: can_manage,
+    }
+}
+
 pub async fn update_global_chat_policy(
     repo: &impl RoomRepository,
     max_message_length: usize,

@@ -6,8 +6,6 @@ use crate::ui::{Avatar, RoleBadge};
 #[component]
 pub fn MemberSheet(
     open: bool,
-    current_role: String,
-    current_profile_id: String,
     members: Vec<RoomMemberResponse>,
     on_promote: EventHandler<String>,
     on_mute: EventHandler<String>,
@@ -38,8 +36,9 @@ pub fn MemberSheet(
                                 profile_id: member.profile_id,
                                 name: member.display_name,
                                 role: member.role,
-                                current_role: current_role.clone(),
-                                current_profile_id: current_profile_id.clone(),
+                                can_promote: member.can_promote,
+                                can_mute: member.can_mute,
+                                can_remove: member.can_remove,
                                 on_promote: on_promote.clone(),
                                 on_mute: on_mute.clone(),
                                 on_remove: on_remove.clone(),
@@ -57,16 +56,13 @@ fn MemberRow(
     profile_id: String,
     name: String,
     role: String,
-    current_role: String,
-    current_profile_id: String,
+    can_promote: bool,
+    can_mute: bool,
+    can_remove: bool,
     on_promote: EventHandler<String>,
     on_mute: EventHandler<String>,
     on_remove: EventHandler<String>,
 ) -> Element {
-    let can_manage_member =
-        current_role == "owner" || (current_role == "admin" && role == "member");
-    let can_promote = current_role == "owner" && role == "member";
-    let is_self = profile_id == current_profile_id;
     let promote_target = profile_id.clone();
     let mute_target = profile_id.clone();
     let remove_target = profile_id.clone();
@@ -80,7 +76,7 @@ fn MemberRow(
             }
             RoleBadge { label: role }
 
-            if !is_self && (can_promote || can_manage_member) {
+            if can_promote || can_mute || can_remove {
                 div { class: "member-sheet-actions",
                     if can_promote {
                         button {
@@ -89,12 +85,14 @@ fn MemberRow(
                             "升管"
                         }
                     }
-                    if can_manage_member {
+                    if can_mute {
                         button {
                             class: "ghost-button member-action-button",
                             onclick: move |_| on_mute.call(mute_target.clone()),
                             "禁言"
                         }
+                    }
+                    if can_remove {
                         button {
                             class: "ghost-button member-action-button danger",
                             onclick: move |_| on_remove.call(remove_target.clone()),
@@ -119,12 +117,13 @@ mod tests {
             rsx! {
                 MemberSheet {
                     open: true,
-                    current_role: "owner".to_string(),
-                    current_profile_id: "self".to_string(),
                     members: vec![RoomMemberResponse {
                         profile_id: "member-1".to_string(),
                         display_name: "Alice".to_string(),
                         role: "member".to_string(),
+                        can_promote: true,
+                        can_mute: true,
+                        can_remove: true,
                     }],
                     on_promote: move |_| {},
                     on_mute: move |_| {},
@@ -149,12 +148,13 @@ mod tests {
             rsx! {
                 MemberSheet {
                     open: true,
-                    current_role: "owner".to_string(),
-                    current_profile_id: "self".to_string(),
                     members: vec![RoomMemberResponse {
                         profile_id: "member-1".to_string(),
                         display_name: "Alice".to_string(),
                         role: "member".to_string(),
+                        can_promote: true,
+                        can_mute: true,
+                        can_remove: true,
                     }],
                     on_promote: move |_| {},
                     on_mute: move |_| {},
@@ -174,18 +174,19 @@ mod tests {
     }
 
     #[test]
-    fn self_row_should_not_render_management_actions() {
+    fn 没有能力位时不应渲染管理按钮() {
         #[component]
         fn TestSelfRow() -> Element {
             rsx! {
                 MemberSheet {
                     open: true,
-                    current_role: "owner".to_string(),
-                    current_profile_id: "self".to_string(),
                     members: vec![RoomMemberResponse {
                         profile_id: "self".to_string(),
                         display_name: "Alice".to_string(),
                         role: "member".to_string(),
+                        can_promote: false,
+                        can_mute: false,
+                        can_remove: false,
                     }],
                     on_promote: move |_| {},
                     on_mute: move |_| {},

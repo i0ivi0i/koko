@@ -795,6 +795,9 @@ mod tests {
                 profile_id: "profile-1".into(),
                 display_name: "user-1".into(),
                 role: "owner".into(),
+                can_promote: false,
+                can_mute: false,
+                can_remove: false,
             }],
         })
         .unwrap();

@@ -23,7 +23,10 @@ use crate::{
     room_repo::PostgresRoomRepository,
     session,
 };
-use koko_core::model::{MessageId, ProfileId, Role, RoomCode, RoomId};
+use koko_core::{
+    model::{MessageId, ProfileId, Role, RoomCode, RoomId},
+    room::member_action_capabilities,
+};
 
 const DEFAULT_MESSAGE_PAGE_LIMIT: usize = 40;
 const MAX_MESSAGE_PAGE_LIMIT: u16 = 100;
@@ -99,7 +102,7 @@ pub async fn get_admin_overview(
 pub async fn get_global_chat_policy(
     State(state): State<AppState>,
 ) -> Result<Json<GlobalChatPolicyResponse>, ApiError> {
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let policy = koko_core::room::get_global_chat_policy(&room_repo)
         .await
         .map_err(map_domain_error)?;
@@ -114,7 +117,7 @@ pub async fn update_global_chat_policy(
     State(state): State<AppState>,
     Json(request): Json<UpdateGlobalChatPolicyRequest>,
 ) -> Result<Json<GlobalChatPolicyResponse>, ApiError> {
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let policy = koko_core::room::update_global_chat_policy(
         &room_repo,
         usize::try_from(request.max_message_length)
@@ -133,7 +136,7 @@ pub async fn list_admin_rooms(
     State(state): State<AppState>,
     Query(query): Query<AdminRoomListQuery>,
 ) -> Result<Json<AdminRoomListResponse>, ApiError> {
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let items = room_repo
         .list_admin_rooms(
             query.code.as_deref(),
@@ -153,7 +156,7 @@ pub async fn get_admin_room_detail(
     Path(room_id): Path<String>,
 ) -> Result<Json<AdminRoomDetailResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let room = room_repo
         .admin_room_detail(room_id)
         .await
@@ -175,7 +178,7 @@ pub async fn list_admin_room_members(
     Path(room_id): Path<String>,
 ) -> Result<Json<RoomMembersResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let items = room_repo
         .list_members(room_id)
         .await
@@ -185,6 +188,9 @@ pub async fn list_admin_room_members(
             profile_id: member.profile_id.0.to_string(),
             display_name: session::build_display_name(member.profile_id),
             role: role_name(member.role).to_owned(),
+            can_promote: false,
+            can_mute: false,
+            can_remove: false,
         })
         .collect();
 
@@ -200,7 +206,7 @@ pub async fn join_or_create_room(
     let code =
         RoomCode::parse(&request.code).map_err(|_| ApiError::bad_request("房间短码不合法"))?;
     let session = require_authenticated_session(&headers, &state.pool).await?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let result = koko_core::room::join_or_create_room(&room_repo, session.profile_id, code)
         .await
         .map_err(map_domain_error)?;
@@ -219,7 +225,7 @@ pub async fn get_room(
 ) -> Result<Json<RoomResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
     require_room_member(&headers, &state.pool, room_id).await?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let room = room_repo
         .find_room(room_id)
         .await
@@ -261,18 +267,18 @@ pub async fn list_room_members(
     Path(room_id): Path<String>,
 ) -> Result<Json<RoomMembersResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
-    require_room_member(&headers, &state.pool, room_id).await?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let session = require_authenticated_session(&headers, &state.pool).await?;
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
+    let viewer_role =
+        koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
+            .await
+            .map_err(map_domain_error)?;
     let items = room_repo
         .list_members(room_id)
         .await
         .map_err(|_| ApiError::internal("成员列表读取失败"))?
         .into_iter()
-        .map(|member| RoomMemberResponse {
-            profile_id: member.profile_id.0.to_string(),
-            display_name: session::build_display_name(member.profile_id),
-            role: role_name(member.role).to_owned(),
-        })
+        .map(|member| room_member_to_response(session.profile_id, viewer_role, member))
         .collect();
 
     Ok(Json(RoomMembersResponse { items }))
@@ -321,11 +327,12 @@ pub async fn promote_room_admin(
     let room_id = parse_room_id(&room_id)?;
     let session = require_authenticated_session(&headers, &state.pool).await?;
     let target_id = parse_profile_id(&request.target_profile_id)?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
 
     koko_core::room::promote_admin(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
+    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -339,11 +346,12 @@ pub async fn demote_room_admin(
     let room_id = parse_room_id(&room_id)?;
     let session = require_authenticated_session(&headers, &state.pool).await?;
     let target_id = parse_profile_id(&request.target_profile_id)?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
 
     koko_core::room::demote_admin(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
+    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -358,11 +366,12 @@ pub async fn mute_room_member(
     let _ = request;
     let session = require_authenticated_session(&headers, &state.pool).await?;
     let target_id = parse_profile_id(&member_id)?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
 
     koko_core::room::mute_member(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
+    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -377,12 +386,16 @@ pub async fn remove_room_member(
     let _ = request;
     let session = require_authenticated_session(&headers, &state.pool).await?;
     let target_id = parse_profile_id(&member_id)?;
-    let room_repo = PostgresRoomRepository::new(state.pool);
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
 
     koko_core::room::remove_member(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
-    state.realtime.evict_profile_from_room(target_id, room_id).await;
+    state
+        .realtime
+        .evict_profile_from_room(target_id, room_id)
+        .await;
+    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -571,6 +584,28 @@ pub(crate) fn role_name(role: Role) -> &'static str {
         Role::Owner => "owner",
         Role::Admin => "admin",
         Role::Member => "member",
+    }
+}
+
+pub(crate) fn room_member_to_response(
+    viewer_profile_id: ProfileId,
+    viewer_role: Role,
+    member: crate::room_repo::RoomMemberRecord,
+) -> RoomMemberResponse {
+    let capabilities = member_action_capabilities(
+        viewer_profile_id,
+        viewer_role,
+        member.profile_id,
+        member.role,
+    );
+
+    RoomMemberResponse {
+        profile_id: member.profile_id.0.to_string(),
+        display_name: session::build_display_name(member.profile_id),
+        role: role_name(member.role).to_owned(),
+        can_promote: capabilities.can_promote,
+        can_mute: capabilities.can_mute,
+        can_remove: capabilities.can_remove,
     }
 }
 

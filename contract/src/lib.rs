@@ -59,6 +59,12 @@ pub struct RoomMemberResponse {
     pub profile_id: String,
     pub display_name: String,
     pub role: String,
+    #[serde(default)]
+    pub can_promote: bool,
+    #[serde(default)]
+    pub can_mute: bool,
+    #[serde(default)]
+    pub can_remove: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -160,9 +166,7 @@ pub enum ClientRealtimeCommand {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientRealtimeQuery {
     /// 预留给后续 realtime 历史同步；当前主 web 流程仍主要通过 HTTP 加载历史。
-    LoadRecentMessages {
-        limit: Option<u16>,
-    },
+    LoadRecentMessages { limit: Option<u16> },
     /// 预留给后续 realtime 历史分页；当前主 web 流程仍主要通过 HTTP 加载更早消息。
     LoadOlderMessages {
         before_message_id: Option<String>,
@@ -387,6 +391,9 @@ mod tests {
                 profile_id: "profile-1".into(),
                 display_name: "user-1".into(),
                 role: "owner".into(),
+                can_promote: false,
+                can_mute: false,
+                can_remove: false,
             }],
         };
 
@@ -420,6 +427,9 @@ mod tests {
                 profile_id: "profile-1".into(),
                 display_name: "user-1".into(),
                 role: "admin".into(),
+                can_promote: false,
+                can_mute: true,
+                can_remove: true,
             },
         };
 

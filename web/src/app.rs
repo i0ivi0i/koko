@@ -95,22 +95,20 @@ pub fn App() -> Element {
                 }
                 MemberSheet {
                     open: members_open(),
-                    current_role: room.role.clone(),
-                    current_profile_id: room.profile_id.clone(),
                     members: room.members.clone(),
                     on_promote: move |target_profile_id: String| {
                         if let Some(room) = room_state() {
-                            spawn_member_action(room_state, room, target_profile_id, MemberAction::Promote);
+                            spawn_member_action(room, target_profile_id, MemberAction::Promote);
                         }
                     },
                     on_mute: move |target_profile_id: String| {
                         if let Some(room) = room_state() {
-                            spawn_member_action(room_state, room, target_profile_id, MemberAction::Mute);
+                            spawn_member_action(room, target_profile_id, MemberAction::Mute);
                         }
                     },
                     on_remove: move |target_profile_id: String| {
                         if let Some(room) = room_state() {
-                            spawn_member_action(room_state, room, target_profile_id, MemberAction::Remove);
+                            spawn_member_action(room, target_profile_id, MemberAction::Remove);
                         }
                     },
                     on_close: move |_| members_open.set(false),
@@ -177,10 +175,7 @@ pub fn App() -> Element {
     }
 }
 
-fn send_room_message(
-    room_client: Signal<Option<client::JoinedRoomClient>>,
-    content: String,
-) {
+fn send_room_message(room_client: Signal<Option<client::JoinedRoomClient>>, content: String) {
     if let Some(client) = room_client() {
         if let Err(error) = client.send_message(&content) {
             show_runtime_error(error);
@@ -206,12 +201,7 @@ fn show_runtime_error(message: String) {
     }
 }
 
-fn spawn_member_action(
-    mut room_state: Signal<Option<ActiveRoom>>,
-    room: ActiveRoom,
-    target_profile_id: String,
-    action: MemberAction,
-) {
+fn spawn_member_action(room: ActiveRoom, target_profile_id: String, action: MemberAction) {
     spawn(async move {
         if let Err(error) =
             client::run_member_action(action, &room.room_id, &room.session_id, &target_profile_id)
@@ -220,23 +210,5 @@ fn spawn_member_action(
             show_runtime_error(error);
             return;
         }
-
-        room_state.with_mut(|state| match action {
-            MemberAction::Promote => {
-                let _ = state::promote_member_if_room_matches(
-                    state,
-                    &room.room_id,
-                    &target_profile_id,
-                );
-            }
-            MemberAction::Remove => {
-                let _ = state::remove_member_if_room_matches(
-                    state,
-                    &room.room_id,
-                    &target_profile_id,
-                );
-            }
-            MemberAction::Mute => {}
-        });
     });
 }

@@ -7,9 +7,10 @@ use std::{
 };
 
 use koko_contract::{
-    ClientRealtimeCommand, ClientRealtimeQuery, RoomMemberResponse, ServerRealtimeEvent,
+    ClientRealtimeCommand, ClientRealtimeQuery, MessageResponse, RoomMemberResponse,
+    ServerRealtimeEvent,
 };
-use koko_core::model::{ProfileId, RoomCode, RoomId};
+use koko_core::model::{ProfileId, Role, RoomCode, RoomId};
 use socketioxide::{
     SocketIo,
     extract::{Data, Extension, SocketRef, State as SocketState},
@@ -61,6 +62,19 @@ impl RealtimeHub {
             let _ = io
                 .within(profile_room_name(profile_id))
                 .leave(socket_room_name(room_id))
+                .await;
+        }
+    }
+
+    pub(crate) async fn publish_to_profile(
+        &self,
+        profile_id: ProfileId,
+        event: ServerRealtimeEvent,
+    ) {
+        if let Some(io) = self.socket_io.get().cloned() {
+            let _ = io
+                .to(profile_room_name(profile_id))
+                .emit(SOCKET_IO_EVENT_NAME, &event)
                 .await;
         }
     }
@@ -286,54 +300,10 @@ async fn emit_room_snapshot(
         session.clear_room_id();
     }
 
-    let room = room_repo
-        .find_room(room_id)
-        .await
-        .map_err(|_| ApiError::internal("房间查询失败"))?
-        .ok_or_else(|| ApiError::not_found("房间不存在"))?;
-
-    let (before_message_id, limit) = match query {
-        SnapshotQuery::Recent { limit } => (None, normalize_message_page_limit(limit)),
-        SnapshotQuery::Older {
-            before_message_id,
-            limit,
-        } => (
-            parse_optional_message_id(before_message_id.as_deref())?,
-            normalize_message_page_limit(limit),
-        ),
-    };
-
-    let message_repo = PostgresMessageRepository::new(state.pool.clone());
-    let page = message_repo
-        .list_room_messages(room_id, before_message_id, limit)
-        .await
-        .map_err(map_list_messages_error)?;
-    let messages = page.items.into_iter().map(message_to_response).collect();
-
-    let members = room_repo
-        .list_members(room_id)
-        .await
-        .map_err(|_| ApiError::internal("成员列表读取失败"))?
-        .into_iter()
-        .map(|member| RoomMemberResponse {
-            profile_id: member.profile_id.0.to_string(),
-            display_name: session::build_display_name(member.profile_id),
-            role: role_name(member.role).to_owned(),
-        })
-        .collect();
+    let event = build_room_snapshot_event(state, room_id, session.profile_id, role, &query).await?;
 
     socket
-        .emit(
-            SOCKET_IO_EVENT_NAME,
-            &ServerRealtimeEvent::RoomSnapshot {
-                room_id: room.id.0.to_string(),
-                code: room.code.as_str().to_owned(),
-                role: role_name(role).to_owned(),
-                messages,
-                has_more_messages: page.has_more,
-                members,
-            },
-        )
+        .emit(SOCKET_IO_EVENT_NAME, &event)
         .map_err(|_| ApiError::internal("房间快照发送失败"))?;
 
     if is_room_transition {
@@ -342,6 +312,34 @@ async fn emit_room_snapshot(
     }
 
     Ok(())
+}
+
+pub(crate) async fn publish_room_snapshot_updates(state: &AppState, room_id: RoomId) {
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
+    let Ok(members) = room_repo.list_members(room_id).await else {
+        return;
+    };
+
+    for member in members {
+        let Ok(event) = build_room_snapshot_event(
+            state,
+            room_id,
+            member.profile_id,
+            member.role,
+            &SnapshotQuery::Recent {
+                limit: DEFAULT_SNAPSHOT_LIMIT,
+            },
+        )
+        .await
+        else {
+            continue;
+        };
+
+        state
+            .realtime
+            .publish_to_profile(member.profile_id, event)
+            .await;
+    }
 }
 
 async fn send_message_event(
@@ -379,6 +377,83 @@ enum SnapshotQuery {
         before_message_id: Option<String>,
         limit: Option<u16>,
     },
+}
+
+#[derive(Clone)]
+struct RoomSnapshotBase {
+    room_id: String,
+    code: String,
+    messages: Vec<MessageResponse>,
+    has_more_messages: bool,
+    members: Vec<RoomMemberResponse>,
+}
+
+async fn build_room_snapshot_event(
+    state: &AppState,
+    room_id: RoomId,
+    viewer_profile_id: ProfileId,
+    role: Role,
+    query: &SnapshotQuery,
+) -> Result<ServerRealtimeEvent, ApiError> {
+    let snapshot = load_room_snapshot_base(state, room_id, viewer_profile_id, role, query).await?;
+
+    Ok(ServerRealtimeEvent::RoomSnapshot {
+        room_id: snapshot.room_id,
+        code: snapshot.code,
+        role: role_name(role).to_owned(),
+        messages: snapshot.messages,
+        has_more_messages: snapshot.has_more_messages,
+        members: snapshot.members,
+    })
+}
+
+async fn load_room_snapshot_base(
+    state: &AppState,
+    room_id: RoomId,
+    viewer_profile_id: ProfileId,
+    viewer_role: Role,
+    query: &SnapshotQuery,
+) -> Result<RoomSnapshotBase, ApiError> {
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
+    let room = room_repo
+        .find_room(room_id)
+        .await
+        .map_err(|_| ApiError::internal("房间查询失败"))?
+        .ok_or_else(|| ApiError::not_found("房间不存在"))?;
+
+    let (before_message_id, limit) = match query {
+        SnapshotQuery::Recent { limit } => (None, normalize_message_page_limit(*limit)),
+        SnapshotQuery::Older {
+            before_message_id,
+            limit,
+        } => (
+            parse_optional_message_id(before_message_id.as_deref())?,
+            normalize_message_page_limit(*limit),
+        ),
+    };
+
+    let message_repo = PostgresMessageRepository::new(state.pool.clone());
+    let page = message_repo
+        .list_room_messages(room_id, before_message_id, limit)
+        .await
+        .map_err(map_list_messages_error)?;
+    let messages = page.items.into_iter().map(message_to_response).collect();
+
+    let members = room_repo
+        .list_members(room_id)
+        .await
+        .map_err(|_| ApiError::internal("成员列表读取失败"))?
+        .into_iter()
+        .map(|member| crate::http::room_member_to_response(viewer_profile_id, viewer_role, member))
+        .collect();
+
+    Ok(RoomSnapshotBase {
+        room_id: room.id.0.to_string(),
+        code: room.code.as_str().to_owned(),
+        messages,
+        has_more_messages: page.has_more,
+        members,
+    })
 }
 
 fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {

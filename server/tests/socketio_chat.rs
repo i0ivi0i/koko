@@ -403,9 +403,150 @@ async fn 成员被移除后不应继续收到房间广播() {
         .unwrap();
     assert_eq!(owner_send.status(), StatusCode::OK);
 
-    member_socket.assert_no_event(Duration::from_millis(300)).await;
+    member_socket
+        .assert_no_event(Duration::from_millis(300))
+        .await;
 
     member_socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
+async fn 提升管理员后在线房间成员应收到更新后的_room_snapshot() {
+    let pool = test_pool().await;
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
+
+    insert_profile(&pool, owner_id, "promote-owner").await;
+    insert_profile(&pool, member_id, "promote-member").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
+    insert_member(&pool, room_id, member_id, "member").await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut owner_socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = owner_socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+
+    let promote = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/roles/promote"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "target_profile_id": member_id.to_string(),
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(promote.status(), StatusCode::OK);
+
+    let updated_snapshot = owner_socket.next_event().await;
+    assert_eq!(updated_snapshot.0, "event");
+    assert_eq!(updated_snapshot.1["type"], "room_snapshot");
+    assert_eq!(updated_snapshot.1["room_id"], room_id.to_string());
+    assert_eq!(updated_snapshot.1["role"], "owner");
+    assert_eq!(
+        updated_snapshot.1["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|member| member["profile_id"] == member_id.to_string())
+            .unwrap()["role"],
+        "admin"
+    );
+
+    owner_socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
+async fn 移除成员后在线剩余成员应收到更新后的_room_snapshot() {
+    let pool = test_pool().await;
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
+
+    insert_profile(&pool, owner_id, "remove-owner-snapshot").await;
+    insert_profile(&pool, member_id, "remove-member-snapshot").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
+    insert_member(&pool, room_id, member_id, "member").await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut owner_socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = owner_socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+
+    let remove = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/members/{member_id}/remove"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+            owner_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(remove.status(), StatusCode::OK);
+
+    let updated_snapshot = owner_socket.next_event().await;
+    assert_eq!(updated_snapshot.0, "event");
+    assert_eq!(updated_snapshot.1["type"], "room_snapshot");
+    assert_eq!(updated_snapshot.1["room_id"], room_id.to_string());
+    assert_eq!(updated_snapshot.1["role"], "owner");
+    assert_eq!(updated_snapshot.1["members"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        updated_snapshot.1["members"][0]["profile_id"],
+        owner_id.to_string()
+    );
+
+    owner_socket.close().await;
     shutdown_test_server(server).await;
 }
 

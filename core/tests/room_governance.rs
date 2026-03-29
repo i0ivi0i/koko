@@ -11,7 +11,10 @@ use koko_core::{
         RoomGovernanceState, RoomId,
     },
     port::{MessageRepository, RoomRepository},
-    room::{ensure_can_manage_member, mute_member, promote_admin, remove_member},
+    room::{
+        ensure_can_manage_member, member_action_capabilities, mute_member, promote_admin,
+        remove_member,
+    },
 };
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
@@ -370,4 +373,39 @@ async fn 房间被封禁时应拒绝发送消息() {
         .unwrap_err();
 
     assert_eq!(error, DomainError::RoomTemporarilyBanned);
+}
+
+#[test]
+fn 群主视角下普通成员应带有完整治理能力() {
+    let owner_id = ProfileId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+
+    let capabilities = member_action_capabilities(owner_id, Role::Owner, member_id, Role::Member);
+
+    assert!(capabilities.can_promote);
+    assert!(capabilities.can_mute);
+    assert!(capabilities.can_remove);
+}
+
+#[test]
+fn 管理员视角下普通成员不应带有升管能力() {
+    let admin_id = ProfileId(Uuid::new_v4());
+    let member_id = ProfileId(Uuid::new_v4());
+
+    let capabilities = member_action_capabilities(admin_id, Role::Admin, member_id, Role::Member);
+
+    assert!(!capabilities.can_promote);
+    assert!(capabilities.can_mute);
+    assert!(capabilities.can_remove);
+}
+
+#[test]
+fn 自己这一行不应带有任何治理能力() {
+    let owner_id = ProfileId(Uuid::new_v4());
+
+    let capabilities = member_action_capabilities(owner_id, Role::Owner, owner_id, Role::Owner);
+
+    assert!(!capabilities.can_promote);
+    assert!(!capabilities.can_mute);
+    assert!(!capabilities.can_remove);
 }

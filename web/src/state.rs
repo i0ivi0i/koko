@@ -128,54 +128,6 @@ pub fn earliest_message_id(room: &ActiveRoom) -> Option<String> {
         .map(|message| message.message_id.clone())
 }
 
-pub fn promote_member_if_room_matches(
-    state: &mut Option<ActiveRoom>,
-    room_id: &str,
-    target_profile_id: &str,
-) -> bool {
-    let Some(room) = state.as_mut() else {
-        return false;
-    };
-
-    if room.room_id != room_id {
-        return false;
-    }
-
-    let Some(member) = room
-        .members
-        .iter_mut()
-        .find(|member| member.profile_id == target_profile_id)
-    else {
-        return false;
-    };
-
-    if member.role == "admin" {
-        return false;
-    }
-
-    member.role = "admin".into();
-    true
-}
-
-pub fn remove_member_if_room_matches(
-    state: &mut Option<ActiveRoom>,
-    room_id: &str,
-    target_profile_id: &str,
-) -> bool {
-    let Some(room) = state.as_mut() else {
-        return false;
-    };
-
-    if room.room_id != room_id {
-        return false;
-    }
-
-    let original_len = room.members.len();
-    room.members
-        .retain(|member| member.profile_id != target_profile_id);
-    room.members.len() != original_len
-}
-
 pub fn replace_room_snapshot_if_room_matches(
     state: &mut Option<ActiveRoom>,
     snapshot: RoomRealtimeSnapshot,
@@ -223,6 +175,9 @@ mod tests {
             profile_id: id.to_string(),
             display_name: format!("user-{id}"),
             role: "member".into(),
+            can_promote: false,
+            can_mute: false,
+            can_remove: false,
         }
     }
 
@@ -299,69 +254,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["msg-1", "msg-2", "msg-3"]
         );
-    }
-
-    #[test]
-    fn promote_member_if_room_matches_should_upgrade_local_role() {
-        let mut state = Some(ActiveRoom {
-            session_id: "session-1".into(),
-            profile_id: "profile-1".into(),
-            display_name: "user-1".into(),
-            room_id: "room-1".into(),
-            room_code: "1A234".into(),
-            role: "owner".into(),
-            messages: vec![message("msg-1")],
-            has_more_messages: false,
-            members: vec![
-                RoomMemberResponse {
-                    profile_id: "profile-1".into(),
-                    display_name: "user-profile-1".into(),
-                    role: "owner".into(),
-                },
-                RoomMemberResponse {
-                    profile_id: "profile-2".into(),
-                    display_name: "user-profile-2".into(),
-                    role: "member".into(),
-                },
-            ],
-        });
-
-        let changed = promote_member_if_room_matches(&mut state, "room-1", "profile-2");
-
-        assert!(changed);
-        assert_eq!(state.as_ref().unwrap().members[1].role, "admin");
-    }
-
-    #[test]
-    fn remove_member_if_room_matches_should_drop_local_member() {
-        let mut state = Some(ActiveRoom {
-            session_id: "session-1".into(),
-            profile_id: "profile-1".into(),
-            display_name: "user-1".into(),
-            room_id: "room-1".into(),
-            room_code: "1A234".into(),
-            role: "owner".into(),
-            messages: vec![message("msg-1")],
-            has_more_messages: false,
-            members: vec![
-                RoomMemberResponse {
-                    profile_id: "profile-1".into(),
-                    display_name: "user-profile-1".into(),
-                    role: "owner".into(),
-                },
-                RoomMemberResponse {
-                    profile_id: "profile-2".into(),
-                    display_name: "user-profile-2".into(),
-                    role: "member".into(),
-                },
-            ],
-        });
-
-        let changed = remove_member_if_room_matches(&mut state, "room-1", "profile-2");
-
-        assert!(changed);
-        assert_eq!(state.as_ref().unwrap().members.len(), 1);
-        assert_eq!(state.as_ref().unwrap().members[0].profile_id, "profile-1");
     }
 
     #[test]
