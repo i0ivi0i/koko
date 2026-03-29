@@ -544,6 +544,61 @@ async fn socketio通过不存在短码入房时应创建房间并返回快照() 
 }
 
 #[tokio::test]
+async fn 房间被封禁后老成员仍可通过socketio入房而新成员应被拒绝() {
+    let pool = test_pool().await;
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let joiner_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let member_session_id = Uuid::new_v4();
+    let joiner_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
+
+    insert_profile(&pool, owner_id, "banned-socketio-owner").await;
+    insert_profile(&pool, member_id, "banned-socketio-member").await;
+    insert_profile(&pool, joiner_id, "banned-socketio-joiner").await;
+    insert_session(&pool, member_session_id, member_id).await;
+    insert_session(&pool, joiner_session_id, joiner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
+    insert_member(&pool, room_id, member_id, "member").await;
+
+    sqlx::query(
+        r#"
+        INSERT INTO room_governance_state (room_id, banned_until, ban_reason)
+        VALUES ($1, NOW() + INTERVAL '1 hour', $2)
+        "#,
+    )
+    .bind(room_id)
+    .bind("socketio governance test")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let (member_socket, member_snapshot) =
+        SocketIoTestClient::connect_and_join(address, member_session_id, &room_code).await;
+    assert_eq!(member_snapshot.0, "event");
+    assert_eq!(member_snapshot.1["type"], "room_snapshot");
+    assert_eq!(member_snapshot.1["room_id"], room_id.to_string());
+
+    let (joiner_socket, joiner_error) =
+        SocketIoTestClient::connect_and_join_expect_error(address, joiner_session_id, &room_code)
+            .await;
+    assert_eq!(joiner_error.0, "error");
+    assert_eq!(joiner_error.1, Value::String("房间暂时封禁".into()));
+
+    member_socket.close().await;
+    joiner_socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
 async fn 成员被移除后不应继续收到房间广播() {
     let pool = test_pool().await;
     let owner_id = Uuid::new_v4();
@@ -871,6 +926,28 @@ impl SocketIoTestClient {
         );
 
         (socket, snapshot)
+    }
+
+    async fn connect_and_join_expect_error(
+        address: SocketAddr,
+        session_id: Uuid,
+        room_code: &str,
+    ) -> (Self, SocketIoEvent) {
+        let mut socket = Self::connect(address, session_id).await;
+        socket
+            .send_command(json!({
+                "type": "join_room",
+                "code": room_code,
+            }))
+            .await;
+        let error = socket.next_event().await;
+        assert_eq!(
+            error.0, "error",
+            "join_room 应返回错误而不是 room_snapshot: {:?}",
+            error.1
+        );
+
+        (socket, error)
     }
 
     async fn send_command(&self, command: Value) {

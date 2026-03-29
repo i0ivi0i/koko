@@ -9,10 +9,10 @@ use headers::{Authorization, HeaderMapExt, authorization::Basic};
 use koko_contract::{
     AdminOverviewResponse, AdminRoomDetailResponse, AdminRoomListItem, AdminRoomListQuery,
     AdminRoomListResponse, BanRoomRequest, BootstrapSessionRequest, BootstrapSessionResponse,
-    DemoteAdminRequest, GlobalChatPolicyResponse, JoinOrCreateRoomRequest,
-    JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest, RoomGovernanceStateResponse,
-    RoomMemberResponse, RoomMembersResponse, RoomMessagesQuery, RoomMessagesResponse, RoomResponse,
-    SESSION_HEADER_NAME, SendMessageRequest, ServerRealtimeEvent, UpdateGlobalChatPolicyRequest,
+    DemoteAdminRequest, GlobalChatPolicyResponse, MessageResponse, PromoteAdminRequest,
+    RoomGovernanceStateResponse, RoomMemberResponse, RoomMembersResponse, RoomMessagesQuery,
+    RoomMessagesResponse, RoomResponse, SESSION_HEADER_NAME, SendMessageRequest,
+    ServerRealtimeEvent, UpdateGlobalChatPolicyRequest,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
@@ -24,7 +24,7 @@ use crate::{
     session,
 };
 use koko_core::{
-    model::{MessageId, ProfileId, Role, Room, RoomCode, RoomId},
+    model::{MessageId, ProfileId, Role, Room, RoomId},
     room::member_action_capabilities,
 };
 
@@ -219,27 +219,6 @@ pub async fn list_admin_room_members(
         .collect();
 
     Ok(Json(RoomMembersResponse { items }))
-}
-
-#[tracing::instrument(skip(state, headers, request), fields(code = %request.code))]
-pub async fn join_or_create_room(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<JoinOrCreateRoomRequest>,
-) -> Result<Json<JoinOrCreateRoomResponse>, ApiError> {
-    let code =
-        RoomCode::parse(&request.code).map_err(|_| ApiError::bad_request("房间短码不合法"))?;
-    let session = require_authenticated_session(&headers, &state.pool).await?;
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
-    let result = koko_core::room::join_or_create_room(&room_repo, session.profile_id, code)
-        .await
-        .map_err(map_domain_error)?;
-
-    Ok(Json(JoinOrCreateRoomResponse {
-        room_id: result.room.id.0.to_string(),
-        code: result.room.code.as_str().to_owned(),
-        role: role_name(result.role).to_owned(),
-    }))
 }
 
 pub async fn get_room(

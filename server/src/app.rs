@@ -142,7 +142,6 @@ fn build_app_with_admin_auth_and_realtime(
         .route("/", get(http::root_status))
         .nest("/admin", admin_routes)
         .route("/session/bootstrap", post(http::bootstrap_session))
-        .route("/rooms/join-or-create", post(http::join_or_create_room))
         .route(
             "/rooms/{room_id}/roles/promote",
             post(http::promote_room_admin),

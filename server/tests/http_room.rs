@@ -10,19 +10,12 @@ use uuid::Uuid;
 const SESSION_HEADER: &str = "x-koko-session-id";
 
 #[sqlx::test(migrations = "../migrations")]
-async fn 入房或建房接口应返回房间与当前角色(pool: PgPool) {
+async fn 公开join_or_create入口不应继续对外暴露(pool: PgPool) {
     let app = koko_server::app::build_app(pool.clone());
-    let profile_id = Uuid::new_v4();
     let session_id = Uuid::new_v4();
+    let profile_id = Uuid::new_v4();
 
-    sqlx::query!(
-        "INSERT INTO profiles (id, device_key) VALUES ($1, $2)",
-        profile_id,
-        "room-device-1"
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    insert_profile(&pool, profile_id, "join-public-route-removed").await;
     insert_session(&pool, session_id, profile_id).await;
 
     let response = app
@@ -33,46 +26,6 @@ async fn 入房或建房接口应返回房间与当前角色(pool: PgPool) {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
-                        "code": "1A234",
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-            session_id,
-        ))
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let payload: Value = serde_json::from_slice(&body).unwrap();
-
-    assert_eq!(payload["code"], "1A234");
-    assert_eq!(payload["role"], "owner");
-    assert!(payload["room_id"].as_str().is_some());
-}
-
-#[sqlx::test(migrations = "../migrations")]
-async fn 入房接口应忽略客户端伪造的_profile_id并使用会话身份(pool: PgPool) {
-    let app = koko_server::app::build_app(pool.clone());
-    let actual_profile_id = Uuid::new_v4();
-    let forged_profile_id = Uuid::new_v4();
-    let session_id = Uuid::new_v4();
-
-    insert_profile(&pool, actual_profile_id, "join-actual-device").await;
-    insert_profile(&pool, forged_profile_id, "join-forged-device").await;
-    insert_session(&pool, session_id, actual_profile_id).await;
-
-    let response = app
-        .oneshot(with_session(
-            Request::builder()
-                .method("POST")
-                .uri("/rooms/join-or-create")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "profile_id": forged_profile_id.to_string(),
                         "code": "9J012",
                     })
                     .to_string(),
@@ -83,17 +36,7 @@ async fn 入房接口应忽略客户端伪造的_profile_id并使用会话身份
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let payload: Value = serde_json::from_slice(&body).unwrap();
-    let room_id = Uuid::parse_str(payload["room_id"].as_str().unwrap()).unwrap();
-
-    let owner_id = sqlx::query_scalar!("SELECT owner_profile_id FROM rooms WHERE id = $1", room_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-
-    assert_eq!(owner_id, actual_profile_id);
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
 
 #[sqlx::test(migrations = "../migrations")]

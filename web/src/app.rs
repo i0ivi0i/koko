@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use koko_contract::RoomLeftReason;
 
 use crate::{
     chat::ChatScreen,
@@ -197,10 +198,11 @@ pub fn App() -> Element {
                                                 return;
                                             }
 
-                                            let should_leave = room_state()
+                                            let active_room_matches = room_state()
                                                 .as_ref()
                                                 .is_some_and(|room| room.room_id == event.room_id);
-                                            if !should_leave {
+                                            let join_inflight = room_state().is_none() && loading();
+                                            if !active_room_matches && !join_inflight {
                                                 return;
                                             }
 
@@ -296,10 +298,9 @@ fn show_runtime_error(message: String) {
     }
 }
 
-fn room_left_reason_message(reason: &str) -> String {
+fn room_left_reason_message(reason: &RoomLeftReason) -> String {
     match reason {
-        "removed" => "你已被移出房间".into(),
-        _ => "你已离开房间".into(),
+        RoomLeftReason::Removed => "你已被移出房间".into(),
     }
 }
 

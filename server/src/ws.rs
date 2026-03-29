@@ -6,7 +6,9 @@ use std::{
     },
 };
 
-use koko_contract::{ClientRealtimeCommand, ClientRealtimeQuery, ServerRealtimeEvent};
+use koko_contract::{
+    ClientRealtimeCommand, ClientRealtimeQuery, RoomLeftReason, ServerRealtimeEvent,
+};
 use koko_core::model::{ProfileId, Role, Room, RoomCode, RoomId};
 use socketioxide::{
     SocketIo,
@@ -59,7 +61,7 @@ impl RealtimeHub {
                 let should_leave = socket
                     .extensions
                     .get::<Arc<SocketSession>>()
-                    .is_some_and(|session| session.clear_room_if_matches(room_id));
+                    .is_some_and(|session| session.clear_room_if_targeted(room_id));
 
                 if should_leave {
                     socket.leave(socket_room_name(room_id));
@@ -67,7 +69,7 @@ impl RealtimeHub {
                         SOCKET_IO_EVENT_NAME,
                         &ServerRealtimeEvent::RoomLeft {
                             room_id: room_id.0.to_string(),
-                            reason: "removed".into(),
+                            reason: RoomLeftReason::Removed,
                         },
                     );
                 }
@@ -108,39 +110,123 @@ impl RealtimeHub {
 #[derive(Debug, Clone)]
 struct SocketSession {
     profile_id: ProfileId,
-    joined_room_id: Arc<Mutex<Option<RoomId>>>,
+    room_state: Arc<Mutex<SocketRoomState>>,
 }
 
 impl SocketSession {
     fn new(profile_id: ProfileId) -> Self {
         Self {
             profile_id,
-            joined_room_id: Arc::new(Mutex::new(None)),
+            room_state: Arc::new(Mutex::new(SocketRoomState::default())),
         }
     }
 
     fn room_id(&self) -> Option<RoomId> {
-        *self.joined_room_id.lock().unwrap()
+        self.room_state.lock().unwrap().joined_room_id
     }
 
-    fn clear_room_id(&self) {
-        *self.joined_room_id.lock().unwrap() = None;
+    fn begin_room_transition(&self, target_room_id: RoomId) -> RoomTransition {
+        let mut room_state = self.room_state.lock().unwrap();
+        let previous_room_id = room_state.joined_room_id;
+        let is_switch = previous_room_id != Some(target_room_id);
+
+        if !is_switch {
+            return RoomTransition {
+                previous_room_id,
+                target_room_id,
+                revision: room_state.revision,
+                is_switch,
+            };
+        }
+
+        room_state.revision = room_state.revision.wrapping_add(1);
+        room_state.pending_room_id = Some(target_room_id);
+        room_state.joined_room_id = None;
+
+        RoomTransition {
+            previous_room_id,
+            target_room_id,
+            revision: room_state.revision,
+            is_switch,
+        }
     }
 
-    fn clear_room_if_matches(&self, room_id: RoomId) -> bool {
-        let mut guard = self.joined_room_id.lock().unwrap();
-        if *guard != Some(room_id) {
+    fn restore_room_transition(&self, transition: RoomTransition) -> Option<RoomId> {
+        if !transition.is_switch {
+            return transition.previous_room_id;
+        }
+
+        let mut room_state = self.room_state.lock().unwrap();
+        if room_state.revision != transition.revision
+            || room_state.pending_room_id != Some(transition.target_room_id)
+        {
+            return room_state.joined_room_id;
+        }
+
+        room_state.pending_room_id = None;
+        room_state.joined_room_id = transition.previous_room_id;
+        transition.previous_room_id
+    }
+
+    fn activate_room_transition(&self, transition: RoomTransition) -> bool {
+        if !transition.is_switch {
+            return true;
+        }
+
+        let mut room_state = self.room_state.lock().unwrap();
+        if room_state.revision != transition.revision
+            || room_state.pending_room_id != Some(transition.target_room_id)
+        {
             return false;
         }
 
-        *guard = None;
+        room_state.pending_room_id = None;
+        room_state.joined_room_id = Some(transition.target_room_id);
         true
     }
 
-    fn activate_room(&self, room_id: RoomId) {
-        let mut guard = self.joined_room_id.lock().unwrap();
-        *guard = Some(room_id);
+    fn transition_is_current(&self, transition: RoomTransition) -> bool {
+        if !transition.is_switch {
+            return true;
+        }
+
+        let room_state = self.room_state.lock().unwrap();
+        room_state.revision == transition.revision
+            && room_state.pending_room_id == Some(transition.target_room_id)
     }
+
+    fn clear_room_if_targeted(&self, room_id: RoomId) -> bool {
+        let mut room_state = self.room_state.lock().unwrap();
+        let was_joined = room_state.joined_room_id == Some(room_id);
+        let was_pending = room_state.pending_room_id == Some(room_id);
+        if !was_joined && !was_pending {
+            return false;
+        }
+
+        room_state.revision = room_state.revision.wrapping_add(1);
+        if was_joined {
+            room_state.joined_room_id = None;
+        }
+        if was_pending {
+            room_state.pending_room_id = None;
+        }
+        true
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct SocketRoomState {
+    joined_room_id: Option<RoomId>,
+    pending_room_id: Option<RoomId>,
+    revision: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RoomTransition {
+    previous_room_id: Option<RoomId>,
+    target_room_id: RoomId,
+    revision: u64,
+    is_switch: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -287,32 +373,53 @@ async fn emit_room_snapshot(
     let room_id = seed.room_id;
     let viewer =
         load_room_viewer_context(&state.pool, session.profile_id, room_id, seed.room).await?;
-    let current_room_id = session.room_id();
-    let is_room_transition = current_room_id != Some(room_id);
-    if is_room_transition {
-        if let Some(current_room_id) = current_room_id {
-            socket.leave(socket_room_name(current_room_id));
+    let transition = session.begin_room_transition(room_id);
+    if transition.is_switch {
+        if let Some(previous_room_id) = transition.previous_room_id {
+            socket.leave(socket_room_name(previous_room_id));
         }
-        session.clear_room_id();
     }
 
-    let snapshot = load_room_snapshot_view(
+    let snapshot_result = load_room_snapshot_view(
         &state.pool,
         session.profile_id,
         viewer.room,
         viewer.role,
         query,
     )
-    .await?;
-    let event = build_room_snapshot_event(snapshot);
+    .await;
 
-    socket
-        .emit(SOCKET_IO_EVENT_NAME, &event)
-        .map_err(|_| ApiError::internal("房间快照发送失败"))?;
+    let snapshot = match snapshot_result {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            if let Some(previous_room_id) = session.restore_room_transition(transition) {
+                socket.join(socket_room_name(previous_room_id));
+            }
+            return Err(error);
+        }
+    };
 
-    if is_room_transition {
+    if !session.transition_is_current(transition) {
+        return Ok(());
+    }
+
+    if transition.is_switch {
         socket.join(socket_room_name(room_id));
-        session.activate_room(room_id);
+    }
+
+    let event = build_room_snapshot_event(snapshot);
+    if socket.emit(SOCKET_IO_EVENT_NAME, &event).is_err() {
+        if transition.is_switch {
+            socket.leave(socket_room_name(room_id));
+            if let Some(previous_room_id) = session.restore_room_transition(transition) {
+                socket.join(socket_room_name(previous_room_id));
+            }
+        }
+        return Err(ApiError::internal("房间快照发送失败"));
+    }
+
+    if transition.is_switch && !session.activate_room_transition(transition) {
+        socket.leave(socket_room_name(room_id));
     }
 
     Ok(())
@@ -420,4 +527,46 @@ fn socket_room_name(room_id: RoomId) -> String {
 
 fn profile_room_name(profile_id: ProfileId) -> String {
     format!("profile:{}", profile_id.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn 清除pending房间应阻止过期切房激活() {
+        let session = SocketSession::new(ProfileId(Uuid::new_v4()));
+        let first_room = RoomId(Uuid::new_v4());
+        let next_room = RoomId(Uuid::new_v4());
+
+        let first_transition = session.begin_room_transition(first_room);
+        assert!(session.activate_room_transition(first_transition));
+        assert_eq!(session.room_id(), Some(first_room));
+
+        let second_transition = session.begin_room_transition(next_room);
+        assert!(session.clear_room_if_targeted(next_room));
+        assert!(!session.transition_is_current(second_transition));
+        assert!(!session.activate_room_transition(second_transition));
+        assert_eq!(session.room_id(), None);
+    }
+
+    #[test]
+    fn 快照发送失败时应恢复旧房间状态() {
+        let session = SocketSession::new(ProfileId(Uuid::new_v4()));
+        let first_room = RoomId(Uuid::new_v4());
+        let next_room = RoomId(Uuid::new_v4());
+
+        let first_transition = session.begin_room_transition(first_room);
+        assert!(session.activate_room_transition(first_transition));
+        assert_eq!(session.room_id(), Some(first_room));
+
+        let second_transition = session.begin_room_transition(next_room);
+        assert_eq!(session.room_id(), None);
+        assert_eq!(
+            session.restore_room_transition(second_transition),
+            Some(first_room)
+        );
+        assert_eq!(session.room_id(), Some(first_room));
+    }
 }

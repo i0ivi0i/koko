@@ -16,18 +16,6 @@ pub struct BootstrapSessionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct JoinOrCreateRoomRequest {
-    pub code: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct JoinOrCreateRoomResponse {
-    pub room_id: String,
-    pub code: String,
-    pub role: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RoomResponse {
     pub room_id: String,
     pub code: String,
@@ -194,7 +182,7 @@ pub enum ServerRealtimeEvent {
     /// 当前主 web 流程用于 authoritative 离房真相同步，例如成员被移除后主动退出房间界面。
     RoomLeft {
         room_id: String,
-        reason: String,
+        reason: RoomLeftReason,
     },
     /// 当前主 web 流程稳定消费的新增消息事件。
     MessageCreated {
@@ -218,6 +206,12 @@ pub enum ServerRealtimeEvent {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomLeftReason {
+    Removed,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,20 +227,6 @@ mod tests {
 
         let json = serde_json::to_string(&value).unwrap();
         let decoded: BootstrapSessionResponse = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(decoded, value);
-    }
-
-    #[test]
-    fn join_room_response_should_roundtrip() {
-        let value = JoinOrCreateRoomResponse {
-            room_id: "room-1".into(),
-            code: "1A234".into(),
-            role: "owner".into(),
-        };
-
-        let json = serde_json::to_string(&value).unwrap();
-        let decoded: JoinOrCreateRoomResponse = serde_json::from_str(&json).unwrap();
 
         assert_eq!(decoded, value);
     }
@@ -456,7 +436,7 @@ mod tests {
     fn server_realtime_event_room_left_should_roundtrip() {
         let value = ServerRealtimeEvent::RoomLeft {
             room_id: "room-1".into(),
-            reason: "removed".into(),
+            reason: RoomLeftReason::Removed,
         };
 
         let json = serde_json::to_string(&value).unwrap();

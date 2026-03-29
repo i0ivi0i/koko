@@ -293,9 +293,7 @@ async fn 更新全局消息长度后超长消息应被拒绝(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查看权限(
-    pool: PgPool,
-) {
+async fn 房间被封禁后应拒绝发言并保留已有成员查看权限(pool: PgPool) {
     let app = build_admin_app(pool.clone());
     let room_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
@@ -335,47 +333,35 @@ async fn 房间被封禁后应拒绝新入房和发言但保留已有成员查�
 
     assert_eq!(ban.status(), StatusCode::OK);
 
-    let existing_member_join = app
+    let existing_member_room = app
         .clone()
         .oneshot(with_session(
             Request::builder()
-                .method("POST")
-                .uri("/rooms/join-or-create")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "code": "8H901",
-                    })
-                    .to_string(),
-                ))
+                .method("GET")
+                .uri(format!("/rooms/{room_id}"))
+                .body(Body::empty())
                 .unwrap(),
             member_session_id,
         ))
         .await
         .unwrap();
 
-    assert_eq!(existing_member_join.status(), StatusCode::OK);
+    assert_eq!(existing_member_room.status(), StatusCode::OK);
 
-    let join = app
+    let outsider_room = app
         .clone()
         .oneshot(with_session(
             Request::builder()
-                .method("POST")
-                .uri("/rooms/join-or-create")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "code": "8H901",
-                    })
-                    .to_string(),
-                ))
+                .method("GET")
+                .uri(format!("/rooms/{room_id}"))
+                .body(Body::empty())
                 .unwrap(),
             joiner_session_id,
         ))
         .await
         .unwrap();
 
-    assert_eq!(join.status(), StatusCode::FORBIDDEN);
+    assert_eq!(outsider_room.status(), StatusCode::FORBIDDEN);
 
     let send = app
         .oneshot(with_session(

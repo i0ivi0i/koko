@@ -5,7 +5,8 @@ use gloo_storage::{LocalStorage, Storage};
 use js_sys::Function;
 use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, ClientRealtimeCommand, MessageResponse,
-    PromoteAdminRequest, RoomMessagesResponse, SESSION_HEADER_NAME, ServerRealtimeEvent,
+    PromoteAdminRequest, RoomLeftReason, RoomMessagesResponse, SESSION_HEADER_NAME,
+    ServerRealtimeEvent,
 };
 use serde::de::DeserializeOwned;
 #[cfg(target_arch = "wasm32")]
@@ -126,7 +127,7 @@ type ErrorObserver = Arc<Mutex<Box<dyn FnMut(String)>>>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RoomLeftRealtimeEvent {
     pub room_id: String,
-    pub reason: String,
+    pub reason: RoomLeftReason,
 }
 
 #[derive(Clone)]
@@ -362,10 +363,12 @@ fn connect_room_events_with_observer(
     let state = Arc::new(Mutex::new(RealtimeState::Connecting));
     let ready = Arc::new(Mutex::new(false));
     let pending_commands = Arc::new(Mutex::new(Vec::new()));
+    let pending_messages = Arc::new(Mutex::new(Vec::new()));
     let transport = create_realtime_transport(
         state.clone(),
         ready.clone(),
         pending_commands.clone(),
+        pending_messages.clone(),
         room_code,
         session_id.clone(),
         on_message.clone(),
@@ -418,6 +421,7 @@ fn create_realtime_transport(
     state: Arc<Mutex<RealtimeState>>,
     ready: Arc<Mutex<bool>>,
     pending_commands: Arc<Mutex<Vec<ClientRealtimeCommand>>>,
+    pending_messages: Arc<Mutex<Vec<MessageResponse>>>,
     room_code: String,
     session_id: String,
     on_message: MessageObserver,
@@ -430,6 +434,7 @@ fn create_realtime_transport(
     {
         let state_for_status = state.clone();
         let ready_for_status = ready.clone();
+        let pending_messages_for_status = pending_messages.clone();
         let on_status = Closure::wrap(Box::new(move |status: String| {
             let next_state = match status.as_str() {
                 "connected" => RealtimeState::Connected,
@@ -442,6 +447,7 @@ fn create_realtime_transport(
             store_realtime_state(&state_for_status, next_state);
             if !matches!(next_state, RealtimeState::Connected) {
                 *ready_for_status.lock().unwrap() = false;
+                pending_messages_for_status.lock().unwrap().clear();
             }
         }) as Box<dyn FnMut(String)>);
 
@@ -450,13 +456,21 @@ fn create_realtime_transport(
         let members_snapshot_for_events = on_members_snapshot.clone();
         let room_left_for_events = on_room_left.clone();
         let ready_for_events = ready.clone();
+        let state_for_events = state.clone();
         let pending_for_events = pending_commands.clone();
+        let pending_messages_for_events = pending_messages.clone();
         let socket_handle = Rc::new(RefCell::new(None::<JsValue>));
         let socket_handle_for_events = socket_handle.clone();
         let on_event = Closure::wrap(Box::new(move |payload: JsValue| {
             if let Some(snapshot) = decode_room_snapshot_event_value(&payload) {
                 *ready_for_events.lock().unwrap() = true;
+                let room_id = snapshot.room_id.clone();
                 notify_snapshot(&snapshot_for_events, snapshot);
+                flush_pending_messages(
+                    &pending_messages_for_events,
+                    &room_id,
+                    &observer_for_events,
+                );
                 if let Some(socket) = socket_handle_for_events.borrow().clone() {
                     let _ = flush_pending_commands(&pending_for_events, |command| {
                         emit_command_to_socket(&socket, command)
@@ -467,12 +481,18 @@ fn create_realtime_transport(
                 notify_members_snapshot(&members_snapshot_for_events, snapshot);
             }
             if let Some(event) = decode_room_left_event_value(&payload) {
+                store_realtime_state(&state_for_events, RealtimeState::Closed);
                 *ready_for_events.lock().unwrap() = false;
                 pending_for_events.lock().unwrap().clear();
+                pending_messages_for_events.lock().unwrap().clear();
                 notify_room_left(&room_left_for_events, event);
             }
             if let Some(message) = decode_message_created_event_value(&payload) {
-                notify_message(&observer_for_events, message);
+                if *ready_for_events.lock().unwrap() {
+                    notify_message(&observer_for_events, message);
+                } else {
+                    pending_messages_for_events.lock().unwrap().push(message);
+                }
             }
         }) as Box<dyn FnMut(JsValue)>);
 
@@ -507,6 +527,7 @@ fn create_realtime_transport(
             state,
             ready,
             pending_commands,
+            pending_messages,
             room_code,
             session_id,
             on_message,
@@ -516,6 +537,31 @@ fn create_realtime_transport(
             on_error,
         );
         Err("官方 Socket.IO 浏览器客户端仅在 wasm 环境可用".into())
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn flush_pending_messages(
+    pending_messages: &Arc<Mutex<Vec<MessageResponse>>>,
+    room_id: &str,
+    on_message: &MessageObserver,
+) {
+    let queued = {
+        let mut guard = pending_messages.lock().unwrap();
+        std::mem::take(&mut *guard)
+    };
+
+    let mut stale_messages = Vec::new();
+    for message in queued {
+        if message.room_id == room_id {
+            notify_message(on_message, message);
+        } else {
+            stale_messages.push(message);
+        }
+    }
+
+    if !stale_messages.is_empty() {
+        pending_messages.lock().unwrap().extend(stale_messages);
     }
 }
 
@@ -1029,14 +1075,14 @@ mod tests {
     fn room_left_event_should_decode_to_room_left_realtime_event() {
         let payload = serde_json::to_string(&ServerRealtimeEvent::RoomLeft {
             room_id: "room-1".into(),
-            reason: "removed".into(),
+            reason: RoomLeftReason::Removed,
         })
         .unwrap();
 
         let event = decode_room_left_event(&payload).unwrap();
 
         assert_eq!(event.room_id, "room-1");
-        assert_eq!(event.reason, "removed");
+        assert_eq!(event.reason, RoomLeftReason::Removed);
     }
 
     #[test]
