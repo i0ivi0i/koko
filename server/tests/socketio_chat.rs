@@ -331,6 +331,80 @@ async fn socketio切房后不应继续收到旧房间广播() {
 }
 
 #[tokio::test]
+async fn socketio通过不存在短码入房时应创建房间并返回快照() {
+    let pool = test_pool().await;
+    let profile_id = Uuid::new_v4();
+    let existing_room_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+    let existing_room_code = unique_room_code(existing_room_id);
+    let room_code = unique_room_code(Uuid::new_v4());
+
+    insert_profile(&pool, profile_id, "socketio-create-owner").await;
+    insert_session(&pool, session_id, profile_id).await;
+    insert_room_with_owner(&pool, existing_room_id, profile_id, &existing_room_code).await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": session_id.to_string(),
+            "room_id": existing_room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let initial_snapshot = socket.next_event().await;
+    assert_eq!(initial_snapshot.0, "event");
+    assert_eq!(initial_snapshot.1["type"], "room_snapshot");
+    assert_eq!(initial_snapshot.1["room_id"], existing_room_id.to_string());
+
+    socket
+        .send_command(json!({
+            "type": "join_room",
+            "code": room_code,
+        }))
+        .await;
+
+    let room_snapshot = socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+    assert_eq!(room_snapshot.1["code"], room_code);
+    assert_eq!(room_snapshot.1["role"], "owner");
+    assert_eq!(room_snapshot.1["messages"], json!([]));
+    assert_eq!(room_snapshot.1["has_more_messages"], Value::Bool(false));
+    assert_eq!(
+        room_snapshot.1["members"][0]["profile_id"],
+        profile_id.to_string()
+    );
+    assert_eq!(room_snapshot.1["members"][0]["role"], "owner");
+
+    let room_id = Uuid::parse_str(room_snapshot.1["room_id"].as_str().unwrap()).unwrap();
+    let persisted_room_id = sqlx::query_scalar!(
+        r#"
+        SELECT r.id AS "id!: Uuid"
+        FROM rooms r
+        JOIN room_codes rc ON rc.room_id = r.id
+        WHERE rc.code = $1
+        "#,
+        room_code
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(persisted_room_id, room_id);
+
+    socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
 async fn 成员被移除后不应继续收到房间广播() {
     let pool = test_pool().await;
     let owner_id = Uuid::new_v4();

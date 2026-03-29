@@ -10,7 +10,7 @@ use koko_contract::{
     ClientRealtimeCommand, ClientRealtimeQuery, MessageResponse, RoomMemberResponse,
     ServerRealtimeEvent,
 };
-use koko_core::model::{ProfileId, Role, RoomCode, RoomId};
+use koko_core::model::{ProfileId, Role, Room, RoomCode, RoomId};
 use socketioxide::{
     SocketIo,
     extract::{Data, Extension, SocketRef, State as SocketState},
@@ -171,7 +171,7 @@ async fn on_socket_io_connection(
             &socket,
             &state,
             &session,
-            room_id,
+            RoomSnapshotSeed::lookup(room_id),
             SnapshotQuery::Recent {
                 limit: DEFAULT_SNAPSHOT_LIMIT,
             },
@@ -205,12 +205,12 @@ async fn on_socket_io_command(
     match command {
         ClientRealtimeCommand::JoinRoom { code } => {
             match resolve_socket_room_by_code(&state, &session, &code).await {
-                Ok(room_id) => {
+                Ok(seed) => {
                     if let Err(error) = emit_room_snapshot(
                         &socket,
                         &state,
                         &session,
-                        room_id,
+                        seed,
                         SnapshotQuery::Recent {
                             limit: DEFAULT_SNAPSHOT_LIMIT,
                         },
@@ -259,7 +259,14 @@ async fn on_socket_io_query(
         },
     };
 
-    if let Err(error) = emit_room_snapshot(&socket, &state, &session, room_id, snapshot_query).await
+    if let Err(error) = emit_room_snapshot(
+        &socket,
+        &state,
+        &session,
+        RoomSnapshotSeed::lookup(room_id),
+        snapshot_query,
+    )
+    .await
     {
         emit_socket_error(&socket, error.message());
     }
@@ -269,28 +276,25 @@ async fn resolve_socket_room_by_code(
     state: &AppState,
     session: &SocketSession,
     code: &str,
-) -> Result<RoomId, ApiError> {
+) -> Result<RoomSnapshotSeed, ApiError> {
     let code = RoomCode::parse(code).map_err(|_| ApiError::bad_request("房间短码不合法"))?;
     let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let result = koko_core::room::join_or_create_room(&room_repo, session.profile_id, code)
         .await
         .map_err(map_domain_error)?;
 
-    Ok(result.room.id)
+    Ok(RoomSnapshotSeed::known(result.room, result.role))
 }
 
 async fn emit_room_snapshot(
     socket: &SocketRef,
     state: &AppState,
     session: &SocketSession,
-    room_id: RoomId,
+    seed: RoomSnapshotSeed,
     query: SnapshotQuery,
 ) -> Result<(), ApiError> {
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
-    let role = koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
-        .await
-        .map_err(map_domain_error)?;
-
+    let snapshot = load_room_snapshot_base(state, session.profile_id, seed, &query).await?;
+    let room_id = snapshot.room.id;
     let current_room_id = session.room_id();
     let is_room_transition = current_room_id != Some(room_id);
     if is_room_transition {
@@ -300,7 +304,7 @@ async fn emit_room_snapshot(
         session.clear_room_id();
     }
 
-    let event = build_room_snapshot_event(state, room_id, session.profile_id, role, &query).await?;
+    let event = build_room_snapshot_event(snapshot);
 
     socket
         .emit(SOCKET_IO_EVENT_NAME, &event)
@@ -321,12 +325,8 @@ pub(crate) async fn publish_room_members_updates(state: &AppState, room_id: Room
     };
 
     for member in &members {
-        let event = build_room_members_snapshot_event(
-            room_id,
-            member.profile_id,
-            member.role,
-            &members,
-        );
+        let event =
+            build_room_members_snapshot_event(room_id, member.profile_id, member.role, &members);
 
         state
             .realtime
@@ -373,31 +373,48 @@ enum SnapshotQuery {
 }
 
 #[derive(Clone)]
+struct RoomSnapshotSeed {
+    room: Option<Room>,
+    room_id: RoomId,
+    role: Option<Role>,
+}
+
+impl RoomSnapshotSeed {
+    fn known(room: Room, role: Role) -> Self {
+        Self {
+            room_id: room.id,
+            room: Some(room),
+            role: Some(role),
+        }
+    }
+
+    fn lookup(room_id: RoomId) -> Self {
+        Self {
+            room: None,
+            room_id,
+            role: None,
+        }
+    }
+}
+
+#[derive(Clone)]
 struct RoomSnapshotBase {
-    room_id: String,
-    code: String,
+    room: Room,
+    role: Role,
     messages: Vec<MessageResponse>,
     has_more_messages: bool,
     members: Vec<RoomMemberResponse>,
 }
 
-async fn build_room_snapshot_event(
-    state: &AppState,
-    room_id: RoomId,
-    viewer_profile_id: ProfileId,
-    role: Role,
-    query: &SnapshotQuery,
-) -> Result<ServerRealtimeEvent, ApiError> {
-    let snapshot = load_room_snapshot_base(state, room_id, viewer_profile_id, role, query).await?;
-
-    Ok(ServerRealtimeEvent::RoomSnapshot {
-        room_id: snapshot.room_id,
-        code: snapshot.code,
-        role: role_name(role).to_owned(),
+fn build_room_snapshot_event(snapshot: RoomSnapshotBase) -> ServerRealtimeEvent {
+    ServerRealtimeEvent::RoomSnapshot {
+        room_id: snapshot.room.id.0.to_string(),
+        code: snapshot.room.code.as_str().to_owned(),
+        role: role_name(snapshot.role).to_owned(),
         messages: snapshot.messages,
         has_more_messages: snapshot.has_more_messages,
         members: snapshot.members,
-    })
+    }
 }
 
 fn build_room_members_snapshot_event(
@@ -421,17 +438,26 @@ fn build_room_members_snapshot_event(
 
 async fn load_room_snapshot_base(
     state: &AppState,
-    room_id: RoomId,
     viewer_profile_id: ProfileId,
-    viewer_role: Role,
+    seed: RoomSnapshotSeed,
     query: &SnapshotQuery,
 ) -> Result<RoomSnapshotBase, ApiError> {
     let room_repo = PostgresRoomRepository::new(state.pool.clone());
-    let room = room_repo
-        .find_room(room_id)
-        .await
-        .map_err(|_| ApiError::internal("房间查询失败"))?
-        .ok_or_else(|| ApiError::not_found("房间不存在"))?;
+    let room_id = seed.room_id;
+    let role = match seed.role {
+        Some(role) => role,
+        None => koko_core::room::ensure_can_read_room(&room_repo, room_id, viewer_profile_id)
+            .await
+            .map_err(map_domain_error)?,
+    };
+    let room = match seed.room {
+        Some(room) => room,
+        None => room_repo
+            .find_room(room_id)
+            .await
+            .map_err(|_| ApiError::internal("房间查询失败"))?
+            .ok_or_else(|| ApiError::not_found("房间不存在"))?,
+    };
 
     let (before_message_id, limit) = match query {
         SnapshotQuery::Recent { limit } => (None, normalize_message_page_limit(*limit)),
@@ -456,12 +482,12 @@ async fn load_room_snapshot_base(
         .await
         .map_err(|_| ApiError::internal("成员列表读取失败"))?
         .into_iter()
-        .map(|member| crate::http::room_member_to_response(viewer_profile_id, viewer_role, member))
+        .map(|member| crate::http::room_member_to_response(viewer_profile_id, role, member))
         .collect();
 
     Ok(RoomSnapshotBase {
-        room_id: room.id.0.to_string(),
-        code: room.code.as_str().to_owned(),
+        room,
+        role,
         messages,
         has_more_messages: page.has_more,
         members,
