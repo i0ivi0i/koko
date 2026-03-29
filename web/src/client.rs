@@ -4,9 +4,8 @@ use gloo_storage::{LocalStorage, Storage};
 #[cfg(target_arch = "wasm32")]
 use js_sys::Function;
 use koko_contract::{
-    BootstrapSessionRequest, BootstrapSessionResponse, ClientRealtimeCommand,
-    JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest,
-    RoomMessagesResponse, SESSION_HEADER_NAME, ServerRealtimeEvent,
+    BootstrapSessionRequest, BootstrapSessionResponse, ClientRealtimeCommand, MessageResponse,
+    PromoteAdminRequest, RoomMessagesResponse, SESSION_HEADER_NAME, ServerRealtimeEvent,
 };
 use serde::de::DeserializeOwned;
 #[cfg(target_arch = "wasm32")]
@@ -19,7 +18,7 @@ use std::sync::{Arc, Mutex};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
-use crate::state::{ActiveRoomSnapshot, RoomMembersRealtimeSnapshot, RoomRealtimeSnapshot};
+use crate::state::{RoomMembersRealtimeSnapshot, RoomRealtimeSnapshot};
 
 #[cfg(target_arch = "wasm32")]
 const DEVICE_TOKEN_STORAGE_KEY: &str = "koko.device_token";
@@ -175,6 +174,7 @@ pub fn api_base() -> &'static str {
     option_env!("KOKO_API_BASE").unwrap_or("http://127.0.0.1:3000")
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 pub fn build_socket_io_base_url(api_base: &str) -> String {
     api_base.trim_end_matches('/').to_string()
 }
@@ -188,8 +188,7 @@ fn build_room_messages_path(room_id: &str, before_message_id: Option<&str>) -> S
     }
 }
 
-pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
-    let normalized_code = code.to_ascii_uppercase();
+pub async fn bootstrap_session() -> Result<BootstrapSessionResponse, String> {
     let session: BootstrapSessionResponse = parse_json_response(
         Request::post(&format!("{}/session/bootstrap", api_base()))
             .json(&BootstrapSessionRequest {
@@ -203,33 +202,7 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
     .await?;
     persist_bootstrap_device_token(&session.device_token);
 
-    let joined: JoinOrCreateRoomResponse = parse_json_response(
-        Request::post(&format!("{}/rooms/join-or-create", api_base()))
-            .header(SESSION_HEADER_NAME, &session.session_id)
-            .json(&JoinOrCreateRoomRequest {
-                code: normalized_code,
-            })
-            .map_err(|error| error.to_string())?
-            .send()
-            .await
-            .map_err(|error| error.to_string())?,
-    )
-    .await?;
-
-    Ok(build_joined_room_snapshot(session, joined))
-}
-
-fn build_joined_room_snapshot(
-    session: BootstrapSessionResponse,
-    joined: JoinOrCreateRoomResponse,
-) -> ActiveRoomSnapshot {
-    ActiveRoomSnapshot {
-        session,
-        joined,
-        messages: Vec::new(),
-        has_more_messages: false,
-        members: Vec::new(),
-    }
+    Ok(session)
 }
 
 fn into_message_observer<F>(on_message: F) -> MessageObserver
@@ -265,6 +238,7 @@ fn persist_bootstrap_device_token(device_token: &str) {
     let _ = device_token;
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 fn sanitize_bootstrap_device_token(stored: Option<&str>) -> Option<String> {
     stored
         .map(str::trim)
@@ -299,10 +273,12 @@ fn build_member_action_request(
     match action {
         MemberAction::Promote => MemberActionRequest {
             path: format!("/rooms/{room_id}/roles/promote"),
-            body: Some(serde_json::to_string(&PromoteAdminRequest {
-                target_profile_id: target_profile_id.to_owned(),
-            })
-            .expect("治理请求序列化不应失败")),
+            body: Some(
+                serde_json::to_string(&PromoteAdminRequest {
+                    target_profile_id: target_profile_id.to_owned(),
+                })
+                .expect("治理请求序列化不应失败"),
+            ),
         },
         MemberAction::Mute => MemberActionRequest {
             path: format!("/rooms/{room_id}/members/{target_profile_id}/mute"),
@@ -325,8 +301,7 @@ pub async fn run_member_action(
 
     let response = send_request(
         Request::post(&format!("{}{}", api_base(), request.path))
-        .header(SESSION_HEADER_NAME, session_id)
-        ,
+            .header(SESSION_HEADER_NAME, session_id),
         request.body,
     )
     .await?;
@@ -334,8 +309,8 @@ pub async fn run_member_action(
     ensure_member_action_succeeded(response).await
 }
 
-pub fn connect_joined_room<F, E>(
-    room_id: String,
+pub fn connect_room_by_code<F, E>(
+    room_code: String,
     session_id: String,
     on_message: F,
     on_snapshot: impl FnMut(RoomRealtimeSnapshot) + 'static,
@@ -352,8 +327,8 @@ where
         Arc::new(Mutex::new(Box::new(on_members_snapshot)));
     let error_observer: ErrorObserver = Arc::new(Mutex::new(Box::new(on_error)));
     let realtime = connect_room_events_with_observer(
-        room_id.clone(),
-        session_id.clone(),
+        room_code,
+        session_id,
         observer.clone(),
         snapshot_observer,
         members_snapshot_observer,
@@ -366,7 +341,7 @@ where
 }
 
 fn connect_room_events_with_observer(
-    room_id: String,
+    room_code: String,
     session_id: String,
     on_message: MessageObserver,
     on_snapshot: SnapshotObserver,
@@ -380,7 +355,7 @@ fn connect_room_events_with_observer(
         state.clone(),
         ready.clone(),
         pending_commands.clone(),
-        room_id.clone(),
+        room_code,
         session_id.clone(),
         on_message.clone(),
         on_snapshot,
@@ -425,7 +400,7 @@ fn create_realtime_transport(
     state: Arc<Mutex<RealtimeState>>,
     ready: Arc<Mutex<bool>>,
     pending_commands: Arc<Mutex<Vec<ClientRealtimeCommand>>>,
-    room_id: String,
+    room_code: String,
     session_id: String,
     on_message: MessageObserver,
     on_snapshot: SnapshotObserver,
@@ -485,7 +460,7 @@ fn create_realtime_transport(
         let socket = js_create_room_socket(
             &build_socket_io_base_url(api_base()),
             &session_id,
-            &room_id,
+            &room_code,
             on_event.as_ref().unchecked_ref(),
             on_status.as_ref().unchecked_ref(),
             on_error.as_ref().unchecked_ref(),
@@ -507,7 +482,7 @@ fn create_realtime_transport(
             state,
             ready,
             pending_commands,
-            room_id,
+            room_code,
             session_id,
             on_message,
             on_snapshot,
@@ -533,7 +508,7 @@ extern "C" {
     fn js_create_room_socket(
         api_base: &str,
         session_id: &str,
-        room_id: &str,
+        room_code: &str,
         on_event: &Function,
         on_status: &Function,
         on_error: &Function,
@@ -552,9 +527,20 @@ fn build_send_command(content: &str) -> ClientRealtimeCommand {
     }
 }
 
+fn build_join_room_command(code: &str) -> ClientRealtimeCommand {
+    ClientRealtimeCommand::JoinRoom {
+        code: code.trim().to_ascii_uppercase(),
+    }
+}
+
 #[cfg_attr(not(test), allow(dead_code))]
 fn build_send_command_json(content: &str) -> Result<String, String> {
     serde_json::to_string(&build_send_command(content)).map_err(|error| error.to_string())
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn build_join_room_command_json(code: &str) -> Result<String, String> {
+    serde_json::to_string(&build_join_room_command(code)).map_err(|error| error.to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -599,7 +585,9 @@ fn decode_room_members_snapshot_event(text: &str) -> Option<RoomMembersRealtimeS
 }
 
 #[cfg(target_arch = "wasm32")]
-fn decode_room_members_snapshot_event_value(value: &JsValue) -> Option<RoomMembersRealtimeSnapshot> {
+fn decode_room_members_snapshot_event_value(
+    value: &JsValue,
+) -> Option<RoomMembersRealtimeSnapshot> {
     let event = decode_socket_event_value(value)?;
     decode_room_members_snapshot(event)
 }
@@ -687,6 +675,7 @@ where
     Ok(())
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 fn flush_pending_commands<F>(
     pending_commands: &Arc<Mutex<Vec<ClientRealtimeCommand>>>,
     mut emit: F,
@@ -712,10 +701,7 @@ where
     Ok(())
 }
 
-async fn send_request(
-    builder: RequestBuilder,
-    body: Option<String>,
-) -> Result<Response, String> {
+async fn send_request(builder: RequestBuilder, body: Option<String>) -> Result<Response, String> {
     let request = match body {
         Some(body) => builder
             .header("content-type", "application/json")
@@ -798,10 +784,12 @@ mod tests {
         assert_eq!(request.path, "/rooms/room-1/roles/promote");
         assert_eq!(
             request.body,
-            Some(serde_json::to_string(&PromoteAdminRequest {
-                target_profile_id: "member-1".into(),
-            })
-            .unwrap())
+            Some(
+                serde_json::to_string(&PromoteAdminRequest {
+                    target_profile_id: "member-1".into(),
+                })
+                .unwrap()
+            )
         );
     }
 
@@ -847,10 +835,7 @@ mod tests {
 
     #[test]
     fn member_action_failure_without_body_should_fall_back_to_status_text() {
-        assert_eq!(
-            http_error_message(404, "Not Found", ""),
-            "Not Found"
-        );
+        assert_eq!(http_error_message(404, "Not Found", ""), "Not Found");
     }
 
     #[test]
@@ -859,24 +844,16 @@ mod tests {
     }
 
     #[test]
-    fn joined_room_snapshot_should_start_empty_until_realtime_snapshot_arrives() {
-        let snapshot = build_joined_room_snapshot(
-            BootstrapSessionResponse {
-                session_id: "session-1".into(),
-                profile_id: "profile-1".into(),
-                display_name: "user-1".into(),
-                device_token: "anon-token-1".into(),
-            },
-            JoinOrCreateRoomResponse {
-                room_id: "room-1".into(),
-                code: "1A234".into(),
-                role: "owner".into(),
-            },
-        );
+    fn join_room_event_should_encode_socketio_command_payload() {
+        let payload = build_join_room_command_json("1A234").unwrap();
 
-        assert!(snapshot.messages.is_empty());
-        assert!(!snapshot.has_more_messages);
-        assert!(snapshot.members.is_empty());
+        assert_eq!(
+            payload,
+            serde_json::to_string(&ClientRealtimeCommand::JoinRoom {
+                code: "1A234".into(),
+            })
+            .unwrap()
+        );
     }
 
     #[test]
@@ -1023,10 +1000,7 @@ mod tests {
             &pending,
             build_send_command("queued-command"),
             move |command| {
-                emitted_for_closure
-                    .lock()
-                    .unwrap()
-                    .push(command.clone());
+                emitted_for_closure.lock().unwrap().push(command.clone());
                 Ok(())
             },
         );
@@ -1049,10 +1023,7 @@ mod tests {
         let emitted_for_closure = emitted.clone();
 
         let result = flush_pending_commands(&pending, move |command| {
-            emitted_for_closure
-                .lock()
-                .unwrap()
-                .push(command.clone());
+            emitted_for_closure.lock().unwrap().push(command.clone());
             Ok(())
         });
 
@@ -1077,10 +1048,7 @@ mod tests {
         let emitted_for_closure = emitted.clone();
 
         let result = flush_pending_commands(&pending, move |command| {
-            emitted_for_closure
-                .lock()
-                .unwrap()
-                .push(command.clone());
+            emitted_for_closure.lock().unwrap().push(command.clone());
             if *command == build_send_command("first-command") {
                 return Err("emit failed".into());
             }

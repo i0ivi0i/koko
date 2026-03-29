@@ -118,23 +118,34 @@ pub fn App() -> Element {
                     loading: loading(),
                     error_message: error_message(),
                     on_enter: move |code: String| {
+                        if loading() {
+                            return;
+                        }
+
                         let mut room_state = room_state;
+                        let mut room_client = room_client;
                         let mut loading = loading;
                         let mut error_message = error_message;
+                        let mut loading_older_messages = loading_older_messages;
 
                         spawn(async move {
                             loading.set(true);
                             error_message.set(None);
+                            room_state.set(None);
+                            room_client.with_mut(|client| {
+                                if let Some(current) = client.take() {
+                                    current.close();
+                                }
+                            });
 
-                            match client::join_room(&code).await {
-                                Ok(snapshot) => {
-                                    let room = state::apply_joined_room(snapshot);
-                                    let room_id = room.room_id.clone();
-                                    let session_id = room.session_id.clone();
-                                    let connection = client::connect_joined_room(
-                                        room_id.clone(),
-                                        session_id,
+                            match client::bootstrap_session().await {
+                                Ok(session) => {
+                                    let session_for_snapshot = session.clone();
+                                    let connection = client::connect_room_by_code(
+                                        code,
+                                        session.session_id.clone(),
                                         move |message| {
+                                            let room_id = message.room_id.clone();
                                             room_state.with_mut(|state| {
                                                 state::append_message_if_room_matches(
                                                     state,
@@ -145,11 +156,18 @@ pub fn App() -> Element {
                                         },
                                         move |snapshot| {
                                             room_state.with_mut(|state| {
-                                                state::replace_room_snapshot_if_room_matches(
-                                                    state,
-                                                    snapshot,
-                                                );
+                                                if state.is_none() {
+                                                    *state = Some(state::build_active_room(
+                                                        session_for_snapshot.clone(),
+                                                        snapshot,
+                                                    ));
+                                                    return;
+                                                }
+
+                                                state::replace_room_snapshot_if_room_matches(state, snapshot);
                                             });
+                                            error_message.set(None);
+                                            loading.set(false);
                                         },
                                         move |snapshot| {
                                             room_state.with_mut(|state| {
@@ -159,22 +177,38 @@ pub fn App() -> Element {
                                                 );
                                             });
                                         },
-                                        move |error| show_runtime_error(error),
+                                        move |error| {
+                                            if room_state().is_some() {
+                                                show_runtime_error(error);
+                                                return;
+                                            }
+
+                                            room_client.with_mut(|client| {
+                                                if let Some(current) = client.take() {
+                                                    current.close();
+                                                }
+                                            });
+                                            loading.set(false);
+                                            error_message.set(Some(error));
+                                        },
                                     );
 
                                     match connection {
                                         Ok(connection) => {
                                             loading_older_messages.set(false);
-                                            room_state.set(Some(room));
                                             room_client.set(Some(connection));
                                         }
-                                        Err(error) => error_message.set(Some(error)),
+                                        Err(error) => {
+                                            loading.set(false);
+                                            error_message.set(Some(error));
+                                        }
                                     }
                                 }
-                                Err(error) => error_message.set(Some(error)),
+                                Err(error) => {
+                                    loading.set(false);
+                                    error_message.set(Some(error));
+                                }
                             }
-
-                            loading.set(false);
                         });
                     },
                 }

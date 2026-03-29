@@ -24,20 +24,23 @@ function toErrorMessage(error) {
   }
 }
 
-export function createRoomSocket(apiBase, sessionId, roomId, onEvent, onStatus, onError) {
+export function createRoomSocket(apiBase, sessionId, roomCode, onEvent, onStatus, onError) {
   const socket = io(normalizeBaseUrl(apiBase), {
     autoConnect: false,
     path: "/socket.io",
     transports: ["websocket"],
     auth: {
       session_id: sessionId,
-      room_id: roomId,
     },
   });
 
   onStatus("connecting");
 
   socket.on("connect", () => {
+    socket.emit("command", {
+      type: "join_room",
+      code: String(roomCode ?? "").trim().toUpperCase(),
+    });
     onStatus("connected");
   });
 

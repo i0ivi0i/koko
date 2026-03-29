@@ -1,6 +1,4 @@
-use koko_contract::{
-    BootstrapSessionResponse, JoinOrCreateRoomResponse, MessageResponse, RoomMemberResponse,
-};
+use koko_contract::{BootstrapSessionResponse, MessageResponse, RoomMemberResponse};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ActiveRoom {
@@ -10,14 +8,6 @@ pub struct ActiveRoom {
     pub room_id: String,
     pub room_code: String,
     pub role: String,
-    pub messages: Vec<MessageResponse>,
-    pub has_more_messages: bool,
-    pub members: Vec<RoomMemberResponse>,
-}
-
-pub struct ActiveRoomSnapshot {
-    pub session: BootstrapSessionResponse,
-    pub joined: JoinOrCreateRoomResponse,
     pub messages: Vec<MessageResponse>,
     pub has_more_messages: bool,
     pub members: Vec<RoomMemberResponse>,
@@ -38,14 +28,17 @@ pub struct RoomMembersRealtimeSnapshot {
     pub members: Vec<RoomMemberResponse>,
 }
 
-pub fn apply_joined_room(snapshot: ActiveRoomSnapshot) -> ActiveRoom {
+pub fn build_active_room(
+    session: BootstrapSessionResponse,
+    snapshot: RoomRealtimeSnapshot,
+) -> ActiveRoom {
     ActiveRoom {
-        session_id: snapshot.session.session_id,
-        profile_id: snapshot.session.profile_id,
-        display_name: snapshot.session.display_name,
-        room_id: snapshot.joined.room_id,
-        room_code: snapshot.joined.code,
-        role: snapshot.joined.role,
+        session_id: session.session_id,
+        profile_id: session.profile_id,
+        display_name: session.display_name,
+        room_id: snapshot.room_id,
+        room_code: snapshot.room_code,
+        role: snapshot.role,
         messages: snapshot.messages,
         has_more_messages: snapshot.has_more_messages,
         members: snapshot.members,
@@ -181,7 +174,10 @@ fn merge_snapshot_messages(
     }
 
     for message in snapshot_messages {
-        if existing.iter().any(|item| item.message_id == message.message_id) {
+        if existing
+            .iter()
+            .any(|item| item.message_id == message.message_id)
+        {
             continue;
         }
 
@@ -228,23 +224,23 @@ mod tests {
     }
 
     #[test]
-    fn joined_room_snapshot_should_build_active_room() {
-        let room = apply_joined_room(ActiveRoomSnapshot {
-            session: BootstrapSessionResponse {
+    fn realtime_room_snapshot_should_build_active_room() {
+        let room = build_active_room(
+            BootstrapSessionResponse {
                 session_id: "session-1".into(),
                 profile_id: "profile-1".into(),
                 display_name: "user-1".into(),
                 device_token: "anon-token-1".into(),
             },
-            joined: JoinOrCreateRoomResponse {
+            RoomRealtimeSnapshot {
                 room_id: "room-1".into(),
-                code: "1A234".into(),
+                room_code: "1A234".into(),
                 role: "owner".into(),
+                messages: vec![message("msg-1")],
+                has_more_messages: true,
+                members: vec![member("profile-1")],
             },
-            messages: vec![message("msg-1")],
-            has_more_messages: true,
-            members: vec![member("profile-1")],
-        });
+        );
 
         assert_eq!(room.room_code, "1A234");
         assert_eq!(room.role, "owner");
