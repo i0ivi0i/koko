@@ -320,17 +320,13 @@ pub(crate) async fn publish_room_members_updates(state: &AppState, room_id: Room
         return;
     };
 
-    for member in members {
-        let Ok(event) = build_room_members_snapshot_event(
-            state,
+    for member in &members {
+        let event = build_room_members_snapshot_event(
             room_id,
             member.profile_id,
             member.role,
-        )
-        .await
-        else {
-            continue;
-        };
+            &members,
+        );
 
         state
             .realtime
@@ -404,26 +400,23 @@ async fn build_room_snapshot_event(
     })
 }
 
-async fn build_room_members_snapshot_event(
-    state: &AppState,
+fn build_room_members_snapshot_event(
     room_id: RoomId,
     viewer_profile_id: ProfileId,
     role: Role,
-) -> Result<ServerRealtimeEvent, ApiError> {
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
-    let members = room_repo
-        .list_members(room_id)
-        .await
-        .map_err(|_| ApiError::internal("成员列表读取失败"))?
-        .into_iter()
+    members: &[crate::room_repo::RoomMemberRecord],
+) -> ServerRealtimeEvent {
+    let members = members
+        .iter()
+        .copied()
         .map(|member| crate::http::room_member_to_response(viewer_profile_id, role, member))
         .collect();
 
-    Ok(ServerRealtimeEvent::RoomMembersSnapshot {
+    ServerRealtimeEvent::RoomMembersSnapshot {
         room_id: room_id.0.to_string(),
         role: role_name(role).to_owned(),
         members,
-    })
+    }
 }
 
 async fn load_room_snapshot_base(

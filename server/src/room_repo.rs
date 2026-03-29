@@ -11,6 +11,7 @@ pub struct PostgresRoomRepository {
     pool: PgPool,
 }
 
+#[derive(Clone, Copy)]
 pub struct RoomMemberRecord {
     pub profile_id: ProfileId,
     pub role: Role,
