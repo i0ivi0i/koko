@@ -150,16 +150,20 @@ pub struct AdminRoomDetailResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientRealtimeCommand {
+    /// 当前主 web 流程已稳定使用的实时入房命令。
     JoinRoom { code: String },
+    /// 当前主 web 流程已稳定使用的发消息命令。
     SendMessage { content: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientRealtimeQuery {
+    /// 预留给后续 realtime 历史同步；当前主 web 流程仍主要通过 HTTP 加载历史。
     LoadRecentMessages {
         limit: Option<u16>,
     },
+    /// 预留给后续 realtime 历史分页；当前主 web 流程仍主要通过 HTTP 加载更早消息。
     LoadOlderMessages {
         before_message_id: Option<String>,
         limit: Option<u16>,
@@ -169,6 +173,7 @@ pub enum ClientRealtimeQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerRealtimeEvent {
+    /// 当前主 web 流程的首屏房间同步入口。
     RoomSnapshot {
         room_id: String,
         code: String,
@@ -177,6 +182,7 @@ pub enum ServerRealtimeEvent {
         has_more_messages: bool,
         members: Vec<RoomMemberResponse>,
     },
+    /// 当前主 web 流程稳定消费的新增消息事件。
     MessageCreated {
         message_id: String,
         room_id: String,
@@ -184,10 +190,12 @@ pub enum ServerRealtimeEvent {
         content: String,
         created_at: String,
     },
+    /// 预留给后续成员增量同步；当前主 web 流程仍以快照与 HTTP 刷新为主。
     MemberChanged {
         room_id: String,
         member: RoomMemberResponse,
     },
+    /// 预留给后续治理结果事件化；当前主 web 流程仍主要依赖 HTTP 治理回执。
     GovernanceResult {
         room_id: String,
         action: String,
