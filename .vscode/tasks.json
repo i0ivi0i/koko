@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cargo check (isolated)",
+      "type": "shell",
+      "command": "cargo check --target-dir target/check"
+    },
+    {
+      "label": "cargo nextest (isolated)",
+      "type": "shell",
+      "command": "cargo nextest run --target-dir target/nextest"
+    },
+    {
+      "label": "cargo test --doc (isolated)",
+      "type": "shell",
+      "command": "cargo test --doc --target-dir target/doctest"
+    },
+    {
+      "label": "cargo build --timings (isolated)",
+      "type": "shell",
+      "command": "cargo build --timings --target-dir target/timings"
+    }
+  ]
+}
