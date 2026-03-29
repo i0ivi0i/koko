@@ -214,36 +214,20 @@ pub async fn join_room(code: &str) -> Result<ActiveRoomSnapshot, String> {
             .await
             .map_err(|error| error.to_string())?;
 
-    let messages: RoomMessagesResponse = Request::get(&format!(
-        "{}{}",
-        api_base(),
-        build_room_messages_path(&joined.room_id, None)
-    ))
-    .header(SESSION_HEADER_NAME, &session.session_id)
-    .send()
-    .await
-    .map_err(|error| error.to_string())?
-    .json()
-    .await
-    .map_err(|error| error.to_string())?;
+    Ok(build_joined_room_snapshot(session, joined))
+}
 
-    let members: RoomMembersResponse =
-        Request::get(&format!("{}/rooms/{}/members", api_base(), joined.room_id))
-            .header(SESSION_HEADER_NAME, &session.session_id)
-            .send()
-            .await
-            .map_err(|error| error.to_string())?
-            .json()
-            .await
-            .map_err(|error| error.to_string())?;
-
-    Ok(ActiveRoomSnapshot {
+fn build_joined_room_snapshot(
+    session: BootstrapSessionResponse,
+    joined: JoinOrCreateRoomResponse,
+) -> ActiveRoomSnapshot {
+    ActiveRoomSnapshot {
         session,
         joined,
-        messages: messages.items,
-        has_more_messages: messages.has_more,
-        members: members.items,
-    })
+        messages: Vec::new(),
+        has_more_messages: false,
+        members: Vec::new(),
+    }
 }
 
 fn into_message_observer<F>(on_message: F) -> MessageObserver
@@ -725,6 +709,27 @@ mod tests {
             build_room_messages_path("room-1", Some("msg-9")),
             "/rooms/room-1/messages?before_message_id=msg-9&limit=40"
         );
+    }
+
+    #[test]
+    fn joined_room_snapshot_should_start_empty_until_realtime_snapshot_arrives() {
+        let snapshot = build_joined_room_snapshot(
+            BootstrapSessionResponse {
+                session_id: "session-1".into(),
+                profile_id: "profile-1".into(),
+                display_name: "user-1".into(),
+                device_token: "anon-token-1".into(),
+            },
+            JoinOrCreateRoomResponse {
+                room_id: "room-1".into(),
+                code: "1A234".into(),
+                role: "owner".into(),
+            },
+        );
+
+        assert!(snapshot.messages.is_empty());
+        assert!(!snapshot.has_more_messages);
+        assert!(snapshot.members.is_empty());
     }
 
     #[test]
