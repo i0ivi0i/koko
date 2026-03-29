@@ -19,8 +19,8 @@ use socketioxide::{
 use crate::{
     app::AppState,
     http::{
-        ApiError, RoomSnapshotQuery, RoomSnapshotView, load_room_snapshot_view,
-        load_room_viewer_context, map_domain_error, message_to_response, role_name,
+        ApiError, RoomSnapshotQuery, RoomSnapshotView, load_room_snapshot_view_for_viewer,
+        map_domain_error, message_to_response, role_name,
     },
     message_repo::PostgresMessageRepository,
     room_repo::PostgresRoomRepository,
@@ -371,20 +371,18 @@ async fn emit_room_snapshot(
     query: RoomSnapshotQuery,
 ) -> Result<(), ApiError> {
     let room_id = seed.room_id;
-    let viewer =
-        load_room_viewer_context(&state.pool, session.profile_id, room_id, seed.room).await?;
     let transition = session.begin_room_transition(room_id);
-    if transition.is_switch {
-        if let Some(previous_room_id) = transition.previous_room_id {
-            socket.leave(socket_room_name(previous_room_id));
-        }
+    if transition.is_switch
+        && let Some(previous_room_id) = transition.previous_room_id
+    {
+        socket.leave(socket_room_name(previous_room_id));
     }
 
-    let snapshot_result = load_room_snapshot_view(
+    let snapshot_result = load_room_snapshot_view_for_viewer(
         &state.pool,
         session.profile_id,
-        viewer.room,
-        viewer.role,
+        room_id,
+        seed.room,
         query,
     )
     .await;

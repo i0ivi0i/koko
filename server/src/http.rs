@@ -42,6 +42,11 @@ pub(crate) struct RoomSnapshotView {
     pub members: Vec<RoomMemberResponse>,
 }
 
+pub(crate) struct RoomMessagesPage {
+    pub items: Vec<MessageResponse>,
+    pub has_more: bool,
+}
+
 pub(crate) struct RoomViewerContext {
     pub room: Room,
     pub role: Role,
@@ -557,6 +562,20 @@ pub(crate) async fn load_room_messages_response(
     before_message_id: Option<String>,
     limit: Option<u16>,
 ) -> Result<RoomMessagesResponse, ApiError> {
+    let page = load_room_messages_page(pool, room_id, before_message_id, limit).await?;
+
+    Ok(RoomMessagesResponse {
+        items: page.items,
+        has_more: page.has_more,
+    })
+}
+
+pub(crate) async fn load_room_messages_page(
+    pool: &sqlx::PgPool,
+    room_id: RoomId,
+    before_message_id: Option<String>,
+    limit: Option<u16>,
+) -> Result<RoomMessagesPage, ApiError> {
     let before_message_id = parse_optional_message_id(before_message_id.as_deref())?;
     let limit = normalize_message_page_limit(limit);
     let message_repo = PostgresMessageRepository::new(pool.clone());
@@ -565,7 +584,7 @@ pub(crate) async fn load_room_messages_response(
         .await
         .map_err(map_list_messages_error)?;
 
-    Ok(RoomMessagesResponse {
+    Ok(RoomMessagesPage {
         items: page.items.into_iter().map(message_to_response).collect(),
         has_more: page.has_more,
     })
@@ -577,6 +596,17 @@ pub(crate) async fn load_room_members_response(
     viewer_profile_id: ProfileId,
     viewer_role: Role,
 ) -> Result<RoomMembersResponse, ApiError> {
+    let items = load_room_member_items(pool, room_id, viewer_profile_id, viewer_role).await?;
+
+    Ok(RoomMembersResponse { items })
+}
+
+pub(crate) async fn load_room_member_items(
+    pool: &sqlx::PgPool,
+    room_id: RoomId,
+    viewer_profile_id: ProfileId,
+    viewer_role: Role,
+) -> Result<Vec<RoomMemberResponse>, ApiError> {
     let room_repo = PostgresRoomRepository::new(pool.clone());
     let items = room_repo
         .list_members(room_id)
@@ -586,7 +616,7 @@ pub(crate) async fn load_room_members_response(
         .map(|member| room_member_to_response(viewer_profile_id, viewer_role, member))
         .collect();
 
-    Ok(RoomMembersResponse { items })
+    Ok(items)
 }
 
 pub(crate) async fn load_room_snapshot_view(
@@ -598,22 +628,34 @@ pub(crate) async fn load_room_snapshot_view(
 ) -> Result<RoomSnapshotView, ApiError> {
     let messages = match query {
         RoomSnapshotQuery::Recent { limit } => {
-            load_room_messages_response(pool, room.id, None, limit).await?
+            load_room_messages_page(pool, room.id, None, limit).await?
         }
         RoomSnapshotQuery::Older {
             before_message_id,
             limit,
-        } => load_room_messages_response(pool, room.id, before_message_id, limit).await?,
+        } => load_room_messages_page(pool, room.id, before_message_id, limit).await?,
     };
-    let members = load_room_members_response(pool, room.id, viewer_profile_id, viewer_role).await?;
+    let members = load_room_member_items(pool, room.id, viewer_profile_id, viewer_role).await?;
 
     Ok(RoomSnapshotView {
         room,
         role: viewer_role,
         messages: messages.items,
         has_more_messages: messages.has_more,
-        members: members.items,
+        members,
     })
+}
+
+pub(crate) async fn load_room_snapshot_view_for_viewer(
+    pool: &sqlx::PgPool,
+    viewer_profile_id: ProfileId,
+    room_id: RoomId,
+    known_room: Option<Room>,
+    query: RoomSnapshotQuery,
+) -> Result<RoomSnapshotView, ApiError> {
+    let viewer = load_room_viewer_context(pool, viewer_profile_id, room_id, known_room).await?;
+
+    load_room_snapshot_view(pool, viewer_profile_id, viewer.room, viewer.role, query).await
 }
 
 fn parse_profile_id(raw: &str) -> Result<ProfileId, ApiError> {

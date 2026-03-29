@@ -890,6 +890,7 @@ impl SocketIoTestClient {
                     let _ = error_tx.send(("error".to_owned(), payload_to_value(payload)));
                 })
                 .connect()
+                .map_err(|error| error.to_string())
         })
         .await
         .expect("socketio 测试客户端连接任务不应 panic")
@@ -952,7 +953,11 @@ impl SocketIoTestClient {
 
     async fn send_command(&self, command: Value) {
         let socket = self.socket.clone();
-        tokio::task::spawn_blocking(move || socket.emit("command", command))
+        tokio::task::spawn_blocking(move || {
+            socket
+                .emit("command", command)
+                .map_err(|error| error.to_string())
+        })
             .await
             .expect("socketio command 发送任务不应 panic")
             .expect("socketio command 发送应成功");
@@ -975,7 +980,7 @@ impl SocketIoTestClient {
 
     async fn close(self) {
         let socket = self.socket;
-        tokio::task::spawn_blocking(move || socket.disconnect())
+        tokio::task::spawn_blocking(move || socket.disconnect().map_err(|error| error.to_string()))
             .await
             .expect("socketio 客户端断开任务不应 panic")
             .expect("socketio 客户端断开应成功");

@@ -328,10 +328,10 @@ mod tests {
     fn wait_for_pid(path: &Path) -> u32 {
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
-            if let Ok(content) = fs::read_to_string(path) {
-                if let Ok(pid) = content.trim().parse() {
-                    return pid;
-                }
+            if let Ok(content) = fs::read_to_string(path)
+                && let Ok(pid) = content.trim().parse()
+            {
+                return pid;
             }
 
             assert!(std::time::Instant::now() < deadline, "等待子进程 PID 超时");
