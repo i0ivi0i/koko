@@ -322,7 +322,7 @@ pub async fn run_member_action(
 ) -> Result<(), String> {
     let request = build_member_action_request(action, room_id, target_profile_id);
 
-    Request::post(&format!("{}{}", api_base(), request.path))
+    let response = Request::post(&format!("{}{}", api_base(), request.path))
         .header(SESSION_HEADER_NAME, session_id)
         .header("content-type", "application/json")
         .body(request.body)
@@ -331,7 +331,7 @@ pub async fn run_member_action(
         .await
         .map_err(|error| error.to_string())?;
 
-    Ok(())
+    ensure_member_action_succeeded(response).await
 }
 
 pub fn connect_joined_room<F, E>(
@@ -627,6 +627,31 @@ where
     Ok(())
 }
 
+async fn ensure_member_action_succeeded(response: gloo_net::http::Response) -> Result<(), String> {
+    if response.ok() {
+        return Ok(());
+    }
+
+    let status_text = response.status_text();
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    Err(member_action_error_message(status, &status_text, &body))
+}
+
+fn member_action_error_message(status: u16, status_text: &str, body: &str) -> String {
+    let message = body.trim();
+
+    if !message.is_empty() {
+        return message.to_owned();
+    }
+
+    if !status_text.trim().is_empty() {
+        return status_text.to_owned();
+    }
+
+    format!("请求失败 ({status})")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -692,6 +717,27 @@ mod tests {
             build_room_messages_path("room-1", Some("msg-9")),
             "/rooms/room-1/messages?before_message_id=msg-9&limit=40"
         );
+    }
+
+    #[test]
+    fn member_action_failure_should_prefer_response_body() {
+        assert_eq!(
+            member_action_error_message(403, "Forbidden", "房间权限不足"),
+            "房间权限不足"
+        );
+    }
+
+    #[test]
+    fn member_action_failure_without_body_should_fall_back_to_status_text() {
+        assert_eq!(
+            member_action_error_message(404, "Not Found", ""),
+            "Not Found"
+        );
+    }
+
+    #[test]
+    fn member_action_failure_without_body_or_status_text_should_include_status_code() {
+        assert_eq!(member_action_error_message(500, "", ""), "请求失败 (500)");
     }
 
     #[test]

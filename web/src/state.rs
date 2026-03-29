@@ -55,11 +55,7 @@ pub fn append_message_if_missing(room: &mut ActiveRoom, message: MessageResponse
         return false;
     }
 
-    let insert_at = room
-        .messages
-        .iter()
-        .position(|existing| message.created_at <= existing.created_at)
-        .unwrap_or(room.messages.len());
+    let insert_at = message_insert_at(&room.messages, &message);
     room.messages.insert(insert_at, message);
     true
 }
@@ -142,7 +138,7 @@ pub fn replace_room_snapshot_if_room_matches(
 
     room.room_code = snapshot.room_code;
     room.role = snapshot.role;
-    room.messages = snapshot.messages;
+    merge_snapshot_messages(&mut room.messages, snapshot.messages);
     room.has_more_messages = snapshot.has_more_messages;
     room.members = snapshot.members;
     true
@@ -150,6 +146,32 @@ pub fn replace_room_snapshot_if_room_matches(
 
 pub fn leave_room(state: &mut Option<ActiveRoom>) {
     *state = None;
+}
+
+fn merge_snapshot_messages(
+    existing: &mut Vec<MessageResponse>,
+    snapshot_messages: Vec<MessageResponse>,
+) {
+    if existing.is_empty() {
+        *existing = snapshot_messages;
+        return;
+    }
+
+    for message in snapshot_messages {
+        if existing.iter().any(|item| item.message_id == message.message_id) {
+            continue;
+        }
+
+        let insert_at = message_insert_at(existing, &message);
+        existing.insert(insert_at, message);
+    }
+}
+
+fn message_insert_at(existing: &[MessageResponse], message: &MessageResponse) -> usize {
+    existing
+        .iter()
+        .position(|item| message.created_at < item.created_at)
+        .unwrap_or(existing.len())
 }
 
 #[cfg(test)]
@@ -292,7 +314,7 @@ mod tests {
                 .iter()
                 .map(|item| item.message_id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["msg-2", "msg-3"]
+            vec!["msg-1", "msg-2", "msg-3"]
         );
         assert!(!room.has_more_messages);
         assert_eq!(
@@ -301,6 +323,59 @@ mod tests {
                 .map(|item| item.profile_id.as_str())
                 .collect::<Vec<_>>(),
             vec!["profile-2", "profile-3"]
+        );
+    }
+
+    #[test]
+    fn replace_room_snapshot_if_room_matches_should_preserve_already_loaded_older_history() {
+        let mut state = Some(ActiveRoom {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+            room_id: "room-1".into(),
+            room_code: "1A234".into(),
+            role: "member".into(),
+            messages: vec![
+                message_at("msg-1", "2026-03-27T12:31:00Z"),
+                message_at("msg-2", "2026-03-27T12:32:00Z"),
+                message_at("msg-3", "2026-03-27T12:33:00Z"),
+            ],
+            has_more_messages: true,
+            members: vec![member("profile-1")],
+        });
+
+        let replaced = replace_room_snapshot_if_room_matches(
+            &mut state,
+            RoomRealtimeSnapshot {
+                room_id: "room-1".into(),
+                room_code: "1A234".into(),
+                role: "owner".into(),
+                messages: vec![
+                    message_at("msg-3", "2026-03-27T12:33:00Z"),
+                    message_at("msg-4", "2026-03-27T12:34:00Z"),
+                ],
+                has_more_messages: false,
+                members: vec![member("profile-2")],
+            },
+        );
+
+        assert!(replaced);
+        let room = state.as_ref().unwrap();
+        assert_eq!(
+            room.messages
+                .iter()
+                .map(|item| item.message_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["msg-1", "msg-2", "msg-3", "msg-4"]
+        );
+        assert_eq!(room.role, "owner");
+        assert!(!room.has_more_messages);
+        assert_eq!(
+            room.members
+                .iter()
+                .map(|item| item.profile_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["profile-2"]
         );
     }
 
