@@ -44,16 +44,8 @@ async fn socketio入房后服务端应可直接通过socketioxide房间广播() 
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": owner_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = socket.next_event().await;
+    let (mut socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, owner_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
@@ -117,16 +109,8 @@ async fn 被禁言成员通过socketio发送消息应被领域规则拒绝() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": member_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = socket.next_event().await;
+    let (mut socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, member_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
     assert_eq!(room_snapshot.1["room_id"], room_id.to_string());
@@ -177,16 +161,8 @@ async fn http发送消息后socketio客户端应收到_message_created广播() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": owner_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = socket.next_event().await;
+    let (mut socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, owner_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
@@ -259,16 +235,8 @@ async fn socketio首个_room_snapshot应与_http房间视图保持一致() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": owner_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = socket.next_event().await;
+    let (socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, owner_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
     assert_eq!(room_snapshot.1["room_id"], room_id.to_string());
@@ -365,16 +333,8 @@ async fn socketio切房后不应继续收到旧房间广播() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": profile_session_id.to_string(),
-            "room_id": room_a_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = socket.next_event().await;
+    let (mut socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, profile_session_id, &room_a_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
     assert_eq!(room_snapshot.1["room_id"], room_a_id.to_string());
@@ -486,16 +446,8 @@ async fn socketio切房命令发出后旧房间广播不应抢在新快照前到
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": profile_session_id.to_string(),
-            "room_id": room_a_id.to_string(),
-        }),
-    )
-    .await;
-
-    let initial_snapshot = socket.next_event().await;
+    let (mut socket, initial_snapshot) =
+        SocketIoTestClient::connect_and_join(address, profile_session_id, &room_a_code).await;
     assert_eq!(initial_snapshot.0, "event");
     assert_eq!(initial_snapshot.1["type"], "room_snapshot");
     assert_eq!(initial_snapshot.1["room_id"], room_a_id.to_string());
@@ -506,6 +458,11 @@ async fn socketio切房命令发出后旧房间广播不应抢在新快照前到
             "code": room_b_code,
         }))
         .await;
+
+    let first_after_join = socket.next_event().await;
+    assert_eq!(first_after_join.0, "event");
+    assert_eq!(first_after_join.1["type"], "room_snapshot");
+    assert_eq!(first_after_join.1["room_id"], room_b_id.to_string());
 
     let owner_a_send = http_app
         .oneshot(with_session(
@@ -526,10 +483,7 @@ async fn socketio切房命令发出后旧房间广播不应抢在新快照前到
         .unwrap();
     assert_eq!(owner_a_send.status(), StatusCode::OK);
 
-    let first_after_join = socket.next_event().await;
-    assert_eq!(first_after_join.0, "event");
-    assert_eq!(first_after_join.1["type"], "room_snapshot");
-    assert_eq!(first_after_join.1["room_id"], room_b_id.to_string());
+    socket.assert_no_event(Duration::from_millis(200)).await;
 
     socket.close().await;
     shutdown_test_server(server).await;
@@ -555,28 +509,8 @@ async fn socketio通过不存在短码入房时应创建房间并返回快照() 
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": session_id.to_string(),
-            "room_id": existing_room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let initial_snapshot = socket.next_event().await;
-    assert_eq!(initial_snapshot.0, "event");
-    assert_eq!(initial_snapshot.1["type"], "room_snapshot");
-    assert_eq!(initial_snapshot.1["room_id"], existing_room_id.to_string());
-
-    socket
-        .send_command(json!({
-            "type": "join_room",
-            "code": room_code,
-        }))
-        .await;
-
-    let room_snapshot = socket.next_event().await;
+    let (socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
     assert_eq!(room_snapshot.1["code"], room_code);
@@ -634,16 +568,8 @@ async fn 成员被移除后不应继续收到房间广播() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut member_socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": member_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = member_socket.next_event().await;
+    let (mut member_socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, member_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
     assert_eq!(room_snapshot.1["room_id"], room_id.to_string());
@@ -712,16 +638,8 @@ async fn 提升管理员后在线房间成员应收到更新后的_room_members_
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut owner_socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": owner_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = owner_socket.next_event().await;
+    let (mut owner_socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, owner_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
@@ -786,16 +704,8 @@ async fn 禁言成员后在线房间成员应收到带禁言状态的_room_membe
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut owner_socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": owner_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = owner_socket.next_event().await;
+    let (mut owner_socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, owner_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
@@ -853,16 +763,8 @@ async fn 移除成员后在线剩余成员应收到更新后的_room_members_sna
         axum::serve(listener, app).await.unwrap();
     });
 
-    let mut owner_socket = SocketIoTestClient::connect(
-        address,
-        json!({
-            "session_id": owner_session_id.to_string(),
-            "room_id": room_id.to_string(),
-        }),
-    )
-    .await;
-
-    let room_snapshot = owner_socket.next_event().await;
+    let (mut owner_socket, room_snapshot) =
+        SocketIoTestClient::connect_and_join(address, owner_session_id, &room_code).await;
     assert_eq!(room_snapshot.0, "event");
     assert_eq!(room_snapshot.1["type"], "room_snapshot");
 
@@ -902,18 +804,24 @@ struct SocketIoTestClient {
 }
 
 impl SocketIoTestClient {
-    async fn connect(address: SocketAddr, auth: Value) -> Self {
+    async fn connect(address: SocketAddr, session_id: Uuid) -> Self {
         let (tx, rx) = unbounded_channel();
         let url = format!("http://{address}");
         let socket = tokio::task::spawn_blocking(move || {
             let event_tx = tx.clone();
+            let open_tx = tx.clone();
             let error_tx = tx;
             SocketIoClientBuilder::new(url)
                 .namespace("/")
                 .transport_type(TransportType::Websocket)
                 .reconnect(false)
                 .reconnect_on_disconnect(false)
-                .auth(auth)
+                .auth(json!({
+                    "session_id": session_id.to_string(),
+                }))
+                .on("open", move |payload, _| {
+                    let _ = open_tx.send(("open".to_owned(), payload_to_value(payload)));
+                })
                 .on("event", move |payload, _| {
                     let _ = event_tx.send(("event".to_owned(), payload_to_value(payload)));
                 })
@@ -926,7 +834,37 @@ impl SocketIoTestClient {
         .expect("socketio 测试客户端连接任务不应 panic")
         .expect("rust_socketio 客户端应连接成功");
 
-        Self { socket, events: rx }
+        let mut client = Self { socket, events: rx };
+        let opened = client.next_event().await;
+        assert_eq!(
+            opened.0, "open",
+            "socketio 客户端应先进入 open，再发送业务命令: {:?}",
+            opened.1
+        );
+
+        client
+    }
+
+    async fn connect_and_join(
+        address: SocketAddr,
+        session_id: Uuid,
+        room_code: &str,
+    ) -> (Self, SocketIoEvent) {
+        let mut socket = Self::connect(address, session_id).await;
+        socket
+            .send_command(json!({
+                "type": "join_room",
+                "code": room_code,
+            }))
+            .await;
+        let snapshot = socket.next_event().await;
+        assert_eq!(
+            snapshot.0, "event",
+            "join_room 应返回 room_snapshot 而不是错误: {:?}",
+            snapshot.1
+        );
+
+        (socket, snapshot)
     }
 
     async fn send_command(&self, command: Value) {
