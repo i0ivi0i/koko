@@ -9,9 +9,9 @@ use headers::{Authorization, HeaderMapExt, authorization::Basic};
 use koko_contract::{
     AdminOverviewResponse, AdminRoomDetailResponse, AdminRoomListItem, AdminRoomListQuery,
     AdminRoomListResponse, BanRoomRequest, BootstrapSessionRequest, BootstrapSessionResponse,
-    DemoteAdminRequest, GlobalChatPolicyResponse, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse,
-    MessageResponse, PromoteAdminRequest, RoomGovernanceStateResponse, RoomMemberResponse,
-    RoomMembersResponse, RoomMessagesQuery, RoomMessagesResponse, RoomResponse,
+    DemoteAdminRequest, GlobalChatPolicyResponse, JoinOrCreateRoomRequest,
+    JoinOrCreateRoomResponse, MessageResponse, PromoteAdminRequest, RoomGovernanceStateResponse,
+    RoomMemberResponse, RoomMembersResponse, RoomMessagesQuery, RoomMessagesResponse, RoomResponse,
     SESSION_HEADER_NAME, SendMessageRequest, ServerRealtimeEvent, UpdateGlobalChatPolicyRequest,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -24,7 +24,7 @@ use crate::{
     session,
 };
 use koko_core::{
-    model::{MessageId, ProfileId, Role, RoomCode, RoomId},
+    model::{MessageId, ProfileId, Role, Room, RoomCode, RoomId},
     room::member_action_capabilities,
 };
 
@@ -33,6 +33,29 @@ const MAX_MESSAGE_PAGE_LIMIT: u16 = 100;
 const DEFAULT_ADMIN_ROOM_LIMIT: usize = 50;
 const MAX_ADMIN_ROOM_LIMIT: u16 = 200;
 const ADMIN_BASIC_REALM: &str = "Basic realm=\"koko-admin\", charset=\"UTF-8\"";
+
+pub(crate) struct RoomSnapshotView {
+    pub room: Room,
+    pub role: Role,
+    pub messages: Vec<MessageResponse>,
+    pub has_more_messages: bool,
+    pub members: Vec<RoomMemberResponse>,
+}
+
+pub(crate) struct RoomViewerContext {
+    pub room: Room,
+    pub role: Role,
+}
+
+pub(crate) enum RoomSnapshotQuery {
+    Recent {
+        limit: Option<u16>,
+    },
+    Older {
+        before_message_id: Option<String>,
+        limit: Option<u16>,
+    },
+}
 
 pub async fn bootstrap_session(
     State(state): State<AppState>,
@@ -225,13 +248,10 @@ pub async fn get_room(
     Path(room_id): Path<String>,
 ) -> Result<Json<RoomResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
-    require_room_member(&headers, &state.pool, room_id).await?;
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
-    let room = room_repo
-        .find_room(room_id)
-        .await
-        .map_err(|_| ApiError::internal("房间查询失败"))?
-        .ok_or_else(|| ApiError::not_found("房间不存在"))?;
+    let session = require_authenticated_session(&headers, &state.pool).await?;
+    let room = load_room_viewer_context(&state.pool, session.profile_id, room_id, None)
+        .await?
+        .room;
 
     Ok(Json(RoomResponse {
         room_id: room.id.0.to_string(),
@@ -247,19 +267,10 @@ pub async fn list_room_messages(
 ) -> Result<Json<RoomMessagesResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
     require_room_member(&headers, &state.pool, room_id).await?;
-    let before_message_id = parse_optional_message_id(query.before_message_id.as_deref())?;
-    let limit = normalize_message_page_limit(query.limit);
-    let message_repo = PostgresMessageRepository::new(state.pool);
-    let page = message_repo
-        .list_room_messages(room_id, before_message_id, limit)
-        .await
-        .map_err(map_list_messages_error)?;
-    let items = page.items.into_iter().map(message_to_response).collect();
-
-    Ok(Json(RoomMessagesResponse {
-        items,
-        has_more: page.has_more,
-    }))
+    Ok(Json(
+        load_room_messages_response(&state.pool, room_id, query.before_message_id, query.limit)
+            .await?,
+    ))
 }
 
 pub async fn list_room_members(
@@ -269,20 +280,11 @@ pub async fn list_room_members(
 ) -> Result<Json<RoomMembersResponse>, ApiError> {
     let room_id = parse_room_id(&room_id)?;
     let session = require_authenticated_session(&headers, &state.pool).await?;
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
-    let viewer_role =
-        koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
-            .await
-            .map_err(map_domain_error)?;
-    let items = room_repo
-        .list_members(room_id)
-        .await
-        .map_err(|_| ApiError::internal("成员列表读取失败"))?
-        .into_iter()
-        .map(|member| room_member_to_response(session.profile_id, viewer_role, member))
-        .collect();
+    let viewer = load_room_viewer_context(&state.pool, session.profile_id, room_id, None).await?;
 
-    Ok(Json(RoomMembersResponse { items }))
+    Ok(Json(
+        load_room_members_response(&state.pool, room_id, session.profile_id, viewer.role).await?,
+    ))
 }
 
 #[tracing::instrument(skip(state, headers, request), fields(room_id = %room_id))]
@@ -539,6 +541,100 @@ async fn require_room_member(
         .map_err(map_domain_error)?;
 
     Ok(session)
+}
+
+pub(crate) async fn load_room_or_not_found(
+    room_repo: &PostgresRoomRepository,
+    room_id: RoomId,
+) -> Result<Room, ApiError> {
+    room_repo
+        .find_room(room_id)
+        .await
+        .map_err(|_| ApiError::internal("房间查询失败"))?
+        .ok_or_else(|| ApiError::not_found("房间不存在"))
+}
+
+pub(crate) async fn load_room_viewer_context(
+    pool: &sqlx::PgPool,
+    viewer_profile_id: ProfileId,
+    room_id: RoomId,
+    known_room: Option<Room>,
+) -> Result<RoomViewerContext, ApiError> {
+    let room_repo = PostgresRoomRepository::new(pool.clone());
+    let role = koko_core::room::ensure_can_read_room(&room_repo, room_id, viewer_profile_id)
+        .await
+        .map_err(map_domain_error)?;
+    let room = match known_room {
+        Some(room) => room,
+        None => load_room_or_not_found(&room_repo, room_id).await?,
+    };
+
+    Ok(RoomViewerContext { room, role })
+}
+
+pub(crate) async fn load_room_messages_response(
+    pool: &sqlx::PgPool,
+    room_id: RoomId,
+    before_message_id: Option<String>,
+    limit: Option<u16>,
+) -> Result<RoomMessagesResponse, ApiError> {
+    let before_message_id = parse_optional_message_id(before_message_id.as_deref())?;
+    let limit = normalize_message_page_limit(limit);
+    let message_repo = PostgresMessageRepository::new(pool.clone());
+    let page = message_repo
+        .list_room_messages(room_id, before_message_id, limit)
+        .await
+        .map_err(map_list_messages_error)?;
+
+    Ok(RoomMessagesResponse {
+        items: page.items.into_iter().map(message_to_response).collect(),
+        has_more: page.has_more,
+    })
+}
+
+pub(crate) async fn load_room_members_response(
+    pool: &sqlx::PgPool,
+    room_id: RoomId,
+    viewer_profile_id: ProfileId,
+    viewer_role: Role,
+) -> Result<RoomMembersResponse, ApiError> {
+    let room_repo = PostgresRoomRepository::new(pool.clone());
+    let items = room_repo
+        .list_members(room_id)
+        .await
+        .map_err(|_| ApiError::internal("成员列表读取失败"))?
+        .into_iter()
+        .map(|member| room_member_to_response(viewer_profile_id, viewer_role, member))
+        .collect();
+
+    Ok(RoomMembersResponse { items })
+}
+
+pub(crate) async fn load_room_snapshot_view(
+    pool: &sqlx::PgPool,
+    viewer_profile_id: ProfileId,
+    room: Room,
+    viewer_role: Role,
+    query: RoomSnapshotQuery,
+) -> Result<RoomSnapshotView, ApiError> {
+    let messages = match query {
+        RoomSnapshotQuery::Recent { limit } => {
+            load_room_messages_response(pool, room.id, None, limit).await?
+        }
+        RoomSnapshotQuery::Older {
+            before_message_id,
+            limit,
+        } => load_room_messages_response(pool, room.id, before_message_id, limit).await?,
+    };
+    let members = load_room_members_response(pool, room.id, viewer_profile_id, viewer_role).await?;
+
+    Ok(RoomSnapshotView {
+        room,
+        role: viewer_role,
+        messages: messages.items,
+        has_more_messages: messages.has_more,
+        members: members.items,
+    })
 }
 
 fn parse_profile_id(raw: &str) -> Result<ProfileId, ApiError> {

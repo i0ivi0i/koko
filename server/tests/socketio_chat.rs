@@ -1,5 +1,5 @@
 use axum::{
-    body::Body,
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
 use koko_contract::ServerRealtimeEvent;
@@ -215,6 +215,118 @@ async fn http发送消息后socketio客户端应收到_message_created广播() {
     assert_eq!(event.1["room_id"], room_id.to_string());
     assert_eq!(event.1["sender_id"], owner_id.to_string());
     assert_eq!(event.1["content"], "http to socketio");
+
+    socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
+async fn socketio首个_room_snapshot应与_http房间视图保持一致() {
+    let pool = test_pool().await;
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
+    let message_id = Uuid::new_v4();
+
+    insert_profile(&pool, owner_id, "snapshot-owner").await;
+    insert_profile(&pool, member_id, "snapshot-member").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
+    insert_member(&pool, room_id, member_id, "member").await;
+    mute_member_until_future(&pool, room_id, member_id).await;
+
+    sqlx::query!(
+        r#"
+        INSERT INTO messages (id, room_id, sender_id, content, created_at)
+        VALUES ($1, $2, $3, $4, NOW() - INTERVAL '5 minutes')
+        "#,
+        message_id,
+        room_id,
+        owner_id,
+        "snapshot-baseline"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+    assert_eq!(room_snapshot.1["room_id"], room_id.to_string());
+
+    let room = http_app
+        .clone()
+        .oneshot(with_session(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/rooms/{room_id}"))
+                .body(Body::empty())
+                .unwrap(),
+            owner_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(room.status(), StatusCode::OK);
+    let room_body = to_bytes(room.into_body(), usize::MAX).await.unwrap();
+    let room_payload: Value = serde_json::from_slice(&room_body).unwrap();
+
+    let messages = http_app
+        .clone()
+        .oneshot(with_session(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/rooms/{room_id}/messages"))
+                .body(Body::empty())
+                .unwrap(),
+            owner_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(messages.status(), StatusCode::OK);
+    let messages_body = to_bytes(messages.into_body(), usize::MAX).await.unwrap();
+    let messages_payload: Value = serde_json::from_slice(&messages_body).unwrap();
+
+    let members = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/rooms/{room_id}/members"))
+                .body(Body::empty())
+                .unwrap(),
+            owner_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(members.status(), StatusCode::OK);
+    let members_body = to_bytes(members.into_body(), usize::MAX).await.unwrap();
+    let members_payload: Value = serde_json::from_slice(&members_body).unwrap();
+
+    assert_eq!(room_snapshot.1["code"], room_payload["code"]);
+    assert_eq!(room_snapshot.1["messages"], messages_payload["items"]);
+    assert_eq!(
+        room_snapshot.1["has_more_messages"],
+        messages_payload["has_more"]
+    );
+    assert_eq!(room_snapshot.1["members"], members_payload["items"]);
 
     socket.close().await;
     shutdown_test_server(server).await;

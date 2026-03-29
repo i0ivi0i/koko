@@ -6,10 +6,7 @@ use std::{
     },
 };
 
-use koko_contract::{
-    ClientRealtimeCommand, ClientRealtimeQuery, MessageResponse, RoomMemberResponse,
-    ServerRealtimeEvent,
-};
+use koko_contract::{ClientRealtimeCommand, ClientRealtimeQuery, ServerRealtimeEvent};
 use koko_core::model::{ProfileId, Role, Room, RoomCode, RoomId};
 use socketioxide::{
     SocketIo,
@@ -21,8 +18,8 @@ use uuid::Uuid;
 use crate::{
     app::AppState,
     http::{
-        ApiError, map_domain_error, map_list_messages_error, message_to_response,
-        normalize_message_page_limit, parse_optional_message_id, role_name,
+        ApiError, RoomSnapshotQuery, RoomSnapshotView, load_room_snapshot_view,
+        load_room_viewer_context, map_domain_error, message_to_response, role_name,
     },
     message_repo::PostgresMessageRepository,
     room_repo::PostgresRoomRepository,
@@ -172,7 +169,7 @@ async fn on_socket_io_connection(
             &state,
             &session,
             RoomSnapshotSeed::lookup(room_id),
-            SnapshotQuery::Recent {
+            RoomSnapshotQuery::Recent {
                 limit: DEFAULT_SNAPSHOT_LIMIT,
             },
         )
@@ -211,7 +208,7 @@ async fn on_socket_io_command(
                         &state,
                         &session,
                         seed,
-                        SnapshotQuery::Recent {
+                        RoomSnapshotQuery::Recent {
                             limit: DEFAULT_SNAPSHOT_LIMIT,
                         },
                     )
@@ -249,11 +246,11 @@ async fn on_socket_io_query(
     };
 
     let snapshot_query = match query {
-        ClientRealtimeQuery::LoadRecentMessages { limit } => SnapshotQuery::Recent { limit },
+        ClientRealtimeQuery::LoadRecentMessages { limit } => RoomSnapshotQuery::Recent { limit },
         ClientRealtimeQuery::LoadOlderMessages {
             before_message_id,
             limit,
-        } => SnapshotQuery::Older {
+        } => RoomSnapshotQuery::Older {
             before_message_id,
             limit,
         },
@@ -291,13 +288,11 @@ async fn emit_room_snapshot(
     state: &AppState,
     session: &SocketSession,
     seed: RoomSnapshotSeed,
-    query: SnapshotQuery,
+    query: RoomSnapshotQuery,
 ) -> Result<(), ApiError> {
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let room_id = seed.room_id;
-    let role = koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
-        .await
-        .map_err(map_domain_error)?;
+    let viewer =
+        load_room_viewer_context(&state.pool, session.profile_id, room_id, seed.room).await?;
     let current_room_id = session.room_id();
     let is_room_transition = current_room_id != Some(room_id);
     if is_room_transition {
@@ -307,7 +302,14 @@ async fn emit_room_snapshot(
         session.clear_room_id();
     }
 
-    let snapshot = load_room_snapshot_base(state, session.profile_id, seed, role, &query).await?;
+    let snapshot = load_room_snapshot_view(
+        &state.pool,
+        session.profile_id,
+        viewer.room,
+        viewer.role,
+        query,
+    )
+    .await?;
     let event = build_room_snapshot_event(snapshot);
 
     socket
@@ -366,16 +368,6 @@ fn emit_socket_error(socket: &SocketRef, message: &'static str) {
     let _ = socket.emit(SOCKET_IO_ERROR_NAME, message);
 }
 
-enum SnapshotQuery {
-    Recent {
-        limit: Option<u16>,
-    },
-    Older {
-        before_message_id: Option<String>,
-        limit: Option<u16>,
-    },
-}
-
 #[derive(Clone)]
 struct RoomSnapshotSeed {
     room: Option<Room>,
@@ -398,16 +390,7 @@ impl RoomSnapshotSeed {
     }
 }
 
-#[derive(Clone)]
-struct RoomSnapshotBase {
-    room: Room,
-    role: Role,
-    messages: Vec<MessageResponse>,
-    has_more_messages: bool,
-    members: Vec<RoomMemberResponse>,
-}
-
-fn build_room_snapshot_event(snapshot: RoomSnapshotBase) -> ServerRealtimeEvent {
+fn build_room_snapshot_event(snapshot: RoomSnapshotView) -> ServerRealtimeEvent {
     ServerRealtimeEvent::RoomSnapshot {
         room_id: snapshot.room.id.0.to_string(),
         code: snapshot.room.code.as_str().to_owned(),
@@ -435,59 +418,6 @@ fn build_room_members_snapshot_event(
         role: role_name(role).to_owned(),
         members,
     }
-}
-
-async fn load_room_snapshot_base(
-    state: &AppState,
-    viewer_profile_id: ProfileId,
-    seed: RoomSnapshotSeed,
-    viewer_role: Role,
-    query: &SnapshotQuery,
-) -> Result<RoomSnapshotBase, ApiError> {
-    let room_repo = PostgresRoomRepository::new(state.pool.clone());
-    let room_id = seed.room_id;
-    let room = match seed.room {
-        Some(room) => room,
-        None => room_repo
-            .find_room(room_id)
-            .await
-            .map_err(|_| ApiError::internal("房间查询失败"))?
-            .ok_or_else(|| ApiError::not_found("房间不存在"))?,
-    };
-
-    let (before_message_id, limit) = match query {
-        SnapshotQuery::Recent { limit } => (None, normalize_message_page_limit(*limit)),
-        SnapshotQuery::Older {
-            before_message_id,
-            limit,
-        } => (
-            parse_optional_message_id(before_message_id.as_deref())?,
-            normalize_message_page_limit(*limit),
-        ),
-    };
-
-    let message_repo = PostgresMessageRepository::new(state.pool.clone());
-    let page = message_repo
-        .list_room_messages(room_id, before_message_id, limit)
-        .await
-        .map_err(map_list_messages_error)?;
-    let messages = page.items.into_iter().map(message_to_response).collect();
-
-    let members = room_repo
-        .list_members(room_id)
-        .await
-        .map_err(|_| ApiError::internal("成员列表读取失败"))?
-        .into_iter()
-        .map(|member| crate::http::room_member_to_response(viewer_profile_id, viewer_role, member))
-        .collect();
-
-    Ok(RoomSnapshotBase {
-        room,
-        role: viewer_role,
-        messages,
-        has_more_messages: page.has_more,
-        members,
-    })
 }
 
 fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {

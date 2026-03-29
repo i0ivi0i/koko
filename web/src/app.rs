@@ -14,6 +14,7 @@ pub fn App() -> Element {
     let mut members_open = use_signal(|| false);
     let mut room_state = use_signal(|| None::<ActiveRoom>);
     let mut room_client = use_signal(|| None::<client::JoinedRoomClient>);
+    let mut room_attempt = use_signal(|| 0_u64);
     let loading = use_signal(|| false);
     let mut loading_older_messages = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
@@ -36,6 +37,7 @@ pub fn App() -> Element {
                     messages: room.messages.clone(),
                     member_count: room.members.len(),
                     on_back: move |_| {
+                        room_attempt.set(room_attempt().wrapping_add(1));
                         if let Some(client) = room_client() {
                             client.close();
                         }
@@ -124,11 +126,14 @@ pub fn App() -> Element {
 
                         let mut room_state = room_state;
                         let mut room_client = room_client;
+                        let mut room_attempt = room_attempt;
                         let mut loading = loading;
                         let mut error_message = error_message;
                         let mut loading_older_messages = loading_older_messages;
 
                         spawn(async move {
+                            let attempt = room_attempt().wrapping_add(1);
+                            room_attempt.set(attempt);
                             loading.set(true);
                             error_message.set(None);
                             room_state.set(None);
@@ -145,6 +150,9 @@ pub fn App() -> Element {
                                         code,
                                         session.session_id.clone(),
                                         move |message| {
+                                            if room_attempt() != attempt {
+                                                return;
+                                            }
                                             let room_id = message.room_id.clone();
                                             room_state.with_mut(|state| {
                                                 state::append_message_if_room_matches(
@@ -155,6 +163,9 @@ pub fn App() -> Element {
                                             });
                                         },
                                         move |snapshot| {
+                                            if room_attempt() != attempt {
+                                                return;
+                                            }
                                             room_state.with_mut(|state| {
                                                 if state.is_none() {
                                                     *state = Some(state::build_active_room(
@@ -170,6 +181,9 @@ pub fn App() -> Element {
                                             loading.set(false);
                                         },
                                         move |snapshot| {
+                                            if room_attempt() != attempt {
+                                                return;
+                                            }
                                             room_state.with_mut(|state| {
                                                 state::replace_room_members_snapshot_if_room_matches(
                                                     state,
@@ -178,6 +192,9 @@ pub fn App() -> Element {
                                             });
                                         },
                                         move |error| {
+                                            if room_attempt() != attempt {
+                                                return;
+                                            }
                                             if room_state().is_some() {
                                                 show_runtime_error(error);
                                                 return;
@@ -195,16 +212,26 @@ pub fn App() -> Element {
 
                                     match connection {
                                         Ok(connection) => {
+                                            if room_attempt() != attempt {
+                                                connection.close();
+                                                return;
+                                            }
                                             loading_older_messages.set(false);
                                             room_client.set(Some(connection));
                                         }
                                         Err(error) => {
+                                            if room_attempt() != attempt {
+                                                return;
+                                            }
                                             loading.set(false);
                                             error_message.set(Some(error));
                                         }
                                     }
                                 }
                                 Err(error) => {
+                                    if room_attempt() != attempt {
+                                        return;
+                                    }
                                     loading.set(false);
                                     error_message.set(Some(error));
                                 }
