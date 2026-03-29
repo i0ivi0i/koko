@@ -314,21 +314,18 @@ async fn emit_room_snapshot(
     Ok(())
 }
 
-pub(crate) async fn publish_room_snapshot_updates(state: &AppState, room_id: RoomId) {
+pub(crate) async fn publish_room_members_updates(state: &AppState, room_id: RoomId) {
     let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let Ok(members) = room_repo.list_members(room_id).await else {
         return;
     };
 
     for member in members {
-        let Ok(event) = build_room_snapshot_event(
+        let Ok(event) = build_room_members_snapshot_event(
             state,
             room_id,
             member.profile_id,
             member.role,
-            &SnapshotQuery::Recent {
-                limit: DEFAULT_SNAPSHOT_LIMIT,
-            },
         )
         .await
         else {
@@ -404,6 +401,28 @@ async fn build_room_snapshot_event(
         messages: snapshot.messages,
         has_more_messages: snapshot.has_more_messages,
         members: snapshot.members,
+    })
+}
+
+async fn build_room_members_snapshot_event(
+    state: &AppState,
+    room_id: RoomId,
+    viewer_profile_id: ProfileId,
+    role: Role,
+) -> Result<ServerRealtimeEvent, ApiError> {
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
+    let members = room_repo
+        .list_members(room_id)
+        .await
+        .map_err(|_| ApiError::internal("成员列表读取失败"))?
+        .into_iter()
+        .map(|member| crate::http::room_member_to_response(viewer_profile_id, role, member))
+        .collect();
+
+    Ok(ServerRealtimeEvent::RoomMembersSnapshot {
+        room_id: room_id.0.to_string(),
+        role: role_name(role).to_owned(),
+        members,
     })
 }
 

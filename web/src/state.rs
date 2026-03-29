@@ -32,6 +32,12 @@ pub struct RoomRealtimeSnapshot {
     pub members: Vec<RoomMemberResponse>,
 }
 
+pub struct RoomMembersRealtimeSnapshot {
+    pub room_id: String,
+    pub role: String,
+    pub members: Vec<RoomMemberResponse>,
+}
+
 pub fn apply_joined_room(snapshot: ActiveRoomSnapshot) -> ActiveRoom {
     ActiveRoom {
         session_id: snapshot.session.session_id,
@@ -146,6 +152,23 @@ pub fn replace_room_snapshot_if_room_matches(
 
 pub fn leave_room(state: &mut Option<ActiveRoom>) {
     *state = None;
+}
+
+pub fn replace_room_members_snapshot_if_room_matches(
+    state: &mut Option<ActiveRoom>,
+    snapshot: RoomMembersRealtimeSnapshot,
+) -> bool {
+    let Some(room) = state.as_mut() else {
+        return false;
+    };
+
+    if room.room_id != snapshot.room_id {
+        return false;
+    }
+
+    room.role = snapshot.role;
+    room.members = snapshot.members;
+    true
 }
 
 fn merge_snapshot_messages(
@@ -370,6 +393,49 @@ mod tests {
         );
         assert_eq!(room.role, "owner");
         assert!(!room.has_more_messages);
+        assert_eq!(
+            room.members
+                .iter()
+                .map(|item| item.profile_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["profile-2"]
+        );
+    }
+
+    #[test]
+    fn replace_room_members_snapshot_if_room_matches_should_refresh_only_role_and_members() {
+        let mut state = Some(ActiveRoom {
+            session_id: "session-1".into(),
+            profile_id: "profile-1".into(),
+            display_name: "user-1".into(),
+            room_id: "room-1".into(),
+            room_code: "1A234".into(),
+            role: "member".into(),
+            messages: vec![message("msg-1"), message("msg-2")],
+            has_more_messages: true,
+            members: vec![member("profile-1")],
+        });
+
+        let replaced = replace_room_members_snapshot_if_room_matches(
+            &mut state,
+            RoomMembersRealtimeSnapshot {
+                room_id: "room-1".into(),
+                role: "admin".into(),
+                members: vec![member("profile-2")],
+            },
+        );
+
+        assert!(replaced);
+        let room = state.as_ref().unwrap();
+        assert_eq!(room.role, "admin");
+        assert_eq!(
+            room.messages
+                .iter()
+                .map(|item| item.message_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["msg-1", "msg-2"]
+        );
+        assert!(room.has_more_messages);
         assert_eq!(
             room.members
                 .iter()

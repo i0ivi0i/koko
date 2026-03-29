@@ -188,6 +188,12 @@ pub enum ServerRealtimeEvent {
         has_more_messages: bool,
         members: Vec<RoomMemberResponse>,
     },
+    /// 当前主 web 流程用于治理后的成员与角色真相同步，不携带消息时间线。
+    RoomMembersSnapshot {
+        room_id: String,
+        role: String,
+        members: Vec<RoomMemberResponse>,
+    },
     /// 当前主 web 流程稳定消费的新增消息事件。
     MessageCreated {
         message_id: String,
@@ -414,6 +420,28 @@ mod tests {
             sender_id: "profile-1".into(),
             content: "hello".into(),
             created_at: "2026-03-27T12:34:56Z".into(),
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ServerRealtimeEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn server_realtime_event_room_members_snapshot_should_roundtrip() {
+        let value = ServerRealtimeEvent::RoomMembersSnapshot {
+            room_id: "room-1".into(),
+            role: "admin".into(),
+            members: vec![RoomMemberResponse {
+                profile_id: "profile-1".into(),
+                display_name: "user-1".into(),
+                role: "admin".into(),
+                is_muted: true,
+                can_promote: false,
+                can_mute: true,
+                can_remove: true,
+            }],
         };
 
         let json = serde_json::to_string(&value).unwrap();

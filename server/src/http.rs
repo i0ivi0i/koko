@@ -333,7 +333,7 @@ pub async fn promote_room_admin(
     koko_core::room::promote_admin(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
-    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
+    crate::ws::publish_room_members_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -352,7 +352,7 @@ pub async fn demote_room_admin(
     koko_core::room::demote_admin(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
-    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
+    crate::ws::publish_room_members_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -372,7 +372,7 @@ pub async fn mute_room_member(
     koko_core::room::mute_member(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
-    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
+    crate::ws::publish_room_members_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -396,7 +396,7 @@ pub async fn remove_room_member(
         .realtime
         .evict_profile_from_room(target_id, room_id)
         .await;
-    crate::ws::publish_room_snapshot_updates(&state, room_id).await;
+    crate::ws::publish_room_members_updates(&state, room_id).await;
 
     Ok(StatusCode::OK)
 }

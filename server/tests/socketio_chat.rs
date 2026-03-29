@@ -412,7 +412,7 @@ async fn 成员被移除后不应继续收到房间广播() {
 }
 
 #[tokio::test]
-async fn 提升管理员后在线房间成员应收到更新后的_room_snapshot() {
+async fn 提升管理员后在线房间成员应收到更新后的_room_members_snapshot() {
     let pool = test_pool().await;
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -468,7 +468,7 @@ async fn 提升管理员后在线房间成员应收到更新后的_room_snapshot
 
     let updated_snapshot = owner_socket.next_event().await;
     assert_eq!(updated_snapshot.0, "event");
-    assert_eq!(updated_snapshot.1["type"], "room_snapshot");
+    assert_eq!(updated_snapshot.1["type"], "room_members_snapshot");
     assert_eq!(updated_snapshot.1["room_id"], room_id.to_string());
     assert_eq!(updated_snapshot.1["role"], "owner");
     assert_eq!(
@@ -486,7 +486,7 @@ async fn 提升管理员后在线房间成员应收到更新后的_room_snapshot
 }
 
 #[tokio::test]
-async fn 禁言成员后在线房间成员应收到带禁言状态的_room_snapshot() {
+async fn 禁言成员后在线房间成员应收到带禁言状态的_room_members_snapshot() {
     let pool = test_pool().await;
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -537,7 +537,7 @@ async fn 禁言成员后在线房间成员应收到带禁言状态的_room_snaps
 
     let updated_snapshot = owner_socket.next_event().await;
     assert_eq!(updated_snapshot.0, "event");
-    assert_eq!(updated_snapshot.1["type"], "room_snapshot");
+    assert_eq!(updated_snapshot.1["type"], "room_members_snapshot");
     assert_eq!(updated_snapshot.1["room_id"], room_id.to_string());
     assert_eq!(
         updated_snapshot.1["members"]
@@ -554,7 +554,7 @@ async fn 禁言成员后在线房间成员应收到带禁言状态的_room_snaps
 }
 
 #[tokio::test]
-async fn 移除成员后在线剩余成员应收到更新后的_room_snapshot() {
+async fn 移除成员后在线剩余成员应收到更新后的_room_members_snapshot() {
     let pool = test_pool().await;
     let owner_id = Uuid::new_v4();
     let member_id = Uuid::new_v4();
@@ -605,7 +605,7 @@ async fn 移除成员后在线剩余成员应收到更新后的_room_snapshot() 
 
     let updated_snapshot = owner_socket.next_event().await;
     assert_eq!(updated_snapshot.0, "event");
-    assert_eq!(updated_snapshot.1["type"], "room_snapshot");
+    assert_eq!(updated_snapshot.1["type"], "room_members_snapshot");
     assert_eq!(updated_snapshot.1["room_id"], room_id.to_string());
     assert_eq!(updated_snapshot.1["role"], "owner");
     assert_eq!(updated_snapshot.1["members"].as_array().unwrap().len(), 1);
