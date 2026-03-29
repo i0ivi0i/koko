@@ -1,6 +1,3 @@
-#[path = "../src/lib.rs"]
-mod koko;
-
 #[test]
 fn crate_exposes_expected_root_modules() {
     use koko::{admin, app, chat, contract, domain, http, panel, rt, store, support, view, web};

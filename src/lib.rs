@@ -2,9 +2,9 @@ pub mod support;
 
 macro_rules! placeholder_module {
     ($name:ident) => {
-        pub(crate) mod $name {
-            #[allow(dead_code)]
-            pub(crate) struct Module;
+        pub mod $name {
+            #[doc(hidden)]
+            pub struct Module;
         }
     };
 }
