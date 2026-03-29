@@ -213,15 +213,30 @@ fn spawn_member_action(
     action: MemberAction,
 ) {
     spawn(async move {
-        let _ =
+        if let Err(error) =
             client::run_member_action(action, &room.room_id, &room.session_id, &target_profile_id)
-                .await;
-        if let Ok(members) = client::fetch_room_members(&room.room_id, &room.session_id).await {
-            room_state.with_mut(|state| {
-                if let Some(current) = state.as_mut() {
-                    state::replace_members(current, members);
-                }
-            });
+                .await
+        {
+            show_runtime_error(error);
+            return;
         }
+
+        room_state.with_mut(|state| match action {
+            MemberAction::Promote => {
+                let _ = state::promote_member_if_room_matches(
+                    state,
+                    &room.room_id,
+                    &target_profile_id,
+                );
+            }
+            MemberAction::Remove => {
+                let _ = state::remove_member_if_room_matches(
+                    state,
+                    &room.room_id,
+                    &target_profile_id,
+                );
+            }
+            MemberAction::Mute => {}
+        });
     });
 }

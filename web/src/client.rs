@@ -6,8 +6,7 @@ use js_sys::Function;
 use koko_contract::{
     BootstrapSessionRequest, BootstrapSessionResponse, ClientRealtimeCommand,
     GovernanceActorRequest, JoinOrCreateRoomRequest, JoinOrCreateRoomResponse, MessageResponse,
-    PromoteAdminRequest, RoomMemberResponse, RoomMembersResponse, RoomMessagesResponse,
-    SESSION_HEADER_NAME, ServerRealtimeEvent,
+    PromoteAdminRequest, RoomMessagesResponse, SESSION_HEADER_NAME, ServerRealtimeEvent,
 };
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
@@ -287,23 +286,6 @@ pub async fn fetch_room_messages(
     .json()
     .await
     .map_err(|error| error.to_string())
-}
-
-pub async fn fetch_room_members(
-    room_id: &str,
-    session_id: &str,
-) -> Result<Vec<RoomMemberResponse>, String> {
-    let members: RoomMembersResponse =
-        Request::get(&format!("{}/rooms/{room_id}/members", api_base()))
-            .header(SESSION_HEADER_NAME, session_id)
-            .send()
-            .await
-            .map_err(|error| error.to_string())?
-            .json()
-            .await
-            .map_err(|error| error.to_string())?;
-
-    Ok(members.items)
 }
 
 fn build_member_action_request(
@@ -649,7 +631,8 @@ where
 mod tests {
     use super::*;
     use koko_contract::{
-        ClientRealtimeCommand, GovernanceActorRequest, PromoteAdminRequest, ServerRealtimeEvent,
+        ClientRealtimeCommand, GovernanceActorRequest, PromoteAdminRequest, RoomMemberResponse,
+        ServerRealtimeEvent,
     };
     use std::sync::{Arc, Mutex};
 
