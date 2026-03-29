@@ -273,10 +273,10 @@ pub fn App() -> Element {
 }
 
 fn send_room_message(room_client: Signal<Option<client::JoinedRoomClient>>, content: String) {
-    if let Some(client) = room_client() {
-        if let Err(error) = client.send_message(&content) {
-            show_runtime_error(error);
-        }
+    if let Some(client) = room_client()
+        && let Err(error) = client.send_message(&content)
+    {
+        show_runtime_error(error);
     }
 }
 
@@ -311,7 +311,6 @@ fn spawn_member_action(room: ActiveRoom, target_profile_id: String, action: Memb
                 .await
         {
             show_runtime_error(error);
-            return;
         }
     });
 }

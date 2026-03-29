@@ -20,7 +20,7 @@ pub fn ChatScreen(
     let mut draft = use_signal(String::new);
     let draft_value = draft();
     let send_disabled = draft_value.trim().is_empty();
-    let composer_rows = draft_value.lines().count().max(1).min(4);
+    let composer_rows = draft_value.lines().count().clamp(1, 4);
     let send_button_class = if send_disabled {
         "composer-send-button is-idle"
     } else {

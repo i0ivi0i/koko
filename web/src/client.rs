@@ -11,11 +11,8 @@ use koko_contract::{
 use serde::de::DeserializeOwned;
 #[cfg(target_arch = "wasm32")]
 use serde_wasm_bindgen::{from_value as from_js_value, to_value as to_js_value};
-#[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
-#[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
@@ -24,6 +21,8 @@ use crate::state::{RoomMembersRealtimeSnapshot, RoomRealtimeSnapshot};
 #[cfg(target_arch = "wasm32")]
 const DEVICE_TOKEN_STORAGE_KEY: &str = "koko.device_token";
 const MESSAGE_PAGE_LIMIT: u16 = 40;
+
+type Shared<T> = Rc<RefCell<T>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemberAction {
@@ -40,9 +39,7 @@ struct MemberActionRequest {
 
 #[derive(Clone)]
 pub struct RoomRealtimeClient {
-    state: Arc<Mutex<RealtimeState>>,
-    ready: Arc<Mutex<bool>>,
-    pending_commands: Arc<Mutex<Vec<ClientRealtimeCommand>>>,
+    runtime: RealtimeRuntime,
     transport: RealtimeTransport,
 }
 
@@ -65,22 +62,22 @@ impl RoomRealtimeClient {
         let command = build_send_command(content);
         dispatch_or_queue_command(
             self.state(),
-            *self.ready.lock().unwrap(),
-            &self.pending_commands,
+            *self.runtime.ready.borrow(),
+            &self.runtime.pending_commands,
             command,
             |command| self.transport.emit_command(command),
         )
     }
 
     pub fn close(&self) {
-        store_realtime_state(&self.state, RealtimeState::Closed);
-        *self.ready.lock().unwrap() = false;
-        self.pending_commands.lock().unwrap().clear();
+        store_realtime_state(&self.runtime.state, RealtimeState::Closed);
+        *self.runtime.ready.borrow_mut() = false;
+        self.runtime.pending_commands.borrow_mut().clear();
         self.transport.close();
     }
 
     fn state(&self) -> RealtimeState {
-        *self.state.lock().unwrap()
+        *self.runtime.state.borrow()
     }
 }
 
@@ -100,6 +97,7 @@ impl JoinedRoomClient {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RealtimeState {
     Disconnected,
@@ -118,11 +116,41 @@ impl RealtimeState {
     }
 }
 
-type MessageObserver = Arc<Mutex<Box<dyn FnMut(MessageResponse)>>>;
-type SnapshotObserver = Arc<Mutex<Box<dyn FnMut(RoomRealtimeSnapshot)>>>;
-type MembersSnapshotObserver = Arc<Mutex<Box<dyn FnMut(RoomMembersRealtimeSnapshot)>>>;
-type RoomLeftObserver = Arc<Mutex<Box<dyn FnMut(RoomLeftRealtimeEvent)>>>;
-type ErrorObserver = Arc<Mutex<Box<dyn FnMut(String)>>>;
+type MessageObserver = Shared<Box<dyn FnMut(MessageResponse)>>;
+type SnapshotObserver = Shared<Box<dyn FnMut(RoomRealtimeSnapshot)>>;
+type MembersSnapshotObserver = Shared<Box<dyn FnMut(RoomMembersRealtimeSnapshot)>>;
+type RoomLeftObserver = Shared<Box<dyn FnMut(RoomLeftRealtimeEvent)>>;
+type ErrorObserver = Shared<Box<dyn FnMut(String)>>;
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[derive(Clone)]
+struct RealtimeRuntime {
+    state: Shared<RealtimeState>,
+    ready: Shared<bool>,
+    pending_commands: Shared<Vec<ClientRealtimeCommand>>,
+    pending_messages: Shared<Vec<MessageResponse>>,
+}
+
+impl RealtimeRuntime {
+    fn connecting() -> Self {
+        Self {
+            state: Rc::new(RefCell::new(RealtimeState::Connecting)),
+            ready: Rc::new(RefCell::new(false)),
+            pending_commands: Rc::new(RefCell::new(Vec::new())),
+            pending_messages: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[derive(Clone)]
+struct RealtimeObservers {
+    on_message: MessageObserver,
+    on_snapshot: SnapshotObserver,
+    on_members_snapshot: MembersSnapshotObserver,
+    on_room_left: RoomLeftObserver,
+    on_error: ErrorObserver,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RoomLeftRealtimeEvent {
@@ -130,6 +158,7 @@ pub struct RoomLeftRealtimeEvent {
     pub reason: RoomLeftReason,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone)]
 enum RealtimeTransport {
     #[cfg(target_arch = "wasm32")]
@@ -217,7 +246,7 @@ fn into_message_observer<F>(on_message: F) -> MessageObserver
 where
     F: FnMut(MessageResponse) + 'static,
 {
-    Arc::new(Mutex::new(Box::new(on_message)))
+    Rc::new(RefCell::new(Box::new(on_message)))
 }
 
 fn bootstrap_device_token() -> Option<String> {
@@ -330,21 +359,14 @@ where
     F: FnMut(MessageResponse) + 'static,
     E: FnMut(String) + 'static,
 {
-    let observer = into_message_observer(on_message);
-    let snapshot_observer: SnapshotObserver = Arc::new(Mutex::new(Box::new(on_snapshot)));
-    let members_snapshot_observer: MembersSnapshotObserver =
-        Arc::new(Mutex::new(Box::new(on_members_snapshot)));
-    let room_left_observer: RoomLeftObserver = Arc::new(Mutex::new(Box::new(on_room_left)));
-    let error_observer: ErrorObserver = Arc::new(Mutex::new(Box::new(on_error)));
-    let realtime = connect_room_events_with_observer(
-        room_code,
-        session_id,
-        observer.clone(),
-        snapshot_observer,
-        members_snapshot_observer,
-        room_left_observer,
-        error_observer,
-    )?;
+    let observers = RealtimeObservers {
+        on_message: into_message_observer(on_message),
+        on_snapshot: Rc::new(RefCell::new(Box::new(on_snapshot))),
+        on_members_snapshot: Rc::new(RefCell::new(Box::new(on_members_snapshot))),
+        on_room_left: Rc::new(RefCell::new(Box::new(on_room_left))),
+        on_error: Rc::new(RefCell::new(Box::new(on_error))),
+    };
+    let realtime = connect_room_events_with_observer(room_code, session_id, observers)?;
 
     Ok(JoinedRoomClient {
         realtime: Some(realtime),
@@ -354,47 +376,26 @@ where
 fn connect_room_events_with_observer(
     room_code: String,
     session_id: String,
-    on_message: MessageObserver,
-    on_snapshot: SnapshotObserver,
-    on_members_snapshot: MembersSnapshotObserver,
-    on_room_left: RoomLeftObserver,
-    on_error: ErrorObserver,
+    observers: RealtimeObservers,
 ) -> Result<RoomRealtimeClient, String> {
-    let state = Arc::new(Mutex::new(RealtimeState::Connecting));
-    let ready = Arc::new(Mutex::new(false));
-    let pending_commands = Arc::new(Mutex::new(Vec::new()));
-    let pending_messages = Arc::new(Mutex::new(Vec::new()));
-    let transport = create_realtime_transport(
-        state.clone(),
-        ready.clone(),
-        pending_commands.clone(),
-        pending_messages.clone(),
-        room_code,
-        session_id.clone(),
-        on_message.clone(),
-        on_snapshot,
-        on_members_snapshot,
-        on_room_left,
-        on_error,
-    )?;
+    let runtime = RealtimeRuntime::connecting();
+    let transport = create_realtime_transport(runtime.clone(), room_code, session_id, observers)?;
 
     Ok(RoomRealtimeClient {
-        state,
-        ready,
-        pending_commands,
+        runtime,
         transport,
     })
 }
 
 #[cfg(target_arch = "wasm32")]
 fn notify_message(on_message: &MessageObserver, message: MessageResponse) {
-    let mut callback = on_message.lock().unwrap();
+    let mut callback = on_message.borrow_mut();
     (*callback)(message);
 }
 
 #[cfg(target_arch = "wasm32")]
 fn notify_snapshot(on_snapshot: &SnapshotObserver, snapshot: RoomRealtimeSnapshot) {
-    let mut callback = on_snapshot.lock().unwrap();
+    let mut callback = on_snapshot.borrow_mut();
     (*callback)(snapshot);
 }
 
@@ -403,38 +404,31 @@ fn notify_members_snapshot(
     on_snapshot: &MembersSnapshotObserver,
     snapshot: RoomMembersRealtimeSnapshot,
 ) {
-    let mut callback = on_snapshot.lock().unwrap();
+    let mut callback = on_snapshot.borrow_mut();
     (*callback)(snapshot);
 }
 
 #[cfg(target_arch = "wasm32")]
 fn notify_room_left(on_room_left: &RoomLeftObserver, event: RoomLeftRealtimeEvent) {
-    let mut callback = on_room_left.lock().unwrap();
+    let mut callback = on_room_left.borrow_mut();
     (*callback)(event);
 }
 
-fn store_realtime_state(state: &Arc<Mutex<RealtimeState>>, next: RealtimeState) {
-    *state.lock().unwrap() = next;
+fn store_realtime_state(state: &Shared<RealtimeState>, next: RealtimeState) {
+    *state.borrow_mut() = next;
 }
 
 fn create_realtime_transport(
-    state: Arc<Mutex<RealtimeState>>,
-    ready: Arc<Mutex<bool>>,
-    pending_commands: Arc<Mutex<Vec<ClientRealtimeCommand>>>,
-    pending_messages: Arc<Mutex<Vec<MessageResponse>>>,
+    runtime: RealtimeRuntime,
     room_code: String,
     session_id: String,
-    on_message: MessageObserver,
-    on_snapshot: SnapshotObserver,
-    on_members_snapshot: MembersSnapshotObserver,
-    on_room_left: RoomLeftObserver,
-    on_error: ErrorObserver,
+    observers: RealtimeObservers,
 ) -> Result<RealtimeTransport, String> {
     #[cfg(target_arch = "wasm32")]
     {
-        let state_for_status = state.clone();
-        let ready_for_status = ready.clone();
-        let pending_messages_for_status = pending_messages.clone();
+        let state_for_status = runtime.state.clone();
+        let ready_for_status = runtime.ready.clone();
+        let pending_messages_for_status = runtime.pending_messages.clone();
         let on_status = Closure::wrap(Box::new(move |status: String| {
             let next_state = match status.as_str() {
                 "connected" => RealtimeState::Connected,
@@ -446,24 +440,24 @@ fn create_realtime_transport(
 
             store_realtime_state(&state_for_status, next_state);
             if !matches!(next_state, RealtimeState::Connected) {
-                *ready_for_status.lock().unwrap() = false;
-                pending_messages_for_status.lock().unwrap().clear();
+                *ready_for_status.borrow_mut() = false;
+                pending_messages_for_status.borrow_mut().clear();
             }
         }) as Box<dyn FnMut(String)>);
 
-        let observer_for_events = on_message.clone();
-        let snapshot_for_events = on_snapshot.clone();
-        let members_snapshot_for_events = on_members_snapshot.clone();
-        let room_left_for_events = on_room_left.clone();
-        let ready_for_events = ready.clone();
-        let state_for_events = state.clone();
-        let pending_for_events = pending_commands.clone();
-        let pending_messages_for_events = pending_messages.clone();
+        let observer_for_events = observers.on_message.clone();
+        let snapshot_for_events = observers.on_snapshot.clone();
+        let members_snapshot_for_events = observers.on_members_snapshot.clone();
+        let room_left_for_events = observers.on_room_left.clone();
+        let ready_for_events = runtime.ready.clone();
+        let state_for_events = runtime.state.clone();
+        let pending_for_events = runtime.pending_commands.clone();
+        let pending_messages_for_events = runtime.pending_messages.clone();
         let socket_handle = Rc::new(RefCell::new(None::<JsValue>));
         let socket_handle_for_events = socket_handle.clone();
         let on_event = Closure::wrap(Box::new(move |payload: JsValue| {
             if let Some(snapshot) = decode_room_snapshot_event_value(&payload) {
-                *ready_for_events.lock().unwrap() = true;
+                *ready_for_events.borrow_mut() = true;
                 let room_id = snapshot.room_id.clone();
                 notify_snapshot(&snapshot_for_events, snapshot);
                 flush_pending_messages(
@@ -482,23 +476,23 @@ fn create_realtime_transport(
             }
             if let Some(event) = decode_room_left_event_value(&payload) {
                 store_realtime_state(&state_for_events, RealtimeState::Closed);
-                *ready_for_events.lock().unwrap() = false;
-                pending_for_events.lock().unwrap().clear();
-                pending_messages_for_events.lock().unwrap().clear();
+                *ready_for_events.borrow_mut() = false;
+                pending_for_events.borrow_mut().clear();
+                pending_messages_for_events.borrow_mut().clear();
                 notify_room_left(&room_left_for_events, event);
             }
             if let Some(message) = decode_message_created_event_value(&payload) {
-                if *ready_for_events.lock().unwrap() {
+                if *ready_for_events.borrow() {
                     notify_message(&observer_for_events, message);
                 } else {
-                    pending_messages_for_events.lock().unwrap().push(message);
+                    pending_messages_for_events.borrow_mut().push(message);
                 }
             }
         }) as Box<dyn FnMut(JsValue)>);
 
-        let observer_for_error = on_error.clone();
+        let observer_for_error = observers.on_error.clone();
         let on_error = Closure::wrap(Box::new(move |error: String| {
-            let mut callback = observer_for_error.lock().unwrap();
+            let mut callback = observer_for_error.borrow_mut();
             (*callback)(error);
         }) as Box<dyn FnMut(String)>);
 
@@ -524,17 +518,10 @@ fn create_realtime_transport(
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = (
-            state,
-            ready,
-            pending_commands,
-            pending_messages,
+            runtime,
             room_code,
             session_id,
-            on_message,
-            on_snapshot,
-            on_members_snapshot,
-            on_room_left,
-            on_error,
+            observers,
         );
         Err("官方 Socket.IO 浏览器客户端仅在 wasm 环境可用".into())
     }
@@ -542,12 +529,12 @@ fn create_realtime_transport(
 
 #[cfg(target_arch = "wasm32")]
 fn flush_pending_messages(
-    pending_messages: &Arc<Mutex<Vec<MessageResponse>>>,
+    pending_messages: &Shared<Vec<MessageResponse>>,
     room_id: &str,
     on_message: &MessageObserver,
 ) {
     let queued = {
-        let mut guard = pending_messages.lock().unwrap();
+        let mut guard = pending_messages.borrow_mut();
         std::mem::take(&mut *guard)
     };
 
@@ -561,7 +548,7 @@ fn flush_pending_messages(
     }
 
     if !stale_messages.is_empty() {
-        pending_messages.lock().unwrap().extend(stale_messages);
+        pending_messages.borrow_mut().extend(stale_messages);
     }
 }
 
@@ -748,7 +735,7 @@ fn decode_room_left(event: ServerRealtimeEvent) -> Option<RoomLeftRealtimeEvent>
 fn dispatch_or_queue_command<F>(
     state: RealtimeState,
     ready: bool,
-    pending_commands: &Arc<Mutex<Vec<ClientRealtimeCommand>>>,
+    pending_commands: &Shared<Vec<ClientRealtimeCommand>>,
     command: ClientRealtimeCommand,
     emit_now: F,
 ) -> Result<(), String>
@@ -763,27 +750,27 @@ where
         return emit_now(&command);
     }
 
-    pending_commands.lock().unwrap().push(command);
+    pending_commands.borrow_mut().push(command);
     Ok(())
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 fn flush_pending_commands<F>(
-    pending_commands: &Arc<Mutex<Vec<ClientRealtimeCommand>>>,
+    pending_commands: &Shared<Vec<ClientRealtimeCommand>>,
     mut emit: F,
 ) -> Result<(), String>
 where
     F: FnMut(&ClientRealtimeCommand) -> Result<(), String>,
 {
     let mut queued = {
-        let mut guard = pending_commands.lock().unwrap();
+        let mut guard = pending_commands.borrow_mut();
         std::mem::take(&mut *guard)
     };
 
     let mut emitted = 0usize;
     while emitted < queued.len() {
         if let Err(error) = emit(&queued[emitted]) {
-            let mut guard = pending_commands.lock().unwrap();
+            let mut guard = pending_commands.borrow_mut();
             guard.extend(queued.drain(emitted..));
             return Err(error);
         }
@@ -850,7 +837,6 @@ mod tests {
     use koko_contract::{
         ClientRealtimeCommand, PromoteAdminRequest, RoomMemberResponse, ServerRealtimeEvent,
     };
-    use std::sync::{Arc, Mutex};
 
     #[test]
     fn api_base_should_fall_back_to_local_server() {
@@ -1096,8 +1082,8 @@ mod tests {
 
     #[test]
     fn dispatch_or_queue_command_should_queue_while_connected_but_not_ready() {
-        let pending = Arc::new(Mutex::new(Vec::new()));
-        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let pending = Rc::new(RefCell::new(Vec::new()));
+        let emitted = Rc::new(RefCell::new(Vec::new()));
         let emitted_for_closure = emitted.clone();
 
         let result = dispatch_or_queue_command(
@@ -1106,37 +1092,37 @@ mod tests {
             &pending,
             build_send_command("queued-command"),
             move |command| {
-                emitted_for_closure.lock().unwrap().push(command.clone());
+                emitted_for_closure.borrow_mut().push(command.clone());
                 Ok(())
             },
         );
 
         assert_eq!(result, Ok(()));
         assert_eq!(
-            pending.lock().unwrap().as_slice(),
+            pending.borrow().as_slice(),
             &[build_send_command("queued-command")]
         );
-        assert!(emitted.lock().unwrap().is_empty());
+        assert!(emitted.borrow().is_empty());
     }
 
     #[test]
     fn flush_pending_commands_should_emit_in_order_and_clear_queue() {
-        let pending = Arc::new(Mutex::new(vec![
+        let pending = Rc::new(RefCell::new(vec![
             build_send_command("first-command"),
             build_send_command("second-command"),
         ]));
-        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let emitted = Rc::new(RefCell::new(Vec::new()));
         let emitted_for_closure = emitted.clone();
 
         let result = flush_pending_commands(&pending, move |command| {
-            emitted_for_closure.lock().unwrap().push(command.clone());
+            emitted_for_closure.borrow_mut().push(command.clone());
             Ok(())
         });
 
         assert_eq!(result, Ok(()));
-        assert!(pending.lock().unwrap().is_empty());
+        assert!(pending.borrow().is_empty());
         assert_eq!(
-            emitted.lock().unwrap().as_slice(),
+            emitted.borrow().as_slice(),
             &[
                 build_send_command("first-command"),
                 build_send_command("second-command"),
@@ -1146,15 +1132,15 @@ mod tests {
 
     #[test]
     fn flush_pending_commands_should_requeue_remaining_commands_after_failure() {
-        let pending = Arc::new(Mutex::new(vec![
+        let pending = Rc::new(RefCell::new(vec![
             build_send_command("first-command"),
             build_send_command("second-command"),
         ]));
-        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let emitted = Rc::new(RefCell::new(Vec::new()));
         let emitted_for_closure = emitted.clone();
 
         let result = flush_pending_commands(&pending, move |command| {
-            emitted_for_closure.lock().unwrap().push(command.clone());
+            emitted_for_closure.borrow_mut().push(command.clone());
             if *command == build_send_command("first-command") {
                 return Err("emit failed".into());
             }
@@ -1163,14 +1149,14 @@ mod tests {
 
         assert_eq!(result, Err("emit failed".into()));
         assert_eq!(
-            pending.lock().unwrap().as_slice(),
+            pending.borrow().as_slice(),
             &[
                 build_send_command("first-command"),
                 build_send_command("second-command"),
             ]
         );
         assert_eq!(
-            emitted.lock().unwrap().as_slice(),
+            emitted.borrow().as_slice(),
             &[build_send_command("first-command")]
         );
     }
@@ -1185,9 +1171,12 @@ mod tests {
     #[test]
     fn close_should_move_client_to_closed_state() {
         let client = RoomRealtimeClient {
-            state: Arc::new(Mutex::new(RealtimeState::Connected)),
-            ready: Arc::new(Mutex::new(true)),
-            pending_commands: Arc::new(Mutex::new(Vec::new())),
+            runtime: RealtimeRuntime {
+                state: Rc::new(RefCell::new(RealtimeState::Connected)),
+                ready: Rc::new(RefCell::new(true)),
+                pending_commands: Rc::new(RefCell::new(Vec::new())),
+                pending_messages: Rc::new(RefCell::new(Vec::new())),
+            },
             transport: RealtimeTransport::Unavailable,
         };
 
@@ -1210,9 +1199,12 @@ mod tests {
     #[test]
     fn room_realtime_client_should_fail_when_transport_is_unavailable() {
         let realtime = RoomRealtimeClient {
-            state: Arc::new(Mutex::new(RealtimeState::Connected)),
-            ready: Arc::new(Mutex::new(true)),
-            pending_commands: Arc::new(Mutex::new(Vec::new())),
+            runtime: RealtimeRuntime {
+                state: Rc::new(RefCell::new(RealtimeState::Connected)),
+                ready: Rc::new(RefCell::new(true)),
+                pending_commands: Rc::new(RefCell::new(Vec::new())),
+                pending_messages: Rc::new(RefCell::new(Vec::new())),
+            },
             transport: RealtimeTransport::Unavailable,
         };
         let client = JoinedRoomClient {
@@ -1232,9 +1224,12 @@ mod tests {
     #[test]
     fn joined_room_client_close_should_close_underlying_realtime_client() {
         let realtime = RoomRealtimeClient {
-            state: Arc::new(Mutex::new(RealtimeState::Connected)),
-            ready: Arc::new(Mutex::new(true)),
-            pending_commands: Arc::new(Mutex::new(Vec::new())),
+            runtime: RealtimeRuntime {
+                state: Rc::new(RefCell::new(RealtimeState::Connected)),
+                ready: Rc::new(RefCell::new(true)),
+                pending_commands: Rc::new(RefCell::new(Vec::new())),
+                pending_messages: Rc::new(RefCell::new(Vec::new())),
+            },
             transport: RealtimeTransport::Unavailable,
         };
         let client = JoinedRoomClient {

@@ -40,9 +40,9 @@ pub fn MemberSheet(
                                 can_promote: member.can_promote,
                                 can_mute: member.can_mute,
                                 can_remove: member.can_remove,
-                                on_promote: on_promote.clone(),
-                                on_mute: on_mute.clone(),
-                                on_remove: on_remove.clone(),
+                                on_promote,
+                                on_mute,
+                                on_remove,
                             }
                         }
                     }
