@@ -392,7 +392,7 @@ pub async fn remove_room_member(
         .map_err(map_domain_error)?;
     state
         .realtime
-        .evict_profile_from_room(target_id, room_id)
+        .remove_profile_from_room(target_id, room_id)
         .await;
     crate::ws::publish_room_members_updates(&state, room_id).await;
 

@@ -130,6 +130,7 @@ pub fn App() -> Element {
                         let mut loading = loading;
                         let mut error_message = error_message;
                         let mut loading_older_messages = loading_older_messages;
+                        let mut members_open = members_open;
 
                         spawn(async move {
                             let attempt = room_attempt().wrapping_add(1);
@@ -190,6 +191,31 @@ pub fn App() -> Element {
                                                     snapshot,
                                                 );
                                             });
+                                        },
+                                        move |event| {
+                                            if room_attempt() != attempt {
+                                                return;
+                                            }
+
+                                            let should_leave = room_state()
+                                                .as_ref()
+                                                .is_some_and(|room| room.room_id == event.room_id);
+                                            if !should_leave {
+                                                return;
+                                            }
+
+                                            room_attempt.set(room_attempt().wrapping_add(1));
+                                            room_client.with_mut(|client| {
+                                                if let Some(current) = client.take() {
+                                                    current.close();
+                                                }
+                                            });
+                                            room_state.with_mut(state::leave_room);
+                                            members_open.set(false);
+                                            loading.set(false);
+                                            loading_older_messages.set(false);
+                                            error_message
+                                                .set(Some(room_left_reason_message(&event.reason)));
                                         },
                                         move |error| {
                                             if room_attempt() != attempt {
@@ -267,6 +293,13 @@ fn show_runtime_error(message: String) {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = message;
+    }
+}
+
+fn room_left_reason_message(reason: &str) -> String {
+    match reason {
+        "removed" => "你已被移出房间".into(),
+        _ => "你已离开房间".into(),
     }
 }
 

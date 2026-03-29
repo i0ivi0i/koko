@@ -120,7 +120,14 @@ impl RealtimeState {
 type MessageObserver = Arc<Mutex<Box<dyn FnMut(MessageResponse)>>>;
 type SnapshotObserver = Arc<Mutex<Box<dyn FnMut(RoomRealtimeSnapshot)>>>;
 type MembersSnapshotObserver = Arc<Mutex<Box<dyn FnMut(RoomMembersRealtimeSnapshot)>>>;
+type RoomLeftObserver = Arc<Mutex<Box<dyn FnMut(RoomLeftRealtimeEvent)>>>;
 type ErrorObserver = Arc<Mutex<Box<dyn FnMut(String)>>>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoomLeftRealtimeEvent {
+    pub room_id: String,
+    pub reason: String,
+}
 
 #[derive(Clone)]
 enum RealtimeTransport {
@@ -315,6 +322,7 @@ pub fn connect_room_by_code<F, E>(
     on_message: F,
     on_snapshot: impl FnMut(RoomRealtimeSnapshot) + 'static,
     on_members_snapshot: impl FnMut(RoomMembersRealtimeSnapshot) + 'static,
+    on_room_left: impl FnMut(RoomLeftRealtimeEvent) + 'static,
     on_error: E,
 ) -> Result<JoinedRoomClient, String>
 where
@@ -325,6 +333,7 @@ where
     let snapshot_observer: SnapshotObserver = Arc::new(Mutex::new(Box::new(on_snapshot)));
     let members_snapshot_observer: MembersSnapshotObserver =
         Arc::new(Mutex::new(Box::new(on_members_snapshot)));
+    let room_left_observer: RoomLeftObserver = Arc::new(Mutex::new(Box::new(on_room_left)));
     let error_observer: ErrorObserver = Arc::new(Mutex::new(Box::new(on_error)));
     let realtime = connect_room_events_with_observer(
         room_code,
@@ -332,6 +341,7 @@ where
         observer.clone(),
         snapshot_observer,
         members_snapshot_observer,
+        room_left_observer,
         error_observer,
     )?;
 
@@ -346,6 +356,7 @@ fn connect_room_events_with_observer(
     on_message: MessageObserver,
     on_snapshot: SnapshotObserver,
     on_members_snapshot: MembersSnapshotObserver,
+    on_room_left: RoomLeftObserver,
     on_error: ErrorObserver,
 ) -> Result<RoomRealtimeClient, String> {
     let state = Arc::new(Mutex::new(RealtimeState::Connecting));
@@ -360,6 +371,7 @@ fn connect_room_events_with_observer(
         on_message.clone(),
         on_snapshot,
         on_members_snapshot,
+        on_room_left,
         on_error,
     )?;
 
@@ -392,6 +404,12 @@ fn notify_members_snapshot(
     (*callback)(snapshot);
 }
 
+#[cfg(target_arch = "wasm32")]
+fn notify_room_left(on_room_left: &RoomLeftObserver, event: RoomLeftRealtimeEvent) {
+    let mut callback = on_room_left.lock().unwrap();
+    (*callback)(event);
+}
+
 fn store_realtime_state(state: &Arc<Mutex<RealtimeState>>, next: RealtimeState) {
     *state.lock().unwrap() = next;
 }
@@ -405,6 +423,7 @@ fn create_realtime_transport(
     on_message: MessageObserver,
     on_snapshot: SnapshotObserver,
     on_members_snapshot: MembersSnapshotObserver,
+    on_room_left: RoomLeftObserver,
     on_error: ErrorObserver,
 ) -> Result<RealtimeTransport, String> {
     #[cfg(target_arch = "wasm32")]
@@ -429,6 +448,7 @@ fn create_realtime_transport(
         let observer_for_events = on_message.clone();
         let snapshot_for_events = on_snapshot.clone();
         let members_snapshot_for_events = on_members_snapshot.clone();
+        let room_left_for_events = on_room_left.clone();
         let ready_for_events = ready.clone();
         let pending_for_events = pending_commands.clone();
         let socket_handle = Rc::new(RefCell::new(None::<JsValue>));
@@ -445,6 +465,11 @@ fn create_realtime_transport(
             }
             if let Some(snapshot) = decode_room_members_snapshot_event_value(&payload) {
                 notify_members_snapshot(&members_snapshot_for_events, snapshot);
+            }
+            if let Some(event) = decode_room_left_event_value(&payload) {
+                *ready_for_events.lock().unwrap() = false;
+                pending_for_events.lock().unwrap().clear();
+                notify_room_left(&room_left_for_events, event);
             }
             if let Some(message) = decode_message_created_event_value(&payload) {
                 notify_message(&observer_for_events, message);
@@ -487,6 +512,7 @@ fn create_realtime_transport(
             on_message,
             on_snapshot,
             on_members_snapshot,
+            on_room_left,
             on_error,
         );
         Err("官方 Socket.IO 浏览器客户端仅在 wasm 环境可用".into())
@@ -592,6 +618,18 @@ fn decode_room_members_snapshot_event_value(
     decode_room_members_snapshot(event)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+fn decode_room_left_event(text: &str) -> Option<RoomLeftRealtimeEvent> {
+    let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
+    decode_room_left(event)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn decode_room_left_event_value(value: &JsValue) -> Option<RoomLeftRealtimeEvent> {
+    let event = decode_socket_event_value(value)?;
+    decode_room_left(event)
+}
+
 fn decode_room_snapshot(event: ServerRealtimeEvent) -> Option<RoomRealtimeSnapshot> {
     let ServerRealtimeEvent::RoomSnapshot {
         room_id,
@@ -651,6 +689,14 @@ fn decode_room_members_snapshot(event: ServerRealtimeEvent) -> Option<RoomMember
         role,
         members,
     })
+}
+
+fn decode_room_left(event: ServerRealtimeEvent) -> Option<RoomLeftRealtimeEvent> {
+    let ServerRealtimeEvent::RoomLeft { room_id, reason } = event else {
+        return None;
+    };
+
+    Some(RoomLeftRealtimeEvent { room_id, reason })
 }
 
 fn dispatch_or_queue_command<F>(
@@ -977,6 +1023,20 @@ mod tests {
         assert_eq!(snapshot.role, "admin");
         assert_eq!(snapshot.members.len(), 1);
         assert!(snapshot.members[0].is_muted);
+    }
+
+    #[test]
+    fn room_left_event_should_decode_to_room_left_realtime_event() {
+        let payload = serde_json::to_string(&ServerRealtimeEvent::RoomLeft {
+            room_id: "room-1".into(),
+            reason: "removed".into(),
+        })
+        .unwrap();
+
+        let event = decode_room_left_event(&payload).unwrap();
+
+        assert_eq!(event.room_id, "room-1");
+        assert_eq!(event.reason, "removed");
     }
 
     #[test]

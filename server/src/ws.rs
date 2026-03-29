@@ -53,8 +53,25 @@ impl RealtimeHub {
         }
     }
 
-    pub(crate) async fn evict_profile_from_room(&self, profile_id: ProfileId, room_id: RoomId) {
+    pub(crate) async fn remove_profile_from_room(&self, profile_id: ProfileId, room_id: RoomId) {
         if let Some(io) = self.socket_io.get().cloned() {
+            for socket in io.within(profile_room_name(profile_id)).sockets() {
+                let should_leave = socket
+                    .extensions
+                    .get::<Arc<SocketSession>>()
+                    .is_some_and(|session| session.clear_room_if_matches(room_id));
+
+                if should_leave {
+                    socket.leave(socket_room_name(room_id));
+                    let _ = socket.emit(
+                        SOCKET_IO_EVENT_NAME,
+                        &ServerRealtimeEvent::RoomLeft {
+                            room_id: room_id.0.to_string(),
+                            reason: "removed".into(),
+                        },
+                    );
+                }
+            }
             let _ = io
                 .within(profile_room_name(profile_id))
                 .leave(socket_room_name(room_id))
@@ -108,6 +125,16 @@ impl SocketSession {
 
     fn clear_room_id(&self) {
         *self.joined_room_id.lock().unwrap() = None;
+    }
+
+    fn clear_room_if_matches(&self, room_id: RoomId) -> bool {
+        let mut guard = self.joined_room_id.lock().unwrap();
+        if *guard != Some(room_id) {
+            return false;
+        }
+
+        *guard = None;
+        true
     }
 
     fn activate_room(&self, room_id: RoomId) {

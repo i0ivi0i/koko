@@ -191,6 +191,11 @@ pub enum ServerRealtimeEvent {
         role: String,
         members: Vec<RoomMemberResponse>,
     },
+    /// 当前主 web 流程用于 authoritative 离房真相同步，例如成员被移除后主动退出房间界面。
+    RoomLeft {
+        room_id: String,
+        reason: String,
+    },
     /// 当前主 web 流程稳定消费的新增消息事件。
     MessageCreated {
         message_id: String,
@@ -439,6 +444,19 @@ mod tests {
                 can_mute: true,
                 can_remove: true,
             }],
+        };
+
+        let json = serde_json::to_string(&value).unwrap();
+        let decoded: ServerRealtimeEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn server_realtime_event_room_left_should_roundtrip() {
+        let value = ServerRealtimeEvent::RoomLeft {
+            room_id: "room-1".into(),
+            reason: "removed".into(),
         };
 
         let json = serde_json::to_string(&value).unwrap();

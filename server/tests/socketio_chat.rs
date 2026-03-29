@@ -588,6 +588,12 @@ async fn 成员被移除后不应继续收到房间广播() {
         .unwrap();
     assert_eq!(remove.status(), StatusCode::OK);
 
+    let room_left = member_socket.next_event().await;
+    assert_eq!(room_left.0, "event");
+    assert_eq!(room_left.1["type"], "room_left");
+    assert_eq!(room_left.1["room_id"], room_id.to_string());
+    assert_eq!(room_left.1["reason"], "removed");
+
     let owner_send = http_app
         .oneshot(with_session(
             Request::builder()
