@@ -1,2 +1,2 @@
-# Placeholder directory for committed sqlx offline metadata.
-# Populate with `cargo sqlx prepare` output when queries are added.
+# Committed placeholder for the `.sqlx` directory.
+# Actual generated SQLx metadata will appear here once query macros land.

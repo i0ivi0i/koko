@@ -3,10 +3,12 @@
 # Do not require or recommend WSL2.
 #
 # Optional compiler caching:
-# Cargo will use `sccache` when it is installed and available on PATH.
-# Keep the repo free of machine-specific wrapper paths.
+# Ready-to-enable opt-in snippet:
+# [build]
+# rustc-wrapper = "sccache"
+#
+# Keep the repo free of machine-specific wrapper paths, and only enable this
+# when `sccache` is already installed and on PATH in the current environment.
 #
 # SQLx checks stay off the hot path; use `cargo sqlx prepare` locally and
 # `cargo sqlx prepare --check` in CI against committed `.sqlx` metadata.
-[build]
-rustc-wrapper = "sccache"
