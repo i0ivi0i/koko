@@ -283,7 +283,7 @@ async fn resolve_socket_room_by_code(
         .await
         .map_err(map_domain_error)?;
 
-    Ok(RoomSnapshotSeed::known(result.room, result.role))
+    Ok(RoomSnapshotSeed::known(result.room))
 }
 
 async fn emit_room_snapshot(
@@ -293,8 +293,11 @@ async fn emit_room_snapshot(
     seed: RoomSnapshotSeed,
     query: SnapshotQuery,
 ) -> Result<(), ApiError> {
-    let snapshot = load_room_snapshot_base(state, session.profile_id, seed, &query).await?;
-    let room_id = snapshot.room.id;
+    let room_repo = PostgresRoomRepository::new(state.pool.clone());
+    let room_id = seed.room_id;
+    let role = koko_core::room::ensure_can_read_room(&room_repo, room_id, session.profile_id)
+        .await
+        .map_err(map_domain_error)?;
     let current_room_id = session.room_id();
     let is_room_transition = current_room_id != Some(room_id);
     if is_room_transition {
@@ -304,6 +307,7 @@ async fn emit_room_snapshot(
         session.clear_room_id();
     }
 
+    let snapshot = load_room_snapshot_base(state, session.profile_id, seed, role, &query).await?;
     let event = build_room_snapshot_event(snapshot);
 
     socket
@@ -376,15 +380,13 @@ enum SnapshotQuery {
 struct RoomSnapshotSeed {
     room: Option<Room>,
     room_id: RoomId,
-    role: Option<Role>,
 }
 
 impl RoomSnapshotSeed {
-    fn known(room: Room, role: Role) -> Self {
+    fn known(room: Room) -> Self {
         Self {
             room_id: room.id,
             room: Some(room),
-            role: Some(role),
         }
     }
 
@@ -392,7 +394,6 @@ impl RoomSnapshotSeed {
         Self {
             room: None,
             room_id,
-            role: None,
         }
     }
 }
@@ -440,16 +441,11 @@ async fn load_room_snapshot_base(
     state: &AppState,
     viewer_profile_id: ProfileId,
     seed: RoomSnapshotSeed,
+    viewer_role: Role,
     query: &SnapshotQuery,
 ) -> Result<RoomSnapshotBase, ApiError> {
     let room_repo = PostgresRoomRepository::new(state.pool.clone());
     let room_id = seed.room_id;
-    let role = match seed.role {
-        Some(role) => role,
-        None => koko_core::room::ensure_can_read_room(&room_repo, room_id, viewer_profile_id)
-            .await
-            .map_err(map_domain_error)?,
-    };
     let room = match seed.room {
         Some(room) => room,
         None => room_repo
@@ -482,12 +478,12 @@ async fn load_room_snapshot_base(
         .await
         .map_err(|_| ApiError::internal("成员列表读取失败"))?
         .into_iter()
-        .map(|member| crate::http::room_member_to_response(viewer_profile_id, role, member))
+        .map(|member| crate::http::room_member_to_response(viewer_profile_id, viewer_role, member))
         .collect();
 
     Ok(RoomSnapshotBase {
         room,
-        role,
+        role: viewer_role,
         messages,
         has_more_messages: page.has_more,
         members,

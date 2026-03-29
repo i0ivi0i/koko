@@ -331,6 +331,99 @@ async fn socketio切房后不应继续收到旧房间广播() {
 }
 
 #[tokio::test]
+async fn socketio切房命令发出后旧房间广播不应抢在新快照前到达() {
+    let pool = test_pool().await;
+    let profile_id = Uuid::new_v4();
+    let owner_a_id = Uuid::new_v4();
+    let owner_b_id = Uuid::new_v4();
+    let room_a_id = Uuid::new_v4();
+    let room_b_id = Uuid::new_v4();
+    let profile_session_id = Uuid::new_v4();
+    let owner_a_session_id = Uuid::new_v4();
+    let room_a_code = unique_room_code(room_a_id);
+    let room_b_code = unique_room_code(room_b_id);
+
+    insert_profile(&pool, profile_id, "switch-race-member").await;
+    insert_profile(&pool, owner_a_id, "switch-race-owner-a").await;
+    insert_profile(&pool, owner_b_id, "switch-race-owner-b").await;
+    insert_session(&pool, profile_session_id, profile_id).await;
+    insert_session(&pool, owner_a_session_id, owner_a_id).await;
+    insert_room_with_owner(&pool, room_a_id, owner_a_id, &room_a_code).await;
+    insert_room_with_owner(&pool, room_b_id, owner_b_id, &room_b_code).await;
+    insert_member(&pool, room_a_id, profile_id, "member").await;
+    insert_member(&pool, room_b_id, profile_id, "member").await;
+
+    for index in 0..120 {
+        sqlx::query(
+            "INSERT INTO messages (id, room_id, sender_id, content) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(room_b_id)
+        .bind(owner_b_id)
+        .bind(format!("warmup-{index}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": profile_session_id.to_string(),
+            "room_id": room_a_id.to_string(),
+        }),
+    )
+    .await;
+
+    let initial_snapshot = socket.next_event().await;
+    assert_eq!(initial_snapshot.0, "event");
+    assert_eq!(initial_snapshot.1["type"], "room_snapshot");
+    assert_eq!(initial_snapshot.1["room_id"], room_a_id.to_string());
+
+    socket
+        .send_command(json!({
+            "type": "join_room",
+            "code": room_b_code,
+        }))
+        .await;
+
+    let owner_a_send = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_a_id}/messages"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "old room must not overtake snapshot",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            owner_a_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(owner_a_send.status(), StatusCode::OK);
+
+    let first_after_join = socket.next_event().await;
+    assert_eq!(first_after_join.0, "event");
+    assert_eq!(first_after_join.1["type"], "room_snapshot");
+    assert_eq!(first_after_join.1["room_id"], room_b_id.to_string());
+
+    socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
 async fn socketio通过不存在短码入房时应创建房间并返回快照() {
     let pool = test_pool().await;
     let profile_id = Uuid::new_v4();
