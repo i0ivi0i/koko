@@ -13,7 +13,6 @@ use socketioxide::{
     extract::{Data, Extension, SocketRef, State as SocketState},
     handler::ConnectHandler,
 };
-use uuid::Uuid;
 
 use crate::{
     app::AppState,
@@ -92,21 +91,15 @@ impl RealtimeHub {
 #[derive(Debug, Clone)]
 struct SocketSession {
     profile_id: ProfileId,
-    initial_room_id: Option<RoomId>,
     joined_room_id: Arc<Mutex<Option<RoomId>>>,
 }
 
 impl SocketSession {
-    fn new(profile_id: ProfileId, initial_room_id: Option<RoomId>) -> Self {
+    fn new(profile_id: ProfileId) -> Self {
         Self {
             profile_id,
-            initial_room_id,
             joined_room_id: Arc::new(Mutex::new(None)),
         }
-    }
-
-    fn initial_room_id(&self) -> Option<RoomId> {
-        self.initial_room_id
     }
 
     fn room_id(&self) -> Option<RoomId> {
@@ -126,7 +119,6 @@ impl SocketSession {
 #[derive(Debug, serde::Deserialize)]
 struct SocketIoAuth {
     session_id: String,
-    room_id: Option<String>,
 }
 
 pub(crate) fn configure_socket_io(io: &SocketIo) {
@@ -141,16 +133,10 @@ async fn authenticate_socket_io(
     let session = session::authenticate_session(&state.pool, &auth.session_id)
         .await
         .map_err(|_| "会话认证无效".to_owned())?;
-    let room_id = auth
-        .room_id
-        .as_deref()
-        .map(parse_room_id)
-        .transpose()
-        .map_err(|_| "room_id 不合法".to_owned())?;
 
     socket
         .extensions
-        .insert(Arc::new(SocketSession::new(session.profile_id, room_id)));
+        .insert(Arc::new(SocketSession::new(session.profile_id)));
 
     Ok(())
 }
@@ -162,25 +148,6 @@ async fn on_socket_io_connection(
 ) {
     state.online_connection_opened();
     socket.join(profile_room_name(session.profile_id));
-
-    if let Some(room_id) = session.initial_room_id() {
-        if let Err(error) = emit_room_snapshot(
-            &socket,
-            &state,
-            &session,
-            RoomSnapshotSeed::lookup(room_id),
-            RoomSnapshotQuery::Recent {
-                limit: DEFAULT_SNAPSHOT_LIMIT,
-            },
-        )
-        .await
-        {
-            emit_socket_error(&socket, error.message());
-            let _ = socket.disconnect();
-            state.online_connection_closed();
-            return;
-        }
-    }
 
     socket.on(SOCKET_IO_COMMAND_NAME, on_socket_io_command);
     socket.on(SOCKET_IO_QUERY_NAME, on_socket_io_query);
@@ -418,12 +385,6 @@ fn build_room_members_snapshot_event(
         role: role_name(role).to_owned(),
         members,
     }
-}
-
-fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {
-    Uuid::parse_str(raw)
-        .map(RoomId)
-        .map_err(|_| ApiError::bad_request("room_id 不合法"))
 }
 
 fn socket_room_name(room_id: RoomId) -> String {
