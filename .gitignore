@@ -1,0 +1,13 @@
+target/
+target-spec-review/
+
+# This is an application/server repo, not a reusable library crate.
+# Keep the lockfile tracked so builds stay reproducible across Win11 and Linux.
+!Cargo.lock
+
+# Tests are source code and must stay under version control.
+!tests/
+
+# Common local OS noise.
+Thumbs.db
+.DS_Store
