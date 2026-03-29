@@ -2,12 +2,14 @@ mod env;
 mod logging;
 mod process;
 
+use clap::{Parser, Subcommand};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 use std::process::ExitCode;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Subcommand)]
 enum Command {
     Init,
     Dev,
@@ -16,8 +18,12 @@ enum Command {
     Check,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Parser)]
+#[command(name = "xtask")]
 struct Cli {
+    #[command(subcommand)]
     command: Command,
+    #[arg(long, global = true)]
     dry_run: bool,
 }
 
@@ -45,29 +51,15 @@ fn run() -> Result<(), String> {
 }
 
 fn parse_args() -> Result<Cli, String> {
-    let mut args = std::env::args().skip(1);
-    let Some(command) = args.next() else {
-        return Err("缺少子命令。可用命令: init, dev, migrate, test, check".into());
-    };
+    parse_args_from(std::env::args())
+}
 
-    let mut dry_run = false;
-    for arg in args {
-        match arg.as_str() {
-            "--dry-run" => dry_run = true,
-            other => return Err(format!("不支持的参数: {other}")),
-        }
-    }
-
-    let command = match command.as_str() {
-        "init" => Command::Init,
-        "dev" => Command::Dev,
-        "migrate" => Command::Migrate,
-        "test" => Command::Test,
-        "check" => Command::Check,
-        other => return Err(format!("不支持的子命令: {other}")),
-    };
-
-    Ok(Cli { command, dry_run })
+fn parse_args_from<I, T>(args: I) -> Result<Cli, String>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    Cli::try_parse_from(args).map_err(|error| error.to_string())
 }
 
 fn run_init(root: &std::path::Path, dry_run: bool) -> Result<(), String> {
@@ -593,6 +585,39 @@ mod tests {
         assert_eq!(
             backend_probe_addr("192.168.1.7:3000").unwrap().to_string(),
             "192.168.1.7:3000"
+        );
+    }
+
+    #[test]
+    fn parse_args_should_accept_subcommand_and_dry_run() {
+        let cli = parse_args_from(["xtask", "dev", "--dry-run"]).expect("应能解析 clap 参数");
+
+        assert_eq!(
+            cli,
+            Cli {
+                command: Command::Dev,
+                dry_run: true,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_args_should_reject_unknown_subcommand() {
+        let error = parse_args_from(["xtask", "ship"]).expect_err("未知子命令应失败");
+
+        assert!(error.contains("unrecognized subcommand"));
+    }
+
+    #[test]
+    fn parse_args_should_accept_global_dry_run_before_subcommand() {
+        let cli = parse_args_from(["xtask", "--dry-run", "check"]).expect("应能解析全局 dry-run");
+
+        assert_eq!(
+            cli,
+            Cli {
+                command: Command::Check,
+                dry_run: true,
+            }
         );
     }
 }

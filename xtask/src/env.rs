@@ -74,13 +74,7 @@ fn parse_local_env(content: &str, path: PathBuf) -> Result<LocalEnv, String> {
 }
 
 fn generate_local_admin_password() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("系统时间应晚于 Unix epoch")
-        .as_nanos();
-    format!("local-admin-{nanos:x}")
+    format!("local-admin-{}", uuid::Uuid::new_v4())
 }
 
 fn append_local_admin_password(path: &Path, admin_password: &str) -> Result<(), String> {
@@ -97,7 +91,7 @@ fn append_local_admin_password(path: &Path, admin_password: &str) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
-    use super::{LocalEnv, load_local_env};
+    use super::{LocalEnv, generate_local_admin_password, load_local_env};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -208,6 +202,18 @@ mod tests {
         assert!(env.admin_password_generated);
         assert!(content.contains("KOKO_ADMIN_PASSWORD="));
         assert!(content.contains(&env.admin_password));
+    }
+
+    #[test]
+    fn generate_local_admin_password_should_use_uuid_shape() {
+        let first = generate_local_admin_password();
+        let second = generate_local_admin_password();
+
+        assert!(first.starts_with("local-admin-"));
+        assert!(second.starts_with("local-admin-"));
+        assert_ne!(first, second);
+        let suffix = first.trim_start_matches("local-admin-");
+        uuid::Uuid::parse_str(suffix).expect("后台密码后缀应为 uuid");
     }
 
     fn create_temp_root(content: &str) -> PathBuf {
