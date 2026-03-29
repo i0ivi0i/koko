@@ -586,18 +586,19 @@ fn build_send_command(content: &str) -> ClientRealtimeCommand {
     }
 }
 
+#[cfg(test)]
 fn build_join_room_command(code: &str) -> ClientRealtimeCommand {
     ClientRealtimeCommand::JoinRoom {
         code: code.trim().to_ascii_uppercase(),
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 fn build_send_command_json(content: &str) -> Result<String, String> {
     serde_json::to_string(&build_send_command(content)).map_err(|error| error.to_string())
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 fn build_join_room_command_json(code: &str) -> Result<String, String> {
     serde_json::to_string(&build_join_room_command(code)).map_err(|error| error.to_string())
 }
@@ -613,7 +614,7 @@ fn decode_socket_event_value(value: &JsValue) -> Option<ServerRealtimeEvent> {
     from_js_value(value.clone()).ok()
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 fn decode_room_snapshot_event(text: &str) -> Option<RoomRealtimeSnapshot> {
     let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
     decode_room_snapshot(event)
@@ -625,7 +626,7 @@ fn decode_room_snapshot_event_value(value: &JsValue) -> Option<RoomRealtimeSnaps
     decode_room_snapshot(event)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 fn decode_message_created_event(text: &str) -> Option<MessageResponse> {
     let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
     decode_message_created(event)
@@ -637,7 +638,7 @@ fn decode_message_created_event_value(value: &JsValue) -> Option<MessageResponse
     decode_message_created(event)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 fn decode_room_members_snapshot_event(text: &str) -> Option<RoomMembersRealtimeSnapshot> {
     let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
     decode_room_members_snapshot(event)
@@ -651,7 +652,7 @@ fn decode_room_members_snapshot_event_value(
     decode_room_members_snapshot(event)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 fn decode_room_left_event(text: &str) -> Option<RoomLeftRealtimeEvent> {
     let event = serde_json::from_str::<ServerRealtimeEvent>(text).ok()?;
     decode_room_left(event)
@@ -663,6 +664,7 @@ fn decode_room_left_event_value(value: &JsValue) -> Option<RoomLeftRealtimeEvent
     decode_room_left(event)
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn decode_room_snapshot(event: ServerRealtimeEvent) -> Option<RoomRealtimeSnapshot> {
     let ServerRealtimeEvent::RoomSnapshot {
         room_id,
@@ -686,6 +688,7 @@ fn decode_room_snapshot(event: ServerRealtimeEvent) -> Option<RoomRealtimeSnapsh
     })
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn decode_message_created(event: ServerRealtimeEvent) -> Option<MessageResponse> {
     let ServerRealtimeEvent::MessageCreated {
         message_id,
@@ -707,6 +710,7 @@ fn decode_message_created(event: ServerRealtimeEvent) -> Option<MessageResponse>
     })
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn decode_room_members_snapshot(event: ServerRealtimeEvent) -> Option<RoomMembersRealtimeSnapshot> {
     let ServerRealtimeEvent::RoomMembersSnapshot {
         room_id,
@@ -724,6 +728,7 @@ fn decode_room_members_snapshot(event: ServerRealtimeEvent) -> Option<RoomMember
     })
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn decode_room_left(event: ServerRealtimeEvent) -> Option<RoomLeftRealtimeEvent> {
     let ServerRealtimeEvent::RoomLeft { room_id, reason } = event else {
         return None;
