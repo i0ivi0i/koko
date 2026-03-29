@@ -452,6 +452,7 @@ mod tests {
                         profile_id: "member-1".to_string(),
                         display_name: "匿名用户".to_string(),
                         role: "owner".to_string(),
+                        is_muted: false,
                         can_promote: false,
                         can_mute: false,
                         can_remove: false,

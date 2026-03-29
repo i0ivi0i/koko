@@ -175,6 +175,7 @@ mod tests {
             profile_id: id.to_string(),
             display_name: format!("user-{id}"),
             role: "member".into(),
+            is_muted: false,
             can_promote: false,
             can_mute: false,
             can_remove: false,

@@ -486,6 +486,74 @@ async fn 提升管理员后在线房间成员应收到更新后的_room_snapshot
 }
 
 #[tokio::test]
+async fn 禁言成员后在线房间成员应收到带禁言状态的_room_snapshot() {
+    let pool = test_pool().await;
+    let owner_id = Uuid::new_v4();
+    let member_id = Uuid::new_v4();
+    let room_id = Uuid::new_v4();
+    let owner_session_id = Uuid::new_v4();
+    let room_code = unique_room_code(room_id);
+
+    insert_profile(&pool, owner_id, "mute-owner").await;
+    insert_profile(&pool, member_id, "mute-member").await;
+    insert_session(&pool, owner_session_id, owner_id).await;
+    insert_room_with_owner(&pool, room_id, owner_id, &room_code).await;
+    insert_member(&pool, room_id, member_id, "member").await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = koko_server::app::build_app(pool.clone());
+    let http_app = app.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let mut owner_socket = SocketIoTestClient::connect(
+        address,
+        json!({
+            "session_id": owner_session_id.to_string(),
+            "room_id": room_id.to_string(),
+        }),
+    )
+    .await;
+
+    let room_snapshot = owner_socket.next_event().await;
+    assert_eq!(room_snapshot.0, "event");
+    assert_eq!(room_snapshot.1["type"], "room_snapshot");
+
+    let mute = http_app
+        .oneshot(with_session(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/rooms/{room_id}/members/{member_id}/mute"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+            owner_session_id,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(mute.status(), StatusCode::OK);
+
+    let updated_snapshot = owner_socket.next_event().await;
+    assert_eq!(updated_snapshot.0, "event");
+    assert_eq!(updated_snapshot.1["type"], "room_snapshot");
+    assert_eq!(updated_snapshot.1["room_id"], room_id.to_string());
+    assert_eq!(
+        updated_snapshot.1["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|member| member["profile_id"] == member_id.to_string())
+            .unwrap()["is_muted"],
+        true
+    );
+
+    owner_socket.close().await;
+    shutdown_test_server(server).await;
+}
+
+#[tokio::test]
 async fn 移除成员后在线剩余成员应收到更新后的_room_snapshot() {
     let pool = test_pool().await;
     let owner_id = Uuid::new_v4();

@@ -36,6 +36,7 @@ pub fn MemberSheet(
                                 profile_id: member.profile_id,
                                 name: member.display_name,
                                 role: member.role,
+                                is_muted: member.is_muted,
                                 can_promote: member.can_promote,
                                 can_mute: member.can_mute,
                                 can_remove: member.can_remove,
@@ -56,6 +57,7 @@ fn MemberRow(
     profile_id: String,
     name: String,
     role: String,
+    is_muted: bool,
     can_promote: bool,
     can_mute: bool,
     can_remove: bool,
@@ -73,6 +75,9 @@ fn MemberRow(
             div { class: "member-meta",
                 div { class: "member-name", "{name}" }
                 div { class: "member-role", "匿名设备身份" }
+                if is_muted {
+                    div { class: "message-meta", "已禁言" }
+                }
             }
             RoleBadge { label: role }
 
@@ -121,6 +126,7 @@ mod tests {
                         profile_id: "member-1".to_string(),
                         display_name: "Alice".to_string(),
                         role: "member".to_string(),
+                        is_muted: false,
                         can_promote: true,
                         can_mute: true,
                         can_remove: true,
@@ -152,6 +158,7 @@ mod tests {
                         profile_id: "member-1".to_string(),
                         display_name: "Alice".to_string(),
                         role: "member".to_string(),
+                        is_muted: false,
                         can_promote: true,
                         can_mute: true,
                         can_remove: true,
@@ -184,6 +191,7 @@ mod tests {
                         profile_id: "self".to_string(),
                         display_name: "Alice".to_string(),
                         role: "member".to_string(),
+                        is_muted: false,
                         can_promote: false,
                         can_mute: false,
                         can_remove: false,
@@ -204,5 +212,36 @@ mod tests {
         assert!(!html.contains("升管"));
         assert!(!html.contains("禁言"));
         assert!(!html.contains("移除"));
+    }
+
+    #[test]
+    fn 禁言成员应展示后端快照给出的禁言标记() {
+        #[component]
+        fn TestMutedMember() -> Element {
+            rsx! {
+                MemberSheet {
+                    open: true,
+                    members: vec![RoomMemberResponse {
+                        profile_id: "member-1".to_string(),
+                        display_name: "Alice".to_string(),
+                        role: "member".to_string(),
+                        is_muted: true,
+                        can_promote: false,
+                        can_mute: true,
+                        can_remove: true,
+                    }],
+                    on_promote: move |_| {},
+                    on_mute: move |_| {},
+                    on_remove: move |_| {},
+                    on_close: move |_| {},
+                }
+            }
+        }
+
+        let mut dom = VirtualDom::new(TestMutedMember);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+
+        assert!(html.contains("已禁言"));
     }
 }

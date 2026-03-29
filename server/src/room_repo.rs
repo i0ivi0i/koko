@@ -14,6 +14,7 @@ pub struct PostgresRoomRepository {
 pub struct RoomMemberRecord {
     pub profile_id: ProfileId,
     pub role: Role,
+    pub is_muted: bool,
 }
 
 pub struct AdminRoomRecord {
@@ -52,7 +53,7 @@ impl PostgresRoomRepository {
     ) -> Result<Vec<RoomMemberRecord>, sqlx::Error> {
         let rows = sqlx::query!(
             r#"
-            SELECT rm.profile_id, rm.role
+            SELECT rm.profile_id, rm.role, rm.muted_until
             FROM room_members rm
             WHERE rm.room_id = $1
             ORDER BY rm.created_at ASC
@@ -75,6 +76,9 @@ impl PostgresRoomRepository {
                 Some(RoomMemberRecord {
                     profile_id: ProfileId(row.profile_id),
                     role,
+                    is_muted: row
+                        .muted_until
+                        .is_some_and(|until| until > OffsetDateTime::now_utc()),
                 })
             })
             .collect())

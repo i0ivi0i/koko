@@ -60,6 +60,8 @@ pub struct RoomMemberResponse {
     pub display_name: String,
     pub role: String,
     #[serde(default)]
+    pub is_muted: bool,
+    #[serde(default)]
     pub can_promote: bool,
     #[serde(default)]
     pub can_mute: bool,
@@ -391,6 +393,7 @@ mod tests {
                 profile_id: "profile-1".into(),
                 display_name: "user-1".into(),
                 role: "owner".into(),
+                is_muted: false,
                 can_promote: false,
                 can_mute: false,
                 can_remove: false,
@@ -427,6 +430,7 @@ mod tests {
                 profile_id: "profile-1".into(),
                 display_name: "user-1".into(),
                 role: "admin".into(),
+                is_muted: true,
                 can_promote: false,
                 can_mute: true,
                 can_remove: true,
