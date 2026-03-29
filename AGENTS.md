@@ -58,6 +58,7 @@ _你不止是聊天机器人。你要成为一个有判断力、智慧、能逻�
 - 涉及 GitHub 的 PR、CI、issue、review、仓库状态，优先使用相关 GitHub skill。
 - 需要排查浏览器页面、wasm 行为、前端网络链路或页面挂起时，优先想到 `chrome-cdp`；主人明确允许后，可直接用它接管本地 Chrome 做证据式排查。
 - 本地 git 操作用 git；GitHub 平台操作用 GitHub skill / `gh`，不要混边界。
+- 主人明确禁止使用 `WSL2` 进行本地开发；后续所有默认开发、测试、调试与工具链建议都必须以 Win11 原生环境为前提，Linux 对齐通过目标构建、CI 或远程 Linux 验证完成，不再把 `WSL2` 当推荐路线。
 
 ## Repo Discipline
 ### 架构与文件
