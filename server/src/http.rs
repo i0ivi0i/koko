@@ -382,6 +382,7 @@ pub async fn remove_room_member(
     koko_core::room::remove_member(&room_repo, room_id, session.profile_id, target_id)
         .await
         .map_err(map_domain_error)?;
+    state.realtime.evict_profile_from_room(target_id, room_id).await;
 
     Ok(StatusCode::OK)
 }

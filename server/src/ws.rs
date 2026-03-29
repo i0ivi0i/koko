@@ -56,6 +56,15 @@ impl RealtimeHub {
         }
     }
 
+    pub(crate) async fn evict_profile_from_room(&self, profile_id: ProfileId, room_id: RoomId) {
+        if let Some(io) = self.socket_io.get().cloned() {
+            let _ = io
+                .within(profile_room_name(profile_id))
+                .leave(socket_room_name(room_id))
+                .await;
+        }
+    }
+
     pub(crate) fn online_connections(&self) -> u64 {
         self.online_connections.load(Ordering::Relaxed) as u64
     }
@@ -141,6 +150,7 @@ async fn on_socket_io_connection(
     SocketState(state): SocketState<AppState>,
 ) {
     state.online_connection_opened();
+    socket.join(profile_room_name(session.profile_id));
 
     if let Some(room_id) = session.initial_room_id() {
         if let Err(error) = emit_room_snapshot(
@@ -379,4 +389,8 @@ fn parse_room_id(raw: &str) -> Result<RoomId, ApiError> {
 
 fn socket_room_name(room_id: RoomId) -> String {
     room_id.0.to_string()
+}
+
+fn profile_room_name(profile_id: ProfileId) -> String {
+    format!("profile:{}", profile_id.0)
 }
