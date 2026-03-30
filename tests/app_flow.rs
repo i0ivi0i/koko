@@ -497,6 +497,7 @@ async fn join_or_create_persists_room_member_and_room_code() {
     let persisted_room_id = harness.room_id_by_code(&room_code).await;
     assert_eq!(snapshot.room_id, persisted_room_id);
     assert_eq!(harness.member_count(snapshot.room_id, session_id).await, 1);
+    harness.cleanup().await;
 }
 
 #[tokio::test]
@@ -564,6 +565,7 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it() {
         harness.message_bodies(joined.room_id).await,
         vec!["persisted hello".to_string()]
     );
+    harness.cleanup().await;
 }
 
 #[tokio::test]
@@ -600,6 +602,7 @@ async fn join_or_create_treats_room_code_as_case_insensitive() {
     assert_eq!(first_snapshot.room_id, second_snapshot.room_id);
     assert_eq!(harness.member_count(first_snapshot.room_id, first_session_id).await, 1);
     assert_eq!(harness.member_count(first_snapshot.room_id, second_session_id).await, 1);
+    harness.cleanup().await;
 }
 
 #[tokio::test]
@@ -633,6 +636,7 @@ async fn repeated_join_does_not_duplicate_member_in_same_room() {
 
     assert_eq!(first_snapshot.room_id, second_snapshot.room_id);
     assert_eq!(harness.member_count(first_snapshot.room_id, session_id).await, 1);
+    harness.cleanup().await;
 }
 
 #[tokio::test]
@@ -662,6 +666,7 @@ async fn send_text_message_rejects_non_member_sender_via_database_truth() {
 
     assert_eq!(error.code(), AppErrorCode::Internal);
     assert_eq!(harness.message_count(room_id).await, 0);
+    harness.cleanup().await;
 }
 
 #[tokio::test]
@@ -692,6 +697,7 @@ async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_
     assert_eq!(snapshot.room_id, room_v2);
     assert_eq!(snapshot.room_code.normalized(), normalized_code);
     assert_eq!(snapshot.room_code.code_version, 2);
+    harness.cleanup().await;
 }
 
 #[test]
@@ -746,6 +752,18 @@ fn destructive_reset_rejects_admin_url_on_different_host_or_port() {
 }
 
 #[tokio::test]
+async fn pg_harness_drops_isolated_database_after_scope_exit() {
+    let harness = PgHarness::new("pg_harness_drops_isolated_database_after_scope_exit").await;
+    let database_name = harness.database_name().to_string();
+    harness.cleanup().await;
+
+    assert!(
+        !database_exists(&database_name).await,
+        "isolated test database `{database_name}` should be removed after harness cleanup"
+    );
+}
+
+#[tokio::test]
 async fn deleting_truth_rows_is_blocked_in_stage_one() {
     let harness = PgHarness::new("deleting_truth_rows_is_blocked_in_stage_one").await;
     let session_id = Uuid::now_v7();
@@ -790,6 +808,7 @@ async fn deleting_truth_rows_is_blocked_in_stage_one() {
 
     assert!(room_delete.is_err());
     assert!(session_delete.is_err());
+    harness.cleanup().await;
 }
 
 #[derive(Debug)]
@@ -1061,6 +1080,9 @@ fn fixed_time() -> DateTime<Utc> {
 struct PgHarness {
     pool: PgPool,
     store: PgStore,
+    database_url: String,
+    admin_database_url: String,
+    database_name: String,
 }
 
 impl PgHarness {
@@ -1070,6 +1092,8 @@ impl PgHarness {
         )
         .unwrap();
         let database_url = derive_isolated_test_database_url(&base_database_url, test_name).unwrap();
+        let admin_database_url = default_admin_database_url(&database_url);
+        let database_name = database_name_from_url(&database_url);
         reset_test_database(&database_url).await;
         let pool = PgPoolOptions::new()
             .max_connections(5)
@@ -1081,7 +1105,18 @@ impl PgHarness {
         Self {
             store: PgStore::new(pool.clone()),
             pool,
+            database_url,
+            admin_database_url,
+            database_name,
         }
+    }
+
+    fn database_name(&self) -> &str {
+        &self.database_name
+    }
+
+    async fn cleanup(self) {
+        destroy_test_database(&self.database_url, &self.admin_database_url, self.pool).await;
     }
 
     async fn seed_active_session(&self, session_id: Uuid) {
@@ -1192,6 +1227,24 @@ impl PgHarness {
     }
 }
 
+async fn database_exists(database_name: &str) -> bool {
+    let admin_url = default_admin_database_url(DEFAULT_TEST_DATABASE_URL);
+    let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(admin_options)
+        .await
+        .unwrap();
+
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)",
+    )
+    .bind(database_name)
+    .fetch_one(&admin_pool)
+    .await
+    .unwrap()
+}
+
 fn derive_isolated_test_database_url(base_database_url: &str, test_name: &str) -> Result<String, String> {
     let base_database_url = validated_test_database_url(Some(base_database_url))?;
     let mut options = PgConnectOptions::from_str(&base_database_url)
@@ -1246,6 +1299,20 @@ fn validated_test_database_url(raw_url: Option<&str>) -> Result<String, String> 
     Ok(database_url)
 }
 
+fn database_name_from_url(database_url: &str) -> String {
+    PgConnectOptions::from_str(database_url)
+        .unwrap()
+        .get_database()
+        .unwrap()
+        .to_string()
+}
+
+fn default_admin_database_url(test_database_url: &str) -> String {
+    let admin_url = env::var("KOKO_TEST_ADMIN_DATABASE_URL")
+        .unwrap_or_else(|_| DEFAULT_TEST_ADMIN_DATABASE_URL.to_string());
+    validate_admin_database_url(test_database_url, &admin_url).unwrap()
+}
+
 fn validate_admin_database_url(test_database_url: &str, admin_database_url: &str) -> Result<String, String> {
     let test_options = PgConnectOptions::from_str(test_database_url)
         .map_err(|error| format!("failed to parse test database url: {error}"))?;
@@ -1294,9 +1361,7 @@ async fn reset_test_database(database_url: &str) {
     let options = PgConnectOptions::from_str(database_url).unwrap();
     let database_name = options.get_database().unwrap().to_string();
     let database_user = options.get_username().to_string();
-    let admin_url = env::var("KOKO_TEST_ADMIN_DATABASE_URL")
-        .unwrap_or_else(|_| DEFAULT_TEST_ADMIN_DATABASE_URL.to_string());
-    let admin_url = validate_admin_database_url(database_url, &admin_url).unwrap();
+    let admin_url = default_admin_database_url(database_url);
     let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
     let admin_pool = PgPoolOptions::new()
         .max_connections(1)
@@ -1346,6 +1411,35 @@ async fn reset_test_database(database_url: &str) {
     .execute(&test_database_admin_pool)
     .await
     .unwrap();
+}
+
+async fn destroy_test_database(database_url: &str, admin_database_url: &str, pool: PgPool) {
+    pool.close().await;
+
+    let database_name = database_name_from_url(database_url);
+    let admin_url = validate_admin_database_url(database_url, admin_database_url).unwrap();
+    let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(admin_options)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "SELECT pg_terminate_backend(pid)
+         FROM pg_stat_activity
+         WHERE datname = $1
+           AND pid <> pg_backend_pid()",
+    )
+    .bind(&database_name)
+    .execute(&admin_pool)
+    .await
+    .unwrap();
+
+    sqlx::query(&format!("DROP DATABASE IF EXISTS \"{database_name}\""))
+        .execute(&admin_pool)
+        .await
+        .unwrap();
 }
 
 async fn run_migrations(pool: &PgPool) {
