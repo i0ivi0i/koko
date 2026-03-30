@@ -17,6 +17,21 @@ fn crate_exposes_expected_root_modules() {
 }
 
 #[test]
+fn crate_source_gates_server_modules_away_from_wasm_builds() {
+    let lib_source = include_str!("../src/lib.rs");
+    let main_source = include_str!("../src/main.rs");
+    let cargo_manifest = include_str!("../Cargo.toml");
+
+    assert!(lib_source.contains("#[cfg(not(target_arch = \"wasm32\"))]\npub mod http;"));
+    assert!(lib_source.contains("#[cfg(not(target_arch = \"wasm32\"))]\npub mod rt;"));
+    assert!(lib_source.contains("#[cfg(not(target_arch = \"wasm32\"))]\npub mod store;"));
+    assert!(main_source.contains("#[cfg(not(target_arch = \"wasm32\"))]"));
+    assert!(main_source.contains("#[cfg(target_arch = \"wasm32\")]"));
+    assert!(cargo_manifest.contains("[target.'cfg(not(target_arch = \"wasm32\"))'.dependencies]"));
+    assert!(cargo_manifest.contains("[target.'cfg(target_arch = \"wasm32\")'.dependencies]"));
+}
+
+#[test]
 fn room_code_is_case_insensitive_and_normalized() {
     let code = koko::domain::RoomCode::new("a1234").unwrap();
     assert_eq!(code.normalized(), "A1234");

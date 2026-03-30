@@ -1,7 +1,10 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
+#[cfg(not(target_arch = "wasm32"))]
 use sqlx::postgres::PgPoolOptions;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = koko::support::AppConfig::from_env()?;
@@ -25,3 +28,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, router).await?;
     Ok(())
 }
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}

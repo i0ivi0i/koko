@@ -31,6 +31,10 @@ async fn load_bootstrap_session() -> Result<BootstrapSession, String> {
 pub fn App() -> Element {
     let mut state = use_signal(ChatState::awaiting_bootstrap);
     let bootstrap_session = use_resource(|| async move { load_bootstrap_session().await });
+    let bootstrap_error = match &*bootstrap_session.read_unchecked() {
+        Some(Err(error)) => Some(error.clone()),
+        _ => None,
+    };
 
     if let Some(Ok(session)) = &*bootstrap_session.read_unchecked() {
         let session = session.clone();
@@ -45,6 +49,11 @@ pub fn App() -> Element {
         Title { "koko" }
         Stylesheet { href: asset!("/assets/theme.css") }
         div { class: "koko-web-shell",
+            if let Some(error) = bootstrap_error {
+                div { class: "koko-web-shell__error",
+                    "Bootstrap failed: {error}"
+                }
+            }
             view::ChatPage { state: chat_state }
         }
     }

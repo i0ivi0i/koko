@@ -100,6 +100,14 @@ fn web_app_keeps_chat_state_in_a_signal_instead_of_rebuilding_each_render() {
 }
 
 #[test]
+fn web_app_surfaces_bootstrap_failures_instead_of_hiding_them_as_loading() {
+    let source = include_str!("../src/web.rs");
+
+    assert!(source.contains("Some(Err(error))"));
+    assert!(source.contains("Bootstrap failed"));
+}
+
+#[test]
 fn web_shell_does_not_fake_joined_state_or_require_bridge_stub() {
     let source = include_str!("../src/web.rs");
 
