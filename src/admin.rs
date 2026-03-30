@@ -1,14 +1,14 @@
 use dioxus::prelude::*;
 
 use crate::{
-    contract::{AdminOverview, AdminRoomSummary},
+    contract::{AdminOverview, AdminPanelData, AdminRoomSummary},
     view,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
 
-pub const ADMIN_OVERVIEW_PATH: &str = "/api/admin/overview";
+pub const ADMIN_PANEL_PATH: &str = "/api/admin/panel";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminPanelState {
@@ -22,8 +22,6 @@ impl AdminPanelState {
     }
 }
 
-pub const ADMIN_ROOMS_PATH: &str = "/api/admin/rooms";
-
 pub fn admin_panel_state(overview: AdminOverview, rooms: Vec<AdminRoomSummary>) -> AdminPanelState {
     AdminPanelState::new(overview, rooms)
 }
@@ -35,30 +33,19 @@ async fn load_admin_panel(admin_token: String) -> Result<AdminPanelState, String
     }
 
     let client = reqwest::Client::new();
-    let overview = client
-        .get(ADMIN_OVERVIEW_PATH)
-        .header("x-admin-token", admin_token.clone())
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .error_for_status()
-        .map_err(|error| error.to_string())?
-        .json::<AdminOverview>()
-        .await
-        .map_err(|error| error.to_string())?;
-    let rooms = client
-        .get(ADMIN_ROOMS_PATH)
+    let panel = client
+        .get(ADMIN_PANEL_PATH)
         .header("x-admin-token", admin_token)
         .send()
         .await
         .map_err(|error| error.to_string())?
         .error_for_status()
         .map_err(|error| error.to_string())?
-        .json::<Vec<AdminRoomSummary>>()
+        .json::<AdminPanelData>()
         .await
         .map_err(|error| error.to_string())?;
 
-    Ok(admin_panel_state(overview, rooms))
+    Ok(admin_panel_state(panel.overview, panel.rooms))
 }
 
 pub fn app() -> Element {

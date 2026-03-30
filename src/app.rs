@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     contract::{
-        AdminOverview, AdminRoomSummary, AppErrorCode, AppEvent, BootstrapSession,
+        AdminOverview, AdminPanelData, AdminRoomSummary, AppErrorCode, AppEvent, BootstrapSession,
         JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageCreated, MessageView,
         RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
@@ -139,6 +139,10 @@ pub trait AdminRoomsPort {
     ) -> impl Future<Output = Result<Vec<AdminRoomSummary>, AppError>> + Send;
 }
 
+pub trait AdminPanelPort {
+    fn load_admin_panel(&self) -> impl Future<Output = Result<AdminPanelData, AppError>> + Send;
+}
+
 pub trait IdGenerator {
     fn next_message_id(&self) -> Uuid;
 }
@@ -215,6 +219,13 @@ where
     P: AdminRoomsPort,
 {
     admin_rooms_port.list_admin_rooms().await
+}
+
+pub async fn load_admin_panel<P>(admin_panel_port: &P) -> Result<AdminPanelData, AppError>
+where
+    P: AdminPanelPort,
+{
+    admin_panel_port.load_admin_panel().await
 }
 
 pub async fn subscribe_room_stream<S, M>(

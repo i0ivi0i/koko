@@ -4,10 +4,11 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminOverviewPort, AdminRoomsPort, AppError, MembershipPort, MessageStore, RoomEntryPort,
-        RoomEntryTx, RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
+        AdminOverviewPort, AdminPanelPort, AdminRoomsPort, AppError, MembershipPort, MessageStore,
+        RoomEntryPort, RoomEntryTx, RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort,
+        SessionPort,
     },
-    contract::{AdminOverview, AdminRoomSummary},
+    contract::{AdminOverview, AdminPanelData, AdminRoomSummary},
     domain::{AnonymousSession, Message, MessageBody, MessageStatus, RoomCode, SessionStatus},
 };
 
@@ -358,6 +359,15 @@ impl AdminRoomsPort for PgStore {
                 latest_preview: row.get("latest_preview"),
             })
             .collect())
+    }
+}
+
+impl AdminPanelPort for PgStore {
+    async fn load_admin_panel(&self) -> Result<AdminPanelData, AppError> {
+        let overview = self.get_admin_overview().await?;
+        let rooms = self.list_admin_rooms().await?;
+
+        Ok(AdminPanelData { overview, rooms })
     }
 }
 

@@ -15,11 +15,11 @@ use uuid::Uuid;
 use crate::{
     app::{
         AppError, bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
-        list_admin_rooms, load_room_snapshot,
+        list_admin_rooms, load_admin_panel, load_room_snapshot,
     },
     contract::{
-        AdminOverview, AdminRoomSummary, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
-        RoomSnapshot,
+        AdminOverview, AdminPanelData, AdminRoomSummary, JoinOrCreateRoomByCodeCommand,
+        LoadRoomSnapshotQuery, RoomSnapshot,
     },
     store::PgStore,
     support,
@@ -51,6 +51,7 @@ pub fn app_router(store: PgStore, admin_token: String) -> Router {
         .route("/api/rooms/join", post(join_room))
         .route("/api/rooms/{room_id}/snapshot", get(room_snapshot))
         .route("/api/admin/overview", get(admin_overview))
+        .route("/api/admin/panel", get(admin_panel))
         .route("/api/admin/rooms", get(admin_rooms))
         .with_state(HttpState { store, admin_token })
 }
@@ -135,6 +136,17 @@ async fn admin_rooms(
         .await
         .map_err(map_http_error)?;
     Ok(Json(rooms))
+}
+
+async fn admin_panel(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+) -> Result<Json<AdminPanelData>, (StatusCode, Json<ErrorPayload>)> {
+    require_admin_token(&state.admin_token, &headers)?;
+    let panel = load_admin_panel(&state.store)
+        .await
+        .map_err(map_http_error)?;
+    Ok(Json(panel))
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]
