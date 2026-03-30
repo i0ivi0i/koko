@@ -3,13 +3,11 @@ use std::sync::Mutex;
 use chrono::{TimeZone, Utc};
 use koko::{
     app::{AppError, Clock, IdGenerator, MembershipPort, MessageStore, SessionPort},
-    contract::{
-        CommandRejected, MessageCreated, SendTextMessageCommand, SubscribeRoomStreamCommand,
-    },
+    contract::{CommandRejected, SendTextMessageCommand, SubscribeRoomStreamCommand},
     domain::Message,
     rt::{
-        RealtimePort, SendTextMessageDeps, SubscribeRoomStreamDeps, handle_send_text_message,
-        handle_subscribe_room_stream,
+        RealtimeEffect, SendTextMessageDeps, SubscribeRoomStreamDeps, plan_send_text_message,
+        plan_subscribe_room_stream,
     },
 };
 use uuid::Uuid;
@@ -30,60 +28,58 @@ fn init_tracing_is_idempotent() {
 async fn subscribe_room_stream_joins_room_after_membership_check_and_notifies_client() {
     let room_id = Uuid::from_u128(1);
     let session_id = Uuid::from_u128(2);
-    let realtime = FakeRealtimePort::default();
 
-    handle_subscribe_room_stream(
+    let plan = plan_subscribe_room_stream(
         SubscribeRoomStreamDeps {
             session_port: &FakeSessionPort::allow(),
             membership_port: &FakeMembershipPort::allow(),
-            realtime: &realtime,
         },
         SubscribeRoomStreamCommand {
             room_id,
             session_id,
         },
     )
-    .await
-    .unwrap();
+    .await;
 
-    assert_eq!(realtime.joined_room_ids(), vec![room_id]);
-    assert_eq!(realtime.subscribed_room_ids(), vec![room_id]);
-    assert!(realtime.rejections().is_empty());
+    assert_eq!(plan.result, Ok(()));
+    assert_eq!(
+        plan.effects,
+        vec![
+            RealtimeEffect::JoinRoom { room_id },
+            RealtimeEffect::EmitRoomStreamSubscribed { room_id },
+        ]
+    );
 }
 
 #[tokio::test]
 async fn subscribe_room_stream_rejects_non_member_without_joining_and_emits_rejection() {
     let room_id = Uuid::from_u128(11);
     let session_id = Uuid::from_u128(12);
-    let realtime = FakeRealtimePort::default();
 
-    let error = handle_subscribe_room_stream(
+    let plan = plan_subscribe_room_stream(
         SubscribeRoomStreamDeps {
             session_port: &FakeSessionPort::allow(),
             membership_port: &FakeMembershipPort::deny(),
-            realtime: &realtime,
         },
         SubscribeRoomStreamCommand {
             room_id,
             session_id,
         },
     )
-    .await
-    .unwrap_err();
+    .await;
 
     assert_eq!(
-        error,
-        AppError::NotRoomMember {
+        plan.result,
+        Err(AppError::NotRoomMember {
             room_id,
             session_id
-        }
+        })
     );
-    assert!(realtime.joined_room_ids().is_empty());
     assert_eq!(
-        realtime.rejections(),
-        vec![CommandRejected {
-            code: koko::contract::AppErrorCode::MembershipRequired,
-        }]
+        plan.effects,
+        vec![RealtimeEffect::EmitCommandRejected(CommandRejected {
+            code: koko::contract::AppErrorCode::MembershipRequired
+        })]
     );
 }
 
@@ -94,14 +90,12 @@ async fn message_is_broadcast_only_after_persistence_and_sender_gets_feedback() 
     let message_id = Uuid::from_u128(23);
     let trace = TraceLog::default();
     let store = FakeMessageStore::new(trace.clone());
-    let realtime = FakeRealtimePort::new(trace.clone());
 
-    let created = handle_send_text_message(
+    let plan = plan_send_text_message(
         SendTextMessageDeps {
             session_port: &FakeSessionPort::allow(),
             membership_port: &FakeMembershipPort::allow(),
             message_store: &store,
-            realtime: &realtime,
             id_generator: &FixedIdGenerator(message_id),
             clock: &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
         },
@@ -112,15 +106,22 @@ async fn message_is_broadcast_only_after_persistence_and_sender_gets_feedback() 
             client_message_id: None,
         },
     )
-    .await
-    .unwrap();
+    .await;
 
+    let created = plan.result.unwrap();
     assert_eq!(created.message_id, message_id);
     assert_eq!(created.body, "hello realtime");
-    assert_eq!(trace.events(), vec!["persist", "broadcast"]);
-    assert_eq!(realtime.broadcast_room_ids(), vec![room_id]);
-    assert_eq!(realtime.accepted_message_ids(), vec![message_id]);
-    assert!(realtime.rejections().is_empty());
+    assert_eq!(trace.events(), vec!["persist"]);
+    assert_eq!(
+        plan.effects,
+        vec![
+            RealtimeEffect::EmitMessageAccepted(created.clone()),
+            RealtimeEffect::BroadcastMessageCreated {
+                room_id,
+                payload: created.clone(),
+            },
+        ]
+    );
 }
 
 #[tokio::test]
@@ -129,14 +130,12 @@ async fn send_text_message_failure_emits_rejection_without_broadcast() {
     let session_id = Uuid::from_u128(32);
     let trace = TraceLog::default();
     let store = FakeMessageStore::new(trace.clone());
-    let realtime = FakeRealtimePort::new(trace);
 
-    let error = handle_send_text_message(
+    let plan = plan_send_text_message(
         SendTextMessageDeps {
             session_port: &FakeSessionPort::allow(),
             membership_port: &FakeMembershipPort::deny(),
             message_store: &store,
-            realtime: &realtime,
             id_generator: &FixedIdGenerator(Uuid::from_u128(33)),
             clock: &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
         },
@@ -147,22 +146,20 @@ async fn send_text_message_failure_emits_rejection_without_broadcast() {
             client_message_id: None,
         },
     )
-    .await
-    .unwrap_err();
+    .await;
 
     assert_eq!(
-        error,
-        AppError::NotRoomMember {
+        plan.result,
+        Err(AppError::NotRoomMember {
             room_id,
             session_id
-        }
+        })
     );
-    assert!(realtime.broadcast_room_ids().is_empty());
     assert_eq!(
-        realtime.rejections(),
-        vec![CommandRejected {
-            code: koko::contract::AppErrorCode::MembershipRequired,
-        }]
+        plan.effects,
+        vec![RealtimeEffect::EmitCommandRejected(CommandRejected {
+            code: koko::contract::AppErrorCode::MembershipRequired
+        })]
     );
 }
 
@@ -232,84 +229,6 @@ impl MessageStore for FakeMessageStore {
     async fn save_message(&self, message: Message) -> Result<Message, AppError> {
         self.trace.push("persist");
         Ok(message)
-    }
-}
-
-#[derive(Debug, Default)]
-struct FakeRealtimePort {
-    trace: TraceLog,
-    joined_room_ids: Mutex<Vec<Uuid>>,
-    subscribed_room_ids: Mutex<Vec<Uuid>>,
-    accepted_message_ids: Mutex<Vec<Uuid>>,
-    rejections: Mutex<Vec<CommandRejected>>,
-    room_ids: Mutex<Vec<Uuid>>,
-}
-
-impl FakeRealtimePort {
-    fn new(trace: TraceLog) -> Self {
-        Self {
-            trace,
-            joined_room_ids: Mutex::default(),
-            subscribed_room_ids: Mutex::default(),
-            accepted_message_ids: Mutex::default(),
-            rejections: Mutex::default(),
-            room_ids: Mutex::default(),
-        }
-    }
-
-    fn joined_room_ids(&self) -> Vec<Uuid> {
-        self.joined_room_ids.lock().unwrap().clone()
-    }
-
-    fn subscribed_room_ids(&self) -> Vec<Uuid> {
-        self.subscribed_room_ids.lock().unwrap().clone()
-    }
-
-    fn accepted_message_ids(&self) -> Vec<Uuid> {
-        self.accepted_message_ids.lock().unwrap().clone()
-    }
-
-    fn rejections(&self) -> Vec<CommandRejected> {
-        self.rejections.lock().unwrap().clone()
-    }
-
-    fn broadcast_room_ids(&self) -> Vec<Uuid> {
-        self.room_ids.lock().unwrap().clone()
-    }
-}
-
-impl RealtimePort for FakeRealtimePort {
-    async fn join_room(&self, room_id: Uuid) -> Result<(), AppError> {
-        self.joined_room_ids.lock().unwrap().push(room_id);
-        Ok(())
-    }
-
-    async fn emit_room_stream_subscribed(&self, room_id: Uuid) -> Result<(), AppError> {
-        self.subscribed_room_ids.lock().unwrap().push(room_id);
-        Ok(())
-    }
-
-    async fn emit_message_accepted(&self, payload: &MessageCreated) -> Result<(), AppError> {
-        self.accepted_message_ids
-            .lock()
-            .unwrap()
-            .push(payload.message_id);
-        Ok(())
-    }
-
-    async fn emit_command_rejected(&self, payload: &CommandRejected) -> Result<(), AppError> {
-        self.rejections.lock().unwrap().push(payload.clone());
-        Ok(())
-    }
-
-    async fn broadcast_message_created(
-        &self,
-        room_id: Uuid,
-        _payload: &MessageCreated,
-    ) -> Result<(), AppError> {
-        self.trace.push("broadcast");
-        self.room_ids.lock().unwrap().push(room_id);
-        Ok(())
     }
 }
 

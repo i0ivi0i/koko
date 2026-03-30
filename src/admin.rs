@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{contract::AdminOverview, view};
+use crate::contract::AdminOverview;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -39,21 +39,6 @@ impl AdminPanelState {
     pub fn new(overview: AdminOverview, rooms: Vec<AdminRoomSummary>) -> Self {
         Self { overview, rooms }
     }
-
-    pub fn preview() -> Self {
-        Self::new(
-            AdminOverview {
-                room_count: 3,
-                member_count: 18,
-                message_count: 42,
-            },
-            vec![
-                AdminRoomSummary::new("A1234", 12, 21, "hello admin"),
-                AdminRoomSummary::new("B1234", 4, 12, "moderation view"),
-                AdminRoomSummary::new("C1234", 2, 9, "room detail preview"),
-            ],
-        )
-    }
 }
 
 pub fn render_admin_panel(state: &AdminPanelState) -> String {
@@ -75,11 +60,18 @@ pub fn render_admin_panel(state: &AdminPanelState) -> String {
 }
 
 pub fn app() -> Element {
-    let state = AdminPanelState::preview();
-
     rsx! {
         Title { "koko admin" }
         Stylesheet { href: asset!("/assets/theme.css") }
-        view::AdminPanel { state: state }
+        div { class: "admin-shell",
+            header { class: "admin-shell__hero",
+                div { class: "admin-shell__eyebrow", "Koko admin" }
+                h1 { class: "admin-shell__title", "Read-only operations" }
+                p {
+                    class: "admin-shell__summary",
+                    "Admin read model wiring is pending. Render real data here instead of preview fixtures."
+                }
+            }
+        }
     }
 }

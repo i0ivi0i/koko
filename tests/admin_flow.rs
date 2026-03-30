@@ -34,6 +34,13 @@ fn admin_panel_renders_room_summary_and_member_count() {
     assert!(panel.contains("hello admin"));
 }
 
+#[test]
+fn admin_app_no_longer_boots_from_preview_state() {
+    let source = include_str!("../src/admin.rs");
+
+    assert!(!source.contains("AdminPanelState::preview()"));
+}
+
 #[tokio::test]
 async fn admin_overview_returns_room_member_and_message_counts() {
     let harness = HttpHarness::new("admin_overview_returns_room_member_and_message_counts").await;

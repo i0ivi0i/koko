@@ -1,6 +1,6 @@
 #[test]
 fn crate_exposes_expected_root_modules() {
-    use koko::{admin, app, chat, contract, domain, http, panel, rt, store, support, view, web};
+    use koko::{admin, app, chat, contract, domain, http, rt, store, support, view, web};
 
     let _ = std::any::type_name::<domain::Room>();
     let _ = std::any::type_name::<app::AppError>();
@@ -12,7 +12,6 @@ fn crate_exposes_expected_root_modules() {
     let _ = std::any::type_name::<chat::Module>();
     let _ = std::any::type_name::<view::Module>();
     let _ = std::any::type_name::<admin::Module>();
-    let _ = std::any::type_name::<panel::Module>();
     assert_eq!(support::app_name(), "koko");
 }
 
@@ -29,6 +28,14 @@ fn crate_source_gates_server_modules_away_from_wasm_builds() {
     assert!(main_source.contains("#[cfg(target_arch = \"wasm32\")]"));
     assert!(cargo_manifest.contains("[target.'cfg(not(target_arch = \"wasm32\"))'.dependencies]"));
     assert!(cargo_manifest.contains("[target.'cfg(target_arch = \"wasm32\")'.dependencies]"));
+}
+
+#[test]
+fn crate_root_does_not_keep_placeholder_modules() {
+    let lib_source = include_str!("../src/lib.rs");
+
+    assert!(!lib_source.contains("placeholder_module!"));
+    assert!(!lib_source.contains("pub mod panel"));
 }
 
 #[test]

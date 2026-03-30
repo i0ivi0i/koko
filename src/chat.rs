@@ -57,7 +57,7 @@ impl Default for ChatState {
 
 impl ChatState {
     pub fn awaiting_bootstrap() -> Self {
-        Self::new(Uuid::nil())
+        Self::default()
     }
 
     pub fn new(session_id: Uuid) -> Self {
