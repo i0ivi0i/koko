@@ -1,4 +1,5 @@
 pub mod support;
+pub mod domain;
 
 macro_rules! placeholder_module {
     ($name:ident) => {
@@ -9,7 +10,6 @@ macro_rules! placeholder_module {
     };
 }
 
-placeholder_module!(domain);
 placeholder_module!(app);
 placeholder_module!(contract);
 placeholder_module!(store);
