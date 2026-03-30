@@ -9,7 +9,6 @@ pub mod http;
 pub mod rt;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod store;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod support;
 pub mod view;
 pub mod web;

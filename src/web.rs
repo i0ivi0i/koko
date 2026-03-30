@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{chat::ChatState, contract::BootstrapSession, view};
+use crate::{chat::ChatState, contract::BootstrapSession, support, view};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -14,8 +14,10 @@ pub fn bootstrap_state(session: BootstrapSession) -> ChatState {
 }
 
 async fn load_bootstrap_session() -> Result<BootstrapSession, String> {
+    let url = support::resolve_api_url(&support::browser_location()?, BOOTSTRAP_PATH)?;
+
     reqwest::Client::new()
-        .post(BOOTSTRAP_PATH)
+        .post(url)
         .send()
         .await
         .map_err(|error| error.to_string())?

@@ -2,14 +2,19 @@ mod http_support;
 
 use axum::{
     body::{Body, to_bytes},
-    http::{Request, StatusCode, header::{COOKIE, SET_COOKIE}},
+    http::{
+        Request, StatusCode,
+        header::{COOKIE, SET_COOKIE},
+    },
 };
 use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
     admin::AdminPanelState,
     app::send_text_message,
-    contract::{AdminOverview, AdminPanelData, AdminRoomSummary, BootstrapSession, SendTextMessageCommand},
+    contract::{
+        AdminOverview, AdminPanelData, AdminRoomSummary, BootstrapSession, SendTextMessageCommand,
+    },
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -74,6 +79,8 @@ fn admin_app_loads_backend_panel_through_dioxus_resource() {
     assert!(source.contains("use_resource"));
     assert!(source.contains("load_admin_panel"));
     assert!(source.contains("/api/admin/panel"));
+    assert!(source.contains("resolve_api_url"));
+    assert!(!source.contains(".get(ADMIN_PANEL_PATH)"));
     assert!(!source.contains(".json::<AdminOverview>()"));
     assert!(!source.contains(".json::<Vec<AdminRoomSummary>>()"));
 }

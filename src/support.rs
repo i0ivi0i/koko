@@ -1,7 +1,11 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::{convert::Infallible, env, net::SocketAddr};
 
 use chrono::{DateTime, Utc};
+use reqwest::Url;
+#[cfg(not(target_arch = "wasm32"))]
 use thiserror::Error;
+#[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -11,11 +15,14 @@ use crate::{
 };
 
 pub const APP_NAME: &str = "koko";
+#[cfg(not(target_arch = "wasm32"))]
 pub const DEFAULT_TRACING_FILTER: &str = "info";
 pub const SESSION_COOKIE_NAME: &str = "koko_session";
 
+#[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:4000";
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub database_url: String,
@@ -23,6 +30,7 @@ pub struct AppConfig {
     pub admin_token: String,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("missing environment variable {0}")]
@@ -36,6 +44,7 @@ pub enum ConfigError {
     },
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TracingInit {
     Initialized,
@@ -66,6 +75,7 @@ pub fn admin_token_error_code() -> &'static str {
     "invalid_admin_token"
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
@@ -77,6 +87,39 @@ pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     };
 
     Ok(result)
+}
+
+pub fn resolve_api_url(browser_location: &str, contract_path: &str) -> Result<String, String> {
+    let browser_location = browser_location.trim();
+    if browser_location.is_empty() {
+        return Err("Browser location required".to_string());
+    }
+
+    let contract_path = contract_path.trim();
+    if contract_path.is_empty() {
+        return Err("Contract path required".to_string());
+    }
+
+    let base = Url::parse(browser_location).map_err(|error| error.to_string())?;
+    let resolved = base
+        .join(contract_path)
+        .map_err(|error| error.to_string())?;
+
+    Ok(resolved.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn browser_location() -> Result<String, String> {
+    web_sys::window()
+        .ok_or_else(|| "Browser window unavailable".to_string())?
+        .location()
+        .href()
+        .map_err(|error| format!("{error:?}"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn browser_location() -> Result<String, String> {
+    Err("Browser location unavailable on native target".to_string())
 }
 
 impl Clock for SystemClock {
@@ -91,6 +134,7 @@ impl IdGenerator for SystemIdGenerator {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AppConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         let database_url = env::var("KOKO_DATABASE_URL")

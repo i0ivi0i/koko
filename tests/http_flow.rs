@@ -2,7 +2,10 @@ mod http_support;
 
 use axum::{
     body::{Body, to_bytes},
-    http::{Request, StatusCode, header::{COOKIE, SET_COOKIE}},
+    http::{
+        Request, StatusCode,
+        header::{COOKIE, SET_COOKIE},
+    },
 };
 use http_support::HttpHarness;
 use koko::{
@@ -75,6 +78,14 @@ fn web_bootstrap_state_applies_backend_session_to_chat_state() {
 }
 
 #[test]
+fn support_resolves_api_path_against_browser_origin() {
+    let url = koko::support::resolve_api_url("https://example.com/app", "/api/session/bootstrap")
+        .expect("same-origin api path should resolve into an absolute URL");
+
+    assert_eq!(url, "https://example.com/api/session/bootstrap");
+}
+
+#[test]
 fn web_app_uses_bootstrap_state_bridge_in_its_shell() {
     let source = include_str!("../src/web.rs");
 
@@ -88,6 +99,8 @@ fn web_app_loads_bootstrap_session_through_dioxus_resource() {
 
     assert!(source.contains("use_resource"));
     assert!(source.contains("load_bootstrap_session"));
+    assert!(source.contains("resolve_api_url"));
+    assert!(!source.contains(".post(BOOTSTRAP_PATH)"));
 }
 
 #[test]
@@ -229,9 +242,12 @@ async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request() {
         .to_str()
         .unwrap()
         .to_string();
-    let first_session: BootstrapSession =
-        serde_json::from_slice(&to_bytes(first_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let first_session: BootstrapSession = serde_json::from_slice(
+        &to_bytes(first_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
 
     let cookie_value = first_set_cookie
         .split(';')
@@ -241,9 +257,12 @@ async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request() {
     let second_response = bootstrap_session_response(&harness, Some(cookie_value.as_str())).await;
     assert_eq!(second_response.status(), StatusCode::CREATED);
 
-    let second_session: BootstrapSession =
-        serde_json::from_slice(&to_bytes(second_response.into_body(), usize::MAX).await.unwrap())
-            .unwrap();
+    let second_session: BootstrapSession = serde_json::from_slice(
+        &to_bytes(second_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
 
     assert_eq!(second_session.session_id, first_session.session_id);
     harness.cleanup().await;
@@ -354,7 +373,9 @@ async fn bootstrap_session_response(
     harness: &HttpHarness,
     cookie: Option<&str>,
 ) -> axum::http::Response<Body> {
-    let mut request = Request::builder().method("POST").uri("/api/session/bootstrap");
+    let mut request = Request::builder()
+        .method("POST")
+        .uri("/api/session/bootstrap");
 
     if let Some(cookie) = cookie {
         request = request.header(COOKIE, cookie);
