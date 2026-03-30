@@ -20,6 +20,8 @@ pub fn App() -> Element {
     });
 
     rsx! {
+        Title { "koko" }
+        Stylesheet { href: asset!("/assets/theme.css") }
         div { class: "koko-web-shell",
             view::ChatPage { state: state() }
         }
