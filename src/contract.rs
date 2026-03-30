@@ -2,13 +2,22 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AppErrorCode {
+    InvalidSession,
+    MembershipRequired,
+    InvalidRoomCode,
+    InvalidMessageBody,
+    Internal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JoinOrCreateRoomByCodeCommand {
     pub room_code: String,
     pub session_id: Uuid,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadRoomSnapshotQuery {
     pub room_id: Uuid,
     pub session_id: Uuid,
@@ -29,7 +38,7 @@ pub struct RoomSnapshot {
     pub messages: Vec<MessageView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SendTextMessageCommand {
     pub room_id: Uuid,
     pub session_id: Uuid,

@@ -6,11 +6,13 @@ use uuid::Uuid;
 
 use crate::{
     contract::{
-        AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageCreated,
-        MessageView, RoomSnapshot, SendTextMessageCommand,
+        AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
+        MessageCreated, MessageView, RoomSnapshot, SendTextMessageCommand,
     },
     domain::{DomainError, Message, MessageBody, MessageStatus, RoomCode},
 };
+
+const ROOM_SNAPSHOT_LIMIT: usize = 50;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AppError {
@@ -18,10 +20,22 @@ pub enum AppError {
     SessionNotActive { session_id: Uuid },
     #[error("session {session_id} is not a member of room {room_id}")]
     NotRoomMember { room_id: Uuid, session_id: Uuid },
-    #[error("dependency failure in {dependency}")]
-    DependencyFailure { dependency: &'static str },
+    #[error("dependency failure")]
+    DependencyFailure,
     #[error(transparent)]
     Domain(#[from] DomainError),
+}
+
+impl AppError {
+    pub fn code(&self) -> AppErrorCode {
+        match self {
+            Self::SessionNotActive { .. } => AppErrorCode::InvalidSession,
+            Self::NotRoomMember { .. } => AppErrorCode::MembershipRequired,
+            Self::DependencyFailure => AppErrorCode::Internal,
+            Self::Domain(DomainError::InvalidRoomCode) => AppErrorCode::InvalidRoomCode,
+            Self::Domain(DomainError::EmptyMessageBody) => AppErrorCode::InvalidMessageBody,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,21 +64,22 @@ pub trait MessageStore {
     fn save_message(
         &self,
         message: Message,
-    ) -> impl Future<Output = Result<(), AppError>> + Send;
+    ) -> impl Future<Output = Result<Message, AppError>> + Send;
 }
 
-pub trait RoomEntryPort {
+pub trait RoomJoinPort {
     fn join_or_create_room_by_code(
         &self,
         room_code: RoomCode,
         session_id: Uuid,
-    ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
+    ) -> impl Future<Output = Result<Uuid, AppError>> + Send;
 }
 
 pub trait RoomSnapshotPort {
     fn load_room_snapshot(
         &self,
         room_id: Uuid,
+        limit: usize,
     ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
 }
 
@@ -116,26 +131,29 @@ where
         created_at,
         status: MessageStatus::Active,
     };
-    message_store.save_message(message.clone()).await?;
+    let persisted_message = message_store.save_message(message.clone()).await?;
+    ensure_persisted_message_matches(&message, &persisted_message)?;
 
     Ok(AppEvent::MessageCreated(MessageCreated {
-        message_id: message.message_id,
-        room_id: message.room_id,
-        session_id: message.sender_session_id,
-        body: message.body.as_str().to_string(),
-        created_at: message.created_at,
+        message_id: persisted_message.message_id,
+        room_id: persisted_message.room_id,
+        session_id: persisted_message.sender_session_id,
+        body: persisted_message.body.as_str().to_string(),
+        created_at: persisted_message.created_at,
         client_message_id: command.client_message_id,
     }))
 }
 
-pub async fn join_or_create_room_by_code<S, R>(
+pub async fn join_or_create_room_by_code<S, J, R>(
     session_port: &S,
-    room_entry_port: &R,
+    room_join_port: &J,
+    room_snapshot_port: &R,
     command: JoinOrCreateRoomByCodeCommand,
 ) -> Result<RoomSnapshot, AppError>
 where
     S: SessionPort,
-    R: RoomEntryPort,
+    J: RoomJoinPort,
+    R: RoomSnapshotPort,
 {
     if !session_port.is_active_session(command.session_id).await? {
         return Err(AppError::SessionNotActive {
@@ -144,9 +162,15 @@ where
     }
 
     let room_code = RoomCode::new(&command.room_code)?;
-    let snapshot = room_entry_port
+    let room_id = room_join_port
         .join_or_create_room_by_code(room_code, command.session_id)
         .await?;
+    let snapshot = room_snapshot_port
+        .load_room_snapshot(room_id, ROOM_SNAPSHOT_LIMIT)
+        .await?;
+    if snapshot.room_id != room_id {
+        return Err(AppError::DependencyFailure);
+    }
 
     Ok(build_room_snapshot(snapshot))
 }
@@ -178,7 +202,13 @@ where
         });
     }
 
-    let snapshot = room_snapshot_port.load_room_snapshot(query.room_id).await?;
+    let snapshot = room_snapshot_port
+        .load_room_snapshot(query.room_id, ROOM_SNAPSHOT_LIMIT)
+        .await?;
+    if snapshot.room_id != query.room_id {
+        return Err(AppError::DependencyFailure);
+    }
+
     Ok(build_room_snapshot(snapshot))
 }
 
@@ -196,5 +226,23 @@ fn build_room_snapshot(snapshot: RoomSnapshotData) -> RoomSnapshot {
                 created_at: message.created_at,
             })
             .collect(),
+    }
+}
+
+fn ensure_persisted_message_matches(
+    expected: &Message,
+    persisted: &Message,
+) -> Result<(), AppError> {
+    let matches = expected.message_id == persisted.message_id
+        && expected.room_id == persisted.room_id
+        && expected.sender_session_id == persisted.sender_session_id
+        && expected.body == persisted.body
+        && expected.created_at == persisted.created_at
+        && expected.status == persisted.status;
+
+    if matches {
+        Ok(())
+    } else {
+        Err(AppError::DependencyFailure)
     }
 }
