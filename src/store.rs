@@ -3,8 +3,12 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
-    app::{AppError, MembershipPort, MessageStore, RoomJoinPort, RoomSnapshotData, RoomSnapshotPort, SessionPort},
-    domain::{Message, MessageBody, MessageStatus, RoomCode},
+    app::{
+        AdminOverviewPort, AppError, MembershipPort, MessageStore, RoomJoinPort,
+        RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
+    },
+    contract::AdminOverview,
+    domain::{AnonymousSession, Message, MessageBody, MessageStatus, RoomCode, SessionStatus},
 };
 
 #[derive(Debug, Clone)]
@@ -35,6 +39,34 @@ impl SessionPort for PgStore {
         .map_err(map_sqlx_error)?;
 
         Ok(matches!(status.as_deref(), Some("active")))
+    }
+}
+
+impl SessionBootstrapPort for PgStore {
+    async fn save_session(&self, session: AnonymousSession) -> Result<AnonymousSession, AppError> {
+        let row = sqlx::query(
+            "INSERT INTO anonymous_sessions (session_id, issued_at, last_seen_at, status)
+             VALUES ($1, $2, $3, 'active')
+             RETURNING session_id, issued_at, last_seen_at, status",
+        )
+        .bind(session.session_id)
+        .bind(session.issued_at)
+        .bind(session.last_seen_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        let status = row.get::<String, _>("status");
+        if status != "active" {
+            return Err(AppError::DependencyFailure);
+        }
+
+        Ok(AnonymousSession {
+            session_id: row.get("session_id"),
+            issued_at: row.get("issued_at"),
+            last_seen_at: row.get("last_seen_at"),
+            status: SessionStatus::Active,
+        })
     }
 }
 
@@ -202,6 +234,26 @@ impl RoomSnapshotPort for PgStore {
             room_id,
             room_code,
             messages,
+        })
+    }
+}
+
+impl AdminOverviewPort for PgStore {
+    async fn get_admin_overview(&self) -> Result<AdminOverview, AppError> {
+        let row = sqlx::query(
+            "SELECT
+                 (SELECT COUNT(*) FROM rooms WHERE status = 'active') AS room_count,
+                 (SELECT COUNT(*) FROM members WHERE status = 'active') AS member_count,
+                 (SELECT COUNT(*) FROM messages WHERE status = 'active') AS message_count",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(AdminOverview {
+            room_count: row.get("room_count"),
+            member_count: row.get("member_count"),
+            message_count: row.get("message_count"),
         })
     }
 }

@@ -6,10 +6,13 @@ use uuid::Uuid;
 
 use crate::{
     contract::{
-        AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
-        MessageCreated, MessageView, RoomSnapshot, SendTextMessageCommand,
+        AdminOverview, AppErrorCode, AppEvent, BootstrapSession, JoinOrCreateRoomByCodeCommand,
+        LoadRoomSnapshotQuery, MessageCreated, MessageView, RoomSnapshot, SendTextMessageCommand,
     },
-    domain::{DomainError, Message, MessageBody, MessageStatus, RoomCode},
+    domain::{
+        AnonymousSession, DomainError, Message, MessageBody, MessageStatus, RoomCode,
+        SessionStatus,
+    },
 };
 
 const ROOM_SNAPSHOT_LIMIT: usize = 50;
@@ -52,6 +55,13 @@ pub trait SessionPort {
     ) -> impl Future<Output = Result<bool, AppError>> + Send;
 }
 
+pub trait SessionBootstrapPort {
+    fn save_session(
+        &self,
+        session: AnonymousSession,
+    ) -> impl Future<Output = Result<AnonymousSession, AppError>> + Send;
+}
+
 pub trait MembershipPort {
     fn is_room_member(
         &self,
@@ -84,12 +94,52 @@ pub trait RoomSnapshotPort {
     ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
 }
 
+pub trait AdminOverviewPort {
+    fn get_admin_overview(&self) -> impl Future<Output = Result<AdminOverview, AppError>> + Send;
+}
+
 pub trait IdGenerator {
     fn next_message_id(&self) -> Uuid;
 }
 
 pub trait Clock {
     fn now(&self) -> DateTime<Utc>;
+}
+
+pub async fn bootstrap_anonymous_session<P, C>(
+    session_bootstrap_port: &P,
+    clock: &C,
+    session_id: Uuid,
+) -> Result<BootstrapSession, AppError>
+where
+    P: SessionBootstrapPort,
+    C: Clock,
+{
+    let now = clock.now();
+    let session = AnonymousSession {
+        session_id,
+        issued_at: now,
+        last_seen_at: now,
+        status: SessionStatus::Active,
+    };
+    let persisted = session_bootstrap_port.save_session(session).await?;
+
+    if persisted.session_id != session_id || persisted.status != SessionStatus::Active {
+        return Err(AppError::DependencyFailure);
+    }
+
+    Ok(BootstrapSession {
+        session_id: persisted.session_id,
+        issued_at: persisted.issued_at,
+        last_seen_at: persisted.last_seen_at,
+    })
+}
+
+pub async fn get_admin_overview<P>(admin_overview_port: &P) -> Result<AdminOverview, AppError>
+where
+    P: AdminOverviewPort,
+{
+    admin_overview_port.get_admin_overview().await
 }
 
 pub async fn send_text_message<S, M, R, I, C>(

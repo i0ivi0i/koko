@@ -25,6 +25,20 @@ pub struct LoadRoomSnapshotQuery {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapSession {
+    pub session_id: Uuid,
+    pub issued_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminOverview {
+    pub room_count: i64,
+    pub member_count: i64,
+    pub message_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageView {
     pub message_id: Uuid,
     pub session_id: Uuid,
