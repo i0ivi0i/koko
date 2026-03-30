@@ -1,4 +1,6 @@
 use std::{
+    path::Path,
+    str::FromStr,
     env,
     sync::{
         Mutex, OnceLock,
@@ -20,7 +22,12 @@ use koko::{
     domain::{Message, MessageBody, MessageStatus, RoomCode},
     store::PgStore,
 };
-use sqlx::{PgPool, Row};
+use sqlx::{
+    Row,
+    migrate::Migrator,
+    postgres::{PgConnectOptions, PgPoolOptions},
+    PgPool,
+};
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
@@ -632,6 +639,81 @@ async fn repeated_join_does_not_duplicate_member_in_same_room() {
     assert_eq!(harness.member_count(first_snapshot.room_id, session_id).await, 1);
 }
 
+#[tokio::test]
+async fn send_text_message_rejects_non_member_sender_via_database_truth() {
+    let _guard = db_test_lock().lock().await;
+    let harness = PgHarness::new().await;
+    let session_id = Uuid::now_v7();
+    let room_id = Uuid::now_v7();
+    let room_code = unique_room_code('e');
+    harness.seed_active_session(session_id).await;
+    harness.seed_room_with_code(room_id, &room_code, 1).await;
+
+    let error = send_text_message(
+        &harness.store,
+        &FakeMembershipPort::allow(),
+        &harness.store,
+        &FakeIdGenerator::new(Uuid::now_v7()),
+        &FakeClock::new(fixed_time()),
+        SendTextMessageCommand {
+            room_id,
+            session_id,
+            body: "database truth".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::Internal);
+    assert_eq!(harness.message_count(room_id).await, 0);
+}
+
+#[tokio::test]
+async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version() {
+    let _guard = db_test_lock().lock().await;
+    let harness = PgHarness::new().await;
+    let session_id = Uuid::now_v7();
+    let normalized_code = unique_room_code('f');
+    let room_v1 = Uuid::now_v7();
+    let room_v2 = Uuid::now_v7();
+    harness.seed_active_session(session_id).await;
+    harness.seed_room_with_code(room_v1, &normalized_code, 1).await;
+    harness.seed_room_with_code(room_v2, &normalized_code, 2).await;
+
+    let mut requested_room_code = RoomCode::new(&normalized_code).unwrap();
+    requested_room_code.code_version = 2;
+    let joined = harness
+        .store
+        .join_or_create_room_by_code(requested_room_code.clone(), 50, session_id)
+        .await
+        .unwrap();
+
+    assert_eq!(joined.room_id, room_v2);
+    assert_eq!(joined.room_code.code_version, 2);
+    assert_eq!(harness.member_count(room_v2, session_id).await, 1);
+
+    let snapshot = harness.store.load_room_snapshot(room_v2, 50).await.unwrap();
+
+    assert_eq!(snapshot.room_id, room_v2);
+    assert_eq!(snapshot.room_code.normalized(), normalized_code);
+    assert_eq!(snapshot.room_code.code_version, 2);
+}
+
+#[test]
+fn destructive_reset_rejects_non_test_database_names() {
+    let error = validated_test_database_url(Some(
+        "postgres://koko:koko_local@127.0.0.1:5432/koko_stage1",
+    ))
+    .unwrap_err();
+
+    assert!(error.contains("_test"));
+    assert_eq!(
+        validated_test_database_url(Some(DEFAULT_TEST_DATABASE_URL)).unwrap(),
+        DEFAULT_TEST_DATABASE_URL
+    );
+}
+
 #[derive(Debug)]
 struct FakeSessionPort {
     allowed: bool,
@@ -905,11 +987,17 @@ struct PgHarness {
 
 impl PgHarness {
     async fn new() -> Self {
-        let database_url = env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://koko:koko_local@127.0.0.1:5432/koko_stage1".to_string());
-        let pool = PgPool::connect(&database_url).await.unwrap();
-        ensure_schema(&pool).await;
-        reset_truth_tables(&pool).await;
+        let database_url = validated_test_database_url(
+            env::var("KOKO_TEST_DATABASE_URL").ok().as_deref(),
+        )
+        .unwrap();
+        reset_test_database(&database_url).await;
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url)
+            .await
+            .unwrap();
+        run_migrations(&pool).await;
 
         Self {
             store: PgStore::new(pool.clone()),
@@ -931,9 +1019,50 @@ impl PgHarness {
         .unwrap();
     }
 
+    async fn seed_room_with_code(&self, room_id: Uuid, room_code: &str, code_version: u16) {
+        let now = Utc::now();
+        sqlx::query(
+            "INSERT INTO rooms (room_id, created_at, status)
+             VALUES ($1, $2, 'active')",
+        )
+        .bind(room_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO room_codes (
+                 room_code_id,
+                 room_id,
+                 original_code,
+                 normalized_code,
+                 code_version,
+                 created_at
+             )
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(room_id)
+        .bind(room_code)
+        .bind(RoomCode::new(room_code).unwrap().normalized())
+        .bind(i16::try_from(code_version).unwrap())
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .unwrap();
+    }
+
     async fn room_id_by_code(&self, room_code: &str) -> Uuid {
-        sqlx::query("SELECT room_id FROM room_codes WHERE normalized_code = $1")
-            .bind(RoomCode::new(room_code).unwrap().normalized())
+        let room_code = RoomCode::new(room_code).unwrap();
+        sqlx::query(
+            "SELECT room_id
+             FROM room_codes
+             WHERE normalized_code = $1
+               AND code_version = $2",
+        )
+            .bind(room_code.normalized())
+            .bind(i16::try_from(room_code.code_version).unwrap())
             .fetch_one(&self.pool)
             .await
             .unwrap()
@@ -954,6 +1083,19 @@ impl PgHarness {
         .get("member_count")
     }
 
+    async fn message_count(&self, room_id: Uuid) -> i64 {
+        sqlx::query(
+            "SELECT COUNT(*) AS message_count
+             FROM messages
+             WHERE room_id = $1",
+        )
+        .bind(room_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap()
+        .get("message_count")
+    }
+
     async fn message_bodies(&self, room_id: Uuid) -> Vec<String> {
         sqlx::query(
             "SELECT body
@@ -971,23 +1113,93 @@ impl PgHarness {
     }
 }
 
-async fn ensure_schema(pool: &PgPool) {
-    for statement in include_str!("../migrations/0001_init.sql")
-        .split(';')
-        .map(|statement: &str| statement.trim())
-        .filter(|statement: &&str| !statement.is_empty())
-    {
-        sqlx::query(statement).execute(pool).await.unwrap();
+fn validated_test_database_url(raw_url: Option<&str>) -> Result<String, String> {
+    let database_url = raw_url.unwrap_or(DEFAULT_TEST_DATABASE_URL).to_string();
+    let options = PgConnectOptions::from_str(&database_url)
+        .map_err(|error| format!("failed to parse test database url: {error}"))?;
+    let database_name = options
+        .get_database()
+        .ok_or_else(|| "test database url must include a database name".to_string())?;
+
+    if !database_name.ends_with("_test") {
+        return Err(format!(
+            "destructive test reset only allows databases ending with _test, got `{database_name}`"
+        ));
     }
+
+    if !database_name
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    {
+        return Err(format!(
+            "test database name `{database_name}` must use lowercase ascii letters, digits, or underscores"
+        ));
+    }
+
+    Ok(database_url)
 }
 
-async fn reset_truth_tables(pool: &PgPool) {
+async fn reset_test_database(database_url: &str) {
+    let options = PgConnectOptions::from_str(database_url).unwrap();
+    let database_name = options.get_database().unwrap().to_string();
+    let database_user = options.get_username().to_string();
+    let admin_url = env::var("KOKO_TEST_ADMIN_DATABASE_URL")
+        .unwrap_or_else(|_| DEFAULT_TEST_ADMIN_DATABASE_URL.to_string());
+    let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(admin_options.clone())
+        .await
+        .unwrap();
+
     sqlx::query(
-        "TRUNCATE TABLE messages, members, room_codes, rooms, anonymous_sessions RESTART IDENTITY CASCADE",
+        "SELECT pg_terminate_backend(pid)
+         FROM pg_stat_activity
+         WHERE datname = $1
+           AND pid <> pg_backend_pid()",
     )
-    .execute(pool)
+    .bind(&database_name)
+    .execute(&admin_pool)
     .await
     .unwrap();
+
+    sqlx::query(&format!("DROP DATABASE IF EXISTS \"{database_name}\""))
+    .execute(&admin_pool)
+    .await
+    .unwrap();
+
+    sqlx::query(&format!(
+        "CREATE DATABASE \"{database_name}\" OWNER \"{database_user}\""
+    ))
+    .execute(&admin_pool)
+    .await
+    .unwrap();
+
+    let test_database_admin_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(admin_options.database(&database_name))
+        .await
+        .unwrap();
+
+    sqlx::query(&format!(
+        "ALTER SCHEMA public OWNER TO \"{database_user}\""
+    ))
+    .execute(&test_database_admin_pool)
+    .await
+    .unwrap();
+
+    sqlx::query(&format!(
+        "GRANT ALL ON SCHEMA public TO \"{database_user}\""
+    ))
+    .execute(&test_database_admin_pool)
+    .await
+    .unwrap();
+}
+
+async fn run_migrations(pool: &PgPool) {
+    let migration_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let migrator = Migrator::new(migration_dir.as_path()).await.unwrap();
+    migrator.run(pool).await.unwrap();
 }
 
 fn unique_room_code(letter: char) -> String {
@@ -1001,3 +1213,6 @@ fn db_test_lock() -> &'static AsyncMutex<()> {
 
 static DB_TEST_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
 static ROOM_CODE_SEQUENCE: AtomicUsize = AtomicUsize::new(1_000);
+const DEFAULT_TEST_DATABASE_URL: &str = "postgres://koko:koko_local@127.0.0.1:5432/koko_test";
+const DEFAULT_TEST_ADMIN_DATABASE_URL: &str =
+    "postgres://postgres:postgres@127.0.0.1:5432/postgres";

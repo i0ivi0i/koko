@@ -104,9 +104,11 @@ impl RoomJoinPort for PgStore {
         let room_id = match sqlx::query_scalar(
             "SELECT room_id
              FROM room_codes
-             WHERE normalized_code = $1",
+             WHERE normalized_code = $1
+               AND code_version = $2",
         )
         .bind(room_code.normalized())
+        .bind(i16::try_from(room_code.code_version).map_err(|_| AppError::DependencyFailure)?)
         .fetch_optional(&mut *tx)
         .await
         .map_err(map_sqlx_error)?
@@ -179,8 +181,8 @@ impl RoomSnapshotPort for PgStore {
         room_id: Uuid,
         limit: usize,
     ) -> Result<RoomSnapshotData, AppError> {
-        let normalized_code: Option<String> = sqlx::query_scalar(
-            "SELECT normalized_code
+        let row = sqlx::query(
+            "SELECT normalized_code, code_version
              FROM room_codes
              WHERE room_id = $1
              LIMIT 1",
@@ -189,12 +191,11 @@ impl RoomSnapshotPort for PgStore {
         .fetch_optional(&self.pool)
         .await
         .map_err(map_sqlx_error)?;
-        let room_code = RoomCode::new(
-            normalized_code
-                .as_deref()
-                .ok_or(AppError::DependencyFailure)?,
-        )
-        .map_err(|_| AppError::DependencyFailure)?;
+        let row = row.ok_or(AppError::DependencyFailure)?;
+        let room_code = map_room_code(
+            row.get::<String, _>("normalized_code"),
+            row.get::<i16, _>("code_version"),
+        )?;
         let messages = load_recent_messages(&self.pool, room_id, limit).await?;
 
         Ok(RoomSnapshotData {
@@ -233,6 +234,12 @@ where
     .map_err(map_sqlx_error)?;
 
     rows.into_iter().map(|row| map_message_row(&row)).collect()
+}
+
+fn map_room_code(normalized_code: String, code_version: i16) -> Result<RoomCode, AppError> {
+    let mut room_code = RoomCode::new(&normalized_code).map_err(|_| AppError::DependencyFailure)?;
+    room_code.code_version = u16::try_from(code_version).map_err(|_| AppError::DependencyFailure)?;
+    Ok(room_code)
 }
 
 fn map_message_row(row: &sqlx::postgres::PgRow) -> Result<Message, AppError> {

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS room_codes (
     code_version SMALLINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_room_codes_room UNIQUE (room_id),
-    CONSTRAINT uq_room_codes_normalized_code UNIQUE (normalized_code)
+    CONSTRAINT uq_room_codes_normalized_code_version UNIQUE (normalized_code, code_version)
 );
 
 CREATE TABLE IF NOT EXISTS members (
@@ -34,20 +34,14 @@ CREATE TABLE IF NOT EXISTS members (
 CREATE TABLE IF NOT EXISTS messages (
     message_id UUID PRIMARY KEY,
     room_id UUID NOT NULL REFERENCES rooms(room_id) ON DELETE CASCADE,
-    sender_session_id UUID NOT NULL REFERENCES anonymous_sessions(session_id) ON DELETE CASCADE,
+    sender_session_id UUID NOT NULL,
     body TEXT NOT NULL CHECK (BTRIM(body) <> ''),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    status TEXT NOT NULL CHECK (status = 'active')
+    status TEXT NOT NULL CHECK (status = 'active'),
+    CONSTRAINT fk_messages_member_sender
+        FOREIGN KEY (room_id, sender_session_id)
+        REFERENCES members(room_id, session_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_room_codes_normalized_code
-    ON room_codes(normalized_code);
-
-CREATE INDEX IF NOT EXISTS idx_members_room_session
-    ON members(room_id, session_id);
-
-CREATE INDEX IF NOT EXISTS idx_members_session
-    ON members(session_id);
 
 CREATE INDEX IF NOT EXISTS idx_messages_room_created_at
     ON messages(room_id, created_at DESC, message_id DESC);
