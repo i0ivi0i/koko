@@ -56,6 +56,10 @@ impl Default for ChatState {
 }
 
 impl ChatState {
+    pub fn awaiting_bootstrap() -> Self {
+        Self::new(Uuid::nil())
+    }
+
     pub fn new(session_id: Uuid) -> Self {
         Self {
             session_id,

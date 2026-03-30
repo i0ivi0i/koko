@@ -6,10 +6,15 @@ use crate::{chat::ChatState, view};
 pub struct Module;
 
 pub const THEME_PATH: &str = "/assets/theme.css";
+pub const BOOTSTRAP_PATH: &str = "/api/session/bootstrap";
+
+fn bootstrapping_state() -> ChatState {
+    ChatState::awaiting_bootstrap()
+}
 
 #[component]
 pub fn App() -> Element {
-    let state = use_signal(ChatState::default);
+    let state = use_signal(bootstrapping_state);
 
     rsx! {
         Title { "koko" }

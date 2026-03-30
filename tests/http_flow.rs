@@ -50,6 +50,18 @@ fn web_shell_does_not_fake_joined_state_or_require_bridge_stub() {
     assert_eq!(ChatState::default().connection(), ConnectionState::Offline);
 }
 
+#[test]
+fn web_shell_does_not_bootstrap_from_local_default_state() {
+    let source = include_str!("../src/web.rs");
+
+    assert!(!source.contains("ChatState::default"));
+    assert!(
+        source.contains("bootstrap_session")
+            || source.contains("bootstrap_anonymous_session")
+            || source.contains("/api/session/bootstrap")
+    );
+}
+
 #[tokio::test]
 async fn bootstrap_then_join_returns_room_snapshot() {
     let harness = HttpHarness::new("bootstrap_then_join_returns_room_snapshot").await;
