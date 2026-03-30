@@ -1,0 +1,99 @@
+.tg-shell {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #eef4fb 0%, #dfe9f5 100%);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  font-family: "SF Pro Display", "Segoe UI", sans-serif;
+  color: #132033;
+}
+
+.tg-nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(18px);
+}
+
+.tg-nav__back,
+.tg-nav__meta,
+.tg-bubble__meta {
+  font-size: 12px;
+  color: #6a7b93;
+}
+
+.tg-nav__name {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tg-nav__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: #3f8cff;
+  color: #fff;
+  font-weight: 700;
+}
+
+.tg-thread {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.tg-bubble {
+  max-width: min(78%, 420px);
+  padding: 10px 14px;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(31, 52, 88, 0.08);
+}
+
+.tg-bubble--pending {
+  background: #fff7d6;
+}
+
+.tg-bubble--confirmed {
+  margin-left: auto;
+  background: #ffffff;
+}
+
+.tg-bubble--rejected {
+  background: #ffe1e1;
+}
+
+.tg-bubble__body {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.tg-compose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 14px 16px 24px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.tg-compose__field {
+  min-height: 48px;
+  border-radius: 24px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  color: #8da0b8;
+}
+
+.tg-compose__send {
+  min-width: 72px;
+  border: none;
+  border-radius: 24px;
+  background: #2f8cff;
+  color: #fff;
+  font-weight: 700;
+}

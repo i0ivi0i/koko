@@ -5,9 +5,40 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_support::HttpHarness;
-use koko::contract::{BootstrapSession, RoomSnapshot};
+use koko::{
+    chat::{ChatState, DeliveryState},
+    contract::{BootstrapSession, MessageCreated, RoomSnapshot},
+};
 use std::env;
 use tower::ServiceExt;
+use uuid::Uuid;
+
+#[test]
+fn web_state_promotes_pending_message_only_after_server_confirmation() {
+    let mut state = ChatState::default();
+    let room_id = Uuid::from_u128(90);
+    let session_id = Uuid::from_u128(91);
+    let pending_id = state.enqueue_pending(room_id, session_id, " hello koko ");
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Pending);
+    assert_eq!(state.messages()[0].body, "hello koko");
+    assert!(state.confirmed_messages().is_empty());
+
+    state.confirm_message(MessageCreated {
+        message_id: Uuid::from_u128(92),
+        room_id,
+        session_id,
+        body: "hello koko".to_string(),
+        created_at: chrono::Utc::now(),
+        client_message_id: Some(pending_id),
+    });
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Confirmed);
+    assert_eq!(state.messages()[0].message_id, Some(Uuid::from_u128(92)));
+    assert_eq!(state.confirmed_messages().len(), 1);
+}
 
 #[tokio::test]
 async fn bootstrap_then_join_returns_room_snapshot() {
