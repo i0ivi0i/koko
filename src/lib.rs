@@ -4,6 +4,7 @@ pub mod app;
 pub mod contract;
 pub mod store;
 pub mod http;
+pub mod rt;
 
 macro_rules! placeholder_module {
     ($name:ident) => {
@@ -14,7 +15,6 @@ macro_rules! placeholder_module {
     };
 }
 
-placeholder_module!(rt);
 placeholder_module!(web);
 placeholder_module!(chat);
 placeholder_module!(view);

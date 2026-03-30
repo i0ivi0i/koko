@@ -18,6 +18,12 @@ pub struct JoinOrCreateRoomByCodeCommand {
     pub session_id: Uuid,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubscribeRoomStreamCommand {
+    pub room_id: Uuid,
+    pub session_id: Uuid,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadRoomSnapshotQuery {
     pub room_id: Uuid,
@@ -53,7 +59,7 @@ pub struct RoomSnapshot {
     pub messages: Vec<MessageView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SendTextMessageCommand {
     pub room_id: Uuid,
     pub session_id: Uuid,
