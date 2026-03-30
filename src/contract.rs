@@ -3,6 +3,33 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JoinOrCreateRoomByCodeCommand {
+    pub room_code: String,
+    pub session_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoadRoomSnapshotQuery {
+    pub room_id: Uuid,
+    pub session_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageView {
+    pub message_id: Uuid,
+    pub session_id: Uuid,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoomSnapshot {
+    pub room_id: Uuid,
+    pub room_code: String,
+    pub messages: Vec<MessageView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SendTextMessageCommand {
     pub room_id: Uuid,
     pub session_id: Uuid,

@@ -5,8 +5,11 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    contract::{AppEvent, MessageCreated, SendTextMessageCommand},
-    domain::{DomainError, Message, MessageBody, MessageStatus},
+    contract::{
+        AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageCreated,
+        MessageView, RoomSnapshot, SendTextMessageCommand,
+    },
+    domain::{DomainError, Message, MessageBody, MessageStatus, RoomCode},
 };
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -15,8 +18,17 @@ pub enum AppError {
     SessionNotActive { session_id: Uuid },
     #[error("session {session_id} is not a member of room {room_id}")]
     NotRoomMember { room_id: Uuid, session_id: Uuid },
+    #[error("dependency failure in {dependency}")]
+    DependencyFailure { dependency: &'static str },
     #[error(transparent)]
     Domain(#[from] DomainError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoomSnapshotData {
+    pub room_id: Uuid,
+    pub room_code: RoomCode,
+    pub messages: Vec<Message>,
 }
 
 pub trait SessionPort {
@@ -38,7 +50,22 @@ pub trait MessageStore {
     fn save_message(
         &self,
         message: Message,
-    ) -> impl Future<Output = Result<Message, AppError>> + Send;
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
+}
+
+pub trait RoomEntryPort {
+    fn join_or_create_room_by_code(
+        &self,
+        room_code: RoomCode,
+        session_id: Uuid,
+    ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
+}
+
+pub trait RoomSnapshotPort {
+    fn load_room_snapshot(
+        &self,
+        room_id: Uuid,
+    ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
 }
 
 pub trait IdGenerator {
@@ -89,14 +116,85 @@ where
         created_at,
         status: MessageStatus::Active,
     };
-    let saved_message = message_store.save_message(message).await?;
+    message_store.save_message(message.clone()).await?;
 
     Ok(AppEvent::MessageCreated(MessageCreated {
-        message_id: saved_message.message_id,
-        room_id: saved_message.room_id,
-        session_id: saved_message.sender_session_id,
-        body: saved_message.body.as_str().to_string(),
-        created_at: saved_message.created_at,
+        message_id: message.message_id,
+        room_id: message.room_id,
+        session_id: message.sender_session_id,
+        body: message.body.as_str().to_string(),
+        created_at: message.created_at,
         client_message_id: command.client_message_id,
     }))
+}
+
+pub async fn join_or_create_room_by_code<S, R>(
+    session_port: &S,
+    room_entry_port: &R,
+    command: JoinOrCreateRoomByCodeCommand,
+) -> Result<RoomSnapshot, AppError>
+where
+    S: SessionPort,
+    R: RoomEntryPort,
+{
+    if !session_port.is_active_session(command.session_id).await? {
+        return Err(AppError::SessionNotActive {
+            session_id: command.session_id,
+        });
+    }
+
+    let room_code = RoomCode::new(&command.room_code)?;
+    let snapshot = room_entry_port
+        .join_or_create_room_by_code(room_code, command.session_id)
+        .await?;
+
+    Ok(build_room_snapshot(snapshot))
+}
+
+pub async fn load_room_snapshot<S, M, R>(
+    session_port: &S,
+    membership_port: &M,
+    room_snapshot_port: &R,
+    query: LoadRoomSnapshotQuery,
+) -> Result<RoomSnapshot, AppError>
+where
+    S: SessionPort,
+    M: MembershipPort,
+    R: RoomSnapshotPort,
+{
+    if !session_port.is_active_session(query.session_id).await? {
+        return Err(AppError::SessionNotActive {
+            session_id: query.session_id,
+        });
+    }
+
+    if !membership_port
+        .is_room_member(query.room_id, query.session_id)
+        .await?
+    {
+        return Err(AppError::NotRoomMember {
+            room_id: query.room_id,
+            session_id: query.session_id,
+        });
+    }
+
+    let snapshot = room_snapshot_port.load_room_snapshot(query.room_id).await?;
+    Ok(build_room_snapshot(snapshot))
+}
+
+fn build_room_snapshot(snapshot: RoomSnapshotData) -> RoomSnapshot {
+    RoomSnapshot {
+        room_id: snapshot.room_id,
+        room_code: snapshot.room_code.normalized().to_string(),
+        messages: snapshot
+            .messages
+            .into_iter()
+            .map(|message| MessageView {
+                message_id: message.message_id,
+                session_id: message.sender_session_id,
+                body: message.body.as_str().to_string(),
+                created_at: message.created_at,
+            })
+            .collect(),
+    }
 }
