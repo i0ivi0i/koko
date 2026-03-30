@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     contract::{AdminOverview, AdminPanelData, AdminRoomSummary},
-    support, view,
+    view, web,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,7 +33,7 @@ async fn load_admin_panel(admin_token: String) -> Result<AdminPanelState, String
     }
 
     let client = reqwest::Client::new();
-    let url = support::resolve_api_url(&support::browser_location()?, ADMIN_PANEL_PATH)?;
+    let url = web::resolve_shell_api_url(&web::browser_location()?, ADMIN_PANEL_PATH)?;
     let panel = client
         .get(url)
         .header("x-admin-token", admin_token)

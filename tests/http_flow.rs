@@ -78,14 +78,6 @@ fn web_bootstrap_state_applies_backend_session_to_chat_state() {
 }
 
 #[test]
-fn support_resolves_api_path_against_browser_origin() {
-    let url = koko::support::resolve_api_url("https://example.com/app", "/api/session/bootstrap")
-        .expect("same-origin api path should resolve into an absolute URL");
-
-    assert_eq!(url, "https://example.com/api/session/bootstrap");
-}
-
-#[test]
 fn web_app_uses_bootstrap_state_bridge_in_its_shell() {
     let source = include_str!("../src/web.rs");
 
@@ -99,7 +91,7 @@ fn web_app_loads_bootstrap_session_through_dioxus_resource() {
 
     assert!(source.contains("use_resource"));
     assert!(source.contains("load_bootstrap_session"));
-    assert!(source.contains("resolve_api_url"));
+    assert!(source.contains("resolve_shell_api_url"));
     assert!(!source.contains(".post(BOOTSTRAP_PATH)"));
 }
 

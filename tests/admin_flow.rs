@@ -79,7 +79,7 @@ fn admin_app_loads_backend_panel_through_dioxus_resource() {
     assert!(source.contains("use_resource"));
     assert!(source.contains("load_admin_panel"));
     assert!(source.contains("/api/admin/panel"));
-    assert!(source.contains("resolve_api_url"));
+    assert!(source.contains("resolve_shell_api_url"));
     assert!(!source.contains(".get(ADMIN_PANEL_PATH)"));
     assert!(!source.contains(".json::<AdminOverview>()"));
     assert!(!source.contains(".json::<Vec<AdminRoomSummary>>()"));

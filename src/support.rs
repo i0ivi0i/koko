@@ -2,7 +2,6 @@
 use std::{convert::Infallible, env, net::SocketAddr};
 
 use chrono::{DateTime, Utc};
-use reqwest::Url;
 #[cfg(not(target_arch = "wasm32"))]
 use thiserror::Error;
 #[cfg(not(target_arch = "wasm32"))]
@@ -87,39 +86,6 @@ pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     };
 
     Ok(result)
-}
-
-pub fn resolve_api_url(browser_location: &str, contract_path: &str) -> Result<String, String> {
-    let browser_location = browser_location.trim();
-    if browser_location.is_empty() {
-        return Err("Browser location required".to_string());
-    }
-
-    let contract_path = contract_path.trim();
-    if contract_path.is_empty() {
-        return Err("Contract path required".to_string());
-    }
-
-    let base = Url::parse(browser_location).map_err(|error| error.to_string())?;
-    let resolved = base
-        .join(contract_path)
-        .map_err(|error| error.to_string())?;
-
-    Ok(resolved.to_string())
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn browser_location() -> Result<String, String> {
-    web_sys::window()
-        .ok_or_else(|| "Browser window unavailable".to_string())?
-        .location()
-        .href()
-        .map_err(|error| format!("{error:?}"))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn browser_location() -> Result<String, String> {
-    Err("Browser location unavailable on native target".to_string())
 }
 
 impl Clock for SystemClock {

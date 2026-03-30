@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
+use reqwest::Url;
 
-use crate::{chat::ChatState, contract::BootstrapSession, support, view};
+use crate::{chat::ChatState, contract::BootstrapSession, view};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -13,8 +14,44 @@ pub fn bootstrap_state(session: BootstrapSession) -> ChatState {
     state
 }
 
+pub(crate) fn resolve_shell_api_url(
+    browser_location: &str,
+    contract_path: &str,
+) -> Result<String, String> {
+    let browser_location = browser_location.trim();
+    if browser_location.is_empty() {
+        return Err("Browser location required".to_string());
+    }
+
+    let contract_path = contract_path.trim();
+    if contract_path.is_empty() {
+        return Err("Contract path required".to_string());
+    }
+
+    let base = Url::parse(browser_location).map_err(|error| error.to_string())?;
+    let resolved = base
+        .join(contract_path)
+        .map_err(|error| error.to_string())?;
+
+    Ok(resolved.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn browser_location() -> Result<String, String> {
+    web_sys::window()
+        .ok_or_else(|| "Browser window unavailable".to_string())?
+        .location()
+        .href()
+        .map_err(|error| format!("{error:?}"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn browser_location() -> Result<String, String> {
+    Err("Browser location unavailable on native target".to_string())
+}
+
 async fn load_bootstrap_session() -> Result<BootstrapSession, String> {
-    let url = support::resolve_api_url(&support::browser_location()?, BOOTSTRAP_PATH)?;
+    let url = resolve_shell_api_url(&browser_location()?, BOOTSTRAP_PATH)?;
 
     reqwest::Client::new()
         .post(url)
@@ -62,4 +99,17 @@ pub fn App() -> Element {
 
 pub fn app() -> Element {
     rsx! { App {} }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_shell_api_url;
+
+    #[test]
+    fn resolve_shell_api_url_joins_same_origin_contract_path() {
+        let url = resolve_shell_api_url("https://example.com/app", "/api/session/bootstrap")
+            .expect("same-origin api path should resolve into an absolute URL");
+
+        assert_eq!(url, "https://example.com/api/session/bootstrap");
+    }
 }
