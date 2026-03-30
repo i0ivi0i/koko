@@ -23,6 +23,24 @@ fn app_error_code_serializes_to_stable_wire_value() {
     );
 }
 
+#[test]
+fn app_event_serializes_to_tagged_wire_format() {
+    let json = serde_json::to_string(&AppEvent::MessageCreated(koko::contract::MessageCreated {
+        message_id: Uuid::from_u128(1),
+        room_id: Uuid::from_u128(2),
+        session_id: Uuid::from_u128(3),
+        body: "hello".to_string(),
+        created_at: fixed_time(),
+        client_message_id: Some(Uuid::from_u128(4)),
+    }))
+    .unwrap();
+
+    assert_eq!(
+        json,
+        "{\"type\":\"message_created\",\"payload\":{\"message_id\":\"00000000-0000-0000-0000-000000000001\",\"room_id\":\"00000000-0000-0000-0000-000000000002\",\"session_id\":\"00000000-0000-0000-0000-000000000003\",\"body\":\"hello\",\"created_at\":\"2026-03-30T12:00:00Z\",\"client_message_id\":\"00000000-0000-0000-0000-000000000004\"}}"
+    );
+}
+
 #[tokio::test]
 async fn send_text_message_returns_message_created_event() {
     let room_id = Uuid::from_u128(1);
@@ -164,8 +182,7 @@ async fn send_text_message_rejects_empty_body() {
 async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     let session_id = Uuid::from_u128(31);
     let room_id = Uuid::from_u128(32);
-    let join_port = FakeRoomJoinPort::new(room_id);
-    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
+    let join_port = FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
         room_id,
         "A1234",
         vec![sample_message(Uuid::from_u128(33), room_id, session_id, "hello")],
@@ -174,7 +191,6 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     let snapshot = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
         &join_port,
-        &snapshot_port,
         JoinOrCreateRoomByCodeCommand {
             room_code: "a1234".to_string(),
             session_id,
@@ -184,7 +200,7 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     .unwrap();
 
     assert_eq!(join_port.requested_codes(), vec!["A1234".to_string()]);
-    assert_eq!(snapshot_port.requested_limits(), vec![50]);
+    assert_eq!(join_port.requested_limits(), vec![50]);
     assert_eq!(snapshot, expected_snapshot(room_id, session_id, "hello"));
 }
 
@@ -192,8 +208,7 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
 async fn join_or_create_room_by_code_rejects_invalid_room_code() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
-        &FakeRoomJoinPort::new(Uuid::from_u128(36)),
-        &FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
+        &FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
             Uuid::from_u128(36),
             "A1234",
             vec![],
@@ -212,8 +227,7 @@ async fn join_or_create_room_by_code_rejects_invalid_room_code() {
 #[tokio::test]
 async fn join_or_create_room_by_code_rejects_inactive_session() {
     let session_id = Uuid::from_u128(34);
-    let join_port = FakeRoomJoinPort::new(Uuid::from_u128(35));
-    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
+    let join_port = FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
         Uuid::from_u128(35),
         "A1234",
         vec![],
@@ -222,7 +236,6 @@ async fn join_or_create_room_by_code_rejects_inactive_session() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::deny(),
         &join_port,
-        &snapshot_port,
         JoinOrCreateRoomByCodeCommand {
             room_code: "a1234".to_string(),
             session_id,
@@ -233,7 +246,7 @@ async fn join_or_create_room_by_code_rejects_inactive_session() {
 
     assert_eq!(error.code(), AppErrorCode::InvalidSession);
     assert!(join_port.requested_codes().is_empty());
-    assert!(snapshot_port.requested_limits().is_empty());
+    assert!(join_port.requested_limits().is_empty());
 }
 
 #[tokio::test]
@@ -263,19 +276,21 @@ async fn load_room_snapshot_returns_messages_for_member() {
 }
 
 #[tokio::test]
-async fn load_room_snapshot_truncates_to_latest_fifty_messages() {
+async fn load_room_snapshot_sorts_and_truncates_to_latest_fifty_messages() {
     let room_id = Uuid::from_u128(430);
     let session_id = Uuid::from_u128(431);
-    let messages = (0..55)
+    let mut messages: Vec<_> = (0..55)
         .map(|index| {
-            sample_message(
+            sample_message_at(
                 Uuid::from_u128(500 + index),
                 room_id,
                 session_id,
                 &format!("message {index}"),
+                index,
             )
         })
         .collect();
+    messages.reverse();
     let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
         room_id,
         "A1234",
@@ -494,20 +509,26 @@ impl MessageStore for FakeMessageStore {
 
 #[derive(Debug)]
 struct FakeRoomJoinPort {
-    room_id: Uuid,
+    snapshot: RoomSnapshotData,
     requested_codes: Mutex<Vec<String>>,
+    requested_limits: Mutex<Vec<usize>>,
 }
 
 impl FakeRoomJoinPort {
-    fn new(room_id: Uuid) -> Self {
+    fn with_snapshot(snapshot: RoomSnapshotData) -> Self {
         Self {
-            room_id,
+            snapshot,
             requested_codes: Mutex::default(),
+            requested_limits: Mutex::default(),
         }
     }
 
     fn requested_codes(&self) -> Vec<String> {
         self.requested_codes.lock().unwrap().clone()
+    }
+
+    fn requested_limits(&self) -> Vec<usize> {
+        self.requested_limits.lock().unwrap().clone()
     }
 }
 
@@ -515,13 +536,15 @@ impl RoomJoinPort for FakeRoomJoinPort {
     async fn join_or_create_room_by_code(
         &self,
         room_code: RoomCode,
+        limit: usize,
         _session_id: Uuid,
-    ) -> Result<Uuid, AppError> {
+    ) -> Result<RoomSnapshotData, AppError> {
         self.requested_codes
             .lock()
             .unwrap()
             .push(room_code.normalized().to_string());
-        Ok(self.room_id)
+        self.requested_limits.lock().unwrap().push(limit);
+        Ok(self.snapshot.clone())
     }
 }
 
@@ -626,12 +649,24 @@ fn sample_snapshot_data(room_id: Uuid, room_code: &str, messages: Vec<Message>) 
 }
 
 fn sample_message(message_id: Uuid, room_id: Uuid, session_id: Uuid, body: &str) -> Message {
+    sample_message_at(message_id, room_id, session_id, body, 0)
+}
+
+fn sample_message_at(
+    message_id: Uuid,
+    room_id: Uuid,
+    session_id: Uuid,
+    body: &str,
+    minute_offset: u128,
+) -> Message {
     Message {
         message_id,
         room_id,
         sender_session_id: session_id,
         body: MessageBody::new(body).unwrap(),
-        created_at: fixed_time(),
+        created_at: Utc
+            .timestamp_opt(fixed_time().timestamp() + minute_offset as i64, 0)
+            .unwrap(),
         status: MessageStatus::Active,
     }
 }

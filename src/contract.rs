@@ -58,6 +58,7 @@ pub struct MessageCreated {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AppEvent {
     MessageCreated(MessageCreated),
 }

@@ -71,8 +71,9 @@ pub trait RoomJoinPort {
     fn join_or_create_room_by_code(
         &self,
         room_code: RoomCode,
+        limit: usize,
         session_id: Uuid,
-    ) -> impl Future<Output = Result<Uuid, AppError>> + Send;
+    ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
 }
 
 pub trait RoomSnapshotPort {
@@ -144,16 +145,14 @@ where
     }))
 }
 
-pub async fn join_or_create_room_by_code<S, J, R>(
+pub async fn join_or_create_room_by_code<S, J>(
     session_port: &S,
     room_join_port: &J,
-    room_snapshot_port: &R,
     command: JoinOrCreateRoomByCodeCommand,
 ) -> Result<RoomSnapshot, AppError>
 where
     S: SessionPort,
     J: RoomJoinPort,
-    R: RoomSnapshotPort,
 {
     if !session_port.is_active_session(command.session_id).await? {
         return Err(AppError::SessionNotActive {
@@ -162,15 +161,9 @@ where
     }
 
     let room_code = RoomCode::new(&command.room_code)?;
-    let room_id = room_join_port
-        .join_or_create_room_by_code(room_code, command.session_id)
+    let snapshot = room_join_port
+        .join_or_create_room_by_code(room_code, ROOM_SNAPSHOT_LIMIT, command.session_id)
         .await?;
-    let snapshot = room_snapshot_port
-        .load_room_snapshot(room_id, ROOM_SNAPSHOT_LIMIT)
-        .await?;
-    if snapshot.room_id != room_id {
-        return Err(AppError::DependencyFailure);
-    }
 
     Ok(build_room_snapshot(snapshot))
 }
@@ -213,14 +206,25 @@ where
 }
 
 fn build_room_snapshot(snapshot: RoomSnapshotData) -> RoomSnapshot {
-    let message_count = snapshot.messages.len();
+    let RoomSnapshotData {
+        room_id,
+        room_code,
+        mut messages,
+    } = snapshot;
+
+    messages.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then(left.message_id.cmp(&right.message_id))
+    });
+
+    let message_count = messages.len();
     let skip = message_count.saturating_sub(ROOM_SNAPSHOT_LIMIT);
 
     RoomSnapshot {
-        room_id: snapshot.room_id,
-        room_code: snapshot.room_code.normalized().to_string(),
-        messages: snapshot
-            .messages
+        room_id,
+        room_code: room_code.normalized().to_string(),
+        messages: messages
             .into_iter()
             .skip(skip)
             .map(|message| MessageView {
