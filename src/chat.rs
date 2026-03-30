@@ -32,15 +32,6 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChatView {
-    pub session_id: Uuid,
-    pub room_id: Option<Uuid>,
-    pub room_code: String,
-    pub connection: ConnectionState,
-    pub messages: Vec<ChatMessage>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatState {
     session_id: Uuid,
     room_id: Option<Uuid>,
@@ -178,16 +169,6 @@ impl ChatState {
 
     pub fn set_connection(&mut self, connection: ConnectionState) {
         self.connection = connection;
-    }
-
-    pub fn view(&self) -> ChatView {
-        ChatView {
-            session_id: self.session_id,
-            room_id: self.room_id,
-            room_code: self.room_code.clone(),
-            connection: self.connection,
-            messages: self.messages.clone(),
-        }
     }
 
     fn sort_messages(&mut self) {

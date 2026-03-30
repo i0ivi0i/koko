@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
@@ -37,12 +37,6 @@ struct HttpState {
 #[derive(Debug, Deserialize)]
 struct JoinRoomRequest {
     room_code: String,
-    session_id: Uuid,
-}
-
-#[derive(Debug, Deserialize)]
-struct SnapshotQuery {
-    session_id: Uuid,
 }
 
 pub fn app_router(store: PgStore, admin_token: String) -> Router {
@@ -82,14 +76,16 @@ async fn bootstrap_session(
 
 async fn join_room(
     State(state): State<HttpState>,
+    jar: CookieJar,
     Json(request): Json<JoinRoomRequest>,
 ) -> Result<Json<RoomSnapshot>, (StatusCode, Json<ErrorPayload>)> {
+    let session_id = resolve_session_id(&jar)?;
     let snapshot = join_or_create_room_by_code(
         &state.store,
         &state.store,
         JoinOrCreateRoomByCodeCommand {
             room_code: request.room_code,
-            session_id: request.session_id,
+            session_id,
         },
     )
     .await
@@ -100,15 +96,16 @@ async fn join_room(
 async fn room_snapshot(
     State(state): State<HttpState>,
     Path(room_id): Path<Uuid>,
-    Query(query): Query<SnapshotQuery>,
+    jar: CookieJar,
 ) -> Result<Json<RoomSnapshot>, (StatusCode, Json<ErrorPayload>)> {
+    let session_id = resolve_session_id(&jar)?;
     let snapshot = load_room_snapshot(
         &state.store,
         &state.store,
         &state.store,
         LoadRoomSnapshotQuery {
             room_id,
-            session_id: query.session_id,
+            session_id,
         },
     )
     .await
@@ -172,6 +169,24 @@ fn require_admin_token(
             }),
         ))
     }
+}
+
+fn resolve_session_id(jar: &CookieJar) -> Result<Uuid, (StatusCode, Json<ErrorPayload>)> {
+    jar.get(support::SESSION_COOKIE_NAME)
+        .and_then(|cookie| Uuid::parse_str(cookie.value()).ok())
+        .ok_or_else(invalid_session_error)
+}
+
+fn invalid_session_error() -> (StatusCode, Json<ErrorPayload>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorPayload {
+            code: support::app_error_code(&AppError::SessionNotActive {
+                session_id: Uuid::nil(),
+            })
+            .to_string(),
+        }),
+    )
 }
 
 fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {

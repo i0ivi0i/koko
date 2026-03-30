@@ -5,7 +5,6 @@ use crate::{chat::ChatState, contract::BootstrapSession, view};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
 
-pub const THEME_PATH: &str = "/assets/theme.css";
 pub const BOOTSTRAP_PATH: &str = "/api/session/bootstrap";
 
 pub fn bootstrap_state(session: BootstrapSession) -> ChatState {

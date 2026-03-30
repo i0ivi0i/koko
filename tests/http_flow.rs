@@ -128,12 +128,31 @@ fn web_shell_does_not_bootstrap_from_local_default_state() {
     );
 }
 
+#[test]
+fn chat_module_does_not_keep_unused_mirror_view_state() {
+    let source = include_str!("../src/chat.rs");
+
+    assert!(!source.contains("pub struct ChatView"));
+    assert!(!source.contains("pub fn view(&self) -> ChatView"));
+}
+
+#[test]
+fn http_room_routes_do_not_require_frontend_session_id_echo() {
+    let source = include_str!("../src/http.rs");
+
+    assert!(source.contains("CookieJar"));
+    assert!(source.contains("resolve_session_id"));
+    assert!(!source.contains("struct SnapshotQuery"));
+    assert!(!source.contains("request.session_id"));
+    assert!(!source.contains("Query<SnapshotQuery>"));
+}
+
 #[tokio::test]
 async fn bootstrap_then_join_returns_room_snapshot() {
     let harness = HttpHarness::new("bootstrap_then_join_returns_room_snapshot").await;
 
-    let session = bootstrap_session(&harness).await;
-    let snapshot = join_room(&harness, session.session_id, "a1234").await;
+    let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let snapshot = join_room(&harness, &cookie, "a1234").await;
 
     assert_eq!(snapshot.room_code, "A1234");
     assert!(snapshot.messages.is_empty());
@@ -144,17 +163,15 @@ async fn bootstrap_then_join_returns_room_snapshot() {
 async fn snapshot_endpoint_returns_joined_room_history() {
     let harness = HttpHarness::new("snapshot_endpoint_returns_joined_room_history").await;
 
-    let session = bootstrap_session(&harness).await;
-    let joined = join_room(&harness, session.session_id, "b1234").await;
+    let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let joined = join_room(&harness, &cookie, "b1234").await;
     let response = harness
         .router
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!(
-                    "/api/rooms/{}/snapshot?session_id={}",
-                    joined.room_id, session.session_id
-                ))
+                .uri(format!("/api/rooms/{}/snapshot", joined.room_id))
+                .header(COOKIE, cookie)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -185,7 +202,6 @@ async fn join_requires_bootstrapped_session() {
                 .body(Body::from(
                     serde_json::json!({
                         "room_code": "C1234",
-                        "session_id": uuid::Uuid::now_v7(),
                     })
                     .to_string(),
                 ))
@@ -313,12 +329,25 @@ fn app_error_code_exposes_stable_membership_required_code() {
     assert_eq!(code, "membership_required");
 }
 
-async fn bootstrap_session(harness: &HttpHarness) -> BootstrapSession {
+async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
     let response = bootstrap_session_response(harness, None).await;
 
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    let cookie = response
+        .headers()
+        .get(SET_COOKIE)
+        .expect("bootstrap should set a reusable session cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let session =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    (session, cookie)
 }
 
 async fn bootstrap_session_response(
@@ -339,7 +368,7 @@ async fn bootstrap_session_response(
         .unwrap()
 }
 
-async fn join_room(harness: &HttpHarness, session_id: uuid::Uuid, room_code: &str) -> RoomSnapshot {
+async fn join_room(harness: &HttpHarness, cookie: &str, room_code: &str) -> RoomSnapshot {
     let response = harness
         .router
         .clone()
@@ -348,10 +377,10 @@ async fn join_room(harness: &HttpHarness, session_id: uuid::Uuid, room_code: &st
                 .method("POST")
                 .uri("/api/rooms/join")
                 .header("content-type", "application/json")
+                .header(COOKIE, cookie)
                 .body(Body::from(
                     serde_json::json!({
                         "room_code": room_code,
-                        "session_id": session_id,
                     })
                     .to_string(),
                 ))

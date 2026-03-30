@@ -2,7 +2,7 @@ mod http_support;
 
 use axum::{
     body::{Body, to_bytes},
-    http::{Request, StatusCode},
+    http::{Request, StatusCode, header::{COOKIE, SET_COOKIE}},
 };
 use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
@@ -91,10 +91,10 @@ fn admin_app_sends_admin_token_header_instead_of_fake_preview_data() {
 async fn admin_rooms_returns_live_room_summaries() {
     let harness = HttpHarness::new("admin_rooms_returns_live_room_summaries").await;
 
-    let first_session = bootstrap_session(&harness).await;
-    let second_session = bootstrap_session(&harness).await;
-    let room = join_room(&harness, first_session.session_id, "e1234").await;
-    let _ = join_room(&harness, second_session.session_id, "e1234").await;
+    let (first_session, first_cookie) = bootstrap_session_with_cookie(&harness).await;
+    let (_second_session, second_cookie) = bootstrap_session_with_cookie(&harness).await;
+    let room = join_room(&harness, &first_cookie, "e1234").await;
+    let _ = join_room(&harness, &second_cookie, "e1234").await;
 
     let event = send_text_message(
         &harness.store,
@@ -142,10 +142,10 @@ async fn admin_rooms_returns_live_room_summaries() {
 async fn admin_panel_returns_overview_and_live_room_summaries() {
     let harness = HttpHarness::new("admin_panel_returns_overview_and_live_room_summaries").await;
 
-    let first_session = bootstrap_session(&harness).await;
-    let second_session = bootstrap_session(&harness).await;
-    let room = join_room(&harness, first_session.session_id, "f1234").await;
-    let _ = join_room(&harness, second_session.session_id, "f1234").await;
+    let (first_session, first_cookie) = bootstrap_session_with_cookie(&harness).await;
+    let (_second_session, second_cookie) = bootstrap_session_with_cookie(&harness).await;
+    let room = join_room(&harness, &first_cookie, "f1234").await;
+    let _ = join_room(&harness, &second_cookie, "f1234").await;
 
     let event = send_text_message(
         &harness.store,
@@ -194,10 +194,10 @@ async fn admin_panel_returns_overview_and_live_room_summaries() {
 async fn admin_overview_returns_room_member_and_message_counts() {
     let harness = HttpHarness::new("admin_overview_returns_room_member_and_message_counts").await;
 
-    let first_session = bootstrap_session(&harness).await;
-    let second_session = bootstrap_session(&harness).await;
-    let room = join_room(&harness, first_session.session_id, "d1234").await;
-    let _ = join_room(&harness, second_session.session_id, "d1234").await;
+    let (first_session, first_cookie) = bootstrap_session_with_cookie(&harness).await;
+    let (_second_session, second_cookie) = bootstrap_session_with_cookie(&harness).await;
+    let room = join_room(&harness, &first_cookie, "d1234").await;
+    let _ = join_room(&harness, &second_cookie, "d1234").await;
 
     let event = send_text_message(
         &harness.store,
@@ -259,7 +259,7 @@ async fn admin_overview_requires_admin_token() {
     harness.cleanup().await;
 }
 
-async fn bootstrap_session(harness: &HttpHarness) -> BootstrapSession {
+async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
     let response = harness
         .router
         .clone()
@@ -275,12 +275,25 @@ async fn bootstrap_session(harness: &HttpHarness) -> BootstrapSession {
 
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    let cookie = response
+        .headers()
+        .get(SET_COOKIE)
+        .expect("bootstrap should set a reusable session cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let session =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    (session, cookie)
 }
 
 async fn join_room(
     harness: &HttpHarness,
-    session_id: uuid::Uuid,
+    cookie: &str,
     room_code: &str,
 ) -> koko::contract::RoomSnapshot {
     let response = harness
@@ -291,10 +304,10 @@ async fn join_room(
                 .method("POST")
                 .uri("/api/rooms/join")
                 .header("content-type", "application/json")
+                .header(COOKIE, cookie)
                 .body(Body::from(
                     serde_json::json!({
                         "room_code": room_code,
-                        "session_id": session_id,
                     })
                     .to_string(),
                 ))
