@@ -35,7 +35,7 @@ impl HttpHarness {
             .unwrap();
         run_migrations(&pool).await;
         let store = PgStore::new(pool.clone());
-        let router = http::app_router(store.clone());
+        let router = http::app_router(store.clone(), "local-admin-token".to_string());
 
         Self {
             router,

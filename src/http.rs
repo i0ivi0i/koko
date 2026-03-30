@@ -1,7 +1,7 @@
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     routing::{get, post},
 };
 use chrono::{DateTime, Utc};
@@ -26,6 +26,7 @@ pub struct Module;
 #[derive(Clone)]
 struct HttpState {
     store: PgStore,
+    admin_token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,13 +49,13 @@ impl Clock for SystemClock {
     }
 }
 
-pub fn app_router(store: PgStore) -> Router {
+pub fn app_router(store: PgStore, admin_token: String) -> Router {
     Router::new()
         .route("/api/session/bootstrap", post(bootstrap_session))
         .route("/api/rooms/join", post(join_room))
         .route("/api/rooms/{room_id}/snapshot", get(room_snapshot))
         .route("/api/admin/overview", get(admin_overview))
-        .with_state(HttpState { store })
+        .with_state(HttpState { store, admin_token })
 }
 
 async fn bootstrap_session(
@@ -104,7 +105,9 @@ async fn room_snapshot(
 
 async fn admin_overview(
     State(state): State<HttpState>,
+    headers: HeaderMap,
 ) -> Result<Json<AdminOverview>, (StatusCode, Json<ErrorPayload>)> {
+    require_admin_token(&state.admin_token, &headers)?;
     let overview = get_admin_overview(&state.store)
         .await
         .map_err(map_http_error)?;
@@ -114,6 +117,26 @@ async fn admin_overview(
 #[derive(Debug, Deserialize, serde::Serialize)]
 struct ErrorPayload {
     code: String,
+}
+
+fn require_admin_token(
+    expected_token: &str,
+    headers: &HeaderMap,
+) -> Result<(), (StatusCode, Json<ErrorPayload>)> {
+    let provided = headers
+        .get("x-admin-token")
+        .and_then(|value| value.to_str().ok());
+
+    if provided == Some(expected_token) {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorPayload {
+                code: "invalid_admin_token".to_string(),
+            }),
+        ))
+    }
 }
 
 fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {

@@ -45,6 +45,7 @@ async fn admin_overview_returns_room_member_and_message_counts() {
         .oneshot(
             Request::builder()
                 .uri("/api/admin/overview")
+                .header("x-admin-token", "local-admin-token")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -60,6 +61,26 @@ async fn admin_overview_returns_room_member_and_message_counts() {
     assert_eq!(overview.room_count, 1);
     assert_eq!(overview.member_count, 2);
     assert_eq!(overview.message_count, 1);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn admin_overview_requires_admin_token() {
+    let harness = HttpHarness::new("admin_overview_requires_admin_token").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/overview")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     harness.cleanup().await;
 }
 

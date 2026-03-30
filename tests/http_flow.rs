@@ -6,6 +6,7 @@ use axum::{
 };
 use http_support::HttpHarness;
 use koko::contract::{BootstrapSession, RoomSnapshot};
+use std::env;
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -78,6 +79,36 @@ async fn join_requires_bootstrapped_session() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     harness.cleanup().await;
+}
+
+#[test]
+fn app_config_requires_database_url_and_admin_token() {
+    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
+    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
+    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
+
+    unsafe {
+        env::remove_var("KOKO_DATABASE_URL");
+        env::remove_var("KOKO_ADMIN_TOKEN");
+        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:4000");
+    }
+
+    assert!(koko::support::AppConfig::from_env().is_err());
+
+    unsafe {
+        match original_database_url {
+            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
+            None => env::remove_var("KOKO_DATABASE_URL"),
+        }
+        match original_admin_token {
+            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
+            None => env::remove_var("KOKO_ADMIN_TOKEN"),
+        }
+        match original_bind_addr {
+            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
+            None => env::remove_var("KOKO_BIND_ADDR"),
+        }
+    }
 }
 
 async fn bootstrap_session(harness: &HttpHarness) -> BootstrapSession {
