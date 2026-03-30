@@ -75,6 +75,22 @@ fn web_bootstrap_state_applies_backend_session_to_chat_state() {
 }
 
 #[test]
+fn web_app_uses_bootstrap_state_bridge_in_its_shell() {
+    let source = include_str!("../src/web.rs");
+
+    assert!(source.contains("bootstrap_state("));
+    assert!(!source.contains("use_signal(bootstrapping_state)"));
+}
+
+#[test]
+fn web_app_loads_bootstrap_session_through_dioxus_resource() {
+    let source = include_str!("../src/web.rs");
+
+    assert!(source.contains("use_resource"));
+    assert!(source.contains("load_bootstrap_session"));
+}
+
+#[test]
 fn web_shell_does_not_fake_joined_state_or_require_bridge_stub() {
     let source = include_str!("../src/web.rs");
 

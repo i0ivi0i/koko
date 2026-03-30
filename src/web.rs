@@ -18,15 +18,32 @@ pub fn bootstrap_state(session: BootstrapSession) -> ChatState {
     state
 }
 
+async fn load_bootstrap_session() -> Result<BootstrapSession, String> {
+    reqwest::Client::new()
+        .post(BOOTSTRAP_PATH)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<BootstrapSession>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
 #[component]
 pub fn App() -> Element {
-    let state = use_signal(bootstrapping_state);
+    let bootstrap_session = use_resource(|| async move { load_bootstrap_session().await });
+    let state = match &*bootstrap_session.read_unchecked() {
+        Some(Ok(session)) => bootstrap_state(session.clone()),
+        Some(Err(_)) | None => bootstrapping_state(),
+    };
 
     rsx! {
         Title { "koko" }
         Stylesheet { href: asset!("/assets/theme.css") }
         div { class: "koko-web-shell",
-            view::ChatPage { state: state() }
+            view::ChatPage { state }
         }
     }
 }

@@ -2033,6 +2033,7 @@ dependencies = [
  "axum-extra",
  "chrono",
  "dioxus",
+ "reqwest",
  "serde",
  "serde_json",
  "socketioxide",
