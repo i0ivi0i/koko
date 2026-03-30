@@ -3,8 +3,8 @@ fn crate_exposes_expected_root_modules() {
     use koko::{admin, app, chat, contract, domain, http, panel, rt, store, support, view, web};
 
     let _ = std::any::type_name::<domain::Room>();
-    let _ = std::any::type_name::<app::Module>();
-    let _ = std::any::type_name::<contract::Module>();
+    let _ = std::any::type_name::<app::AppError>();
+    let _ = std::any::type_name::<contract::SendTextMessageCommand>();
     let _ = std::any::type_name::<store::Module>();
     let _ = std::any::type_name::<rt::Module>();
     let _ = std::any::type_name::<http::Module>();
