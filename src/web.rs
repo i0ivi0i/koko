@@ -8,10 +8,6 @@ pub struct Module;
 pub const THEME_PATH: &str = "/assets/theme.css";
 pub const BOOTSTRAP_PATH: &str = "/api/session/bootstrap";
 
-fn bootstrapping_state() -> ChatState {
-    ChatState::awaiting_bootstrap()
-}
-
 pub fn bootstrap_state(session: BootstrapSession) -> ChatState {
     let mut state = ChatState::awaiting_bootstrap();
     state.apply_bootstrap_session(session);
@@ -33,17 +29,23 @@ async fn load_bootstrap_session() -> Result<BootstrapSession, String> {
 
 #[component]
 pub fn App() -> Element {
+    let mut state = use_signal(ChatState::awaiting_bootstrap);
     let bootstrap_session = use_resource(|| async move { load_bootstrap_session().await });
-    let state = match &*bootstrap_session.read_unchecked() {
-        Some(Ok(session)) => bootstrap_state(session.clone()),
-        Some(Err(_)) | None => bootstrapping_state(),
-    };
+
+    if let Some(Ok(session)) = &*bootstrap_session.read_unchecked() {
+        let session = session.clone();
+        if state().session_id() != session.session_id {
+            state.set(bootstrap_state(session));
+        }
+    }
+
+    let chat_state = state();
 
     rsx! {
         Title { "koko" }
         Stylesheet { href: asset!("/assets/theme.css") }
         div { class: "koko-web-shell",
-            view::ChatPage { state }
+            view::ChatPage { state: chat_state }
         }
     }
 }

@@ -91,6 +91,15 @@ fn web_app_loads_bootstrap_session_through_dioxus_resource() {
 }
 
 #[test]
+fn web_app_keeps_chat_state_in_a_signal_instead_of_rebuilding_each_render() {
+    let source = include_str!("../src/web.rs");
+
+    assert!(source.contains("use_signal"));
+    assert!(source.contains("state.set(") || source.contains("state.write()"));
+    assert!(!source.contains("let state = match &*bootstrap_session"));
+}
+
+#[test]
 fn web_shell_does_not_fake_joined_state_or_require_bridge_stub() {
     let source = include_str!("../src/web.rs");
 
