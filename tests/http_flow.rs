@@ -96,6 +96,13 @@ fn app_config_requires_database_url_and_admin_token() {
     assert!(koko::support::AppConfig::from_env().is_err());
 
     unsafe {
+        env::set_var("KOKO_DATABASE_URL", "postgres://koko:koko_local@127.0.0.1:5432/koko_test");
+        env::set_var("KOKO_ADMIN_TOKEN", "");
+    }
+
+    assert!(koko::support::AppConfig::from_env().is_err());
+
+    unsafe {
         match original_database_url {
             Some(value) => env::set_var("KOKO_DATABASE_URL", value),
             None => env::remove_var("KOKO_DATABASE_URL"),

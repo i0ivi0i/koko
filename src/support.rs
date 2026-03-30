@@ -17,6 +17,8 @@ pub struct AppConfig {
 pub enum ConfigError {
     #[error("missing environment variable {0}")]
     MissingEnv(&'static str),
+    #[error("empty environment variable {0}")]
+    EmptyEnv(&'static str),
     #[error("invalid bind address `{value}`: {source}")]
     InvalidBindAddr {
         value: String,
@@ -34,6 +36,9 @@ impl AppConfig {
             env::var("KOKO_DATABASE_URL").map_err(|_| ConfigError::MissingEnv("KOKO_DATABASE_URL"))?;
         let admin_token =
             env::var("KOKO_ADMIN_TOKEN").map_err(|_| ConfigError::MissingEnv("KOKO_ADMIN_TOKEN"))?;
+        if admin_token.trim().is_empty() {
+            return Err(ConfigError::EmptyEnv("KOKO_ADMIN_TOKEN"));
+        }
         let bind_addr_raw = env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
         let bind_addr = bind_addr_raw.parse().map_err(|source| ConfigError::InvalidBindAddr {
             value: bind_addr_raw,
