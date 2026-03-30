@@ -7,11 +7,32 @@ use axum::{
 use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
+    admin::{AdminPanelState, AdminRoomSummary, render_admin_panel},
     app::send_text_message,
     contract::{AdminOverview, BootstrapSession, SendTextMessageCommand},
 };
 use tower::ServiceExt;
 use uuid::Uuid;
+
+#[test]
+fn admin_panel_renders_room_summary_and_member_count() {
+    let panel = render_admin_panel(&AdminPanelState::new(
+        AdminOverview {
+            room_count: 3,
+            member_count: 18,
+            message_count: 42,
+        },
+        vec![
+            AdminRoomSummary::new("A1234", 12, 21, "hello admin"),
+            AdminRoomSummary::new("B1234", 6, 21, "world admin"),
+        ],
+    ));
+
+    assert!(panel.contains("Rooms"));
+    assert!(panel.contains("A1234"));
+    assert!(panel.contains("12 members"));
+    assert!(panel.contains("hello admin"));
+}
 
 #[tokio::test]
 async fn admin_overview_returns_room_member_and_message_counts() {
@@ -54,10 +75,8 @@ async fn admin_overview_returns_room_member_and_message_counts() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let overview: AdminOverview = serde_json::from_slice(
-        &to_bytes(response.into_body(), usize::MAX).await.unwrap(),
-    )
-    .unwrap();
+    let overview: AdminOverview =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(overview.room_count, 1);
     assert_eq!(overview.member_count, 2);
     assert_eq!(overview.message_count, 1);

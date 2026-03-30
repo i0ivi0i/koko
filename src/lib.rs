@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod app;
 pub mod chat;
 pub mod contract;
@@ -18,5 +19,4 @@ macro_rules! placeholder_module {
     };
 }
 
-placeholder_module!(admin);
 placeholder_module!(panel);

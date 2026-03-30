@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+use crate::admin::{AdminPanelState, AdminRoomSummary};
 use crate::chat::{ChatMessage, ChatState, ConnectionState, DeliveryState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,5 +68,64 @@ fn delivery_label(state: DeliveryState) -> &'static str {
         DeliveryState::Pending => "Sending",
         DeliveryState::Confirmed => "Delivered",
         DeliveryState::Failed => "Retry",
+    }
+}
+
+#[component]
+pub fn AdminPanel(state: AdminPanelState) -> Element {
+    rsx! {
+        div { class: "admin-shell",
+            header { class: "admin-shell__hero",
+                div {
+                    class: "admin-shell__eyebrow",
+                    "Koko admin"
+                }
+                h1 { class: "admin-shell__title", "Read-only operations" }
+                p {
+                    class: "admin-shell__summary",
+                    "{state.overview.room_count} rooms, {state.overview.member_count} members, {state.overview.message_count} messages"
+                }
+            }
+            section { class: "admin-shell__stats",
+                AdminStatCard { label: "Rooms", value: state.overview.room_count.to_string() }
+                AdminStatCard { label: "Members", value: state.overview.member_count.to_string() }
+                AdminStatCard { label: "Messages", value: state.overview.message_count.to_string() }
+            }
+            section { class: "admin-shell__list",
+                div { class: "admin-shell__list-head",
+                    h2 { "Active rooms" }
+                    span { "{state.rooms.len()} tracked" }
+                }
+                for room in state.rooms {
+                    AdminRoomCard { room: room.clone() }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn AdminStatCard(label: String, value: String) -> Element {
+    rsx! {
+        article { class: "admin-stat",
+            div { class: "admin-stat__label", "{label}" }
+            div { class: "admin-stat__value", "{value}" }
+        }
+    }
+}
+
+#[component]
+fn AdminRoomCard(room: AdminRoomSummary) -> Element {
+    rsx! {
+        article { class: "admin-room",
+            div { class: "admin-room__code", "{room.room_code}" }
+            div { class: "admin-room__meta",
+                "{room.member_count} members"
+            }
+            div { class: "admin-room__meta",
+                "{room.message_count} messages"
+            }
+            div { class: "admin-room__preview", "{room.latest_preview}" }
+        }
     }
 }
