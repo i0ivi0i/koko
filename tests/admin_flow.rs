@@ -7,7 +7,7 @@ use axum::{
 use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
-    admin::{AdminPanelState, AdminRoomSummary, render_admin_panel},
+    admin::{AdminPanelState, AdminRoomSummary},
     app::send_text_message,
     contract::{AdminOverview, BootstrapSession, SendTextMessageCommand},
 };
@@ -15,8 +15,8 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[test]
-fn admin_panel_renders_room_summary_and_member_count() {
-    let panel = render_admin_panel(&AdminPanelState::new(
+fn admin_panel_state_keeps_room_summary_and_member_count() {
+    let panel = AdminPanelState::new(
         AdminOverview {
             room_count: 3,
             member_count: 18,
@@ -26,12 +26,24 @@ fn admin_panel_renders_room_summary_and_member_count() {
             AdminRoomSummary::new("A1234", 12, 21, "hello admin"),
             AdminRoomSummary::new("B1234", 6, 21, "world admin"),
         ],
-    ));
+    );
 
-    assert!(panel.contains("Rooms"));
-    assert!(panel.contains("A1234"));
-    assert!(panel.contains("12 members"));
-    assert!(panel.contains("hello admin"));
+    assert_eq!(panel.overview.room_count, 3);
+    assert_eq!(panel.rooms[0].room_code, "A1234");
+    assert_eq!(panel.rooms[0].member_count, 12);
+    assert_eq!(panel.rooms[0].latest_preview, "hello admin");
+}
+
+#[test]
+fn admin_panel_state_wraps_backend_overview_without_fake_rooms() {
+    let state = koko::admin::admin_panel_state(AdminOverview {
+        room_count: 5,
+        member_count: 12,
+        message_count: 44,
+    });
+
+    assert_eq!(state.overview.room_count, 5);
+    assert!(state.rooms.is_empty());
 }
 
 #[test]
@@ -39,6 +51,25 @@ fn admin_app_no_longer_boots_from_preview_state() {
     let source = include_str!("../src/admin.rs");
 
     assert!(!source.contains("AdminPanelState::preview()"));
+    assert!(!source.contains("render_admin_panel"));
+}
+
+#[test]
+fn admin_app_loads_backend_overview_through_dioxus_resource() {
+    let source = include_str!("../src/admin.rs");
+
+    assert!(source.contains("use_resource"));
+    assert!(source.contains("load_admin_overview"));
+    assert!(source.contains("/api/admin/overview"));
+}
+
+#[test]
+fn admin_app_sends_admin_token_header_instead_of_fake_preview_data() {
+    let source = include_str!("../src/admin.rs");
+
+    assert!(source.contains("x-admin-token"));
+    assert!(source.contains("view::AdminPanel"));
+    assert!(!source.contains("wiring is pending"));
 }
 
 #[tokio::test]

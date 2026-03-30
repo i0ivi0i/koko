@@ -1,9 +1,11 @@
 use dioxus::prelude::*;
 
-use crate::contract::AdminOverview;
+use crate::{contract::AdminOverview, view};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
+
+pub const ADMIN_OVERVIEW_PATH: &str = "/api/admin/overview";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminRoomSummary {
@@ -41,25 +43,51 @@ impl AdminPanelState {
     }
 }
 
-pub fn render_admin_panel(state: &AdminPanelState) -> String {
-    let mut lines = vec![
-        "Rooms".to_string(),
-        format!("{} rooms", state.overview.room_count),
-        format!("{} members", state.overview.member_count),
-        format!("{} messages", state.overview.message_count),
-    ];
+pub fn admin_panel_state(overview: AdminOverview) -> AdminPanelState {
+    AdminPanelState::new(overview, Vec::new())
+}
 
-    for room in &state.rooms {
-        lines.push(format!(
-            "{} | {} members | {} messages | {}",
-            room.room_code, room.member_count, room.message_count, room.latest_preview
-        ));
+async fn load_admin_overview(admin_token: String) -> Result<AdminOverview, String> {
+    let admin_token = admin_token.trim().to_string();
+    if admin_token.is_empty() {
+        return Err("Admin token required".to_string());
     }
 
-    lines.join("\n")
+    reqwest::Client::new()
+        .get(ADMIN_OVERVIEW_PATH)
+        .header("x-admin-token", admin_token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<AdminOverview>()
+        .await
+        .map_err(|error| error.to_string())
 }
 
 pub fn app() -> Element {
+    let mut admin_token = use_signal(String::new);
+    let mut requested_token = use_signal(String::new);
+    let overview = use_resource(move || {
+        let requested_token = requested_token();
+        async move {
+            if requested_token.trim().is_empty() {
+                None
+            } else {
+                Some(load_admin_overview(requested_token).await)
+            }
+        }
+    });
+    let overview_error = match &*overview.read_unchecked() {
+        Some(Some(Err(error))) => Some(error.clone()),
+        _ => None,
+    };
+    let panel = match &*overview.read_unchecked() {
+        Some(Some(Ok(overview))) => Some(admin_panel_state(overview.clone())),
+        _ => None,
+    };
+
     rsx! {
         Title { "koko admin" }
         Stylesheet { href: asset!("/assets/theme.css") }
@@ -67,9 +95,31 @@ pub fn app() -> Element {
             header { class: "admin-shell__hero",
                 div { class: "admin-shell__eyebrow", "Koko admin" }
                 h1 { class: "admin-shell__title", "Read-only operations" }
+                p { class: "admin-shell__summary", "Load live overview data through the backend read model." }
+            }
+            form {
+                class: "admin-shell__stats",
+                onsubmit: move |event| {
+                    event.prevent_default();
+                    requested_token.set(admin_token());
+                },
+                input {
+                    r#type: "password",
+                    placeholder: "Admin token",
+                    value: "{admin_token}",
+                    oninput: move |event| admin_token.set(event.value()),
+                }
+                button { r#type: "submit", "Load overview" }
+            }
+            if let Some(error) = overview_error {
+                p { class: "admin-shell__summary", "Admin overview failed: {error}" }
+            }
+            if let Some(state) = panel {
+                view::AdminPanel { state: state }
+            } else if requested_token().trim().is_empty() {
                 p {
                     class: "admin-shell__summary",
-                    "Admin read model wiring is pending. Render real data here instead of preview fixtures."
+                    "Enter an admin token to fetch live overview data."
                 }
             }
         }
