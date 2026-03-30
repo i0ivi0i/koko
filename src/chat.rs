@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::contract::{MessageCreated, RoomSnapshot};
+use crate::contract::{BootstrapSession, MessageCreated, RoomSnapshot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -72,6 +72,10 @@ impl ChatState {
 
     pub fn session_id(&self) -> Uuid {
         self.session_id
+    }
+
+    pub fn apply_bootstrap_session(&mut self, session: BootstrapSession) {
+        self.session_id = session.session_id;
     }
 
     pub fn room_id(&self) -> Option<Uuid> {

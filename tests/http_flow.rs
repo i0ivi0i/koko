@@ -42,6 +42,23 @@ fn web_state_promotes_pending_message_only_after_server_confirmation() {
 }
 
 #[test]
+fn web_state_applies_bootstrap_session_without_joining_room() {
+    let mut state = ChatState::awaiting_bootstrap();
+    let session = BootstrapSession {
+        session_id: Uuid::from_u128(93),
+        issued_at: chrono::Utc::now(),
+        last_seen_at: chrono::Utc::now(),
+    };
+
+    state.apply_bootstrap_session(session.clone());
+
+    assert_eq!(state.session_id(), session.session_id);
+    assert_eq!(state.connection(), ConnectionState::Offline);
+    assert_eq!(state.room_id(), None);
+    assert!(state.messages().is_empty());
+}
+
+#[test]
 fn web_shell_does_not_fake_joined_state_or_require_bridge_stub() {
     let source = include_str!("../src/web.rs");
 
