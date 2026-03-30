@@ -75,10 +75,8 @@ async fn snapshot_endpoint_returns_joined_room_history() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let snapshot: RoomSnapshot = serde_json::from_slice(
-        &to_bytes(response.into_body(), usize::MAX).await.unwrap(),
-    )
-    .unwrap();
+    let snapshot: RoomSnapshot =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(snapshot.room_id, joined.room_id);
     assert_eq!(snapshot.room_code, "B1234");
     harness.cleanup().await;
@@ -127,7 +125,10 @@ fn app_config_requires_database_url_and_admin_token() {
     assert!(koko::support::AppConfig::from_env().is_err());
 
     unsafe {
-        env::set_var("KOKO_DATABASE_URL", "postgres://koko:koko_local@127.0.0.1:5432/koko_test");
+        env::set_var(
+            "KOKO_DATABASE_URL",
+            "postgres://koko:koko_local@127.0.0.1:5432/koko_test",
+        );
         env::set_var("KOKO_ADMIN_TOKEN", "");
     }
 

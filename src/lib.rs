@@ -1,11 +1,11 @@
-pub mod support;
-pub mod domain;
 pub mod app;
+pub mod chat;
 pub mod contract;
-pub mod store;
+pub mod domain;
 pub mod http;
 pub mod rt;
-pub mod chat;
+pub mod store;
+pub mod support;
 pub mod view;
 pub mod web;
 
