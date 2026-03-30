@@ -2,7 +2,7 @@ mod http_support;
 
 use axum::{
     body::{Body, to_bytes},
-    http::{Request, StatusCode},
+    http::{Request, StatusCode, header::{COOKIE, SET_COOKIE}},
 };
 use http_support::HttpHarness;
 use koko::{
@@ -120,6 +120,41 @@ async fn join_requires_bootstrapped_session() {
     harness.cleanup().await;
 }
 
+#[tokio::test]
+async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request() {
+    let harness =
+        HttpHarness::new("bootstrap_session_sets_cookie_and_reuses_it_on_followup_request").await;
+
+    let first_response = bootstrap_session_response(&harness, None).await;
+    assert_eq!(first_response.status(), StatusCode::CREATED);
+
+    let first_set_cookie = first_response
+        .headers()
+        .get(SET_COOKIE)
+        .expect("bootstrap should return Set-Cookie for a reusable anonymous session")
+        .to_str()
+        .unwrap()
+        .to_string();
+    let first_session: BootstrapSession =
+        serde_json::from_slice(&to_bytes(first_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+
+    let cookie_value = first_set_cookie
+        .split(';')
+        .next()
+        .expect("Set-Cookie should contain a cookie pair")
+        .to_string();
+    let second_response = bootstrap_session_response(&harness, Some(cookie_value.as_str())).await;
+    assert_eq!(second_response.status(), StatusCode::CREATED);
+
+    let second_session: BootstrapSession =
+        serde_json::from_slice(&to_bytes(second_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+
+    assert_eq!(second_session.session_id, first_session.session_id);
+    harness.cleanup().await;
+}
+
 #[test]
 fn app_config_requires_database_url_and_admin_token() {
     let original_database_url = env::var("KOKO_DATABASE_URL").ok();
@@ -201,22 +236,29 @@ fn app_error_code_exposes_stable_membership_required_code() {
 }
 
 async fn bootstrap_session(harness: &HttpHarness) -> BootstrapSession {
-    let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/session/bootstrap")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = bootstrap_session_response(harness, None).await;
 
     assert_eq!(response.status(), StatusCode::CREATED);
 
     serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+async fn bootstrap_session_response(
+    harness: &HttpHarness,
+    cookie: Option<&str>,
+) -> axum::http::Response<Body> {
+    let mut request = Request::builder().method("POST").uri("/api/session/bootstrap");
+
+    if let Some(cookie) = cookie {
+        request = request.header(COOKIE, cookie);
+    }
+
+    harness
+        .router
+        .clone()
+        .oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
 }
 
 async fn join_room(harness: &HttpHarness, session_id: uuid::Uuid, room_code: &str) -> RoomSnapshot {

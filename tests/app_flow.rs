@@ -12,14 +12,15 @@ use chrono::{DateTime, TimeZone, Utc};
 use koko::{
     app::{
         AppError, Clock, IdGenerator, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
-        RoomSnapshotData, RoomSnapshotPort, SessionPort, join_or_create_room_by_code,
-        load_room_snapshot, send_text_message, subscribe_room_stream,
+        RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
+        bootstrap_anonymous_session, join_or_create_room_by_code, load_room_snapshot,
+        send_text_message, subscribe_room_stream,
     },
     contract::{
-        AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageView,
-        RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
+        AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
+        MessageView, RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
-    domain::{Message, MessageBody, MessageStatus, RoomCode},
+    domain::{AnonymousSession, Message, MessageBody, MessageStatus, RoomCode, SessionStatus},
     store::PgStore,
 };
 use sqlx::{
@@ -53,6 +54,62 @@ fn app_event_serializes_to_tagged_wire_format() {
         json,
         "{\"type\":\"message_created\",\"payload\":{\"message_id\":\"00000000-0000-0000-0000-000000000001\",\"room_id\":\"00000000-0000-0000-0000-000000000002\",\"session_id\":\"00000000-0000-0000-0000-000000000003\",\"body\":\"hello\",\"created_at\":\"2026-03-30T12:00:00Z\",\"client_message_id\":\"00000000-0000-0000-0000-000000000004\"}}"
     );
+}
+
+#[tokio::test]
+async fn bootstrap_anonymous_session_reuses_existing_session_when_present() {
+    let existing_session_id = Uuid::from_u128(100);
+    let now = fixed_time();
+    let existing_session = AnonymousSession {
+        session_id: existing_session_id,
+        issued_at: now,
+        last_seen_at: now,
+        status: SessionStatus::Active,
+    };
+    let bootstrap_port = FakeSessionBootstrapPort::with_existing(existing_session.clone());
+
+    let session = bootstrap_anonymous_session(
+        &bootstrap_port,
+        &FakeClock::new(now),
+        Some(existing_session_id),
+        Uuid::from_u128(101),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(session.session_id, existing_session_id);
+    assert_eq!(bootstrap_port.loaded_session_ids(), vec![existing_session_id]);
+}
+
+#[tokio::test]
+async fn bootstrap_anonymous_session_refreshes_existing_session_state_when_reused() {
+    let existing_session_id = Uuid::from_u128(102);
+    let original_time = Utc.with_ymd_and_hms(2026, 3, 30, 11, 55, 0).unwrap();
+    let reuse_time = fixed_time();
+    let existing_session = AnonymousSession {
+        session_id: existing_session_id,
+        issued_at: original_time,
+        last_seen_at: original_time,
+        status: SessionStatus::Active,
+    };
+    let bootstrap_port = FakeSessionBootstrapPort::with_existing(existing_session.clone());
+
+    let session = bootstrap_anonymous_session(
+        &bootstrap_port,
+        &FakeClock::new(reuse_time),
+        Some(existing_session_id),
+        Uuid::from_u128(103),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(session.session_id, existing_session_id);
+    assert_eq!(session.issued_at, original_time);
+    assert_eq!(session.last_seen_at, reuse_time);
+    assert_eq!(bootstrap_port.loaded_session_ids(), vec![existing_session_id]);
+    assert_eq!(bootstrap_port.saved_sessions().len(), 1);
+    assert_eq!(bootstrap_port.saved_sessions()[0].session_id, existing_session_id);
+    assert_eq!(bootstrap_port.saved_sessions()[0].last_seen_at, reuse_time);
 }
 
 #[tokio::test]
@@ -1296,6 +1353,43 @@ impl FakeClock {
 impl Clock for FakeClock {
     fn now(&self) -> DateTime<Utc> {
         self.now
+    }
+}
+
+#[derive(Debug)]
+struct FakeSessionBootstrapPort {
+    existing_session: Option<AnonymousSession>,
+    saved_sessions: Mutex<Vec<AnonymousSession>>,
+    loaded_session_ids: Mutex<Vec<Uuid>>,
+}
+
+impl FakeSessionBootstrapPort {
+    fn with_existing(existing_session: AnonymousSession) -> Self {
+        Self {
+            existing_session: Some(existing_session),
+            saved_sessions: Mutex::default(),
+            loaded_session_ids: Mutex::default(),
+        }
+    }
+
+    fn saved_sessions(&self) -> Vec<AnonymousSession> {
+        self.saved_sessions.lock().unwrap().clone()
+    }
+
+    fn loaded_session_ids(&self) -> Vec<Uuid> {
+        self.loaded_session_ids.lock().unwrap().clone()
+    }
+}
+
+impl SessionBootstrapPort for FakeSessionBootstrapPort {
+    async fn load_session(&self, session_id: Uuid) -> Result<Option<AnonymousSession>, AppError> {
+        self.loaded_session_ids.lock().unwrap().push(session_id);
+        Ok(self.existing_session.clone())
+    }
+
+    async fn save_session(&self, session: AnonymousSession) -> Result<AnonymousSession, AppError> {
+        self.saved_sessions.lock().unwrap().push(session.clone());
+        Ok(session)
     }
 }
 

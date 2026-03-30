@@ -56,6 +56,11 @@ pub trait SessionPort {
 }
 
 pub trait SessionBootstrapPort {
+    fn load_session(
+        &self,
+        session_id: Uuid,
+    ) -> impl Future<Output = Result<Option<AnonymousSession>, AppError>> + Send;
+
     fn save_session(
         &self,
         session: AnonymousSession,
@@ -139,12 +144,37 @@ pub trait Clock {
 pub async fn bootstrap_anonymous_session<P, C>(
     session_bootstrap_port: &P,
     clock: &C,
+    existing_session_id: Option<Uuid>,
     session_id: Uuid,
 ) -> Result<BootstrapSession, AppError>
 where
     P: SessionBootstrapPort,
     C: Clock,
 {
+    if let Some(existing_session_id) = existing_session_id
+        && let Some(existing_session) = session_bootstrap_port
+            .load_session(existing_session_id)
+            .await?
+    {
+        let refreshed_session = AnonymousSession {
+            last_seen_at: clock.now(),
+            ..existing_session
+        };
+        let persisted = session_bootstrap_port
+            .save_session(refreshed_session)
+            .await?;
+
+        if persisted.status != SessionStatus::Active || persisted.session_id != existing_session_id {
+            return Err(AppError::DependencyFailure);
+        }
+
+        return Ok(BootstrapSession {
+            session_id: persisted.session_id,
+            issued_at: persisted.issued_at,
+            last_seen_at: persisted.last_seen_at,
+        });
+    }
+
     let now = clock.now();
     let session = AnonymousSession {
         session_id,

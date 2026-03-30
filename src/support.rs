@@ -12,6 +12,7 @@ use crate::{
 
 pub const APP_NAME: &str = "koko";
 pub const DEFAULT_TRACING_FILTER: &str = "info";
+pub const SESSION_COOKIE_NAME: &str = "koko_session";
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:4000";
 

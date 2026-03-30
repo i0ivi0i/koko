@@ -2,7 +2,12 @@ use axum::{
     Json, Router,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
+    response::IntoResponse,
     routing::{get, post},
+};
+use axum_extra::extract::{
+    CookieJar,
+    cookie::{Cookie, SameSite},
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -13,8 +18,7 @@ use crate::{
         load_room_snapshot,
     },
     contract::{
-        AdminOverview, BootstrapSession, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
-        RoomSnapshot,
+        AdminOverview, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, RoomSnapshot,
     },
     store::PgStore,
     support,
@@ -51,11 +55,26 @@ pub fn app_router(store: PgStore, admin_token: String) -> Router {
 
 async fn bootstrap_session(
     State(state): State<HttpState>,
-) -> Result<(StatusCode, Json<BootstrapSession>), (StatusCode, Json<ErrorPayload>)> {
-    let session = bootstrap_anonymous_session(&state.store, &support::SystemClock, Uuid::now_v7())
-        .await
-        .map_err(map_http_error)?;
-    Ok((StatusCode::CREATED, Json(session)))
+    jar: CookieJar,
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorPayload>)> {
+    let existing_session_id = jar
+        .get(support::SESSION_COOKIE_NAME)
+        .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
+    let session = bootstrap_anonymous_session(
+        &state.store,
+        &support::SystemClock,
+        existing_session_id,
+        Uuid::now_v7(),
+    )
+    .await
+    .map_err(map_http_error)?;
+    let cookie = Cookie::build((support::SESSION_COOKIE_NAME, session.session_id.to_string()))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .path("/")
+        .build();
+
+    Ok((jar.add(cookie), (StatusCode::CREATED, Json(session))))
 }
 
 async fn join_room(

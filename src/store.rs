@@ -43,10 +43,41 @@ impl SessionPort for PgStore {
 }
 
 impl SessionBootstrapPort for PgStore {
+    async fn load_session(&self, session_id: Uuid) -> Result<Option<AnonymousSession>, AppError> {
+        let row = sqlx::query(
+            "SELECT session_id, issued_at, last_seen_at, status
+             FROM anonymous_sessions
+             WHERE session_id = $1",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let status = row.get::<String, _>("status");
+        if status != "active" {
+            return Err(AppError::DependencyFailure);
+        }
+
+        Ok(Some(AnonymousSession {
+            session_id: row.get("session_id"),
+            issued_at: row.get("issued_at"),
+            last_seen_at: row.get("last_seen_at"),
+            status: SessionStatus::Active,
+        }))
+    }
+
     async fn save_session(&self, session: AnonymousSession) -> Result<AnonymousSession, AppError> {
         let row = sqlx::query(
             "INSERT INTO anonymous_sessions (session_id, issued_at, last_seen_at, status)
              VALUES ($1, $2, $3, 'active')
+             ON CONFLICT (session_id) DO UPDATE
+             SET last_seen_at = EXCLUDED.last_seen_at,
+                 status = 'active'
              RETURNING session_id, issued_at, last_seen_at, status",
         )
         .bind(session.session_id)
