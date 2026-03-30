@@ -2,6 +2,7 @@ pub mod support;
 pub mod domain;
 pub mod app;
 pub mod contract;
+pub mod store;
 
 macro_rules! placeholder_module {
     ($name:ident) => {
@@ -12,7 +13,6 @@ macro_rules! placeholder_module {
     };
 }
 
-placeholder_module!(store);
 placeholder_module!(rt);
 placeholder_module!(http);
 placeholder_module!(web);

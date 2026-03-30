@@ -5,7 +5,7 @@ fn crate_exposes_expected_root_modules() {
     let _ = std::any::type_name::<domain::Room>();
     let _ = std::any::type_name::<app::AppError>();
     let _ = std::any::type_name::<contract::SendTextMessageCommand>();
-    let _ = std::any::type_name::<store::Module>();
+    let _ = std::any::type_name::<store::PgStore>();
     let _ = std::any::type_name::<rt::Module>();
     let _ = std::any::type_name::<http::Module>();
     let _ = std::any::type_name::<web::Module>();

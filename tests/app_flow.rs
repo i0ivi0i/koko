@@ -1,4 +1,10 @@
-use std::sync::Mutex;
+use std::{
+    env,
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use chrono::{DateTime, TimeZone, Utc};
 use koko::{
@@ -12,7 +18,10 @@ use koko::{
         RoomSnapshot, SendTextMessageCommand,
     },
     domain::{Message, MessageBody, MessageStatus, RoomCode},
+    store::PgStore,
 };
+use sqlx::{PgPool, Row};
+use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 #[test]
@@ -458,6 +467,171 @@ fn app_and_contract_source_stays_entrypoint_neutral() {
     }
 }
 
+#[tokio::test]
+async fn join_or_create_persists_room_member_and_room_code() {
+    let _guard = db_test_lock().lock().await;
+    let harness = PgHarness::new().await;
+    let session_id = Uuid::now_v7();
+    let room_code = unique_room_code('a');
+    harness.seed_active_session(session_id).await;
+
+    let snapshot = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: room_code.clone(),
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(snapshot.room_code, room_code.to_ascii_uppercase());
+    assert!(snapshot.messages.is_empty());
+    let persisted_room_id = harness.room_id_by_code(&room_code).await;
+    assert_eq!(snapshot.room_id, persisted_room_id);
+    assert_eq!(harness.member_count(snapshot.room_id, session_id).await, 1);
+}
+
+#[tokio::test]
+async fn send_text_message_persists_message_and_room_snapshot_reads_it() {
+    let _guard = db_test_lock().lock().await;
+    let harness = PgHarness::new().await;
+    let session_id = Uuid::now_v7();
+    let room_code = unique_room_code('b');
+    let message_id = Uuid::now_v7();
+    let now = fixed_time();
+    harness.seed_active_session(session_id).await;
+
+    let joined = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        JoinOrCreateRoomByCodeCommand {
+            room_code,
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let event = send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FakeIdGenerator::new(message_id),
+        &FakeClock::new(now),
+        SendTextMessageCommand {
+            room_id: joined.room_id,
+            session_id,
+            body: "  persisted hello  ".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(matches!(
+        event,
+        AppEvent::MessageCreated(message_created)
+            if message_created.message_id == message_id
+                && message_created.room_id == joined.room_id
+                && message_created.session_id == session_id
+                && message_created.body == "persisted hello"
+                && message_created.created_at == now
+    ));
+
+    let snapshot = load_room_snapshot(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        LoadRoomSnapshotQuery {
+            room_id: joined.room_id,
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(snapshot.messages.len(), 1);
+    assert_eq!(snapshot.messages[0].message_id, message_id);
+    assert_eq!(snapshot.messages[0].body, "persisted hello");
+    assert_eq!(
+        harness.message_bodies(joined.room_id).await,
+        vec!["persisted hello".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn join_or_create_treats_room_code_as_case_insensitive() {
+    let _guard = db_test_lock().lock().await;
+    let harness = PgHarness::new().await;
+    let first_session_id = Uuid::now_v7();
+    let second_session_id = Uuid::now_v7();
+    let room_code = unique_room_code('c');
+    harness.seed_active_session(first_session_id).await;
+    harness.seed_active_session(second_session_id).await;
+
+    let first_snapshot = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: room_code.to_ascii_lowercase(),
+            session_id: first_session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let second_snapshot = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: room_code.to_ascii_uppercase(),
+            session_id: second_session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(first_snapshot.room_id, second_snapshot.room_id);
+    assert_eq!(harness.member_count(first_snapshot.room_id, first_session_id).await, 1);
+    assert_eq!(harness.member_count(first_snapshot.room_id, second_session_id).await, 1);
+}
+
+#[tokio::test]
+async fn repeated_join_does_not_duplicate_member_in_same_room() {
+    let _guard = db_test_lock().lock().await;
+    let harness = PgHarness::new().await;
+    let session_id = Uuid::now_v7();
+    let room_code = unique_room_code('d');
+    harness.seed_active_session(session_id).await;
+
+    let first_snapshot = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: room_code.clone(),
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let second_snapshot = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: room_code.to_ascii_lowercase(),
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(first_snapshot.room_id, second_snapshot.room_id);
+    assert_eq!(harness.member_count(first_snapshot.room_id, session_id).await, 1);
+}
+
 #[derive(Debug)]
 struct FakeSessionPort {
     allowed: bool,
@@ -723,3 +897,107 @@ fn sample_message_at(
 fn fixed_time() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()
 }
+
+struct PgHarness {
+    pool: PgPool,
+    store: PgStore,
+}
+
+impl PgHarness {
+    async fn new() -> Self {
+        let database_url = env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://koko:koko_local@127.0.0.1:5432/koko_stage1".to_string());
+        let pool = PgPool::connect(&database_url).await.unwrap();
+        ensure_schema(&pool).await;
+        reset_truth_tables(&pool).await;
+
+        Self {
+            store: PgStore::new(pool.clone()),
+            pool,
+        }
+    }
+
+    async fn seed_active_session(&self, session_id: Uuid) {
+        let now = Utc::now();
+        sqlx::query(
+            "INSERT INTO anonymous_sessions (session_id, issued_at, last_seen_at, status)
+             VALUES ($1, $2, $3, 'active')",
+        )
+        .bind(session_id)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .unwrap();
+    }
+
+    async fn room_id_by_code(&self, room_code: &str) -> Uuid {
+        sqlx::query("SELECT room_id FROM room_codes WHERE normalized_code = $1")
+            .bind(RoomCode::new(room_code).unwrap().normalized())
+            .fetch_one(&self.pool)
+            .await
+            .unwrap()
+            .get("room_id")
+    }
+
+    async fn member_count(&self, room_id: Uuid, session_id: Uuid) -> i64 {
+        sqlx::query(
+            "SELECT COUNT(*) AS member_count
+             FROM members
+             WHERE room_id = $1 AND session_id = $2",
+        )
+        .bind(room_id)
+        .bind(session_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap()
+        .get("member_count")
+    }
+
+    async fn message_bodies(&self, room_id: Uuid) -> Vec<String> {
+        sqlx::query(
+            "SELECT body
+             FROM messages
+             WHERE room_id = $1
+             ORDER BY created_at ASC, message_id ASC",
+        )
+        .bind(room_id)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.get("body"))
+        .collect()
+    }
+}
+
+async fn ensure_schema(pool: &PgPool) {
+    for statement in include_str!("../migrations/0001_init.sql")
+        .split(';')
+        .map(|statement: &str| statement.trim())
+        .filter(|statement: &&str| !statement.is_empty())
+    {
+        sqlx::query(statement).execute(pool).await.unwrap();
+    }
+}
+
+async fn reset_truth_tables(pool: &PgPool) {
+    sqlx::query(
+        "TRUNCATE TABLE messages, members, room_codes, rooms, anonymous_sessions RESTART IDENTITY CASCADE",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+fn unique_room_code(letter: char) -> String {
+    let value = ROOM_CODE_SEQUENCE.fetch_add(1, Ordering::Relaxed) % 10_000;
+    format!("{}{value:04}", letter.to_ascii_uppercase())
+}
+
+fn db_test_lock() -> &'static AsyncMutex<()> {
+    DB_TEST_LOCK.get_or_init(|| AsyncMutex::new(()))
+}
+
+static DB_TEST_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
+static ROOM_CODE_SEQUENCE: AtomicUsize = AtomicUsize::new(1_000);
