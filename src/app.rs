@@ -213,12 +213,16 @@ where
 }
 
 fn build_room_snapshot(snapshot: RoomSnapshotData) -> RoomSnapshot {
+    let message_count = snapshot.messages.len();
+    let skip = message_count.saturating_sub(ROOM_SNAPSHOT_LIMIT);
+
     RoomSnapshot {
         room_id: snapshot.room_id,
         room_code: snapshot.room_code.normalized().to_string(),
         messages: snapshot
             .messages
             .into_iter()
+            .skip(skip)
             .map(|message| MessageView {
                 message_id: message.message_id,
                 session_id: message.sender_session_id,

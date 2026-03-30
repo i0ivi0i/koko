@@ -15,6 +15,14 @@ use koko::{
 };
 use uuid::Uuid;
 
+#[test]
+fn app_error_code_serializes_to_stable_wire_value() {
+    assert_eq!(
+        serde_json::to_string(&AppErrorCode::InvalidSession).unwrap(),
+        "\"invalid_session\""
+    );
+}
+
 #[tokio::test]
 async fn send_text_message_returns_message_created_event() {
     let room_id = Uuid::from_u128(1);
@@ -132,6 +140,27 @@ async fn send_text_message_rejects_persisted_message_drift() {
 }
 
 #[tokio::test]
+async fn send_text_message_rejects_empty_body() {
+    let error = send_text_message(
+        &FakeSessionPort::allow(),
+        &FakeMembershipPort::allow(),
+        &FakeMessageStore::persisting(MessageStoreOutcome::same()),
+        &FakeIdGenerator::new(Uuid::from_u128(27)),
+        &FakeClock::new(fixed_time()),
+        SendTextMessageCommand {
+            room_id: Uuid::from_u128(28),
+            session_id: Uuid::from_u128(29),
+            body: "   ".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::InvalidMessageBody);
+}
+
+#[tokio::test]
 async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     let session_id = Uuid::from_u128(31);
     let room_id = Uuid::from_u128(32);
@@ -157,6 +186,27 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     assert_eq!(join_port.requested_codes(), vec!["A1234".to_string()]);
     assert_eq!(snapshot_port.requested_limits(), vec![50]);
     assert_eq!(snapshot, expected_snapshot(room_id, session_id, "hello"));
+}
+
+#[tokio::test]
+async fn join_or_create_room_by_code_rejects_invalid_room_code() {
+    let error = join_or_create_room_by_code(
+        &FakeSessionPort::allow(),
+        &FakeRoomJoinPort::new(Uuid::from_u128(36)),
+        &FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
+            Uuid::from_u128(36),
+            "A1234",
+            vec![],
+        )),
+        JoinOrCreateRoomByCodeCommand {
+            room_code: "ABCDE".to_string(),
+            session_id: Uuid::from_u128(37),
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::InvalidRoomCode);
 }
 
 #[tokio::test]
@@ -213,6 +263,40 @@ async fn load_room_snapshot_returns_messages_for_member() {
 }
 
 #[tokio::test]
+async fn load_room_snapshot_truncates_to_latest_fifty_messages() {
+    let room_id = Uuid::from_u128(430);
+    let session_id = Uuid::from_u128(431);
+    let messages = (0..55)
+        .map(|index| {
+            sample_message(
+                Uuid::from_u128(500 + index),
+                room_id,
+                session_id,
+                &format!("message {index}"),
+            )
+        })
+        .collect();
+    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
+        room_id,
+        "A1234",
+        messages,
+    ));
+
+    let snapshot = load_room_snapshot(
+        &FakeSessionPort::allow(),
+        &FakeMembershipPort::allow(),
+        &snapshot_port,
+        LoadRoomSnapshotQuery { room_id, session_id },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(snapshot.messages.len(), 50);
+    assert_eq!(snapshot.messages.first().unwrap().body, "message 5");
+    assert_eq!(snapshot.messages.last().unwrap().body, "message 54");
+}
+
+#[tokio::test]
 async fn load_room_snapshot_rejects_inactive_session() {
     let room_id = Uuid::from_u128(44);
     let session_id = Uuid::from_u128(45);
@@ -259,6 +343,30 @@ async fn load_room_snapshot_rejects_non_member() {
 }
 
 #[tokio::test]
+async fn load_room_snapshot_rejects_mismatched_room_snapshot() {
+    let requested_room_id = Uuid::from_u128(48);
+    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
+        Uuid::from_u128(49),
+        "A1234",
+        vec![],
+    ));
+
+    let error = load_room_snapshot(
+        &FakeSessionPort::allow(),
+        &FakeMembershipPort::allow(),
+        &snapshot_port,
+        LoadRoomSnapshotQuery {
+            room_id: requested_room_id,
+            session_id: Uuid::from_u128(50),
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::Internal);
+}
+
+#[tokio::test]
 async fn load_room_snapshot_propagates_internal_error_code_for_dependency_failure() {
     let room_id = Uuid::from_u128(51);
     let session_id = Uuid::from_u128(52);
@@ -277,21 +385,12 @@ async fn load_room_snapshot_propagates_internal_error_code_for_dependency_failur
 }
 
 #[test]
-fn app_and_contract_types_stay_entrypoint_neutral() {
-    let type_names = [
-        std::any::type_name::<AppError>(),
-        std::any::type_name::<AppErrorCode>(),
-        std::any::type_name::<JoinOrCreateRoomByCodeCommand>(),
-        std::any::type_name::<LoadRoomSnapshotQuery>(),
-        std::any::type_name::<RoomSnapshot>(),
-        std::any::type_name::<SendTextMessageCommand>(),
-    ];
-
-    for type_name in type_names {
-        let lowered = type_name.to_ascii_lowercase();
-        assert!(!lowered.contains("axum"));
-        assert!(!lowered.contains("sqlx"));
-        assert!(!lowered.contains("socketioxide"));
+fn app_and_contract_source_stays_entrypoint_neutral() {
+    for source in [include_str!("../src/app.rs"), include_str!("../src/contract.rs")] {
+        let lowered = source.to_ascii_lowercase();
+        assert!(!lowered.contains("axum::"));
+        assert!(!lowered.contains("sqlx::"));
+        assert!(!lowered.contains("socketioxide::"));
     }
 }
 
