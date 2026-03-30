@@ -225,6 +225,26 @@ async fn join_or_create_room_by_code_rejects_invalid_room_code() {
 }
 
 #[tokio::test]
+async fn join_or_create_room_by_code_rejects_mismatched_room_code_snapshot() {
+    let error = join_or_create_room_by_code(
+        &FakeSessionPort::allow(),
+        &FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
+            Uuid::from_u128(38),
+            "B1234",
+            vec![],
+        )),
+        JoinOrCreateRoomByCodeCommand {
+            room_code: "A1234".to_string(),
+            session_id: Uuid::from_u128(39),
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::Internal);
+}
+
+#[tokio::test]
 async fn join_or_create_room_by_code_rejects_inactive_session() {
     let session_id = Uuid::from_u128(34);
     let join_port = FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
@@ -373,6 +393,35 @@ async fn load_room_snapshot_rejects_mismatched_room_snapshot() {
         LoadRoomSnapshotQuery {
             room_id: requested_room_id,
             session_id: Uuid::from_u128(50),
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::Internal);
+}
+
+#[tokio::test]
+async fn load_room_snapshot_rejects_snapshot_with_foreign_room_messages() {
+    let requested_room_id = Uuid::from_u128(53);
+    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
+        requested_room_id,
+        "A1234",
+        vec![sample_message(
+            Uuid::from_u128(54),
+            Uuid::from_u128(55),
+            Uuid::from_u128(56),
+            "foreign",
+        )],
+    ));
+
+    let error = load_room_snapshot(
+        &FakeSessionPort::allow(),
+        &FakeMembershipPort::allow(),
+        &snapshot_port,
+        LoadRoomSnapshotQuery {
+            room_id: requested_room_id,
+            session_id: Uuid::from_u128(57),
         },
     )
     .await

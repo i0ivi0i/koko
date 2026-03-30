@@ -162,10 +162,13 @@ where
 
     let room_code = RoomCode::new(&command.room_code)?;
     let snapshot = room_join_port
-        .join_or_create_room_by_code(room_code, ROOM_SNAPSHOT_LIMIT, command.session_id)
+        .join_or_create_room_by_code(room_code.clone(), ROOM_SNAPSHOT_LIMIT, command.session_id)
         .await?;
+    if snapshot.room_code.normalized() != room_code.normalized() {
+        return Err(AppError::DependencyFailure);
+    }
 
-    Ok(build_room_snapshot(snapshot))
+    build_room_snapshot(snapshot)
 }
 
 pub async fn load_room_snapshot<S, M, R>(
@@ -202,15 +205,19 @@ where
         return Err(AppError::DependencyFailure);
     }
 
-    Ok(build_room_snapshot(snapshot))
+    build_room_snapshot(snapshot)
 }
 
-fn build_room_snapshot(snapshot: RoomSnapshotData) -> RoomSnapshot {
+fn build_room_snapshot(snapshot: RoomSnapshotData) -> Result<RoomSnapshot, AppError> {
     let RoomSnapshotData {
         room_id,
         room_code,
         mut messages,
     } = snapshot;
+
+    if messages.iter().any(|message| message.room_id != room_id) {
+        return Err(AppError::DependencyFailure);
+    }
 
     messages.sort_by(|left, right| {
         left.created_at
@@ -221,7 +228,7 @@ fn build_room_snapshot(snapshot: RoomSnapshotData) -> RoomSnapshot {
     let message_count = messages.len();
     let skip = message_count.saturating_sub(ROOM_SNAPSHOT_LIMIT);
 
-    RoomSnapshot {
+    Ok(RoomSnapshot {
         room_id,
         room_code: room_code.normalized().to_string(),
         messages: messages
@@ -234,7 +241,7 @@ fn build_room_snapshot(snapshot: RoomSnapshotData) -> RoomSnapshot {
                 created_at: message.created_at,
             })
             .collect(),
-    }
+    })
 }
 
 fn ensure_persisted_message_matches(
