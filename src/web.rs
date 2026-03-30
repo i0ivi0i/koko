@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{chat::ChatState, view};
+use crate::{chat::ChatState, contract::BootstrapSession, view};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -10,6 +10,12 @@ pub const BOOTSTRAP_PATH: &str = "/api/session/bootstrap";
 
 fn bootstrapping_state() -> ChatState {
     ChatState::awaiting_bootstrap()
+}
+
+pub fn bootstrap_state(session: BootstrapSession) -> ChatState {
+    let mut state = ChatState::awaiting_bootstrap();
+    state.apply_bootstrap_session(session);
+    state
 }
 
 #[component]
