@@ -8,6 +8,12 @@ target-spec-review/
 # Tests are source code and must stay under version control.
 !tests/
 
+# Editor-local workflow files should stay local, not in the shared repo.
+.vscode/
+
+# Keep real SQLx metadata when it exists, but do not track an empty placeholder.
+.sqlx/.gitkeep
+
 # Common local OS noise.
 Thumbs.db
 .DS_Store
