@@ -7,7 +7,7 @@ use axum::{
 use http_support::HttpHarness;
 use koko::{
     app::AppError,
-    chat::{ChatState, DeliveryState},
+    chat::{ChatState, ConnectionState, DeliveryState},
     contract::{BootstrapSession, MessageCreated, RoomSnapshot},
 };
 use std::env;
@@ -39,6 +39,15 @@ fn web_state_promotes_pending_message_only_after_server_confirmation() {
     assert_eq!(state.messages()[0].delivery, DeliveryState::Confirmed);
     assert_eq!(state.messages()[0].message_id, Some(Uuid::from_u128(92)));
     assert_eq!(state.confirmed_messages().len(), 1);
+}
+
+#[test]
+fn web_shell_does_not_fake_joined_state_or_require_bridge_stub() {
+    let source = include_str!("../src/web.rs");
+
+    assert!(!source.contains("ConnectionState::Joined"));
+    assert!(!source.contains("SOCKET_BRIDGE_PATH"));
+    assert_eq!(ChatState::default().connection(), ConnectionState::Offline);
 }
 
 #[tokio::test]

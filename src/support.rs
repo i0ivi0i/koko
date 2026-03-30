@@ -1,9 +1,14 @@
 use std::{convert::Infallible, env, net::SocketAddr};
 
+use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tracing_subscriber::EnvFilter;
+use uuid::Uuid;
 
-use crate::{app::AppError, contract::AppErrorCode};
+use crate::{
+    app::{AppError, Clock, IdGenerator},
+    contract::AppErrorCode,
+};
 
 pub const APP_NAME: &str = "koko";
 pub const DEFAULT_TRACING_FILTER: &str = "info";
@@ -36,6 +41,12 @@ pub enum TracingInit {
     AlreadyInitialized,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SystemClock;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SystemIdGenerator;
+
 pub fn app_name() -> &'static str {
     APP_NAME
 }
@@ -55,8 +66,8 @@ pub fn admin_token_error_code() -> &'static str {
 }
 
 pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_filter));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
     let subscriber = tracing_subscriber::fmt().with_env_filter(filter).finish();
 
     let result = match tracing::subscriber::set_global_default(subscriber) {
@@ -67,24 +78,39 @@ pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     Ok(result)
 }
 
+impl Clock for SystemClock {
+    fn now(&self) -> DateTime<Utc> {
+        Utc::now()
+    }
+}
+
+impl IdGenerator for SystemIdGenerator {
+    fn next_message_id(&self) -> Uuid {
+        Uuid::now_v7()
+    }
+}
+
 impl AppConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
-        let database_url =
-            env::var("KOKO_DATABASE_URL").map_err(|_| ConfigError::MissingEnv("KOKO_DATABASE_URL"))?;
+        let database_url = env::var("KOKO_DATABASE_URL")
+            .map_err(|_| ConfigError::MissingEnv("KOKO_DATABASE_URL"))?;
         if database_url.trim().is_empty() {
             return Err(ConfigError::EmptyEnv("KOKO_DATABASE_URL"));
         }
-        let admin_token =
-            env::var("KOKO_ADMIN_TOKEN").map_err(|_| ConfigError::MissingEnv("KOKO_ADMIN_TOKEN"))?;
+        let admin_token = env::var("KOKO_ADMIN_TOKEN")
+            .map_err(|_| ConfigError::MissingEnv("KOKO_ADMIN_TOKEN"))?;
         let admin_token = admin_token.trim().to_string();
         if admin_token.is_empty() {
             return Err(ConfigError::EmptyEnv("KOKO_ADMIN_TOKEN"));
         }
-        let bind_addr_raw = env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
-        let bind_addr = bind_addr_raw.parse().map_err(|source| ConfigError::InvalidBindAddr {
-            value: bind_addr_raw,
-            source,
-        })?;
+        let bind_addr_raw =
+            env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
+        let bind_addr = bind_addr_raw
+            .parse()
+            .map_err(|source| ConfigError::InvalidBindAddr {
+                value: bind_addr_raw,
+                source,
+            })?;
 
         Ok(Self {
             database_url: database_url.trim().to_string(),

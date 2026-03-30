@@ -18,19 +18,9 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct Module;
 
-pub trait RoomSubscriber {
-    fn join_room(&self, room: &str) -> impl Future<Output = Result<(), AppError>> + Send;
-}
+pub trait RealtimePort {
+    fn join_room(&self, room_id: Uuid) -> impl Future<Output = Result<(), AppError>> + Send;
 
-pub trait RoomBroadcaster {
-    fn broadcast_message_created(
-        &self,
-        room_id: Uuid,
-        payload: &MessageCreated,
-    ) -> impl Future<Output = Result<(), AppError>> + Send;
-}
-
-pub trait RealtimeResponder {
     fn emit_room_stream_subscribed(
         &self,
         room_id: Uuid,
@@ -44,6 +34,12 @@ pub trait RealtimeResponder {
     fn emit_command_rejected(
         &self,
         payload: &CommandRejected,
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
+
+    fn broadcast_message_created(
+        &self,
+        room_id: Uuid,
+        payload: &MessageCreated,
     ) -> impl Future<Output = Result<(), AppError>> + Send;
 }
 
@@ -73,44 +69,41 @@ fn warn_handler_failure(handler: &str, error: &AppError) {
     );
 }
 
-pub struct SubscribeRoomStreamDeps<'a, S, M, R, N> {
+pub struct SubscribeRoomStreamDeps<'a, S, M, R> {
     pub session_port: &'a S,
     pub membership_port: &'a M,
-    pub subscriber: &'a R,
-    pub responder: &'a N,
+    pub realtime: &'a R,
 }
 
-pub struct SendTextMessageDeps<'a, S, M, Store, B, N, I, C> {
+pub struct SendTextMessageDeps<'a, S, M, Store, R, I, C> {
     pub session_port: &'a S,
     pub membership_port: &'a M,
     pub message_store: &'a Store,
-    pub broadcaster: &'a B,
-    pub responder: &'a N,
+    pub realtime: &'a R,
     pub id_generator: &'a I,
     pub clock: &'a C,
 }
 
-pub async fn handle_subscribe_room_stream<S, M, R, N>(
-    deps: SubscribeRoomStreamDeps<'_, S, M, R, N>,
+pub async fn handle_subscribe_room_stream<S, M, R>(
+    deps: SubscribeRoomStreamDeps<'_, S, M, R>,
     command: SubscribeRoomStreamCommand,
 ) -> Result<(), AppError>
 where
     S: SessionPort,
     M: app::MembershipPort,
-    R: RoomSubscriber,
-    N: RealtimeResponder,
+    R: RealtimePort,
 {
     match app::subscribe_room_stream(deps.session_port, deps.membership_port, command.clone()).await
     {
         Ok(()) => {
-            deps.subscriber.join_room(&command.room_id.to_string()).await?;
-            deps.responder
+            deps.realtime.join_room(command.room_id).await?;
+            deps.realtime
                 .emit_room_stream_subscribed(command.room_id)
                 .await?;
             Ok(())
         }
         Err(error) => {
-            deps.responder
+            deps.realtime
                 .emit_command_rejected(&CommandRejected { code: error.code() })
                 .await?;
             Err(error)
@@ -118,16 +111,15 @@ where
     }
 }
 
-pub async fn handle_send_text_message<S, M, Store, B, N, I, C>(
-    deps: SendTextMessageDeps<'_, S, M, Store, B, N, I, C>,
+pub async fn handle_send_text_message<S, M, Store, R, I, C>(
+    deps: SendTextMessageDeps<'_, S, M, Store, R, I, C>,
     command: SendTextMessageCommand,
 ) -> Result<MessageCreated, AppError>
 where
     S: SessionPort,
     M: MembershipPort,
     Store: MessageStore,
-    B: RoomBroadcaster,
-    N: RealtimeResponder,
+    R: RealtimePort,
     I: IdGenerator,
     C: Clock,
 {
@@ -144,7 +136,7 @@ where
     {
         Ok(event) => event,
         Err(error) => {
-            deps.responder
+            deps.realtime
                 .emit_command_rejected(&CommandRejected { code: error.code() })
                 .await?;
             return Err(error);
@@ -153,8 +145,8 @@ where
 
     match event {
         crate::contract::AppEvent::MessageCreated(payload) => {
-            deps.responder.emit_message_accepted(&payload).await?;
-            deps.broadcaster
+            deps.realtime.emit_message_accepted(&payload).await?;
+            deps.realtime
                 .broadcast_message_created(room_id, &payload)
                 .await?;
             Ok(payload)
@@ -174,20 +166,20 @@ pub fn install_realtime<Store, IdGen, AppClock>(
         let state = state.clone();
         async move {
             let io_for_events = io.clone();
+            let io_for_subscribe = io_for_events.clone();
 
             socket.on("subscribe_room_stream", {
                 let state = state.clone();
                 move |socket: SocketRef, Data(command): Data<SubscribeRoomStreamCommand>| {
                     let state = state.clone();
+                    let io = io_for_subscribe.clone();
                     async move {
-                        let subscriber = SocketRoomSubscriber::new(socket);
-                        let responder = SocketRealtimeResponder::new(subscriber.socket.clone());
+                        let realtime = SocketRealtimePort::new(socket, io);
                         if let Err(error) = handle_subscribe_room_stream(
                             SubscribeRoomStreamDeps {
                                 session_port: &state.store,
                                 membership_port: &state.store,
-                                subscriber: &subscriber,
-                                responder: &responder,
+                                realtime: &realtime,
                             },
                             command,
                         )
@@ -204,16 +196,14 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                 let io = io_for_events.clone();
                 move |socket: SocketRef, Data(command): Data<SendTextMessageCommand>| {
                     let state = state.clone();
-                    let broadcaster = SocketRoomBroadcaster::new(io.clone());
-                    let responder = SocketRealtimeResponder::new(socket);
+                    let realtime = SocketRealtimePort::new(socket, io.clone());
                     async move {
                         if let Err(error) = handle_send_text_message(
                             SendTextMessageDeps {
                                 session_port: &state.store,
                                 membership_port: &state.store,
                                 message_store: &state.store,
-                                broadcaster: &broadcaster,
-                                responder: &responder,
+                                realtime: &realtime,
                                 id_generator: &state.id_generator,
                                 clock: &state.clock,
                             },
@@ -231,66 +221,26 @@ pub fn install_realtime<Store, IdGen, AppClock>(
 }
 
 #[derive(Clone)]
-struct SocketRoomSubscriber {
+struct SocketRealtimePort {
     socket: SocketRef,
-}
-
-impl SocketRoomSubscriber {
-    fn new(socket: SocketRef) -> Self {
-        Self { socket }
-    }
-}
-
-impl RoomSubscriber for SocketRoomSubscriber {
-    async fn join_room(&self, room: &str) -> Result<(), AppError> {
-        self.socket.join(room.to_string());
-        Ok(())
-    }
-}
-
-#[derive(Clone)]
-struct SocketRoomBroadcaster {
     io: SocketIo,
 }
 
-impl SocketRoomBroadcaster {
-    fn new(io: SocketIo) -> Self {
-        Self { io }
+impl SocketRealtimePort {
+    fn new(socket: SocketRef, io: SocketIo) -> Self {
+        Self { socket, io }
     }
 }
 
-impl RoomBroadcaster for SocketRoomBroadcaster {
-    async fn broadcast_message_created(
-        &self,
-        room_id: Uuid,
-        payload: &MessageCreated,
-    ) -> Result<(), AppError> {
-        self.io
-            .to(room_id.to_string())
-            .emit("message_created", payload)
-            .await
-            .map_err(|_| AppError::DependencyFailure)
+impl RealtimePort for SocketRealtimePort {
+    async fn join_room(&self, room_id: Uuid) -> Result<(), AppError> {
+        self.socket.join(room_id.to_string());
+        Ok(())
     }
-}
 
-#[derive(Clone)]
-struct SocketRealtimeResponder {
-    socket: SocketRef,
-}
-
-impl SocketRealtimeResponder {
-    fn new(socket: SocketRef) -> Self {
-        Self { socket }
-    }
-}
-
-impl RealtimeResponder for SocketRealtimeResponder {
     async fn emit_room_stream_subscribed(&self, room_id: Uuid) -> Result<(), AppError> {
         self.socket
-            .emit(
-                "room_stream_subscribed",
-                &RoomStreamSubscribed { room_id },
-            )
+            .emit("room_stream_subscribed", &RoomStreamSubscribed { room_id })
             .map_err(|_| AppError::DependencyFailure)
     }
 
@@ -303,6 +253,18 @@ impl RealtimeResponder for SocketRealtimeResponder {
     async fn emit_command_rejected(&self, payload: &CommandRejected) -> Result<(), AppError> {
         self.socket
             .emit("command_rejected", payload)
+            .map_err(|_| AppError::DependencyFailure)
+    }
+
+    async fn broadcast_message_created(
+        &self,
+        room_id: Uuid,
+        payload: &MessageCreated,
+    ) -> Result<(), AppError> {
+        self.io
+            .to(room_id.to_string())
+            .emit("message_created", payload)
+            .await
             .map_err(|_| AppError::DependencyFailure)
     }
 }

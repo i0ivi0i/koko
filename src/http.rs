@@ -4,14 +4,13 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::{get, post},
 };
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
     app::{
-        AppError, Clock, bootstrap_anonymous_session, get_admin_overview,
-        join_or_create_room_by_code, load_room_snapshot,
+        AppError, bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
+        load_room_snapshot,
     },
     contract::{
         AdminOverview, BootstrapSession, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
@@ -41,15 +40,6 @@ struct SnapshotQuery {
     session_id: Uuid,
 }
 
-#[derive(Debug)]
-struct SystemClock;
-
-impl Clock for SystemClock {
-    fn now(&self) -> DateTime<Utc> {
-        Utc::now()
-    }
-}
-
 pub fn app_router(store: PgStore, admin_token: String) -> Router {
     Router::new()
         .route("/api/session/bootstrap", post(bootstrap_session))
@@ -62,7 +52,7 @@ pub fn app_router(store: PgStore, admin_token: String) -> Router {
 async fn bootstrap_session(
     State(state): State<HttpState>,
 ) -> Result<(StatusCode, Json<BootstrapSession>), (StatusCode, Json<ErrorPayload>)> {
-    let session = bootstrap_anonymous_session(&state.store, &SystemClock, Uuid::now_v7())
+    let session = bootstrap_anonymous_session(&state.store, &support::SystemClock, Uuid::now_v7())
         .await
         .map_err(map_http_error)?;
     Ok((StatusCode::CREATED, Json(session)))
