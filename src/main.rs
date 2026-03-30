@@ -24,12 +24,7 @@ impl koko::app::Clock for SystemClock {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = koko::support::AppConfig::from_env()?;
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    let _ = koko::support::init_tracing(koko::support::DEFAULT_TRACING_FILTER)?;
 
     let pool = PgPoolOptions::new()
         .max_connections(10)

@@ -14,6 +14,18 @@ use koko::{
 };
 use uuid::Uuid;
 
+#[test]
+fn init_tracing_is_idempotent() {
+    let first = koko::support::init_tracing("info").unwrap();
+    let second = koko::support::init_tracing("debug").unwrap();
+
+    assert!(matches!(
+        first,
+        koko::support::TracingInit::Initialized | koko::support::TracingInit::AlreadyInitialized
+    ));
+    assert_eq!(second, koko::support::TracingInit::AlreadyInitialized);
+}
+
 #[tokio::test]
 async fn subscribe_room_stream_joins_room_after_membership_check_and_notifies_client() {
     let room_id = Uuid::from_u128(1);

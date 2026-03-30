@@ -6,6 +6,7 @@ use axum::{
 };
 use http_support::HttpHarness;
 use koko::{
+    app::AppError,
     chat::{ChatState, DeliveryState},
     contract::{BootstrapSession, MessageCreated, RoomSnapshot},
 };
@@ -148,6 +149,46 @@ fn app_config_requires_database_url_and_admin_token() {
             None => env::remove_var("KOKO_BIND_ADDR"),
         }
     }
+}
+
+#[test]
+fn app_config_rejects_empty_database_url() {
+    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
+    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
+    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
+
+    unsafe {
+        env::set_var("KOKO_DATABASE_URL", "   ");
+        env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
+        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:4000");
+    }
+
+    assert!(koko::support::AppConfig::from_env().is_err());
+
+    unsafe {
+        match original_database_url {
+            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
+            None => env::remove_var("KOKO_DATABASE_URL"),
+        }
+        match original_admin_token {
+            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
+            None => env::remove_var("KOKO_ADMIN_TOKEN"),
+        }
+        match original_bind_addr {
+            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
+            None => env::remove_var("KOKO_BIND_ADDR"),
+        }
+    }
+}
+
+#[test]
+fn app_error_code_exposes_stable_membership_required_code() {
+    let code = koko::support::app_error_code(&AppError::NotRoomMember {
+        room_id: Uuid::from_u128(120),
+        session_id: Uuid::from_u128(121),
+    });
+
+    assert_eq!(code, "membership_required");
 }
 
 async fn bootstrap_session(harness: &HttpHarness) -> BootstrapSession {

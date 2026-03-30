@@ -64,6 +64,15 @@ impl<Store, IdGen, AppClock> RealtimeState<Store, IdGen, AppClock> {
     }
 }
 
+fn warn_handler_failure(handler: &str, error: &AppError) {
+    warn!(
+        handler,
+        code = crate::support::app_error_code(error),
+        ?error,
+        "realtime handler failed"
+    );
+}
+
 pub struct SubscribeRoomStreamDeps<'a, S, M, R, N> {
     pub session_port: &'a S,
     pub membership_port: &'a M,
@@ -184,7 +193,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         )
                         .await
                         {
-                            warn!(?error, "subscribe_room_stream handler failed");
+                            warn_handler_failure("subscribe_room_stream", &error);
                         }
                     }
                 }
@@ -212,7 +221,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         )
                         .await
                         {
-                            warn!(?error, "send_text_message handler failed");
+                            warn_handler_failure("send_text_message", &error);
                         }
                     }
                 }

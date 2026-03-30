@@ -18,6 +18,7 @@ use crate::{
         RoomSnapshot,
     },
     store::PgStore,
+    support,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -133,7 +134,7 @@ fn require_admin_token(
         Err((
             StatusCode::UNAUTHORIZED,
             Json(ErrorPayload {
-                code: "invalid_admin_token".to_string(),
+                code: support::admin_token_error_code().to_string(),
             }),
         ))
     }
@@ -151,14 +152,7 @@ fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {
     (
         status,
         Json(ErrorPayload {
-            code: match error.code() {
-                crate::contract::AppErrorCode::InvalidSession => "invalid_session",
-                crate::contract::AppErrorCode::MembershipRequired => "membership_required",
-                crate::contract::AppErrorCode::InvalidRoomCode => "invalid_room_code",
-                crate::contract::AppErrorCode::InvalidMessageBody => "invalid_message_body",
-                crate::contract::AppErrorCode::Internal => "internal",
-            }
-            .to_string(),
+            code: support::app_error_code(&error).to_string(),
         }),
     )
 }
