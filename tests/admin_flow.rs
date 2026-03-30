@@ -9,7 +9,7 @@ use http_support::HttpHarness;
 use koko::{
     admin::AdminPanelState,
     app::send_text_message,
-    contract::{AdminOverview, AdminRoomSummary, BootstrapSession, SendTextMessageCommand},
+    contract::{AdminOverview, AdminPanelData, AdminRoomSummary, BootstrapSession, SendTextMessageCommand},
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -68,13 +68,14 @@ fn admin_app_no_longer_boots_from_preview_state() {
 }
 
 #[test]
-fn admin_app_loads_backend_overview_through_dioxus_resource() {
+fn admin_app_loads_backend_panel_through_dioxus_resource() {
     let source = include_str!("../src/admin.rs");
 
     assert!(source.contains("use_resource"));
     assert!(source.contains("load_admin_panel"));
-    assert!(source.contains("/api/admin/overview"));
-    assert!(source.contains("/api/admin/rooms"));
+    assert!(source.contains("/api/admin/panel"));
+    assert!(!source.contains(".json::<AdminOverview>()"));
+    assert!(!source.contains(".json::<Vec<AdminRoomSummary>>()"));
 }
 
 #[test]
@@ -134,6 +135,58 @@ async fn admin_rooms_returns_live_room_summaries() {
     assert_eq!(rooms[0].member_count, 2);
     assert_eq!(rooms[0].message_count, 1);
     assert_eq!(rooms[0].latest_preview, "room summary body");
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn admin_panel_returns_overview_and_live_room_summaries() {
+    let harness = HttpHarness::new("admin_panel_returns_overview_and_live_room_summaries").await;
+
+    let first_session = bootstrap_session(&harness).await;
+    let second_session = bootstrap_session(&harness).await;
+    let room = join_room(&harness, first_session.session_id, "f1234").await;
+    let _ = join_room(&harness, second_session.session_id, "f1234").await;
+
+    let event = send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FixedIdGenerator(Uuid::from_u128(39)),
+        &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 14, 0, 0).unwrap()),
+        SendTextMessageCommand {
+            room_id: room.room_id,
+            session_id: first_session.session_id,
+            body: "panel body".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(matches!(event, koko::contract::AppEvent::MessageCreated(_)));
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/panel")
+                .header("x-admin-token", "local-admin-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let panel: AdminPanelData =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(panel.overview.room_count, 1);
+    assert_eq!(panel.overview.member_count, 2);
+    assert_eq!(panel.overview.message_count, 1);
+    assert_eq!(panel.rooms.len(), 1);
+    assert_eq!(panel.rooms[0].room_code, "F1234");
+    assert_eq!(panel.rooms[0].latest_preview, "panel body");
     harness.cleanup().await;
 }
 
