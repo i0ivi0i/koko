@@ -15,10 +15,11 @@ use uuid::Uuid;
 use crate::{
     app::{
         AppError, bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
-        load_room_snapshot,
+        list_admin_rooms, load_room_snapshot,
     },
     contract::{
-        AdminOverview, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, RoomSnapshot,
+        AdminOverview, AdminRoomSummary, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
+        RoomSnapshot,
     },
     store::PgStore,
     support,
@@ -50,6 +51,7 @@ pub fn app_router(store: PgStore, admin_token: String) -> Router {
         .route("/api/rooms/join", post(join_room))
         .route("/api/rooms/{room_id}/snapshot", get(room_snapshot))
         .route("/api/admin/overview", get(admin_overview))
+        .route("/api/admin/rooms", get(admin_rooms))
         .with_state(HttpState { store, admin_token })
 }
 
@@ -122,6 +124,17 @@ async fn admin_overview(
         .await
         .map_err(map_http_error)?;
     Ok(Json(overview))
+}
+
+async fn admin_rooms(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<AdminRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
+    require_admin_token(&state.admin_token, &headers)?;
+    let rooms = list_admin_rooms(&state.store)
+        .await
+        .map_err(map_http_error)?;
+    Ok(Json(rooms))
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]

@@ -55,6 +55,14 @@ pub struct AdminOverview {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminRoomSummary {
+    pub room_code: String,
+    pub member_count: i64,
+    pub message_count: i64,
+    pub latest_preview: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageView {
     pub message_id: Uuid,
     pub session_id: Uuid,

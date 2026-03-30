@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::admin::{AdminPanelState, AdminRoomSummary};
+use crate::{admin::AdminPanelState, contract::AdminRoomSummary};
 use crate::chat::{ChatMessage, ChatState, ConnectionState, DeliveryState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

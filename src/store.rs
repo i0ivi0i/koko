@@ -4,10 +4,10 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminOverviewPort, AppError, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
-        RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
+        AdminOverviewPort, AdminRoomsPort, AppError, MembershipPort, MessageStore, RoomEntryPort,
+        RoomEntryTx, RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
     },
-    contract::AdminOverview,
+    contract::{AdminOverview, AdminRoomSummary},
     domain::{AnonymousSession, Message, MessageBody, MessageStatus, RoomCode, SessionStatus},
 };
 
@@ -307,6 +307,57 @@ impl AdminOverviewPort for PgStore {
             member_count: row.get("member_count"),
             message_count: row.get("message_count"),
         })
+    }
+}
+
+impl AdminRoomsPort for PgStore {
+    async fn list_admin_rooms(&self) -> Result<Vec<AdminRoomSummary>, AppError> {
+        let rows = sqlx::query(
+            "SELECT
+                 room_codes.normalized_code AS room_code,
+                 COALESCE(member_stats.member_count, 0) AS member_count,
+                 COALESCE(message_stats.message_count, 0) AS message_count,
+                 COALESCE(message_stats.latest_preview, '') AS latest_preview
+             FROM rooms
+             JOIN room_codes ON room_codes.room_id = rooms.room_id
+             LEFT JOIN LATERAL (
+                 SELECT COUNT(*) AS member_count
+                 FROM members
+                 WHERE members.room_id = rooms.room_id
+                   AND members.status = 'active'
+             ) AS member_stats ON TRUE
+             LEFT JOIN LATERAL (
+                 SELECT
+                     COUNT(*) AS message_count,
+                     MAX(created_at) AS latest_created_at,
+                     (
+                         SELECT body
+                         FROM messages
+                         WHERE messages.room_id = rooms.room_id
+                           AND messages.status = 'active'
+                         ORDER BY created_at DESC, message_id DESC
+                         LIMIT 1
+                     ) AS latest_preview
+                 FROM messages
+                 WHERE messages.room_id = rooms.room_id
+                   AND messages.status = 'active'
+             ) AS message_stats ON TRUE
+             WHERE rooms.status = 'active'
+             ORDER BY message_stats.latest_created_at DESC NULLS LAST, room_codes.normalized_code ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| AdminRoomSummary {
+                room_code: row.get("room_code"),
+                member_count: row.get("member_count"),
+                message_count: row.get("message_count"),
+                latest_preview: row.get("latest_preview"),
+            })
+            .collect())
     }
 }
 

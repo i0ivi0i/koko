@@ -1,35 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::{contract::AdminOverview, view};
+use crate::{
+    contract::{AdminOverview, AdminRoomSummary},
+    view,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
 
 pub const ADMIN_OVERVIEW_PATH: &str = "/api/admin/overview";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AdminRoomSummary {
-    pub room_code: String,
-    pub member_count: i64,
-    pub message_count: i64,
-    pub latest_preview: String,
-}
-
-impl AdminRoomSummary {
-    pub fn new(
-        room_code: &str,
-        member_count: i64,
-        message_count: i64,
-        latest_preview: &str,
-    ) -> Self {
-        Self {
-            room_code: room_code.to_string(),
-            member_count,
-            message_count,
-            latest_preview: latest_preview.to_string(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminPanelState {
@@ -43,19 +22,22 @@ impl AdminPanelState {
     }
 }
 
-pub fn admin_panel_state(overview: AdminOverview) -> AdminPanelState {
-    AdminPanelState::new(overview, Vec::new())
+pub const ADMIN_ROOMS_PATH: &str = "/api/admin/rooms";
+
+pub fn admin_panel_state(overview: AdminOverview, rooms: Vec<AdminRoomSummary>) -> AdminPanelState {
+    AdminPanelState::new(overview, rooms)
 }
 
-async fn load_admin_overview(admin_token: String) -> Result<AdminOverview, String> {
+async fn load_admin_panel(admin_token: String) -> Result<AdminPanelState, String> {
     let admin_token = admin_token.trim().to_string();
     if admin_token.is_empty() {
         return Err("Admin token required".to_string());
     }
 
-    reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let overview = client
         .get(ADMIN_OVERVIEW_PATH)
-        .header("x-admin-token", admin_token)
+        .header("x-admin-token", admin_token.clone())
         .send()
         .await
         .map_err(|error| error.to_string())?
@@ -63,7 +45,20 @@ async fn load_admin_overview(admin_token: String) -> Result<AdminOverview, Strin
         .map_err(|error| error.to_string())?
         .json::<AdminOverview>()
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    let rooms = client
+        .get(ADMIN_ROOMS_PATH)
+        .header("x-admin-token", admin_token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<Vec<AdminRoomSummary>>()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(admin_panel_state(overview, rooms))
 }
 
 pub fn app() -> Element {
@@ -75,7 +70,7 @@ pub fn app() -> Element {
             if requested_token.trim().is_empty() {
                 None
             } else {
-                Some(load_admin_overview(requested_token).await)
+                Some(load_admin_panel(requested_token).await)
             }
         }
     });
@@ -84,7 +79,7 @@ pub fn app() -> Element {
         _ => None,
     };
     let panel = match &*overview.read_unchecked() {
-        Some(Some(Ok(overview))) => Some(admin_panel_state(overview.clone())),
+        Some(Some(Ok(state))) => Some(state.clone()),
         _ => None,
     };
 

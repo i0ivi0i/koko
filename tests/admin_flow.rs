@@ -7,9 +7,9 @@ use axum::{
 use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
-    admin::{AdminPanelState, AdminRoomSummary},
+    admin::AdminPanelState,
     app::send_text_message,
-    contract::{AdminOverview, BootstrapSession, SendTextMessageCommand},
+    contract::{AdminOverview, AdminRoomSummary, BootstrapSession, SendTextMessageCommand},
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -23,8 +23,18 @@ fn admin_panel_state_keeps_room_summary_and_member_count() {
             message_count: 42,
         },
         vec![
-            AdminRoomSummary::new("A1234", 12, 21, "hello admin"),
-            AdminRoomSummary::new("B1234", 6, 21, "world admin"),
+            AdminRoomSummary {
+                room_code: "A1234".to_string(),
+                member_count: 12,
+                message_count: 21,
+                latest_preview: "hello admin".to_string(),
+            },
+            AdminRoomSummary {
+                room_code: "B1234".to_string(),
+                member_count: 6,
+                message_count: 21,
+                latest_preview: "world admin".to_string(),
+            },
         ],
     );
 
@@ -36,11 +46,14 @@ fn admin_panel_state_keeps_room_summary_and_member_count() {
 
 #[test]
 fn admin_panel_state_wraps_backend_overview_without_fake_rooms() {
-    let state = koko::admin::admin_panel_state(AdminOverview {
-        room_count: 5,
-        member_count: 12,
-        message_count: 44,
-    });
+    let state = koko::admin::admin_panel_state(
+        AdminOverview {
+            room_count: 5,
+            member_count: 12,
+            message_count: 44,
+        },
+        vec![],
+    );
 
     assert_eq!(state.overview.room_count, 5);
     assert!(state.rooms.is_empty());
@@ -59,8 +72,9 @@ fn admin_app_loads_backend_overview_through_dioxus_resource() {
     let source = include_str!("../src/admin.rs");
 
     assert!(source.contains("use_resource"));
-    assert!(source.contains("load_admin_overview"));
+    assert!(source.contains("load_admin_panel"));
     assert!(source.contains("/api/admin/overview"));
+    assert!(source.contains("/api/admin/rooms"));
 }
 
 #[test]
@@ -70,6 +84,57 @@ fn admin_app_sends_admin_token_header_instead_of_fake_preview_data() {
     assert!(source.contains("x-admin-token"));
     assert!(source.contains("view::AdminPanel"));
     assert!(!source.contains("wiring is pending"));
+}
+
+#[tokio::test]
+async fn admin_rooms_returns_live_room_summaries() {
+    let harness = HttpHarness::new("admin_rooms_returns_live_room_summaries").await;
+
+    let first_session = bootstrap_session(&harness).await;
+    let second_session = bootstrap_session(&harness).await;
+    let room = join_room(&harness, first_session.session_id, "e1234").await;
+    let _ = join_room(&harness, second_session.session_id, "e1234").await;
+
+    let event = send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FixedIdGenerator(Uuid::from_u128(29)),
+        &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 13, 0, 0).unwrap()),
+        SendTextMessageCommand {
+            room_id: room.room_id,
+            session_id: first_session.session_id,
+            body: "room summary body".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(matches!(event, koko::contract::AppEvent::MessageCreated(_)));
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/rooms")
+                .header("x-admin-token", "local-admin-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let rooms: Vec<AdminRoomSummary> =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(rooms.len(), 1);
+    assert_eq!(rooms[0].room_code, "E1234");
+    assert_eq!(rooms[0].member_count, 2);
+    assert_eq!(rooms[0].message_count, 1);
+    assert_eq!(rooms[0].latest_preview, "room summary body");
+    harness.cleanup().await;
 }
 
 #[tokio::test]
