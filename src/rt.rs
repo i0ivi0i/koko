@@ -4,11 +4,15 @@ use socketioxide::{
     SocketIo,
     extract::{Data, SocketRef},
 };
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
     app::{self, AppError, Clock, IdGenerator, MembershipPort, MessageStore, SessionPort},
-    contract::{MessageCreated, SendTextMessageCommand, SubscribeRoomStreamCommand},
+    contract::{
+        CommandRejected, MessageCreated, RoomStreamSubscribed, SendTextMessageCommand,
+        SubscribeRoomStreamCommand,
+    },
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -23,6 +27,23 @@ pub trait RoomBroadcaster {
         &self,
         room_id: Uuid,
         payload: &MessageCreated,
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
+}
+
+pub trait RealtimeResponder {
+    fn emit_room_stream_subscribed(
+        &self,
+        room_id: Uuid,
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
+
+    fn emit_message_accepted(
+        &self,
+        payload: &MessageCreated,
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
+
+    fn emit_command_rejected(
+        &self,
+        payload: &CommandRejected,
     ) -> impl Future<Output = Result<(), AppError>> + Send;
 }
 
@@ -43,43 +64,53 @@ impl<Store, IdGen, AppClock> RealtimeState<Store, IdGen, AppClock> {
     }
 }
 
-pub async fn subscribe_room_stream<S, M, R>(
-    session_port: &S,
-    membership_port: &M,
-    subscriber: &R,
+pub struct SubscribeRoomStreamDeps<'a, S, M, R, N> {
+    pub session_port: &'a S,
+    pub membership_port: &'a M,
+    pub subscriber: &'a R,
+    pub responder: &'a N,
+}
+
+pub struct SendTextMessageDeps<'a, S, M, Store, B, N, I, C> {
+    pub session_port: &'a S,
+    pub membership_port: &'a M,
+    pub message_store: &'a Store,
+    pub broadcaster: &'a B,
+    pub responder: &'a N,
+    pub id_generator: &'a I,
+    pub clock: &'a C,
+}
+
+pub async fn handle_subscribe_room_stream<S, M, R, N>(
+    deps: SubscribeRoomStreamDeps<'_, S, M, R, N>,
     command: SubscribeRoomStreamCommand,
 ) -> Result<(), AppError>
 where
     S: SessionPort,
-    M: MembershipPort,
+    M: app::MembershipPort,
     R: RoomSubscriber,
+    N: RealtimeResponder,
 {
-    if !session_port.is_active_session(command.session_id).await? {
-        return Err(AppError::SessionNotActive {
-            session_id: command.session_id,
-        });
-    }
-
-    if !membership_port
-        .is_room_member(command.room_id, command.session_id)
-        .await?
+    match app::subscribe_room_stream(deps.session_port, deps.membership_port, command.clone()).await
     {
-        return Err(AppError::NotRoomMember {
-            room_id: command.room_id,
-            session_id: command.session_id,
-        });
+        Ok(()) => {
+            deps.subscriber.join_room(&command.room_id.to_string()).await?;
+            deps.responder
+                .emit_room_stream_subscribed(command.room_id)
+                .await?;
+            Ok(())
+        }
+        Err(error) => {
+            deps.responder
+                .emit_command_rejected(&CommandRejected { code: error.code() })
+                .await?;
+            Err(error)
+        }
     }
-
-    subscriber.join_room(&command.room_id.to_string()).await
 }
 
-pub async fn send_text_message_and_broadcast<S, M, Store, B, I, C>(
-    session_port: &S,
-    membership_port: &M,
-    message_store: &Store,
-    broadcaster: &B,
-    id_generator: &I,
-    clock: &C,
+pub async fn handle_send_text_message<S, M, Store, B, N, I, C>(
+    deps: SendTextMessageDeps<'_, S, M, Store, B, N, I, C>,
     command: SendTextMessageCommand,
 ) -> Result<MessageCreated, AppError>
 where
@@ -87,23 +118,34 @@ where
     M: MembershipPort,
     Store: MessageStore,
     B: RoomBroadcaster,
+    N: RealtimeResponder,
     I: IdGenerator,
     C: Clock,
 {
     let room_id = command.room_id;
-    let event = app::send_text_message(
-        session_port,
-        membership_port,
-        message_store,
-        id_generator,
-        clock,
+    let event = match app::send_text_message(
+        deps.session_port,
+        deps.membership_port,
+        deps.message_store,
+        deps.id_generator,
+        deps.clock,
         command,
     )
-    .await?;
+    .await
+    {
+        Ok(event) => event,
+        Err(error) => {
+            deps.responder
+                .emit_command_rejected(&CommandRejected { code: error.code() })
+                .await?;
+            return Err(error);
+        }
+    };
 
     match event {
         crate::contract::AppEvent::MessageCreated(payload) => {
-            broadcaster
+            deps.responder.emit_message_accepted(&payload).await?;
+            deps.broadcaster
                 .broadcast_message_created(room_id, &payload)
                 .await?;
             Ok(payload)
@@ -130,13 +172,20 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                     let state = state.clone();
                     async move {
                         let subscriber = SocketRoomSubscriber::new(socket);
-                        let _ = subscribe_room_stream(
-                            &state.store,
-                            &state.store,
-                            &subscriber,
+                        let responder = SocketRealtimeResponder::new(subscriber.socket.clone());
+                        if let Err(error) = handle_subscribe_room_stream(
+                            SubscribeRoomStreamDeps {
+                                session_port: &state.store,
+                                membership_port: &state.store,
+                                subscriber: &subscriber,
+                                responder: &responder,
+                            },
                             command,
                         )
-                        .await;
+                        .await
+                        {
+                            warn!(?error, "subscribe_room_stream handler failed");
+                        }
                     }
                 }
             });
@@ -144,20 +193,27 @@ pub fn install_realtime<Store, IdGen, AppClock>(
             socket.on("send_text_message", {
                 let state = state.clone();
                 let io = io_for_events.clone();
-                move |Data(command): Data<SendTextMessageCommand>| {
+                move |socket: SocketRef, Data(command): Data<SendTextMessageCommand>| {
                     let state = state.clone();
                     let broadcaster = SocketRoomBroadcaster::new(io.clone());
+                    let responder = SocketRealtimeResponder::new(socket);
                     async move {
-                        let _ = send_text_message_and_broadcast(
-                            &state.store,
-                            &state.store,
-                            &state.store,
-                            &broadcaster,
-                            &state.id_generator,
-                            &state.clock,
+                        if let Err(error) = handle_send_text_message(
+                            SendTextMessageDeps {
+                                session_port: &state.store,
+                                membership_port: &state.store,
+                                message_store: &state.store,
+                                broadcaster: &broadcaster,
+                                responder: &responder,
+                                id_generator: &state.id_generator,
+                                clock: &state.clock,
+                            },
                             command,
                         )
-                        .await;
+                        .await
+                        {
+                            warn!(?error, "send_text_message handler failed");
+                        }
                     }
                 }
             });
@@ -204,6 +260,40 @@ impl RoomBroadcaster for SocketRoomBroadcaster {
             .to(room_id.to_string())
             .emit("message_created", payload)
             .await
+            .map_err(|_| AppError::DependencyFailure)
+    }
+}
+
+#[derive(Clone)]
+struct SocketRealtimeResponder {
+    socket: SocketRef,
+}
+
+impl SocketRealtimeResponder {
+    fn new(socket: SocketRef) -> Self {
+        Self { socket }
+    }
+}
+
+impl RealtimeResponder for SocketRealtimeResponder {
+    async fn emit_room_stream_subscribed(&self, room_id: Uuid) -> Result<(), AppError> {
+        self.socket
+            .emit(
+                "room_stream_subscribed",
+                &RoomStreamSubscribed { room_id },
+            )
+            .map_err(|_| AppError::DependencyFailure)
+    }
+
+    async fn emit_message_accepted(&self, payload: &MessageCreated) -> Result<(), AppError> {
+        self.socket
+            .emit("message_accepted", payload)
+            .map_err(|_| AppError::DependencyFailure)
+    }
+
+    async fn emit_command_rejected(&self, payload: &CommandRejected) -> Result<(), AppError> {
+        self.socket
+            .emit("command_rejected", payload)
             .map_err(|_| AppError::DependencyFailure)
     }
 }

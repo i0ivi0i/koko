@@ -11,13 +11,13 @@ use std::{
 use chrono::{DateTime, TimeZone, Utc};
 use koko::{
     app::{
-        join_or_create_room_by_code, load_room_snapshot, send_text_message, AppError, Clock,
-        IdGenerator, MembershipPort, MessageStore, RoomJoinPort, RoomSnapshotData,
+        join_or_create_room_by_code, load_room_snapshot, send_text_message, subscribe_room_stream,
+        AppError, Clock, IdGenerator, MembershipPort, MessageStore, RoomJoinPort, RoomSnapshotData,
         RoomSnapshotPort, SessionPort,
     },
     contract::{
         AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageView,
-        RoomSnapshot, SendTextMessageCommand,
+        RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
     domain::{Message, MessageBody, MessageStatus, RoomCode},
     store::PgStore,
@@ -462,6 +462,40 @@ async fn load_room_snapshot_propagates_internal_error_code_for_dependency_failur
 
     assert_eq!(error.code(), AppErrorCode::Internal);
     assert!(matches!(error, AppError::DependencyFailure));
+}
+
+#[tokio::test]
+async fn subscribe_room_stream_accepts_active_member() {
+    subscribe_room_stream(
+        &FakeSessionPort::allow(),
+        &FakeMembershipPort::allow(),
+        SubscribeRoomStreamCommand {
+            room_id: Uuid::from_u128(58),
+            session_id: Uuid::from_u128(59),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn subscribe_room_stream_rejects_non_member() {
+    let room_id = Uuid::from_u128(60);
+    let session_id = Uuid::from_u128(61);
+
+    let error = subscribe_room_stream(
+        &FakeSessionPort::allow(),
+        &FakeMembershipPort::deny(),
+        SubscribeRoomStreamCommand {
+            room_id,
+            session_id,
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error, AppError::NotRoomMember { room_id, session_id });
+    assert_eq!(error.code(), AppErrorCode::MembershipRequired);
 }
 
 #[test]

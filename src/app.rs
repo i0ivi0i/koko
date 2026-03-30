@@ -8,6 +8,7 @@ use crate::{
     contract::{
         AdminOverview, AppErrorCode, AppEvent, BootstrapSession, JoinOrCreateRoomByCodeCommand,
         LoadRoomSnapshotQuery, MessageCreated, MessageView, RoomSnapshot, SendTextMessageCommand,
+        SubscribeRoomStreamCommand,
     },
     domain::{
         AnonymousSession, DomainError, Message, MessageBody, MessageStatus, RoomCode,
@@ -140,6 +141,34 @@ where
     P: AdminOverviewPort,
 {
     admin_overview_port.get_admin_overview().await
+}
+
+pub async fn subscribe_room_stream<S, M>(
+    session_port: &S,
+    membership_port: &M,
+    command: SubscribeRoomStreamCommand,
+) -> Result<(), AppError>
+where
+    S: SessionPort,
+    M: MembershipPort,
+{
+    if !session_port.is_active_session(command.session_id).await? {
+        return Err(AppError::SessionNotActive {
+            session_id: command.session_id,
+        });
+    }
+
+    if !membership_port
+        .is_room_member(command.room_id, command.session_id)
+        .await?
+    {
+        return Err(AppError::NotRoomMember {
+            room_id: command.room_id,
+            session_id: command.session_id,
+        });
+    }
+
+    Ok(())
 }
 
 pub async fn send_text_message<S, M, R, I, C>(

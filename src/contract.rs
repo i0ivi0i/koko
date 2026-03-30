@@ -24,6 +24,16 @@ pub struct SubscribeRoomStreamCommand {
     pub session_id: Uuid,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoomStreamSubscribed {
+    pub room_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandRejected {
+    pub code: AppErrorCode,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadRoomSnapshotQuery {
     pub room_id: Uuid,
