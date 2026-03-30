@@ -752,8 +752,8 @@ fn destructive_reset_rejects_admin_url_on_different_host_or_port() {
 }
 
 #[tokio::test]
-async fn pg_harness_drops_isolated_database_after_scope_exit() {
-    let harness = PgHarness::new("pg_harness_drops_isolated_database_after_scope_exit").await;
+async fn pg_harness_cleanup_drops_isolated_database() {
+    let harness = PgHarness::new("pg_harness_cleanup_drops_isolated_database").await;
     let database_name = harness.database_name().to_string();
     harness.cleanup().await;
 
@@ -1228,7 +1228,11 @@ impl PgHarness {
 }
 
 async fn database_exists(database_name: &str) -> bool {
-    let admin_url = default_admin_database_url(DEFAULT_TEST_DATABASE_URL);
+    let base_database_url = validated_test_database_url(
+        env::var("KOKO_TEST_DATABASE_URL").ok().as_deref(),
+    )
+    .unwrap();
+    let admin_url = default_admin_database_url(&base_database_url);
     let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
     let admin_pool = PgPoolOptions::new()
         .max_connections(1)
