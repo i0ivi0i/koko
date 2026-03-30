@@ -11,8 +11,7 @@ use crate::{
         SubscribeRoomStreamCommand,
     },
     domain::{
-        AnonymousSession, DomainError, Message, MessageBody, MessageStatus, RoomCode,
-        SessionStatus,
+        AnonymousSession, DomainError, Message, MessageBody, MessageStatus, RoomCode, SessionStatus,
     },
 };
 
@@ -78,13 +77,43 @@ pub trait MessageStore {
     ) -> impl Future<Output = Result<Message, AppError>> + Send;
 }
 
-pub trait RoomJoinPort {
-    fn join_or_create_room_by_code(
+pub trait RoomEntryPort {
+    type Tx<'a>: RoomEntryTx
+    where
+        Self: 'a;
+
+    fn begin_room_entry(
         &self,
-        room_code: RoomCode,
-        limit: usize,
+        room_code: &RoomCode,
+    ) -> impl Future<Output = Result<Self::Tx<'_>, AppError>> + Send;
+}
+
+pub trait RoomEntryTx {
+    fn find_room_by_code(
+        &mut self,
+        room_code: &RoomCode,
+    ) -> impl Future<Output = Result<Option<Uuid>, AppError>> + Send;
+
+    fn create_room(
+        &mut self,
+        room_code: &RoomCode,
+    ) -> impl Future<Output = Result<Uuid, AppError>> + Send;
+
+    fn ensure_room_member(
+        &mut self,
+        room_id: Uuid,
         session_id: Uuid,
-    ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
+
+    fn load_recent_messages(
+        &mut self,
+        room_id: Uuid,
+        limit: usize,
+    ) -> impl Future<Output = Result<Vec<Message>, AppError>> + Send;
+
+    fn commit(self) -> impl Future<Output = Result<(), AppError>> + Send
+    where
+        Self: Sized;
 }
 
 pub trait RoomSnapshotPort {
@@ -226,12 +255,12 @@ where
 
 pub async fn join_or_create_room_by_code<S, J>(
     session_port: &S,
-    room_join_port: &J,
+    room_entry_port: &J,
     command: JoinOrCreateRoomByCodeCommand,
 ) -> Result<RoomSnapshot, AppError>
 where
     S: SessionPort,
-    J: RoomJoinPort,
+    J: RoomEntryPort,
 {
     if !session_port.is_active_session(command.session_id).await? {
         return Err(AppError::SessionNotActive {
@@ -240,12 +269,22 @@ where
     }
 
     let room_code = RoomCode::new(&command.room_code)?;
-    let snapshot = room_join_port
-        .join_or_create_room_by_code(room_code.clone(), ROOM_SNAPSHOT_LIMIT, command.session_id)
+    let mut room_entry = room_entry_port.begin_room_entry(&room_code).await?;
+    let room_id = match room_entry.find_room_by_code(&room_code).await? {
+        Some(room_id) => room_id,
+        None => room_entry.create_room(&room_code).await?,
+    };
+    room_entry
+        .ensure_room_member(room_id, command.session_id)
         .await?;
-    if snapshot.room_code.normalized() != room_code.normalized() {
-        return Err(AppError::DependencyFailure);
-    }
+    let snapshot = RoomSnapshotData {
+        room_id,
+        room_code,
+        messages: room_entry
+            .load_recent_messages(room_id, ROOM_SNAPSHOT_LIMIT)
+            .await?,
+    };
+    room_entry.commit().await?;
 
     build_room_snapshot(snapshot)
 }

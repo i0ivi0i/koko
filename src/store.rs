@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminOverviewPort, AppError, MembershipPort, MessageStore, RoomJoinPort,
+        AdminOverviewPort, AppError, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
         RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
     },
     contract::AdminOverview,
@@ -116,15 +116,18 @@ impl MessageStore for PgStore {
     }
 }
 
-impl RoomJoinPort for PgStore {
-    async fn join_or_create_room_by_code(
-        &self,
-        room_code: RoomCode,
-        limit: usize,
-        session_id: Uuid,
-    ) -> Result<RoomSnapshotData, AppError> {
+pub struct PgRoomEntry<'a> {
+    tx: sqlx::Transaction<'a, sqlx::Postgres>,
+}
+
+impl RoomEntryPort for PgStore {
+    type Tx<'a>
+        = PgRoomEntry<'a>
+    where
+        Self: 'a;
+
+    async fn begin_room_entry(&self, room_code: &RoomCode) -> Result<Self::Tx<'_>, AppError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
-        let now = Utc::now();
 
         sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1), $2)")
             .bind(room_code.normalized())
@@ -133,7 +136,13 @@ impl RoomJoinPort for PgStore {
             .await
             .map_err(map_sqlx_error)?;
 
-        let room_id = match sqlx::query_scalar(
+        Ok(PgRoomEntry { tx })
+    }
+}
+
+impl RoomEntryTx for PgRoomEntry<'_> {
+    async fn find_room_by_code(&mut self, room_code: &RoomCode) -> Result<Option<Uuid>, AppError> {
+        sqlx::query_scalar(
             "SELECT room_id
              FROM room_codes
              WHERE normalized_code = $1
@@ -141,48 +150,55 @@ impl RoomJoinPort for PgStore {
         )
         .bind(room_code.normalized())
         .bind(i16::try_from(room_code.code_version).map_err(|_| AppError::DependencyFailure)?)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut *self.tx)
         .await
-        .map_err(map_sqlx_error)?
-        {
-            Some(room_id) => room_id,
-            None => {
-                let room_id = Uuid::now_v7();
-                sqlx::query(
-                    "INSERT INTO rooms (room_id, created_at, status)
-                     VALUES ($1, $2, 'active')",
-                )
-                .bind(room_id)
-                .bind(now)
-                .execute(&mut *tx)
-                .await
-                .map_err(map_sqlx_error)?;
+        .map_err(map_sqlx_error)
+    }
 
-                sqlx::query(
-                    "INSERT INTO room_codes (
-                         room_code_id,
-                         room_id,
-                         original_code,
-                         normalized_code,
-                         code_version,
-                         created_at
-                     )
-                     VALUES ($1, $2, $3, $4, $5, $6)",
-                )
-                .bind(Uuid::now_v7())
-                .bind(room_id)
-                .bind(room_code.original())
-                .bind(room_code.normalized())
-                .bind(i16::try_from(room_code.code_version).map_err(|_| AppError::DependencyFailure)?)
-                .bind(now)
-                .execute(&mut *tx)
-                .await
-                .map_err(map_sqlx_error)?;
+    async fn create_room(&mut self, room_code: &RoomCode) -> Result<Uuid, AppError> {
+        let now = Utc::now();
+        let room_id = Uuid::now_v7();
 
-                room_id
-            }
-        };
+        sqlx::query(
+            "INSERT INTO rooms (room_id, created_at, status)
+             VALUES ($1, $2, 'active')",
+        )
+        .bind(room_id)
+        .bind(now)
+        .execute(&mut *self.tx)
+        .await
+        .map_err(map_sqlx_error)?;
 
+        sqlx::query(
+            "INSERT INTO room_codes (
+                 room_code_id,
+                 room_id,
+                 original_code,
+                 normalized_code,
+                 code_version,
+                 created_at
+             )
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(room_id)
+        .bind(room_code.original())
+        .bind(room_code.normalized())
+        .bind(i16::try_from(room_code.code_version).map_err(|_| AppError::DependencyFailure)?)
+        .bind(now)
+        .execute(&mut *self.tx)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(room_id)
+    }
+
+    async fn ensure_room_member(
+        &mut self,
+        room_id: Uuid,
+        session_id: Uuid,
+    ) -> Result<(), AppError> {
+        let now = Utc::now();
         sqlx::query(
             "INSERT INTO members (member_id, room_id, session_id, joined_at, status)
              VALUES ($1, $2, $3, $4, 'active')
@@ -192,18 +208,23 @@ impl RoomJoinPort for PgStore {
         .bind(room_id)
         .bind(session_id)
         .bind(now)
-        .execute(&mut *tx)
+        .execute(&mut *self.tx)
         .await
         .map_err(map_sqlx_error)?;
 
-        let messages = load_recent_messages(&mut *tx, room_id, limit).await?;
-        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(())
+    }
 
-        Ok(RoomSnapshotData {
-            room_id,
-            room_code,
-            messages,
-        })
+    async fn load_recent_messages(
+        &mut self,
+        room_id: Uuid,
+        limit: usize,
+    ) -> Result<Vec<Message>, AppError> {
+        load_recent_messages(&mut *self.tx, room_id, limit).await
+    }
+
+    async fn commit(self) -> Result<(), AppError> {
+        self.tx.commit().await.map_err(map_sqlx_error)
     }
 }
 
@@ -290,7 +311,8 @@ where
 
 fn map_room_code(normalized_code: String, code_version: i16) -> Result<RoomCode, AppError> {
     let mut room_code = RoomCode::new(&normalized_code).map_err(|_| AppError::DependencyFailure)?;
-    room_code.code_version = u16::try_from(code_version).map_err(|_| AppError::DependencyFailure)?;
+    room_code.code_version =
+        u16::try_from(code_version).map_err(|_| AppError::DependencyFailure)?;
     Ok(room_code)
 }
 
@@ -300,8 +322,8 @@ fn map_message_row(row: &sqlx::postgres::PgRow) -> Result<Message, AppError> {
         return Err(AppError::DependencyFailure);
     }
 
-    let body = MessageBody::new(&row.get::<String, _>("body"))
-        .map_err(|_| AppError::DependencyFailure)?;
+    let body =
+        MessageBody::new(&row.get::<String, _>("body")).map_err(|_| AppError::DependencyFailure)?;
 
     Ok(Message {
         message_id: row.get("message_id"),

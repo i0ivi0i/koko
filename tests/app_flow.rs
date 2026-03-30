@@ -1,7 +1,7 @@
 use std::{
+    env,
     path::Path,
     str::FromStr,
-    env,
     sync::{
         Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -11,9 +11,9 @@ use std::{
 use chrono::{DateTime, TimeZone, Utc};
 use koko::{
     app::{
-        join_or_create_room_by_code, load_room_snapshot, send_text_message, subscribe_room_stream,
-        AppError, Clock, IdGenerator, MembershipPort, MessageStore, RoomJoinPort, RoomSnapshotData,
-        RoomSnapshotPort, SessionPort,
+        AppError, Clock, IdGenerator, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
+        RoomSnapshotData, RoomSnapshotPort, SessionPort, join_or_create_room_by_code,
+        load_room_snapshot, send_text_message, subscribe_room_stream,
     },
     contract::{
         AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageView,
@@ -23,11 +23,9 @@ use koko::{
     store::PgStore,
 };
 use sqlx::{
-    ConnectOptions,
-    Row,
+    ConnectOptions, PgPool, Row,
     migrate::Migrator,
     postgres::{PgConnectOptions, PgPoolOptions},
-    PgPool,
 };
 use uuid::Uuid;
 
@@ -145,7 +143,13 @@ async fn send_text_message_rejects_non_member() {
     .unwrap_err();
 
     assert_eq!(error.code(), AppErrorCode::MembershipRequired);
-    assert_eq!(error, AppError::NotRoomMember { room_id, session_id });
+    assert_eq!(
+        error,
+        AppError::NotRoomMember {
+            room_id,
+            session_id
+        }
+    );
     assert!(store.recorded_bodies().is_empty());
 }
 
@@ -198,10 +202,15 @@ async fn send_text_message_rejects_empty_body() {
 async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     let session_id = Uuid::from_u128(31);
     let room_id = Uuid::from_u128(32);
-    let join_port = FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
+    let join_port = FakeRoomEntryPort::missing_room(sample_snapshot_data(
         room_id,
         "A1234",
-        vec![sample_message(Uuid::from_u128(33), room_id, session_id, "hello")],
+        vec![sample_message(
+            Uuid::from_u128(33),
+            room_id,
+            session_id,
+            "hello",
+        )],
     ));
 
     let snapshot = join_or_create_room_by_code(
@@ -215,16 +224,54 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     .await
     .unwrap();
 
-    assert_eq!(join_port.requested_codes(), vec!["A1234".to_string()]);
-    assert_eq!(join_port.requested_limits(), vec![50]);
+    assert_eq!(
+        join_port.operations(),
+        vec![
+            "find_room_by_code",
+            "create_room",
+            "ensure_room_member",
+            "load_recent_messages",
+            "commit",
+        ]
+    );
     assert_eq!(snapshot, expected_snapshot(room_id, session_id, "hello"));
+}
+
+#[tokio::test]
+async fn join_or_create_room_by_code_reuses_existing_room_without_recreating_it() {
+    let session_id = Uuid::from_u128(34);
+    let room_id = Uuid::from_u128(35);
+    let join_port =
+        FakeRoomEntryPort::existing_room(sample_snapshot_data(room_id, "A1234", vec![]));
+
+    let snapshot = join_or_create_room_by_code(
+        &FakeSessionPort::allow(),
+        &join_port,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: "A1234".to_string(),
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(snapshot.room_id, room_id);
+    assert_eq!(
+        join_port.operations(),
+        vec![
+            "find_room_by_code",
+            "ensure_room_member",
+            "load_recent_messages",
+            "commit",
+        ]
+    );
 }
 
 #[tokio::test]
 async fn join_or_create_room_by_code_rejects_invalid_room_code() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
-        &FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
+        &FakeRoomEntryPort::existing_room(sample_snapshot_data(
             Uuid::from_u128(36),
             "A1234",
             vec![],
@@ -244,7 +291,7 @@ async fn join_or_create_room_by_code_rejects_invalid_room_code() {
 async fn join_or_create_room_by_code_rejects_mismatched_room_code_snapshot() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
-        &FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
+        &FakeRoomEntryPort::existing_room(sample_snapshot_data(
             Uuid::from_u128(38),
             "B1234",
             vec![],
@@ -263,7 +310,7 @@ async fn join_or_create_room_by_code_rejects_mismatched_room_code_snapshot() {
 #[tokio::test]
 async fn join_or_create_room_by_code_rejects_inactive_session() {
     let session_id = Uuid::from_u128(34);
-    let join_port = FakeRoomJoinPort::with_snapshot(sample_snapshot_data(
+    let join_port = FakeRoomEntryPort::existing_room(sample_snapshot_data(
         Uuid::from_u128(35),
         "A1234",
         vec![],
@@ -281,8 +328,34 @@ async fn join_or_create_room_by_code_rejects_inactive_session() {
     .unwrap_err();
 
     assert_eq!(error.code(), AppErrorCode::InvalidSession);
-    assert!(join_port.requested_codes().is_empty());
-    assert!(join_port.requested_limits().is_empty());
+    assert!(join_port.operations().is_empty());
+}
+
+#[tokio::test]
+async fn join_or_create_room_by_code_skips_commit_when_member_write_fails() {
+    let session_id = Uuid::from_u128(40);
+    let join_port = FakeRoomEntryPort::member_failure(sample_snapshot_data(
+        Uuid::from_u128(41),
+        "A1234",
+        vec![],
+    ));
+
+    let error = join_or_create_room_by_code(
+        &FakeSessionPort::allow(),
+        &join_port,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: "A1234".to_string(),
+            session_id,
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::Internal);
+    assert_eq!(
+        join_port.operations(),
+        vec!["find_room_by_code", "ensure_room_member"]
+    );
 }
 
 #[tokio::test]
@@ -292,14 +365,22 @@ async fn load_room_snapshot_returns_messages_for_member() {
     let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
         room_id,
         "A1234",
-        vec![sample_message(Uuid::from_u128(43), room_id, session_id, "hello again")],
+        vec![sample_message(
+            Uuid::from_u128(43),
+            room_id,
+            session_id,
+            "hello again",
+        )],
     ));
 
     let snapshot = load_room_snapshot(
         &FakeSessionPort::allow(),
         &FakeMembershipPort::allow(),
         &snapshot_port,
-        LoadRoomSnapshotQuery { room_id, session_id },
+        LoadRoomSnapshotQuery {
+            room_id,
+            session_id,
+        },
     )
     .await
     .unwrap();
@@ -327,17 +408,17 @@ async fn load_room_snapshot_sorts_and_truncates_to_latest_fifty_messages() {
         })
         .collect();
     messages.reverse();
-    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
-        room_id,
-        "A1234",
-        messages,
-    ));
+    let snapshot_port =
+        FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(room_id, "A1234", messages));
 
     let snapshot = load_room_snapshot(
         &FakeSessionPort::allow(),
         &FakeMembershipPort::allow(),
         &snapshot_port,
-        LoadRoomSnapshotQuery { room_id, session_id },
+        LoadRoomSnapshotQuery {
+            room_id,
+            session_id,
+        },
     )
     .await
     .unwrap();
@@ -351,17 +432,17 @@ async fn load_room_snapshot_sorts_and_truncates_to_latest_fifty_messages() {
 async fn load_room_snapshot_rejects_inactive_session() {
     let room_id = Uuid::from_u128(44);
     let session_id = Uuid::from_u128(45);
-    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
-        room_id,
-        "A1234",
-        vec![],
-    ));
+    let snapshot_port =
+        FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(room_id, "A1234", vec![]));
 
     let error = load_room_snapshot(
         &FakeSessionPort::deny(),
         &FakeMembershipPort::allow(),
         &snapshot_port,
-        LoadRoomSnapshotQuery { room_id, session_id },
+        LoadRoomSnapshotQuery {
+            room_id,
+            session_id,
+        },
     )
     .await
     .unwrap_err();
@@ -374,17 +455,17 @@ async fn load_room_snapshot_rejects_inactive_session() {
 async fn load_room_snapshot_rejects_non_member() {
     let room_id = Uuid::from_u128(46);
     let session_id = Uuid::from_u128(47);
-    let snapshot_port = FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(
-        room_id,
-        "A1234",
-        vec![],
-    ));
+    let snapshot_port =
+        FakeRoomSnapshotPort::with_snapshot(sample_snapshot_data(room_id, "A1234", vec![]));
 
     let error = load_room_snapshot(
         &FakeSessionPort::allow(),
         &FakeMembershipPort::deny(),
         &snapshot_port,
-        LoadRoomSnapshotQuery { room_id, session_id },
+        LoadRoomSnapshotQuery {
+            room_id,
+            session_id,
+        },
     )
     .await
     .unwrap_err();
@@ -455,7 +536,10 @@ async fn load_room_snapshot_propagates_internal_error_code_for_dependency_failur
         &FakeSessionPort::allow(),
         &FakeMembershipPort::allow(),
         &FakeRoomSnapshotPort::failing(),
-        LoadRoomSnapshotQuery { room_id, session_id },
+        LoadRoomSnapshotQuery {
+            room_id,
+            session_id,
+        },
     )
     .await
     .unwrap_err();
@@ -494,13 +578,22 @@ async fn subscribe_room_stream_rejects_non_member() {
     .await
     .unwrap_err();
 
-    assert_eq!(error, AppError::NotRoomMember { room_id, session_id });
+    assert_eq!(
+        error,
+        AppError::NotRoomMember {
+            room_id,
+            session_id
+        }
+    );
     assert_eq!(error.code(), AppErrorCode::MembershipRequired);
 }
 
 #[test]
 fn app_and_contract_source_stays_entrypoint_neutral() {
-    for source in [include_str!("../src/app.rs"), include_str!("../src/contract.rs")] {
+    for source in [
+        include_str!("../src/app.rs"),
+        include_str!("../src/contract.rs"),
+    ] {
         let lowered = source.to_ascii_lowercase();
         assert!(!lowered.contains("axum::"));
         assert!(!lowered.contains("sqlx::"));
@@ -536,7 +629,8 @@ async fn join_or_create_persists_room_member_and_room_code() {
 
 #[tokio::test]
 async fn send_text_message_persists_message_and_room_snapshot_reads_it() {
-    let harness = PgHarness::new("send_text_message_persists_message_and_room_snapshot_reads_it").await;
+    let harness =
+        PgHarness::new("send_text_message_persists_message_and_room_snapshot_reads_it").await;
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('b');
     let message_id = Uuid::now_v7();
@@ -634,8 +728,18 @@ async fn join_or_create_treats_room_code_as_case_insensitive() {
     .unwrap();
 
     assert_eq!(first_snapshot.room_id, second_snapshot.room_id);
-    assert_eq!(harness.member_count(first_snapshot.room_id, first_session_id).await, 1);
-    assert_eq!(harness.member_count(first_snapshot.room_id, second_session_id).await, 1);
+    assert_eq!(
+        harness
+            .member_count(first_snapshot.room_id, first_session_id)
+            .await,
+        1
+    );
+    assert_eq!(
+        harness
+            .member_count(first_snapshot.room_id, second_session_id)
+            .await,
+        1
+    );
     harness.cleanup().await;
 }
 
@@ -669,13 +773,19 @@ async fn repeated_join_does_not_duplicate_member_in_same_room() {
     .unwrap();
 
     assert_eq!(first_snapshot.room_id, second_snapshot.room_id);
-    assert_eq!(harness.member_count(first_snapshot.room_id, session_id).await, 1);
+    assert_eq!(
+        harness
+            .member_count(first_snapshot.room_id, session_id)
+            .await,
+        1
+    );
     harness.cleanup().await;
 }
 
 #[tokio::test]
 async fn send_text_message_rejects_non_member_sender_via_database_truth() {
-    let harness = PgHarness::new("send_text_message_rejects_non_member_sender_via_database_truth").await;
+    let harness =
+        PgHarness::new("send_text_message_rejects_non_member_sender_via_database_truth").await;
     let session_id = Uuid::now_v7();
     let room_id = Uuid::now_v7();
     let room_code = unique_room_code('e');
@@ -705,25 +815,46 @@ async fn send_text_message_rejects_non_member_sender_via_database_truth() {
 
 #[tokio::test]
 async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version() {
-    let harness = PgHarness::new("store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version").await;
+    let harness = PgHarness::new(
+        "store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version",
+    )
+    .await;
     let session_id = Uuid::now_v7();
     let normalized_code = unique_room_code('f');
     let room_v1 = Uuid::now_v7();
     let room_v2 = Uuid::now_v7();
     harness.seed_active_session(session_id).await;
-    harness.seed_room_with_code(room_v1, &normalized_code, 1).await;
-    harness.seed_room_with_code(room_v2, &normalized_code, 2).await;
+    harness
+        .seed_room_with_code(room_v1, &normalized_code, 1)
+        .await;
+    harness
+        .seed_room_with_code(room_v2, &normalized_code, 2)
+        .await;
 
     let mut requested_room_code = RoomCode::new(&normalized_code).unwrap();
     requested_room_code.code_version = 2;
-    let joined = harness
+    let mut room_entry = harness
         .store
-        .join_or_create_room_by_code(requested_room_code.clone(), 50, session_id)
+        .begin_room_entry(&requested_room_code)
         .await
         .unwrap();
+    let joined_room_id = room_entry
+        .find_room_by_code(&requested_room_code)
+        .await
+        .unwrap()
+        .unwrap();
+    room_entry
+        .ensure_room_member(joined_room_id, session_id)
+        .await
+        .unwrap();
+    let messages = room_entry
+        .load_recent_messages(joined_room_id, 50)
+        .await
+        .unwrap();
+    room_entry.commit().await.unwrap();
 
-    assert_eq!(joined.room_id, room_v2);
-    assert_eq!(joined.room_code.code_version, 2);
+    assert_eq!(joined_room_id, room_v2);
+    assert!(messages.is_empty());
     assert_eq!(harness.member_count(room_v2, session_id).await, 1);
 
     let snapshot = harness.store.load_room_snapshot(room_v2, 50).await.unwrap();
@@ -943,44 +1074,149 @@ impl MessageStore for FakeMessageStore {
     }
 }
 
-#[derive(Debug)]
-struct FakeRoomJoinPort {
-    snapshot: RoomSnapshotData,
-    requested_codes: Mutex<Vec<String>>,
-    requested_limits: Mutex<Vec<usize>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RoomPresence {
+    Existing,
+    Missing,
 }
 
-impl FakeRoomJoinPort {
-    fn with_snapshot(snapshot: RoomSnapshotData) -> Self {
+#[derive(Debug, Default)]
+struct FakeRoomEntryState {
+    operations: Vec<&'static str>,
+    requested_codes: Vec<String>,
+    requested_limits: Vec<usize>,
+}
+
+#[derive(Debug)]
+struct FakeRoomEntryPort {
+    snapshot: RoomSnapshotData,
+    room_presence: RoomPresence,
+    fail_member_write: bool,
+    state: std::sync::Arc<Mutex<FakeRoomEntryState>>,
+}
+
+impl FakeRoomEntryPort {
+    fn existing_room(snapshot: RoomSnapshotData) -> Self {
         Self {
             snapshot,
-            requested_codes: Mutex::default(),
-            requested_limits: Mutex::default(),
+            room_presence: RoomPresence::Existing,
+            fail_member_write: false,
+            state: std::sync::Arc::new(Mutex::new(FakeRoomEntryState::default())),
         }
     }
 
-    fn requested_codes(&self) -> Vec<String> {
-        self.requested_codes.lock().unwrap().clone()
+    fn missing_room(snapshot: RoomSnapshotData) -> Self {
+        Self {
+            snapshot,
+            room_presence: RoomPresence::Missing,
+            fail_member_write: false,
+            state: std::sync::Arc::new(Mutex::new(FakeRoomEntryState::default())),
+        }
     }
 
-    fn requested_limits(&self) -> Vec<usize> {
-        self.requested_limits.lock().unwrap().clone()
+    fn member_failure(snapshot: RoomSnapshotData) -> Self {
+        Self {
+            snapshot,
+            room_presence: RoomPresence::Existing,
+            fail_member_write: true,
+            state: std::sync::Arc::new(Mutex::new(FakeRoomEntryState::default())),
+        }
+    }
+
+    fn operations(&self) -> Vec<&'static str> {
+        self.state.lock().unwrap().operations.clone()
     }
 }
 
-impl RoomJoinPort for FakeRoomJoinPort {
-    async fn join_or_create_room_by_code(
-        &self,
-        room_code: RoomCode,
-        limit: usize,
-        _session_id: Uuid,
-    ) -> Result<RoomSnapshotData, AppError> {
-        self.requested_codes
+impl RoomEntryPort for FakeRoomEntryPort {
+    type Tx<'a>
+        = FakeRoomEntryTx
+    where
+        Self: 'a;
+
+    async fn begin_room_entry(&self, _room_code: &RoomCode) -> Result<Self::Tx<'_>, AppError> {
+        Ok(FakeRoomEntryTx {
+            snapshot: self.snapshot.clone(),
+            room_presence: self.room_presence,
+            fail_member_write: self.fail_member_write,
+            state: self.state.clone(),
+        })
+    }
+}
+
+struct FakeRoomEntryTx {
+    snapshot: RoomSnapshotData,
+    room_presence: RoomPresence,
+    fail_member_write: bool,
+    state: std::sync::Arc<Mutex<FakeRoomEntryState>>,
+}
+
+impl FakeRoomEntryTx {
+    fn push(&self, operation: &'static str) {
+        self.state.lock().unwrap().operations.push(operation);
+    }
+}
+
+impl RoomEntryTx for FakeRoomEntryTx {
+    async fn find_room_by_code(&mut self, room_code: &RoomCode) -> Result<Option<Uuid>, AppError> {
+        self.push("find_room_by_code");
+        self.state
             .lock()
             .unwrap()
+            .requested_codes
             .push(room_code.normalized().to_string());
-        self.requested_limits.lock().unwrap().push(limit);
-        Ok(self.snapshot.clone())
+        if room_code.normalized() != self.snapshot.room_code.normalized() {
+            return Ok(None);
+        }
+
+        Ok(match self.room_presence {
+            RoomPresence::Existing => Some(self.snapshot.room_id),
+            RoomPresence::Missing => None,
+        })
+    }
+
+    async fn create_room(&mut self, room_code: &RoomCode) -> Result<Uuid, AppError> {
+        self.push("create_room");
+        if room_code.normalized() != self.snapshot.room_code.normalized() {
+            return Err(AppError::DependencyFailure);
+        }
+
+        Ok(self.snapshot.room_id)
+    }
+
+    async fn ensure_room_member(
+        &mut self,
+        room_id: Uuid,
+        _session_id: Uuid,
+    ) -> Result<(), AppError> {
+        self.push("ensure_room_member");
+        if self.fail_member_write {
+            return Err(AppError::DependencyFailure);
+        }
+        if room_id == self.snapshot.room_id {
+            Ok(())
+        } else {
+            Err(AppError::DependencyFailure)
+        }
+    }
+
+    async fn load_recent_messages(
+        &mut self,
+        room_id: Uuid,
+        limit: usize,
+    ) -> Result<Vec<Message>, AppError> {
+        self.push("load_recent_messages");
+        self.state.lock().unwrap().requested_limits.push(limit);
+        if room_id != self.snapshot.room_id || limit != 50 {
+            return Err(AppError::DependencyFailure);
+        }
+
+        Ok(self.snapshot.messages.clone())
+    }
+
+    async fn commit(self) -> Result<(), AppError> {
+        self.push("commit");
+        Ok(())
     }
 }
 
@@ -1076,7 +1312,11 @@ fn expected_snapshot(room_id: Uuid, session_id: Uuid, body: &str) -> RoomSnapsho
     }
 }
 
-fn sample_snapshot_data(room_id: Uuid, room_code: &str, messages: Vec<Message>) -> RoomSnapshotData {
+fn sample_snapshot_data(
+    room_id: Uuid,
+    room_code: &str,
+    messages: Vec<Message>,
+) -> RoomSnapshotData {
     RoomSnapshotData {
         room_id,
         room_code: RoomCode::new(room_code).unwrap(),
@@ -1121,11 +1361,11 @@ struct PgHarness {
 
 impl PgHarness {
     async fn new(test_name: &str) -> Self {
-        let base_database_url = validated_test_database_url(
-            env::var("KOKO_TEST_DATABASE_URL").ok().as_deref(),
-        )
-        .unwrap();
-        let database_url = derive_isolated_test_database_url(&base_database_url, test_name).unwrap();
+        let base_database_url =
+            validated_test_database_url(env::var("KOKO_TEST_DATABASE_URL").ok().as_deref())
+                .unwrap();
+        let database_url =
+            derive_isolated_test_database_url(&base_database_url, test_name).unwrap();
         let admin_database_url = default_admin_database_url(&database_url);
         let database_name = database_name_from_url(&database_url);
         reset_test_database(&database_url).await;
@@ -1209,12 +1449,12 @@ impl PgHarness {
              WHERE normalized_code = $1
                AND code_version = $2",
         )
-            .bind(room_code.normalized())
-            .bind(i16::try_from(room_code.code_version).unwrap())
-            .fetch_one(&self.pool)
-            .await
-            .unwrap()
-            .get("room_id")
+        .bind(room_code.normalized())
+        .bind(i16::try_from(room_code.code_version).unwrap())
+        .fetch_one(&self.pool)
+        .await
+        .unwrap()
+        .get("room_id")
     }
 
     async fn member_count(&self, room_id: Uuid, session_id: Uuid) -> i64 {
@@ -1262,10 +1502,8 @@ impl PgHarness {
 }
 
 async fn database_exists(database_name: &str) -> bool {
-    let base_database_url = validated_test_database_url(
-        env::var("KOKO_TEST_DATABASE_URL").ok().as_deref(),
-    )
-    .unwrap();
+    let base_database_url =
+        validated_test_database_url(env::var("KOKO_TEST_DATABASE_URL").ok().as_deref()).unwrap();
     let admin_url = default_admin_database_url(&base_database_url);
     let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
     let admin_pool = PgPoolOptions::new()
@@ -1274,16 +1512,17 @@ async fn database_exists(database_name: &str) -> bool {
         .await
         .unwrap();
 
-    sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)",
-    )
-    .bind(database_name)
-    .fetch_one(&admin_pool)
-    .await
-    .unwrap()
+    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
+        .bind(database_name)
+        .fetch_one(&admin_pool)
+        .await
+        .unwrap()
 }
 
-fn derive_isolated_test_database_url(base_database_url: &str, test_name: &str) -> Result<String, String> {
+fn derive_isolated_test_database_url(
+    base_database_url: &str,
+    test_name: &str,
+) -> Result<String, String> {
     let base_database_url = validated_test_database_url(Some(base_database_url))?;
     let mut options = PgConnectOptions::from_str(&base_database_url)
         .map_err(|error| format!("failed to parse test database url: {error}"))?;
@@ -1351,7 +1590,10 @@ fn default_admin_database_url(test_database_url: &str) -> String {
     validate_admin_database_url(test_database_url, &admin_url).unwrap()
 }
 
-fn validate_admin_database_url(test_database_url: &str, admin_database_url: &str) -> Result<String, String> {
+fn validate_admin_database_url(
+    test_database_url: &str,
+    admin_database_url: &str,
+) -> Result<String, String> {
     let test_options = PgConnectOptions::from_str(test_database_url)
         .map_err(|error| format!("failed to parse test database url: {error}"))?;
     let admin_options = PgConnectOptions::from_str(admin_database_url)
@@ -1419,9 +1661,9 @@ async fn reset_test_database(database_url: &str) {
     .unwrap();
 
     sqlx::query(&format!("DROP DATABASE IF EXISTS \"{database_name}\""))
-    .execute(&admin_pool)
-    .await
-    .unwrap();
+        .execute(&admin_pool)
+        .await
+        .unwrap();
 
     sqlx::query(&format!(
         "CREATE DATABASE \"{database_name}\" OWNER \"{database_user}\""
@@ -1436,12 +1678,10 @@ async fn reset_test_database(database_url: &str) {
         .await
         .unwrap();
 
-    sqlx::query(&format!(
-        "ALTER SCHEMA public OWNER TO \"{database_user}\""
-    ))
-    .execute(&test_database_admin_pool)
-    .await
-    .unwrap();
+    sqlx::query(&format!("ALTER SCHEMA public OWNER TO \"{database_user}\""))
+        .execute(&test_database_admin_pool)
+        .await
+        .unwrap();
 
     sqlx::query(&format!(
         "GRANT ALL ON SCHEMA public TO \"{database_user}\""
