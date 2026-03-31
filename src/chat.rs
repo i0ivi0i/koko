@@ -66,6 +66,7 @@ pub struct ChatTimelineState {
     room_id: Option<Uuid>,
     room_code: String,
     connection: ConnectionState,
+    draft: String,
     messages: Vec<ChatMessage>,
 }
 
@@ -101,6 +102,7 @@ impl ChatState {
                 room_id: None,
                 room_code: String::new(),
                 connection: ConnectionState::Offline,
+                draft: String::new(),
                 messages: Vec::new(),
             },
         }
@@ -140,6 +142,10 @@ impl ChatState {
 
     pub fn connection(&self) -> ConnectionState {
         self.timeline.connection
+    }
+
+    pub fn draft(&self) -> &str {
+        &self.timeline.draft
     }
 
     pub fn messages(&self) -> &[ChatMessage] {
@@ -196,6 +202,7 @@ impl ChatState {
         self.timeline.room_id = Some(room.room_id);
         self.timeline.room_code = room.room_code.clone();
         self.timeline.connection = ConnectionState::Offline;
+        self.timeline.draft.clear();
         self.timeline.messages.clear();
     }
 
@@ -207,6 +214,7 @@ impl ChatState {
         self.timeline.room_id = Some(snapshot.room_id);
         self.timeline.room_code = snapshot.room_code;
         self.timeline.connection = ConnectionState::Offline;
+        self.timeline.draft.clear();
         self.timeline.messages = snapshot
             .messages
             .into_iter()
@@ -223,7 +231,6 @@ impl ChatState {
 
     pub fn apply_subscription_refill_snapshot(&mut self, snapshot: RoomSnapshot) {
         if self.timeline.room_id != Some(snapshot.room_id) {
-            self.open_room_from_snapshot(snapshot);
             return;
         }
 
@@ -242,11 +249,20 @@ impl ChatState {
         self.search.query = query.to_string();
     }
 
+    pub fn set_draft(&mut self, draft: &str) {
+        self.timeline.draft = draft.to_string();
+    }
+
+    pub fn clear_draft(&mut self) {
+        self.timeline.draft.clear();
+    }
+
     pub fn show_join_by_code(&mut self) {
         self.screen = ShellScreen::JoinByCode;
         self.timeline.room_id = None;
         self.timeline.room_code.clear();
         self.timeline.connection = ConnectionState::Offline;
+        self.timeline.draft.clear();
         self.timeline.messages.clear();
     }
 
@@ -276,17 +292,22 @@ impl ChatState {
 
     pub fn confirm_message(&mut self, event: MessageCreated) {
         if let Some(client_message_id) = event.client_message_id
-            && let Some(message) = self
+            && let Some(index) = self
                 .timeline
                 .messages
-                .iter_mut()
-                .find(|message| message.client_message_id == Some(client_message_id))
+                .iter()
+                .position(|message| message.client_message_id == Some(client_message_id))
         {
-            message.message_id = Some(event.message_id);
-            message.body = event.body;
-            message.created_at = event.created_at;
-            message.delivery = DeliveryState::Confirmed;
+            self.timeline.messages[index].message_id = Some(event.message_id);
+            self.timeline.messages[index].body = event.body;
+            self.timeline.messages[index].created_at = event.created_at;
+            self.timeline.messages[index].delivery = DeliveryState::Confirmed;
+            self.remove_duplicate_message_id(event.message_id, Some(index));
             self.sort_messages();
+            return;
+        }
+
+        if self.timeline.room_id != Some(event.room_id) {
             return;
         }
 
@@ -345,7 +366,21 @@ impl ChatState {
         self.timeline.room_id = None;
         self.timeline.room_code.clear();
         self.timeline.connection = ConnectionState::Offline;
+        self.timeline.draft.clear();
         self.timeline.messages.clear();
+    }
+
+    fn remove_duplicate_message_id(&mut self, message_id: Uuid, keep_index: Option<usize>) {
+        self.timeline.messages.retain_with_index(|index, message| {
+            if message.message_id != Some(message_id) {
+                return true;
+            }
+
+            match keep_index {
+                Some(keep_index) => index == keep_index,
+                None => index == 0,
+            }
+        });
     }
 }
 
@@ -366,5 +401,20 @@ fn fallback_screen(joined_rooms: &[ConversationItem]) -> ShellScreen {
         ShellScreen::JoinByCode
     } else {
         ShellScreen::ConversationList
+    }
+}
+
+trait RetainWithIndex<T> {
+    fn retain_with_index(&mut self, predicate: impl FnMut(usize, &T) -> bool);
+}
+
+impl<T> RetainWithIndex<T> for Vec<T> {
+    fn retain_with_index(&mut self, mut predicate: impl FnMut(usize, &T) -> bool) {
+        let mut index = 0;
+        self.retain(|item| {
+            let keep = predicate(index, item);
+            index += 1;
+            keep
+        });
     }
 }

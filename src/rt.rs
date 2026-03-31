@@ -16,7 +16,8 @@ use crate::{
         SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
-        CommandRejected, RoomStreamSubscribed, SendTextMessageCommand, SubscribeRoomStreamCommand,
+        CommandRejected, RejectedCommandKind, RoomStreamSubscribed, SendTextMessageCommand,
+        SubscribeRoomStreamCommand,
     },
 };
 
@@ -142,7 +143,13 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         if let Err(error) =
                             app::subscribe_room_stream(&state.store, &state.store, input).await
                         {
-                            emit_command_rejected(&socket, &error);
+                            emit_command_rejected(
+                                &socket,
+                                &error,
+                                RejectedCommandKind::SubscribeRoomStream,
+                                Some(room_id),
+                                None,
+                            );
                             warn_handler_failure("subscribe_room_stream", &error);
                             return;
                         }
@@ -165,6 +172,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                     let state = state.clone();
                     async move {
                         let room_id = payload.room_id;
+                        let client_message_id = payload.client_message_id;
                         let input = send_text_message_input(session, payload);
                         match app::send_text_message(
                             &state.store,
@@ -182,7 +190,13 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                     .await;
                             }
                             Err(error) => {
-                                emit_command_rejected(&socket, &error);
+                                emit_command_rejected(
+                                    &socket,
+                                    &error,
+                                    RejectedCommandKind::SendTextMessage,
+                                    Some(room_id),
+                                    client_message_id,
+                                );
                                 warn_handler_failure("send_text_message", &error);
                             }
                         }
@@ -209,11 +223,22 @@ fn room_name(room_id: Uuid) -> String {
     room_id.to_string()
 }
 
-fn emit_command_rejected(socket: &SocketRef, error: &AppError) {
+fn emit_command_rejected(
+    socket: &SocketRef,
+    error: &AppError,
+    command: RejectedCommandKind,
+    room_id: Option<Uuid>,
+    client_message_id: Option<Uuid>,
+) {
     emit_to_socket(
         socket,
         "command_rejected",
-        &CommandRejected { code: error.code() },
+        &CommandRejected {
+            code: error.code(),
+            command,
+            room_id,
+            client_message_id,
+        },
     );
 }
 

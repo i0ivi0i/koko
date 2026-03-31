@@ -339,6 +339,34 @@ async fn assets_theme_css_is_served_as_static_file() {
 }
 
 #[tokio::test]
+async fn assets_socket_io_client_is_served_as_static_file() {
+    let harness = HttpHarness::new("assets_socket_io_client_is_served_as_static_file").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/assets/socket.io.esm.min.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("Socket.IO v4.5.1"));
+    harness.cleanup().await;
+}
+
+#[tokio::test]
 async fn theme_css_exposes_telegram_shell_sections() {
     let harness = HttpHarness::new("theme_css_exposes_telegram_shell_sections").await;
 

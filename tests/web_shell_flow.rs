@@ -1,7 +1,10 @@
 use chrono::{TimeZone, Utc};
 use koko::{
-    chat::{ChatState, ConnectionState, ShellScreen},
-    contract::{BootstrapSession, JoinedRoomSummary, MessageView, RoomSearchResult, RoomSnapshot},
+    chat::{ChatState, ConnectionState, DeliveryState, ShellScreen},
+    contract::{
+        BootstrapSession, JoinedRoomSummary, MessageCreated, MessageView, RoomSearchResult,
+        RoomSnapshot,
+    },
     web::{resolve_last_open_room_id, select_initial_screen, should_enter_join_flow},
 };
 use uuid::Uuid;
@@ -153,6 +156,33 @@ fn message_created_for_current_room_appends_to_timeline() {
 }
 
 #[test]
+fn send_message_keeps_pending_until_message_accepted() {
+    let room_id = Uuid::from_u128(14);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(room_id, "A1234", Vec::new()));
+
+    let pending_id = state.enqueue_pending(room_id, state.session_id(), "  hello koko  ");
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Pending);
+    assert_eq!(state.confirmed_messages().len(), 0);
+
+    state.confirm_message(MessageCreated {
+        message_id: Uuid::from_u128(141),
+        room_id,
+        session_id: state.session_id(),
+        body: "hello koko".to_string(),
+        created_at: fixed_time(),
+        client_message_id: Some(pending_id),
+    });
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Confirmed);
+    assert_eq!(state.messages()[0].message_id, Some(Uuid::from_u128(141)));
+    assert_eq!(state.confirmed_messages().len(), 1);
+}
+
+#[test]
 fn refill_snapshot_does_not_duplicate_message_created_already_in_timeline() {
     let room_id = Uuid::from_u128(13);
     let mut state = bootstrapped_state();
@@ -184,6 +214,66 @@ fn refill_snapshot_does_not_duplicate_message_created_already_in_timeline() {
             Some(Uuid::from_u128(132)),
             Some(Uuid::from_u128(133))
         ]
+    );
+}
+
+#[test]
+fn subscription_refill_then_realtime_event_does_not_duplicate_message() {
+    let room_id = Uuid::from_u128(15);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(room_id, "A1234", Vec::new()));
+
+    let pending_id = state.enqueue_pending(room_id, state.session_id(), "hello refill");
+    state.apply_subscription_refill_snapshot(room_snapshot(
+        room_id,
+        "A1234",
+        vec![message_view(Uuid::from_u128(151), "hello refill", 0)],
+    ));
+
+    state.confirm_message(MessageCreated {
+        message_id: Uuid::from_u128(151),
+        room_id,
+        session_id: state.session_id(),
+        body: "hello refill".to_string(),
+        created_at: fixed_time(),
+        client_message_id: Some(pending_id),
+    });
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Confirmed);
+    assert_eq!(state.messages()[0].message_id, Some(Uuid::from_u128(151)));
+}
+
+#[test]
+fn stale_subscription_refill_for_previous_room_is_ignored() {
+    let first_room_id = Uuid::from_u128(16);
+    let second_room_id = Uuid::from_u128(17);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(
+        first_room_id,
+        "A1234",
+        vec![message_view(Uuid::from_u128(161), "first room", 0)],
+    ));
+    state.open_room_from_snapshot(room_snapshot(
+        second_room_id,
+        "B1234",
+        vec![message_view(Uuid::from_u128(171), "second room", 1)],
+    ));
+
+    state.apply_subscription_refill_snapshot(room_snapshot(
+        first_room_id,
+        "A1234",
+        vec![message_view(Uuid::from_u128(162), "late refill", 2)],
+    ));
+
+    assert_eq!(state.room_id(), Some(second_room_id));
+    assert_eq!(
+        state
+            .messages()
+            .iter()
+            .map(|message| (message.room_id, message.message_id))
+            .collect::<Vec<_>>(),
+        vec![(second_room_id, Some(Uuid::from_u128(171)))]
     );
 }
 
@@ -224,6 +314,51 @@ fn joined_rooms_can_manually_enter_join_flow() {
     assert_eq!(state.screen(), ShellScreen::JoinByCode);
     assert_eq!(state.joined_rooms().len(), 1);
     assert_eq!(state.room_id(), None);
+}
+
+#[test]
+fn active_room_ignores_message_created_from_other_room() {
+    let room_id = Uuid::from_u128(10);
+    let other_room_id = Uuid::from_u128(11);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(
+        room_id,
+        "A1234",
+        vec![message_view(Uuid::from_u128(101), "first", 0)],
+    ));
+
+    state.confirm_message(MessageCreated {
+        message_id: Uuid::from_u128(102),
+        room_id: other_room_id,
+        session_id: Uuid::from_u128(91),
+        body: "foreign".to_string(),
+        created_at: fixed_time(),
+        client_message_id: None,
+    });
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].room_id, room_id);
+}
+
+#[test]
+fn draft_is_local_shell_state_and_can_be_cleared_after_enqueue() {
+    let room_id = Uuid::from_u128(12);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(room_id, "A1234", Vec::new()));
+    state.set_draft("  hello koko  ");
+
+    assert_eq!(state.draft(), "  hello koko  ");
+
+    let session_id = state.session_id();
+    let draft = state.draft().to_string();
+    let pending_id = state.enqueue_pending(room_id, session_id, &draft);
+    state.clear_draft();
+
+    assert_eq!(state.draft(), "");
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].client_message_id, Some(pending_id));
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Pending);
+    assert_eq!(state.messages()[0].body, "hello koko");
 }
 
 fn bootstrapped_state() -> ChatState {

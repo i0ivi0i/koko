@@ -29,9 +29,19 @@ pub struct RoomStreamSubscribed {
     pub room_id: Uuid,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RejectedCommandKind {
+    SubscribeRoomStream,
+    SendTextMessage,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommandRejected {
     pub code: AppErrorCode,
+    pub command: RejectedCommandKind,
+    pub room_id: Option<Uuid>,
+    pub client_message_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
