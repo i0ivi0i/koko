@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     admin::AdminPanelState,
     chat::{ChatMessage, ChatState, ConnectionState, ConversationItem, DeliveryState, ShellScreen},
-    contract::AdminRoomSummary,
+    contract::{AdminRoomSummary, RoomSearchResult},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +17,7 @@ pub fn ChatPage(
     #[props(default)] on_back_to_list: Option<EventHandler<()>>,
     #[props(default)] on_room_selected: Option<EventHandler<Uuid>>,
     #[props(default)] on_search_input: Option<EventHandler<String>>,
-    #[props(default)] on_search_result_selected: Option<EventHandler<Uuid>>,
+    #[props(default)] on_search_result_selected: Option<EventHandler<RoomSearchResult>>,
 ) -> Element {
     // 这里只做壳层分流，消息、成员、搜索结果都仍由 ChatState 提供真相。
     match state.screen() {
@@ -97,7 +97,7 @@ fn JoinByCodeScreen(
     state: ChatState,
     #[props(default)] on_back_to_list: Option<EventHandler<()>>,
     #[props(default)] on_search_input: Option<EventHandler<String>>,
-    #[props(default)] on_search_result_selected: Option<EventHandler<Uuid>>,
+    #[props(default)] on_search_result_selected: Option<EventHandler<RoomSearchResult>>,
 ) -> Element {
     let result_count = state.search_results().len();
 
@@ -293,8 +293,8 @@ fn ConversationListItem(
 
 #[component]
 fn SearchResultItem(
-    result: crate::contract::RoomSearchResult,
-    #[props(default)] on_select: Option<EventHandler<Uuid>>,
+    result: RoomSearchResult,
+    #[props(default)] on_select: Option<EventHandler<RoomSearchResult>>,
 ) -> Element {
     let room_code = shell_room_code(&result.room_code);
 
@@ -305,7 +305,7 @@ fn SearchResultItem(
             tabindex: "0",
             onclick: move |_| {
                 if let Some(handler) = on_select.as_ref() {
-                    handler.call(result.room_id);
+                    handler.call(result.clone());
                 }
             },
             div { class: "tg-search-result__avatar", "{room_code.chars().next().unwrap_or('K')}" }

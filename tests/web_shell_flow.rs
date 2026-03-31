@@ -48,7 +48,8 @@ fn stale_last_open_room_id_falls_back_to_list() {
     let mut state = bootstrapped_state();
     state.apply_joined_rooms(vec![joined_room(Uuid::from_u128(3), "A1234")]);
 
-    let restored_room_id = resolve_last_open_room_id(state.joined_rooms(), Some(Uuid::from_u128(4)));
+    let restored_room_id =
+        resolve_last_open_room_id(state.joined_rooms(), Some(Uuid::from_u128(4)));
     state.restore_last_open_room(restored_room_id);
 
     assert_eq!(state.screen(), ShellScreen::ConversationList);
@@ -85,7 +86,11 @@ fn subscription_refill_merges_second_snapshot_without_duplicates() {
             .iter()
             .filter_map(|message| message.message_id)
             .collect::<Vec<_>>(),
-        vec![Uuid::from_u128(51), Uuid::from_u128(52), Uuid::from_u128(53)]
+        vec![
+            Uuid::from_u128(51),
+            Uuid::from_u128(52),
+            Uuid::from_u128(53)
+        ]
     );
 }
 
@@ -114,6 +119,18 @@ fn conversation_item_exposes_unread_placeholder_without_becoming_truth_source() 
 
     assert!(conversation.show_unread_placeholder);
     assert_eq!(conversation.display_title, "A1234");
+}
+
+#[test]
+fn joined_rooms_can_manually_enter_join_flow() {
+    let mut state = bootstrapped_state();
+    state.apply_joined_rooms(vec![joined_room(Uuid::from_u128(9), "A1234")]);
+
+    state.show_join_by_code();
+
+    assert_eq!(state.screen(), ShellScreen::JoinByCode);
+    assert_eq!(state.joined_rooms().len(), 1);
+    assert_eq!(state.room_id(), None);
 }
 
 fn bootstrapped_state() -> ChatState {

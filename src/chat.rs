@@ -180,7 +180,11 @@ impl ChatState {
             return;
         };
 
-        let Some(room) = self.joined_rooms.iter().find(|room| room.room_id == room_id) else {
+        let Some(room) = self
+            .joined_rooms
+            .iter()
+            .find(|room| room.room_id == room_id)
+        else {
             self.last_open_room = None;
             self.clear_open_room();
             self.screen = fallback_screen(&self.joined_rooms);
@@ -236,6 +240,14 @@ impl ChatState {
 
     pub fn set_search_query(&mut self, query: &str) {
         self.search.query = query.to_string();
+    }
+
+    pub fn show_join_by_code(&mut self) {
+        self.screen = ShellScreen::JoinByCode;
+        self.timeline.room_id = None;
+        self.timeline.room_code.clear();
+        self.timeline.connection = ConnectionState::Offline;
+        self.timeline.messages.clear();
     }
 
     pub fn enter_room(&mut self, snapshot: RoomSnapshot) {
