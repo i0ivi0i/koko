@@ -54,7 +54,7 @@ while (true) {
 
     teardownSocket();
     activeRoomId = command.room_id;
-    socket = io({ path: "/socket.io", withCredentials: true });
+    socket = io({ path: "/socket.io" });
     socket.on("connect", () => {
       sendEvent({ type: "connected", room_id: activeRoomId });
       socket.emit("subscribe_room_stream", { room_id: activeRoomId });
