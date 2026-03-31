@@ -18,6 +18,9 @@ pub fn ChatPage(
     #[props(default)] on_room_selected: Option<EventHandler<Uuid>>,
     #[props(default)] on_search_input: Option<EventHandler<String>>,
     #[props(default)] on_search_result_selected: Option<EventHandler<RoomSearchResult>>,
+    #[props(default)] draft: String,
+    #[props(default)] on_draft_input: Option<EventHandler<String>>,
+    #[props(default)] on_send_message: Option<EventHandler<()>>,
 ) -> Element {
     // 这里只做壳层分流，消息、成员、搜索结果都仍由 ChatState 提供真相。
     match state.screen() {
@@ -40,6 +43,9 @@ pub fn ChatPage(
             ChatScreen {
                 state,
                 on_back_to_list,
+                draft,
+                on_draft_input,
+                on_send_message,
             }
         },
     }
@@ -145,6 +151,9 @@ fn JoinByCodeScreen(
 fn ChatScreen(
     state: ChatState,
     #[props(default)] on_back_to_list: Option<EventHandler<()>>,
+    #[props(default)] draft: String,
+    #[props(default)] on_draft_input: Option<EventHandler<String>>,
+    #[props(default)] on_send_message: Option<EventHandler<()>>,
 ) -> Element {
     let room_code = shell_room_code(state.room_code());
 
@@ -173,12 +182,29 @@ fn ChatScreen(
             }
             footer { class: "tg-compose",
                 div { class: "tg-compose__field",
-                    span { class: "tg-compose__placeholder", "Message" }
+                    input {
+                        class: "tg-compose__input",
+                        r#type: "text",
+                        value: "{draft}",
+                        placeholder: "Message",
+                        readonly: on_draft_input.is_none(),
+                        disabled: on_draft_input.is_none(),
+                        oninput: move |event| {
+                            if let Some(handler) = on_draft_input.as_ref() {
+                                handler.call(event.value());
+                            }
+                        },
+                    }
                 }
                 button {
                     class: "tg-compose__send",
                     r#type: "button",
-                    disabled: true,
+                    disabled: on_send_message.is_none() || draft.trim().is_empty(),
+                    onclick: move |_| {
+                        if let Some(handler) = on_send_message.as_ref() {
+                            handler.call(());
+                        }
+                    },
                     "Send"
                 }
             }
