@@ -18,9 +18,10 @@ use koko::{
     app::{
         AdminAccessPort, AdminOverviewPort, AdminQueryContext, AdminRoomsPort, AppError, Clock,
         IdGenerator, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx, RoomSnapshotData,
-        RoomSnapshotPort, SessionBootstrapPort, SessionPort, bootstrap_anonymous_session,
-        get_admin_overview, join_or_create_room_by_code, list_admin_rooms, load_room_snapshot,
-        send_text_message, subscribe_room_stream,
+        RoomSnapshotPort, SendTextMessageInput, SessionBootstrapPort, SessionPort,
+        SubscribeRoomStreamInput, bootstrap_anonymous_session, get_admin_overview,
+        join_or_create_room_by_code, list_admin_rooms, load_room_snapshot, send_text_message,
+        subscribe_room_stream,
     },
     contract::{
         AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageView,
@@ -63,6 +64,34 @@ fn app_event_serializes_to_tagged_wire_format() {
     assert_eq!(
         json,
         "{\"type\":\"message_created\",\"payload\":{\"message_id\":\"00000000-0000-0000-0000-000000000001\",\"room_id\":\"00000000-0000-0000-0000-000000000002\",\"session_id\":\"00000000-0000-0000-0000-000000000003\",\"body\":\"hello\",\"created_at\":\"2026-03-30T12:00:00Z\",\"client_message_id\":\"00000000-0000-0000-0000-000000000004\"}}"
+    );
+}
+
+#[test]
+fn subscribe_room_stream_command_serializes_without_session_id() {
+    let json = serde_json::to_string(&SubscribeRoomStreamCommand {
+        room_id: Uuid::from_u128(1),
+    })
+    .unwrap();
+
+    assert_eq!(
+        json,
+        "{\"room_id\":\"00000000-0000-0000-0000-000000000001\"}"
+    );
+}
+
+#[test]
+fn send_text_message_command_serializes_without_session_id() {
+    let json = serde_json::to_string(&SendTextMessageCommand {
+        room_id: Uuid::from_u128(2),
+        body: "hello".to_string(),
+        client_message_id: Some(Uuid::from_u128(3)),
+    })
+    .unwrap();
+
+    assert_eq!(
+        json,
+        "{\"room_id\":\"00000000-0000-0000-0000-000000000002\",\"body\":\"hello\",\"client_message_id\":\"00000000-0000-0000-0000-000000000003\"}"
     );
 }
 
@@ -163,7 +192,7 @@ async fn send_text_message_returns_message_created_event() {
         &store,
         &FakeIdGenerator::new(message_id),
         &FakeClock::new(now),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id,
             session_id,
             body: "  hello koko  ".to_string(),
@@ -198,7 +227,7 @@ async fn send_text_message_rejects_inactive_session() {
         &store,
         &FakeIdGenerator::new(Uuid::from_u128(13)),
         &FakeClock::new(fixed_time()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id,
             session_id,
             body: "hello".to_string(),
@@ -225,7 +254,7 @@ async fn send_text_message_rejects_non_member() {
         &store,
         &FakeIdGenerator::new(Uuid::from_u128(23)),
         &FakeClock::new(fixed_time()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id,
             session_id,
             body: "hello".to_string(),
@@ -257,7 +286,7 @@ async fn send_text_message_rejects_persisted_message_drift() {
         &FakeMessageStore::persisting(MessageStoreOutcome::rewrite_body("drifted")),
         &FakeIdGenerator::new(Uuid::from_u128(26)),
         &FakeClock::new(fixed_time()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id,
             session_id,
             body: "hello".to_string(),
@@ -278,7 +307,7 @@ async fn send_text_message_rejects_empty_body() {
         &FakeMessageStore::persisting(MessageStoreOutcome::same()),
         &FakeIdGenerator::new(Uuid::from_u128(27)),
         &FakeClock::new(fixed_time()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id: Uuid::from_u128(28),
             session_id: Uuid::from_u128(29),
             body: "   ".to_string(),
@@ -693,7 +722,7 @@ async fn subscribe_room_stream_accepts_active_member() {
     subscribe_room_stream(
         &FakeSessionPort::allow(),
         &FakeMembershipPort::allow(),
-        SubscribeRoomStreamCommand {
+        SubscribeRoomStreamInput {
             room_id: Uuid::from_u128(58),
             session_id: Uuid::from_u128(59),
         },
@@ -710,7 +739,7 @@ async fn subscribe_room_stream_rejects_non_member() {
     let error = subscribe_room_stream(
         &FakeSessionPort::allow(),
         &FakeMembershipPort::deny(),
-        SubscribeRoomStreamCommand {
+        SubscribeRoomStreamInput {
             room_id,
             session_id,
         },
@@ -793,7 +822,7 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it() {
         &harness.store,
         &FakeIdGenerator::new(message_id),
         &FakeClock::new(now),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id: joined.room_id,
             session_id,
             body: "  persisted hello  ".to_string(),
@@ -945,7 +974,7 @@ async fn send_text_message_rejects_non_member_sender_via_database_truth() {
         &harness.store,
         &FakeIdGenerator::new(Uuid::now_v7()),
         &FakeClock::new(fixed_time()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id,
             session_id,
             body: "database truth".to_string(),
@@ -1106,7 +1135,7 @@ async fn deleting_truth_rows_is_blocked_in_stage_one() {
         &harness.store,
         &FakeIdGenerator::new(Uuid::now_v7()),
         &FakeClock::new(fixed_time()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id: joined.room_id,
             session_id,
             body: "history".to_string(),

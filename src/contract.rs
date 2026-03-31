@@ -22,7 +22,6 @@ pub struct JoinOrCreateRoomByCodeCommand {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubscribeRoomStreamCommand {
     pub room_id: Uuid,
-    pub session_id: Uuid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,7 +80,6 @@ pub struct RoomSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SendTextMessageCommand {
     pub room_id: Uuid,
-    pub session_id: Uuid,
     pub body: String,
     pub client_message_id: Option<Uuid>,
 }

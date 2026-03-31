@@ -11,10 +11,8 @@ use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
     admin::AdminPanelState,
-    app::send_text_message,
-    contract::{
-        AdminOverview, AdminRoomSummary, BootstrapSession, SendTextMessageCommand,
-    },
+    app::{SendTextMessageInput, send_text_message},
+    contract::{AdminOverview, AdminRoomSummary, BootstrapSession},
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -99,7 +97,7 @@ async fn admin_rooms_returns_live_room_summaries() {
         &harness.store,
         &FixedIdGenerator(Uuid::from_u128(29)),
         &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 13, 0, 0).unwrap()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id: room.room_id,
             session_id: first_session.session_id,
             body: "room summary body".to_string(),
@@ -171,7 +169,7 @@ async fn admin_overview_returns_room_member_and_message_counts() {
         &harness.store,
         &FixedIdGenerator(Uuid::from_u128(9)),
         &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id: room.room_id,
             session_id: first_session.session_id,
             body: "hello admin".to_string(),

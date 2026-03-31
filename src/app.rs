@@ -8,7 +8,7 @@ use crate::{
     contract::{
         AdminOverview, AdminRoomSummary, AppErrorCode, AppEvent, BootstrapSession,
         JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageCreated, MessageView,
-        RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
+        RoomSnapshot,
     },
     domain::{
         AnonymousSession, DomainError, Message, MessageBody, MessageStatus, NewMemberRecord,
@@ -17,6 +17,20 @@ use crate::{
 };
 
 const ROOM_SNAPSHOT_LIMIT: usize = 50;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubscribeRoomStreamInput {
+    pub room_id: Uuid,
+    pub session_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SendTextMessageInput {
+    pub room_id: Uuid,
+    pub session_id: Uuid,
+    pub body: String,
+    pub client_message_id: Option<Uuid>,
+}
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AppError {
@@ -270,7 +284,7 @@ where
 pub async fn subscribe_room_stream<S, M>(
     session_port: &S,
     membership_port: &M,
-    command: SubscribeRoomStreamCommand,
+    command: SubscribeRoomStreamInput,
 ) -> Result<(), AppError>
 where
     S: SessionPort,
@@ -301,7 +315,7 @@ pub async fn send_text_message<S, M, R, I, C>(
     message_store: &R,
     id_generator: &I,
     clock: &C,
-    command: SendTextMessageCommand,
+    command: SendTextMessageInput,
 ) -> Result<AppEvent, AppError>
 where
     S: SessionPort,

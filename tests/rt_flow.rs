@@ -2,8 +2,11 @@ use std::sync::Mutex;
 
 use chrono::{TimeZone, Utc};
 use koko::{
-    app::{AppError, Clock, IdGenerator, MembershipPort, MessageStore, SessionPort},
-    contract::{CommandRejected, SendTextMessageCommand, SubscribeRoomStreamCommand},
+    app::{
+        AppError, Clock, IdGenerator, MembershipPort, MessageStore, SendTextMessageInput,
+        SessionPort, SubscribeRoomStreamInput,
+    },
+    contract::CommandRejected,
     domain::Message,
     rt::{
         RealtimeEffect, SendTextMessageDeps, SubscribeRoomStreamDeps, plan_send_text_message,
@@ -34,7 +37,7 @@ async fn subscribe_room_stream_joins_room_after_membership_check_and_notifies_cl
             session_port: &FakeSessionPort::allow(),
             membership_port: &FakeMembershipPort::allow(),
         },
-        SubscribeRoomStreamCommand {
+        SubscribeRoomStreamInput {
             room_id,
             session_id,
         },
@@ -61,7 +64,7 @@ async fn subscribe_room_stream_rejects_non_member_without_joining_and_emits_reje
             session_port: &FakeSessionPort::allow(),
             membership_port: &FakeMembershipPort::deny(),
         },
-        SubscribeRoomStreamCommand {
+        SubscribeRoomStreamInput {
             room_id,
             session_id,
         },
@@ -99,7 +102,7 @@ async fn message_is_broadcast_only_after_persistence_and_sender_gets_feedback() 
             id_generator: &FixedIdGenerator(message_id),
             clock: &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
         },
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id,
             session_id,
             body: " hello realtime ".to_string(),
@@ -139,7 +142,7 @@ async fn send_text_message_failure_emits_rejection_without_broadcast() {
             id_generator: &FixedIdGenerator(Uuid::from_u128(33)),
             clock: &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
         },
-        SendTextMessageCommand {
+        SendTextMessageInput {
             room_id,
             session_id,
             body: "hello realtime".to_string(),

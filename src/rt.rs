@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::Deserialize;
 use socketioxide::{
     SocketIo,
     extract::{Data, SocketRef},
@@ -8,10 +9,12 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
-    app::{self, AppError, Clock, IdGenerator, MembershipPort, MessageStore, SessionPort},
+    app::{
+        self, AppError, Clock, IdGenerator, MembershipPort, MessageStore, SendTextMessageInput,
+        SessionPort, SubscribeRoomStreamInput,
+    },
     contract::{
-        CommandRejected, MessageCreated, RoomStreamSubscribed, SendTextMessageCommand,
-        SubscribeRoomStreamCommand,
+        CommandRejected, MessageCreated, RoomStreamSubscribed,
     },
 };
 
@@ -72,9 +75,23 @@ pub struct SendTextMessageDeps<'a, S, M, Store, I, C> {
     pub clock: &'a C,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct LegacySubscribeRoomStreamPayload {
+    room_id: Uuid,
+    session_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct LegacySendTextMessagePayload {
+    room_id: Uuid,
+    session_id: Uuid,
+    body: String,
+    client_message_id: Option<Uuid>,
+}
+
 pub async fn plan_subscribe_room_stream<S, M>(
     deps: SubscribeRoomStreamDeps<'_, S, M>,
-    command: SubscribeRoomStreamCommand,
+    command: SubscribeRoomStreamInput,
 ) -> CommandPlan<()>
 where
     S: SessionPort,
@@ -104,7 +121,7 @@ where
 
 pub async fn plan_send_text_message<S, M, Store, I, C>(
     deps: SendTextMessageDeps<'_, S, M, Store, I, C>,
-    command: SendTextMessageCommand,
+    command: SendTextMessageInput,
 ) -> CommandPlan<MessageCreated>
 where
     S: SessionPort,
@@ -166,7 +183,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
             socket.on("subscribe_room_stream", {
                 let state = state.clone();
                 let io = subscribe_io.clone();
-                move |socket: SocketRef, Data(command): Data<SubscribeRoomStreamCommand>| {
+                move |socket: SocketRef, Data(command): Data<LegacySubscribeRoomStreamPayload>| {
                     let state = state.clone();
                     let io = io.clone();
                     async move {
@@ -175,7 +192,10 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                 session_port: &state.store,
                                 membership_port: &state.store,
                             },
-                            command,
+                            SubscribeRoomStreamInput {
+                                room_id: command.room_id,
+                                session_id: command.session_id,
+                            },
                         )
                         .await;
 
@@ -192,7 +212,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
             socket.on("send_text_message", {
                 let state = state.clone();
                 let io = message_io.clone();
-                move |socket: SocketRef, Data(command): Data<SendTextMessageCommand>| {
+                move |socket: SocketRef, Data(command): Data<LegacySendTextMessagePayload>| {
                     let state = state.clone();
                     let io = io.clone();
                     async move {
@@ -204,7 +224,12 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                 id_generator: &state.id_generator,
                                 clock: &state.clock,
                             },
-                            command,
+                            SendTextMessageInput {
+                                room_id: command.room_id,
+                                session_id: command.session_id,
+                                body: command.body,
+                                client_message_id: command.client_message_id,
+                            },
                         )
                         .await;
 
