@@ -362,7 +362,7 @@ async fn assets_socket_io_client_is_served_as_static_file() {
             .to_vec(),
     )
     .unwrap();
-    assert!(body.contains("Socket.IO v4.5.1"));
+    assert!(body.contains("Socket.IO v4.8.3"));
     harness.cleanup().await;
 }
 
