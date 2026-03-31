@@ -8,7 +8,10 @@ use crate::{
         RoomEntryTx, RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
     },
     contract::{AdminOverview, AdminRoomSummary},
-    domain::{AnonymousSession, Message, MessageBody, MessageStatus, RoomCode, SessionStatus},
+    domain::{
+        AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord,
+        NewRoomCodeRecord, NewRoomRecord, RoomCode, SessionStatus,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -186,16 +189,21 @@ impl RoomEntryTx for PgRoomEntry<'_> {
         .map_err(map_sqlx_error)
     }
 
-    async fn create_room(&mut self, room_code: &RoomCode) -> Result<Uuid, AppError> {
-        let now = Utc::now();
-        let room_id = Uuid::now_v7();
+    async fn create_room(
+        &mut self,
+        room: &NewRoomRecord,
+        room_code: &NewRoomCodeRecord,
+    ) -> Result<(), AppError> {
+        if room_code.room_id != room.room_id {
+            return Err(AppError::DependencyFailure);
+        }
 
         sqlx::query(
             "INSERT INTO rooms (room_id, created_at, status)
              VALUES ($1, $2, 'active')",
         )
-        .bind(room_id)
-        .bind(now)
+        .bind(room.room_id)
+        .bind(room.created_at)
         .execute(&mut *self.tx)
         .await
         .map_err(map_sqlx_error)?;
@@ -211,34 +219,29 @@ impl RoomEntryTx for PgRoomEntry<'_> {
              )
              VALUES ($1, $2, $3, $4, $5, $6)",
         )
-        .bind(Uuid::now_v7())
-        .bind(room_id)
-        .bind(room_code.original())
-        .bind(room_code.normalized())
+        .bind(room_code.room_code_id)
+        .bind(room_code.room_id)
+        .bind(&room_code.original_code)
+        .bind(&room_code.normalized_code)
         .bind(i16::try_from(room_code.code_version).map_err(|_| AppError::DependencyFailure)?)
-        .bind(now)
+        .bind(room_code.created_at)
         .execute(&mut *self.tx)
         .await
         .map_err(map_sqlx_error)?;
 
-        Ok(room_id)
+        Ok(())
     }
 
-    async fn ensure_room_member(
-        &mut self,
-        room_id: Uuid,
-        session_id: Uuid,
-    ) -> Result<(), AppError> {
-        let now = Utc::now();
+    async fn ensure_room_member(&mut self, member: &NewMemberRecord) -> Result<(), AppError> {
         sqlx::query(
             "INSERT INTO members (member_id, room_id, session_id, joined_at, status)
              VALUES ($1, $2, $3, $4, 'active')
              ON CONFLICT (room_id, session_id) DO NOTHING",
         )
-        .bind(Uuid::now_v7())
-        .bind(room_id)
-        .bind(session_id)
-        .bind(now)
+        .bind(member.member_id)
+        .bind(member.room_id)
+        .bind(member.session_id)
+        .bind(member.joined_at)
         .execute(&mut *self.tx)
         .await
         .map_err(map_sqlx_error)?;

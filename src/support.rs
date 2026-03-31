@@ -112,6 +112,18 @@ impl IdGenerator for SystemIdGenerator {
     fn next_message_id(&self) -> Uuid {
         Uuid::now_v7()
     }
+
+    fn next_room_id(&self) -> Uuid {
+        Uuid::now_v7()
+    }
+
+    fn next_room_code_id(&self) -> Uuid {
+        Uuid::now_v7()
+    }
+
+    fn next_member_id(&self) -> Uuid {
+        Uuid::now_v7()
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]

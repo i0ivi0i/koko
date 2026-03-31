@@ -85,6 +85,8 @@ async fn join_room(
     let snapshot = join_or_create_room_by_code(
         &state.store,
         &state.store,
+        &support::SystemIdGenerator,
+        &support::SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code: request.room_code,
             session_id,

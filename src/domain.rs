@@ -50,6 +50,12 @@ pub struct Room {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewRoomRecord {
+    pub room_id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomCode {
     original: String,
     normalized: String,
@@ -88,12 +94,30 @@ impl RoomCode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewRoomCodeRecord {
+    pub room_code_id: Uuid,
+    pub room_id: Uuid,
+    pub original_code: String,
+    pub normalized_code: String,
+    pub code_version: u16,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Member {
     pub member_id: Uuid,
     pub room_id: Uuid,
     pub session_id: Uuid,
     pub joined_at: DateTime<Utc>,
     pub status: MemberStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewMemberRecord {
+    pub member_id: Uuid,
+    pub room_id: Uuid,
+    pub session_id: Uuid,
+    pub joined_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

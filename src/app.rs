@@ -11,7 +11,8 @@ use crate::{
         RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
     domain::{
-        AnonymousSession, DomainError, Message, MessageBody, MessageStatus, RoomCode, SessionStatus,
+        AnonymousSession, DomainError, Message, MessageBody, MessageStatus, NewMemberRecord,
+        NewRoomCodeRecord, NewRoomRecord, RoomCode, SessionStatus,
     },
 };
 
@@ -122,13 +123,13 @@ pub trait RoomEntryTx {
 
     fn create_room(
         &mut self,
-        room_code: &RoomCode,
-    ) -> impl Future<Output = Result<Uuid, AppError>> + Send;
+        room: &NewRoomRecord,
+        room_code: &NewRoomCodeRecord,
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
 
     fn ensure_room_member(
         &mut self,
-        room_id: Uuid,
-        session_id: Uuid,
+        member: &NewMemberRecord,
     ) -> impl Future<Output = Result<(), AppError>> + Send;
 
     fn load_recent_messages(
@@ -162,6 +163,18 @@ pub trait AdminRoomsPort {
 
 pub trait IdGenerator {
     fn next_message_id(&self) -> Uuid;
+
+    fn next_room_id(&self) -> Uuid {
+        self.next_message_id()
+    }
+
+    fn next_room_code_id(&self) -> Uuid {
+        self.next_message_id()
+    }
+
+    fn next_member_id(&self) -> Uuid {
+        self.next_message_id()
+    }
 }
 
 pub trait Clock {
@@ -335,14 +348,18 @@ where
     }))
 }
 
-pub async fn join_or_create_room_by_code<S, J>(
+pub async fn join_or_create_room_by_code<S, J, I, C>(
     session_port: &S,
     room_entry_port: &J,
+    id_generator: &I,
+    clock: &C,
     command: JoinOrCreateRoomByCodeCommand,
 ) -> Result<RoomSnapshot, AppError>
 where
     S: SessionPort,
     J: RoomEntryPort,
+    I: IdGenerator,
+    C: Clock,
 {
     if !session_port.is_active_session(command.session_id).await? {
         return Err(AppError::SessionNotActive {
@@ -354,11 +371,32 @@ where
     let mut room_entry = room_entry_port.begin_room_entry(&room_code).await?;
     let room_id = match room_entry.find_room_by_code(&room_code).await? {
         Some(room_id) => room_id,
-        None => room_entry.create_room(&room_code).await?,
+        None => {
+            let now = clock.now();
+            let room = NewRoomRecord {
+                room_id: id_generator.next_room_id(),
+                created_at: now,
+            };
+            let room_code_record = NewRoomCodeRecord {
+                room_code_id: id_generator.next_room_code_id(),
+                room_id: room.room_id,
+                original_code: room_code.original().to_string(),
+                normalized_code: room_code.normalized().to_string(),
+                code_version: room_code.code_version,
+                created_at: now,
+            };
+            room_entry.create_room(&room, &room_code_record).await?;
+
+            room.room_id
+        }
     };
-    room_entry
-        .ensure_room_member(room_id, command.session_id)
-        .await?;
+    let member = NewMemberRecord {
+        member_id: id_generator.next_member_id(),
+        room_id,
+        session_id: command.session_id,
+        joined_at: clock.now(),
+    };
+    room_entry.ensure_room_member(&member).await?;
     let snapshot = RoomSnapshotData {
         room_id,
         room_code,

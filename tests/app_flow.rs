@@ -21,8 +21,12 @@ use koko::{
         AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageView,
         RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
-    domain::{AnonymousSession, Message, MessageBody, MessageStatus, RoomCode, SessionStatus},
+    domain::{
+        AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord,
+        NewRoomCodeRecord, NewRoomRecord, RoomCode, SessionStatus,
+    },
     store::PgStore,
+    support::{SystemClock, SystemIdGenerator},
 };
 use sqlx::{
     ConnectOptions, PgPool, Row,
@@ -304,6 +308,8 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     let snapshot = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
         &join_port,
+        &FakeIdGenerator::new_room_entry(room_id, Uuid::from_u128(3201), Uuid::from_u128(3202), Uuid::from_u128(3203)),
+        &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "a1234".to_string(),
             session_id,
@@ -326,6 +332,41 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
 }
 
 #[tokio::test]
+async fn join_or_create_room_by_code_generates_room_and_member_facts_in_application() {
+    let now = fixed_time();
+    let join_port = FakeRoomEntryPort::missing_room(sample_snapshot_data(
+        Uuid::from_u128(11),
+        "A1234",
+        vec![],
+    ));
+
+    let snapshot = join_or_create_room_by_code(
+        &FakeSessionPort::allow(),
+        &join_port,
+        &FakeIdGenerator::new_room_entry(
+            Uuid::from_u128(11),
+            Uuid::from_u128(12),
+            Uuid::from_u128(13),
+            Uuid::from_u128(14),
+        ),
+        &FakeClock::new(now),
+        JoinOrCreateRoomByCodeCommand {
+            room_code: "A1234".to_string(),
+            session_id: Uuid::from_u128(99),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(snapshot.room_id, Uuid::from_u128(11));
+    assert_eq!(join_port.recorded_room_code_id(), Some(Uuid::from_u128(12)));
+    assert_eq!(join_port.recorded_member_id(), Some(Uuid::from_u128(13)));
+    assert_eq!(join_port.recorded_room_created_at(), Some(now));
+    assert_eq!(join_port.recorded_room_code_created_at(), Some(now));
+    assert_eq!(join_port.recorded_member_joined_at(), Some(now));
+}
+
+#[tokio::test]
 async fn join_or_create_room_by_code_reuses_existing_room_without_recreating_it() {
     let session_id = Uuid::from_u128(34);
     let room_id = Uuid::from_u128(35);
@@ -335,6 +376,8 @@ async fn join_or_create_room_by_code_reuses_existing_room_without_recreating_it(
     let snapshot = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
         &join_port,
+        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3401), Uuid::from_u128(3402), Uuid::from_u128(3403), Uuid::from_u128(3404)),
+        &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "A1234".to_string(),
             session_id,
@@ -364,6 +407,8 @@ async fn join_or_create_room_by_code_rejects_invalid_room_code() {
             "A1234",
             vec![],
         )),
+        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3601), Uuid::from_u128(3602), Uuid::from_u128(3603), Uuid::from_u128(3604)),
+        &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "ABCDE".to_string(),
             session_id: Uuid::from_u128(37),
@@ -384,6 +429,8 @@ async fn join_or_create_room_by_code_rejects_mismatched_room_code_snapshot() {
             "B1234",
             vec![],
         )),
+        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3801), Uuid::from_u128(3802), Uuid::from_u128(3803), Uuid::from_u128(3804)),
+        &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "A1234".to_string(),
             session_id: Uuid::from_u128(39),
@@ -407,6 +454,8 @@ async fn join_or_create_room_by_code_rejects_inactive_session() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::deny(),
         &join_port,
+        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3901), Uuid::from_u128(3902), Uuid::from_u128(3903), Uuid::from_u128(3904)),
+        &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "a1234".to_string(),
             session_id,
@@ -431,6 +480,8 @@ async fn join_or_create_room_by_code_skips_commit_when_member_write_fails() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
         &join_port,
+        &FakeIdGenerator::new_room_entry(Uuid::from_u128(4001), Uuid::from_u128(4002), Uuid::from_u128(4003), Uuid::from_u128(4004)),
+        &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "A1234".to_string(),
             session_id,
@@ -699,6 +750,8 @@ async fn join_or_create_persists_room_member_and_room_code() {
     let snapshot = join_or_create_room_by_code(
         &harness.store,
         &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code: room_code.clone(),
             session_id,
@@ -728,6 +781,8 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it() {
     let joined = join_or_create_room_by_code(
         &harness.store,
         &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code,
             session_id,
@@ -796,6 +851,8 @@ async fn join_or_create_treats_room_code_as_case_insensitive() {
     let first_snapshot = join_or_create_room_by_code(
         &harness.store,
         &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code: room_code.to_ascii_lowercase(),
             session_id: first_session_id,
@@ -807,6 +864,8 @@ async fn join_or_create_treats_room_code_as_case_insensitive() {
     let second_snapshot = join_or_create_room_by_code(
         &harness.store,
         &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code: room_code.to_ascii_uppercase(),
             session_id: second_session_id,
@@ -841,6 +900,8 @@ async fn repeated_join_does_not_duplicate_member_in_same_room() {
     let first_snapshot = join_or_create_room_by_code(
         &harness.store,
         &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code: room_code.clone(),
             session_id,
@@ -852,6 +913,8 @@ async fn repeated_join_does_not_duplicate_member_in_same_room() {
     let second_snapshot = join_or_create_room_by_code(
         &harness.store,
         &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code: room_code.to_ascii_lowercase(),
             session_id,
@@ -932,7 +995,12 @@ async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_
         .unwrap()
         .unwrap();
     room_entry
-        .ensure_room_member(joined_room_id, session_id)
+        .ensure_room_member(&NewMemberRecord {
+            member_id: Uuid::now_v7(),
+            room_id: joined_room_id,
+            session_id,
+            joined_at: fixed_time(),
+        })
         .await
         .unwrap();
     let messages = room_entry
@@ -1026,6 +1094,8 @@ async fn deleting_truth_rows_is_blocked_in_stage_one() {
     let joined = join_or_create_room_by_code(
         &harness.store,
         &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
         JoinOrCreateRoomByCodeCommand {
             room_code,
             session_id,
@@ -1215,6 +1285,11 @@ struct FakeRoomEntryState {
     operations: Vec<&'static str>,
     requested_codes: Vec<String>,
     requested_limits: Vec<usize>,
+    recorded_room_code_id: Option<Uuid>,
+    recorded_member_id: Option<Uuid>,
+    recorded_room_created_at: Option<DateTime<Utc>>,
+    recorded_room_code_created_at: Option<DateTime<Utc>>,
+    recorded_member_joined_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug)]
@@ -1255,6 +1330,26 @@ impl FakeRoomEntryPort {
 
     fn operations(&self) -> Vec<&'static str> {
         self.state.lock().unwrap().operations.clone()
+    }
+
+    fn recorded_room_code_id(&self) -> Option<Uuid> {
+        self.state.lock().unwrap().recorded_room_code_id
+    }
+
+    fn recorded_member_id(&self) -> Option<Uuid> {
+        self.state.lock().unwrap().recorded_member_id
+    }
+
+    fn recorded_room_created_at(&self) -> Option<DateTime<Utc>> {
+        self.state.lock().unwrap().recorded_room_created_at
+    }
+
+    fn recorded_room_code_created_at(&self) -> Option<DateTime<Utc>> {
+        self.state.lock().unwrap().recorded_room_code_created_at
+    }
+
+    fn recorded_member_joined_at(&self) -> Option<DateTime<Utc>> {
+        self.state.lock().unwrap().recorded_member_joined_at
     }
 }
 
@@ -1305,25 +1400,35 @@ impl RoomEntryTx for FakeRoomEntryTx {
         })
     }
 
-    async fn create_room(&mut self, room_code: &RoomCode) -> Result<Uuid, AppError> {
+    async fn create_room(
+        &mut self,
+        room: &NewRoomRecord,
+        room_code: &NewRoomCodeRecord,
+    ) -> Result<(), AppError> {
         self.push("create_room");
-        if room_code.normalized() != self.snapshot.room_code.normalized() {
+        if room.room_id != self.snapshot.room_id
+            || room_code.room_id != self.snapshot.room_id
+            || room_code.normalized_code != self.snapshot.room_code.normalized()
+        {
             return Err(AppError::DependencyFailure);
         }
+        let mut state = self.state.lock().unwrap();
+        state.recorded_room_code_id = Some(room_code.room_code_id);
+        state.recorded_room_created_at = Some(room.created_at);
+        state.recorded_room_code_created_at = Some(room_code.created_at);
 
-        Ok(self.snapshot.room_id)
+        Ok(())
     }
 
-    async fn ensure_room_member(
-        &mut self,
-        room_id: Uuid,
-        _session_id: Uuid,
-    ) -> Result<(), AppError> {
+    async fn ensure_room_member(&mut self, member: &NewMemberRecord) -> Result<(), AppError> {
         self.push("ensure_room_member");
         if self.fail_member_write {
             return Err(AppError::DependencyFailure);
         }
-        if room_id == self.snapshot.room_id {
+        let mut state = self.state.lock().unwrap();
+        state.recorded_member_id = Some(member.member_id);
+        state.recorded_member_joined_at = Some(member.joined_at);
+        if member.room_id == self.snapshot.room_id {
             Ok(())
         } else {
             Err(AppError::DependencyFailure)
@@ -1397,18 +1502,52 @@ impl RoomSnapshotPort for FakeRoomSnapshotPort {
 
 #[derive(Debug)]
 struct FakeIdGenerator {
-    next_id: Uuid,
+    next_message_id: Uuid,
+    next_room_id: Uuid,
+    next_room_code_id: Uuid,
+    next_member_id: Uuid,
 }
 
 impl FakeIdGenerator {
     fn new(next_id: Uuid) -> Self {
-        Self { next_id }
+        Self {
+            next_message_id: next_id,
+            next_room_id: next_id,
+            next_room_code_id: next_id,
+            next_member_id: next_id,
+        }
+    }
+
+    fn new_room_entry(
+        next_room_id: Uuid,
+        next_room_code_id: Uuid,
+        next_member_id: Uuid,
+        next_message_id: Uuid,
+    ) -> Self {
+        Self {
+            next_message_id,
+            next_room_id,
+            next_room_code_id,
+            next_member_id,
+        }
     }
 }
 
 impl IdGenerator for FakeIdGenerator {
     fn next_message_id(&self) -> Uuid {
-        self.next_id
+        self.next_message_id
+    }
+
+    fn next_room_id(&self) -> Uuid {
+        self.next_room_id
+    }
+
+    fn next_room_code_id(&self) -> Uuid {
+        self.next_room_code_id
+    }
+
+    fn next_member_id(&self) -> Uuid {
+        self.next_member_id
     }
 }
 
