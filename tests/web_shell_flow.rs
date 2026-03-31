@@ -95,6 +95,99 @@ fn subscription_refill_merges_second_snapshot_without_duplicates() {
 }
 
 #[test]
+fn message_created_from_other_room_does_not_pollute_current_timeline() {
+    let current_room_id = Uuid::from_u128(10);
+    let other_room_id = Uuid::from_u128(11);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(
+        current_room_id,
+        "A1234",
+        vec![message_view(Uuid::from_u128(101), "current", 0)],
+    ));
+
+    state.confirm_message(message_created(
+        other_room_id,
+        Uuid::from_u128(102),
+        "other room",
+        1,
+    ));
+
+    assert_eq!(
+        state
+            .messages()
+            .iter()
+            .map(|message| (message.room_id, message.message_id, message.body.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(
+            current_room_id,
+            Some(Uuid::from_u128(101)),
+            "current"
+        )]
+    );
+}
+
+#[test]
+fn message_created_for_current_room_appends_to_timeline() {
+    let room_id = Uuid::from_u128(12);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(
+        room_id,
+        "A1234",
+        vec![message_view(Uuid::from_u128(121), "first", 0)],
+    ));
+
+    state.confirm_message(message_created(room_id, Uuid::from_u128(122), "second", 1));
+
+    assert_eq!(
+        state
+            .messages()
+            .iter()
+            .map(|message| (message.room_id, message.message_id, message.body.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            (room_id, Some(Uuid::from_u128(121)), "first"),
+            (room_id, Some(Uuid::from_u128(122)), "second"),
+        ]
+    );
+    assert_eq!(state.confirmed_messages().len(), 2);
+}
+
+#[test]
+fn refill_snapshot_does_not_duplicate_message_created_already_in_timeline() {
+    let room_id = Uuid::from_u128(13);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(
+        room_id,
+        "A1234",
+        vec![message_view(Uuid::from_u128(131), "first", 0)],
+    ));
+
+    state.confirm_message(message_created(room_id, Uuid::from_u128(132), "second", 1));
+
+    state.apply_subscription_refill_snapshot(room_snapshot(
+        room_id,
+        "A1234",
+        vec![
+            message_view(Uuid::from_u128(132), "second", 1),
+            message_view(Uuid::from_u128(133), "third", 2),
+        ],
+    ));
+
+    assert_eq!(
+        state
+            .messages()
+            .iter()
+            .map(|message| message.message_id)
+            .collect::<Vec<_>>(),
+        vec![
+            Some(Uuid::from_u128(131)),
+            Some(Uuid::from_u128(132)),
+            Some(Uuid::from_u128(133))
+        ]
+    );
+}
+
+#[test]
 fn search_input_updates_without_mutating_remote_truth() {
     let room_id = Uuid::from_u128(6);
     let mut state = bootstrapped_state();
@@ -180,6 +273,24 @@ fn message_view(message_id: Uuid, body: &str, minute_offset: i64) -> MessageView
         created_at: Utc
             .timestamp_opt(fixed_time().timestamp() + minute_offset * 60, 0)
             .unwrap(),
+    }
+}
+
+fn message_created(
+    room_id: Uuid,
+    message_id: Uuid,
+    body: &str,
+    minute_offset: i64,
+) -> koko::contract::MessageCreated {
+    koko::contract::MessageCreated {
+        message_id,
+        room_id,
+        session_id: Uuid::from_u128(91),
+        body: body.to_string(),
+        created_at: Utc
+            .timestamp_opt(fixed_time().timestamp() + minute_offset * 60, 0)
+            .unwrap(),
+        client_message_id: None,
     }
 }
 
