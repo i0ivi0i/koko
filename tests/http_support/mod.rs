@@ -10,21 +10,21 @@ use sqlx::{
 
 use koko::{http, store::PgStore};
 
-pub struct HttpHarness {
-    pub router: Router,
-    #[allow(dead_code)]
+#[allow(dead_code)]
+pub struct DatabaseHarness {
     pub store: PgStore,
+    pub pool: PgPool,
     database_url: String,
     admin_database_url: String,
-    pool: PgPool,
+    database_name: String,
 }
 
-impl HttpHarness {
+#[allow(dead_code)]
+impl DatabaseHarness {
     pub async fn new(test_name: &str) -> Self {
-        let base_database_url = validated_test_database_url(
-            env::var("KOKO_TEST_DATABASE_URL").ok().as_deref(),
-        )
-        .unwrap();
+        let base_database_url =
+            validated_test_database_url(env::var("KOKO_TEST_DATABASE_URL").ok().as_deref())
+                .unwrap();
         let database_url = derive_isolated_test_database_url(&base_database_url, test_name).unwrap();
         let admin_database_url = default_admin_database_url(&database_url);
         reset_test_database(&database_url).await;
@@ -35,15 +35,19 @@ impl HttpHarness {
             .unwrap();
         run_migrations(&pool).await;
         let store = PgStore::new(pool.clone());
-        let router = http::app_router(store.clone(), "local-admin-token".to_string());
+        let database_name = database_name_from_url(&database_url);
 
         Self {
-            router,
             store,
+            pool,
             database_url,
             admin_database_url,
-            pool,
+            database_name,
         }
+    }
+
+    pub fn database_name(&self) -> &str {
+        &self.database_name
     }
 
     pub async fn cleanup(self) {
@@ -51,7 +55,37 @@ impl HttpHarness {
     }
 }
 
-fn derive_isolated_test_database_url(base_database_url: &str, test_name: &str) -> Result<String, String> {
+#[allow(dead_code)]
+pub struct HttpHarness {
+    pub router: Router,
+    #[allow(dead_code)]
+    pub store: PgStore,
+    db: DatabaseHarness,
+}
+
+#[allow(dead_code)]
+impl HttpHarness {
+    pub async fn new(test_name: &str) -> Self {
+        let db = DatabaseHarness::new(test_name).await;
+        let store = db.store.clone();
+        let router = http::app_router(db.store.clone(), "local-admin-token".to_string());
+
+        Self {
+            router,
+            store,
+            db,
+        }
+    }
+
+    pub async fn cleanup(self) {
+        self.db.cleanup().await;
+    }
+}
+
+pub fn derive_isolated_test_database_url(
+    base_database_url: &str,
+    test_name: &str,
+) -> Result<String, String> {
     let base_database_url = validated_test_database_url(Some(base_database_url))?;
     let mut options = PgConnectOptions::from_str(&base_database_url)
         .map_err(|error| format!("failed to parse test database url: {error}"))?;
@@ -79,7 +113,7 @@ fn derive_isolated_test_database_url(base_database_url: &str, test_name: &str) -
     validated_test_database_url(Some(&derived_url))
 }
 
-fn validated_test_database_url(raw_url: Option<&str>) -> Result<String, String> {
+pub fn validated_test_database_url(raw_url: Option<&str>) -> Result<String, String> {
     let database_url = raw_url.unwrap_or(DEFAULT_TEST_DATABASE_URL).to_string();
     let options = PgConnectOptions::from_str(&database_url)
         .map_err(|error| format!("failed to parse test database url: {error}"))?;
@@ -105,13 +139,16 @@ fn validated_test_database_url(raw_url: Option<&str>) -> Result<String, String> 
     Ok(database_url)
 }
 
-fn default_admin_database_url(test_database_url: &str) -> String {
+pub fn default_admin_database_url(test_database_url: &str) -> String {
     let admin_url = env::var("KOKO_TEST_ADMIN_DATABASE_URL")
         .unwrap_or_else(|_| DEFAULT_TEST_ADMIN_DATABASE_URL.to_string());
     validate_admin_database_url(test_database_url, &admin_url).unwrap()
 }
 
-fn validate_admin_database_url(test_database_url: &str, admin_database_url: &str) -> Result<String, String> {
+pub fn validate_admin_database_url(
+    test_database_url: &str,
+    admin_database_url: &str,
+) -> Result<String, String> {
     let test_options = PgConnectOptions::from_str(test_database_url)
         .map_err(|error| format!("failed to parse test database url: {error}"))?;
     let admin_options = PgConnectOptions::from_str(admin_database_url)
@@ -153,6 +190,14 @@ fn sanitize_database_component(raw: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+pub fn database_name_from_url(database_url: &str) -> String {
+    PgConnectOptions::from_str(database_url)
+        .unwrap()
+        .get_database()
+        .unwrap()
+        .to_string()
 }
 
 async fn reset_test_database(database_url: &str) {
@@ -210,11 +255,7 @@ async fn reset_test_database(database_url: &str) {
 async fn destroy_test_database(database_url: &str, admin_database_url: &str, pool: PgPool) {
     pool.close().await;
 
-    let database_name = PgConnectOptions::from_str(database_url)
-        .unwrap()
-        .get_database()
-        .unwrap()
-        .to_string();
+    let database_name = database_name_from_url(database_url);
     let admin_url = validate_admin_database_url(database_url, admin_database_url).unwrap();
     let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
     let admin_pool = PgPoolOptions::new()
@@ -246,6 +287,7 @@ async fn run_migrations(pool: &PgPool) {
     migrator.run(pool).await.unwrap();
 }
 
-const DEFAULT_TEST_DATABASE_URL: &str = "postgres://koko:koko_local@127.0.0.1:5432/koko_test";
+pub const DEFAULT_TEST_DATABASE_URL: &str =
+    "postgres://koko:koko_local@127.0.0.1:5432/koko_test";
 const DEFAULT_TEST_ADMIN_DATABASE_URL: &str =
     "postgres://postgres:postgres@127.0.0.1:5432/postgres";
