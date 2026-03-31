@@ -22,7 +22,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         koko::support::SystemClock,
     ));
     koko::rt::install_realtime(&io, realtime);
-    let router = koko::http::app_router(store, config.admin_token).layer(socket_layer);
+    let router = koko::http::app_router(
+        store,
+        config.admin_token,
+        koko::http::default_frontend_dist_dir(),
+        koko::http::default_frontend_asset_dir(),
+    )
+    .layer(socket_layer);
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
     axum::serve(listener, router).await?;

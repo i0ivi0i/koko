@@ -68,7 +68,18 @@ impl HttpHarness {
     pub async fn new(test_name: &str) -> Self {
         let db = DatabaseHarness::new(test_name).await;
         let store = db.store.clone();
-        let router = http::app_router(db.store.clone(), "local-admin-token".to_string());
+        let frontend_fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("http_support")
+            .join("fixtures")
+            .join("frontend");
+        let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let router = http::app_router(
+            db.store.clone(),
+            "local-admin-token".to_string(),
+            frontend_fixture_dir,
+            asset_dir,
+        );
 
         Self {
             router,

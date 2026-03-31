@@ -232,6 +232,110 @@ async fn room_search_endpoint_returns_case_insensitive_matches() {
 }
 
 #[tokio::test]
+async fn root_entry_serves_frontend_shell() {
+    let harness = HttpHarness::new("root_entry_serves_frontend_shell").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
+        .unwrap();
+    assert!(body.contains("koko-web-shell"));
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn frontend_shell_fallback_serves_index_for_unknown_non_api_path() {
+    let harness = HttpHarness::new("frontend_shell_fallback_serves_index_for_unknown_non_api_path").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/rooms/a1234")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
+        .unwrap();
+    assert!(body.contains("koko-web-shell"));
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn assets_theme_css_is_served_as_static_file() {
+    let harness = HttpHarness::new("assets_theme_css_is_served_as_static_file").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/assets/theme.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
+        .unwrap();
+    assert!(body.contains(".tg-shell"));
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn missing_static_asset_stays_404_instead_of_falling_back_to_index() {
+    let harness = HttpHarness::new("missing_static_asset_stays_404_instead_of_falling_back_to_index").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/assets/missing-theme.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn unknown_api_path_stays_404_instead_of_falling_back_to_index() {
+    let harness = HttpHarness::new("unknown_api_path_stays_404_instead_of_falling_back_to_index").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/unknown-path")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
 async fn join_requires_bootstrapped_session() {
     let harness = HttpHarness::new("join_requires_bootstrapped_session").await;
 

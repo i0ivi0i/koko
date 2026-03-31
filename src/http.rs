@@ -1,6 +1,8 @@
+use std::path::{PathBuf, Path as FsPath};
+
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path as RoutePath, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
@@ -10,6 +12,7 @@ use axum_extra::extract::{
     cookie::{Cookie, SameSite},
 };
 use serde::Deserialize;
+use tower_http::services::{ServeDir, ServeFile};
 use uuid::Uuid;
 
 use crate::{
@@ -45,19 +48,49 @@ struct SearchRoomsParams {
     query: String,
 }
 
-pub fn app_router(store: PgStore, admin_token: String) -> Router {
+pub const FRONTEND_DIST_DIR: &str = "dist";
+pub const FRONTEND_ASSET_DIR: &str = "assets";
+
+pub fn api_router(store: PgStore, admin_token: String) -> Router {
     Router::new()
-        .route("/api/session/bootstrap", post(bootstrap_session))
-        .route("/api/rooms", get(joined_rooms))
-        .route("/api/rooms/search", get(search_rooms))
-        .route("/api/rooms/join", post(join_room))
-        .route("/api/rooms/{room_id}/snapshot", get(room_snapshot))
-        .route("/api/admin/overview", get(admin_overview))
-        .route("/api/admin/rooms", get(admin_rooms))
+        .route("/session/bootstrap", post(bootstrap_session))
+        .route("/rooms", get(joined_rooms))
+        .route("/rooms/search", get(search_rooms))
+        .route("/rooms/join", post(join_room))
+        .route("/rooms/{room_id}/snapshot", get(room_snapshot))
+        .route("/admin/overview", get(admin_overview))
+        .route("/admin/rooms", get(admin_rooms))
+        .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(HttpState {
             store,
             admin_access: support::StaticAdminAccess::new(admin_token),
         })
+}
+
+pub fn app_router(
+    store: PgStore,
+    admin_token: String,
+    frontend_dist_dir: impl Into<PathBuf>,
+    asset_dir: impl Into<PathBuf>,
+) -> Router {
+    let index_file = frontend_dist_dir.into().join("index.html");
+
+    Router::new()
+        .nest("/api", api_router(store, admin_token))
+        .nest_service("/assets", ServeDir::new(asset_dir.into()))
+        .route_service("/", ServeFile::new(index_file.clone()))
+        .fallback_service(
+            // 非 API 深链接统一回到入口壳，静态资源仍由 /assets 独立承接。
+            ServeFile::new(index_file),
+        )
+}
+
+pub fn default_frontend_dist_dir() -> PathBuf {
+    FsPath::new(FRONTEND_DIST_DIR).to_path_buf()
+}
+
+pub fn default_frontend_asset_dir() -> PathBuf {
+    FsPath::new(FRONTEND_ASSET_DIR).to_path_buf()
 }
 
 async fn bootstrap_session(
@@ -139,7 +172,7 @@ async fn search_rooms(
 
 async fn room_snapshot(
     State(state): State<HttpState>,
-    Path(room_id): Path<Uuid>,
+    RoutePath(room_id): RoutePath<Uuid>,
     jar: CookieJar,
 ) -> Result<Json<RoomSnapshot>, (StatusCode, Json<ErrorPayload>)> {
     let session_id = resolve_session_id(&jar)?;

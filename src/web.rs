@@ -147,4 +147,18 @@ mod tests {
 
         assert_eq!(url, "https://example.com/api/session/bootstrap");
     }
+
+    #[test]
+    fn resolve_shell_api_url_keeps_room_queries_on_same_origin() {
+        let rooms_url = resolve_shell_api_url("https://example.com/rooms/a1234", "/api/rooms")
+            .expect("rooms contract should stay on the same origin");
+        let search_url = resolve_shell_api_url(
+            "https://example.com/rooms/a1234",
+            "/api/rooms/search?query=a12",
+        )
+        .expect("search contract should stay on the same origin");
+
+        assert_eq!(rooms_url, "https://example.com/api/rooms");
+        assert_eq!(search_url, "https://example.com/api/rooms/search?query=a12");
+    }
 }
