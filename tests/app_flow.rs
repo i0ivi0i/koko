@@ -11,15 +11,17 @@ use std::{
 use chrono::{DateTime, TimeZone, Utc};
 use koko::{
     app::{
-        AdminAccessPort, AdminOverviewPort, AdminQueryContext, AppError, Clock, IdGenerator,
-        MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx, RoomSnapshotData,
-        RoomSnapshotPort, SessionBootstrapPort, SessionPort, bootstrap_anonymous_session,
-        get_admin_overview, join_or_create_room_by_code, load_room_snapshot, send_text_message,
+        AdminAccessPort, AdminOverviewPort, AdminPanelPort, AdminQueryContext, AdminRoomsPort,
+        AppError, Clock, IdGenerator, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
+        RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
+        bootstrap_anonymous_session, get_admin_overview, get_admin_panel,
+        join_or_create_room_by_code, list_admin_rooms, load_room_snapshot, send_text_message,
         subscribe_room_stream,
     },
     contract::{
-        AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
-        MessageView, RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
+        AdminPanelData, AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand,
+        LoadRoomSnapshotQuery, MessageView, RoomSnapshot, SendTextMessageCommand,
+        SubscribeRoomStreamCommand,
     },
     domain::{AnonymousSession, Message, MessageBody, MessageStatus, RoomCode, SessionStatus},
     store::PgStore,
@@ -36,6 +38,10 @@ fn app_error_code_serializes_to_stable_wire_value() {
     assert_eq!(
         serde_json::to_string(&AppErrorCode::InvalidSession).unwrap(),
         "\"invalid_session\""
+    );
+    assert_eq!(
+        serde_json::to_string(&AppErrorCode::InvalidAdminToken).unwrap(),
+        "\"invalid_admin_token\""
     );
 }
 
@@ -62,6 +68,32 @@ async fn admin_overview_requires_authorized_admin_context() {
     let error = get_admin_overview(
         &FakeAdminAccessPort::deny(),
         &FakeAdminOverviewPort::default(),
+        AdminQueryContext::new("wrong-token".to_string()),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::InvalidAdminToken);
+}
+
+#[tokio::test]
+async fn admin_rooms_requires_authorized_admin_context() {
+    let error = list_admin_rooms(
+        &FakeAdminAccessPort::deny(),
+        &FakeAdminRoomsPort::default(),
+        AdminQueryContext::new("wrong-token".to_string()),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::InvalidAdminToken);
+}
+
+#[tokio::test]
+async fn admin_panel_requires_authorized_admin_context() {
+    let error = get_admin_panel(
+        &FakeAdminAccessPort::deny(),
+        &FakeAdminPanelPort::default(),
         AdminQueryContext::new("wrong-token".to_string()),
     )
     .await
@@ -1096,6 +1128,26 @@ impl AdminOverviewPort for FakeAdminOverviewPort {
         &self,
     ) -> Result<koko::contract::AdminOverview, AppError> {
         panic!("admin overview port should not be called when admin access is denied");
+    }
+}
+
+#[derive(Debug, Default)]
+struct FakeAdminRoomsPort;
+
+impl AdminRoomsPort for FakeAdminRoomsPort {
+    async fn list_admin_rooms(
+        &self,
+    ) -> Result<Vec<koko::contract::AdminRoomSummary>, AppError> {
+        panic!("admin rooms port should not be called when admin access is denied");
+    }
+}
+
+#[derive(Debug, Default)]
+struct FakeAdminPanelPort;
+
+impl AdminPanelPort for FakeAdminPanelPort {
+    async fn load_admin_panel(&self) -> Result<AdminPanelData, AppError> {
+        panic!("admin panel port should not be called when admin access is denied");
     }
 }
 

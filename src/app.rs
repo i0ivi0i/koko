@@ -258,10 +258,19 @@ where
     admin_rooms_port.list_admin_rooms().await
 }
 
-pub async fn load_admin_panel<P>(admin_panel_port: &P) -> Result<AdminPanelData, AppError>
+pub async fn get_admin_panel<A, P>(
+    access_port: &A,
+    admin_panel_port: &P,
+    context: AdminQueryContext,
+) -> Result<AdminPanelData, AppError>
 where
+    A: AdminAccessPort,
     P: AdminPanelPort,
 {
+    if !access_port.is_authorized_admin(&context).await? {
+        return Err(AppError::AdminAccessDenied);
+    }
+
     admin_panel_port.load_admin_panel().await
 }
 

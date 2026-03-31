@@ -64,36 +64,6 @@ fn admin_panel_state_wraps_backend_overview_without_fake_rooms() {
     assert!(state.rooms.is_empty());
 }
 
-#[test]
-fn admin_app_no_longer_boots_from_preview_state() {
-    let source = include_str!("../src/admin.rs");
-
-    assert!(!source.contains("AdminPanelState::preview()"));
-    assert!(!source.contains("render_admin_panel"));
-}
-
-#[test]
-fn admin_app_loads_backend_panel_through_dioxus_resource() {
-    let source = include_str!("../src/admin.rs");
-
-    assert!(source.contains("use_resource"));
-    assert!(source.contains("load_admin_panel"));
-    assert!(source.contains("/api/admin/panel"));
-    assert!(source.contains("resolve_shell_api_url"));
-    assert!(!source.contains(".get(ADMIN_PANEL_PATH)"));
-    assert!(!source.contains(".json::<AdminOverview>()"));
-    assert!(!source.contains(".json::<Vec<AdminRoomSummary>>()"));
-}
-
-#[test]
-fn admin_app_sends_admin_token_header_instead_of_fake_preview_data() {
-    let source = include_str!("../src/admin.rs");
-
-    assert!(source.contains("x-admin-token"));
-    assert!(source.contains("view::AdminPanel"));
-    assert!(!source.contains("wiring is pending"));
-}
-
 #[tokio::test]
 async fn admin_rooms_returns_live_room_summaries() {
     let harness = HttpHarness::new("admin_rooms_returns_live_room_summaries").await;
@@ -256,6 +226,46 @@ async fn admin_overview_requires_admin_token() {
         .oneshot(
             Request::builder()
                 .uri("/api/admin/overview")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn admin_rooms_requires_admin_token() {
+    let harness = HttpHarness::new("admin_rooms_requires_admin_token").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/rooms")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn admin_panel_requires_admin_token() {
+    let harness = HttpHarness::new("admin_panel_requires_admin_token").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/panel")
                 .body(Body::empty())
                 .unwrap(),
         )

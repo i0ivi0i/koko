@@ -14,9 +14,8 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminAccessPort, AdminQueryContext, AppError, bootstrap_anonymous_session,
-        get_admin_overview, join_or_create_room_by_code, list_admin_rooms, load_admin_panel,
-        load_room_snapshot,
+        AdminQueryContext, AppError, bootstrap_anonymous_session, get_admin_overview,
+        get_admin_panel, join_or_create_room_by_code, list_admin_rooms, load_room_snapshot,
     },
     contract::{
         AdminOverview, AdminPanelData, AdminRoomSummary, JoinOrCreateRoomByCodeCommand,
@@ -144,15 +143,7 @@ async fn admin_panel(
     headers: HeaderMap,
 ) -> Result<Json<AdminPanelData>, (StatusCode, Json<ErrorPayload>)> {
     let context = admin_query_context(&headers)?;
-    if !state
-        .admin_access
-        .is_authorized_admin(&context)
-        .await
-        .map_err(map_http_error)?
-    {
-        return Err(map_http_error(AppError::AdminAccessDenied));
-    }
-    let panel = load_admin_panel(&state.store)
+    let panel = get_admin_panel(&state.admin_access, &state.store, context)
         .await
         .map_err(map_http_error)?;
     Ok(Json(panel))
