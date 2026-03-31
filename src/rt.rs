@@ -74,7 +74,7 @@ where
     Ok(AuthenticatedSession { session_id })
 }
 
-pub fn parse_koko_session_cookie(headers: &HeaderMap) -> Result<Uuid, AppError> {
+fn parse_koko_session_cookie(headers: &HeaderMap) -> Result<Uuid, AppError> {
     for cookie_header in headers.get_all(COOKIE) {
         let raw_cookie = cookie_header.to_str().map_err(|_| invalid_session_error())?;
         for segment in raw_cookie.split(';') {
