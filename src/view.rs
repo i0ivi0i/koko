@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
+use uuid::Uuid;
 
 use crate::{
     admin::AdminPanelState,
@@ -11,17 +12,45 @@ use crate::{
 pub struct Module;
 
 #[component]
-pub fn ChatPage(state: ChatState) -> Element {
+pub fn ChatPage(
+    state: ChatState,
+    #[props(default)] on_back_to_list: Option<EventHandler<()>>,
+    #[props(default)] on_room_selected: Option<EventHandler<Uuid>>,
+    #[props(default)] on_search_input: Option<EventHandler<String>>,
+    #[props(default)] on_search_result_selected: Option<EventHandler<Uuid>>,
+) -> Element {
     // 这里只做壳层分流，消息、成员、搜索结果都仍由 ChatState 提供真相。
     match state.screen() {
-        ShellScreen::JoinByCode => rsx! { JoinByCodeScreen { state } },
-        ShellScreen::ConversationList => rsx! { ConversationListScreen { state } },
-        ShellScreen::Chat => rsx! { ChatScreen { state } },
+        ShellScreen::JoinByCode => rsx! {
+            JoinByCodeScreen {
+                state,
+                on_back_to_list,
+                on_search_input,
+                on_search_result_selected,
+            }
+        },
+        ShellScreen::ConversationList => rsx! {
+            ConversationListScreen {
+                state,
+                on_room_selected,
+                on_search_input,
+            }
+        },
+        ShellScreen::Chat => rsx! {
+            ChatScreen {
+                state,
+                on_back_to_list,
+            }
+        },
     }
 }
 
 #[component]
-fn ConversationListScreen(state: ChatState) -> Element {
+fn ConversationListScreen(
+    state: ChatState,
+    #[props(default)] on_room_selected: Option<EventHandler<Uuid>>,
+    #[props(default)] on_search_input: Option<EventHandler<String>>,
+) -> Element {
     let room_count = state.joined_rooms().len();
 
     rsx! {
@@ -31,12 +60,16 @@ fn ConversationListScreen(state: ChatState) -> Element {
                 title: "Chats".to_string(),
                 subtitle: format!("{room_count} joined rooms"),
                 badge: "TL".to_string(),
+                on_back_to_list: None,
             }
             section { class: "tg-shell__body tg-shell__body--list",
                 div { class: "tg-shell__search-card",
                     div { class: "tg-shell__search-card-title", "Search rooms" }
-                    div { class: "tg-shell__search-card-copy",
-                        "Search by room code to jump into a room."
+                    RoomSearchBar {
+                        value: state.search_query().to_string(),
+                        placeholder: "Search by room code".to_string(),
+                        hint: "Search by room code to jump into a room.".to_string(),
+                        on_input: on_search_input,
                     }
                 }
                 if room_count == 0 {
@@ -47,7 +80,10 @@ fn ConversationListScreen(state: ChatState) -> Element {
                 } else {
                     div { class: "tg-chat-list",
                         for room in state.joined_rooms().iter().cloned() {
-                            ConversationListItem { room }
+                            ConversationListItem {
+                                room,
+                                on_select: on_room_selected,
+                            }
                         }
                     }
                 }
@@ -57,7 +93,12 @@ fn ConversationListScreen(state: ChatState) -> Element {
 }
 
 #[component]
-fn JoinByCodeScreen(state: ChatState) -> Element {
+fn JoinByCodeScreen(
+    state: ChatState,
+    #[props(default)] on_back_to_list: Option<EventHandler<()>>,
+    #[props(default)] on_search_input: Option<EventHandler<String>>,
+    #[props(default)] on_search_result_selected: Option<EventHandler<Uuid>>,
+) -> Element {
     let result_count = state.search_results().len();
 
     rsx! {
@@ -67,13 +108,17 @@ fn JoinByCodeScreen(state: ChatState) -> Element {
                 title: "Search".to_string(),
                 subtitle: "Enter a room code".to_string(),
                 badge: "TL".to_string(),
+                on_back_to_list,
             }
             section { class: "tg-shell__body tg-shell__body--search",
                 div { class: "tg-search-panel",
                     div { class: "tg-search-panel__label", "Room code" }
-                    div { class: "tg-search-panel__field", "{search_query_or_placeholder(state.search_query())}" }
-                    div { class: "tg-search-panel__hint",
-                        "Case-insensitive prefix search over normalized room codes."
+                    RoomSearchBar {
+                        value: state.search_query().to_string(),
+                        placeholder: "Type a room code".to_string(),
+                        hint: "Case-insensitive prefix search over normalized room codes."
+                            .to_string(),
+                        on_input: on_search_input,
                     }
                 }
                 if result_count == 0 {
@@ -84,7 +129,10 @@ fn JoinByCodeScreen(state: ChatState) -> Element {
                 } else {
                     div { class: "tg-search-results",
                         for result in state.search_results().iter().cloned() {
-                            SearchResultItem { result }
+                            SearchResultItem {
+                                result,
+                                on_select: on_search_result_selected,
+                            }
                         }
                     }
                 }
@@ -94,7 +142,10 @@ fn JoinByCodeScreen(state: ChatState) -> Element {
 }
 
 #[component]
-fn ChatScreen(state: ChatState) -> Element {
+fn ChatScreen(
+    state: ChatState,
+    #[props(default)] on_back_to_list: Option<EventHandler<()>>,
+) -> Element {
     let room_code = shell_room_code(state.room_code());
 
     rsx! {
@@ -104,6 +155,7 @@ fn ChatScreen(state: ChatState) -> Element {
                 title: room_code.clone(),
                 subtitle: connection_label(state.connection()).to_string(),
                 badge: room_code.chars().next().unwrap_or('K').to_string(),
+                on_back_to_list,
             }
             section { class: "tg-shell__body tg-shell__body--chat",
                 if state.messages().is_empty() {
@@ -135,16 +187,59 @@ fn ChatScreen(state: ChatState) -> Element {
 }
 
 #[component]
-fn ShellHeader(back_label: String, title: String, subtitle: String, badge: String) -> Element {
+fn ShellHeader(
+    back_label: String,
+    title: String,
+    subtitle: String,
+    badge: String,
+    #[props(default)] on_back_to_list: Option<EventHandler<()>>,
+) -> Element {
     rsx! {
         header { class: "tg-nav",
-            div { class: "tg-nav__back", "{back_label}" }
+            button {
+                class: "tg-nav__back",
+                r#type: "button",
+                disabled: on_back_to_list.is_none(),
+                onclick: move |_| {
+                    if let Some(handler) = on_back_to_list.as_ref() {
+                        handler.call(());
+                    }
+                },
+                "{back_label}"
+            }
             div { class: "tg-nav__title",
                 div { class: "tg-nav__name", "{title}" }
                 div { class: "tg-nav__meta", "{subtitle}" }
             }
             div { class: "tg-nav__avatar", "{badge}" }
         }
+    }
+}
+
+#[component]
+fn RoomSearchBar(
+    value: String,
+    placeholder: String,
+    hint: String,
+    #[props(default)] on_input: Option<EventHandler<String>>,
+) -> Element {
+    rsx! {
+        div { class: "tg-search-panel__field",
+            input {
+                class: "tg-search-panel__input",
+                r#type: "search",
+                value: "{value}",
+                placeholder: "{placeholder}",
+                readonly: on_input.is_none(),
+                disabled: on_input.is_none(),
+                oninput: move |event| {
+                    if let Some(handler) = on_input.as_ref() {
+                        handler.call(event.value());
+                    }
+                },
+            }
+        }
+        div { class: "tg-search-panel__hint", "{hint}" }
     }
 }
 
@@ -159,7 +254,10 @@ fn EmptyState(title: String, body: String) -> Element {
 }
 
 #[component]
-fn ConversationListItem(room: ConversationItem) -> Element {
+fn ConversationListItem(
+    room: ConversationItem,
+    #[props(default)] on_select: Option<EventHandler<Uuid>>,
+) -> Element {
     let room_code = shell_room_code(&room.room_code);
     let latest_time = room.latest_message_at.map(format_clock).unwrap_or_default();
     let unread_label = if room.show_unread_placeholder {
@@ -169,7 +267,15 @@ fn ConversationListItem(room: ConversationItem) -> Element {
     };
 
     rsx! {
-        article { class: "tg-chat-card",
+        article {
+            class: "tg-chat-card",
+            role: "button",
+            tabindex: "0",
+            onclick: move |_| {
+                if let Some(handler) = on_select.as_ref() {
+                    handler.call(room.room_id);
+                }
+            },
             div { class: "tg-chat-card__avatar", "{room_code.chars().next().unwrap_or('K')}" }
             div { class: "tg-chat-card__content",
                 div { class: "tg-chat-card__title", "{room.display_title}" }
@@ -186,11 +292,22 @@ fn ConversationListItem(room: ConversationItem) -> Element {
 }
 
 #[component]
-fn SearchResultItem(result: crate::contract::RoomSearchResult) -> Element {
+fn SearchResultItem(
+    result: crate::contract::RoomSearchResult,
+    #[props(default)] on_select: Option<EventHandler<Uuid>>,
+) -> Element {
     let room_code = shell_room_code(&result.room_code);
 
     rsx! {
-        article { class: "tg-search-result",
+        article {
+            class: "tg-search-result",
+            role: "button",
+            tabindex: "0",
+            onclick: move |_| {
+                if let Some(handler) = on_select.as_ref() {
+                    handler.call(result.room_id);
+                }
+            },
             div { class: "tg-search-result__avatar", "{room_code.chars().next().unwrap_or('K')}" }
             div { class: "tg-search-result__content",
                 div { class: "tg-search-result__title", "{result.display_title}" }
@@ -243,14 +360,6 @@ fn delivery_label(state: DeliveryState) -> &'static str {
         DeliveryState::Pending => "Sending",
         DeliveryState::Confirmed => "Delivered",
         DeliveryState::Failed => "Retry",
-    }
-}
-
-fn search_query_or_placeholder(query: &str) -> String {
-    if query.trim().is_empty() {
-        "Type a room code".to_string()
-    } else {
-        query.to_string()
     }
 }
 
@@ -337,17 +446,6 @@ fn AdminRoomCard(room: AdminRoomSummary) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn search_query_or_placeholder_falls_back_to_prompt() {
-        assert_eq!(search_query_or_placeholder(""), "Type a room code");
-        assert_eq!(search_query_or_placeholder("  "), "Type a room code");
-    }
-
-    #[test]
-    fn search_query_or_placeholder_keeps_user_input() {
-        assert_eq!(search_query_or_placeholder("a1234"), "a1234");
-    }
 
     #[test]
     fn conversation_preview_uses_placeholder_when_empty() {
