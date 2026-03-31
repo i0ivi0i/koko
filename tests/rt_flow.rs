@@ -1,17 +1,16 @@
 use std::{
     collections::HashSet,
-    future::Future,
-    pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use axum::{
     Router,
-    http::{HeaderMap, HeaderValue, header::COOKIE},
+    http::{HeaderMap, HeaderValue, Request, header::COOKIE},
     routing::get,
 };
 use chrono::{TimeZone, Utc};
+use futures_util::{SinkExt, StreamExt, stream::SplitSink};
 use koko::{
     app::{
         AppError, Clock, IdGenerator, MembershipPort, MessageStore, SendTextMessageInput,
@@ -26,17 +25,16 @@ use koko::{
         send_text_message_input, subscribe_room_stream_input,
     },
 };
-use rust_socketio::{
-    Payload,
-    asynchronous::{Client, ClientBuilder},
-};
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::{
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
     task::JoinHandle,
     time::timeout,
+};
+use tokio_tungstenite::{
+    MaybeTlsStream, WebSocketStream, connect_async,
+    tungstenite::{self, Message as WsMessage},
 };
 use uuid::Uuid;
 
@@ -112,25 +110,11 @@ async fn sender_receives_message_accepted_but_not_message_created() {
     )
     .await;
 
-    let mut unauthenticated_error_rx = mpsc::unbounded_channel();
-    let unauthenticated = ClientBuilder::new(harness.base_url())
-        .namespace("/")
-        .reconnect(false)
-        .on("error", move |payload, _| {
-            let tx = unauthenticated_error_rx.0.clone();
-            Box::pin(async move {
-                let _ = tx.send(payload_text(payload));
-            }) as CallbackFuture
-        })
-        .connect()
-        .await
-        .unwrap();
     assert!(
-        next_event("unauthenticated error", &mut unauthenticated_error_rx.1)
+        connect_error_text(harness.base_url())
             .await
-            .contains("ConnectError")
+            .contains("not active")
     );
-    drop(unauthenticated);
 
     let mut sender_room_stream = mpsc::unbounded_channel();
     let mut sender_message_accepted = mpsc::unbounded_channel();
@@ -498,16 +482,16 @@ where
     T: DeserializeOwned,
 {
     match payload {
-        Payload::Text(values) => serde_json::from_value(first_payload_value(values)).unwrap(),
-        Payload::Binary(_) => panic!("unexpected binary payload"),
+        Payload::Text(values, _) => serde_json::from_value(first_payload_value(values)).unwrap(),
+        Payload::Binary(_, _) => panic!("unexpected binary payload"),
         _ => panic!("unexpected payload variant"),
     }
 }
 
 fn payload_text(payload: Payload) -> String {
     match payload {
-        Payload::Text(values) => serde_json::from_value(first_payload_value(values)).unwrap(),
-        Payload::Binary(_) => panic!("unexpected binary payload"),
+        Payload::Text(values, _) => serde_json::from_value(first_payload_value(values)).unwrap(),
+        Payload::Binary(_, _) => panic!("unexpected binary payload"),
         _ => panic!("unexpected payload variant"),
     }
 }

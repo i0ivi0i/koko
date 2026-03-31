@@ -9,7 +9,6 @@ $ErrorActionPreference = "Stop"
 
 $nightlyToolchain = "nightly-x86_64-pc-windows-msvc"
 $requiredTarget = "wasm32-unknown-unknown"
-$requiredDxVersion = "0.7.4"
 
 function Test-ListContains {
     param(
@@ -19,6 +18,25 @@ function Test-ListContains {
 
     return [bool]($Items | Select-String -SimpleMatch $Needle)
 }
+
+function Get-LockfilePackageVersion {
+    param(
+        [string]$PackageName
+    )
+
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    $lockfilePath = Join-Path $repoRoot "Cargo.lock"
+    $lockfile = Get-Content $lockfilePath -Raw
+    $pattern = '(?ms)^\[\[package\]\]\r?\nname = "' + [regex]::Escape($PackageName) + '"\r?\nversion = "([^"]+)"'
+    $match = [regex]::Match($lockfile, $pattern)
+    if (-not $match.Success) {
+        throw "Unable to resolve $PackageName version from Cargo.lock"
+    }
+
+    return $match.Groups[1].Value
+}
+
+$requiredDxVersion = Get-LockfilePackageVersion -PackageName "dioxus"
 
 $dxVersionLine = (& dx --version).Trim()
 if ($dxVersionLine -notlike "dioxus $requiredDxVersion*") {

@@ -33,9 +33,20 @@ jobs:
         shell: pwsh
         run: cargo install sqlx-cli --locked --no-default-features --features native-tls,postgres
 
+      - name: Resolve Dioxus version from lockfile
+        id: dioxus
+        shell: pwsh
+        run: |
+          $lockfile = Get-Content Cargo.lock -Raw
+          $match = [regex]::Match($lockfile, '(?ms)^\[\[package\]\]\r?\nname = "dioxus"\r?\nversion = "([^"]+)"')
+          if (-not $match.Success) {
+            throw "Unable to resolve dioxus version from Cargo.lock"
+          }
+          "version=$($match.Groups[1].Value)" >> $env:GITHUB_OUTPUT
+
       - name: Install Dioxus CLI
         shell: pwsh
-        run: cargo install dioxus-cli --version 0.7.4 --locked
+        run: cargo install dioxus-cli --version ${{ steps.dioxus.outputs.version }} --locked
 
       - name: Refresh lockfile and verify
         shell: pwsh
