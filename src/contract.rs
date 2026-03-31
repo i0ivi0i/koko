@@ -64,12 +64,6 @@ pub struct AdminRoomSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AdminPanelData {
-    pub overview: AdminOverview,
-    pub rooms: Vec<AdminRoomSummary>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageView {
     pub message_id: Uuid,
     pub session_id: Uuid,

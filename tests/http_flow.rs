@@ -153,6 +153,27 @@ fn http_room_routes_do_not_require_frontend_session_id_echo() {
 }
 
 #[tokio::test]
+async fn admin_panel_route_is_not_exposed_from_http_router() {
+    let harness = HttpHarness::new("admin_panel_route_is_not_exposed_from_http_router").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/panel")
+                .header("x-admin-token", "local-admin-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
 async fn bootstrap_then_join_returns_room_snapshot() {
     let harness = HttpHarness::new("bootstrap_then_join_returns_room_snapshot").await;
 

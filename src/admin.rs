@@ -1,14 +1,15 @@
 use dioxus::prelude::*;
 
 use crate::{
-    contract::{AdminOverview, AdminPanelData, AdminRoomSummary},
+    contract::{AdminOverview, AdminRoomSummary},
     view, web,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
 
-pub const ADMIN_PANEL_PATH: &str = "/api/admin/panel";
+const ADMIN_OVERVIEW_PATH: &str = "/api/admin/overview";
+const ADMIN_ROOMS_PATH: &str = "/api/admin/rooms";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminPanelState {
@@ -26,15 +27,15 @@ pub fn admin_panel_state(overview: AdminOverview, rooms: Vec<AdminRoomSummary>) 
     AdminPanelState::new(overview, rooms)
 }
 
-async fn load_admin_panel(admin_token: String) -> Result<AdminPanelState, String> {
+async fn load_admin_overview(admin_token: String) -> Result<AdminOverview, String> {
     let admin_token = admin_token.trim().to_string();
     if admin_token.is_empty() {
         return Err("Admin token required".to_string());
     }
 
     let client = reqwest::Client::new();
-    let url = web::resolve_shell_api_url(&web::browser_location()?, ADMIN_PANEL_PATH)?;
-    let panel = client
+    let url = web::resolve_shell_api_url(&web::browser_location()?, ADMIN_OVERVIEW_PATH)?;
+    client
         .get(url)
         .header("x-admin-token", admin_token)
         .send()
@@ -42,11 +43,36 @@ async fn load_admin_panel(admin_token: String) -> Result<AdminPanelState, String
         .map_err(|error| error.to_string())?
         .error_for_status()
         .map_err(|error| error.to_string())?
-        .json::<AdminPanelData>()
+        .json::<AdminOverview>()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| error.to_string())
+}
 
-    Ok(admin_panel_state(panel.overview, panel.rooms))
+async fn load_admin_rooms(admin_token: String) -> Result<Vec<AdminRoomSummary>, String> {
+    let admin_token = admin_token.trim().to_string();
+    if admin_token.is_empty() {
+        return Err("Admin token required".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let url = web::resolve_shell_api_url(&web::browser_location()?, ADMIN_ROOMS_PATH)?;
+    client
+        .get(url)
+        .header("x-admin-token", admin_token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<Vec<AdminRoomSummary>>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn load_admin_state(admin_token: String) -> Result<AdminPanelState, String> {
+    let overview = load_admin_overview(admin_token.clone()).await?;
+    let rooms = load_admin_rooms(admin_token).await?;
+    Ok(admin_panel_state(overview, rooms))
 }
 
 pub fn app() -> Element {
@@ -58,7 +84,7 @@ pub fn app() -> Element {
             if requested_token.trim().is_empty() {
                 None
             } else {
-                Some(load_admin_panel(requested_token).await)
+                Some(load_admin_state(requested_token).await)
             }
         }
     });
