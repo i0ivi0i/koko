@@ -50,7 +50,7 @@ jobs:
 
       - name: Refresh lockfile and verify
         shell: pwsh
-        run: .\scripts\update-deps-and-verify.ps1
+        run: .\scripts\verify-rust-workspace.ps1 -UpdateDeps
 
       - name: Capture dependency diff
         id: diff

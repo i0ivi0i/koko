@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [switch]$UpdateDeps,
     [switch]$SkipBundle,
     [switch]$SkipNextest,
     [switch]$SkipSqlx
@@ -24,6 +25,10 @@ function Invoke-Step {
 
 Push-Location $repoRoot
 try {
+    if ($UpdateDeps) {
+        Invoke-Step "cargo update" { cargo update }
+    }
+
     Invoke-Step "cargo check" { cargo check }
     Invoke-Step "cargo check --target wasm32-unknown-unknown" {
         cargo check --target wasm32-unknown-unknown
