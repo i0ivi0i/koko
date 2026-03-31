@@ -1,5 +1,10 @@
 use std::sync::Mutex;
 
+use axum::http::{
+    HeaderMap,
+    HeaderValue,
+    header::COOKIE,
+};
 use chrono::{TimeZone, Utc};
 use koko::{
     app::{
@@ -9,8 +14,8 @@ use koko::{
     contract::CommandRejected,
     domain::Message,
     rt::{
-        RealtimeEffect, SendTextMessageDeps, SubscribeRoomStreamDeps, plan_send_text_message,
-        plan_subscribe_room_stream,
+        RealtimeEffect, SendTextMessageDeps, SubscribeRoomStreamDeps, authenticate_realtime_session,
+        plan_send_text_message, plan_subscribe_room_stream,
     },
 };
 use uuid::Uuid;
@@ -166,6 +171,50 @@ async fn send_text_message_failure_emits_rejection_without_broadcast() {
     );
 }
 
+#[tokio::test]
+async fn authenticate_realtime_session_reads_koko_session_from_multi_cookie_header() {
+    let session_id = Uuid::from_u128(1);
+    let mut headers = HeaderMap::new();
+    headers.append(COOKIE, HeaderValue::from_static("theme=dark; other=value"));
+    headers.append(
+        COOKIE,
+        HeaderValue::from_str(&format!("tracking=on; koko_session={session_id}")).unwrap(),
+    );
+
+    let authenticated = authenticate_realtime_session(&FakeSessionPort::allow(), &headers)
+        .await
+        .unwrap();
+
+    assert_eq!(authenticated.session_id, session_id);
+}
+
+#[tokio::test]
+async fn authenticate_realtime_session_rejects_missing_or_invalid_cookie() {
+    let missing_cookie = HeaderMap::new();
+    let missing_cookie_error =
+        authenticate_realtime_session(&FakeSessionPort::allow(), &missing_cookie)
+            .await
+            .unwrap_err();
+    assert_eq!(missing_cookie_error.code(), koko::contract::AppErrorCode::InvalidSession);
+
+    let mut invalid_cookie = HeaderMap::new();
+    invalid_cookie.append(COOKIE, HeaderValue::from_static("koko_session=not-a-uuid"));
+    let invalid_cookie_error = authenticate_realtime_session(&FakeSessionPort::allow(), &invalid_cookie)
+        .await
+        .unwrap_err();
+    assert_eq!(invalid_cookie_error.code(), koko::contract::AppErrorCode::InvalidSession);
+
+    let mut inactive_cookie = HeaderMap::new();
+    inactive_cookie.append(
+        COOKIE,
+        HeaderValue::from_str(&format!("koko_session={}", Uuid::from_u128(2))).unwrap(),
+    );
+    let inactive_cookie_error = authenticate_realtime_session(&FakeSessionPort::deny(), &inactive_cookie)
+        .await
+        .unwrap_err();
+    assert_eq!(inactive_cookie_error.code(), koko::contract::AppErrorCode::InvalidSession);
+}
+
 #[derive(Debug)]
 struct FakeSessionPort {
     allowed: bool,
@@ -174,6 +223,10 @@ struct FakeSessionPort {
 impl FakeSessionPort {
     fn allow() -> Self {
         Self { allowed: true }
+    }
+
+    fn deny() -> Self {
+        Self { allowed: false }
     }
 }
 

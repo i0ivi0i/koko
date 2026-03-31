@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::http::{HeaderMap, header::COOKIE};
 use serde::Deserialize;
 use socketioxide::{
     SocketIo,
@@ -20,6 +21,11 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct Module;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthenticatedSession {
+    pub session_id: Uuid,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RealtimeEffect {
@@ -53,6 +59,40 @@ impl<Store, IdGen, AppClock> RealtimeState<Store, IdGen, AppClock> {
     }
 }
 
+pub async fn authenticate_realtime_session<S>(
+    session_port: &S,
+    headers: &HeaderMap,
+) -> Result<AuthenticatedSession, AppError>
+where
+    S: SessionPort,
+{
+    let session_id = parse_koko_session_cookie(headers)?;
+    if !session_port.is_active_session(session_id).await? {
+        return Err(AppError::SessionNotActive { session_id });
+    }
+
+    Ok(AuthenticatedSession { session_id })
+}
+
+pub fn parse_koko_session_cookie(headers: &HeaderMap) -> Result<Uuid, AppError> {
+    for cookie_header in headers.get_all(COOKIE) {
+        let raw_cookie = cookie_header.to_str().map_err(|_| invalid_session_error())?;
+        for segment in raw_cookie.split(';') {
+            let trimmed = segment.trim();
+            let Some((name, value)) = trimmed.split_once('=') else {
+                continue;
+            };
+            if name.trim() != crate::support::SESSION_COOKIE_NAME {
+                continue;
+            }
+
+            return Uuid::parse_str(value.trim()).map_err(|_| invalid_session_error());
+        }
+    }
+
+    Err(invalid_session_error())
+}
+
 fn warn_handler_failure(handler: &str, error: &AppError) {
     warn!(
         handler,
@@ -60,6 +100,12 @@ fn warn_handler_failure(handler: &str, error: &AppError) {
         ?error,
         "realtime handler failed"
     );
+}
+
+fn invalid_session_error() -> AppError {
+    AppError::SessionNotActive {
+        session_id: Uuid::nil(),
+    }
 }
 
 pub struct SubscribeRoomStreamDeps<'a, S, M> {
