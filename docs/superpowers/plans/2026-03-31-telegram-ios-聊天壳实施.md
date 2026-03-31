@@ -514,7 +514,10 @@ Expected:
 
 - [ ] **Step 2: 运行前台打包验证**
 
-Run: `dx bundle --platform web`
+Run: `powershell -ExecutionPolicy Bypass -File scripts/dx-bundle-web.ps1`
+
+Note:
+- 2026-04-01 当前链路下，`Rust 1.94 + dx 0.7.4 + wasm-bindgen` 直接跑 `dx bundle --platform web` 会命中 `clone_ref` 失败；这里固定走仓库内脚本，把 Rust 官方 `nightly + -Zbuild-std + target-cpu=mvp` workaround 收口成单一入口。
 
 Expected:
 - 成功产出可部署的 web 静态资源到 `Dioxus.toml` 的 `[application].out_dir`
