@@ -1,7 +1,9 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::contract::{BootstrapSession, MessageCreated, RoomSnapshot};
+use crate::contract::{
+    BootstrapSession, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -20,6 +22,13 @@ pub enum ConnectionState {
     Joined,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellScreen {
+    JoinByCode,
+    ConversationList,
+    Chat,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatMessage {
     pub room_id: Uuid,
@@ -32,12 +41,42 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChatState {
-    session_id: Uuid,
+pub struct ConversationItem {
+    pub room_id: Uuid,
+    pub room_code: String,
+    pub display_title: String,
+    pub latest_preview: String,
+    pub latest_message_at: Option<DateTime<Utc>>,
+    pub show_unread_placeholder: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LastOpenRoom {
+    pub room_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RoomSearchState {
+    query: String,
+    results: Vec<RoomSearchResult>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatTimelineState {
     room_id: Option<Uuid>,
     room_code: String,
     connection: ConnectionState,
     messages: Vec<ChatMessage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatState {
+    session_id: Uuid,
+    screen: ShellScreen,
+    joined_rooms: Vec<ConversationItem>,
+    last_open_room: Option<LastOpenRoom>,
+    search: RoomSearchState,
+    timeline: ChatTimelineState,
 }
 
 impl Default for ChatState {
@@ -54,10 +93,16 @@ impl ChatState {
     pub fn new(session_id: Uuid) -> Self {
         Self {
             session_id,
-            room_id: None,
-            room_code: String::new(),
-            connection: ConnectionState::Offline,
-            messages: Vec::new(),
+            screen: ShellScreen::JoinByCode,
+            joined_rooms: Vec::new(),
+            last_open_room: None,
+            search: RoomSearchState::default(),
+            timeline: ChatTimelineState {
+                room_id: None,
+                room_code: String::new(),
+                connection: ConnectionState::Offline,
+                messages: Vec::new(),
+            },
         }
     }
 
@@ -69,55 +114,142 @@ impl ChatState {
         self.session_id = session.session_id;
     }
 
+    pub fn screen(&self) -> ShellScreen {
+        self.screen
+    }
+
+    pub fn joined_rooms(&self) -> &[ConversationItem] {
+        &self.joined_rooms
+    }
+
+    pub fn search_query(&self) -> &str {
+        &self.search.query
+    }
+
+    pub fn search_results(&self) -> &[RoomSearchResult] {
+        &self.search.results
+    }
+
     pub fn room_id(&self) -> Option<Uuid> {
-        self.room_id
+        self.timeline.room_id
     }
 
     pub fn room_code(&self) -> &str {
-        &self.room_code
+        &self.timeline.room_code
     }
 
     pub fn connection(&self) -> ConnectionState {
-        self.connection
+        self.timeline.connection
     }
 
     pub fn messages(&self) -> &[ChatMessage] {
-        &self.messages
+        &self.timeline.messages
     }
 
     pub fn confirmed_messages(&self) -> Vec<&ChatMessage> {
-        self.messages
+        self.timeline
+            .messages
             .iter()
             .filter(|message| message.delivery == DeliveryState::Confirmed)
             .collect()
     }
 
-    pub fn enter_room(&mut self, snapshot: RoomSnapshot) {
-        self.room_id = Some(snapshot.room_id);
-        self.room_code = snapshot.room_code;
-        self.connection = ConnectionState::Joined;
-        self.messages = snapshot
-            .messages
+    pub fn apply_joined_rooms(&mut self, rooms: Vec<JoinedRoomSummary>) {
+        self.joined_rooms = rooms
             .into_iter()
-            .map(|message| ChatMessage {
-                room_id: snapshot.room_id,
-                session_id: message.session_id,
-                client_message_id: None,
-                message_id: Some(message.message_id),
-                body: message.body,
-                created_at: message.created_at,
-                delivery: DeliveryState::Confirmed,
+            .map(|room| ConversationItem {
+                room_id: room.room_id,
+                room_code: room.room_code,
+                display_title: room.display_title,
+                latest_preview: room.latest_preview,
+                latest_message_at: room.latest_message_at,
+                show_unread_placeholder: true,
             })
             .collect();
+
+        if self.timeline.room_id.is_none() {
+            self.screen = fallback_screen(&self.joined_rooms);
+        }
+    }
+
+    pub fn restore_last_open_room(&mut self, room_id: Option<Uuid>) {
+        let Some(room_id) = room_id else {
+            self.last_open_room = None;
+            self.clear_open_room();
+            self.screen = fallback_screen(&self.joined_rooms);
+            return;
+        };
+
+        let Some(room) = self.joined_rooms.iter().find(|room| room.room_id == room_id) else {
+            self.last_open_room = None;
+            self.clear_open_room();
+            self.screen = fallback_screen(&self.joined_rooms);
+            return;
+        };
+
+        self.last_open_room = Some(LastOpenRoom { room_id });
+        self.screen = ShellScreen::Chat;
+        self.timeline.room_id = Some(room.room_id);
+        self.timeline.room_code = room.room_code.clone();
+        self.timeline.connection = ConnectionState::Offline;
+        self.timeline.messages.clear();
+    }
+
+    pub fn open_room_from_snapshot(&mut self, snapshot: RoomSnapshot) {
+        self.last_open_room = Some(LastOpenRoom {
+            room_id: snapshot.room_id,
+        });
+        self.screen = ShellScreen::Chat;
+        self.timeline.room_id = Some(snapshot.room_id);
+        self.timeline.room_code = snapshot.room_code;
+        self.timeline.connection = ConnectionState::Offline;
+        self.timeline.messages = snapshot
+            .messages
+            .into_iter()
+            .map(|message| snapshot_message(snapshot.room_id, message))
+            .collect();
         self.sort_messages();
+    }
+
+    pub fn start_room_subscription(&mut self, room_id: Uuid) {
+        if self.timeline.room_id == Some(room_id) {
+            self.timeline.connection = ConnectionState::Joined;
+        }
+    }
+
+    pub fn apply_subscription_refill_snapshot(&mut self, snapshot: RoomSnapshot) {
+        if self.timeline.room_id != Some(snapshot.room_id) {
+            self.open_room_from_snapshot(snapshot);
+            return;
+        }
+
+        self.timeline.room_code = snapshot.room_code;
+        for message in snapshot.messages {
+            self.upsert_confirmed_message(snapshot_message(snapshot.room_id, message));
+        }
+        self.sort_messages();
+    }
+
+    pub fn apply_search_results(&mut self, results: Vec<RoomSearchResult>) {
+        self.search.results = results;
+    }
+
+    pub fn set_search_query(&mut self, query: &str) {
+        self.search.query = query.to_string();
+    }
+
+    pub fn enter_room(&mut self, snapshot: RoomSnapshot) {
+        self.open_room_from_snapshot(snapshot);
+        self.timeline.connection = ConnectionState::Joined;
     }
 
     pub fn enqueue_pending(&mut self, room_id: Uuid, session_id: Uuid, body: &str) -> Uuid {
         let pending_id = Uuid::now_v7();
         let body = body.trim().to_string();
 
-        self.room_id = Some(room_id);
-        self.messages.push(ChatMessage {
+        self.screen = ShellScreen::Chat;
+        self.timeline.room_id = Some(room_id);
+        self.timeline.messages.push(ChatMessage {
             room_id,
             session_id,
             client_message_id: Some(pending_id),
@@ -133,6 +265,7 @@ impl ChatState {
     pub fn confirm_message(&mut self, event: MessageCreated) {
         if let Some(client_message_id) = event.client_message_id
             && let Some(message) = self
+                .timeline
                 .messages
                 .iter_mut()
                 .find(|message| message.client_message_id == Some(client_message_id))
@@ -145,7 +278,7 @@ impl ChatState {
             return;
         }
 
-        self.messages.push(ChatMessage {
+        self.upsert_confirmed_message(ChatMessage {
             room_id: event.room_id,
             session_id: event.session_id,
             client_message_id: event.client_message_id,
@@ -159,6 +292,7 @@ impl ChatState {
 
     pub fn reject_pending(&mut self, client_message_id: Uuid) {
         if let Some(message) = self
+            .timeline
             .messages
             .iter_mut()
             .find(|message| message.client_message_id == Some(client_message_id))
@@ -168,15 +302,57 @@ impl ChatState {
     }
 
     pub fn set_connection(&mut self, connection: ConnectionState) {
-        self.connection = connection;
+        self.timeline.connection = connection;
     }
 
     fn sort_messages(&mut self) {
-        self.messages.sort_by(|left, right| {
+        self.timeline.messages.sort_by(|left, right| {
             left.created_at
                 .cmp(&right.created_at)
                 .then(left.message_id.cmp(&right.message_id))
                 .then(left.client_message_id.cmp(&right.client_message_id))
         });
+    }
+
+    fn upsert_confirmed_message(&mut self, message: ChatMessage) {
+        if let Some(message_id) = message.message_id
+            && let Some(existing) = self
+                .timeline
+                .messages
+                .iter_mut()
+                .find(|existing| existing.message_id == Some(message_id))
+        {
+            *existing = message;
+            return;
+        }
+
+        self.timeline.messages.push(message);
+    }
+
+    fn clear_open_room(&mut self) {
+        self.timeline.room_id = None;
+        self.timeline.room_code.clear();
+        self.timeline.connection = ConnectionState::Offline;
+        self.timeline.messages.clear();
+    }
+}
+
+fn snapshot_message(room_id: Uuid, message: crate::contract::MessageView) -> ChatMessage {
+    ChatMessage {
+        room_id,
+        session_id: message.session_id,
+        client_message_id: None,
+        message_id: Some(message.message_id),
+        body: message.body,
+        created_at: message.created_at,
+        delivery: DeliveryState::Confirmed,
+    }
+}
+
+fn fallback_screen(joined_rooms: &[ConversationItem]) -> ShellScreen {
+    if joined_rooms.is_empty() {
+        ShellScreen::JoinByCode
+    } else {
+        ShellScreen::ConversationList
     }
 }

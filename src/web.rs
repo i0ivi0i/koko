@@ -1,7 +1,12 @@
 use dioxus::prelude::*;
 use reqwest::Url;
+use uuid::Uuid;
 
-use crate::{chat::ChatState, contract::BootstrapSession, view};
+use crate::{
+    chat::{ChatState, ConversationItem, ShellScreen},
+    contract::BootstrapSession,
+    view,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -12,6 +17,36 @@ pub fn bootstrap_state(session: BootstrapSession) -> ChatState {
     let mut state = ChatState::awaiting_bootstrap();
     state.apply_bootstrap_session(session);
     state
+}
+
+pub fn resolve_last_open_room_id(
+    joined_rooms: &[ConversationItem],
+    stored_room_id: Option<Uuid>,
+) -> Option<Uuid> {
+    let stored_room_id = stored_room_id?;
+    joined_rooms
+        .iter()
+        .any(|room| room.room_id == stored_room_id)
+        .then_some(stored_room_id)
+}
+
+pub fn should_enter_join_flow(joined_rooms: &[ConversationItem]) -> bool {
+    joined_rooms.is_empty()
+}
+
+pub fn select_initial_screen(
+    joined_rooms: &[ConversationItem],
+    last_open_room_id: Option<Uuid>,
+) -> ShellScreen {
+    if should_enter_join_flow(joined_rooms) {
+        return ShellScreen::JoinByCode;
+    }
+
+    if resolve_last_open_room_id(joined_rooms, last_open_room_id).is_some() {
+        return ShellScreen::Chat;
+    }
+
+    ShellScreen::ConversationList
 }
 
 pub(crate) fn resolve_shell_api_url(
