@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use axum::http::{HeaderMap, header::COOKIE};
-use serde::Deserialize;
+use serde::Serialize;
 use socketioxide::{
     SocketIo,
-    extract::{Data, SocketRef},
+    extract::{Data, Extension, SocketRef},
+    handler::ConnectHandler,
 };
 use tracing::warn;
 use uuid::Uuid;
@@ -15,7 +16,7 @@ use crate::{
         SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
-        CommandRejected, MessageCreated, RoomStreamSubscribed,
+        CommandRejected, RoomStreamSubscribed, SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
 };
 
@@ -25,21 +26,6 @@ pub struct Module;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuthenticatedSession {
     pub session_id: Uuid,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RealtimeEffect {
-    JoinRoom { room_id: Uuid },
-    EmitRoomStreamSubscribed { room_id: Uuid },
-    EmitMessageAccepted(MessageCreated),
-    EmitCommandRejected(CommandRejected),
-    BroadcastMessageCreated { room_id: Uuid, payload: MessageCreated },
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct CommandPlan<T> {
-    pub effects: Vec<RealtimeEffect>,
-    pub result: Result<T, AppError>,
 }
 
 #[derive(Clone)]
@@ -76,7 +62,9 @@ where
 
 fn parse_koko_session_cookie(headers: &HeaderMap) -> Result<Uuid, AppError> {
     for cookie_header in headers.get_all(COOKIE) {
-        let raw_cookie = cookie_header.to_str().map_err(|_| invalid_session_error())?;
+        let raw_cookie = cookie_header
+            .to_str()
+            .map_err(|_| invalid_session_error())?;
         for segment in raw_cookie.split(';') {
             let trimmed = segment.trim();
             let Some((name, value)) = trimmed.split_once('=') else {
@@ -108,107 +96,25 @@ fn invalid_session_error() -> AppError {
     }
 }
 
-pub struct SubscribeRoomStreamDeps<'a, S, M> {
-    pub session_port: &'a S,
-    pub membership_port: &'a M,
-}
-
-pub struct SendTextMessageDeps<'a, S, M, Store, I, C> {
-    pub session_port: &'a S,
-    pub membership_port: &'a M,
-    pub message_store: &'a Store,
-    pub id_generator: &'a I,
-    pub clock: &'a C,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-struct LegacySubscribeRoomStreamPayload {
-    room_id: Uuid,
-    session_id: Uuid,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-struct LegacySendTextMessagePayload {
-    room_id: Uuid,
-    session_id: Uuid,
-    body: String,
-    client_message_id: Option<Uuid>,
-}
-
-pub async fn plan_subscribe_room_stream<S, M>(
-    deps: SubscribeRoomStreamDeps<'_, S, M>,
-    command: SubscribeRoomStreamInput,
-) -> CommandPlan<()>
-where
-    S: SessionPort,
-    M: app::MembershipPort,
-{
-    match app::subscribe_room_stream(deps.session_port, deps.membership_port, command.clone()).await
-    {
-        Ok(()) => CommandPlan {
-            effects: vec![
-                RealtimeEffect::JoinRoom {
-                    room_id: command.room_id,
-                },
-                RealtimeEffect::EmitRoomStreamSubscribed {
-                    room_id: command.room_id,
-                },
-            ],
-            result: Ok(()),
-        },
-        Err(error) => CommandPlan {
-            effects: vec![RealtimeEffect::EmitCommandRejected(CommandRejected {
-                code: error.code(),
-            })],
-            result: Err(error),
-        },
+pub fn subscribe_room_stream_input(
+    session: AuthenticatedSession,
+    payload: SubscribeRoomStreamCommand,
+) -> SubscribeRoomStreamInput {
+    SubscribeRoomStreamInput {
+        room_id: payload.room_id,
+        session_id: session.session_id,
     }
 }
 
-pub async fn plan_send_text_message<S, M, Store, I, C>(
-    deps: SendTextMessageDeps<'_, S, M, Store, I, C>,
-    command: SendTextMessageInput,
-) -> CommandPlan<MessageCreated>
-where
-    S: SessionPort,
-    M: MembershipPort,
-    Store: MessageStore,
-    I: IdGenerator,
-    C: Clock,
-{
-    let room_id = command.room_id;
-    let event = match app::send_text_message(
-        deps.session_port,
-        deps.membership_port,
-        deps.message_store,
-        deps.id_generator,
-        deps.clock,
-        command,
-    )
-    .await
-    {
-        Ok(event) => event,
-        Err(error) => {
-            return CommandPlan {
-                effects: vec![RealtimeEffect::EmitCommandRejected(CommandRejected {
-                    code: error.code(),
-                })],
-                result: Err(error),
-            };
-        }
-    };
-
-    match event {
-        crate::contract::AppEvent::MessageCreated(payload) => CommandPlan {
-            effects: vec![
-                RealtimeEffect::EmitMessageAccepted(payload.clone()),
-                RealtimeEffect::BroadcastMessageCreated {
-                    room_id,
-                    payload: payload.clone(),
-                },
-            ],
-            result: Ok(payload),
-        },
+pub fn send_text_message_input(
+    session: AuthenticatedSession,
+    payload: SendTextMessageCommand,
+) -> SendTextMessageInput {
+    SendTextMessageInput {
+        room_id: payload.room_id,
+        session_id: session.session_id,
+        body: payload.body,
+        client_message_id: payload.client_message_id,
     }
 }
 
@@ -220,111 +126,116 @@ pub fn install_realtime<Store, IdGen, AppClock>(
     IdGen: IdGenerator + Clone + Send + Sync + 'static,
     AppClock: Clock + Clone + Send + Sync + 'static,
 {
-    io.ns("/", move |socket: SocketRef, io: SocketIo| {
-        let state = state.clone();
+    let connect_state = state.clone();
+    let on_connect = move |socket: SocketRef| {
+        let state = connect_state.clone();
         async move {
-            let subscribe_io = io.clone();
-            let message_io = io.clone();
-
             socket.on("subscribe_room_stream", {
                 let state = state.clone();
-                let io = subscribe_io.clone();
-                move |socket: SocketRef, Data(command): Data<LegacySubscribeRoomStreamPayload>| {
+                move |socket: SocketRef,
+                      Extension(session): Extension<AuthenticatedSession>,
+                      Data(payload): Data<SubscribeRoomStreamCommand>| {
                     let state = state.clone();
-                    let io = io.clone();
                     async move {
-                        let plan = plan_subscribe_room_stream(
-                            SubscribeRoomStreamDeps {
-                                session_port: &state.store,
-                                membership_port: &state.store,
-                            },
-                            SubscribeRoomStreamInput {
-                                room_id: command.room_id,
-                                session_id: command.session_id,
-                            },
-                        )
-                        .await;
+                        let room_id = payload.room_id;
+                        let input = subscribe_room_stream_input(session, payload);
+                        if let Err(error) =
+                            app::subscribe_room_stream(&state.store, &state.store, input).await
+                        {
+                            emit_command_rejected(&socket, &error);
+                            warn_handler_failure("subscribe_room_stream", &error);
+                            return;
+                        }
 
-                        if let Err(error) = apply_effects(&socket, &io, plan.effects).await {
-                            warn_handler_failure("subscribe_room_stream", &error);
-                        }
-                        if let Err(error) = plan.result {
-                            warn_handler_failure("subscribe_room_stream", &error);
-                        }
+                        socket.join(room_name(room_id));
+                        emit_to_socket(
+                            &socket,
+                            "room_stream_subscribed",
+                            &RoomStreamSubscribed { room_id },
+                        );
                     }
                 }
             });
 
             socket.on("send_text_message", {
                 let state = state.clone();
-                let io = message_io.clone();
-                move |socket: SocketRef, Data(command): Data<LegacySendTextMessagePayload>| {
+                move |socket: SocketRef,
+                      Extension(session): Extension<AuthenticatedSession>,
+                      Data(payload): Data<SendTextMessageCommand>| {
                     let state = state.clone();
-                    let io = io.clone();
                     async move {
-                        let plan = plan_send_text_message(
-                            SendTextMessageDeps {
-                                session_port: &state.store,
-                                membership_port: &state.store,
-                                message_store: &state.store,
-                                id_generator: &state.id_generator,
-                                clock: &state.clock,
-                            },
-                            SendTextMessageInput {
-                                room_id: command.room_id,
-                                session_id: command.session_id,
-                                body: command.body,
-                                client_message_id: command.client_message_id,
-                            },
+                        let room_id = payload.room_id;
+                        let input = send_text_message_input(session, payload);
+                        match app::send_text_message(
+                            &state.store,
+                            &state.store,
+                            &state.store,
+                            &state.id_generator,
+                            &state.clock,
+                            input,
                         )
-                        .await;
-
-                        if let Err(error) = apply_effects(&socket, &io, plan.effects).await {
-                            warn_handler_failure("send_text_message", &error);
-                        }
-                        if let Err(error) = plan.result {
-                            warn_handler_failure("send_text_message", &error);
+                        .await
+                        {
+                            Ok(crate::contract::AppEvent::MessageCreated(payload)) => {
+                                emit_to_socket(&socket, "message_accepted", &payload);
+                                emit_to_room_others(&socket, room_id, "message_created", &payload)
+                                    .await;
+                            }
+                            Err(error) => {
+                                emit_command_rejected(&socket, &error);
+                                warn_handler_failure("send_text_message", &error);
+                            }
                         }
                     }
                 }
             });
         }
-    });
+    };
+    let auth_state = state.clone();
+    let auth_middleware = move |socket: SocketRef| {
+        let state = auth_state.clone();
+        async move {
+            let session =
+                authenticate_realtime_session(&state.store, &socket.req_parts().headers).await?;
+            socket.extensions.insert(session);
+            Ok::<(), AppError>(())
+        }
+    };
+
+    io.ns("/", on_connect.with(auth_middleware));
 }
 
-async fn apply_effects(
-    socket: &SocketRef,
-    io: &SocketIo,
-    effects: Vec<RealtimeEffect>,
-) -> Result<(), AppError> {
-    for effect in effects {
-        match effect {
-            RealtimeEffect::JoinRoom { room_id } => {
-                socket.join(room_id.to_string());
-            }
-            RealtimeEffect::EmitRoomStreamSubscribed { room_id } => {
-                socket
-                    .emit("room_stream_subscribed", &RoomStreamSubscribed { room_id })
-                    .map_err(|_| AppError::DependencyFailure)?;
-            }
-            RealtimeEffect::EmitMessageAccepted(payload) => {
-                socket
-                    .emit("message_accepted", &payload)
-                    .map_err(|_| AppError::DependencyFailure)?;
-            }
-            RealtimeEffect::EmitCommandRejected(payload) => {
-                socket
-                    .emit("command_rejected", &payload)
-                    .map_err(|_| AppError::DependencyFailure)?;
-            }
-            RealtimeEffect::BroadcastMessageCreated { room_id, payload } => {
-                io.to(room_id.to_string())
-                    .emit("message_created", &payload)
-                    .await
-                    .map_err(|_| AppError::DependencyFailure)?;
-            }
-        }
-    }
+fn room_name(room_id: Uuid) -> String {
+    room_id.to_string()
+}
 
-    Ok(())
+fn emit_command_rejected(socket: &SocketRef, error: &AppError) {
+    emit_to_socket(
+        socket,
+        "command_rejected",
+        &CommandRejected { code: error.code() },
+    );
+}
+
+fn emit_to_socket<T>(socket: &SocketRef, event: &'static str, payload: &T)
+where
+    T: Serialize,
+{
+    if socket.emit(event, payload).is_err() {
+        warn_handler_failure(event, &AppError::DependencyFailure);
+    }
+}
+
+async fn emit_to_room_others<T>(socket: &SocketRef, room_id: Uuid, event: &'static str, payload: &T)
+where
+    T: Serialize,
+{
+    if socket
+        .to(room_name(room_id))
+        .emit(event, payload)
+        .await
+        .is_err()
+    {
+        warn_handler_failure(event, &AppError::DependencyFailure);
+    }
 }

@@ -36,7 +36,7 @@ chrono = { version = "0.4", features = ["serde"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.8"
 axum-extra = { version = "0.10", features = ["cookie"] }
-socketioxide = "0.18.2"
+socketioxide = { version = "0.18.2", features = ["extensions"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "fs"] }
@@ -48,4 +48,5 @@ uuid = { version = "1", features = ["v7", "serde", "js"] }
 web-sys = { version = "0.3", features = ["Window", "Location"] }
 
 [dev-dependencies]
+rust_socketio = { version = "0.6", features = ["async"] }
 tower = { version = "0.5", features = ["util"] }

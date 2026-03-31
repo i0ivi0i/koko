@@ -1,9 +1,15 @@
-use std::sync::Mutex;
+use std::{
+    collections::HashSet,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use axum::http::{
-    HeaderMap,
-    HeaderValue,
-    header::COOKIE,
+use axum::{
+    Router,
+    http::{HeaderMap, HeaderValue, header::COOKIE},
+    routing::get,
 };
 use chrono::{TimeZone, Utc};
 use koko::{
@@ -11,12 +17,26 @@ use koko::{
         AppError, Clock, IdGenerator, MembershipPort, MessageStore, SendTextMessageInput,
         SessionPort, SubscribeRoomStreamInput,
     },
-    contract::CommandRejected,
+    contract::{
+        MessageCreated, RoomStreamSubscribed, SendTextMessageCommand, SubscribeRoomStreamCommand,
+    },
     domain::Message,
     rt::{
-        RealtimeEffect, SendTextMessageDeps, SubscribeRoomStreamDeps, authenticate_realtime_session,
-        plan_send_text_message, plan_subscribe_room_stream,
+        AuthenticatedSession, RealtimeState, authenticate_realtime_session, install_realtime,
+        send_text_message_input, subscribe_room_stream_input,
     },
+};
+use rust_socketio::{
+    Payload,
+    asynchronous::{Client, ClientBuilder},
+};
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
+use tokio::{
+    net::TcpListener,
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+    time::timeout,
 };
 use uuid::Uuid;
 
@@ -33,142 +53,179 @@ fn init_tracing_is_idempotent() {
 }
 
 #[tokio::test]
-async fn subscribe_room_stream_joins_room_after_membership_check_and_notifies_client() {
-    let room_id = Uuid::from_u128(1);
-    let session_id = Uuid::from_u128(2);
-
-    let plan = plan_subscribe_room_stream(
-        SubscribeRoomStreamDeps {
-            session_port: &FakeSessionPort::allow(),
-            membership_port: &FakeMembershipPort::allow(),
+async fn subscribe_room_stream_input_uses_authenticated_session() {
+    let input = subscribe_room_stream_input(
+        AuthenticatedSession {
+            session_id: Uuid::from_u128(2),
         },
-        SubscribeRoomStreamInput {
-            room_id,
-            session_id,
+        SubscribeRoomStreamCommand {
+            room_id: Uuid::from_u128(1),
         },
-    )
-    .await;
+    );
 
-    assert_eq!(plan.result, Ok(()));
     assert_eq!(
-        plan.effects,
-        vec![
-            RealtimeEffect::JoinRoom { room_id },
-            RealtimeEffect::EmitRoomStreamSubscribed { room_id },
-        ]
+        input,
+        SubscribeRoomStreamInput {
+            room_id: Uuid::from_u128(1),
+            session_id: Uuid::from_u128(2),
+        }
     );
 }
 
 #[tokio::test]
-async fn subscribe_room_stream_rejects_non_member_without_joining_and_emits_rejection() {
+async fn send_text_message_input_uses_authenticated_session() {
+    let input = send_text_message_input(
+        AuthenticatedSession {
+            session_id: Uuid::from_u128(2),
+        },
+        SendTextMessageCommand {
+            room_id: Uuid::from_u128(1),
+            body: "hello".to_string(),
+            client_message_id: None,
+        },
+    );
+
+    assert_eq!(
+        input,
+        SendTextMessageInput {
+            room_id: Uuid::from_u128(1),
+            session_id: Uuid::from_u128(2),
+            body: "hello".to_string(),
+            client_message_id: None,
+        }
+    );
+}
+
+#[tokio::test]
+async fn sender_receives_message_accepted_but_not_message_created() {
     let room_id = Uuid::from_u128(11);
-    let session_id = Uuid::from_u128(12);
-
-    let plan = plan_subscribe_room_stream(
-        SubscribeRoomStreamDeps {
-            session_port: &FakeSessionPort::allow(),
-            membership_port: &FakeMembershipPort::deny(),
-        },
-        SubscribeRoomStreamInput {
-            room_id,
-            session_id,
-        },
+    let sender_session_id = Uuid::from_u128(12);
+    let receiver_session_id = Uuid::from_u128(13);
+    let client_message_id = Uuid::from_u128(14);
+    let message_id = Uuid::from_u128(15);
+    let harness = RealtimeHarness::spawn(
+        RealtimeTestStore::new(
+            [sender_session_id, receiver_session_id],
+            [(room_id, sender_session_id), (room_id, receiver_session_id)],
+        ),
+        message_id,
     )
     .await;
 
-    assert_eq!(
-        plan.result,
-        Err(AppError::NotRoomMember {
-            room_id,
-            session_id
+    let mut unauthenticated_error_rx = mpsc::unbounded_channel();
+    let unauthenticated = ClientBuilder::new(harness.base_url())
+        .namespace("/")
+        .reconnect(false)
+        .on("error", move |payload, _| {
+            let tx = unauthenticated_error_rx.0.clone();
+            Box::pin(async move {
+                let _ = tx.send(payload_text(payload));
+            }) as CallbackFuture
         })
+        .connect()
+        .await
+        .unwrap();
+    assert!(
+        next_event("unauthenticated error", &mut unauthenticated_error_rx.1)
+            .await
+            .contains("ConnectError")
     );
-    assert_eq!(
-        plan.effects,
-        vec![RealtimeEffect::EmitCommandRejected(CommandRejected {
-            code: koko::contract::AppErrorCode::MembershipRequired
-        })]
-    );
-}
+    drop(unauthenticated);
 
-#[tokio::test]
-async fn message_is_broadcast_only_after_persistence_and_sender_gets_feedback() {
-    let room_id = Uuid::from_u128(21);
-    let session_id = Uuid::from_u128(22);
-    let message_id = Uuid::from_u128(23);
-    let trace = TraceLog::default();
-    let store = FakeMessageStore::new(trace.clone());
-
-    let plan = plan_send_text_message(
-        SendTextMessageDeps {
-            session_port: &FakeSessionPort::allow(),
-            membership_port: &FakeMembershipPort::allow(),
-            message_store: &store,
-            id_generator: &FixedIdGenerator(message_id),
-            clock: &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
-        },
-        SendTextMessageInput {
-            room_id,
-            session_id,
-            body: " hello realtime ".to_string(),
-            client_message_id: None,
-        },
+    let mut sender_room_stream = mpsc::unbounded_channel();
+    let mut sender_message_accepted = mpsc::unbounded_channel();
+    let mut sender_message_created = mpsc::unbounded_channel();
+    let mut sender_connected = mpsc::unbounded_channel();
+    let sender = connect_client(
+        harness.base_url(),
+        sender_session_id,
+        ClientChannels::new(
+            sender_connected.0,
+            sender_room_stream.0,
+            sender_message_accepted.0,
+            sender_message_created.0,
+        ),
     )
-    .await;
+    .await
+    .unwrap();
 
-    let created = plan.result.unwrap();
-    assert_eq!(created.message_id, message_id);
-    assert_eq!(created.body, "hello realtime");
-    assert_eq!(trace.events(), vec!["persist"]);
-    assert_eq!(
-        plan.effects,
-        vec![
-            RealtimeEffect::EmitMessageAccepted(created.clone()),
-            RealtimeEffect::BroadcastMessageCreated {
-                room_id,
-                payload: created.clone(),
-            },
-        ]
-    );
-}
-
-#[tokio::test]
-async fn send_text_message_failure_emits_rejection_without_broadcast() {
-    let room_id = Uuid::from_u128(31);
-    let session_id = Uuid::from_u128(32);
-    let trace = TraceLog::default();
-    let store = FakeMessageStore::new(trace.clone());
-
-    let plan = plan_send_text_message(
-        SendTextMessageDeps {
-            session_port: &FakeSessionPort::allow(),
-            membership_port: &FakeMembershipPort::deny(),
-            message_store: &store,
-            id_generator: &FixedIdGenerator(Uuid::from_u128(33)),
-            clock: &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
-        },
-        SendTextMessageInput {
-            room_id,
-            session_id,
-            body: "hello realtime".to_string(),
-            client_message_id: None,
-        },
+    let mut receiver_room_stream = mpsc::unbounded_channel();
+    let mut receiver_message_accepted = mpsc::unbounded_channel();
+    let mut receiver_message_created = mpsc::unbounded_channel();
+    let mut receiver_connected = mpsc::unbounded_channel();
+    let receiver = connect_client(
+        harness.base_url(),
+        receiver_session_id,
+        ClientChannels::new(
+            receiver_connected.0,
+            receiver_room_stream.0,
+            receiver_message_accepted.0,
+            receiver_message_created.0,
+        ),
     )
-    .await;
+    .await
+    .unwrap();
+
+    next_event("sender connected", &mut sender_connected.1).await;
+    next_event("receiver connected", &mut receiver_connected.1).await;
+
+    sender
+        .emit("subscribe_room_stream", json!({ "room_id": room_id }))
+        .await
+        .unwrap();
+    receiver
+        .emit("subscribe_room_stream", json!({ "room_id": room_id }))
+        .await
+        .unwrap();
 
     assert_eq!(
-        plan.result,
-        Err(AppError::NotRoomMember {
-            room_id,
-            session_id
-        })
+        next_event("sender subscribed", &mut sender_room_stream.1).await,
+        RoomStreamSubscribed { room_id }
     );
     assert_eq!(
-        plan.effects,
-        vec![RealtimeEffect::EmitCommandRejected(CommandRejected {
-            code: koko::contract::AppErrorCode::MembershipRequired
-        })]
+        next_event("receiver subscribed", &mut receiver_room_stream.1).await,
+        RoomStreamSubscribed { room_id }
     );
+
+    sender
+        .emit(
+            "send_text_message",
+            json!({
+                "room_id": room_id,
+                "body": " hello direct realtime ",
+                "client_message_id": client_message_id,
+            }),
+        )
+        .await
+        .unwrap();
+
+    let accepted = next_event("sender message_accepted", &mut sender_message_accepted.1).await;
+    assert_eq!(
+        accepted,
+        MessageCreated {
+            message_id,
+            room_id,
+            session_id: sender_session_id,
+            body: "hello direct realtime".to_string(),
+            created_at: fixed_time(),
+            client_message_id: Some(client_message_id),
+        }
+    );
+
+    assert_eq!(
+        next_event("receiver message_created", &mut receiver_message_created.1).await,
+        accepted.clone()
+    );
+    assert!(
+        timeout(Duration::from_millis(300), sender_message_created.1.recv())
+            .await
+            .is_err()
+    );
+    assert!(receiver_message_accepted.1.try_recv().is_err());
+
+    sender.disconnect().await.unwrap();
+    receiver.disconnect().await.unwrap();
+    harness.shutdown().await;
 }
 
 #[tokio::test]
@@ -195,24 +252,35 @@ async fn authenticate_realtime_session_rejects_missing_or_invalid_cookie() {
         authenticate_realtime_session(&FakeSessionPort::allow(), &missing_cookie)
             .await
             .unwrap_err();
-    assert_eq!(missing_cookie_error.code(), koko::contract::AppErrorCode::InvalidSession);
+    assert_eq!(
+        missing_cookie_error.code(),
+        koko::contract::AppErrorCode::InvalidSession
+    );
 
     let mut invalid_cookie = HeaderMap::new();
     invalid_cookie.append(COOKIE, HeaderValue::from_static("koko_session=not-a-uuid"));
-    let invalid_cookie_error = authenticate_realtime_session(&FakeSessionPort::allow(), &invalid_cookie)
-        .await
-        .unwrap_err();
-    assert_eq!(invalid_cookie_error.code(), koko::contract::AppErrorCode::InvalidSession);
+    let invalid_cookie_error =
+        authenticate_realtime_session(&FakeSessionPort::allow(), &invalid_cookie)
+            .await
+            .unwrap_err();
+    assert_eq!(
+        invalid_cookie_error.code(),
+        koko::contract::AppErrorCode::InvalidSession
+    );
 
     let mut inactive_cookie = HeaderMap::new();
     inactive_cookie.append(
         COOKIE,
         HeaderValue::from_str(&format!("koko_session={}", Uuid::from_u128(2))).unwrap(),
     );
-    let inactive_cookie_error = authenticate_realtime_session(&FakeSessionPort::deny(), &inactive_cookie)
-        .await
-        .unwrap_err();
-    assert_eq!(inactive_cookie_error.code(), koko::contract::AppErrorCode::InvalidSession);
+    let inactive_cookie_error =
+        authenticate_realtime_session(&FakeSessionPort::deny(), &inactive_cookie)
+            .await
+            .unwrap_err();
+    assert_eq!(
+        inactive_cookie_error.code(),
+        koko::contract::AppErrorCode::InvalidSession
+    );
 }
 
 #[derive(Debug)]
@@ -236,58 +304,49 @@ impl SessionPort for FakeSessionPort {
     }
 }
 
-#[derive(Debug)]
-struct FakeMembershipPort {
-    allowed: bool,
+#[derive(Debug, Clone)]
+struct RealtimeTestStore {
+    active_sessions: Arc<HashSet<Uuid>>,
+    memberships: Arc<HashSet<(Uuid, Uuid)>>,
+    persisted_messages: Arc<Mutex<Vec<Message>>>,
 }
 
-impl FakeMembershipPort {
-    fn allow() -> Self {
-        Self { allowed: true }
-    }
-
-    fn deny() -> Self {
-        Self { allowed: false }
-    }
-}
-
-impl MembershipPort for FakeMembershipPort {
-    async fn is_room_member(&self, _room_id: Uuid, _session_id: Uuid) -> Result<bool, AppError> {
-        Ok(self.allowed)
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-struct TraceLog(std::sync::Arc<Mutex<Vec<&'static str>>>);
-
-impl TraceLog {
-    fn events(&self) -> Vec<&'static str> {
-        self.0.lock().unwrap().clone()
-    }
-
-    fn push(&self, event: &'static str) {
-        self.0.lock().unwrap().push(event);
+impl RealtimeTestStore {
+    fn new(
+        active_sessions: impl IntoIterator<Item = Uuid>,
+        memberships: impl IntoIterator<Item = (Uuid, Uuid)>,
+    ) -> Self {
+        Self {
+            active_sessions: Arc::new(active_sessions.into_iter().collect()),
+            memberships: Arc::new(memberships.into_iter().collect()),
+            persisted_messages: Arc::default(),
+        }
     }
 }
 
-#[derive(Debug)]
-struct FakeMessageStore {
-    trace: TraceLog,
-}
-
-impl FakeMessageStore {
-    fn new(trace: TraceLog) -> Self {
-        Self { trace }
+impl SessionPort for RealtimeTestStore {
+    async fn is_active_session(&self, session_id: Uuid) -> Result<bool, AppError> {
+        Ok(self.active_sessions.contains(&session_id))
     }
 }
 
-impl MessageStore for FakeMessageStore {
+impl MembershipPort for RealtimeTestStore {
+    async fn is_room_member(&self, room_id: Uuid, session_id: Uuid) -> Result<bool, AppError> {
+        Ok(self.memberships.contains(&(room_id, session_id)))
+    }
+}
+
+impl MessageStore for RealtimeTestStore {
     async fn save_message(&self, message: Message) -> Result<Message, AppError> {
-        self.trace.push("persist");
+        self.persisted_messages
+            .lock()
+            .unwrap()
+            .push(message.clone());
         Ok(message)
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 struct FixedIdGenerator(Uuid);
 
 impl IdGenerator for FixedIdGenerator {
@@ -296,10 +355,168 @@ impl IdGenerator for FixedIdGenerator {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 struct FixedClock(chrono::DateTime<Utc>);
 
 impl Clock for FixedClock {
     fn now(&self) -> chrono::DateTime<Utc> {
         self.0
     }
+}
+
+type CallbackFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+#[derive(Debug)]
+struct ClientChannels {
+    connected: mpsc::UnboundedSender<()>,
+    room_stream_subscribed: mpsc::UnboundedSender<RoomStreamSubscribed>,
+    message_accepted: mpsc::UnboundedSender<MessageCreated>,
+    message_created: mpsc::UnboundedSender<MessageCreated>,
+}
+
+impl ClientChannels {
+    fn new(
+        connected: mpsc::UnboundedSender<()>,
+        room_stream_subscribed: mpsc::UnboundedSender<RoomStreamSubscribed>,
+        message_accepted: mpsc::UnboundedSender<MessageCreated>,
+        message_created: mpsc::UnboundedSender<MessageCreated>,
+    ) -> Self {
+        Self {
+            connected,
+            room_stream_subscribed,
+            message_accepted,
+            message_created,
+        }
+    }
+}
+
+struct RealtimeHarness {
+    base_url: String,
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    server_task: JoinHandle<()>,
+}
+
+impl RealtimeHarness {
+    async fn spawn(store: RealtimeTestStore, message_id: Uuid) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let (socket_layer, io) = socketioxide::SocketIo::new_layer();
+        let realtime = Arc::new(RealtimeState::new(
+            store,
+            FixedIdGenerator(message_id),
+            FixedClock(fixed_time()),
+        ));
+        install_realtime(&io, realtime);
+
+        let router = Router::new()
+            .route("/", get(|| async { "ok" }))
+            .layer(socket_layer);
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .unwrap();
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        Self {
+            base_url,
+            shutdown_tx: Some(shutdown_tx),
+            server_task,
+        }
+    }
+
+    fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    async fn shutdown(mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        self.server_task.await.unwrap();
+    }
+}
+
+async fn connect_client(
+    base_url: &str,
+    session_id: Uuid,
+    channels: ClientChannels,
+) -> Result<Client, rust_socketio::Error> {
+    let ClientChannels {
+        connected,
+        room_stream_subscribed,
+        message_accepted,
+        message_created,
+    } = channels;
+
+    ClientBuilder::new(base_url)
+        .namespace("/")
+        .reconnect(false)
+        .opening_header("cookie", format!("koko_session={session_id}"))
+        .on("open", move |_, _| {
+            let tx = connected.clone();
+            Box::pin(async move {
+                let _ = tx.send(());
+            }) as CallbackFuture
+        })
+        .on("room_stream_subscribed", move |payload, _| {
+            let tx = room_stream_subscribed.clone();
+            Box::pin(async move {
+                let _ = tx.send(deserialize_payload(payload));
+            }) as CallbackFuture
+        })
+        .on("message_accepted", move |payload, _| {
+            let tx = message_accepted.clone();
+            Box::pin(async move {
+                let _ = tx.send(deserialize_payload(payload));
+            }) as CallbackFuture
+        })
+        .on("message_created", move |payload, _| {
+            let tx = message_created.clone();
+            Box::pin(async move {
+                let _ = tx.send(deserialize_payload(payload));
+            }) as CallbackFuture
+        })
+        .connect()
+        .await
+}
+
+async fn next_event<T>(label: &'static str, rx: &mut mpsc::UnboundedReceiver<T>) -> T {
+    timeout(Duration::from_secs(3), rx.recv())
+        .await
+        .unwrap_or_else(|_| panic!("{label} timed out"))
+        .unwrap_or_else(|| panic!("{label} channel closed"))
+}
+
+fn deserialize_payload<T>(payload: Payload) -> T
+where
+    T: DeserializeOwned,
+{
+    match payload {
+        Payload::Text(values) => serde_json::from_value(first_payload_value(values)).unwrap(),
+        Payload::Binary(_) => panic!("unexpected binary payload"),
+        _ => panic!("unexpected payload variant"),
+    }
+}
+
+fn payload_text(payload: Payload) -> String {
+    match payload {
+        Payload::Text(values) => serde_json::from_value(first_payload_value(values)).unwrap(),
+        Payload::Binary(_) => panic!("unexpected binary payload"),
+        _ => panic!("unexpected payload variant"),
+    }
+}
+
+fn first_payload_value(mut values: Vec<Value>) -> Value {
+    assert_eq!(values.len(), 1, "expected a single payload argument");
+    values.pop().unwrap()
+}
+
+fn fixed_time() -> chrono::DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()
 }
