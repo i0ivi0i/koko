@@ -41,6 +41,25 @@ pub struct LoadRoomSnapshotQuery {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JoinedRoomSummary {
+    pub room_id: Uuid,
+    pub room_code: String,
+    pub display_title: String,
+    pub latest_preview: String,
+    pub latest_message_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoomSearchResult {
+    pub room_id: Uuid,
+    pub room_code: String,
+    pub display_title: String,
+    pub latest_preview: String,
+    pub latest_message_at: Option<DateTime<Utc>>,
+    pub is_joined: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BootstrapSession {
     pub session_id: Uuid,
     pub issued_at: DateTime<Utc>,

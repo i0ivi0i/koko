@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     contract::{
         AdminOverview, AdminRoomSummary, AppErrorCode, AppEvent, BootstrapSession,
-        JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageCreated, MessageView,
-        RoomSnapshot,
+        JoinedRoomSummary, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageCreated,
+        MessageView, RoomSearchResult, RoomSnapshot,
     },
     domain::{
         AnonymousSession, DomainError, Message, MessageBody, MessageStatus, NewMemberRecord,
@@ -30,6 +30,17 @@ pub struct SendTextMessageInput {
     pub session_id: Uuid,
     pub body: String,
     pub client_message_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListJoinedRoomsQuery {
+    pub session_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchRoomsByCodeQuery {
+    pub session_id: Uuid,
+    pub input: String,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -109,6 +120,21 @@ pub trait MembershipPort {
         room_id: Uuid,
         session_id: Uuid,
     ) -> impl Future<Output = Result<bool, AppError>> + Send;
+}
+
+pub trait JoinedRoomsPort {
+    fn list_joined_rooms(
+        &self,
+        session_id: Uuid,
+    ) -> impl Future<Output = Result<Vec<JoinedRoomSummary>, AppError>> + Send;
+}
+
+pub trait RoomSearchPort {
+    fn search_rooms_by_code(
+        &self,
+        session_id: Uuid,
+        input: &str,
+    ) -> impl Future<Output = Result<Vec<RoomSearchResult>, AppError>> + Send;
 }
 
 pub trait MessageStore {
@@ -279,6 +305,68 @@ where
     }
 
     admin_rooms_port.list_admin_rooms().await
+}
+
+pub async fn list_joined_rooms<S, P>(
+    session_port: &S,
+    joined_rooms_port: &P,
+    query: ListJoinedRoomsQuery,
+) -> Result<Vec<JoinedRoomSummary>, AppError>
+where
+    S: SessionPort,
+    P: JoinedRoomsPort,
+{
+    if !session_port.is_active_session(query.session_id).await? {
+        return Err(AppError::SessionNotActive {
+            session_id: query.session_id,
+        });
+    }
+
+    let mut rooms = joined_rooms_port.list_joined_rooms(query.session_id).await?;
+    rooms.sort_by(|left, right| {
+        right
+            .latest_message_at
+            .cmp(&left.latest_message_at)
+            .then(left.room_code.cmp(&right.room_code))
+    });
+    Ok(rooms)
+}
+
+pub async fn search_rooms_by_code<S, P>(
+    session_port: &S,
+    room_search_port: &P,
+    query: SearchRoomsByCodeQuery,
+) -> Result<Vec<RoomSearchResult>, AppError>
+where
+    S: SessionPort,
+    P: RoomSearchPort,
+{
+    if !session_port.is_active_session(query.session_id).await? {
+        return Err(AppError::SessionNotActive {
+            session_id: query.session_id,
+        });
+    }
+
+    let normalized_input = query.input.trim().to_ascii_uppercase();
+    if normalized_input.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut rooms = room_search_port
+        .search_rooms_by_code(query.session_id, &query.input)
+        .await?;
+    // 搜索排序保持稳定：先精确命中，再已加入，再最近活跃，最后按群号兜底。
+    rooms.sort_by(|left, right| {
+        let left_exact = left.room_code.eq_ignore_ascii_case(&normalized_input);
+        let right_exact = right.room_code.eq_ignore_ascii_case(&normalized_input);
+
+        right_exact
+            .cmp(&left_exact)
+            .then(right.is_joined.cmp(&left.is_joined))
+            .then(right.latest_message_at.cmp(&left.latest_message_at))
+            .then(left.room_code.cmp(&right.room_code))
+    });
+    Ok(rooms)
 }
 
 pub async fn subscribe_room_stream<S, M>(

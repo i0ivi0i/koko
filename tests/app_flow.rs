@@ -17,15 +17,17 @@ use http_support::{
 use koko::{
     app::{
         AdminAccessPort, AdminOverviewPort, AdminQueryContext, AdminRoomsPort, AppError, Clock,
-        IdGenerator, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx, RoomSnapshotData,
-        RoomSnapshotPort, SendTextMessageInput, SessionBootstrapPort, SessionPort,
+        IdGenerator, JoinedRoomsPort, ListJoinedRoomsQuery, MembershipPort, MessageStore,
+        RoomEntryPort, RoomEntryTx, RoomSearchPort, RoomSnapshotData, RoomSnapshotPort,
+        SearchRoomsByCodeQuery, SendTextMessageInput, SessionBootstrapPort, SessionPort,
         SubscribeRoomStreamInput, bootstrap_anonymous_session, get_admin_overview,
-        join_or_create_room_by_code, list_admin_rooms, load_room_snapshot, send_text_message,
-        subscribe_room_stream,
+        join_or_create_room_by_code, list_admin_rooms, list_joined_rooms, load_room_snapshot,
+        search_rooms_by_code, send_text_message, subscribe_room_stream,
     },
     contract::{
-        AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageView,
-        RoomSnapshot, SendTextMessageCommand, SubscribeRoomStreamCommand,
+        AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, JoinedRoomSummary,
+        LoadRoomSnapshotQuery, MessageView, RoomSearchResult, RoomSnapshot,
+        SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
     domain::{
         AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord,
@@ -524,6 +526,150 @@ async fn join_or_create_room_by_code_skips_commit_when_member_write_fails() {
     assert_eq!(
         join_port.operations(),
         vec!["find_room_by_code", "ensure_room_member"]
+    );
+}
+
+#[tokio::test]
+async fn list_joined_rooms_returns_member_rooms_sorted_by_latest_message() {
+    let session_id = Uuid::from_u128(540);
+    let rooms_port = FakeJoinedRoomsPort::with_rooms(vec![
+        joined_room_summary(Uuid::from_u128(541), "C1234", "third", None),
+        joined_room_summary(
+            Uuid::from_u128(542),
+            "A1234",
+            "first",
+            Some(minute_time(2)),
+        ),
+        joined_room_summary(
+            Uuid::from_u128(543),
+            "B1234",
+            "second",
+            Some(minute_time(1)),
+        ),
+    ]);
+
+    let rooms = list_joined_rooms(
+        &FakeSessionPort::allow(),
+        &rooms_port,
+        ListJoinedRoomsQuery { session_id },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(rooms_port.requested_session_ids(), vec![session_id]);
+    assert_eq!(
+        rooms.into_iter().map(|room| room.room_code).collect::<Vec<_>>(),
+        vec!["A1234".to_string(), "B1234".to_string(), "C1234".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn list_joined_rooms_returns_empty_for_session_with_no_rooms() {
+    let session_id = Uuid::from_u128(544);
+    let rooms_port = FakeJoinedRoomsPort::with_rooms(vec![]);
+
+    let rooms = list_joined_rooms(
+        &FakeSessionPort::allow(),
+        &rooms_port,
+        ListJoinedRoomsQuery { session_id },
+    )
+    .await
+    .unwrap();
+
+    assert!(rooms.is_empty());
+    assert_eq!(rooms_port.requested_session_ids(), vec![session_id]);
+}
+
+#[tokio::test]
+async fn search_rooms_by_code_matches_case_insensitive_prefix_and_marks_membership() {
+    let session_id = Uuid::from_u128(545);
+    let search_port = FakeRoomSearchPort::with_results(vec![
+        room_search_result(
+            Uuid::from_u128(546),
+            "A1234",
+            "joined room",
+            Some(minute_time(1)),
+            true,
+        ),
+        room_search_result(
+            Uuid::from_u128(547),
+            "A1299",
+            "candidate room",
+            None,
+            false,
+        ),
+    ]);
+
+    let results = search_rooms_by_code(
+        &FakeSessionPort::allow(),
+        &search_port,
+        SearchRoomsByCodeQuery {
+            session_id,
+            input: "a12".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(search_port.requested_session_ids(), vec![session_id]);
+    assert_eq!(search_port.requested_inputs(), vec!["a12".to_string()]);
+    assert_eq!(
+        results
+            .into_iter()
+            .map(|room| (room.room_code, room.is_joined))
+            .collect::<Vec<_>>(),
+        vec![
+            ("A1234".to_string(), true),
+            ("A1299".to_string(), false),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn search_rooms_by_code_prioritizes_exact_hit_then_joined_rooms() {
+    let session_id = Uuid::from_u128(548);
+    let search_port = FakeRoomSearchPort::with_results(vec![
+        room_search_result(
+            Uuid::from_u128(549),
+            "A1200",
+            "joined newer",
+            Some(minute_time(3)),
+            true,
+        ),
+        room_search_result(
+            Uuid::from_u128(550),
+            "A1234",
+            "exact hit",
+            Some(minute_time(2)),
+            false,
+        ),
+        room_search_result(
+            Uuid::from_u128(551),
+            "A1299",
+            "not joined",
+            Some(minute_time(4)),
+            false,
+        ),
+    ]);
+
+    let results = search_rooms_by_code(
+        &FakeSessionPort::allow(),
+        &search_port,
+        SearchRoomsByCodeQuery {
+            session_id,
+            input: "a1234".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        results.into_iter().map(|room| room.room_code).collect::<Vec<_>>(),
+        vec![
+            "A1234".to_string(),
+            "A1200".to_string(),
+            "A1299".to_string(),
+        ]
     );
 }
 
@@ -1244,6 +1390,75 @@ impl MembershipPort for FakeMembershipPort {
 }
 
 #[derive(Debug)]
+struct FakeJoinedRoomsPort {
+    rooms: Vec<JoinedRoomSummary>,
+    requested_session_ids: Mutex<Vec<Uuid>>,
+}
+
+impl FakeJoinedRoomsPort {
+    fn with_rooms(rooms: Vec<JoinedRoomSummary>) -> Self {
+        Self {
+            rooms,
+            requested_session_ids: Mutex::default(),
+        }
+    }
+
+    fn requested_session_ids(&self) -> Vec<Uuid> {
+        self.requested_session_ids.lock().unwrap().clone()
+    }
+}
+
+impl JoinedRoomsPort for FakeJoinedRoomsPort {
+    async fn list_joined_rooms(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<JoinedRoomSummary>, AppError> {
+        self.requested_session_ids.lock().unwrap().push(session_id);
+        Ok(self.rooms.clone())
+    }
+}
+
+#[derive(Debug)]
+struct FakeRoomSearchPort {
+    results: Vec<RoomSearchResult>,
+    requested_session_ids: Mutex<Vec<Uuid>>,
+    requested_inputs: Mutex<Vec<String>>,
+}
+
+impl FakeRoomSearchPort {
+    fn with_results(results: Vec<RoomSearchResult>) -> Self {
+        Self {
+            results,
+            requested_session_ids: Mutex::default(),
+            requested_inputs: Mutex::default(),
+        }
+    }
+
+    fn requested_session_ids(&self) -> Vec<Uuid> {
+        self.requested_session_ids.lock().unwrap().clone()
+    }
+
+    fn requested_inputs(&self) -> Vec<String> {
+        self.requested_inputs.lock().unwrap().clone()
+    }
+}
+
+impl RoomSearchPort for FakeRoomSearchPort {
+    async fn search_rooms_by_code(
+        &self,
+        session_id: Uuid,
+        input: &str,
+    ) -> Result<Vec<RoomSearchResult>, AppError> {
+        self.requested_session_ids.lock().unwrap().push(session_id);
+        self.requested_inputs
+            .lock()
+            .unwrap()
+            .push(input.to_string());
+        Ok(self.results.clone())
+    }
+}
+
+#[derive(Debug)]
 enum MessageStoreOutcome {
     Same,
     RewriteBody(&'static str),
@@ -1676,6 +1891,43 @@ fn sample_message_at(
             .unwrap(),
         status: MessageStatus::Active,
     }
+}
+
+fn joined_room_summary(
+    room_id: Uuid,
+    room_code: &str,
+    latest_preview: &str,
+    latest_message_at: Option<DateTime<Utc>>,
+) -> JoinedRoomSummary {
+    JoinedRoomSummary {
+        room_id,
+        room_code: room_code.to_string(),
+        display_title: room_code.to_string(),
+        latest_preview: latest_preview.to_string(),
+        latest_message_at,
+    }
+}
+
+fn room_search_result(
+    room_id: Uuid,
+    room_code: &str,
+    latest_preview: &str,
+    latest_message_at: Option<DateTime<Utc>>,
+    is_joined: bool,
+) -> RoomSearchResult {
+    RoomSearchResult {
+        room_id,
+        room_code: room_code.to_string(),
+        display_title: room_code.to_string(),
+        latest_preview: latest_preview.to_string(),
+        latest_message_at,
+        is_joined,
+    }
+}
+
+fn minute_time(minute_offset: i64) -> DateTime<Utc> {
+    Utc.timestamp_opt(fixed_time().timestamp() + minute_offset * 60, 0)
+        .unwrap()
 }
 
 fn fixed_time() -> DateTime<Utc> {
