@@ -11,7 +11,9 @@ use http_support::HttpHarness;
 use koko::{
     app::{AppError, join_or_create_room_by_code},
     chat::{ChatState, ConnectionState, DeliveryState},
-    contract::{BootstrapSession, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot},
+    contract::{
+        BootstrapSession, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
+    },
     support::{SystemClock, SystemIdGenerator},
 };
 use std::env;
@@ -146,7 +148,12 @@ async fn joined_rooms_endpoint_requires_bootstrapped_session() {
     let response = harness
         .router
         .clone()
-        .oneshot(Request::builder().uri("/api/rooms").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/rooms")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -243,15 +250,21 @@ async fn root_entry_serves_frontend_shell() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = String::from_utf8(to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
-        .unwrap();
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
     assert!(body.contains("koko-web-shell"));
     harness.cleanup().await;
 }
 
 #[tokio::test]
 async fn frontend_shell_fallback_serves_index_for_unknown_non_api_path() {
-    let harness = HttpHarness::new("frontend_shell_fallback_serves_index_for_unknown_non_api_path").await;
+    let harness =
+        HttpHarness::new("frontend_shell_fallback_serves_index_for_unknown_non_api_path").await;
 
     let response = harness
         .router
@@ -266,9 +279,34 @@ async fn frontend_shell_fallback_serves_index_for_unknown_non_api_path() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = String::from_utf8(to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
-        .unwrap();
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
     assert!(body.contains("koko-web-shell"));
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn admin_path_stays_out_of_frontend_shell_fallback() {
+    let harness = HttpHarness::new("admin_path_stays_out_of_frontend_shell_fallback").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/panel")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
     harness.cleanup().await;
 }
 
@@ -289,15 +327,51 @@ async fn assets_theme_css_is_served_as_static_file() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = String::from_utf8(to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec())
-        .unwrap();
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
     assert!(body.contains(".tg-shell"));
     harness.cleanup().await;
 }
 
 #[tokio::test]
+async fn theme_css_exposes_telegram_shell_sections() {
+    let harness = HttpHarness::new("theme_css_exposes_telegram_shell_sections").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/assets/theme.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains(".tg-conversation-list"));
+    assert!(body.contains(".tg-join-by-code"));
+    assert!(body.contains(".tg-chat-screen"));
+    harness.cleanup().await;
+}
+
+#[tokio::test]
 async fn missing_static_asset_stays_404_instead_of_falling_back_to_index() {
-    let harness = HttpHarness::new("missing_static_asset_stays_404_instead_of_falling_back_to_index").await;
+    let harness =
+        HttpHarness::new("missing_static_asset_stays_404_instead_of_falling_back_to_index").await;
 
     let response = harness
         .router
@@ -317,7 +391,8 @@ async fn missing_static_asset_stays_404_instead_of_falling_back_to_index() {
 
 #[tokio::test]
 async fn unknown_api_path_stays_404_instead_of_falling_back_to_index() {
-    let harness = HttpHarness::new("unknown_api_path_stays_404_instead_of_falling_back_to_index").await;
+    let harness =
+        HttpHarness::new("unknown_api_path_stays_404_instead_of_falling_back_to_index").await;
 
     let response = harness
         .router

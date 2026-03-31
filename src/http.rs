@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path as FsPath};
+use std::path::{Path as FsPath, PathBuf};
 
 use axum::{
     Json, Router,
@@ -22,7 +22,7 @@ use crate::{
         search_rooms_by_code,
     },
     contract::{
-        AdminOverview, AdminRoomSummary, JoinedRoomSummary, JoinOrCreateRoomByCodeCommand,
+        AdminOverview, AdminRoomSummary, JoinOrCreateRoomByCodeCommand, JoinedRoomSummary,
         LoadRoomSnapshotQuery, RoomSearchResult, RoomSnapshot,
     },
     store::PgStore,
@@ -79,6 +79,8 @@ pub fn app_router(
         .nest("/api", api_router(store, admin_token))
         .nest_service("/assets", ServeDir::new(asset_dir.into()))
         .route_service("/", ServeFile::new(index_file.clone()))
+        .route("/admin", get(frontend_reserved_not_found))
+        .route("/admin/{*path}", get(frontend_reserved_not_found))
         .fallback_service(
             // 非 API 深链接统一回到入口壳，静态资源仍由 /assets 独立承接。
             ServeFile::new(index_file),
@@ -91,6 +93,10 @@ pub fn default_frontend_dist_dir() -> PathBuf {
 
 pub fn default_frontend_asset_dir() -> PathBuf {
     FsPath::new(FRONTEND_ASSET_DIR).to_path_buf()
+}
+
+async fn frontend_reserved_not_found() -> StatusCode {
+    StatusCode::NOT_FOUND
 }
 
 async fn bootstrap_session(
@@ -143,9 +149,11 @@ async fn joined_rooms(
     jar: CookieJar,
 ) -> Result<Json<Vec<JoinedRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
     let session_id = resolve_session_id(&jar)?;
-    let rooms = list_joined_rooms(&state.store, &state.store, crate::app::ListJoinedRoomsQuery {
-        session_id,
-    })
+    let rooms = list_joined_rooms(
+        &state.store,
+        &state.store,
+        crate::app::ListJoinedRoomsQuery { session_id },
+    )
     .await
     .map_err(map_http_error)?;
     Ok(Json(rooms))
