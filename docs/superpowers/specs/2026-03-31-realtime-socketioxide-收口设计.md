@@ -117,6 +117,7 @@
 
 - `SubscribeRoomStreamCommand` 删除 `session_id`
 - `SendTextMessageCommand` 删除 `session_id`
+- `contract` 中的这两个类型从本轮开始只代表 realtime wire payload，不再直接充当 `application` 输入
 - payload `MessageCreated`、`RoomStreamSubscribed`、`CommandRejected` 保持结构不变
 - realtime 发消息后的 wire 事件名显式固定为两种：
   - `message_accepted`：只发给 sender，payload 复用 `MessageCreated`
@@ -147,6 +148,12 @@
 - 成员资格校验
 - 消息成立真相
 - 持久化后的消息事件生成
+
+输入模型固定为：
+
+- adapter 先从 socket extension 取出已认证 `session_id`
+- 再把 `session_id` 与 wire payload 组装成 app-only 输入结构
+- `application` 继续接收显式 `session_id`，但不再直接依赖客户端 wire payload 类型
 
 本轮不把业务判断下放回 `rt` adapter。
 
@@ -252,7 +259,7 @@
 证明：
 
 - 现有 `subscribe_room_stream` / `send_text_message` 业务语义不变
-- 用例仍以显式 `session_id` 作为应用输入参数
+- 用例仍以显式 `session_id` 作为 app-only 输入的一部分
 
 说明：
 
