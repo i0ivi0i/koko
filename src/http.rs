@@ -15,11 +15,12 @@ use uuid::Uuid;
 use crate::{
     app::{
         AdminQueryContext, AppError, bootstrap_anonymous_session, get_admin_overview,
-        join_or_create_room_by_code, list_admin_rooms, load_room_snapshot,
+        join_or_create_room_by_code, list_admin_rooms, list_joined_rooms, load_room_snapshot,
+        search_rooms_by_code,
     },
     contract::{
-        AdminOverview, AdminRoomSummary, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
-        RoomSnapshot,
+        AdminOverview, AdminRoomSummary, JoinedRoomSummary, JoinOrCreateRoomByCodeCommand,
+        LoadRoomSnapshotQuery, RoomSearchResult, RoomSnapshot,
     },
     store::PgStore,
     support,
@@ -39,9 +40,16 @@ struct JoinRoomRequest {
     room_code: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct SearchRoomsParams {
+    query: String,
+}
+
 pub fn app_router(store: PgStore, admin_token: String) -> Router {
     Router::new()
         .route("/api/session/bootstrap", post(bootstrap_session))
+        .route("/api/rooms", get(joined_rooms))
+        .route("/api/rooms/search", get(search_rooms))
         .route("/api/rooms/join", post(join_room))
         .route("/api/rooms/{room_id}/snapshot", get(room_snapshot))
         .route("/api/admin/overview", get(admin_overview))
@@ -95,6 +103,38 @@ async fn join_room(
     .await
     .map_err(map_http_error)?;
     Ok(Json(snapshot))
+}
+
+async fn joined_rooms(
+    State(state): State<HttpState>,
+    jar: CookieJar,
+) -> Result<Json<Vec<JoinedRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
+    let session_id = resolve_session_id(&jar)?;
+    let rooms = list_joined_rooms(&state.store, &state.store, crate::app::ListJoinedRoomsQuery {
+        session_id,
+    })
+    .await
+    .map_err(map_http_error)?;
+    Ok(Json(rooms))
+}
+
+async fn search_rooms(
+    State(state): State<HttpState>,
+    jar: CookieJar,
+    axum::extract::Query(params): axum::extract::Query<SearchRoomsParams>,
+) -> Result<Json<Vec<RoomSearchResult>>, (StatusCode, Json<ErrorPayload>)> {
+    let session_id = resolve_session_id(&jar)?;
+    let rooms = search_rooms_by_code(
+        &state.store,
+        &state.store,
+        crate::app::SearchRoomsByCodeQuery {
+            session_id,
+            input: params.query,
+        },
+    )
+    .await
+    .map_err(map_http_error)?;
+    Ok(Json(rooms))
 }
 
 async fn room_snapshot(

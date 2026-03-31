@@ -4,10 +4,11 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminOverviewPort, AdminRoomsPort, AppError, MembershipPort, MessageStore, RoomEntryPort,
-        RoomEntryTx, RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
+        AdminOverviewPort, AdminRoomsPort, AppError, JoinedRoomsPort, MembershipPort,
+        MessageStore, RoomEntryPort, RoomEntryTx, RoomSearchPort, RoomSnapshotData,
+        RoomSnapshotPort, SessionBootstrapPort, SessionPort,
     },
-    contract::{AdminOverview, AdminRoomSummary},
+    contract::{AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult},
     domain::{
         AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord,
         NewRoomCodeRecord, NewRoomRecord, RoomCode, SessionStatus,
@@ -120,6 +121,126 @@ impl MembershipPort for PgStore {
         .fetch_one(&self.pool)
         .await
         .map_err(map_sqlx_error)
+    }
+}
+
+impl JoinedRoomsPort for PgStore {
+    async fn list_joined_rooms(&self, session_id: Uuid) -> Result<Vec<JoinedRoomSummary>, AppError> {
+        let rows = sqlx::query(
+            "SELECT
+                 rooms.room_id,
+                 room_codes.normalized_code AS room_code,
+                 room_codes.normalized_code AS display_title,
+                 COALESCE(message_stats.latest_preview, '') AS latest_preview,
+                 message_stats.latest_message_at
+             FROM members
+             JOIN rooms ON rooms.room_id = members.room_id
+             JOIN room_codes ON room_codes.room_id = rooms.room_id
+             LEFT JOIN LATERAL (
+                 SELECT
+                     messages.created_at AS latest_message_at,
+                     messages.body AS latest_preview
+                 FROM messages
+                 WHERE messages.room_id = rooms.room_id
+                   AND messages.status = 'active'
+                 ORDER BY messages.created_at DESC, messages.message_id DESC
+                 LIMIT 1
+             ) AS message_stats ON TRUE
+             WHERE members.session_id = $1
+               AND members.status = 'active'
+               AND rooms.status = 'active'
+             ORDER BY message_stats.latest_message_at DESC NULLS LAST, room_codes.normalized_code ASC",
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| JoinedRoomSummary {
+                room_id: row.get("room_id"),
+                room_code: row.get("room_code"),
+                display_title: row.get("display_title"),
+                latest_preview: row.get("latest_preview"),
+                latest_message_at: row.get("latest_message_at"),
+            })
+            .collect())
+    }
+}
+
+impl RoomSearchPort for PgStore {
+    async fn search_rooms_by_code(
+        &self,
+        session_id: Uuid,
+        input: &str,
+    ) -> Result<Vec<RoomSearchResult>, AppError> {
+        let normalized_prefix = input.trim().to_ascii_uppercase();
+        if normalized_prefix.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let rows = sqlx::query(
+            "SELECT
+                 rooms.room_id,
+                 room_codes.normalized_code AS room_code,
+                 room_codes.normalized_code AS display_title,
+                 COALESCE(message_stats.latest_preview, '') AS latest_preview,
+                 message_stats.latest_message_at,
+                 EXISTS(
+                     SELECT 1
+                     FROM members
+                     WHERE members.room_id = rooms.room_id
+                       AND members.session_id = $1
+                       AND members.status = 'active'
+                 ) AS is_joined
+             FROM rooms
+             JOIN room_codes ON room_codes.room_id = rooms.room_id
+             LEFT JOIN LATERAL (
+                 SELECT
+                     messages.created_at AS latest_message_at,
+                     messages.body AS latest_preview
+                 FROM messages
+                 WHERE messages.room_id = rooms.room_id
+                   AND messages.status = 'active'
+                 ORDER BY messages.created_at DESC, messages.message_id DESC
+                 LIMIT 1
+             ) AS message_stats ON TRUE
+             WHERE rooms.status = 'active'
+               AND room_codes.normalized_code LIKE $2
+             ORDER BY
+                 CASE WHEN room_codes.normalized_code = $3 THEN 0 ELSE 1 END,
+                 CASE
+                     WHEN EXISTS(
+                         SELECT 1
+                         FROM members
+                         WHERE members.room_id = rooms.room_id
+                           AND members.session_id = $1
+                           AND members.status = 'active'
+                     ) THEN 0
+                     ELSE 1
+                 END,
+                 message_stats.latest_message_at DESC NULLS LAST,
+                 room_codes.normalized_code ASC",
+        )
+        .bind(session_id)
+        .bind(format!("{normalized_prefix}%"))
+        .bind(&normalized_prefix)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| RoomSearchResult {
+                room_id: row.get("room_id"),
+                room_code: row.get("room_code"),
+                display_title: row.get("display_title"),
+                latest_preview: row.get("latest_preview"),
+                latest_message_at: row.get("latest_message_at"),
+                is_joined: row.get("is_joined"),
+            })
+            .collect())
     }
 }
 

@@ -9,9 +9,10 @@ use axum::{
 };
 use http_support::HttpHarness;
 use koko::{
-    app::AppError,
+    app::{AppError, join_or_create_room_by_code},
     chat::{ChatState, ConnectionState, DeliveryState},
-    contract::{BootstrapSession, MessageCreated, RoomSnapshot},
+    contract::{BootstrapSession, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot},
+    support::{SystemClock, SystemIdGenerator},
 };
 use std::env;
 use tower::ServiceExt;
@@ -135,6 +136,98 @@ async fn snapshot_endpoint_returns_joined_room_history() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(snapshot.room_id, joined.room_id);
     assert_eq!(snapshot.room_code, "B1234");
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn joined_rooms_endpoint_requires_bootstrapped_session() {
+    let harness = HttpHarness::new("joined_rooms_endpoint_requires_bootstrapped_session").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(Request::builder().uri("/api/rooms").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn joined_rooms_endpoint_returns_current_memberships() {
+    let harness = HttpHarness::new("joined_rooms_endpoint_returns_current_memberships").await;
+
+    let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let first = join_room(&harness, &cookie, "a1234").await;
+    let second = join_room(&harness, &cookie, "b1234").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/rooms")
+                .header(COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let rooms: Vec<JoinedRoomSummary> =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(rooms.len(), 2);
+    assert_eq!(rooms[0].room_id, first.room_id);
+    assert_eq!(rooms[1].room_id, second.room_id);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn room_search_endpoint_returns_case_insensitive_matches() {
+    let harness = HttpHarness::new("room_search_endpoint_returns_case_insensitive_matches").await;
+
+    let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let joined = join_room(&harness, &cookie, "a1234").await;
+    let other_session_id = Uuid::now_v7();
+    seed_active_session(&harness, other_session_id).await;
+    let discoverable = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
+        koko::contract::JoinOrCreateRoomByCodeCommand {
+            room_code: "A1299".to_string(),
+            session_id: other_session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/rooms/search?query=a12")
+                .header(COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let rooms: Vec<RoomSearchResult> =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(rooms.len(), 2);
+    assert_eq!(rooms[0].room_id, joined.room_id);
+    assert!(rooms[0].is_joined);
+    assert_eq!(rooms[1].room_id, discoverable.room_id);
+    assert!(!rooms[1].is_joined);
     harness.cleanup().await;
 }
 
@@ -351,4 +444,18 @@ async fn join_room(harness: &HttpHarness, cookie: &str, room_code: &str) -> Room
     assert_eq!(response.status(), StatusCode::OK);
 
     serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+async fn seed_active_session(harness: &HttpHarness, session_id: Uuid) {
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "INSERT INTO anonymous_sessions (session_id, issued_at, last_seen_at, status)
+         VALUES ($1, $2, $3, 'active')",
+    )
+    .bind(session_id)
+    .bind(now)
+    .bind(now)
+    .execute(harness.store.pool())
+    .await
+    .unwrap();
 }

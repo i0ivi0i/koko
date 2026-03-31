@@ -1105,6 +1105,142 @@ async fn repeated_join_does_not_duplicate_member_in_same_room() {
 }
 
 #[tokio::test]
+async fn pg_store_lists_joined_rooms_with_latest_preview() {
+    let harness = PgHarness::new("pg_store_lists_joined_rooms_with_latest_preview").await;
+    let session_id = Uuid::now_v7();
+    let first_room_code = "A1234".to_string();
+    let second_room_code = "B1234".to_string();
+    harness.seed_active_session(session_id).await;
+
+    let first_joined = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: first_room_code.clone(),
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+    let second_joined = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: second_room_code.clone(),
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let _ = send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FakeIdGenerator::new(Uuid::from_u128(2001)),
+        &FakeClock::new(minute_time(1)),
+        SendTextMessageInput {
+            room_id: second_joined.room_id,
+            session_id,
+            body: "older preview".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+    let _ = send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FakeIdGenerator::new(Uuid::from_u128(2002)),
+        &FakeClock::new(minute_time(2)),
+        SendTextMessageInput {
+            room_id: first_joined.room_id,
+            session_id,
+            body: "newer preview".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let rooms = list_joined_rooms(
+        &harness.store,
+        &harness.store,
+        ListJoinedRoomsQuery { session_id },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(rooms.len(), 2);
+    assert_eq!(rooms[0].room_id, first_joined.room_id);
+    assert_eq!(rooms[0].room_code, first_room_code);
+    assert_eq!(rooms[0].latest_preview, "newer preview");
+    assert_eq!(rooms[1].room_id, second_joined.room_id);
+    assert_eq!(rooms[1].room_code, second_room_code);
+    assert_eq!(rooms[1].latest_preview, "older preview");
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn pg_store_searches_rooms_by_normalized_code_prefix() {
+    let harness = PgHarness::new("pg_store_searches_rooms_by_normalized_code_prefix").await;
+    let joined_session_id = Uuid::now_v7();
+    let other_session_id = Uuid::now_v7();
+    harness.seed_active_session(joined_session_id).await;
+    harness.seed_active_session(other_session_id).await;
+
+    let joined = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: "A1234".to_string(),
+            session_id: joined_session_id,
+        },
+    )
+    .await
+    .unwrap();
+    let discoverable = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
+        JoinOrCreateRoomByCodeCommand {
+            room_code: "A1299".to_string(),
+            session_id: other_session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let results = search_rooms_by_code(
+        &harness.store,
+        &harness.store,
+        SearchRoomsByCodeQuery {
+            session_id: joined_session_id,
+            input: "a12".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].room_id, joined.room_id);
+    assert_eq!(results[0].room_code, "A1234");
+    assert!(results[0].is_joined);
+    assert_eq!(results[1].room_id, discoverable.room_id);
+    assert_eq!(results[1].room_code, "A1299");
+    assert!(!results[1].is_joined);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
 async fn send_text_message_rejects_non_member_sender_via_database_truth() {
     let harness =
         PgHarness::new("send_text_message_rejects_non_member_sender_via_database_truth").await;
