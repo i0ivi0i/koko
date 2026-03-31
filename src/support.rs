@@ -9,7 +9,7 @@ use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 use crate::{
-    app::{AppError, Clock, IdGenerator},
+    app::{AdminAccessPort, AdminQueryContext, AppError, Clock, IdGenerator},
     contract::AppErrorCode,
 };
 
@@ -66,12 +66,26 @@ pub fn app_error_code(error: &AppError) -> &'static str {
         AppErrorCode::MembershipRequired => "membership_required",
         AppErrorCode::InvalidRoomCode => "invalid_room_code",
         AppErrorCode::InvalidMessageBody => "invalid_message_body",
+        AppErrorCode::InvalidAdminToken => "invalid_admin_token",
         AppErrorCode::Internal => "internal",
     }
 }
 
-pub fn admin_token_error_code() -> &'static str {
-    "invalid_admin_token"
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaticAdminAccess {
+    expected_token: String,
+}
+
+impl StaticAdminAccess {
+    pub fn new(expected_token: String) -> Self {
+        Self { expected_token }
+    }
+}
+
+impl AdminAccessPort for StaticAdminAccess {
+    async fn is_authorized_admin(&self, context: &AdminQueryContext) -> Result<bool, AppError> {
+        Ok(context.admin_token == self.expected_token)
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]

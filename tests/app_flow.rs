@@ -11,10 +11,11 @@ use std::{
 use chrono::{DateTime, TimeZone, Utc};
 use koko::{
     app::{
-        AppError, Clock, IdGenerator, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
-        RoomSnapshotData, RoomSnapshotPort, SessionBootstrapPort, SessionPort,
-        bootstrap_anonymous_session, join_or_create_room_by_code, load_room_snapshot,
-        send_text_message, subscribe_room_stream,
+        AdminAccessPort, AdminOverviewPort, AdminQueryContext, AppError, Clock, IdGenerator,
+        MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx, RoomSnapshotData,
+        RoomSnapshotPort, SessionBootstrapPort, SessionPort, bootstrap_anonymous_session,
+        get_admin_overview, join_or_create_room_by_code, load_room_snapshot, send_text_message,
+        subscribe_room_stream,
     },
     contract::{
         AppErrorCode, AppEvent, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
@@ -54,6 +55,19 @@ fn app_event_serializes_to_tagged_wire_format() {
         json,
         "{\"type\":\"message_created\",\"payload\":{\"message_id\":\"00000000-0000-0000-0000-000000000001\",\"room_id\":\"00000000-0000-0000-0000-000000000002\",\"session_id\":\"00000000-0000-0000-0000-000000000003\",\"body\":\"hello\",\"created_at\":\"2026-03-30T12:00:00Z\",\"client_message_id\":\"00000000-0000-0000-0000-000000000004\"}}"
     );
+}
+
+#[tokio::test]
+async fn admin_overview_requires_authorized_admin_context() {
+    let error = get_admin_overview(
+        &FakeAdminAccessPort::deny(),
+        &FakeAdminOverviewPort::default(),
+        AdminQueryContext::new("wrong-token".to_string()),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::InvalidAdminToken);
 }
 
 #[tokio::test]
@@ -1051,6 +1065,37 @@ impl FakeSessionPort {
 impl SessionPort for FakeSessionPort {
     async fn is_active_session(&self, _session_id: Uuid) -> Result<bool, AppError> {
         Ok(self.allowed)
+    }
+}
+
+#[derive(Debug)]
+struct FakeAdminAccessPort {
+    authorized: bool,
+}
+
+impl FakeAdminAccessPort {
+    fn deny() -> Self {
+        Self { authorized: false }
+    }
+}
+
+impl AdminAccessPort for FakeAdminAccessPort {
+    async fn is_authorized_admin(
+        &self,
+        _context: &AdminQueryContext,
+    ) -> Result<bool, AppError> {
+        Ok(self.authorized)
+    }
+}
+
+#[derive(Debug, Default)]
+struct FakeAdminOverviewPort;
+
+impl AdminOverviewPort for FakeAdminOverviewPort {
+    async fn get_admin_overview(
+        &self,
+    ) -> Result<koko::contract::AdminOverview, AppError> {
+        panic!("admin overview port should not be called when admin access is denied");
     }
 }
 

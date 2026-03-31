@@ -14,8 +14,9 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AppError, bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
-        list_admin_rooms, load_admin_panel, load_room_snapshot,
+        AdminAccessPort, AdminQueryContext, AppError, bootstrap_anonymous_session,
+        get_admin_overview, join_or_create_room_by_code, list_admin_rooms, load_admin_panel,
+        load_room_snapshot,
     },
     contract::{
         AdminOverview, AdminPanelData, AdminRoomSummary, JoinOrCreateRoomByCodeCommand,
@@ -31,7 +32,7 @@ pub struct Module;
 #[derive(Clone)]
 struct HttpState {
     store: PgStore,
-    admin_token: String,
+    admin_access: support::StaticAdminAccess,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,7 +48,10 @@ pub fn app_router(store: PgStore, admin_token: String) -> Router {
         .route("/api/admin/overview", get(admin_overview))
         .route("/api/admin/panel", get(admin_panel))
         .route("/api/admin/rooms", get(admin_rooms))
-        .with_state(HttpState { store, admin_token })
+        .with_state(HttpState {
+            store,
+            admin_access: support::StaticAdminAccess::new(admin_token),
+        })
 }
 
 async fn bootstrap_session(
@@ -117,8 +121,8 @@ async fn admin_overview(
     State(state): State<HttpState>,
     headers: HeaderMap,
 ) -> Result<Json<AdminOverview>, (StatusCode, Json<ErrorPayload>)> {
-    require_admin_token(&state.admin_token, &headers)?;
-    let overview = get_admin_overview(&state.store)
+    let context = admin_query_context(&headers)?;
+    let overview = get_admin_overview(&state.admin_access, &state.store, context)
         .await
         .map_err(map_http_error)?;
     Ok(Json(overview))
@@ -128,8 +132,8 @@ async fn admin_rooms(
     State(state): State<HttpState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AdminRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
-    require_admin_token(&state.admin_token, &headers)?;
-    let rooms = list_admin_rooms(&state.store)
+    let context = admin_query_context(&headers)?;
+    let rooms = list_admin_rooms(&state.admin_access, &state.store, context)
         .await
         .map_err(map_http_error)?;
     Ok(Json(rooms))
@@ -139,7 +143,15 @@ async fn admin_panel(
     State(state): State<HttpState>,
     headers: HeaderMap,
 ) -> Result<Json<AdminPanelData>, (StatusCode, Json<ErrorPayload>)> {
-    require_admin_token(&state.admin_token, &headers)?;
+    let context = admin_query_context(&headers)?;
+    if !state
+        .admin_access
+        .is_authorized_admin(&context)
+        .await
+        .map_err(map_http_error)?
+    {
+        return Err(map_http_error(AppError::AdminAccessDenied));
+    }
     let panel = load_admin_panel(&state.store)
         .await
         .map_err(map_http_error)?;
@@ -151,24 +163,15 @@ struct ErrorPayload {
     code: String,
 }
 
-fn require_admin_token(
-    expected_token: &str,
+fn admin_query_context(
     headers: &HeaderMap,
-) -> Result<(), (StatusCode, Json<ErrorPayload>)> {
-    let provided = headers
+) -> Result<AdminQueryContext, (StatusCode, Json<ErrorPayload>)> {
+    let token = headers
         .get("x-admin-token")
-        .and_then(|value| value.to_str().ok());
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(invalid_admin_token_error)?;
 
-    if provided == Some(expected_token) {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorPayload {
-                code: support::admin_token_error_code().to_string(),
-            }),
-        ))
-    }
+    Ok(AdminQueryContext::new(token.to_string()))
 }
 
 fn resolve_session_id(jar: &CookieJar) -> Result<Uuid, (StatusCode, Json<ErrorPayload>)> {
@@ -189,10 +192,15 @@ fn invalid_session_error() -> (StatusCode, Json<ErrorPayload>) {
     )
 }
 
+fn invalid_admin_token_error() -> (StatusCode, Json<ErrorPayload>) {
+    map_http_error(AppError::AdminAccessDenied)
+}
+
 fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {
     let status = match error {
         AppError::SessionNotActive { .. } => StatusCode::UNAUTHORIZED,
         AppError::NotRoomMember { .. } => StatusCode::FORBIDDEN,
+        AppError::AdminAccessDenied => StatusCode::UNAUTHORIZED,
         AppError::Domain(crate::domain::DomainError::InvalidRoomCode)
         | AppError::Domain(crate::domain::DomainError::EmptyMessageBody) => StatusCode::BAD_REQUEST,
         AppError::DependencyFailure => StatusCode::INTERNAL_SERVER_ERROR,

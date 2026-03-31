@@ -23,6 +23,8 @@ pub enum AppError {
     SessionNotActive { session_id: Uuid },
     #[error("session {session_id} is not a member of room {room_id}")]
     NotRoomMember { room_id: Uuid, session_id: Uuid },
+    #[error("admin access denied")]
+    AdminAccessDenied,
     #[error("dependency failure")]
     DependencyFailure,
     #[error(transparent)]
@@ -34,6 +36,7 @@ impl AppError {
         match self {
             Self::SessionNotActive { .. } => AppErrorCode::InvalidSession,
             Self::NotRoomMember { .. } => AppErrorCode::MembershipRequired,
+            Self::AdminAccessDenied => AppErrorCode::InvalidAdminToken,
             Self::DependencyFailure => AppErrorCode::Internal,
             Self::Domain(DomainError::InvalidRoomCode) => AppErrorCode::InvalidRoomCode,
             Self::Domain(DomainError::EmptyMessageBody) => AppErrorCode::InvalidMessageBody,
@@ -42,10 +45,28 @@ impl AppError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdminQueryContext {
+    pub admin_token: String,
+}
+
+impl AdminQueryContext {
+    pub fn new(admin_token: String) -> Self {
+        Self { admin_token }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomSnapshotData {
     pub room_id: Uuid,
     pub room_code: RoomCode,
     pub messages: Vec<Message>,
+}
+
+pub trait AdminAccessPort {
+    fn is_authorized_admin(
+        &self,
+        context: &AdminQueryContext,
+    ) -> impl Future<Output = Result<bool, AppError>> + Send;
 }
 
 pub trait SessionPort {
@@ -205,19 +226,35 @@ where
     })
 }
 
-pub async fn get_admin_overview<P>(admin_overview_port: &P) -> Result<AdminOverview, AppError>
+pub async fn get_admin_overview<A, P>(
+    access_port: &A,
+    admin_overview_port: &P,
+    context: AdminQueryContext,
+) -> Result<AdminOverview, AppError>
 where
+    A: AdminAccessPort,
     P: AdminOverviewPort,
 {
+    if !access_port.is_authorized_admin(&context).await? {
+        return Err(AppError::AdminAccessDenied);
+    }
+
     admin_overview_port.get_admin_overview().await
 }
 
-pub async fn list_admin_rooms<P>(
+pub async fn list_admin_rooms<A, P>(
+    access_port: &A,
     admin_rooms_port: &P,
+    context: AdminQueryContext,
 ) -> Result<Vec<AdminRoomSummary>, AppError>
 where
+    A: AdminAccessPort,
     P: AdminRoomsPort,
 {
+    if !access_port.is_authorized_admin(&context).await? {
+        return Err(AppError::AdminAccessDenied);
+    }
+
     admin_rooms_port.list_admin_rooms().await
 }
 

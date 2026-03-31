@@ -9,6 +9,7 @@ pub enum AppErrorCode {
     MembershipRequired,
     InvalidRoomCode,
     InvalidMessageBody,
+    InvalidAdminToken,
     Internal,
 }
 
