@@ -20,6 +20,12 @@
 3. 删除 adapter 内没有明确边界价值的 `CommandPlan + RealtimeEffect`
 4. 补齐能证明新边界成立的测试
 
+附加版本目标：
+
+- 本轮只对 realtime 热点簇评估并优先采用 `socketioxide` 的已核实最新稳定版，而不是把“尽量用最新版”扩成全仓依赖翻新
+- 本次设计将 `socketioxide` 的计划目标版本固定为 `0.18.2`
+- 这个版本目标来自 2026-03-31 对 docs.rs 的核实；若真正开始实施前要改成更高版本，必须先重新核实并更新本 spec，不允许在实现阶段临时漂移
+
 完成后，仓库应满足：
 
 - realtime command 不再携带 `session_id`
@@ -40,6 +46,8 @@
 - 引入新的 runtime、语言或前端工具链
 
 如果后续要让 Web 前台真正接通 realtime，那是下一轮功能实现，不混在本轮治理修复里。
+
+本轮也不做“为了追新而全仓依赖翻新”；版本升级范围只限 `socketioxide` 及其为完成本轮收口所必需的最小兼容调整。
 
 ---
 
@@ -146,6 +154,7 @@
 
 装配原则：
 
+- 本轮实现前先优先评估 `socketioxide` 从 `0.17` 升级到本 spec 已钉死的 `0.18.2`；若升级可行，按 `0.18.2` 的稳定 API 落实现
 - 本轮只依赖 `socketioxide` 现有 connect middleware、`SocketRef`、extension 和 room/broadcast operator
 - 本轮不把实现建立在 `with_state(...)` 或新的额外 feature flag 之上
 - 不新增 repo 私有 realtime manager / bridge / facade
@@ -269,12 +278,13 @@
 
 ## 10. 风险与控制
 
-### 风险 1：`socketioxide 0.17` 与最新文档 API 有差异
+### 风险 1：仓库当前 `socketioxide 0.17` 与目标版本 `0.18.2` API 有差异
 
 控制：
 
-- 实施前先按当前锁定版本核实际 API
-- 若确需最小 feature 调整，只做与本轮边界直接相关的补充
+- 实施前先核 `socketioxide 0.18.2` 的真实 API 与迁移成本
+- 若升级到 `0.18.2` 可行，优先直接升级后再实施
+- 若升级被阻断，必须在实现计划里记录阻断 API、降级理由和保留 `0.17` 的边界影响，且升级范围仍冻结在 realtime 热点簇内，不能顺手扩成其它依赖升级
 
 ### 风险 2：测试改造后出现大面积脆弱性
 
@@ -301,8 +311,9 @@
 3. `src/rt.rs` 中不再存在 `CommandPlan` 和 `RealtimeEffect`
 4. handler 直接使用 `socketioxide` 原语完成 join / emit / broadcast
 5. sender 只收到 `message_accepted`，不会因广播路径再收到 `message_created`
-6. `cargo test` 全绿
-7. 审查记录可被更新为“已治理完成或已实质缓解”
+6. 已对 `socketioxide` 最新稳定版升级作出明确结论：要么完成升级，要么留下有证据的阻断说明
+7. `cargo test` 全绿
+8. 审查记录可被更新为“已治理完成或已实质缓解”
 
 ---
 
