@@ -109,7 +109,10 @@
 
 - `SubscribeRoomStreamCommand` 删除 `session_id`
 - `SendTextMessageCommand` 删除 `session_id`
-- 事件 `MessageCreated`、`RoomStreamSubscribed`、`CommandRejected` 保持业务语义不变
+- payload `MessageCreated`、`RoomStreamSubscribed`、`CommandRejected` 保持结构不变
+- realtime 发消息后的 wire 事件名显式固定为两种：
+  - `message_accepted`：只发给 sender，payload 复用 `MessageCreated`
+  - `message_created`：发给房间内其他成员，payload 复用 `MessageCreated`
 - HTTP 侧使用的 `JoinOrCreateRoomByCodeCommand` 与 `LoadRoomSnapshotQuery` 保持现状，因为它们不是客户端 wire contract，而是应用调用参数
 
 ### 5.2 `rt` adapter 层
@@ -117,10 +120,10 @@
 `rt` adapter 改成两段式：
 
 1. 连接阶段
-   - 从 socket 握手上下文提取现有会话标识
+   - 从 socket 握手请求的 cookie 提取现有会话标识
    - 校验该会话是否有效
    - 将已认证会话身份挂到 socket extension
-   - 未通过认证则拒绝 namespace 连接
+   - 未通过认证则在 connect middleware 阶段直接拒绝 namespace 连接
 
 2. 消息阶段
    - handler 只接收业务 payload
@@ -141,38 +144,35 @@
 
 ### 5.4 `main` 装配层
 
-如果当前 `socketioxide` feature 组合不足以使用所需 extractor / state，将在 `Cargo.toml` 中补足最小 feature 集。
-
 装配原则：
 
-- 优先使用 `socketioxide` 原生 middleware / extension / state 表面
+- 本轮只依赖 `socketioxide` 现有 connect middleware、`SocketRef`、extension 和 room/broadcast operator
+- 本轮不把实现建立在 `with_state(...)` 或新的额外 feature flag 之上
 - 不新增 repo 私有 realtime manager / bridge / facade
 
 ---
 
 ## 6. 身份承接方案
 
-本轮默认方案：
+本轮固定采用唯一方案：
 
-- 使用 socket 握手阶段的连接上下文承接会话，而不是消息 payload
+- 使用 socket 握手请求里的 cookie 承接会话，而不是消息 payload
 - 认证结果写入 socket extension
 - 后续消息 handler 只从 extension 读身份
 
-实现上允许两种等价落点，但只选一种：
+具体约束：
 
-1. 直接从握手请求里的 cookie / 请求上下文提取会话
-2. 使用 connect auth payload 仅承载“连接级会话证明”，并在 middleware 中校验后写入 extension
+- 只使用既有 `koko_session` cookie 作为 realtime 连接身份来源
+- 不使用 connect auth payload 承载 `session_id`
+- 不允许在 message payload 中再出现 `session_id`
+- 未认证或无效会话在 connect middleware 阶段直接拒绝进入 namespace
+- 只有通过 middleware 的 socket 才会注册和执行消息 handler
 
-推荐顺序：
+实现说明：
 
-- 优先用已有 HTTP cookie / 握手上下文
-- 若当前 `socketioxide 0.17` 下 cookie 提取成本明显更高，再退到“连接级 auth payload”方案
-
-无论选哪种，都必须满足：
-
-- 身份只在连接阶段承接一次
-- 业务消息 payload 中不再出现 `session_id`
-- adapter 负责承接身份，客户端只表达业务意图
+- 若 `socketioxide 0.17` 没有现成 cookie extractor，本轮就在 connect middleware 内通过握手请求头做最薄的 cookie 解析
+- 这层解析只承担“读取 `koko_session` 并转成 `Uuid`”的协议职责，不新增 repo 私有认证框架
+- cookie 解析必须支持从多 cookie header 中找到 `koko_session`，并把缺失、格式错误、UUID 非法都视为认证失败，在 connect middleware 阶段拒绝连接
 
 ---
 
@@ -204,8 +204,8 @@
 2. 组装 `SendTextMessageCommand`
 3. 调用 `app::send_text_message`
 4. 持久化成功后返回 `MessageCreated`
-5. sender 收到确认事件
-6. 房间成员收到广播事件
+5. sender 收到 `message_accepted`
+6. 房间内其他成员收到 `message_created`
 
 本轮同时修正一个高风险歧义：
 
@@ -213,8 +213,10 @@
 
 默认设计：
 
-- sender 收到 `message_accepted`
-- 房间广播排除 sender
+- sender 只收到 `message_accepted`
+- 房间内其他成员收到 `message_created`
+- 两种事件复用同一个 `MessageCreated` payload 结构，不新增第二套消息 DTO
+- `message_accepted` 与 `message_created` 使用完全相同的字段集合和语义，不添加 transport-only 字段
 
 理由：
 
@@ -252,7 +254,7 @@
 
 证明：
 
-- 未认证连接无法进入 namespace 或无法通过 handler
+- 未认证连接会在 connect middleware 阶段被拒绝进入 namespace
 - 已认证连接能够把 socket 上下文转成应用层命令
 - 成功订阅后会加入 room 并回送确认
 - 发送消息成功后先确认，再向房间其他成员广播
@@ -295,10 +297,10 @@
 当且仅当以下条件都成立，本轮才算完成：
 
 1. realtime command wire contract 中不再出现 `session_id`
-2. realtime 连接阶段能承接并校验会话身份
+2. realtime 连接阶段能从 `koko_session` cookie 承接并校验会话身份
 3. `src/rt.rs` 中不再存在 `CommandPlan` 和 `RealtimeEffect`
 4. handler 直接使用 `socketioxide` 原语完成 join / emit / broadcast
-5. sender 不会因广播路径再收到重复消息事件
+5. sender 只收到 `message_accepted`，不会因广播路径再收到 `message_created`
 6. `cargo test` 全绿
 7. 审查记录可被更新为“已治理完成或已实质缓解”
 
@@ -320,4 +322,3 @@
 - 业务真相在 `application / domain / store`
 - 连接、房间、广播在 `socketioxide`
 - adapter 只翻译，不私有化成熟生态
-
