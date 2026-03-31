@@ -1,5 +1,6 @@
 target/
 target-spec-review/
+dist/
 
 # This is an application/server repo, not a reusable library crate.
 # Keep the lockfile tracked so builds stay reproducible across Win11 and Linux.

@@ -69,7 +69,7 @@
   - [src/rt.rs](/E:/koko/src/rt.rs) 中原有 `CommandPlan`、`RealtimeEffect`、`plan_*`、`apply_effects` 已删除
   - [src/rt.rs](/E:/koko/src/rt.rs#L141) 订阅成功后直接调用 `app::subscribe_room_stream(...)`，随后用 `socket.join(...)` 与 `room_stream_subscribed`
   - [src/rt.rs](/E:/koko/src/rt.rs#L168) 发送消息成功后直接调用 `app::send_text_message(...)`，随后先对 sender 发 `message_accepted`，再通过 [src/rt.rs](/E:/koko/src/rt.rs#L224) 的 `socket.to(room)` 向同房间其他连接广播 `message_created`
-  - `socketioxide` 依赖已升级到 [Cargo.toml](/E:/koko/Cargo.toml#L39) 的 `0.18.2`，并启用了 `extensions` feature；最小 e2e 客户端现使用 [Cargo.toml](/E:/koko/Cargo.toml#L51) 的 `futures-util` 与 [Cargo.toml](/E:/koko/Cargo.toml#L52) 的 `tokio-tungstenite`
+  - `socketioxide` 依赖已升级到 [Cargo.toml](/E:/koko/Cargo.toml#L39) 的 `0.18.2`，并启用了 `extensions` feature；最小 e2e 客户端现使用 [Cargo.toml](/E:/koko/Cargo.toml#L51) 的 `futures-util` 与 [Cargo.toml](/E:/koko/Cargo.toml#L52) 的 `tokio-tungstenite 0.28`
 - 治理判断: realtime adapter 已收回到“薄 handler + 原生 extractor / room operator”表面，没有继续长成仓库私有小框架
 
 ## 已消除观察项

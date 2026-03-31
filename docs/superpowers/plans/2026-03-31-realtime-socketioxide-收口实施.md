@@ -6,7 +6,7 @@
 
 **Architecture:** `contract` 里的 realtime command 退回成 wire payload，`src/app.rs` 新增 app-only 输入结构继续承接显式 `session_id`。`src/rt.rs` 改成薄 adapter：connect middleware 认证一次并把 `AuthenticatedSession` 写进 socket extension，消息 handler 直接调用应用用例，再直接使用 `socketioxide` 原语做 `join`、sender ack 和排除 sender 的房间广播。
 
-**Tech Stack:** Rust 2024, axum 0.8, socketioxide 0.18.2, tokio, serde, sqlx, uuid, chrono, tracing, futures-util, tokio-tungstenite 0.29（仅测试）
+**Tech Stack:** Rust 2024, axum 0.8, socketioxide 0.18.2, tokio, serde, sqlx, uuid, chrono, tracing, futures-util, tokio-tungstenite 0.28（仅测试）
 
 ---
 
@@ -14,7 +14,7 @@
 
 - `Cargo.toml`
   - 升级 `socketioxide` 到 `0.18.2`
-  - 新增测试用 `futures-util = "0.3.32"` 与 `tokio-tungstenite = "0.29.0"`
+  - 新增测试用 `futures-util = "0.3.32"` 与 `tokio-tungstenite = "0.28.0"`
 - `Cargo.lock`
   - 刷新锁文件，固定 `socketioxide 0.18.2`
 - `src/contract.rs`
@@ -262,7 +262,7 @@ socketioxide = "0.18.2"
 ```toml
 [dev-dependencies]
 futures-util = "0.3.32"
-tokio-tungstenite = "0.29.0"
+tokio-tungstenite = "0.28.0"
 ```
 
 - [ ] **Step 2: 刷新锁文件**

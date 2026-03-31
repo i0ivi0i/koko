@@ -50,5 +50,5 @@ web-sys = { version = "0.3.93", features = ["Window", "Location", "Storage"] }
 
 [dev-dependencies]
 futures-util = "0.3.32"
-tokio-tungstenite = "0.29.0"
+tokio-tungstenite = "0.28.0"
 tower = { version = "0.5.3", features = ["util"] }
