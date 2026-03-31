@@ -6,7 +6,7 @@
 
 **Architecture:** 后端只新增稳定查询与同源装配，不返回 Telegram 专属 UI 结构；前端继续沿 Dioxus + Rust + Wasm 主线，在现有 `chat/web/view` 文件中扩展薄壳状态机和 Telegram iOS 展示层。realtime 继续复用已收口的 `socketioxide 0.18.2` 主通道，聊天页采用“先快照，再订阅，再补一次快照”的缺口闭合策略。
 
-**Tech Stack:** Rust 2024, Dioxus 0.7 (web), Axum 0.8, socketioxide 0.18.2, SQLx 0.8, reqwest 0.12, web-sys, tower-http static fs
+**Tech Stack:** Rust 2024, Dioxus 0.7 (web), Axum 0.8, socketioxide 0.18.2, SQLx 0.8, reqwest 0.13, web-sys, tower-http static fs
 
 ---
 
@@ -517,7 +517,7 @@ Expected:
 Run: `powershell -ExecutionPolicy Bypass -File scripts/dx-bundle-web.ps1`
 
 Note:
-- 2026-04-01 当前链路下，`Rust 1.94 + dx 0.7.4 + wasm-bindgen` 直接跑 `dx bundle --platform web` 会命中 `clone_ref` 失败；这里固定走仓库内脚本，把 Rust 官方 `nightly + -Zbuild-std + target-cpu=mvp` workaround 收口成单一入口。
+- 2026-04-01 当前链路下，直接跑 `dx bundle --platform web` 仍会命中 `clone_ref` 失败；这里固定走仓库内脚本，由脚本按 `Cargo.lock` 对齐当前 `dioxus` 版本，并把 Rust `1.94.1 + nightly + -Zbuild-std + target-cpu=mvp` workaround 收口成单一入口。
 
 Expected:
 - 成功产出可部署的 web 静态资源到 `Dioxus.toml` 的 `[application].out_dir`

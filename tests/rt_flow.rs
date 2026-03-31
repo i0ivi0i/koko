@@ -6,7 +6,7 @@ use std::{
 
 use axum::{
     Router,
-    http::{HeaderMap, HeaderValue, Request, header::COOKIE},
+    http::{HeaderMap, HeaderValue, header::COOKIE},
     routing::get,
 };
 use chrono::{TimeZone, Utc};
@@ -25,6 +25,7 @@ use koko::{
         send_text_message_input, subscribe_room_stream_input,
     },
 };
+use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -34,7 +35,7 @@ use tokio::{
 };
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
-    tungstenite::{self, Message as WsMessage},
+    tungstenite::{self, Message as WsMessage, client::IntoClientRequest},
 };
 use uuid::Uuid;
 
@@ -120,7 +121,7 @@ async fn sender_receives_message_accepted_but_not_message_created() {
     let mut sender_message_accepted = mpsc::unbounded_channel();
     let mut sender_message_created = mpsc::unbounded_channel();
     let mut sender_connected = mpsc::unbounded_channel();
-    let sender = connect_client(
+    let mut sender = connect_client(
         harness.base_url(),
         sender_session_id,
         ClientChannels::new(
@@ -137,7 +138,7 @@ async fn sender_receives_message_accepted_but_not_message_created() {
     let mut receiver_message_accepted = mpsc::unbounded_channel();
     let mut receiver_message_created = mpsc::unbounded_channel();
     let mut receiver_connected = mpsc::unbounded_channel();
-    let receiver = connect_client(
+    let mut receiver = connect_client(
         harness.base_url(),
         receiver_session_id,
         ClientChannels::new(
@@ -348,7 +349,8 @@ impl Clock for FixedClock {
     }
 }
 
-type CallbackFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+type ClientSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type ClientWriter = SplitSink<ClientSocket, WsMessage>;
 
 #[derive(Debug)]
 struct ClientChannels {
@@ -426,11 +428,46 @@ impl RealtimeHarness {
     }
 }
 
+struct Client {
+    writer: ClientWriter,
+    read_task: JoinHandle<()>,
+}
+
+impl Client {
+    async fn emit(&mut self, event: &str, payload: Value) -> Result<(), tungstenite::Error> {
+        self.writer
+            .send(WsMessage::Text(socket_io_event(event, payload).into()))
+            .await
+    }
+
+    async fn disconnect(mut self) -> Result<(), tungstenite::Error> {
+        self.writer.send(WsMessage::Text("41".into())).await?;
+        self.writer.close().await?;
+        self.read_task.await.unwrap();
+        Ok(())
+    }
+}
+
+async fn connect_error_text(base_url: &str) -> String {
+    let request = socket_io_request(base_url, None);
+    let (mut socket, _) = connect_async(request).await.unwrap();
+    expect_engine_open(&mut socket).await.unwrap();
+    socket.send(WsMessage::Text("40".into())).await.unwrap();
+
+    loop {
+        let frame = next_text_frame(&mut socket).await.unwrap();
+        if frame.starts_with("44") || frame.contains("not active") {
+            let _ = socket.send(WsMessage::Close(None)).await;
+            return frame;
+        }
+    }
+}
+
 async fn connect_client(
     base_url: &str,
     session_id: Uuid,
     channels: ClientChannels,
-) -> Result<Client, rust_socketio::Error> {
+) -> Result<Client, tungstenite::Error> {
     let ClientChannels {
         connected,
         room_stream_subscribed,
@@ -438,36 +475,46 @@ async fn connect_client(
         message_created,
     } = channels;
 
-    ClientBuilder::new(base_url)
-        .namespace("/")
-        .reconnect(false)
-        .opening_header("cookie", format!("koko_session={session_id}"))
-        .on("open", move |_, _| {
-            let tx = connected.clone();
-            Box::pin(async move {
-                let _ = tx.send(());
-            }) as CallbackFuture
-        })
-        .on("room_stream_subscribed", move |payload, _| {
-            let tx = room_stream_subscribed.clone();
-            Box::pin(async move {
-                let _ = tx.send(deserialize_payload(payload));
-            }) as CallbackFuture
-        })
-        .on("message_accepted", move |payload, _| {
-            let tx = message_accepted.clone();
-            Box::pin(async move {
-                let _ = tx.send(deserialize_payload(payload));
-            }) as CallbackFuture
-        })
-        .on("message_created", move |payload, _| {
-            let tx = message_created.clone();
-            Box::pin(async move {
-                let _ = tx.send(deserialize_payload(payload));
-            }) as CallbackFuture
-        })
-        .connect()
-        .await
+    let request = socket_io_request(base_url, Some(session_id));
+    let (mut socket, _) = connect_async(request).await?;
+    expect_engine_open(&mut socket).await?;
+    socket.send(WsMessage::Text("40".into())).await?;
+
+    loop {
+        let frame = next_text_frame(&mut socket).await?;
+        if frame.starts_with("40") {
+            let _ = connected.send(());
+            break;
+        }
+    }
+
+    let (writer, mut reader) = socket.split();
+    let read_task = tokio::spawn(async move {
+        while let Some(message) = reader.next().await {
+            let Ok(WsMessage::Text(frame)) = message else {
+                continue;
+            };
+
+            let Some((event, payload)) = parse_socket_io_event(frame.as_ref()) else {
+                continue;
+            };
+
+            match event.as_str() {
+                "room_stream_subscribed" => {
+                    let _ = room_stream_subscribed.send(deserialize_payload(payload));
+                }
+                "message_accepted" => {
+                    let _ = message_accepted.send(deserialize_payload(payload));
+                }
+                "message_created" => {
+                    let _ = message_created.send(deserialize_payload(payload));
+                }
+                _ => {}
+            }
+        }
+    });
+
+    Ok(Client { writer, read_task })
 }
 
 async fn next_event<T>(label: &'static str, rx: &mut mpsc::UnboundedReceiver<T>) -> T {
@@ -477,28 +524,69 @@ async fn next_event<T>(label: &'static str, rx: &mut mpsc::UnboundedReceiver<T>)
         .unwrap_or_else(|| panic!("{label} channel closed"))
 }
 
-fn deserialize_payload<T>(payload: Payload) -> T
+fn deserialize_payload<T>(payload: Value) -> T
 where
     T: DeserializeOwned,
 {
-    match payload {
-        Payload::Text(values, _) => serde_json::from_value(first_payload_value(values)).unwrap(),
-        Payload::Binary(_, _) => panic!("unexpected binary payload"),
-        _ => panic!("unexpected payload variant"),
+    serde_json::from_value(payload).unwrap()
+}
+
+fn socket_io_request(
+    base_url: &str,
+    session_id: Option<Uuid>,
+) -> tungstenite::handshake::client::Request {
+    let ws_url = base_url.replacen("http://", "ws://", 1) + "/socket.io/?EIO=4&transport=websocket";
+    let mut request = ws_url.into_client_request().unwrap();
+    if let Some(session_id) = session_id {
+        request.headers_mut().insert(
+            COOKIE,
+            HeaderValue::from_str(&format!("koko_session={session_id}")).unwrap(),
+        );
+    }
+
+    request
+}
+
+async fn expect_engine_open(socket: &mut ClientSocket) -> Result<(), tungstenite::Error> {
+    let frame = next_text_frame(socket).await?;
+    assert!(frame.starts_with('0'), "expected engine open frame, got {frame}");
+    Ok(())
+}
+
+async fn next_text_frame(socket: &mut ClientSocket) -> Result<String, tungstenite::Error> {
+    loop {
+        match socket.next().await {
+            Some(Ok(WsMessage::Text(text))) => return Ok(text.to_string()),
+            Some(Ok(WsMessage::Ping(payload))) => {
+                socket.send(WsMessage::Pong(payload)).await?;
+            }
+            Some(Ok(WsMessage::Close(_))) => return Ok(String::new()),
+            Some(Ok(_)) => continue,
+            Some(Err(error)) => return Err(error),
+            None => return Ok(String::new()),
+        }
     }
 }
 
-fn payload_text(payload: Payload) -> String {
-    match payload {
-        Payload::Text(values, _) => serde_json::from_value(first_payload_value(values)).unwrap(),
-        Payload::Binary(_, _) => panic!("unexpected binary payload"),
-        _ => panic!("unexpected payload variant"),
-    }
+fn socket_io_event(event: &str, payload: Value) -> String {
+    format!("42{}", json!([event, payload]))
 }
 
-fn first_payload_value(mut values: Vec<Value>) -> Value {
-    assert_eq!(values.len(), 1, "expected a single payload argument");
-    values.pop().unwrap()
+fn parse_socket_io_event(frame: &str) -> Option<(String, Value)> {
+    let payload = frame.strip_prefix("42")?;
+    let Value::Array(mut values) = serde_json::from_str::<Value>(payload).ok()? else {
+        return None;
+    };
+    if values.len() != 2 {
+        return None;
+    }
+
+    let payload = values.pop()?;
+    let Value::String(event) = values.pop()? else {
+        return None;
+    };
+
+    Some((event, payload))
 }
 
 fn fixed_time() -> chrono::DateTime<Utc> {

@@ -15,7 +15,11 @@ function Invoke-Step {
     )
 
     Write-Host "==> $Label"
+    $global:LASTEXITCODE = 0
     & $Action
+    if ($LASTEXITCODE -ne 0) {
+        throw "Step failed: $Label (exit code $LASTEXITCODE)"
+    }
 }
 
 Push-Location $repoRoot

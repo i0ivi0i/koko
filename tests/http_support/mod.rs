@@ -107,7 +107,8 @@ pub fn derive_isolated_test_database_url(
         .strip_suffix("_test")
         .ok_or_else(|| "test database name must end with _test".to_string())?;
     let sanitized_test_name = sanitize_database_component(test_name);
-    let unique_suffix = &uuid::Uuid::now_v7().simple().to_string()[..12];
+    let unique_token = uuid::Uuid::now_v7().simple().to_string();
+    let unique_suffix = &unique_token[20..];
     let candidate_name = format!("{base_prefix}_{sanitized_test_name}_{unique_suffix}_test");
     let database_name = if candidate_name.len() <= 63 {
         candidate_name

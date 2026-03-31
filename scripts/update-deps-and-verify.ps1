@@ -11,7 +11,11 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 try {
     Write-Host "==> cargo update"
+    $global:LASTEXITCODE = 0
     cargo update
+    if ($LASTEXITCODE -ne 0) {
+        throw "Step failed: cargo update (exit code $LASTEXITCODE)"
+    }
 
     $verifyArgs = @()
     if ($SkipBundle) {
