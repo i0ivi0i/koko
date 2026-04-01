@@ -124,6 +124,31 @@ function Resolve-AppUrl {
     return "http://$hostName`:$port/"
 }
 
+function Test-LoopbackBindAddress {
+    param(
+        [string]$Address
+    )
+
+    $port = $Address.Substring($Address.LastIndexOf(":") + 1)
+    $hostName = $Address.Substring(0, $Address.Length - $port.Length - 1).Trim()
+    if ($hostName.StartsWith("[") -and $hostName.EndsWith("]")) {
+        $hostName = $hostName.Trim("[", "]")
+    }
+
+    return @("127.0.0.1", "localhost", "::1") -contains $hostName
+}
+
+function Assert-SafeAdminToken {
+    param(
+        [string]$Address,
+        [string]$Token
+    )
+
+    if ($Token.Trim() -eq "local-admin-token" -and -not (Test-LoopbackBindAddress -Address $Address)) {
+        throw "当前监听地址 $Address 会暴露到局域网，请显式传入非默认的 -AdminToken 后再启动。"
+    }
+}
+
 function Get-LocalIPv4Addresses {
     $allAddresses = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
         Where-Object {
@@ -238,6 +263,7 @@ function Read-LogTail {
 
 Push-Location $repoRoot
 try {
+    Assert-SafeAdminToken -Address $BindAddr -Token $AdminToken
     $appUrl = Resolve-AppUrl -Address $BindAddr
     $accessUrls = Resolve-AccessUrls -Address $BindAddr
 
