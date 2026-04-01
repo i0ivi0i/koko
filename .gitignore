@@ -18,3 +18,9 @@ dist/
 # Common local OS noise.
 Thumbs.db
 .DS_Store
+
+# Local study clones stay outside this repo's version history.
+学习/Telegram-iOS/
+
+# Local study mirrors of external repositories should not pollute this repo.
+/学习/Telegram-iOS/
