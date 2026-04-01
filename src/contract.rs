@@ -13,12 +13,6 @@ pub enum AppErrorCode {
     Internal,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct JoinOrCreateRoomByCodeCommand {
-    pub room_code: String,
-    pub session_id: Uuid,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubscribeRoomStreamCommand {
     pub room_id: Uuid,
@@ -42,12 +36,6 @@ pub struct CommandRejected {
     pub command: RejectedCommandKind,
     pub room_id: Option<Uuid>,
     pub client_message_id: Option<Uuid>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoadRoomSnapshotQuery {
-    pub room_id: Uuid,
-    pub session_id: Uuid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

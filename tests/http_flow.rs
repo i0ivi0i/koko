@@ -205,7 +205,7 @@ async fn room_search_endpoint_returns_case_insensitive_matches() {
         &harness.store,
         &SystemIdGenerator,
         &SystemClock,
-        koko::contract::JoinOrCreateRoomByCodeCommand {
+        koko::app::JoinOrCreateRoomByCodeCommand {
             room_code: "A1299".to_string(),
             session_id: other_session_id,
         },

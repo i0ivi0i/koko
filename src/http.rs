@@ -19,11 +19,10 @@ use crate::{
     app::{
         AdminQueryContext, AppError, bootstrap_anonymous_session, get_admin_overview,
         join_or_create_room_by_code, list_admin_rooms, list_joined_rooms, load_room_snapshot,
-        search_rooms_by_code,
+        search_rooms_by_code, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
     },
     contract::{
-        AdminOverview, AdminRoomSummary, JoinOrCreateRoomByCodeCommand, JoinedRoomSummary,
-        LoadRoomSnapshotQuery, RoomSearchResult, RoomSnapshot,
+        AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult, RoomSnapshot,
     },
     store::PgStore,
     support,

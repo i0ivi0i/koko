@@ -7,8 +7,7 @@ use uuid::Uuid;
 use crate::{
     contract::{
         AdminOverview, AdminRoomSummary, AppErrorCode, AppEvent, BootstrapSession,
-        JoinedRoomSummary, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, MessageCreated,
-        MessageView, RoomSearchResult, RoomSnapshot,
+        JoinedRoomSummary, MessageCreated, MessageView, RoomSearchResult, RoomSnapshot,
     },
     domain::{
         AnonymousSession, DomainError, Message, MessageBody, MessageStatus, NewMemberRecord,
@@ -30,6 +29,18 @@ pub struct SendTextMessageInput {
     pub session_id: Uuid,
     pub body: String,
     pub client_message_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinOrCreateRoomByCodeCommand {
+    pub room_code: String,
+    pub session_id: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadRoomSnapshotQuery {
+    pub room_id: Uuid,
+    pub session_id: Uuid,
 }
 
 pub use crate::contract::{ListJoinedRoomsQuery, SearchRoomsByCodeQuery};
