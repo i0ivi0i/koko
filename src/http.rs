@@ -48,8 +48,8 @@ struct SearchRoomsParams {
     query: String,
 }
 
-pub const FRONTEND_DIST_DIR: &str = "dist";
-pub const FRONTEND_ASSET_DIR: &str = "assets";
+pub const FRONTEND_DIST_DIR: &str = "dist/public";
+pub const FRONTEND_ASSET_DIR: &str = "dist/public/assets";
 
 pub fn api_router(store: PgStore, admin_token: String) -> Router {
     Router::new()
@@ -73,16 +73,19 @@ pub fn app_router(
     frontend_dist_dir: impl Into<PathBuf>,
     asset_dir: impl Into<PathBuf>,
 ) -> Router {
-    let index_file = frontend_dist_dir.into().join("index.html");
+    let frontend_dist_dir = frontend_dist_dir.into();
+    let index_file = frontend_dist_dir.join("index.html");
+    let wasm_dir = frontend_dist_dir.join("wasm");
 
     Router::new()
         .nest("/api", api_router(store, admin_token))
         .nest_service("/assets", ServeDir::new(asset_dir.into()))
+        .nest_service("/wasm", ServeDir::new(wasm_dir))
         .route_service("/", ServeFile::new(index_file.clone()))
         .route("/admin", get(frontend_reserved_not_found))
         .route("/admin/{*path}", get(frontend_reserved_not_found))
         .fallback_service(
-            // 非 API 深链接统一回到入口壳，静态资源仍由 /assets 独立承接。
+            // 非 API 深链接统一回到入口壳，静态资源由 /assets 与 /wasm 独立承接。
             ServeFile::new(index_file),
         )
 }

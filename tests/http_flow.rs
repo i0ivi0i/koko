@@ -14,9 +14,10 @@ use koko::{
     contract::{
         BootstrapSession, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
     },
+    http,
     support::{SystemClock, SystemIdGenerator},
 };
-use std::env;
+use std::{env, path::PathBuf};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -420,6 +421,33 @@ async fn assets_socket_io_client_is_served_as_static_file() {
 }
 
 #[tokio::test]
+async fn wasm_bundle_js_is_served_as_static_file() {
+    let harness = HttpHarness::frontend_only();
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/wasm/koko.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("fixture wasm bundle"));
+}
+
+#[tokio::test]
 async fn theme_css_exposes_telegram_shell_sections() {
     let harness = HttpHarness::frontend_only();
 
@@ -484,6 +512,18 @@ async fn unknown_api_path_stays_404_instead_of_falling_back_to_index() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn default_frontend_paths_point_to_dioxus_public_output() {
+    assert_eq!(
+        http::default_frontend_dist_dir(),
+        PathBuf::from("dist").join("public")
+    );
+    assert_eq!(
+        http::default_frontend_asset_dir(),
+        PathBuf::from("dist").join("public").join("assets")
+    );
 }
 
 #[sqlx::test]
