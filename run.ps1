@@ -2,7 +2,7 @@
 param(
     [string]$DatabaseUrl = "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
     [string]$AdminToken = "local-admin-token",
-    [string]$BindAddr = "127.0.0.1:4000",
+    [string]$BindAddr = "127.0.0.1:8080",
     [switch]$SkipBundle,
     [switch]$DryRun,
     [switch]$NoBrowser

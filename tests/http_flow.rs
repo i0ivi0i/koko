@@ -617,7 +617,7 @@ fn app_config_requires_database_url_and_admin_token() {
     unsafe {
         env::remove_var("KOKO_DATABASE_URL");
         env::remove_var("KOKO_ADMIN_TOKEN");
-        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:4000");
+        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:8080");
     }
 
     assert!(koko::support::AppConfig::from_env().is_err());
@@ -657,7 +657,7 @@ fn app_config_rejects_empty_database_url() {
     unsafe {
         env::set_var("KOKO_DATABASE_URL", "   ");
         env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
-        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:4000");
+        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:8080");
     }
 
     assert!(koko::support::AppConfig::from_env().is_err());
@@ -689,6 +689,41 @@ fn app_error_code_exposes_stable_membership_required_code() {
 }
 
 #[test]
+fn app_config_defaults_bind_addr_to_127_0_0_1_8080() {
+    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
+    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
+    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
+
+    unsafe {
+        env::set_var(
+            "KOKO_DATABASE_URL",
+            "postgres://koko:koko_local@127.0.0.1:5432/koko_test",
+        );
+        env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
+        env::remove_var("KOKO_BIND_ADDR");
+    }
+
+    let config = koko::support::AppConfig::from_env().unwrap();
+
+    assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
+
+    unsafe {
+        match original_database_url {
+            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
+            None => env::remove_var("KOKO_DATABASE_URL"),
+        }
+        match original_admin_token {
+            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
+            None => env::remove_var("KOKO_ADMIN_TOKEN"),
+        }
+        match original_bind_addr {
+            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
+            None => env::remove_var("KOKO_BIND_ADDR"),
+        }
+    }
+}
+
+#[test]
 fn root_run_script_supports_dry_run() {
     let powershell = powershell_exe_path();
     let output = Command::new(powershell)
@@ -703,8 +738,6 @@ fn root_run_script_supports_dry_run() {
             "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
             "-AdminToken",
             "local-admin-token",
-            "-BindAddr",
-            "127.0.0.1:4000",
         ])
         .env("PATH", r"C:\Windows\System32")
         .env_remove("PSModulePath")
@@ -726,7 +759,7 @@ fn root_run_script_supports_dry_run() {
     assert!(stdout.contains("KOKO_DATABASE_URL"));
     assert!(stdout.contains("cargo run"));
     assert!(stdout.contains("浏览器"));
-    assert!(stdout.contains("127.0.0.1:4000"));
+    assert!(stdout.contains("127.0.0.1:8080"));
     assert!(stdout.contains("Ctrl+C"));
 }
 

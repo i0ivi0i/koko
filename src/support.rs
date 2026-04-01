@@ -19,7 +19,7 @@ pub const DEFAULT_TRACING_FILTER: &str = "info";
 pub const SESSION_COOKIE_NAME: &str = "koko_session";
 
 #[cfg(not(target_arch = "wasm32"))]
-const DEFAULT_BIND_ADDR: &str = "127.0.0.1:4000";
+const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
