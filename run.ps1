@@ -223,6 +223,27 @@ function Write-AccessHints {
     }
 }
 
+function Write-AdminHints {
+    param(
+        [string[]]$Urls,
+        [string]$Token
+    )
+
+    if ($Urls.Count -eq 0) {
+        return
+    }
+
+    $localUrl = $Urls | Where-Object { $_ -like "http://127.0.0.1:*" } | Select-Object -First 1
+    if (-not $localUrl) {
+        $localUrl = $Urls[0]
+    }
+
+    Write-Host "==> 管理接口:"
+    Write-Host "   GET $($localUrl.TrimEnd('/'))/api/admin/overview"
+    Write-Host "   GET $($localUrl.TrimEnd('/'))/api/admin/rooms"
+    Write-Host "   Header: x-admin-token: $Token"
+}
+
 function Wait-ForServerReady {
     param(
         [string]$Url,
@@ -290,6 +311,7 @@ try {
         Write-Host "==> cargo build --target-dir $runTargetDir"
         Write-Host "==> $serverBinaryPath"
         Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)
+        Write-AdminHints -Urls $accessUrls -Token $AdminToken
         Write-Host "==> 启动成功后可直接开始测试，按 Ctrl+C 可停止服务"
         exit 0
     }
@@ -358,6 +380,8 @@ try {
             Write-Host "   $url"
         }
     }
+
+    Write-AdminHints -Urls $accessUrls -Token $AdminToken
 
     Write-Host "==> 现在可以直接开始真人测试，按 Ctrl+C 可停止服务"
     Wait-Process -Id $serverProcess.Id
