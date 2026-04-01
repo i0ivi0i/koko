@@ -32,16 +32,7 @@ pub struct SendTextMessageInput {
     pub client_message_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ListJoinedRoomsQuery {
-    pub session_id: Uuid,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SearchRoomsByCodeQuery {
-    pub session_id: Uuid,
-    pub input: String,
-}
+pub use crate::contract::{ListJoinedRoomsQuery, SearchRoomsByCodeQuery};
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AppError {

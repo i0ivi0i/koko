@@ -97,6 +97,28 @@ fn send_text_message_command_serializes_without_session_id() {
     );
 }
 
+#[test]
+fn joined_room_queries_live_in_contract_with_stable_wire_shape() {
+    let list_json = serde_json::to_string(&koko::contract::ListJoinedRoomsQuery {
+        session_id: Uuid::from_u128(10),
+    })
+    .unwrap();
+    let search_json = serde_json::to_string(&koko::contract::SearchRoomsByCodeQuery {
+        session_id: Uuid::from_u128(11),
+        input: " a1234 ".to_string(),
+    })
+    .unwrap();
+
+    assert_eq!(
+        list_json,
+        "{\"session_id\":\"00000000-0000-0000-0000-00000000000a\"}"
+    );
+    assert_eq!(
+        search_json,
+        "{\"session_id\":\"00000000-0000-0000-0000-00000000000b\",\"input\":\" a1234 \"}"
+    );
+}
+
 #[tokio::test]
 async fn admin_overview_requires_authorized_admin_context() {
     let error = get_admin_overview(
