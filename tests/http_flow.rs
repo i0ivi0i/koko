@@ -807,8 +807,9 @@ fn root_run_script_defaults_to_lan_accessible_bind_addr() {
     assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
     assert!(stdout.contains("已自动生成临时 AdminToken"));
     assert!(stdout.contains("127.0.0.1:8080"));
-    assert!(stdout.contains("/api/admin/overview"));
-    assert!(stdout.contains("/api/admin/rooms"));
+    assert!(!stdout.contains("/api/admin/overview"));
+    assert!(!stdout.contains("/api/admin/rooms"));
+    assert!(!stdout.contains("x-admin-token"));
     assert!(stdout.contains("Ctrl+C"));
 }
 
@@ -844,7 +845,7 @@ fn root_run_script_generates_temporary_admin_token_when_exposed_to_lan() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("已自动生成临时 AdminToken"));
     assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
-    assert!(stdout.contains("x-admin-token"));
+    assert!(!stdout.contains("x-admin-token"));
 }
 
 fn powershell_exe_path() -> String {
