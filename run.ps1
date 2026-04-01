@@ -138,15 +138,19 @@ function Test-LoopbackBindAddress {
     return @("127.0.0.1", "localhost", "::1") -contains $hostName
 }
 
-function Assert-SafeAdminToken {
+function Resolve-EffectiveAdminToken {
     param(
         [string]$Address,
         [string]$Token
     )
 
     if ($Token.Trim() -eq "local-admin-token" -and -not (Test-LoopbackBindAddress -Address $Address)) {
-        throw "当前监听地址 $Address 会暴露到局域网，请显式传入非默认的 -AdminToken 后再启动。"
+        $generatedToken = "dev-" + [guid]::NewGuid().ToString("N")
+        Write-Host "==> 当前监听地址 $Address 会暴露到局域网，已自动生成临时 AdminToken: $generatedToken"
+        return $generatedToken
     }
+
+    return $Token
 }
 
 function Get-LocalIPv4Addresses {
@@ -263,7 +267,7 @@ function Read-LogTail {
 
 Push-Location $repoRoot
 try {
-    Assert-SafeAdminToken -Address $BindAddr -Token $AdminToken
+    $AdminToken = Resolve-EffectiveAdminToken -Address $BindAddr -Token $AdminToken
     $appUrl = Resolve-AppUrl -Address $BindAddr
     $accessUrls = Resolve-AccessUrls -Address $BindAddr
 

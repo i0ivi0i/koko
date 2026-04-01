@@ -783,8 +783,6 @@ fn root_run_script_defaults_to_lan_accessible_bind_addr() {
             "-SkipBundle",
             "-DatabaseUrl",
             "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-            "-AdminToken",
-            "dev-admin-token",
         ])
         .env("PATH", r"C:\Windows\System32")
         .env_remove("PSModulePath")
@@ -807,12 +805,13 @@ fn root_run_script_defaults_to_lan_accessible_bind_addr() {
     assert!(stdout.contains("cargo build"));
     assert!(stdout.contains("浏览器"));
     assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
+    assert!(stdout.contains("已自动生成临时 AdminToken"));
     assert!(stdout.contains("127.0.0.1:8080"));
     assert!(stdout.contains("Ctrl+C"));
 }
 
 #[test]
-fn root_run_script_rejects_predictable_admin_token_when_exposed_to_lan() {
+fn root_run_script_generates_temporary_admin_token_when_exposed_to_lan() {
     let _guard = env_lock();
     let powershell = powershell_exe_path();
     let output = Command::new(powershell)
@@ -835,13 +834,14 @@ fn root_run_script_rejects_predictable_admin_token_when_exposed_to_lan() {
         .unwrap();
 
     assert!(
-        !output.status.success(),
-        "run.ps1 should reject the predictable default admin token when listening on all interfaces"
+        output.status.success(),
+        "run.ps1 should generate a temporary admin token instead of rejecting startup, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("显式传入"));
-    assert!(stderr.contains("AdminToken"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("已自动生成临时 AdminToken"));
+    assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
 }
 
 fn powershell_exe_path() -> String {
