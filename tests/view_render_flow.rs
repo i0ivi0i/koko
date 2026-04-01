@@ -83,6 +83,27 @@ fn conversation_rows_mark_keyboard_activation_support() {
     assert!(html.contains("data-shell-activatable=\"true\""));
 }
 
+#[test]
+fn chat_screen_marks_thread_and_composer_subregions_for_telegram_shell() {
+    let html = render_chat_page(chat_screen_state());
+
+    assert!(html.contains("data-shell-region=\"message-thread\""));
+    assert!(html.contains("class=\"tg-compose__field\""));
+    assert!(html.contains("class=\"tg-compose__send\""));
+    assert!(html.contains("aria-label=\"Send message\""));
+}
+
+#[test]
+fn chat_send_control_stays_disabled_for_blank_draft() {
+    let html = render_chat_page(chat_screen_state());
+
+    assert!(
+        html.contains(
+            "class=\"tg-compose__send\" type=\"button\" aria-label=\"Send message\" disabled"
+        )
+    );
+}
+
 fn render_chat_page(state: ChatState) -> String {
     let mut vdom = VirtualDom::new_with_props(
         ChatPage,

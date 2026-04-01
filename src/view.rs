@@ -223,13 +223,14 @@ fn ChatScreen(
                 button {
                     class: "tg-compose__send",
                     r#type: "button",
+                    "aria-label": "Send message",
                     disabled: on_send_message.is_none() || draft.trim().is_empty(),
                     onclick: move |_| {
                         if let Some(handler) = on_send_message.as_ref() {
                             handler.call(());
                         }
                     },
-                    "Send"
+                    "↑"
                 }
             }
         }
