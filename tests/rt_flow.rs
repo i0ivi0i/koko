@@ -8,7 +8,7 @@ use std::{
 
 use axum::{
     Router,
-    http::{HeaderMap, HeaderValue, StatusCode, header::COOKIE},
+    http::{HeaderMap, HeaderValue, header::COOKIE},
     routing::get,
 };
 use chrono::{TimeZone, Utc};
@@ -20,8 +20,7 @@ use koko::{
         SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
-        BootstrapSession, MessageCreated, RoomSnapshot, RoomStreamSubscribed,
-        SendTextMessageCommand, SubscribeRoomStreamCommand,
+        MessageCreated, RoomStreamSubscribed, SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
     domain::Message,
     rt::{
@@ -31,7 +30,6 @@ use koko::{
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
-use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
@@ -218,41 +216,14 @@ async fn sender_receives_message_accepted_but_not_message_created() {
     harness.shutdown().await;
 }
 
-#[tokio::test]
-async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server() {
-    let pool = test_database_pool().await;
-    let harness = HttpHarness::new(pool);
-    let server = RouterHarness::spawn(harness.router.clone()).await;
-    let client = reqwest::Client::new();
+#[sqlx::test]
+async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let server = HttpHarness::new(pool).spawn().await;
     let room_code = format!("z{:04}", Uuid::now_v7().as_u128() % 10_000);
-
-    let bootstrap_response = client
-        .post(format!("{}/api/session/bootstrap", server.base_url()))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(bootstrap_response.status(), StatusCode::CREATED);
-    let cookie = bootstrap_response
-        .headers()
-        .get(reqwest::header::SET_COOKIE)
-        .expect("bootstrap should set koko_session cookie")
-        .to_str()
-        .unwrap()
-        .split(';')
-        .next()
-        .unwrap()
-        .to_string();
-    let _session: BootstrapSession = bootstrap_response.json().await.unwrap();
-
-    let join_response = client
-        .post(format!("{}/api/rooms/join", server.base_url()))
-        .header(COOKIE.as_str(), cookie.as_str())
-        .json(&json!({ "room_code": room_code }))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(join_response.status(), StatusCode::OK);
-    let room: RoomSnapshot = join_response.json().await.unwrap();
+    let (_session, cookie) = server.bootstrap_session_with_cookie().await;
+    let room = server.join_room(&cookie, &room_code).await;
 
     let mut room_stream = mpsc::unbounded_channel();
     let message_accepted = mpsc::unbounded_channel();
@@ -286,6 +257,7 @@ async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server() 
 
     socket.disconnect().await.unwrap();
     server.shutdown().await;
+    Ok(())
 }
 
 #[tokio::test]
@@ -471,47 +443,6 @@ struct RealtimeHarness {
     base_url: String,
     shutdown_tx: Option<oneshot::Sender<()>>,
     server_task: JoinHandle<()>,
-}
-
-struct RouterHarness {
-    base_url: String,
-    shutdown_tx: Option<oneshot::Sender<()>>,
-    server_task: JoinHandle<()>,
-}
-
-impl RouterHarness {
-    async fn spawn(router: Router) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let base_url = format!("http://{}", listener.local_addr().unwrap());
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let server_task = tokio::spawn(async move {
-            axum::serve(listener, router)
-                .with_graceful_shutdown(async {
-                    let _ = shutdown_rx.await;
-                })
-                .await
-                .unwrap();
-        });
-
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        Self {
-            base_url,
-            shutdown_tx: Some(shutdown_tx),
-            server_task,
-        }
-    }
-
-    fn base_url(&self) -> &str {
-        &self.base_url
-    }
-
-    async fn shutdown(mut self) {
-        if let Some(shutdown_tx) = self.shutdown_tx.take() {
-            let _ = shutdown_tx.send(());
-        }
-        self.server_task.await.unwrap();
-    }
 }
 
 impl RealtimeHarness {
@@ -733,18 +664,4 @@ fn parse_socket_io_event(frame: &str) -> Option<(String, Value)> {
 
 fn fixed_time() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()
-}
-
-async fn test_database_pool() -> PgPool {
-    PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&test_database_url())
-        .await
-        .unwrap()
-}
-
-fn test_database_url() -> String {
-    std::env::var("KOKO_DATABASE_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .unwrap_or_else(|_| "postgres://koko:koko_local@127.0.0.1:5432/koko_test".to_string())
 }

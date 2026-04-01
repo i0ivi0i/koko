@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&config.database_url)
         .await?;
     let store = koko::store::PgStore::new(pool);
-    let router = koko::assemble_app(
+    let router = koko::http::server_router(
         store,
         config.admin_token,
         koko::http::default_frontend_dist_dir(),

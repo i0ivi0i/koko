@@ -12,14 +12,15 @@ use axum_extra::extract::{
     cookie::{Cookie, SameSite},
 };
 use serde::Deserialize;
+use std::sync::Arc;
 use tower_http::services::{ServeDir, ServeFile};
 use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminQueryContext, AppError, bootstrap_anonymous_session, get_admin_overview,
-        join_or_create_room_by_code, list_admin_rooms, list_joined_rooms, load_room_snapshot,
-        search_rooms_by_code, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
+        AdminQueryContext, AppError, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
+        bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
+        list_admin_rooms, list_joined_rooms, load_room_snapshot, search_rooms_by_code,
     },
     contract::{
         AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult, RoomSnapshot,
@@ -84,6 +85,22 @@ pub fn app_router(
             // 非 API 深链接统一回到入口壳，静态资源仍由 /assets 独立承接。
             ServeFile::new(index_file),
         )
+}
+
+pub fn server_router(
+    store: PgStore,
+    admin_token: String,
+    frontend_dist_dir: impl Into<PathBuf>,
+    asset_dir: impl Into<PathBuf>,
+) -> Router {
+    let (socket_layer, io) = socketioxide::SocketIo::new_layer();
+    let realtime = Arc::new(crate::rt::RealtimeState::new(
+        store.clone(),
+        support::SystemIdGenerator,
+        support::SystemClock,
+    ));
+    crate::rt::install_realtime(&io, realtime);
+    app_router(store, admin_token, frontend_dist_dir, asset_dir).layer(socket_layer)
 }
 
 pub fn default_frontend_dist_dir() -> PathBuf {
