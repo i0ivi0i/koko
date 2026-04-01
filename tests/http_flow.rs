@@ -17,7 +17,7 @@ use koko::{
     http,
     support::{SystemClock, SystemIdGenerator},
 };
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, process::Command};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -686,6 +686,53 @@ fn app_error_code_exposes_stable_membership_required_code() {
     });
 
     assert_eq!(code, "membership_required");
+}
+
+#[test]
+fn root_run_script_supports_dry_run() {
+    let powershell = powershell_exe_path();
+    let output = Command::new(powershell)
+        .args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "run.ps1",
+            "-DryRun",
+            "-SkipBundle",
+            "-DatabaseUrl",
+            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
+            "-AdminToken",
+            "local-admin-token",
+            "-BindAddr",
+            "127.0.0.1:4000",
+        ])
+        .env("PATH", r"C:\Windows\System32")
+        .env_remove("PSModulePath")
+        .env_remove("PATHEXT")
+        .env_remove("PROMPT")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "run.ps1 dry-run should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Skip web bundle"));
+    assert!(stdout.contains("准备数据库结构"));
+    assert!(stdout.contains("KOKO_DATABASE_URL"));
+    assert!(stdout.contains("cargo run"));
+    assert!(stdout.contains("浏览器"));
+    assert!(stdout.contains("127.0.0.1:4000"));
+    assert!(stdout.contains("Ctrl+C"));
+}
+
+fn powershell_exe_path() -> String {
+    let windir = env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".to_string());
+    format!(r"{windir}\System32\WindowsPowerShell\v1.0\powershell.exe")
 }
 
 async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
