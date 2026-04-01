@@ -18,9 +18,9 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminQueryContext, AppError, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
+        AdminLoginCommand, AppError, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
         bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
-        list_admin_rooms, list_joined_rooms, load_room_snapshot, search_rooms_by_code,
+        list_admin_rooms, list_joined_rooms, load_room_snapshot, login_admin, search_rooms_by_code,
     },
     contract::{
         AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult, RoomSnapshot,
@@ -221,7 +221,13 @@ async fn admin_overview(
     State(state): State<HttpState>,
     headers: HeaderMap,
 ) -> Result<Json<AdminOverview>, (StatusCode, Json<ErrorPayload>)> {
-    let context = admin_query_context(&headers)?;
+    let context = login_admin(
+        &state.admin_access,
+        &state.admin_access,
+        admin_login_command(&headers)?,
+    )
+    .await
+    .map_err(map_http_error)?;
     let overview = get_admin_overview(&state.admin_access, &state.store, context)
         .await
         .map_err(map_http_error)?;
@@ -232,7 +238,13 @@ async fn admin_rooms(
     State(state): State<HttpState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AdminRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
-    let context = admin_query_context(&headers)?;
+    let context = login_admin(
+        &state.admin_access,
+        &state.admin_access,
+        admin_login_command(&headers)?,
+    )
+    .await
+    .map_err(map_http_error)?;
     let rooms = list_admin_rooms(&state.admin_access, &state.store, context)
         .await
         .map_err(map_http_error)?;
@@ -244,15 +256,17 @@ struct ErrorPayload {
     code: String,
 }
 
-fn admin_query_context(
+fn admin_login_command(
     headers: &HeaderMap,
-) -> Result<AdminQueryContext, (StatusCode, Json<ErrorPayload>)> {
+) -> Result<AdminLoginCommand, (StatusCode, Json<ErrorPayload>)> {
     let token = headers
         .get("x-admin-token")
         .and_then(|value| value.to_str().ok())
         .ok_or_else(invalid_admin_token_error)?;
 
-    Ok(AdminQueryContext::new(token.to_string()))
+    Ok(AdminLoginCommand {
+        token: token.to_string(),
+    })
 }
 
 fn resolve_session_id(jar: &CookieJar) -> Result<Uuid, (StatusCode, Json<ErrorPayload>)> {
@@ -274,14 +288,17 @@ fn invalid_session_error() -> (StatusCode, Json<ErrorPayload>) {
 }
 
 fn invalid_admin_token_error() -> (StatusCode, Json<ErrorPayload>) {
-    map_http_error(AppError::AdminAccessDenied)
+    map_http_error(AppError::InvalidAdminToken)
 }
 
 fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {
     let status = match error {
         AppError::SessionNotActive { .. } => StatusCode::UNAUTHORIZED,
         AppError::NotRoomMember { .. } => StatusCode::FORBIDDEN,
-        AppError::AdminAccessDenied => StatusCode::UNAUTHORIZED,
+        AppError::InvalidAdminToken
+        | AppError::AdminSessionRequired
+        | AppError::AdminSessionExpired
+        | AppError::AdminSessionReplaced => StatusCode::UNAUTHORIZED,
         AppError::Domain(crate::domain::DomainError::InvalidRoomCode)
         | AppError::Domain(crate::domain::DomainError::EmptyMessageBody) => StatusCode::BAD_REQUEST,
         AppError::DependencyFailure => StatusCode::INTERNAL_SERVER_ERROR,

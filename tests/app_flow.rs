@@ -6,8 +6,8 @@ use std::sync::{
 use chrono::{DateTime, TimeZone, Utc};
 use koko::{
     app::{
-        AdminAccessPort, AdminOverviewPort, AdminQueryContext, AdminRoomsPort, AppError, Clock,
-        IdGenerator, JoinOrCreateRoomByCodeCommand, JoinedRoomsPort, ListJoinedRoomsQuery,
+        AdminOverviewPort, AdminRoomsPort, AdminSessionContext, AdminSessionPort, AppError,
+        Clock, IdGenerator, JoinOrCreateRoomByCodeCommand, JoinedRoomsPort, ListJoinedRoomsQuery,
         LoadRoomSnapshotQuery, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
         RoomSearchPort, RoomSnapshotData, RoomSnapshotPort, SearchRoomsByCodeQuery,
         SendTextMessageInput, SessionBootstrapPort, SessionPort, SubscribeRoomStreamInput,
@@ -112,27 +112,27 @@ fn joined_room_queries_live_in_contract_with_stable_wire_shape() {
 #[tokio::test]
 async fn admin_overview_requires_authorized_admin_context() {
     let error = get_admin_overview(
-        &FakeAdminAccessPort::deny(),
+        &FakeAdminSessionPort::required(),
         &FakeAdminOverviewPort::default(),
-        AdminQueryContext::new("wrong-token".to_string()),
+        AdminSessionContext::new(Uuid::from_u128(501)),
     )
     .await
     .unwrap_err();
 
-    assert_eq!(error.code(), AppErrorCode::InvalidAdminToken);
+    assert_eq!(error.code(), AppErrorCode::AdminSessionRequired);
 }
 
 #[tokio::test]
 async fn admin_rooms_requires_authorized_admin_context() {
     let error = list_admin_rooms(
-        &FakeAdminAccessPort::deny(),
+        &FakeAdminSessionPort::required(),
         &FakeAdminRoomsPort::default(),
-        AdminQueryContext::new("wrong-token".to_string()),
+        AdminSessionContext::new(Uuid::from_u128(502)),
     )
     .await
     .unwrap_err();
 
-    assert_eq!(error.code(), AppErrorCode::InvalidAdminToken);
+    assert_eq!(error.code(), AppErrorCode::AdminSessionRequired);
 }
 
 #[tokio::test]
@@ -1405,22 +1405,35 @@ impl SessionPort for FakeSessionPort {
 }
 
 #[derive(Debug)]
-struct FakeAdminAccessPort {
-    authorized: bool,
+struct FakeAdminSessionPort {
+    state: koko::app::AdminSessionState,
 }
 
-impl FakeAdminAccessPort {
-    fn deny() -> Self {
-        Self { authorized: false }
+impl FakeAdminSessionPort {
+    fn required() -> Self {
+        Self {
+            state: koko::app::AdminSessionState::Required,
+        }
     }
 }
 
-impl AdminAccessPort for FakeAdminAccessPort {
-    async fn is_authorized_admin(
+impl AdminSessionPort for FakeAdminSessionPort {
+    async fn create_admin_session(&self) -> Result<AdminSessionContext, AppError> {
+        panic!("overview/rooms test should not create admin session")
+    }
+
+    async fn read_admin_session(
         &self,
-        _context: &AdminQueryContext,
-    ) -> Result<bool, AppError> {
-        Ok(self.authorized)
+        _context: &AdminSessionContext,
+    ) -> Result<koko::app::AdminSessionState, AppError> {
+        Ok(self.state)
+    }
+
+    async fn revoke_admin_session(
+        &self,
+        _context: &AdminSessionContext,
+    ) -> Result<(), AppError> {
+        panic!("overview/rooms test should not revoke admin session")
     }
 }
 

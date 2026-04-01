@@ -698,6 +698,22 @@ fn app_error_code_exposes_stable_membership_required_code() {
 }
 
 #[test]
+fn app_error_code_exposes_admin_session_codes() {
+    assert_eq!(
+        koko::support::app_error_code(&AppError::AdminSessionRequired),
+        "admin_session_required"
+    );
+    assert_eq!(
+        koko::support::app_error_code(&AppError::AdminSessionExpired),
+        "admin_session_expired"
+    );
+    assert_eq!(
+        koko::support::app_error_code(&AppError::AdminSessionReplaced),
+        "admin_session_replaced"
+    );
+}
+
+#[test]
 fn app_config_defaults_bind_addr_to_0_0_0_0_8080() {
     let _guard = env_lock();
     let original_database_url = env::var("KOKO_DATABASE_URL").ok();

@@ -11,8 +11,8 @@ use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
     admin::AdminPanelState,
-    app::{SendTextMessageInput, send_text_message},
-    contract::{AdminOverview, AdminRoomSummary, BootstrapSession},
+    app::{AdminLoginCommand, AdminSessionPort, SendTextMessageInput, login_admin, send_text_message},
+    contract::{AdminOverview, AdminRoomSummary, AppErrorCode, BootstrapSession},
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -80,6 +80,21 @@ fn admin_panel_state_composes_overview_and_rooms_from_stable_queries() {
 
     assert_eq!(state.overview.room_count, 2);
     assert_eq!(state.rooms.len(), 1);
+}
+
+#[tokio::test]
+async fn login_admin_rejects_invalid_token() {
+    let error = login_admin(
+        &koko::support::StaticAdminAccess::new("local-admin-token".to_string()),
+        &FakeAdminSessionPort::default(),
+        AdminLoginCommand {
+            token: "wrong-token".to_string(),
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), AppErrorCode::InvalidAdminToken);
 }
 
 #[sqlx::test]
@@ -317,5 +332,28 @@ struct FixedClock(chrono::DateTime<Utc>);
 impl koko::app::Clock for FixedClock {
     fn now(&self) -> chrono::DateTime<Utc> {
         self.0
+    }
+}
+
+#[derive(Debug, Default)]
+struct FakeAdminSessionPort;
+
+impl AdminSessionPort for FakeAdminSessionPort {
+    async fn create_admin_session(&self) -> Result<koko::app::AdminSessionContext, koko::app::AppError> {
+        panic!("invalid token should short-circuit before creating admin session");
+    }
+
+    async fn read_admin_session(
+        &self,
+        _context: &koko::app::AdminSessionContext,
+    ) -> Result<koko::app::AdminSessionState, koko::app::AppError> {
+        panic!("login flow should not read admin session state");
+    }
+
+    async fn revoke_admin_session(
+        &self,
+        _context: &koko::app::AdminSessionContext,
+    ) -> Result<(), koko::app::AppError> {
+        panic!("login flow should not revoke admin session");
     }
 }

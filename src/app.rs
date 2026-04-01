@@ -6,8 +6,9 @@ use uuid::Uuid;
 
 use crate::{
     contract::{
-        AdminOverview, AdminRoomSummary, AppErrorCode, AppEvent, BootstrapSession,
-        JoinedRoomSummary, MessageCreated, MessageView, RoomSearchResult, RoomSnapshot,
+        AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode, AppEvent,
+        BootstrapSession, JoinedRoomSummary, MessageCreated, MessageView, RoomSearchResult,
+        RoomSnapshot,
     },
     domain::{
         AnonymousSession, DomainError, Message, MessageBody, MessageStatus, NewMemberRecord,
@@ -51,8 +52,14 @@ pub enum AppError {
     SessionNotActive { session_id: Uuid },
     #[error("session {session_id} is not a member of room {room_id}")]
     NotRoomMember { room_id: Uuid, session_id: Uuid },
-    #[error("admin access denied")]
-    AdminAccessDenied,
+    #[error("admin token is invalid")]
+    InvalidAdminToken,
+    #[error("admin session is required")]
+    AdminSessionRequired,
+    #[error("admin session is expired")]
+    AdminSessionExpired,
+    #[error("admin session is replaced by newer login")]
+    AdminSessionReplaced,
     #[error("dependency failure")]
     DependencyFailure,
     #[error(transparent)]
@@ -64,7 +71,10 @@ impl AppError {
         match self {
             Self::SessionNotActive { .. } => AppErrorCode::InvalidSession,
             Self::NotRoomMember { .. } => AppErrorCode::MembershipRequired,
-            Self::AdminAccessDenied => AppErrorCode::InvalidAdminToken,
+            Self::InvalidAdminToken => AppErrorCode::InvalidAdminToken,
+            Self::AdminSessionRequired => AppErrorCode::AdminSessionRequired,
+            Self::AdminSessionExpired => AppErrorCode::AdminSessionExpired,
+            Self::AdminSessionReplaced => AppErrorCode::AdminSessionReplaced,
             Self::DependencyFailure => AppErrorCode::Internal,
             Self::Domain(DomainError::InvalidRoomCode) => AppErrorCode::InvalidRoomCode,
             Self::Domain(DomainError::EmptyMessageBody) => AppErrorCode::InvalidMessageBody,
@@ -73,14 +83,27 @@ impl AppError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AdminQueryContext {
-    pub admin_token: String,
+pub struct AdminLoginCommand {
+    pub token: String,
 }
 
-impl AdminQueryContext {
-    pub fn new(admin_token: String) -> Self {
-        Self { admin_token }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdminSessionContext {
+    pub session_id: Uuid,
+}
+
+impl AdminSessionContext {
+    pub fn new(session_id: Uuid) -> Self {
+        Self { session_id }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdminSessionState {
+    Active,
+    Required,
+    Expired,
+    Replaced,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,11 +113,27 @@ pub struct RoomSnapshotData {
     pub messages: Vec<Message>,
 }
 
-pub trait AdminAccessPort {
-    fn is_authorized_admin(
+pub trait AdminCredentialPort {
+    fn verify_admin_token(
         &self,
-        context: &AdminQueryContext,
+        token: &str,
     ) -> impl Future<Output = Result<bool, AppError>> + Send;
+}
+
+pub trait AdminSessionPort {
+    fn create_admin_session(
+        &self,
+    ) -> impl Future<Output = Result<AdminSessionContext, AppError>> + Send;
+
+    fn read_admin_session(
+        &self,
+        context: &AdminSessionContext,
+    ) -> impl Future<Output = Result<AdminSessionState, AppError>> + Send;
+
+    fn revoke_admin_session(
+        &self,
+        context: &AdminSessionContext,
+    ) -> impl Future<Output = Result<(), AppError>> + Send;
 }
 
 pub trait SessionPort {
@@ -278,35 +317,92 @@ where
 }
 
 pub async fn get_admin_overview<A, P>(
-    access_port: &A,
+    admin_session_port: &A,
     admin_overview_port: &P,
-    context: AdminQueryContext,
+    context: AdminSessionContext,
 ) -> Result<AdminOverview, AppError>
 where
-    A: AdminAccessPort,
+    A: AdminSessionPort,
     P: AdminOverviewPort,
 {
-    if !access_port.is_authorized_admin(&context).await? {
-        return Err(AppError::AdminAccessDenied);
-    }
-
+    // 管理概览与房间列表都必须通过 application 层统一鉴权，防止权限真相散落到 HTTP/CLI/shell。
+    authorize_admin_session(admin_session_port, &context).await?;
     admin_overview_port.get_admin_overview().await
 }
 
 pub async fn list_admin_rooms<A, P>(
-    access_port: &A,
+    admin_session_port: &A,
     admin_rooms_port: &P,
-    context: AdminQueryContext,
+    context: AdminSessionContext,
 ) -> Result<Vec<AdminRoomSummary>, AppError>
 where
-    A: AdminAccessPort,
+    A: AdminSessionPort,
     P: AdminRoomsPort,
 {
-    if !access_port.is_authorized_admin(&context).await? {
-        return Err(AppError::AdminAccessDenied);
+    // 这里与 admin_overview 复用同一授权入口，避免 adapter 自行判断会话状态导致边界漂移。
+    authorize_admin_session(admin_session_port, &context).await?;
+    admin_rooms_port.list_admin_rooms().await
+}
+
+pub async fn login_admin<C, S>(
+    credential_port: &C,
+    admin_session_port: &S,
+    command: AdminLoginCommand,
+) -> Result<AdminSessionContext, AppError>
+where
+    C: AdminCredentialPort,
+    S: AdminSessionPort,
+{
+    let token = command.token.trim();
+    if token.is_empty() || !credential_port.verify_admin_token(token).await? {
+        return Err(AppError::InvalidAdminToken);
     }
 
-    admin_rooms_port.list_admin_rooms().await
+    admin_session_port.create_admin_session().await
+}
+
+pub async fn get_admin_session<S>(
+    admin_session_port: &S,
+    context: &AdminSessionContext,
+    idle_timeout_seconds: u64,
+) -> Result<AdminSessionStatus, AppError>
+where
+    S: AdminSessionPort,
+{
+    // /api/admin/session 只做探活，不续命：避免前端轮询探针悄悄延长后台会话。
+    let authenticated = matches!(
+        admin_session_port.read_admin_session(context).await?,
+        AdminSessionState::Active
+    );
+    Ok(AdminSessionStatus {
+        authenticated,
+        idle_timeout_seconds,
+    })
+}
+
+pub async fn logout_admin<S>(
+    admin_session_port: &S,
+    context: &AdminSessionContext,
+) -> Result<(), AppError>
+where
+    S: AdminSessionPort,
+{
+    admin_session_port.revoke_admin_session(context).await
+}
+
+pub async fn authorize_admin_session<S>(
+    admin_session_port: &S,
+    context: &AdminSessionContext,
+) -> Result<(), AppError>
+where
+    S: AdminSessionPort,
+{
+    match admin_session_port.read_admin_session(context).await? {
+        AdminSessionState::Active => Ok(()),
+        AdminSessionState::Required => Err(AppError::AdminSessionRequired),
+        AdminSessionState::Expired => Err(AppError::AdminSessionExpired),
+        AdminSessionState::Replaced => Err(AppError::AdminSessionReplaced),
+    }
 }
 
 pub async fn list_joined_rooms<S, P>(

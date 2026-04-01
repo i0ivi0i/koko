@@ -10,6 +10,9 @@ pub enum AppErrorCode {
     InvalidRoomCode,
     InvalidMessageBody,
     InvalidAdminToken,
+    AdminSessionRequired,
+    AdminSessionExpired,
+    AdminSessionReplaced,
     Internal,
 }
 
@@ -73,6 +76,17 @@ pub struct BootstrapSession {
     pub session_id: Uuid,
     pub issued_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminLoginRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminSessionStatus {
+    pub authenticated: bool,
+    pub idle_timeout_seconds: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -9,7 +9,10 @@ use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 use crate::{
-    app::{AdminAccessPort, AdminQueryContext, AppError, Clock, IdGenerator},
+    app::{
+        AdminCredentialPort, AdminSessionContext, AdminSessionPort, AdminSessionState, AppError,
+        Clock, IdGenerator,
+    },
     contract::AppErrorCode,
 };
 
@@ -67,6 +70,9 @@ pub fn app_error_code(error: &AppError) -> &'static str {
         AppErrorCode::InvalidRoomCode => "invalid_room_code",
         AppErrorCode::InvalidMessageBody => "invalid_message_body",
         AppErrorCode::InvalidAdminToken => "invalid_admin_token",
+        AppErrorCode::AdminSessionRequired => "admin_session_required",
+        AppErrorCode::AdminSessionExpired => "admin_session_expired",
+        AppErrorCode::AdminSessionReplaced => "admin_session_replaced",
         AppErrorCode::Internal => "internal",
     }
 }
@@ -82,9 +88,29 @@ impl StaticAdminAccess {
     }
 }
 
-impl AdminAccessPort for StaticAdminAccess {
-    async fn is_authorized_admin(&self, context: &AdminQueryContext) -> Result<bool, AppError> {
-        Ok(context.admin_token == self.expected_token)
+impl AdminCredentialPort for StaticAdminAccess {
+    async fn verify_admin_token(&self, token: &str) -> Result<bool, AppError> {
+        Ok(token == self.expected_token)
+    }
+}
+
+impl AdminSessionPort for StaticAdminAccess {
+    async fn create_admin_session(&self) -> Result<AdminSessionContext, AppError> {
+        Ok(AdminSessionContext::new(Uuid::now_v7()))
+    }
+
+    async fn read_admin_session(
+        &self,
+        _context: &AdminSessionContext,
+    ) -> Result<AdminSessionState, AppError> {
+        Ok(AdminSessionState::Active)
+    }
+
+    async fn revoke_admin_session(
+        &self,
+        _context: &AdminSessionContext,
+    ) -> Result<(), AppError> {
+        Ok(())
     }
 }
 
