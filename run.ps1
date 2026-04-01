@@ -12,6 +12,7 @@ $ErrorActionPreference = "Stop"
 $serverProcess = $null
 
 $repoRoot = $PSScriptRoot
+$cargoManifestPath = Join-Path $repoRoot "Cargo.toml"
 $bundleScript = Join-Path $repoRoot "scripts\dx-bundle-web.ps1"
 $migrationsDir = Join-Path $repoRoot "migrations"
 $runTargetDir = "target/run"
@@ -58,6 +59,22 @@ function Ensure-Command {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         throw "Missing required command: $Name"
     }
+}
+
+function Get-BinaryPath {
+    param(
+        [string]$ManifestPath,
+        [string]$TargetDir
+    )
+
+    $manifest = Get-Content $ManifestPath -Raw
+    $match = [regex]::Match($manifest, '(?m)^\[package\]\s*(?:\r?\n(?!\[).*)*?\r?\nname = "([^"]+)"')
+    if (-not $match.Success) {
+        throw "Unable to resolve package name from $ManifestPath"
+    }
+
+    $packageName = $match.Groups[1].Value
+    return Join-Path $repoRoot "$TargetDir\debug\$packageName.exe"
 }
 
 function Ensure-Database {
@@ -167,7 +184,9 @@ try {
         Write-Host "==> Set KOKO_DATABASE_URL"
         Write-Host "==> Set KOKO_ADMIN_TOKEN"
         Write-Host "==> Set KOKO_BIND_ADDR"
-        Write-Host "==> cargo run --target-dir $runTargetDir"
+        $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
+        Write-Host "==> cargo build --target-dir $runTargetDir"
+        Write-Host "==> $serverBinaryPath"
         if ($NoBrowser) {
             Write-Host "==> 浏览器不会自动打开"
         }
@@ -192,6 +211,7 @@ try {
     $env:KOKO_DATABASE_URL = $DatabaseUrl
     $env:KOKO_ADMIN_TOKEN = $AdminToken
     $env:KOKO_BIND_ADDR = $BindAddr
+    $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
 
     $logDir = Join-Path $env:TEMP "koko-run"
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -199,9 +219,16 @@ try {
     $stderrLog = Join-Path $logDir "server.err.log"
     Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
 
+    Invoke-Step "cargo build --target-dir $runTargetDir" {
+        & cargo build --target-dir $runTargetDir
+    }
+
+    if (-not (Test-Path $serverBinaryPath)) {
+        throw "Koko 构建已完成，但找不到可执行文件：$serverBinaryPath"
+    }
+
     Write-Host "==> 正在启动 Koko 服务..."
-    $serverProcess = Start-Process cargo `
-        -ArgumentList "run", "--target-dir", $runTargetDir `
+    $serverProcess = Start-Process $serverBinaryPath `
         -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog `
