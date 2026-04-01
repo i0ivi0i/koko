@@ -80,9 +80,9 @@ fn web_bootstrap_state_applies_backend_session_to_chat_state() {
     assert!(state.messages().is_empty());
 }
 
-#[tokio::test]
-async fn admin_panel_route_is_not_exposed_from_http_router() {
-    let harness = HttpHarness::new("admin_panel_route_is_not_exposed_from_http_router").await;
+#[sqlx::test]
+async fn admin_panel_route_is_not_exposed_from_http_router(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -98,24 +98,24 @@ async fn admin_panel_route_is_not_exposed_from_http_router() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn bootstrap_then_join_returns_room_snapshot() {
-    let harness = HttpHarness::new("bootstrap_then_join_returns_room_snapshot").await;
+#[sqlx::test]
+async fn bootstrap_then_join_returns_room_snapshot(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let snapshot = join_room(&harness, &cookie, "a1234").await;
 
     assert_eq!(snapshot.room_code, "A1234");
     assert!(snapshot.messages.is_empty());
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn snapshot_endpoint_returns_joined_room_history() {
-    let harness = HttpHarness::new("snapshot_endpoint_returns_joined_room_history").await;
+#[sqlx::test]
+async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let joined = join_room(&harness, &cookie, "b1234").await;
@@ -138,12 +138,14 @@ async fn snapshot_endpoint_returns_joined_room_history() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(snapshot.room_id, joined.room_id);
     assert_eq!(snapshot.room_code, "B1234");
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn joined_rooms_endpoint_requires_bootstrapped_session() {
-    let harness = HttpHarness::new("joined_rooms_endpoint_requires_bootstrapped_session").await;
+#[sqlx::test]
+async fn joined_rooms_endpoint_requires_bootstrapped_session(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -158,12 +160,12 @@ async fn joined_rooms_endpoint_requires_bootstrapped_session() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn joined_rooms_endpoint_returns_current_memberships() {
-    let harness = HttpHarness::new("joined_rooms_endpoint_returns_current_memberships").await;
+#[sqlx::test]
+async fn joined_rooms_endpoint_returns_current_memberships(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let first = join_room(&harness, &cookie, "a1234").await;
@@ -189,14 +191,14 @@ async fn joined_rooms_endpoint_returns_current_memberships() {
     assert_eq!(rooms.len(), 2);
     assert_eq!(rooms[0].room_id, first.room_id);
     assert_eq!(rooms[1].room_id, second.room_id);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers() {
-    let harness =
-        HttpHarness::new("joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers")
-            .await;
+#[sqlx::test]
+async fn joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let joined = join_room(&harness, &cookie, "a1234").await;
@@ -221,14 +223,14 @@ async fn joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(rooms.len(), 1);
     assert_eq!(rooms[0].room_id, joined.room_id);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_headers() {
-    let harness =
-        HttpHarness::new("joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_headers")
-            .await;
+#[sqlx::test]
+async fn joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_headers(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -245,12 +247,14 @@ async fn joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_head
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn room_search_endpoint_returns_case_insensitive_matches() {
-    let harness = HttpHarness::new("room_search_endpoint_returns_case_insensitive_matches").await;
+#[sqlx::test]
+async fn room_search_endpoint_returns_case_insensitive_matches(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let joined = join_room(&harness, &cookie, "a1234").await;
@@ -291,12 +295,12 @@ async fn room_search_endpoint_returns_case_insensitive_matches() {
     assert!(rooms[0].is_joined);
     assert_eq!(rooms[1].room_id, discoverable.room_id);
     assert!(!rooms[1].is_joined);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn root_entry_serves_frontend_shell() {
-    let harness = HttpHarness::new("root_entry_serves_frontend_shell").await;
+#[sqlx::test]
+async fn root_entry_serves_frontend_shell(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -314,13 +318,14 @@ async fn root_entry_serves_frontend_shell() {
     )
     .unwrap();
     assert!(body.contains("koko-web-shell"));
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn frontend_shell_fallback_serves_index_for_unknown_non_api_path() {
-    let harness =
-        HttpHarness::new("frontend_shell_fallback_serves_index_for_unknown_non_api_path").await;
+#[sqlx::test]
+async fn frontend_shell_fallback_serves_index_for_unknown_non_api_path(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -343,12 +348,12 @@ async fn frontend_shell_fallback_serves_index_for_unknown_non_api_path() {
     )
     .unwrap();
     assert!(body.contains("koko-web-shell"));
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn admin_path_stays_out_of_frontend_shell_fallback() {
-    let harness = HttpHarness::new("admin_path_stays_out_of_frontend_shell_fallback").await;
+#[sqlx::test]
+async fn admin_path_stays_out_of_frontend_shell_fallback(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -363,12 +368,12 @@ async fn admin_path_stays_out_of_frontend_shell_fallback() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn assets_theme_css_is_served_as_static_file() {
-    let harness = HttpHarness::new("assets_theme_css_is_served_as_static_file").await;
+#[sqlx::test]
+async fn assets_theme_css_is_served_as_static_file(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -391,12 +396,12 @@ async fn assets_theme_css_is_served_as_static_file() {
     )
     .unwrap();
     assert!(body.contains(".tg-shell"));
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn assets_socket_io_client_is_served_as_static_file() {
-    let harness = HttpHarness::new("assets_socket_io_client_is_served_as_static_file").await;
+#[sqlx::test]
+async fn assets_socket_io_client_is_served_as_static_file(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -419,12 +424,12 @@ async fn assets_socket_io_client_is_served_as_static_file() {
     )
     .unwrap();
     assert!(body.contains("Socket.IO v4.8.3"));
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn theme_css_exposes_telegram_shell_sections() {
-    let harness = HttpHarness::new("theme_css_exposes_telegram_shell_sections").await;
+#[sqlx::test]
+async fn theme_css_exposes_telegram_shell_sections(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -449,13 +454,14 @@ async fn theme_css_exposes_telegram_shell_sections() {
     assert!(body.contains(".tg-conversation-list"));
     assert!(body.contains(".tg-join-by-code"));
     assert!(body.contains(".tg-chat-screen"));
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn missing_static_asset_stays_404_instead_of_falling_back_to_index() {
-    let harness =
-        HttpHarness::new("missing_static_asset_stays_404_instead_of_falling_back_to_index").await;
+#[sqlx::test]
+async fn missing_static_asset_stays_404_instead_of_falling_back_to_index(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -470,13 +476,14 @@ async fn missing_static_asset_stays_404_instead_of_falling_back_to_index() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn unknown_api_path_stays_404_instead_of_falling_back_to_index() {
-    let harness =
-        HttpHarness::new("unknown_api_path_stays_404_instead_of_falling_back_to_index").await;
+#[sqlx::test]
+async fn unknown_api_path_stays_404_instead_of_falling_back_to_index(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -491,12 +498,12 @@ async fn unknown_api_path_stays_404_instead_of_falling_back_to_index() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn join_requires_bootstrapped_session() {
-    let harness = HttpHarness::new("join_requires_bootstrapped_session").await;
+#[sqlx::test]
+async fn join_requires_bootstrapped_session(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -518,13 +525,14 @@ async fn join_requires_bootstrapped_session() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request() {
-    let harness =
-        HttpHarness::new("bootstrap_session_sets_cookie_and_reuses_it_on_followup_request").await;
+#[sqlx::test]
+async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let first_response = bootstrap_session_response(&harness, None).await;
     assert_eq!(first_response.status(), StatusCode::CREATED);
@@ -559,19 +567,20 @@ async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request() {
     .unwrap();
 
     assert_eq!(second_session.session_id, first_session.session_id);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie() {
-    let harness = HttpHarness::new("bootstrap_session_tolerates_invalid_existing_koko_session_cookie")
-        .await;
+#[sqlx::test]
+async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
 
     let response = bootstrap_session_response(&harness, Some("koko_session=not-a-uuid")).await;
 
     assert_eq!(response.status(), StatusCode::CREATED);
     assert!(response.headers().get(SET_COOKIE).is_some());
-    harness.cleanup().await;
+    Ok(())
 }
 
 #[test]

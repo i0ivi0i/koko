@@ -1,23 +1,13 @@
-mod http_support;
-
-use std::{
-    env,
-    str::FromStr,
-    sync::{
-        Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
+use std::sync::{
+    Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use chrono::{DateTime, TimeZone, Utc};
-use http_support::{
-    DatabaseHarness, DEFAULT_TEST_DATABASE_URL, default_admin_database_url,
-    derive_isolated_test_database_url, validate_admin_database_url, validated_test_database_url,
-};
 use koko::{
     app::{
         AdminAccessPort, AdminOverviewPort, AdminQueryContext, AdminRoomsPort, AppError, Clock,
-        IdGenerator, JoinedRoomsPort, JoinOrCreateRoomByCodeCommand, ListJoinedRoomsQuery,
+        IdGenerator, JoinOrCreateRoomByCodeCommand, JoinedRoomsPort, ListJoinedRoomsQuery,
         LoadRoomSnapshotQuery, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
         RoomSearchPort, RoomSnapshotData, RoomSnapshotPort, SearchRoomsByCodeQuery,
         SendTextMessageInput, SessionBootstrapPort, SessionPort, SubscribeRoomStreamInput,
@@ -30,13 +20,13 @@ use koko::{
         SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
     domain::{
-        AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord,
-        NewRoomCodeRecord, NewRoomRecord, RoomCode, SessionStatus,
+        AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord, NewRoomCodeRecord,
+        NewRoomRecord, RoomCode, SessionStatus,
     },
     store::PgStore,
     support::{SystemClock, SystemIdGenerator},
 };
-use sqlx::{PgPool, Row, postgres::PgConnectOptions};
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 #[test]
@@ -925,17 +915,9 @@ async fn subscribe_room_stream_rejects_non_member() {
     assert_eq!(error.code(), AppErrorCode::MembershipRequired);
 }
 
-#[tokio::test]
-async fn shared_test_database_support_creates_isolated_database() {
-    let harness = DatabaseHarness::new("shared_test_database_support_creates_isolated_database").await;
-
-    assert!(harness.database_name().ends_with("_test"));
-    harness.cleanup().await;
-}
-
-#[tokio::test]
-async fn join_or_create_persists_room_member_and_room_code() {
-    let harness = PgHarness::new("join_or_create_persists_room_member_and_room_code").await;
+#[sqlx::test]
+async fn join_or_create_persists_room_member_and_room_code(pool: PgPool) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('a');
     harness.seed_active_session(session_id).await;
@@ -958,13 +940,14 @@ async fn join_or_create_persists_room_member_and_room_code() {
     let persisted_room_id = harness.room_id_by_code(&room_code).await;
     assert_eq!(snapshot.room_id, persisted_room_id);
     assert_eq!(harness.member_count(snapshot.room_id, session_id).await, 1);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn send_text_message_persists_message_and_room_snapshot_reads_it() {
-    let harness =
-        PgHarness::new("send_text_message_persists_message_and_room_snapshot_reads_it").await;
+#[sqlx::test]
+async fn send_text_message_persists_message_and_room_snapshot_reads_it(
+    pool: PgPool,
+) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('b');
     let message_id = Uuid::now_v7();
@@ -1029,12 +1012,12 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it() {
         harness.message_bodies(joined.room_id).await,
         vec!["persisted hello".to_string()]
     );
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn join_or_create_treats_room_code_as_case_insensitive() {
-    let harness = PgHarness::new("join_or_create_treats_room_code_as_case_insensitive").await;
+#[sqlx::test]
+async fn join_or_create_treats_room_code_as_case_insensitive(pool: PgPool) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let first_session_id = Uuid::now_v7();
     let second_session_id = Uuid::now_v7();
     let room_code = unique_room_code('c');
@@ -1080,12 +1063,12 @@ async fn join_or_create_treats_room_code_as_case_insensitive() {
             .await,
         1
     );
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn repeated_join_does_not_duplicate_member_in_same_room() {
-    let harness = PgHarness::new("repeated_join_does_not_duplicate_member_in_same_room").await;
+#[sqlx::test]
+async fn repeated_join_does_not_duplicate_member_in_same_room(pool: PgPool) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('d');
     harness.seed_active_session(session_id).await;
@@ -1123,12 +1106,12 @@ async fn repeated_join_does_not_duplicate_member_in_same_room() {
             .await,
         1
     );
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn pg_store_lists_joined_rooms_with_latest_preview() {
-    let harness = PgHarness::new("pg_store_lists_joined_rooms_with_latest_preview").await;
+#[sqlx::test]
+async fn pg_store_lists_joined_rooms_with_latest_preview(pool: PgPool) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let session_id = Uuid::now_v7();
     let first_room_code = "A1234".to_string();
     let second_room_code = "B1234".to_string();
@@ -1205,12 +1188,12 @@ async fn pg_store_lists_joined_rooms_with_latest_preview() {
     assert_eq!(rooms[1].room_id, second_joined.room_id);
     assert_eq!(rooms[1].room_code, second_room_code);
     assert_eq!(rooms[1].latest_preview, "older preview");
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn pg_store_searches_rooms_by_normalized_code_prefix() {
-    let harness = PgHarness::new("pg_store_searches_rooms_by_normalized_code_prefix").await;
+#[sqlx::test]
+async fn pg_store_searches_rooms_by_normalized_code_prefix(pool: PgPool) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let joined_session_id = Uuid::now_v7();
     let other_session_id = Uuid::now_v7();
     harness.seed_active_session(joined_session_id).await;
@@ -1259,13 +1242,14 @@ async fn pg_store_searches_rooms_by_normalized_code_prefix() {
     assert_eq!(results[1].room_id, discoverable.room_id);
     assert_eq!(results[1].room_code, "A1299");
     assert!(!results[1].is_joined);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn send_text_message_rejects_non_member_sender_via_database_truth() {
-    let harness =
-        PgHarness::new("send_text_message_rejects_non_member_sender_via_database_truth").await;
+#[sqlx::test]
+async fn send_text_message_rejects_non_member_sender_via_database_truth(
+    pool: PgPool,
+) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let session_id = Uuid::now_v7();
     let room_id = Uuid::now_v7();
     let room_code = unique_room_code('e');
@@ -1290,15 +1274,14 @@ async fn send_text_message_rejects_non_member_sender_via_database_truth() {
 
     assert_eq!(error.code(), AppErrorCode::Internal);
     assert_eq!(harness.message_count(room_id).await, 0);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[tokio::test]
-async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version() {
-    let harness = PgHarness::new(
-        "store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version",
-    )
-    .await;
+#[sqlx::test]
+async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version(
+    pool: PgPool,
+) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let session_id = Uuid::now_v7();
     let normalized_code = unique_room_code('f');
     let room_v1 = Uuid::now_v7();
@@ -1347,75 +1330,12 @@ async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_
     assert_eq!(snapshot.room_id, room_v2);
     assert_eq!(snapshot.room_code.normalized(), normalized_code);
     assert_eq!(snapshot.room_code.code_version, 2);
-    harness.cleanup().await;
+    Ok(())
 }
 
-#[test]
-fn derived_test_database_url_is_unique_and_guarded() {
-    let first_url = derive_isolated_test_database_url(
-        DEFAULT_TEST_DATABASE_URL,
-        "join_or_create_persists_room_member_and_room_code",
-    )
-    .unwrap();
-    let second_url = derive_isolated_test_database_url(
-        DEFAULT_TEST_DATABASE_URL,
-        "join_or_create_persists_room_member_and_room_code",
-    )
-    .unwrap();
-    let first_options = PgConnectOptions::from_str(&first_url).unwrap();
-    let second_options = PgConnectOptions::from_str(&second_url).unwrap();
-
-    assert_ne!(first_url, second_url);
-    assert!(first_options.get_database().unwrap().ends_with("_test"));
-    assert!(second_options.get_database().unwrap().ends_with("_test"));
-}
-
-#[test]
-fn destructive_reset_rejects_non_test_database_names() {
-    let error = validated_test_database_url(Some(
-        "postgres://koko:koko_local@127.0.0.1:5432/koko_stage1",
-    ))
-    .unwrap_err();
-
-    assert!(error.contains("_test"));
-    assert_eq!(
-        validated_test_database_url(Some(DEFAULT_TEST_DATABASE_URL)).unwrap(),
-        DEFAULT_TEST_DATABASE_URL
-    );
-}
-
-#[test]
-fn destructive_reset_rejects_admin_url_on_different_host_or_port() {
-    let error = validate_admin_database_url(
-        DEFAULT_TEST_DATABASE_URL,
-        "postgres://postgres:postgres@127.0.0.2:5432/postgres",
-    )
-    .unwrap_err();
-    assert!(error.contains("host/port"));
-
-    let error = validate_admin_database_url(
-        DEFAULT_TEST_DATABASE_URL,
-        "postgres://postgres:postgres@127.0.0.1:15432/postgres",
-    )
-    .unwrap_err();
-    assert!(error.contains("host/port"));
-}
-
-#[tokio::test]
-async fn pg_harness_cleanup_drops_isolated_database() {
-    let harness = PgHarness::new("pg_harness_cleanup_drops_isolated_database").await;
-    let database_name = harness.database_name().to_string();
-    harness.cleanup().await;
-
-    assert!(
-        !database_exists(&database_name).await,
-        "isolated test database `{database_name}` should be removed after harness cleanup"
-    );
-}
-
-#[tokio::test]
-async fn deleting_truth_rows_is_blocked_in_stage_one() {
-    let harness = PgHarness::new("deleting_truth_rows_is_blocked_in_stage_one").await;
+#[sqlx::test]
+async fn deleting_truth_rows_is_blocked_in_stage_one(pool: PgPool) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool).await;
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('g');
     harness.seed_active_session(session_id).await;
@@ -1460,7 +1380,7 @@ async fn deleting_truth_rows_is_blocked_in_stage_one() {
 
     assert!(room_delete.is_err());
     assert!(session_delete.is_err());
-    harness.cleanup().await;
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -2093,30 +2013,14 @@ fn fixed_time() -> DateTime<Utc> {
 }
 
 struct PgHarness {
-    core: DatabaseHarness,
     pool: PgPool,
     store: PgStore,
 }
 
 impl PgHarness {
-    async fn new(test_name: &str) -> Self {
-        let core = DatabaseHarness::new(test_name).await;
-        let pool = core.pool.clone();
-        let store = core.store.clone();
-
-        Self {
-            core,
-            pool,
-            store,
-        }
-    }
-
-    fn database_name(&self) -> &str {
-        self.core.database_name()
-    }
-
-    async fn cleanup(self) {
-        self.core.cleanup().await;
+    async fn new(pool: PgPool) -> Self {
+        let store = PgStore::new(pool.clone());
+        Self { pool, store }
     }
 
     async fn seed_active_session(&self, session_id: Uuid) {
@@ -2225,20 +2129,6 @@ impl PgHarness {
         .map(|row| row.get("body"))
         .collect()
     }
-}
-
-async fn database_exists(database_name: &str) -> bool {
-    let base_database_url =
-        validated_test_database_url(env::var("KOKO_TEST_DATABASE_URL").ok().as_deref()).unwrap();
-    let admin_url = default_admin_database_url(&base_database_url);
-    let admin_options = PgConnectOptions::from_str(&admin_url).unwrap();
-    let admin_pool = PgPool::connect_with(admin_options).await.unwrap();
-
-    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
-        .bind(database_name)
-        .fetch_one(&admin_pool)
-        .await
-        .unwrap()
 }
 
 fn unique_room_code(letter: char) -> String {
