@@ -17,7 +17,11 @@ use koko::{
     http,
     support::{SystemClock, SystemIdGenerator},
 };
-use std::{env, path::PathBuf, process::Command};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 use std::sync::{Mutex, OnceLock};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -616,75 +620,33 @@ async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie(
 }
 
 #[test]
-fn app_config_requires_database_url_and_admin_token() {
-    let _guard = env_lock();
-    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
-    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
-    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
+fn app_config_requires_database_url() {
+    let config_path = temp_config_file_path("requires-db-url");
+    let result = koko::support::AppConfig::load_for_test(
+        None,
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        Some("local-admin-token"),
+        None,
+    );
 
-    unsafe {
-        env::remove_var("KOKO_DATABASE_URL");
-        env::remove_var("KOKO_ADMIN_TOKEN");
-        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:8080");
-    }
-
-    assert!(koko::support::AppConfig::from_env().is_err());
-
-    unsafe {
-        env::set_var(
-            "KOKO_DATABASE_URL",
-            "postgres://koko:koko_local@127.0.0.1:5432/koko_test",
-        );
-        env::set_var("KOKO_ADMIN_TOKEN", "");
-    }
-
-    assert!(koko::support::AppConfig::from_env().is_err());
-
-    unsafe {
-        match original_database_url {
-            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
-            None => env::remove_var("KOKO_DATABASE_URL"),
-        }
-        match original_admin_token {
-            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
-            None => env::remove_var("KOKO_ADMIN_TOKEN"),
-        }
-        match original_bind_addr {
-            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
-            None => env::remove_var("KOKO_BIND_ADDR"),
-        }
-    }
+    assert!(result.is_err());
+    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn app_config_rejects_empty_database_url() {
-    let _guard = env_lock();
-    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
-    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
-    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
+    let config_path = temp_config_file_path("rejects-empty-db-url");
+    let result = koko::support::AppConfig::load_for_test(
+        Some("   "),
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        Some("local-admin-token"),
+        None,
+    );
 
-    unsafe {
-        env::set_var("KOKO_DATABASE_URL", "   ");
-        env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
-        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:8080");
-    }
-
-    assert!(koko::support::AppConfig::from_env().is_err());
-
-    unsafe {
-        match original_database_url {
-            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
-            None => env::remove_var("KOKO_DATABASE_URL"),
-        }
-        match original_admin_token {
-            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
-            None => env::remove_var("KOKO_ADMIN_TOKEN"),
-        }
-        match original_bind_addr {
-            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
-            None => env::remove_var("KOKO_BIND_ADDR"),
-        }
-    }
+    assert!(result.is_err());
+    remove_temp_config_root(&config_path);
 }
 
 #[test]
@@ -715,74 +677,111 @@ fn app_error_code_exposes_admin_session_codes() {
 
 #[test]
 fn app_config_defaults_bind_addr_to_0_0_0_0_8080() {
-    let _guard = env_lock();
-    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
-    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
-    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
-
-    unsafe {
-        env::set_var(
-            "KOKO_DATABASE_URL",
-            "postgres://koko:koko_local@127.0.0.1:5432/koko_test",
-        );
-        env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
-        env::remove_var("KOKO_BIND_ADDR");
-    }
-
-    let config = koko::support::AppConfig::from_env().unwrap();
+    let config_path = temp_config_file_path("default-bind-addr");
+    let config = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        None,
+        config_path.clone(),
+        Some("local-admin-token"),
+        None,
+    )
+    .unwrap();
 
     assert_eq!(config.bind_addr.to_string(), "0.0.0.0:8080");
-
-    unsafe {
-        match original_database_url {
-            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
-            None => env::remove_var("KOKO_DATABASE_URL"),
-        }
-        match original_admin_token {
-            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
-            None => env::remove_var("KOKO_ADMIN_TOKEN"),
-        }
-        match original_bind_addr {
-            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
-            None => env::remove_var("KOKO_BIND_ADDR"),
-        }
-    }
+    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn app_config_respects_explicit_bind_addr_override() {
-    let _guard = env_lock();
-    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
-    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
-    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
-
-    unsafe {
-        env::set_var(
-            "KOKO_DATABASE_URL",
-            "postgres://koko:koko_local@127.0.0.1:5432/koko_test",
-        );
-        env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
-        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:8080");
-    }
-
-    let config = koko::support::AppConfig::from_env().unwrap();
+    let config_path = temp_config_file_path("explicit-bind-addr");
+    let config = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        Some("local-admin-token"),
+        None,
+    )
+    .unwrap();
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
+    remove_temp_config_root(&config_path);
+}
 
-    unsafe {
-        match original_database_url {
-            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
-            None => env::remove_var("KOKO_DATABASE_URL"),
-        }
-        match original_admin_token {
-            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
-            None => env::remove_var("KOKO_ADMIN_TOKEN"),
-        }
-        match original_bind_addr {
-            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
-            None => env::remove_var("KOKO_BIND_ADDR"),
-        }
-    }
+#[test]
+fn app_config_bootstraps_admin_token_into_config_file() {
+    let config_path = temp_config_file_path("bootstrap-admin-token");
+    let config = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert!(!config.admin_token.is_empty());
+    assert!(config.admin_token_notice.is_some());
+    let content = fs::read_to_string(&config_path).unwrap();
+    assert_eq!(content, format!("admin_token = \"{}\"\n", config.admin_token));
+    remove_temp_config_root(&config_path);
+}
+
+#[test]
+fn app_config_imports_admin_token_from_env_once_when_file_missing() {
+    let config_path = temp_config_file_path("import-admin-token-once");
+    let first = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        Some("migrated-admin-token"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(first.admin_token, "migrated-admin-token");
+    assert!(
+        first
+            .admin_token_notice
+            .as_deref()
+            .unwrap_or_default()
+            .contains("KOKO_ADMIN_TOKEN")
+    );
+
+    let second = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        Some("ignored-token"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(second.admin_token, "migrated-admin-token");
+    assert!(second.admin_token_notice.is_none());
+    remove_temp_config_root(&config_path);
+}
+
+#[test]
+fn app_config_respects_admin_cookie_secure_override() {
+    let config_path = temp_config_file_path("admin-cookie-secure");
+    let secure = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        Some("local-admin-token"),
+        Some(true),
+    )
+    .unwrap();
+    assert!(secure.admin_cookie_secure);
+
+    let insecure = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        config_path.clone(),
+        None,
+        Some(false),
+    )
+    .unwrap();
+    assert!(!insecure.admin_cookie_secure);
+    remove_temp_config_root(&config_path);
 }
 
 #[test]
@@ -821,16 +820,17 @@ fn root_run_script_defaults_to_lan_accessible_bind_addr() {
     assert!(stdout.contains("cargo build"));
     assert!(stdout.contains("浏览器"));
     assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
-    assert!(stdout.contains("已自动生成临时 AdminToken"));
+    assert!(stdout.contains("/admin"));
     assert!(stdout.contains("127.0.0.1:8080"));
     assert!(!stdout.contains("/api/admin/overview"));
     assert!(!stdout.contains("/api/admin/rooms"));
+    assert!(!stdout.contains("已自动生成临时 AdminToken"));
     assert!(!stdout.contains("x-admin-token"));
     assert!(stdout.contains("Ctrl+C"));
 }
 
 #[test]
-fn root_run_script_generates_temporary_admin_token_when_exposed_to_lan() {
+fn root_run_script_prints_admin_entry_without_temporary_admin_token_log() {
     let _guard = env_lock();
     let powershell = powershell_exe_path();
     let output = Command::new(powershell)
@@ -854,14 +854,30 @@ fn root_run_script_generates_temporary_admin_token_when_exposed_to_lan() {
 
     assert!(
         output.status.success(),
-        "run.ps1 should generate a temporary admin token instead of rejecting startup, stderr: {}",
+        "run.ps1 dry-run should keep admin entry output stable, stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("已自动生成临时 AdminToken"));
+    assert!(stdout.contains("/admin"));
     assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
+    assert!(!stdout.contains("已自动生成临时 AdminToken"));
     assert!(!stdout.contains("x-admin-token"));
+}
+
+fn temp_config_file_path(case_name: &str) -> PathBuf {
+    env::temp_dir()
+        .join("koko-tests")
+        .join(format!("{case_name}-{}", Uuid::now_v7()))
+        .join("config")
+        .join("koko.toml")
+}
+
+fn remove_temp_config_root(config_file_path: &Path) {
+    let Some(root) = config_file_path.parent().and_then(|value| value.parent()) else {
+        return;
+    };
+    let _ = fs::remove_dir_all(root);
 }
 
 fn powershell_exe_path() -> String {

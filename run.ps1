@@ -124,35 +124,6 @@ function Resolve-AppUrl {
     return "http://$hostName`:$port/"
 }
 
-function Test-LoopbackBindAddress {
-    param(
-        [string]$Address
-    )
-
-    $port = $Address.Substring($Address.LastIndexOf(":") + 1)
-    $hostName = $Address.Substring(0, $Address.Length - $port.Length - 1).Trim()
-    if ($hostName.StartsWith("[") -and $hostName.EndsWith("]")) {
-        $hostName = $hostName.Trim("[", "]")
-    }
-
-    return @("127.0.0.1", "localhost", "::1") -contains $hostName
-}
-
-function Resolve-EffectiveAdminToken {
-    param(
-        [string]$Address,
-        [string]$Token
-    )
-
-    if ($Token.Trim() -eq "local-admin-token" -and -not (Test-LoopbackBindAddress -Address $Address)) {
-        $generatedToken = "dev-" + [guid]::NewGuid().ToString("N")
-        Write-Host "==> 当前监听地址 $Address 会暴露到局域网，已自动生成临时 AdminToken: $generatedToken"
-        return $generatedToken
-    }
-
-    return $Token
-}
-
 function Get-LocalIPv4Addresses {
     $allAddresses = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
         Where-Object {
@@ -221,6 +192,13 @@ function Write-AccessHints {
             Write-Host "   $url"
         }
     }
+    Write-Host "==> 管理入口: $($localUrl)admin"
+    if ($lanUrls.Count -gt 0) {
+        Write-Host "==> 局域网管理入口:"
+        foreach ($url in $lanUrls) {
+            Write-Host "   $($url)admin"
+        }
+    }
 }
 
 function Wait-ForServerReady {
@@ -267,7 +245,6 @@ function Read-LogTail {
 
 Push-Location $repoRoot
 try {
-    $AdminToken = Resolve-EffectiveAdminToken -Address $BindAddr -Token $AdminToken
     $appUrl = Resolve-AppUrl -Address $BindAddr
     $accessUrls = Resolve-AccessUrls -Address $BindAddr
 

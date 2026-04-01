@@ -35,6 +35,7 @@ pub struct Module;
 struct HttpState {
     store: PgStore,
     admin_access: support::StaticAdminAccess,
+    admin_cookie_secure: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,7 +51,7 @@ struct SearchRoomsParams {
 pub const FRONTEND_DIST_DIR: &str = "dist/public";
 pub const FRONTEND_ASSET_DIR: &str = "dist/public/assets";
 
-pub fn api_router(store: PgStore, admin_token: String) -> Router {
+pub fn api_router(store: PgStore, admin_token: String, admin_cookie_secure: bool) -> Router {
     Router::new()
         .route("/session/bootstrap", post(bootstrap_session))
         .route("/rooms", get(joined_rooms))
@@ -63,12 +64,14 @@ pub fn api_router(store: PgStore, admin_token: String) -> Router {
         .with_state(HttpState {
             store,
             admin_access: support::StaticAdminAccess::new(admin_token),
+            admin_cookie_secure,
         })
 }
 
 pub fn app_router(
     store: PgStore,
     admin_token: String,
+    admin_cookie_secure: bool,
     frontend_dist_dir: impl Into<PathBuf>,
     asset_dir: impl Into<PathBuf>,
 ) -> Router {
@@ -77,7 +80,7 @@ pub fn app_router(
     let wasm_dir = frontend_dist_dir.join("wasm");
 
     Router::new()
-        .nest("/api", api_router(store, admin_token))
+        .nest("/api", api_router(store, admin_token, admin_cookie_secure))
         .nest_service("/assets", ServeDir::new(asset_dir.into()))
         .nest_service("/wasm", ServeDir::new(wasm_dir))
         .route_service("/", ServeFile::new(index_file.clone()))
@@ -92,6 +95,7 @@ pub fn app_router(
 pub fn server_router(
     store: PgStore,
     admin_token: String,
+    admin_cookie_secure: bool,
     frontend_dist_dir: impl Into<PathBuf>,
     asset_dir: impl Into<PathBuf>,
 ) -> Router {
@@ -102,7 +106,14 @@ pub fn server_router(
         support::SystemClock,
     ));
     crate::rt::install_realtime(&io, realtime);
-    app_router(store, admin_token, frontend_dist_dir, asset_dir).layer(socket_layer)
+    app_router(
+        store,
+        admin_token,
+        admin_cookie_secure,
+        frontend_dist_dir,
+        asset_dir,
+    )
+    .layer(socket_layer)
 }
 
 pub fn default_frontend_dist_dir() -> PathBuf {
@@ -135,6 +146,7 @@ async fn bootstrap_session(
     let cookie = Cookie::build((support::SESSION_COOKIE_NAME, session.session_id.to_string()))
         .http_only(true)
         .same_site(SameSite::Lax)
+        .secure(state.admin_cookie_secure)
         .path("/")
         .build();
 

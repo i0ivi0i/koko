@@ -43,6 +43,7 @@ impl HttpHarness {
         let router = http::server_router(
             store.clone(),
             "local-admin-token".to_string(),
+            false,
             frontend_fixture_dir,
             asset_dir,
         );

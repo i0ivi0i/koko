@@ -1,5 +1,11 @@
 #[cfg(not(target_arch = "wasm32"))]
-use std::{convert::Infallible, env, net::SocketAddr};
+use std::{
+    convert::Infallible,
+    env, fs,
+    io,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use chrono::{DateTime, Utc};
 #[cfg(not(target_arch = "wasm32"))]
@@ -20,6 +26,14 @@ pub const SESSION_COOKIE_NAME: &str = "koko_session";
 
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_BIND_ADDR: &str = "0.0.0.0:8080";
+#[cfg(not(target_arch = "wasm32"))]
+const DEFAULT_CONFIG_PATH: &str = "config/koko.toml";
+#[cfg(not(target_arch = "wasm32"))]
+const DATABASE_URL_ENV: &str = "KOKO_DATABASE_URL";
+#[cfg(not(target_arch = "wasm32"))]
+const ADMIN_TOKEN_ENV: &str = "KOKO_ADMIN_TOKEN";
+#[cfg(not(target_arch = "wasm32"))]
+const ADMIN_COOKIE_SECURE_ENV: &str = "KOKO_ADMIN_COOKIE_SECURE";
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +41,8 @@ pub struct AppConfig {
     pub database_url: String,
     pub bind_addr: SocketAddr,
     pub admin_token: String,
+    pub admin_token_notice: Option<String>,
+    pub admin_cookie_secure: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -41,6 +57,14 @@ pub enum ConfigError {
         value: String,
         source: std::net::AddrParseError,
     },
+    #[error("invalid boolean environment variable {name}: `{value}`")]
+    InvalidBoolEnv { name: &'static str, value: String },
+    #[error("failed to read config file `{path}`: {source}")]
+    ReadConfig { path: PathBuf, source: io::Error },
+    #[error("failed to write config file `{path}`: {source}")]
+    WriteConfig { path: PathBuf, source: io::Error },
+    #[error("invalid config file `{path}`: expected `admin_token = \"...\"`")]
+    InvalidConfigFile { path: PathBuf },
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -131,31 +155,182 @@ impl IdGenerator for SystemIdGenerator {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl AppConfig {
-    pub fn from_env() -> Result<Self, ConfigError> {
-        let database_url = env::var("KOKO_DATABASE_URL")
-            .map_err(|_| ConfigError::MissingEnv("KOKO_DATABASE_URL"))?;
-        if database_url.trim().is_empty() {
-            return Err(ConfigError::EmptyEnv("KOKO_DATABASE_URL"));
-        }
-        let admin_token = env::var("KOKO_ADMIN_TOKEN")
-            .map_err(|_| ConfigError::MissingEnv("KOKO_ADMIN_TOKEN"))?;
-        let admin_token = admin_token.trim().to_string();
-        if admin_token.is_empty() {
-            return Err(ConfigError::EmptyEnv("KOKO_ADMIN_TOKEN"));
-        }
-        let bind_addr_raw =
-            env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
+    pub fn load() -> Result<Self, ConfigError> {
+        let database_url = env::var(DATABASE_URL_ENV).map_err(|_| ConfigError::MissingEnv(DATABASE_URL_ENV))?;
+        let bind_addr_raw = env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
+        let config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
+        let admin_token_seed = env::var(ADMIN_TOKEN_ENV).ok();
+        let admin_cookie_secure =
+            parse_admin_cookie_secure(env::var(ADMIN_COOKIE_SECURE_ENV).ok().as_deref())?;
+
+        Self::load_inner(
+            Some(database_url.as_str()),
+            Some(bind_addr_raw.as_str()),
+            config_path,
+            admin_token_seed.as_deref(),
+            Some(admin_cookie_secure),
+        )
+    }
+
+    pub fn load_for_test(
+        database_url: Option<&str>,
+        bind_addr: Option<&str>,
+        config_path: impl Into<PathBuf>,
+        admin_token_seed: Option<&str>,
+        admin_cookie_secure_override: Option<bool>,
+    ) -> Result<Self, ConfigError> {
+        Self::load_inner(
+            database_url,
+            bind_addr,
+            config_path.into(),
+            admin_token_seed,
+            admin_cookie_secure_override,
+        )
+    }
+
+    fn load_inner(
+        database_url: Option<&str>,
+        bind_addr: Option<&str>,
+        config_path: PathBuf,
+        admin_token_seed: Option<&str>,
+        admin_cookie_secure_override: Option<bool>,
+    ) -> Result<Self, ConfigError> {
+        let database_url = parse_required_value(DATABASE_URL_ENV, database_url)?;
+        let bind_addr_raw = bind_addr.unwrap_or(DEFAULT_BIND_ADDR).trim().to_string();
         let bind_addr = bind_addr_raw
             .parse()
             .map_err(|source| ConfigError::InvalidBindAddr {
                 value: bind_addr_raw,
                 source,
             })?;
+        let admin_cookie_secure = admin_cookie_secure_override.unwrap_or(false);
+        let (admin_token, admin_token_notice) =
+            load_or_bootstrap_admin_token(&config_path, admin_token_seed)?;
 
         Ok(Self {
-            database_url: database_url.trim().to_string(),
+            database_url,
             bind_addr,
             admin_token,
+            admin_token_notice,
+            admin_cookie_secure,
         })
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_required_value(name: &'static str, value: Option<&str>) -> Result<String, ConfigError> {
+    let Some(raw) = value else {
+        return Err(ConfigError::MissingEnv(name));
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(ConfigError::EmptyEnv(name));
+    }
+    Ok(trimmed.to_string())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_admin_cookie_secure(raw: Option<&str>) -> Result<bool, ConfigError> {
+    let Some(raw) = raw else {
+        return Ok(false);
+    };
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => Err(ConfigError::InvalidBoolEnv {
+            name: ADMIN_COOKIE_SECURE_ENV,
+            value: raw.to_string(),
+        }),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_or_bootstrap_admin_token(
+    config_path: &Path,
+    admin_token_seed: Option<&str>,
+) -> Result<(String, Option<String>), ConfigError> {
+    if config_path.exists() {
+        let content = fs::read_to_string(config_path).map_err(|source| ConfigError::ReadConfig {
+            path: config_path.to_path_buf(),
+            source,
+        })?;
+        let token = parse_admin_token_from_config(config_path, &content)?;
+        return Ok((token, None));
+    }
+
+    // 管理员口令真相必须落在配置文件，避免入口脚本或环境变量各自持有一份事实。
+    // KOKO_ADMIN_TOKEN 只允许作为“文件首次缺失时的一跳迁移入口”，写入后立即由文件接管。
+    let (token, notice) = match admin_token_seed {
+        Some(raw) => {
+            let token = parse_required_value(ADMIN_TOKEN_ENV, Some(raw))?;
+            (
+                token,
+                Some(
+                    "检测到 KOKO_ADMIN_TOKEN，已一次性导入 config/koko.toml；后续将以配置文件为准。"
+                        .to_string(),
+                ),
+            )
+        }
+        None => (
+            format!("admin-{}", Uuid::now_v7()),
+            Some("首次启动未发现 config/koko.toml，已自动生成管理员口令并写入该文件。".to_string()),
+        ),
+    };
+
+    write_admin_token_config(config_path, &token)?;
+    Ok((token, notice))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_admin_token_from_config(config_path: &Path, content: &str) -> Result<String, ConfigError> {
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(2, '=');
+        let Some(key) = parts.next().map(str::trim) else {
+            break;
+        };
+        let Some(value) = parts.next().map(str::trim) else {
+            break;
+        };
+        if key != "admin_token" {
+            break;
+        }
+        let token = serde_json::from_str::<String>(value).map_err(|_| ConfigError::InvalidConfigFile {
+            path: config_path.to_path_buf(),
+        })?;
+        if token.trim().is_empty() {
+            return Err(ConfigError::InvalidConfigFile {
+                path: config_path.to_path_buf(),
+            });
+        }
+        return Ok(token);
+    }
+
+    Err(ConfigError::InvalidConfigFile {
+        path: config_path.to_path_buf(),
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn write_admin_token_config(config_path: &Path, admin_token: &str) -> Result<(), ConfigError> {
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ConfigError::WriteConfig {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+    let encoded_token = serde_json::to_string(admin_token).map_err(|source| ConfigError::WriteConfig {
+        path: config_path.to_path_buf(),
+        source: io::Error::new(io::ErrorKind::InvalidData, source),
+    })?;
+    fs::write(config_path, format!("admin_token = {encoded_token}\n")).map_err(|source| {
+        ConfigError::WriteConfig {
+            path: config_path.to_path_buf(),
+            source,
+        }
+    })
 }

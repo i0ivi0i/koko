@@ -4,7 +4,10 @@ use sqlx::postgres::PgPoolOptions;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = koko::support::AppConfig::from_env()?;
+    let config = koko::support::AppConfig::load()?;
+    if let Some(notice) = config.admin_token_notice.as_deref() {
+        println!("{notice}");
+    }
     let _ = koko::support::init_tracing(koko::support::DEFAULT_TRACING_FILTER)?;
 
     let pool = PgPoolOptions::new()
@@ -14,7 +17,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store = koko::store::PgStore::new(pool);
     let router = koko::http::server_router(
         store,
-        config.admin_token,
+        config.admin_token.clone(),
+        config.admin_cookie_secure,
         koko::http::default_frontend_dist_dir(),
         koko::http::default_frontend_asset_dir(),
     );
