@@ -193,6 +193,62 @@ async fn joined_rooms_endpoint_returns_current_memberships() {
 }
 
 #[tokio::test]
+async fn joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers() {
+    let harness =
+        HttpHarness::new("joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers")
+            .await;
+
+    let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let joined = join_room(&harness, &cookie, "a1234").await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/rooms")
+                .header(COOKIE, "theme=dark; tracking=on")
+                .header(COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let rooms: Vec<JoinedRoomSummary> =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(rooms.len(), 1);
+    assert_eq!(rooms[0].room_id, joined.room_id);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_headers() {
+    let harness =
+        HttpHarness::new("joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_headers")
+            .await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/rooms")
+                .header(COOKIE, "theme=dark; logged_in=true")
+                .header(COOKIE, "koko_session=not-a-uuid")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
 async fn room_search_endpoint_returns_case_insensitive_matches() {
     let harness = HttpHarness::new("room_search_endpoint_returns_case_insensitive_matches").await;
 
@@ -503,6 +559,18 @@ async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request() {
     .unwrap();
 
     assert_eq!(second_session.session_id, first_session.session_id);
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie() {
+    let harness = HttpHarness::new("bootstrap_session_tolerates_invalid_existing_koko_session_cookie")
+        .await;
+
+    let response = bootstrap_session_response(&harness, Some("koko_session=not-a-uuid")).await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert!(response.headers().get(SET_COOKIE).is_some());
     harness.cleanup().await;
 }
 

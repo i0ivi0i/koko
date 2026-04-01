@@ -231,6 +231,22 @@ async fn authenticate_realtime_session_reads_koko_session_from_multi_cookie_head
 }
 
 #[tokio::test]
+async fn authenticate_realtime_session_reads_quoted_koko_session_cookie_value() {
+    let session_id = Uuid::from_u128(3);
+    let mut headers = HeaderMap::new();
+    headers.append(
+        COOKIE,
+        HeaderValue::from_str(&format!("theme=dark; koko_session=\"{session_id}\"")).unwrap(),
+    );
+
+    let authenticated = authenticate_realtime_session(&FakeSessionPort::allow(), &headers)
+        .await
+        .unwrap();
+
+    assert_eq!(authenticated.session_id, session_id);
+}
+
+#[tokio::test]
 async fn authenticate_realtime_session_rejects_missing_or_invalid_cookie() {
     let missing_cookie = HeaderMap::new();
     let missing_cookie_error =

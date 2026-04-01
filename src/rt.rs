@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::http::{HeaderMap, header::COOKIE};
+use axum::http::HeaderMap;
 use serde::Serialize;
 use socketioxide::{
     SocketIo,
@@ -53,7 +53,7 @@ pub async fn authenticate_realtime_session<S>(
 where
     S: SessionPort,
 {
-    let session_id = parse_koko_session_cookie(headers)?;
+    let session_id = resolve_session_id(headers)?;
     if !session_port.is_active_session(session_id).await? {
         return Err(AppError::SessionNotActive { session_id });
     }
@@ -61,25 +61,10 @@ where
     Ok(AuthenticatedSession { session_id })
 }
 
-fn parse_koko_session_cookie(headers: &HeaderMap) -> Result<Uuid, AppError> {
-    for cookie_header in headers.get_all(COOKIE) {
-        let raw_cookie = cookie_header
-            .to_str()
-            .map_err(|_| invalid_session_error())?;
-        for segment in raw_cookie.split(';') {
-            let trimmed = segment.trim();
-            let Some((name, value)) = trimmed.split_once('=') else {
-                continue;
-            };
-            if name.trim() != crate::support::SESSION_COOKIE_NAME {
-                continue;
-            }
-
-            return Uuid::parse_str(value.trim()).map_err(|_| invalid_session_error());
-        }
-    }
-
-    Err(invalid_session_error())
+fn resolve_session_id(headers: &HeaderMap) -> Result<Uuid, AppError> {
+    crate::support::session_id_from_headers(headers)
+        .map_err(|_| invalid_session_error())?
+        .ok_or_else(invalid_session_error)
 }
 
 fn warn_handler_failure(handler: &str, error: &AppError) {

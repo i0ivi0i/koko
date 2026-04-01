@@ -100,11 +100,9 @@ async fn frontend_reserved_not_found() -> StatusCode {
 
 async fn bootstrap_session(
     State(state): State<HttpState>,
-    jar: CookieJar,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorPayload>)> {
-    let existing_session_id = jar
-        .get(support::SESSION_COOKIE_NAME)
-        .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
+    let existing_session_id = support::session_id_from_headers(&headers).ok().flatten();
     let session = bootstrap_anonymous_session(
         &state.store,
         &support::SystemClock,
@@ -119,15 +117,15 @@ async fn bootstrap_session(
         .path("/")
         .build();
 
-    Ok((jar.add(cookie), (StatusCode::CREATED, Json(session))))
+    Ok((CookieJar::new().add(cookie), (StatusCode::CREATED, Json(session))))
 }
 
 async fn join_room(
     State(state): State<HttpState>,
-    jar: CookieJar,
+    headers: HeaderMap,
     Json(request): Json<JoinRoomRequest>,
 ) -> Result<Json<RoomSnapshot>, (StatusCode, Json<ErrorPayload>)> {
-    let session_id = resolve_session_id(&jar)?;
+    let session_id = resolve_session_id(&headers)?;
     let snapshot = join_or_create_room_by_code(
         &state.store,
         &state.store,
@@ -145,9 +143,9 @@ async fn join_room(
 
 async fn joined_rooms(
     State(state): State<HttpState>,
-    jar: CookieJar,
+    headers: HeaderMap,
 ) -> Result<Json<Vec<JoinedRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
-    let session_id = resolve_session_id(&jar)?;
+    let session_id = resolve_session_id(&headers)?;
     let rooms = list_joined_rooms(
         &state.store,
         &state.store,
@@ -160,10 +158,10 @@ async fn joined_rooms(
 
 async fn search_rooms(
     State(state): State<HttpState>,
-    jar: CookieJar,
+    headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<SearchRoomsParams>,
 ) -> Result<Json<Vec<RoomSearchResult>>, (StatusCode, Json<ErrorPayload>)> {
-    let session_id = resolve_session_id(&jar)?;
+    let session_id = resolve_session_id(&headers)?;
     let rooms = search_rooms_by_code(
         &state.store,
         &state.store,
@@ -180,9 +178,9 @@ async fn search_rooms(
 async fn room_snapshot(
     State(state): State<HttpState>,
     RoutePath(room_id): RoutePath<Uuid>,
-    jar: CookieJar,
+    headers: HeaderMap,
 ) -> Result<Json<RoomSnapshot>, (StatusCode, Json<ErrorPayload>)> {
-    let session_id = resolve_session_id(&jar)?;
+    let session_id = resolve_session_id(&headers)?;
     let snapshot = load_room_snapshot(
         &state.store,
         &state.store,
@@ -235,9 +233,9 @@ fn admin_query_context(
     Ok(AdminQueryContext::new(token.to_string()))
 }
 
-fn resolve_session_id(jar: &CookieJar) -> Result<Uuid, (StatusCode, Json<ErrorPayload>)> {
-    jar.get(support::SESSION_COOKIE_NAME)
-        .and_then(|cookie| Uuid::parse_str(cookie.value()).ok())
+fn resolve_session_id(headers: &HeaderMap) -> Result<Uuid, (StatusCode, Json<ErrorPayload>)> {
+    support::session_id_from_headers(headers)
+        .map_err(|_| invalid_session_error())?
         .ok_or_else(invalid_session_error)
 }
 
