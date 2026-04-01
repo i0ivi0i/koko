@@ -60,8 +60,11 @@ fn ConversationListScreen(
     let room_count = state.joined_rooms().len();
 
     rsx! {
-        div { class: "tg-shell tg-shell--list",
+        div {
+            class: "tg-shell tg-shell--list",
+            "data-shell-screen": "conversation-list",
             ShellHeader {
+                shows_back: false,
                 back_label: "Menu".to_string(),
                 title: "Chats".to_string(),
                 subtitle: format!("{room_count} joined rooms"),
@@ -69,7 +72,10 @@ fn ConversationListScreen(
                 on_back_to_list: None,
             }
             section { class: "tg-shell__body tg-shell__body--list",
-                div { class: "tg-shell__search-card",
+                div {
+                    class: "tg-shell__search-card",
+                    role: "search",
+                    "data-shell-region": "room-search",
                     div { class: "tg-shell__search-card-title", "Search rooms" }
                     RoomSearchBar {
                         value: state.search_query().to_string(),
@@ -84,7 +90,10 @@ fn ConversationListScreen(
                         body: "Open search and join a room to start chatting.".to_string(),
                     }
                 } else {
-                    div { class: "tg-chat-list",
+                    div {
+                        class: "tg-chat-list",
+                        role: "list",
+                        "data-shell-region": "conversation-list",
                         for room in state.joined_rooms().iter().cloned() {
                             ConversationListItem {
                                 room,
@@ -108,8 +117,11 @@ fn JoinByCodeScreen(
     let result_count = state.search_results().len();
 
     rsx! {
-        div { class: "tg-shell tg-shell--search",
+        div {
+            class: "tg-shell tg-shell--search",
+            "data-shell-screen": "join-by-code",
             ShellHeader {
+                shows_back: true,
                 back_label: "Chats".to_string(),
                 title: "Search".to_string(),
                 subtitle: "Enter a room code".to_string(),
@@ -117,7 +129,10 @@ fn JoinByCodeScreen(
                 on_back_to_list,
             }
             section { class: "tg-shell__body tg-shell__body--search",
-                div { class: "tg-search-panel",
+                div {
+                    class: "tg-search-panel",
+                    role: "search",
+                    "data-shell-region": "room-search",
                     div { class: "tg-search-panel__label", "Room code" }
                     RoomSearchBar {
                         value: state.search_query().to_string(),
@@ -133,7 +148,10 @@ fn JoinByCodeScreen(
                         body: "Type a room code and matching rooms will appear here.".to_string(),
                     }
                 } else {
-                    div { class: "tg-search-results",
+                    div {
+                        class: "tg-search-results",
+                        role: "list",
+                        "data-shell-region": "search-results",
                         for result in state.search_results().iter().cloned() {
                             SearchResultItem {
                                 result,
@@ -158,8 +176,11 @@ fn ChatScreen(
     let room_code = shell_room_code(state.room_code());
 
     rsx! {
-        div { class: "tg-shell tg-shell--chat",
+        div {
+            class: "tg-shell tg-shell--chat",
+            "data-shell-screen": "chat",
             ShellHeader {
+                shows_back: true,
                 back_label: "Chats".to_string(),
                 title: room_code.clone(),
                 subtitle: connection_label(state.connection()).to_string(),
@@ -173,14 +194,18 @@ fn ChatScreen(
                         body: "Messages will appear here once the room timeline loads.".to_string(),
                     }
                 } else {
-                    div { class: "tg-thread",
+                    div {
+                        class: "tg-thread",
+                        "data-shell-region": "message-thread",
                         for message in state.messages().iter().cloned() {
                             MessageBubble { message }
                         }
                     }
                 }
             }
-            footer { class: "tg-compose",
+            footer {
+                class: "tg-compose",
+                "data-shell-region": "composer",
                 div { class: "tg-compose__field",
                     input {
                         class: "tg-compose__input",
@@ -214,6 +239,7 @@ fn ChatScreen(
 
 #[component]
 fn ShellHeader(
+    shows_back: bool,
     back_label: String,
     title: String,
     subtitle: String,
@@ -221,7 +247,10 @@ fn ShellHeader(
     #[props(default)] on_back_to_list: Option<EventHandler<()>>,
 ) -> Element {
     rsx! {
-        header { class: "tg-nav",
+        header {
+            class: "tg-nav",
+            role: "navigation",
+            "data-shell-back": if shows_back { "true" } else { "false" },
             button {
                 class: "tg-nav__back",
                 r#type: "button",
