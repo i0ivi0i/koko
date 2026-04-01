@@ -340,21 +340,49 @@ fn ConversationListItem(
             class: "tg-chat-card",
             role: "button",
             tabindex: "0",
+            "data-shell-row": "conversation",
+            "data-shell-activatable": "true",
             onclick: move |_| {
                 if let Some(handler) = on_select.as_ref() {
                     handler.call(room.room_id);
                 }
             },
-            div { class: "tg-chat-card__avatar", "{room_code.chars().next().unwrap_or('K')}" }
+            onkeydown: move |event| {
+                if let Some(handler) = on_select.as_ref()
+                    && is_row_activation_key(&event.key())
+                {
+                    event.prevent_default();
+                    handler.call(room.room_id);
+                }
+            },
+            div {
+                class: "tg-chat-card__avatar",
+                "data-conversation-region": "avatar",
+                "{room_code.chars().next().unwrap_or('K')}"
+            }
             div { class: "tg-chat-card__content",
-                div { class: "tg-chat-card__title", "{room.display_title}" }
-                div { class: "tg-chat-card__preview",
+                div {
+                    class: "tg-chat-card__title",
+                    "data-conversation-region": "title",
+                    "{room.display_title}"
+                }
+                div {
+                    class: "tg-chat-card__preview",
+                    "data-conversation-region": "preview",
                     "{conversation_preview(&room.latest_preview)}"
                 }
             }
             div { class: "tg-chat-card__meta",
-                div { class: "tg-chat-card__time", "{latest_time}" }
-                div { class: "tg-chat-card__unread", "{unread_label}" }
+                div {
+                    class: "tg-chat-card__time",
+                    "data-conversation-region": "time",
+                    "{latest_time}"
+                }
+                div {
+                    class: "tg-chat-card__unread",
+                    "data-conversation-region": "unread",
+                    "{unread_label}"
+                }
             }
         }
     }
@@ -453,6 +481,10 @@ fn format_clock(time: DateTime<Utc>) -> String {
     time.format("%H:%M").to_string()
 }
 
+fn is_row_activation_key(key: &Key) -> bool {
+    matches!(key, Key::Enter) || matches!(key, Key::Character(value) if value == " ")
+}
+
 #[component]
 pub fn AdminPanel(state: AdminPanelState) -> Element {
     rsx! {
@@ -533,5 +565,12 @@ mod tests {
         assert_eq!(connection_label(ConnectionState::Offline), "Offline");
         assert_eq!(connection_label(ConnectionState::Connecting), "Connecting");
         assert_eq!(connection_label(ConnectionState::Joined), "Connected");
+    }
+
+    #[test]
+    fn row_activation_keys_accept_enter_and_space_only() {
+        assert!(is_row_activation_key(&Key::Enter));
+        assert!(is_row_activation_key(&Key::Character(" ".into())));
+        assert!(!is_row_activation_key(&Key::Escape));
     }
 }

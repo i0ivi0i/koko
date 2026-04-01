@@ -64,6 +64,25 @@ fn search_and_chat_top_bars_share_the_same_structural_regions() {
     }
 }
 
+#[test]
+fn conversation_rows_expose_stable_avatar_content_and_meta_regions() {
+    let html = render_chat_page(conversation_list_state());
+
+    assert!(html.contains("data-shell-row=\"conversation\""));
+    assert!(html.contains("data-conversation-region=\"avatar\""));
+    assert!(html.contains("data-conversation-region=\"title\""));
+    assert!(html.contains("data-conversation-region=\"preview\""));
+    assert!(html.contains("data-conversation-region=\"time\""));
+    assert!(html.contains("data-conversation-region=\"unread\""));
+}
+
+#[test]
+fn conversation_rows_mark_keyboard_activation_support() {
+    let html = render_chat_page(conversation_list_state());
+
+    assert!(html.contains("data-shell-activatable=\"true\""));
+}
+
 fn render_chat_page(state: ChatState) -> String {
     let mut vdom = VirtualDom::new_with_props(
         ChatPage,

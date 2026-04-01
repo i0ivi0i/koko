@@ -475,75 +475,10 @@
 }
 
 .tg-search__results,
-.tg-list__items,
 .tg-chat-list {
   display: grid;
-  gap: 10px;
+  gap: 0;
 }
-
-.tg-list__item,
-.tg-search-result,
-.tg-room-card,
-.tg-conversation-card,
-.tg-chat-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 14px;
-  border-radius: 18px;
-  border: 1px solid var(--koko-border);
-  background: rgba(23, 33, 43, 0.92);
-  box-shadow: var(--koko-shadow-soft);
-  transition:
-    transform 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease;
-}
-
-.tg-list__item:hover,
-.tg-search-result:hover,
-.tg-room-card:hover,
-.tg-conversation-card:hover,
-.tg-chat-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(72, 192, 255, 0.22);
-  background: rgba(26, 37, 50, 0.96);
-}
-
-.tg-list__item--active,
-.tg-search-result--active,
-.tg-room-card--active,
-.tg-conversation-card--active,
-.tg-chat-card--active {
-  border-color: rgba(72, 192, 255, 0.32);
-  background:
-    linear-gradient(180deg, rgba(42, 171, 238, 0.12), rgba(23, 33, 43, 0.98));
-}
-
-.tg-list__item-main,
-.tg-search-result__main,
-.tg-room-card__main,
-.tg-conversation-card__main,
-.tg-chat-card__content {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.tg-list__title,
-.tg-search-result__title,
-.tg-room-card__title,
-.tg-conversation-card__title,
-.tg-chat-card__title {
-  font-size: 16px;
-}
-
-.tg-list__preview,
-.tg-search-result__preview,
-.tg-room-card__preview,
-.tg-conversation-card__preview,
-.tg-chat-card__preview,
 .tg-search-panel__hint,
 .tg-shell__search-card-copy,
 .tg-empty-state__body {
@@ -551,19 +486,6 @@
   opacity: 0.82;
   font-size: 14px;
   line-height: 1.35;
-}
-
-.tg-list__badge,
-.tg-search-result__badge,
-.tg-room-card__badge,
-.tg-conversation-card__badge {
-  justify-self: end;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(42, 171, 238, 0.14);
-  color: var(--koko-accent-strong);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .tg-empty {
@@ -643,8 +565,7 @@
   justify-items: end;
 }
 
-.tg-search-result__chip,
-.tg-chat-card__unread {
+.tg-search-result__chip {
   min-width: 52px;
   justify-self: end;
   padding: 6px 10px;
@@ -655,16 +576,15 @@
   font-weight: 700;
 }
 
-.tg-search-result__chip--joined,
-.tg-chat-card__unread {
+.tg-search-result__chip--joined {
   background: rgba(95, 211, 141, 0.14);
   color: var(--koko-success);
 }
 
 .tg-chat-card__avatar,
 .tg-search-result__avatar {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -678,17 +598,80 @@
 .tg-chat-card,
 .tg-search-result {
   grid-template-columns: auto minmax(0, 1fr) auto;
+  position: relative;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tg-chat-card:hover,
+.tg-search-result:hover {
+  transform: none;
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tg-chat-card:focus-visible,
+.tg-search-result:focus-visible {
+  outline: none;
+  background: rgba(42, 171, 238, 0.1);
+}
+
+.tg-chat-card::after,
+.tg-search-result::after {
+  content: "";
+  position: absolute;
+  left: 78px;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .tg-chat-card__content,
 .tg-search-result__content {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .tg-chat-screen .tg-thread {
   padding-top: 18px;
+}
+
+.tg-chat-card__title,
+.tg-search-result__title {
+  font-weight: 600;
+}
+
+.tg-chat-card__preview,
+.tg-search-result__preview {
+  color: var(--koko-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tg-chat-card__meta {
+  align-self: stretch;
+  padding-block: 2px;
+}
+
+.tg-chat-card__time {
+  color: var(--koko-faint);
+}
+
+.tg-chat-card__unread {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--koko-accent);
+  color: transparent;
+  font-size: 0;
 }
 
 /* 列表 / 搜索 / 聊天三段壳的响应式处理 */
@@ -727,17 +710,13 @@
     padding-inline: 10px;
   }
 
-  .tg-list__item,
   .tg-search-result,
-  .tg-room-card,
-  .tg-conversation-card {
+  .tg-chat-card {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .tg-list__badge,
-  .tg-search-result__badge,
-  .tg-room-card__badge,
-  .tg-conversation-card__badge {
+  .tg-search-result__chip,
+  .tg-chat-card__unread {
     grid-column: 2;
     justify-self: start;
   }
@@ -754,10 +733,8 @@
   .admin-shell__hero,
   .admin-stat,
   .admin-room,
-  .tg-list__item,
   .tg-search-result,
-  .tg-room-card,
-  .tg-conversation-card {
+  .tg-chat-card {
     animation: none !important;
     transition: none !important;
   }
