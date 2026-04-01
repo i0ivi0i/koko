@@ -82,7 +82,7 @@ while (true) {
 
   if (command.type === "send_text_message") {
     if (!socket) {
-      sendEvent({ type: "error", message: "Realtime socket unavailable" });
+      sendEvent({ type: "error", message: "实时连接不可用" });
       continue;
     }
 
@@ -232,12 +232,12 @@ pub(crate) fn resolve_shell_api_url(
 ) -> Result<String, String> {
     let browser_location = browser_location.trim();
     if browser_location.is_empty() {
-        return Err("Browser location required".to_string());
+        return Err("浏览器地址不能为空".to_string());
     }
 
     let contract_path = contract_path.trim();
     if contract_path.is_empty() {
-        return Err("Contract path required".to_string());
+        return Err("接口路径不能为空".to_string());
     }
 
     let base = Url::parse(browser_location).map_err(|error| error.to_string())?;
@@ -445,12 +445,12 @@ fn remove_pending_send(
 #[cfg(any(target_arch = "wasm32", test))]
 fn rejection_message(code: AppErrorCode) -> String {
     match code {
-        AppErrorCode::InvalidSession => "Realtime session is no longer valid".to_string(),
-        AppErrorCode::MembershipRequired => "You are no longer a member of this room".to_string(),
-        AppErrorCode::InvalidRoomCode => "Room code is invalid".to_string(),
-        AppErrorCode::InvalidMessageBody => "Message body is invalid".to_string(),
-        AppErrorCode::InvalidAdminToken => "Admin token is invalid".to_string(),
-        AppErrorCode::Internal => "Realtime command failed".to_string(),
+        AppErrorCode::InvalidSession => "实时会话已失效".to_string(),
+        AppErrorCode::MembershipRequired => "你已不在该房间中".to_string(),
+        AppErrorCode::InvalidRoomCode => "房间码不合法".to_string(),
+        AppErrorCode::InvalidMessageBody => "消息内容不合法".to_string(),
+        AppErrorCode::InvalidAdminToken => "管理员令牌无效".to_string(),
+        AppErrorCode::Internal => "实时指令执行失败".to_string(),
     }
 }
 
@@ -498,7 +498,7 @@ fn spawn_realtime_bridge(
                     }
                     set_shell_error(
                         shell_error,
-                        Some(format!("Realtime bridge ended: {error}")),
+                        Some(format!("实时连接桥已结束：{error}")),
                     );
                     break;
                 }
@@ -523,7 +523,7 @@ fn spawn_realtime_bridge(
                     if !matches!(reason.as_deref(), Some("manual_disconnect" | "switch_room")) {
                         set_shell_error(
                             shell_error,
-                            reason.map(|reason| format!("Realtime disconnected: {reason}")),
+                            reason.map(|reason| format!("实时连接已断开：{reason}")),
                         );
                     }
                 }
@@ -548,7 +548,7 @@ fn spawn_realtime_bridge(
                             }
                             Err(error) => set_shell_error(
                                 refill_shell_error,
-                                Some(format!("Failed to refill room snapshot: {error}")),
+                                Some(format!("补拉房间快照失败：{error}")),
                             ),
                         }
                     });
@@ -595,7 +595,7 @@ fn spawn_realtime_bridge(
                         next_state.set_connection(ConnectionState::Offline);
                         state.set(next_state);
                     }
-                    set_shell_error(shell_error, Some(format!("Realtime error: {message}")));
+                    set_shell_error(shell_error, Some(format!("实时连接出错：{message}")));
                 }
             }
         }
@@ -656,7 +656,7 @@ pub fn App() -> Element {
                 Ok(()) => realtime_active_room.set(target_room),
                 Err(error) => set_shell_error(
                     shell_error,
-                    Some(format!("Failed to send realtime command: {error}")),
+                    Some(format!("发送实时指令失败：{error}")),
                 ),
             }
         }
@@ -719,7 +719,7 @@ pub fn App() -> Element {
     } else if let Some(Err(error)) = &*joined_rooms.read_unchecked() {
         set_shell_error(
             shell_error,
-            Some(format!("Failed to load joined rooms: {error}")),
+            Some(format!("加载已加入房间失败：{error}")),
         );
     }
 
@@ -752,7 +752,7 @@ pub fn App() -> Element {
     } else if let Some(Err(error)) = &*search_results.read_unchecked() {
         set_shell_error(
             shell_error,
-            Some(format!("Failed to search rooms: {error}")),
+            Some(format!("搜索房间失败：{error}")),
         );
     }
 
@@ -797,21 +797,21 @@ pub fn App() -> Element {
             state.set(next_state);
             room_action.set(RoomAction::Idle);
             realtime_target_room.set(None);
-            set_shell_error(shell_error, Some(format!("Failed to open room: {error}")));
+            set_shell_error(shell_error, Some(format!("打开房间失败：{error}")));
         }
     }
 
     let chat_state = state();
     let chat_draft = chat_state.draft().to_string();
     let bootstrap_error = match &*bootstrap_session.read_unchecked() {
-        Some(Err(error)) => Some(format!("Bootstrap failed: {error}")),
+        Some(Err(error)) => Some(format!("初始化失败：{error}")),
         _ => None,
     };
     let current_shell_error = shell_error();
     let error_message = resolve_shell_banner_message(bootstrap_error, current_shell_error);
 
     rsx! {
-        Title { "koko" }
+        Title { "Koko 聊天" }
         Stylesheet { href: asset!("/assets/theme.css") }
         div { class: "koko-web-shell",
             if let Some(error) = error_message {
@@ -905,7 +905,7 @@ pub fn App() -> Element {
                             state.set(next_state);
                             set_shell_error(
                                 shell_error,
-                                Some("Realtime bridge is unavailable".to_string()),
+                                Some("实时连接桥不可用".to_string()),
                             );
                             let _ = remove_pending_send(pending_send_ids, client_message_id);
                             return;
@@ -921,7 +921,7 @@ pub fn App() -> Element {
                             state.set(next_state);
                             set_shell_error(
                                 shell_error,
-                                Some(format!("Failed to send realtime message: {error}")),
+                                Some(format!("发送实时消息失败：{error}")),
                             );
                             let _ = remove_pending_send(pending_send_ids, client_message_id);
                         }
@@ -934,7 +934,7 @@ pub fn App() -> Element {
                         state.set(next_state);
                         set_shell_error(
                             shell_error,
-                            Some("Realtime message sending is only available in wasm".to_string()),
+                            Some("实时消息发送仅在 wasm 环境可用".to_string()),
                         );
                         let _ = remove_pending_send(pending_send_ids, client_message_id);
                     }
@@ -1050,14 +1050,26 @@ mod tests {
     }
 
     #[test]
+    fn resolve_shell_api_url_validation_copy_is_localized() {
+        assert_eq!(
+            resolve_shell_api_url("", "/api/session/bootstrap").unwrap_err(),
+            "浏览器地址不能为空"
+        );
+        assert_eq!(
+            resolve_shell_api_url("https://example.com/app", "").unwrap_err(),
+            "接口路径不能为空"
+        );
+    }
+
+    #[test]
     fn rejection_message_keeps_realtime_copy_stable() {
         assert_eq!(
             rejection_message(AppErrorCode::MembershipRequired),
-            "You are no longer a member of this room"
+            "你已不在该房间中"
         );
         assert_eq!(
             rejection_message(AppErrorCode::InvalidMessageBody),
-            "Message body is invalid"
+            "消息内容不合法"
         );
     }
 
@@ -1091,18 +1103,18 @@ mod tests {
     #[test]
     fn shell_banner_prefers_bootstrap_failure_over_shell_error() {
         let banner = resolve_shell_banner_message(
-            Some("Bootstrap failed: nope".to_string()),
-            Some("Realtime failed".to_string()),
+            Some("初始化失败：nope".to_string()),
+            Some("实时连接失败".to_string()),
         );
 
-        assert_eq!(banner, Some("Bootstrap failed: nope".to_string()));
+        assert_eq!(banner, Some("初始化失败：nope".to_string()));
     }
 
     #[test]
     fn shell_banner_uses_shell_error_when_bootstrap_is_clean() {
-        let banner = resolve_shell_banner_message(None, Some("Realtime failed".to_string()));
+        let banner = resolve_shell_banner_message(None, Some("实时连接失败".to_string()));
 
-        assert_eq!(banner, Some("Realtime failed".to_string()));
+        assert_eq!(banner, Some("实时连接失败".to_string()));
         assert_eq!(resolve_shell_banner_message(None, None), None);
     }
 }

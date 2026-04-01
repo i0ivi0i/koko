@@ -67,8 +67,8 @@ fn ConversationListScreen(
             ShellHeader {
                 shows_back: false,
                 back_label: String::new(),
-                title: "Chats".to_string(),
-                subtitle: format!("{room_count} joined rooms"),
+                title: "聊天".to_string(),
+                subtitle: format!("已加入 {room_count} 个房间"),
                 shows_compose_action: true,
                 on_back_to_list: None,
             }
@@ -80,15 +80,15 @@ fn ConversationListScreen(
                     "data-shell-search-style": "embedded",
                     RoomSearchBar {
                         value: state.search_query().to_string(),
-                        placeholder: "Search by room code".to_string(),
+                        placeholder: "按房间码搜索".to_string(),
                         hint: String::new(),
                         on_input: on_search_input,
                     }
                 }
                 if room_count == 0 {
                     EmptyState {
-                        title: "No conversations yet".to_string(),
-                        body: "Open search and join a room to start chatting.".to_string(),
+                        title: "还没有聊天".to_string(),
+                        body: "先搜索并加入一个房间，再开始聊天。".to_string(),
                     }
                 } else {
                     div {
@@ -124,9 +124,9 @@ fn JoinByCodeScreen(
             "data-shell-frame": "phone",
             ShellHeader {
                 shows_back: true,
-                back_label: "Chats".to_string(),
-                title: "Search".to_string(),
-                subtitle: "Enter a room code".to_string(),
+                back_label: "聊天".to_string(),
+                title: "搜索".to_string(),
+                subtitle: "输入房间码".to_string(),
                 shows_compose_action: false,
                 on_back_to_list,
             }
@@ -138,15 +138,15 @@ fn JoinByCodeScreen(
                     "data-shell-search-style": "embedded",
                     RoomSearchBar {
                         value: state.search_query().to_string(),
-                        placeholder: "Type a room code".to_string(),
+                        placeholder: "输入房间码".to_string(),
                         hint: String::new(),
                         on_input: on_search_input,
                     }
                 }
                 if result_count == 0 {
                     EmptyState {
-                        title: "No matches yet".to_string(),
-                        body: "Type a room code and matching rooms will appear here.".to_string(),
+                        title: "还没有匹配结果".to_string(),
+                        body: "输入房间码后，匹配的房间会显示在这里。".to_string(),
                     }
                 } else {
                     div {
@@ -183,7 +183,7 @@ fn ChatScreen(
             "data-shell-frame": "phone",
             ShellHeader {
                 shows_back: true,
-                back_label: "Chats".to_string(),
+                back_label: "聊天".to_string(),
                 title: room_code.clone(),
                 subtitle: connection_label(state.connection()).to_string(),
                 shows_compose_action: false,
@@ -192,8 +192,8 @@ fn ChatScreen(
             section { class: "tg-shell__body tg-shell__body--chat",
                 if state.messages().is_empty() {
                     EmptyState {
-                        title: "No messages yet".to_string(),
-                        body: "Messages will appear here once the room timeline loads.".to_string(),
+                        title: "还没有消息".to_string(),
+                        body: "房间消息加载完成后，会显示在这里。".to_string(),
                     }
                 } else {
                     div {
@@ -213,7 +213,7 @@ fn ChatScreen(
                         class: "tg-compose__input",
                         r#type: "text",
                         value: "{draft}",
-                        placeholder: "Message",
+                        placeholder: "输入消息",
                         readonly: on_draft_input.is_none(),
                         disabled: on_draft_input.is_none(),
                         oninput: move |event| {
@@ -226,7 +226,7 @@ fn ChatScreen(
                 button {
                     class: "tg-compose__send",
                     r#type: "button",
-                    "aria-label": "Send message",
+                    "aria-label": "发送消息",
                     disabled: on_send_message.is_none() || draft.trim().is_empty(),
                     onclick: move |_| {
                         if let Some(handler) = on_send_message.as_ref() {
@@ -337,7 +337,7 @@ fn ConversationListItem(
     let room_code = shell_room_code(&room.room_code);
     let latest_time = room.latest_message_at.map(format_clock).unwrap_or_default();
     let unread_label = if room.show_unread_placeholder {
-        "Unread"
+        "未读"
     } else {
         ""
     };
@@ -421,9 +421,9 @@ fn SearchResultItem(
             }
             div { class: "tg-search-result__meta",
                 if result.is_joined {
-                    div { class: "tg-search-result__chip tg-search-result__chip--joined", "Joined" }
+                    div { class: "tg-search-result__chip tg-search-result__chip--joined", "已加入" }
                 } else {
-                    div { class: "tg-search-result__chip", "Open" }
+                    div { class: "tg-search-result__chip", "进入" }
                 }
             }
         }
@@ -453,23 +453,23 @@ fn bubble_class(message: &ChatMessage) -> &'static str {
 
 fn connection_label(state: ConnectionState) -> &'static str {
     match state {
-        ConnectionState::Offline => "Offline",
-        ConnectionState::Connecting => "Connecting",
-        ConnectionState::Joined => "Connected",
+        ConnectionState::Offline => "未连接",
+        ConnectionState::Connecting => "连接中",
+        ConnectionState::Joined => "已连接",
     }
 }
 
 fn delivery_label(state: DeliveryState) -> &'static str {
     match state {
-        DeliveryState::Pending => "Sending",
-        DeliveryState::Confirmed => "Delivered",
-        DeliveryState::Failed => "Retry",
+        DeliveryState::Pending => "发送中",
+        DeliveryState::Confirmed => "已送达",
+        DeliveryState::Failed => "发送失败",
     }
 }
 
 fn conversation_preview(preview: &str) -> String {
     if preview.trim().is_empty() {
-        "No preview yet".to_string()
+        "暂无消息预览".to_string()
     } else {
         preview.to_string()
     }
@@ -499,23 +499,23 @@ pub fn AdminPanel(state: AdminPanelState) -> Element {
             header { class: "admin-shell__hero",
                 div {
                     class: "admin-shell__eyebrow",
-                    "Koko admin"
+                    "Koko 管理台"
                 }
-                h1 { class: "admin-shell__title", "Read-only operations" }
+                h1 { class: "admin-shell__title", "只读运维视图" }
                 p {
                     class: "admin-shell__summary",
-                    "{state.overview.room_count} rooms, {state.overview.member_count} members, {state.overview.message_count} messages"
+                    "{state.overview.room_count} 个房间，{state.overview.member_count} 位成员，{state.overview.message_count} 条消息"
                 }
             }
             section { class: "admin-shell__stats",
-                AdminStatCard { label: "Rooms", value: state.overview.room_count.to_string() }
-                AdminStatCard { label: "Members", value: state.overview.member_count.to_string() }
-                AdminStatCard { label: "Messages", value: state.overview.message_count.to_string() }
+                AdminStatCard { label: "房间", value: state.overview.room_count.to_string() }
+                AdminStatCard { label: "成员", value: state.overview.member_count.to_string() }
+                AdminStatCard { label: "消息", value: state.overview.message_count.to_string() }
             }
             section { class: "admin-shell__list",
                 div { class: "admin-shell__list-head",
-                    h2 { "Active rooms" }
-                    span { "{state.rooms.len()} tracked" }
+                    h2 { "活跃房间" }
+                    span { "已追踪 {state.rooms.len()} 个" }
                 }
                 for room in state.rooms {
                     AdminRoomCard { room: room.clone() }
@@ -541,10 +541,10 @@ fn AdminRoomCard(room: AdminRoomSummary) -> Element {
         article { class: "admin-room",
             div { class: "admin-room__code", "{room.room_code}" }
             div { class: "admin-room__meta",
-                "{room.member_count} members"
+                "{room.member_count} 位成员"
             }
             div { class: "admin-room__meta",
-                "{room.message_count} messages"
+                "{room.message_count} 条消息"
             }
             div { class: "admin-room__preview", "{room.latest_preview}" }
         }
@@ -557,8 +557,8 @@ mod tests {
 
     #[test]
     fn conversation_preview_uses_placeholder_when_empty() {
-        assert_eq!(conversation_preview(""), "No preview yet");
-        assert_eq!(conversation_preview("   "), "No preview yet");
+        assert_eq!(conversation_preview(""), "暂无消息预览");
+        assert_eq!(conversation_preview("   "), "暂无消息预览");
     }
 
     #[test]
@@ -569,9 +569,9 @@ mod tests {
 
     #[test]
     fn connection_label_keeps_shell_status_text_stable() {
-        assert_eq!(connection_label(ConnectionState::Offline), "Offline");
-        assert_eq!(connection_label(ConnectionState::Connecting), "Connecting");
-        assert_eq!(connection_label(ConnectionState::Joined), "Connected");
+        assert_eq!(connection_label(ConnectionState::Offline), "未连接");
+        assert_eq!(connection_label(ConnectionState::Connecting), "连接中");
+        assert_eq!(connection_label(ConnectionState::Joined), "已连接");
     }
 
     #[test]

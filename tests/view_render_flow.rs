@@ -90,7 +90,7 @@ fn chat_screen_marks_thread_and_composer_subregions_for_telegram_shell() {
     assert!(html.contains("data-shell-region=\"message-thread\""));
     assert!(html.contains("class=\"tg-compose__field\""));
     assert!(html.contains("class=\"tg-compose__send\""));
-    assert!(html.contains("aria-label=\"Send message\""));
+    assert!(html.contains("aria-label=\"发送消息\""));
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn chat_send_control_stays_disabled_for_blank_draft() {
 
     assert!(
         html.contains(
-            "class=\"tg-compose__send\" type=\"button\" aria-label=\"Send message\" disabled"
+            "class=\"tg-compose__send\" type=\"button\" aria-label=\"发送消息\" disabled"
         )
     );
 }
@@ -120,6 +120,20 @@ fn chat_empty_state_stays_inside_shell_regions() {
     assert!(html.contains("data-shell-frame=\"phone\""));
     assert!(html.contains("data-shell-region=\"empty-state\""));
     assert!(html.contains("data-empty-style=\"shell\""));
+}
+
+#[test]
+fn shell_primary_copy_is_localized_for_chinese_users() {
+    let list_html = render_chat_page(conversation_list_state());
+    let search_html = render_chat_page(join_by_code_state());
+    let chat_html = render_chat_page(chat_screen_state());
+
+    assert!(list_html.contains(">聊天<"));
+    assert!(list_html.contains("placeholder=\"按房间码搜索\""));
+    assert!(search_html.contains(">搜索<"));
+    assert!(search_html.contains("placeholder=\"输入房间码\""));
+    assert!(chat_html.contains("placeholder=\"输入消息\""));
+    assert!(chat_html.contains("aria-label=\"发送消息\""));
 }
 
 fn render_chat_page(state: ChatState) -> String {
