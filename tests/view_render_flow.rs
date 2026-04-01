@@ -104,6 +104,24 @@ fn chat_send_control_stays_disabled_for_blank_draft() {
     );
 }
 
+#[test]
+fn join_by_code_empty_state_stays_inside_shell_regions() {
+    let html = render_chat_page(empty_join_by_code_state());
+
+    assert!(html.contains("data-shell-frame=\"phone\""));
+    assert!(html.contains("data-shell-region=\"empty-state\""));
+    assert!(html.contains("data-empty-style=\"shell\""));
+}
+
+#[test]
+fn chat_empty_state_stays_inside_shell_regions() {
+    let html = render_chat_page(empty_chat_state());
+
+    assert!(html.contains("data-shell-frame=\"phone\""));
+    assert!(html.contains("data-shell-region=\"empty-state\""));
+    assert!(html.contains("data-empty-style=\"shell\""));
+}
+
 fn render_chat_page(state: ChatState) -> String {
     let mut vdom = VirtualDom::new_with_props(
         ChatPage,
@@ -136,6 +154,12 @@ fn join_by_code_state() -> ChatState {
     state
 }
 
+fn empty_join_by_code_state() -> ChatState {
+    let mut state = bootstrapped_state();
+    state.show_join_by_code();
+    state
+}
+
 fn chat_screen_state() -> ChatState {
     let mut state = bootstrapped_state();
     state.open_room_from_snapshot(room_snapshot(
@@ -143,6 +167,12 @@ fn chat_screen_state() -> ChatState {
         "A1234",
         vec![message_view(Uuid::from_u128(31), "hello koko", 0)],
     ));
+    state
+}
+
+fn empty_chat_state() -> ChatState {
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(Uuid::from_u128(4), "B1234", Vec::new()));
     state
 }
 

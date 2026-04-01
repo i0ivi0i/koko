@@ -466,6 +466,13 @@ fn rejection_resets_subscription(payload: &CommandRejected) -> bool {
     payload.command == RejectedCommandKind::SubscribeRoomStream
 }
 
+fn resolve_shell_banner_message(
+    bootstrap_error: Option<String>,
+    shell_error: Option<String>,
+) -> Option<String> {
+    bootstrap_error.or(shell_error)
+}
+
 #[cfg(target_arch = "wasm32")]
 fn spawn_realtime_bridge(
     mut state: Signal<ChatState>,
@@ -801,7 +808,7 @@ pub fn App() -> Element {
         _ => None,
     };
     let current_shell_error = shell_error();
-    let error_message = bootstrap_error.or(current_shell_error);
+    let error_message = resolve_shell_banner_message(bootstrap_error, current_shell_error);
 
     rsx! {
         Title { "koko" }
@@ -946,6 +953,7 @@ mod tests {
     use super::{
         normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
         rejected_pending_message_id, rejection_message, rejection_resets_subscription,
+        resolve_shell_banner_message,
         resolve_joined_rooms_path, resolve_room_search_path, resolve_room_snapshot_path,
         resolve_shell_api_url, resolve_shell_api_url_with_query, should_trigger_room_search,
     };
@@ -1078,5 +1086,23 @@ mod tests {
 
         assert_eq!(rejected_pending_message_id(&payload), None);
         assert!(rejection_resets_subscription(&payload));
+    }
+
+    #[test]
+    fn shell_banner_prefers_bootstrap_failure_over_shell_error() {
+        let banner = resolve_shell_banner_message(
+            Some("Bootstrap failed: nope".to_string()),
+            Some("Realtime failed".to_string()),
+        );
+
+        assert_eq!(banner, Some("Bootstrap failed: nope".to_string()));
+    }
+
+    #[test]
+    fn shell_banner_uses_shell_error_when_bootstrap_is_clean() {
+        let banner = resolve_shell_banner_message(None, Some("Realtime failed".to_string()));
+
+        assert_eq!(banner, Some("Realtime failed".to_string()));
+        assert_eq!(resolve_shell_banner_message(None, None), None);
     }
 }

@@ -63,6 +63,7 @@ fn ConversationListScreen(
         div {
             class: "tg-shell tg-shell--list",
             "data-shell-screen": "conversation-list",
+            "data-shell-frame": "phone",
             ShellHeader {
                 shows_back: false,
                 back_label: String::new(),
@@ -120,6 +121,7 @@ fn JoinByCodeScreen(
         div {
             class: "tg-shell tg-shell--search",
             "data-shell-screen": "join-by-code",
+            "data-shell-frame": "phone",
             ShellHeader {
                 shows_back: true,
                 back_label: "Chats".to_string(),
@@ -178,6 +180,7 @@ fn ChatScreen(
         div {
             class: "tg-shell tg-shell--chat",
             "data-shell-screen": "chat",
+            "data-shell-frame": "phone",
             ShellHeader {
                 shows_back: true,
                 back_label: "Chats".to_string(),
@@ -316,7 +319,10 @@ fn RoomSearchBar(
 #[component]
 fn EmptyState(title: String, body: String) -> Element {
     rsx! {
-        article { class: "tg-empty-state",
+        article {
+            class: "tg-empty-state",
+            "data-shell-region": "empty-state",
+            "data-empty-style": "shell",
             div { class: "tg-empty-state__title", "{title}" }
             p { class: "tg-empty-state__body", "{body}" }
         }

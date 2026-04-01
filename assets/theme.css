@@ -23,7 +23,7 @@
   --koko-radius-sm: 14px;
   --koko-nav-height: 68px;
   --koko-composer-height: 78px;
-  --koko-max-width: 980px;
+  --koko-max-width: 460px;
   --koko-font:
     "SF Pro Text", "SF Pro Display", "Segoe UI", "Helvetica Neue", "Noto Sans", Arial,
     sans-serif;
@@ -460,6 +460,13 @@
 .tg-empty-state {
   display: grid;
   gap: 8px;
+}
+
+.tg-empty-state {
+  place-self: center;
+  max-width: 280px;
+  padding: 56px 18px 32px;
+  text-align: center;
 }
 
 .tg-search__title,
