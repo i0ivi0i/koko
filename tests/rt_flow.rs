@@ -1,3 +1,5 @@
+mod http_support;
+
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex},
@@ -6,18 +8,20 @@ use std::{
 
 use axum::{
     Router,
-    http::{HeaderMap, HeaderValue, header::COOKIE},
+    http::{HeaderMap, HeaderValue, StatusCode, header::COOKIE},
     routing::get,
 };
 use chrono::{TimeZone, Utc};
 use futures_util::{SinkExt, StreamExt, stream::SplitSink};
+use http_support::HttpHarness;
 use koko::{
     app::{
         AppError, Clock, IdGenerator, MembershipPort, MessageStore, SendTextMessageInput,
         SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
-        MessageCreated, RoomStreamSubscribed, SendTextMessageCommand, SubscribeRoomStreamCommand,
+        BootstrapSession, MessageCreated, RoomSnapshot, RoomStreamSubscribed,
+        SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
     domain::Message,
     rt::{
@@ -27,6 +31,7 @@ use koko::{
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
@@ -214,6 +219,76 @@ async fn sender_receives_message_accepted_but_not_message_created() {
 }
 
 #[tokio::test]
+async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server() {
+    let pool = test_database_pool().await;
+    let harness = HttpHarness::new(pool);
+    let server = RouterHarness::spawn(harness.router.clone()).await;
+    let client = reqwest::Client::new();
+    let room_code = format!("z{:04}", Uuid::now_v7().as_u128() % 10_000);
+
+    let bootstrap_response = client
+        .post(format!("{}/api/session/bootstrap", server.base_url()))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bootstrap_response.status(), StatusCode::CREATED);
+    let cookie = bootstrap_response
+        .headers()
+        .get(reqwest::header::SET_COOKIE)
+        .expect("bootstrap should set koko_session cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let _session: BootstrapSession = bootstrap_response.json().await.unwrap();
+
+    let join_response = client
+        .post(format!("{}/api/rooms/join", server.base_url()))
+        .header(COOKIE.as_str(), cookie.as_str())
+        .json(&json!({ "room_code": room_code }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(join_response.status(), StatusCode::OK);
+    let room: RoomSnapshot = join_response.json().await.unwrap();
+
+    let mut room_stream = mpsc::unbounded_channel();
+    let message_accepted = mpsc::unbounded_channel();
+    let message_created = mpsc::unbounded_channel();
+    let mut connected = mpsc::unbounded_channel();
+    let mut socket = connect_client_with_cookie(
+        server.base_url(),
+        &cookie,
+        ClientChannels::new(
+            connected.0,
+            room_stream.0,
+            message_accepted.0,
+            message_created.0,
+        ),
+    )
+    .await
+    .unwrap();
+
+    next_event("connected", &mut connected.1).await;
+    socket
+        .emit("subscribe_room_stream", json!({ "room_id": room.room_id }))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        next_event("room_stream_subscribed", &mut room_stream.1).await,
+        RoomStreamSubscribed {
+            room_id: room.room_id,
+        }
+    );
+
+    socket.disconnect().await.unwrap();
+    server.shutdown().await;
+}
+
+#[tokio::test]
 async fn authenticate_realtime_session_reads_koko_session_from_multi_cookie_header() {
     let session_id = Uuid::from_u128(1);
     let mut headers = HeaderMap::new();
@@ -398,6 +473,47 @@ struct RealtimeHarness {
     server_task: JoinHandle<()>,
 }
 
+struct RouterHarness {
+    base_url: String,
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    server_task: JoinHandle<()>,
+}
+
+impl RouterHarness {
+    async fn spawn(router: Router) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .unwrap();
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        Self {
+            base_url,
+            shutdown_tx: Some(shutdown_tx),
+            server_task,
+        }
+    }
+
+    fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    async fn shutdown(mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        self.server_task.await.unwrap();
+    }
+}
+
 impl RealtimeHarness {
     async fn spawn(store: RealtimeTestStore, message_id: Uuid) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -484,6 +600,14 @@ async fn connect_client(
     session_id: Uuid,
     channels: ClientChannels,
 ) -> Result<Client, tungstenite::Error> {
+    connect_client_with_cookie(base_url, &format!("koko_session={session_id}"), channels).await
+}
+
+async fn connect_client_with_cookie(
+    base_url: &str,
+    cookie: &str,
+    channels: ClientChannels,
+) -> Result<Client, tungstenite::Error> {
     let ClientChannels {
         connected,
         room_stream_subscribed,
@@ -491,7 +615,7 @@ async fn connect_client(
         message_created,
     } = channels;
 
-    let request = socket_io_request(base_url, Some(session_id));
+    let request = socket_io_request(base_url, Some(cookie));
     let (mut socket, _) = connect_async(request).await?;
     expect_engine_open(&mut socket).await?;
     socket.send(WsMessage::Text("40".into())).await?;
@@ -549,15 +673,14 @@ where
 
 fn socket_io_request(
     base_url: &str,
-    session_id: Option<Uuid>,
+    cookie: Option<&str>,
 ) -> tungstenite::handshake::client::Request {
     let ws_url = base_url.replacen("http://", "ws://", 1) + "/socket.io/?EIO=4&transport=websocket";
     let mut request = ws_url.into_client_request().unwrap();
-    if let Some(session_id) = session_id {
-        request.headers_mut().insert(
-            COOKIE,
-            HeaderValue::from_str(&format!("koko_session={session_id}")).unwrap(),
-        );
+    if let Some(cookie) = cookie {
+        request
+            .headers_mut()
+            .insert(COOKIE, HeaderValue::from_str(cookie).unwrap());
     }
 
     request
@@ -565,7 +688,10 @@ fn socket_io_request(
 
 async fn expect_engine_open(socket: &mut ClientSocket) -> Result<(), tungstenite::Error> {
     let frame = next_text_frame(socket).await?;
-    assert!(frame.starts_with('0'), "expected engine open frame, got {frame}");
+    assert!(
+        frame.starts_with('0'),
+        "expected engine open frame, got {frame}"
+    );
     Ok(())
 }
 
@@ -607,4 +733,18 @@ fn parse_socket_io_event(frame: &str) -> Option<(String, Value)> {
 
 fn fixed_time() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()
+}
+
+async fn test_database_pool() -> PgPool {
+    PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&test_database_url())
+        .await
+        .unwrap()
+}
+
+fn test_database_url() -> String {
+    std::env::var("KOKO_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| "postgres://koko:koko_local@127.0.0.1:5432/koko_test".to_string())
 }

@@ -3,7 +3,7 @@ use std::path::Path;
 use axum::Router;
 use sqlx::PgPool;
 
-use koko::{http, store::PgStore};
+use koko::{assemble_app, store::PgStore};
 
 #[allow(dead_code)]
 pub struct HttpHarness {
@@ -30,7 +30,7 @@ impl HttpHarness {
             .join("fixtures")
             .join("frontend");
         let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
-        let router = http::app_router(
+        let router = assemble_app(
             store.clone(),
             "local-admin-token".to_string(),
             frontend_fixture_dir,
