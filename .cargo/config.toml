@@ -16,6 +16,3 @@
 # Win11 下 rustc / linker / 索引更新并发时更容易撞到文件锁。
 # 默认把本地构建并发收成 1，优先稳定；后续若在 CI 或更稳的环境里要提速，可显式覆盖 CARGO_BUILD_JOBS。
 jobs = 1
-
-[env]
-DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres"

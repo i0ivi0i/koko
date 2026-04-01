@@ -917,7 +917,7 @@ async fn subscribe_room_stream_rejects_non_member() {
 
 #[sqlx::test]
 async fn join_or_create_persists_room_member_and_room_code(pool: PgPool) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('a');
     harness.seed_active_session(session_id).await;
@@ -947,7 +947,7 @@ async fn join_or_create_persists_room_member_and_room_code(pool: PgPool) -> sqlx
 async fn send_text_message_persists_message_and_room_snapshot_reads_it(
     pool: PgPool,
 ) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('b');
     let message_id = Uuid::now_v7();
@@ -1017,7 +1017,7 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it(
 
 #[sqlx::test]
 async fn join_or_create_treats_room_code_as_case_insensitive(pool: PgPool) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let first_session_id = Uuid::now_v7();
     let second_session_id = Uuid::now_v7();
     let room_code = unique_room_code('c');
@@ -1068,7 +1068,7 @@ async fn join_or_create_treats_room_code_as_case_insensitive(pool: PgPool) -> sq
 
 #[sqlx::test]
 async fn repeated_join_does_not_duplicate_member_in_same_room(pool: PgPool) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('d');
     harness.seed_active_session(session_id).await;
@@ -1111,7 +1111,7 @@ async fn repeated_join_does_not_duplicate_member_in_same_room(pool: PgPool) -> s
 
 #[sqlx::test]
 async fn pg_store_lists_joined_rooms_with_latest_preview(pool: PgPool) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
     let first_room_code = "A1234".to_string();
     let second_room_code = "B1234".to_string();
@@ -1193,7 +1193,7 @@ async fn pg_store_lists_joined_rooms_with_latest_preview(pool: PgPool) -> sqlx::
 
 #[sqlx::test]
 async fn pg_store_searches_rooms_by_normalized_code_prefix(pool: PgPool) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let joined_session_id = Uuid::now_v7();
     let other_session_id = Uuid::now_v7();
     harness.seed_active_session(joined_session_id).await;
@@ -1249,7 +1249,7 @@ async fn pg_store_searches_rooms_by_normalized_code_prefix(pool: PgPool) -> sqlx
 async fn send_text_message_rejects_non_member_sender_via_database_truth(
     pool: PgPool,
 ) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
     let room_id = Uuid::now_v7();
     let room_code = unique_room_code('e');
@@ -1281,7 +1281,7 @@ async fn send_text_message_rejects_non_member_sender_via_database_truth(
 async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_version(
     pool: PgPool,
 ) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
     let normalized_code = unique_room_code('f');
     let room_v1 = Uuid::now_v7();
@@ -1335,7 +1335,7 @@ async fn store_scopes_room_code_lookup_by_code_version_and_snapshot_round_trips_
 
 #[sqlx::test]
 async fn deleting_truth_rows_is_blocked_in_stage_one(pool: PgPool) -> sqlx::Result<()> {
-    let harness = PgHarness::new(pool).await;
+    let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
     let room_code = unique_room_code('g');
     harness.seed_active_session(session_id).await;
@@ -2018,7 +2018,7 @@ struct PgHarness {
 }
 
 impl PgHarness {
-    async fn new(pool: PgPool) -> Self {
+    fn new(pool: PgPool) -> Self {
         let store = PgStore::new(pool.clone());
         Self { pool, store }
     }

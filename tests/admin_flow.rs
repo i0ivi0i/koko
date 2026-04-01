@@ -84,7 +84,7 @@ fn admin_panel_state_composes_overview_and_rooms_from_stable_queries() {
 
 #[sqlx::test]
 async fn admin_rooms_returns_live_room_summaries(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool).await;
+    let harness = HttpHarness::new(pool);
 
     let (first_session, first_cookie) = bootstrap_session_with_cookie(&harness).await;
     let (_second_session, second_cookie) = bootstrap_session_with_cookie(&harness).await;
@@ -133,9 +133,9 @@ async fn admin_rooms_returns_live_room_summaries(pool: sqlx::PgPool) -> sqlx::Re
     Ok(())
 }
 
-#[sqlx::test]
-async fn admin_panel_route_is_not_exposed_anymore(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool).await;
+#[tokio::test]
+async fn admin_panel_route_is_not_exposed_anymore() {
+    let harness = HttpHarness::frontend_only();
 
     let response = harness
         .router
@@ -151,14 +151,13 @@ async fn admin_panel_route_is_not_exposed_anymore(pool: sqlx::PgPool) -> sqlx::R
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    Ok(())
 }
 
 #[sqlx::test]
 async fn admin_overview_returns_room_member_and_message_counts(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool).await;
+    let harness = HttpHarness::new(pool);
 
     let (first_session, first_cookie) = bootstrap_session_with_cookie(&harness).await;
     let (_second_session, second_cookie) = bootstrap_session_with_cookie(&harness).await;
@@ -205,9 +204,9 @@ async fn admin_overview_returns_room_member_and_message_counts(
     Ok(())
 }
 
-#[sqlx::test]
-async fn admin_overview_requires_admin_token(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool).await;
+#[tokio::test]
+async fn admin_overview_requires_admin_token() {
+    let harness = HttpHarness::frontend_only();
 
     let response = harness
         .router
@@ -222,12 +221,11 @@ async fn admin_overview_requires_admin_token(pool: sqlx::PgPool) -> sqlx::Result
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    Ok(())
 }
 
-#[sqlx::test]
-async fn admin_rooms_requires_admin_token(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool).await;
+#[tokio::test]
+async fn admin_rooms_requires_admin_token() {
+    let harness = HttpHarness::frontend_only();
 
     let response = harness
         .router
@@ -242,7 +240,6 @@ async fn admin_rooms_requires_admin_token(pool: sqlx::PgPool) -> sqlx::Result<()
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    Ok(())
 }
 
 async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
