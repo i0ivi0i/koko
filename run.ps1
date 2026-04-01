@@ -3,6 +3,7 @@ param(
     [string]$DatabaseUrl = "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
     [string]$AdminToken = "local-admin-token",
     [string]$BindAddr = "127.0.0.1:8080",
+    [switch]$Lan,
     [switch]$SkipBundle,
     [switch]$DryRun,
     [switch]$NoBrowser
@@ -124,6 +125,76 @@ function Resolve-AppUrl {
     return "http://$hostName`:$port/"
 }
 
+function Get-LocalIPv4Addresses {
+    $allAddresses = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+        Where-Object {
+            $_.OperationalStatus -eq [System.Net.NetworkInformation.OperationalStatus]::Up -and
+            $_.NetworkInterfaceType -ne [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback
+        } |
+        ForEach-Object {
+            $_.GetIPProperties().UnicastAddresses |
+                Where-Object {
+                    $_.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
+                    -not $_.Address.IPAddressToString.StartsWith("169.254.")
+                } |
+                ForEach-Object { $_.Address.IPAddressToString }
+        }
+
+    return $allAddresses | Sort-Object -Unique
+}
+
+function Resolve-AccessUrls {
+    param(
+        [string]$Address
+    )
+
+    $port = $Address.Substring($Address.LastIndexOf(":") + 1)
+    $hostName = $Address.Substring(0, $Address.Length - $port.Length - 1).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($hostName) -or $hostName -eq "0.0.0.0") {
+        $urls = @("http://127.0.0.1`:$port/")
+        $urls += Get-LocalIPv4Addresses | ForEach-Object { "http://$_`:$port/" }
+        return $urls | Sort-Object -Unique
+    }
+
+    if ($hostName.Contains(":") -and -not $hostName.StartsWith("[")) {
+        return @("http://[$hostName]:$port/")
+    }
+
+    return @("http://$hostName`:$port/")
+}
+
+function Write-AccessHints {
+    param(
+        [string[]]$Urls,
+        [bool]$OpenBrowser
+    )
+
+    if ($Urls.Count -eq 0) {
+        return
+    }
+
+    $localUrl = $Urls | Where-Object { $_ -like "http://127.0.0.1:*" } | Select-Object -First 1
+    if (-not $localUrl) {
+        $localUrl = $Urls[0]
+    }
+
+    if ($OpenBrowser) {
+        Write-Host "==> 浏览器会自动打开: $localUrl"
+    }
+    else {
+        Write-Host "==> 浏览器不会自动打开"
+    }
+
+    $lanUrls = $Urls | Where-Object { $_ -ne $localUrl }
+    if ($lanUrls.Count -gt 0) {
+        Write-Host "==> 局域网设备请访问:"
+        foreach ($url in $lanUrls) {
+            Write-Host "   $url"
+        }
+    }
+}
+
 function Wait-ForServerReady {
     param(
         [string]$Url,
@@ -168,7 +239,12 @@ function Read-LogTail {
 
 Push-Location $repoRoot
 try {
+    if ($Lan -and -not $PSBoundParameters.ContainsKey("BindAddr")) {
+        $BindAddr = "0.0.0.0:8080"
+    }
+
     $appUrl = Resolve-AppUrl -Address $BindAddr
+    $accessUrls = Resolve-AccessUrls -Address $BindAddr
 
     if ($DryRun) {
         if ($SkipBundle) {
@@ -184,15 +260,11 @@ try {
         Write-Host "==> Set KOKO_DATABASE_URL"
         Write-Host "==> Set KOKO_ADMIN_TOKEN"
         Write-Host "==> Set KOKO_BIND_ADDR"
+        Write-Host "==> 监听地址: $BindAddr"
         $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
         Write-Host "==> cargo build --target-dir $runTargetDir"
         Write-Host "==> $serverBinaryPath"
-        if ($NoBrowser) {
-            Write-Host "==> 浏览器不会自动打开"
-        }
-        else {
-            Write-Host "==> 浏览器会自动打开: $appUrl"
-        }
+        Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)
         Write-Host "==> 启动成功后可直接开始测试，按 Ctrl+C 可停止服务"
         exit 0
     }
@@ -252,6 +324,14 @@ try {
     }
     else {
         Write-Host "==> 已启动，请打开: $appUrl"
+    }
+
+    $lanUrls = $accessUrls | Where-Object { $_ -ne $appUrl }
+    if ($lanUrls.Count -gt 0) {
+        Write-Host "==> 局域网设备请访问:"
+        foreach ($url in $lanUrls) {
+            Write-Host "   $url"
+        }
     }
 
     Write-Host "==> 现在可以直接开始真人测试，按 Ctrl+C 可停止服务"

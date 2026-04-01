@@ -757,10 +757,47 @@ fn root_run_script_supports_dry_run() {
     assert!(stdout.contains("Skip web bundle"));
     assert!(stdout.contains("准备数据库结构"));
     assert!(stdout.contains("KOKO_DATABASE_URL"));
-    assert!(stdout.contains("cargo run"));
+    assert!(stdout.contains("cargo build"));
     assert!(stdout.contains("浏览器"));
+    assert!(stdout.contains("监听地址: 127.0.0.1:8080"));
     assert!(stdout.contains("127.0.0.1:8080"));
     assert!(stdout.contains("Ctrl+C"));
+}
+
+#[test]
+fn root_run_script_supports_lan_dry_run() {
+    let powershell = powershell_exe_path();
+    let output = Command::new(powershell)
+        .args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "run.ps1",
+            "-DryRun",
+            "-SkipBundle",
+            "-Lan",
+            "-DatabaseUrl",
+            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
+            "-AdminToken",
+            "local-admin-token",
+        ])
+        .env("PATH", r"C:\Windows\System32")
+        .env_remove("PSModulePath")
+        .env_remove("PATHEXT")
+        .env_remove("PROMPT")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "run.ps1 lan dry-run should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
+    assert!(stdout.contains("局域网设备请访问"));
 }
 
 fn powershell_exe_path() -> String {
