@@ -18,9 +18,8 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminLoginCommand, AppError, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery,
-        bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
-        list_admin_rooms, list_joined_rooms, load_room_snapshot, login_admin, search_rooms_by_code,
+        AppError, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, bootstrap_anonymous_session,
+        join_or_create_room_by_code, list_joined_rooms, load_room_snapshot, search_rooms_by_code,
     },
     contract::{
         AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult, RoomSnapshot,
@@ -221,14 +220,8 @@ async fn admin_overview(
     State(state): State<HttpState>,
     headers: HeaderMap,
 ) -> Result<Json<AdminOverview>, (StatusCode, Json<ErrorPayload>)> {
-    let context = login_admin(
-        &state.admin_access,
-        &state.admin_access,
-        admin_login_command(&headers)?,
-    )
-    .await
-    .map_err(map_http_error)?;
-    let overview = get_admin_overview(&state.admin_access, &state.store, context)
+    authorize_admin_token(&state.admin_access, &headers).await?;
+    let overview = crate::app::AdminOverviewPort::get_admin_overview(&state.store)
         .await
         .map_err(map_http_error)?;
     Ok(Json(overview))
@@ -238,14 +231,8 @@ async fn admin_rooms(
     State(state): State<HttpState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AdminRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
-    let context = login_admin(
-        &state.admin_access,
-        &state.admin_access,
-        admin_login_command(&headers)?,
-    )
-    .await
-    .map_err(map_http_error)?;
-    let rooms = list_admin_rooms(&state.admin_access, &state.store, context)
+    authorize_admin_token(&state.admin_access, &headers).await?;
+    let rooms = crate::app::AdminRoomsPort::list_admin_rooms(&state.store)
         .await
         .map_err(map_http_error)?;
     Ok(Json(rooms))
@@ -256,17 +243,28 @@ struct ErrorPayload {
     code: String,
 }
 
-fn admin_login_command(
+fn resolve_admin_token(
     headers: &HeaderMap,
-) -> Result<AdminLoginCommand, (StatusCode, Json<ErrorPayload>)> {
-    let token = headers
+) -> Result<&str, (StatusCode, Json<ErrorPayload>)> {
+    headers
         .get("x-admin-token")
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(invalid_admin_token_error)?;
+        .ok_or_else(invalid_admin_token_error)
+}
 
-    Ok(AdminLoginCommand {
-        token: token.to_string(),
-    })
+async fn authorize_admin_token(
+    admin_access: &support::StaticAdminAccess,
+    headers: &HeaderMap,
+) -> Result<(), (StatusCode, Json<ErrorPayload>)> {
+    let token = resolve_admin_token(headers)?;
+    let authorized = crate::app::AdminCredentialPort::verify_admin_token(admin_access, token)
+        .await
+        .map_err(map_http_error)?;
+    if authorized {
+        Ok(())
+    } else {
+        Err(invalid_admin_token_error())
+    }
 }
 
 fn resolve_session_id(jar: &CookieJar) -> Result<Uuid, (StatusCode, Json<ErrorPayload>)> {

@@ -9,10 +9,7 @@ use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 use crate::{
-    app::{
-        AdminCredentialPort, AdminSessionContext, AdminSessionPort, AdminSessionState, AppError,
-        Clock, IdGenerator,
-    },
+    app::{AdminCredentialPort, AppError, Clock, IdGenerator},
     contract::AppErrorCode,
 };
 
@@ -91,26 +88,6 @@ impl StaticAdminAccess {
 impl AdminCredentialPort for StaticAdminAccess {
     async fn verify_admin_token(&self, token: &str) -> Result<bool, AppError> {
         Ok(token == self.expected_token)
-    }
-}
-
-impl AdminSessionPort for StaticAdminAccess {
-    async fn create_admin_session(&self) -> Result<AdminSessionContext, AppError> {
-        Ok(AdminSessionContext::new(Uuid::now_v7()))
-    }
-
-    async fn read_admin_session(
-        &self,
-        _context: &AdminSessionContext,
-    ) -> Result<AdminSessionState, AppError> {
-        Ok(AdminSessionState::Active)
-    }
-
-    async fn revoke_admin_session(
-        &self,
-        _context: &AdminSessionContext,
-    ) -> Result<(), AppError> {
-        Ok(())
     }
 }
 
