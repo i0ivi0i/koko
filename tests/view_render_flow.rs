@@ -39,6 +39,31 @@ fn chat_screen_exposes_navigation_thread_and_composer_regions() {
     assert!(html.contains("data-shell-region=\"composer\""));
 }
 
+#[test]
+fn conversation_list_drops_menu_and_tl_framing_for_embedded_ios_chrome() {
+    let html = render_chat_page(conversation_list_state());
+
+    assert!(!html.contains(">Menu<"));
+    assert!(!html.contains(">TL<"));
+    assert!(!html.contains("Search rooms"));
+    assert!(html.contains("data-shell-region=\"top-bar-leading\""));
+    assert!(html.contains("data-shell-region=\"top-bar-title\""));
+    assert!(html.contains("data-shell-region=\"top-bar-trailing\""));
+    assert!(html.contains("data-shell-search-style=\"embedded\""));
+}
+
+#[test]
+fn search_and_chat_top_bars_share_the_same_structural_regions() {
+    let join_html = render_chat_page(join_by_code_state());
+    let chat_html = render_chat_page(chat_screen_state());
+
+    for html in [join_html, chat_html] {
+        assert!(html.contains("data-shell-region=\"top-bar-leading\""));
+        assert!(html.contains("data-shell-region=\"top-bar-title\""));
+        assert!(html.contains("data-shell-region=\"top-bar-trailing\""));
+    }
+}
+
 fn render_chat_page(state: ChatState) -> String {
     let mut vdom = VirtualDom::new_with_props(
         ChatPage,
@@ -55,20 +80,6 @@ fn render_chat_page(state: ChatState) -> String {
     );
     vdom.rebuild_in_place();
     dioxus_ssr::render(&vdom)
-}
-
-#[test]
-fn chat_page_props_are_public_for_direct_ssr_root_rendering() {
-    let _ = ChatPageProps {
-        state: ChatState::awaiting_bootstrap(),
-        on_back_to_list: None,
-        on_room_selected: None,
-        on_search_input: None,
-        on_search_result_selected: None,
-        draft: String::new(),
-        on_draft_input: None,
-        on_send_message: None,
-    };
 }
 
 fn conversation_list_state() -> ChatState {

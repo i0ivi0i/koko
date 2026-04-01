@@ -65,10 +65,10 @@ fn ConversationListScreen(
             "data-shell-screen": "conversation-list",
             ShellHeader {
                 shows_back: false,
-                back_label: "Menu".to_string(),
+                back_label: String::new(),
                 title: "Chats".to_string(),
                 subtitle: format!("{room_count} joined rooms"),
-                badge: "TL".to_string(),
+                shows_compose_action: true,
                 on_back_to_list: None,
             }
             section { class: "tg-shell__body tg-shell__body--list",
@@ -76,11 +76,11 @@ fn ConversationListScreen(
                     class: "tg-shell__search-card",
                     role: "search",
                     "data-shell-region": "room-search",
-                    div { class: "tg-shell__search-card-title", "Search rooms" }
+                    "data-shell-search-style": "embedded",
                     RoomSearchBar {
                         value: state.search_query().to_string(),
                         placeholder: "Search by room code".to_string(),
-                        hint: "Search by room code to jump into a room.".to_string(),
+                        hint: String::new(),
                         on_input: on_search_input,
                     }
                 }
@@ -125,7 +125,7 @@ fn JoinByCodeScreen(
                 back_label: "Chats".to_string(),
                 title: "Search".to_string(),
                 subtitle: "Enter a room code".to_string(),
-                badge: "TL".to_string(),
+                shows_compose_action: false,
                 on_back_to_list,
             }
             section { class: "tg-shell__body tg-shell__body--search",
@@ -133,12 +133,11 @@ fn JoinByCodeScreen(
                     class: "tg-search-panel",
                     role: "search",
                     "data-shell-region": "room-search",
-                    div { class: "tg-search-panel__label", "Room code" }
+                    "data-shell-search-style": "embedded",
                     RoomSearchBar {
                         value: state.search_query().to_string(),
                         placeholder: "Type a room code".to_string(),
-                        hint: "Case-insensitive prefix search over normalized room codes."
-                            .to_string(),
+                        hint: String::new(),
                         on_input: on_search_input,
                     }
                 }
@@ -184,7 +183,7 @@ fn ChatScreen(
                 back_label: "Chats".to_string(),
                 title: room_code.clone(),
                 subtitle: connection_label(state.connection()).to_string(),
-                badge: room_code.chars().next().unwrap_or('K').to_string(),
+                shows_compose_action: false,
                 on_back_to_list,
             }
             section { class: "tg-shell__body tg-shell__body--chat",
@@ -243,7 +242,7 @@ fn ShellHeader(
     back_label: String,
     title: String,
     subtitle: String,
-    badge: String,
+    shows_compose_action: bool,
     #[props(default)] on_back_to_list: Option<EventHandler<()>>,
 ) -> Element {
     rsx! {
@@ -251,22 +250,34 @@ fn ShellHeader(
             class: "tg-nav",
             role: "navigation",
             "data-shell-back": if shows_back { "true" } else { "false" },
-            button {
-                class: "tg-nav__back",
-                r#type: "button",
-                disabled: on_back_to_list.is_none(),
-                onclick: move |_| {
-                    if let Some(handler) = on_back_to_list.as_ref() {
-                        handler.call(());
+            div { class: "tg-nav__leading", "data-shell-region": "top-bar-leading",
+                if shows_back {
+                    button {
+                        class: "tg-nav__back",
+                        r#type: "button",
+                        disabled: on_back_to_list.is_none(),
+                        onclick: move |_| {
+                            if let Some(handler) = on_back_to_list.as_ref() {
+                                handler.call(());
+                            }
+                        },
+                        "{back_label}"
                     }
-                },
-                "{back_label}"
+                } else {
+                    div { class: "tg-nav__leading-spacer", "aria-hidden": "true" }
+                }
             }
-            div { class: "tg-nav__title",
+            div { class: "tg-nav__title", "data-shell-region": "top-bar-title",
                 div { class: "tg-nav__name", "{title}" }
                 div { class: "tg-nav__meta", "{subtitle}" }
             }
-            div { class: "tg-nav__avatar", "{badge}" }
+            div { class: "tg-nav__trailing", "data-shell-region": "top-bar-trailing",
+                if shows_compose_action {
+                    div { class: "tg-nav__action", "aria-hidden": "true", "+" }
+                } else {
+                    div { class: "tg-nav__trailing-spacer", "aria-hidden": "true" }
+                }
+            }
         }
     }
 }
@@ -280,6 +291,7 @@ fn RoomSearchBar(
 ) -> Element {
     rsx! {
         div { class: "tg-search-panel__field",
+            span { class: "tg-search-panel__icon", "aria-hidden": "true", "⌕" }
             input {
                 class: "tg-search-panel__input",
                 r#type: "search",
@@ -294,7 +306,9 @@ fn RoomSearchBar(
                 },
             }
         }
-        div { class: "tg-search-panel__hint", "{hint}" }
+        if !hint.trim().is_empty() {
+            div { class: "tg-search-panel__hint", "{hint}" }
+        }
     }
 }
 
