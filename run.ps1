@@ -2,8 +2,7 @@
 param(
     [string]$DatabaseUrl = "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
     [string]$AdminToken = "local-admin-token",
-    [string]$BindAddr = "127.0.0.1:8080",
-    [switch]$Lan,
+    [string]$BindAddr = "0.0.0.0:8080",
     [switch]$SkipBundle,
     [switch]$DryRun,
     [switch]$NoBrowser
@@ -239,10 +238,6 @@ function Read-LogTail {
 
 Push-Location $repoRoot
 try {
-    if ($Lan -and -not $PSBoundParameters.ContainsKey("BindAddr")) {
-        $BindAddr = "0.0.0.0:8080"
-    }
-
     $appUrl = Resolve-AppUrl -Address $BindAddr
     $accessUrls = Resolve-AccessUrls -Address $BindAddr
 

@@ -18,8 +18,15 @@ use koko::{
     support::{SystemClock, SystemIdGenerator},
 };
 use std::{env, path::PathBuf, process::Command};
+use std::sync::{Mutex, OnceLock};
 use tower::ServiceExt;
 use uuid::Uuid;
+
+static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
 
 #[test]
 fn web_state_promotes_pending_message_only_after_server_confirmation() {
@@ -610,6 +617,7 @@ async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie(
 
 #[test]
 fn app_config_requires_database_url_and_admin_token() {
+    let _guard = env_lock();
     let original_database_url = env::var("KOKO_DATABASE_URL").ok();
     let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
     let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
@@ -650,6 +658,7 @@ fn app_config_requires_database_url_and_admin_token() {
 
 #[test]
 fn app_config_rejects_empty_database_url() {
+    let _guard = env_lock();
     let original_database_url = env::var("KOKO_DATABASE_URL").ok();
     let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
     let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
@@ -689,7 +698,8 @@ fn app_error_code_exposes_stable_membership_required_code() {
 }
 
 #[test]
-fn app_config_defaults_bind_addr_to_127_0_0_1_8080() {
+fn app_config_defaults_bind_addr_to_0_0_0_0_8080() {
+    let _guard = env_lock();
     let original_database_url = env::var("KOKO_DATABASE_URL").ok();
     let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
     let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
@@ -701,6 +711,42 @@ fn app_config_defaults_bind_addr_to_127_0_0_1_8080() {
         );
         env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
         env::remove_var("KOKO_BIND_ADDR");
+    }
+
+    let config = koko::support::AppConfig::from_env().unwrap();
+
+    assert_eq!(config.bind_addr.to_string(), "0.0.0.0:8080");
+
+    unsafe {
+        match original_database_url {
+            Some(value) => env::set_var("KOKO_DATABASE_URL", value),
+            None => env::remove_var("KOKO_DATABASE_URL"),
+        }
+        match original_admin_token {
+            Some(value) => env::set_var("KOKO_ADMIN_TOKEN", value),
+            None => env::remove_var("KOKO_ADMIN_TOKEN"),
+        }
+        match original_bind_addr {
+            Some(value) => env::set_var("KOKO_BIND_ADDR", value),
+            None => env::remove_var("KOKO_BIND_ADDR"),
+        }
+    }
+}
+
+#[test]
+fn app_config_respects_explicit_bind_addr_override() {
+    let _guard = env_lock();
+    let original_database_url = env::var("KOKO_DATABASE_URL").ok();
+    let original_admin_token = env::var("KOKO_ADMIN_TOKEN").ok();
+    let original_bind_addr = env::var("KOKO_BIND_ADDR").ok();
+
+    unsafe {
+        env::set_var(
+            "KOKO_DATABASE_URL",
+            "postgres://koko:koko_local@127.0.0.1:5432/koko_test",
+        );
+        env::set_var("KOKO_ADMIN_TOKEN", "local-admin-token");
+        env::set_var("KOKO_BIND_ADDR", "127.0.0.1:8080");
     }
 
     let config = koko::support::AppConfig::from_env().unwrap();
@@ -724,7 +770,8 @@ fn app_config_defaults_bind_addr_to_127_0_0_1_8080() {
 }
 
 #[test]
-fn root_run_script_supports_dry_run() {
+fn root_run_script_defaults_to_lan_accessible_bind_addr() {
+    let _guard = env_lock();
     let powershell = powershell_exe_path();
     let output = Command::new(powershell)
         .args([
@@ -759,45 +806,9 @@ fn root_run_script_supports_dry_run() {
     assert!(stdout.contains("KOKO_DATABASE_URL"));
     assert!(stdout.contains("cargo build"));
     assert!(stdout.contains("浏览器"));
-    assert!(stdout.contains("监听地址: 127.0.0.1:8080"));
+    assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
     assert!(stdout.contains("127.0.0.1:8080"));
     assert!(stdout.contains("Ctrl+C"));
-}
-
-#[test]
-fn root_run_script_supports_lan_dry_run() {
-    let powershell = powershell_exe_path();
-    let output = Command::new(powershell)
-        .args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            "run.ps1",
-            "-DryRun",
-            "-SkipBundle",
-            "-Lan",
-            "-DatabaseUrl",
-            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-            "-AdminToken",
-            "local-admin-token",
-        ])
-        .env("PATH", r"C:\Windows\System32")
-        .env_remove("PSModulePath")
-        .env_remove("PATHEXT")
-        .env_remove("PROMPT")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
-
-    assert!(
-        output.status.success(),
-        "run.ps1 lan dry-run should succeed, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
-    assert!(stdout.contains("局域网设备请访问"));
 }
 
 fn powershell_exe_path() -> String {
