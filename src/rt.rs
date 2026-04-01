@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, header::COOKIE};
+use axum_extra::extract::cookie::Cookie;
 use serde::Serialize;
 use socketioxide::{
     SocketIo,
@@ -62,9 +63,26 @@ where
 }
 
 fn resolve_session_id(headers: &HeaderMap) -> Result<Uuid, AppError> {
-    crate::support::session_id_from_headers(headers)
-        .map_err(|_| invalid_session_error())?
+    find_session_cookie(headers)?
+        .map(|cookie| cookie.value_trimmed().to_owned())
+        .map(|value| Uuid::parse_str(&value).map_err(|_| invalid_session_error()))
+        .transpose()?
         .ok_or_else(invalid_session_error)
+}
+
+fn find_session_cookie(headers: &HeaderMap) -> Result<Option<Cookie<'static>>, AppError> {
+    for cookie_header in headers.get_all(COOKIE) {
+        let raw_cookie = cookie_header
+            .to_str()
+            .map_err(|_| invalid_session_error())?;
+        for cookie in Cookie::split_parse(raw_cookie).flatten() {
+            if cookie.name() == crate::support::SESSION_COOKIE_NAME {
+                return Ok(Some(cookie.into_owned()));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 fn warn_handler_failure(handler: &str, error: &AppError) {

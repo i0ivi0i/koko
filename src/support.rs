@@ -1,10 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::{convert::Infallible, env, net::SocketAddr};
 
-#[cfg(not(target_arch = "wasm32"))]
-use axum::http::HeaderMap;
-#[cfg(not(target_arch = "wasm32"))]
-use axum_extra::extract::CookieJar;
 use chrono::{DateTime, Utc};
 #[cfg(not(target_arch = "wasm32"))]
 use thiserror::Error;
@@ -49,10 +45,6 @@ pub enum ConfigError {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SessionCookieParseError;
-
-#[cfg(not(target_arch = "wasm32"))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TracingInit {
     Initialized,
     AlreadyInitialized,
@@ -94,20 +86,6 @@ impl AdminAccessPort for StaticAdminAccess {
     async fn is_authorized_admin(&self, context: &AdminQueryContext) -> Result<bool, AppError> {
         Ok(context.admin_token == self.expected_token)
     }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn session_id_from_headers(
-    headers: &HeaderMap,
-) -> Result<Option<Uuid>, SessionCookieParseError> {
-    let jar = CookieJar::from_headers(headers);
-    let Some(cookie) = jar.get(SESSION_COOKIE_NAME) else {
-        return Ok(None);
-    };
-
-    Uuid::parse_str(cookie.value_trimmed())
-        .map(Some)
-        .map_err(|_| SessionCookieParseError)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
