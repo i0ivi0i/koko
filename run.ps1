@@ -14,6 +14,7 @@ $serverProcess = $null
 $repoRoot = $PSScriptRoot
 $bundleScript = Join-Path $repoRoot "scripts\dx-bundle-web.ps1"
 $migrationsDir = Join-Path $repoRoot "migrations"
+$runTargetDir = "target/run"
 
 function Invoke-Step {
     param(
@@ -166,7 +167,7 @@ try {
         Write-Host "==> Set KOKO_DATABASE_URL"
         Write-Host "==> Set KOKO_ADMIN_TOKEN"
         Write-Host "==> Set KOKO_BIND_ADDR"
-        Write-Host "==> cargo run"
+        Write-Host "==> cargo run --target-dir $runTargetDir"
         if ($NoBrowser) {
             Write-Host "==> 浏览器不会自动打开"
         }
@@ -200,7 +201,7 @@ try {
 
     Write-Host "==> 正在启动 Koko 服务..."
     $serverProcess = Start-Process cargo `
-        -ArgumentList "run" `
+        -ArgumentList "run", "--target-dir", $runTargetDir `
         -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog `
