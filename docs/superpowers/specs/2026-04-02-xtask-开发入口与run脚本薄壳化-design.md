@@ -92,7 +92,7 @@ cargo xtask dev
 本次优先采用 Cargo 生态已成熟的模式：
 
 - 新建 `xtask` crate
-- 用 `.cargo/config.toml` 的 `[alias]` 暴露 `cargo xtask`
+- 修改现有 `.cargo/config.toml` 的 `[alias]` 暴露 `cargo xtask`
 
 不优先引入额外任务 DSL，也不继续扩大 PowerShell 编排。
 
@@ -136,6 +136,20 @@ cargo xtask dev
 
 ## 目标架构
 
+### 0. 先解决 `.rs` 文件总数约束
+
+仓库当前非测试用途 `.rs` 文件正好是 13 个，因此不能直接新增 `xtask/src/main.rs` 就当作没有代价。
+
+本轮在引入 `xtask` 前，必须先完成一个低风险收口：
+
+- 将 `src/view.rs` 收口进 `src/web.rs`
+
+原因：
+
+- `view` 与 `web` 同属 Web 壳层，职责相邻，属于低风险整合
+- 这不是无关重构，而是满足仓库 `.rs` 文件总数约束的必要前置动作
+- 完成该收口后，再新增 `xtask/src/main.rs`，非测试 `.rs` 文件总数仍能维持在 13
+
 ### 1. 命令面
 
 面向开发者的推荐入口统一为：
@@ -166,14 +180,27 @@ powershell -File run.ps1  =>  cargo xtask dev ...
 - `xtask/Cargo.toml`
 - `xtask/src/main.rs`
 
-新增：
-
-- `.cargo/config.toml`
-
 修改：
 
+- `Cargo.toml`
+- `.cargo/config.toml`
 - `run.ps1`
 - `tests/http_flow.rs`
+- `src/web.rs`
+- `src/view.rs`（本轮会被收口并删除）
+
+根 `Cargo.toml` 需要从“单包 manifest”升级为“根包 + workspace”共存形态，最小落地方式为：
+
+- 保留现有 `[package]`
+- 新增 `[workspace]`
+- `members = ["xtask"]`
+
+现有 `.cargo/config.toml` 不新建，只修改并保留已有 `jobs = 1` 稳定性设置；在此基础上追加别名，例如：
+
+```toml
+[alias]
+xtask = "run -p xtask --"
+```
 
 如有必要，可新增一小组 `xtask` 测试文件；但要克制，避免把测试体系打散。
 
@@ -187,6 +214,8 @@ powershell -File run.ps1  =>  cargo xtask dev ...
 - 构建并启动 Rust 主程序
 - 可选根据 Rust 首页行做浏览器 auto-open
 - `--dry-run` 只预演编排动作
+
+实现上优先把编排逻辑放进 `xtask` 内部的纯 Rust helper，再由 CLI 入口调用，这样测试不必继续污染正式用户参数面。
 
 但它不承担：
 
@@ -205,6 +234,8 @@ powershell -File run.ps1  =>  cargo xtask dev ...
 它不再拥有自己的数据库准备逻辑、进程编排逻辑和测试 seam 逻辑。
 
 如果后续保留 Windows 专属参数兼容，也必须只做“参数映射”，不能重新变成编排中心。
+
+这意味着当前已经存在于 `run.ps1` 的测试专用 seam，后续都应迁出 PowerShell，而不是继续扩。
 
 ## 命令与参数设计
 
@@ -260,6 +291,13 @@ cargo xtask dev
 - `dev` 的 auto-open 只消费 Rust 首页行
 - 缺首页行只禁用 auto-open，不导致启动失败
 
+这些测试的 seam 不再继续挂在 `run.ps1` 的公开参数上，而应采用二选一的克制方案：
+
+- 方案一：把流程拆成可单测的 Rust helper，直接在单测里注入 fake runner / fake browser opener
+- 方案二：保留少量 xtask 内部测试专用环境变量，仅在测试命令中设置，不暴露给正式 CLI 帮助
+
+本次优先推荐方案一；如果为了快速迁移必须使用方案二，也只能限于 xtask 内部，不允许再把测试入口挂回 `run.ps1`。
+
 ### 2. `run.ps1` 测试收缩为薄壳断言
 
 迁移后，`run.ps1` 测试重点只应剩下：
@@ -269,6 +307,15 @@ cargo xtask dev
 - 是否透传退出码
 
 当前大量围绕 PowerShell 内部编排写的测试，应逐步迁移到 `xtask` 侧。
+
+迁移完成后，`run.ps1` 测试不再关注：
+
+- `psql` 调用细节
+- `cargo build` 调用细节
+- stdout tee 细节
+- 浏览器打开等待逻辑
+
+这些都应成为 `xtask` 的测试责任。
 
 ### 3. Rust 主程序边界测试继续保留
 
@@ -282,6 +329,7 @@ cargo xtask dev
 
 - 优先单文件 `xtask/src/main.rs`
 - 非必要不继续拆模块
+- 必须以前置收口 `src/view.rs -> src/web.rs` 作为配额交换动作，不能先加了再说
 
 ### 2. Windows 与 Linux 行为漂移风险
 
@@ -306,11 +354,14 @@ cargo xtask dev
 
 1. 开发者可以直接运行 `cargo xtask dev`
 2. `run.ps1` 仍可用，但本质只是调用 `cargo xtask dev`
-3. 数据库准备、bundle、build、spawn 等开发编排动作已不再由 PowerShell 持有
-4. 首页地址 / 管理入口 / 管理员口令 / ready 真相仍只由 Rust 主程序输出
-5. auto-open 只消费 Rust 首页行
-6. `--dry-run` 只预演准备动作，不伪造服务真相
-7. 测试边界从 PowerShell 内部实现迁到 `xtask` 行为
+3. 根 `Cargo.toml` 已明确支持 workspace 中的 `xtask`
+4. 现有 `.cargo/config.toml` 被保留并扩展 alias，而不是被覆盖重建
+5. `src/view.rs` 已收口进 `src/web.rs`，新增 `xtask` 后非测试 `.rs` 总数仍不超过 13
+6. 数据库准备、bundle、build、spawn 等开发编排动作已不再由 PowerShell 持有
+7. 首页地址 / 管理入口 / 管理员口令 / ready 真相仍只由 Rust 主程序输出
+8. auto-open 只消费 Rust 首页行
+9. `--dry-run` 只预演准备动作，不伪造服务真相
+10. 测试边界从 PowerShell 内部实现迁到 `xtask` 行为
 
 ## 结论
 
