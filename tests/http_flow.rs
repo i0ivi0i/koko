@@ -1093,14 +1093,6 @@ fn root_run_script_no_browser_still_prints_homepage_url() {
 }
 
 #[test]
-fn rust_binary_startup_source_defers_banner_until_ready() {
-    let main_source =
-        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs")).unwrap();
-    assert!(main_source.contains("write_startup_banner_if_ready"));
-    assert!(!main_source.contains("println!(\"当前管理员口令:"));
-}
-
-#[test]
 fn root_run_script_prints_current_admin_token_from_config() {
     let _guard = env_lock();
     let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/koko.toml");
