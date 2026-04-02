@@ -255,7 +255,6 @@ where
 
         self.ensure_command("cargo")?;
         if !inputs.skip_bundle {
-            self.ensure_command("powershell")?;
             self.run_bundle()?;
         }
         self.prepare_database(&report.config)?;
@@ -316,6 +315,7 @@ where
                 ],
             )
             .map(|_| ())
+            .map_err(|error| format!("web bundle failed: {error}"))
     }
 
     fn prepare_database(&self, config: &ResolvedAppConfig) -> Result<(), String> {
@@ -1065,7 +1065,6 @@ mod tests {
             actions.actions(),
             vec![
                 RecordedAction::CheckCommand("cargo".to_string()),
-                RecordedAction::CheckCommand("powershell".to_string()),
                 RecordedAction::BundleWeb,
                 RecordedAction::PrepareDatabase("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string()),
                 RecordedAction::BuildServer,
@@ -1088,6 +1087,41 @@ mod tests {
                 ),
                 ("KOKO_ADMIN_TOKEN".to_string(), None),
             ]
+        );
+    }
+
+    #[test]
+    fn dev_flow_runs_real_bundle_command_without_powershell_version_probe() {
+        let temp_root = temp_workspace_root("dev-run-bundle-without-version-probe");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::with_action_log(actions.clone());
+        let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
+        let database = RecordingDatabaseProvisioner::with_action_log(actions);
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            database,
+            runner.clone(),
+            launcher,
+            RecordingBrowserOpener::default(),
+        );
+
+        coordinator
+            .run(DevInputs::default())
+            .expect("dev run should execute bundle command directly");
+
+        let commands = runner.command_programs_and_args();
+        assert!(
+            commands.iter().any(|command| {
+                command.starts_with("powershell -ExecutionPolicy Bypass -File ")
+            }),
+            "expected real bundle command, got {commands:?}"
+        );
+        assert!(
+            !commands.iter().any(|command| command == "powershell --version"),
+            "bundle flow must not probe powershell with --version: {commands:?}"
         );
     }
 
@@ -1206,9 +1240,45 @@ mod tests {
             actions.actions(),
             vec![
                 RecordedAction::CheckCommand("cargo".to_string()),
-                RecordedAction::CheckCommand("powershell".to_string()),
                 RecordedAction::BundleWeb,
                 RecordedAction::PrepareDatabase("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn dev_flow_stops_before_database_when_bundle_command_fails() {
+        let temp_root = temp_workspace_root("dev-run-bundle-fail");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::failing_bundle(
+            actions.clone(),
+            "CreateProcess failed".to_string(),
+        );
+        let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
+        let database = RecordingDatabaseProvisioner::with_action_log(actions.clone());
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            database,
+            runner,
+            launcher.clone(),
+            RecordingBrowserOpener::default(),
+        );
+
+        let error = coordinator
+            .run(DevInputs::default())
+            .expect_err("bundle failure should stop dev run");
+
+        assert!(error.contains("web bundle failed"));
+        assert!(error.contains("CreateProcess failed"));
+        assert_eq!(launcher.launch_calls().len(), 0);
+        assert_eq!(
+            actions.actions(),
+            vec![
+                RecordedAction::CheckCommand("cargo".to_string()),
+                RecordedAction::BundleWeb,
             ]
         );
     }
@@ -1241,7 +1311,6 @@ mod tests {
             actions.actions(),
             vec![
                 RecordedAction::CheckCommand("cargo".to_string()),
-                RecordedAction::CheckCommand("powershell".to_string()),
                 RecordedAction::BundleWeb,
                 RecordedAction::PrepareDatabase("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string()),
                 RecordedAction::BuildServer,
@@ -1501,6 +1570,7 @@ mod tests {
     struct RecordingCommandRunner {
         actions: SharedActionLog,
         calls: Rc<RefCell<Vec<String>>>,
+        bundle_error: Rc<RefCell<Option<String>>>,
         build_error: Rc<RefCell<Option<String>>>,
     }
 
@@ -1509,6 +1579,7 @@ mod tests {
             Self {
                 actions: SharedActionLog::default(),
                 calls: Rc::new(RefCell::new(Vec::new())),
+                bundle_error: Rc::new(RefCell::new(None)),
                 build_error: Rc::new(RefCell::new(None)),
             }
         }
@@ -1519,6 +1590,16 @@ mod tests {
             Self {
                 actions,
                 calls: Rc::new(RefCell::new(Vec::new())),
+                bundle_error: Rc::new(RefCell::new(None)),
+                build_error: Rc::new(RefCell::new(None)),
+            }
+        }
+
+        fn failing_bundle(actions: SharedActionLog, error: String) -> Self {
+            Self {
+                actions,
+                calls: Rc::new(RefCell::new(Vec::new())),
+                bundle_error: Rc::new(RefCell::new(Some(error))),
                 build_error: Rc::new(RefCell::new(None)),
             }
         }
@@ -1527,6 +1608,7 @@ mod tests {
             Self {
                 actions,
                 calls: Rc::new(RefCell::new(Vec::new())),
+                bundle_error: Rc::new(RefCell::new(None)),
                 build_error: Rc::new(RefCell::new(Some("cargo build failed".to_string()))),
             }
         }
@@ -1552,6 +1634,9 @@ mod tests {
 
             if program == "powershell" && args.iter().any(|arg| arg == "-File") {
                 self.actions.push(RecordedAction::BundleWeb);
+                if let Some(error) = self.bundle_error.borrow_mut().take() {
+                    return Err(error);
+                }
                 return Ok(CommandOutput::default());
             }
 
