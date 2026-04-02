@@ -989,6 +989,88 @@ fn root_run_script_auto_open_uses_fake_child_homepage_line() {
 }
 
 #[test]
+fn root_run_script_normal_startup_auto_open_uses_exact_rust_homepage_url() {
+    let (child_script, browser_log_path, _child_cleanup) =
+        temp_startup_child_fixture(Some("http://127.0.0.1:8899/"));
+    let (shim_dir, psql_log_path, _shim_cleanup) = temp_fake_toolchain();
+    let child_script = child_script.to_string_lossy().into_owned();
+    let browser_log_path = browser_log_path.to_string_lossy().into_owned();
+    let output = run_root_script_with_shimmed_toolchain(
+        &[
+            "-SkipBundle",
+            "-BindAddr",
+            "127.0.0.1:8080",
+            "-NoBrowser:$false",
+            "-TestChildScript",
+            child_script.as_str(),
+            "-TestChildMode",
+            "Tee",
+            "-TestBrowserLogPath",
+            browser_log_path.as_str(),
+        ],
+        &shim_dir,
+        &psql_log_path,
+        false,
+    );
+
+    assert!(
+        output.status.success(),
+        "normal startup should trust Rust output instead of probing BindAddr\nstatus={:?}\nstdout={}\nstderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("==> 首页地址: http://127.0.0.1:8899/"));
+    assert!(!stdout.contains("Koko 没能成功启动"));
+
+    let browser_log = fs::read_to_string(&browser_log_path).unwrap();
+    assert_eq!(browser_log.trim(), "http://127.0.0.1:8899/");
+}
+
+#[test]
+fn root_run_script_normal_startup_missing_homepage_only_disables_auto_open() {
+    let (child_script, browser_log_path, _child_cleanup) = temp_startup_child_fixture(None);
+    let (shim_dir, psql_log_path, _shim_cleanup) = temp_fake_toolchain();
+    let child_script = child_script.to_string_lossy().into_owned();
+    let browser_log_path = browser_log_path.to_string_lossy().into_owned();
+    let output = run_root_script_with_shimmed_toolchain(
+        &[
+            "-SkipBundle",
+            "-BindAddr",
+            "127.0.0.1:8080",
+            "-NoBrowser:$false",
+            "-TestChildScript",
+            child_script.as_str(),
+            "-TestChildMode",
+            "Tee",
+            "-TestBrowserLogPath",
+            browser_log_path.as_str(),
+        ],
+        &shim_dir,
+        &psql_log_path,
+        false,
+    );
+
+    assert!(
+        output.status.success(),
+        "missing homepage line should only disable auto-open\nstatus={:?}\nstdout={}\nstderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("child ready without homepage"));
+    assert!(!stdout.contains("Koko 启动后没有从 Rust 输出中解析到首页地址。"));
+    assert!(
+        !Path::new(&browser_log_path).exists(),
+        "browser should stay closed when Rust did not print a homepage line"
+    );
+}
+
+#[test]
 fn root_run_script_does_not_fabricate_banner_when_child_fails() {
     let output = run_root_script_with_tooling(&[
         "-SkipBundle",
@@ -1045,20 +1127,14 @@ fn root_run_script_clears_inherited_admin_token_before_child_launch() {
 #[test]
 fn root_run_script_stops_after_first_failed_migration() {
     let (child_script, _child_cleanup) = temp_env_probe_child_script();
-    let (shim_dir, log_path, _shim_cleanup) = temp_failed_migration_toolchain();
-    let _guard = env_lock();
-    let powershell = powershell_exe_path();
-    let output = std::process::Command::new(powershell)
-        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
-        .args(["-SkipBundle", "-TestChildScript"])
-        .arg(&child_script)
-        .env("PATH", format!(r"{};C:\Windows\System32", shim_dir.display()))
-        .env("PATHEXT", ".COM;.EXE;.BAT;.CMD")
-        .env("FAKE_PSQL_LOG", &log_path)
-        .env("FAKE_PSQL_STATE", shim_dir.join("psql-state.txt"))
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
+    let (shim_dir, log_path, _shim_cleanup) = temp_fake_toolchain();
+    let child_script = child_script.to_string_lossy().into_owned();
+    let output = run_root_script_with_shimmed_toolchain(
+        &["-SkipBundle", "-TestChildScript", child_script.as_str()],
+        &shim_dir,
+        &log_path,
+        true,
+    );
 
     assert!(
         !output.status.success(),
@@ -1106,6 +1182,29 @@ fn run_root_script_with_tooling(args: &[&str]) -> std::process::Output {
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap()
+}
+
+fn run_root_script_with_shimmed_toolchain(
+    args: &[&str],
+    shim_dir: &Path,
+    psql_log_path: &Path,
+    fail_first_migration: bool,
+) -> std::process::Output {
+    let _guard = env_lock();
+    let powershell = powershell_exe_path();
+    let mut command = std::process::Command::new(powershell);
+    command
+        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
+        .args(args)
+        .env("PATH", format!(r"{};C:\Windows\System32", shim_dir.display()))
+        .env("PATHEXT", ".COM;.EXE;.BAT;.CMD")
+        .env("FAKE_PSQL_LOG", psql_log_path)
+        .env("FAKE_PSQL_STATE", shim_dir.join("psql-state.txt"))
+        .current_dir(env!("CARGO_MANIFEST_DIR"));
+    if fail_first_migration {
+        command.env("FAKE_PSQL_FAIL_FIRST", "1");
+    }
+    command.output().unwrap()
 }
 
 fn temp_config_file_path(case_name: &str) -> PathBuf {
@@ -1189,7 +1288,30 @@ if ($env:KOKO_ADMIN_TOKEN) {
     (script_path.clone(), TempScriptGuard::new(script_path))
 }
 
-fn temp_failed_migration_toolchain() -> (PathBuf, PathBuf, TempScriptGuard) {
+fn temp_startup_child_fixture(homepage_url: Option<&str>) -> (PathBuf, PathBuf, TempScriptGuard) {
+    let fixture_dir = env::temp_dir()
+        .join("koko-tests")
+        .join(format!("startup-child-{}", Uuid::now_v7()));
+    fs::create_dir_all(&fixture_dir).unwrap();
+    let script_path = fixture_dir.join("startup.ps1");
+    let browser_log_path = fixture_dir.join("browser.log");
+
+    let script_body = match homepage_url {
+        Some(url) => format!(
+            "Write-Output \"==> 首页地址: {url}\"\r\nWrite-Output \"==> 管理入口: {url}admin\"\r\nWrite-Output \"==> 当前管理员口令: admin-test-token\"\r\n"
+        ),
+        None => "Write-Output \"child ready without homepage\"\r\n".to_string(),
+    };
+    fs::write(&script_path, script_body).unwrap();
+
+    (
+        script_path,
+        browser_log_path,
+        TempScriptGuard::new(fixture_dir.join("cleanup.marker")),
+    )
+}
+
+fn temp_fake_toolchain() -> (PathBuf, PathBuf, TempScriptGuard) {
     let tool_dir = env::temp_dir()
         .join("koko-tests")
         .join(format!("fake-toolchain-{}", Uuid::now_v7()));
@@ -1218,9 +1340,11 @@ if \"%~2\"==\"-tAc\" (\r\n\
 )\r\n\
 if \"%~6\"==\"-f\" (\r\n\
   echo migrate^|%*>>\"%FAKE_PSQL_LOG%\"\r\n\
-  if exist \"%FAKE_PSQL_STATE%\" goto migration_ok\r\n\
-  break>\"%FAKE_PSQL_STATE%\"\r\n\
-  exit /b 1\r\n\
+  if \"%FAKE_PSQL_FAIL_FIRST%\"==\"1\" (\r\n\
+    if exist \"%FAKE_PSQL_STATE%\" goto migration_ok\r\n\
+    break>\"%FAKE_PSQL_STATE%\"\r\n\
+    exit /b 1\r\n\
+  )\r\n\
 )\r\n\
 :migration_ok\r\n\
 exit /b 0\r\n\

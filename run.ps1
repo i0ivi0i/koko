@@ -7,7 +7,12 @@ param(
     [switch]$DryRun,
     [object]$NoBrowser = $false,
     # 仅供测试夹具替换子进程入口使用，不是第二套启动协议。
-    [string]$TestChildScript
+    [string]$TestChildScript,
+    # 仅供测试切换 stdout 采集方式，正常启动链仍以 Rust 输出为准。
+    [ValidateSet("Replay", "Tee")]
+    [string]$TestChildMode = "Replay",
+    # 仅供测试记录浏览器打开请求，避免真的拉起系统浏览器。
+    [string]$TestBrowserLogPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -112,51 +117,39 @@ function Ensure-Database {
     }
 }
 
-function Wait-ForServerReady {
-    param(
-        [string]$Url,
-        [System.Diagnostics.Process]$Process,
-        [int]$TimeoutSeconds = 60
-    )
-
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    while ((Get-Date) -lt $deadline) {
-        if ($Process.HasExited) {
-            return $false
-        }
-
-        try {
-            $response = Invoke-WebRequest -UseBasicParsing $Url -TimeoutSec 2
-            if ($response.StatusCode -eq 200) {
-                return $true
-            }
-        }
-        catch {
-            Start-Sleep -Milliseconds 500
-            continue
-        }
-
-        Start-Sleep -Milliseconds 500
-    }
-
-    return $false
-}
-
 function New-ChildProcessSpec {
     param(
         [string]$ServerBinaryPath,
-        [string]$TestChildScript
+        [string]$TestChildScript,
+        [string]$TestChildMode
     )
 
     $logDir = Join-Path $env:TEMP "koko-run"
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
     $runId = [guid]::NewGuid().ToString("N")
+    $powershellExe = Join-Path $PSHOME "powershell.exe"
 
     if ($TestChildScript) {
-        $powershellExe = Join-Path $PSHOME "powershell.exe"
         $stdoutLog = Join-Path $logDir "server-$runId.out.log"
         $stderrLog = Join-Path $logDir "server-$runId.err.log"
         Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
+
+        if ($TestChildMode -eq "Tee") {
+            $command = '& "{0}" -ExecutionPolicy Bypass -File "{1}" *>&1 | Tee-Object -FilePath "{2}"; exit $LASTEXITCODE' -f $powershellExe, $TestChildScript, $stdoutLog
+            return [pscustomobject]@{
+                FilePath = $powershellExe
+                ArgumentList = @(
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    $command
+                )
+                StdoutLog = $stdoutLog
+                StderrLog = $null
+                ReplayOutput = $false
+            }
+        }
 
         return [pscustomobject]@{
             FilePath = $powershellExe
@@ -172,11 +165,10 @@ function New-ChildProcessSpec {
         }
     }
 
-    $powershellExe = Join-Path $PSHOME "powershell.exe"
     $stdoutLog = Join-Path $logDir "server-$runId.out.log"
     Remove-Item $stdoutLog -ErrorAction SilentlyContinue
 
-    # 正常启动分支仍然保留 ready probe，但 auto-open 只认 Rust 输出里的首页地址。
+    # 正常启动分支只负责把 Rust stdout 落盘，供 auto-open best-effort 消费。
     $command = '& "{0}" *>&1 | Tee-Object -FilePath "{1}"; exit $LASTEXITCODE' -f $ServerBinaryPath, $stdoutLog
 
     return [pscustomobject]@{
@@ -242,6 +234,54 @@ function Get-StartupHomepageUrlFromLines {
     }
 
     return $null
+}
+
+function Wait-ForStartupHomepageUrl {
+    param(
+        [string]$StdoutLog,
+        [System.Diagnostics.Process]$Process,
+        [int]$TimeoutSeconds = 5
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path $StdoutLog) {
+            $homepageUrl = Get-StartupHomepageUrlFromLines -Lines (Get-Content $StdoutLog)
+            if (-not [string]::IsNullOrWhiteSpace($homepageUrl)) {
+                return $homepageUrl
+            }
+        }
+
+        if ($Process.HasExited) {
+            break
+        }
+
+        Start-Sleep -Milliseconds 200
+    }
+
+    if (Test-Path $StdoutLog) {
+        return Get-StartupHomepageUrlFromLines -Lines (Get-Content $StdoutLog)
+    }
+
+    return $null
+}
+
+function Open-StartupHomepage {
+    param(
+        [string]$Url,
+        [string]$TestBrowserLogPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        return
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($TestBrowserLogPath)) {
+        Set-Content -Path $TestBrowserLogPath -Value $Url -Encoding Ascii
+        return
+    }
+
+    Start-Process $Url | Out-Null
 }
 
 function Start-ChildProcess {
@@ -310,22 +350,10 @@ try {
         throw "Koko 构建已完成，但找不到可执行文件：$serverBinaryPath"
     }
 
-    $port = $BindAddr.Substring($BindAddr.LastIndexOf(":") + 1)
-    $hostName = $BindAddr.Substring(0, $BindAddr.Length - $port.Length - 1).Trim()
-    if ([string]::IsNullOrWhiteSpace($hostName) -or $hostName -eq "0.0.0.0") {
-        $hostName = "127.0.0.1"
-    }
-
-    if ($hostName.Contains(":") -and -not $hostName.StartsWith("[")) {
-        $readyProbeUrl = "http://[$hostName]:$port/"
-    }
-    else {
-        $readyProbeUrl = "http://$hostName`:$port/"
-    }
-
     $childProcessSpec = New-ChildProcessSpec `
         -ServerBinaryPath $serverBinaryPath `
-        -TestChildScript $TestChildScript
+        -TestChildScript $TestChildScript `
+        -TestChildMode $TestChildMode
 
     $startProcessArgs = @{
         WorkingDirectory = $repoRoot
@@ -351,21 +379,15 @@ try {
         exit [int]$serverProcess.ExitCode
     }
     else {
-        if (-not (Wait-ForServerReady -Url $readyProbeUrl -Process $serverProcess)) {
-            throw "Koko 没能成功启动。请先检查 Rust 子进程的输出，再确认数据库连接和端口占用。"
-        }
-
-        $startupHomepageUrl = Get-StartupHomepageUrlFromLines -Lines (Get-Content $childProcessSpec.StdoutLog)
-        if ([string]::IsNullOrWhiteSpace($startupHomepageUrl)) {
-            throw "Koko 启动后没有从 Rust 输出中解析到首页地址。"
-        }
-
-        # auto-open 只消费 Rust 输出中的首页地址；ready probe 仍可暂时沿用 BindAddr。
+        # auto-open 只是消费 Rust 已经打印出来的首页地址；解析不到就直接跳过，不能反客为主定义 ready。
         if ($allowBrowser) {
-            Start-Process $startupHomepageUrl | Out-Null
+            $startupHomepageUrl = Wait-ForStartupHomepageUrl -StdoutLog $childProcessSpec.StdoutLog -Process $serverProcess
+            Open-StartupHomepage -Url $startupHomepageUrl -TestBrowserLogPath $TestBrowserLogPath
         }
 
-        Wait-Process -Id $serverProcess.Id
+        if (-not $serverProcess.HasExited) {
+            Wait-Process -Id $serverProcess.Id
+        }
     }
 }
 finally {
