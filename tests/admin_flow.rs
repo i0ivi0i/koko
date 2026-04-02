@@ -359,10 +359,11 @@ async fn admin_session_becomes_invalid_after_admin_token_rotation(
         AdminSessionState::Required
     );
 
-    let truth_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_session_truth")
-        .fetch_one(store.pool())
-        .await?;
-    assert_eq!(truth_rows, 0);
+    let active_session_id: String =
+        sqlx::query_scalar("SELECT active_session_id FROM admin_session_truth")
+            .fetch_one(store.pool())
+            .await?;
+    assert_eq!(active_session_id, session_id.to_string());
     Ok(())
 }
 
@@ -395,10 +396,65 @@ async fn admin_session_becomes_invalid_when_token_only_changes_outer_whitespace(
         AdminSessionState::Required
     );
 
-    let truth_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_session_truth")
-        .fetch_one(store.pool())
-        .await?;
-    assert_eq!(truth_rows, 0);
+    let active_session_id: String =
+        sqlx::query_scalar("SELECT active_session_id FROM admin_session_truth")
+            .fetch_one(store.pool())
+            .await?;
+    assert_eq!(active_session_id, session_id.to_string());
+    Ok(())
+}
+
+#[sqlx::test]
+async fn admin_session_old_fingerprint_does_not_clear_new_active_session(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let store = PgStore::new(pool);
+    let original_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");
+    let rotated_fingerprint = koko::support::admin_token_fingerprint("rotated-admin-token");
+    let old_session_id = Uuid::from_u128(7042);
+    let new_session_id = Uuid::from_u128(7043);
+    let issued_at = fixed_admin_time();
+    let rotated_at = issued_at + chrono::TimeDelta::minutes(1);
+
+    store
+        .replace_active_admin_session(old_session_id, &original_fingerprint, issued_at)
+        .await
+        .unwrap();
+    store
+        .replace_active_admin_session(new_session_id, &rotated_fingerprint, rotated_at)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store
+            .read_admin_session_state(
+                old_session_id,
+                &original_fingerprint,
+                rotated_at + chrono::TimeDelta::seconds(1),
+                true,
+            )
+            .await
+            .unwrap(),
+        AdminSessionState::Required
+    );
+    assert_eq!(
+        store
+            .read_admin_session_state(
+                new_session_id,
+                &rotated_fingerprint,
+                rotated_at + chrono::TimeDelta::seconds(2),
+                false,
+            )
+            .await
+            .unwrap(),
+        AdminSessionState::Active
+    );
+
+    let active_session_id: String =
+        sqlx::query_scalar("SELECT active_session_id FROM admin_session_truth")
+            .fetch_one(store.pool())
+            .await?;
+    assert_eq!(active_session_id, new_session_id.to_string());
     Ok(())
 }
 

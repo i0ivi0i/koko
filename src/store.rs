@@ -92,8 +92,7 @@ impl PgStore {
 
         let session_id = session_id.to_string();
         if truth.admin_token_fingerprint != token_fingerprint {
-            // 管理员口令一旦轮换，旧指纹对应的后台会话必须立即失效，防止旧 cookie 在口令换代后继续持有后台权限。
-            clear_admin_session_truth(&mut tx).await?;
+            // 管理员口令一旦轮换，旧指纹对应的请求必须立刻失效；但数据库中的当前真相行代表新口令下的新活跃会话，不能被旧请求反向撤销。
             tx.commit().await.map_err(map_sqlx_error)?;
             return Ok(AdminSessionState::Required);
         }
