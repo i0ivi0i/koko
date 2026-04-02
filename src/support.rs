@@ -165,6 +165,7 @@ impl AppConfig {
             env::var(DATABASE_URL_ENV).map_err(|_| ConfigError::MissingEnv(DATABASE_URL_ENV))?;
         let bind_addr_raw =
             env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
+        // 启动只认 config/koko.toml 作为管理员口令真相；环境变量这里只承接一次性迁移入口。
         let config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
         let admin_token_seed = env::var(ADMIN_TOKEN_ENV).ok();
         let admin_cookie_secure =

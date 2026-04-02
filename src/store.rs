@@ -97,6 +97,7 @@ impl PgStore {
             return Ok(AdminSessionState::Required);
         }
 
+        // 这里永远只认当前这一条 active_session_id；只要不是同一个会话，就视为被新登录顶掉。
         if truth.active_session_id != session_id {
             tx.commit().await.map_err(map_sqlx_error)?;
             return Ok(AdminSessionState::Replaced);

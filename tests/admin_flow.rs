@@ -140,6 +140,26 @@ async fn admin_login_cookie_unlocks_admin_overview_and_rooms(
 }
 
 #[sqlx::test]
+async fn admin_session_survives_server_restart(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool.clone()).await.spawn().await;
+    let admin_cookie = harness.admin_login_with_cookie().await;
+    harness.shutdown().await;
+
+    let restarted = HttpHarness::new(pool).await.spawn().await;
+    let overview = restarted
+        .client()
+        .get(format!("{}/api/admin/overview", restarted.base_url()))
+        .header(reqwest::header::COOKIE, admin_cookie)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(overview.status(), reqwest::StatusCode::OK);
+    restarted.shutdown().await;
+    Ok(())
+}
+
+#[sqlx::test]
 async fn admin_logout_flushes_cookie_back_to_login_required(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {

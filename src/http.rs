@@ -292,6 +292,7 @@ async fn admin_session(
     let Some(context) = resolve_admin_session_context(&session)? else {
         return Ok(Json(unauthenticated_admin_session_status()));
     };
+    // 这个 GET 只做探活，不刷新 last_seen_at；否则轮询会把 3 天空闲期悄悄续命。
     let admin_session_port = build_http_admin_session_port(&state, session, false);
     let status = get_admin_session(
         &admin_session_port,
