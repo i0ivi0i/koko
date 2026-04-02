@@ -21,7 +21,6 @@ use std::sync::{Mutex, OnceLock};
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -930,211 +929,98 @@ fn startup_banner_normalizes_unspecified_ipv4_to_loopback_home_url() {
 }
 
 #[test]
-fn root_run_script_defaults_to_lan_accessible_bind_addr() {
-    let _guard = env_lock();
-    let powershell = powershell_exe_path();
-    let output = Command::new(powershell)
-        .args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            "run.ps1",
-            "-DryRun",
-            "-SkipBundle",
-            "-DatabaseUrl",
-            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-        ])
-        .env("PATH", r"C:\Windows\System32")
-        .env_remove("PSModulePath")
-        .env_remove("PATHEXT")
-        .env_remove("PROMPT")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
+fn root_run_script_dry_run_does_not_print_home_admin_or_token() {
+    let output = run_root_script(&["-DryRun", "-SkipBundle"]);
 
-    assert!(
-        output.status.success(),
-        "run.ps1 dry-run should succeed, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
+    assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Skip web bundle"));
-    assert!(stdout.contains("准备数据库结构"));
-    assert!(stdout.contains("KOKO_DATABASE_URL"));
-    assert!(stdout.contains("cargo build"));
-    assert!(stdout.contains("浏览器"));
-    assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
-    assert!(stdout.contains("/admin"));
-    assert!(stdout.contains("127.0.0.1:8080"));
-    assert!(!stdout.contains("/api/admin/overview"));
-    assert!(!stdout.contains("/api/admin/rooms"));
-    assert!(!stdout.contains("已自动生成临时 AdminToken"));
-    assert!(!stdout.contains("x-admin-token"));
-    assert!(stdout.contains("Ctrl+C"));
+
+    assert!(!stdout.contains("首页地址:"));
+    assert!(!stdout.contains("管理入口:"));
+    assert!(!stdout.contains("当前管理员口令:"));
 }
 
 #[test]
-fn root_run_script_prints_admin_entry_without_temporary_admin_token_log() {
-    let _guard = env_lock();
-    let powershell = powershell_exe_path();
-    let output = Command::new(powershell)
-        .args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            "run.ps1",
-            "-DryRun",
-            "-SkipBundle",
-            "-DatabaseUrl",
-            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-        ])
-        .env("PATH", r"C:\Windows\System32")
-        .env_remove("PSModulePath")
-        .env_remove("PATHEXT")
-        .env_remove("PROMPT")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
+fn root_run_script_passthroughs_fake_child_banner_without_replaying_it() {
+    let output = run_root_script(&[
+        "-SkipBundle",
+        "-TestChildScript",
+        "tests/http_support/fixtures/powershell/fake-rust-startup.ps1",
+    ]);
 
-    assert!(
-        output.status.success(),
-        "run.ps1 dry-run should keep admin entry output stable, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
+    assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("/admin"));
-    assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
-    assert!(!stdout.contains("已自动生成临时 AdminToken"));
-    assert!(!stdout.contains("x-admin-token"));
+    assert!(stdout.contains("==> 首页地址: http://127.0.0.1:8080/"));
+    assert_eq!(stdout.matches("==> 首页地址: http://127.0.0.1:8080/").count(), 1);
 }
 
 #[test]
-fn root_run_script_reuses_access_hints_in_real_startup_branch() {
-    let script = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("run.ps1")).unwrap();
-    let needle = "Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)";
-    assert_eq!(script.matches(needle).count(), 2);
+fn root_run_script_does_not_fabricate_banner_when_child_fails() {
+    let output = run_root_script(&[
+        "-SkipBundle",
+        "-TestChildScript",
+        "tests/http_support/fixtures/powershell/fake-rust-error.ps1",
+    ]);
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("fake child failed"));
+    assert!(!stdout.contains("首页地址:"));
+    assert!(!stdout.contains("管理入口:"));
+    assert!(!stdout.contains("当前管理员口令:"));
+}
+
+#[test]
+fn root_run_script_contains_startup_truth_boundary_comment() {
+    let script =
+        std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("run.ps1"))
+            .unwrap();
+
+    assert!(script.contains("启动语义真相"));
 }
 
 #[test]
 fn root_run_script_dry_run_without_admin_token_does_not_set_koko_admin_token() {
-    let _guard = env_lock();
-    let powershell = powershell_exe_path();
-    let output = Command::new(powershell)
-        .args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            "run.ps1",
-            "-DryRun",
-            "-SkipBundle",
-            "-DatabaseUrl",
-            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-        ])
-        .env("PATH", r"C:\Windows\System32")
-        .env_remove("PSModulePath")
-        .env_remove("PATHEXT")
-        .env_remove("PROMPT")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
+    let output = run_root_script(&["-DryRun", "-SkipBundle"]);
 
-    assert!(
-        output.status.success(),
-        "run.ps1 dry-run without explicit admin token should succeed, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
+    assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(!stdout.contains("Set KOKO_ADMIN_TOKEN"));
 }
 
 #[test]
 fn root_run_script_clears_inherited_admin_token_without_explicit_override() {
-    let script = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("run.ps1")).unwrap();
-    assert!(script.contains("Remove-Item Env:KOKO_ADMIN_TOKEN -ErrorAction SilentlyContinue"));
-}
-
-#[test]
-fn root_run_script_no_browser_still_prints_homepage_url() {
     let _guard = env_lock();
     let powershell = powershell_exe_path();
-    let output = Command::new(powershell)
-        .args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            "run.ps1",
-            "-DryRun",
-            "-SkipBundle",
-            "-NoBrowser",
-            "-DatabaseUrl",
-            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-        ])
+    let output = std::process::Command::new(powershell)
+        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1", "-DryRun", "-SkipBundle"])
+        .env("PATH", r"C:\Windows\System32")
+        .env_remove("PSModulePath")
+        .env_remove("PATHEXT")
+        .env_remove("PROMPT")
+        .env("KOKO_ADMIN_TOKEN", "inherited-token")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("Set KOKO_ADMIN_TOKEN"));
+}
+
+fn run_root_script(args: &[&str]) -> std::process::Output {
+    let _guard = env_lock();
+    let powershell = powershell_exe_path();
+    std::process::Command::new(powershell)
+        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
+        .args(args)
         .env("PATH", r"C:\Windows\System32")
         .env_remove("PSModulePath")
         .env_remove("PATHEXT")
         .env_remove("PROMPT")
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .unwrap();
-
-    assert!(
-        output.status.success(),
-        "run.ps1 dry-run with -NoBrowser should succeed, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("首页地址"));
-    assert!(stdout.contains("127.0.0.1:8080"));
-    assert!(stdout.contains("浏览器不会自动打开"));
-}
-
-#[test]
-fn root_run_script_prints_current_admin_token_from_config() {
-    let _guard = env_lock();
-    let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/koko.toml");
-    let config_source = fs::read_to_string(&config_path).unwrap();
-    let current_admin_token = config_source
-        .lines()
-        .find_map(|line| {
-            let line = line.trim();
-            let (_, value) = line.split_once('=')?;
-            serde_json::from_str::<String>(value.trim()).ok()
-        })
-        .expect("repo config should contain a readable admin token");
-
-    let powershell = powershell_exe_path();
-    let output = Command::new(powershell)
-        .args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            "run.ps1",
-            "-DryRun",
-            "-SkipBundle",
-            "-DatabaseUrl",
-            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-        ])
-        .env("PATH", r"C:\Windows\System32")
-        .env_remove("PSModulePath")
-        .env_remove("PATHEXT")
-        .env_remove("PROMPT")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
-
-    assert!(
-        output.status.success(),
-        "run.ps1 dry-run should succeed, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("当前管理员口令:"));
-    assert!(stdout.contains(&current_admin_token));
+        .unwrap()
 }
 
 fn temp_config_file_path(case_name: &str) -> PathBuf {

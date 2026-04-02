@@ -5,7 +5,9 @@ param(
     [string]$BindAddr = "0.0.0.0:8080",
     [switch]$SkipBundle,
     [switch]$DryRun,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    # 仅供测试夹具替换子进程入口使用，不是第二套启动协议。
+    [string]$TestChildScript
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,7 +15,6 @@ $serverProcess = $null
 
 $repoRoot = $PSScriptRoot
 $cargoManifestPath = Join-Path $repoRoot "Cargo.toml"
-$adminConfigPath = Join-Path $repoRoot "config\koko.toml"
 $bundleScript = Join-Path $repoRoot "scripts\dx-bundle-web.ps1"
 $migrationsDir = Join-Path $repoRoot "migrations"
 $runTargetDir = "target/run"
@@ -78,33 +79,6 @@ function Get-BinaryPath {
     return Join-Path $repoRoot "$TargetDir\debug\$packageName.exe"
 }
 
-function Get-AdminTokenFromConfig {
-    param(
-        [string]$ConfigPath
-    )
-
-    if (-not (Test-Path $ConfigPath)) {
-        throw "Missing admin config file: $ConfigPath"
-    }
-
-    $content = Get-Content $ConfigPath -Raw
-    $match = [regex]::Match($content, '(?m)^\s*admin_token\s*=\s*("([^"]*)")\s*$')
-    if (-not $match.Success) {
-        throw "Unable to read admin token from $ConfigPath"
-    }
-
-    return $match.Groups[2].Value
-}
-
-function Write-AdminTokenHint {
-    param(
-        [string]$ConfigPath
-    )
-
-    $adminToken = Get-AdminTokenFromConfig -ConfigPath $ConfigPath
-    Write-Host "==> 当前管理员口令: $adminToken"
-}
-
 function Ensure-Database {
     param(
         [string]$Url,
@@ -130,102 +104,6 @@ function Ensure-Database {
     Invoke-Step "准备数据库结构" {
         foreach ($migration in $migrations) {
             & psql $Url -v ON_ERROR_STOP=1 -q -f $migration.FullName | Out-Null
-        }
-    }
-}
-
-function Resolve-AppUrl {
-    param(
-        [string]$Address
-    )
-
-    $port = $Address.Substring($Address.LastIndexOf(":") + 1)
-    $hostName = $Address.Substring(0, $Address.Length - $port.Length - 1).Trim()
-    if ([string]::IsNullOrWhiteSpace($hostName) -or $hostName -eq "0.0.0.0") {
-        $hostName = "127.0.0.1"
-    }
-
-    if ($hostName.Contains(":") -and -not $hostName.StartsWith("[")) {
-        return "http://[$hostName]:$port/"
-    }
-
-    return "http://$hostName`:$port/"
-}
-
-function Get-LocalIPv4Addresses {
-    $allAddresses = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
-        Where-Object {
-            $_.OperationalStatus -eq [System.Net.NetworkInformation.OperationalStatus]::Up -and
-            $_.NetworkInterfaceType -ne [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback
-        } |
-        ForEach-Object {
-            $_.GetIPProperties().UnicastAddresses |
-                Where-Object {
-                    $_.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
-                    -not $_.Address.IPAddressToString.StartsWith("169.254.")
-                } |
-                ForEach-Object { $_.Address.IPAddressToString }
-        }
-
-    return $allAddresses | Sort-Object -Unique
-}
-
-function Resolve-AccessUrls {
-    param(
-        [string]$Address
-    )
-
-    $port = $Address.Substring($Address.LastIndexOf(":") + 1)
-    $hostName = $Address.Substring(0, $Address.Length - $port.Length - 1).Trim()
-
-    if ([string]::IsNullOrWhiteSpace($hostName) -or $hostName -eq "0.0.0.0") {
-        $urls = @("http://127.0.0.1`:$port/")
-        $urls += Get-LocalIPv4Addresses | ForEach-Object { "http://$_`:$port/" }
-        return $urls | Sort-Object -Unique
-    }
-
-    if ($hostName.Contains(":") -and -not $hostName.StartsWith("[")) {
-        return @("http://[$hostName]:$port/")
-    }
-
-    return @("http://$hostName`:$port/")
-}
-
-function Write-AccessHints {
-    param(
-        [string[]]$Urls,
-        [bool]$OpenBrowser
-    )
-
-    if ($Urls.Count -eq 0) {
-        return
-    }
-
-    $localUrl = $Urls | Where-Object { $_ -like "http://127.0.0.1:*" } | Select-Object -First 1
-    if (-not $localUrl) {
-        $localUrl = $Urls[0]
-    }
-
-    Write-Host "==> 首页地址: $localUrl"
-    if ($OpenBrowser) {
-        Write-Host "==> 浏览器会自动打开: $localUrl"
-    }
-    else {
-        Write-Host "==> 浏览器不会自动打开"
-    }
-
-    $lanUrls = $Urls | Where-Object { $_ -ne $localUrl }
-    if ($lanUrls.Count -gt 0) {
-        Write-Host "==> 局域网设备请访问:"
-        foreach ($url in $lanUrls) {
-            Write-Host "   $url"
-        }
-    }
-    Write-Host "==> 管理入口: $($localUrl)admin"
-    if ($lanUrls.Count -gt 0) {
-        Write-Host "==> 局域网管理入口:"
-        foreach ($url in $lanUrls) {
-            Write-Host "   $($url)admin"
         }
     }
 }
@@ -260,24 +138,11 @@ function Wait-ForServerReady {
     return $false
 }
 
-function Read-LogTail {
-    param(
-        [string]$Path
-    )
-
-    if (-not (Test-Path $Path)) {
-        return ""
-    }
-
-    return (Get-Content $Path -Tail 40) -join [Environment]::NewLine
-}
-
+# 脚本入口：这里只负责准备运行环境，启动语义真相应由 Rust 子进程输出。
 Push-Location $repoRoot
 try {
-    $appUrl = Resolve-AppUrl -Address $BindAddr
-    $accessUrls = Resolve-AccessUrls -Address $BindAddr
-
     if ($DryRun) {
+        # -DryRun：只预演准备动作，不再伪造首页地址、管理入口或管理员口令。
         if ($SkipBundle) {
             Write-Host "==> Skip web bundle"
         }
@@ -293,13 +158,17 @@ try {
             Write-Host "==> Set KOKO_ADMIN_TOKEN"
         }
         Write-Host "==> Set KOKO_BIND_ADDR"
-        Write-Host "==> 监听地址: $BindAddr"
-        Write-AdminTokenHint -ConfigPath $adminConfigPath
-        $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
         Write-Host "==> cargo build --target-dir $runTargetDir"
-        Write-Host "==> $serverBinaryPath"
-        Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)
-        Write-Host "==> 启动成功后可直接开始测试，按 Ctrl+C 可停止服务"
+        exit 0
+    }
+
+    # stdout/stderr 处理：只消费 Rust 子进程的输出，不再重播任何部署提示。
+    if ($TestChildScript) {
+        & $TestChildScript
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+
         exit 0
     }
 
@@ -324,12 +193,6 @@ try {
     $env:KOKO_BIND_ADDR = $BindAddr
     $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
 
-    $logDir = Join-Path $env:TEMP "koko-run"
-    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-    $stdoutLog = Join-Path $logDir "server.out.log"
-    $stderrLog = Join-Path $logDir "server.err.log"
-    Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
-
     Invoke-Step "cargo build --target-dir $runTargetDir" {
         & cargo build --target-dir $runTargetDir
     }
@@ -338,32 +201,33 @@ try {
         throw "Koko 构建已完成，但找不到可执行文件：$serverBinaryPath"
     }
 
-    Write-Host "==> 正在启动 Koko 服务..."
+    $port = $BindAddr.Substring($BindAddr.LastIndexOf(":") + 1)
+    $hostName = $BindAddr.Substring(0, $BindAddr.Length - $port.Length - 1).Trim()
+    if ([string]::IsNullOrWhiteSpace($hostName) -or $hostName -eq "0.0.0.0") {
+        $hostName = "127.0.0.1"
+    }
+
+    if ($hostName.Contains(":") -and -not $hostName.StartsWith("[")) {
+        $appUrl = "http://[$hostName]:$port/"
+    }
+    else {
+        $appUrl = "http://$hostName`:$port/"
+    }
+
     $serverProcess = Start-Process $serverBinaryPath `
         -WorkingDirectory $repoRoot `
-        -RedirectStandardOutput $stdoutLog `
-        -RedirectStandardError $stderrLog `
+        -NoNewWindow `
         -PassThru
 
     if (-not (Wait-ForServerReady -Url $appUrl -Process $serverProcess)) {
-        $stderrTail = Read-LogTail -Path $stderrLog
-        $stdoutTail = Read-LogTail -Path $stdoutLog
-        if (-not [string]::IsNullOrWhiteSpace($stderrTail)) {
-            Write-Host $stderrTail
-        }
-        elseif (-not [string]::IsNullOrWhiteSpace($stdoutTail)) {
-            Write-Host $stdoutTail
-        }
-        throw "Koko 没能成功启动。请先看上面的最后日志，再检查数据库连接和端口占用。"
+        throw "Koko 没能成功启动。请先检查 Rust 子进程的输出，再确认数据库连接和端口占用。"
     }
 
+    # auto-open：仅在需要时打开浏览器，不再输出部署提示。
     if (-not $NoBrowser) {
         Start-Process $appUrl | Out-Null
     }
-    Write-AdminTokenHint -ConfigPath $adminConfigPath
-    Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)
 
-    Write-Host "==> 现在可以直接开始真人测试，按 Ctrl+C 可停止服务"
     Wait-Process -Id $serverProcess.Id
 }
 finally {
