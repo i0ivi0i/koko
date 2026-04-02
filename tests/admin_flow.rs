@@ -367,6 +367,42 @@ async fn admin_session_becomes_invalid_after_admin_token_rotation(
 }
 
 #[sqlx::test]
+async fn admin_session_becomes_invalid_when_token_only_changes_outer_whitespace(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let store = PgStore::new(pool);
+    let original_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");
+    let whitespace_rotated_fingerprint =
+        koko::support::admin_token_fingerprint(" local-admin-token ");
+    let session_id = Uuid::from_u128(7041);
+    let issued_at = fixed_admin_time();
+
+    store
+        .replace_active_admin_session(session_id, &original_fingerprint, issued_at)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store
+            .read_admin_session_state(
+                session_id,
+                &whitespace_rotated_fingerprint,
+                issued_at + chrono::TimeDelta::minutes(1),
+                true,
+            )
+            .await
+            .unwrap(),
+        AdminSessionState::Required
+    );
+
+    let truth_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_session_truth")
+        .fetch_one(store.pool())
+        .await?;
+    assert_eq!(truth_rows, 0);
+    Ok(())
+}
+
+#[sqlx::test]
 async fn admin_session_probe_does_not_refresh_last_seen(pool: sqlx::PgPool) -> sqlx::Result<()> {
     let store = PgStore::new(pool);
     let token_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");

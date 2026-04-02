@@ -99,7 +99,7 @@ pub fn app_error_code(error: &AppError) -> &'static str {
 }
 
 pub fn admin_token_fingerprint(token: &str) -> String {
-    let digest = Sha256::digest(token.trim().as_bytes());
+    let digest = Sha256::digest(token.as_bytes());
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
