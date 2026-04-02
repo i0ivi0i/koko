@@ -1,5 +1,7 @@
 mod http_support;
 
+use std::sync::Arc;
+
 use axum::{
     body::{Body, to_bytes},
     http::{
@@ -11,8 +13,12 @@ use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
     admin::AdminPanelState,
-    app::{AdminLoginCommand, AdminSessionPort, SendTextMessageInput, login_admin, send_text_message},
+    app::{
+        AdminLoginCommand, AdminSessionPort, AdminSessionState, SendTextMessageInput, login_admin,
+        send_text_message,
+    },
     contract::{AdminOverview, AdminRoomSummary, AppErrorCode, BootstrapSession},
+    store::PgStore,
 };
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -257,6 +263,207 @@ async fn admin_rooms_requires_admin_token() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+#[sqlx::test]
+async fn admin_session_rotation_replaces_previous_session(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let store = PgStore::new(pool);
+    let token_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");
+    let first_session = Uuid::from_u128(701);
+    let second_session = Uuid::from_u128(702);
+    let issued_at = fixed_admin_time();
+    let rotated_at = issued_at + chrono::TimeDelta::minutes(5);
+
+    store
+        .replace_active_admin_session(first_session, &token_fingerprint, issued_at)
+        .await
+        .unwrap();
+    store
+        .replace_active_admin_session(second_session, &token_fingerprint, rotated_at)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store
+            .read_admin_session_state(first_session, &token_fingerprint, rotated_at, true)
+            .await
+            .unwrap(),
+        AdminSessionState::Replaced
+    );
+    assert_eq!(
+        store
+            .read_admin_session_state(second_session, &token_fingerprint, rotated_at, true)
+            .await
+            .unwrap(),
+        AdminSessionState::Active
+    );
+
+    let truth_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_session_truth")
+        .fetch_one(store.pool())
+        .await?;
+    assert_eq!(truth_rows, 1);
+    Ok(())
+}
+
+#[sqlx::test]
+async fn admin_session_expires_after_three_idle_days(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let store = PgStore::new(pool);
+    let token_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");
+    let session_id = Uuid::from_u128(703);
+    let issued_at = fixed_admin_time();
+    let expired_at = issued_at + chrono::TimeDelta::days(3) + chrono::TimeDelta::seconds(1);
+
+    store
+        .replace_active_admin_session(session_id, &token_fingerprint, issued_at)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store
+            .read_admin_session_state(session_id, &token_fingerprint, expired_at, true)
+            .await
+            .unwrap(),
+        AdminSessionState::Expired
+    );
+
+    let truth_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_session_truth")
+        .fetch_one(store.pool())
+        .await?;
+    assert_eq!(truth_rows, 0);
+    Ok(())
+}
+
+#[sqlx::test]
+async fn admin_session_becomes_invalid_after_admin_token_rotation(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let store = PgStore::new(pool);
+    let original_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");
+    let rotated_fingerprint = koko::support::admin_token_fingerprint("rotated-admin-token");
+    let session_id = Uuid::from_u128(704);
+    let issued_at = fixed_admin_time();
+
+    store
+        .replace_active_admin_session(session_id, &original_fingerprint, issued_at)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store
+            .read_admin_session_state(
+                session_id,
+                &rotated_fingerprint,
+                issued_at + chrono::TimeDelta::minutes(1),
+                true,
+            )
+            .await
+            .unwrap(),
+        AdminSessionState::Required
+    );
+
+    let truth_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_session_truth")
+        .fetch_one(store.pool())
+        .await?;
+    assert_eq!(truth_rows, 0);
+    Ok(())
+}
+
+#[sqlx::test]
+async fn admin_session_probe_does_not_refresh_last_seen(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let store = PgStore::new(pool);
+    let token_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");
+    let session_id = Uuid::from_u128(705);
+    let issued_at = fixed_admin_time();
+    let probe_at = issued_at + chrono::TimeDelta::days(2);
+    let expired_at = issued_at + chrono::TimeDelta::days(3) + chrono::TimeDelta::seconds(1);
+
+    store
+        .replace_active_admin_session(session_id, &token_fingerprint, issued_at)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store
+            .read_admin_session_state(session_id, &token_fingerprint, probe_at, false)
+            .await
+            .unwrap(),
+        AdminSessionState::Active
+    );
+
+    let last_seen_at: chrono::DateTime<Utc> =
+        sqlx::query_scalar("SELECT last_seen_at FROM admin_session_truth")
+            .fetch_one(store.pool())
+            .await?;
+    assert_eq!(last_seen_at, issued_at);
+
+    assert_eq!(
+        store
+            .read_admin_session_state(session_id, &token_fingerprint, expired_at, false)
+            .await
+            .unwrap(),
+        AdminSessionState::Expired
+    );
+    Ok(())
+}
+
+#[sqlx::test]
+async fn concurrent_admin_logins_leave_only_one_active_session(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let store = Arc::new(PgStore::new(pool));
+    let token_fingerprint = koko::support::admin_token_fingerprint("local-admin-token");
+    let barrier = Arc::new(tokio::sync::Barrier::new(3));
+    let first_session = Uuid::from_u128(706);
+    let second_session = Uuid::from_u128(707);
+    let now = fixed_admin_time();
+
+    let first_login = {
+        let store = store.clone();
+        let token_fingerprint = token_fingerprint.clone();
+        let barrier = barrier.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .replace_active_admin_session(first_session, &token_fingerprint, now)
+                .await
+        })
+    };
+    let second_login = {
+        let store = store.clone();
+        let token_fingerprint = token_fingerprint.clone();
+        let barrier = barrier.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .replace_active_admin_session(second_session, &token_fingerprint, now)
+                .await
+        })
+    };
+
+    barrier.wait().await;
+    first_login.await.unwrap().unwrap();
+    second_login.await.unwrap().unwrap();
+
+    let first_state = store
+        .read_admin_session_state(first_session, &token_fingerprint, now, false)
+        .await
+        .unwrap();
+    let second_state = store
+        .read_admin_session_state(second_session, &token_fingerprint, now, false)
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        (first_state, second_state),
+        (AdminSessionState::Active, AdminSessionState::Replaced)
+            | (AdminSessionState::Replaced, AdminSessionState::Active)
+    ));
+
+    let truth_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM admin_session_truth")
+        .fetch_one(store.pool())
+        .await?;
+    assert_eq!(truth_rows, 1);
+    Ok(())
+}
+
 async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
     let response = harness
         .router
@@ -335,11 +542,17 @@ impl koko::app::Clock for FixedClock {
     }
 }
 
+fn fixed_admin_time() -> chrono::DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 4, 2, 10, 0, 0).unwrap()
+}
+
 #[derive(Debug, Default)]
 struct FakeAdminSessionPort;
 
 impl AdminSessionPort for FakeAdminSessionPort {
-    async fn create_admin_session(&self) -> Result<koko::app::AdminSessionContext, koko::app::AppError> {
+    async fn create_admin_session(
+        &self,
+    ) -> Result<koko::app::AdminSessionContext, koko::app::AppError> {
         panic!("invalid token should short-circuit before creating admin session");
     }
 

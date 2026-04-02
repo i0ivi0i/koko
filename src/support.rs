@@ -1,13 +1,13 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::{
     convert::Infallible,
-    env, fs,
-    io,
+    env, fs, io,
     net::SocketAddr,
     path::{Path, PathBuf},
 };
 
 use chrono::{DateTime, Utc};
+use sha2::{Digest, Sha256};
 #[cfg(not(target_arch = "wasm32"))]
 use thiserror::Error;
 #[cfg(not(target_arch = "wasm32"))]
@@ -98,6 +98,11 @@ pub fn app_error_code(error: &AppError) -> &'static str {
     }
 }
 
+pub fn admin_token_fingerprint(token: &str) -> String {
+    let digest = Sha256::digest(token.trim().as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StaticAdminAccess {
     expected_token: String,
@@ -156,8 +161,10 @@ impl IdGenerator for SystemIdGenerator {
 #[cfg(not(target_arch = "wasm32"))]
 impl AppConfig {
     pub fn load() -> Result<Self, ConfigError> {
-        let database_url = env::var(DATABASE_URL_ENV).map_err(|_| ConfigError::MissingEnv(DATABASE_URL_ENV))?;
-        let bind_addr_raw = env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
+        let database_url =
+            env::var(DATABASE_URL_ENV).map_err(|_| ConfigError::MissingEnv(DATABASE_URL_ENV))?;
+        let bind_addr_raw =
+            env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
         let config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
         let admin_token_seed = env::var(ADMIN_TOKEN_ENV).ok();
         let admin_cookie_secure =
@@ -251,10 +258,11 @@ fn load_or_bootstrap_admin_token(
     admin_token_seed: Option<&str>,
 ) -> Result<(String, Option<String>), ConfigError> {
     if config_path.exists() {
-        let content = fs::read_to_string(config_path).map_err(|source| ConfigError::ReadConfig {
-            path: config_path.to_path_buf(),
-            source,
-        })?;
+        let content =
+            fs::read_to_string(config_path).map_err(|source| ConfigError::ReadConfig {
+                path: config_path.to_path_buf(),
+                source,
+            })?;
         let token = parse_admin_token_from_config(config_path, &content)?;
         return Ok((token, None));
     }
@@ -299,9 +307,10 @@ fn parse_admin_token_from_config(config_path: &Path, content: &str) -> Result<St
         if key != "admin_token" {
             break;
         }
-        let token = serde_json::from_str::<String>(value).map_err(|_| ConfigError::InvalidConfigFile {
-            path: config_path.to_path_buf(),
-        })?;
+        let token =
+            serde_json::from_str::<String>(value).map_err(|_| ConfigError::InvalidConfigFile {
+                path: config_path.to_path_buf(),
+            })?;
         if token.trim().is_empty() {
             return Err(ConfigError::InvalidConfigFile {
                 path: config_path.to_path_buf(),
@@ -323,10 +332,11 @@ fn write_admin_token_config(config_path: &Path, admin_token: &str) -> Result<(),
             source,
         })?;
     }
-    let encoded_token = serde_json::to_string(admin_token).map_err(|source| ConfigError::WriteConfig {
-        path: config_path.to_path_buf(),
-        source: io::Error::new(io::ErrorKind::InvalidData, source),
-    })?;
+    let encoded_token =
+        serde_json::to_string(admin_token).map_err(|source| ConfigError::WriteConfig {
+            path: config_path.to_path_buf(),
+            source: io::Error::new(io::ErrorKind::InvalidData, source),
+        })?;
     fs::write(config_path, format!("admin_token = {encoded_token}\n")).map_err(|source| {
         ConfigError::WriteConfig {
             path: config_path.to_path_buf(),

@@ -1,23 +1,34 @@
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::{
     app::{
-        AdminOverviewPort, AdminRoomsPort, AppError, JoinedRoomsPort, MembershipPort,
-        MessageStore, RoomEntryPort, RoomEntryTx, RoomSearchPort, RoomSnapshotData,
+        AdminOverviewPort, AdminRoomsPort, AdminSessionState, AppError, JoinedRoomsPort,
+        MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx, RoomSearchPort, RoomSnapshotData,
         RoomSnapshotPort, SessionBootstrapPort, SessionPort,
     },
     contract::{AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult},
     domain::{
-        AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord,
-        NewRoomCodeRecord, NewRoomRecord, RoomCode, SessionStatus,
+        AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord, NewRoomCodeRecord,
+        NewRoomRecord, RoomCode, SessionStatus,
     },
 };
+
+const ADMIN_SESSION_TRUTH_LOCK_NAME: &str = "admin_session_truth";
+const ADMIN_SESSION_TRUTH_LOCK_NAMESPACE: i32 = 1;
+const ADMIN_SESSION_IDLE_TIMEOUT: time::Duration = time::Duration::days(3);
 
 #[derive(Debug, Clone)]
 pub struct PgStore {
     pool: PgPool,
+}
+
+#[derive(Debug)]
+struct AdminSessionTruthRow {
+    active_session_id: String,
+    admin_token_fingerprint: String,
+    last_seen_at: DateTime<Utc>,
 }
 
 impl PgStore {
@@ -27,6 +38,108 @@ impl PgStore {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub async fn replace_active_admin_session(
+        &self,
+        session_id: Uuid,
+        token_fingerprint: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), AppError> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
+        lock_admin_session_truth(&mut tx).await?;
+
+        // 后台只保留一条真相行，避免数据库里并存多条“当前管理员会话”造成双活与边界漂移。
+        sqlx::query(
+            "INSERT INTO admin_session_truth (
+                 singleton_key,
+                 active_session_id,
+                 admin_token_fingerprint,
+                 issued_at,
+                 last_seen_at
+             )
+             VALUES (TRUE, $1, $2, $3, $3)
+             ON CONFLICT (singleton_key) DO UPDATE
+             SET active_session_id = EXCLUDED.active_session_id,
+                 admin_token_fingerprint = EXCLUDED.admin_token_fingerprint,
+                 issued_at = EXCLUDED.issued_at,
+                 last_seen_at = EXCLUDED.last_seen_at",
+        )
+        .bind(session_id.to_string())
+        .bind(token_fingerprint)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        tx.commit().await.map_err(map_sqlx_error)
+    }
+
+    pub async fn read_admin_session_state(
+        &self,
+        session_id: Uuid,
+        token_fingerprint: &str,
+        now: DateTime<Utc>,
+        touch_last_seen: bool,
+    ) -> Result<AdminSessionState, AppError> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
+        lock_admin_session_truth(&mut tx).await?;
+
+        let Some(truth) = load_admin_session_truth(&mut tx).await? else {
+            tx.commit().await.map_err(map_sqlx_error)?;
+            return Ok(AdminSessionState::Required);
+        };
+
+        let session_id = session_id.to_string();
+        if truth.admin_token_fingerprint != token_fingerprint {
+            // 管理员口令一旦轮换，旧指纹对应的后台会话必须立即失效，防止旧 cookie 在口令换代后继续持有后台权限。
+            clear_admin_session_truth(&mut tx).await?;
+            tx.commit().await.map_err(map_sqlx_error)?;
+            return Ok(AdminSessionState::Required);
+        }
+
+        if truth.active_session_id != session_id {
+            tx.commit().await.map_err(map_sqlx_error)?;
+            return Ok(AdminSessionState::Replaced);
+        }
+
+        if admin_session_is_expired(truth.last_seen_at, now)? {
+            clear_admin_session_truth(&mut tx).await?;
+            tx.commit().await.map_err(map_sqlx_error)?;
+            return Ok(AdminSessionState::Expired);
+        }
+
+        if touch_last_seen && now > truth.last_seen_at {
+            sqlx::query(
+                "UPDATE admin_session_truth
+                 SET last_seen_at = $1
+                 WHERE singleton_key = TRUE",
+            )
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+        }
+
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(AdminSessionState::Active)
+    }
+
+    pub async fn clear_admin_session(&self, session_id: Uuid) -> Result<(), AppError> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_error)?;
+        lock_admin_session_truth(&mut tx).await?;
+
+        sqlx::query(
+            "DELETE FROM admin_session_truth
+             WHERE singleton_key = TRUE
+               AND active_session_id = $1",
+        )
+        .bind(session_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        tx.commit().await.map_err(map_sqlx_error)
     }
 }
 
@@ -125,7 +238,10 @@ impl MembershipPort for PgStore {
 }
 
 impl JoinedRoomsPort for PgStore {
-    async fn list_joined_rooms(&self, session_id: Uuid) -> Result<Vec<JoinedRoomSummary>, AppError> {
+    async fn list_joined_rooms(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<JoinedRoomSummary>, AppError> {
         let rows = sqlx::query(
             "SELECT
                  rooms.room_id,
@@ -483,6 +599,58 @@ impl AdminRoomsPort for PgStore {
             })
             .collect())
     }
+}
+
+async fn lock_admin_session_truth(tx: &mut Transaction<'_, Postgres>) -> Result<(), AppError> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1), $2)")
+        .bind(ADMIN_SESSION_TRUTH_LOCK_NAME)
+        .bind(ADMIN_SESSION_TRUTH_LOCK_NAMESPACE)
+        .execute(&mut **tx)
+        .await
+        .map_err(map_sqlx_error)?;
+
+    Ok(())
+}
+
+async fn load_admin_session_truth(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Option<AdminSessionTruthRow>, AppError> {
+    let row = sqlx::query(
+        "SELECT active_session_id, admin_token_fingerprint, last_seen_at
+         FROM admin_session_truth
+         WHERE singleton_key = TRUE",
+    )
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(map_sqlx_error)?;
+
+    Ok(row.map(|row: sqlx::postgres::PgRow| AdminSessionTruthRow {
+        active_session_id: row.get("active_session_id"),
+        admin_token_fingerprint: row.get("admin_token_fingerprint"),
+        last_seen_at: row.get("last_seen_at"),
+    }))
+}
+
+async fn clear_admin_session_truth(tx: &mut Transaction<'_, Postgres>) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM admin_session_truth WHERE singleton_key = TRUE")
+        .execute(&mut **tx)
+        .await
+        .map_err(map_sqlx_error)?;
+
+    Ok(())
+}
+
+fn admin_session_is_expired(
+    last_seen_at: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<bool, AppError> {
+    let timeout = chrono::TimeDelta::seconds(ADMIN_SESSION_IDLE_TIMEOUT.whole_seconds());
+    let idle = now.signed_duration_since(last_seen_at);
+    if idle < chrono::TimeDelta::zero() {
+        return Ok(false);
+    }
+
+    Ok(idle > timeout)
 }
 
 async fn load_recent_messages<'a, E>(
