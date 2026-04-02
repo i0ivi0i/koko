@@ -1,10 +1,14 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use std::{
+    io::{BufRead, BufReader},
     path::Path,
     path::PathBuf,
-    process::{Child, Command},
+    process::{Child, Command, ExitStatus as ProcessExitStatus, Stdio},
     process::ExitCode,
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
 };
 
 use koko::support::{self, ResolvedAppConfig, StartupBanner};
@@ -16,7 +20,7 @@ use sqlx::{
 use url::Url;
 
 fn help_text() -> &'static str {
-    "xtask\n\nUsage: cargo xtask [--help]\n       cargo xtask dev [--dry-run] [--skip-bundle] [--database-url <url>] [--bind-addr <addr>] [--config-path <path>]\n\nWorkspace task runner."
+    "xtask\n\nUsage: cargo xtask [--help]\n       cargo xtask dev [--dry-run] [--skip-bundle] [--no-browser] [--database-url <url>] [--bind-addr <addr>] [--config-path <path>]\n\nWorkspace task runner."
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,6 +58,7 @@ struct DevInputs {
     config_path: Option<PathBuf>,
     admin_cookie_secure: Option<bool>,
     skip_bundle: bool,
+    no_browser: bool,
     dry_run: bool,
 }
 
@@ -114,6 +119,7 @@ trait DatabaseProvisioner {
 
 #[allow(dead_code)]
 trait ChildProcess {
+    fn wait_for_homepage_url(&mut self, timeout: Duration) -> Result<Option<String>, String>;
     fn wait(&mut self) -> Result<(), String>;
 }
 
@@ -165,7 +171,7 @@ struct DevCoordinator<C, B, D, R, L, O> {
     database_provisioner: D,
     command_runner: R,
     child_process_launcher: L,
-    _browser_opener: O,
+    browser_opener: O,
 }
 
 impl<C, B, D, R, L, O> DevCoordinator<C, B, D, R, L, O>
@@ -212,7 +218,7 @@ where
             database_provisioner,
             command_runner,
             child_process_launcher,
-            _browser_opener: browser_opener,
+            browser_opener,
         }
     }
 
@@ -277,6 +283,11 @@ where
                 ("KOKO_ADMIN_TOKEN".to_string(), None),
             ],
         )?;
+        if !inputs.no_browser {
+            if let Some(homepage_url) = child.wait_for_homepage_url(AUTO_OPEN_TIMEOUT)? {
+                self.browser_opener.open(&homepage_url)?;
+            }
+        }
         child.wait()?;
 
         Ok(report)
@@ -442,11 +453,50 @@ impl DatabaseProvisioner for SqlxDatabaseProvisioner {
 #[derive(Debug)]
 struct RealChildProcess {
     child: Child,
+    homepage_url: Arc<Mutex<Option<String>>>,
+    observation_error: Arc<Mutex<Option<String>>>,
+    exit_status: Option<ProcessExitStatus>,
+    output_threads: Vec<JoinHandle<()>>,
 }
 
 impl ChildProcess for RealChildProcess {
+    fn wait_for_homepage_url(&mut self, timeout: Duration) -> Result<Option<String>, String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(error) = self.take_observation_error() {
+                return Err(error);
+            }
+
+            if let Some(homepage_url) = self.homepage_url.lock().unwrap().clone() {
+                return Ok(Some(homepage_url));
+            }
+
+            if Instant::now() >= deadline {
+                return Ok(None);
+            }
+
+            if let Some(status) = self.child.try_wait().map_err(|error| error.to_string())? {
+                self.exit_status = Some(status);
+                self.join_output_threads();
+                if let Some(error) = self.take_observation_error() {
+                    return Err(error);
+                }
+                return Ok(self.homepage_url.lock().unwrap().clone());
+            }
+
+            thread::sleep(Duration::from_millis(200));
+        }
+    }
+
     fn wait(&mut self) -> Result<(), String> {
-        let status = self.child.wait().map_err(|error| error.to_string())?;
+        let status = match self.exit_status.take() {
+            Some(status) => status,
+            None => self.child.wait().map_err(|error| error.to_string())?,
+        };
+        self.join_output_threads();
+        if let Some(error) = self.take_observation_error() {
+            return Err(error);
+        }
         if !status.success() {
             return Err(format!(
                 "Child process exited with code {}",
@@ -454,6 +504,18 @@ impl ChildProcess for RealChildProcess {
             ));
         }
         Ok(())
+    }
+}
+
+impl RealChildProcess {
+    fn join_output_threads(&mut self) {
+        for handle in self.output_threads.drain(..) {
+            let _ = handle.join();
+        }
+    }
+
+    fn take_observation_error(&self) -> Option<String> {
+        self.observation_error.lock().unwrap().clone()
     }
 }
 
@@ -468,7 +530,11 @@ impl ChildProcessLauncher for RealChildProcessLauncher {
         envs: &[(String, Option<String>)],
     ) -> Result<Box<dyn ChildProcess>, String> {
         let mut command = Command::new(program);
-        command.args(args).current_dir(default_workspace_root());
+        command
+            .args(args)
+            .current_dir(default_workspace_root())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         for (name, value) in envs {
             match value {
                 Some(value) => {
@@ -479,8 +545,65 @@ impl ChildProcessLauncher for RealChildProcessLauncher {
                 }
             }
         }
-        let child = command.spawn().map_err(|error| error.to_string())?;
-        Ok(Box::new(RealChildProcess { child }))
+        let mut child = command.spawn().map_err(|error| error.to_string())?;
+        let homepage_url = Arc::new(Mutex::new(None));
+        let observation_error = Arc::new(Mutex::new(None));
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "xtask failed to capture child stdout".to_string())?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| "xtask failed to capture child stderr".to_string())?;
+
+        let stdout_homepage_url = homepage_url.clone();
+        let stdout_observation_error = observation_error.clone();
+        let stdout_thread = thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                match line {
+                    Ok(line) => {
+                        if let Some(homepage_url) = parse_homepage_url_line(&line) {
+                            let mut slot = stdout_homepage_url.lock().unwrap();
+                            if slot.is_none() {
+                                *slot = Some(homepage_url);
+                            }
+                        }
+                        println!("{line}");
+                    }
+                    Err(error) => {
+                        let mut slot = stdout_observation_error.lock().unwrap();
+                        if slot.is_none() {
+                            *slot = Some(format!("xtask failed to read child stdout: {error}"));
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+        let stderr_observation_error = observation_error.clone();
+        let stderr_thread = thread::spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                match line {
+                    Ok(line) => eprintln!("{line}"),
+                    Err(error) => {
+                        let mut slot = stderr_observation_error.lock().unwrap();
+                        if slot.is_none() {
+                            *slot = Some(format!("xtask failed to read child stderr: {error}"));
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(Box::new(RealChildProcess {
+            child,
+            homepage_url,
+            observation_error,
+            exit_status: None,
+            output_threads: vec![stdout_thread, stderr_thread],
+        }))
     }
 }
 
@@ -488,12 +611,16 @@ impl ChildProcessLauncher for RealChildProcessLauncher {
 struct RealBrowserOpener;
 
 impl BrowserOpener for RealBrowserOpener {
-    fn open(&self, _url: &str) -> Result<(), String> {
-        Ok(())
+    fn open(&self, url: &str) -> Result<(), String> {
+        webbrowser::open(url)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     }
 }
 
 const RUN_TARGET_DIR: &str = "target/run";
+const AUTO_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+const HOMEPAGE_PREFIX: &str = "==> 首页地址: ";
 
 fn default_workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -573,6 +700,7 @@ fn parse_dev_inputs(args: &[String]) -> Result<DevInputs, String> {
         match args[index].as_str() {
             "--dry-run" => inputs.dry_run = true,
             "--skip-bundle" => inputs.skip_bundle = true,
+            "--no-browser" => inputs.no_browser = true,
             "--database-url" => {
                 index += 1;
                 let value = args
@@ -604,6 +732,13 @@ fn parse_dev_inputs(args: &[String]) -> Result<DevInputs, String> {
     Ok(inputs)
 }
 
+fn parse_homepage_url_line(line: &str) -> Option<String> {
+    line.strip_prefix(HOMEPAGE_PREFIX)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
 fn main() -> ExitCode {
     let response = dispatch(std::env::args().skip(1));
 
@@ -624,6 +759,7 @@ mod tests {
         CommandRunner, DatabaseProvisioner, DevCoordinator, DevInputs, ExitStatus, OutputStream,
         ResolvedAppConfig, StartupBanner, StartupBannerSource, SupportConfigSource,
         SupportStartupBannerSource, dispatch, help_text,
+        parse_homepage_url_line,
     };
     use koko::support::AppConfig;
     use std::{
@@ -631,7 +767,7 @@ mod tests {
         env, fs,
         path::{Path, PathBuf},
         rc::Rc,
-        time::{SystemTime, UNIX_EPOCH},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     #[test]
@@ -1044,6 +1180,158 @@ mod tests {
         assert!(lines.iter().any(|line| line.contains("==> launch ")));
     }
 
+    #[test]
+    fn auto_open_uses_exact_homepage_url_from_child_stdout() {
+        let temp_root = temp_workspace_root("auto-open-exact-homepage");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::with_action_log(actions.clone());
+        let launcher = RecordingChildProcessLauncher::with_transcript(
+            actions.clone(),
+            vec![
+                "child warming up".to_string(),
+                "==> 首页地址: http://127.0.0.1:8899/ ".to_string(),
+            ],
+            vec!["child stderr noise".to_string()],
+        );
+        let database = RecordingDatabaseProvisioner::with_action_log(actions.clone());
+        let browser = RecordingBrowserOpener::default();
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            database,
+            runner,
+            launcher,
+            browser.clone(),
+        );
+
+        coordinator
+            .run(DevInputs {
+                skip_bundle: true,
+                ..DevInputs::default()
+            })
+            .expect("homepage printed by Rust should trigger auto-open");
+
+        assert_eq!(
+            browser.opened_urls(),
+            vec!["http://127.0.0.1:8899/".to_string()]
+        );
+    }
+
+    #[test]
+    fn auto_open_missing_homepage_only_disables_browser_open() {
+        let temp_root = temp_workspace_root("auto-open-missing-homepage");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::with_action_log(actions.clone());
+        let launcher = RecordingChildProcessLauncher::with_transcript(
+            actions,
+            vec!["child ready without homepage".to_string()],
+            vec!["==> 首页地址: http://127.0.0.1:9999/".to_string()],
+        );
+        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
+        let browser = RecordingBrowserOpener::default();
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            database,
+            runner,
+            launcher,
+            browser.clone(),
+        );
+
+        coordinator
+            .run(DevInputs {
+                skip_bundle: true,
+                ..DevInputs::default()
+            })
+            .expect("missing homepage should not fail startup");
+
+        assert!(browser.opened_urls().is_empty());
+    }
+
+    #[test]
+    fn auto_open_respects_no_browser_flag() {
+        let temp_root = temp_workspace_root("auto-open-disabled");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::with_action_log(actions.clone());
+        let launcher = RecordingChildProcessLauncher::with_transcript(
+            actions,
+            vec!["==> 首页地址: http://127.0.0.1:8899/".to_string()],
+            Vec::new(),
+        );
+        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
+        let browser = RecordingBrowserOpener::default();
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            database,
+            runner,
+            launcher,
+            browser.clone(),
+        );
+
+        coordinator
+            .run(DevInputs {
+                skip_bundle: true,
+                no_browser: true,
+                ..DevInputs::default()
+            })
+            .expect("no-browser should skip auto-open");
+
+        assert!(browser.opened_urls().is_empty());
+    }
+
+    #[test]
+    fn auto_open_observation_failure_stops_dev_run() {
+        let temp_root = temp_workspace_root("auto-open-observation-error");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::with_action_log(actions.clone());
+        let launcher = RecordingChildProcessLauncher::with_observation_error(
+            actions,
+            "xtask failed to read child stdout: broken pipe".to_string(),
+        );
+        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
+        let browser = RecordingBrowserOpener::default();
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            database,
+            runner,
+            launcher,
+            browser,
+        );
+
+        let error = coordinator
+            .run(DevInputs {
+                skip_bundle: true,
+                ..DevInputs::default()
+            })
+            .expect_err("homepage observation failure should stop dev run");
+
+        assert!(error.contains("failed to read child stdout"));
+    }
+
+    #[test]
+    fn auto_open_parser_ignores_non_homepage_lines() {
+        assert_eq!(parse_homepage_url_line("==> 管理入口: http://127.0.0.1:8080/admin"), None);
+        assert_eq!(parse_homepage_url_line("child ready"), None);
+    }
+
+    #[test]
+    fn auto_open_parser_extracts_trimmed_homepage_url() {
+        assert_eq!(
+            parse_homepage_url_line("==> 首页地址: http://127.0.0.1:8899/ "),
+            Some("http://127.0.0.1:8899/".to_string())
+        );
+    }
+
     #[derive(Debug, Clone)]
     struct FakeConfigSource {
         config: ResolvedAppConfig,
@@ -1216,6 +1504,9 @@ mod tests {
     struct RecordingChildProcessLauncher {
         actions: SharedActionLog,
         calls: Rc<RefCell<Vec<LaunchCall>>>,
+        stdout_lines: Vec<String>,
+        stderr_lines: Vec<String>,
+        observation_error: Option<String>,
     }
 
     impl RecordingChildProcessLauncher {
@@ -1223,6 +1514,33 @@ mod tests {
             Self {
                 actions,
                 calls: Rc::new(RefCell::new(Vec::new())),
+                stdout_lines: Vec::new(),
+                stderr_lines: Vec::new(),
+                observation_error: None,
+            }
+        }
+
+        fn with_transcript(
+            actions: SharedActionLog,
+            stdout_lines: Vec<String>,
+            stderr_lines: Vec<String>,
+        ) -> Self {
+            Self {
+                actions,
+                calls: Rc::new(RefCell::new(Vec::new())),
+                stdout_lines,
+                stderr_lines,
+                observation_error: None,
+            }
+        }
+
+        fn with_observation_error(actions: SharedActionLog, error: String) -> Self {
+            Self {
+                actions,
+                calls: Rc::new(RefCell::new(Vec::new())),
+                stdout_lines: Vec::new(),
+                stderr_lines: Vec::new(),
+                observation_error: Some(error),
             }
         }
 
@@ -1234,9 +1552,23 @@ mod tests {
     #[derive(Debug, Clone)]
     struct RecordingChildProcess {
         actions: SharedActionLog,
+        stdout_lines: Vec<String>,
+        stderr_lines: Vec<String>,
+        observation_error: Option<String>,
     }
 
     impl ChildProcess for RecordingChildProcess {
+        fn wait_for_homepage_url(&mut self, _timeout: Duration) -> Result<Option<String>, String> {
+            if let Some(error) = self.observation_error.clone() {
+                return Err(error);
+            }
+            let _ = &self.stderr_lines;
+            Ok(self
+                .stdout_lines
+                .iter()
+                .find_map(|line| parse_homepage_url_line(line)))
+        }
+
         fn wait(&mut self) -> Result<(), String> {
             self.actions.push(RecordedAction::WaitChild);
             Ok(())
@@ -1258,18 +1590,29 @@ mod tests {
             });
             Ok(Box::new(RecordingChildProcess {
                 actions: self.actions.clone(),
+                stdout_lines: self.stdout_lines.clone(),
+                stderr_lines: self.stderr_lines.clone(),
+                observation_error: self.observation_error.clone(),
             }))
         }
     }
 
-    #[derive(Debug, Default)]
+    #[derive(Debug, Clone, Default)]
     struct RecordingBrowserOpener {
         _calls: Cell<usize>,
+        opened_urls: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl RecordingBrowserOpener {
+        fn opened_urls(&self) -> Vec<String> {
+            self.opened_urls.borrow().clone()
+        }
     }
 
     impl BrowserOpener for RecordingBrowserOpener {
-        fn open(&self, _url: &str) -> Result<(), String> {
+        fn open(&self, url: &str) -> Result<(), String> {
             self._calls.set(self._calls.get() + 1);
+            self.opened_urls.borrow_mut().push(url.to_string());
             Ok(())
         }
     }
@@ -1304,6 +1647,9 @@ mod tests {
         ) -> Result<Box<dyn ChildProcess>, String> {
             Ok(Box::new(RecordingChildProcess {
                 actions: SharedActionLog::default(),
+                stdout_lines: Vec::new(),
+                stderr_lines: Vec::new(),
+                observation_error: None,
             }))
         }
     }
