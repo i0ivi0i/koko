@@ -854,6 +854,42 @@ mod tests {
     }
 
     #[test]
+    fn dev_plan_falls_back_to_default_dev_database_when_env_is_missing() {
+        let _isolation = TestIsolationGuard::acquire();
+        let temp_root = temp_workspace_root("shared-config-default-db");
+        let _cwd_guard = CurrentDirGuard::switch_to(&temp_root);
+        write_config_file(
+            &temp_root.join("config").join("koko.toml"),
+            "shared-admin-token",
+        );
+        let _env_guard = EnvGuard::set(&[
+            ("KOKO_DATABASE_URL", None),
+            ("KOKO_BIND_ADDR", None),
+            ("KOKO_ADMIN_TOKEN", None),
+            ("KOKO_ADMIN_COOKIE_SECURE", None),
+        ]);
+        let coordinator = DevCoordinator::new(
+            SupportConfigSource,
+            SupportStartupBannerSource,
+            NoopDatabaseProvisioner,
+            NoopCommandRunner::default(),
+            NoopChildProcessLauncher::default(),
+            NoopBrowserOpener::default(),
+        );
+
+        let report = coordinator
+            .preview(DevInputs::default())
+            .expect("xtask dev should fall back to a stable local database url");
+
+        assert_eq!(
+            report.config.database_url,
+            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat"
+        );
+        assert_eq!(report.config.bind_addr.to_string(), "0.0.0.0:8080");
+        assert_eq!(report.config.config_path, PathBuf::from("config").join("koko.toml"));
+    }
+
+    #[test]
     fn app_config_load_for_test_ignores_process_env_defaults() {
         let _isolation = TestIsolationGuard::acquire();
         let config_path = temp_config_path("load-for-test-env");

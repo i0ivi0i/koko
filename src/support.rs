@@ -34,6 +34,8 @@ const DEFAULT_CONFIG_PATH: &str = "config/koko.toml";
 #[cfg(not(target_arch = "wasm32"))]
 const DATABASE_URL_ENV: &str = "KOKO_DATABASE_URL";
 #[cfg(not(target_arch = "wasm32"))]
+const DEFAULT_DEV_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat";
+#[cfg(not(target_arch = "wasm32"))]
 const ADMIN_TOKEN_ENV: &str = "KOKO_ADMIN_TOKEN";
 #[cfg(not(target_arch = "wasm32"))]
 const ADMIN_COOKIE_SECURE_ENV: &str = "KOKO_ADMIN_COOKIE_SECURE";
@@ -527,8 +529,15 @@ impl ResolvedAppConfig {
     ) -> Result<Self, ConfigError> {
         // xtask preview 只需要和主程序同源的地址/数据库/安全位解析结果；
         // 管理员口令真相仍必须留给真实启动路径去读/写 config/koko.toml。
+        // 但 `cargo xtask dev` 是开发入口，仍需要受控的本地数据库默认值，
+        // 这样 `run.ps1` 和 `xtask dev` 才能保持开箱可跑，而不把薄壳重新做重。
+        let dev_database_url = database_url
+            .map(ToOwned::to_owned)
+            .or_else(|| env::var(DATABASE_URL_ENV).ok())
+            .or_else(|| Some(DEFAULT_DEV_DATABASE_URL.to_string()));
+
         Self::load_common_with_overrides(
-            database_url,
+            dev_database_url.as_deref(),
             bind_addr,
             config_path,
             admin_cookie_secure_override,
