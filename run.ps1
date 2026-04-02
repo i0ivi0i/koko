@@ -283,6 +283,7 @@ try {
         exit [int]$serverProcess.ExitCode
     }
     else {
+        $serverProcess = Start-Process $childProcessSpec.FilePath @startProcessArgs
         if (-not (Wait-ForServerReady -Url $appUrl -Process $serverProcess)) {
             throw "Koko 没能成功启动。请先检查 Rust 子进程的输出，再确认数据库连接和端口占用。"
         }
