@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $serverProcess = $null
+$scriptExitCode = $null
 
 $repoRoot = $PSScriptRoot
 $cargoManifestPath = Join-Path $repoRoot "Cargo.toml"
@@ -138,6 +139,61 @@ function Wait-ForServerReady {
     return $false
 }
 
+function New-ChildProcessSpec {
+    param(
+        [string]$ServerBinaryPath,
+        [string]$TestChildScript
+    )
+
+    if ($TestChildScript) {
+        $powershellExe = Join-Path $PSHOME "powershell.exe"
+        $logDir = Join-Path $env:TEMP "koko-run"
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+        $stdoutLog = Join-Path $logDir "server.out.log"
+        $stderrLog = Join-Path $logDir "server.err.log"
+        Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
+
+        return [pscustomobject]@{
+            FilePath = $powershellExe
+            ArgumentList = @(
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                $TestChildScript
+            )
+            StdoutLog = $stdoutLog
+            StderrLog = $stderrLog
+            ReplayOutput = $true
+        }
+    }
+
+    return [pscustomobject]@{
+        FilePath = $ServerBinaryPath
+        ArgumentList = @()
+        StdoutLog = $null
+        StderrLog = $null
+        ReplayOutput = $false
+    }
+}
+
+function Write-ChildProcessOutput {
+    param(
+        [string]$StdoutLog,
+        [string]$StderrLog
+    )
+
+    foreach ($path in @($StdoutLog, $StderrLog)) {
+        if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path $path)) {
+            continue
+        }
+
+        $lines = Get-Content $path
+        foreach ($line in $lines) {
+            Write-Host $line
+        }
+    }
+}
+
 # 脚本入口：这里只负责准备运行环境，启动语义真相应由 Rust 子进程输出。
 Push-Location $repoRoot
 try {
@@ -159,16 +215,6 @@ try {
         }
         Write-Host "==> Set KOKO_BIND_ADDR"
         Write-Host "==> cargo build --target-dir $runTargetDir"
-        exit 0
-    }
-
-    # stdout/stderr 处理：只消费 Rust 子进程的输出，不再重播任何部署提示。
-    if ($TestChildScript) {
-        & $TestChildScript
-        if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-        }
-
         exit 0
     }
 
@@ -214,25 +260,48 @@ try {
         $appUrl = "http://$hostName`:$port/"
     }
 
-    $serverProcess = Start-Process $serverBinaryPath `
-        -WorkingDirectory $repoRoot `
-        -NoNewWindow `
-        -PassThru
+    $childProcessSpec = New-ChildProcessSpec `
+        -ServerBinaryPath $serverBinaryPath `
+        -TestChildScript $TestChildScript
 
-    if (-not (Wait-ForServerReady -Url $appUrl -Process $serverProcess)) {
-        throw "Koko 没能成功启动。请先检查 Rust 子进程的输出，再确认数据库连接和端口占用。"
+    $startProcessArgs = @{
+        WorkingDirectory = $repoRoot
+        NoNewWindow = $true
+        PassThru = $true
+    }
+    if ($childProcessSpec.ArgumentList.Count -gt 0) {
+        $startProcessArgs.ArgumentList = $childProcessSpec.ArgumentList
+    }
+    if ($childProcessSpec.ReplayOutput) {
+        $startProcessArgs.RedirectStandardOutput = $childProcessSpec.StdoutLog
+        $startProcessArgs.RedirectStandardError = $childProcessSpec.StderrLog
     }
 
-    # auto-open：仅在需要时打开浏览器，不再输出部署提示。
-    if (-not $NoBrowser) {
-        Start-Process $appUrl | Out-Null
+    if ($childProcessSpec.ReplayOutput) {
+        $serverProcess = Start-Process $childProcessSpec.FilePath @startProcessArgs -Wait
+        Write-ChildProcessOutput -StdoutLog $childProcessSpec.StdoutLog -StderrLog $childProcessSpec.StderrLog
+        exit [int]$serverProcess.ExitCode
     }
+    else {
+        if (-not (Wait-ForServerReady -Url $appUrl -Process $serverProcess)) {
+            throw "Koko 没能成功启动。请先检查 Rust 子进程的输出，再确认数据库连接和端口占用。"
+        }
 
-    Wait-Process -Id $serverProcess.Id
+        # auto-open：仅在需要时打开浏览器，不再输出部署提示。
+        if (-not $NoBrowser) {
+            Start-Process $appUrl | Out-Null
+        }
+
+        Wait-Process -Id $serverProcess.Id
+    }
 }
 finally {
     if ($null -ne $serverProcess -and -not $serverProcess.HasExited) {
         Stop-Process -Id $serverProcess.Id -Force
     }
     Pop-Location
+}
+
+if ($null -ne $scriptExitCode) {
+    exit $scriptExitCode
 }

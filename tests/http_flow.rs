@@ -942,7 +942,7 @@ fn root_run_script_dry_run_does_not_print_home_admin_or_token() {
 
 #[test]
 fn root_run_script_passthroughs_fake_child_banner_without_replaying_it() {
-    let output = run_root_script(&[
+    let output = run_root_script_with_tooling(&[
         "-SkipBundle",
         "-TestChildScript",
         "tests/http_support/fixtures/powershell/fake-rust-startup.ps1",
@@ -956,7 +956,7 @@ fn root_run_script_passthroughs_fake_child_banner_without_replaying_it() {
 
 #[test]
 fn root_run_script_does_not_fabricate_banner_when_child_fails() {
-    let output = run_root_script(&[
+    let output = run_root_script_with_tooling(&[
         "-SkipBundle",
         "-TestChildScript",
         "tests/http_support/fixtures/powershell/fake-rust-error.ps1",
@@ -989,15 +989,14 @@ fn root_run_script_dry_run_without_admin_token_does_not_set_koko_admin_token() {
 }
 
 #[test]
-fn root_run_script_clears_inherited_admin_token_without_explicit_override() {
+fn root_run_script_clears_inherited_admin_token_before_child_launch() {
+    let (child_script, _cleanup) = temp_env_probe_child_script();
     let _guard = env_lock();
     let powershell = powershell_exe_path();
     let output = std::process::Command::new(powershell)
-        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1", "-DryRun", "-SkipBundle"])
-        .env("PATH", r"C:\Windows\System32")
-        .env_remove("PSModulePath")
-        .env_remove("PATHEXT")
-        .env_remove("PROMPT")
+        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
+        .args(["-SkipBundle", "-TestChildScript"])
+        .arg(&child_script)
         .env("KOKO_ADMIN_TOKEN", "inherited-token")
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -1005,7 +1004,8 @@ fn root_run_script_clears_inherited_admin_token_without_explicit_override() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(!stdout.contains("Set KOKO_ADMIN_TOKEN"));
+    assert!(stdout.contains("child ready"));
+    assert!(!stdout.contains("KOKO_ADMIN_TOKEN=inherited-token"));
 }
 
 fn run_root_script(args: &[&str]) -> std::process::Output {
@@ -1018,6 +1018,17 @@ fn run_root_script(args: &[&str]) -> std::process::Output {
         .env_remove("PSModulePath")
         .env_remove("PATHEXT")
         .env_remove("PROMPT")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap()
+}
+
+fn run_root_script_with_tooling(args: &[&str]) -> std::process::Output {
+    let _guard = env_lock();
+    let powershell = powershell_exe_path();
+    std::process::Command::new(powershell)
+        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
+        .args(args)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap()
@@ -1068,6 +1079,40 @@ fn remove_temp_config_root(config_file_path: &Path) {
 fn powershell_exe_path() -> String {
     let windir = env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".to_string());
     format!(r"{windir}\System32\WindowsPowerShell\v1.0\powershell.exe")
+}
+
+struct TempScriptGuard(PathBuf);
+
+impl TempScriptGuard {
+    fn new(script_path: PathBuf) -> Self {
+        Self(script_path)
+    }
+}
+
+impl Drop for TempScriptGuard {
+    fn drop(&mut self) {
+        if let Some(root) = self.0.parent() {
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+}
+
+fn temp_env_probe_child_script() -> (PathBuf, TempScriptGuard) {
+    let script_dir = env::temp_dir()
+        .join("koko-tests")
+        .join(format!("env-probe-{}", Uuid::now_v7()));
+    fs::create_dir_all(&script_dir).unwrap();
+    let script_path = script_dir.join("probe.ps1");
+    fs::write(
+        &script_path,
+        r#"Write-Output "child ready"
+if ($env:KOKO_ADMIN_TOKEN) {
+    Write-Output "KOKO_ADMIN_TOKEN=$env:KOKO_ADMIN_TOKEN"
+}
+"#,
+    )
+    .unwrap();
+    (script_path.clone(), TempScriptGuard::new(script_path))
 }
 
 async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
