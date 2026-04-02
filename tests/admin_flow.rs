@@ -154,6 +154,21 @@ async fn admin_logout_flushes_cookie_back_to_login_required(
         .await
         .unwrap();
     assert_eq!(logout_response.status(), reqwest::StatusCode::OK);
+    let logout_set_cookies: Vec<String> = logout_response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().unwrap().to_string())
+        .collect();
+    assert!(
+        logout_set_cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("koko_admin_session=")
+                && (cookie.contains("Max-Age=0")
+                    || cookie.contains("max-age=0")
+                    || cookie.contains("Expires="))),
+        "logout should clear the admin session cookie, got: {logout_set_cookies:?}"
+    );
 
     let status_response = harness
         .client()

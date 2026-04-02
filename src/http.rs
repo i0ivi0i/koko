@@ -37,6 +37,11 @@ pub struct Module;
 #[derive(Clone)]
 struct HttpState {
     store: PgStore,
+}
+
+#[derive(Clone)]
+struct AdminHttpState {
+    store: PgStore,
     admin_access: support::StaticAdminAccess,
     admin_token_fingerprint: String,
 }
@@ -81,20 +86,24 @@ pub fn build_admin_session_layer(store: AdminSessionStore, secure: bool) -> Admi
         .with_expiry(Expiry::OnInactivity(ADMIN_SESSION_IDLE_TIMEOUT))
 }
 
-pub fn api_router(store: PgStore, admin_token: String) -> Router {
+pub fn api_router(store: PgStore) -> Router {
     Router::new()
         .route("/session/bootstrap", post(bootstrap_session))
         .route("/rooms", get(joined_rooms))
         .route("/rooms/search", get(search_rooms))
         .route("/rooms/join", post(join_room))
         .route("/rooms/{room_id}/snapshot", get(room_snapshot))
+        .with_state(HttpState { store })
+}
+
+pub fn admin_api_router(store: PgStore, admin_token: String) -> Router {
+    Router::new()
         .route("/admin/session/login", post(admin_login))
         .route("/admin/session", get(admin_session))
         .route("/admin/session/logout", post(admin_logout))
         .route("/admin/overview", get(admin_overview))
         .route("/admin/rooms", get(admin_rooms))
-        .fallback(|| async { StatusCode::NOT_FOUND })
-        .with_state(HttpState {
+        .with_state(AdminHttpState {
             store,
             admin_access: support::StaticAdminAccess::new(admin_token.clone()),
             admin_token_fingerprint: support::admin_token_fingerprint(&admin_token),
@@ -139,7 +148,11 @@ pub fn server_router(
     crate::rt::install_realtime(&io, realtime);
 
     frontend_shell_router(frontend_dist_dir, asset_dir)
-        .nest("/api", api_router(store, admin_token).layer(admin_session_layer))
+        .nest("/api", api_router(store.clone()))
+        .nest(
+            "/api",
+            admin_api_router(store, admin_token).layer(admin_session_layer),
+        )
         .layer(socket_layer)
 }
 
@@ -255,7 +268,7 @@ async fn room_snapshot(
 }
 
 async fn admin_login(
-    State(state): State<HttpState>,
+    State(state): State<AdminHttpState>,
     session: Session,
     Json(request): Json<AdminLoginRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorPayload>)> {
@@ -273,7 +286,7 @@ async fn admin_login(
 }
 
 async fn admin_session(
-    State(state): State<HttpState>,
+    State(state): State<AdminHttpState>,
     session: Session,
 ) -> Result<Json<AdminSessionStatus>, (StatusCode, Json<ErrorPayload>)> {
     let Some(context) = resolve_admin_session_context(&session)? else {
@@ -291,7 +304,7 @@ async fn admin_session(
 }
 
 async fn admin_logout(
-    State(state): State<HttpState>,
+    State(state): State<AdminHttpState>,
     session: Session,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorPayload>)> {
     if let Some(context) = resolve_admin_session_context(&session)? {
@@ -305,7 +318,7 @@ async fn admin_logout(
 }
 
 async fn admin_overview(
-    State(state): State<HttpState>,
+    State(state): State<AdminHttpState>,
     session: Session,
 ) -> Result<Json<AdminOverview>, (StatusCode, Json<ErrorPayload>)> {
     // Session/cookie 只属于 HTTP adapter；真正“这个后台会话是否有效”的裁决仍必须回 application + store。
@@ -318,7 +331,7 @@ async fn admin_overview(
 }
 
 async fn admin_rooms(
-    State(state): State<HttpState>,
+    State(state): State<AdminHttpState>,
     session: Session,
 ) -> Result<Json<Vec<AdminRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
     // 这里继续复用 application 用例做后台授权，避免 handler 自己判断“已登录/过期/被顶掉”而把业务真相散落回 adapter。
@@ -395,7 +408,7 @@ impl AdminSessionPort for HttpAdminSessionPort {
 }
 
 fn build_http_admin_session_port(
-    state: &HttpState,
+    state: &AdminHttpState,
     session: Session,
     touch_last_seen: bool,
 ) -> HttpAdminSessionPort {
