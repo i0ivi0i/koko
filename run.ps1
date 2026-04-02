@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$DatabaseUrl = "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
-    [string]$AdminToken = "local-admin-token",
+    [string]$AdminToken,
     [string]$BindAddr = "0.0.0.0:8080",
     [switch]$SkipBundle,
     [switch]$DryRun,
@@ -178,6 +178,7 @@ function Write-AccessHints {
         $localUrl = $Urls[0]
     }
 
+    Write-Host "==> 首页地址: $localUrl"
     if ($OpenBrowser) {
         Write-Host "==> 浏览器会自动打开: $localUrl"
     }
@@ -260,7 +261,9 @@ try {
         Write-Host "==> Ensure database $($config.DatabaseName)"
         Write-Host "==> 准备数据库结构: $migrationsDir"
         Write-Host "==> Set KOKO_DATABASE_URL"
-        Write-Host "==> Set KOKO_ADMIN_TOKEN"
+        if ($PSBoundParameters.ContainsKey("AdminToken")) {
+            Write-Host "==> Set KOKO_ADMIN_TOKEN"
+        }
         Write-Host "==> Set KOKO_BIND_ADDR"
         Write-Host "==> 监听地址: $BindAddr"
         $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
@@ -283,7 +286,9 @@ try {
     Ensure-Database -Url $DatabaseUrl -MigrationsPath $migrationsDir
 
     $env:KOKO_DATABASE_URL = $DatabaseUrl
-    $env:KOKO_ADMIN_TOKEN = $AdminToken
+    if ($PSBoundParameters.ContainsKey("AdminToken")) {
+        $env:KOKO_ADMIN_TOKEN = $AdminToken
+    }
     $env:KOKO_BIND_ADDR = $BindAddr
     $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
 

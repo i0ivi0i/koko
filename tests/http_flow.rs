@@ -878,6 +878,75 @@ fn root_run_script_reuses_access_hints_in_real_startup_branch() {
     assert_eq!(script.matches(needle).count(), 2);
 }
 
+#[test]
+fn root_run_script_dry_run_without_admin_token_does_not_set_koko_admin_token() {
+    let _guard = env_lock();
+    let powershell = powershell_exe_path();
+    let output = Command::new(powershell)
+        .args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "run.ps1",
+            "-DryRun",
+            "-SkipBundle",
+            "-DatabaseUrl",
+            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
+        ])
+        .env("PATH", r"C:\Windows\System32")
+        .env_remove("PSModulePath")
+        .env_remove("PATHEXT")
+        .env_remove("PROMPT")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "run.ps1 dry-run without explicit admin token should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("Set KOKO_ADMIN_TOKEN"));
+}
+
+#[test]
+fn root_run_script_no_browser_still_prints_homepage_url() {
+    let _guard = env_lock();
+    let powershell = powershell_exe_path();
+    let output = Command::new(powershell)
+        .args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "run.ps1",
+            "-DryRun",
+            "-SkipBundle",
+            "-NoBrowser",
+            "-DatabaseUrl",
+            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
+        ])
+        .env("PATH", r"C:\Windows\System32")
+        .env_remove("PSModulePath")
+        .env_remove("PATHEXT")
+        .env_remove("PROMPT")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "run.ps1 dry-run with -NoBrowser should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("首页地址"));
+    assert!(stdout.contains("127.0.0.1:8080"));
+    assert!(stdout.contains("浏览器不会自动打开"));
+}
+
 fn temp_config_file_path(case_name: &str) -> PathBuf {
     env::temp_dir()
         .join("koko-tests")
