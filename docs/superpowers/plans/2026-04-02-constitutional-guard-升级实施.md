@@ -16,6 +16,7 @@
 
 - Skill root: `C:\Users\home\.claude\skills\constitutional-guard`
 - 兼容入口: `C:\Users\home\.claude\skills\koko-constitutional-audit`
+- 短兼容入口: `C:\Users\home\.claude\skills\koko-A`
 - 参考设计稿: `E:\koko\docs\superpowers\specs\2026-04-02-constitutional-guard-design.md`
 
 ### 计划中的主要文件职责
@@ -332,6 +333,7 @@ Expected: 全量样本通过；至少 mode、state、anti-wheel、law-hierarchy 
 - `pre-code calibration` 与 `in-flight drift correction` 均达到 `5` 正例 + `5` 负例
 - `combo` 路由达到 `3` 命中 + `3` 不命中对照
 - `evals.json` 当前共 `22` 条提示样例
+- 新增短 alias `koko-A`，保持 redirect-only，并指向 canonical `constitutional-guard`
 - `check_protocol_conformance.py --fixtures ...conformance-fixtures.json` 通过
 - `run_fixture_batch.py --json --include-holdout --fail-on-mismatch` 全量 `44/44` 通过
 - `Get-Content ...evals.json | ConvertFrom-Json | Out-Null` 通过
