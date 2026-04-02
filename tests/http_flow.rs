@@ -642,6 +642,7 @@ fn bootstrap_session_cookie_path_does_not_apply_admin_cookie_secure_yet() {
 #[test]
 fn app_config_requires_database_url() {
     let config_path = temp_config_file_path("requires-db-url");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let result = koko::support::AppConfig::load_for_test(
         None,
         Some("127.0.0.1:8080"),
@@ -651,12 +652,12 @@ fn app_config_requires_database_url() {
     );
 
     assert!(result.is_err());
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn app_config_rejects_empty_database_url() {
     let config_path = temp_config_file_path("rejects-empty-db-url");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let result = koko::support::AppConfig::load_for_test(
         Some("   "),
         Some("127.0.0.1:8080"),
@@ -666,7 +667,6 @@ fn app_config_rejects_empty_database_url() {
     );
 
     assert!(result.is_err());
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
@@ -698,6 +698,7 @@ fn app_error_code_exposes_admin_session_codes() {
 #[test]
 fn app_config_defaults_bind_addr_to_0_0_0_0_8080() {
     let config_path = temp_config_file_path("default-bind-addr");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let config = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         None,
@@ -708,12 +709,12 @@ fn app_config_defaults_bind_addr_to_0_0_0_0_8080() {
     .unwrap();
 
     assert_eq!(config.bind_addr.to_string(), "0.0.0.0:8080");
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn app_config_respects_explicit_bind_addr_override() {
     let config_path = temp_config_file_path("explicit-bind-addr");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let config = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         Some("127.0.0.1:8080"),
@@ -724,12 +725,12 @@ fn app_config_respects_explicit_bind_addr_override() {
     .unwrap();
 
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:8080");
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn app_config_bootstraps_admin_token_into_config_file() {
     let config_path = temp_config_file_path("bootstrap-admin-token");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let config = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         Some("127.0.0.1:8080"),
@@ -746,12 +747,12 @@ fn app_config_bootstraps_admin_token_into_config_file() {
         content,
         format!("admin_token = \"{}\"\n", config.admin_token)
     );
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn app_config_imports_admin_token_from_env_once_when_file_missing() {
     let config_path = temp_config_file_path("import-admin-token-once");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let first = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         Some("127.0.0.1:8080"),
@@ -779,12 +780,12 @@ fn app_config_imports_admin_token_from_env_once_when_file_missing() {
     .unwrap();
     assert_eq!(second.admin_token, "migrated-admin-token");
     assert!(second.admin_token_notice.is_none());
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn app_config_respects_admin_cookie_secure_override() {
     let config_path = temp_config_file_path("admin-cookie-secure");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let secure = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         Some("127.0.0.1:8080"),
@@ -804,7 +805,6 @@ fn app_config_respects_admin_cookie_secure_override() {
     )
     .unwrap();
     assert!(!insecure.admin_cookie_secure);
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
