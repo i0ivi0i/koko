@@ -50,6 +50,16 @@ pub struct AppConfig {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedAppConfig {
+    pub database_url: String,
+    pub bind_addr: SocketAddr,
+    pub config_path: PathBuf,
+    pub admin_token_seed: Option<String>,
+    pub admin_cookie_secure: bool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartupBanner {
     pub home_urls: Vec<String>,
     pub lan_urls: Vec<String>,
@@ -405,23 +415,24 @@ impl IdGenerator for SystemIdGenerator {
 #[cfg(not(target_arch = "wasm32"))]
 impl AppConfig {
     pub fn load() -> Result<Self, ConfigError> {
-        let database_url =
-            env::var(DATABASE_URL_ENV).map_err(|_| ConfigError::MissingEnv(DATABASE_URL_ENV))?;
-        let bind_addr_raw =
-            env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
         // 启动只认 config/koko.toml 作为管理员口令真相；环境变量这里只承接一次性迁移入口。
-        let config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
-        let admin_token_seed = env::var(ADMIN_TOKEN_ENV).ok();
-        let admin_cookie_secure =
-            parse_admin_cookie_secure(env::var(ADMIN_COOKIE_SECURE_ENV).ok().as_deref())?;
+        Self::load_from_resolved(ResolvedAppConfig::load()?)
+    }
 
-        Self::load_inner(
-            Some(database_url.as_str()),
-            Some(bind_addr_raw.as_str()),
+    pub fn load_with_overrides(
+        database_url: Option<&str>,
+        bind_addr: Option<&str>,
+        config_path: Option<PathBuf>,
+        admin_token_seed: Option<&str>,
+        admin_cookie_secure_override: Option<bool>,
+    ) -> Result<Self, ConfigError> {
+        Self::load_from_resolved(ResolvedAppConfig::load_with_overrides(
+            database_url,
+            bind_addr,
             config_path,
-            admin_token_seed.as_deref(),
-            Some(admin_cookie_secure),
-        )
+            admin_token_seed,
+            admin_cookie_secure_override,
+        )?)
     }
 
     pub fn load_for_test(
@@ -431,19 +442,58 @@ impl AppConfig {
         admin_token_seed: Option<&str>,
         admin_cookie_secure_override: Option<bool>,
     ) -> Result<Self, ConfigError> {
-        Self::load_inner(
+        Self::load_from_resolved(ResolvedAppConfig::load_for_test(
             database_url,
             bind_addr,
-            config_path.into(),
+            config_path,
             admin_token_seed,
             admin_cookie_secure_override,
-        )
+        )?)
     }
 
-    fn load_inner(
+    fn load_from_resolved(resolved: ResolvedAppConfig) -> Result<Self, ConfigError> {
+        let (admin_token, admin_token_notice) = load_or_bootstrap_admin_token(
+            &resolved.config_path,
+            resolved.admin_token_seed.as_deref(),
+        )?;
+
+        Ok(Self {
+            database_url: resolved.database_url,
+            bind_addr: resolved.bind_addr,
+            admin_token,
+            admin_token_notice,
+            admin_cookie_secure: resolved.admin_cookie_secure,
+        })
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ResolvedAppConfig {
+    pub fn load() -> Result<Self, ConfigError> {
+        Self::load_with_overrides(None, None, None, None, None)
+    }
+
+    pub fn load_with_overrides(
         database_url: Option<&str>,
         bind_addr: Option<&str>,
-        config_path: PathBuf,
+        config_path: Option<PathBuf>,
+        admin_token_seed: Option<&str>,
+        admin_cookie_secure_override: Option<bool>,
+    ) -> Result<Self, ConfigError> {
+        let mut resolved =
+            Self::load_common_with_overrides(database_url, bind_addr, config_path, admin_cookie_secure_override)?;
+        let admin_token_seed = match admin_token_seed {
+            Some(raw) => Some(parse_required_value(ADMIN_TOKEN_ENV, Some(raw))?),
+            None => env::var(ADMIN_TOKEN_ENV).ok().map(|value| value.trim().to_string()),
+        };
+        resolved.admin_token_seed = admin_token_seed;
+        Ok(resolved)
+    }
+
+    pub fn load_for_test(
+        database_url: Option<&str>,
+        bind_addr: Option<&str>,
+        config_path: impl Into<PathBuf>,
         admin_token_seed: Option<&str>,
         admin_cookie_secure_override: Option<bool>,
     ) -> Result<Self, ConfigError> {
@@ -455,15 +505,69 @@ impl AppConfig {
                 value: bind_addr_raw,
                 source,
             })?;
-        let admin_cookie_secure = admin_cookie_secure_override.unwrap_or(false);
-        let (admin_token, admin_token_notice) =
-            load_or_bootstrap_admin_token(&config_path, admin_token_seed)?;
+        let admin_token_seed = match admin_token_seed {
+            Some(raw) => Some(parse_required_value(ADMIN_TOKEN_ENV, Some(raw))?),
+            None => None,
+        };
 
         Ok(Self {
             database_url,
             bind_addr,
-            admin_token,
-            admin_token_notice,
+            config_path: config_path.into(),
+            admin_token_seed,
+            admin_cookie_secure: admin_cookie_secure_override.unwrap_or(false),
+        })
+    }
+
+    pub fn load_for_xtask_preview(
+        database_url: Option<&str>,
+        bind_addr: Option<&str>,
+        config_path: Option<PathBuf>,
+        admin_cookie_secure_override: Option<bool>,
+    ) -> Result<Self, ConfigError> {
+        // xtask preview 只需要和主程序同源的地址/数据库/安全位解析结果；
+        // 管理员口令真相仍必须留给真实启动路径去读/写 config/koko.toml。
+        Self::load_common_with_overrides(
+            database_url,
+            bind_addr,
+            config_path,
+            admin_cookie_secure_override,
+        )
+    }
+
+    fn load_common_with_overrides(
+        database_url: Option<&str>,
+        bind_addr: Option<&str>,
+        config_path: Option<PathBuf>,
+        admin_cookie_secure_override: Option<bool>,
+    ) -> Result<Self, ConfigError> {
+        let database_url = match database_url {
+            Some(raw) => parse_required_value(DATABASE_URL_ENV, Some(raw))?,
+            None => parse_required_value(
+                DATABASE_URL_ENV,
+                env::var(DATABASE_URL_ENV).ok().as_deref(),
+            )?,
+        };
+        let bind_addr_raw = match bind_addr {
+            Some(raw) => raw.trim().to_string(),
+            None => env::var("KOKO_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string()),
+        };
+        let bind_addr = bind_addr_raw
+            .parse()
+            .map_err(|source| ConfigError::InvalidBindAddr {
+                value: bind_addr_raw,
+                source,
+            })?;
+        let admin_cookie_secure = match admin_cookie_secure_override {
+            Some(value) => value,
+            None => parse_admin_cookie_secure(env::var(ADMIN_COOKIE_SECURE_ENV).ok().as_deref())?,
+        };
+
+        Ok(Self {
+            database_url,
+            bind_addr,
+            config_path: config_path.unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH)),
+            admin_token_seed: None,
             admin_cookie_secure,
         })
     }
