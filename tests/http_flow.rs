@@ -827,10 +827,11 @@ fn startup_banner_renders_home_admin_token_and_notice() {
 
 #[test]
 fn startup_banner_keeps_admin_token_notice_from_app_config() {
+    let config_path = temp_config_file_path("startup-banner-notice");
     let config = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         Some("127.0.0.1:8080"),
-        temp_config_file_path("startup-banner-notice"),
+        config_path.clone(),
         None,
         None,
     )
@@ -838,6 +839,28 @@ fn startup_banner_keeps_admin_token_notice_from_app_config() {
 
     let banner = koko::support::build_startup_banner_from_bind_addr(config.bind_addr, &config);
     assert!(banner.admin_token_notice.is_some());
+    remove_temp_config_root(&config_path);
+}
+
+#[test]
+fn startup_banner_normalizes_unspecified_ipv4_to_loopback_home_url() {
+    let config_path = temp_config_file_path("startup-banner-unspecified-ipv4");
+    let config = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        None,
+        config_path.clone(),
+        None,
+        None,
+    )
+    .unwrap();
+
+    let banner = koko::support::build_startup_banner_from_bind_addr(config.bind_addr, &config);
+
+    assert_eq!(banner.home_urls[0], "http://127.0.0.1:8080/");
+    assert_eq!(banner.admin_url, "http://127.0.0.1:8080/admin");
+    assert!(banner.admin_token_notice.is_some());
+    assert!(banner.lan_urls.is_empty());
+    remove_temp_config_root(&config_path);
 }
 
 #[test]

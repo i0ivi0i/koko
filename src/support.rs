@@ -2,7 +2,7 @@
 use std::{
     convert::Infallible,
     env, fs, io,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
 };
 
@@ -120,7 +120,8 @@ pub fn build_startup_banner_from_bind_addr(
 ) -> StartupBanner {
     // 启动横幅的事实必须在 Rust 里生成，而不是继续交给脚本各自推导。
     // 这样 bind_addr、管理员口令和启动提示才能共享同一份真相，避免壳层和脚本打印出不同口径。
-    let home_url = format!("http://{bind_addr}/");
+    // 当前任务只承接首页、管理入口、口令和提示；LAN 展示留给后续任务，因此这里只填单个首页 URL。
+    let home_url = startup_banner_home_url(bind_addr);
 
     StartupBanner {
         home_urls: vec![home_url.clone()],
@@ -128,6 +129,17 @@ pub fn build_startup_banner_from_bind_addr(
         admin_url: format!("{home_url}admin"),
         admin_token: config.admin_token.clone(),
         admin_token_notice: config.admin_token_notice.clone(),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn startup_banner_home_url(bind_addr: SocketAddr) -> String {
+    let port = bind_addr.port();
+    match bind_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => format!("http://127.0.0.1:{port}/"),
+        IpAddr::V6(ip) if ip.is_unspecified() => format!("http://[::1]:{port}/"),
+        IpAddr::V4(ip) => format!("http://{ip}:{port}/"),
+        IpAddr::V6(ip) => format!("http://[{ip}]:{port}/"),
     }
 }
 
@@ -148,31 +160,6 @@ impl StartupBanner {
 
         if let Some(notice) = self.admin_token_notice.as_deref() {
             lines.push(format!("==> {notice}"));
-        }
-
-        if !self.lan_urls.is_empty() {
-            let local_url = self.home_urls.first();
-            let lan_urls: Vec<&String> = if let Some(local_url) = local_url {
-                self.lan_urls.iter().filter(|url| *url != local_url).collect()
-            }
-            else {
-                self.lan_urls.iter().collect()
-            };
-
-            if !lan_urls.is_empty() {
-                lines.push("==> 局域网设备请访问:".to_string());
-                for url in lan_urls {
-                    lines.push(format!("   {url}"));
-                }
-                lines.push("==> 局域网管理入口:".to_string());
-                for url in self
-                    .lan_urls
-                    .iter()
-                    .filter(|url| Some(*url) != self.home_urls.first())
-                {
-                    lines.push(format!("   {url}admin"));
-                }
-            }
         }
 
         lines
