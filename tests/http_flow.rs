@@ -846,6 +846,23 @@ fn startup_banner_renders_lan_urls_when_present() {
 }
 
 #[test]
+fn startup_banner_transcript_policy_hides_admin_token_from_default_log_sink() {
+    let banner = koko::support::StartupBanner {
+        home_urls: vec!["http://127.0.0.1:8080/".to_string()],
+        lan_urls: vec![],
+        admin_url: "http://127.0.0.1:8080/admin".to_string(),
+        admin_token: "admin-test-token".to_string(),
+        admin_token_notice: None,
+    };
+
+    let transcript = banner.render_lines();
+    let persistent = banner.render_persistent_log_lines();
+
+    assert!(transcript.iter().any(|line| line.contains("admin-test-token")));
+    assert!(!persistent.iter().any(|line| line.contains("admin-test-token")));
+}
+
+#[test]
 fn startup_banner_keeps_admin_token_notice_from_app_config() {
     let config_path = temp_config_file_path("startup-banner-notice");
     let _cleanup = TempConfigRootGuard::new(config_path.clone());
@@ -952,6 +969,20 @@ fn root_run_script_passthroughs_fake_child_banner_without_replaying_it() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("==> 首页地址: http://127.0.0.1:8080/"));
     assert_eq!(stdout.matches("==> 首页地址: http://127.0.0.1:8080/").count(), 1);
+}
+
+#[test]
+fn root_run_script_auto_open_uses_fake_child_homepage_line() {
+    let output = run_root_script_with_tooling(&[
+        "-SkipBundle",
+        "-NoBrowser:$false",
+        "-TestChildScript",
+        "tests/http_support/fixtures/powershell/fake-rust-startup.ps1",
+    ]);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("==> 首页地址: http://127.0.0.1:8080/"));
 }
 
 #[test]

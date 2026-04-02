@@ -165,6 +165,8 @@ fn startup_banner_home_url(bind_addr: SocketAddr) -> String {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl StartupBanner {
+    // 启动横幅有两条去向：`render_lines()` 只服务终端直出，`render_persistent_log_lines()`
+    // 只给长期技术日志。后者默认不落管理员口令，避免把一次性敏感信息写进常驻日志。
     pub fn render_lines(&self) -> Vec<String> {
         let mut lines = Vec::new();
 
@@ -174,6 +176,33 @@ impl StartupBanner {
 
         lines.push(format!("==> 管理入口: {}", self.admin_url));
         lines.push(format!("==> 当前管理员口令: {}", self.admin_token));
+
+        if let Some(notice) = self.admin_token_notice.as_deref() {
+            lines.push(format!("==> {notice}"));
+        }
+
+        if !self.lan_urls.is_empty() {
+            lines.push("==> 局域网设备请访问:".to_string());
+            for url in &self.lan_urls {
+                lines.push(format!("   {url}"));
+            }
+            lines.push("==> 局域网管理入口:".to_string());
+            for url in &self.lan_urls {
+                lines.push(format!("   {url}admin"));
+            }
+        }
+
+        lines
+    }
+
+    pub fn render_persistent_log_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+
+        if let Some(home_url) = self.home_urls.first() {
+            lines.push(format!("==> 首页地址: {home_url}"));
+        }
+
+        lines.push(format!("==> 管理入口: {}", self.admin_url));
 
         if let Some(notice) = self.admin_token_notice.as_deref() {
             lines.push(format!("==> {notice}"));

@@ -5,7 +5,7 @@ param(
     [string]$BindAddr = "0.0.0.0:8080",
     [switch]$SkipBundle,
     [switch]$DryRun,
-    [switch]$NoBrowser,
+    [object]$NoBrowser = $false,
     # 仅供测试夹具替换子进程入口使用，不是第二套启动协议。
     [string]$TestChildScript
 )
@@ -145,12 +145,14 @@ function New-ChildProcessSpec {
         [string]$TestChildScript
     )
 
+    $logDir = Join-Path $env:TEMP "koko-run"
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    $runId = [guid]::NewGuid().ToString("N")
+
     if ($TestChildScript) {
         $powershellExe = Join-Path $PSHOME "powershell.exe"
-        $logDir = Join-Path $env:TEMP "koko-run"
-        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-        $stdoutLog = Join-Path $logDir "server.out.log"
-        $stderrLog = Join-Path $logDir "server.err.log"
+        $stdoutLog = Join-Path $logDir "server-$runId.out.log"
+        $stderrLog = Join-Path $logDir "server-$runId.err.log"
         Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
 
         return [pscustomobject]@{
@@ -167,10 +169,23 @@ function New-ChildProcessSpec {
         }
     }
 
+    $powershellExe = Join-Path $PSHOME "powershell.exe"
+    $stdoutLog = Join-Path $logDir "server-$runId.out.log"
+    Remove-Item $stdoutLog -ErrorAction SilentlyContinue
+
+    # 正常启动分支仍然保留 ready probe，但 auto-open 只认 Rust 输出里的首页地址。
+    $command = '& "{0}" *>&1 | Tee-Object -FilePath "{1}"; exit $LASTEXITCODE' -f $ServerBinaryPath, $stdoutLog
+
     return [pscustomobject]@{
-        FilePath = $ServerBinaryPath
-        ArgumentList = @()
-        StdoutLog = $null
+        FilePath = $powershellExe
+        ArgumentList = @(
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            $command
+        )
+        StdoutLog = $stdoutLog
         StderrLog = $null
         ReplayOutput = $false
     }
@@ -192,6 +207,38 @@ function Write-ChildProcessOutput {
             Write-Host $line
         }
     }
+}
+
+function Test-TruthyValue {
+    param(
+        [object]$Value
+    )
+
+    if ($Value -is [bool]) {
+        return [bool]$Value
+    }
+
+    if ($null -eq $Value) {
+        return $false
+    }
+
+    $normalized = $Value.ToString().Trim().ToLowerInvariant()
+    return $normalized -in @("true", "1", "yes", "on")
+}
+
+function Get-StartupHomepageUrlFromLines {
+    param(
+        [string[]]$Lines
+    )
+
+    $prefix = "==> 首页地址: "
+    foreach ($line in $Lines) {
+        if ($line.StartsWith($prefix)) {
+            return $line.Substring($prefix.Length).Trim()
+        }
+    }
+
+    return $null
 }
 
 function Start-ChildProcess {
@@ -267,10 +314,10 @@ try {
     }
 
     if ($hostName.Contains(":") -and -not $hostName.StartsWith("[")) {
-        $appUrl = "http://[$hostName]:$port/"
+        $readyProbeUrl = "http://[$hostName]:$port/"
     }
     else {
-        $appUrl = "http://$hostName`:$port/"
+        $readyProbeUrl = "http://$hostName`:$port/"
     }
 
     $childProcessSpec = New-ChildProcessSpec `
@@ -291,19 +338,28 @@ try {
     }
 
     $serverProcess = Start-ChildProcess -Spec $childProcessSpec -StartProcessArgs $startProcessArgs
+    $allowBrowser = -not (Test-TruthyValue -Value $NoBrowser)
 
     if ($childProcessSpec.ReplayOutput) {
         Write-ChildProcessOutput -StdoutLog $childProcessSpec.StdoutLog -StderrLog $childProcessSpec.StderrLog
+        if ($serverProcess.ExitCode -eq 0) {
+            [void](Get-StartupHomepageUrlFromLines -Lines (Get-Content $childProcessSpec.StdoutLog))
+        }
         exit [int]$serverProcess.ExitCode
     }
     else {
-        if (-not (Wait-ForServerReady -Url $appUrl -Process $serverProcess)) {
+        if (-not (Wait-ForServerReady -Url $readyProbeUrl -Process $serverProcess)) {
             throw "Koko 没能成功启动。请先检查 Rust 子进程的输出，再确认数据库连接和端口占用。"
         }
 
-        # auto-open：仅在需要时打开浏览器，不再输出部署提示。
-        if (-not $NoBrowser) {
-            Start-Process $appUrl | Out-Null
+        $startupHomepageUrl = Get-StartupHomepageUrlFromLines -Lines (Get-Content $childProcessSpec.StdoutLog)
+        if ([string]::IsNullOrWhiteSpace($startupHomepageUrl)) {
+            throw "Koko 启动后没有从 Rust 输出中解析到首页地址。"
+        }
+
+        # auto-open 只消费 Rust 输出中的首页地址；ready probe 仍可暂时沿用 BindAddr。
+        if ($allowBrowser) {
+            Start-Process $startupHomepageUrl | Out-Null
         }
 
         Wait-Process -Id $serverProcess.Id
