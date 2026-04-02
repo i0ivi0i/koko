@@ -119,6 +119,12 @@ async fn admin_entry_serves_frontend_shell() {
     assert!(body.contains("koko-web-shell"));
 }
 
+#[test]
+fn admin_route_detection_treats_only_admin_as_backend_entry() {
+    assert!(koko::admin::is_admin_shell_path("https://example.com/admin"));
+    assert!(!koko::admin::is_admin_shell_path("https://example.com/rooms/a1234"));
+}
+
 #[sqlx::test]
 async fn bootstrap_then_join_returns_room_snapshot(pool: sqlx::PgPool) -> sqlx::Result<()> {
     let harness = HttpHarness::new(pool).await;

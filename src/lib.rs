@@ -12,3 +12,5 @@ pub mod store;
 pub mod support;
 pub mod view;
 pub mod web;
+
+pub use admin::root_shell;

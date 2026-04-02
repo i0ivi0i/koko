@@ -947,8 +947,12 @@ pub fn App() -> Element {
     }
 }
 
-pub fn app() -> Element {
+pub fn chat_shell() -> Element {
     rsx! { App {} }
+}
+
+pub fn app() -> Element {
+    chat_shell()
 }
 
 #[cfg(test)]

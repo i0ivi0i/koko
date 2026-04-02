@@ -36,5 +36,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    dioxus::launch(koko::web::app);
+    dioxus::launch(koko::root_shell);
 }
