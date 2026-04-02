@@ -41,7 +41,10 @@ enum AdminShellAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum AdminShellView {
     Login { session_notice: Option<String> },
-    Panel(AdminPanelState),
+    Panel {
+        state: Option<AdminPanelState>,
+        load_error: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -203,6 +206,29 @@ async fn load_admin_state() -> Result<AdminPanelState, AdminRequestError> {
     Ok(admin_panel_state(overview, rooms))
 }
 
+fn resolve_admin_panel_view(
+    load_state: Result<AdminPanelState, AdminRequestError>,
+) -> Result<AdminShellView, String> {
+    match load_state {
+        Ok(state) => Ok(AdminShellView::Panel {
+            state: Some(state),
+            load_error: None,
+        }),
+        Err(error) => {
+            if let Some(session_notice) = admin_session_notice(&error) {
+                Ok(AdminShellView::Login {
+                    session_notice: Some(session_notice),
+                })
+            } else {
+                Ok(AdminShellView::Panel {
+                    state: None,
+                    load_error: Some(format!("加载后台概览失败：{}", error.message())),
+                })
+            }
+        }
+    }
+}
+
 async fn resolve_admin_shell(action: AdminShellAction) -> Result<AdminShellView, String> {
     match action {
         AdminShellAction::Probe => {
@@ -225,35 +251,13 @@ async fn resolve_admin_shell(action: AdminShellAction) -> Result<AdminShellView,
                 });
             }
 
-            load_admin_state()
-                .await
-                .map(AdminShellView::Panel)
-                .or_else(|error| {
-                    admin_session_notice(&error)
-                        .map(|session_notice| {
-                            AdminShellView::Login {
-                                session_notice: Some(session_notice),
-                            }
-                        })
-                        .ok_or_else(|| format!("加载后台概览失败：{}", error.message()))
-                })
+            resolve_admin_panel_view(load_admin_state().await)
         }
         AdminShellAction::Login(token) => {
             login_admin(token)
                 .await
                 .map_err(|error| format!("登录后台失败：{}", error.message()))?;
-            load_admin_state()
-                .await
-                .map(AdminShellView::Panel)
-                .or_else(|error| {
-                    admin_session_notice(&error)
-                        .map(|session_notice| {
-                            AdminShellView::Login {
-                                session_notice: Some(session_notice),
-                            }
-                        })
-                        .ok_or_else(|| format!("加载后台概览失败：{}", error.message()))
-                })
+            resolve_admin_panel_view(load_admin_state().await)
         }
         AdminShellAction::Logout => {
             logout_admin()
@@ -273,16 +277,22 @@ pub fn is_admin_shell_path(browser_location: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn root_shell() -> Element {
-    let browser_location = web::browser_location().unwrap_or_default();
+#[component]
+fn RootShellOutlet(browser_location: String) -> Element {
     if is_admin_shell_path(&browser_location) {
-        app()
+        rsx! { AdminApp {} }
     } else {
-        web::chat_shell()
+        rsx! { web::App {} }
     }
 }
 
-pub fn app() -> Element {
+pub fn root_shell() -> Element {
+    let browser_location = web::browser_location().unwrap_or_default();
+    rsx! { RootShellOutlet { browser_location } }
+}
+
+#[component]
+fn AdminApp() -> Element {
     let mut admin_token = use_signal(String::new);
     let mut action_version = use_signal(|| 0_u64);
     let mut shell_action = use_signal(|| AdminShellAction::Probe);
@@ -343,7 +353,7 @@ pub fn app() -> Element {
                     }
                 }
             },
-            AdminShellView::Panel(state) => rsx! {
+            AdminShellView::Panel { state, load_error } => rsx! {
                 div { class: "admin-shell",
                     div { class: "admin-shell__stats",
                         button {
@@ -355,14 +365,28 @@ pub fn app() -> Element {
                             "退出后台"
                         }
                     }
+                    if let Some(error) = load_error {
+                        p { class: "admin-shell__summary", "{error}" }
+                    }
                     if let Some(error) = request_error {
                         p { class: "admin-shell__summary", "{error}" }
                     }
-                    view::AdminPanel { state: state }
+                    if let Some(state) = state {
+                        view::AdminPanel { state: state }
+                    } else {
+                        p {
+                            class: "admin-shell__summary",
+                            "后台会话仍有效，但后台数据暂时不可用。"
+                        }
+                    }
                 }
             },
         }
     }
+}
+
+pub fn app() -> Element {
+    rsx! { AdminApp {} }
 }
 
 #[cfg(test)]
@@ -386,5 +410,37 @@ mod tests {
         assert!(is_admin_shell_path("https://example.com/admin"));
         assert!(!is_admin_shell_path("https://example.com/admin/panel"));
         assert!(!is_admin_shell_path("https://example.com/rooms/a1234"));
+    }
+
+    #[test]
+    fn root_shell_routes_admin_path_into_admin_component_branch() {
+        let mut vdom = VirtualDom::new_with_props(
+            RootShellOutlet,
+            RootShellOutletProps {
+                browser_location: "https://example.com/admin".to_string(),
+            },
+        );
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        assert!(html.contains("Koko 管理后台"));
+        assert!(!html.contains("placeholder=\"按房间码搜索\""));
+    }
+
+    #[test]
+    fn non_auth_admin_load_error_keeps_backend_shell() {
+        let view = resolve_admin_panel_view(Err(AdminRequestError {
+            code: Some(AppErrorCode::Internal),
+            detail: "HTTP 500".to_string(),
+        }))
+        .unwrap();
+
+        assert_eq!(
+            view,
+            AdminShellView::Panel {
+                state: None,
+                load_error: Some("加载后台概览失败：HTTP 500".to_string()),
+            }
+        );
     }
 }
