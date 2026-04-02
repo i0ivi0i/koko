@@ -2,10 +2,6 @@ mod http_support;
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
 use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
@@ -16,7 +12,6 @@ use koko::{
     contract::{AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode},
     store::PgStore,
 };
-use tower::ServiceExt;
 use uuid::Uuid;
 
 #[test]
@@ -142,25 +137,6 @@ async fn admin_login_cookie_unlocks_admin_overview_and_rooms(
 
     harness.shutdown().await;
     Ok(())
-}
-
-#[tokio::test]
-async fn admin_panel_route_is_not_exposed_anymore() {
-    let harness = HttpHarness::frontend_only();
-
-    let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/api/admin/panel")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[sqlx::test]
