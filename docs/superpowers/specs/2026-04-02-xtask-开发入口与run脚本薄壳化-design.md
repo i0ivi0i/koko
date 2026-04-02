@@ -136,19 +136,15 @@ cargo xtask dev
 
 ## 目标架构
 
-### 0. 先解决 `.rs` 文件总数约束
+### 0. `xtask` 作为独立工具目录，允许破例增加 `.rs`
 
-仓库当前非测试用途 `.rs` 文件正好是 13 个，因此不能直接新增 `xtask/src/main.rs` 就当作没有代价。
+仓库对主应用长期有“非测试用途 `.rs` 文件总数控制”的约束，但本次明确允许 `xtask` 作为独立工具目录破例增加 `.rs`：
 
-本轮在引入 `xtask` 前，必须先完成一个低风险收口：
+- `xtask` 位于仓库根下独立文件夹
+- 它是开发工具，不属于 `src/` 主应用模块碎片化扩张
+- 因此本轮不要求为了给 `xtask/src/main.rs` 腾位置而去收口现有 `src/*.rs`
 
-- 将 `src/view.rs` 收口进 `src/web.rs`
-
-原因：
-
-- `view` 与 `web` 同属 Web 壳层，职责相邻，属于低风险整合
-- 这不是无关重构，而是满足仓库 `.rs` 文件总数约束的必要前置动作
-- 完成该收口后，再新增 `xtask/src/main.rs`，非测试 `.rs` 文件总数仍能维持在 13
+这条是当前任务的显式例外，避免为了满足形式约束去引入与目标无关的模块合并。
 
 ### 1. 命令面
 
@@ -186,14 +182,13 @@ powershell -File run.ps1  =>  cargo xtask dev ...
 - `.cargo/config.toml`
 - `run.ps1`
 - `tests/http_flow.rs`
-- `src/web.rs`
-- `src/view.rs`（本轮会被收口并删除）
 
 根 `Cargo.toml` 需要从“单包 manifest”升级为“根包 + workspace”共存形态，最小落地方式为：
 
 - 保留现有 `[package]`
 - 新增 `[workspace]`
 - `members = ["xtask"]`
+- `xtask/Cargo.toml` 的 `[package] name` 固定为 `xtask`
 
 现有 `.cargo/config.toml` 不新建，只修改并保留已有 `jobs = 1` 稳定性设置；在此基础上追加别名，例如：
 
@@ -201,6 +196,15 @@ powershell -File run.ps1  =>  cargo xtask dev ...
 [alias]
 xtask = "run -p xtask --"
 ```
+
+workspace 改造后的命令口径必须保持可预期：
+
+- 现有根目录 `cargo check`
+- 现有根目录 `cargo test`
+- 现有根目录 `cargo build`
+- 新增 `cargo xtask dev`
+
+都必须在仓库根目录稳定工作，且不要求开发者额外记忆 `--manifest-path`。
 
 如有必要，可新增一小组 `xtask` 测试文件；但要克制，避免把测试体系打散。
 
@@ -239,7 +243,8 @@ xtask = "run -p xtask --"
 
 `run.ps1` 应退化成薄壳：
 
-- 解析与现有用户习惯兼容的少量参数
+- 优先原样透传用户 argv
+- 仅在确有必要时做最小的 PowerShell 风格参数名兼容
 - 调用 `cargo xtask dev`
 - 透传退出码
 
@@ -248,6 +253,12 @@ xtask = "run -p xtask --"
 如果后续保留 Windows 专属参数兼容，也必须只做“参数映射”，不能重新变成编排中心。
 
 这意味着当前已经存在于 `run.ps1` 的测试专用 seam，后续都应迁出 PowerShell，而不是继续扩。
+
+同时还必须明确禁止：
+
+- `run.ps1` 自带与 xtask 或主程序不同的默认值
+- `run.ps1` 自己派生 `database-url` / `bind-addr`
+- `run.ps1` 自己决定是否写配置或如何解释配置真相
 
 ## 命令与参数设计
 
@@ -272,6 +283,13 @@ cargo xtask dev
 - `run.ps1` 若继续保留 PowerShell 风格参数，也只做一一映射
 - 不新增当前任务不需要的子命令和配置面
 - 所有 CLI 参数都只作为“编排层透传输入”存在；未显式传入时，默认值仍由主程序自己的配置加载逻辑决定
+
+为了让“主程序决定默认值”不流于口号，本轮要求 xtask 的数据库准备逻辑必须复用与主程序同源的配置解析结果，而不是自己再算一遍有效配置。可接受的实现方向只有两种：
+
+- 方案一：把主程序现有配置解析 helper 提升为库中可复用接口，xtask 与主程序共同调用
+- 方案二：xtask 在未显式传入覆盖参数时，不单独准备数据库，而是只负责传递环境并启动主程序
+
+本次优先推荐方案一，因为它更符合“开发编排也共享同一份配置真相”。
 
 ## 数据与控制流
 
@@ -357,11 +375,11 @@ cargo xtask dev
 
 ### 1. `.rs` 文件数量约束
 
-仓库有“非测试用途 `.rs` 文件总数长期控制在 13 个以内”的约束，因此 `xtask` 必须保持极简：
+仓库对主应用 `src/` 仍保持“非测试用途 `.rs` 文件数长期克制”的原则；但本次显式允许 `xtask` 作为独立工具目录破例增加最少量 `.rs`：
 
 - 优先单文件 `xtask/src/main.rs`
 - 非必要不继续拆模块
-- 必须以前置收口 `src/view.rs -> src/web.rs` 作为配额交换动作，不能先加了再说
+- 这项例外只适用于 `xtask/`，不意味着主应用 `src/` 可以继续放宽
 
 ### 2. Windows 与 Linux 行为漂移风险
 
@@ -388,12 +406,14 @@ cargo xtask dev
 2. `run.ps1` 仍可用，但本质只是调用 `cargo xtask dev`
 3. 根 `Cargo.toml` 已明确支持 workspace 中的 `xtask`
 4. 现有 `.cargo/config.toml` 被保留并扩展 alias，而不是被覆盖重建
-5. `src/view.rs` 已收口进 `src/web.rs`，新增 `xtask` 后非测试 `.rs` 总数仍不超过 13
-6. 数据库准备、bundle、build、spawn 等开发编排动作已不再由 PowerShell 持有
-7. 首页地址 / 管理入口 / 管理员口令 / ready 真相仍只由 Rust 主程序输出
-8. auto-open 只消费 Rust 首页行
-9. `--dry-run` 只预演准备动作，不伪造服务真相
-10. 测试边界从 PowerShell 内部实现迁到 `xtask` 行为
+5. 根目录 `cargo check/test/build` 与 `cargo xtask dev` 的行为都在 workspace 改造后保持稳定可预期
+6. `xtask` 作为独立工具目录允许破例增加最少量 `.rs`，但不放宽主应用 `src/` 的收敛要求
+7. 数据库准备、bundle、build、spawn 等开发编排动作已不再由 PowerShell 持有
+8. 首页地址 / 管理入口 / 管理员口令 / ready 真相仍只由 Rust 主程序输出
+9. auto-open 只消费 Rust 首页行
+10. `--dry-run` 只预演准备动作，不伪造服务真相
+11. `run.ps1` 不再保留测试专用参数；测试边界已迁到 `xtask` 行为
+12. xtask 未显式传入的配置值仍与主程序共用同一份解析真相，而不是另算一套默认值
 
 ## 结论
 
