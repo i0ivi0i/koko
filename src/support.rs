@@ -133,6 +133,26 @@ pub fn build_startup_banner_from_bind_addr(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+pub fn write_startup_banner_if_ready<W: std::io::Write>(
+    sink: &mut W,
+    ready_addr: Result<SocketAddr, &'static str>,
+    config: &AppConfig,
+) -> io::Result<()> {
+    // 横幅是给人看的启动事实，不属于 tracing 的结构化日志。
+    // 只有等到 ready 地址确定后再写，才能避免在数据库、迁移或 bind 失败时误报“已启动”。
+    let Ok(bind_addr) = ready_addr else {
+        return Ok(());
+    };
+
+    let banner = build_startup_banner_from_bind_addr(bind_addr, config);
+    for line in banner.render_lines() {
+        writeln!(sink, "{line}")?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn startup_banner_home_url(bind_addr: SocketAddr) -> String {
     let port = bind_addr.port();
     match bind_addr.ip() {

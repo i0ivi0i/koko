@@ -7,10 +7,8 @@ use tower_sessions_sqlx_store::PostgresStore;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = koko::support::AppConfig::load()?;
-    println!("当前管理员口令: {}", config.admin_token);
-    if let Some(notice) = config.admin_token_notice.as_deref() {
-        println!("{notice}");
-    }
+    // tracing 负责运行时日志；启动横幅是给人看的 ready 事实，不能混成一层。
+    // 先初始化 tracing，保证后续错误和运行日志有统一出口，再等 ready 后写一次横幅。
     let _ = koko::support::init_tracing(koko::support::DEFAULT_TRACING_FILTER)?;
 
     let pool = PgPoolOptions::new()
@@ -30,6 +28,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         koko::http::default_frontend_asset_dir(),
     );
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
+    let ready_addr = listener.local_addr()?;
+    let mut stdout = std::io::stdout().lock();
+    koko::support::write_startup_banner_if_ready(&mut stdout, Ok(ready_addr), &config)?;
 
     axum::serve(listener, router).await?;
     Ok(())

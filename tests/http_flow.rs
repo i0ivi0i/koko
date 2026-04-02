@@ -864,6 +864,51 @@ fn startup_banner_keeps_admin_token_notice_from_app_config() {
 }
 
 #[test]
+fn startup_banner_uses_actual_bound_port_after_listener_bind() {
+    let config = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:0"),
+        temp_config_file_path("startup-banner-bound-port"),
+        Some("local-admin-token"),
+        None,
+    )
+    .unwrap();
+
+    let listener = std::net::TcpListener::bind(config.bind_addr).unwrap();
+    let bound = listener.local_addr().unwrap();
+    drop(listener);
+
+    let banner = koko::support::build_startup_banner_from_bind_addr(bound, &config);
+    assert!(banner.home_urls[0].ends_with(&format!(":{}/", bound.port())));
+}
+
+#[test]
+fn startup_banner_sink_writes_nothing_for_startup_failures() {
+    let mut sink = Vec::new();
+    let config = sample_startup_config();
+
+    koko::support::write_startup_banner_if_ready(&mut sink, Err("db failed"), &config).unwrap();
+
+    assert!(sink.is_empty());
+}
+
+#[test]
+fn startup_banner_sink_writes_once_for_ready_state() {
+    let mut sink = Vec::new();
+    let config = sample_startup_config();
+
+    koko::support::write_startup_banner_if_ready(
+        &mut sink,
+        Ok("127.0.0.1:8080".parse().unwrap()),
+        &config,
+    )
+    .unwrap();
+
+    let output = String::from_utf8(sink).unwrap();
+    assert_eq!(output.matches("==> 首页地址:").count(), 1);
+}
+
+#[test]
 fn startup_banner_normalizes_unspecified_ipv4_to_loopback_home_url() {
     let config_path = temp_config_file_path("startup-banner-unspecified-ipv4");
     let _cleanup = TempConfigRootGuard::new(config_path.clone());
@@ -1048,11 +1093,11 @@ fn root_run_script_no_browser_still_prints_homepage_url() {
 }
 
 #[test]
-fn rust_binary_startup_source_prints_current_admin_token() {
+fn rust_binary_startup_source_defers_banner_until_ready() {
     let main_source =
         fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs")).unwrap();
-    assert!(main_source.contains("当前管理员口令:"));
-    assert!(main_source.contains("config.admin_token"));
+    assert!(main_source.contains("write_startup_banner_if_ready"));
+    assert!(!main_source.contains("println!(\"当前管理员口令:"));
 }
 
 #[test]
@@ -1106,6 +1151,19 @@ fn temp_config_file_path(case_name: &str) -> PathBuf {
         .join(format!("{case_name}-{}", Uuid::now_v7()))
         .join("config")
         .join("koko.toml")
+}
+
+fn sample_startup_config() -> koko::support::AppConfig {
+    let config_path = temp_config_file_path("startup-banner-sample");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
+    koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        config_path,
+        Some("local-admin-token"),
+        None,
+    )
+    .unwrap()
 }
 
 struct TempConfigRootGuard(PathBuf);
