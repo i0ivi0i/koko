@@ -912,6 +912,12 @@ fn root_run_script_dry_run_without_admin_token_does_not_set_koko_admin_token() {
 }
 
 #[test]
+fn root_run_script_clears_inherited_admin_token_without_explicit_override() {
+    let script = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("run.ps1")).unwrap();
+    assert!(script.contains("Remove-Item Env:KOKO_ADMIN_TOKEN -ErrorAction SilentlyContinue"));
+}
+
+#[test]
 fn root_run_script_no_browser_still_prints_homepage_url() {
     let _guard = env_lock();
     let powershell = powershell_exe_path();

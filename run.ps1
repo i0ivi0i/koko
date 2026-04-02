@@ -289,6 +289,9 @@ try {
     if ($PSBoundParameters.ContainsKey("AdminToken")) {
         $env:KOKO_ADMIN_TOKEN = $AdminToken
     }
+    else {
+        Remove-Item Env:KOKO_ADMIN_TOKEN -ErrorAction SilentlyContinue
+    }
     $env:KOKO_BIND_ADDR = $BindAddr
     $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
 
