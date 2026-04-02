@@ -35,7 +35,6 @@ pub struct Module;
 struct HttpState {
     store: PgStore,
     admin_access: support::StaticAdminAccess,
-    admin_cookie_secure: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +50,7 @@ struct SearchRoomsParams {
 pub const FRONTEND_DIST_DIR: &str = "dist/public";
 pub const FRONTEND_ASSET_DIR: &str = "dist/public/assets";
 
-pub fn api_router(store: PgStore, admin_token: String, admin_cookie_secure: bool) -> Router {
+pub fn api_router(store: PgStore, admin_token: String, _admin_cookie_secure: bool) -> Router {
     Router::new()
         .route("/session/bootstrap", post(bootstrap_session))
         .route("/rooms", get(joined_rooms))
@@ -64,7 +63,6 @@ pub fn api_router(store: PgStore, admin_token: String, admin_cookie_secure: bool
         .with_state(HttpState {
             store,
             admin_access: support::StaticAdminAccess::new(admin_token),
-            admin_cookie_secure,
         })
 }
 
@@ -146,7 +144,6 @@ async fn bootstrap_session(
     let cookie = Cookie::build((support::SESSION_COOKIE_NAME, session.session_id.to_string()))
         .http_only(true)
         .same_site(SameSite::Lax)
-        .secure(state.admin_cookie_secure)
         .path("/")
         .build();
 

@@ -620,6 +620,12 @@ async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie(
 }
 
 #[test]
+fn bootstrap_session_cookie_path_does_not_apply_admin_cookie_secure_yet() {
+    let http_source = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/http.rs")).unwrap();
+    assert!(!http_source.contains(".secure("));
+}
+
+#[test]
 fn app_config_requires_database_url() {
     let config_path = temp_config_file_path("requires-db-url");
     let result = koko::support::AppConfig::load_for_test(
@@ -863,6 +869,13 @@ fn root_run_script_prints_admin_entry_without_temporary_admin_token_log() {
     assert!(stdout.contains("监听地址: 0.0.0.0:8080"));
     assert!(!stdout.contains("已自动生成临时 AdminToken"));
     assert!(!stdout.contains("x-admin-token"));
+}
+
+#[test]
+fn root_run_script_reuses_access_hints_in_real_startup_branch() {
+    let script = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("run.ps1")).unwrap();
+    let needle = "Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)";
+    assert_eq!(script.matches(needle).count(), 2);
 }
 
 fn temp_config_file_path(case_name: &str) -> PathBuf {

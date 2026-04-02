@@ -322,19 +322,8 @@ try {
 
     if (-not $NoBrowser) {
         Start-Process $appUrl | Out-Null
-        Write-Host "==> 已启动，浏览器已打开: $appUrl"
     }
-    else {
-        Write-Host "==> 已启动，请打开: $appUrl"
-    }
-
-    $lanUrls = $accessUrls | Where-Object { $_ -ne $appUrl }
-    if ($lanUrls.Count -gt 0) {
-        Write-Host "==> 局域网设备请访问:"
-        foreach ($url in $lanUrls) {
-            Write-Host "   $url"
-        }
-    }
+    Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)
 
     Write-Host "==> 现在可以直接开始真人测试，按 Ctrl+C 可停止服务"
     Wait-Process -Id $serverProcess.Id
