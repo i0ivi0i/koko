@@ -449,7 +449,7 @@ fn rejection_message(code: AppErrorCode) -> String {
         AppErrorCode::MembershipRequired => "你已不在该房间中".to_string(),
         AppErrorCode::InvalidRoomCode => "房间码不合法".to_string(),
         AppErrorCode::InvalidMessageBody => "消息内容不合法".to_string(),
-        AppErrorCode::InvalidAdminToken => "管理员令牌无效".to_string(),
+        AppErrorCode::InvalidAdminToken => "管理员口令无效".to_string(),
         AppErrorCode::AdminSessionRequired => "管理员会话不存在".to_string(),
         AppErrorCode::AdminSessionExpired => "管理员会话已过期".to_string(),
         AppErrorCode::AdminSessionReplaced => "管理员会话已被替换".to_string(),

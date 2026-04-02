@@ -104,17 +104,17 @@ pub fn admin_token_fingerprint(token: &str) -> String {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StaticAdminAccess {
+pub struct AdminTokenVerifier {
     expected_token: String,
 }
 
-impl StaticAdminAccess {
+impl AdminTokenVerifier {
     pub fn new(expected_token: String) -> Self {
         Self { expected_token }
     }
 }
 
-impl AdminCredentialPort for StaticAdminAccess {
+impl AdminCredentialPort for AdminTokenVerifier {
     async fn verify_admin_token(&self, token: &str) -> Result<bool, AppError> {
         Ok(token == self.expected_token)
     }

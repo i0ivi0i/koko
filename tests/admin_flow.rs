@@ -82,7 +82,7 @@ fn admin_panel_state_composes_overview_and_rooms_from_stable_queries() {
 #[tokio::test]
 async fn login_admin_rejects_invalid_token() {
     let error = login_admin(
-        &koko::support::StaticAdminAccess::new("local-admin-token".to_string()),
+        &koko::support::AdminTokenVerifier::new("local-admin-token".to_string()),
         &FakeAdminSessionPort::default(),
         AdminLoginCommand {
             token: "wrong-token".to_string(),

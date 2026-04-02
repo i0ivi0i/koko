@@ -42,7 +42,7 @@ struct HttpState {
 #[derive(Clone)]
 struct AdminHttpState {
     store: PgStore,
-    admin_access: support::StaticAdminAccess,
+    admin_token_verifier: support::AdminTokenVerifier,
     admin_token_fingerprint: String,
 }
 
@@ -105,7 +105,7 @@ pub fn admin_api_router(store: PgStore, admin_token: String) -> Router {
         .route("/admin/rooms", get(admin_rooms))
         .with_state(AdminHttpState {
             store,
-            admin_access: support::StaticAdminAccess::new(admin_token.clone()),
+            admin_token_verifier: support::AdminTokenVerifier::new(admin_token.clone()),
             admin_token_fingerprint: support::admin_token_fingerprint(&admin_token),
         })
 }
@@ -274,7 +274,7 @@ async fn admin_login(
 ) -> Result<StatusCode, (StatusCode, Json<ErrorPayload>)> {
     let admin_session_port = build_http_admin_session_port(&state, session.clone(), true);
     login_admin(
-        &state.admin_access,
+        &state.admin_token_verifier,
         &admin_session_port,
         AdminLoginCommand {
             token: request.token,
