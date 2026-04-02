@@ -120,50 +120,14 @@ pub fn build_startup_banner_from_bind_addr(
 ) -> StartupBanner {
     // 启动横幅的事实必须在 Rust 里生成，而不是继续交给脚本各自推导。
     // 这样 bind_addr、管理员口令和启动提示才能共享同一份真相，避免壳层和脚本打印出不同口径。
-    let (home_urls, lan_urls) = startup_banner_urls(bind_addr);
-    let admin_url = home_urls
-        .first()
-        .map(|url| format!("{url}admin"))
-        .unwrap_or_else(|| format!("http://127.0.0.1:{}/admin", bind_addr.port()));
+    let home_url = format!("http://{bind_addr}/");
 
     StartupBanner {
-        home_urls,
-        lan_urls,
-        admin_url,
+        home_urls: vec![home_url.clone()],
+        lan_urls: Vec::new(),
+        admin_url: format!("{home_url}admin"),
         admin_token: config.admin_token.clone(),
         admin_token_notice: config.admin_token_notice.clone(),
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn startup_banner_urls(bind_addr: SocketAddr) -> (Vec<String>, Vec<String>) {
-    let port = bind_addr.port();
-    let ip = bind_addr.ip();
-
-    if ip.is_unspecified() {
-        return (vec![format!("http://127.0.0.1:{port}/")], Vec::new());
-    }
-
-    if ip.is_loopback() {
-        return (vec![format!("http://{ip}:{port}/")], Vec::new());
-    }
-
-    let home_url = format_url_for_socket_addr(bind_addr);
-    (vec![home_url], Vec::new())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn format_url_for_socket_addr(addr: SocketAddr) -> String {
-    format_url_for_ip(addr.ip(), addr.port())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn format_url_for_ip(ip: std::net::IpAddr, port: u16) -> String {
-    if ip.is_ipv6() {
-        format!("http://[{ip}]:{port}/")
-    }
-    else {
-        format!("http://{ip}:{port}/")
     }
 }
 
