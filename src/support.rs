@@ -46,6 +46,16 @@ pub struct AppConfig {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartupBanner {
+    pub home_urls: Vec<String>,
+    pub lan_urls: Vec<String>,
+    pub admin_url: String,
+    pub admin_token: String,
+    pub admin_token_notice: Option<String>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("missing environment variable {0}")]
@@ -101,6 +111,108 @@ pub fn app_error_code(error: &AppError) -> &'static str {
 pub fn admin_token_fingerprint(token: &str) -> String {
     let digest = Sha256::digest(token.as_bytes());
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_startup_banner_from_bind_addr(
+    bind_addr: SocketAddr,
+    config: &AppConfig,
+) -> StartupBanner {
+    // 启动横幅的事实必须在 Rust 里生成，而不是继续交给脚本各自推导。
+    // 这样 bind_addr、管理员口令和启动提示才能共享同一份真相，避免壳层和脚本打印出不同口径。
+    let (home_urls, lan_urls) = startup_banner_urls(bind_addr);
+    let admin_url = home_urls
+        .first()
+        .map(|url| format!("{url}admin"))
+        .unwrap_or_else(|| format!("http://127.0.0.1:{}/admin", bind_addr.port()));
+
+    StartupBanner {
+        home_urls,
+        lan_urls,
+        admin_url,
+        admin_token: config.admin_token.clone(),
+        admin_token_notice: config.admin_token_notice.clone(),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn startup_banner_urls(bind_addr: SocketAddr) -> (Vec<String>, Vec<String>) {
+    let port = bind_addr.port();
+    let ip = bind_addr.ip();
+
+    if ip.is_unspecified() {
+        return (vec![format!("http://127.0.0.1:{port}/")], Vec::new());
+    }
+
+    if ip.is_loopback() {
+        return (vec![format!("http://{ip}:{port}/")], Vec::new());
+    }
+
+    let home_url = format_url_for_socket_addr(bind_addr);
+    (vec![home_url], Vec::new())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn format_url_for_socket_addr(addr: SocketAddr) -> String {
+    format_url_for_ip(addr.ip(), addr.port())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn format_url_for_ip(ip: std::net::IpAddr, port: u16) -> String {
+    if ip.is_ipv6() {
+        format!("http://[{ip}]:{port}/")
+    }
+    else {
+        format!("http://{ip}:{port}/")
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl StartupBanner {
+    pub fn render_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+
+        if let Some(home_url) = self.home_urls.first() {
+            lines.push(format!("==> 首页地址: {home_url}"));
+        }
+        else if let Some(lan_url) = self.lan_urls.first() {
+            lines.push(format!("==> 首页地址: {lan_url}"));
+        }
+
+        lines.push(format!("==> 管理入口: {}", self.admin_url));
+        lines.push(format!("==> 当前管理员口令: {}", self.admin_token));
+
+        if let Some(notice) = self.admin_token_notice.as_deref() {
+            lines.push(format!("==> {notice}"));
+        }
+
+        if !self.lan_urls.is_empty() {
+            let local_url = self.home_urls.first();
+            let lan_urls: Vec<&String> = if let Some(local_url) = local_url {
+                self.lan_urls.iter().filter(|url| *url != local_url).collect()
+            }
+            else {
+                self.lan_urls.iter().collect()
+            };
+
+            if !lan_urls.is_empty() {
+                lines.push("==> 局域网设备请访问:".to_string());
+                for url in lan_urls {
+                    lines.push(format!("   {url}"));
+                }
+                lines.push("==> 局域网管理入口:".to_string());
+                for url in self
+                    .lan_urls
+                    .iter()
+                    .filter(|url| Some(*url) != self.home_urls.first())
+                {
+                    lines.push(format!("   {url}admin"));
+                }
+            }
+        }
+
+        lines
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

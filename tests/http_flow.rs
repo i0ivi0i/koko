@@ -808,6 +808,39 @@ fn app_config_respects_admin_cookie_secure_override() {
 }
 
 #[test]
+fn startup_banner_renders_home_admin_token_and_notice() {
+    let banner = koko::support::StartupBanner {
+        home_urls: vec!["http://127.0.0.1:8080/".to_string()],
+        lan_urls: vec![],
+        admin_url: "http://127.0.0.1:8080/admin".to_string(),
+        admin_token: "admin-token".to_string(),
+        admin_token_notice: Some("首次启动已写入 config/koko.toml".to_string()),
+    };
+
+    let lines = banner.render_lines();
+
+    assert_eq!(lines[0], "==> 首页地址: http://127.0.0.1:8080/");
+    assert_eq!(lines[1], "==> 管理入口: http://127.0.0.1:8080/admin");
+    assert_eq!(lines[2], "==> 当前管理员口令: admin-token");
+    assert_eq!(lines[3], "==> 首次启动已写入 config/koko.toml");
+}
+
+#[test]
+fn startup_banner_keeps_admin_token_notice_from_app_config() {
+    let config = koko::support::AppConfig::load_for_test(
+        Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+        Some("127.0.0.1:8080"),
+        temp_config_file_path("startup-banner-notice"),
+        None,
+        None,
+    )
+    .unwrap();
+
+    let banner = koko::support::build_startup_banner_from_bind_addr(config.bind_addr, &config);
+    assert!(banner.admin_token_notice.is_some());
+}
+
+#[test]
 fn root_run_script_defaults_to_lan_accessible_bind_addr() {
     let _guard = env_lock();
     let powershell = powershell_exe_path();
