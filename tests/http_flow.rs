@@ -17,12 +17,12 @@ use koko::{
     http,
     support::{SystemClock, SystemIdGenerator},
 };
+use std::sync::{Mutex, OnceLock};
 use std::{
     env, fs,
     path::{Path, PathBuf},
     process::Command,
 };
-use std::sync::{Mutex, OnceLock};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -93,7 +93,7 @@ fn web_bootstrap_state_applies_backend_session_to_chat_state() {
 }
 
 #[tokio::test]
-async fn admin_panel_route_is_not_exposed_from_http_router() {
+async fn admin_entry_serves_frontend_shell() {
     let harness = HttpHarness::frontend_only();
 
     let response = harness
@@ -101,20 +101,27 @@ async fn admin_panel_route_is_not_exposed_from_http_router() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/admin/panel")
-                .header("x-admin-token", "local-admin-token")
+                .uri("/admin")
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("koko-web-shell"));
 }
 
 #[sqlx::test]
 async fn bootstrap_then_join_returns_room_snapshot(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let snapshot = join_room(&harness, &cookie, "a1234").await;
@@ -126,7 +133,7 @@ async fn bootstrap_then_join_returns_room_snapshot(pool: sqlx::PgPool) -> sqlx::
 
 #[sqlx::test]
 async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let joined = join_room(&harness, &cookie, "b1234").await;
@@ -156,7 +163,7 @@ async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sq
 async fn joined_rooms_endpoint_requires_bootstrapped_session(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -176,7 +183,7 @@ async fn joined_rooms_endpoint_requires_bootstrapped_session(
 
 #[sqlx::test]
 async fn joined_rooms_endpoint_returns_current_memberships(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let first = join_room(&harness, &cookie, "a1234").await;
@@ -209,7 +216,7 @@ async fn joined_rooms_endpoint_returns_current_memberships(pool: sqlx::PgPool) -
 async fn joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let joined = join_room(&harness, &cookie, "a1234").await;
@@ -241,7 +248,7 @@ async fn joined_rooms_endpoint_reads_koko_session_from_multi_cookie_headers(
 async fn joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_headers(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -265,7 +272,7 @@ async fn joined_rooms_endpoint_rejects_invalid_koko_session_in_mixed_cookie_head
 async fn room_search_endpoint_returns_case_insensitive_matches(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let joined = join_room(&harness, &cookie, "a1234").await;
@@ -539,7 +546,7 @@ fn default_frontend_paths_point_to_dioxus_public_output() {
 
 #[sqlx::test]
 async fn join_requires_bootstrapped_session(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let response = harness
         .router
@@ -568,7 +575,7 @@ async fn join_requires_bootstrapped_session(pool: sqlx::PgPool) -> sqlx::Result<
 async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let first_response = bootstrap_session_response(&harness, None).await;
     assert_eq!(first_response.status(), StatusCode::CREATED);
@@ -610,7 +617,7 @@ async fn bootstrap_session_sets_cookie_and_reuses_it_on_followup_request(
 async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await;
 
     let response = bootstrap_session_response(&harness, Some("koko_session=not-a-uuid")).await;
 
@@ -621,7 +628,8 @@ async fn bootstrap_session_tolerates_invalid_existing_koko_session_cookie(
 
 #[test]
 fn bootstrap_session_cookie_path_does_not_apply_admin_cookie_secure_yet() {
-    let http_source = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/http.rs")).unwrap();
+    let http_source =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/http.rs")).unwrap();
     assert!(!http_source.contains(".secure("));
 }
 
@@ -728,7 +736,10 @@ fn app_config_bootstraps_admin_token_into_config_file() {
     assert!(!config.admin_token.is_empty());
     assert!(config.admin_token_notice.is_some());
     let content = fs::read_to_string(&config_path).unwrap();
-    assert_eq!(content, format!("admin_token = \"{}\"\n", config.admin_token));
+    assert_eq!(
+        content,
+        format!("admin_token = \"{}\"\n", config.admin_token)
+    );
     remove_temp_config_root(&config_path);
 }
 

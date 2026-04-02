@@ -42,6 +42,8 @@ axum-extra = { version = "0.12.5", features = ["cookie"] }
 socketioxide = { version = "0.18.2", features = ["extensions"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
 tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tower-sessions = "0.14"
+tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
 tower-http = { version = "0.6.8", features = ["cors", "trace", "compression-gzip", "fs"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

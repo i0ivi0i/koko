@@ -220,7 +220,7 @@ async fn sender_receives_message_accepted_but_not_message_created() {
 async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let server = HttpHarness::new(pool).spawn().await;
+    let server = HttpHarness::new(pool).await.spawn().await;
     let room_code = format!("z{:04}", Uuid::now_v7().as_u128() % 10_000);
     let (_session, cookie) = server.bootstrap_session_with_cookie().await;
     let room = server.join_room(&cookie, &room_code).await;

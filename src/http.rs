@@ -1,30 +1,33 @@
 use std::path::{Path as FsPath, PathBuf};
+use std::sync::Arc;
 
 use axum::{
     Json, Router,
     extract::{Path as RoutePath, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{any, get, post},
 };
-use axum_extra::extract::{
-    CookieJar,
-    cookie::{Cookie, SameSite},
-};
+use axum_extra::extract::cookie::Cookie;
+use axum_extra::extract::CookieJar;
 use serde::Deserialize;
-use std::sync::Arc;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_sessions::{Expiry, Session, SessionManagerLayer, cookie::SameSite};
+use tower_sessions_sqlx_store::PostgresStore as AdminSessionStore;
 use uuid::Uuid;
 
 use crate::{
     app::{
-        AppError, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, bootstrap_anonymous_session,
-        join_or_create_room_by_code, list_joined_rooms, load_room_snapshot, search_rooms_by_code,
+        AdminLoginCommand, AdminSessionContext, AdminSessionPort, AdminSessionState, AppError,
+        Clock, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, bootstrap_anonymous_session,
+        get_admin_overview, get_admin_session, join_or_create_room_by_code, list_admin_rooms,
+        list_joined_rooms, load_room_snapshot, login_admin, logout_admin, search_rooms_by_code,
     },
     contract::{
-        AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult, RoomSnapshot,
+        AdminLoginRequest, AdminOverview, AdminRoomSummary, AdminSessionStatus,
+        JoinedRoomSummary, RoomSearchResult, RoomSnapshot,
     },
-    store::PgStore,
+    store::{ADMIN_SESSION_IDLE_TIMEOUT, PgStore},
     support,
 };
 
@@ -35,6 +38,15 @@ pub struct Module;
 struct HttpState {
     store: PgStore,
     admin_access: support::StaticAdminAccess,
+    admin_token_fingerprint: String,
+}
+
+#[derive(Debug, Clone)]
+struct HttpAdminSessionPort {
+    store: PgStore,
+    session: Session,
+    admin_token_fingerprint: String,
+    touch_last_seen: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,8 +59,27 @@ struct SearchRoomsParams {
     query: String,
 }
 
+#[derive(Debug, Deserialize, serde::Serialize)]
+struct ErrorPayload {
+    code: String,
+}
+
 pub const FRONTEND_DIST_DIR: &str = "dist/public";
 pub const FRONTEND_ASSET_DIR: &str = "dist/public/assets";
+pub const ADMIN_SESSION_COOKIE_NAME: &str = "koko_admin_session";
+const ADMIN_SESSION_MARKER_KEY: &str = "authenticated";
+
+pub type AdminSessionLayer = SessionManagerLayer<AdminSessionStore>;
+
+pub fn build_admin_session_layer(store: AdminSessionStore, secure: bool) -> AdminSessionLayer {
+    SessionManagerLayer::new(store)
+        .with_name(ADMIN_SESSION_COOKIE_NAME)
+        .with_http_only(true)
+        .with_same_site(SameSite::Lax)
+        .with_path("/")
+        .with_secure(secure)
+        .with_expiry(Expiry::OnInactivity(ADMIN_SESSION_IDLE_TIMEOUT))
+}
 
 pub fn api_router(store: PgStore, admin_token: String) -> Router {
     Router::new()
@@ -57,18 +88,20 @@ pub fn api_router(store: PgStore, admin_token: String) -> Router {
         .route("/rooms/search", get(search_rooms))
         .route("/rooms/join", post(join_room))
         .route("/rooms/{room_id}/snapshot", get(room_snapshot))
+        .route("/admin/session/login", post(admin_login))
+        .route("/admin/session", get(admin_session))
+        .route("/admin/session/logout", post(admin_logout))
         .route("/admin/overview", get(admin_overview))
         .route("/admin/rooms", get(admin_rooms))
         .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(HttpState {
             store,
-            admin_access: support::StaticAdminAccess::new(admin_token),
+            admin_access: support::StaticAdminAccess::new(admin_token.clone()),
+            admin_token_fingerprint: support::admin_token_fingerprint(&admin_token),
         })
 }
 
-pub fn app_router(
-    store: PgStore,
-    admin_token: String,
+pub fn frontend_shell_router(
     frontend_dist_dir: impl Into<PathBuf>,
     asset_dir: impl Into<PathBuf>,
 ) -> Router {
@@ -77,14 +110,15 @@ pub fn app_router(
     let wasm_dir = frontend_dist_dir.join("wasm");
 
     Router::new()
-        .nest("/api", api_router(store, admin_token))
+        .route("/api", any(frontend_reserved_not_found))
+        .route("/api/{*path}", any(frontend_reserved_not_found))
         .nest_service("/assets", ServeDir::new(asset_dir.into()))
         .nest_service("/wasm", ServeDir::new(wasm_dir))
         .route_service("/", ServeFile::new(index_file.clone()))
-        .route("/admin", get(frontend_reserved_not_found))
+        .route_service("/admin", ServeFile::new(index_file.clone()))
         .route("/admin/{*path}", get(frontend_reserved_not_found))
         .fallback_service(
-            // 非 API 深链接统一回到入口壳，静态资源由 /assets 与 /wasm 独立承接。
+            // 前端静态壳测试只验证入口与回退规则，不该硬走完整生产 router，否则会被真实 session/数据库装配误伤。
             ServeFile::new(index_file),
         )
 }
@@ -92,6 +126,7 @@ pub fn app_router(
 pub fn server_router(
     store: PgStore,
     admin_token: String,
+    admin_session_layer: AdminSessionLayer,
     frontend_dist_dir: impl Into<PathBuf>,
     asset_dir: impl Into<PathBuf>,
 ) -> Router {
@@ -102,7 +137,10 @@ pub fn server_router(
         support::SystemClock,
     ));
     crate::rt::install_realtime(&io, realtime);
-    app_router(store, admin_token, frontend_dist_dir, asset_dir).layer(socket_layer)
+
+    frontend_shell_router(frontend_dist_dir, asset_dir)
+        .nest("/api", api_router(store, admin_token).layer(admin_session_layer))
+        .layer(socket_layer)
 }
 
 pub fn default_frontend_dist_dir() -> PathBuf {
@@ -216,12 +254,64 @@ async fn room_snapshot(
     Ok(Json(snapshot))
 }
 
+async fn admin_login(
+    State(state): State<HttpState>,
+    session: Session,
+    Json(request): Json<AdminLoginRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorPayload>)> {
+    let admin_session_port = build_http_admin_session_port(&state, session.clone(), true);
+    login_admin(
+        &state.admin_access,
+        &admin_session_port,
+        AdminLoginCommand {
+            token: request.token,
+        },
+    )
+    .await
+    .map_err(map_http_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn admin_session(
+    State(state): State<HttpState>,
+    session: Session,
+) -> Result<Json<AdminSessionStatus>, (StatusCode, Json<ErrorPayload>)> {
+    let Some(context) = resolve_admin_session_context(&session)? else {
+        return Ok(Json(unauthenticated_admin_session_status()));
+    };
+    let admin_session_port = build_http_admin_session_port(&state, session, false);
+    let status = get_admin_session(
+        &admin_session_port,
+        &context,
+        admin_session_idle_timeout_seconds(),
+    )
+    .await
+    .map_err(map_http_error)?;
+    Ok(Json(status))
+}
+
+async fn admin_logout(
+    State(state): State<HttpState>,
+    session: Session,
+) -> Result<StatusCode, (StatusCode, Json<ErrorPayload>)> {
+    if let Some(context) = resolve_admin_session_context(&session)? {
+        let admin_session_port = build_http_admin_session_port(&state, session.clone(), true);
+        logout_admin(&admin_session_port, &context)
+            .await
+            .map_err(map_http_error)?;
+    }
+    session.flush().await.map_err(map_session_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn admin_overview(
     State(state): State<HttpState>,
-    headers: HeaderMap,
+    session: Session,
 ) -> Result<Json<AdminOverview>, (StatusCode, Json<ErrorPayload>)> {
-    authorize_admin_token(&state.admin_access, &headers).await?;
-    let overview = crate::app::AdminOverviewPort::get_admin_overview(&state.store)
+    // Session/cookie 只属于 HTTP adapter；真正“这个后台会话是否有效”的裁决仍必须回 application + store。
+    let context = require_admin_session_context(&session)?;
+    let admin_session_port = build_http_admin_session_port(&state, session, true);
+    let overview = get_admin_overview(&admin_session_port, &state.store, context)
         .await
         .map_err(map_http_error)?;
     Ok(Json(overview))
@@ -229,48 +319,125 @@ async fn admin_overview(
 
 async fn admin_rooms(
     State(state): State<HttpState>,
-    headers: HeaderMap,
+    session: Session,
 ) -> Result<Json<Vec<AdminRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
-    authorize_admin_token(&state.admin_access, &headers).await?;
-    let rooms = crate::app::AdminRoomsPort::list_admin_rooms(&state.store)
+    // 这里继续复用 application 用例做后台授权，避免 handler 自己判断“已登录/过期/被顶掉”而把业务真相散落回 adapter。
+    let context = require_admin_session_context(&session)?;
+    let admin_session_port = build_http_admin_session_port(&state, session, true);
+    let rooms = list_admin_rooms(&admin_session_port, &state.store, context)
         .await
         .map_err(map_http_error)?;
     Ok(Json(rooms))
 }
 
-#[derive(Debug, Deserialize, serde::Serialize)]
-struct ErrorPayload {
-    code: String,
-}
-
-fn resolve_admin_token(
-    headers: &HeaderMap,
-) -> Result<&str, (StatusCode, Json<ErrorPayload>)> {
-    headers
-        .get("x-admin-token")
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(invalid_admin_token_error)
-}
-
-async fn authorize_admin_token(
-    admin_access: &support::StaticAdminAccess,
-    headers: &HeaderMap,
-) -> Result<(), (StatusCode, Json<ErrorPayload>)> {
-    let token = resolve_admin_token(headers)?;
-    let authorized = crate::app::AdminCredentialPort::verify_admin_token(admin_access, token)
-        .await
-        .map_err(map_http_error)?;
-    if authorized {
-        Ok(())
-    } else {
-        Err(invalid_admin_token_error())
+impl HttpAdminSessionPort {
+    fn new(
+        store: PgStore,
+        session: Session,
+        admin_token_fingerprint: String,
+        touch_last_seen: bool,
+    ) -> Self {
+        Self {
+            store,
+            session,
+            admin_token_fingerprint,
+            touch_last_seen,
+        }
     }
+}
+
+impl AdminSessionPort for HttpAdminSessionPort {
+    async fn create_admin_session(&self) -> Result<AdminSessionContext, AppError> {
+        if self.session.id().is_some() {
+            self.session
+                .cycle_id()
+                .await
+                .map_err(|_| AppError::DependencyFailure)?;
+        }
+        self.session
+            .insert(ADMIN_SESSION_MARKER_KEY, true)
+            .await
+            .map_err(|_| AppError::DependencyFailure)?;
+        self.session.save().await.map_err(|_| AppError::DependencyFailure)?;
+
+        let context = require_admin_session_context_from_app(&self.session)?;
+        self.store
+            .replace_active_admin_session(
+                context.session_id,
+                &self.admin_token_fingerprint,
+                support::SystemClock.now(),
+            )
+            .await?;
+
+        Ok(context)
+    }
+
+    async fn read_admin_session(
+        &self,
+        context: &AdminSessionContext,
+    ) -> Result<AdminSessionState, AppError> {
+        self.store
+            .read_admin_session_state(
+                context.session_id,
+                &self.admin_token_fingerprint,
+                support::SystemClock.now(),
+                self.touch_last_seen,
+            )
+            .await
+    }
+
+    async fn revoke_admin_session(
+        &self,
+        context: &AdminSessionContext,
+    ) -> Result<(), AppError> {
+        self.store.clear_admin_session(context.session_id).await
+    }
+}
+
+fn build_http_admin_session_port(
+    state: &HttpState,
+    session: Session,
+    touch_last_seen: bool,
+) -> HttpAdminSessionPort {
+    HttpAdminSessionPort::new(
+        state.store.clone(),
+        session,
+        state.admin_token_fingerprint.clone(),
+        touch_last_seen,
+    )
 }
 
 fn resolve_session_id(jar: &CookieJar) -> Result<Uuid, (StatusCode, Json<ErrorPayload>)> {
     jar.get(support::SESSION_COOKIE_NAME)
         .and_then(|cookie| Uuid::parse_str(cookie.value()).ok())
         .ok_or_else(invalid_session_error)
+}
+
+fn resolve_admin_session_context(
+    session: &Session,
+) -> Result<Option<AdminSessionContext>, (StatusCode, Json<ErrorPayload>)> {
+    let Some(session_id) = session.id() else {
+        return Ok(None);
+    };
+    Ok(Some(AdminSessionContext::new(admin_session_uuid(session_id))))
+}
+
+fn require_admin_session_context(
+    session: &Session,
+) -> Result<AdminSessionContext, (StatusCode, Json<ErrorPayload>)> {
+    resolve_admin_session_context(session)?
+        .ok_or_else(|| map_http_error(AppError::AdminSessionRequired))
+}
+
+fn require_admin_session_context_from_app(session: &Session) -> Result<AdminSessionContext, AppError> {
+    let Some(session_id) = session.id() else {
+        return Err(AppError::AdminSessionRequired);
+    };
+    Ok(AdminSessionContext::new(admin_session_uuid(session_id)))
+}
+
+fn admin_session_uuid(session_id: tower_sessions::session::Id) -> Uuid {
+    Uuid::from_u128(session_id.0 as u128)
 }
 
 fn invalid_session_error() -> (StatusCode, Json<ErrorPayload>) {
@@ -283,10 +450,6 @@ fn invalid_session_error() -> (StatusCode, Json<ErrorPayload>) {
             .to_string(),
         }),
     )
-}
-
-fn invalid_admin_token_error() -> (StatusCode, Json<ErrorPayload>) {
-    map_http_error(AppError::InvalidAdminToken)
 }
 
 fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {
@@ -308,4 +471,19 @@ fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {
             code: support::app_error_code(&error).to_string(),
         }),
     )
+}
+
+fn map_session_error(_: tower_sessions::session::Error) -> (StatusCode, Json<ErrorPayload>) {
+    map_http_error(AppError::DependencyFailure)
+}
+
+fn admin_session_idle_timeout_seconds() -> u64 {
+    ADMIN_SESSION_IDLE_TIMEOUT.whole_seconds() as u64
+}
+
+fn unauthenticated_admin_session_status() -> AdminSessionStatus {
+    AdminSessionStatus {
+        authenticated: false,
+        idle_timeout_seconds: admin_session_idle_timeout_seconds(),
+    }
 }

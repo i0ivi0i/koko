@@ -4,6 +4,7 @@ use axum::Router;
 use koko::contract::{BootstrapSession, RoomSnapshot};
 use sqlx::PgPool;
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
+use tower_sessions_sqlx_store::PostgresStore;
 
 use koko::{http, store::PgStore};
 
@@ -23,17 +24,33 @@ pub struct RunningHttpHarness {
 
 #[allow(dead_code)]
 impl HttpHarness {
-    pub fn new(pool: PgPool) -> Self {
-        Self::assemble(PgStore::new(pool))
+    pub async fn new(pool: PgPool) -> Self {
+        let store = PgStore::new(pool.clone());
+        let session_store = PostgresStore::new(pool);
+        session_store.migrate().await.unwrap();
+        let session_layer = http::build_admin_session_layer(session_store, false);
+        Self::assemble_server(store, session_layer)
     }
 
     pub fn frontend_only() -> Self {
-        // Keep router wiring identical while ensuring static/fallback tests never touch Postgres.
+        // 这里故意只装静态壳，避免前端入口/回退测试被真实 session store 与数据库初始化牵连。
         let pool = PgPool::connect_lazy(FRONTEND_ONLY_DATABASE_URL).unwrap();
-        Self::assemble(PgStore::new(pool))
+        let store = PgStore::new(pool);
+        let frontend_fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("http_support")
+            .join("fixtures")
+            .join("frontend");
+        let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let router = http::frontend_shell_router(frontend_fixture_dir, asset_dir);
+
+        Self { router, store }
     }
 
-    fn assemble(store: PgStore) -> Self {
+    fn assemble_server(
+        store: PgStore,
+        session_layer: http::AdminSessionLayer,
+    ) -> Self {
         let frontend_fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
             .join("http_support")
@@ -42,7 +59,8 @@ impl HttpHarness {
         let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
         let router = http::server_router(
             store.clone(),
-            "local-admin-token".to_string(),
+            TEST_ADMIN_TOKEN.to_string(),
+            session_layer,
             frontend_fixture_dir,
             asset_dir,
         );
@@ -80,6 +98,10 @@ impl RunningHttpHarness {
         &self.base_url
     }
 
+    pub fn client(&self) -> &reqwest::Client {
+        &self.client
+    }
+
     pub async fn bootstrap_session_with_cookie(&self) -> (BootstrapSession, String) {
         let response = self
             .client
@@ -103,6 +125,29 @@ impl RunningHttpHarness {
         let session = response.json().await.unwrap();
 
         (session, cookie)
+    }
+
+    pub async fn admin_login_with_cookie(&self) -> String {
+        let response = self
+            .client
+            .post(format!("{}/api/admin/session/login", self.base_url()))
+            .json(&serde_json::json!({ "token": TEST_ADMIN_TOKEN }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), reqwest::StatusCode::NO_CONTENT);
+
+        response
+            .headers()
+            .get(reqwest::header::SET_COOKIE)
+            .expect("admin login should set a reusable admin session cookie")
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string()
     }
 
     pub async fn join_room(&self, cookie: &str, room_code: &str) -> RoomSnapshot {
@@ -130,3 +175,4 @@ impl RunningHttpHarness {
 }
 
 const FRONTEND_ONLY_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:1/koko_unused";
+pub const TEST_ADMIN_TOKEN: &str = "local-admin-token";

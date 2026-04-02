@@ -17,7 +17,7 @@ use crate::{
 
 const ADMIN_SESSION_TRUTH_LOCK_NAME: &str = "admin_session_truth";
 const ADMIN_SESSION_TRUTH_LOCK_NAMESPACE: i32 = 1;
-const ADMIN_SESSION_IDLE_TIMEOUT: time::Duration = time::Duration::days(3);
+pub const ADMIN_SESSION_IDLE_TIMEOUT: time::Duration = time::Duration::days(3);
 
 #[derive(Debug, Clone)]
 pub struct PgStore {

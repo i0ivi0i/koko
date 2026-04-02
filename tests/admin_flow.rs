@@ -3,21 +3,17 @@ mod http_support;
 use std::sync::Arc;
 
 use axum::{
-    body::{Body, to_bytes},
-    http::{
-        Request, StatusCode,
-        header::{COOKIE, SET_COOKIE},
-    },
+    body::Body,
+    http::{Request, StatusCode},
 };
 use chrono::{TimeZone, Utc};
 use http_support::HttpHarness;
 use koko::{
     admin::AdminPanelState,
     app::{
-        AdminLoginCommand, AdminSessionPort, AdminSessionState, SendTextMessageInput, login_admin,
-        send_text_message,
+        AdminLoginCommand, AdminSessionPort, AdminSessionState, login_admin,
     },
-    contract::{AdminOverview, AdminRoomSummary, AppErrorCode, BootstrapSession},
+    contract::{AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode},
     store::PgStore,
 };
 use tower::ServiceExt;
@@ -104,53 +100,47 @@ async fn login_admin_rejects_invalid_token() {
 }
 
 #[sqlx::test]
-async fn admin_rooms_returns_live_room_summaries(pool: sqlx::PgPool) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+async fn admin_login_cookie_unlocks_admin_overview_and_rooms(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await.spawn().await;
 
-    let (first_session, first_cookie) = bootstrap_session_with_cookie(&harness).await;
-    let (_second_session, second_cookie) = bootstrap_session_with_cookie(&harness).await;
-    let room = join_room(&harness, &first_cookie, "e1234").await;
-    let _ = join_room(&harness, &second_cookie, "e1234").await;
+    let (_first_session, first_cookie) = harness.bootstrap_session_with_cookie().await;
+    let (_second_session, second_cookie) = harness.bootstrap_session_with_cookie().await;
+    let _ = harness.join_room(&first_cookie, "e1234").await;
+    let _ = harness.join_room(&second_cookie, "e1234").await;
 
-    let event = send_text_message(
-        &harness.store,
-        &harness.store,
-        &harness.store,
-        &FixedIdGenerator(Uuid::from_u128(29)),
-        &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 13, 0, 0).unwrap()),
-        SendTextMessageInput {
-            room_id: room.room_id,
-            session_id: first_session.session_id,
-            body: "room summary body".to_string(),
-            client_message_id: None,
-        },
-    )
-    .await
-    .unwrap();
-    assert!(matches!(event, koko::contract::AppEvent::MessageCreated(_)));
+    let admin_cookie = harness.admin_login_with_cookie().await;
 
-    let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/api/admin/rooms")
-                .header("x-admin-token", "local-admin-token")
-                .body(Body::empty())
-                .unwrap(),
-        )
+    let overview_response = harness
+        .client()
+        .get(format!("{}/api/admin/overview", harness.base_url()))
+        .header(reqwest::header::COOKIE, &admin_cookie)
+        .send()
         .await
         .unwrap();
+    assert_eq!(overview_response.status(), reqwest::StatusCode::OK);
+    let overview: AdminOverview = overview_response.json().await.unwrap();
+    assert_eq!(overview.room_count, 1);
+    assert_eq!(overview.member_count, 2);
+    assert_eq!(overview.message_count, 0);
 
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let rooms: Vec<AdminRoomSummary> =
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let rooms_response = harness
+        .client()
+        .get(format!("{}/api/admin/rooms", harness.base_url()))
+        .header(reqwest::header::COOKIE, admin_cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rooms_response.status(), reqwest::StatusCode::OK);
+    let rooms: Vec<AdminRoomSummary> = rooms_response.json().await.unwrap();
     assert_eq!(rooms.len(), 1);
     assert_eq!(rooms[0].room_code, "E1234");
     assert_eq!(rooms[0].member_count, 2);
-    assert_eq!(rooms[0].message_count, 1);
-    assert_eq!(rooms[0].latest_preview, "room summary body");
+    assert_eq!(rooms[0].message_count, 0);
+    assert_eq!(rooms[0].latest_preview, "");
+
+    harness.shutdown().await;
     Ok(())
 }
 
@@ -164,7 +154,6 @@ async fn admin_panel_route_is_not_exposed_anymore() {
         .oneshot(
             Request::builder()
                 .uri("/api/admin/panel")
-                .header("x-admin-token", "local-admin-token")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -175,92 +164,66 @@ async fn admin_panel_route_is_not_exposed_anymore() {
 }
 
 #[sqlx::test]
-async fn admin_overview_returns_room_member_and_message_counts(
+async fn admin_logout_flushes_cookie_back_to_login_required(
     pool: sqlx::PgPool,
 ) -> sqlx::Result<()> {
-    let harness = HttpHarness::new(pool);
+    let harness = HttpHarness::new(pool).await.spawn().await;
+    let admin_cookie = harness.admin_login_with_cookie().await;
 
-    let (first_session, first_cookie) = bootstrap_session_with_cookie(&harness).await;
-    let (_second_session, second_cookie) = bootstrap_session_with_cookie(&harness).await;
-    let room = join_room(&harness, &first_cookie, "d1234").await;
-    let _ = join_room(&harness, &second_cookie, "d1234").await;
-
-    let event = send_text_message(
-        &harness.store,
-        &harness.store,
-        &harness.store,
-        &FixedIdGenerator(Uuid::from_u128(9)),
-        &FixedClock(Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()),
-        SendTextMessageInput {
-            room_id: room.room_id,
-            session_id: first_session.session_id,
-            body: "hello admin".to_string(),
-            client_message_id: None,
-        },
-    )
-    .await
-    .unwrap();
-    assert!(matches!(event, koko::contract::AppEvent::MessageCreated(_)));
-
-    let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/api/admin/overview")
-                .header("x-admin-token", "local-admin-token")
-                .body(Body::empty())
-                .unwrap(),
-        )
+    let logout_response = harness
+        .client()
+        .post(format!("{}/api/admin/session/logout", harness.base_url()))
+        .header(reqwest::header::COOKIE, &admin_cookie)
+        .send()
         .await
         .unwrap();
+    assert_eq!(logout_response.status(), reqwest::StatusCode::NO_CONTENT);
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status_response = harness
+        .client()
+        .get(format!("{}/api/admin/session", harness.base_url()))
+        .header(reqwest::header::COOKIE, &admin_cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(status_response.status(), reqwest::StatusCode::OK);
+    let status: AdminSessionStatus = status_response.json().await.unwrap();
+    assert!(!status.authenticated);
 
-    let overview: AdminOverview =
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    assert_eq!(overview.room_count, 1);
-    assert_eq!(overview.member_count, 2);
-    assert_eq!(overview.message_count, 1);
+    let overview_response = harness
+        .client()
+        .get(format!("{}/api/admin/overview", harness.base_url()))
+        .header(reqwest::header::COOKIE, admin_cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(overview_response.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let payload: serde_json::Value = overview_response.json().await.unwrap();
+    assert_eq!(payload["code"], "admin_session_required");
+
+    harness.shutdown().await;
     Ok(())
 }
 
-#[tokio::test]
-async fn admin_overview_requires_admin_token() {
-    let harness = HttpHarness::frontend_only();
+#[sqlx::test]
+async fn admin_overview_requires_backend_session_cookie(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await.spawn().await;
 
     let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/api/admin/overview")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .client()
+        .get(format!("{}/api/admin/overview", harness.base_url()))
+        .send()
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
+    assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let payload: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(payload["code"], "admin_session_required");
 
-#[tokio::test]
-async fn admin_rooms_requires_admin_token() {
-    let harness = HttpHarness::frontend_only();
-
-    let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/api/admin/rooms")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    harness.shutdown().await;
+    Ok(())
 }
 
 #[sqlx::test]
@@ -554,84 +517,6 @@ async fn concurrent_admin_logins_leave_only_one_active_session(
         .await?;
     assert_eq!(truth_rows, 1);
     Ok(())
-}
-
-async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
-    let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/session/bootstrap")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    let cookie = response
-        .headers()
-        .get(SET_COOKIE)
-        .expect("bootstrap should set a reusable session cookie")
-        .to_str()
-        .unwrap()
-        .split(';')
-        .next()
-        .unwrap()
-        .to_string();
-    let session =
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-
-    (session, cookie)
-}
-
-async fn join_room(
-    harness: &HttpHarness,
-    cookie: &str,
-    room_code: &str,
-) -> koko::contract::RoomSnapshot {
-    let response = harness
-        .router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/rooms/join")
-                .header("content-type", "application/json")
-                .header(COOKIE, cookie)
-                .body(Body::from(
-                    serde_json::json!({
-                        "room_code": room_code,
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
-}
-
-struct FixedIdGenerator(Uuid);
-
-impl koko::app::IdGenerator for FixedIdGenerator {
-    fn next_message_id(&self) -> Uuid {
-        self.0
-    }
-}
-
-struct FixedClock(chrono::DateTime<Utc>);
-
-impl koko::app::Clock for FixedClock {
-    fn now(&self) -> chrono::DateTime<Utc> {
-        self.0
-    }
 }
 
 fn fixed_admin_time() -> chrono::DateTime<Utc> {
