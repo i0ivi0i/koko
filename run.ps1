@@ -194,6 +194,19 @@ function Write-ChildProcessOutput {
     }
 }
 
+function Start-ChildProcess {
+    param(
+        [pscustomobject]$Spec,
+        [hashtable]$StartProcessArgs
+    )
+
+    if ($Spec.ReplayOutput) {
+        return Start-Process $Spec.FilePath @StartProcessArgs -Wait
+    }
+
+    return Start-Process $Spec.FilePath @StartProcessArgs
+}
+
 # 脚本入口：这里只负责准备运行环境，启动语义真相应由 Rust 子进程输出。
 Push-Location $repoRoot
 try {
@@ -277,13 +290,13 @@ try {
         $startProcessArgs.RedirectStandardError = $childProcessSpec.StderrLog
     }
 
+    $serverProcess = Start-ChildProcess -Spec $childProcessSpec -StartProcessArgs $startProcessArgs
+
     if ($childProcessSpec.ReplayOutput) {
-        $serverProcess = Start-Process $childProcessSpec.FilePath @startProcessArgs -Wait
         Write-ChildProcessOutput -StdoutLog $childProcessSpec.StdoutLog -StderrLog $childProcessSpec.StderrLog
         exit [int]$serverProcess.ExitCode
     }
     else {
-        $serverProcess = Start-Process $childProcessSpec.FilePath @startProcessArgs
         if (-not (Wait-ForServerReady -Url $appUrl -Process $serverProcess)) {
             throw "Koko 没能成功启动。请先检查 Rust 子进程的输出，再确认数据库连接和端口占用。"
         }

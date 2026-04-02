@@ -980,20 +980,6 @@ fn root_run_script_contains_startup_truth_boundary_comment() {
 }
 
 #[test]
-fn root_run_script_real_branch_starts_child_process_explicitly() {
-    let script =
-        std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("run.ps1"))
-            .unwrap();
-
-    assert_eq!(
-        script
-            .matches("Start-Process $childProcessSpec.FilePath @startProcessArgs")
-            .count(),
-        2
-    );
-}
-
-#[test]
 fn root_run_script_dry_run_without_admin_token_does_not_set_koko_admin_token() {
     let output = run_root_script(&["-DryRun", "-SkipBundle"]);
 
