@@ -18,7 +18,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let router = koko::http::server_router(
         store,
         config.admin_token.clone(),
-        config.admin_cookie_secure,
         koko::http::default_frontend_dist_dir(),
         koko::http::default_frontend_asset_dir(),
     );
