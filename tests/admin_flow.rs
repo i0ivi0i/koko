@@ -153,7 +153,7 @@ async fn admin_logout_flushes_cookie_back_to_login_required(
         .send()
         .await
         .unwrap();
-    assert_eq!(logout_response.status(), reqwest::StatusCode::NO_CONTENT);
+    assert_eq!(logout_response.status(), reqwest::StatusCode::OK);
 
     let status_response = harness
         .client()

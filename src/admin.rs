@@ -37,7 +37,6 @@ async fn load_admin_overview(admin_token: String) -> Result<AdminOverview, Strin
     let url = web::resolve_shell_api_url(&web::browser_location()?, ADMIN_OVERVIEW_PATH)?;
     client
         .get(url)
-        .header("x-admin-token", admin_token)
         .send()
         .await
         .map_err(|error| error.to_string())?
@@ -58,7 +57,6 @@ async fn load_admin_rooms(admin_token: String) -> Result<Vec<AdminRoomSummary>, 
     let url = web::resolve_shell_api_url(&web::browser_location()?, ADMIN_ROOMS_PATH)?;
     client
         .get(url)
-        .header("x-admin-token", admin_token)
         .send()
         .await
         .map_err(|error| error.to_string())?

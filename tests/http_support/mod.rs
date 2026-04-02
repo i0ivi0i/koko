@@ -136,7 +136,7 @@ impl RunningHttpHarness {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), reqwest::StatusCode::NO_CONTENT);
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
 
         response
             .headers()

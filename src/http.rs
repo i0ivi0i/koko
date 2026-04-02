@@ -269,7 +269,7 @@ async fn admin_login(
     )
     .await
     .map_err(map_http_error)?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(StatusCode::OK)
 }
 
 async fn admin_session(
@@ -301,7 +301,7 @@ async fn admin_logout(
             .map_err(map_http_error)?;
     }
     session.flush().await.map_err(map_session_error)?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(StatusCode::OK)
 }
 
 async fn admin_overview(
