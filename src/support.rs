@@ -1,5 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::{
+    collections::BTreeSet,
     convert::Infallible,
     env, fs, io,
     net::{IpAddr, SocketAddr},
@@ -7,6 +8,8 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
+#[cfg(not(target_arch = "wasm32"))]
+use if_addrs::Interface;
 use sha2::{Digest, Sha256};
 #[cfg(not(target_arch = "wasm32"))]
 use thiserror::Error;
@@ -53,6 +56,17 @@ pub struct StartupBanner {
     pub admin_url: String,
     pub admin_token: String,
     pub admin_token_notice: Option<String>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StartupLanAddressCandidate {
+    pub display_name: String,
+    pub system_name: Option<String>,
+    pub ip: IpAddr,
+    pub is_up: bool,
+    pub is_loopback_interface: bool,
+    pub is_tunnel_interface: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -118,18 +132,64 @@ pub fn build_startup_banner_from_bind_addr(
     bind_addr: SocketAddr,
     config: &AppConfig,
 ) -> StartupBanner {
+    let lan_candidates = discover_startup_banner_lan_candidates().unwrap_or_default();
+    build_startup_banner_from_bind_addr_with_lan_candidates(bind_addr, config, &lan_candidates)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn build_startup_banner_from_bind_addr_with_lan_candidates(
+    bind_addr: SocketAddr,
+    config: &AppConfig,
+    lan_candidates: &[StartupLanAddressCandidate],
+) -> StartupBanner {
     // 启动横幅的事实必须在 Rust 里生成，而不是继续交给脚本各自推导。
     // 这样 bind_addr、管理员口令和启动提示才能共享同一份真相，避免壳层和脚本打印出不同口径。
-    // 当前任务只承接首页、管理入口、口令和提示；LAN 展示留给后续任务，因此这里只填单个首页 URL。
+    // 局域网地址只补启动展示，不反向影响 bind/config 真相链，也不沉淀成新的网络发现层。
     let home_url = startup_banner_home_url(bind_addr);
+    let lan_urls = collect_startup_banner_lan_urls(bind_addr, lan_candidates);
 
     StartupBanner {
         home_urls: vec![home_url.clone()],
-        lan_urls: Vec::new(),
+        lan_urls,
         admin_url: format!("{home_url}admin"),
         admin_token: config.admin_token.clone(),
         admin_token_notice: config.admin_token_notice.clone(),
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_startup_banner_lan_urls(
+    bind_addr: SocketAddr,
+    lan_candidates: &[StartupLanAddressCandidate],
+) -> Vec<String> {
+    if !bind_addr.ip().is_unspecified() {
+        return Vec::new();
+    }
+
+    let port = bind_addr.port();
+    let mut urls = BTreeSet::new();
+
+    for candidate in lan_candidates {
+        if !candidate.is_up
+            || candidate.is_loopback_interface
+            || candidate.is_tunnel_interface
+            || startup_banner_interface_name_matches_blocklist(candidate)
+        {
+            continue;
+        }
+
+        let IpAddr::V4(ipv4) = candidate.ip else {
+            continue;
+        };
+
+        if ipv4.is_loopback() || ipv4.is_link_local() {
+            continue;
+        }
+
+        urls.insert(format!("http://{ipv4}:{port}/"));
+    }
+
+    urls.into_iter().collect()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -221,6 +281,70 @@ impl StartupBanner {
 
         lines
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<Interface> for StartupLanAddressCandidate {
+    fn from(interface: Interface) -> Self {
+        let ip = interface.ip();
+        let is_up = interface.is_oper_up();
+        let is_loopback_interface = interface.is_loopback();
+        #[cfg(windows)]
+        let system_name = Some(interface.adapter_name.clone());
+        #[cfg(not(windows))]
+        let system_name = None;
+
+        Self {
+            display_name: interface.name,
+            system_name,
+            ip,
+            is_up,
+            is_loopback_interface,
+            // 标准库没有跨平台网卡枚举；对比过 `network-interface` 和 `if-addrs` 后，
+            // 这里只有 `if-addrs` 同时暴露 oper status、loopback 判断和 Windows adapter_name，
+            // 因此选它做启动展示补齐。它公开的 `is_p2p()` 在多平台上会把 PPP 和 tunnel 混在一起，
+            // 超出本次 spec 允许的过滤范围，所以这里默认不把 point-to-point 直接当 tunnel。
+            is_tunnel_interface: false,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn discover_startup_banner_lan_candidates() -> io::Result<Vec<StartupLanAddressCandidate>> {
+    // 这里的网卡枚举只服务启动横幅展示补齐，失败时退化为“不打印 LAN 列表”。
+    // 启动真相仍由 bind 地址决定，不让可选展示逻辑反客为主影响 ready 链。
+    if_addrs::get_if_addrs().map(|interfaces| interfaces.into_iter().map(Into::into).collect())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn startup_banner_interface_name_matches_blocklist(
+    candidate: &StartupLanAddressCandidate,
+) -> bool {
+    // 这些关键字只服务启动横幅的展示去噪，避免把容器/虚拟网卡误当成对外访问提示。
+    // 它们不是新的网络发现真相，更不能被别处复用成“系统网络策略”。
+    const BLOCKED_KEYWORDS: [&str; 10] = [
+        "docker",
+        "container",
+        "veth",
+        "hyper-v",
+        "vethernet",
+        "wsl",
+        "vmware",
+        "virtualbox",
+        "tailscale",
+        "zerotier",
+    ];
+
+    let display_name = candidate.display_name.to_ascii_lowercase();
+    let system_name = candidate
+        .system_name
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    BLOCKED_KEYWORDS
+        .iter()
+        .any(|keyword| display_name.contains(keyword) || system_name.contains(keyword))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -464,4 +588,159 @@ fn write_admin_token_config(config_path: &Path, admin_token: &str) -> Result<(),
             source,
         }
     })
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::{
+        AppConfig, StartupLanAddressCandidate, build_startup_banner_from_bind_addr_with_lan_candidates,
+        collect_startup_banner_lan_urls,
+    };
+    use std::{
+        env, fs,
+        net::{IpAddr, Ipv4Addr, Ipv6Addr},
+        path::{Path, PathBuf},
+    };
+    use uuid::Uuid;
+
+    #[test]
+    fn startup_banner_prefers_localhost_for_unspecified_ipv4_bind() {
+        let banner = build_startup_banner_from_bind_addr_with_lan_candidates(
+            "0.0.0.0:8080".parse().unwrap(),
+            &sample_startup_config(),
+            &sample_lan_candidates(),
+        );
+
+        assert_eq!(banner.home_urls[0], "http://127.0.0.1:8080/");
+        assert_eq!(
+            banner.lan_urls,
+            vec![
+                "http://10.0.0.9:8080/".to_string(),
+                "http://10.8.0.2:8080/".to_string(),
+                "http://192.168.1.20:8080/".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn startup_banner_prefers_loopback_v6_for_unspecified_ipv6_bind() {
+        let banner = build_startup_banner_from_bind_addr_with_lan_candidates(
+            "[::]:8080".parse().unwrap(),
+            &sample_startup_config(),
+            &sample_lan_candidates(),
+        );
+
+        assert_eq!(banner.home_urls[0], "http://[::1]:8080/");
+        assert_eq!(
+            banner.lan_urls,
+            vec![
+                "http://10.0.0.9:8080/".to_string(),
+                "http://10.8.0.2:8080/".to_string(),
+                "http://192.168.1.20:8080/".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn startup_banner_filters_and_sorts_lan_ipv4_candidates_per_spec() {
+        let urls = collect_startup_banner_lan_urls(
+            "0.0.0.0:8080".parse().unwrap(),
+            &sample_lan_candidates(),
+        );
+
+        assert_eq!(
+            urls,
+            vec![
+                "http://10.0.0.9:8080/".to_string(),
+                "http://10.8.0.2:8080/".to_string(),
+                "http://192.168.1.20:8080/".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn startup_banner_skips_lan_urls_for_explicit_bind_host() {
+        let urls = collect_startup_banner_lan_urls(
+            "192.168.1.88:8080".parse().unwrap(),
+            &sample_lan_candidates(),
+        );
+
+        assert!(urls.is_empty());
+    }
+
+    fn sample_startup_config() -> AppConfig {
+        let config_path = temp_config_file_path("support-startup-banner-sample");
+        let _cleanup = TempConfigRootGuard::new(config_path.clone());
+        AppConfig::load_for_test(
+            Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
+            Some("127.0.0.1:8080"),
+            config_path,
+            Some("local-admin-token"),
+            None,
+        )
+        .unwrap()
+    }
+
+    fn sample_lan_candidates() -> Vec<StartupLanAddressCandidate> {
+        vec![
+            lan_candidate("Wi-Fi", Some("intel-wifi"), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)), true, false, false),
+            lan_candidate("Ethernet", Some("usb-lan"), IpAddr::V4(Ipv4Addr::new(10, 0, 0, 9)), true, false, false),
+            lan_candidate("Wi-Fi Duplicate", Some("intel-wifi-2"), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)), true, false, false),
+            lan_candidate("Loopback Pseudo-Interface 1", Some("loopback"), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), true, true, false),
+            lan_candidate("Ethernet Link Local", Some("usb-lan-2"), IpAddr::V4(Ipv4Addr::new(169, 254, 12, 34)), true, false, false),
+            lan_candidate("Docker Desktop", Some("docker0"), IpAddr::V4(Ipv4Addr::new(172, 17, 0, 1)), true, false, false),
+            lan_candidate("vEthernet (WSL)", Some("wsl-switch"), IpAddr::V4(Ipv4Addr::new(172, 25, 160, 1)), true, false, false),
+            lan_candidate("Ethernet Down", Some("rtl8168"), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 30)), false, false, false),
+            lan_candidate("PPP Adapter", Some("wan-miniport"), IpAddr::V4(Ipv4Addr::new(10, 8, 0, 2)), true, false, false),
+            lan_candidate("Tunnel Adapter", Some("corp-tunnel"), IpAddr::V4(Ipv4Addr::new(10, 9, 0, 2)), true, false, true),
+            lan_candidate("Wi-Fi IPv6", Some("intel-wifi-v6"), IpAddr::V6(Ipv6Addr::LOCALHOST), true, false, false),
+        ]
+    }
+
+    fn lan_candidate(
+        display_name: &str,
+        system_name: Option<&str>,
+        ip: IpAddr,
+        is_up: bool,
+        is_loopback_interface: bool,
+        is_tunnel_interface: bool,
+    ) -> StartupLanAddressCandidate {
+        StartupLanAddressCandidate {
+            display_name: display_name.to_string(),
+            system_name: system_name.map(ToOwned::to_owned),
+            ip,
+            is_up,
+            is_loopback_interface,
+            is_tunnel_interface,
+        }
+    }
+
+    fn temp_config_file_path(case_name: &str) -> PathBuf {
+        env::temp_dir()
+            .join("koko-tests")
+            .join(format!("{case_name}-{}", Uuid::now_v7()))
+            .join("config")
+            .join("koko.toml")
+    }
+
+    struct TempConfigRootGuard(PathBuf);
+
+    impl TempConfigRootGuard {
+        fn new(config_file_path: PathBuf) -> Self {
+            Self(config_file_path)
+        }
+    }
+
+    impl Drop for TempConfigRootGuard {
+        fn drop(&mut self) {
+            remove_temp_config_root(&self.0);
+        }
+    }
+
+    fn remove_temp_config_root(config_file_path: &Path) {
+        let Some(root) = config_file_path.parent().and_then(|value| value.parent()) else {
+            return;
+        };
+        let _ = fs::remove_dir_all(root);
+    }
 }
