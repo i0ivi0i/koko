@@ -93,7 +93,7 @@ function Ensure-Database {
 
     if ($databaseExists -ne "1") {
         Invoke-Step "Create database $($config.DatabaseName)" {
-            & psql $config.AdminUrl -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE ""$databaseNameIdentifier""" | Out-Null
+            & psql $config.AdminUrl -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE ""$databaseNameIdentifier""" > $null
         }
     }
 
@@ -104,7 +104,10 @@ function Ensure-Database {
 
     Invoke-Step "准备数据库结构" {
         foreach ($migration in $migrations) {
-            & psql $Url -v ON_ERROR_STOP=1 -q -f $migration.FullName | Out-Null
+            & psql $Url -v ON_ERROR_STOP=1 -q -f $migration.FullName > $null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Migration failed: $($migration.Name) (exit code $LASTEXITCODE)"
+            }
         }
     }
 }

@@ -1042,6 +1042,46 @@ fn root_run_script_clears_inherited_admin_token_before_child_launch() {
     assert!(!stdout.contains("KOKO_ADMIN_TOKEN=inherited-token"));
 }
 
+#[test]
+fn root_run_script_stops_after_first_failed_migration() {
+    let (child_script, _child_cleanup) = temp_env_probe_child_script();
+    let (shim_dir, log_path, _shim_cleanup) = temp_failed_migration_toolchain();
+    let _guard = env_lock();
+    let powershell = powershell_exe_path();
+    let output = std::process::Command::new(powershell)
+        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
+        .args(["-SkipBundle", "-TestChildScript"])
+        .arg(&child_script)
+        .env("PATH", format!(r"{};C:\Windows\System32", shim_dir.display()))
+        .env("PATHEXT", ".COM;.EXE;.BAT;.CMD")
+        .env("FAKE_PSQL_LOG", &log_path)
+        .env("FAKE_PSQL_STATE", shim_dir.join("psql-state.txt"))
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "migration failure should stop run.ps1 immediately"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("child ready"),
+        "child process must not start after failed migration"
+    );
+
+    let log = fs::read_to_string(&log_path).unwrap();
+    let migration_runs = log
+        .lines()
+        .filter(|line| line.starts_with("migrate|"))
+        .count();
+    assert_eq!(
+        migration_runs, 1,
+        "failed migration should stop the loop instead of continuing"
+    );
+}
+
 fn run_root_script(args: &[&str]) -> std::process::Output {
     let _guard = env_lock();
     let powershell = powershell_exe_path();
@@ -1147,6 +1187,53 @@ if ($env:KOKO_ADMIN_TOKEN) {
     )
     .unwrap();
     (script_path.clone(), TempScriptGuard::new(script_path))
+}
+
+fn temp_failed_migration_toolchain() -> (PathBuf, PathBuf, TempScriptGuard) {
+    let tool_dir = env::temp_dir()
+        .join("koko-tests")
+        .join(format!("fake-toolchain-{}", Uuid::now_v7()));
+    fs::create_dir_all(&tool_dir).unwrap();
+
+    let cargo_script = tool_dir.join("cargo.cmd");
+    fs::write(
+        &cargo_script,
+        "@echo off\r\n\
+setlocal\r\n\
+if not exist target\\run\\debug mkdir target\\run\\debug\r\n\
+copy /Y \"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" target\\run\\debug\\koko.exe >nul\r\n\
+exit /b 0\r\n",
+    )
+    .unwrap();
+
+    let psql_script = tool_dir.join("psql.cmd");
+    fs::write(
+        &psql_script,
+        "@echo off\r\n\
+setlocal\r\n\
+echo %DATE% %TIME%^|%*>>\"%FAKE_PSQL_LOG%\"\r\n\
+if \"%~2\"==\"-tAc\" (\r\n\
+  echo 1\r\n\
+  exit /b 0\r\n\
+)\r\n\
+if \"%~6\"==\"-f\" (\r\n\
+  echo migrate^|%*>>\"%FAKE_PSQL_LOG%\"\r\n\
+  if exist \"%FAKE_PSQL_STATE%\" goto migration_ok\r\n\
+  break>\"%FAKE_PSQL_STATE%\"\r\n\
+  exit /b 1\r\n\
+)\r\n\
+:migration_ok\r\n\
+exit /b 0\r\n\
+",
+    )
+    .unwrap();
+
+    let log_path = tool_dir.join("psql.log");
+    (
+        tool_dir.clone(),
+        log_path,
+        TempScriptGuard::new(tool_dir.join("cleanup.marker")),
+    )
 }
 
 async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
