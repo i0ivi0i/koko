@@ -13,6 +13,7 @@ $serverProcess = $null
 
 $repoRoot = $PSScriptRoot
 $cargoManifestPath = Join-Path $repoRoot "Cargo.toml"
+$adminConfigPath = Join-Path $repoRoot "config\koko.toml"
 $bundleScript = Join-Path $repoRoot "scripts\dx-bundle-web.ps1"
 $migrationsDir = Join-Path $repoRoot "migrations"
 $runTargetDir = "target/run"
@@ -75,6 +76,33 @@ function Get-BinaryPath {
 
     $packageName = $match.Groups[1].Value
     return Join-Path $repoRoot "$TargetDir\debug\$packageName.exe"
+}
+
+function Get-AdminTokenFromConfig {
+    param(
+        [string]$ConfigPath
+    )
+
+    if (-not (Test-Path $ConfigPath)) {
+        throw "Missing admin config file: $ConfigPath"
+    }
+
+    $content = Get-Content $ConfigPath -Raw
+    $match = [regex]::Match($content, '(?m)^\s*admin_token\s*=\s*("([^"]*)")\s*$')
+    if (-not $match.Success) {
+        throw "Unable to read admin token from $ConfigPath"
+    }
+
+    return $match.Groups[2].Value
+}
+
+function Write-AdminTokenHint {
+    param(
+        [string]$ConfigPath
+    )
+
+    $adminToken = Get-AdminTokenFromConfig -ConfigPath $ConfigPath
+    Write-Host "==> 当前管理员口令: $adminToken"
 }
 
 function Ensure-Database {
@@ -266,6 +294,7 @@ try {
         }
         Write-Host "==> Set KOKO_BIND_ADDR"
         Write-Host "==> 监听地址: $BindAddr"
+        Write-AdminTokenHint -ConfigPath $adminConfigPath
         $serverBinaryPath = Get-BinaryPath -ManifestPath $cargoManifestPath -TargetDir $runTargetDir
         Write-Host "==> cargo build --target-dir $runTargetDir"
         Write-Host "==> $serverBinaryPath"
@@ -331,6 +360,7 @@ try {
     if (-not $NoBrowser) {
         Start-Process $appUrl | Out-Null
     }
+    Write-AdminTokenHint -ConfigPath $adminConfigPath
     Write-AccessHints -Urls $accessUrls -OpenBrowser (-not $NoBrowser)
 
     Write-Host "==> 现在可以直接开始真人测试，按 Ctrl+C 可停止服务"

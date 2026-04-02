@@ -7,6 +7,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = koko::support::AppConfig::load()?;
+    println!("当前管理员口令: {}", config.admin_token);
     if let Some(notice) = config.admin_token_notice.as_deref() {
         println!("{notice}");
     }

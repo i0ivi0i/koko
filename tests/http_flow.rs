@@ -970,6 +970,59 @@ fn root_run_script_no_browser_still_prints_homepage_url() {
     assert!(stdout.contains("浏览器不会自动打开"));
 }
 
+#[test]
+fn rust_binary_startup_source_prints_current_admin_token() {
+    let main_source =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs")).unwrap();
+    assert!(main_source.contains("当前管理员口令:"));
+    assert!(main_source.contains("config.admin_token"));
+}
+
+#[test]
+fn root_run_script_prints_current_admin_token_from_config() {
+    let _guard = env_lock();
+    let config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config/koko.toml");
+    let config_source = fs::read_to_string(&config_path).unwrap();
+    let current_admin_token = config_source
+        .lines()
+        .find_map(|line| {
+            let line = line.trim();
+            let (_, value) = line.split_once('=')?;
+            serde_json::from_str::<String>(value.trim()).ok()
+        })
+        .expect("repo config should contain a readable admin token");
+
+    let powershell = powershell_exe_path();
+    let output = Command::new(powershell)
+        .args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "run.ps1",
+            "-DryRun",
+            "-SkipBundle",
+            "-DatabaseUrl",
+            "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat",
+        ])
+        .env("PATH", r"C:\Windows\System32")
+        .env_remove("PSModulePath")
+        .env_remove("PATHEXT")
+        .env_remove("PROMPT")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "run.ps1 dry-run should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("当前管理员口令:"));
+    assert!(stdout.contains(&current_admin_token));
+}
+
 fn temp_config_file_path(case_name: &str) -> PathBuf {
     env::temp_dir()
         .join("koko-tests")
