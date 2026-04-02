@@ -826,8 +826,30 @@ fn startup_banner_renders_home_admin_token_and_notice() {
 }
 
 #[test]
+fn startup_banner_renders_lan_urls_when_present() {
+    let banner = koko::support::StartupBanner {
+        home_urls: vec!["http://127.0.0.1:8080/".to_string()],
+        lan_urls: vec!["http://192.168.1.10:8080/".to_string()],
+        admin_url: "http://127.0.0.1:8080/admin".to_string(),
+        admin_token: "admin-token".to_string(),
+        admin_token_notice: None,
+    };
+
+    let lines = banner.render_lines();
+
+    assert_eq!(lines[0], "==> 首页地址: http://127.0.0.1:8080/");
+    assert_eq!(lines[1], "==> 管理入口: http://127.0.0.1:8080/admin");
+    assert_eq!(lines[2], "==> 当前管理员口令: admin-token");
+    assert_eq!(lines[3], "==> 局域网设备请访问:");
+    assert_eq!(lines[4], "   http://192.168.1.10:8080/");
+    assert_eq!(lines[5], "==> 局域网管理入口:");
+    assert_eq!(lines[6], "   http://192.168.1.10:8080/admin");
+}
+
+#[test]
 fn startup_banner_keeps_admin_token_notice_from_app_config() {
     let config_path = temp_config_file_path("startup-banner-notice");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let config = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         Some("127.0.0.1:8080"),
@@ -839,12 +861,12 @@ fn startup_banner_keeps_admin_token_notice_from_app_config() {
 
     let banner = koko::support::build_startup_banner_from_bind_addr(config.bind_addr, &config);
     assert!(banner.admin_token_notice.is_some());
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
 fn startup_banner_normalizes_unspecified_ipv4_to_loopback_home_url() {
     let config_path = temp_config_file_path("startup-banner-unspecified-ipv4");
+    let _cleanup = TempConfigRootGuard::new(config_path.clone());
     let config = koko::support::AppConfig::load_for_test(
         Some("postgres://koko:koko_local@127.0.0.1:5432/koko_test"),
         None,
@@ -860,7 +882,6 @@ fn startup_banner_normalizes_unspecified_ipv4_to_loopback_home_url() {
     assert_eq!(banner.admin_url, "http://127.0.0.1:8080/admin");
     assert!(banner.admin_token_notice.is_some());
     assert!(banner.lan_urls.is_empty());
-    remove_temp_config_root(&config_path);
 }
 
 #[test]
@@ -1085,6 +1106,20 @@ fn temp_config_file_path(case_name: &str) -> PathBuf {
         .join(format!("{case_name}-{}", Uuid::now_v7()))
         .join("config")
         .join("koko.toml")
+}
+
+struct TempConfigRootGuard(PathBuf);
+
+impl TempConfigRootGuard {
+    fn new(config_file_path: PathBuf) -> Self {
+        Self(config_file_path)
+    }
+}
+
+impl Drop for TempConfigRootGuard {
+    fn drop(&mut self) {
+        remove_temp_config_root(&self.0);
+    }
 }
 
 fn remove_temp_config_root(config_file_path: &Path) {

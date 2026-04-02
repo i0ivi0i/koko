@@ -151,15 +151,23 @@ impl StartupBanner {
         if let Some(home_url) = self.home_urls.first() {
             lines.push(format!("==> 首页地址: {home_url}"));
         }
-        else if let Some(lan_url) = self.lan_urls.first() {
-            lines.push(format!("==> 首页地址: {lan_url}"));
-        }
 
         lines.push(format!("==> 管理入口: {}", self.admin_url));
         lines.push(format!("==> 当前管理员口令: {}", self.admin_token));
 
         if let Some(notice) = self.admin_token_notice.as_deref() {
             lines.push(format!("==> {notice}"));
+        }
+
+        if !self.lan_urls.is_empty() {
+            lines.push("==> 局域网设备请访问:".to_string());
+            for url in &self.lan_urls {
+                lines.push(format!("   {url}"));
+            }
+            lines.push("==> 局域网管理入口:".to_string());
+            for url in &self.lan_urls {
+                lines.push(format!("   {url}admin"));
+            }
         }
 
         lines
