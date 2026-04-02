@@ -20,7 +20,7 @@ use sqlx::{
 use url::Url;
 
 fn help_text() -> &'static str {
-    "xtask\n\nUsage: cargo xtask [--help]\n       cargo xtask dev [--dry-run] [--skip-bundle] [--no-browser] [--database-url <url>] [--bind-addr <addr>] [--config-path <path>]\n\nWorkspace task runner."
+    "xtask\n\nUsage: cargo xtask [--help]\n       cargo xtask dev [--dry-run] [--skip-bundle] [--no-browser] [--database-url <url>] [--admin-token <token>] [--bind-addr <addr>] [--config-path <path>]\n\nWorkspace task runner."
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,6 +54,7 @@ struct Response {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct DevInputs {
     database_url: Option<String>,
+    admin_token: Option<String>,
     bind_addr: Option<String>,
     config_path: Option<PathBuf>,
     admin_cookie_secure: Option<bool>,
@@ -280,7 +281,10 @@ where
                     "KOKO_BIND_ADDR".to_string(),
                     Some(report.config.bind_addr.to_string()),
                 ),
-                ("KOKO_ADMIN_TOKEN".to_string(), None),
+                (
+                    "KOKO_ADMIN_TOKEN".to_string(),
+                    inputs.admin_token.clone(),
+                ),
             ],
         )?;
         if !inputs.no_browser {
@@ -702,25 +706,20 @@ fn parse_dev_inputs(args: &[String]) -> Result<DevInputs, String> {
             "--skip-bundle" => inputs.skip_bundle = true,
             "--no-browser" => inputs.no_browser = true,
             "--database-url" => {
-                index += 1;
-                let value = args
-                    .get(index)
-                    .ok_or_else(|| "--database-url requires a value".to_string())?;
-                inputs.database_url = Some(value.clone());
+                inputs.database_url = Some(parse_flag_value(args, &mut index, "--database-url")?);
+            }
+            "--admin-token" => {
+                inputs.admin_token = Some(parse_flag_value(args, &mut index, "--admin-token")?);
             }
             "--bind-addr" => {
-                index += 1;
-                let value = args
-                    .get(index)
-                    .ok_or_else(|| "--bind-addr requires a value".to_string())?;
-                inputs.bind_addr = Some(value.clone());
+                inputs.bind_addr = Some(parse_flag_value(args, &mut index, "--bind-addr")?);
             }
             "--config-path" => {
-                index += 1;
-                let value = args
-                    .get(index)
-                    .ok_or_else(|| "--config-path requires a value".to_string())?;
-                inputs.config_path = Some(PathBuf::from(value));
+                inputs.config_path = Some(PathBuf::from(parse_flag_value(
+                    args,
+                    &mut index,
+                    "--config-path",
+                )?));
             }
             unknown => {
                 return Err(format!("unknown xtask dev argument `{unknown}`"));
@@ -737,6 +736,17 @@ fn parse_homepage_url_line(line: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn parse_flag_value(args: &[String], index: &mut usize, flag: &str) -> Result<String, String> {
+    *index += 1;
+    let value = args
+        .get(*index)
+        .ok_or_else(|| format!("{flag} requires a value"))?;
+    if value.starts_with("--") {
+        return Err(format!("{flag} requires a value"));
+    }
+    Ok(value.clone())
 }
 
 fn main() -> ExitCode {
@@ -780,6 +790,15 @@ mod tests {
         let response = dispatch(["--help".to_owned()]);
         assert_eq!(response.stream, OutputStream::Stdout);
         assert_eq!(response.exit_status, ExitStatus::Success);
+    }
+
+    #[test]
+    fn dev_command_rejects_flag_shaped_admin_token_value() {
+        let response = dispatch(["dev".to_owned(), "--admin-token".to_owned(), "--dry-run".to_owned()]);
+
+        assert_eq!(response.stream, OutputStream::Stderr);
+        assert_eq!(response.exit_status, ExitStatus::Failure);
+        assert!(response.message.contains("--admin-token requires a value"));
     }
 
     #[test]
@@ -1032,6 +1051,53 @@ mod tests {
                     Some("127.0.0.1:8080".to_string())
                 ),
                 ("KOKO_ADMIN_TOKEN".to_string(), None),
+            ]
+        );
+    }
+
+    #[test]
+    fn dev_flow_passes_explicit_admin_token_to_child_env() {
+        let temp_root = temp_workspace_root("dev-run-admin-token");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::with_action_log(actions.clone());
+        let launcher = RecordingChildProcessLauncher::with_action_log(actions);
+        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            database,
+            runner,
+            launcher.clone(),
+            RecordingBrowserOpener::default(),
+        );
+
+        coordinator
+            .run(DevInputs {
+                skip_bundle: true,
+                admin_token: Some("manual-admin-token".to_string()),
+                ..DevInputs::default()
+            })
+            .expect("explicit admin token should be forwarded to child env");
+
+        let launch = launcher.launch_calls();
+        assert_eq!(launch.len(), 1);
+        assert_eq!(
+            launch[0].envs,
+            vec![
+                (
+                    "KOKO_DATABASE_URL".to_string(),
+                    Some("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string())
+                ),
+                (
+                    "KOKO_BIND_ADDR".to_string(),
+                    Some("127.0.0.1:8080".to_string())
+                ),
+                (
+                    "KOKO_ADMIN_TOKEN".to_string(),
+                    Some("manual-admin-token".to_string())
+                ),
             ]
         );
     }

@@ -949,262 +949,78 @@ fn startup_banner_normalizes_unspecified_ipv4_to_loopback_home_url() {
 }
 
 #[test]
-fn root_run_script_dry_run_does_not_print_home_admin_or_token() {
-    let output = run_root_script(&["-DryRun", "-SkipBundle"]);
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    assert!(!stdout.contains("首页地址:"));
-    assert!(!stdout.contains("管理入口:"));
-    assert!(!stdout.contains("当前管理员口令:"));
-}
-
-#[test]
-fn root_run_script_passthroughs_fake_child_banner_without_replaying_it() {
-    let output = run_root_script_with_tooling(&[
-        "-SkipBundle",
-        "-TestChildScript",
-        "tests/http_support/fixtures/powershell/fake-rust-startup.ps1",
-    ]);
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("==> 首页地址: http://127.0.0.1:8080/"));
-    assert_eq!(stdout.matches("==> 首页地址: http://127.0.0.1:8080/").count(), 1);
-}
-
-#[test]
-fn root_run_script_auto_open_uses_fake_child_homepage_line() {
-    let output = run_root_script_with_tooling(&[
-        "-SkipBundle",
-        "-NoBrowser:$false",
-        "-TestChildScript",
-        "tests/http_support/fixtures/powershell/fake-rust-startup.ps1",
-    ]);
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("==> 首页地址: http://127.0.0.1:8080/"));
-}
-
-#[test]
-fn root_run_script_normal_startup_auto_open_uses_exact_rust_homepage_url() {
-    let (child_script, browser_log_path, _child_cleanup) =
-        temp_startup_child_fixture(Some("http://127.0.0.1:8899/"));
-    let (shim_dir, psql_log_path, _shim_cleanup) = temp_fake_toolchain();
-    let child_script = child_script.to_string_lossy().into_owned();
-    let browser_log_path = browser_log_path.to_string_lossy().into_owned();
-    let output = run_root_script_with_shimmed_toolchain(
+fn root_run_script_forwards_powershell_args_to_cargo_xtask_dev() {
+    let (shim_dir, log_path, _cleanup) = temp_fake_xtask_cargo(0);
+    let output = run_root_script_with_fake_cargo(
         &[
-            "-SkipBundle",
+            "-DatabaseUrl",
+            "postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat",
+            "-AdminToken",
+            "manual-admin-token",
             "-BindAddr",
             "127.0.0.1:8080",
-            "-NoBrowser:$false",
-            "-TestChildScript",
-            child_script.as_str(),
-            "-TestChildMode",
-            "Tee",
-            "-TestBrowserLogPath",
-            browser_log_path.as_str(),
+            "-SkipBundle",
+            "-DryRun",
+            "-NoBrowser:$true",
         ],
         &shim_dir,
-        &psql_log_path,
-        false,
     );
 
     assert!(
         output.status.success(),
-        "normal startup should trust Rust output instead of probing BindAddr\nstatus={:?}\nstdout={}\nstderr={}",
-        output.status.code(),
+        "run.ps1 should forward to cargo xtask dev\nstdout={}\nstderr={}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("==> 首页地址: http://127.0.0.1:8899/"));
-    assert!(!stdout.contains("Koko 没能成功启动"));
-
-    let browser_log = fs::read_to_string(&browser_log_path).unwrap();
-    assert_eq!(browser_log.trim(), "http://127.0.0.1:8899/");
-}
-
-#[test]
-fn root_run_script_normal_startup_missing_homepage_only_disables_auto_open() {
-    let (child_script, browser_log_path, _child_cleanup) = temp_startup_child_fixture(None);
-    let (shim_dir, psql_log_path, _shim_cleanup) = temp_fake_toolchain();
-    let child_script = child_script.to_string_lossy().into_owned();
-    let browser_log_path = browser_log_path.to_string_lossy().into_owned();
-    let output = run_root_script_with_shimmed_toolchain(
-        &[
-            "-SkipBundle",
-            "-BindAddr",
-            "127.0.0.1:8080",
-            "-NoBrowser:$false",
-            "-TestChildScript",
-            child_script.as_str(),
-            "-TestChildMode",
-            "Tee",
-            "-TestBrowserLogPath",
-            browser_log_path.as_str(),
-        ],
-        &shim_dir,
-        &psql_log_path,
-        false,
-    );
-
-    assert!(
-        output.status.success(),
-        "missing homepage line should only disable auto-open\nstatus={:?}\nstdout={}\nstderr={}",
-        output.status.code(),
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("child ready without homepage"));
-    assert!(!stdout.contains("Koko 启动后没有从 Rust 输出中解析到首页地址。"));
-    assert!(
-        !Path::new(&browser_log_path).exists(),
-        "browser should stay closed when Rust did not print a homepage line"
-    );
-}
-
-#[test]
-fn root_run_script_does_not_fabricate_banner_when_child_fails() {
-    let output = run_root_script_with_tooling(&[
-        "-SkipBundle",
-        "-TestChildScript",
-        "tests/http_support/fixtures/powershell/fake-rust-error.ps1",
-    ]);
-
-    assert!(!output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("fake child failed"));
-    assert!(!stdout.contains("首页地址:"));
-    assert!(!stdout.contains("管理入口:"));
-    assert!(!stdout.contains("当前管理员口令:"));
-}
-
-#[test]
-fn root_run_script_contains_startup_truth_boundary_comment() {
-    let script =
-        std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("run.ps1"))
-            .unwrap();
-
-    assert!(script.contains("启动语义真相"));
-}
-
-#[test]
-fn root_run_script_dry_run_without_admin_token_does_not_set_koko_admin_token() {
-    let output = run_root_script(&["-DryRun", "-SkipBundle"]);
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(!stdout.contains("Set KOKO_ADMIN_TOKEN"));
-}
-
-#[test]
-fn root_run_script_clears_inherited_admin_token_before_child_launch() {
-    let (child_script, _cleanup) = temp_env_probe_child_script();
-    let _guard = env_lock();
-    let powershell = powershell_exe_path();
-    let output = std::process::Command::new(powershell)
-        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
-        .args(["-SkipBundle", "-TestChildScript"])
-        .arg(&child_script)
-        .env("KOKO_ADMIN_TOKEN", "inherited-token")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap();
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("child ready"));
-    assert!(!stdout.contains("KOKO_ADMIN_TOKEN=inherited-token"));
-}
-
-#[test]
-fn root_run_script_stops_after_first_failed_migration() {
-    let (child_script, _child_cleanup) = temp_env_probe_child_script();
-    let (shim_dir, log_path, _shim_cleanup) = temp_fake_toolchain();
-    let child_script = child_script.to_string_lossy().into_owned();
-    let output = run_root_script_with_shimmed_toolchain(
-        &["-SkipBundle", "-TestChildScript", child_script.as_str()],
-        &shim_dir,
-        &log_path,
-        true,
-    );
-
-    assert!(
-        !output.status.success(),
-        "migration failure should stop run.ps1 immediately"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        !stdout.contains("child ready"),
-        "child process must not start after failed migration"
     );
 
     let log = fs::read_to_string(&log_path).unwrap();
-    let migration_runs = log
-        .lines()
-        .filter(|line| line.starts_with("migrate|"))
-        .count();
-    assert_eq!(
-        migration_runs, 1,
-        "failed migration should stop the loop instead of continuing"
+    assert!(log.contains("args|xtask dev"));
+    assert!(log.contains("--database-url postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat"));
+    assert!(log.contains("--admin-token manual-admin-token"));
+    assert!(log.contains("--bind-addr 127.0.0.1:8080"));
+    assert!(log.contains("--skip-bundle"));
+    assert!(log.contains("--dry-run"));
+    assert!(log.contains("--no-browser"));
+    assert!(log.contains("env|KOKO_ADMIN_TOKEN="));
+}
+
+#[test]
+fn root_run_script_passes_through_xtask_exit_code() {
+    let (shim_dir, _log_path, _cleanup) = temp_fake_xtask_cargo(23);
+    let output = run_root_script_with_fake_cargo(&["-DryRun"], &shim_dir);
+
+    assert_eq!(output.status.code(), Some(23));
+}
+
+#[test]
+fn root_run_script_rejects_legacy_test_seam_args() {
+    let (shim_dir, log_path, _cleanup) = temp_fake_xtask_cargo(0);
+    let output = run_root_script_with_fake_cargo(
+        &["-TestChildScript", "tests/http_support/fixtures/powershell/fake-rust-startup.ps1"],
+        &shim_dir,
+    );
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("TestChildScript"));
+    assert!(
+        !log_path.exists() || fs::read_to_string(&log_path).unwrap_or_default().trim().is_empty(),
+        "legacy seam args should fail before cargo xtask is invoked"
     );
 }
 
-fn run_root_script(args: &[&str]) -> std::process::Output {
+fn run_root_script_with_fake_cargo(args: &[&str], shim_dir: &Path) -> std::process::Output {
     let _guard = env_lock();
     let powershell = powershell_exe_path();
     std::process::Command::new(powershell)
-        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
-        .args(args)
-        .env("PATH", r"C:\Windows\System32")
-        .env_remove("PSModulePath")
-        .env_remove("PATHEXT")
-        .env_remove("PROMPT")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap()
-}
-
-fn run_root_script_with_tooling(args: &[&str]) -> std::process::Output {
-    let _guard = env_lock();
-    let powershell = powershell_exe_path();
-    std::process::Command::new(powershell)
-        .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
-        .args(args)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap()
-}
-
-fn run_root_script_with_shimmed_toolchain(
-    args: &[&str],
-    shim_dir: &Path,
-    psql_log_path: &Path,
-    fail_first_migration: bool,
-) -> std::process::Output {
-    let _guard = env_lock();
-    let powershell = powershell_exe_path();
-    let mut command = std::process::Command::new(powershell);
-    command
         .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
         .args(args)
         .env("PATH", format!(r"{};C:\Windows\System32", shim_dir.display()))
         .env("PATHEXT", ".COM;.EXE;.BAT;.CMD")
-        .env("FAKE_PSQL_LOG", psql_log_path)
-        .env("FAKE_PSQL_STATE", shim_dir.join("psql-state.txt"))
-        .current_dir(env!("CARGO_MANIFEST_DIR"));
-    if fail_first_migration {
-        command.env("FAKE_PSQL_FAIL_FIRST", "1");
-    }
-    command.output().unwrap()
+        .env_remove("KOKO_ADMIN_TOKEN")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap()
 }
 
 fn temp_config_file_path(case_name: &str) -> PathBuf {
@@ -1254,110 +1070,42 @@ fn powershell_exe_path() -> String {
     format!(r"{windir}\System32\WindowsPowerShell\v1.0\powershell.exe")
 }
 
-struct TempScriptGuard(PathBuf);
+struct TempDirGuard(PathBuf);
 
-impl TempScriptGuard {
-    fn new(script_path: PathBuf) -> Self {
-        Self(script_path)
+impl TempDirGuard {
+    fn new(root: PathBuf) -> Self {
+        Self(root)
     }
 }
 
-impl Drop for TempScriptGuard {
+impl Drop for TempDirGuard {
     fn drop(&mut self) {
-        if let Some(root) = self.0.parent() {
-            let _ = fs::remove_dir_all(root);
-        }
+        let _ = fs::remove_dir_all(&self.0);
     }
 }
 
-fn temp_env_probe_child_script() -> (PathBuf, TempScriptGuard) {
-    let script_dir = env::temp_dir()
-        .join("koko-tests")
-        .join(format!("env-probe-{}", Uuid::now_v7()));
-    fs::create_dir_all(&script_dir).unwrap();
-    let script_path = script_dir.join("probe.ps1");
-    fs::write(
-        &script_path,
-        r#"Write-Output "child ready"
-if ($env:KOKO_ADMIN_TOKEN) {
-    Write-Output "KOKO_ADMIN_TOKEN=$env:KOKO_ADMIN_TOKEN"
-}
-"#,
-    )
-    .unwrap();
-    (script_path.clone(), TempScriptGuard::new(script_path))
-}
-
-fn temp_startup_child_fixture(homepage_url: Option<&str>) -> (PathBuf, PathBuf, TempScriptGuard) {
-    let fixture_dir = env::temp_dir()
-        .join("koko-tests")
-        .join(format!("startup-child-{}", Uuid::now_v7()));
-    fs::create_dir_all(&fixture_dir).unwrap();
-    let script_path = fixture_dir.join("startup.ps1");
-    let browser_log_path = fixture_dir.join("browser.log");
-
-    let script_body = match homepage_url {
-        Some(url) => format!(
-            "Write-Output \"==> 首页地址: {url}\"\r\nWrite-Output \"==> 管理入口: {url}admin\"\r\nWrite-Output \"==> 当前管理员口令: admin-test-token\"\r\n"
-        ),
-        None => "Write-Output \"child ready without homepage\"\r\n".to_string(),
-    };
-    fs::write(&script_path, script_body).unwrap();
-
-    (
-        script_path,
-        browser_log_path,
-        TempScriptGuard::new(fixture_dir.join("cleanup.marker")),
-    )
-}
-
-fn temp_fake_toolchain() -> (PathBuf, PathBuf, TempScriptGuard) {
+fn temp_fake_xtask_cargo(exit_code: i32) -> (PathBuf, PathBuf, TempDirGuard) {
     let tool_dir = env::temp_dir()
         .join("koko-tests")
-        .join(format!("fake-toolchain-{}", Uuid::now_v7()));
+        .join(format!("fake-xtask-cargo-{}", Uuid::now_v7()));
     fs::create_dir_all(&tool_dir).unwrap();
+    let log_path = tool_dir.join("cargo.log");
 
     let cargo_script = tool_dir.join("cargo.cmd");
     fs::write(
         &cargo_script,
-        "@echo off\r\n\
+        format!(
+            "@echo off\r\n\
 setlocal\r\n\
-if not exist target\\run\\debug mkdir target\\run\\debug\r\n\
-copy /Y \"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" target\\run\\debug\\koko.exe >nul\r\n\
-exit /b 0\r\n",
+echo args^|%*>>\"{log}\"\r\n\
+echo env^|KOKO_ADMIN_TOKEN=%KOKO_ADMIN_TOKEN%>>\"{log}\"\r\n\
+exit /b {exit_code}\r\n",
+            log = log_path.display()
+        ),
     )
     .unwrap();
 
-    let psql_script = tool_dir.join("psql.cmd");
-    fs::write(
-        &psql_script,
-        "@echo off\r\n\
-setlocal\r\n\
-echo %DATE% %TIME%^|%*>>\"%FAKE_PSQL_LOG%\"\r\n\
-if \"%~2\"==\"-tAc\" (\r\n\
-  echo 1\r\n\
-  exit /b 0\r\n\
-)\r\n\
-if \"%~6\"==\"-f\" (\r\n\
-  echo migrate^|%*>>\"%FAKE_PSQL_LOG%\"\r\n\
-  if \"%FAKE_PSQL_FAIL_FIRST%\"==\"1\" (\r\n\
-    if exist \"%FAKE_PSQL_STATE%\" goto migration_ok\r\n\
-    break>\"%FAKE_PSQL_STATE%\"\r\n\
-    exit /b 1\r\n\
-  )\r\n\
-)\r\n\
-:migration_ok\r\n\
-exit /b 0\r\n\
-",
-    )
-    .unwrap();
-
-    let log_path = tool_dir.join("psql.log");
-    (
-        tool_dir.clone(),
-        log_path,
-        TempScriptGuard::new(tool_dir.join("cleanup.marker")),
-    )
+    (tool_dir.clone(), log_path, TempDirGuard::new(tool_dir))
 }
 
 async fn bootstrap_session_with_cookie(harness: &HttpHarness) -> (BootstrapSession, String) {
