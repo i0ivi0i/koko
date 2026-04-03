@@ -6,7 +6,7 @@ asset_dir = "public"
 title = "koko"
 
 [web.resource]
-script = ["./public/assets/socket.io.min.js"]
+script = ["/assets/socket.io.min.js"]
 
 [web.resource.dev]
 

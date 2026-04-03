@@ -291,6 +291,8 @@ where
                     "Bypass".to_string(),
                     "-File".to_string(),
                     self.bundle_script_path().display().to_string(),
+                    // `xtask dev` 用 Axum 直接服务静态产物，不能把依赖 `/_dioxus` 的开发 bundle 当成运行真相。
+                    "-Release".to_string(),
                 ],
             )
             .map(|_| ())
@@ -316,7 +318,7 @@ where
             lines.push("==> Skip web bundle".to_string());
         } else {
             lines.push(format!(
-                "==> powershell -ExecutionPolicy Bypass -File {}",
+                "==> powershell -ExecutionPolicy Bypass -File {} -Release",
                 self.bundle_script_path().display()
             ));
         }
@@ -1190,10 +1192,41 @@ mod tests {
         assert_eq!(launcher.launch_calls().len(), 0);
         let lines = report.dry_run_lines();
         assert!(lines.iter().any(|line| line.contains("dx-bundle-web.ps1")));
+        assert!(lines.iter().any(|line| line.contains("-Release")));
         assert!(!lines.iter().any(|line| line.contains("Ensure database")));
         assert!(!lines.iter().any(|line| line.contains("准备数据库结构")));
         assert!(lines.iter().any(|line| line.contains("cargo build --target-dir target/run")));
         assert!(lines.iter().any(|line| line.contains("==> launch ")));
+    }
+
+    #[test]
+    fn dev_flow_runs_release_web_bundle_for_static_shell_server() {
+        let temp_root = temp_workspace_root("dev-run-release-web-bundle");
+        write_fake_binary(&temp_root);
+        let actions = SharedActionLog::default();
+        let runner = RecordingCommandRunner::with_action_log(actions);
+        let launcher = RecordingChildProcessLauncher::default();
+        let coordinator = DevCoordinator::with_workspace_root(
+            temp_root.clone(),
+            FakeConfigSource::new(test_dev_config(&temp_root)),
+            FakeStartupBannerSource::without_banner(),
+            runner.clone(),
+            launcher,
+            RecordingBrowserOpener::default(),
+        );
+
+        coordinator
+            .run(DevInputs {
+                no_browser: true,
+                ..DevInputs::default()
+            })
+            .expect("dev run should request a release web bundle");
+
+        assert!(runner.command_programs_and_args().iter().any(|command| {
+            command.contains("powershell")
+                && command.contains("dx-bundle-web.ps1")
+                && command.contains("-Release")
+        }));
     }
 
     #[test]

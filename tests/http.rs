@@ -124,6 +124,17 @@ fn bundled_frontend_index_html() -> String {
     .expect("bundled frontend index should exist")
 }
 
+fn bundled_frontend_asset(asset_name: &str) -> String {
+    fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("dist")
+            .join("public")
+            .join("assets")
+            .join(asset_name),
+    )
+    .unwrap_or_else(|_| panic!("bundled frontend asset should exist: {asset_name}"))
+}
+
 fn script_src_position(html: &str, script_name: &str) -> Option<usize> {
     let mut search_from = 0;
     while let Some(script_offset) = html[search_from..].find("<script") {

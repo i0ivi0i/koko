@@ -380,6 +380,14 @@ async fn assets_socket_io_client_is_served_as_static_file() {
     )
     .unwrap();
     assert!(body.contains("Socket.IO v4.8.3"));
+    assert!(
+        body.contains("globalThis?globalThis:t||self).io=n()"),
+        "socket.io static asset should be the browser UMD bundle that exposes global io"
+    );
+    assert!(
+        !body.contains("export default"),
+        "socket.io static asset must not be the ESM build because index.html loads it as a classic script"
+    );
 }
 
 #[tokio::test]
@@ -404,14 +412,37 @@ async fn old_socket_io_client_asset_is_no_longer_served() {
 #[test]
 fn bundled_index_preloads_socket_io_before_wasm_bootstrap() {
     let index_html = bundled_frontend_index_html();
+    assert!(
+        index_html.contains(r#"src="./assets/socket.io.min.js""#)
+            || index_html.contains(r#"src="/assets/socket.io.min.js""#),
+        "bundled index should point socket.io preload at the static /assets route"
+    );
+    assert!(
+        !index_html.contains("./public/assets/socket.io.min.js"),
+        "bundled index must not point socket.io preload at the nonexistent /public/assets route"
+    );
     let socket_io_position = script_src_position(&index_html, "socket.io.min.js")
         .expect("bundled index should preload socket.io.min.js");
-    let wasm_bootstrap_position =
-        script_src_position(&index_html, "koko.js").expect("bundled index should load koko.js");
+    let wasm_bootstrap_position = script_src_position(&index_html, "koko-")
+        .expect("bundled index should load the hashed wasm bootstrap script");
 
     assert!(
         socket_io_position < wasm_bootstrap_position,
         "socket.io preload must appear before wasm bootstrap in dist/public/index.html"
+    );
+}
+
+#[test]
+fn bundled_socket_io_asset_stays_browser_umd() {
+    let socket_io_asset = bundled_frontend_asset("socket.io.min.js");
+
+    assert!(
+        socket_io_asset.contains("globalThis?globalThis:t||self).io=n()"),
+        "bundled socket.io asset should expose global io for the realtime bridge"
+    );
+    assert!(
+        !socket_io_asset.contains("export default"),
+        "bundled socket.io asset must not regress to the ESM build"
     );
 }
 

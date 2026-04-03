@@ -83,7 +83,22 @@ try {
     }
 
     & dx @dxArgs
-    exit $LASTEXITCODE
+    $dxExitCode = $LASTEXITCODE
+    if ($dxExitCode -ne 0) {
+        exit $dxExitCode
+    }
+
+    # Dioxus 会把自定义 script 路径写进 index.html，但这里的 Socket.IO 运行时必须
+    # 以浏览器经典脚本的真实产物存在于 dist/public/assets，不能继续吃到旧的 ESM 残留文件。
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    $socketIoSource = Join-Path $repoRoot "public\assets\socket.io.min.js"
+    $bundledAssetDir = Join-Path $repoRoot "dist\public\assets"
+    $socketIoDestination = Join-Path $bundledAssetDir "socket.io.min.js"
+
+    New-Item -ItemType Directory -Path $bundledAssetDir -Force | Out-Null
+    Copy-Item -LiteralPath $socketIoSource -Destination $socketIoDestination -Force
+
+    exit 0
 }
 finally {
     if ($null -eq $previousToolchain) {
