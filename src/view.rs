@@ -18,6 +18,7 @@ pub fn ChatPage(
     #[props(default)] on_room_selected: Option<EventHandler<Uuid>>,
     #[props(default)] on_search_input: Option<EventHandler<String>>,
     #[props(default)] on_search_result_selected: Option<EventHandler<RoomSearchResult>>,
+    #[props(default)] on_submit_room_code: Option<EventHandler<()>>,
     #[props(default)] draft: String,
     #[props(default)] on_draft_input: Option<EventHandler<String>>,
     #[props(default)] on_send_message: Option<EventHandler<()>>,
@@ -30,6 +31,7 @@ pub fn ChatPage(
                 on_back_to_list,
                 on_search_input,
                 on_search_result_selected,
+                on_submit_room_code,
             }
         },
         ShellScreen::ConversationList => rsx! {
@@ -114,8 +116,12 @@ fn JoinByCodeScreen(
     #[props(default)] on_back_to_list: Option<EventHandler<()>>,
     #[props(default)] on_search_input: Option<EventHandler<String>>,
     #[props(default)] on_search_result_selected: Option<EventHandler<RoomSearchResult>>,
+    #[props(default)] on_submit_room_code: Option<EventHandler<()>>,
 ) -> Element {
-    let result_count = state.search_results().len();
+    let joined_results = state.joined_search_results();
+    let discoverable_results = state.discoverable_search_results();
+    let can_submit_room_code = state.search_query_forms_complete_room_code();
+    let has_results = !joined_results.is_empty() || !discoverable_results.is_empty();
 
     rsx! {
         div {
@@ -126,7 +132,7 @@ fn JoinByCodeScreen(
                 shows_back: true,
                 back_label: "聊天".to_string(),
                 title: "搜索".to_string(),
-                subtitle: "输入房间码".to_string(),
+                subtitle: "搜索已存在房间".to_string(),
                 shows_compose_action: false,
                 on_back_to_list,
             }
@@ -139,24 +145,57 @@ fn JoinByCodeScreen(
                     RoomSearchBar {
                         value: state.search_query().to_string(),
                         placeholder: "输入房间码".to_string(),
-                        hint: String::new(),
+                        hint: "搜索已存在房间，或输入完整房间码直接进入".to_string(),
                         on_input: on_search_input,
                     }
                 }
-                if result_count == 0 {
+                if can_submit_room_code {
+                    div { class: "tg-search-panel__actions",
+                        button {
+                            class: "tg-search__action tg-search__action--primary",
+                            r#type: "button",
+                            disabled: on_submit_room_code.is_none(),
+                            onclick: move |_| {
+                                if let Some(handler) = on_submit_room_code.as_ref() {
+                                    handler.call(());
+                                }
+                            },
+                            "进入房间"
+                        }
+                    }
+                }
+                if !has_results {
                     EmptyState {
-                        title: "还没有匹配结果".to_string(),
-                        body: "输入房间码后，匹配的房间会显示在这里。".to_string(),
+                        title: "没有已存在的匹配房间".to_string(),
+                        body: "完整房间码可直接进入，不存在时会创建新房间。".to_string(),
                     }
                 } else {
                     div {
                         class: "tg-search-results",
                         role: "list",
                         "data-shell-region": "search-results",
-                        for result in state.search_results().iter().cloned() {
-                            SearchResultItem {
-                                result,
-                                on_select: on_search_result_selected,
+                        if !joined_results.is_empty() {
+                            section { class: "tg-search-section", "data-search-section": "joined",
+                                div { class: "tg-search-section__title", "我已加入" }
+                                for result in joined_results {
+                                    SearchResultItem {
+                                        result,
+                                        on_select: on_search_result_selected,
+                                    }
+                                }
+                            }
+                        }
+                        if !discoverable_results.is_empty() {
+                            section {
+                                class: "tg-search-section",
+                                "data-search-section": "discoverable",
+                                div { class: "tg-search-section__title", "可加入房间" }
+                                for result in discoverable_results {
+                                    SearchResultItem {
+                                        result,
+                                        on_select: on_search_result_selected,
+                                    }
+                                }
                             }
                         }
                     }

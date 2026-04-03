@@ -30,6 +30,16 @@ fn join_by_code_exposes_back_navigation_search_and_results_regions() {
 }
 
 #[test]
+fn join_by_code_groups_joined_and_discoverable_results() {
+    let html = render_chat_page(join_by_code_state());
+
+    assert!(html.contains("data-search-section=\"joined\""));
+    assert!(html.contains("data-search-section=\"discoverable\""));
+    assert!(html.contains(">我已加入<"));
+    assert!(html.contains(">可加入房间<"));
+}
+
+#[test]
 fn chat_screen_exposes_navigation_thread_and_composer_regions() {
     let html = render_chat_page(chat_screen_state());
 
@@ -114,6 +124,19 @@ fn join_by_code_empty_state_stays_inside_shell_regions() {
 }
 
 #[test]
+fn join_by_code_empty_state_explains_direct_entry_for_complete_room_code() {
+    let mut state = bootstrapped_state();
+    state.show_join_by_code();
+    state.set_search_query("A1234");
+
+    let html = render_chat_page(state);
+
+    assert!(html.contains("没有已存在的匹配房间"));
+    assert!(html.contains("完整房间码可直接进入"));
+    assert!(html.contains("进入房间"));
+}
+
+#[test]
 fn chat_empty_state_stays_inside_shell_regions() {
     let html = render_chat_page(empty_chat_state());
 
@@ -136,6 +159,14 @@ fn shell_primary_copy_is_localized_for_chinese_users() {
     assert!(chat_html.contains("aria-label=\"发送消息\""));
 }
 
+#[test]
+fn room_search_copy_explains_search_and_direct_entry_together() {
+    let html = render_chat_page(join_by_code_state());
+
+    assert!(html.contains("搜索已存在房间"));
+    assert!(html.contains("或输入完整房间码直接进入"));
+}
+
 fn render_chat_page(state: ChatState) -> String {
     let mut vdom = VirtualDom::new_with_props(
         ChatPage,
@@ -145,6 +176,7 @@ fn render_chat_page(state: ChatState) -> String {
             on_room_selected: None,
             on_search_input: None,
             on_search_result_selected: None,
+            on_submit_room_code: None,
             draft: String::new(),
             on_draft_input: None,
             on_send_message: None,
@@ -164,7 +196,10 @@ fn join_by_code_state() -> ChatState {
     let mut state = conversation_list_state();
     state.show_join_by_code();
     state.set_search_query("A12");
-    state.apply_search_results(vec![search_result(Uuid::from_u128(2), "A1299", false)]);
+    state.apply_search_results(vec![
+        search_result(Uuid::from_u128(2), "A1234", true),
+        search_result(Uuid::from_u128(3), "A1299", false),
+    ]);
     state
 }
 

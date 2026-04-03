@@ -525,6 +525,11 @@
   margin-top: 6px;
 }
 
+.tg-search-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .tg-search-panel__field {
   position: relative;
   min-height: 48px;
@@ -555,6 +560,19 @@
 
 .tg-search-panel__input:focus {
   outline: none;
+}
+
+.tg-search-section {
+  display: grid;
+  gap: 0;
+}
+
+.tg-search-section__title {
+  padding: 14px 14px 8px;
+  color: var(--koko-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .tg-search-result__meta {
