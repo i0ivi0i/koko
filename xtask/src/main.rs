@@ -2,7 +2,6 @@
 
 use std::{
     io::{BufRead, BufReader},
-    path::Path,
     path::PathBuf,
     process::{Child, Command, ExitStatus as ProcessExitStatus, Stdio},
     process::ExitCode,
@@ -12,12 +11,6 @@ use std::{
 };
 
 use koko::support::{self, ResolvedAppConfig, StartupBanner};
-use sqlx::{
-    Postgres,
-    migrate::{MigrateDatabase, Migrator},
-    postgres::PgPoolOptions,
-};
-use url::Url;
 
 fn help_text() -> &'static str {
     "xtask\n\nUsage: cargo xtask [--help]\n       cargo xtask dev [--dry-run] [--skip-bundle] [--no-browser] [--database-url <url>] [--admin-token <token>] [--bind-addr <addr>] [--config-path <path>]\n\nWorkspace task runner."
@@ -68,7 +61,6 @@ enum DevStep {
     ResolveConfig,
     ResolveBanner,
     BundleWeb,
-    PrepareDatabase,
     BuildServer,
     LaunchChildProcess,
 }
@@ -111,11 +103,6 @@ trait StartupBannerSource {
 #[allow(dead_code)]
 trait CommandRunner {
     fn run(&self, program: &str, args: &[String]) -> Result<CommandOutput, String>;
-}
-
-#[allow(dead_code)]
-trait DatabaseProvisioner {
-    fn prepare(&self, database_url: &str, migrations_dir: &Path) -> Result<(), String>;
 }
 
 #[allow(dead_code)]
@@ -165,21 +152,19 @@ impl StartupBannerSource for SupportStartupBannerSource {
     }
 }
 
-struct DevCoordinator<C, B, D, R, L, O> {
+struct DevCoordinator<C, B, R, L, O> {
     workspace_root: PathBuf,
     config_source: C,
     banner_source: B,
-    database_provisioner: D,
     command_runner: R,
     child_process_launcher: L,
     browser_opener: O,
 }
 
-impl<C, B, D, R, L, O> DevCoordinator<C, B, D, R, L, O>
+impl<C, B, R, L, O> DevCoordinator<C, B, R, L, O>
 where
     C: AppConfigSource,
     B: StartupBannerSource,
-    D: DatabaseProvisioner,
     R: CommandRunner,
     L: ChildProcessLauncher,
     O: BrowserOpener,
@@ -187,7 +172,6 @@ where
     fn new(
         config_source: C,
         banner_source: B,
-        database_provisioner: D,
         command_runner: R,
         child_process_launcher: L,
         browser_opener: O,
@@ -196,7 +180,6 @@ where
             default_workspace_root(),
             config_source,
             banner_source,
-            database_provisioner,
             command_runner,
             child_process_launcher,
             browser_opener,
@@ -207,7 +190,6 @@ where
         workspace_root: PathBuf,
         config_source: C,
         banner_source: B,
-        database_provisioner: D,
         command_runner: R,
         child_process_launcher: L,
         browser_opener: O,
@@ -216,7 +198,6 @@ where
             workspace_root,
             config_source,
             banner_source,
-            database_provisioner,
             command_runner,
             child_process_launcher,
             browser_opener,
@@ -238,7 +219,6 @@ where
                 DevStep::ResolveConfig,
                 DevStep::ResolveBanner,
                 DevStep::BundleWeb,
-                DevStep::PrepareDatabase,
                 DevStep::BuildServer,
                 DevStep::LaunchChildProcess,
             ],
@@ -257,7 +237,6 @@ where
         if !inputs.skip_bundle {
             self.run_bundle()?;
         }
-        self.prepare_database(&report.config)?;
         self.build_server()?;
 
         let server_binary_path = self.server_binary_path();
@@ -318,11 +297,6 @@ where
             .map_err(|error| format!("web bundle failed: {error}"))
     }
 
-    fn prepare_database(&self, config: &ResolvedAppConfig) -> Result<(), String> {
-        self.database_provisioner
-            .prepare(&config.database_url, &self.migrations_dir())
-    }
-
     fn build_server(&self) -> Result<(), String> {
         self.command_runner
             .run(
@@ -336,11 +310,7 @@ where
             .map(|_| ())
     }
 
-    fn build_dry_run_lines(
-        &self,
-        config: &ResolvedAppConfig,
-        skip_bundle: bool,
-    ) -> Vec<String> {
+    fn build_dry_run_lines(&self, _config: &ResolvedAppConfig, skip_bundle: bool) -> Vec<String> {
         let mut lines = Vec::new();
         if skip_bundle {
             lines.push("==> Skip web bundle".to_string());
@@ -350,14 +320,6 @@ where
                 self.bundle_script_path().display()
             ));
         }
-        let database = database_config(&config.database_url)
-            .map(|value| value.database_name)
-            .unwrap_or_else(|_| "<invalid-database-url>".to_string());
-        lines.push(format!("==> Ensure database {database}"));
-        lines.push(format!(
-            "==> 准备数据库结构: {}",
-            self.migrations_dir().display()
-        ));
         lines.push("==> Set KOKO_DATABASE_URL".to_string());
         lines.push("==> Set KOKO_BIND_ADDR".to_string());
         lines.push(format!("==> cargo build --target-dir {RUN_TARGET_DIR}"));
@@ -369,10 +331,6 @@ where
         self.workspace_root.join("scripts").join("dx-bundle-web.ps1")
     }
 
-    fn migrations_dir(&self) -> PathBuf {
-        self.workspace_root.join("migrations")
-    }
-
     fn server_binary_path(&self) -> PathBuf {
         self.workspace_root
             .join("target")
@@ -380,27 +338,6 @@ where
             .join("debug")
             .join(format!("{}{}", support::app_name(), std::env::consts::EXE_SUFFIX))
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct DatabaseConfig {
-    database_name: String,
-    admin_url: String,
-}
-
-fn database_config(database_url: &str) -> Result<DatabaseConfig, String> {
-    let mut url = Url::parse(database_url).map_err(|error| error.to_string())?;
-    let database_name = url.path().trim_start_matches('/').to_string();
-    if database_name.trim().is_empty() {
-        return Err(format!(
-            "DatabaseUrl must include a database name. Got: {database_url}"
-        ));
-    }
-    url.set_path("/postgres");
-    Ok(DatabaseConfig {
-        database_name,
-        admin_url: url.to_string(),
-    })
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -418,39 +355,6 @@ impl CommandRunner for RealCommandRunner {
         Ok(CommandOutput::stdout(
             String::from_utf8_lossy(&output.stdout).to_string(),
         ))
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct SqlxDatabaseProvisioner;
-
-impl DatabaseProvisioner for SqlxDatabaseProvisioner {
-    fn prepare(&self, database_url: &str, migrations_dir: &Path) -> Result<(), String> {
-        // 这里直接复用 SQLx 官方数据库存在性与迁移能力，避免再复制一套 psql 编排语义。
-        let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
-        runtime.block_on(async {
-            if !Postgres::database_exists(database_url)
-                .await
-                .map_err(|error| error.to_string())?
-            {
-                Postgres::create_database(database_url)
-                    .await
-                    .map_err(|error| error.to_string())?;
-            }
-
-            let migrator = Migrator::new(migrations_dir)
-                .await
-                .map_err(|error| error.to_string())?;
-            let pool = PgPoolOptions::new()
-                .max_connections(1)
-                .connect(database_url)
-                .await
-                .map_err(|error| error.to_string())?;
-
-            let result = migrator.run(&pool).await.map_err(|error| error.to_string());
-            pool.close().await;
-            result
-        })
     }
 }
 
@@ -666,7 +570,6 @@ fn dispatch_dev(args: &[String]) -> Response {
             let coordinator = DevCoordinator::new(
                 SupportConfigSource,
                 SupportStartupBannerSource,
-                SqlxDatabaseProvisioner,
                 RealCommandRunner,
                 RealChildProcessLauncher,
                 RealBrowserOpener,
@@ -766,7 +669,7 @@ fn main() -> ExitCode {
 mod tests {
     use super::{
         AppConfigSource, BrowserOpener, ChildProcess, ChildProcessLauncher, CommandOutput,
-        CommandRunner, DatabaseProvisioner, DevCoordinator, DevInputs, ExitStatus, OutputStream,
+        CommandRunner, DevCoordinator, DevInputs, ExitStatus, OutputStream,
         ResolvedAppConfig, StartupBanner, StartupBannerSource, SupportConfigSource,
         SupportStartupBannerSource, dispatch, help_text,
         parse_homepage_url_line,
@@ -835,7 +738,6 @@ mod tests {
         let coordinator = DevCoordinator::new(
             SupportConfigSource,
             SupportStartupBannerSource,
-            NoopDatabaseProvisioner,
             NoopCommandRunner::default(),
             NoopChildProcessLauncher::default(),
             NoopBrowserOpener::default(),
@@ -871,7 +773,6 @@ mod tests {
         let coordinator = DevCoordinator::new(
             SupportConfigSource,
             SupportStartupBannerSource,
-            NoopDatabaseProvisioner,
             NoopCommandRunner::default(),
             NoopChildProcessLauncher::default(),
             NoopBrowserOpener::default(),
@@ -946,7 +847,6 @@ mod tests {
                 admin_token: "shared-admin-token".to_string(),
                 admin_token_notice: None,
             }),
-            NoopDatabaseProvisioner,
             RecordingCommandRunner::default(),
             RecordingChildProcessLauncher::default(),
             RecordingBrowserOpener::default(),
@@ -960,7 +860,7 @@ mod tests {
             .expect("dry-run preview should succeed");
 
         assert!(report.service_banner.is_none());
-        assert_eq!(report.planned_steps.len(), 6);
+        assert_eq!(report.planned_steps.len(), 5);
     }
 
     #[test]
@@ -983,7 +883,6 @@ mod tests {
                 admin_token: "shared-admin-token".to_string(),
                 admin_token_notice: Some("sentinel".to_string()),
             }),
-            NoopDatabaseProvisioner,
             RecordingCommandRunner::default(),
             RecordingChildProcessLauncher::default(),
             RecordingBrowserOpener::default(),
@@ -1020,7 +919,6 @@ mod tests {
         let coordinator = DevCoordinator::new(
             SupportConfigSource,
             SupportStartupBannerSource,
-            NoopDatabaseProvisioner,
             NoopCommandRunner::default(),
             NoopChildProcessLauncher::default(),
             NoopBrowserOpener::default(),
@@ -1039,18 +937,16 @@ mod tests {
     }
 
     #[test]
-    fn dev_flow_executes_bundle_database_build_and_spawn_in_order() {
+    fn dev_flow_executes_bundle_build_and_spawn_in_order() {
         let temp_root = temp_workspace_root("dev-run-order");
         write_fake_binary(&temp_root);
         let actions = SharedActionLog::default();
         let runner = RecordingCommandRunner::with_action_log(actions.clone());
         let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
-        let database = RecordingDatabaseProvisioner::with_action_log(actions.clone());
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner.clone(),
             launcher.clone(),
             RecordingBrowserOpener::default(),
@@ -1066,7 +962,6 @@ mod tests {
             vec![
                 RecordedAction::CheckCommand("cargo".to_string()),
                 RecordedAction::BundleWeb,
-                RecordedAction::PrepareDatabase("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string()),
                 RecordedAction::BuildServer,
                 RecordedAction::LaunchChild,
                 RecordedAction::WaitChild,
@@ -1097,12 +992,10 @@ mod tests {
         let actions = SharedActionLog::default();
         let runner = RecordingCommandRunner::with_action_log(actions.clone());
         let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
-        let database = RecordingDatabaseProvisioner::with_action_log(actions);
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner.clone(),
             launcher,
             RecordingBrowserOpener::default(),
@@ -1132,12 +1025,10 @@ mod tests {
         let actions = SharedActionLog::default();
         let runner = RecordingCommandRunner::with_action_log(actions.clone());
         let launcher = RecordingChildProcessLauncher::with_action_log(actions);
-        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner,
             launcher.clone(),
             RecordingBrowserOpener::default(),
@@ -1179,12 +1070,10 @@ mod tests {
         let actions = SharedActionLog::default();
         let runner = RecordingCommandRunner::with_action_log(actions.clone());
         let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
-        let database = RecordingDatabaseProvisioner::with_action_log(actions.clone());
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner.clone(),
             launcher,
             RecordingBrowserOpener::default(),
@@ -1201,7 +1090,6 @@ mod tests {
             actions.actions(),
             vec![
                 RecordedAction::CheckCommand("cargo".to_string()),
-                RecordedAction::PrepareDatabase("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string()),
                 RecordedAction::BuildServer,
                 RecordedAction::LaunchChild,
                 RecordedAction::WaitChild,
@@ -1210,44 +1098,7 @@ mod tests {
     }
 
     #[test]
-    fn dev_flow_stops_before_spawn_when_migration_fails() {
-        let temp_root = temp_workspace_root("dev-run-migration-fail");
-        write_fake_binary(&temp_root);
-        let actions = SharedActionLog::default();
-        let runner = RecordingCommandRunner::with_action_log(actions.clone());
-        let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
-        let database = RecordingDatabaseProvisioner::failing(
-            actions.clone(),
-            "Migration failed".to_string(),
-        );
-        let coordinator = DevCoordinator::with_workspace_root(
-            temp_root.clone(),
-            FakeConfigSource::new(test_dev_config(&temp_root)),
-            FakeStartupBannerSource::without_banner(),
-            database,
-            runner.clone(),
-            launcher.clone(),
-            RecordingBrowserOpener::default(),
-        );
-
-        let error = coordinator
-            .run(DevInputs::default())
-            .expect_err("migration failure should stop dev run");
-
-        assert!(error.contains("Migration failed"));
-        assert_eq!(launcher.launch_calls().len(), 0);
-        assert_eq!(
-            actions.actions(),
-            vec![
-                RecordedAction::CheckCommand("cargo".to_string()),
-                RecordedAction::BundleWeb,
-                RecordedAction::PrepareDatabase("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string()),
-            ]
-        );
-    }
-
-    #[test]
-    fn dev_flow_stops_before_database_when_bundle_command_fails() {
+    fn dev_flow_stops_before_build_when_bundle_command_fails() {
         let temp_root = temp_workspace_root("dev-run-bundle-fail");
         write_fake_binary(&temp_root);
         let actions = SharedActionLog::default();
@@ -1256,12 +1107,10 @@ mod tests {
             "CreateProcess failed".to_string(),
         );
         let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
-        let database = RecordingDatabaseProvisioner::with_action_log(actions.clone());
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner,
             launcher.clone(),
             RecordingBrowserOpener::default(),
@@ -1290,12 +1139,10 @@ mod tests {
         let actions = SharedActionLog::default();
         let runner = RecordingCommandRunner::failing_build(actions.clone());
         let launcher = RecordingChildProcessLauncher::with_action_log(actions.clone());
-        let database = RecordingDatabaseProvisioner::with_action_log(actions.clone());
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner,
             launcher.clone(),
             RecordingBrowserOpener::default(),
@@ -1312,7 +1159,6 @@ mod tests {
             vec![
                 RecordedAction::CheckCommand("cargo".to_string()),
                 RecordedAction::BundleWeb,
-                RecordedAction::PrepareDatabase("postgres://koko:koko_local@127.0.0.1:5432/koko_dev_chat".to_string()),
                 RecordedAction::BuildServer,
             ]
         );
@@ -1328,7 +1174,6 @@ mod tests {
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            NoopDatabaseProvisioner,
             runner.clone(),
             launcher.clone(),
             RecordingBrowserOpener::default(),
@@ -1345,8 +1190,8 @@ mod tests {
         assert_eq!(launcher.launch_calls().len(), 0);
         let lines = report.dry_run_lines();
         assert!(lines.iter().any(|line| line.contains("dx-bundle-web.ps1")));
-        assert!(lines.iter().any(|line| line.contains("Ensure database koko_dev_chat")));
-        assert!(lines.iter().any(|line| line.contains("准备数据库结构")));
+        assert!(!lines.iter().any(|line| line.contains("Ensure database")));
+        assert!(!lines.iter().any(|line| line.contains("准备数据库结构")));
         assert!(lines.iter().any(|line| line.contains("cargo build --target-dir target/run")));
         assert!(lines.iter().any(|line| line.contains("==> launch ")));
     }
@@ -1365,13 +1210,11 @@ mod tests {
             ],
             vec!["child stderr noise".to_string()],
         );
-        let database = RecordingDatabaseProvisioner::with_action_log(actions.clone());
         let browser = RecordingBrowserOpener::default();
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner,
             launcher,
             browser.clone(),
@@ -1401,13 +1244,11 @@ mod tests {
             vec!["child ready without homepage".to_string()],
             vec!["==> 首页地址: http://127.0.0.1:9999/".to_string()],
         );
-        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
         let browser = RecordingBrowserOpener::default();
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner,
             launcher,
             browser.clone(),
@@ -1434,13 +1275,11 @@ mod tests {
             vec!["==> 首页地址: http://127.0.0.1:8899/".to_string()],
             Vec::new(),
         );
-        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
         let browser = RecordingBrowserOpener::default();
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner,
             launcher,
             browser.clone(),
@@ -1467,13 +1306,11 @@ mod tests {
             actions,
             "xtask failed to read child stdout: broken pipe".to_string(),
         );
-        let database = RecordingDatabaseProvisioner::with_action_log(SharedActionLog::default());
         let browser = RecordingBrowserOpener::default();
         let coordinator = DevCoordinator::with_workspace_root(
             temp_root.clone(),
             FakeConfigSource::new(test_dev_config(&temp_root)),
             FakeStartupBannerSource::without_banner(),
-            database,
             runner,
             launcher,
             browser,
@@ -1547,7 +1384,6 @@ mod tests {
     enum RecordedAction {
         CheckCommand(String),
         BundleWeb,
-        PrepareDatabase(String),
         BuildServer,
         LaunchChild,
         WaitChild,
@@ -1647,36 +1483,6 @@ mod tests {
                 }
             }
             Ok(CommandOutput::default())
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    struct RecordingDatabaseProvisioner {
-        actions: SharedActionLog,
-        result: Rc<RefCell<Result<(), String>>>,
-    }
-
-    impl RecordingDatabaseProvisioner {
-        fn with_action_log(actions: SharedActionLog) -> Self {
-            Self {
-                actions,
-                result: Rc::new(RefCell::new(Ok(()))),
-            }
-        }
-
-        fn failing(actions: SharedActionLog, error: String) -> Self {
-            Self {
-                actions,
-                result: Rc::new(RefCell::new(Err(error))),
-            }
-        }
-    }
-
-    impl DatabaseProvisioner for RecordingDatabaseProvisioner {
-        fn prepare(&self, database_url: &str, _migrations_dir: &Path) -> Result<(), String> {
-            self.actions
-                .push(RecordedAction::PrepareDatabase(database_url.to_string()));
-            self.result.borrow().clone()
         }
     }
 
@@ -1810,15 +1616,6 @@ mod tests {
     impl CommandRunner for NoopCommandRunner {
         fn run(&self, _program: &str, _args: &[String]) -> Result<CommandOutput, String> {
             Ok(CommandOutput::default())
-        }
-    }
-
-    #[derive(Debug, Clone, Copy, Default)]
-    struct NoopDatabaseProvisioner;
-
-    impl DatabaseProvisioner for NoopDatabaseProvisioner {
-        fn prepare(&self, _database_url: &str, _migrations_dir: &Path) -> Result<(), String> {
-            Ok(())
         }
     }
 
