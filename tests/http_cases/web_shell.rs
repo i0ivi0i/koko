@@ -173,6 +173,7 @@ fn send_message_keeps_pending_until_message_accepted() {
         session_id: state.session_id(),
         body: "hello koko".to_string(),
         created_at: fixed_time(),
+        event_position: 0,
         client_message_id: Some(pending_id),
     });
 
@@ -236,6 +237,7 @@ fn subscription_refill_then_realtime_event_does_not_duplicate_message() {
         session_id: state.session_id(),
         body: "hello refill".to_string(),
         created_at: fixed_time(),
+        event_position: 0,
         client_message_id: Some(pending_id),
     });
 
@@ -333,6 +335,7 @@ fn active_room_ignores_message_created_from_other_room() {
         session_id: Uuid::from_u128(91),
         body: "foreign".to_string(),
         created_at: fixed_time(),
+        event_position: 0,
         client_message_id: None,
     });
 
@@ -396,6 +399,7 @@ fn room_snapshot(room_id: Uuid, room_code: &str, messages: Vec<MessageView>) -> 
     RoomSnapshot {
         room_id,
         room_code: room_code.to_string(),
+        latest_event_position: 0,
         messages,
     }
 }
@@ -408,6 +412,7 @@ fn message_view(message_id: Uuid, body: &str, minute_offset: i64) -> MessageView
         created_at: Utc
             .timestamp_opt(fixed_time().timestamp() + minute_offset * 60, 0)
             .unwrap(),
+        event_position: 0,
     }
 }
 
@@ -425,6 +430,7 @@ fn message_created(
         created_at: Utc
             .timestamp_opt(fixed_time().timestamp() + minute_offset * 60, 0)
             .unwrap(),
+        event_position: 0,
         client_message_id: None,
     }
 }

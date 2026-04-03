@@ -110,7 +110,24 @@ pub enum AdminSessionState {
 pub struct RoomSnapshotData {
     pub room_id: Uuid,
     pub room_code: RoomCode,
-    pub messages: Vec<Message>,
+    pub latest_event_position: i64,
+    pub messages: Vec<PersistedMessageRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedMessageRecord {
+    pub message_id: Uuid,
+    pub room_id: Uuid,
+    pub sender_session_id: Uuid,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub event_position: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoomStreamSubscription {
+    pub room_id: Uuid,
+    pub latest_event_position: i64,
 }
 
 pub trait AdminCredentialPort {
@@ -182,7 +199,7 @@ pub trait MessageStore {
     fn save_message(
         &self,
         message: Message,
-    ) -> impl Future<Output = Result<Message, AppError>> + Send;
+    ) -> impl Future<Output = Result<PersistedMessageRecord, AppError>> + Send;
 }
 
 pub trait RoomEntryPort {
@@ -217,7 +234,7 @@ pub trait RoomEntryTx {
         &mut self,
         room_id: Uuid,
         limit: usize,
-    ) -> impl Future<Output = Result<Vec<Message>, AppError>> + Send;
+    ) -> impl Future<Output = Result<Vec<PersistedMessageRecord>, AppError>> + Send;
 
     fn commit(self) -> impl Future<Output = Result<(), AppError>> + Send
     where
@@ -230,6 +247,13 @@ pub trait RoomSnapshotPort {
         room_id: Uuid,
         limit: usize,
     ) -> impl Future<Output = Result<RoomSnapshotData, AppError>> + Send;
+}
+
+pub trait RoomEventPositionPort {
+    fn latest_room_event_position(
+        &self,
+        room_id: Uuid,
+    ) -> impl Future<Output = Result<i64, AppError>> + Send;
 }
 
 pub trait AdminOverviewPort {
@@ -467,14 +491,16 @@ where
     Ok(rooms)
 }
 
-pub async fn subscribe_room_stream<S, M>(
+pub async fn subscribe_room_stream<S, M, P>(
     session_port: &S,
     membership_port: &M,
+    room_event_position_port: &P,
     command: SubscribeRoomStreamInput,
-) -> Result<(), AppError>
+) -> Result<RoomStreamSubscription, AppError>
 where
     S: SessionPort,
     M: MembershipPort,
+    P: RoomEventPositionPort,
 {
     if !session_port.is_active_session(command.session_id).await? {
         return Err(AppError::SessionNotActive {
@@ -492,7 +518,12 @@ where
         });
     }
 
-    Ok(())
+    Ok(RoomStreamSubscription {
+        room_id: command.room_id,
+        latest_event_position: room_event_position_port
+            .latest_room_event_position(command.room_id)
+            .await?,
+    })
 }
 
 pub async fn send_text_message<S, M, R, I, C>(
@@ -542,8 +573,9 @@ where
         message_id: persisted_message.message_id,
         room_id: persisted_message.room_id,
         session_id: persisted_message.sender_session_id,
-        body: persisted_message.body.as_str().to_string(),
+        body: persisted_message.body.clone(),
         created_at: persisted_message.created_at,
+        event_position: persisted_message.event_position,
         client_message_id: command.client_message_id,
     }))
 }
@@ -597,12 +629,15 @@ where
         joined_at: clock.now(),
     };
     room_entry.ensure_room_member(&member).await?;
+    let messages = room_entry
+        .load_recent_messages(room_id, ROOM_SNAPSHOT_LIMIT)
+        .await?;
+    let latest_event_position = messages.last().map(|message| message.event_position).unwrap_or(0);
     let snapshot = RoomSnapshotData {
         room_id,
         room_code,
-        messages: room_entry
-            .load_recent_messages(room_id, ROOM_SNAPSHOT_LIMIT)
-            .await?,
+        latest_event_position,
+        messages,
     };
     room_entry.commit().await?;
 
@@ -650,6 +685,7 @@ fn build_room_snapshot(snapshot: RoomSnapshotData) -> Result<RoomSnapshot, AppEr
     let RoomSnapshotData {
         room_id,
         room_code,
+        latest_event_position,
         mut messages,
     } = snapshot;
 
@@ -658,8 +694,8 @@ fn build_room_snapshot(snapshot: RoomSnapshotData) -> Result<RoomSnapshot, AppEr
     }
 
     messages.sort_by(|left, right| {
-        left.created_at
-            .cmp(&right.created_at)
+        left.event_position
+            .cmp(&right.event_position)
             .then(left.message_id.cmp(&right.message_id))
     });
 
@@ -669,14 +705,16 @@ fn build_room_snapshot(snapshot: RoomSnapshotData) -> Result<RoomSnapshot, AppEr
     Ok(RoomSnapshot {
         room_id,
         room_code: room_code.normalized().to_string(),
+        latest_event_position,
         messages: messages
             .into_iter()
             .skip(skip)
             .map(|message| MessageView {
                 message_id: message.message_id,
                 session_id: message.sender_session_id,
-                body: message.body.as_str().to_string(),
+                body: message.body,
                 created_at: message.created_at,
+                event_position: message.event_position,
             })
             .collect(),
     })
@@ -684,14 +722,14 @@ fn build_room_snapshot(snapshot: RoomSnapshotData) -> Result<RoomSnapshot, AppEr
 
 fn ensure_persisted_message_matches(
     expected: &Message,
-    persisted: &Message,
+    persisted: &PersistedMessageRecord,
 ) -> Result<(), AppError> {
     let matches = expected.message_id == persisted.message_id
         && expected.room_id == persisted.room_id
         && expected.sender_session_id == persisted.sender_session_id
-        && expected.body == persisted.body
+        && expected.body.as_str() == persisted.body
         && expected.created_at == persisted.created_at
-        && expected.status == persisted.status;
+        && expected.status == MessageStatus::Active;
 
     if matches {
         Ok(())

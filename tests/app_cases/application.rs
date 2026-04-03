@@ -116,6 +116,7 @@ async fn send_text_message_returns_message_created_event() {
                 && message_created.session_id == session_id
                 && message_created.body == "hello koko"
                 && message_created.created_at == now
+                && message_created.event_position == 1
                 && message_created.client_message_id == Some(client_message_id)
     ));
 }
@@ -768,9 +769,10 @@ async fn load_room_snapshot_propagates_internal_error_code_for_dependency_failur
 
 #[tokio::test]
 async fn subscribe_room_stream_accepts_active_member() {
-    subscribe_room_stream(
+    let subscription = subscribe_room_stream(
         &FakeSessionPort::allow(),
         &FakeMembershipPort::allow(),
+        &FakeRoomEventPositionPort::with_latest(7),
         SubscribeRoomStreamInput {
             room_id: Uuid::from_u128(58),
             session_id: Uuid::from_u128(59),
@@ -778,6 +780,14 @@ async fn subscribe_room_stream_accepts_active_member() {
     )
     .await
     .unwrap();
+
+    assert_eq!(
+        subscription,
+        RoomStreamSubscription {
+            room_id: Uuid::from_u128(58),
+            latest_event_position: 7,
+        }
+    );
 }
 
 #[tokio::test]
@@ -788,6 +798,7 @@ async fn subscribe_room_stream_rejects_non_member() {
     let error = subscribe_room_stream(
         &FakeSessionPort::allow(),
         &FakeMembershipPort::deny(),
+        &FakeRoomEventPositionPort::with_latest(0),
         SubscribeRoomStreamInput {
             room_id,
             session_id,

@@ -5,13 +5,14 @@ use uuid::Uuid;
 use crate::{
     app::{
         AdminOverviewPort, AdminRoomsPort, AdminSessionState, AppError, JoinedRoomsPort,
-        MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx, RoomSearchPort, RoomSnapshotData,
-        RoomSnapshotPort, SessionBootstrapPort, SessionPort,
+        MembershipPort, MessageStore, PersistedMessageRecord, RoomEntryPort, RoomEntryTx,
+        RoomEventPositionPort, RoomSearchPort, RoomSnapshotData, RoomSnapshotPort,
+        SessionBootstrapPort, SessionPort,
     },
     contract::{AdminOverview, AdminRoomSummary, JoinedRoomSummary, RoomSearchResult},
     domain::{
-        AnonymousSession, Message, MessageBody, MessageStatus, NewMemberRecord, NewRoomCodeRecord,
-        NewRoomRecord, RoomCode, SessionStatus,
+        AnonymousSession, Message, NewMemberRecord, NewRoomCodeRecord, NewRoomRecord, RoomCode,
+        SessionStatus,
     },
 };
 
@@ -361,7 +362,7 @@ impl RoomSearchPort for PgStore {
 }
 
 impl MessageStore for PgStore {
-    async fn save_message(&self, message: Message) -> Result<Message, AppError> {
+    async fn save_message(&self, message: Message) -> Result<PersistedMessageRecord, AppError> {
         let row = sqlx::query(
             "INSERT INTO messages (
                  message_id,
@@ -372,7 +373,7 @@ impl MessageStore for PgStore {
                  status
              )
              VALUES ($1, $2, $3, $4, $5, 'active')
-             RETURNING message_id, room_id, sender_session_id, body, created_at, status",
+             RETURNING message_id, room_id, sender_session_id, body, created_at, event_position",
         )
         .bind(message.message_id)
         .bind(message.room_id)
@@ -383,7 +384,7 @@ impl MessageStore for PgStore {
         .await
         .map_err(map_sqlx_error)?;
 
-        map_message_row(&row)
+        Ok(map_persisted_message_row(&row))
     }
 }
 
@@ -490,7 +491,7 @@ impl RoomEntryTx for PgRoomEntry<'_> {
         &mut self,
         room_id: Uuid,
         limit: usize,
-    ) -> Result<Vec<Message>, AppError> {
+    ) -> Result<Vec<PersistedMessageRecord>, AppError> {
         load_recent_messages(&mut *self.tx, room_id, limit).await
     }
 
@@ -520,13 +521,24 @@ impl RoomSnapshotPort for PgStore {
             row.get::<String, _>("normalized_code"),
             row.get::<i16, _>("code_version"),
         )?;
+        let latest_event_position = latest_room_event_position(&self.pool, room_id).await?;
         let messages = load_recent_messages(&self.pool, room_id, limit).await?;
 
         Ok(RoomSnapshotData {
             room_id,
             room_code,
+            latest_event_position,
             messages,
         })
+    }
+}
+
+impl RoomEventPositionPort for PgStore {
+    async fn latest_room_event_position(
+        &self,
+        room_id: Uuid,
+    ) -> Result<i64, AppError> {
+        latest_room_event_position(&self.pool, room_id).await
     }
 }
 
@@ -657,22 +669,22 @@ async fn load_recent_messages<'a, E>(
     executor: E,
     room_id: Uuid,
     limit: usize,
-) -> Result<Vec<Message>, AppError>
+) -> Result<Vec<PersistedMessageRecord>, AppError>
 where
     E: sqlx::Executor<'a, Database = sqlx::Postgres>,
 {
     let limit = i64::try_from(limit).map_err(|_| AppError::DependencyFailure)?;
     let rows = sqlx::query(
-        "SELECT message_id, room_id, sender_session_id, body, created_at, status
+        "SELECT message_id, room_id, sender_session_id, body, created_at, event_position
          FROM (
-             SELECT message_id, room_id, sender_session_id, body, created_at, status
+             SELECT message_id, room_id, sender_session_id, body, created_at, event_position
              FROM messages
              WHERE room_id = $1
                AND status = 'active'
-             ORDER BY created_at DESC, message_id DESC
+             ORDER BY event_position DESC
              LIMIT $2
          ) AS recent_messages
-         ORDER BY created_at ASC, message_id ASC",
+         ORDER BY event_position ASC",
     )
     .bind(room_id)
     .bind(limit)
@@ -680,7 +692,25 @@ where
     .await
     .map_err(map_sqlx_error)?;
 
-    rows.into_iter().map(|row| map_message_row(&row)).collect()
+    Ok(rows
+        .into_iter()
+        .map(|row| map_persisted_message_row(&row))
+        .collect())
+}
+
+async fn latest_room_event_position<'a, E>(executor: E, room_id: Uuid) -> Result<i64, AppError>
+where
+    E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+{
+    let latest = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(event_position) FROM messages WHERE room_id = $1 AND status = 'active'",
+    )
+    .bind(room_id)
+    .fetch_one(executor)
+    .await
+    .map_err(map_sqlx_error)?;
+
+    Ok(latest.unwrap_or(0))
 }
 
 fn map_room_code(normalized_code: String, code_version: i16) -> Result<RoomCode, AppError> {
@@ -690,23 +720,15 @@ fn map_room_code(normalized_code: String, code_version: i16) -> Result<RoomCode,
     Ok(room_code)
 }
 
-fn map_message_row(row: &sqlx::postgres::PgRow) -> Result<Message, AppError> {
-    let status = row.get::<String, _>("status");
-    if status != "active" {
-        return Err(AppError::DependencyFailure);
-    }
-
-    let body =
-        MessageBody::new(&row.get::<String, _>("body")).map_err(|_| AppError::DependencyFailure)?;
-
-    Ok(Message {
+fn map_persisted_message_row(row: &sqlx::postgres::PgRow) -> PersistedMessageRecord {
+    PersistedMessageRecord {
         message_id: row.get("message_id"),
         room_id: row.get("room_id"),
         sender_session_id: row.get("sender_session_id"),
-        body,
+        body: row.get("body"),
         created_at: row.get::<DateTime<Utc>, _>("created_at"),
-        status: MessageStatus::Active,
-    })
+        event_position: row.get("event_position"),
+    }
 }
 
 fn map_sqlx_error(_: sqlx::Error) -> AppError {

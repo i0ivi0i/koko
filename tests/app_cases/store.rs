@@ -98,6 +98,7 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it(
                 && message_created.session_id == session_id
                 && message_created.body == "persisted hello"
                 && message_created.created_at == now
+                && message_created.event_position == 1
     ));
 
     let snapshot = load_room_snapshot(
@@ -113,8 +114,10 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it(
     .unwrap();
 
     assert_eq!(snapshot.messages.len(), 1);
+    assert_eq!(snapshot.latest_event_position, 1);
     assert_eq!(snapshot.messages[0].message_id, message_id);
     assert_eq!(snapshot.messages[0].body, "persisted hello");
+    assert_eq!(snapshot.messages[0].event_position, 1);
     assert_eq!(
         harness.message_bodies(joined.room_id).await,
         vec!["persisted hello".to_string()]

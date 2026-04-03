@@ -8,12 +8,12 @@ use koko::{
     app::{
         AdminOverviewPort, AdminRoomsPort, AdminSessionContext, AdminSessionPort, AppError,
         Clock, IdGenerator, JoinOrCreateRoomByCodeCommand, JoinedRoomsPort, ListJoinedRoomsQuery,
-        LoadRoomSnapshotQuery, MembershipPort, MessageStore, RoomEntryPort, RoomEntryTx,
-        RoomSearchPort, RoomSnapshotData, RoomSnapshotPort, SearchRoomsByCodeQuery,
-        SendTextMessageInput, SessionBootstrapPort, SessionPort, SubscribeRoomStreamInput,
-        bootstrap_anonymous_session, get_admin_overview, join_or_create_room_by_code,
-        list_admin_rooms, list_joined_rooms, load_room_snapshot, search_rooms_by_code,
-        send_text_message, subscribe_room_stream,
+        LoadRoomSnapshotQuery, MembershipPort, MessageStore, PersistedMessageRecord, RoomEntryPort,
+        RoomEntryTx, RoomEventPositionPort, RoomSearchPort, RoomSnapshotData, RoomSnapshotPort,
+        RoomStreamSubscription, SearchRoomsByCodeQuery, SendTextMessageInput,
+        SessionBootstrapPort, SessionPort, SubscribeRoomStreamInput, bootstrap_anonymous_session,
+        get_admin_overview, join_or_create_room_by_code, list_admin_rooms, list_joined_rooms,
+        load_room_snapshot, search_rooms_by_code, send_text_message, subscribe_room_stream,
     },
     contract::{
         AppErrorCode, AppEvent, JoinedRoomSummary, MessageView, RoomSearchResult, RoomSnapshot,
@@ -245,18 +245,48 @@ impl FakeMessageStore {
 }
 
 impl MessageStore for FakeMessageStore {
-    async fn save_message(&self, message: Message) -> Result<Message, AppError> {
+    async fn save_message(&self, message: Message) -> Result<PersistedMessageRecord, AppError> {
         self.recorded.lock().unwrap().push(message.clone());
 
         let persisted = match self.outcome {
-            MessageStoreOutcome::Same => message,
-            MessageStoreOutcome::RewriteBody(body) => Message {
-                body: MessageBody::new(body).unwrap(),
-                ..message
+            MessageStoreOutcome::Same => PersistedMessageRecord {
+                message_id: message.message_id,
+                room_id: message.room_id,
+                sender_session_id: message.sender_session_id,
+                body: message.body.as_str().to_string(),
+                created_at: message.created_at,
+                event_position: 1,
+            },
+            MessageStoreOutcome::RewriteBody(body) => PersistedMessageRecord {
+                message_id: message.message_id,
+                room_id: message.room_id,
+                sender_session_id: message.sender_session_id,
+                body: MessageBody::new(body).unwrap().as_str().to_string(),
+                created_at: message.created_at,
+                event_position: 1,
             },
         };
 
         Ok(persisted)
+    }
+}
+
+#[derive(Debug)]
+struct FakeRoomEventPositionPort {
+    latest_event_position: i64,
+}
+
+impl FakeRoomEventPositionPort {
+    fn with_latest(latest_event_position: i64) -> Self {
+        Self {
+            latest_event_position,
+        }
+    }
+}
+
+impl RoomEventPositionPort for FakeRoomEventPositionPort {
+    async fn latest_room_event_position(&self, _room_id: Uuid) -> Result<i64, AppError> {
+        Ok(self.latest_event_position)
     }
 }
 
@@ -425,7 +455,7 @@ impl RoomEntryTx for FakeRoomEntryTx {
         &mut self,
         room_id: Uuid,
         limit: usize,
-    ) -> Result<Vec<Message>, AppError> {
+    ) -> Result<Vec<PersistedMessageRecord>, AppError> {
         self.push("load_recent_messages");
         self.state.lock().unwrap().requested_limits.push(limit);
         if room_id != self.snapshot.room_id || limit != 50 {
@@ -595,11 +625,13 @@ fn expected_snapshot(room_id: Uuid, session_id: Uuid, body: &str) -> RoomSnapsho
     RoomSnapshot {
         room_id,
         room_code: "A1234".to_string(),
+        latest_event_position: 1,
         messages: vec![MessageView {
             message_id: Uuid::from_u128(33),
             session_id,
             body: body.to_string(),
             created_at: fixed_time(),
+            event_position: 1,
         }],
     }
 }
@@ -609,9 +641,24 @@ fn sample_snapshot_data(
     room_code: &str,
     messages: Vec<Message>,
 ) -> RoomSnapshotData {
+    let messages = messages
+        .into_iter()
+        .enumerate()
+        .map(|(index, message)| PersistedMessageRecord {
+            message_id: message.message_id,
+            room_id: message.room_id,
+            sender_session_id: message.sender_session_id,
+            body: message.body.as_str().to_string(),
+            created_at: message.created_at,
+            event_position: i64::try_from(index + 1).unwrap(),
+        })
+        .collect::<Vec<_>>();
+    let latest_event_position = messages.last().map(|message| message.event_position).unwrap_or(0);
+
     RoomSnapshotData {
         room_id,
         room_code: RoomCode::new(room_code).unwrap(),
+        latest_event_position,
         messages,
     }
 }

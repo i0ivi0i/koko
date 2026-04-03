@@ -24,6 +24,13 @@ pub struct SubscribeRoomStreamCommand {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoomStreamSubscribed {
     pub room_id: Uuid,
+    pub latest_event_position: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageAccepted {
+    pub room_id: Uuid,
+    pub client_message_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -110,12 +117,14 @@ pub struct MessageView {
     pub session_id: Uuid,
     pub body: String,
     pub created_at: DateTime<Utc>,
+    pub event_position: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoomSnapshot {
     pub room_id: Uuid,
     pub room_code: String,
+    pub latest_event_position: i64,
     pub messages: Vec<MessageView>,
 }
 
@@ -133,6 +142,7 @@ pub struct MessageCreated {
     pub session_id: Uuid,
     pub body: String,
     pub created_at: DateTime<Utc>,
+    pub event_position: i64,
     pub client_message_id: Option<Uuid>,
 }
 

@@ -18,6 +18,7 @@ fn web_state_promotes_pending_message_only_after_server_confirmation() {
         session_id,
         body: "hello koko".to_string(),
         created_at: chrono::Utc::now(),
+        event_position: 0,
         client_message_id: Some(pending_id),
     });
 

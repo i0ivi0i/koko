@@ -1,4 +1,5 @@
 use super::*;
+use chrono::{TimeZone, Utc};
 
 #[tokio::test]
 async fn admin_entry_serves_frontend_shell() {
@@ -79,8 +80,24 @@ async fn join_room_endpoint_returns_invalid_room_code_error_payload(
 async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sqlx::Result<()> {
     let harness = HttpHarness::new(pool).await;
 
-    let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let (session, cookie) = bootstrap_session_with_cookie(&harness).await;
     let joined = join_room(&harness, &cookie, "b1234").await;
+    koko::app::send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FixedIdGenerator(Uuid::from_u128(5001)),
+        &FixedClock(fixed_time()),
+        koko::app::SendTextMessageInput {
+            room_id: joined.room_id,
+            session_id: session.session_id,
+            body: " snapshot message ".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
     let response = harness
         .router
         .clone()
@@ -100,7 +117,33 @@ async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sq
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(snapshot.room_id, joined.room_id);
     assert_eq!(snapshot.room_code, "B1234");
+    assert_eq!(snapshot.latest_event_position, 1);
+    assert_eq!(snapshot.messages.len(), 1);
+    assert_eq!(snapshot.messages[0].body, "snapshot message");
+    assert_eq!(snapshot.messages[0].event_position, 1);
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FixedIdGenerator(Uuid);
+
+impl koko::app::IdGenerator for FixedIdGenerator {
+    fn next_message_id(&self) -> Uuid {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FixedClock(chrono::DateTime<Utc>);
+
+impl koko::app::Clock for FixedClock {
+    fn now(&self) -> chrono::DateTime<Utc> {
+        self.0
+    }
+}
+
+fn fixed_time() -> chrono::DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 3, 30, 12, 0, 0).unwrap()
 }
 
 #[sqlx::test]

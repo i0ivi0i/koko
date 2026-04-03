@@ -20,13 +20,28 @@ fn app_event_serializes_to_tagged_wire_format() {
         session_id: Uuid::from_u128(3),
         body: "hello".to_string(),
         created_at: fixed_time(),
+        event_position: 7,
         client_message_id: Some(Uuid::from_u128(4)),
     }))
     .unwrap();
 
     assert_eq!(
         json,
-        "{\"type\":\"message_created\",\"payload\":{\"message_id\":\"00000000-0000-0000-0000-000000000001\",\"room_id\":\"00000000-0000-0000-0000-000000000002\",\"session_id\":\"00000000-0000-0000-0000-000000000003\",\"body\":\"hello\",\"created_at\":\"2026-03-30T12:00:00Z\",\"client_message_id\":\"00000000-0000-0000-0000-000000000004\"}}"
+        "{\"type\":\"message_created\",\"payload\":{\"message_id\":\"00000000-0000-0000-0000-000000000001\",\"room_id\":\"00000000-0000-0000-0000-000000000002\",\"session_id\":\"00000000-0000-0000-0000-000000000003\",\"body\":\"hello\",\"created_at\":\"2026-03-30T12:00:00Z\",\"event_position\":7,\"client_message_id\":\"00000000-0000-0000-0000-000000000004\"}}"
+    );
+}
+
+#[test]
+fn command_result_serializes_message_accepted_without_history_fields() {
+    let json = serde_json::to_string(&koko::contract::MessageAccepted {
+        room_id: Uuid::from_u128(1),
+        client_message_id: Some(Uuid::from_u128(2)),
+    })
+    .unwrap();
+
+    assert_eq!(
+        json,
+        "{\"room_id\":\"00000000-0000-0000-0000-000000000001\",\"client_message_id\":\"00000000-0000-0000-0000-000000000002\"}"
     );
 }
 

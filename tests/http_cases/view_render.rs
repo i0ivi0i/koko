@@ -260,6 +260,7 @@ fn room_snapshot(room_id: Uuid, room_code: &str, messages: Vec<MessageView>) -> 
     RoomSnapshot {
         room_id,
         room_code: room_code.to_string(),
+        latest_event_position: 0,
         messages,
     }
 }
@@ -272,6 +273,7 @@ fn message_view(message_id: Uuid, body: &str, minute_offset: i64) -> MessageView
         created_at: Utc
             .timestamp_opt(fixed_time().timestamp() + minute_offset * 60, 0)
             .unwrap(),
+        event_position: 0,
     }
 }
 

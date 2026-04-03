@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        self, AppError, Clock, IdGenerator, MembershipPort, MessageStore, SendTextMessageInput,
-        SessionPort, SubscribeRoomStreamInput,
+        self, AppError, Clock, IdGenerator, MembershipPort, MessageStore, RoomEventPositionPort,
+        SendTextMessageInput, SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
         CommandRejected, RejectedCommandKind, RoomStreamSubscribed, SendTextMessageCommand,
@@ -126,7 +126,14 @@ pub fn install_realtime<Store, IdGen, AppClock>(
     io: &SocketIo,
     state: Arc<RealtimeState<Store, IdGen, AppClock>>,
 ) where
-    Store: SessionPort + MembershipPort + MessageStore + Clone + Send + Sync + 'static,
+    Store: SessionPort
+        + MembershipPort
+        + MessageStore
+        + RoomEventPositionPort
+        + Clone
+        + Send
+        + Sync
+        + 'static,
     IdGen: IdGenerator + Clone + Send + Sync + 'static,
     AppClock: Clock + Clone + Send + Sync + 'static,
 {
@@ -143,26 +150,37 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                     async move {
                         let room_id = payload.room_id;
                         let input = subscribe_room_stream_input(session, payload);
-                        if let Err(error) =
-                            app::subscribe_room_stream(&state.store, &state.store, input).await
+                        match app::subscribe_room_stream(
+                            &state.store,
+                            &state.store,
+                            &state.store,
+                            input,
+                        )
+                        .await
                         {
-                            emit_command_rejected(
-                                &socket,
-                                &error,
-                                RejectedCommandKind::SubscribeRoomStream,
-                                Some(room_id),
-                                None,
-                            );
-                            warn_handler_failure("subscribe_room_stream", &error);
-                            return;
+                            Ok(subscription) => {
+                                socket.join(room_name(room_id));
+                                emit_to_socket(
+                                    &socket,
+                                    "room_stream_subscribed",
+                                    &RoomStreamSubscribed {
+                                        room_id: subscription.room_id,
+                                        latest_event_position: subscription.latest_event_position,
+                                    },
+                                );
+                            }
+                            Err(error) => {
+                                emit_command_rejected(
+                                    &socket,
+                                    &error,
+                                    RejectedCommandKind::SubscribeRoomStream,
+                                    Some(room_id),
+                                    None,
+                                );
+                                warn_handler_failure("subscribe_room_stream", &error);
+                                return;
+                            }
                         }
-
-                        socket.join(room_name(room_id));
-                        emit_to_socket(
-                            &socket,
-                            "room_stream_subscribed",
-                            &RoomStreamSubscribed { room_id },
-                        );
                     }
                 }
             });
