@@ -16,7 +16,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&config.database_url)
         .await?;
     let admin_session_store = PostgresStore::new(pool.clone());
-    admin_session_store.migrate().await?;
     let store = koko::store::PgStore::new(pool);
     let admin_session_layer =
         koko::http::build_admin_session_layer(admin_session_store, config.admin_cookie_secure);

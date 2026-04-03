@@ -27,7 +27,6 @@ impl HttpHarness {
     pub async fn new(pool: PgPool) -> Self {
         let store = PgStore::new(pool.clone());
         let session_store = PostgresStore::new(pool);
-        session_store.migrate().await.unwrap();
         let session_layer = http::build_admin_session_layer(session_store, false);
         Self::assemble_server(store, session_layer)
     }

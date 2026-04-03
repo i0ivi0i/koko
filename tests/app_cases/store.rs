@@ -1,6 +1,28 @@
 use super::*;
 
 #[sqlx::test]
+async fn migrations_create_tower_sessions_schema_for_admin_sessions(
+    pool: PgPool,
+) -> sqlx::Result<()> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1
+             FROM information_schema.tables
+             WHERE table_schema = 'tower_sessions'
+               AND table_name = 'session'
+         )",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    assert!(
+        exists,
+        "admin session storage schema should come from SQL migrations"
+    );
+    Ok(())
+}
+
+#[sqlx::test]
 async fn join_or_create_persists_room_member_and_room_code(pool: PgPool) -> sqlx::Result<()> {
     let harness = PgHarness::new(pool);
     let session_id = Uuid::now_v7();
