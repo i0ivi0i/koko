@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn sender_receives_message_accepted_but_not_message_created() {
+async fn sender_receives_message_accepted_and_authoritative_message_created() {
     let room_id = Uuid::from_u128(11);
     let sender_session_id = Uuid::from_u128(12);
     let receiver_session_id = Uuid::from_u128(13);
@@ -70,11 +70,17 @@ async fn sender_receives_message_accepted_but_not_message_created() {
 
     assert_eq!(
         next_event("sender subscribed", &mut sender_room_stream.1).await,
-        RoomStreamSubscribed { room_id }
+        RoomStreamSubscribed {
+            room_id,
+            latest_event_position: 0,
+        }
     );
     assert_eq!(
         next_event("receiver subscribed", &mut receiver_room_stream.1).await,
-        RoomStreamSubscribed { room_id }
+        RoomStreamSubscribed {
+            room_id,
+            latest_event_position: 0,
+        }
     );
 
     sender
@@ -92,24 +98,29 @@ async fn sender_receives_message_accepted_but_not_message_created() {
     let accepted = next_event("sender message_accepted", &mut sender_message_accepted.1).await;
     assert_eq!(
         accepted,
+        MessageAccepted {
+            room_id,
+            client_message_id: Some(client_message_id),
+        }
+    );
+
+    let created = next_event("sender message_created", &mut sender_message_created.1).await;
+    assert_eq!(
+        created,
         MessageCreated {
             message_id,
             room_id,
             session_id: sender_session_id,
             body: "hello direct realtime".to_string(),
             created_at: fixed_time(),
+            event_position: 1,
             client_message_id: Some(client_message_id),
         }
     );
 
     assert_eq!(
         next_event("receiver message_created", &mut receiver_message_created.1).await,
-        accepted.clone()
-    );
-    assert!(
-        timeout(Duration::from_millis(300), sender_message_created.1.recv())
-            .await
-            .is_err()
+        created.clone()
     );
     assert!(receiver_message_accepted.1.try_recv().is_err());
 
@@ -154,6 +165,7 @@ async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server(
         next_event("room_stream_subscribed", &mut room_stream.1).await,
         RoomStreamSubscribed {
             room_id: room.room_id,
+            latest_event_position: 0,
         }
     );
 

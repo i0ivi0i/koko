@@ -2,8 +2,8 @@ use chrono::{TimeZone, Utc};
 use koko::{
     chat::{ChatState, ConnectionState, DeliveryState, ShellScreen},
     contract::{
-        BootstrapSession, JoinedRoomSummary, MessageCreated, MessageView, RoomSearchResult,
-        RoomSnapshot,
+        BootstrapSession, JoinedRoomSummary, MessageAccepted, MessageCreated, MessageView,
+        RoomSearchResult, RoomSnapshot,
     },
     web::{resolve_last_open_room_id, select_initial_screen, should_enter_join_flow},
 };
@@ -156,12 +156,21 @@ fn message_created_for_current_room_appends_to_timeline() {
 }
 
 #[test]
-fn send_message_keeps_pending_until_message_accepted() {
+fn send_message_keeps_pending_until_authoritative_message_created_arrives() {
     let room_id = Uuid::from_u128(14);
     let mut state = bootstrapped_state();
     state.open_room_from_snapshot(room_snapshot(room_id, "A1234", Vec::new()));
 
     let pending_id = state.enqueue_pending(room_id, state.session_id(), "  hello koko  ");
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Pending);
+    assert_eq!(state.confirmed_messages().len(), 0);
+
+    state.note_message_accepted(MessageAccepted {
+        room_id,
+        client_message_id: Some(pending_id),
+    });
 
     assert_eq!(state.messages().len(), 1);
     assert_eq!(state.messages()[0].delivery, DeliveryState::Pending);

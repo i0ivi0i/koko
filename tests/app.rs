@@ -639,8 +639,13 @@ fn expected_snapshot(room_id: Uuid, session_id: Uuid, body: &str) -> RoomSnapsho
 fn sample_snapshot_data(
     room_id: Uuid,
     room_code: &str,
-    messages: Vec<Message>,
+    mut messages: Vec<Message>,
 ) -> RoomSnapshotData {
+    messages.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then(left.message_id.cmp(&right.message_id))
+    });
     let messages = messages
         .into_iter()
         .enumerate()

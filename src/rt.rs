@@ -17,8 +17,8 @@ use crate::{
         SendTextMessageInput, SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
-        CommandRejected, RejectedCommandKind, RoomStreamSubscribed, SendTextMessageCommand,
-        SubscribeRoomStreamCommand,
+        CommandRejected, MessageAccepted, RejectedCommandKind, RoomStreamSubscribed,
+        SendTextMessageCommand, SubscribeRoomStreamCommand,
     },
 };
 
@@ -206,7 +206,15 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         .await
                         {
                             Ok(crate::contract::AppEvent::MessageCreated(payload)) => {
-                                emit_to_socket(&socket, "message_accepted", &payload);
+                                emit_to_socket(
+                                    &socket,
+                                    "message_accepted",
+                                    &MessageAccepted {
+                                        room_id,
+                                        client_message_id,
+                                    },
+                                );
+                                emit_to_socket(&socket, "message_created", &payload);
                                 emit_to_room_others(&socket, room_id, "message_created", &payload)
                                     .await;
                             }

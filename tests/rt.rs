@@ -31,11 +31,12 @@ use http_support::HttpHarness;
 
 use koko::{
     app::{
-        AppError, Clock, IdGenerator, MembershipPort, MessageStore, SendTextMessageInput,
-        SessionPort, SubscribeRoomStreamInput,
+        AppError, Clock, IdGenerator, MembershipPort, MessageStore, PersistedMessageRecord,
+        RoomEventPositionPort, SendTextMessageInput, SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
-        MessageCreated, RoomStreamSubscribed, SendTextMessageCommand, SubscribeRoomStreamCommand,
+        MessageAccepted, MessageCreated, RoomStreamSubscribed, SendTextMessageCommand,
+        SubscribeRoomStreamCommand,
     },
     domain::Message,
     rt::{
@@ -103,12 +104,31 @@ impl MembershipPort for RealtimeTestStore {
 }
 
 impl MessageStore for RealtimeTestStore {
-    async fn save_message(&self, message: Message) -> Result<Message, AppError> {
+    async fn save_message(&self, message: Message) -> Result<PersistedMessageRecord, AppError> {
         self.persisted_messages
             .lock()
             .unwrap()
             .push(message.clone());
-        Ok(message)
+        Ok(PersistedMessageRecord {
+            message_id: message.message_id,
+            room_id: message.room_id,
+            sender_session_id: message.sender_session_id,
+            body: message.body.as_str().to_string(),
+            created_at: message.created_at,
+            event_position: 1,
+        })
+    }
+}
+
+impl RoomEventPositionPort for RealtimeTestStore {
+    async fn latest_room_event_position(&self, room_id: Uuid) -> Result<i64, AppError> {
+        Ok(self
+            .persisted_messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|message| message.room_id == room_id)
+            .count() as i64)
     }
 }
 
@@ -137,7 +157,7 @@ type ClientWriter = SplitSink<ClientSocket, WsMessage>;
 struct ClientChannels {
     connected: mpsc::UnboundedSender<()>,
     room_stream_subscribed: mpsc::UnboundedSender<RoomStreamSubscribed>,
-    message_accepted: mpsc::UnboundedSender<MessageCreated>,
+    message_accepted: mpsc::UnboundedSender<MessageAccepted>,
     message_created: mpsc::UnboundedSender<MessageCreated>,
 }
 
@@ -145,7 +165,7 @@ impl ClientChannels {
     fn new(
         connected: mpsc::UnboundedSender<()>,
         room_stream_subscribed: mpsc::UnboundedSender<RoomStreamSubscribed>,
-        message_accepted: mpsc::UnboundedSender<MessageCreated>,
+        message_accepted: mpsc::UnboundedSender<MessageAccepted>,
         message_created: mpsc::UnboundedSender<MessageCreated>,
     ) -> Self {
         Self {

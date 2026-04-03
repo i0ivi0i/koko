@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::contract::{
-    BootstrapSession, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
+    BootstrapSession, JoinedRoomSummary, MessageAccepted, MessageCreated, RoomSearchResult,
+    RoomSnapshot,
 };
 use crate::domain::RoomCode;
 
@@ -345,6 +346,10 @@ impl ChatState {
             delivery: DeliveryState::Confirmed,
         });
         self.sort_messages();
+    }
+
+    pub fn note_message_accepted(&mut self, _accepted: MessageAccepted) {
+        // message_accepted 只代表命令结果，不得在壳层把 pending 升格成权威历史。
     }
 
     pub fn reject_pending(&mut self, client_message_id: Uuid) {

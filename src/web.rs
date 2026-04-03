@@ -15,7 +15,9 @@ use crate::contract::RejectedCommandKind;
 #[cfg(any(target_arch = "wasm32", test))]
 use crate::contract::CommandRejected;
 #[cfg(target_arch = "wasm32")]
-use crate::contract::{MessageCreated, RoomStreamSubscribed};
+use crate::contract::{MessageAccepted, MessageCreated};
+#[cfg(any(target_arch = "wasm32", test))]
+use crate::contract::RoomStreamSubscribed;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -111,6 +113,13 @@ struct RoomResolution {
     outcome: Result<Option<RoomSnapshot>, WebRequestError>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ActiveRoomSync {
+    room_id: Uuid,
+    revision: u64,
+    snapshot_position: i64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct HttpErrorPayload {
     code: AppErrorCode,
@@ -151,7 +160,7 @@ enum RealtimeEvent {
         payload: RoomStreamSubscribed,
     },
     MessageAccepted {
-        payload: MessageCreated,
+        payload: MessageAccepted,
     },
     MessageCreated {
         payload: MessageCreated,
@@ -468,6 +477,23 @@ fn should_handle_room_resolution(
     *action != RoomAction::Idle && requested_revision == resolved_revision
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
+fn should_accept_room_stream_subscribed(
+    active_room_sync: Option<&ActiveRoomSync>,
+    current_room_id: Option<Uuid>,
+    current_revision: u64,
+    payload: &RoomStreamSubscribed,
+) -> bool {
+    let Some(active_room_sync) = active_room_sync else {
+        return false;
+    };
+
+    current_room_id == Some(payload.room_id)
+        && active_room_sync.room_id == payload.room_id
+        && active_room_sync.revision == current_revision
+        && payload.latest_event_position >= active_room_sync.snapshot_position
+}
+
 fn queue_room_action(
     mut room_action: Signal<RoomAction>,
     mut room_action_revision: Signal<u64>,
@@ -572,8 +598,10 @@ fn can_send_message(state: &ChatState) -> bool {
 fn spawn_realtime_bridge(
     mut state: Signal<ChatState>,
     shell_error: Signal<Option<String>>,
+    active_room_sync: Signal<Option<ActiveRoomSync>>,
     mut realtime_target_room: Signal<Option<Uuid>>,
     mut realtime_active_room: Signal<Option<Uuid>>,
+    room_action_revision: Signal<u64>,
     pending_send_ids: Signal<Vec<Uuid>>,
     joined_rooms_refresh: Signal<u64>,
 ) -> document::Eval {
@@ -623,7 +651,12 @@ fn spawn_realtime_bridge(
                     }
                 }
                 RealtimeEvent::RoomStreamSubscribed { payload } => {
-                    if state().room_id() != Some(payload.room_id) {
+                    if !should_accept_room_stream_subscribed(
+                        active_room_sync().as_ref(),
+                        state().room_id(),
+                        room_action_revision(),
+                        &payload,
+                    ) {
                         continue;
                     }
 
@@ -634,9 +667,14 @@ fn spawn_realtime_bridge(
 
                     let mut refill_state = state;
                     let refill_shell_error = shell_error;
+                    let refill_room_sync = active_room_sync;
+                    let expected_sync = active_room_sync();
                     spawn(async move {
                         match load_room_snapshot(payload.room_id).await {
                             Ok(snapshot) => {
+                                if refill_room_sync() != expected_sync {
+                                    return;
+                                }
                                 let mut next_state = refill_state();
                                 next_state.apply_subscription_refill_snapshot(snapshot);
                                 refill_state.set(next_state);
@@ -653,9 +691,8 @@ fn spawn_realtime_bridge(
                         let _ = remove_pending_send(pending_send_ids, client_message_id);
                     }
                     let mut next_state = state();
-                    next_state.confirm_message(payload);
+                    next_state.note_message_accepted(payload);
                     state.set(next_state);
-                    bump_refresh(joined_rooms_refresh);
                     set_shell_error(shell_error, None);
                 }
                 RealtimeEvent::MessageCreated { payload } => {
@@ -710,6 +747,7 @@ pub fn App() -> Element {
     let mut initial_rooms_applied = use_signal(|| false);
     let shell_error = use_signal(|| None::<String>);
     let mut pending_send_ids = use_signal(Vec::<Uuid>::new);
+    let mut active_room_sync = use_signal(|| None::<ActiveRoomSync>);
     let mut realtime_target_room = use_signal(|| None::<Uuid>);
     let mut realtime_active_room = use_signal(|| None::<Uuid>);
     #[allow(unused_variables, unused_mut)]
@@ -723,8 +761,10 @@ pub fn App() -> Element {
                 realtime_bridge.set(Some(spawn_realtime_bridge(
                     state,
                     shell_error,
+                    active_room_sync,
                     realtime_target_room,
                     realtime_active_room,
+                    room_action_revision,
                     pending_send_ids,
                     joined_rooms_refresh,
                 )));
@@ -767,6 +807,7 @@ pub fn App() -> Element {
             room_action_revision.set(0);
             room_search_query.set(String::new());
             pending_send_ids.set(Vec::new());
+            active_room_sync.set(None);
             realtime_target_room.set(None);
             realtime_active_room.set(None);
             set_shell_error(shell_error, None);
@@ -894,6 +935,11 @@ pub fn App() -> Element {
                     next_state.set_connection(ConnectionState::Connecting);
                     state.set(next_state);
                     pending_send_ids.set(Vec::new());
+                    active_room_sync.set(Some(ActiveRoomSync {
+                        room_id: snapshot.room_id,
+                        revision: room_resolution.revision,
+                        snapshot_position: snapshot.latest_event_position,
+                    }));
                     realtime_target_room.set(Some(snapshot.room_id));
                     write_last_open_room_id(Some(snapshot.room_id));
                     room_action.set(RoomAction::Idle);
@@ -904,6 +950,7 @@ pub fn App() -> Element {
                     next_state.set_connection(ConnectionState::Offline);
                     state.set(next_state);
                     room_action.set(RoomAction::Idle);
+                    active_room_sync.set(None);
                     realtime_target_room.set(None);
                     let message = match action {
                         RoomAction::Join(_) => room_entry_error_message(error.code, &error.detail),
@@ -938,6 +985,7 @@ pub fn App() -> Element {
                 state: chat_state,
                 on_back_to_list: move |_| {
                     room_action.set(RoomAction::Idle);
+                    active_room_sync.set(None);
                     realtime_target_room.set(None);
                     pending_send_ids.set(Vec::new());
                     let mut next_state = state();
@@ -950,6 +998,7 @@ pub fn App() -> Element {
                 },
                 on_room_selected: move |room_id: Uuid| {
                     queue_room_action(room_action, room_action_revision, RoomAction::Open(room_id));
+                    active_room_sync.set(None);
                     realtime_target_room.set(None);
                     pending_send_ids.set(Vec::new());
                     let mut next_state = state();
@@ -979,11 +1028,13 @@ pub fn App() -> Element {
                             room_action_revision,
                             RoomAction::Open(result.room_id),
                         );
+                        active_room_sync.set(None);
                         let mut next_state = state();
                         next_state.restore_last_open_room(Some(result.room_id));
                         next_state.set_connection(ConnectionState::Connecting);
                         state.set(next_state);
                     } else {
+                        active_room_sync.set(None);
                         queue_room_action(
                             room_action,
                             room_action_revision,
@@ -1002,6 +1053,7 @@ pub fn App() -> Element {
                     }
 
                     pending_send_ids.set(Vec::new());
+                    active_room_sync.set(None);
                     realtime_target_room.set(None);
                     queue_room_action(
                         room_action,
@@ -1096,18 +1148,20 @@ pub fn app() -> Element {
 #[cfg(test)]
 mod tests {
     use super::{
-        can_send_message,
-        room_entry_error_message,
+        can_send_message, room_entry_error_message,
         normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
         rejected_pending_message_id, rejection_message, rejection_resets_subscription,
-        resolve_shell_banner_message, should_handle_room_resolution, RoomAction,
-        REALTIME_BRIDGE_SCRIPT,
         resolve_joined_rooms_path, resolve_room_search_path, resolve_room_snapshot_path,
-        resolve_shell_api_url, resolve_shell_api_url_with_query, should_trigger_room_search,
+        resolve_shell_api_url, resolve_shell_api_url_with_query, resolve_shell_banner_message,
+        should_accept_room_stream_subscribed, should_handle_room_resolution,
+        should_trigger_room_search, ActiveRoomSync, RoomAction, REALTIME_BRIDGE_SCRIPT,
     };
     use crate::{
         chat::{ChatState, ConnectionState},
-        contract::{AppErrorCode, BootstrapSession, CommandRejected, RejectedCommandKind},
+        contract::{
+            AppErrorCode, BootstrapSession, CommandRejected, RejectedCommandKind,
+            RoomStreamSubscribed,
+        },
     };
     use uuid::Uuid;
 
@@ -1349,6 +1403,7 @@ mod tests {
         state.open_room_from_snapshot(crate::contract::RoomSnapshot {
             room_id: Uuid::from_u128(11),
             room_code: "A1234".to_string(),
+            latest_event_position: 0,
             messages: Vec::new(),
         });
         state.set_draft("hello");
@@ -1357,5 +1412,51 @@ mod tests {
 
         state.set_connection(ConnectionState::Joined);
         assert!(can_send_message(&state));
+    }
+
+    #[test]
+    fn room_stream_subscription_result_requires_matching_room_revision_and_position() {
+        let sync = ActiveRoomSync {
+            room_id: Uuid::from_u128(12),
+            revision: 7,
+            snapshot_position: 5,
+        };
+
+        assert!(should_accept_room_stream_subscribed(
+            Some(&sync),
+            Some(sync.room_id),
+            7,
+            &RoomStreamSubscribed {
+                room_id: sync.room_id,
+                latest_event_position: 5,
+            }
+        ));
+        assert!(!should_accept_room_stream_subscribed(
+            Some(&sync),
+            Some(sync.room_id),
+            6,
+            &RoomStreamSubscribed {
+                room_id: sync.room_id,
+                latest_event_position: 5,
+            }
+        ));
+        assert!(!should_accept_room_stream_subscribed(
+            Some(&sync),
+            Some(Uuid::from_u128(99)),
+            7,
+            &RoomStreamSubscribed {
+                room_id: sync.room_id,
+                latest_event_position: 5,
+            }
+        ));
+        assert!(!should_accept_room_stream_subscribed(
+            Some(&sync),
+            Some(sync.room_id),
+            7,
+            &RoomStreamSubscribed {
+                room_id: sync.room_id,
+                latest_event_position: 4,
+            }
+        ));
     }
 }
