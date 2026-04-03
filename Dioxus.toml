@@ -5,6 +5,9 @@ asset_dir = "assets"
 [web.app]
 title = "koko"
 
+[web.resource]
+script = ["./assets/socket.io.min.js"]
+
 [web.watcher]
 reload_html = true
 watch_path = ["src", "assets"]

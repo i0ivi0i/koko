@@ -26,9 +26,9 @@ pub const JOIN_ROOM_PATH: &str = "/api/rooms/join";
 pub const ROOM_SNAPSHOT_PATH_PREFIX: &str = "/api/rooms";
 #[cfg(target_arch = "wasm32")]
 const LAST_OPEN_ROOM_STORAGE_KEY: &str = "koko.last_open_room_id";
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 const REALTIME_BRIDGE_SCRIPT: &str = r#"
-const { io } = await import("/assets/socket.io.esm.min.js");
+// 页面入口会先注入官方 Socket.IO bundle，这里只消费全局 io。
 let socket = null;
 let activeRoomId = null;
 
@@ -960,7 +960,7 @@ mod tests {
     use super::{
         normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
         rejected_pending_message_id, rejection_message, rejection_resets_subscription,
-        resolve_shell_banner_message,
+        resolve_shell_banner_message, REALTIME_BRIDGE_SCRIPT,
         resolve_joined_rooms_path, resolve_room_search_path, resolve_room_snapshot_path,
         resolve_shell_api_url, resolve_shell_api_url_with_query, should_trigger_room_search,
     };
@@ -1123,5 +1123,17 @@ mod tests {
 
         assert_eq!(banner, Some("实时连接失败".to_string()));
         assert_eq!(resolve_shell_banner_message(None, None), None);
+    }
+
+    #[test]
+    fn realtime_bridge_uses_preloaded_socket_io_bundle() {
+        assert!(
+            !REALTIME_BRIDGE_SCRIPT.contains("await import("),
+            "bridge should consume the preloaded global io bundle"
+        );
+        assert!(
+            REALTIME_BRIDGE_SCRIPT.contains(r#"io({ path: "/socket.io" })"#),
+            "bridge should still connect through the official socket.io path"
+        );
     }
 }
