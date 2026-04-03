@@ -60,3 +60,40 @@ fn web_bootstrap_state_applies_backend_session_to_chat_state() {
     assert!(state.messages().is_empty());
 }
 
+#[test]
+fn search_query_can_report_when_it_forms_a_complete_room_code() {
+    let mut state = ChatState::awaiting_bootstrap();
+
+    state.set_search_query("A1234");
+    assert!(state.search_query_forms_complete_room_code());
+
+    state.set_search_query("A12");
+    assert!(!state.search_query_forms_complete_room_code());
+}
+
+#[test]
+fn search_results_split_into_joined_and_discoverable_sections() {
+    let mut state = ChatState::awaiting_bootstrap();
+    state.apply_search_results(vec![
+        RoomSearchResult {
+            room_id: Uuid::from_u128(1),
+            room_code: "A1234".to_string(),
+            display_title: "A1234".to_string(),
+            latest_preview: "joined".to_string(),
+            latest_message_at: None,
+            is_joined: true,
+        },
+        RoomSearchResult {
+            room_id: Uuid::from_u128(2),
+            room_code: "A1299".to_string(),
+            display_title: "A1299".to_string(),
+            latest_preview: "discover".to_string(),
+            latest_message_at: None,
+            is_joined: false,
+        },
+    ]);
+
+    assert_eq!(state.joined_search_results().len(), 1);
+    assert_eq!(state.discoverable_search_results().len(), 1);
+}
+

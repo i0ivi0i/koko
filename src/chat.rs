@@ -4,6 +4,7 @@ use uuid::Uuid;
 use crate::contract::{
     BootstrapSession, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
 };
+use crate::domain::RoomCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -130,6 +131,29 @@ impl ChatState {
 
     pub fn search_results(&self) -> &[RoomSearchResult] {
         &self.search.results
+    }
+
+    pub fn search_query_forms_complete_room_code(&self) -> bool {
+        query_forms_complete_room_code(self.search_query())
+    }
+
+    // 这里只给壳层提供分组视图，成员归属真相仍以后端返回的 `is_joined` 为准。
+    pub fn joined_search_results(&self) -> Vec<RoomSearchResult> {
+        self.search
+            .results
+            .iter()
+            .filter(|room| room.is_joined)
+            .cloned()
+            .collect()
+    }
+
+    pub fn discoverable_search_results(&self) -> Vec<RoomSearchResult> {
+        self.search
+            .results
+            .iter()
+            .filter(|room| !room.is_joined)
+            .cloned()
+            .collect()
     }
 
     pub fn room_id(&self) -> Option<Uuid> {
@@ -394,6 +418,10 @@ fn snapshot_message(room_id: Uuid, message: crate::contract::MessageView) -> Cha
         created_at: message.created_at,
         delivery: DeliveryState::Confirmed,
     }
+}
+
+pub fn query_forms_complete_room_code(query: &str) -> bool {
+    RoomCode::new(query).is_ok()
 }
 
 fn fallback_screen(joined_rooms: &[ConversationItem]) -> ShellScreen {
