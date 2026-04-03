@@ -5,23 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Koko: 终端启动 run.ps1",
+            "name": "Koko: 启动 run.ps1",
             "type": "node-terminal",
             "request": "launch",
-            "command": "powershell -ExecutionPolicy Bypass -File \"${workspaceFolder}\\run.ps1\" -DatabaseUrl \"postgres://postgres:postgres@127.0.0.1:5432/postgres\" -NoBrowser $true"
-        },
-        {
-            "name": "Koko: 调试 run.ps1",
-            "type": "PowerShell",
-            "request": "launch",
-            "script": "${workspaceFolder}\\run.ps1",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "-DatabaseUrl",
-                "postgres://postgres:postgres@127.0.0.1:5432/postgres",
-                "-NoBrowser",
-                "$true"
-            ]
+            "command": "cd /d \"${workspaceFolder}\" && powershell -ExecutionPolicy Bypass -File \".\\run.ps1\" -DatabaseUrl \"postgres://postgres:postgres@127.0.0.1:5432/postgres\" -NoBrowser $true"
         }
     ]
 }
