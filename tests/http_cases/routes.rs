@@ -46,6 +46,36 @@ async fn bootstrap_then_join_returns_room_snapshot(pool: sqlx::PgPool) -> sqlx::
 }
 
 #[sqlx::test]
+async fn join_room_endpoint_returns_invalid_room_code_error_payload(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
+
+    let (_session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/rooms/join")
+                .header("content-type", "application/json")
+                .header(COOKIE, &cookie)
+                .body(Body::from(r#"{ "room_code": "ABCDE" }"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let payload: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["code"], "invalid_room_code");
+    Ok(())
+}
+
+#[sqlx::test]
 async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sqlx::Result<()> {
     let harness = HttpHarness::new(pool).await;
 

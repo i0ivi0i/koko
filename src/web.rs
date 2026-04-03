@@ -1,16 +1,17 @@
 use dioxus::prelude::*;
 use reqwest::Url;
+use serde::Deserialize;
 #[cfg(target_arch = "wasm32")]
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
-    chat::{ChatState, ConnectionState, ConversationItem, ShellScreen},
-    contract::{BootstrapSession, JoinedRoomSummary, RoomSearchResult, RoomSnapshot},
+    chat::{ChatState, ConnectionState, ConversationItem, ShellScreen, query_forms_complete_room_code},
+    contract::{AppErrorCode, BootstrapSession, JoinedRoomSummary, RoomSearchResult, RoomSnapshot},
     view,
 };
 #[cfg(any(target_arch = "wasm32", test))]
-use crate::contract::{AppErrorCode, RejectedCommandKind};
+use crate::contract::RejectedCommandKind;
 #[cfg(any(target_arch = "wasm32", test))]
 use crate::contract::CommandRejected;
 #[cfg(target_arch = "wasm32")]
@@ -106,6 +107,17 @@ enum RoomAction {
     Idle,
     Open(Uuid),
     Join(String),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct HttpErrorPayload {
+    code: AppErrorCode,
+}
+
+#[derive(Debug, Clone)]
+struct WebRequestError {
+    code: Option<AppErrorCode>,
+    detail: String,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -317,13 +329,16 @@ async fn load_room_search_results(query: &str) -> Result<Vec<RoomSearchResult>, 
         &normalized_query,
     )?;
 
-    reqwest::Client::new()
+    let response = reqwest::Client::new()
         .get(url)
         .send()
         .await
-        .map_err(|error| error.to_string())?
-        .error_for_status()
-        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(parse_http_error(response).await.detail);
+    }
+
+    response
         .json::<Vec<RoomSearchResult>>()
         .await
         .map_err(|error| error.to_string())
@@ -344,26 +359,45 @@ async fn load_room_snapshot(room_id: Uuid) -> Result<RoomSnapshot, String> {
         .map_err(|error| error.to_string())
 }
 
-async fn join_room_by_code(room_code: &str) -> Result<RoomSnapshot, String> {
+async fn join_room_by_code(room_code: &str) -> Result<RoomSnapshot, WebRequestError> {
     let room_code = normalize_room_code_query(room_code);
     if room_code.is_empty() {
-        return Err("Room code required".to_string());
+        return Err(WebRequestError {
+            code: Some(AppErrorCode::InvalidRoomCode),
+            detail: "Room code required".to_string(),
+        });
     }
 
-    let url = resolve_shell_api_url(&browser_location()?, JOIN_ROOM_PATH)?;
+    let browser_location = browser_location().map_err(|detail| WebRequestError {
+        code: None,
+        detail,
+    })?;
+    let url = resolve_shell_api_url(&browser_location, JOIN_ROOM_PATH).map_err(|detail| WebRequestError {
+        code: None,
+        detail,
+    })?;
     let body = serde_json::json!({ "room_code": room_code });
 
-    reqwest::Client::new()
+    let response = reqwest::Client::new()
         .post(url)
         .json(&body)
         .send()
         .await
-        .map_err(|error| error.to_string())?
-        .error_for_status()
-        .map_err(|error| error.to_string())?
+        .map_err(|error| WebRequestError {
+            code: None,
+            detail: error.to_string(),
+        })?;
+    if !response.status().is_success() {
+        return Err(parse_http_error(response).await);
+    }
+
+    response
         .json::<RoomSnapshot>()
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| WebRequestError {
+            code: None,
+            detail: error.to_string(),
+        })
 }
 
 pub fn parse_stored_room_id(raw: Option<&str>) -> Option<Uuid> {
@@ -440,6 +474,33 @@ fn remove_pending_send(
     let removed = next_pending_send_ids.remove(position);
     pending_send_ids.set(next_pending_send_ids);
     Some(removed)
+}
+
+async fn parse_http_error(response: reqwest::Response) -> WebRequestError {
+    let status = response.status();
+    let bytes = response.bytes().await.unwrap_or_default();
+    let code = serde_json::from_slice::<HttpErrorPayload>(&bytes)
+        .ok()
+        .map(|payload| payload.code);
+    let body = String::from_utf8(bytes.to_vec()).unwrap_or_default();
+
+    WebRequestError {
+        code,
+        detail: if code.is_some() || body.trim().is_empty() {
+            status.to_string()
+        } else {
+            body
+        },
+    }
+}
+
+fn room_entry_error_message(code: Option<AppErrorCode>, detail: &str) -> String {
+    match code {
+        Some(AppErrorCode::InvalidRoomCode) => {
+            "房间码不合法，请输入 1 个字母 + 4 个数字，例如 A1234".to_string()
+        }
+        _ => format!("打开房间失败：{detail}"),
+    }
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -769,7 +830,10 @@ pub fn App() -> Element {
 
         match action {
             RoomAction::Idle => Ok(None),
-            RoomAction::Open(room_id) => load_room_snapshot(room_id).await.map(Some),
+            RoomAction::Open(room_id) => load_room_snapshot(room_id)
+                .await
+                .map(Some)
+                .map_err(|detail| WebRequestError { code: None, detail }),
             RoomAction::Join(room_code) => join_room_by_code(&room_code).await.map(Some),
         }
     });
@@ -795,12 +859,17 @@ pub fn App() -> Element {
         }
     } else if let Some(Err(error)) = &*room_resolution.read_unchecked() {
         if room_action() != RoomAction::Idle {
+            let action = room_action();
             let mut next_state = state();
             next_state.set_connection(ConnectionState::Offline);
             state.set(next_state);
             room_action.set(RoomAction::Idle);
             realtime_target_room.set(None);
-            set_shell_error(shell_error, Some(format!("打开房间失败：{error}")));
+            let message = match action {
+                RoomAction::Join(_) => room_entry_error_message(error.code, &error.detail),
+                _ => format!("打开房间失败：{}", error.detail),
+            };
+            set_shell_error(shell_error, Some(message));
         }
     }
 
@@ -870,6 +939,21 @@ pub fn App() -> Element {
                     } else {
                         room_action.set(RoomAction::Join(result.room_code.clone()));
                     }
+                },
+                on_submit_room_code: move |_| {
+                    let query = room_search_query();
+                    if !query_forms_complete_room_code(&query) {
+                        set_shell_error(
+                            shell_error,
+                            Some("房间码不合法，请输入 1 个字母 + 4 个数字，例如 A1234".to_string()),
+                        );
+                        return;
+                    }
+
+                    pending_send_ids.set(Vec::new());
+                    realtime_target_room.set(None);
+                    room_action.set(RoomAction::Join(normalize_room_code_query(&query)));
+                    set_shell_error(shell_error, None);
                 },
                 draft: chat_draft,
                 on_draft_input: move |draft: String| {
@@ -958,6 +1042,7 @@ pub fn app() -> Element {
 #[cfg(test)]
 mod tests {
     use super::{
+        room_entry_error_message,
         normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
         rejected_pending_message_id, rejection_message, rejection_resets_subscription,
         resolve_shell_banner_message, REALTIME_BRIDGE_SCRIPT,
@@ -1020,6 +1105,14 @@ mod tests {
     #[test]
     fn should_trigger_room_search_accepts_non_blank_queries() {
         assert!(should_trigger_room_search("a12"));
+    }
+
+    #[test]
+    fn room_entry_error_message_prioritizes_stable_error_codes() {
+        assert_eq!(
+            room_entry_error_message(Some(AppErrorCode::InvalidRoomCode), "bad request"),
+            "房间码不合法，请输入 1 个字母 + 4 个数字，例如 A1234"
+        );
     }
 
     #[test]
