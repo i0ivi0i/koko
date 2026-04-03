@@ -17,9 +17,9 @@ fn crate_exposes_expected_root_modules() {
 
 #[test]
 fn crate_source_gates_server_modules_away_from_wasm_builds() {
-    let lib_source = include_str!("../src/lib.rs");
-    let main_source = include_str!("../src/main.rs");
-    let cargo_manifest = include_str!("../Cargo.toml");
+    let lib_source = include_str!("../../src/lib.rs");
+    let main_source = include_str!("../../src/main.rs");
+    let cargo_manifest = include_str!("../../Cargo.toml");
 
     assert!(lib_source.contains("#[cfg(not(target_arch = \"wasm32\"))]\npub mod http;"));
     assert!(lib_source.contains("#[cfg(not(target_arch = \"wasm32\"))]\npub mod rt;"));
@@ -32,7 +32,7 @@ fn crate_source_gates_server_modules_away_from_wasm_builds() {
 
 #[test]
 fn crate_root_does_not_keep_placeholder_modules() {
-    let lib_source = include_str!("../src/lib.rs");
+    let lib_source = include_str!("../../src/lib.rs");
 
     assert!(!lib_source.contains("placeholder_module!"));
     assert!(!lib_source.contains("pub mod panel"));
@@ -55,3 +55,4 @@ fn message_requires_non_empty_body() {
     assert!(koko::domain::MessageBody::new("").is_err());
     assert!(koko::domain::MessageBody::new("   ").is_err());
 }
+

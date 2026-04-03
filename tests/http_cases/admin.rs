@@ -1,9 +1,7 @@
-mod http_support;
-
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
-use http_support::HttpHarness;
+use crate::HttpHarness;
 use koko::{
     admin::AdminPanelState,
     app::{
@@ -558,3 +556,4 @@ impl AdminSessionPort for FakeAdminSessionPort {
         panic!("login flow should not revoke admin session");
     }
 }
+
