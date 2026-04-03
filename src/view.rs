@@ -214,6 +214,11 @@ fn ChatScreen(
     #[props(default)] on_send_message: Option<EventHandler<()>>,
 ) -> Element {
     let room_code = shell_room_code(state.room_code());
+    let send_enabled = can_send_message(
+        state.connection(),
+        &draft,
+        on_send_message.is_some(),
+    );
 
     rsx! {
         div {
@@ -266,7 +271,7 @@ fn ChatScreen(
                     class: "tg-compose__send",
                     r#type: "button",
                     "aria-label": "发送消息",
-                    disabled: on_send_message.is_none() || draft.trim().is_empty(),
+                    disabled: !send_enabled,
                     onclick: move |_| {
                         if let Some(handler) = on_send_message.as_ref() {
                             handler.call(());
@@ -498,6 +503,15 @@ fn connection_label(state: ConnectionState) -> &'static str {
     }
 }
 
+fn can_send_message(
+    connection: ConnectionState,
+    draft: &str,
+    has_send_handler: bool,
+) -> bool {
+    // 壳层只在真实订阅完成后开放发送，避免把本地 pending 误当成已经成立的消息事实。
+    has_send_handler && connection == ConnectionState::Joined && !draft.trim().is_empty()
+}
+
 fn delivery_label(state: DeliveryState) -> &'static str {
     match state {
         DeliveryState::Pending => "发送中",
@@ -611,6 +625,18 @@ mod tests {
         assert_eq!(connection_label(ConnectionState::Offline), "未连接");
         assert_eq!(connection_label(ConnectionState::Connecting), "连接中");
         assert_eq!(connection_label(ConnectionState::Joined), "已连接");
+    }
+
+    #[test]
+    fn send_control_requires_joined_connection() {
+        assert!(!can_send_message(ConnectionState::Connecting, "hello", true));
+        assert!(can_send_message(ConnectionState::Joined, "hello", true));
+    }
+
+    #[test]
+    fn send_control_requires_non_empty_draft_and_handler() {
+        assert!(!can_send_message(ConnectionState::Joined, "   ", true));
+        assert!(!can_send_message(ConnectionState::Joined, "hello", false));
     }
 
     #[test]

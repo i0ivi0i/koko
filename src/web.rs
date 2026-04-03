@@ -49,10 +49,6 @@ function teardownSocket() {
 while (true) {
   const command = await dioxus.recv();
   if (command.type === "connect") {
-    if (socket && activeRoomId === command.room_id) {
-      continue;
-    }
-
     teardownSocket();
     activeRoomId = command.room_id;
     socket = io({ path: "/socket.io" });
@@ -565,6 +561,13 @@ fn resolve_shell_banner_message(
     bootstrap_error.or(shell_error)
 }
 
+fn can_send_message(state: &ChatState) -> bool {
+    // 只有真正 Joined 的房间才能发消息；Connecting 阶段只允许展示本地草稿，不允许制造假历史。
+    state.room_id().is_some()
+        && state.connection() == ConnectionState::Joined
+        && !state.draft().trim().is_empty()
+}
+
 #[cfg(target_arch = "wasm32")]
 fn spawn_realtime_bridge(
     mut state: Signal<ChatState>,
@@ -1014,17 +1017,16 @@ pub fn App() -> Element {
                     state.set(next_state);
                 },
                 on_send_message: move |_| {
-                    let room_id = state().room_id();
-                    let Some(room_id) = room_id else {
-                        return;
-                    };
-
-                    let draft = state().draft().to_string();
-                    if draft.trim().is_empty() {
+                    let current_state = state();
+                    if !can_send_message(&current_state) {
                         return;
                     }
+                    let room_id = current_state
+                        .room_id()
+                        .expect("joined connection should keep an active room");
+                    let draft = current_state.draft().to_string();
 
-                    let session_id = state().session_id();
+                    let session_id = current_state.session_id();
                     let mut next_state = state();
                     let client_message_id =
                         next_state.enqueue_pending(room_id, session_id, &draft);
@@ -1094,6 +1096,7 @@ pub fn app() -> Element {
 #[cfg(test)]
 mod tests {
     use super::{
+        can_send_message,
         room_entry_error_message,
         normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
         rejected_pending_message_id, rejection_message, rejection_resets_subscription,
@@ -1102,7 +1105,10 @@ mod tests {
         resolve_joined_rooms_path, resolve_room_search_path, resolve_room_snapshot_path,
         resolve_shell_api_url, resolve_shell_api_url_with_query, should_trigger_room_search,
     };
-    use crate::contract::{AppErrorCode, CommandRejected, RejectedCommandKind};
+    use crate::{
+        chat::{ChatState, ConnectionState},
+        contract::{AppErrorCode, BootstrapSession, CommandRejected, RejectedCommandKind},
+    };
     use uuid::Uuid;
 
     #[test]
@@ -1284,6 +1290,14 @@ mod tests {
     }
 
     #[test]
+    fn realtime_bridge_does_not_skip_same_room_reconnects() {
+        assert!(
+            !REALTIME_BRIDGE_SCRIPT.contains("activeRoomId === command.room_id"),
+            "bridge must reconnect even when re-entering the same room"
+        );
+    }
+
+    #[test]
     fn stale_room_resolution_is_ignored_when_it_belongs_to_previous_request() {
         let room_id = Uuid::from_u128(9);
 
@@ -1318,5 +1332,30 @@ mod tests {
             8,
             8
         ));
+    }
+
+    #[test]
+    fn can_send_message_requires_joined_connection_and_active_room() {
+        let mut state = ChatState::awaiting_bootstrap();
+        state.apply_bootstrap_session(BootstrapSession {
+            session_id: Uuid::from_u128(90),
+            issued_at: chrono::Utc::now(),
+            last_seen_at: chrono::Utc::now(),
+        });
+        state.set_draft("hello");
+
+        assert!(!can_send_message(&state));
+
+        state.open_room_from_snapshot(crate::contract::RoomSnapshot {
+            room_id: Uuid::from_u128(11),
+            room_code: "A1234".to_string(),
+            messages: Vec::new(),
+        });
+        state.set_draft("hello");
+
+        assert!(!can_send_message(&state));
+
+        state.set_connection(ConnectionState::Joined);
+        assert!(can_send_message(&state));
     }
 }
