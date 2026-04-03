@@ -33,7 +33,8 @@ impl HttpHarness {
     }
 
     pub fn frontend_only() -> Self {
-        // 这里故意只装静态壳，避免前端入口/回退测试被真实 session store 与数据库初始化牵连。
+        // 这里只验证静态路由协议面，避免前端入口/回退测试被真实 session store 与数据库初始化牵连。
+        // 生产环境 bundle 是否总装完整，仍应由面向 dist/public 的测试单独兜底。
         let pool = PgPool::connect_lazy(FRONTEND_ONLY_DATABASE_URL).unwrap();
         let store = PgStore::new(pool);
         let frontend_fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
