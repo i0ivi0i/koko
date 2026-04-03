@@ -208,6 +208,7 @@ impl RoomSearchPort for FakeRoomSearchPort {
 enum MessageStoreOutcome {
     Same,
     RewriteBody(&'static str),
+    RewriteCreatedAt(DateTime<Utc>),
 }
 
 impl MessageStoreOutcome {
@@ -217,6 +218,10 @@ impl MessageStoreOutcome {
 
     fn rewrite_body(body: &'static str) -> Self {
         Self::RewriteBody(body)
+    }
+
+    fn rewrite_created_at(created_at: DateTime<Utc>) -> Self {
+        Self::RewriteCreatedAt(created_at)
     }
 }
 
@@ -263,6 +268,14 @@ impl MessageStore for FakeMessageStore {
                 sender_session_id: message.sender_session_id,
                 body: MessageBody::new(body).unwrap().as_str().to_string(),
                 created_at: message.created_at,
+                event_position: 1,
+            },
+            MessageStoreOutcome::RewriteCreatedAt(created_at) => PersistedMessageRecord {
+                message_id: message.message_id,
+                room_id: message.room_id,
+                sender_session_id: message.sender_session_id,
+                body: message.body.as_str().to_string(),
+                created_at,
                 event_position: 1,
             },
         };

@@ -255,6 +255,39 @@ async fn join_room(harness: &HttpHarness, cookie: &str, room_code: &str) -> Room
     serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
 
+async fn send_room_message(
+    harness: &HttpHarness,
+    cookie: &str,
+    room_id: Uuid,
+    body: &str,
+    client_message_id: Option<Uuid>,
+) -> MessageCreated {
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/rooms/{room_id}/messages"))
+                .header("content-type", "application/json")
+                .header(COOKIE, cookie)
+                .body(Body::from(
+                    serde_json::json!({
+                        "body": body,
+                        "client_message_id": client_message_id,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
 async fn seed_active_session(harness: &HttpHarness, session_id: Uuid) {
     let now = chrono::Utc::now();
     sqlx::query(

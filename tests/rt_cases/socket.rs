@@ -174,6 +174,77 @@ async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server(
     Ok(())
 }
 
+#[sqlx::test]
+async fn smoke_http_bootstrap_join_then_realtime_send_returns_sender_events(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let server = HttpHarness::new(pool).await.spawn().await;
+    let room_code = format!("y{:04}", Uuid::now_v7().as_u128() % 10_000);
+    let (session, cookie) = server.bootstrap_session_with_cookie().await;
+    let room = server.join_room(&cookie, &room_code).await;
+    let client_message_id = Uuid::from_u128(188);
+
+    let mut room_stream = mpsc::unbounded_channel();
+    let mut message_accepted = mpsc::unbounded_channel();
+    let mut message_created = mpsc::unbounded_channel();
+    let mut connected = mpsc::unbounded_channel();
+    let mut socket = connect_client_with_cookie(
+        server.base_url(),
+        &cookie,
+        ClientChannels::new(
+            connected.0,
+            room_stream.0,
+            message_accepted.0,
+            message_created.0,
+        ),
+    )
+    .await
+    .unwrap();
+
+    next_event("connected", &mut connected.1).await;
+    socket
+        .emit("subscribe_room_stream", json!({ "room_id": room.room_id }))
+        .await
+        .unwrap();
+    assert_eq!(
+        next_event("room_stream_subscribed", &mut room_stream.1).await,
+        RoomStreamSubscribed {
+            room_id: room.room_id,
+            latest_event_position: 0,
+        }
+    );
+
+    socket
+        .emit(
+            "send_text_message",
+            json!({
+                "room_id": room.room_id,
+                "body": " hello from integrated realtime ",
+                "client_message_id": client_message_id,
+            }),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        next_event("message_accepted", &mut message_accepted.1).await,
+        MessageAccepted {
+            room_id: room.room_id,
+            client_message_id: Some(client_message_id),
+        }
+    );
+
+    let created = next_event("message_created", &mut message_created.1).await;
+    assert_eq!(created.room_id, room.room_id);
+    assert_eq!(created.session_id, session.session_id);
+    assert_eq!(created.body, "hello from integrated realtime");
+    assert_eq!(created.client_message_id, Some(client_message_id));
+
+    socket.disconnect().await.unwrap();
+    server.shutdown().await;
+    Ok(())
+}
+
 #[tokio::test]
 async fn authenticate_realtime_session_reads_koko_session_from_multi_cookie_header() {
     let session_id = Uuid::from_u128(1);

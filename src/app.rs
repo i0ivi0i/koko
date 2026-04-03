@@ -724,11 +724,11 @@ fn ensure_persisted_message_matches(
     expected: &Message,
     persisted: &PersistedMessageRecord,
 ) -> Result<(), AppError> {
+    // 持久化层可能会把时间戳规整到数据库精度；这里要守住业务真相字段，而不是把时间精度差异误判成落库失败。
     let matches = expected.message_id == persisted.message_id
         && expected.room_id == persisted.room_id
         && expected.sender_session_id == persisted.sender_session_id
         && expected.body.as_str() == persisted.body
-        && expected.created_at == persisted.created_at
         && expected.status == MessageStatus::Active;
 
     if matches {

@@ -124,6 +124,33 @@ async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sq
     Ok(())
 }
 
+#[sqlx::test]
+async fn send_room_message_endpoint_returns_authoritative_message_created(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
+
+    let (session, cookie) = bootstrap_session_with_cookie(&harness).await;
+    let joined = join_room(&harness, &cookie, "c1234").await;
+    let client_message_id = Uuid::from_u128(6001);
+
+    let created = send_room_message(
+        &harness,
+        &cookie,
+        joined.room_id,
+        " http send message ",
+        Some(client_message_id),
+    )
+    .await;
+
+    assert_eq!(created.room_id, joined.room_id);
+    assert_eq!(created.session_id, session.session_id);
+    assert_eq!(created.body, "http send message");
+    assert_eq!(created.client_message_id, Some(client_message_id));
+    assert_eq!(created.event_position, 1);
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy)]
 struct FixedIdGenerator(Uuid);
 

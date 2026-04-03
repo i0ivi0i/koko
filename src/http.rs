@@ -19,13 +19,14 @@ use uuid::Uuid;
 use crate::{
     app::{
         AdminLoginCommand, AdminSessionContext, AdminSessionPort, AdminSessionState, AppError,
-        Clock, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, bootstrap_anonymous_session,
-        get_admin_overview, get_admin_session, join_or_create_room_by_code, list_admin_rooms,
-        list_joined_rooms, load_room_snapshot, login_admin, logout_admin, search_rooms_by_code,
+        Clock, JoinOrCreateRoomByCodeCommand, LoadRoomSnapshotQuery, SendTextMessageInput,
+        bootstrap_anonymous_session, get_admin_overview, get_admin_session,
+        join_or_create_room_by_code, list_admin_rooms, list_joined_rooms, load_room_snapshot,
+        login_admin, logout_admin, search_rooms_by_code, send_text_message,
     },
     contract::{
-        AdminLoginRequest, AdminOverview, AdminRoomSummary, AdminSessionStatus,
-        JoinedRoomSummary, RoomSearchResult, RoomSnapshot,
+        AdminLoginRequest, AdminOverview, AdminRoomSummary, AdminSessionStatus, AppEvent,
+        JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
     },
     store::{ADMIN_SESSION_IDLE_TIMEOUT, PgStore},
     support,
@@ -37,6 +38,7 @@ pub struct Module;
 #[derive(Clone)]
 struct HttpState {
     store: PgStore,
+    io: socketioxide::SocketIo,
 }
 
 #[derive(Clone)]
@@ -64,6 +66,12 @@ struct SearchRoomsParams {
     query: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct SendMessageRequest {
+    body: String,
+    client_message_id: Option<Uuid>,
+}
+
 #[derive(Debug, Deserialize, serde::Serialize)]
 struct ErrorPayload {
     code: String,
@@ -87,14 +95,15 @@ pub fn build_admin_session_layer(store: AdminSessionStore, secure: bool) -> Admi
         .with_expiry(Expiry::OnInactivity(ADMIN_SESSION_IDLE_TIMEOUT))
 }
 
-pub fn api_router(store: PgStore) -> Router {
+pub fn api_router(store: PgStore, io: socketioxide::SocketIo) -> Router {
     Router::new()
         .route("/session/bootstrap", post(bootstrap_session))
         .route("/rooms", get(joined_rooms))
         .route("/rooms/search", get(search_rooms))
         .route("/rooms/join", post(join_room))
         .route("/rooms/{room_id}/snapshot", get(room_snapshot))
-        .with_state(HttpState { store })
+        .route("/rooms/{room_id}/messages", post(send_room_message))
+        .with_state(HttpState { store, io })
 }
 
 pub fn admin_api_router(store: PgStore, admin_token: String) -> Router {
@@ -149,7 +158,7 @@ pub fn server_router(
     crate::rt::install_realtime(&io, realtime);
 
     frontend_shell_router(frontend_dist_dir, asset_dir)
-        .nest("/api", api_router(store.clone()))
+        .nest("/api", api_router(store.clone(), io.clone()))
         .nest(
             "/api",
             admin_api_router(store, admin_token).layer(admin_session_layer),
@@ -266,6 +275,39 @@ async fn room_snapshot(
     .await
     .map_err(map_http_error)?;
     Ok(Json(snapshot))
+}
+
+async fn send_room_message(
+    State(state): State<HttpState>,
+    RoutePath(room_id): RoutePath<Uuid>,
+    jar: CookieJar,
+    Json(request): Json<SendMessageRequest>,
+) -> Result<Json<MessageCreated>, (StatusCode, Json<ErrorPayload>)> {
+    let session_id = resolve_session_id(&jar)?;
+    let event = send_text_message(
+        &state.store,
+        &state.store,
+        &state.store,
+        &support::SystemIdGenerator,
+        &support::SystemClock,
+        SendTextMessageInput {
+            room_id,
+            session_id,
+            body: request.body,
+            client_message_id: request.client_message_id,
+        },
+    )
+    .await
+    .map_err(map_http_error)?;
+
+    let AppEvent::MessageCreated(payload) = event;
+    let _ = state
+        .io
+        .to(room_id.to_string())
+        .emit("message_created", &payload)
+        .await;
+
+    Ok(Json(payload))
 }
 
 async fn admin_login(

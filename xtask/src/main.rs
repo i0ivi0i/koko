@@ -62,6 +62,7 @@ enum DevStep {
     ResolveBanner,
     BundleWeb,
     BuildServer,
+    MigrateDatabase,
     LaunchChildProcess,
 }
 
@@ -220,6 +221,7 @@ where
                 DevStep::ResolveBanner,
                 DevStep::BundleWeb,
                 DevStep::BuildServer,
+                DevStep::MigrateDatabase,
                 DevStep::LaunchChildProcess,
             ],
             dry_run_lines: Vec::new(),
@@ -238,6 +240,7 @@ where
             self.run_bundle()?;
         }
         self.build_server()?;
+        self.run_database_migrations(&report.config)?;
 
         let server_binary_path = self.server_binary_path();
         if !server_binary_path.exists() {
@@ -312,7 +315,7 @@ where
             .map(|_| ())
     }
 
-    fn build_dry_run_lines(&self, _config: &ResolvedAppConfig, skip_bundle: bool) -> Vec<String> {
+    fn build_dry_run_lines(&self, config: &ResolvedAppConfig, skip_bundle: bool) -> Vec<String> {
         let mut lines = Vec::new();
         if skip_bundle {
             lines.push("==> Skip web bundle".to_string());
@@ -325,8 +328,28 @@ where
         lines.push("==> Set KOKO_DATABASE_URL".to_string());
         lines.push("==> Set KOKO_BIND_ADDR".to_string());
         lines.push(format!("==> cargo build --target-dir {RUN_TARGET_DIR}"));
+        lines.push(format!(
+            "==> cargo sqlx migrate run --database-url {}",
+            config.database_url
+        ));
         lines.push(format!("==> launch {}", self.server_binary_path().display()));
         lines
+    }
+
+    fn run_database_migrations(&self, config: &ResolvedAppConfig) -> Result<(), String> {
+        self.command_runner
+            .run(
+                "cargo",
+                &[
+                    "sqlx".to_string(),
+                    "migrate".to_string(),
+                    "run".to_string(),
+                    "--database-url".to_string(),
+                    config.database_url.clone(),
+                ],
+            )
+            .map(|_| ())
+            .map_err(|error| format!("database migration failed: {error}"))
     }
 
     fn bundle_script_path(&self) -> PathBuf {
@@ -862,7 +885,7 @@ mod tests {
             .expect("dry-run preview should succeed");
 
         assert!(report.service_banner.is_none());
-        assert_eq!(report.planned_steps.len(), 5);
+        assert_eq!(report.planned_steps.len(), 6);
     }
 
     #[test]
@@ -965,6 +988,7 @@ mod tests {
                 RecordedAction::CheckCommand("cargo".to_string()),
                 RecordedAction::BundleWeb,
                 RecordedAction::BuildServer,
+                RecordedAction::MigrateDatabase,
                 RecordedAction::LaunchChild,
                 RecordedAction::WaitChild,
             ]
@@ -1093,6 +1117,7 @@ mod tests {
             vec![
                 RecordedAction::CheckCommand("cargo".to_string()),
                 RecordedAction::BuildServer,
+                RecordedAction::MigrateDatabase,
                 RecordedAction::LaunchChild,
                 RecordedAction::WaitChild,
             ]
@@ -1193,8 +1218,7 @@ mod tests {
         let lines = report.dry_run_lines();
         assert!(lines.iter().any(|line| line.contains("dx-bundle-web.ps1")));
         assert!(lines.iter().any(|line| line.contains("-Release")));
-        assert!(!lines.iter().any(|line| line.contains("Ensure database")));
-        assert!(!lines.iter().any(|line| line.contains("准备数据库结构")));
+        assert!(lines.iter().any(|line| line.contains("cargo sqlx migrate run")));
         assert!(lines.iter().any(|line| line.contains("cargo build --target-dir target/run")));
         assert!(lines.iter().any(|line| line.contains("==> launch ")));
     }
@@ -1418,6 +1442,7 @@ mod tests {
         CheckCommand(String),
         BundleWeb,
         BuildServer,
+        MigrateDatabase,
         LaunchChild,
         WaitChild,
     }
@@ -1441,6 +1466,7 @@ mod tests {
         calls: Rc<RefCell<Vec<String>>>,
         bundle_error: Rc<RefCell<Option<String>>>,
         build_error: Rc<RefCell<Option<String>>>,
+        migrate_error: Rc<RefCell<Option<String>>>,
     }
 
     impl Default for RecordingCommandRunner {
@@ -1450,6 +1476,7 @@ mod tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
                 bundle_error: Rc::new(RefCell::new(None)),
                 build_error: Rc::new(RefCell::new(None)),
+                migrate_error: Rc::new(RefCell::new(None)),
             }
         }
     }
@@ -1461,6 +1488,7 @@ mod tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
                 bundle_error: Rc::new(RefCell::new(None)),
                 build_error: Rc::new(RefCell::new(None)),
+                migrate_error: Rc::new(RefCell::new(None)),
             }
         }
 
@@ -1470,6 +1498,7 @@ mod tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
                 bundle_error: Rc::new(RefCell::new(Some(error))),
                 build_error: Rc::new(RefCell::new(None)),
+                migrate_error: Rc::new(RefCell::new(None)),
             }
         }
 
@@ -1479,6 +1508,7 @@ mod tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
                 bundle_error: Rc::new(RefCell::new(None)),
                 build_error: Rc::new(RefCell::new(Some("cargo build failed".to_string()))),
+                migrate_error: Rc::new(RefCell::new(None)),
             }
         }
 
@@ -1512,6 +1542,17 @@ mod tests {
             if program == "cargo" && args.first().is_some_and(|arg| arg == "build") {
                 self.actions.push(RecordedAction::BuildServer);
                 if let Some(error) = self.build_error.borrow_mut().take() {
+                    return Err(error);
+                }
+            }
+            if program == "cargo"
+                && args.len() >= 3
+                && args[0] == "sqlx"
+                && args[1] == "migrate"
+                && args[2] == "run"
+            {
+                self.actions.push(RecordedAction::MigrateDatabase);
+                if let Some(error) = self.migrate_error.borrow_mut().take() {
                     return Err(error);
                 }
             }

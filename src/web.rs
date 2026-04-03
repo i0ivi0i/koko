@@ -53,7 +53,7 @@ while (true) {
   if (command.type === "connect") {
     teardownSocket();
     activeRoomId = command.room_id;
-    socket = io({ path: "/socket.io" });
+    socket = io({ path: "/socket.io", transports: ["websocket"] });
     socket.on("connect", () => {
       sendEvent({ type: "connected", room_id: activeRoomId });
       socket.emit("subscribe_room_stream", { room_id: activeRoomId });
@@ -219,6 +219,10 @@ pub fn should_trigger_room_search(query: &str) -> bool {
 
 pub fn resolve_room_snapshot_path(room_id: Uuid) -> String {
     format!("{ROOM_SNAPSHOT_PATH_PREFIX}/{room_id}/snapshot")
+}
+
+pub fn resolve_send_message_path(room_id: Uuid) -> String {
+    format!("{ROOM_SNAPSHOT_PATH_PREFIX}/{room_id}/messages")
 }
 
 pub fn resolve_join_room_path() -> &'static str {
@@ -411,6 +415,43 @@ async fn join_room_by_code(room_code: &str) -> Result<RoomSnapshot, WebRequestEr
         })
 }
 
+#[cfg(target_arch = "wasm32")]
+async fn send_room_message(
+    room_id: Uuid,
+    body: &str,
+    client_message_id: Uuid,
+) -> Result<MessageCreated, WebRequestError> {
+    let browser_location = browser_location().map_err(|detail| WebRequestError {
+        code: None,
+        detail,
+    })?;
+    let url = resolve_shell_api_url(&browser_location, &resolve_send_message_path(room_id))
+        .map_err(|detail| WebRequestError { code: None, detail })?;
+    let response = reqwest::Client::new()
+        .post(url)
+        .json(&serde_json::json!({
+            "body": body,
+            "client_message_id": client_message_id,
+        }))
+        .send()
+        .await
+        .map_err(|error| WebRequestError {
+            code: None,
+            detail: error.to_string(),
+        })?;
+    if !response.status().is_success() {
+        return Err(parse_http_error(response).await);
+    }
+
+    response
+        .json::<MessageCreated>()
+        .await
+        .map_err(|error| WebRequestError {
+            code: None,
+            detail: error.to_string(),
+        })
+}
+
 pub fn parse_stored_room_id(raw: Option<&str>) -> Option<Uuid> {
     let raw = raw?.trim();
     (!raw.is_empty())
@@ -585,6 +626,10 @@ fn resolve_shell_banner_message(
     shell_error: Option<String>,
 ) -> Option<String> {
     bootstrap_error.or(shell_error)
+}
+
+fn should_clear_background_shell_error(state: &ChatState) -> bool {
+    !matches!(state.screen(), ShellScreen::Chat) || state.room_id().is_none()
 }
 
 fn can_send_message(state: &ChatState) -> bool {
@@ -853,10 +898,13 @@ pub fn App() -> Element {
             initial_rooms_applied.set(true);
         }
 
+        let clear_shell_error = should_clear_background_shell_error(&next_state);
         if changed {
             state.set(next_state);
         }
-        set_shell_error(shell_error, None);
+        if clear_shell_error {
+            set_shell_error(shell_error, None);
+        }
     } else if let Some(Err(error)) = &*joined_rooms.read_unchecked() {
         set_shell_error(
             shell_error,
@@ -887,8 +935,12 @@ pub fn App() -> Element {
             next_state.apply_search_results(results.clone());
             changed = true;
         }
+        let clear_shell_error = should_clear_background_shell_error(&next_state);
         if changed {
             state.set(next_state);
+        }
+        if clear_shell_error {
+            set_shell_error(shell_error, None);
         }
     } else if let Some(Err(error)) = &*search_results.read_unchecked() {
         set_shell_error(
@@ -1095,32 +1147,38 @@ pub fn App() -> Element {
 
                     #[cfg(target_arch = "wasm32")]
                     {
-                        let Some(bridge) = realtime_bridge() else {
-                            let mut next_state = state();
-                            next_state.reject_pending(client_message_id);
-                            state.set(next_state);
-                            set_shell_error(
-                                shell_error,
-                                Some("实时连接桥不可用".to_string()),
-                            );
-                            let _ = remove_pending_send(pending_send_ids, client_message_id);
-                            return;
-                        };
-
-                        if let Err(error) = bridge.send(RealtimeCommand::SendTextMessage {
-                            room_id,
-                            body: draft.trim().to_string(),
-                            client_message_id,
-                        }) {
-                            let mut next_state = state();
-                            next_state.reject_pending(client_message_id);
-                            state.set(next_state);
-                            set_shell_error(
-                                shell_error,
-                                Some(format!("发送实时消息失败：{error}")),
-                            );
-                            let _ = remove_pending_send(pending_send_ids, client_message_id);
-                        }
+                        let mut send_state = state;
+                        let send_shell_error = shell_error;
+                        let send_pending_ids = pending_send_ids;
+                        let send_refresh = joined_rooms_refresh;
+                        spawn(async move {
+                            match send_room_message(
+                                room_id,
+                                draft.trim(),
+                                client_message_id,
+                            )
+                            .await
+                            {
+                                Ok(payload) => {
+                                    let _ = remove_pending_send(send_pending_ids, client_message_id);
+                                    let mut next_state = send_state();
+                                    next_state.confirm_message(payload);
+                                    send_state.set(next_state);
+                                    bump_refresh(send_refresh);
+                                    set_shell_error(send_shell_error, None);
+                                }
+                                Err(error) => {
+                                    let _ = remove_pending_send(send_pending_ids, client_message_id);
+                                    let mut next_state = send_state();
+                                    next_state.reject_pending(client_message_id);
+                                    send_state.set(next_state);
+                                    set_shell_error(
+                                        send_shell_error,
+                                        Some(format!("发送消息失败：{}", error.detail)),
+                                    );
+                                }
+                            }
+                        });
                     }
 
                     #[cfg(not(target_arch = "wasm32"))]
@@ -1155,7 +1213,9 @@ mod tests {
         normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
         rejected_pending_message_id, rejection_message, rejection_resets_subscription,
         resolve_joined_rooms_path, resolve_room_search_path, resolve_room_snapshot_path,
+        resolve_send_message_path,
         resolve_shell_api_url, resolve_shell_api_url_with_query, resolve_shell_banner_message,
+        should_clear_background_shell_error,
         should_accept_room_stream_subscribed, should_handle_room_resolution,
         should_trigger_room_search, ActiveRoomSync, RoomAction, REALTIME_BRIDGE_SCRIPT,
     };
@@ -1259,6 +1319,16 @@ mod tests {
     }
 
     #[test]
+    fn resolve_send_message_path_keeps_message_command_url_stable() {
+        let room_id = Uuid::from_u128(42);
+
+        assert_eq!(
+            resolve_send_message_path(room_id),
+            "/api/rooms/00000000-0000-0000-0000-00000000002a/messages"
+        );
+    }
+
+    #[test]
     fn resolve_join_and_search_paths_stay_stable() {
         assert_eq!(resolve_join_room_path(), "/api/rooms/join");
         assert_eq!(resolve_joined_rooms_path(), "/api/rooms");
@@ -1335,14 +1405,34 @@ mod tests {
     }
 
     #[test]
+    fn background_success_keeps_room_open_failure_visible_inside_chat() {
+        let mut state = ChatState::awaiting_bootstrap();
+        state.open_room_from_snapshot(crate::contract::RoomSnapshot {
+            room_id: Uuid::from_u128(91),
+            room_code: "A1234".to_string(),
+            latest_event_position: 0,
+            messages: Vec::new(),
+        });
+
+        assert!(!should_clear_background_shell_error(&state));
+    }
+
+    #[test]
+    fn background_success_clears_errors_outside_chat_flow() {
+        let state = ChatState::awaiting_bootstrap();
+        assert!(should_clear_background_shell_error(&state));
+    }
+
+    #[test]
     fn realtime_bridge_uses_preloaded_socket_io_bundle() {
         assert!(
             !REALTIME_BRIDGE_SCRIPT.contains("await import("),
             "bridge should consume the preloaded global io bundle"
         );
         assert!(
-            REALTIME_BRIDGE_SCRIPT.contains(r#"io({ path: "/socket.io" })"#),
-            "bridge should still connect through the official socket.io path"
+            REALTIME_BRIDGE_SCRIPT
+                .contains(r#"io({ path: "/socket.io", transports: ["websocket"] })"#),
+            "bridge should still connect through the official socket.io path and lock browser transport to websocket"
         );
     }
 

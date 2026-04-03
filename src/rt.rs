@@ -188,6 +188,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
             socket.on("send_text_message", {
                 let state = state.clone();
                 move |socket: SocketRef,
+                      io: SocketIo,
                       Extension(session): Extension<AuthenticatedSession>,
                       Data(payload): Data<SendTextMessageCommand>| {
                     let state = state.clone();
@@ -206,17 +207,20 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         .await
                         {
                             Ok(crate::contract::AppEvent::MessageCreated(payload)) => {
-                                emit_to_socket(
-                                    &socket,
-                                    "message_accepted",
-                                    &MessageAccepted {
-                                        room_id,
-                                        client_message_id,
-                                    },
-                                );
-                                emit_to_socket(&socket, "message_created", &payload);
-                                emit_to_room_others(&socket, room_id, "message_created", &payload)
-                                    .await;
+                                let socket = socket.clone();
+                                let io = io.clone();
+                                tokio::spawn(async move {
+                                    emit_to_socket(
+                                        &socket,
+                                        "message_accepted",
+                                        &MessageAccepted {
+                                            room_id,
+                                            client_message_id,
+                                        },
+                                    );
+                                    emit_to_room(&io, room_id, "message_created", &payload)
+                                        .await;
+                                });
                             }
                             Err(error) => {
                                 emit_command_rejected(
@@ -280,11 +284,11 @@ where
     }
 }
 
-async fn emit_to_room_others<T>(socket: &SocketRef, room_id: Uuid, event: &'static str, payload: &T)
+async fn emit_to_room<T>(io: &SocketIo, room_id: Uuid, event: &'static str, payload: &T)
 where
     T: Serialize,
 {
-    if socket
+    if io
         .to(room_name(room_id))
         .emit(event, payload)
         .await

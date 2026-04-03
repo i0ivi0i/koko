@@ -1,4 +1,5 @@
 use super::*;
+use chrono::Timelike;
 
 #[tokio::test]
 async fn admin_overview_requires_authorized_admin_context() {
@@ -203,6 +204,44 @@ async fn send_text_message_rejects_persisted_message_drift() {
     .unwrap_err();
 
     assert_eq!(error.code(), AppErrorCode::Internal);
+}
+
+#[tokio::test]
+async fn send_text_message_accepts_persisted_timestamp_canonicalization() {
+    let room_id = Uuid::from_u128(2401);
+    let session_id = Uuid::from_u128(2501);
+    let message_id = Uuid::from_u128(2601);
+    let now = fixed_time()
+        .with_nanosecond(123_456_789)
+        .expect("nanosecond precision should be valid");
+    let persisted_created_at = now
+        .with_nanosecond(123_456_000)
+        .expect("microsecond precision should be valid");
+
+    let event = send_text_message(
+        &FakeSessionPort::allow(),
+        &FakeMembershipPort::allow(),
+        &FakeMessageStore::persisting(MessageStoreOutcome::rewrite_created_at(
+            persisted_created_at,
+        )),
+        &FakeIdGenerator::new(message_id),
+        &FakeClock::new(now),
+        SendTextMessageInput {
+            room_id,
+            session_id,
+            body: "hello".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(matches!(
+        event,
+        AppEvent::MessageCreated(message_created)
+            if message_created.message_id == message_id
+                && message_created.created_at == persisted_created_at
+    ));
 }
 
 #[tokio::test]
