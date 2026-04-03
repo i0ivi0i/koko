@@ -109,6 +109,12 @@ enum RoomAction {
     Join(String),
 }
 
+#[derive(Debug, Clone)]
+struct RoomResolution {
+    revision: u64,
+    outcome: Result<Option<RoomSnapshot>, WebRequestError>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct HttpErrorPayload {
     code: AppErrorCode,
@@ -460,9 +466,24 @@ fn set_shell_error(mut shell_error: Signal<Option<String>>, message: Option<Stri
 
 fn should_handle_room_resolution(
     action: &RoomAction,
-    resource_state: UseResourceState,
+    requested_revision: u64,
+    resolved_revision: u64,
 ) -> bool {
-    *action != RoomAction::Idle && matches!(resource_state, UseResourceState::Ready)
+    *action != RoomAction::Idle && requested_revision == resolved_revision
+}
+
+fn queue_room_action(
+    mut room_action: Signal<RoomAction>,
+    mut room_action_revision: Signal<u64>,
+    action: RoomAction,
+) {
+    if action == RoomAction::Idle {
+        room_action.set(RoomAction::Idle);
+        return;
+    }
+
+    room_action_revision += 1;
+    room_action.set(action);
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -681,6 +702,7 @@ pub fn App() -> Element {
     let mut session_id = use_signal(Uuid::nil);
     let mut room_search_query = use_signal(String::new);
     let mut room_action = use_signal(|| RoomAction::Idle);
+    let mut room_action_revision = use_signal(|| 0_u64);
     let mut joined_rooms_refresh = use_signal(|| 0_u64);
     let mut initial_rooms_applied = use_signal(|| false);
     let shell_error = use_signal(|| None::<String>);
@@ -739,6 +761,7 @@ pub fn App() -> Element {
             session_id.set(session.session_id);
             initial_rooms_applied.set(false);
             room_action.set(RoomAction::Idle);
+            room_action_revision.set(0);
             room_search_query.set(String::new());
             pending_send_ids.set(Vec::new());
             realtime_target_room.set(None);
@@ -775,7 +798,7 @@ pub fn App() -> Element {
             if let Some(room_id) =
                 resolve_last_open_room_id(next_state.joined_rooms(), read_last_open_room_id())
             {
-                room_action.set(RoomAction::Open(room_id));
+                queue_room_action(room_action, room_action_revision, RoomAction::Open(room_id));
                 next_state.restore_last_open_room(Some(room_id));
                 next_state.set_connection(ConnectionState::Connecting);
                 changed = true;
@@ -829,55 +852,64 @@ pub fn App() -> Element {
 
     let room_resolution = use_resource(move || async move {
         let session_id = session_id();
+        let revision = room_action_revision();
         let action = room_action();
 
         if session_id.is_nil() {
-            return Ok(None);
+            return RoomResolution {
+                revision,
+                outcome: Ok(None),
+            };
         }
 
-        match action {
+        let outcome = match action {
             RoomAction::Idle => Ok(None),
             RoomAction::Open(room_id) => load_room_snapshot(room_id)
                 .await
                 .map(Some)
                 .map_err(|detail| WebRequestError { code: None, detail }),
             RoomAction::Join(room_code) => join_room_by_code(&room_code).await.map(Some),
-        }
+        };
+
+        RoomResolution { revision, outcome }
     });
 
-    let room_resolution_state = *room_resolution.state().read();
-    if let Some(Ok(Some(snapshot))) = &*room_resolution.read_unchecked() {
+    if let Some(room_resolution) = &*room_resolution.read_unchecked() {
         let action = room_action();
-        if should_handle_room_resolution(&action, room_resolution_state) {
-            let mut next_state = state();
-            if matches!(action, RoomAction::Join(_)) {
-                joined_rooms_refresh += 1;
-                room_search_query.set(String::new());
-                next_state.set_search_query("");
-                next_state.apply_search_results(Vec::new());
+        let requested_revision = room_action_revision();
+        if should_handle_room_resolution(&action, requested_revision, room_resolution.revision) {
+            match &room_resolution.outcome {
+                Ok(Some(snapshot)) => {
+                    let mut next_state = state();
+                    if matches!(action, RoomAction::Join(_)) {
+                        joined_rooms_refresh += 1;
+                        room_search_query.set(String::new());
+                        next_state.set_search_query("");
+                        next_state.apply_search_results(Vec::new());
+                    }
+                    next_state.open_room_from_snapshot(snapshot.clone());
+                    next_state.set_connection(ConnectionState::Connecting);
+                    state.set(next_state);
+                    pending_send_ids.set(Vec::new());
+                    realtime_target_room.set(Some(snapshot.room_id));
+                    write_last_open_room_id(Some(snapshot.room_id));
+                    room_action.set(RoomAction::Idle);
+                    set_shell_error(shell_error, None);
+                }
+                Err(error) => {
+                    let mut next_state = state();
+                    next_state.set_connection(ConnectionState::Offline);
+                    state.set(next_state);
+                    room_action.set(RoomAction::Idle);
+                    realtime_target_room.set(None);
+                    let message = match action {
+                        RoomAction::Join(_) => room_entry_error_message(error.code, &error.detail),
+                        _ => format!("打开房间失败：{}", error.detail),
+                    };
+                    set_shell_error(shell_error, Some(message));
+                }
+                Ok(None) => {}
             }
-            next_state.open_room_from_snapshot(snapshot.clone());
-            next_state.set_connection(ConnectionState::Connecting);
-            state.set(next_state);
-            pending_send_ids.set(Vec::new());
-            realtime_target_room.set(Some(snapshot.room_id));
-            write_last_open_room_id(Some(snapshot.room_id));
-            room_action.set(RoomAction::Idle);
-            set_shell_error(shell_error, None);
-        }
-    } else if let Some(Err(error)) = &*room_resolution.read_unchecked() {
-        let action = room_action();
-        if should_handle_room_resolution(&action, room_resolution_state) {
-            let mut next_state = state();
-            next_state.set_connection(ConnectionState::Offline);
-            state.set(next_state);
-            room_action.set(RoomAction::Idle);
-            realtime_target_room.set(None);
-            let message = match action {
-                RoomAction::Join(_) => room_entry_error_message(error.code, &error.detail),
-                _ => format!("打开房间失败：{}", error.detail),
-            };
-            set_shell_error(shell_error, Some(message));
         }
     }
 
@@ -914,7 +946,7 @@ pub fn App() -> Element {
                     state.set(next_state);
                 },
                 on_room_selected: move |room_id: Uuid| {
-                    room_action.set(RoomAction::Open(room_id));
+                    queue_room_action(room_action, room_action_revision, RoomAction::Open(room_id));
                     realtime_target_room.set(None);
                     pending_send_ids.set(Vec::new());
                     let mut next_state = state();
@@ -939,13 +971,21 @@ pub fn App() -> Element {
                     pending_send_ids.set(Vec::new());
                     realtime_target_room.set(None);
                     if result.is_joined {
-                        room_action.set(RoomAction::Open(result.room_id));
+                        queue_room_action(
+                            room_action,
+                            room_action_revision,
+                            RoomAction::Open(result.room_id),
+                        );
                         let mut next_state = state();
                         next_state.restore_last_open_room(Some(result.room_id));
                         next_state.set_connection(ConnectionState::Connecting);
                         state.set(next_state);
                     } else {
-                        room_action.set(RoomAction::Join(result.room_code.clone()));
+                        queue_room_action(
+                            room_action,
+                            room_action_revision,
+                            RoomAction::Join(result.room_code.clone()),
+                        );
                     }
                 },
                 on_submit_room_code: move |_| {
@@ -960,7 +1000,11 @@ pub fn App() -> Element {
 
                     pending_send_ids.set(Vec::new());
                     realtime_target_room.set(None);
-                    room_action.set(RoomAction::Join(normalize_room_code_query(&query)));
+                    queue_room_action(
+                        room_action,
+                        room_action_revision,
+                        RoomAction::Join(normalize_room_code_query(&query)),
+                    );
                     set_shell_error(shell_error, None);
                 },
                 draft: chat_draft,
@@ -1059,7 +1103,6 @@ mod tests {
         resolve_shell_api_url, resolve_shell_api_url_with_query, should_trigger_room_search,
     };
     use crate::contract::{AppErrorCode, CommandRejected, RejectedCommandKind};
-    use dioxus::prelude::UseResourceState;
     use uuid::Uuid;
 
     #[test]
@@ -1241,38 +1284,39 @@ mod tests {
     }
 
     #[test]
-    fn stale_room_resolution_is_ignored_until_resource_finishes_refetching() {
+    fn stale_room_resolution_is_ignored_when_it_belongs_to_previous_request() {
         let room_id = Uuid::from_u128(9);
 
         assert!(!should_handle_room_resolution(
             &RoomAction::Open(room_id),
-            UseResourceState::Pending
-        ));
-        assert!(!should_handle_room_resolution(
-            &RoomAction::Open(room_id),
-            UseResourceState::Stopped
+            2,
+            1
         ));
         assert!(!should_handle_room_resolution(
             &RoomAction::Join("A1234".to_string()),
-            UseResourceState::Paused
+            5,
+            4
         ));
     }
 
     #[test]
-    fn ready_room_resolution_is_consumed_only_for_active_room_actions() {
+    fn matching_room_resolution_revision_is_consumed_only_for_active_room_actions() {
         let room_id = Uuid::from_u128(10);
 
         assert!(!should_handle_room_resolution(
             &RoomAction::Idle,
-            UseResourceState::Ready
+            3,
+            3
         ));
         assert!(should_handle_room_resolution(
             &RoomAction::Open(room_id),
-            UseResourceState::Ready
+            7,
+            7
         ));
         assert!(should_handle_room_resolution(
             &RoomAction::Join("A1234".to_string()),
-            UseResourceState::Ready
+            8,
+            8
         ));
     }
 }
