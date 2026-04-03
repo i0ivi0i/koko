@@ -42,7 +42,9 @@ impl HttpHarness {
             .join("http_support")
             .join("fixtures")
             .join("frontend");
-        let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("public")
+            .join("assets");
         let router = http::frontend_shell_router(frontend_fixture_dir, asset_dir);
 
         Self { router, store }
@@ -57,7 +59,9 @@ impl HttpHarness {
             .join("http_support")
             .join("fixtures")
             .join("frontend");
-        let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let asset_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("public")
+            .join("assets");
         let router = http::server_router(
             store.clone(),
             TEST_ADMIN_TOKEN.to_string(),

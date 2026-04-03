@@ -315,7 +315,7 @@ fn AdminApp() -> Element {
 
     rsx! {
         Title { "Koko 管理后台" }
-        Stylesheet { href: asset!("/assets/theme.css") }
+        Stylesheet { href: asset!("/public/assets/theme.css") }
         match shell_view {
             AdminShellView::Login { session_notice } => rsx! {
                 div { class: "admin-shell",

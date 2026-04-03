@@ -70,7 +70,7 @@ struct ErrorPayload {
 }
 
 pub const FRONTEND_DIST_DIR: &str = "dist/public";
-// assets/ 目录保存源码侧静态资源；服务端运行时真正对外暴露的是打包后的 dist/public/assets。
+// Dioxus 会把 public/ 合并进 dist/public；服务端运行时真正对外暴露的是打包后的 dist/public/assets。
 pub const FRONTEND_ASSET_DIR: &str = "dist/public/assets";
 pub const ADMIN_SESSION_COOKIE_NAME: &str = "koko_admin_session";
 const ADMIN_SESSION_MARKER_KEY: &str = "authenticated";

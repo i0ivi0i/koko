@@ -1,16 +1,16 @@
 [application]
 out_dir = "dist"
-asset_dir = "assets"
+asset_dir = "public"
 
 [web.app]
 title = "koko"
 
 [web.resource]
-script = ["./assets/socket.io.min.js"]
+script = ["./public/assets/socket.io.min.js"]
 
 [web.resource.dev]
 
 [web.watcher]
 reload_html = true
-watch_path = ["src", "assets"]
+watch_path = ["src", "public"]
 index_on_404 = true

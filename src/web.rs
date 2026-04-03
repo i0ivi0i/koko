@@ -815,7 +815,7 @@ pub fn App() -> Element {
 
     rsx! {
         Title { "Koko 聊天" }
-        Stylesheet { href: asset!("/assets/theme.css") }
+        Stylesheet { href: asset!("/public/assets/theme.css") }
         div { class: "koko-web-shell",
             if let Some(error) = error_message {
                 div { class: "koko-web-shell__error",
