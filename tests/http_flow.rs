@@ -462,6 +462,20 @@ async fn old_socket_io_client_asset_is_no_longer_served() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+#[test]
+fn bundled_index_preloads_socket_io_before_wasm_bootstrap() {
+    let index_html = bundled_frontend_index_html();
+    let socket_io_position = script_src_position(&index_html, "socket.io.min.js")
+        .expect("bundled index should preload socket.io.min.js");
+    let wasm_bootstrap_position =
+        script_src_position(&index_html, "koko.js").expect("bundled index should load koko.js");
+
+    assert!(
+        socket_io_position < wasm_bootstrap_position,
+        "socket.io preload must appear before wasm bootstrap in dist/public/index.html"
+    );
+}
+
 #[tokio::test]
 async fn wasm_bundle_js_is_served_as_static_file() {
     let harness = HttpHarness::frontend_only();
@@ -1087,6 +1101,31 @@ fn remove_temp_config_root(config_file_path: &Path) {
 fn powershell_exe_path() -> String {
     let windir = env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".to_string());
     format!(r"{windir}\System32\WindowsPowerShell\v1.0\powershell.exe")
+}
+
+fn bundled_frontend_index_html() -> String {
+    fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("dist")
+            .join("public")
+            .join("index.html"),
+    )
+    .expect("bundled frontend index should exist")
+}
+
+fn script_src_position(html: &str, script_name: &str) -> Option<usize> {
+    let mut search_from = 0;
+    while let Some(script_offset) = html[search_from..].find("<script") {
+        let script_start = search_from + script_offset;
+        let script_tail = &html[script_start..];
+        let script_end = script_tail.find('>')?;
+        let tag = &script_tail[..script_end];
+        if tag.contains("src=") && tag.contains(script_name) {
+            return Some(script_start);
+        }
+        search_from = script_start + script_end + 1;
+    }
+    None
 }
 
 struct TempDirGuard(PathBuf);

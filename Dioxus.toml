@@ -8,6 +8,8 @@ title = "koko"
 [web.resource]
 script = ["./assets/socket.io.min.js"]
 
+[web.resource.dev]
+
 [web.watcher]
 reload_html = true
 watch_path = ["src", "assets"]
