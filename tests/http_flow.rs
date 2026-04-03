@@ -425,7 +425,7 @@ async fn assets_socket_io_client_is_served_as_static_file() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/assets/socket.io.esm.min.js")
+                .uri("/assets/socket.io.min.js")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -441,6 +441,25 @@ async fn assets_socket_io_client_is_served_as_static_file() {
     )
     .unwrap();
     assert!(body.contains("Socket.IO v4.8.3"));
+}
+
+#[tokio::test]
+async fn old_socket_io_client_asset_is_no_longer_served() {
+    let harness = HttpHarness::frontend_only();
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/assets/socket.io.esm.min.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
