@@ -508,8 +508,10 @@ fn can_send_message(
     draft: &str,
     has_send_handler: bool,
 ) -> bool {
-    // 壳层只在真实订阅完成后开放发送，避免把本地 pending 误当成已经成立的消息事实。
-    has_send_handler && connection == ConnectionState::Joined && !draft.trim().is_empty()
+    // sender 的权威 message_created 会直接回到当前 socket，发送资格不应被订阅 ack 反向绑死。
+    has_send_handler
+        && matches!(connection, ConnectionState::Connecting | ConnectionState::Joined)
+        && !draft.trim().is_empty()
 }
 
 fn delivery_label(state: DeliveryState) -> &'static str {
@@ -607,6 +609,252 @@ fn AdminRoomCard(room: AdminRoomSummary) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contract::RoomSnapshot;
+    use dioxus::{
+        html::{
+            AnimationData, CancelData, ClipboardData, CompositionData, DragData, FileData,
+            FocusData, FormData, FormValue, HasFileData, HasFormData, HasMouseData,
+            HtmlEventConverter, ImageData, InteractionElementOffset, InteractionLocation,
+            KeyboardData, MediaData, ModifiersInteraction, MountedData, MouseData, PointerData,
+            PointerInteraction, PlatformEventData, ResizeData, ScrollData, SelectionData,
+            ToggleData, TouchData, TransitionData, VisibleData, WheelData, geometry::*,
+            input_data::{MouseButton, MouseButtonSet},
+            keyboard_types::Modifiers,
+            set_event_converter,
+        },
+        prelude::{Event, Props, VirtualDom},
+    };
+    use dioxus_core::{ElementId, Mutation, Mutations};
+    use std::{
+        any::Any,
+        rc::Rc,
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+    use uuid::Uuid;
+
+    #[derive(Props, Clone)]
+    struct InteractiveChatHarnessProps {
+        draft_inputs: Arc<Mutex<Vec<String>>>,
+        send_count: Arc<AtomicUsize>,
+    }
+
+    impl PartialEq for InteractiveChatHarnessProps {
+        fn eq(&self, other: &Self) -> bool {
+            Arc::ptr_eq(&self.draft_inputs, &other.draft_inputs)
+                && Arc::ptr_eq(&self.send_count, &other.send_count)
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestFormPlatformEvent {
+        value: String,
+    }
+
+    impl HasFileData for TestFormPlatformEvent {
+        fn files(&self) -> Vec<FileData> {
+            Vec::new()
+        }
+    }
+
+    impl HasFormData for TestFormPlatformEvent {
+        fn value(&self) -> String {
+            self.value.clone()
+        }
+
+        fn valid(&self) -> bool {
+            true
+        }
+
+        fn values(&self) -> Vec<(String, FormValue)> {
+            Vec::new()
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct TestMousePlatformEvent;
+
+    impl InteractionLocation for TestMousePlatformEvent {
+        fn client_coordinates(&self) -> ClientPoint {
+            ClientPoint::new(0.0, 0.0)
+        }
+
+        fn screen_coordinates(&self) -> ScreenPoint {
+            ScreenPoint::new(0.0, 0.0)
+        }
+
+        fn page_coordinates(&self) -> PagePoint {
+            PagePoint::new(0.0, 0.0)
+        }
+    }
+
+    impl InteractionElementOffset for TestMousePlatformEvent {
+        fn element_coordinates(&self) -> ElementPoint {
+            ElementPoint::new(0.0, 0.0)
+        }
+    }
+
+    impl ModifiersInteraction for TestMousePlatformEvent {
+        fn modifiers(&self) -> Modifiers {
+            Modifiers::empty()
+        }
+    }
+
+    impl PointerInteraction for TestMousePlatformEvent {
+        fn trigger_button(&self) -> Option<MouseButton> {
+            Some(MouseButton::Primary)
+        }
+
+        fn held_buttons(&self) -> MouseButtonSet {
+            MouseButtonSet::empty()
+        }
+    }
+
+    impl HasMouseData for TestMousePlatformEvent {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    struct TestHtmlEventConverter;
+
+    impl HtmlEventConverter for TestHtmlEventConverter {
+        fn convert_animation_data(&self, _: &PlatformEventData) -> AnimationData {
+            unreachable!("animation data is not used in this test")
+        }
+
+        fn convert_cancel_data(&self, _: &PlatformEventData) -> CancelData {
+            unreachable!("cancel data is not used in this test")
+        }
+
+        fn convert_clipboard_data(&self, _: &PlatformEventData) -> ClipboardData {
+            unreachable!("clipboard data is not used in this test")
+        }
+
+        fn convert_composition_data(&self, _: &PlatformEventData) -> CompositionData {
+            unreachable!("composition data is not used in this test")
+        }
+
+        fn convert_drag_data(&self, _: &PlatformEventData) -> DragData {
+            unreachable!("drag data is not used in this test")
+        }
+
+        fn convert_focus_data(&self, _: &PlatformEventData) -> FocusData {
+            unreachable!("focus data is not used in this test")
+        }
+
+        fn convert_form_data(&self, event: &PlatformEventData) -> FormData {
+            let input = event
+                .downcast::<TestFormPlatformEvent>()
+                .unwrap_or_else(|| panic!("missing test form payload"));
+            FormData::new(input.clone())
+        }
+
+        fn convert_image_data(&self, _: &PlatformEventData) -> ImageData {
+            unreachable!("image data is not used in this test")
+        }
+
+        fn convert_keyboard_data(&self, _: &PlatformEventData) -> KeyboardData {
+            unreachable!("keyboard data is not used in this test")
+        }
+
+        fn convert_media_data(&self, _: &PlatformEventData) -> MediaData {
+            unreachable!("media data is not used in this test")
+        }
+
+        fn convert_mounted_data(&self, _: &PlatformEventData) -> MountedData {
+            unreachable!("mounted data is not used in this test")
+        }
+
+        fn convert_mouse_data(&self, event: &PlatformEventData) -> MouseData {
+            let input = event
+                .downcast::<TestMousePlatformEvent>()
+                .unwrap_or_else(|| panic!("missing test mouse payload"));
+            MouseData::new(input.clone())
+        }
+
+        fn convert_pointer_data(&self, _: &PlatformEventData) -> PointerData {
+            unreachable!("pointer data is not used in this test")
+        }
+
+        fn convert_resize_data(&self, _: &PlatformEventData) -> ResizeData {
+            unreachable!("resize data is not used in this test")
+        }
+
+        fn convert_scroll_data(&self, _: &PlatformEventData) -> ScrollData {
+            unreachable!("scroll data is not used in this test")
+        }
+
+        fn convert_selection_data(&self, _: &PlatformEventData) -> SelectionData {
+            unreachable!("selection data is not used in this test")
+        }
+
+        fn convert_toggle_data(&self, _: &PlatformEventData) -> ToggleData {
+            unreachable!("toggle data is not used in this test")
+        }
+
+        fn convert_touch_data(&self, _: &PlatformEventData) -> TouchData {
+            unreachable!("touch data is not used in this test")
+        }
+
+        fn convert_transition_data(&self, _: &PlatformEventData) -> TransitionData {
+            unreachable!("transition data is not used in this test")
+        }
+
+        fn convert_visible_data(&self, _: &PlatformEventData) -> VisibleData {
+            unreachable!("visible data is not used in this test")
+        }
+
+        fn convert_wheel_data(&self, _: &PlatformEventData) -> WheelData {
+            unreachable!("wheel data is not used in this test")
+        }
+    }
+
+    fn interactive_chat_state(connection: ConnectionState) -> ChatState {
+        let mut state = ChatState::awaiting_bootstrap();
+        state.open_room_from_snapshot(RoomSnapshot {
+            room_id: Uuid::from_u128(1),
+            room_code: "A1234".to_string(),
+            latest_event_position: 0,
+            messages: Vec::new(),
+        });
+        state.set_connection(connection);
+        state
+    }
+
+    fn element_id_with_listener(edits: &[Mutation], event_name: &str) -> ElementId {
+        edits
+            .iter()
+            .find_map(|edit| match edit {
+                Mutation::NewEventListener { name, id } if name == event_name => Some(*id),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("missing listener for `{event_name}`"))
+    }
+
+    fn interactive_chat_harness(props: InteractiveChatHarnessProps) -> Element {
+        let draft_inputs = props.draft_inputs.clone();
+        let send_count = props.send_count.clone();
+
+        rsx! {
+            ChatScreen {
+                state: interactive_chat_state(ConnectionState::Connecting),
+                draft: "hello koko".to_string(),
+                on_draft_input: move |value| {
+                    draft_inputs.lock().unwrap().push(value);
+                },
+                on_send_message: move |_| {
+                    send_count.fetch_add(1, Ordering::SeqCst);
+                },
+            }
+        }
+    }
 
     #[test]
     fn conversation_preview_uses_placeholder_when_empty() {
@@ -628,8 +876,8 @@ mod tests {
     }
 
     #[test]
-    fn send_control_requires_joined_connection() {
-        assert!(!can_send_message(ConnectionState::Connecting, "hello", true));
+    fn send_control_allows_connecting_room_before_subscription_ack() {
+        assert!(can_send_message(ConnectionState::Connecting, "hello", true));
         assert!(can_send_message(ConnectionState::Joined, "hello", true));
     }
 
@@ -637,6 +885,43 @@ mod tests {
     fn send_control_requires_non_empty_draft_and_handler() {
         assert!(!can_send_message(ConnectionState::Joined, "   ", true));
         assert!(!can_send_message(ConnectionState::Joined, "hello", false));
+    }
+
+    #[test]
+    fn chat_screen_forwards_draft_input_and_send_click_events() {
+        set_event_converter(Box::new(TestHtmlEventConverter));
+
+        let captured_drafts = Arc::new(Mutex::new(Vec::<String>::new()));
+        let send_count = Arc::new(AtomicUsize::new(0));
+        let mut dom = VirtualDom::new_with_props(
+            interactive_chat_harness,
+            InteractiveChatHarnessProps {
+                draft_inputs: captured_drafts.clone(),
+                send_count: send_count.clone(),
+            },
+        );
+        let mut mutations = Mutations::default();
+        dom.rebuild(&mut mutations);
+
+        let input_id = element_id_with_listener(&mutations.edits, "input");
+        let send_id = element_id_with_listener(&mutations.edits, "click");
+
+        let input_event = Event::new(
+            Rc::new(PlatformEventData::new(Box::new(TestFormPlatformEvent {
+                value: "new draft".to_string(),
+            }))) as Rc<dyn Any>,
+            true,
+        );
+        dom.runtime().handle_event("input", input_event, input_id);
+
+        let click_event = Event::new(
+            Rc::new(PlatformEventData::new(Box::new(TestMousePlatformEvent))) as Rc<dyn Any>,
+            true,
+        );
+        dom.runtime().handle_event("click", click_event, send_id);
+
+        assert_eq!(captured_drafts.lock().unwrap().as_slice(), &["new draft"]);
+        assert_eq!(send_count.load(Ordering::SeqCst), 1);
     }
 
     #[test]

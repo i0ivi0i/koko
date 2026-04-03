@@ -588,9 +588,12 @@ fn resolve_shell_banner_message(
 }
 
 fn can_send_message(state: &ChatState) -> bool {
-    // 只有真正 Joined 的房间才能发消息；Connecting 阶段只允许展示本地草稿，不允许制造假历史。
+    // sender 会直收自己的权威 message_created；壳层不能把发送资格错误地定义成“必须等订阅 ack”。
     state.room_id().is_some()
-        && state.connection() == ConnectionState::Joined
+        && matches!(
+            state.connection(),
+            ConnectionState::Connecting | ConnectionState::Joined
+        )
         && !state.draft().trim().is_empty()
 }
 
@@ -1389,7 +1392,7 @@ mod tests {
     }
 
     #[test]
-    fn can_send_message_requires_joined_connection_and_active_room() {
+    fn can_send_message_allows_connecting_room_with_active_room() {
         let mut state = ChatState::awaiting_bootstrap();
         state.apply_bootstrap_session(BootstrapSession {
             session_id: Uuid::from_u128(90),
@@ -1409,6 +1412,9 @@ mod tests {
         state.set_draft("hello");
 
         assert!(!can_send_message(&state));
+
+        state.set_connection(ConnectionState::Connecting);
+        assert!(can_send_message(&state));
 
         state.set_connection(ConnectionState::Joined);
         assert!(can_send_message(&state));
