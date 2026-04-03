@@ -56,7 +56,19 @@ socket.io.min.js@4.8.3
 
 ### 2. Dioxus 官方资源管理路径
 
-Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，资源源目录与构建输出目录分离是正常做法，不应为了“表面少目录”去打破这种边界。
+Dioxus 官方在 [Configure Project](https://dioxuslabs.com/learn/0.7/guides/tools/configure/) 中提供了：
+
+- `[web.resource].script`
+- `[web.resource.dev].script`
+
+用于把 JavaScript 资源直接纳入页面入口。官方示例明确使用相对 `Cargo.toml` 的路径，例如：
+
+```toml
+[web.resource]
+script = ["./public/index.js"]
+```
+
+这说明对“必须先于 wasm bootstrap 出现在页面里的第三方脚本”，官方正路是**入口资源配置层**，不是把 `<script>` 临时塞进组件树里碰时序。
 
 ### 3. 项目法约束
 
@@ -74,6 +86,7 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 做法：
 
 - 在仓库 `assets/` 中保留一份官方最新版 `socket.io.min.js`
+- 通过 [Dioxus.toml](/E:/koko/Dioxus.toml) 的 `[web.resource].script` 把它接入页面入口
 - 浏览器通过全局 `io` 接入
 - 运行时仍由现有 Dioxus/Axum 静态资源链路提供
 
@@ -81,6 +94,7 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 
 - 不引入 JS 工具链
 - 完全站在官方客户端 bundle 路径上
+- 完全复用 Dioxus 官方入口资源能力
 - 目录增长最少
 - 版本、来源、升级点清晰可控
 
@@ -128,6 +142,7 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 可接受的唯一方向是：
 
 - 直接使用 Socket.IO 官方浏览器生产 bundle
+- 直接使用 Dioxus 官方入口资源机制把它放进页面
 - Rust 项目只负责把它当普通静态资源稳定提供出来
 
 ### 2. 源资源与产物分离，但真相必须统一
@@ -143,10 +158,11 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 因此本次不追求删除 `dist/`，而是追求：
 
 - 浏览器代码引用的资源路径
+- Dioxus 入口页面生成出来的资源路径
 - 服务器静态资源挂载路径
 - 测试断言的资源路径
 
-三者保持一致。
+四者保持一致。
 
 ### 3. 浏览器接入回到官方主路径
 
@@ -155,13 +171,14 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 
 - 使用 `socket.io.min.js`
 - 通过浏览器全局 `io` 建立连接
+- 由 [Dioxus.toml](/E:/koko/Dioxus.toml) 的 `[web.resource].script` 把官方 bundle 注入页面入口
 
-这样更贴近官方浏览器直接接入路径，也更容易让后来维护者一眼看懂。
+这样更贴近官方浏览器直接接入路径，也更符合 Dioxus 官方资源配置方式。
 
 ### 4. 不借这次改动继续膨胀私有桥接层
 
 当前 [src/web.rs](/E:/koko/src/web.rs) 里已经有一层实时桥接逻辑。  
-这次只做“资源与接入方式收口”，不借机再抽新框架、造新中间层、发明新的 JS helper 文件。
+这次只做“资源与接入方式收口”，不借机再抽新框架、造新中间层、发明新的 JS helper 文件，也不自定义新的页面模板，除非官方 `Dioxus.toml` 入口资源机制被实证证明不够用。
 
 原则是：
 
@@ -193,29 +210,27 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 - 当前固定版本是 `4.8.3`
 - 仓库不引入 npm，本文件作为受控 vendor 资产维护
 
-### 2. 浏览器代码
+### 2. 浏览器代码与页面入口
+
+[Dioxus.toml](/E:/koko/Dioxus.toml) 中新增：
+
+```toml
+[web.resource]
+script = ["./assets/socket.io.min.js"]
+```
+
+职责是让 Dioxus 在生成的 `index.html` 入口里显式插入官方 `socket.io.min.js`，而不是依赖组件树渲染时机。
 
 [src/web.rs](/E:/koko/src/web.rs) 中：
 
 - 删除 `dynamic import("/assets/socket.io.esm.min.js")`
 - 改成直接使用浏览器全局 `io`
-- 增补中文注释，说明这是依赖预先加载的官方 vendor bundle，而非 Rust 侧自己实现的实时客户端
+- 增补中文注释，说明这里消费的是已由页面入口预加载的官方 vendor bundle，而非 Rust 侧自己实现的实时客户端
 
-这里还必须闭合一个责任：
-
-- 由 Dioxus 页面壳在 Web 入口中显式先加载 `/assets/socket.io.min.js`
-- 再让依赖 `io` 的实时桥接逻辑启动
-
-也就是说，本次不能只把 JS 侧改成“使用全局 `io`”，还必须明确由哪一个页面宿主负责把官方 bundle 先挂进去。
-
-可接受方向是：
-
-- 在现有 Web 壳中使用 Dioxus 提供的脚本资源声明能力，明确插入 `/assets/socket.io.min.js`
-
-不可接受方向是：
+本次明确拒绝两条路：
 
 - 继续依赖运行时碰运气的隐式加载顺序
-- 新造一层资源预加载脚本或私有引导器
+- 在 `App()` 组件树里临时插 `<script>` 再假设它一定早于 wasm bootstrap
 
 ### 3. 静态资源挂载
 
@@ -234,9 +249,9 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 
 本次允许修改的文件范围收敛为：
 
+- [Dioxus.toml](/E:/koko/Dioxus.toml)
 - [assets/socket.io.min.js](/E:/koko/assets/socket.io.min.js)（新增或替换）
 - [src/web.rs](/E:/koko/src/web.rs)
-- 负责 Web 壳脚本预加载的宿主文件（若与 `src/web.rs` 不同，则一并最小修改）
 - [src/http.rs](/E:/koko/src/http.rs)（仅必要注释和边界说明）
 - [tests/http_support/mod.rs](/E:/koko/tests/http_support/mod.rs)
 - [tests/http_flow.rs](/E:/koko/tests/http_flow.rs)
@@ -254,7 +269,7 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 - `/wasm/...` 可访问
 - 未知静态资源保持 404
 
-同时把旧的 `socket.io.esm.min.js` 断言替换成新版 `socket.io.min.js`。
+同时把旧的 `socket.io.esm.min.js` 断言替换成新版 `socket.io.min.js`，并增加旧资源已下线的断言。
 
 ### 2. 测试表意要收紧
 
@@ -264,23 +279,23 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 最小收口要求：
 
 - 保留现有前端 fixture 作为路由/fallback 测试壳
-- 但静态资源断言要明确对齐最终运行时资源名 `socket.io.min.js`
-- 真实 bundle 验证不能只看文件存在，还要验证服务端默认静态资源路径与 bundle 产物路径一致
+- 静态资源断言明确对齐最终运行时资源名 `socket.io.min.js`
+- 真实 bundle 验证不能只看文件存在，还要验证生成的入口页面顺序与默认运行时静态资源目录
 
 如果当前测试辅助层继续直接喂根目录 `assets/`，也必须在测试命名和中文注释里明确：
 
 - 这里是在验证静态路由协议面
 - 这里不是生产产物总装测试
 
-同时新增一条更靠近生产的验证，证明默认运行时静态资源目录指向的确实是 bundle 后的 `dist/public/assets`。
-
-也就是说，本次设计允许测试职责分层，但不允许再让“源码目录假装运行时目录”成为唯一验证。
+同时新增一条更靠近生产的验证，证明 bundle 后的 `index.html` 确实先注入 `socket.io.min.js`，再加载 `/wasm/koko.js`。
 
 ### 3. bundle 验证
 
 完成代码改动后，必须跑仓库标准 web bundle 流程，确认：
 
 - `dist/public/assets/socket.io.min.js` 实际存在
+- `dist/public/index.html` 中实际出现 `socket.io.min.js`
+- `socket.io.min.js` 在 `/wasm/koko.js` 之前被插入入口页面
 - 默认运行时静态资源目录仍然指向 `dist/public/assets`
 
 如果 bundle 后文件未进入产物目录，则说明资源真相仍未收口，不能宣布完成。
@@ -303,7 +318,7 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 - 为什么选择官方 vendor bundle 而不是 npm
 - 为什么服务端读 `dist/public/assets` 而不是根目录 `assets`
 - 为什么浏览器侧依赖全局 `io`
-- 为什么页面宿主必须先加载官方 bundle，再启动实时桥接
+- 为什么入口脚本声明放在 `Dioxus.toml` 而不是组件树
 
 禁止写这种无价值注释：
 
@@ -321,8 +336,8 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 
 ### 2. 运行时路径失配风险
 
-如果浏览器侧改了资源文件名，但测试、bundle、服务端挂载未同步，最容易出现“开发看起来正常、真实产物缺文件”的假绿。  
-所以这轮的关键不是简单改字符串，而是把资源文件名、静态路由、bundle 产物三者一起验证。
+如果浏览器侧改了资源文件名，但 `Dioxus.toml`、测试、bundle、服务端挂载未同步，最容易出现“开发看起来正常、真实产物缺文件”的假绿。
+所以这轮的关键不是简单改字符串，而是把资源文件名、入口页面、静态路由、bundle 产物四者一起验证。
 
 ### 3. 私有桥接膨胀风险
 
@@ -336,15 +351,16 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 1. 仓库中不再保留 `assets/socket.io.esm.min.js`
 2. 仓库中存在官方最新版 `socket.io.min.js@4.8.3`
 3. 浏览器侧不再使用 `dynamic import("/assets/socket.io.esm.min.js")`
-4. 页面宿主已显式先加载 `/assets/socket.io.min.js`
+4. [Dioxus.toml](/E:/koko/Dioxus.toml) 已通过 `[web.resource].script` 显式声明 `./assets/socket.io.min.js`
 5. 浏览器侧改为通过全局 `io` 接入 Socket.IO
 6. `/assets/socket.io.min.js` 静态资源测试通过
 7. 仓库标准 web bundle 流程后，`dist/public/assets/socket.io.min.js` 实际存在
-8. 默认运行时静态资源目录仍明确指向 `dist/public/assets`
-9. 至少有一条最小兼容性 smoke 能证明最新版官方客户端接入当前 Rust 服务端不会直接失效
-10. 关键边界处已补上简洁、有效的中文注释
-11. 本次没有引入 npm/pnpm 或新的前端工具链
-12. 本次没有引入新的私有 `socket.io` 包装层、资源复制轮子或预加载引导器
+8. `dist/public/index.html` 中 `socket.io.min.js` 先于 `/wasm/koko.js` 出现
+9. 默认运行时静态资源目录仍明确指向 `dist/public/assets`
+10. 至少有一条最小兼容性 smoke 能证明最新版官方客户端接入当前 Rust 服务端不会直接失效
+11. 关键边界处已补上简洁、有效的中文注释
+12. 本次没有引入 npm/pnpm 或新的前端工具链
+13. 本次没有引入新的私有 `socket.io` 包装层、资源复制轮子或预加载引导器
 
 ## 结论
 
@@ -353,6 +369,7 @@ Dioxus 官方支持把第三方 JS 文件作为静态资源纳入资产管线，
 
 - 继续保持纯 Rust 工程
 - 直接复用 Socket.IO 官方最新版浏览器生产 bundle
-- 把 `socket.io` 资源、运行时路径、测试断言收口成一份真相
+- 直接复用 Dioxus 官方入口资源能力
+- 把 `socket.io` 资源、入口页面、运行时路径、测试断言收口成一份真相
 
 这样既不重造轮子，也能让目录、升级点、维护成本都更克制。
