@@ -458,6 +458,13 @@ fn set_shell_error(mut shell_error: Signal<Option<String>>, message: Option<Stri
     }
 }
 
+fn should_handle_room_resolution(
+    action: &RoomAction,
+    resource_state: UseResourceState,
+) -> bool {
+    *action != RoomAction::Idle && matches!(resource_state, UseResourceState::Ready)
+}
+
 #[cfg(target_arch = "wasm32")]
 fn bump_refresh(mut joined_rooms_refresh: Signal<u64>) {
     joined_rooms_refresh.set(joined_rooms_refresh() + 1);
@@ -838,9 +845,10 @@ pub fn App() -> Element {
         }
     });
 
+    let room_resolution_state = *room_resolution.state().read();
     if let Some(Ok(Some(snapshot))) = &*room_resolution.read_unchecked() {
         let action = room_action();
-        if action != RoomAction::Idle {
+        if should_handle_room_resolution(&action, room_resolution_state) {
             let mut next_state = state();
             if matches!(action, RoomAction::Join(_)) {
                 joined_rooms_refresh += 1;
@@ -858,8 +866,8 @@ pub fn App() -> Element {
             set_shell_error(shell_error, None);
         }
     } else if let Some(Err(error)) = &*room_resolution.read_unchecked() {
-        if room_action() != RoomAction::Idle {
-            let action = room_action();
+        let action = room_action();
+        if should_handle_room_resolution(&action, room_resolution_state) {
             let mut next_state = state();
             next_state.set_connection(ConnectionState::Offline);
             state.set(next_state);
@@ -1045,11 +1053,13 @@ mod tests {
         room_entry_error_message,
         normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
         rejected_pending_message_id, rejection_message, rejection_resets_subscription,
-        resolve_shell_banner_message, REALTIME_BRIDGE_SCRIPT,
+        resolve_shell_banner_message, should_handle_room_resolution, RoomAction,
+        REALTIME_BRIDGE_SCRIPT,
         resolve_joined_rooms_path, resolve_room_search_path, resolve_room_snapshot_path,
         resolve_shell_api_url, resolve_shell_api_url_with_query, should_trigger_room_search,
     };
     use crate::contract::{AppErrorCode, CommandRejected, RejectedCommandKind};
+    use dioxus::prelude::UseResourceState;
     use uuid::Uuid;
 
     #[test]
@@ -1228,5 +1238,41 @@ mod tests {
             REALTIME_BRIDGE_SCRIPT.contains(r#"io({ path: "/socket.io" })"#),
             "bridge should still connect through the official socket.io path"
         );
+    }
+
+    #[test]
+    fn stale_room_resolution_is_ignored_until_resource_finishes_refetching() {
+        let room_id = Uuid::from_u128(9);
+
+        assert!(!should_handle_room_resolution(
+            &RoomAction::Open(room_id),
+            UseResourceState::Pending
+        ));
+        assert!(!should_handle_room_resolution(
+            &RoomAction::Open(room_id),
+            UseResourceState::Stopped
+        ));
+        assert!(!should_handle_room_resolution(
+            &RoomAction::Join("A1234".to_string()),
+            UseResourceState::Paused
+        ));
+    }
+
+    #[test]
+    fn ready_room_resolution_is_consumed_only_for_active_room_actions() {
+        let room_id = Uuid::from_u128(10);
+
+        assert!(!should_handle_room_resolution(
+            &RoomAction::Idle,
+            UseResourceState::Ready
+        ));
+        assert!(should_handle_room_resolution(
+            &RoomAction::Open(room_id),
+            UseResourceState::Ready
+        ));
+        assert!(should_handle_room_resolution(
+            &RoomAction::Join("A1234".to_string()),
+            UseResourceState::Ready
+        ));
     }
 }
