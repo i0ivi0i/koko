@@ -575,4 +575,3 @@ async fn deleting_truth_rows_is_blocked_in_stage_one(pool: PgPool) -> sqlx::Resu
     assert!(session_delete.is_err());
     Ok(())
 }
-

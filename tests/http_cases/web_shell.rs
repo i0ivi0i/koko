@@ -121,11 +121,7 @@ fn message_created_from_other_room_does_not_pollute_current_timeline() {
             .iter()
             .map(|message| (message.room_id, message.message_id, message.body.as_str()))
             .collect::<Vec<_>>(),
-        vec![(
-            current_room_id,
-            Some(Uuid::from_u128(101)),
-            "current"
-        )]
+        vec![(current_room_id, Some(Uuid::from_u128(101)), "current")]
     );
 }
 

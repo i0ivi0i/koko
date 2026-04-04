@@ -340,7 +340,8 @@ where
             .save_session(refreshed_session)
             .await?;
 
-        if persisted.status != SessionStatus::Active || persisted.session_id != existing_session_id {
+        if persisted.status != SessionStatus::Active || persisted.session_id != existing_session_id
+        {
             return Err(AppError::DependencyFailure);
         }
 
@@ -475,7 +476,9 @@ where
         });
     }
 
-    let mut rooms = joined_rooms_port.list_joined_rooms(query.session_id).await?;
+    let mut rooms = joined_rooms_port
+        .list_joined_rooms(query.session_id)
+        .await?;
     rooms.sort_by(|left, right| {
         right
             .latest_message_at
@@ -663,7 +666,10 @@ where
     let messages = room_entry
         .load_recent_messages(room_id, ROOM_SNAPSHOT_LIMIT)
         .await?;
-    let latest_event_position = messages.last().map(|message| message.event_position).unwrap_or(0);
+    let latest_event_position = messages
+        .last()
+        .map(|message| message.event_position)
+        .unwrap_or(0);
     let snapshot = RoomSnapshotData {
         room_id,
         room_code,

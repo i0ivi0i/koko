@@ -6,14 +6,14 @@ use std::sync::{
 use chrono::{DateTime, TimeZone, Utc};
 use koko::{
     app::{
-        AdminOverviewPort, AdminRoomsPort, AdminSessionContext, AdminSessionPort, AppError,
-        Clock, IdGenerator, JoinOrCreateRoomByCodeCommand, JoinedRoomsPort, ListJoinedRoomsQuery,
+        AdminOverviewPort, AdminRoomsPort, AdminSessionContext, AdminSessionPort, AppError, Clock,
+        IdGenerator, JoinOrCreateRoomByCodeCommand, JoinedRoomsPort, ListJoinedRoomsQuery,
         LoadRoomSnapshotQuery, MembershipPort, MessageStore, PersistedMessageRecord, RoomEntryPort,
         RoomEntryTx, RoomEventPositionPort, RoomSearchPort, RoomSnapshotData, RoomSnapshotPort,
-        RoomStreamSubscription, SearchRoomsByCodeQuery, SendTextMessageInput,
-        SessionBootstrapPort, SessionPort, SubscribeRoomStreamInput, bootstrap_anonymous_session,
-        get_admin_overview, join_or_create_room_by_code, list_admin_rooms, list_joined_rooms,
-        load_room_snapshot, search_rooms_by_code, send_text_message, subscribe_room_stream,
+        RoomStreamSubscription, SearchRoomsByCodeQuery, SendTextMessageInput, SessionBootstrapPort,
+        SessionPort, SubscribeRoomStreamInput, bootstrap_anonymous_session, get_admin_overview,
+        join_or_create_room_by_code, list_admin_rooms, list_joined_rooms, load_room_snapshot,
+        search_rooms_by_code, send_text_message, subscribe_room_stream,
     },
     contract::{
         AppErrorCode, AppEvent, JoinedRoomSummary, MessageView, RoomSearchResult, RoomSnapshot,
@@ -29,16 +29,16 @@ use koko::{
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-#[path = "app_cases/contract.rs"]
-mod contract;
 #[path = "app_cases/application.rs"]
 mod application;
-#[path = "app_cases/store.rs"]
-mod store;
-#[path = "app_cases/domain.rs"]
-mod domain;
 #[path = "bigbang_cases/mod.rs"]
 mod bigbang_cases;
+#[path = "app_cases/contract.rs"]
+mod contract;
+#[path = "app_cases/domain.rs"]
+mod domain;
+#[path = "app_cases/store.rs"]
+mod store;
 
 #[derive(Debug)]
 struct FakeSessionPort {
@@ -86,10 +86,7 @@ impl AdminSessionPort for FakeAdminSessionPort {
         Ok(self.state)
     }
 
-    async fn revoke_admin_session(
-        &self,
-        _context: &AdminSessionContext,
-    ) -> Result<(), AppError> {
+    async fn revoke_admin_session(&self, _context: &AdminSessionContext) -> Result<(), AppError> {
         panic!("overview/rooms test should not revoke admin session")
     }
 }
@@ -98,9 +95,7 @@ impl AdminSessionPort for FakeAdminSessionPort {
 struct FakeAdminOverviewPort;
 
 impl AdminOverviewPort for FakeAdminOverviewPort {
-    async fn get_admin_overview(
-        &self,
-    ) -> Result<koko::contract::AdminOverview, AppError> {
+    async fn get_admin_overview(&self) -> Result<koko::contract::AdminOverview, AppError> {
         panic!("admin overview port should not be called when admin access is denied");
     }
 }
@@ -109,9 +104,7 @@ impl AdminOverviewPort for FakeAdminOverviewPort {
 struct FakeAdminRoomsPort;
 
 impl AdminRoomsPort for FakeAdminRoomsPort {
-    async fn list_admin_rooms(
-        &self,
-    ) -> Result<Vec<koko::contract::AdminRoomSummary>, AppError> {
+    async fn list_admin_rooms(&self) -> Result<Vec<koko::contract::AdminRoomSummary>, AppError> {
         panic!("admin rooms port should not be called when admin access is denied");
     }
 }
@@ -673,7 +666,10 @@ fn sample_snapshot_data(
             event_position: i64::try_from(index + 1).unwrap(),
         })
         .collect::<Vec<_>>();
-    let latest_event_position = messages.last().map(|message| message.event_position).unwrap_or(0);
+    let latest_event_position = messages
+        .last()
+        .map(|message| message.event_position)
+        .unwrap_or(0);
 
     RoomSnapshotData {
         room_id,

@@ -214,11 +214,7 @@ fn ChatScreen(
     #[props(default)] on_send_message: Option<EventHandler<()>>,
 ) -> Element {
     let room_code = shell_room_code(state.room_code());
-    let send_enabled = can_send_message(
-        state.connection(),
-        &draft,
-        on_send_message.is_some(),
-    );
+    let send_enabled = can_send_message(state.connection(), &draft, on_send_message.is_some());
 
     rsx! {
         div {
@@ -503,14 +499,13 @@ fn connection_label(state: ConnectionState) -> &'static str {
     }
 }
 
-fn can_send_message(
-    connection: ConnectionState,
-    draft: &str,
-    has_send_handler: bool,
-) -> bool {
+fn can_send_message(connection: ConnectionState, draft: &str, has_send_handler: bool) -> bool {
     // sender 的权威 message_created 会直接回到当前 socket，发送资格不应被订阅 ack 反向绑死。
     has_send_handler
-        && matches!(connection, ConnectionState::Connecting | ConnectionState::Joined)
+        && matches!(
+            connection,
+            ConnectionState::Connecting | ConnectionState::Joined
+        )
         && !draft.trim().is_empty()
 }
 
@@ -615,9 +610,10 @@ mod tests {
             AnimationData, CancelData, ClipboardData, CompositionData, DragData, FileData,
             FocusData, FormData, FormValue, HasFileData, HasFormData, HasMouseData,
             HtmlEventConverter, ImageData, InteractionElementOffset, InteractionLocation,
-            KeyboardData, MediaData, ModifiersInteraction, MountedData, MouseData, PointerData,
-            PointerInteraction, PlatformEventData, ResizeData, ScrollData, SelectionData,
-            ToggleData, TouchData, TransitionData, VisibleData, WheelData, geometry::*,
+            KeyboardData, MediaData, ModifiersInteraction, MountedData, MouseData,
+            PlatformEventData, PointerData, PointerInteraction, ResizeData, ScrollData,
+            SelectionData, ToggleData, TouchData, TransitionData, VisibleData, WheelData,
+            geometry::*,
             input_data::{MouseButton, MouseButtonSet},
             keyboard_types::Modifiers,
             set_event_converter,

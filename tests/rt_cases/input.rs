@@ -74,4 +74,3 @@ async fn send_text_message_input_uses_authenticated_session() {
         }
     );
 }
-

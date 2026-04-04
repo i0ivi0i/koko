@@ -52,8 +52,16 @@ fn startup_banner_transcript_policy_hides_admin_token_from_default_log_sink() {
     let transcript = banner.render_lines();
     let persistent = banner.render_persistent_log_lines();
 
-    assert!(transcript.iter().any(|line| line.contains("admin-test-token")));
-    assert!(!persistent.iter().any(|line| line.contains("admin-test-token")));
+    assert!(
+        transcript
+            .iter()
+            .any(|line| line.contains("admin-test-token"))
+    );
+    assert!(
+        !persistent
+            .iter()
+            .any(|line| line.contains("admin-test-token"))
+    );
 }
 
 #[test]
@@ -136,8 +144,10 @@ fn startup_banner_normalizes_unspecified_ipv4_to_loopback_home_url() {
     assert_eq!(banner.home_urls[0], "http://127.0.0.1:8080/");
     assert_eq!(banner.admin_url, "http://127.0.0.1:8080/admin");
     assert!(banner.admin_token_notice.is_some());
-    assert!(banner
-        .lan_urls
-        .iter()
-        .all(|url| url.starts_with("http://") && url.ends_with(":8080/")));
+    assert!(
+        banner
+            .lan_urls
+            .iter()
+            .all(|url| url.starts_with("http://") && url.ends_with(":8080/"))
+    );
 }

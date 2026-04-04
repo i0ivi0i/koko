@@ -8,8 +8,8 @@ use axum::{
     response::IntoResponse,
     routing::{any, get, post},
 };
-use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
+use axum_extra::extract::cookie::Cookie;
 use serde::Deserialize;
 use tower_http::{
     services::{ServeDir, ServeFile},
@@ -158,7 +158,8 @@ fn frontend_shell_router_inner(
     let index_file = frontend_dist_dir.join("index.html");
     let wasm_dir = frontend_dist_dir.join("wasm");
 
-    let router = Router::new().nest_service("/assets", ServeDir::new(asset_dir.into()))
+    let router = Router::new()
+        .nest_service("/assets", ServeDir::new(asset_dir.into()))
         .nest_service("/wasm", ServeDir::new(wasm_dir))
         .route_service("/", ServeFile::new(index_file.clone()))
         .route_service("/admin", ServeFile::new(index_file.clone()))
@@ -194,7 +195,10 @@ pub fn server_router(
     crate::rt::install_realtime(&io, realtime);
 
     frontend_shell_router_inner(frontend_dist_dir, asset_dir, false)
-        .nest("/api", traced_api_router(store, io, admin_token, admin_session_layer))
+        .nest(
+            "/api",
+            traced_api_router(store, io, admin_token, admin_session_layer),
+        )
         .layer(socket_layer)
 }
 
@@ -224,7 +228,9 @@ async fn bootstrap_session(
         Uuid::now_v7(),
     )
     .await
-    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::BootstrapAnonymousSession))?;
+    .map_err(|error| {
+        map_http_error_with_operation(error, ErrorOperation::BootstrapAnonymousSession)
+    })?;
     let cookie = Cookie::build((support::SESSION_COOKIE_NAME, session.session_id.to_string()))
         .http_only(true)
         .same_site(SameSite::Lax)
@@ -251,7 +257,9 @@ async fn join_room(
         },
     )
     .await
-    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::JoinOrCreateRoomByCode))?;
+    .map_err(|error| {
+        map_http_error_with_operation(error, ErrorOperation::JoinOrCreateRoomByCode)
+    })?;
     Ok(Json(snapshot))
 }
 
@@ -484,7 +492,10 @@ impl AdminSessionPort for HttpAdminSessionPort {
             .insert(ADMIN_SESSION_MARKER_KEY, true)
             .await
             .map_err(|_| AppError::DependencyFailure)?;
-        self.session.save().await.map_err(|_| AppError::DependencyFailure)?;
+        self.session
+            .save()
+            .await
+            .map_err(|_| AppError::DependencyFailure)?;
 
         let context = require_admin_session_context_from_app(&self.session)?;
         self.store
@@ -512,10 +523,7 @@ impl AdminSessionPort for HttpAdminSessionPort {
             .await
     }
 
-    async fn revoke_admin_session(
-        &self,
-        context: &AdminSessionContext,
-    ) -> Result<(), AppError> {
+    async fn revoke_admin_session(&self, context: &AdminSessionContext) -> Result<(), AppError> {
         self.store.clear_admin_session(context.session_id).await
     }
 }
@@ -545,7 +553,9 @@ fn resolve_admin_session_context(
     let Some(session_id) = session.id() else {
         return Ok(None);
     };
-    Ok(Some(AdminSessionContext::new(admin_session_uuid(session_id))))
+    Ok(Some(AdminSessionContext::new(admin_session_uuid(
+        session_id,
+    ))))
 }
 
 fn require_admin_session_context(
@@ -556,7 +566,9 @@ fn require_admin_session_context(
         .ok_or_else(|| map_http_error_with_operation(AppError::AdminSessionRequired, operation))
 }
 
-fn require_admin_session_context_from_app(session: &Session) -> Result<AdminSessionContext, AppError> {
+fn require_admin_session_context_from_app(
+    session: &Session,
+) -> Result<AdminSessionContext, AppError> {
     let Some(session_id) = session.id() else {
         return Err(AppError::AdminSessionRequired);
     };
@@ -608,10 +620,7 @@ fn map_http_error_payload(
         AppError::DependencyFailure => StatusCode::INTERNAL_SERVER_ERROR,
     };
 
-    (
-        status,
-        Json(error_payload(&error, operation)),
-    )
+    (status, Json(error_payload(&error, operation)))
 }
 
 fn map_session_error(_: tower_sessions::session::Error) -> (StatusCode, Json<ErrorPayload>) {

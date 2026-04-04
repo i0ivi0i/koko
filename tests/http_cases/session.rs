@@ -91,4 +91,3 @@ fn bootstrap_session_cookie_path_does_not_apply_admin_cookie_secure_yet() {
         fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/http.rs")).unwrap();
     assert!(!http_source.contains(".secure("));
 }
-

@@ -521,10 +521,7 @@ impl RoomSnapshotPort for PgStore {
 }
 
 impl RoomEventPositionPort for PgStore {
-    async fn latest_room_event_position(
-        &self,
-        room_id: Uuid,
-    ) -> Result<i64, AppError> {
+    async fn latest_room_event_position(&self, room_id: Uuid) -> Result<i64, AppError> {
         latest_room_event_position(&self.pool, room_id).await
     }
 }

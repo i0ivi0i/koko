@@ -132,4 +132,3 @@ fn search_results_split_into_joined_and_discoverable_sections() {
     assert_eq!(state.joined_search_results().len(), 1);
     assert_eq!(state.discoverable_search_results().len(), 1);
 }
-

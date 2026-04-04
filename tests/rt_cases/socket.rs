@@ -374,4 +374,3 @@ async fn authenticate_realtime_session_rejects_missing_or_invalid_cookie() {
         koko::contract::AppErrorCode::InvalidSession
     );
 }
-

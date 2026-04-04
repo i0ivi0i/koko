@@ -5,19 +5,21 @@ use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::{
-    chat::{ChatState, ConnectionState, ConversationItem, ShellScreen, query_forms_complete_room_code},
-    contract::{AppErrorCode, BootstrapSession, JoinedRoomSummary, RoomSearchResult, RoomSnapshot},
-    view,
-};
+#[cfg(any(target_arch = "wasm32", test))]
+use crate::contract::CommandRejected;
 #[cfg(any(target_arch = "wasm32", test))]
 use crate::contract::RejectedCommandKind;
 #[cfg(any(target_arch = "wasm32", test))]
-use crate::contract::CommandRejected;
+use crate::contract::RoomStreamSubscribed;
 #[cfg(target_arch = "wasm32")]
 use crate::contract::{MessageAccepted, MessageCreated};
-#[cfg(any(target_arch = "wasm32", test))]
-use crate::contract::RoomStreamSubscribed;
+use crate::{
+    chat::{
+        ChatState, ConnectionState, ConversationItem, ShellScreen, query_forms_complete_room_code,
+    },
+    contract::{AppErrorCode, BootstrapSession, JoinedRoomSummary, RoomSearchResult, RoomSnapshot},
+    view,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Module;
@@ -150,27 +152,13 @@ enum RealtimeCommand {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum RealtimeEvent {
-    Connected {
-        room_id: Uuid,
-    },
-    Disconnected {
-        reason: Option<String>,
-    },
-    RoomStreamSubscribed {
-        payload: RoomStreamSubscribed,
-    },
-    MessageAccepted {
-        payload: MessageAccepted,
-    },
-    MessageCreated {
-        payload: MessageCreated,
-    },
-    CommandRejected {
-        payload: CommandRejected,
-    },
-    Error {
-        message: String,
-    },
+    Connected { room_id: Uuid },
+    Disconnected { reason: Option<String> },
+    RoomStreamSubscribed { payload: RoomStreamSubscribed },
+    MessageAccepted { payload: MessageAccepted },
+    MessageCreated { payload: MessageCreated },
+    CommandRejected { payload: CommandRejected },
+    Error { message: String },
 }
 
 pub fn bootstrap_state(session: BootstrapSession) -> ChatState {
@@ -383,14 +371,10 @@ async fn join_room_by_code(room_code: &str) -> Result<RoomSnapshot, WebRequestEr
         });
     }
 
-    let browser_location = browser_location().map_err(|detail| WebRequestError {
-        code: None,
-        detail,
-    })?;
-    let url = resolve_shell_api_url(&browser_location, JOIN_ROOM_PATH).map_err(|detail| WebRequestError {
-        code: None,
-        detail,
-    })?;
+    let browser_location =
+        browser_location().map_err(|detail| WebRequestError { code: None, detail })?;
+    let url = resolve_shell_api_url(&browser_location, JOIN_ROOM_PATH)
+        .map_err(|detail| WebRequestError { code: None, detail })?;
     let body = serde_json::json!({ "room_code": room_code });
 
     let response = reqwest::Client::new()
@@ -421,10 +405,8 @@ async fn send_room_message(
     body: &str,
     client_message_id: Uuid,
 ) -> Result<MessageCreated, WebRequestError> {
-    let browser_location = browser_location().map_err(|detail| WebRequestError {
-        code: None,
-        detail,
-    })?;
+    let browser_location =
+        browser_location().map_err(|detail| WebRequestError { code: None, detail })?;
     let url = resolve_shell_api_url(&browser_location, &resolve_send_message_path(room_id))
         .map_err(|detail| WebRequestError { code: None, detail })?;
     let response = reqwest::Client::new()
@@ -667,10 +649,7 @@ fn spawn_realtime_bridge(
                         next_state.set_connection(ConnectionState::Offline);
                         state.set(next_state);
                     }
-                    set_shell_error(
-                        shell_error,
-                        Some(format!("实时连接桥已结束：{error}")),
-                    );
+                    set_shell_error(shell_error, Some(format!("实时连接桥已结束：{error}")));
                     break;
                 }
             };
@@ -842,10 +821,9 @@ pub fn App() -> Element {
 
             match bridge.send(command) {
                 Ok(()) => realtime_active_room.set(target_room),
-                Err(error) => set_shell_error(
-                    shell_error,
-                    Some(format!("发送实时指令失败：{error}")),
-                ),
+                Err(error) => {
+                    set_shell_error(shell_error, Some(format!("发送实时指令失败：{error}")))
+                }
             }
         }
     });
@@ -910,10 +888,7 @@ pub fn App() -> Element {
             set_shell_error(shell_error, None);
         }
     } else if let Some(Err(error)) = &*joined_rooms.read_unchecked() {
-        set_shell_error(
-            shell_error,
-            Some(format!("加载已加入房间失败：{error}")),
-        );
+        set_shell_error(shell_error, Some(format!("加载已加入房间失败：{error}")));
     }
 
     let search_results = use_resource(move || async move {
@@ -947,10 +922,7 @@ pub fn App() -> Element {
             set_shell_error(shell_error, None);
         }
     } else if let Some(Err(error)) = &*search_results.read_unchecked() {
-        set_shell_error(
-            shell_error,
-            Some(format!("搜索房间失败：{error}")),
-        );
+        set_shell_error(shell_error, Some(format!("搜索房间失败：{error}")));
     }
 
     let room_resolution = use_resource(move || async move {
@@ -1213,15 +1185,14 @@ pub fn app() -> Element {
 #[cfg(test)]
 mod tests {
     use super::{
-        can_send_message, room_entry_error_message,
-        normalize_room_code_query, parse_stored_room_id, resolve_join_room_path,
-        rejected_pending_message_id, rejection_message, rejection_resets_subscription,
+        ActiveRoomSync, REALTIME_BRIDGE_SCRIPT, RoomAction, can_send_message,
+        normalize_room_code_query, parse_stored_room_id, rejected_pending_message_id,
+        rejection_message, rejection_resets_subscription, resolve_join_room_path,
         resolve_joined_rooms_path, resolve_room_search_path, resolve_room_snapshot_path,
-        resolve_send_message_path,
-        resolve_shell_api_url, resolve_shell_api_url_with_query, resolve_shell_banner_message,
-        should_clear_background_shell_error,
-        should_accept_room_stream_subscribed, should_handle_room_resolution,
-        should_trigger_room_search, ActiveRoomSync, RoomAction, REALTIME_BRIDGE_SCRIPT,
+        resolve_send_message_path, resolve_shell_api_url, resolve_shell_api_url_with_query,
+        resolve_shell_banner_message, room_entry_error_message,
+        should_accept_room_stream_subscribed, should_clear_background_shell_error,
+        should_handle_room_resolution, should_trigger_room_search,
     };
     use crate::{
         chat::{ChatState, ConnectionState},
@@ -1377,7 +1348,10 @@ mod tests {
             client_message_id: Some(client_message_id),
         };
 
-        assert_eq!(rejected_pending_message_id(&payload), Some(client_message_id));
+        assert_eq!(
+            rejected_pending_message_id(&payload),
+            Some(client_message_id)
+        );
         assert!(!rejection_resets_subscription(&payload));
     }
 
@@ -1476,11 +1450,7 @@ mod tests {
     fn matching_room_resolution_revision_is_consumed_only_for_active_room_actions() {
         let room_id = Uuid::from_u128(10);
 
-        assert!(!should_handle_room_resolution(
-            &RoomAction::Idle,
-            3,
-            3
-        ));
+        assert!(!should_handle_room_resolution(&RoomAction::Idle, 3, 3));
         assert!(should_handle_room_resolution(
             &RoomAction::Open(room_id),
             7,

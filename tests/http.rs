@@ -34,26 +34,26 @@ fn env_lock() -> std::sync::MutexGuard<'static, ()> {
     ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
 }
 
-#[path = "http_cases/chat_state.rs"]
-mod chat_state;
-#[path = "http_cases/routes.rs"]
-mod routes;
-#[path = "http_cases/session.rs"]
-mod session;
-#[path = "http_cases/config.rs"]
-mod config;
-#[path = "http_cases/startup.rs"]
-mod startup;
-#[path = "http_cases/run_script.rs"]
-mod run_script;
-#[path = "http_cases/web_shell.rs"]
-mod web_shell;
-#[path = "http_cases/view_render.rs"]
-mod view_render;
 #[path = "http_cases/admin.rs"]
 mod admin;
 #[path = "bigbang_cases/mod.rs"]
 mod bigbang_cases;
+#[path = "http_cases/chat_state.rs"]
+mod chat_state;
+#[path = "http_cases/config.rs"]
+mod config;
+#[path = "http_cases/routes.rs"]
+mod routes;
+#[path = "http_cases/run_script.rs"]
+mod run_script;
+#[path = "http_cases/session.rs"]
+mod session;
+#[path = "http_cases/startup.rs"]
+mod startup;
+#[path = "http_cases/view_render.rs"]
+mod view_render;
+#[path = "http_cases/web_shell.rs"]
+mod web_shell;
 
 fn run_root_script_with_fake_cargo(args: &[&str], shim_dir: &Path) -> std::process::Output {
     let _guard = env_lock();
@@ -61,7 +61,10 @@ fn run_root_script_with_fake_cargo(args: &[&str], shim_dir: &Path) -> std::proce
     std::process::Command::new(powershell)
         .args(["-ExecutionPolicy", "Bypass", "-File", "run.ps1"])
         .args(args)
-        .env("PATH", format!(r"{};C:\Windows\System32", shim_dir.display()))
+        .env(
+            "PATH",
+            format!(r"{};C:\Windows\System32", shim_dir.display()),
+        )
         .env("PATHEXT", ".COM;.EXE;.BAT;.CMD")
         .env_remove("KOKO_ADMIN_TOKEN")
         .current_dir(env!("CARGO_MANIFEST_DIR"))

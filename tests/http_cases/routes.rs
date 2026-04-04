@@ -1,8 +1,11 @@
 use super::*;
 use chrono::{TimeZone, Utc};
-use std::{io, sync::{Arc, Mutex}};
-use tracing_subscriber::fmt::MakeWriter;
+use std::{
+    io,
+    sync::{Arc, Mutex},
+};
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::MakeWriter;
 
 #[tokio::test]
 async fn admin_entry_serves_frontend_shell() {
@@ -33,8 +36,12 @@ async fn admin_entry_serves_frontend_shell() {
 
 #[test]
 fn admin_route_detection_treats_only_admin_as_backend_entry() {
-    assert!(koko::admin::is_admin_shell_path("https://example.com/admin"));
-    assert!(!koko::admin::is_admin_shell_path("https://example.com/rooms/a1234"));
+    assert!(koko::admin::is_admin_shell_path(
+        "https://example.com/admin"
+    ));
+    assert!(!koko::admin::is_admin_shell_path(
+        "https://example.com/rooms/a1234"
+    ));
 }
 
 #[sqlx::test]
@@ -50,7 +57,9 @@ async fn bootstrap_then_join_returns_room_snapshot(pool: sqlx::PgPool) -> sqlx::
 }
 
 #[sqlx::test]
-async fn unknown_api_path_emits_trace_in_full_server_router(pool: sqlx::PgPool) -> sqlx::Result<()> {
+async fn unknown_api_path_emits_trace_in_full_server_router(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
     let harness = HttpHarness::new(pool).await;
     let buffer = Arc::new(Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
@@ -754,4 +763,3 @@ impl io::Write for BufferGuard {
         Ok(())
     }
 }
-

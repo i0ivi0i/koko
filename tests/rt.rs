@@ -45,12 +45,12 @@ use koko::{
     },
 };
 
+#[path = "bigbang_cases/mod.rs"]
+mod bigbang_cases;
 #[path = "rt_cases/input.rs"]
 mod input;
 #[path = "rt_cases/socket.rs"]
 mod socket;
-#[path = "bigbang_cases/mod.rs"]
-mod bigbang_cases;
 
 #[derive(Debug)]
 struct FakeSessionPort {
