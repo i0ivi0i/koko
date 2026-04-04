@@ -1,0 +1,699 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Socketioxide is a socket.io server implementation that works as a tower layer/service. It integrates nicely with the rest of the `tower`/`tokio`/`hyper` ecosystem."><title>socketioxide - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="/-/rustdoc.static/${f}">`).join(""))</script><link rel="stylesheet" href="/-/rustdoc.static/normalize-9960930a.css"><link rel="stylesheet" href="/-/static/vendored.css?0-0-0-da7690ee-2026-03-15" media="all" /><link rel="stylesheet" href="/-/rustdoc.static/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="/-/rustdoc.static/" data-current-crate="socketioxide" data-themes="" data-resource-suffix="-20260214-1.95.0-nightly-a33907a7a" data-rustdoc-version="1.95.0-nightly (a33907a7a 2026-02-14)" data-channel="nightly" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="/-/rustdoc.static/storage-41dd4d93.js"></script><script defer src="../crates-20260214-1.95.0-nightly-a33907a7a.js"></script><script defer src="/-/rustdoc.static/main-5013f961.js"></script><noscript><link rel="stylesheet" href="/-/rustdoc.static/noscript-f7c3ffd8.css"></noscript><link rel="icon" href="https://raw.githubusercontent.com/Totodore/socketioxide/refs/heads/main/.github/logo_dark.ico"><link rel="stylesheet" href="/-/static/rustdoc-2025-08-20.css?0-0-0-da7690ee-2026-03-15" media="all" /><link rel="stylesheet" href="/-/static/font-awesome.css?0-0-0-da7690ee-2026-03-15" media="all" />
+
+<link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
+
+<script type="text/javascript">(function() {
+    function applyTheme(theme) {
+        if (theme) {
+            document.documentElement.dataset.docsRsTheme = theme;
+        }
+    }
+
+    window.addEventListener("storage", ev => {
+        if (ev.key === "rustdoc-theme") {
+            applyTheme(ev.newValue);
+        }
+    });
+
+    // see ./storage-change-detection.html for details
+    window.addEventListener("message", ev => {
+        if (ev.data && ev.data.storage && ev.data.storage.key === "rustdoc-theme") {
+            applyTheme(ev.data.storage.value);
+        }
+    });
+
+    applyTheme(window.localStorage.getItem("rustdoc-theme"));
+})();</script></head><body class="rustdoc-page">
+<div class="nav-container">
+    <div class="container">
+        <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
+            <form action="/releases/search"
+                  method="GET"
+                  id="nav-search-form"
+                  class="landing-search-form-nav  ">
+
+                
+                <a href="/" class="pure-menu-heading pure-menu-link docsrs-logo" aria-label="Docs.rs">
+                    <span title="Docs.rs"><span class="fa fa-solid fa-cubes " aria-hidden="true"></span></span>
+                    <span class="title">Docs.rs</span>
+                </a><ul class="pure-menu-list">
+    <script id="crate-metadata" type="application/json">
+        
+        {
+            "name": "socketioxide",
+            "version": "0.18.2"
+        }
+    </script><li class="pure-menu-item pure-menu-has-children">
+            <a href="#" class="pure-menu-link crate-name" title="Socket IO server implementation in rust as a Tower Service.">
+                <span class="fa fa-solid fa-cube " aria-hidden="true"></span>
+                <span class="title">socketioxide-0.18.2</span>
+            </a><div class="pure-menu-children package-details-menu">
+                
+                <ul class="pure-menu-list menu-item-divided">
+                    <li class="pure-menu-heading" id="crate-title">
+                        socketioxide 0.18.2
+                        <span id="clipboard" class="svg-clipboard" title="Copy crate name and version information"></span>
+                    </li><li class="pure-menu-item">
+                        <a href="/socketioxide/0.18.2/socketioxide/" class="pure-menu-link description" id="permalink" title="Get a link to this specific version"><span class="fa fa-solid fa-link " aria-hidden="true"></span> Permalink
+                        </a>
+                    </li><li class="pure-menu-item">
+                        <a href="/crate/socketioxide/latest" class="pure-menu-link description" title="See socketioxide in docs.rs">
+                            <span class="fa fa-solid fa-cube " aria-hidden="true"></span> Docs.rs crate page
+                        </a>
+                    </li><li class="pure-menu-item">
+                            <span class="pure-menu-link description"><span class="fa fa-solid fa-scale-unbalanced-flip " aria-hidden="true"></span>
+                            <a href="https://spdx.org/licenses/MIT" class="pure-menu-sublink">MIT</a></span>
+                        </li></ul>
+
+                <div class="pure-g menu-item-divided">
+                    <div class="pure-u-1-2 right-border">
+                        <ul class="pure-menu-list">
+                            <li class="pure-menu-heading">Links</li>
+
+                            <li class="pure-menu-item">
+                                    <a href="https://github.com/totodore/socketioxide" class="pure-menu-link">
+                                        <span class="fa fa-solid fa-house " aria-hidden="true"></span> Homepage
+                                    </a>
+                                </li><li class="pure-menu-item">
+                                    <a href="https://github.com/totodore/socketioxide" class="pure-menu-link">
+                                        <span class="fa fa-solid fa-code-branch " aria-hidden="true"></span> Repository
+                                    </a>
+                                </li><li class="pure-menu-item">
+                                <a href="https://crates.io/crates/socketioxide" class="pure-menu-link" title="See socketioxide in crates.io">
+                                    <span class="fa fa-solid fa-cube " aria-hidden="true"></span> crates.io
+                                </a>
+                            </li>
+
+                            
+                            <li class="pure-menu-item">
+                                <a href="/crate/socketioxide/latest/source/" title="Browse source of socketioxide-0.18.2" class="pure-menu-link">
+                                    <span class="fa fa-solid fa-folder-open " aria-hidden="true"></span> Source
+                                </a>
+                            </li>
+                        </ul>
+                    </div><div class="pure-u-1-2">
+                        <ul class="pure-menu-list" id="topbar-owners">
+                            <li class="pure-menu-heading">Owners</li><li class="pure-menu-item">
+                                    <a href="https://crates.io/users/Totodore" class="pure-menu-link">
+                                        <span class="fa fa-solid fa-user " aria-hidden="true"></span> Totodore
+                                    </a>
+                                </li></ul>
+                    </div>
+                </div>
+
+                <div class="pure-g menu-item-divided">
+                    <div class="pure-u-1-2 right-border">
+                        <ul class="pure-menu-list">
+                            <li class="pure-menu-heading">Dependencies</li>
+
+                            
+                            <li class="pure-menu-item">
+                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
+                                    <ul class="pure-menu-list">
+                                        <li class="pure-menu-item"><a href="/bytes/^1.11/" class="pure-menu-link">
+                bytes ^1.11
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/engineioxide/^0.17/" class="pure-menu-link">
+                engineioxide ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/futures-core/^0.3/" class="pure-menu-link">
+                futures-core ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/futures-util/^0.3/" class="pure-menu-link">
+                futures-util ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/http/^1.4/" class="pure-menu-link">
+                http ^1.4
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/http-body/^1.0/" class="pure-menu-link">
+                http-body ^1.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/hyper/^1.8/" class="pure-menu-link">
+                hyper ^1.8
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/matchit/^0.9/" class="pure-menu-link">
+                matchit ^0.9
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/pin-project-lite/^0.2/" class="pure-menu-link">
+                pin-project-lite ^0.2
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/serde/^1.0/" class="pure-menu-link">
+                serde ^1.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/socketioxide-core/^0.17/" class="pure-menu-link">
+                socketioxide-core ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/socketioxide-parser-common/^0.17/" class="pure-menu-link">
+                socketioxide-parser-common ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/socketioxide-parser-msgpack/^0.17/" class="pure-menu-link">
+                socketioxide-parser-msgpack ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/state/^0.6.0/" class="pure-menu-link">
+                state ^0.6.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/thiserror/^2.0/" class="pure-menu-link">
+                thiserror ^2.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tokio/^1.49/" class="pure-menu-link">
+                tokio ^1.49
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tower-layer/^0.3/" class="pure-menu-link">
+                tower-layer ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tower-service/^0.3/" class="pure-menu-link">
+                tower-service ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tracing/^0.1/" class="pure-menu-link">
+                tracing ^0.1
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/axum/^0.8/" class="pure-menu-link">
+                axum ^0.8
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/codspeed-criterion-compat/^4/" class="pure-menu-link">
+                codspeed-criterion-compat ^4
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/http-body-util/^0.1/" class="pure-menu-link">
+                http-body-util ^0.1
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/rand/^0.10/" class="pure-menu-link">
+                rand ^0.10
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/serde_json/^1.0/" class="pure-menu-link">
+                serde_json ^1.0
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tokio/^1.49/" class="pure-menu-link">
+                tokio ^1.49
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tokio-stream/^0.1/" class="pure-menu-link">
+                tokio-stream ^0.1
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tokio-tungstenite/^0.28/" class="pure-menu-link">
+                tokio-tungstenite ^0.28
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tokio-util/^0.7/" class="pure-menu-link">
+                tokio-util ^0.7
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/tracing-subscriber/^0.3/" class="pure-menu-link">
+                tracing-subscriber ^0.3
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li>
+                                    </ul>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="pure-u-1-2">
+                        <ul class="pure-menu-list">
+                            <li class="pure-menu-heading">Versions</li>
+
+                            <li class="pure-menu-item">
+                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1" data-url="/crate/socketioxide/latest/menus/releases/socketioxide/">
+                                    <span class="rotate"><span class="fa fa-solid fa-spinner " aria-hidden="true"></span></span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                    
+                    
+                    <div class="pure-g">
+                        <div class="pure-u-1">
+                            <ul class="pure-menu-list">
+                                <li>
+                                    <a href="/crate/socketioxide/latest" class="pure-menu-link">
+                                        <b>100%</b>
+                                        of the crate is documented
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div></div>
+        </li><li class="pure-menu-item pure-menu-has-children">
+                <a href="#" class="pure-menu-link" aria-label="Platform">
+                    <span class="fa fa-solid fa-gears " aria-hidden="true"></span>
+                    <span class="title">Platform</span>
+                </a>
+
+                
+                <ul class="pure-menu-children" id="platforms" data-url="/crate/socketioxide/latest/menus/platforms/socketioxide/"><li class="pure-menu-item">
+            <a href="/crate/socketioxide/latest/target-redirect/aarch64-apple-darwin/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="nofollow">aarch64-apple-darwin</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/socketioxide/latest/target-redirect/aarch64-unknown-linux-gnu/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="nofollow">aarch64-unknown-linux-gnu</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/socketioxide/latest/target-redirect/i686-pc-windows-msvc/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="nofollow">i686-pc-windows-msvc</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/socketioxide/latest/target-redirect/x86_64-pc-windows-msvc/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="nofollow">x86_64-pc-windows-msvc</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/socketioxide/latest/target-redirect/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="nofollow">x86_64-unknown-linux-gnu</a>
+        </li></ul>
+            </li><li class="pure-menu-item">
+                <a href="/crate/socketioxide/latest/features" title="Browse available feature flags of socketioxide-0.18.2" class="pure-menu-link">
+                    <span class="fa fa-solid fa-flag " aria-hidden="true"></span>
+                    <span class="title">Feature flags</span>
+                </a>
+            </li>
+        
+    
+</ul><div class="spacer"></div>
+                
+                
+
+<ul class="pure-menu-list">
+                    <li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" aria-label="docs.rs">docs.rs</a>
+                        <ul class="pure-menu-children aligned-icons"><li class="pure-menu-item"><a class="pure-menu-link" href="/about"><span class="fa fa-solid fa-circle-info " aria-hidden="true"></span> About docs.rs</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/badges"><span class="fa fa-brands fa-fonticons " aria-hidden="true"></span> Badges</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/builds"><span class="fa fa-solid fa-gears " aria-hidden="true"></span> Builds</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/metadata"><span class="fa fa-solid fa-table " aria-hidden="true"></span> Metadata</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/redirections"><span class="fa fa-solid fa-road " aria-hidden="true"></span> Shorthand URLs</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/download"><span class="fa fa-solid fa-download " aria-hidden="true"></span> Download</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/rustdoc-json"><span class="fa fa-solid fa-file-code " aria-hidden="true"></span> Rustdoc JSON</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/releases/queue"><span class="fa fa-solid fa-gears " aria-hidden="true"></span> Build queue</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="https://foundation.rust-lang.org/policies/privacy-policy/#docs.rs" target="_blank"><span class="fa fa-solid fa-shield-halved " aria-hidden="true"></span> Privacy policy</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="pure-menu-list"><li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" aria-label="Rust">Rust</a>
+                        <ul class="pure-menu-children">
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://www.rust-lang.org/" target="_blank">Rust website</a></li>
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/book/" target="_blank">The Book</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/std/" target="_blank">Standard Library API Reference</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/rust-by-example/" target="_blank">Rust by Example</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/cargo/guide/" target="_blank">The Cargo Guide</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/nightly/clippy" target="_blank">Clippy Documentation</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <div id="search-input-nav">
+                    <label for="nav-search">
+                        <span class="fa fa-solid fa-magnifying-glass " aria-hidden="true"></span>
+                    </label>
+
+                    
+                    
+                    <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" tabindex="-1"
+                        placeholder="Find crate"
+                        >
+                </div>
+            </form>
+        </div>
+    </div>
+</div><div class="rustdoc mod crate container-rustdoc" id="rustdoc_body_wrapper" tabindex="-1"><script async src="/-/static/menu.js?0-0-0-da7690ee-2026-03-15"></script>
+<script async src="/-/static/index.js?0-0-0-da7690ee-2026-03-15"></script>
+
+<iframe src="/-/storage-change-detection.html" width="0" height="0" style="display: none"></iframe><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate socketioxide</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../socketioxide/index.html"><img src="https://raw.githubusercontent.com/Totodore/socketioxide/refs/heads/main/.github/logo_dark.svg" alt="logo"></a><h2><a href="../socketioxide/index.html">socketioxide</a><span class="version">0.18.2</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#table-of-contents" title="Table of contents">Table of contents</a></li><li><a href="#features" title="Features">Features</a></li><li><a href="#compatibility" title="Compatibility">Compatibility</a></li><li><a href="#usage" title="Usage">Usage</a><ul><li><a href="#basic-example-with-axum" title="Basic example with axum:">Basic example with axum:</a></li></ul></li><li><a href="#initialisation" title="Initialisation">Initialisation</a><ul><li><a href="#tower-layer-example-with-custom-configuration" title="Tower layer example with custom configuration:">Tower layer example with custom configuration:</a></li><li><a href="#tower-standalone-service-example-with-default-configuration" title="Tower standalone service example with default configuration:">Tower standalone service example with default configuration:</a></li></ul></li><li><a href="#handlers" title="Handlers">Handlers</a></li><li><a href="#extractors" title="Extractors">Extractors</a><ul><li><a href="#extractor-order" title="Extractor order">Extractor order</a></li></ul></li><li><a href="#events" title="Events">Events</a></li><li><a href="#middlewares" title="Middlewares">Middlewares</a></li><li><a href="#emiting-data" title="Emiting data">Emiting data</a><ul><li><a href="#emitting-binary-data" title="Emitting binary data">Emitting binary data</a></li><li><a href="#emit-errors" title="Emit errors">Emit errors</a></li><li><a href="#emitting-with-operators" title="Emitting with operators">Emitting with operators</a></li></ul></li><li><a href="#acknowledgements" title="Acknowledgements">Acknowledgements</a><ul><li><a href="#server-acknowledgements" title="Server acknowledgements">Server acknowledgements</a></li><li><a href="#client-acknowledgements" title="Client acknowledgements">Client acknowledgements</a></li></ul></li><li><a href="#state-management" title="State management">State management</a><ul><li><a href="#per-socket-state" title="Per socket state">Per socket state</a></li><li><a href="#global-state" title="Global state">Global state</a></li></ul></li><li><a href="#adapters" title="Adapters">Adapters</a><ul><li><a href="#write-this" title="Write this:">Write this:</a></li><li><a href="#instead-of-that" title="Instead of that:">Instead of that:</a></li></ul></li><li><a href="#parsers" title="Parsers">Parsers</a></li><li><a href="#feature-flags" title="Feature flags">Feature flags</a></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1>Crate <span>socketioxide</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/socketioxide/lib.rs.html#1-420">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Socketioxide is a socket.io server implementation that works as a tower layer/service.
+It integrates nicely with the rest of the <a href="https://docs.rs/tower/latest/tower/"><code>tower</code></a>/<a href="https://docs.rs/tokio/1.49.0/x86_64-unknown-linux-gnu/tokio/index.html" title="mod tokio"><code>tokio</code></a>/<a href="https://docs.rs/hyper/latest/hyper/"><code>hyper</code></a> ecosystem.</p>
+<h3 id="table-of-contents"><a class="doc-anchor" href="#table-of-contents">§</a>Table of contents</h3>
+<ul>
+<li><a href="#features">Features</a></li>
+<li><a href="#compatibility">Compatibility</a></li>
+<li><a href="#usage">Usage</a></li>
+<li><a href="#initialisation">Initialisation</a></li>
+<li><a href="#handlers">Handlers</a></li>
+<li><a href="#extractors">Extractors</a></li>
+<li><a href="#events">Events</a></li>
+<li><a href="#middlewares">Middlewares</a></li>
+<li><a href="#emiting-data">Emiting data</a></li>
+<li><a href="#acknowledgements">Acknowledgements</a></li>
+<li><a href="#state-management">State management</a></li>
+<li><a href="#adapters">Adapters</a></li>
+<li><a href="#parsers">Parsers</a></li>
+<li><a href="#feature-flags">Feature flags</a></li>
+</ul>
+<h3 id="features"><a class="doc-anchor" href="#features">§</a>Features</h3>
+<ul>
+<li>Easy to use flexible axum-like API</li>
+<li>Fully compatible with the official <a href="https://socket.io/docs/v4/client-api/">socket.io client</a></li>
+<li>Support for the previous version of the protocol (v4).</li>
+<li>State Management</li>
+<li>Namespaces</li>
+<li>Rooms</li>
+<li>Acknowledgements</li>
+<li>Common and Msgpack parsers</li>
+<li>Polling &amp; Websocket transports</li>
+</ul>
+<h3 id="compatibility"><a class="doc-anchor" href="#compatibility">§</a>Compatibility</h3>
+<p>Because it works as a tower <a href="https://docs.rs/tower-layer/0.3.3/x86_64-unknown-linux-gnu/tower_layer/trait.Layer.html" title="trait tower_layer::Layer"><code>layer</code></a>/<a href="https://docs.rs/tower-service/0.3.3/x86_64-unknown-linux-gnu/tower_service/trait.Service.html" title="trait tower_service::Service"><code>service</code></a> or an hyper <a href="https://docs.rs/hyper/1.8.1/x86_64-unknown-linux-gnu/hyper/service/service/trait.Service.html" title="trait hyper::service::service::Service"><code>service</code></a>
+you can use it with any http server frameworks that works with tower/hyper:</p>
+<ul>
+<li><a href="https://docs.rs/axum/latest/axum/">Axum</a></li>
+<li><a href="https://docs.rs/warp/latest/warp/">Warp</a> (Not supported with socketioxide &gt;= 0.9.0 as long as warp doesn’t migrate to hyper v1)</li>
+<li><a href="https://docs.rs/hyper/latest/hyper/">Hyper</a></li>
+<li><a href="https://docs.rs/salvo/latest/salvo/">Salvo</a></li>
+</ul>
+<p>Check the <a href="http://github.com/totodore/socketioxide/tree/main/examples">examples</a> for
+more details on frameworks integration.</p>
+<h3 id="usage"><a class="doc-anchor" href="#usage">§</a>Usage</h3>
+<p>The API tries to mimic the equivalent JS API as much as possible.
+The main difference is that the default namespace <code>/</code> is not created automatically,
+you need to create it manually.</p>
+<h5 id="basic-example-with-axum"><a class="doc-anchor" href="#basic-example-with-axum">§</a>Basic example with axum:</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>axum::routing::get;
+<span class="kw">use </span>socketioxide::{
+    extract::SocketRef,
+    SocketIo,
+};
+<span class="attr">#[tokio::main]
+</span><span class="kw">async fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;(), Box&lt;<span class="kw">dyn </span>std::error::Error&gt;&gt; {
+    <span class="kw">let </span>(layer, io) = SocketIo::new_layer();
+
+    <span class="comment">// Register a handler for the default namespace
+    </span>io.ns(<span class="string">"/"</span>, <span class="kw">async </span>|s: SocketRef| {
+        <span class="comment">// For each "message" event received, send a "message-back" event with the "Hello World!" event
+        </span>s.on(<span class="string">"message"</span>, <span class="kw">async </span>|s: SocketRef| {
+            s.emit(<span class="string">"message-back"</span>, <span class="string">"Hello World!"</span>).ok();
+        });
+    });
+
+    <span class="kw">let </span>app = axum::Router::new()
+    .route(<span class="string">"/"</span>, get(<span class="kw">async </span>|| <span class="string">"Hello, World!"</span>))
+    .layer(layer);
+
+    <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="string">"0.0.0.0:3000"</span>).<span class="kw">await</span>.unwrap();
+    axum::serve(listener, app).<span class="kw">await</span>.unwrap();
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div><h3 id="initialisation"><a class="doc-anchor" href="#initialisation">§</a>Initialisation</h3>
+<p>The <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> struct is the main entry point of the library. It is used to create
+a <a href="https://docs.rs/tower-layer/0.3.3/x86_64-unknown-linux-gnu/tower_layer/trait.Layer.html" title="trait tower_layer::Layer"><code>Layer</code></a> or a <a href="https://docs.rs/tower-service/0.3.3/x86_64-unknown-linux-gnu/tower_service/trait.Service.html" title="trait tower_service::Service"><code>Service</code></a>.
+Later it can be used as the equivalent of the <code>io</code> object in the JS API.</p>
+<p>When creating your <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> instance, you can use the builder pattern to configure it with the <a href="struct.SocketIoBuilder.html" title="struct socketioxide::SocketIoBuilder"><code>SocketIoBuilder</code></a> struct.</p>
+<ul>
+<li>See the <a href="struct.SocketIoBuilder.html" title="struct socketioxide::SocketIoBuilder"><code>SocketIoBuilder</code></a> doc for more details on the available configuration options.</li>
+<li>See the <a href="layer/index.html" title="mod socketioxide::layer"><code>layer</code></a> module doc for more details on layers.</li>
+<li>See the <a href="service/index.html" title="mod socketioxide::service"><code>service</code></a> module doc for more details on services.</li>
+</ul>
+<h5 id="tower-layer-example-with-custom-configuration"><a class="doc-anchor" href="#tower-layer-example-with-custom-configuration">§</a>Tower layer example with custom configuration:</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>socketioxide::SocketIo;
+<span class="kw">let </span>(layer, io) = SocketIo::builder()
+    .max_payload(<span class="number">10_000_000</span>) <span class="comment">// Max HTTP payload size of 10M
+    </span>.max_buffer_size(<span class="number">10_000</span>) <span class="comment">// Max number of packets in the buffer
+    </span>.build_layer();</code></pre></div><h5 id="tower-standalone-service-example-with-default-configuration"><a class="doc-anchor" href="#tower-standalone-service-example-with-default-configuration">§</a>Tower <em>standalone</em> service example with default configuration:</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>socketioxide::SocketIo;
+<span class="kw">let </span>(svc, io) = SocketIo::new_svc();</code></pre></div><h3 id="handlers"><a class="doc-anchor" href="#handlers">§</a>Handlers</h3>
+<p>Handlers are async functions or clonable async closures that are given to the <code>io.ns</code>, the <code>socket.on</code> and the <code>socket.on_disconnect</code> fns.
+They can take from 0 to 16 arguments that implements the <a href="handler/connect/trait.FromConnectParts.html" title="trait socketioxide::handler::connect::FromConnectParts"><code>FromConnectParts</code></a>
+trait for the <a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a>, the <a href="handler/message/trait.FromMessageParts.html" title="trait socketioxide::handler::message::FromMessageParts"><code>FromMessageParts</code></a> for
+the <a href="handler/message/trait.MessageHandler.html" title="trait socketioxide::handler::message::MessageHandler"><code>MessageHandler</code></a> and the <a href="handler/disconnect/trait.FromDisconnectParts.html" title="trait socketioxide::handler::disconnect::FromDisconnectParts"><code>FromDisconnectParts</code></a> for the <a href="handler/disconnect/trait.DisconnectHandler.html" title="trait socketioxide::handler::disconnect::DisconnectHandler"><code>DisconnectHandler</code></a>.
+They are greatly inspired by the axum handlers.</p>
+<p>A new task will be spawned for each incoming connection/message so it doesn’t block the event management task.</p>
+<ul>
+<li>Check the <a href="handler/connect/index.html" title="mod socketioxide::handler::connect"><code>handler::connect</code></a> module doc for more details on the connect handler and connect middlewares.</li>
+<li>Check the <a href="handler/message/index.html" title="mod socketioxide::handler::message"><code>handler::message</code></a> module doc for more details on the message handler.</li>
+<li>Check the <a href="handler/disconnect/index.html" title="mod socketioxide::handler::disconnect"><code>handler::disconnect</code></a> module doc for more details on the disconnect handler.</li>
+<li>Check the <a href="extract/index.html" title="mod socketioxide::extract"><code>extract</code></a> module doc for more details on the extractors.</li>
+</ul>
+<h3 id="extractors"><a class="doc-anchor" href="#extractors">§</a>Extractors</h3>
+<p>Handlers params are called extractors and are used to extract data from the incoming connection/message. They are inspired by the axum extractors.
+An extractor is a struct that implements the <a href="handler/connect/trait.FromConnectParts.html" title="trait socketioxide::handler::connect::FromConnectParts"><code>FromConnectParts</code></a> trait for the <a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a>
+the <a href="handler/message/trait.FromMessageParts.html" title="trait socketioxide::handler::message::FromMessageParts"><code>FromMessageParts</code></a> for the <a href="handler/message/trait.MessageHandler.html" title="trait socketioxide::handler::message::MessageHandler"><code>MessageHandler</code></a> and the
+<a href="handler/disconnect/trait.FromDisconnectParts.html" title="trait socketioxide::handler::disconnect::FromDisconnectParts"><code>FromDisconnectParts</code></a> for the <a href="handler/disconnect/trait.DisconnectHandler.html" title="trait socketioxide::handler::disconnect::DisconnectHandler"><code>DisconnectHandler</code></a>.</p>
+<p>They can be used to extract data from the context of the handler and get specific params. Here are some examples of extractors:</p>
+<ul>
+<li><a href="extract/struct.Data.html" title="struct socketioxide::extract::Data"><code>Data</code></a>: extracts and deserialize from any receieved data, if a deserialization error occurs the handler won’t be called:
+<ul>
+<li>for <a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a>: extracts and deserialize from the incoming auth data</li>
+<li>for <a href="handler/connect/trait.ConnectMiddleware.html" title="trait socketioxide::handler::connect::ConnectMiddleware"><code>ConnectMiddleware</code></a>: extract and deserialize from the incoming auth data.
+In case of error, the middleware chain stops and a <code>connect_error</code> event is sent.</li>
+<li>for <a href="handler/message/trait.MessageHandler.html" title="trait socketioxide::handler::message::MessageHandler"><code>MessageHandler</code></a>: extracts and deserialize from the incoming message data</li>
+</ul>
+</li>
+<li><a href="extract/struct.TryData.html" title="struct socketioxide::extract::TryData"><code>TryData</code></a>: extracts and deserialize from the any received data but with a <code>Result</code> type in case of error:
+<ul>
+<li>for <a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a> and <a href="handler/connect/trait.ConnectMiddleware.html" title="trait socketioxide::handler::connect::ConnectMiddleware"><code>ConnectMiddleware</code></a>: extracts and deserialize from the incoming auth data</li>
+<li>for <a href="handler/message/trait.MessageHandler.html" title="trait socketioxide::handler::message::MessageHandler"><code>MessageHandler</code></a>: extracts and deserialize from the incoming message data</li>
+</ul>
+</li>
+<li><a href="extract/struct.SocketRef.html" title="struct socketioxide::extract::SocketRef"><code>SocketRef</code></a>: extracts a reference to the <a href="socket/struct.Socket.html" title="struct socketioxide::socket::Socket"><code>Socket</code></a></li>
+<li><a href="extract/struct.AckSender.html" title="struct socketioxide::extract::AckSender"><code>AckSender</code></a>: Can be used to send an ack response to the current message event</li>
+<li><a href="enum.ProtocolVersion.html" title="enum socketioxide::ProtocolVersion"><code>ProtocolVersion</code></a>: extracts the protocol version of the socket</li>
+<li><a href="enum.TransportType.html" title="enum socketioxide::TransportType"><code>TransportType</code></a>: extracts the transport type of the socket</li>
+<li><a href="socket/enum.DisconnectReason.html" title="enum socketioxide::socket::DisconnectReason"><code>DisconnectReason</code></a>: extracts the reason of the disconnection</li>
+<li><a href="extract/struct.State.html" title="struct socketioxide::extract::State"><code>State</code></a>: extracts a <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html" title="trait core::clone::Clone"><code>Clone</code></a> of a state previously set with <a href="struct.SocketIoBuilder.html" title="struct socketioxide::SocketIoBuilder"><code>SocketIoBuilder::with_state</code></a>.</li>
+<li><a href="extract/struct.Extension.html" title="struct socketioxide::extract::Extension"><code>Extension</code></a>: extracts a clone of the corresponding socket extension</li>
+<li><a href="extract/struct.MaybeExtension.html" title="struct socketioxide::extract::MaybeExtension"><code>MaybeExtension</code></a>: extracts a clone of the corresponding socket extension if it exists</li>
+<li><a href="extract/struct.HttpExtension.html" title="struct socketioxide::extract::HttpExtension"><code>HttpExtension</code></a>: extracts a clone of the http request extension</li>
+<li><a href="extract/struct.MaybeHttpExtension.html" title="struct socketioxide::extract::MaybeHttpExtension"><code>MaybeHttpExtension</code></a>: extracts a clone of the http request extension if it exists</li>
+<li><a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a>: extracts a reference to the <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> handle</li>
+</ul>
+<h4 id="extractor-order"><a class="doc-anchor" href="#extractor-order">§</a>Extractor order</h4>
+<p>Extractors are run in the order of their declaration in the handler signature.
+If an extractor returns an error, the handler won’t be called and a <code>tracing::error!</code> call
+will be emitted if the <code>tracing</code> feature is enabled.</p>
+<p>For the <a href="handler/message/trait.MessageHandler.html" title="trait socketioxide::handler::message::MessageHandler"><code>MessageHandler</code></a>, some extractors require to <em>consume</em> the event and therefore
+only implement the <a href="handler/message/trait.FromMessage.html" title="trait socketioxide::handler::message::FromMessage"><code>FromMessage</code></a> trait.</p>
+<p>Note that any extractors that implement the <a href="handler/message/trait.FromMessageParts.html" title="trait socketioxide::handler::message::FromMessageParts"><code>FromMessageParts</code></a> also implement by default
+the <a href="handler/message/trait.FromMessage.html" title="trait socketioxide::handler::message::FromMessage"><code>FromMessage</code></a> trait.</p>
+<h3 id="events"><a class="doc-anchor" href="#events">§</a>Events</h3>
+<p>There are three types of events:</p>
+<ul>
+<li>The connect event is emitted when a new connection is established. It can be handled with the
+<a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a> and the <code>io.ns</code> method.</li>
+<li>The message event is emitted when a new message is received. It can be handled with the
+<a href="handler/message/trait.MessageHandler.html" title="trait socketioxide::handler::message::MessageHandler"><code>MessageHandler</code></a> and the <code>socket.on</code> method.</li>
+<li>The disconnect event is emitted when a socket is closed. It can be handled with the
+<a href="handler/disconnect/trait.DisconnectHandler.html" title="trait socketioxide::handler::disconnect::DisconnectHandler"><code>DisconnectHandler</code></a> and the <code>socket.on_disconnect</code> method.</li>
+</ul>
+<p>Only one handler can exist for an event so registering a new handler for an event will replace the previous one.</p>
+<h3 id="middlewares"><a class="doc-anchor" href="#middlewares">§</a>Middlewares</h3>
+<p>When providing a <a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a> for a namespace you can add any number of
+<a href="handler/connect/trait.ConnectMiddleware.html" title="trait socketioxide::handler::connect::ConnectMiddleware"><code>ConnectMiddleware</code></a> in front of it. It is useful to add authentication or logging middlewares.</p>
+<p>A middleware <em>must</em> return a <code>Result&lt;(), E&gt; where E: Display</code>.</p>
+<ul>
+<li>If the result is <code>Ok(())</code>, the next middleware is called or if there is no more middleware,
+the socket is connected and the <a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a> is called.</li>
+<li>If the result is an error, the namespace connection will be refused and the error will be returned with a
+<a href="https://socket.io/docs/v4/middlewares/#handling-middleware-error"><code>connect_error</code> event and a <code>message</code></a> field with the error.</li>
+</ul>
+<div class="warning">
+    Because the socket is not yet connected to the namespace,
+    you can't send messages to it from the middleware.
+</div>
+<p>See the <a href="handler/connect/index.html#middleware" title="mod socketioxide::handler::connect"><code>handler::connect</code></a> module doc for more details
+on middlewares and examples.</p>
+<h3 id="emiting-data"><a class="doc-anchor" href="#emiting-data">§</a><a href="#emiting-data">Emiting data</a></h3>
+<p>Data can be emitted to a socket with the <a href="socket/struct.Socket.html" title="struct socketioxide::socket::Socket"><code>Socket::emit</code></a> method. It takes an event name and a data argument.
+The data argument can be any type that implements the <a href="https://docs.rs/serde_core/1.0.225/x86_64-unknown-linux-gnu/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize"><code>serde::Serialize</code></a> trait.</p>
+<p>You can emit from the <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> handle or the <a href="extract/struct.SocketRef.html" title="struct socketioxide::extract::SocketRef"><code>SocketRef</code></a>.
+The difference is that you can move the <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>io</code></a> handle everywhere because it is a cheaply cloneable struct.
+The <a href="extract/struct.SocketRef.html" title="struct socketioxide::extract::SocketRef"><code>SocketRef</code></a> is a reference to the socket and you should avoid storing it in your own code (e.g. in HashMap/Vec).
+If you do so, you will have to remove the socket reference when the socket is disconnected to avoid memory leaks.</p>
+<p>Moreover the <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>io</code></a> handle can emit to any namespace while the <a href="extract/struct.SocketRef.html" title="struct socketioxide::extract::SocketRef"><code>SocketRef</code></a> can only emit to the namespace of the socket.</p>
+<p>When using any <code>emit</code> fn, if you provide tuple-like data (tuple, arrays), it will be considered as multiple emit arguments.
+If you send a vector it will be considered as a single argument.</p>
+<h5 id="emitting-binary-data"><a class="doc-anchor" href="#emitting-binary-data">§</a>Emitting binary data</h5>
+<p>To emit binary data, you must use a data type that implements <a href="https://docs.rs/serde_core/1.0.225/x86_64-unknown-linux-gnu/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize"><code>Serialize</code></a> as binary data.
+Currently if you use <code>Vec&lt;u8&gt;</code> it will be considered as a number sequence and not binary data.
+To counter that you must either use a special type like <a href="https://docs.rs/bytes/1.11.1/x86_64-unknown-linux-gnu/bytes/bytes/struct.Bytes.html" title="struct bytes::bytes::Bytes"><code>Bytes</code></a> or use the <a href="https://docs.rs/serde_bytes"><code>serde_bytes</code></a> crate.
+If you want to emit generic binary data, use <a href="https://docs.rs/rmpv"><code>rmpv::Value</code></a> rather than <a href="https://docs.rs/serde_json/latest/serde_json/value"><code>serde_json::Value</code></a> otherwise
+the binary data will also be serialized as a number sequence.</p>
+<h5 id="emit-errors"><a class="doc-anchor" href="#emit-errors">§</a>Emit errors</h5>
+<p>If the data can’t be serialized, a <a href="struct.ParserError.html" title="struct socketioxide::ParserError"><code>ParserError</code></a> will be returned.</p>
+<p>If the socket is disconnected or the internal channel is full, a <a href="enum.SendError.html" title="enum socketioxide::SendError"><code>SendError</code></a> will be returned.
+Moreover, a tracing log will be emitted if the <code>tracing</code> feature is enabled.</p>
+<h5 id="emitting-with-operators"><a class="doc-anchor" href="#emitting-with-operators">§</a>Emitting with operators</h5>
+<p>To configure the emit, you can chain <a href="operators/index.html" title="mod socketioxide::operators"><code>Operators</code></a> methods to the emit call. With that you can easily configure the following options:</p>
+<ul>
+<li>rooms: emit, join, leave to specific rooms</li>
+<li>namespace: emit to a specific namespace (only from the <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> handle)</li>
+<li>timeout: set a custom timeout when waiting for an ack</li>
+<li>binary: emit a binary payload with the message</li>
+<li>local: broadcast only to the current node (in case of a cluster)</li>
+</ul>
+<p>Check the <a href="operators/index.html" title="mod socketioxide::operators"><code>operators</code></a> module doc for more details on operators.</p>
+<h3 id="acknowledgements"><a class="doc-anchor" href="#acknowledgements">§</a>Acknowledgements</h3>
+<p>You can ensure that a message has been received by the client/server with acknowledgements.</p>
+<h5 id="server-acknowledgements"><a class="doc-anchor" href="#server-acknowledgements">§</a>Server acknowledgements</h5>
+<p>They are implemented with the <a href="extract/struct.AckSender.html" title="struct socketioxide::extract::AckSender"><code>AckSender</code></a> extractor.
+You can send an ack response with an optional binary payload with the <a href="extract/struct.AckSender.html#method.send" title="struct socketioxide::extract::AckSender"><code>AckSender::send</code></a> method.
+If the client doesn’t send an ack id to respond to, the <a href="extract/struct.AckSender.html#method.send" title="struct socketioxide::extract::AckSender"><code>AckSender::send</code></a> method will do nothing.</p>
+<h5 id="client-acknowledgements"><a class="doc-anchor" href="#client-acknowledgements">§</a>Client acknowledgements</h5>
+<p>If you want to emit/broadcast a message and await for a/many client(s) acknowledgment(s) you can use:</p>
+<ul>
+<li><a href="extract/struct.SocketRef.html#method.emit_with_ack" title="struct socketioxide::extract::SocketRef"><code>SocketRef::emit_with_ack</code></a> for a single client</li>
+<li><a href="operators/struct.BroadcastOperators.html#method.emit_with_ack" title="struct socketioxide::operators::BroadcastOperators"><code>BroadcastOperators::emit_with_ack</code></a> for broadcasting or <a href="#emiting-data">emit configuration</a>.</li>
+<li><a href="struct.SocketIo.html#method.emit_with_ack" title="struct socketioxide::SocketIo"><code>SocketIo::emit_with_ack</code></a> for broadcasting to an entire namespace.</li>
+</ul>
+<h3 id="state-management"><a class="doc-anchor" href="#state-management">§</a><a href="#state-management">State management</a></h3>
+<p>There are two ways to manage the state of the server:</p>
+<h5 id="per-socket-state"><a class="doc-anchor" href="#per-socket-state">§</a>Per socket state</h5>
+<p>You can enable the <code>extensions</code> feature and use the <a href="socket/struct.Socket.html#structfield.extensions" title="field socketioxide::socket::Socket::extensions"><code>extensions</code></a> field on any socket to manage
+the state of each socket. It is backed by a <a href="https://doc.rust-lang.org/nightly/std/sync/poison/rwlock/struct.RwLock.html" title="struct std::sync::poison::rwlock::RwLock"><code>RwLock&lt;HashMap&gt;&gt;</code></a> so you can safely access it
+from multiple threads. However, the value must be <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html" title="trait core::clone::Clone"><code>Clone</code></a> and <code>'static</code>.
+When calling get, or using the <a href="extract/struct.Extension.html" title="struct socketioxide::extract::Extension"><code>Extension</code></a>/<a href="extract/struct.MaybeExtension.html" title="struct socketioxide::extract::MaybeExtension"><code>MaybeExtension</code></a> extractor,
+the value will always be cloned.
+See the <a href="extensions/index.html" title="mod socketioxide::extensions"><code>extensions</code></a> module doc for more details.</p>
+<h5 id="global-state"><a class="doc-anchor" href="#global-state">§</a>Global state</h5>
+<p>You can enable the <code>state</code> feature and use <a href="struct.SocketIoBuilder.html" title="struct socketioxide::SocketIoBuilder"><code>SocketIoBuilder::with_state</code></a> method to set
+multiple global states for the server. You can then access them from any handler with the <a href="extract/struct.State.html" title="struct socketioxide::extract::State"><code>State</code></a> extractor.</p>
+<p>The state is stored in the <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> handle and is shared between all the sockets. The only limitation is that all the
+provided state types must be clonable.
+Therefore it is recommended to use the <a href="https://doc.rust-lang.org/nightly/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc"><code>Arc</code></a> type to share the state between the handlers.</p>
+<p>You can then use the <a href="extract/struct.State.html" title="struct socketioxide::extract::State"><code>State</code></a> extractor to access the state in the handlers.</p>
+<h3 id="adapters"><a class="doc-anchor" href="#adapters">§</a>Adapters</h3>
+<p>This library is designed to support clustering through the use of adapters.
+Adapters enable broadcasting messages and managing socket room memberships across nodes
+without requiring changes to your code. The <a href="adapter/trait.Adapter.html" title="trait socketioxide::adapter::Adapter"><code>Adapter</code></a> trait abstracts the underlying system,
+making it easy to integrate with different implementations.</p>
+<p>Adapters typically interact with third-party systems like Redis, Postgres, Kafka, etc.,
+to facilitate message exchange between nodes.</p>
+<p>The default adapter is the <a href="adapter/struct.LocalAdapter.html" title="struct socketioxide::adapter::LocalAdapter"><code>LocalAdapter</code></a>, a simple in-memory implementation. If you intend
+to use a different adapter, ensure that extractors are either generic over the adapter type
+or explicitly specify the adapter type for each extractor that requires it.</p>
+<h5 id="write-this"><a class="doc-anchor" href="#write-this">§</a>Write this:</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">async fn </span>my_handler&lt;A: Adapter&gt;(s: SocketRef&lt;A&gt;, io: SocketIo&lt;A&gt;) { }
+<span class="kw">let </span>(layer, io) = SocketIo::new_layer();
+io.ns(<span class="string">"/"</span>, my_handler);</code></pre></div><h5 id="instead-of-that"><a class="doc-anchor" href="#instead-of-that">§</a>Instead of that:</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">async fn </span>my_handler(s: SocketRef, io: SocketIo) { }
+<span class="kw">let </span>(layer, io) = SocketIo::new_layer();
+io.ns(<span class="string">"/"</span>, my_handler);</code></pre></div>
+<p>Refer to the <a href="https://github.com/totodore/socketioxide">README</a> for a list of available adapters and
+the <a href="https://github.com/totodore/socketioxide/tree/main/examples">examples</a> for detailed usage guidance.
+You can also consult specific adapter crate documentation for more information.</p>
+<h3 id="parsers"><a class="doc-anchor" href="#parsers">§</a>Parsers</h3>
+<p>This library uses the socket.io common parser which is the default for all the socket.io implementations.
+Socketioxide also provided a msgpack parser. It is faster and more efficient than the default parser especially
+for binary data or payloads with a lot of numbers.
+To enable it, you must enable the <a href="#feature-flags"><code>msgpack</code></a> feature and then use the
+<a href="struct.SocketIoBuilder.html#method.with_parser" title="struct socketioxide::SocketIoBuilder"><code>with_parser</code></a> fn to set the parser to <a href="struct.ParserConfig.html#method.msgpack" title="struct socketioxide::ParserConfig"><code>ParserConfig::msgpack</code></a>.</p>
+<h3 id="feature-flags"><a class="doc-anchor" href="#feature-flags">§</a><a href="#feature-flags">Feature flags</a></h3>
+<ul>
+<li><code>v4</code>: enable support for the socket.io protocol v4</li>
+<li><code>tracing</code>: enable logging with <a href="https://docs.rs/tracing/0.1.44/x86_64-unknown-linux-gnu/tracing/index.html" title="mod tracing"><code>tracing</code></a> calls</li>
+<li><code>extensions</code>: enable per-socket state with the <a href="extensions/index.html" title="mod socketioxide::extensions"><code>extensions</code></a> module</li>
+<li><code>state</code>: enable global state management</li>
+<li><code>msgpack</code>: enable msgpack custom parser</li>
+</ul>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="ack/index.html" title="mod socketioxide::ack">ack</a></dt><dd>Acknowledgement related types and functions.</dd><dt><a class="mod" href="adapter/index.html" title="mod socketioxide::adapter">adapter</a></dt><dd>Adapters are responsible for managing the internal state of the server (rooms, sockets, etc…).
+When a socket joins or leaves a room, the adapter is responsible for updating the state.
+The default adapter is the <a href="adapter/struct.LocalAdapter.html" title="struct socketioxide::adapter::LocalAdapter"><code>LocalAdapter</code></a>, which stores the state in memory.
+Other adapters can be made to share the state between multiple servers.</dd><dt><a class="mod" href="extensions/index.html" title="mod socketioxide::extensions">extensions</a><wbr><span class="stab portability" title="Available on crate feature `extensions` only"><code>extensions</code></span></dt><dd><a href="extensions/struct.Extensions.html" title="struct socketioxide::extensions::Extensions"><code>Extensions</code></a> used to store extra data in each socket instance.</dd><dt><a class="mod" href="extract/index.html" title="mod socketioxide::extract">extract</a></dt><dd>Extractors for <a href="handler/connect/trait.ConnectHandler.html" title="trait socketioxide::handler::connect::ConnectHandler"><code>ConnectHandler</code></a>, <a href="handler/connect/trait.ConnectMiddleware.html" title="trait socketioxide::handler::connect::ConnectMiddleware"><code>ConnectMiddleware</code></a>, <a href="handler/message/trait.MessageHandler.html" title="trait socketioxide::handler::message::MessageHandler"><code>MessageHandler</code></a> and <a href="handler/disconnect/trait.DisconnectHandler.html" title="trait socketioxide::handler::disconnect::DisconnectHandler"><code>DisconnectHandler</code></a>.</dd><dt><a class="mod" href="handler/index.html" title="mod socketioxide::handler">handler</a></dt><dd>Functions and types used to handle incoming connections and messages.
+There is three main types of handlers: <a href="handler/connect/index.html" title="mod socketioxide::handler::connect">connect</a>, <a href="handler/message/index.html" title="mod socketioxide::handler::message">message</a> and <a href="handler/disconnect/index.html" title="mod socketioxide::handler::disconnect">disconnect</a>.</dd><dt><a class="mod" href="layer/index.html" title="mod socketioxide::layer">layer</a></dt><dd>A tower <a href="https://docs.rs/tower-layer/0.3.3/x86_64-unknown-linux-gnu/tower_layer/trait.Layer.html" title="trait tower_layer::Layer"><code>Layer</code></a> for socket.io so it can be used as a middleware with frameworks supporting layers.</dd><dt><a class="mod" href="operators/index.html" title="mod socketioxide::operators">operators</a></dt><dd>Operators are used to select sockets to send a packet to,
+or to configure the packet that will be emitted.</dd><dt><a class="mod" href="service/index.html" title="mod socketioxide::service">service</a></dt><dd>A Tower <a href="https://docs.rs/tower-service/0.3.3/x86_64-unknown-linux-gnu/tower_service/trait.Service.html" title="trait tower_service::Service"><code>Service</code></a> and Hyper <a href="https://docs.rs/hyper/1.8.1/x86_64-unknown-linux-gnu/hyper/service/service/trait.Service.html" title="trait hyper::service::service::Service"><code>Service</code></a> for socket.io so it</dd><dt><a class="mod" href="socket/index.html" title="mod socketioxide::socket">socket</a></dt><dd>A <a href="socket/struct.Socket.html" title="struct socketioxide::socket::Socket"><code>Socket</code></a> represents a client connected to a namespace.
+The socket struct itself should not be used directly, but through a <a href="extract/struct.SocketRef.html" title="struct socketioxide::extract::SocketRef"><code>SocketRef</code></a>.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.AdapterError.html" title="struct socketioxide::AdapterError">Adapter<wbr>Error</a></dt><dd>Error type for the <a href="https://docs.rs/socketioxide-core/0.17.0/x86_64-unknown-linux-gnu/socketioxide_core/adapter/trait.CoreAdapter.html" title="trait socketioxide_core::adapter::CoreAdapter"><code>CoreAdapter</code></a> trait.</dd><dt><a class="struct" href="struct.ParserConfig.html" title="struct socketioxide::ParserConfig">Parser<wbr>Config</a></dt><dd>The parser to use to encode and decode socket.io packets</dd><dt><a class="struct" href="struct.ParserError.html" title="struct socketioxide::ParserError">Parser<wbr>Error</a></dt><dd>A parser error that wraps any error that can occur during parsing.</dd><dt><a class="struct" href="struct.SocketIo.html" title="struct socketioxide::SocketIo">Socket<wbr>Io</a></dt><dd>The <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> instance can be cheaply cloned and moved around everywhere in your program.
+It can be used as the main handle to access the whole socket.io context.</dd><dt><a class="struct" href="struct.SocketIoBuilder.html" title="struct socketioxide::SocketIoBuilder">Socket<wbr>IoBuilder</a></dt><dd>A builder to create a <a href="struct.SocketIo.html" title="struct socketioxide::SocketIo"><code>SocketIo</code></a> instance.
+It contains everything to configure the socket.io server with a <a href="struct.SocketIoConfig.html" title="struct socketioxide::SocketIoConfig"><code>SocketIoConfig</code></a>.
+It can be used to build either a Tower <a href="https://docs.rs/tower-layer/0.3.3/x86_64-unknown-linux-gnu/tower_layer/trait.Layer.html" title="trait tower_layer::Layer"><code>Layer</code></a> or a <a href="https://docs.rs/tower-service/0.3.3/x86_64-unknown-linux-gnu/tower_service/trait.Service.html" title="trait tower_service::Service"><code>Service</code></a>.</dd><dt><a class="struct" href="struct.SocketIoConfig.html" title="struct socketioxide::SocketIoConfig">Socket<wbr>IoConfig</a></dt><dd>Configuration for Socket.IO &amp; Engine.IO</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.AckError.html" title="enum socketioxide::AckError">AckError</a></dt><dd>Error type for ack operations.</dd><dt><a class="enum" href="enum.BroadcastError.html" title="enum socketioxide::BroadcastError">Broadcast<wbr>Error</a></dt><dd>Error type for broadcast operations.</dd><dt><a class="enum" href="enum.EmitWithAckError.html" title="enum socketioxide::EmitWithAckError">Emit<wbr>With<wbr>AckError</a></dt><dd>Error type for the <a href="operators/struct.BroadcastOperators.html#method.emit_with_ack" title="method socketioxide::operators::BroadcastOperators::emit_with_ack"><code>emit_with_ack</code></a> method.</dd><dt><a class="enum" href="enum.NsInsertError.html" title="enum socketioxide::NsInsertError">NsInsert<wbr>Error</a></dt><dd>Represents errors that can occur when inserting a new route.</dd><dt><a class="enum" href="enum.ProtocolVersion.html" title="enum socketioxide::ProtocolVersion">Protocol<wbr>Version</a></dt><dd>Socket.IO protocol version.
+It is accessible with the <a href="socket/struct.Socket.html" title="struct socketioxide::socket::Socket"><code>Socket::protocol</code></a> method or as an extractor</dd><dt><a class="enum" href="enum.SendError.html" title="enum socketioxide::SendError">Send<wbr>Error</a></dt><dd>Error type for sending operations.</dd><dt><a class="enum" href="enum.SocketError.html" title="enum socketioxide::SocketError">Socket<wbr>Error</a></dt><dd>Error type when using the underlying engine.io socket</dd><dt><a class="enum" href="enum.TransportType.html" title="enum socketioxide::TransportType">Transport<wbr>Type</a></dt><dd>The type of <code>transport</code> used by the client.</dd></dl></section></div></main></div></body></html>

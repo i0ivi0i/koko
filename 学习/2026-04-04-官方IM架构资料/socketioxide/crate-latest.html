@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="generator" content="docs.rs 0.0.0 (da7690ee 2026-03-15 )"><link rel="canonical" href="https://docs.rs/crate/socketioxide/latest" /><link rel="stylesheet" href="/-/static/vendored.css?0-0-0-da7690ee-2026-03-15" media="all" />
+        <link rel="stylesheet" href="/-/static/style.css?0-0-0-da7690ee-2026-03-15" media="all" />
+        <link rel="stylesheet" href="/-/static/font-awesome.css?0-0-0-da7690ee-2026-03-15" media="all" />
+
+        <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
+
+        <title>socketioxide 0.18.2 - Docs.rs</title><script nonce="HeuIvzO70d6GfKzTTplDbUUXmWYcetRNwo1eh+iM2wDGmTGo">(function() {
+    function applyTheme(theme) {
+        if (theme) {
+            document.documentElement.dataset.docsRsTheme = theme;
+        }
+    }
+
+    window.addEventListener("storage", ev => {
+        if (ev.key === "rustdoc-theme") {
+            applyTheme(ev.newValue);
+        }
+    });
+
+    // see ./storage-change-detection.html for details
+    window.addEventListener("message", ev => {
+        if (ev.data && ev.data.storage && ev.data.storage.key === "rustdoc-theme") {
+            applyTheme(ev.data.storage.value);
+        }
+    });
+
+    applyTheme(window.localStorage.getItem("rustdoc-theme"));
+})();</script><script defer type="text/javascript" nonce="HeuIvzO70d6GfKzTTplDbUUXmWYcetRNwo1eh+iM2wDGmTGo" src="/-/static/menu.js?0-0-0-da7690ee-2026-03-15"></script>
+        <script defer type="text/javascript" nonce="HeuIvzO70d6GfKzTTplDbUUXmWYcetRNwo1eh+iM2wDGmTGo" src="/-/static/index.js?0-0-0-da7690ee-2026-03-15"></script>
+    </head>
+
+    <body class="">
+<div class="nav-container">
+    <div class="container">
+        <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
+            <form action="/releases/search"
+                  method="GET"
+                  id="nav-search-form"
+                  class="landing-search-form-nav  ">
+
+                
+                <a href="/" class="pure-menu-heading pure-menu-link docsrs-logo" aria-label="Docs.rs">
+                    <span title="Docs.rs"><span class="fa fa-solid fa-cubes " aria-hidden="true"></span></span>
+                    <span class="title">Docs.rs</span>
+                </a><ul class="pure-menu-list">
+    <script id="crate-metadata" type="application/json">
+        
+        {
+            "name": "socketioxide",
+            "version": "0.18.2"
+        }
+    </script><li class="pure-menu-item">
+            <a href="/crate/socketioxide/latest" class="pure-menu-link crate-name" title="Socket IO server implementation in rust as a Tower Service.">
+                <span class="fa fa-solid fa-cube " aria-hidden="true"></span>
+                <span class="title">socketioxide-0.18.2</span>
+            </a>
+        </li><li class="pure-menu-item pure-menu-has-children">
+                <a href="#" class="pure-menu-link" aria-label="Platform">
+                    <span class="fa fa-solid fa-gears " aria-hidden="true"></span>
+                    <span class="title">Platform</span>
+                </a>
+
+                
+                <ul class="pure-menu-children" id="platforms" data-url="/crate/socketioxide/latest/menus/platforms/"><li class="pure-menu-item">
+            <a href="/socketioxide/latest/aarch64-apple-darwin/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="">aarch64-apple-darwin</a>
+        </li><li class="pure-menu-item">
+            <a href="/socketioxide/latest/aarch64-unknown-linux-gnu/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="">aarch64-unknown-linux-gnu</a>
+        </li><li class="pure-menu-item">
+            <a href="/socketioxide/latest/i686-pc-windows-msvc/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="">i686-pc-windows-msvc</a>
+        </li><li class="pure-menu-item">
+            <a href="/socketioxide/latest/x86_64-pc-windows-msvc/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="">x86_64-pc-windows-msvc</a>
+        </li><li class="pure-menu-item">
+            <a href="/socketioxide/latest/socketioxide/" class="pure-menu-link" data-fragment="retain" rel="">x86_64-unknown-linux-gnu</a>
+        </li></ul>
+            </li><li class="pure-menu-item">
+                <a href="/crate/socketioxide/latest/features" title="Browse available feature flags of socketioxide-0.18.2" class="pure-menu-link">
+                    <span class="fa fa-solid fa-flag " aria-hidden="true"></span>
+                    <span class="title">Feature flags</span>
+                </a>
+            </li>
+        
+    
+</ul><div class="spacer"></div>
+                
+                
+
+<ul class="pure-menu-list">
+                    <li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" aria-label="docs.rs">docs.rs</a>
+                        <ul class="pure-menu-children aligned-icons"><li class="pure-menu-item"><a class="pure-menu-link" href="/about"><span class="fa fa-solid fa-circle-info " aria-hidden="true"></span> About docs.rs</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/badges"><span class="fa fa-brands fa-fonticons " aria-hidden="true"></span> Badges</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/builds"><span class="fa fa-solid fa-gears " aria-hidden="true"></span> Builds</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/metadata"><span class="fa fa-solid fa-table " aria-hidden="true"></span> Metadata</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/redirections"><span class="fa fa-solid fa-road " aria-hidden="true"></span> Shorthand URLs</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/download"><span class="fa fa-solid fa-download " aria-hidden="true"></span> Download</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/rustdoc-json"><span class="fa fa-solid fa-file-code " aria-hidden="true"></span> Rustdoc JSON</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/releases/queue"><span class="fa fa-solid fa-gears " aria-hidden="true"></span> Build queue</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="https://foundation.rust-lang.org/policies/privacy-policy/#docs.rs" target="_blank"><span class="fa fa-solid fa-shield-halved " aria-hidden="true"></span> Privacy policy</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="pure-menu-list"><li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" aria-label="Rust">Rust</a>
+                        <ul class="pure-menu-children">
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://www.rust-lang.org/" target="_blank">Rust website</a></li>
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/book/" target="_blank">The Book</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/std/" target="_blank">Standard Library API Reference</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/rust-by-example/" target="_blank">Rust by Example</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/cargo/guide/" target="_blank">The Cargo Guide</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/nightly/clippy" target="_blank">Clippy Documentation</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <div id="search-input-nav">
+                    <label for="nav-search">
+                        <span class="fa fa-solid fa-magnifying-glass " aria-hidden="true"></span>
+                    </label>
+
+                    
+                    
+                    <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" tabindex="-1"
+                        placeholder="Find crate"
+                        >
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+    
+    <div class="docsrs-package-container">
+        <div class="container">
+            <div class="description-container">
+                
+
+                
+                <h1 id="crate-title">
+                    socketioxide 0.18.2
+                    <span id="clipboard" class="svg-clipboard" title="Copy crate name and version information"></span>
+                </h1>
+
+                
+                <div class="description">Socket IO server implementation in rust as a Tower Service.</div>
+
+
+                <div class="pure-menu pure-menu-horizontal">
+                    <ul class="pure-menu-list">
+                        
+                        <li class="pure-menu-item"><a href="/crate/socketioxide/latest"
+                                class="pure-menu-link pure-menu-active">
+                                <span class="fa fa-solid fa-cube " aria-hidden="true"></span>
+                                <span class="title"> Crate</span>
+                            </a>
+                        </li>
+
+                        
+                        <li class="pure-menu-item">
+                            <a href="/crate/socketioxide/latest/source/"
+                                class="pure-menu-link">
+                                <span class="fa fa-regular fa-folder-open " aria-hidden="true"></span>
+                                <span class="title"> Source</span>
+                            </a>
+                        </li>
+
+                        
+                        <li class="pure-menu-item">
+                            <a href="/crate/socketioxide/latest/builds"
+                                class="pure-menu-link">
+                                <span class="fa fa-solid fa-gears " aria-hidden="true"></span>
+                                <span class="title"> Builds</span>
+                            </a>
+                        </li>
+
+                        
+                        <li class="pure-menu-item">
+                            <a href="/crate/socketioxide/latest/features"
+                               class="pure-menu-link">
+                                <span class="fa fa-solid fa-flag " aria-hidden="true"></span>
+                                <span class="title">Feature flags</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div><a href="/socketioxide/latest/socketioxide/" class="doc-link">
+                    <span class="fa fa-solid fa-book " aria-hidden="true"></span> Documentation
+                </a></div>
+    </div>
+<div class="container package-page-container">
+        <div class="pure-g">
+            <div class="pure-u-1 pure-u-sm-7-24 pure-u-md-5-24">
+                <div class="pure-menu package-menu">
+                    <ul class="pure-menu-list">
+                            
+                            
+                            <li class="pure-menu-heading">Coverage</li>
+                            <li class="pure-menu-item text-center"><b>100%</b><br>
+                                <span class="documented-info"><b>157</b> out of <b>157</b> items documented</span><span class="documented-info"><b>58</b> out of <b>105</b> items with examples</span></li><li class="pure-menu-heading">Size</li>
+                            <li class="pure-menu-item">
+                                <span class="documented-info">Source code size: 361.25 kB
+                                    <span class="size" tabindex=0><span class="fa fa-solid fa-circle-info " aria-hidden="true"></span><span class="info">This is the summed size of all the files inside the crates.io package for this release.</span>
+                                    </span>
+                                </span>
+                            </li><li class="pure-menu-item">
+                                    <span class="documented-info">Documentation size: 32.59 MB
+                                        <span class="size" tabindex=0><span class="fa fa-solid fa-circle-info " aria-hidden="true"></span><span class="info">This is the summed size of all files generated by rustdoc for all configured targets</span>
+                                        </span>
+                                    </span>
+                                </li><li class="pure-menu-heading">Ø build duration</li><li class="pure-menu-item">
+                                    <span class="documented-info">this release: 1m 13s
+                                        <span class="size" tabindex=0><span class="fa fa-solid fa-circle-info " aria-hidden="true"></span><span class="info">Average build duration of <b>successful</b> builds.</span>
+                                        </span>
+                                    </span>
+                                </li><li class="pure-menu-item">
+                                    <span class="documented-info">all releases: 1m 23s
+                                        <span class="size" tabindex=0><span class="fa fa-solid fa-circle-info " aria-hidden="true"></span><span class="info">Average build duration of <b>successful</b> builds in releases after 2024-10-23.</span>
+                                        </span>
+                                    </span>
+                                </li><li class="pure-menu-heading">Links</li>
+                        <li class="pure-menu-item">
+                                <a href="https://github.com/totodore/socketioxide" class="pure-menu-link">
+                                    <span class="fa fa-solid fa-house " aria-hidden="true"></span> Homepage
+                                </a>
+                            </li><li class="pure-menu-item">
+                                <a href="https://github.com/totodore/socketioxide" class="pure-menu-link">
+                                    
+                                    <span class="fa fa-solid fa-code-branch " aria-hidden="true"></span>
+                                        
+                                            Totodore/socketioxide
+                                        
+                                        <br>
+                                        <span class="fa fa-solid fa-star left-margin" aria-hidden="true"></span> 1575
+                                        <span class="fa fa-solid fa-code-branch " aria-hidden="true"></span> 75
+                                        <span class="fa fa-solid fa-circle-exclamation " aria-hidden="true"></span> 10
+
+                                    </a>
+                            </li>
+                        <li class="pure-menu-item">
+                            <a href="https://crates.io/crates/socketioxide" class="pure-menu-link"
+                                title="See socketioxide on crates.io">
+                                <span class="fa fa-solid fa-cube " aria-hidden="true"></span> crates.io
+                            </a>
+                        </li>
+
+                        <li class="pure-menu-heading">Dependencies</li>
+                        <li class="pure-menu-item">
+                            <div class="pure-menu pure-menu-scrollable sub-menu">
+                                <ul class="pure-menu-list">
+                                    
+                                    <li class="pure-menu-item"><a href="/crate/bytes/^1.11" class="pure-menu-link">
+                bytes ^1.11
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/engineioxide/^0.17" class="pure-menu-link">
+                engineioxide ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/futures-core/^0.3" class="pure-menu-link">
+                futures-core ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/futures-util/^0.3" class="pure-menu-link">
+                futures-util ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/http/^1.4" class="pure-menu-link">
+                http ^1.4
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/http-body/^1.0" class="pure-menu-link">
+                http-body ^1.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/hyper/^1.8" class="pure-menu-link">
+                hyper ^1.8
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/matchit/^0.9" class="pure-menu-link">
+                matchit ^0.9
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/pin-project-lite/^0.2" class="pure-menu-link">
+                pin-project-lite ^0.2
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/serde/^1.0" class="pure-menu-link">
+                serde ^1.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/socketioxide-core/^0.17" class="pure-menu-link">
+                socketioxide-core ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/socketioxide-parser-common/^0.17" class="pure-menu-link">
+                socketioxide-parser-common ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/socketioxide-parser-msgpack/^0.17" class="pure-menu-link">
+                socketioxide-parser-msgpack ^0.17
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/state/^0.6.0" class="pure-menu-link">
+                state ^0.6.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/thiserror/^2.0" class="pure-menu-link">
+                thiserror ^2.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tokio/^1.49" class="pure-menu-link">
+                tokio ^1.49
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tower-layer/^0.3" class="pure-menu-link">
+                tower-layer ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tower-service/^0.3" class="pure-menu-link">
+                tower-service ^0.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tracing/^0.1" class="pure-menu-link">
+                tracing ^0.1
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/axum/^0.8" class="pure-menu-link">
+                axum ^0.8
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/codspeed-criterion-compat/^4" class="pure-menu-link">
+                codspeed-criterion-compat ^4
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/http-body-util/^0.1" class="pure-menu-link">
+                http-body-util ^0.1
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/rand/^0.10" class="pure-menu-link">
+                rand ^0.10
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/serde_json/^1.0" class="pure-menu-link">
+                serde_json ^1.0
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tokio/^1.49" class="pure-menu-link">
+                tokio ^1.49
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tokio-stream/^0.1" class="pure-menu-link">
+                tokio-stream ^0.1
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tokio-tungstenite/^0.28" class="pure-menu-link">
+                tokio-tungstenite ^0.28
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tokio-util/^0.7" class="pure-menu-link">
+                tokio-util ^0.7
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/crate/tracing-subscriber/^0.3" class="pure-menu-link">
+                tracing-subscriber ^0.3
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        <li class="pure-menu-heading">Versions</li>
+                        <li class="pure-menu-item">
+                            <div class="pure-menu pure-menu-scrollable sub-menu">
+                                <ul class="pure-menu-list">
+                                    
+                                    
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.18.2"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.18.2</b> (2026-02-15)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.18.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.18.1</b> (2026-01-24)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.18.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.18.0</b> (2025-10-25)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.17.2"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.17.2</b> (2025-06-09)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.17.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.17.1</b> (2025-05-17)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.17.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.17.0</b> (2025-05-04)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.16.3"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.16.3</b> (2025-06-09)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.16.2"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.16.2</b> (2025-03-21)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.16.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.16.1</b> (2025-01-29)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.16.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.16.0</b> (2025-01-17)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.15.2"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.15.2</b> (2025-06-09)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.15.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.15.1</b> (2024-11-02)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.15.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.15.0</b> (2024-10-20)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.14.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.14.1</b> (2024-08-14)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.14.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.14.0</b> (2024-06-26)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.13.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.13.1</b> (2024-05-08)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.13.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.13.0</b> (2024-05-06)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.12.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.12.0</b> (2024-03-20)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.11.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.11.1</b> (2024-03-20)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.11.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.11.0</b> (2024-03-06)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.10.2"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.10.2</b> (2024-01-22)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.10.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.10.1</b> (2024-01-18)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.10.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.10.0</b> (2024-01-02)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.9.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.9.1</b> (2023-12-21)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.9.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.9.0</b> (2023-12-15)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.8.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.8.0</b> (2023-12-11)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.7.3"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.7.3</b> (2023-12-05)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.7.2"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.7.2</b> (2023-11-22)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.7.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.7.1</b> (2023-11-12)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.7.0"
+                
+                rel="nofollow"
+                class="pure-menu-link warn"
+                 title="socketioxide-0.7.0 is yanked"
+                
+            ><span class="fa fa-solid fa-triangle-exclamation " aria-hidden="true"></span><b>0.7.0</b> (2023-11-12)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.6.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.6.0</b> (2023-10-18)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.5.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.5.1</b> (2023-10-10)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.5.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.5.0</b> (2023-09-27)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.4.1"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.4.1</b> (2023-08-20)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.4.0"
+                
+                rel="nofollow"
+                class="pure-menu-link warn"
+                 title="socketioxide-0.4.0 is yanked"
+                
+            ><span class="fa fa-solid fa-triangle-exclamation " aria-hidden="true"></span><b>0.4.0</b> (2023-08-20)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.3.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.3.0</b> (2023-06-17)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.2.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.2.0</b> (2023-05-29)</a>
+        </li>
+        
+         
+        <li class="pure-menu-item">
+            <a
+                href="/crate/socketioxide/0.1.0"
+                
+                rel="nofollow"
+                class="pure-menu-link"
+                
+                
+            ><b>0.1.0</b> (2023-05-24)</a>
+        </li>
+                                </ul>
+                            </div>
+                        </li>
+
+                        
+                        <li class="pure-menu-heading">Owners</li>
+                        <li class="pure-menu-item"><a href="https://crates.io/users/Totodore">
+                                    <img src="https://avatars.githubusercontent.com/u/26095587?v=4" alt="Totodore" class="owner">
+                                </a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pure-u-1 pure-u-sm-17-24 pure-u-md-19-24 package-details" id="main">
+                <h1><a href="https://github.com/totodore/socketioxide"><code>Socketioxide</code></a> 🚀🦀</h1>
+<!-- raw HTML omitted -->
+<p>A <a href="https://socket.io"><em><strong><code>socket.io</code></strong></em></a> server implementation in Rust that integrates with the <a href="https://tokio.rs/#tk-lib-tower"><em><strong><code>Tower</code></strong></em></a> ecosystem and the <a href="https://tokio.rs"><em><strong><code>Tokio stack</code></strong></em></a>. It integrates with any server framework based on tower like <a href="https://docs.rs/axum/latest/axum/"><em><strong><code>Axum</code></strong></em></a>, <a href="https://docs.rs/warp/latest/warp/"><em><strong><code>Warp</code></strong></em></a>, <a href="https://salvo.rs"><em><strong><code>Salvo</code></strong></em></a>, <a href="https://viz.rs"><em><strong><code>Viz</code></strong></em></a> or <a href="https://docs.rs/hyper/latest/hyper/"><em><strong><code>Hyper</code></strong></em></a>. Add any other tower based middleware on top of socketioxide such as CORS, authorization, compression, etc with <a href="https://docs.rs/tower-http/latest/tower_http/"><em><strong><code>tower-http</code></strong></em></a>.</p>
+<p><a href="https://crates.io/crates/socketioxide"><img src="https://img.shields.io/crates/v/socketioxide.svg" alt="Crates.io" /></a>
+<a href="https://docs.rs/socketioxide"><img src="https://docs.rs/socketioxide/badge.svg" alt="Documentation" /></a>
+<a href="https://github.com/Totodore/socketioxide/actions/workflows/github-ci.yml"><img src="https://github.com/Totodore/socketioxide/actions/workflows/github-ci.yml/badge.svg" alt="CI" /></a></p>
+<!-- raw HTML omitted -->
+<h2>Features</h2>
+<ul>
+<li>Integrates with:
+<ul>
+<li><a href="https://docs.rs/axum/latest/axum/">Axum</a>: <a href="./examples/axum-echo/axum_echo.rs">🏓echo example</a></li>
+<li><a href="https://docs.rs/warp/latest/warp/">Warp</a>: <a href="./examples/warp-echo/warp_echo.rs">🏓echo example</a></li>
+<li><a href="https://docs.rs/hyper/latest/hyper/">Hyper</a>: <a href="./examples/hyper-echo/hyper_echo.rs">🏓echo example</a></li>
+<li><a href="https://salvo.rs">Salvo</a>: <a href="./examples/salvo-echo/salvo_echo.rs">🏓echo example</a></li>
+<li><a href="https://viz.rs">Viz</a>: <a href="./examples/viz-echo/viz_echo.rs">🏓echo example</a></li>
+</ul>
+</li>
+<li>Out of the box support for any other middleware based on tower:
+<ul>
+<li><a href="https://docs.rs/tower-http/latest/tower_http/cors">🔓CORS</a></li>
+<li><a href="https://docs.rs/tower-http/latest/tower_http/compression">📁Compression</a></li>
+<li><a href="https://docs.rs/tower-http/latest/tower_http/auth">🔐Authorization</a></li>
+</ul>
+</li>
+<li>Effortless horizontal scaling with plugable adapters:
+<ul>
+<li><a href="https://docs.rs/socketioxide-redis/latest/socketioxide-redis">Redis / Valkey</a></li>
+<li><a href="https://docs.rs/socketioxide-mongodb/latest/socketioxide-mongodb">MongoDB</a></li>
+<li>More to come...</li>
+</ul>
+</li>
+<li>Remote cluster communication with <a href="https://github.com/Totodore/socketioxide-emitter">Socketioxide-emitter</a></li>
+<li>Namespaces and Dynamic Namespaces</li>
+<li>Rooms</li>
+<li>Ack and emit with ack</li>
+<li>Binary packets</li>
+<li>Polling &amp; Websocket transports</li>
+<li>Common (default) &amp; Msgpack parsers</li>
+<li>Extensions to add custom data to sockets</li>
+<li>Memory efficient http payload parsing with streams</li>
+<li>Flexible axum-like API to handle events. With extractors to extract data from your handlers</li>
+<li>Well tested with the official <a href="https://github.com/totodore/socketioxide/actions">end to end test-suite</a></li>
+<li>All Socket.io versions supported :
+<ul>
+<li><a href="https://socket.io/docs/v4/">🔌protocol v5</a> : socket.io js from v3.0.0..latest, it is enabled by default</li>
+<li><a href="https://github.com/socketio/socket.io-protocol/tree/v4">🔌protocol v4</a> : based on engine.io v3, under the feature flag <code>v4</code>, (socket.io js from v1.0.3..latest)</li>
+</ul>
+</li>
+</ul>
+<!-- raw HTML omitted -->
+<h2>Examples</h2>
+<!-- raw HTML omitted -->
+<pre><code class="language-rust"><span class="syntax-source syntax-rust">io<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ns</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>/<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">s</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef<span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+    s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">on</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>new message<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">s</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef<span class="syntax-punctuation syntax-separator syntax-rust">,</span> Data::&lt;String&gt;<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">msg</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+        <span class="syntax-storage syntax-type syntax-rust">let</span> username <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>extensions<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-meta syntax-path syntax-rust">get<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-generic syntax-rust"><span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>Username<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">unwrap</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">clone</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        <span class="syntax-storage syntax-type syntax-rust">let</span> msg <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> <span class="syntax-meta syntax-path syntax-rust">Res<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>Message <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+            username<span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+            message<span class="syntax-punctuation syntax-separator syntax-rust">:</span> msg<span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+        </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">broadcast</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>new message<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> msg</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+    </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">on</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>
+        <span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>add user<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+        <span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">s</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef<span class="syntax-punctuation syntax-separator syntax-rust">,</span> Data::&lt;String&gt;<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">username</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-variable syntax-parameter syntax-rust">user_cnt</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> <span class="syntax-meta syntax-generic syntax-rust">State<span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>UserCnt<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+            <span class="syntax-keyword syntax-control syntax-rust">if</span> s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>extensions<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-meta syntax-path syntax-rust">get<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-generic syntax-rust"><span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>Username<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">is_some</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span> <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+                <span class="syntax-keyword syntax-control syntax-rust">return</span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span>
+            <span class="syntax-storage syntax-type syntax-rust">let</span> num_users <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> user_cnt<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">add_user</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>extensions<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">insert</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>Username<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>username<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">clone</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>login<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-meta syntax-path syntax-rust">Res<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>Login <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span> num_users </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+            <span class="syntax-storage syntax-type syntax-rust">let</span> res <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> <span class="syntax-meta syntax-path syntax-rust">Res<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>UserEvent <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+                num_users<span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+                username<span class="syntax-punctuation syntax-separator syntax-rust">:</span> Username<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>username</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+            </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">broadcast</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>user joined<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> res</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+    </span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">on</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>typing<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">s</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef<span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+        <span class="syntax-storage syntax-type syntax-rust">let</span> username <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>extensions<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-meta syntax-path syntax-rust">get<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-generic syntax-rust"><span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>Username<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">unwrap</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">clone</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">broadcast</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>
+            <span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>typing<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-meta syntax-path syntax-rust">Res<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>Username <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span> username </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>
+            <span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+    </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">on</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>stop typing<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">s</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef<span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+        <span class="syntax-storage syntax-type syntax-rust">let</span> username <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>extensions<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-meta syntax-path syntax-rust">get<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-generic syntax-rust"><span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>Username<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">unwrap</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">clone</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">broadcast</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>
+            <span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>stop typing<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-meta syntax-path syntax-rust">Res<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>Username <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span> username </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>
+            <span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+    </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">on_disconnect</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">s</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef<span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-variable syntax-parameter syntax-rust">user_cnt</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> <span class="syntax-meta syntax-generic syntax-rust">State<span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>UserCnt<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+        <span class="syntax-keyword syntax-control syntax-rust">if</span> <span class="syntax-storage syntax-type syntax-rust">let</span> <span class="syntax-support syntax-type syntax-rust">Some</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>username</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span> <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>extensions<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-meta syntax-path syntax-rust">get<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-generic syntax-rust"><span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>Username<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span> <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+            <span class="syntax-storage syntax-type syntax-rust">let</span> num_users <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> user_cnt<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">remove_user</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            <span class="syntax-storage syntax-type syntax-rust">let</span> res <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> <span class="syntax-meta syntax-path syntax-rust">Res<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>UserEvent <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+                num_users<span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+                username<span class="syntax-punctuation syntax-separator syntax-rust">:</span> username<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">clone</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+            </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            s<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">broadcast</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>user left<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> res</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span>
+    </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+</span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+</span></code></pre>
+<!-- raw HTML omitted -->
+<pre><code class="language-rust"><span class="syntax-source syntax-rust"><span class="syntax-keyword syntax-other syntax-rust">use</span> <span class="syntax-meta syntax-path syntax-rust">axum<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-path syntax-rust">routing<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>get<span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+<span class="syntax-keyword syntax-other syntax-rust">use</span> <span class="syntax-meta syntax-path syntax-rust">serde_json<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>Value<span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+<span class="syntax-keyword syntax-other syntax-rust">use</span> <span class="syntax-meta syntax-path syntax-rust">socketioxide<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+    <span class="syntax-meta syntax-path syntax-rust">extract<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>AckSender<span class="syntax-punctuation syntax-separator syntax-rust">,</span> Bin<span class="syntax-punctuation syntax-separator syntax-rust">,</span> Data<span class="syntax-punctuation syntax-separator syntax-rust">,</span> SocketRef</span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+    SocketIo<span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+</span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+<span class="syntax-keyword syntax-other syntax-rust">use</span> <span class="syntax-meta syntax-path syntax-rust">tracing<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>info<span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+<span class="syntax-keyword syntax-other syntax-rust">use</span> <span class="syntax-meta syntax-path syntax-rust">tracing_subscriber<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>FmtSubscriber<span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+<span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-storage syntax-type syntax-function syntax-rust">fn</span> </span><span class="syntax-entity syntax-name syntax-function syntax-rust">on_connect</span></span><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">(</span><span class="syntax-variable syntax-parameter syntax-rust">socket</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef, Data<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">data</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>: <span class="syntax-meta syntax-generic syntax-rust">Data<span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>Value<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span></span><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">)</span></span></span></span><span class="syntax-meta syntax-function syntax-rust"> </span><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+    <span class="syntax-support syntax-macro syntax-rust">info!</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>Socket.IO connected: {:?} {:?}<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> socket<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ns</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> socket<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>id</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+    socket<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>auth<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> data</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    socket<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">on</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>
+        <span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>message<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+        <span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">socket</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> SocketRef<span class="syntax-punctuation syntax-separator syntax-rust">,</span> Data::&lt;Value&gt;<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">data</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> Bin<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">bin</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+            <span class="syntax-support syntax-macro syntax-rust">info!</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>Received event: {:?} {:?}<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> data<span class="syntax-punctuation syntax-separator syntax-rust">,</span> bin</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            socket<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">bin</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>bin</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">emit</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>message-back<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> data</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+    </span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    socket<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">on</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>
+        <span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>message-with-ack<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+        <span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust">Data::&lt;Value&gt;<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">data</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-variable syntax-parameter syntax-rust">ack</span><span class="syntax-punctuation syntax-separator syntax-rust">:</span> AckSender<span class="syntax-punctuation syntax-separator syntax-rust">,</span> Bin<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-variable syntax-parameter syntax-rust">bin</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+            <span class="syntax-support syntax-macro syntax-rust">info!</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>Received event: {:?} {:?}<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> data<span class="syntax-punctuation syntax-separator syntax-rust">,</span> bin</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+            ack<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">bin</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>bin</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">send</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>data</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+        </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span>
+    </span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+</span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span>
+
+<span class="syntax-meta syntax-annotation syntax-rust"><span class="syntax-punctuation syntax-definition syntax-annotation syntax-rust">#</span><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">[</span><span class="syntax-variable syntax-annotation syntax-rust">tokio</span>::<span class="syntax-variable syntax-annotation syntax-rust">main</span><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">]</span></span>
+async <span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-storage syntax-type syntax-function syntax-rust">fn</span> </span><span class="syntax-entity syntax-name syntax-function syntax-rust">main</span></span><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">)</span></span></span></span><span class="syntax-meta syntax-function syntax-rust"> <span class="syntax-meta syntax-function syntax-return-type syntax-rust"><span class="syntax-punctuation syntax-separator syntax-rust">-&gt;</span> <span class="syntax-meta syntax-generic syntax-rust"><span class="syntax-support syntax-type syntax-rust">Result</span><span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span>, <span class="syntax-meta syntax-generic syntax-rust"><span class="syntax-support syntax-type syntax-rust">Box</span><span class="syntax-punctuation syntax-definition syntax-generic syntax-begin syntax-rust">&lt;</span>dyn <span class="syntax-meta syntax-path syntax-rust">std<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-path syntax-rust">error<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>Error<span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span><span class="syntax-punctuation syntax-definition syntax-generic syntax-end syntax-rust">&gt;</span></span></span> </span><span class="syntax-meta syntax-function syntax-rust"><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span>
+    <span class="syntax-meta syntax-path syntax-rust">tracing<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-path syntax-rust">subscriber<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>set_global_default<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-meta syntax-path syntax-rust">FmtSubscriber<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>default<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-keyword syntax-operator syntax-rust">?</span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    <span class="syntax-storage syntax-type syntax-rust">let</span> <span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>layer<span class="syntax-punctuation syntax-separator syntax-rust">,</span> io</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span> <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> <span class="syntax-meta syntax-path syntax-rust">SocketIo<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>new_layer<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    io<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ns</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>/<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> on_connect</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+    io<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">ns</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>/custom<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> on_connect</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    <span class="syntax-storage syntax-type syntax-rust">let</span> app <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> <span class="syntax-meta syntax-path syntax-rust">axum<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-path syntax-rust">Router<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>new<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>
+        <span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">route</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>/<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span><span class="syntax-punctuation syntax-separator syntax-rust">,</span> <span class="syntax-support syntax-function syntax-rust">get</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-begin syntax-rust">|</span></span></span><span class="syntax-meta syntax-function syntax-closure syntax-rust"><span class="syntax-meta syntax-function syntax-parameters syntax-rust"><span class="syntax-punctuation syntax-section syntax-parameters syntax-end syntax-rust">|</span></span> </span><span class="syntax-meta syntax-function syntax-closure syntax-rust">async <span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-begin syntax-rust">{</span> <span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>Hello, World!<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span> </span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>
+        <span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">layer</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>layer</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    <span class="syntax-support syntax-macro syntax-rust">info!</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>Starting server<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    <span class="syntax-storage syntax-type syntax-rust">let</span> listener <span class="syntax-keyword syntax-operator syntax-assignment syntax-rust">=</span> <span class="syntax-meta syntax-path syntax-rust">tokio<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-path syntax-rust">net<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span><span class="syntax-meta syntax-path syntax-rust">TcpListener<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>bind<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-string syntax-quoted syntax-double syntax-rust"><span class="syntax-punctuation syntax-definition syntax-string syntax-begin syntax-rust">&quot;</span>0.0.0.0:3000<span class="syntax-punctuation syntax-definition syntax-string syntax-end syntax-rust">&quot;</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>await<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">unwrap</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+    <span class="syntax-meta syntax-path syntax-rust">axum<span class="syntax-punctuation syntax-accessor syntax-rust">::</span></span>serve<span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span>listener<span class="syntax-punctuation syntax-separator syntax-rust">,</span> app</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span>await<span class="syntax-punctuation syntax-accessor syntax-dot syntax-rust">.</span><span class="syntax-support syntax-function syntax-rust">unwrap</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span><span class="syntax-punctuation syntax-terminator syntax-rust">;</span>
+
+    <span class="syntax-support syntax-type syntax-rust">Ok</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-begin syntax-rust">(</span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span></span><span class="syntax-meta syntax-group syntax-rust"><span class="syntax-punctuation syntax-section syntax-group syntax-end syntax-rust">)</span></span>
+</span><span class="syntax-meta syntax-block syntax-rust"><span class="syntax-punctuation syntax-section syntax-block syntax-end syntax-rust">}</span></span></span>
+</span></code></pre>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<h2>Contributions and Feedback / Questions</h2>
+<p>Any contribution is welcome, feel free to open an issue or a PR. If you want to contribute but don't know where to start, you can check the <a href="https://github.com/totodore/socketioxide/issues">issues</a>.</p>
+<p>If you have any question or feedback, please open a thread on the <a href="https://github.com/totodore/socketioxide/discussions">discussions</a> page.</p>
+<h2>License 🔐</h2>
+<p>This project is licensed under the <a href="./LICENSE">MIT license</a>.</p>
+
+
+                </div>
+        </div>
+    </div></body>
+</html>
