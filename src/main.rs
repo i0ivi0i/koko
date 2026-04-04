@@ -10,6 +10,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tracing 负责运行时日志；启动横幅是给人看的 ready 事实，不能混成一层。
     // 先初始化 tracing，保证后续错误和运行日志有统一出口，再等 ready 后写一次横幅。
     let _ = koko::support::init_tracing(koko::support::DEFAULT_TRACING_FILTER)?;
+    // `run.ps1` 只做纯启动器，前端产物是否过期必须由 Rust 主链在启动时直接裁决。
+    koko::support::ensure_frontend_bundle_is_fresh()?;
 
     let pool = PgPoolOptions::new()
         .max_connections(10)

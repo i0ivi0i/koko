@@ -5,6 +5,7 @@ use std::{
     env, fs, io,
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 use chrono::{DateTime, Utc};
@@ -39,6 +40,19 @@ const DEFAULT_DEV_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5
 const ADMIN_TOKEN_ENV: &str = "KOKO_ADMIN_TOKEN";
 #[cfg(not(target_arch = "wasm32"))]
 const ADMIN_COOKIE_SECURE_ENV: &str = "KOKO_ADMIN_COOKIE_SECURE";
+#[cfg(not(target_arch = "wasm32"))]
+const FRONTEND_INDEX_PATH: &str = "dist/public/index.html";
+#[cfg(not(target_arch = "wasm32"))]
+const FRONTEND_BUNDLE_INPUT_PATHS: [&str; 8] = [
+    "Dioxus.toml",
+    "src/web.rs",
+    "src/view.rs",
+    "src/chat.rs",
+    "src/contract.rs",
+    "src/admin.rs",
+    "public/assets/theme.css",
+    "public/assets/socket.io.min.js",
+];
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +132,49 @@ pub struct SystemIdGenerator;
 
 pub fn app_name() -> &'static str {
     APP_NAME
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn ensure_frontend_bundle_is_fresh() -> io::Result<()> {
+    ensure_frontend_bundle_is_fresh_in(&env::current_dir()?)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn ensure_frontend_bundle_is_fresh_in(root: &Path) -> io::Result<()> {
+    let index_path = root.join(FRONTEND_INDEX_PATH);
+    let index_modified = fs::metadata(&index_path)?.modified()?;
+    let mut newest_input: Option<(PathBuf, SystemTime)> = None;
+
+    for relative_path in FRONTEND_BUNDLE_INPUT_PATHS {
+        let path = root.join(relative_path);
+        let Ok(metadata) = fs::metadata(&path) else {
+            continue;
+        };
+        let Ok(modified) = metadata.modified() else {
+            continue;
+        };
+
+        if newest_input
+            .as_ref()
+            .is_none_or(|(_, current)| modified > *current)
+        {
+            newest_input = Some((path, modified));
+        }
+    }
+
+    let Some((source_path, source_modified)) = newest_input else {
+        return Ok(());
+    };
+
+    if source_modified > index_modified {
+        return Err(io::Error::other(format!(
+            "前端产物过期：`{}` 早于 `{}`，请先执行 `powershell -ExecutionPolicy Bypass -File scripts/dx-bundle-web.ps1 -Release` 再启动。",
+            index_path.display(),
+            source_path.display()
+        )));
+    }
+
+    Ok(())
 }
 
 pub fn app_error_code(error: &AppError) -> &'static str {
@@ -705,13 +762,15 @@ mod tests {
     use super::{
         AppConfig, DEFAULT_TRACING_FILTER, StartupLanAddressCandidate,
         build_startup_banner_from_bind_addr_with_lan_candidates, collect_startup_banner_lan_urls,
-        tracing_subscriber_builder,
+        ensure_frontend_bundle_is_fresh_in, tracing_subscriber_builder,
     };
     use std::{
         env, fs, io,
         net::{IpAddr, Ipv4Addr, Ipv6Addr},
         path::{Path, PathBuf},
         sync::{Arc, Mutex},
+        thread,
+        time::Duration,
     };
     use tracing_subscriber::fmt::MakeWriter;
     use tracing_subscriber::EnvFilter;
@@ -780,6 +839,24 @@ mod tests {
         );
 
         assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn frontend_bundle_freshness_rejects_stale_index() {
+        let root = env::temp_dir()
+            .join("koko-tests")
+            .join(format!("frontend-freshness-{}", Uuid::now_v7()));
+        fs::create_dir_all(root.join("dist/public")).unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("public/assets")).unwrap();
+        fs::write(root.join("dist/public/index.html"), "<html></html>").unwrap();
+        thread::sleep(Duration::from_millis(1100));
+        fs::write(root.join("src/web.rs"), "// newer than index\n").unwrap();
+
+        let error = ensure_frontend_bundle_is_fresh_in(&root).unwrap_err();
+        assert!(error.to_string().contains("前端产物过期"));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
