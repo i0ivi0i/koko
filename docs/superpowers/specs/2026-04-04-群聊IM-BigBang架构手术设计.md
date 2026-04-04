@@ -211,3 +211,11 @@
 
 这次 Big Bang 的核心不是“把代码拆得更碎”，而是把真相归属、同步锚点、错误语义和追踪体系一次性钉死。  
 只要边界清楚、日志统一、补洞机制明确，即使出现 bug，也能在最短路径内定位并修复，而不是在多层之间反复漂移。
+
+## 11. 实施结果（2026-04-04）
+
+1. 已完成 `Task1~Task7` 的代码落地与阶段提交，建立了 BigBang 守卫测试、错误语义收口、HTTP/RT 入口瘦身、壳层体验态隔离、store 映射收口和 trace 字段统一。  
+2. `ack != message_created` 边界已在 realtime 测试中固化，新增“拒绝发送不产生 accepted/created”守卫。  
+3. `room != membership truth` 仍由 application/store 裁决，shell 仅消费体验态，且已增加跨房间 accepted 忽略守卫。  
+4. 根因定位门禁已可运行：`bigbang_cases::root_cause_trace` 不再红。  
+5. `Task8` 收尾包含：全量验证命令、规范回填与最终清理。

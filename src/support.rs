@@ -391,9 +391,7 @@ fn discover_startup_banner_lan_candidates() -> io::Result<Vec<StartupLanAddressC
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn startup_banner_interface_name_matches_blocklist(
-    candidate: &StartupLanAddressCandidate,
-) -> bool {
+fn startup_banner_interface_name_matches_blocklist(candidate: &StartupLanAddressCandidate) -> bool {
     // 这些关键字只服务启动横幅的展示去噪，避免把容器/虚拟网卡误当成对外访问提示。
     // 它们不是新的网络发现真相，更不能被别处复用成“系统网络策略”。
     const BLOCKED_KEYWORDS: [&str; 10] = [
@@ -589,11 +587,17 @@ impl ResolvedAppConfig {
         admin_token_seed: Option<&str>,
         admin_cookie_secure_override: Option<bool>,
     ) -> Result<Self, ConfigError> {
-        let mut resolved =
-            Self::load_common_with_overrides(database_url, bind_addr, config_path, admin_cookie_secure_override)?;
+        let mut resolved = Self::load_common_with_overrides(
+            database_url,
+            bind_addr,
+            config_path,
+            admin_cookie_secure_override,
+        )?;
         let admin_token_seed = match admin_token_seed {
             Some(raw) => Some(parse_required_value(ADMIN_TOKEN_ENV, Some(raw))?),
-            None => env::var(ADMIN_TOKEN_ENV).ok().map(|value| value.trim().to_string()),
+            None => env::var(ADMIN_TOKEN_ENV)
+                .ok()
+                .map(|value| value.trim().to_string()),
         };
         resolved.admin_token_seed = admin_token_seed;
         Ok(resolved)
@@ -730,6 +734,7 @@ pub struct TraceContext {
 }
 
 pub fn trace_line(layer: &str, operation: &str, context: &TraceContext) -> String {
+    // 统一根因定位最小键集：任何入口日志都可复用这条稳定格式，避免链路字段漂移。
     format!(
         "layer={layer} operation={operation} request_id={} session_id={} room_id={} client_message_id={} event_position={}",
         context.request_id,
@@ -860,8 +865,8 @@ mod tests {
         thread,
         time::Duration,
     };
-    use tracing_subscriber::fmt::MakeWriter;
     use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::fmt::MakeWriter;
     use uuid::Uuid;
 
     #[test]
@@ -989,17 +994,94 @@ mod tests {
 
     fn sample_lan_candidates() -> Vec<StartupLanAddressCandidate> {
         vec![
-            lan_candidate("Wi-Fi", Some("intel-wifi"), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)), true, false, false),
-            lan_candidate("Ethernet", Some("usb-lan"), IpAddr::V4(Ipv4Addr::new(10, 0, 0, 9)), true, false, false),
-            lan_candidate("Wi-Fi Duplicate", Some("intel-wifi-2"), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)), true, false, false),
-            lan_candidate("Loopback Pseudo-Interface 1", Some("loopback"), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), true, true, false),
-            lan_candidate("Ethernet Link Local", Some("usb-lan-2"), IpAddr::V4(Ipv4Addr::new(169, 254, 12, 34)), true, false, false),
-            lan_candidate("Docker Desktop", Some("docker0"), IpAddr::V4(Ipv4Addr::new(172, 17, 0, 1)), true, false, false),
-            lan_candidate("vEthernet (WSL)", Some("wsl-switch"), IpAddr::V4(Ipv4Addr::new(172, 25, 160, 1)), true, false, false),
-            lan_candidate("Ethernet Down", Some("rtl8168"), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 30)), false, false, false),
-            lan_candidate("PPP Adapter", Some("wan-miniport"), IpAddr::V4(Ipv4Addr::new(10, 8, 0, 2)), true, false, false),
-            lan_candidate("Tunnel Adapter", Some("corp-tunnel"), IpAddr::V4(Ipv4Addr::new(10, 9, 0, 2)), true, false, true),
-            lan_candidate("Wi-Fi IPv6", Some("intel-wifi-v6"), IpAddr::V6(Ipv6Addr::LOCALHOST), true, false, false),
+            lan_candidate(
+                "Wi-Fi",
+                Some("intel-wifi"),
+                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)),
+                true,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "Ethernet",
+                Some("usb-lan"),
+                IpAddr::V4(Ipv4Addr::new(10, 0, 0, 9)),
+                true,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "Wi-Fi Duplicate",
+                Some("intel-wifi-2"),
+                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)),
+                true,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "Loopback Pseudo-Interface 1",
+                Some("loopback"),
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                true,
+                true,
+                false,
+            ),
+            lan_candidate(
+                "Ethernet Link Local",
+                Some("usb-lan-2"),
+                IpAddr::V4(Ipv4Addr::new(169, 254, 12, 34)),
+                true,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "Docker Desktop",
+                Some("docker0"),
+                IpAddr::V4(Ipv4Addr::new(172, 17, 0, 1)),
+                true,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "vEthernet (WSL)",
+                Some("wsl-switch"),
+                IpAddr::V4(Ipv4Addr::new(172, 25, 160, 1)),
+                true,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "Ethernet Down",
+                Some("rtl8168"),
+                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 30)),
+                false,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "PPP Adapter",
+                Some("wan-miniport"),
+                IpAddr::V4(Ipv4Addr::new(10, 8, 0, 2)),
+                true,
+                false,
+                false,
+            ),
+            lan_candidate(
+                "Tunnel Adapter",
+                Some("corp-tunnel"),
+                IpAddr::V4(Ipv4Addr::new(10, 9, 0, 2)),
+                true,
+                false,
+                true,
+            ),
+            lan_candidate(
+                "Wi-Fi IPv6",
+                Some("intel-wifi-v6"),
+                IpAddr::V6(Ipv6Addr::LOCALHOST),
+                true,
+                false,
+                false,
+            ),
         ]
     }
 

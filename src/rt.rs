@@ -189,7 +189,6 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                     ?error,
                                     "subscribe_room_stream rejected"
                                 );
-                                return;
                             }
                         }
                     }
@@ -284,27 +283,29 @@ pub fn install_realtime<Store, IdGen, AppClock>(
         }
     };
     let auth_state = state.clone();
-    let auth_middleware = move |socket: SocketRef| {
-        let state = auth_state.clone();
-        async move {
-            let session = match authenticate_realtime_session(&state.store, &socket.req_parts().headers)
-                .await
-            {
-                Ok(session) => session,
-                Err(error) => {
-                    warn!(
-                        code = crate::support::app_error_code(&error),
-                        ?error,
-                        "rt auth rejected"
-                    );
-                    return Err(error);
-                }
-            };
-            info!(session_id = %session.session_id, "rt connected");
-            socket.extensions.insert(session);
-            Ok::<(), AppError>(())
-        }
-    };
+    let auth_middleware =
+        move |socket: SocketRef| {
+            let state = auth_state.clone();
+            async move {
+                let session =
+                    match authenticate_realtime_session(&state.store, &socket.req_parts().headers)
+                        .await
+                    {
+                        Ok(session) => session,
+                        Err(error) => {
+                            warn!(
+                                code = crate::support::app_error_code(&error),
+                                ?error,
+                                "rt auth rejected"
+                            );
+                            return Err(error);
+                        }
+                    };
+                info!(session_id = %session.session_id, "rt connected");
+                socket.extensions.insert(session);
+                Ok::<(), AppError>(())
+            }
+        };
 
     io.ns("/", on_connect.with(auth_middleware));
 }

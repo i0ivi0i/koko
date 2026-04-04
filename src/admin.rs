@@ -2,7 +2,9 @@ use dioxus::prelude::*;
 use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{
-    contract::{AdminLoginRequest, AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode},
+    contract::{
+        AdminLoginRequest, AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode,
+    },
     view, web,
 };
 
@@ -40,7 +42,9 @@ enum AdminShellAction {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum AdminShellView {
-    Login { session_notice: Option<String> },
+    Login {
+        session_notice: Option<String>,
+    },
     Panel {
         state: Option<AdminPanelState>,
         load_error: Option<String>,
@@ -60,10 +64,10 @@ struct AdminRequestError {
 
 impl AdminRequestError {
     fn message(&self) -> String {
-        if let Some(code) = self.code {
-            if let Some(message) = admin_error_message(code) {
-                return message.to_string();
-            }
+        if let Some(code) = self.code
+            && let Some(message) = admin_error_message(code)
+        {
+            return message.to_string();
         }
         self.detail.clone()
     }
@@ -136,10 +140,8 @@ fn admin_session_notice(error: &AdminRequestError) -> Option<String> {
 
 async fn load_admin_session_status() -> Result<AdminSessionStatus, AdminRequestError> {
     let client = reqwest::Client::new();
-    let browser_location = web::browser_location().map_err(|detail| AdminRequestError {
-        code: None,
-        detail,
-    })?;
+    let browser_location =
+        web::browser_location().map_err(|detail| AdminRequestError { code: None, detail })?;
     let url = web::resolve_shell_api_url(&browser_location, ADMIN_SESSION_PATH)
         .map_err(|detail| AdminRequestError { code: None, detail })?;
     // probe 只确认后台会话是否仍有效，不续命，避免轮询把 3 天空闲期悄悄刷新。
@@ -156,10 +158,8 @@ async fn login_admin(token: String) -> Result<(), AdminRequestError> {
     }
 
     let client = reqwest::Client::new();
-    let browser_location = web::browser_location().map_err(|detail| AdminRequestError {
-        code: None,
-        detail,
-    })?;
+    let browser_location =
+        web::browser_location().map_err(|detail| AdminRequestError { code: None, detail })?;
     let url = web::resolve_shell_api_url(&browser_location, ADMIN_SESSION_LOGIN_PATH)
         .map_err(|detail| AdminRequestError { code: None, detail })?;
     send_admin_request(client.post(url).json(&AdminLoginRequest { token })).await?;
@@ -168,10 +168,8 @@ async fn login_admin(token: String) -> Result<(), AdminRequestError> {
 
 async fn logout_admin() -> Result<(), AdminRequestError> {
     let client = reqwest::Client::new();
-    let browser_location = web::browser_location().map_err(|detail| AdminRequestError {
-        code: None,
-        detail,
-    })?;
+    let browser_location =
+        web::browser_location().map_err(|detail| AdminRequestError { code: None, detail })?;
     let url = web::resolve_shell_api_url(&browser_location, ADMIN_SESSION_LOGOUT_PATH)
         .map_err(|detail| AdminRequestError { code: None, detail })?;
     send_admin_request(client.post(url)).await?;
@@ -180,10 +178,8 @@ async fn logout_admin() -> Result<(), AdminRequestError> {
 
 async fn load_admin_overview() -> Result<AdminOverview, AdminRequestError> {
     let client = reqwest::Client::new();
-    let browser_location = web::browser_location().map_err(|detail| AdminRequestError {
-        code: None,
-        detail,
-    })?;
+    let browser_location =
+        web::browser_location().map_err(|detail| AdminRequestError { code: None, detail })?;
     let url = web::resolve_shell_api_url(&browser_location, ADMIN_OVERVIEW_PATH)
         .map_err(|detail| AdminRequestError { code: None, detail })?;
     load_admin_json(client.get(url)).await
@@ -191,10 +187,8 @@ async fn load_admin_overview() -> Result<AdminOverview, AdminRequestError> {
 
 async fn load_admin_rooms() -> Result<Vec<AdminRoomSummary>, AdminRequestError> {
     let client = reqwest::Client::new();
-    let browser_location = web::browser_location().map_err(|detail| AdminRequestError {
-        code: None,
-        detail,
-    })?;
+    let browser_location =
+        web::browser_location().map_err(|detail| AdminRequestError { code: None, detail })?;
     let url = web::resolve_shell_api_url(&browser_location, ADMIN_ROOMS_PATH)
         .map_err(|detail| AdminRequestError { code: None, detail })?;
     load_admin_json(client.get(url)).await

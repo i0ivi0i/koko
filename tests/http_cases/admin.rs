@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use chrono::{TimeZone, Utc};
 use crate::HttpHarness;
+use chrono::{TimeZone, Utc};
 use koko::{
     admin::AdminPanelState,
-    app::{
-        AdminLoginCommand, AdminSessionPort, AdminSessionState, login_admin,
-    },
+    app::{AdminLoginCommand, AdminSessionPort, AdminSessionState, login_admin},
     contract::{AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode},
     store::PgStore,
 };
@@ -81,7 +79,7 @@ fn admin_panel_state_composes_overview_and_rooms_from_stable_queries() {
 async fn login_admin_rejects_invalid_token() {
     let error = login_admin(
         &koko::support::AdminTokenVerifier::new("local-admin-token".to_string()),
-        &FakeAdminSessionPort::default(),
+        &FakeAdminSessionPort,
         AdminLoginCommand {
             token: "wrong-token".to_string(),
         },
@@ -206,7 +204,10 @@ async fn admin_logout_flushes_cookie_back_to_login_required(
         .send()
         .await
         .unwrap();
-    assert_eq!(overview_response.status(), reqwest::StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        overview_response.status(),
+        reqwest::StatusCode::UNAUTHORIZED
+    );
     let payload: serde_json::Value = overview_response.json().await.unwrap();
     assert_eq!(payload["code"], "admin_session_required");
 
@@ -215,9 +216,7 @@ async fn admin_logout_flushes_cookie_back_to_login_required(
 }
 
 #[sqlx::test]
-async fn admin_overview_requires_backend_session_cookie(
-    pool: sqlx::PgPool,
-) -> sqlx::Result<()> {
+async fn admin_overview_requires_backend_session_cookie(pool: sqlx::PgPool) -> sqlx::Result<()> {
     let harness = HttpHarness::new(pool).await.spawn().await;
 
     let response = harness
@@ -556,4 +555,3 @@ impl AdminSessionPort for FakeAdminSessionPort {
         panic!("login flow should not revoke admin session");
     }
 }
-

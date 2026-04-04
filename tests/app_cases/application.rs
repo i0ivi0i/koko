@@ -41,7 +41,7 @@ fn command_rejection_uses_application_owned_operation_mapping() {
 async fn admin_overview_requires_authorized_admin_context() {
     let error = get_admin_overview(
         &FakeAdminSessionPort::required(),
-        &FakeAdminOverviewPort::default(),
+        &FakeAdminOverviewPort,
         AdminSessionContext::new(Uuid::from_u128(501)),
     )
     .await
@@ -54,7 +54,7 @@ async fn admin_overview_requires_authorized_admin_context() {
 async fn admin_rooms_requires_authorized_admin_context() {
     let error = list_admin_rooms(
         &FakeAdminSessionPort::required(),
-        &FakeAdminRoomsPort::default(),
+        &FakeAdminRoomsPort,
         AdminSessionContext::new(Uuid::from_u128(502)),
     )
     .await
@@ -85,7 +85,10 @@ async fn bootstrap_anonymous_session_reuses_existing_session_when_present() {
     .unwrap();
 
     assert_eq!(session.session_id, existing_session_id);
-    assert_eq!(bootstrap_port.loaded_session_ids(), vec![existing_session_id]);
+    assert_eq!(
+        bootstrap_port.loaded_session_ids(),
+        vec![existing_session_id]
+    );
 }
 
 #[tokio::test]
@@ -113,9 +116,15 @@ async fn bootstrap_anonymous_session_refreshes_existing_session_state_when_reuse
     assert_eq!(session.session_id, existing_session_id);
     assert_eq!(session.issued_at, original_time);
     assert_eq!(session.last_seen_at, reuse_time);
-    assert_eq!(bootstrap_port.loaded_session_ids(), vec![existing_session_id]);
+    assert_eq!(
+        bootstrap_port.loaded_session_ids(),
+        vec![existing_session_id]
+    );
     assert_eq!(bootstrap_port.saved_sessions().len(), 1);
-    assert_eq!(bootstrap_port.saved_sessions()[0].session_id, existing_session_id);
+    assert_eq!(
+        bootstrap_port.saved_sessions()[0].session_id,
+        existing_session_id
+    );
     assert_eq!(bootstrap_port.saved_sessions()[0].last_seen_at, reuse_time);
 }
 
@@ -319,7 +328,12 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
     let snapshot = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
         &join_port,
-        &FakeIdGenerator::new_room_entry(room_id, Uuid::from_u128(3201), Uuid::from_u128(3202), Uuid::from_u128(3203)),
+        &FakeIdGenerator::new_room_entry(
+            room_id,
+            Uuid::from_u128(3201),
+            Uuid::from_u128(3202),
+            Uuid::from_u128(3203),
+        ),
         &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "a1234".to_string(),
@@ -345,11 +359,8 @@ async fn join_or_create_room_by_code_returns_snapshot_after_join() {
 #[tokio::test]
 async fn join_or_create_room_by_code_generates_room_and_member_facts_in_application() {
     let now = fixed_time();
-    let join_port = FakeRoomEntryPort::missing_room(sample_snapshot_data(
-        Uuid::from_u128(11),
-        "A1234",
-        vec![],
-    ));
+    let join_port =
+        FakeRoomEntryPort::missing_room(sample_snapshot_data(Uuid::from_u128(11), "A1234", vec![]));
 
     let snapshot = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
@@ -387,7 +398,12 @@ async fn join_or_create_room_by_code_reuses_existing_room_without_recreating_it(
     let snapshot = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
         &join_port,
-        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3401), Uuid::from_u128(3402), Uuid::from_u128(3403), Uuid::from_u128(3404)),
+        &FakeIdGenerator::new_room_entry(
+            Uuid::from_u128(3401),
+            Uuid::from_u128(3402),
+            Uuid::from_u128(3403),
+            Uuid::from_u128(3404),
+        ),
         &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "A1234".to_string(),
@@ -418,7 +434,12 @@ async fn join_or_create_room_by_code_rejects_invalid_room_code() {
             "A1234",
             vec![],
         )),
-        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3601), Uuid::from_u128(3602), Uuid::from_u128(3603), Uuid::from_u128(3604)),
+        &FakeIdGenerator::new_room_entry(
+            Uuid::from_u128(3601),
+            Uuid::from_u128(3602),
+            Uuid::from_u128(3603),
+            Uuid::from_u128(3604),
+        ),
         &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "ABCDE".to_string(),
@@ -440,7 +461,12 @@ async fn join_or_create_room_by_code_rejects_mismatched_room_code_snapshot() {
             "B1234",
             vec![],
         )),
-        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3801), Uuid::from_u128(3802), Uuid::from_u128(3803), Uuid::from_u128(3804)),
+        &FakeIdGenerator::new_room_entry(
+            Uuid::from_u128(3801),
+            Uuid::from_u128(3802),
+            Uuid::from_u128(3803),
+            Uuid::from_u128(3804),
+        ),
         &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "A1234".to_string(),
@@ -465,7 +491,12 @@ async fn join_or_create_room_by_code_rejects_inactive_session() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::deny(),
         &join_port,
-        &FakeIdGenerator::new_room_entry(Uuid::from_u128(3901), Uuid::from_u128(3902), Uuid::from_u128(3903), Uuid::from_u128(3904)),
+        &FakeIdGenerator::new_room_entry(
+            Uuid::from_u128(3901),
+            Uuid::from_u128(3902),
+            Uuid::from_u128(3903),
+            Uuid::from_u128(3904),
+        ),
         &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "a1234".to_string(),
@@ -491,7 +522,12 @@ async fn join_or_create_room_by_code_skips_commit_when_member_write_fails() {
     let error = join_or_create_room_by_code(
         &FakeSessionPort::allow(),
         &join_port,
-        &FakeIdGenerator::new_room_entry(Uuid::from_u128(4001), Uuid::from_u128(4002), Uuid::from_u128(4003), Uuid::from_u128(4004)),
+        &FakeIdGenerator::new_room_entry(
+            Uuid::from_u128(4001),
+            Uuid::from_u128(4002),
+            Uuid::from_u128(4003),
+            Uuid::from_u128(4004),
+        ),
         &FakeClock::new(fixed_time()),
         JoinOrCreateRoomByCodeCommand {
             room_code: "A1234".to_string(),
@@ -513,12 +549,7 @@ async fn list_joined_rooms_returns_member_rooms_sorted_by_latest_message() {
     let session_id = Uuid::from_u128(540);
     let rooms_port = FakeJoinedRoomsPort::with_rooms(vec![
         joined_room_summary(Uuid::from_u128(541), "C1234", "third", None),
-        joined_room_summary(
-            Uuid::from_u128(542),
-            "A1234",
-            "first",
-            Some(minute_time(2)),
-        ),
+        joined_room_summary(Uuid::from_u128(542), "A1234", "first", Some(minute_time(2))),
         joined_room_summary(
             Uuid::from_u128(543),
             "B1234",
@@ -537,8 +568,15 @@ async fn list_joined_rooms_returns_member_rooms_sorted_by_latest_message() {
 
     assert_eq!(rooms_port.requested_session_ids(), vec![session_id]);
     assert_eq!(
-        rooms.into_iter().map(|room| room.room_code).collect::<Vec<_>>(),
-        vec!["A1234".to_string(), "B1234".to_string(), "C1234".to_string()]
+        rooms
+            .into_iter()
+            .map(|room| room.room_code)
+            .collect::<Vec<_>>(),
+        vec![
+            "A1234".to_string(),
+            "B1234".to_string(),
+            "C1234".to_string()
+        ]
     );
 }
 
@@ -570,13 +608,7 @@ async fn search_rooms_by_code_matches_case_insensitive_prefix_and_marks_membersh
             Some(minute_time(1)),
             true,
         ),
-        room_search_result(
-            Uuid::from_u128(547),
-            "A1299",
-            "candidate room",
-            None,
-            false,
-        ),
+        room_search_result(Uuid::from_u128(547), "A1299", "candidate room", None, false),
     ]);
 
     let results = search_rooms_by_code(
@@ -597,10 +629,7 @@ async fn search_rooms_by_code_matches_case_insensitive_prefix_and_marks_membersh
             .into_iter()
             .map(|room| (room.room_code, room.is_joined))
             .collect::<Vec<_>>(),
-        vec![
-            ("A1234".to_string(), true),
-            ("A1299".to_string(), false),
-        ]
+        vec![("A1234".to_string(), true), ("A1299".to_string(), false),]
     );
 }
 
@@ -643,7 +672,10 @@ async fn search_rooms_by_code_prioritizes_exact_hit_then_joined_rooms() {
     .unwrap();
 
     assert_eq!(
-        results.into_iter().map(|room| room.room_code).collect::<Vec<_>>(),
+        results
+            .into_iter()
+            .map(|room| room.room_code)
+            .collect::<Vec<_>>(),
         vec![
             "A1234".to_string(),
             "A1200".to_string(),
@@ -891,4 +923,3 @@ async fn subscribe_room_stream_rejects_non_member() {
     );
     assert_eq!(error.code(), AppErrorCode::MembershipRequired);
 }
-
