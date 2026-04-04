@@ -4,3 +4,5 @@ pub mod entry;
 pub mod assembly;
 #[path = "契约.rs"]
 pub mod contract;
+#[path = "领域/mod.rs"]
+pub mod domain;
