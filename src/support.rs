@@ -24,7 +24,7 @@ use crate::{
 
 pub const APP_NAME: &str = "koko";
 #[cfg(not(target_arch = "wasm32"))]
-pub const DEFAULT_TRACING_FILTER: &str = "info";
+pub const DEFAULT_TRACING_FILTER: &str = "info,tower_http=trace";
 pub const SESSION_COOKIE_NAME: &str = "koko_session";
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -721,8 +721,9 @@ fn write_admin_token_config(config_path: &Path, admin_token: &str) -> Result<(),
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::{
-        AppConfig, StartupLanAddressCandidate, build_startup_banner_from_bind_addr_with_lan_candidates,
-        collect_startup_banner_lan_urls, tracing_subscriber_builder,
+        AppConfig, DEFAULT_TRACING_FILTER, StartupLanAddressCandidate,
+        build_startup_banner_from_bind_addr_with_lan_candidates, collect_startup_banner_lan_urls,
+        tracing_subscriber_builder,
     };
     use std::{
         env, fs, io,
@@ -818,6 +819,12 @@ mod tests {
         assert!(output.contains("koko::support::tests"), "{output}");
         assert!(output.contains("request_id=7"), "{output}");
         assert!(output.lines().count() == 1, "{output}");
+    }
+
+    #[test]
+    fn default_tracing_filter_keeps_http_trace_visible() {
+        assert!(DEFAULT_TRACING_FILTER.contains("info"));
+        assert!(DEFAULT_TRACING_FILTER.contains("tower_http=trace"));
     }
 
     fn sample_startup_config() -> AppConfig {
