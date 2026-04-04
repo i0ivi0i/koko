@@ -12,7 +12,6 @@ use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 use tower_http::services::{ServeDir, ServeFile};
-use tower_http::trace::TraceLayer;
 use tower_sessions::{Expiry, Session, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_sqlx_store::PostgresStore as AdminSessionStore;
 use uuid::Uuid;
@@ -139,7 +138,6 @@ fn traced_api_router(
         .merge(admin_api_router(store, admin_token).layer(admin_session_layer))
         .route("/", any(frontend_reserved_not_found))
         .fallback(frontend_reserved_not_found)
-        .layer(TraceLayer::new_for_http())
 }
 
 fn frontend_shell_router_inner(
