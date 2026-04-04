@@ -13,6 +13,7 @@
 2. socketioxide 官方提供了与 Socket.IO 兼容的 rooms、acks、adapter、per-socket state 等能力，说明实时库应做薄适配，不应再手搓第二层协议真相。
 3. Telegram 官方更新机制以 `seq / pts / qts` 和 `getDifference` 为核心，说明成熟 IM 依赖“事件位置 + 缺口恢复”而不是“连接永不出错”。
 4. WhatsApp / Meta 公开资料持续强调多设备同步、security by design、reduce attack surface，说明稳定系统来自真相收口与复杂度收缩，而不是壳层越来越聪明。
+5. Unix 原典长期强调“最小必要操作集、小件组合、先做可运行闭环、持续修枝”，这和 IM 系统要防低级复发 bug 的方向一致：少造第二套真相，少造巨物，多守稳定接口。
 
 ## 最新官方来源
 
@@ -51,6 +52,42 @@
 - Meta Security Principles for Private Messaging
   https://engineering.fb.com/wp-content/uploads/2022/07/Meta-Security-Principles-for-Private-Messaging-White-Paper-July-2022-2.pdf
   关键点：`Security by Design and Defense in Depth`、`Reduce the Attack Surface`。减少复杂度本身就是减少 bug 和脆弱性的手段。
+
+## 历史架构依据
+
+- Bell Labs UNIX Foreword (1978)
+  https://www.worldradiohistory.com/Archive-Bell-System-Technical-Journal/70s/Bell-System-Technical-Journal-1978-6.pdf
+  关键点：Unix 的气质是 `simplicity / generality / intelligibility`；复杂任务应由松耦合小部件组合出来，而不是先做一个自以为完备的巨物。
+
+- Ken Thompson: Unix and Beyond (1999)
+  https://cse.unl.edu/~witty/class/csce351/howto/ken_thompson.pdf
+  关键点：Unix 最大的好点子之一是干净而简单的统一接口；接口越统一，shell、可移植性、可组合性越自然，系统越不容易长成失控怪物。
+
+- AUUG / UNIX 哲学讨论 (1984)
+  https://www.tuhs.org/Archive/Documentation/AUUGN/AUUGN-V05.6.pdf
+  关键点：要守住“必要操作的最小生成集”，并持续修枝；系统若只会加功能、不肯删冗余，最终会被自己的体积和历史噪音拖死。
+
+## Unix 可复用的系统智慧
+
+### 1. 先收口最小必要操作集，再扩展组合
+
+- Unix 的强大，不是先把功能做满，而是先守住少数稳定原语，再让复杂能力通过组合长出来。
+- 对 `koko` 来说，这组稳定原语应优先收口到 `command / query / snapshot / event / error code / event_position`，而不是页面流程、socket 回调或壳层临时状态。
+
+### 2. 先让部件说真话，再让壳层变聪明
+
+- Unix 默认一个程序的输出会成为另一个未知程序的输入，这要求接口先忠实表达事实，而不是先夹带展示意图。
+- 对 `koko` 来说，`contract` 必须先表达权威业务事实；壳层展示文案、页面流程、连接提示和局部体验态，只能在 `shell` 派生，不能倒灌回共享表面。
+
+### 3. 先修枝，再加功能
+
+- Unix 传统不是只会加工具，也强调主动删除冗余、合并重复、收缩低价值包装。
+- 对 `koko` 来说，第二套实时协议真相、重复同步桥接、壳层假状态、只服务单壳的数据形状，都应优先删除、收口或并回稳定契约，而不是继续叠补丁。
+
+### 4. 先做可验证闭环，再谈“感觉实时”
+
+- Unix 重视尽早得到可运行闭环，再用真实反馈重做笨重部分，而不是先在脑中补完一个大系统。
+- 对 `koko` 来说，任何新链路都应先证明“快照锚点、实时续接、缺口补洞、幂等合并、失败暴露”这五件事成立，再谈页面是否显得丝滑。
 
 ## 热路径与冷路径职责
 
@@ -154,8 +191,9 @@
 2. `contract` 持续作为多壳共享表面，先收口 command / query / snapshot / event / error code。
 3. Web 壳继续瘦身，少做业务裁决，多做显式错误与显式状态。
 4. 后续若扩展 CLI / iOS / Android，只允许复用同一套权威事件与快照，不允许复制 Web 页面状态机。
+5. 持续修枝：优先清理手搓桥接、重复协议胶水、壳层假状态和单壳专属数据形状，不让它们在主链路里再次长成第二套真相。
 
 ## 结论
 
 以后要防的不是“某个按钮偶尔点不动”，而是系统重新滑回“多层都能宣布真相”的旧路。  
-真正的稳，不是多写几层包装，而是把权威事实、事件位置、补洞路径、测试门禁这四件事长期钉死。
+真正的稳，不是多写几层包装，而是把权威事实、稳定接口、事件位置、补洞路径、测试门禁和持续修枝这几件事长期钉死。
