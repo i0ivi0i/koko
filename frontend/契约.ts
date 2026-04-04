@@ -28,3 +28,17 @@ export interface 后台概览 {
   room_count: number;
   message_count: number;
 }
+
+export interface 后台登录结果 {
+  token: string;
+}
+
+export interface 后台房间列表 {
+  rooms: string[];
+}
+
+export interface 后台房间详情 {
+  room_id: string;
+  latest_event_position: number;
+  message_count: number;
+}

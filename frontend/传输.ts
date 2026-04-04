@@ -1,5 +1,13 @@
 import { io, type Socket } from "socket.io-client";
-import type { 会话快照, 增量事件快照, 房间快照, 后台概览 } from "./契约";
+import type {
+  会话快照,
+  增量事件快照,
+  房间快照,
+  后台概览,
+  后台房间列表,
+  后台房间详情,
+  后台登录结果,
+} from "./契约";
 
 export interface 前端传输端口 {
   bootstrapSession(displayName: string): Promise<会话快照>;
@@ -7,6 +15,9 @@ export interface 前端传输端口 {
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
   loadRoomEvents(roomId: string, from: number): Promise<增量事件快照>;
   loadAdminOverview(token: string): Promise<后台概览>;
+  adminLogin(username: string, password: string): Promise<后台登录结果>;
+  adminRooms(token: string): Promise<后台房间列表>;
+  adminRoomDetail(token: string, roomId: string): Promise<后台房间详情>;
   createSocket(): Socket;
 }
 
@@ -34,6 +45,18 @@ export class HttpRealtime传输 implements 前端传输端口 {
 
   async loadAdminOverview(token: string): Promise<后台概览> {
     return this.get("/api/admin/overview", { "x-admin-token": token });
+  }
+
+  async adminLogin(username: string, password: string): Promise<后台登录结果> {
+    return this.post("/api/admin/login", { username, password });
+  }
+
+  async adminRooms(token: string): Promise<后台房间列表> {
+    return this.get("/api/admin/rooms", { "x-admin-token": token });
+  }
+
+  async adminRoomDetail(token: string, roomId: string): Promise<后台房间详情> {
+    return this.get(`/api/admin/rooms/${roomId}`, { "x-admin-token": token });
   }
 
   createSocket(): Socket {

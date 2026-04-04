@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import "../聊天壳";
 import type { 前端传输端口 } from "../传输";
-import type { 会话快照, 增量事件快照, 后台概览, 房间快照 } from "../契约";
+import type {
+  会话快照,
+  增量事件快照,
+  后台概览,
+  房间快照,
+  后台登录结果,
+  后台房间列表,
+  后台房间详情,
+} from "../契约";
 import { 聊天壳 } from "../聊天壳";
 import type { Socket } from "socket.io-client";
 
@@ -34,6 +42,15 @@ class 假传输 implements 前端传输端口 {
   }
   async loadAdminOverview(): Promise<后台概览> {
     return { room_count: 1, message_count: 1 };
+  }
+  async adminLogin(): Promise<后台登录结果> {
+    return { token: "admin-token" };
+  }
+  async adminRooms(): Promise<后台房间列表> {
+    return { rooms: ["r-test"] };
+  }
+  async adminRoomDetail(): Promise<后台房间详情> {
+    return { room_id: "r-test", latest_event_position: 1, message_count: 1 };
   }
   createSocket(): Socket {
     throw new Error("not used");
