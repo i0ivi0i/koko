@@ -766,7 +766,7 @@ fn spawn_realtime_bridge(
                             state.set(next_state);
                         }
                     }
-                    set_shell_error(shell_error, Some(rejection_message(payload.code)));
+                    set_shell_error(shell_error, Some(rejection_message(payload.error.code)));
                 }
                 RealtimeEvent::Error { message } => {
                     realtime_active_room.set(None);
@@ -1363,7 +1363,11 @@ mod tests {
     fn send_rejection_preserves_pending_message_identity() {
         let client_message_id = Uuid::from_u128(1);
         let payload = CommandRejected {
-            code: AppErrorCode::InvalidMessageBody,
+            error: crate::contract::ErrorEnvelope {
+                code: AppErrorCode::InvalidMessageBody,
+                layer: "application".to_string(),
+                operation: "send_text_message".to_string(),
+            },
             command: RejectedCommandKind::SendTextMessage,
             room_id: Some(Uuid::from_u128(2)),
             client_message_id: Some(client_message_id),
@@ -1376,7 +1380,11 @@ mod tests {
     #[test]
     fn subscribe_rejection_resets_subscription_without_touching_pending_queue() {
         let payload = CommandRejected {
-            code: AppErrorCode::MembershipRequired,
+            error: crate::contract::ErrorEnvelope {
+                code: AppErrorCode::MembershipRequired,
+                layer: "application".to_string(),
+                operation: "subscribe_room_stream".to_string(),
+            },
             command: RejectedCommandKind::SubscribeRoomStream,
             room_id: Some(Uuid::from_u128(3)),
             client_message_id: None,

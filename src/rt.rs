@@ -303,7 +303,10 @@ fn emit_command_rejected(
         socket,
         "command_rejected",
         &CommandRejected {
-            code: error.code(),
+            error: error.error_envelope(match command {
+                RejectedCommandKind::SubscribeRoomStream => "subscribe_room_stream",
+                RejectedCommandKind::SendTextMessage => "send_text_message",
+            }),
             command,
             room_id,
             client_message_id,

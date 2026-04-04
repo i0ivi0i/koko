@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     contract::{
         AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode, AppEvent,
-        BootstrapSession, JoinedRoomSummary, MessageCreated, MessageView, RoomSearchResult,
-        RoomSnapshot,
+        BootstrapSession, ErrorEnvelope, JoinedRoomSummary, MessageCreated, MessageView,
+        RoomSearchResult, RoomSnapshot,
     },
     domain::{
         AnonymousSession, DomainError, Message, MessageBody, MessageStatus, NewMemberRecord,
@@ -78,6 +78,15 @@ impl AppError {
             Self::DependencyFailure => AppErrorCode::Internal,
             Self::Domain(DomainError::InvalidRoomCode) => AppErrorCode::InvalidRoomCode,
             Self::Domain(DomainError::EmptyMessageBody) => AppErrorCode::InvalidMessageBody,
+        }
+    }
+
+    pub fn error_envelope(&self, operation: &'static str) -> ErrorEnvelope {
+        ErrorEnvelope {
+            code: self.code(),
+            // 业务错误语义在 application 层定稿，adapter 只消费这份稳定上下文。
+            layer: "application".to_string(),
+            operation: operation.to_string(),
         }
     }
 }

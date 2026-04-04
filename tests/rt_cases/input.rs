@@ -1,4 +1,23 @@
 use super::*;
+use koko::contract::{AppErrorCode, RejectedCommandKind};
+
+#[test]
+fn command_rejected_must_include_layer_and_operation() {
+    let payload = koko::contract::CommandRejected {
+        error: koko::contract::ErrorEnvelope {
+            code: AppErrorCode::Internal,
+            layer: "application".to_string(),
+            operation: "send_text_message".to_string(),
+        },
+        command: RejectedCommandKind::SendTextMessage,
+        room_id: Some(Uuid::from_u128(1)),
+        client_message_id: Some(Uuid::from_u128(2)),
+    };
+    let json = serde_json::to_value(&payload).unwrap();
+
+    assert_eq!(json["layer"], "application");
+    assert_eq!(json["operation"], "send_text_message");
+}
 
 #[test]
 fn init_tracing_is_idempotent() {

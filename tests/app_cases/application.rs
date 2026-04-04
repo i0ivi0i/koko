@@ -1,6 +1,23 @@
 use super::*;
 use chrono::Timelike;
 
+#[test]
+fn app_error_envelope_marks_application_layer_and_operation() {
+    let error = AppError::NotRoomMember {
+        room_id: Uuid::from_u128(701),
+        session_id: Uuid::from_u128(702),
+    };
+
+    assert_eq!(
+        error.error_envelope("send_text_message"),
+        koko::contract::ErrorEnvelope {
+            code: AppErrorCode::MembershipRequired,
+            layer: "application".to_string(),
+            operation: "send_text_message".to_string(),
+        }
+    );
+}
+
 #[tokio::test]
 async fn admin_overview_requires_authorized_admin_context() {
     let error = get_admin_overview(

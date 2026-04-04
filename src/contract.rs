@@ -41,8 +41,16 @@ pub enum RejectedCommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CommandRejected {
+pub struct ErrorEnvelope {
     pub code: AppErrorCode,
+    pub layer: String,
+    pub operation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandRejected {
+    #[serde(flatten)]
+    pub error: ErrorEnvelope,
     pub command: RejectedCommandKind,
     pub room_id: Option<Uuid>,
     pub client_message_id: Option<Uuid>,
