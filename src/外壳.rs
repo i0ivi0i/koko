@@ -11,6 +11,7 @@ use socketioxide::{
     SocketIo,
 };
 use tokio::task;
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{adapter::Pg仓储, contract, usecase};
 
@@ -62,6 +63,9 @@ pub fn 构建路由(database_url: String, admin_password: String) -> Router {
         .route("/api/admin/overview", get(admin_overview))
         .route("/api/admin/rooms", get(admin_rooms))
         .route("/api/admin/rooms/{room_id}", get(admin_room_detail))
+        // 前端静态资源由后端同源托管，避免开发态跨域和双端口联调噪音。
+        .route_service("/", ServeFile::new("frontend/index.html"))
+        .nest_service("/dist", ServeDir::new("frontend/dist"))
         .layer(socket_layer)
         .with_state(state)
 }

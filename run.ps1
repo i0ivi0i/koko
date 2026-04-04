@@ -20,4 +20,33 @@ function Import-DotEnv {
 }
 
 Import-DotEnv
-cargo run
+
+$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$cargoPath = (Get-Command cargo.exe -ErrorAction Stop).Source
+$pnpmPath = (Get-Command pnpm.cmd -ErrorAction Stop).Source
+$frontendWatch = $null
+
+try {
+    # run.ps1 只做编排：先构建前端产物，再开 watch，最后拉起后端。
+    Write-Host "前端首轮构建: pnpm --dir frontend build"
+    & $pnpmPath --dir frontend build
+
+    Write-Host "前端增量编译: pnpm --dir frontend exec tsc -w --preserveWatchOutput"
+    $frontendWatch = Start-Process -FilePath $pnpmPath `
+        -ArgumentList @("--dir", "frontend", "exec", "tsc", "-w", "--preserveWatchOutput") `
+        -WorkingDirectory $repoRoot `
+        -PassThru
+
+    Write-Host "启动后端: cargo run"
+    $appPort = [Environment]::GetEnvironmentVariable("APP_PORT")
+    if ([string]::IsNullOrWhiteSpace($appPort)) {
+        $appPort = "8080"
+    }
+    Write-Host "访问入口: http://127.0.0.1:$appPort/"
+    & $cargoPath run
+}
+finally {
+    if ($frontendWatch -and -not $frontendWatch.HasExited) {
+        Stop-Process -Id $frontendWatch.Id -Force
+    }
+}
