@@ -34,6 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ready_addr = listener.local_addr()?;
     let mut stdout = std::io::stdout().lock();
     koko::support::write_startup_banner_if_ready(&mut stdout, Ok(ready_addr), &config)?;
+    // 自动开浏览器行为也收口到 Rust 主链，避免 run.ps1 再长第二套逻辑。
+    koko::support::maybe_open_browser_on_startup(ready_addr, &config);
 
     axum::serve(listener, router).await?;
     Ok(())

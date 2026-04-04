@@ -43,6 +43,8 @@ const ADMIN_COOKIE_SECURE_ENV: &str = "KOKO_ADMIN_COOKIE_SECURE";
 #[cfg(not(target_arch = "wasm32"))]
 const LOG_FILTER_ENV: &str = "KOKO_LOG";
 #[cfg(not(target_arch = "wasm32"))]
+const AUTO_OPEN_BROWSER_ENV: &str = "KOKO_AUTO_OPEN_BROWSER";
+#[cfg(not(target_arch = "wasm32"))]
 const FRONTEND_INDEX_PATH: &str = "dist/public/index.html";
 #[cfg(not(target_arch = "wasm32"))]
 const FRONTEND_BUNDLE_INPUT_PATHS: [&str; 8] = [
@@ -449,6 +451,27 @@ pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+pub fn maybe_open_browser_on_startup(bind_addr: SocketAddr, config: &AppConfig) {
+    if !auto_open_browser_enabled() {
+        return;
+    }
+
+    let Some(home_url) = build_startup_banner_from_bind_addr(bind_addr, config)
+        .home_urls
+        .first()
+        .cloned()
+    else {
+        return;
+    };
+
+    std::thread::spawn(move || {
+        if let Err(error) = webbrowser::open(&home_url) {
+            tracing::warn!("自动打开首页失败：{error}");
+        }
+    });
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_tracing_filter(default_filter: &str) -> EnvFilter {
     // 官方建议通过 EnvFilter 支持按环境变量覆盖；
     // 这里改成只认项目级 KOKO_LOG，避免系统全局 RUST_LOG 污染启动日志可见性。
@@ -672,6 +695,20 @@ fn parse_admin_cookie_secure(raw: Option<&str>) -> Result<bool, ConfigError> {
             name: ADMIN_COOKIE_SECURE_ENV,
             value: raw.to_string(),
         }),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn auto_open_browser_enabled() -> bool {
+    let default_enabled = cfg!(target_os = "windows");
+    let Some(raw) = env::var(AUTO_OPEN_BROWSER_ENV).ok() else {
+        return default_enabled;
+    };
+
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => true,
+        "false" | "0" | "no" | "off" => false,
+        _ => default_enabled,
     }
 }
 
