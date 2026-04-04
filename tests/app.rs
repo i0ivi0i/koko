@@ -37,6 +37,8 @@ mod application;
 mod store;
 #[path = "app_cases/domain.rs"]
 mod domain;
+#[path = "bigbang_cases/mod.rs"]
+mod bigbang_cases;
 
 #[derive(Debug)]
 struct FakeSessionPort {

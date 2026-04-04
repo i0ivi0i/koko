@@ -52,6 +52,8 @@ mod web_shell;
 mod view_render;
 #[path = "http_cases/admin.rs"]
 mod admin;
+#[path = "bigbang_cases/mod.rs"]
+mod bigbang_cases;
 
 fn run_root_script_with_fake_cargo(args: &[&str], shim_dir: &Path) -> std::process::Output {
     let _guard = env_lock();
