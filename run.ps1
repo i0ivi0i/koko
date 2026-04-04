@@ -5,7 +5,7 @@ param(
     [string]$BindAddr,
     [switch]$SkipBundle,
     [switch]$DryRun,
-    [object]$NoBrowser = $false
+    [switch]$NoBrowser
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,18 +32,7 @@ if ($DryRun.IsPresent) {
     $xtaskArgs += "--dry-run"
 }
 
-if ($NoBrowser -is [bool]) {
-    $disableBrowser = [bool]$NoBrowser
-}
-elseif ($null -eq $NoBrowser) {
-    $disableBrowser = $false
-}
-else {
-    $normalizedNoBrowser = $NoBrowser.ToString().Trim().TrimStart('$').ToLowerInvariant()
-    $disableBrowser = $normalizedNoBrowser -in @("true", "1", "yes", "on")
-}
-
-if ($disableBrowser) {
+if ($NoBrowser.IsPresent) {
     $xtaskArgs += "--no-browser"
 }
 

@@ -13,7 +13,7 @@ fn root_run_script_forwards_powershell_args_to_cargo_xtask_dev() {
             "127.0.0.1:8080",
             "-SkipBundle",
             "-DryRun",
-            "-NoBrowser:$true",
+            "-NoBrowser",
         ],
         &shim_dir,
     );
