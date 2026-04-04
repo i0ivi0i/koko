@@ -41,6 +41,8 @@ const ADMIN_TOKEN_ENV: &str = "KOKO_ADMIN_TOKEN";
 #[cfg(not(target_arch = "wasm32"))]
 const ADMIN_COOKIE_SECURE_ENV: &str = "KOKO_ADMIN_COOKIE_SECURE";
 #[cfg(not(target_arch = "wasm32"))]
+const LOG_FILTER_ENV: &str = "KOKO_LOG";
+#[cfg(not(target_arch = "wasm32"))]
 const FRONTEND_INDEX_PATH: &str = "dist/public/index.html";
 #[cfg(not(target_arch = "wasm32"))]
 const FRONTEND_BUNDLE_INPUT_PATHS: [&str; 8] = [
@@ -435,8 +437,7 @@ impl AdminCredentialPort for AdminTokenVerifier {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
+    let filter = resolve_tracing_filter(default_filter);
     let subscriber = tracing_subscriber_builder(filter).finish();
 
     let result = match tracing::subscriber::set_global_default(subscriber) {
@@ -445,6 +446,16 @@ pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     };
 
     Ok(result)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn resolve_tracing_filter(default_filter: &str) -> EnvFilter {
+    // 官方建议通过 EnvFilter 支持按环境变量覆盖；
+    // 这里改成只认项目级 KOKO_LOG，避免系统全局 RUST_LOG 污染启动日志可见性。
+    EnvFilter::builder()
+        .with_env_var(LOG_FILTER_ENV)
+        .try_from_env()
+        .unwrap_or_else(|_| EnvFilter::new(default_filter))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
