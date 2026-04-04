@@ -34,7 +34,6 @@ const DEFAULT_CONFIG_PATH: &str = "config/koko.toml";
 #[cfg(not(target_arch = "wasm32"))]
 const DATABASE_URL_ENV: &str = "KOKO_DATABASE_URL";
 #[cfg(not(target_arch = "wasm32"))]
-const DEFAULT_DEV_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat";
 #[cfg(not(target_arch = "wasm32"))]
 const ADMIN_TOKEN_ENV: &str = "KOKO_ADMIN_TOKEN";
 #[cfg(not(target_arch = "wasm32"))]
@@ -534,29 +533,6 @@ impl ResolvedAppConfig {
             admin_token_seed,
             admin_cookie_secure: admin_cookie_secure_override.unwrap_or(false),
         })
-    }
-
-    pub fn load_for_dev_preview(
-        database_url: Option<&str>,
-        bind_addr: Option<&str>,
-        config_path: Option<PathBuf>,
-        admin_cookie_secure_override: Option<bool>,
-    ) -> Result<Self, ConfigError> {
-        // dev preview 只需要和主程序同源的地址/数据库/安全位解析结果；
-        // 管理员口令真相仍必须留给真实启动路径去读/写 config/koko.toml。
-        // 开发启动入口仍需要受控的本地数据库默认值，
-        // 这样 `run.ps1` 才能保持开箱可跑，而不把薄壳重新做重。
-        let dev_database_url = database_url
-            .map(ToOwned::to_owned)
-            .or_else(|| env::var(DATABASE_URL_ENV).ok())
-            .or_else(|| Some(DEFAULT_DEV_DATABASE_URL.to_string()));
-
-        Self::load_common_with_overrides(
-            dev_database_url.as_deref(),
-            bind_addr,
-            config_path,
-            admin_cookie_secure_override,
-        )
     }
 
     fn load_common_with_overrides(
