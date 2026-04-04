@@ -128,6 +128,20 @@ pub fn frontend_shell_router(
     frontend_shell_router_inner(frontend_dist_dir, asset_dir, true)
 }
 
+fn traced_api_router(
+    store: PgStore,
+    io: socketioxide::SocketIo,
+    admin_token: String,
+    admin_session_layer: AdminSessionLayer,
+) -> Router {
+    Router::new()
+        .merge(api_router(store.clone(), io))
+        .merge(admin_api_router(store, admin_token).layer(admin_session_layer))
+        .route("/", any(frontend_reserved_not_found))
+        .fallback(frontend_reserved_not_found)
+        .layer(TraceLayer::new_for_http())
+}
+
 fn frontend_shell_router_inner(
     frontend_dist_dir: impl Into<PathBuf>,
     asset_dir: impl Into<PathBuf>,
@@ -173,22 +187,7 @@ pub fn server_router(
     crate::rt::install_realtime(&io, realtime);
 
     frontend_shell_router_inner(frontend_dist_dir, asset_dir, false)
-        .nest(
-            "/api",
-            api_router(store.clone(), io.clone()).layer(TraceLayer::new_for_http()),
-        )
-        .nest(
-            "/api",
-            admin_api_router(store, admin_token)
-                .layer(admin_session_layer)
-                .layer(TraceLayer::new_for_http()),
-        )
-        .nest(
-            "/api",
-            Router::new()
-                .fallback(frontend_reserved_not_found)
-                .layer(TraceLayer::new_for_http()),
-        )
+        .nest("/api", traced_api_router(store, io, admin_token, admin_session_layer))
         .layer(socket_layer)
 }
 
