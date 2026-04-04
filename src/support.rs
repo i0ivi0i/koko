@@ -11,6 +11,7 @@ use std::{
 use chrono::{DateTime, Utc};
 #[cfg(not(target_arch = "wasm32"))]
 use if_addrs::Interface;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(not(target_arch = "wasm32"))]
 use thiserror::Error;
@@ -20,7 +21,7 @@ use uuid::Uuid;
 
 use crate::{
     app::{AdminCredentialPort, AppError, Clock, IdGenerator},
-    contract::{AppErrorCode, ErrorLayer, ErrorOperation},
+    contract::AppErrorCode,
 };
 
 pub const APP_NAME: &str = "koko";
@@ -712,16 +713,10 @@ fn auto_open_browser_enabled() -> bool {
     }
 }
 
-pub fn error_layer_name(layer: ErrorLayer) -> &'static str {
-    match layer {
-        ErrorLayer::Application => "application",
-    }
-}
-
-pub fn error_operation_name(operation: ErrorOperation) -> &'static str {
-    match operation {
-        ErrorOperation::SubscribeRoomStream => "subscribe_room_stream",
-        ErrorOperation::SendTextMessage => "send_text_message",
+pub fn serde_wire_name<T: Serialize>(value: &T) -> String {
+    match serde_json::to_value(value).expect("enum serialization should succeed") {
+        serde_json::Value::String(name) => name,
+        other => panic!("expected enum to serialize as wire string, got {other:?}"),
     }
 }
 

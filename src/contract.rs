@@ -49,8 +49,18 @@ pub enum ErrorLayer {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorOperation {
+    BootstrapAnonymousSession,
+    JoinOrCreateRoomByCode,
+    ListJoinedRooms,
+    SearchRoomsByCode,
+    LoadRoomSnapshot,
     SubscribeRoomStream,
     SendTextMessage,
+    LoginAdmin,
+    GetAdminSession,
+    LogoutAdmin,
+    GetAdminOverview,
+    ListAdminRooms,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

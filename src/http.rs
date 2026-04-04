@@ -223,7 +223,7 @@ async fn bootstrap_session(
         Uuid::now_v7(),
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::BootstrapAnonymousSession))?;
     let cookie = Cookie::build((support::SESSION_COOKIE_NAME, session.session_id.to_string()))
         .http_only(true)
         .same_site(SameSite::Lax)
@@ -250,7 +250,7 @@ async fn join_room(
         },
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::JoinOrCreateRoomByCode))?;
     Ok(Json(snapshot))
 }
 
@@ -265,7 +265,7 @@ async fn joined_rooms(
         crate::app::ListJoinedRoomsQuery { session_id },
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::ListJoinedRooms))?;
     Ok(Json(rooms))
 }
 
@@ -284,7 +284,7 @@ async fn search_rooms(
         },
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::SearchRoomsByCode))?;
     Ok(Json(rooms))
 }
 
@@ -304,7 +304,7 @@ async fn room_snapshot(
         },
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::LoadRoomSnapshot))?;
     Ok(Json(snapshot))
 }
 
@@ -355,7 +355,7 @@ async fn admin_login(
         },
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::LoginAdmin))?;
     Ok(StatusCode::OK)
 }
 
@@ -374,7 +374,7 @@ async fn admin_session(
         admin_session_idle_timeout_seconds(),
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::GetAdminSession))?;
     Ok(Json(status))
 }
 
@@ -386,7 +386,7 @@ async fn admin_logout(
         let admin_session_port = build_http_admin_session_port(&state, session.clone(), true);
         logout_admin(&admin_session_port, &context)
             .await
-            .map_err(map_http_error)?;
+            .map_err(|error| map_http_error_with_operation(error, ErrorOperation::LogoutAdmin))?;
     }
     session.flush().await.map_err(map_session_error)?;
     Ok(StatusCode::OK)
@@ -397,11 +397,11 @@ async fn admin_overview(
     session: Session,
 ) -> Result<Json<AdminOverview>, (StatusCode, Json<ErrorPayload>)> {
     // Session/cookie 只属于 HTTP adapter；真正“这个后台会话是否有效”的裁决仍必须回 application + store。
-    let context = require_admin_session_context(&session)?;
+    let context = require_admin_session_context(&session, ErrorOperation::GetAdminOverview)?;
     let admin_session_port = build_http_admin_session_port(&state, session, true);
     let overview = get_admin_overview(&admin_session_port, &state.store, context)
         .await
-        .map_err(map_http_error)?;
+        .map_err(|error| map_http_error_with_operation(error, ErrorOperation::GetAdminOverview))?;
     Ok(Json(overview))
 }
 
@@ -410,11 +410,11 @@ async fn admin_rooms(
     session: Session,
 ) -> Result<Json<Vec<AdminRoomSummary>>, (StatusCode, Json<ErrorPayload>)> {
     // 这里继续复用 application 用例做后台授权，避免 handler 自己判断“已登录/过期/被顶掉”而把业务真相散落回 adapter。
-    let context = require_admin_session_context(&session)?;
+    let context = require_admin_session_context(&session, ErrorOperation::ListAdminRooms)?;
     let admin_session_port = build_http_admin_session_port(&state, session, true);
     let rooms = list_admin_rooms(&admin_session_port, &state.store, context)
         .await
-        .map_err(map_http_error)?;
+        .map_err(|error| map_http_error_with_operation(error, ErrorOperation::ListAdminRooms))?;
     Ok(Json(rooms))
 }
 
@@ -512,9 +512,10 @@ fn resolve_admin_session_context(
 
 fn require_admin_session_context(
     session: &Session,
+    operation: ErrorOperation,
 ) -> Result<AdminSessionContext, (StatusCode, Json<ErrorPayload>)> {
     resolve_admin_session_context(session)?
-        .ok_or_else(|| map_http_error(AppError::AdminSessionRequired))
+        .ok_or_else(|| map_http_error_with_operation(AppError::AdminSessionRequired, operation))
 }
 
 fn require_admin_session_context_from_app(session: &Session) -> Result<AdminSessionContext, AppError> {
@@ -593,8 +594,8 @@ fn unauthenticated_admin_session_status() -> AdminSessionStatus {
 fn error_payload(error: &AppError, operation: Option<ErrorOperation>) -> ErrorPayload {
     let (layer, operation) = match operation.map(|operation| error.error_envelope(operation)) {
         Some(context) => (
-            Some(support::error_layer_name(context.layer).to_string()),
-            Some(support::error_operation_name(context.operation).to_string()),
+            Some(support::serde_wire_name(&context.layer)),
+            Some(support::serde_wire_name(&context.operation)),
         ),
         None => (None, None),
     };

@@ -109,6 +109,8 @@ async fn join_room_endpoint_returns_invalid_room_code_error_payload(
     let payload: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(payload["code"], "invalid_room_code");
+    assert_eq!(payload["layer"], "application");
+    assert_eq!(payload["operation"], "join_or_create_room_by_code");
     Ok(())
 }
 
