@@ -4,5 +4,7 @@ pub mod entry;
 pub mod assembly;
 #[path = "契约.rs"]
 pub mod contract;
+#[path = "用例.rs"]
+pub mod usecase;
 #[path = "领域/mod.rs"]
 pub mod domain;

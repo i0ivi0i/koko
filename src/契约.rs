@@ -26,6 +26,10 @@ pub enum 查询 {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum 快照 {
+    会话 {
+        会话标识: String,
+        显示名: String,
+    },
     房间 {
         房间标识: String,
         最新事件位置: i64,
@@ -41,6 +45,9 @@ pub enum 领域事件 {
     消息已创建 {
         房间标识: String,
         消息标识: String,
+        客户端消息标识: String,
+        发送者会话标识: String,
+        文本: String,
         事件位置: i64,
     },
 }
