@@ -10,3 +10,5 @@ pub mod usecase;
 pub mod domain;
 #[path = "适配.rs"]
 pub mod adapter;
+#[path = "外壳.rs"]
+pub mod shell;

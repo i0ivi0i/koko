@@ -14,7 +14,22 @@ pub async fn 启动() -> std::io::Result<()> {
     if let Err(err) = &migrate_result {
         记录命令失败("服务启动", "entry", "migration_failed", &err.to_string());
     }
-    migrate_result
+    migrate_result?;
+
+    let app = crate::shell::构建路由(config.database_url.clone(), config.admin_password.clone());
+    let addr = format!("0.0.0.0:{}", config.app_port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .map_err(|err| std::io::Error::other(format!("监听端口失败: {err}")))?;
+    tracing::info!(
+        usecase = "服务启动",
+        adapter = "entry",
+        app_port = config.app_port,
+        "HTTP 冷路径服务已启动"
+    );
+    axum::serve(listener, app)
+        .await
+        .map_err(|err| std::io::Error::other(format!("服务运行失败: {err}")))
 }
 
 pub fn 记录命令失败(usecase: &str, adapter: &str, error_code: &str, message: &str) {

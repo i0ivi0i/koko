@@ -64,6 +64,120 @@ impl Pg仓储 {
             Ok((latest, event_count, msg_count))
         })
     }
+
+    pub fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        self.rt.block_on(async {
+            let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
+                .bind(房间标识)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+            let Some(room_row) = room else {
+                return Err(contract::错误码::房间不存在);
+            };
+            let room_db_id: i64 = room_row.get("id");
+            let latest_event_position: i64 = room_row.get("latest_event_position");
+
+            let rows = sqlx::query(
+                "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, m.body \
+                 FROM room_events re \
+                 LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+                 LEFT JOIN sessions s ON s.id = m.sender_session_id \
+                 WHERE re.room_id = $1 AND re.event_position > $2 \
+                 ORDER BY re.event_position ASC",
+            )
+            .bind(room_db_id)
+            .bind(从位置开始)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+
+            let mut events = Vec::with_capacity(rows.len());
+            for row in rows {
+                let msg_id: Option<String> = row.get("message_id");
+                let client_id: Option<String> = row.get("client_message_id");
+                let sender_session_id: Option<String> = row.get("session_id");
+                let body: Option<String> = row.get("body");
+                events.push(contract::领域事件::消息已创建 {
+                    房间标识: 房间标识.to_string(),
+                    消息标识: msg_id.unwrap_or_default(),
+                    客户端消息标识: client_id.unwrap_or_default(),
+                    发送者会话标识: sender_session_id.unwrap_or_default(),
+                    文本: body.unwrap_or_default(),
+                    事件位置: row.get("event_position"),
+                });
+            }
+
+            Ok(contract::快照::房间增量事件 {
+                房间标识: 房间标识.to_string(),
+                事件: events,
+                最新事件位置: latest_event_position,
+            })
+        })
+    }
+
+    pub fn 后台概览(&self) -> Result<contract::快照, contract::错误码> {
+        self.rt.block_on(async {
+            let room_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+            let msg_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+            Ok(contract::快照::后台概览 {
+                房间总数: room_count as u64,
+                消息总数: msg_count as u64,
+            })
+        })
+    }
+
+    pub fn 后台房间列表(&self) -> Result<contract::快照, contract::错误码> {
+        self.rt.block_on(async {
+            let rows = sqlx::query("SELECT room_id FROM rooms ORDER BY created_at DESC LIMIT 100")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+            let room_ids = rows
+                .into_iter()
+                .map(|r| r.get::<String, _>("room_id"))
+                .collect::<Vec<_>>();
+            Ok(contract::快照::后台房间列表 {
+                房间标识列表: room_ids,
+            })
+        })
+    }
+
+    pub fn 后台房间详情(&self, 房间标识: &str) -> Result<contract::快照, contract::错误码> {
+        self.rt.block_on(async {
+            let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
+                .bind(房间标识)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+            let Some(room_row) = room else {
+                return Err(contract::错误码::房间不存在);
+            };
+            let room_db_id: i64 = room_row.get("id");
+            let latest: i64 = room_row.get("latest_event_position");
+            let msg_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE room_id = $1")
+                    .bind(room_db_id)
+                    .fetch_one(&self.pool)
+                    .await
+                    .map_err(|_| contract::错误码::系统错误)?;
+            Ok(contract::快照::后台房间详情 {
+                房间标识: 房间标识.to_string(),
+                最新事件位置: latest,
+                消息总数: msg_count as u64,
+            })
+        })
+    }
 }
 
 impl 仓储端口 for Pg仓储 {

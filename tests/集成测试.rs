@@ -1,6 +1,12 @@
+use axum::{
+    body::{to_bytes, Body},
+    http::{Method, Request, StatusCode},
+};
 use serial_test::serial;
+use serde_json::Value;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tower::ServiceExt;
 
 #[test]
 #[serial]
@@ -82,6 +88,104 @@ fn 发送消息事务性顺序成立() {
     assert_eq!(messages, 1, "消息表应写入 1 条");
 }
 
+#[tokio::test]
+#[serial]
+async fn http冷路径闭环() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let app = koko::shell::构建路由(cfg.database_url.clone(), cfg.admin_password.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("H{:011}", uniq % 100_000_000_000);
+    let display_name = format!("http-user-{uniq}");
+
+    let (status, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"display_name": display_name})),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let session_id = bootstrap["session_id"]
+        .as_str()
+        .expect("应返回 session_id")
+        .to_string();
+
+    let (status, join) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/rooms/join-or-create",
+        Some(serde_json::json!({"session_id": session_id, "room_code": code})),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let room_id = join["room_id"].as_str().expect("应返回 room_id").to_string();
+
+    let (status, snapshot) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/rooms/{room_id}/snapshot?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(snapshot["room_id"].as_str(), Some(room_id.as_str()));
+
+    let (status, events) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/rooms/{room_id}/events?from=0"),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(events["events"].is_array());
+
+    let (status, admin_login) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/admin/login",
+        Some(serde_json::json!({"username":"admin","password":"admin"})),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let token = admin_login["token"].as_str().expect("应返回 admin token");
+    let headers = [("x-admin-token", token)];
+
+    let (status, overview) = send_json(
+        app.clone(),
+        Method::GET,
+        "/api/admin/overview",
+        None,
+        &headers,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(overview["room_count"].as_u64().unwrap_or(0) >= 1);
+
+    let (status, rooms) = send_json(app.clone(), Method::GET, "/api/admin/rooms", None, &headers).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(rooms["rooms"].as_array().is_some());
+
+    let (status, room_detail) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/admin/rooms/{room_id}"),
+        None,
+        &headers,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(room_detail["room_id"].as_str(), Some(room_id.as_str()));
+}
+
 fn 备份并清空环境变量(keys: &[&str]) -> Vec<(String, Option<String>)> {
     let mut out = Vec::with_capacity(keys.len());
     for key in keys {
@@ -97,5 +201,36 @@ fn 恢复环境变量(backup: Vec<(String, Option<String>)>) {
             Some(v) => env::set_var(key, v),
             None => env::remove_var(key),
         }
+    }
+}
+
+async fn send_json(
+    app: axum::Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+    headers: &[(&str, &str)],
+) -> (StatusCode, Value) {
+    let mut req = Request::builder().method(method).uri(uri);
+    for (k, v) in headers {
+        req = req.header(*k, *v);
+    }
+    let body = if let Some(v) = body {
+        req = req.header("content-type", "application/json");
+        Body::from(v.to_string())
+    } else {
+        Body::empty()
+    };
+
+    let response = app.oneshot(req.body(body).expect("request")).await.expect("response");
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    if bytes.is_empty() {
+        (status, serde_json::json!({}))
+    } else {
+        let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
+        (status, json)
     }
 }
