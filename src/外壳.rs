@@ -6,6 +6,10 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use socketioxide::{
+    extract::{Data, SocketRef},
+    SocketIo,
+};
 use tokio::task;
 
 use crate::{adapter::Pg仓储, contract, usecase};
@@ -21,6 +25,34 @@ pub fn 构建路由(database_url: String, admin_password: String) -> Router {
         database_url,
         admin_password,
     };
+    let realtime_state = state.clone();
+    let (socket_layer, io) = SocketIo::new_layer();
+    io.ns("/", move |socket: SocketRef| {
+        let state_for_subscribe = realtime_state.clone();
+        let state_for_send = realtime_state.clone();
+        async move {
+            socket.on(
+                "subscribe_room_stream",
+                move |s: SocketRef, Data::<RealtimeSubscribeBody>(payload)| {
+                    let state = state_for_subscribe.clone();
+                    async move {
+                        handle_realtime_subscribe(s, payload, state).await;
+                    }
+                },
+            );
+
+            socket.on(
+                "send_text_message",
+                move |s: SocketRef, Data::<RealtimeSendBody>(payload)| {
+                    let state = state_for_send.clone();
+                    async move {
+                        handle_realtime_send(s, payload, state).await;
+                    }
+                },
+            );
+        }
+    });
+
     Router::new()
         .route("/api/session/bootstrap", post(bootstrap_session))
         .route("/api/rooms/join-or-create", post(join_or_create_room))
@@ -30,6 +62,7 @@ pub fn 构建路由(database_url: String, admin_password: String) -> Router {
         .route("/api/admin/overview", get(admin_overview))
         .route("/api/admin/rooms", get(admin_rooms))
         .route("/api/admin/rooms/{room_id}", get(admin_room_detail))
+        .layer(socket_layer)
         .with_state(state)
 }
 
@@ -69,6 +102,20 @@ struct AdminLoginBody {
 #[derive(Serialize)]
 struct AdminLoginResp {
     token: String,
+}
+
+#[derive(Deserialize, Clone)]
+struct RealtimeSubscribeBody {
+    room_id: String,
+    from: i64,
+}
+
+#[derive(Deserialize, Clone)]
+struct RealtimeSendBody {
+    room_id: String,
+    session_id: String,
+    client_message_id: String,
+    text: String,
 }
 
 const ADMIN_TOKEN: &str = "koko-admin-token";
@@ -366,6 +413,107 @@ fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value>
             }),
         })
         .collect()
+}
+
+fn event_to_json(event: contract::领域事件) -> serde_json::Value {
+    match event {
+        contract::领域事件::消息已创建 {
+            房间标识,
+            消息标识,
+            客户端消息标识,
+            发送者会话标识,
+            文本,
+            事件位置,
+        } => serde_json::json!({
+            "type": "message_created",
+            "room_id": 房间标识,
+            "message_id": 消息标识,
+            "client_message_id": 客户端消息标识,
+            "sender_session_id": 发送者会话标识,
+            "body": 文本,
+            "event_position": 事件位置
+        }),
+    }
+}
+
+async fn handle_realtime_subscribe(
+    socket: SocketRef,
+    payload: RealtimeSubscribeBody,
+    state: 应用状态,
+) {
+    let room_id = payload.room_id.clone();
+    let from = payload.from;
+    let db = state.database_url.clone();
+    let result = task::spawn_blocking(move || {
+        let repo = Pg仓储::连接并迁移(&db)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
+        repo.拉取房间增量事件(&room_id, from)
+            .map_err(|code| map_domain_err_tuple(code))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(contract::快照::房间增量事件 {
+            房间标识,
+            事件,
+            最新事件位置,
+        })) => {
+            let control = serde_json::json!({
+                "kind": "subscribed",
+                "room_id": 房间标识,
+                "from": from,
+                "latest_event_position": 最新事件位置
+            });
+            let events_json = events_to_json(事件);
+            let _ = socket.emit("control_result", &control);
+            let _ = socket.emit("room_events", &events_json);
+        }
+        Ok(Ok(_)) => {
+            let payload =
+                serde_json::json!({"kind":"error","code":"system_error","message":"快照类型不匹配"});
+            let _ = socket.emit("control_result", &payload);
+        }
+        Ok(Err((_, code, message))) => {
+            let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
+            let _ = socket.emit("control_result", &payload);
+        }
+        Err(err) => {
+            let payload = serde_json::json!({"kind":"error","code":"system_error","message": format!("任务执行失败: {err}")});
+            let _ = socket.emit("control_result", &payload);
+        }
+    }
+}
+
+async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, state: 应用状态) {
+    let db = state.database_url.clone();
+    let result = task::spawn_blocking(move || {
+        let mut repo = Pg仓储::连接并迁移(&db)
+            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
+        usecase::发送文本消息(
+            &mut repo,
+            &payload.room_id,
+            &payload.session_id,
+            &payload.client_message_id,
+            &payload.text,
+        )
+        .map_err(|code| map_domain_err_tuple(code))
+    })
+    .await;
+
+    match result {
+        Ok(Ok(event)) => {
+            let payload = event_to_json(event);
+            let _ = socket.emit("room_event", &payload);
+        }
+        Ok(Err((_, code, message))) => {
+            let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
+            let _ = socket.emit("control_result", &payload);
+        }
+        Err(err) => {
+            let payload = serde_json::json!({"kind":"error","code":"system_error","message": format!("任务执行失败: {err}")});
+            let _ = socket.emit("control_result", &payload);
+        }
+    }
 }
 
 fn require_admin(headers: &HeaderMap) -> Result<(), axum::response::Response> {
