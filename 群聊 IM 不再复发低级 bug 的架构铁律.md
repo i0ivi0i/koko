@@ -14,6 +14,65 @@
 3. Telegram 官方更新机制以 `seq / pts / qts` 和 `getDifference` 为核心，说明成熟 IM 依赖“事件位置 + 缺口恢复”而不是“连接永不出错”。
 4. WhatsApp / Meta 公开资料持续强调多设备同步、security by design、reduce attack surface，说明稳定系统来自真相收口与复杂度收缩，而不是壳层越来越聪明。
 
+## 最新官方来源
+
+- Socket.IO How it works
+  https://socket.io/docs/v4/how-it-works/
+  关键点：官方明确双向连接可能建立在 `WebTransport`、`WebSocket`，最差情况是 `HTTP long-polling`；Engine.IO 默认会先保可靠性和升级机制，再追求纯 WebSocket 性能。页面显示的“实时”不等于系统应该抛弃 HTTP。
+
+- Socket.IO Delivery guarantees
+  https://socket.io/docs/v4/delivery-guarantees/
+  关键点：默认只有顺序保证与 `at most once`；若要更强交付保证，应用自己负责事件唯一 ID、持久化、offset 与重连补发。
+
+- Socket.IO Connection state recovery
+  https://socket.io/docs/v4/connection-state-recovery/
+  关键点：临时断线恢复不是万能同步机制，恢复失败时仍需要应用回到自己的快照 / 补洞路径。
+
+- Socket.IO Rooms
+  https://socket.io/docs/v4/rooms/
+  关键点：room 是 server-only concept，广播分组不等于业务成员真相。
+
+- Socket.IO Testing
+  https://socket.io/docs/v4/testing/
+  关键点：实时链路必须有真实 client/server 测试，不该只靠本地推测和手写探针自证。
+
+- socketioxide latest API
+  https://docs.rs/socketioxide/latest/socketioxide/
+  关键点：`SocketIo`、adapter、ack、state、rooms 都属于基础设施表面；适合做薄 adapter，不适合承载业务真相。
+
+- Telegram Working with Updates
+  https://core.telegram.org/api/updates
+  关键点：一旦 `seq / pts / qts` 发现 gap，就必须 `getDifference`；成熟 IM 的稳定性核心是位置序列与补洞，而不是“长连接永不掉”。
+
+- WhatsApp Multi-Device
+  https://engineering.fb.com/2021/07/14/security/whatsapp-multi-device/
+  关键点：多设备后每个设备拥有自己的身份，服务器维护“账号 -> 设备集合”的映射；真正要设计的是同步与真相归属，不是某个单壳页面状态机。
+
+- Meta Security Principles for Private Messaging
+  https://engineering.fb.com/wp-content/uploads/2022/07/Meta-Security-Principles-for-Private-Messaging-White-Paper-July-2022-2.pdf
+  关键点：`Security by Design and Defense in Depth`、`Reduce the Attack Surface`。减少复杂度本身就是减少 bug 和脆弱性的手段。
+
+## 热路径与冷路径职责
+
+### 1. HTTP 不是落后，乱用才落后
+
+- `HTTP / RPC` 适合做冷路径：登录、bootstrap、join room、load snapshot、send command、get difference、后台管理。
+- `WebSocket / WebTransport / socketioxide` 适合做热路径：订阅房间事件流、在线状态、实时广播、短延迟增量同步。
+- 真正不优雅的不是“用了 HTTP”，而是把冷路径和热路径混成一锅。
+
+### 2. 千万人在线的群聊 IM，不该把所有事都塞进 WebSocket
+
+- 只靠 HTTP，会让实时增量变钝。
+- 只靠 WebSocket，也会把快照、补洞、幂等、重试、权限裁决全塞进长连接层，最后更乱。
+- 成熟 IM 更常见的做法是：命令和快照走可恢复的请求路径，增量变化走实时事件流。
+
+### 3. `koko` 的正确职责划分
+
+- `HTTP`：bootstrap session、join room、load snapshot、send command、recover gap。
+- `socketioxide`：subscribe room stream、receive authoritative events、fanout、connection hint。
+- `application / domain`：消息是否合法、谁能发、谁能看、消息什么时候成立、事件位置如何推进。
+- `shell`：草稿、pending、连接提示、错误提示，不宣布业务真相。
+
 ## 核心铁律
 
 ### 1. ack 不是消息成立
