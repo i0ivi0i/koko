@@ -12,6 +12,7 @@ use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
 use tower_sessions::{Expiry, Session, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_sqlx_store::PostgresStore as AdminSessionStore;
 use uuid::Uuid;
@@ -158,10 +159,15 @@ pub fn server_router(
     crate::rt::install_realtime(&io, realtime);
 
     frontend_shell_router(frontend_dist_dir, asset_dir)
-        .nest("/api", api_router(store.clone(), io.clone()))
         .nest(
             "/api",
-            admin_api_router(store, admin_token).layer(admin_session_layer),
+            api_router(store.clone(), io.clone()).layer(TraceLayer::new_for_http()),
+        )
+        .nest(
+            "/api",
+            admin_api_router(store, admin_token)
+                .layer(TraceLayer::new_for_http())
+                .layer(admin_session_layer),
         )
         .layer(socket_layer)
 }
