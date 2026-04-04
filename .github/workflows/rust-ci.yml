@@ -24,7 +24,7 @@ jobs:
           - os: windows-latest
             toolchain: nightly
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure Rust ${{ matrix.toolchain }}
         shell: pwsh
