@@ -5,10 +5,24 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM"],
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./.tsbuildinfo",
     "skipLibCheck": true,
     "noEmitOnError": true,
-    "outDir": "./dist",
     "types": ["vitest/globals", "node"]
   },
-  "include": ["./**/*.ts"]
+  "watchOptions": {
+    "watchFile": "useFsEvents",
+    "watchDirectory": "useFsEvents",
+    "fallbackPolling": "dynamicPriority"
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["./dist", "./node_modules"]
 }

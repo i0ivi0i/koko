@@ -5,7 +5,7 @@ import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 格式化消息 } from "./视图.js";
 
 export class 聊天壳 extends LitElement {
-  static styles = css`
+  static override styles = css`
     :host { display: block; padding: 16px; font-family: "Microsoft YaHei", sans-serif; }
     .row { display: flex; gap: 8px; margin-bottom: 12px; }
     input { padding: 8px; }
@@ -21,7 +21,7 @@ export class 聊天壳 extends LitElement {
     this.transport = transport;
   }
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     void this.bootstrap();
   }
@@ -77,7 +77,7 @@ export class 聊天壳 extends LitElement {
     return out;
   }
 
-  render() {
+  override render() {
     return html`
       <div class="row">
         <input

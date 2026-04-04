@@ -7,6 +7,7 @@
     "test": "vitest run --environment jsdom",
     "test:e2e": "vitest run --environment jsdom tests/端到端测试.spec.ts",
     "typecheck": "tsc --noEmit",
+    "typecheck:watch": "tsc --noEmit --watch --preserveWatchOutput",
     "build": "pnpm typecheck && esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap",
     "dev:watch": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch"
   },

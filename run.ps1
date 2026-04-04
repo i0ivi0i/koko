@@ -25,6 +25,7 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cargoPath = (Get-Command cargo.exe -ErrorAction Stop).Source
 $pnpmPath = (Get-Command pnpm.cmd -ErrorAction Stop).Source
 $frontendWatch = $null
+$frontendTypeWatch = $null
 
 try {
     # run.ps1 只做编排：先构建前端产物，再开 watch，最后拉起后端。
@@ -37,6 +38,12 @@ try {
         -WorkingDirectory $repoRoot `
         -PassThru
 
+    Write-Host "前端类型守卫: pnpm --dir frontend run typecheck:watch"
+    $frontendTypeWatch = Start-Process -FilePath $pnpmPath `
+        -ArgumentList @("--dir", "frontend", "run", "typecheck:watch") `
+        -WorkingDirectory $repoRoot `
+        -PassThru
+
     Write-Host "启动后端: cargo run"
     $appPort = [Environment]::GetEnvironmentVariable("APP_PORT")
     if ([string]::IsNullOrWhiteSpace($appPort)) {
@@ -46,6 +53,9 @@ try {
     & $cargoPath run
 }
 finally {
+    if ($frontendTypeWatch -and -not $frontendTypeWatch.HasExited) {
+        Stop-Process -Id $frontendTypeWatch.Id -Force
+    }
     if ($frontendWatch -and -not $frontendWatch.HasExited) {
         Stop-Process -Id $frontendWatch.Id -Force
     }

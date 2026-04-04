@@ -3,7 +3,7 @@ import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 格式化后台概览 } from "./视图.js";
 
 export class 后台壳 extends LitElement {
-  static styles = css`
+  static override styles = css`
     :host { display: block; padding: 16px; font-family: "Microsoft YaHei", sans-serif; }
     .row { display: flex; gap: 8px; margin-bottom: 12px; }
     input { padding: 8px; }
@@ -55,7 +55,7 @@ export class 后台壳 extends LitElement {
     return this.roomIds.filter((id) => id.includes(this.roomFilter.trim()));
   }
 
-  render() {
+  override render() {
     return html`
       <section id="adminShell">
         <div class="row">

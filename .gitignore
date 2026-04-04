@@ -16,6 +16,7 @@ dist/
 .sqlx/.gitkeep
 .env
 frontend/node_modules/
+frontend/.tsbuildinfo
 
 # Common local OS noise.
 Thumbs.db
