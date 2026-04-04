@@ -380,11 +380,7 @@ impl AdminCredentialPort for AdminTokenVerifier {
 pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .compact()
-        .finish();
+    let subscriber = tracing_subscriber_builder(filter).finish();
 
     let result = match tracing::subscriber::set_global_default(subscriber) {
         Ok(()) => TracingInit::Initialized,
@@ -392,6 +388,21 @@ pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     };
 
     Ok(result)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn tracing_subscriber_builder(
+    filter: EnvFilter,
+) -> tracing_subscriber::fmt::SubscriberBuilder<
+    tracing_subscriber::fmt::format::DefaultFields,
+    tracing_subscriber::fmt::format::Format<tracing_subscriber::fmt::format::Compact>,
+    EnvFilter,
+    fn() -> io::Stdout,
+> {
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .compact()
 }
 
 impl Clock for SystemClock {
@@ -711,13 +722,16 @@ fn write_admin_token_config(config_path: &Path, admin_token: &str) -> Result<(),
 mod tests {
     use super::{
         AppConfig, StartupLanAddressCandidate, build_startup_banner_from_bind_addr_with_lan_candidates,
-        collect_startup_banner_lan_urls,
+        collect_startup_banner_lan_urls, tracing_subscriber_builder,
     };
     use std::{
-        env, fs,
+        env, fs, io,
         net::{IpAddr, Ipv4Addr, Ipv6Addr},
         path::{Path, PathBuf},
+        sync::{Arc, Mutex},
     };
+    use tracing_subscriber::fmt::MakeWriter;
+    use tracing_subscriber::EnvFilter;
     use uuid::Uuid;
 
     #[test]
@@ -783,6 +797,27 @@ mod tests {
         );
 
         assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn init_tracing_uses_compact_target_formatter() {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber_builder(EnvFilter::new("info"))
+            .with_writer(BufferWriter(buffer.clone()))
+            .with_ansi(false)
+            .finish();
+
+        tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!("format_guard_span");
+            let _entered = span.enter();
+            tracing::info!(request_id = 7, "hello");
+        });
+
+        let output = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
+        assert!(output.contains("format_guard_span"), "{output}");
+        assert!(output.contains("koko::support::tests"), "{output}");
+        assert!(output.contains("request_id=7"), "{output}");
+        assert!(output.lines().count() == 1, "{output}");
     }
 
     fn sample_startup_config() -> AppConfig {
@@ -851,6 +886,30 @@ mod tests {
     impl Drop for TempConfigRootGuard {
         fn drop(&mut self) {
             remove_temp_config_root(&self.0);
+        }
+    }
+
+    #[derive(Clone)]
+    struct BufferWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl<'a> MakeWriter<'a> for BufferWriter {
+        type Writer = BufferSink;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            BufferSink(self.0.clone())
+        }
+    }
+
+    struct BufferSink(Arc<Mutex<Vec<u8>>>);
+
+    impl io::Write for BufferSink {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
         }
     }
 
