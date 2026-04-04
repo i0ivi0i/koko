@@ -44,7 +44,7 @@ time = "0.3.47"
 axum = "0.8.8"
 axum-extra = { version = "0.12.5", features = ["cookie"] }
 if-addrs = "0.15.0"
-socketioxide = { version = "0.18.2", features = ["extensions"] }
+socketioxide = { version = "0.18.2", features = ["extensions", "tracing"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
 tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tower-sessions = "0.14"

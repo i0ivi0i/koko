@@ -380,7 +380,11 @@ impl AdminCredentialPort for AdminTokenVerifier {
 pub fn init_tracing(default_filter: &str) -> Result<TracingInit, Infallible> {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
-    let subscriber = tracing_subscriber::fmt().with_env_filter(filter).finish();
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .compact()
+        .finish();
 
     let result = match tracing::subscriber::set_global_default(subscriber) {
         Ok(()) => TracingInit::Initialized,
