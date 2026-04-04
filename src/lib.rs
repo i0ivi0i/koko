@@ -2,3 +2,5 @@
 pub mod entry;
 #[path = "总装.rs"]
 pub mod assembly;
+#[path = "契约.rs"]
+pub mod contract;

@@ -1,4 +1,5 @@
 use std::{env, io};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 配置 {
@@ -22,6 +23,28 @@ pub fn 读取配置() -> io::Result<配置> {
         app_port,
         rust_log,
     })
+}
+
+/// 日志系统必须天然存在：启动时默认初始化，开发和生产只在详细度上有差异。
+pub fn 初始化日志() -> io::Result<()> {
+    let _ = dotenvy::dotenv();
+    let filter_text = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    let filter = EnvFilter::try_new(filter_text.clone()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("RUST_LOG 非法: {filter_text}"),
+        )
+    })?;
+
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_level(true)
+        .finish();
+
+    let _ = tracing::subscriber::set_global_default(subscriber);
+    Ok(())
 }
 
 fn 读取必填环境变量(key: &str) -> io::Result<String> {
