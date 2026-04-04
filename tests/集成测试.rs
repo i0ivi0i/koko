@@ -13,6 +13,20 @@ fn 启动缺配置即失败() {
     恢复环境变量(backup);
 }
 
+#[test]
+fn 数据库真相模型可迁移() {
+    let sql = std::fs::read_to_string("migrations/0001_初始化真相模型.sql")
+        .expect("应存在初始化迁移文件");
+
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS sessions"));
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS rooms"));
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS room_members"));
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS room_events"));
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS messages"));
+    assert!(sql.contains("UNIQUE (room_id, event_position)"));
+    assert!(sql.contains("FOREIGN KEY (room_id, event_position)"));
+}
+
 fn 备份并清空环境变量(keys: &[&str]) -> Vec<(String, Option<String>)> {
     let mut out = Vec::with_capacity(keys.len());
     for key in keys {

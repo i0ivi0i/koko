@@ -47,6 +47,22 @@ pub fn 初始化日志() -> io::Result<()> {
     Ok(())
 }
 
+pub async fn 自动追平迁移(database_url: &str) -> io::Result<()> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
+        .await
+        .map_err(|err| io::Error::other(format!("连接数据库失败: {err}")))?;
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .map_err(|err| io::Error::other(format!("执行迁移失败: {err}")))?;
+
+    pool.close().await;
+    Ok(())
+}
+
 fn 读取必填环境变量(key: &str) -> io::Result<String> {
     match env::var(key) {
         Ok(v) if !v.trim().is_empty() => Ok(v),
