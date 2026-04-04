@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run --environment jsdom",
+    "test:e2e": "vitest run --environment jsdom tests/端到端测试.spec.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json"
   },

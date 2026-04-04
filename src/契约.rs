@@ -2,13 +2,18 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum 命令 {
     引导匿名会话,
-    按短码进房或建房 { 房间短码: String },
+    按短码进房或建房 {
+        房间短码: String,
+    },
     发送文本消息 {
         房间标识: String,
         客户端消息标识: String,
         文本: String,
     },
-    后台登录 { 用户名: String, 密码: String },
+    后台登录 {
+        用户名: String,
+        密码: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,11 +24,18 @@ pub enum 命令结果 {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum 查询 {
-    拉取房间快照 { 房间标识: String },
-    拉取房间增量事件 { 房间标识: String, 从位置开始: i64 },
+    拉取房间快照 {
+        房间标识: String,
+    },
+    拉取房间增量事件 {
+        房间标识: String,
+        从位置开始: i64,
+    },
     后台概览,
     后台房间列表,
-    后台房间详情 { 房间标识: String },
+    后台房间详情 {
+        房间标识: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,8 +81,12 @@ pub enum 领域事件 {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum 控制面结果 {
-    订阅已建立 { 房间标识: String, 起始位置: i64 },
-    需要重拉快照 { 房间标识: String, 期望位置: i64 },
+    订阅已建立 {
+        房间标识: String, 起始位置: i64
+    },
+    需要重拉快照 {
+        房间标识: String, 期望位置: i64
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

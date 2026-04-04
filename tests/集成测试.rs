@@ -2,8 +2,8 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use serial_test::serial;
 use serde_json::Value;
+use serial_test::serial;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
@@ -118,14 +118,19 @@ fn realtime主链闭环() {
     };
     assert!(matches!(
         control,
-        koko::contract::控制面结果::订阅已建立 { 起始位置: 0, .. }
+        koko::contract::控制面结果::订阅已建立 {
+            起始位置: 0, ..
+        }
     ));
 
-    let event = koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "rt-c-1", "hello rt")
-        .expect("发送消息应成功");
+    let event =
+        koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "rt-c-1", "hello rt")
+            .expect("发送消息应成功");
     assert!(matches!(
         event,
-        koko::contract::领域事件::消息已创建 { 事件位置: 1, .. }
+        koko::contract::领域事件::消息已创建 {
+            事件位置: 1, ..
+        }
     ));
 
     let delta = repo
@@ -180,7 +185,10 @@ async fn http冷路径闭环() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let room_id = join["room_id"].as_str().expect("应返回 room_id").to_string();
+    let room_id = join["room_id"]
+        .as_str()
+        .expect("应返回 room_id")
+        .to_string();
 
     let (status, snapshot) = send_json(
         app.clone(),
@@ -227,7 +235,8 @@ async fn http冷路径闭环() {
     assert_eq!(status, StatusCode::OK);
     assert!(overview["room_count"].as_u64().unwrap_or(0) >= 1);
 
-    let (status, rooms) = send_json(app.clone(), Method::GET, "/api/admin/rooms", None, &headers).await;
+    let (status, rooms) =
+        send_json(app.clone(), Method::GET, "/api/admin/rooms", None, &headers).await;
     assert_eq!(status, StatusCode::OK);
     assert!(rooms["rooms"].as_array().is_some());
 
@@ -279,7 +288,10 @@ async fn send_json(
         Body::empty()
     };
 
-    let response = app.oneshot(req.body(body).expect("request")).await.expect("response");
+    let response = app
+        .oneshot(req.body(body).expect("request"))
+        .await
+        .expect("response");
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX)
         .await

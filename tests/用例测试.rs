@@ -1,5 +1,5 @@
-use std::io;
 use std::collections::{HashMap, HashSet};
+use std::io;
 use std::sync::{Arc, Mutex};
 
 #[test]
@@ -66,7 +66,10 @@ struct 假仓储 {
 }
 
 impl koko::usecase::仓储端口 for 假仓储 {
-    fn 创建匿名会话(&mut self, 显示名: &str) -> Result<koko::contract::快照, koko::contract::错误码> {
+    fn 创建匿名会话(
+        &mut self,
+        显示名: &str,
+    ) -> Result<koko::contract::快照, koko::contract::错误码> {
         self.会话计数 += 1;
         Ok(koko::contract::快照::会话 {
             会话标识: format!("s-{}", self.会话计数),
@@ -148,7 +151,9 @@ fn 引导匿名会话可返回会话快照() {
     let mut repo = 假仓储::default();
     let out = koko::usecase::引导匿名会话(&mut repo, "测试用户").expect("应创建会话");
     match out {
-        koko::contract::快照::会话 { 会话标识, 显示名 } => {
+        koko::contract::快照::会话 {
+            会话标识, 显示名
+        } => {
             assert!(会话标识.starts_with("s-"));
             assert_eq!(显示名, "测试用户");
         }

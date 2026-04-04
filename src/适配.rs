@@ -38,11 +38,12 @@ impl Pg仓储 {
         房间标识: &str,
     ) -> Result<(i64, i64, i64), contract::错误码> {
         self.rt.block_on(async {
-            let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
-                .bind(房间标识)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|_| contract::错误码::系统错误)?;
+            let room =
+                sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
+                    .bind(房间标识)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(|_| contract::错误码::系统错误)?;
             let Some(room_row) = room else {
                 return Err(contract::错误码::房间不存在);
             };
@@ -153,13 +154,17 @@ impl Pg仓储 {
         })
     }
 
-    pub fn 后台房间详情(&self, 房间标识: &str) -> Result<contract::快照, contract::错误码> {
+    pub fn 后台房间详情(
+        &self,
+        房间标识: &str,
+    ) -> Result<contract::快照, contract::错误码> {
         self.rt.block_on(async {
-            let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
-                .bind(房间标识)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|_| contract::错误码::系统错误)?;
+            let room =
+                sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
+                    .bind(房间标识)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(|_| contract::错误码::系统错误)?;
             let Some(room_row) = room else {
                 return Err(contract::错误码::房间不存在);
             };
@@ -181,7 +186,10 @@ impl Pg仓储 {
 }
 
 impl 仓储端口 for Pg仓储 {
-    fn 创建匿名会话(&mut self, 显示名: &str) -> Result<contract::快照, contract::错误码> {
+    fn 创建匿名会话(
+        &mut self,
+        显示名: &str,
+    ) -> Result<contract::快照, contract::错误码> {
         self.rt.block_on(async {
             let row = sqlx::query(
                 "INSERT INTO sessions (session_id, display_name) \
@@ -298,13 +306,16 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
-    fn 拉取房间快照(&self, 房间标识: &str) -> Result<contract::快照, contract::错误码> {
+    fn 拉取房间快照(
+        &self, 房间标识: &str
+    ) -> Result<contract::快照, contract::错误码> {
         self.rt.block_on(async {
-            let room = sqlx::query("SELECT room_id, latest_event_position FROM rooms WHERE room_id = $1")
-                .bind(房间标识)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|_| contract::错误码::系统错误)?;
+            let room =
+                sqlx::query("SELECT room_id, latest_event_position FROM rooms WHERE room_id = $1")
+                    .bind(房间标识)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(|_| contract::错误码::系统错误)?;
             let Some(row) = room else {
                 return Err(contract::错误码::房间不存在);
             };

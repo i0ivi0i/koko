@@ -16,7 +16,8 @@ pub async fn 启动() -> std::io::Result<()> {
     }
     migrate_result?;
 
-    let app = crate::shell::构建路由(config.database_url.clone(), config.admin_password.clone());
+    let app =
+        crate::shell::构建路由(config.database_url.clone(), config.admin_password.clone());
     let addr = format!("0.0.0.0:{}", config.app_port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

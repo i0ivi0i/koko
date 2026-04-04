@@ -127,10 +127,14 @@ async fn bootstrap_session(
     let database_url = state.database_url.clone();
     let display_name = body.display_name.clone();
     let result = task::spawn_blocking(move || {
-        let mut repo = Pg仓储::连接并迁移(&database_url)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
-        usecase::引导匿名会话(&mut repo, &display_name)
-            .map_err(|code| map_domain_err_tuple(code))
+        let mut repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
+        usecase::引导匿名会话(&mut repo, &display_name).map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -145,9 +149,12 @@ async fn bootstrap_session(
     };
     match result {
         Ok(contract::快照::会话 {
-            会话标识,
-            显示名,
-        }) => (StatusCode::OK, Json(serde_json::json!({"session_id": 会话标识, "display_name": 显示名}))).into_response(),
+            会话标识, 显示名
+        }) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"session_id": 会话标识, "display_name": 显示名})),
+        )
+            .into_response(),
         Ok(_) => err_resp(
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
@@ -165,10 +172,14 @@ async fn join_or_create_room(
     let session_id = body.session_id.clone();
     let room_code = body.room_code.clone();
     let result = task::spawn_blocking(move || {
-        let mut repo = Pg仓储::连接并迁移(&database_url)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
-        usecase::按短码进房或建房(&mut repo, &session_id, &room_code)
-            .map_err(|code| map_domain_err_tuple(code))
+        let mut repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
+        usecase::按短码进房或建房(&mut repo, &session_id, &room_code).map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -185,7 +196,11 @@ async fn join_or_create_room(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
-        }) => (StatusCode::OK, Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置}))).into_response(),
+        }) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
+        )
+            .into_response(),
         Ok(_) => err_resp(
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
@@ -204,9 +219,14 @@ async fn load_room_snapshot(
     let session_id = query.session_id.clone();
     let room_id_copy = room_id.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
-        usecase::加载房间快照(&repo, &room_id_copy, &session_id).map_err(|code| map_domain_err_tuple(code))
+        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
+        usecase::加载房间快照(&repo, &room_id_copy, &session_id).map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -223,7 +243,11 @@ async fn load_room_snapshot(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
-        }) => (StatusCode::OK, Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置}))).into_response(),
+        }) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
+        )
+            .into_response(),
         Ok(_) => err_resp(
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
@@ -242,10 +266,15 @@ async fn load_room_events(
     let room_id_copy = room_id.clone();
     let from = query.from;
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
+        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
         repo.拉取房间增量事件(&room_id_copy, from)
-            .map_err(|code| map_domain_err_tuple(code))
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -284,21 +313,31 @@ async fn admin_login(
             "管理员账号或密码错误",
         );
     }
-    (StatusCode::OK, Json(AdminLoginResp { token: ADMIN_TOKEN.to_string() })).into_response()
+    (
+        StatusCode::OK,
+        Json(AdminLoginResp {
+            token: ADMIN_TOKEN.to_string(),
+        }),
+    )
+        .into_response()
 }
 
 async fn admin_overview(
-    State(state): State<应用状态>,
-    headers: HeaderMap,
+    State(state): State<应用状态>, headers: HeaderMap
 ) -> impl IntoResponse {
-    if let Err(resp) = require_admin(&headers) {
-        return resp;
+    if let Err((status, code, message)) = require_admin(&headers) {
+        return err_resp(status, code, message);
     }
     let database_url = state.database_url.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
-        repo.后台概览().map_err(|code| map_domain_err_tuple(code))
+        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
+        repo.后台概览().map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -313,26 +352,35 @@ async fn admin_overview(
     };
     match result {
         Ok(contract::快照::后台概览 {
-            房间总数,
-            消息总数,
-        }) => (StatusCode::OK, Json(serde_json::json!({"room_count": 房间总数, "message_count": 消息总数}))).into_response(),
-        Ok(_) => err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", "返回快照类型不匹配"),
+            房间总数, 消息总数
+        }) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"room_count": 房间总数, "message_count": 消息总数})),
+        )
+            .into_response(),
+        Ok(_) => err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "返回快照类型不匹配",
+        ),
         Err(code) => tuple_err_to_resp(code),
     }
 }
 
-async fn admin_rooms(
-    State(state): State<应用状态>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    if let Err(resp) = require_admin(&headers) {
-        return resp;
+async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> impl IntoResponse {
+    if let Err((status, code, message)) = require_admin(&headers) {
+        return err_resp(status, code, message);
     }
     let database_url = state.database_url.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
-        repo.后台房间列表().map_err(|code| map_domain_err_tuple(code))
+        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
+        repo.后台房间列表().map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -346,10 +394,16 @@ async fn admin_rooms(
         }
     };
     match result {
-        Ok(contract::快照::后台房间列表 { 房间标识列表 }) => {
-            (StatusCode::OK, Json(serde_json::json!({"rooms": 房间标识列表}))).into_response()
-        }
-        Ok(_) => err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", "返回快照类型不匹配"),
+        Ok(contract::快照::后台房间列表 { 房间标识列表 }) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"rooms": 房间标识列表})),
+        )
+            .into_response(),
+        Ok(_) => err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "返回快照类型不匹配",
+        ),
         Err(code) => tuple_err_to_resp(code),
     }
 }
@@ -359,15 +413,21 @@ async fn admin_room_detail(
     headers: HeaderMap,
     Path(room_id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_admin(&headers) {
-        return resp;
+    if let Err((status, code, message)) = require_admin(&headers) {
+        return err_resp(status, code, message);
     }
     let database_url = state.database_url.clone();
     let room_id_copy = room_id.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
-        repo.后台房间详情(&room_id_copy).map_err(|code| map_domain_err_tuple(code))
+        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
+        repo.后台房间详情(&room_id_copy)
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
@@ -445,10 +505,15 @@ async fn handle_realtime_subscribe(
     let from = payload.from;
     let db = state.database_url.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&db)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
+        let repo = Pg仓储::连接并迁移(&db).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
         repo.拉取房间增量事件(&room_id, from)
-            .map_err(|code| map_domain_err_tuple(code))
+            .map_err(map_domain_err_tuple)
     })
     .await;
 
@@ -469,8 +534,7 @@ async fn handle_realtime_subscribe(
             let _ = socket.emit("room_events", &events_json);
         }
         Ok(Ok(_)) => {
-            let payload =
-                serde_json::json!({"kind":"error","code":"system_error","message":"快照类型不匹配"});
+            let payload = serde_json::json!({"kind":"error","code":"system_error","message":"快照类型不匹配"});
             let _ = socket.emit("control_result", &payload);
         }
         Ok(Err((_, code, message))) => {
@@ -487,8 +551,13 @@ async fn handle_realtime_subscribe(
 async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, state: 应用状态) {
     let db = state.database_url.clone();
     let result = task::spawn_blocking(move || {
-        let mut repo = Pg仓储::连接并迁移(&db)
-            .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, "system_error", err.to_string()))?;
+        let mut repo = Pg仓储::连接并迁移(&db).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                err.to_string(),
+            )
+        })?;
         usecase::发送文本消息(
             &mut repo,
             &payload.room_id,
@@ -496,7 +565,7 @@ async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, stat
             &payload.client_message_id,
             &payload.text,
         )
-        .map_err(|code| map_domain_err_tuple(code))
+        .map_err(map_domain_err_tuple)
     })
     .await;
 
@@ -516,7 +585,7 @@ async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, stat
     }
 }
 
-fn require_admin(headers: &HeaderMap) -> Result<(), axum::response::Response> {
+fn require_admin(headers: &HeaderMap) -> Result<(), (StatusCode, &'static str, &'static str)> {
     let token = headers
         .get("x-admin-token")
         .and_then(|v| v.to_str().ok())
@@ -524,7 +593,7 @@ fn require_admin(headers: &HeaderMap) -> Result<(), axum::response::Response> {
     if token == ADMIN_TOKEN {
         Ok(())
     } else {
-        Err(err_resp(
+        Err((
             StatusCode::UNAUTHORIZED,
             "admin_session_required",
             "缺少管理员会话",
@@ -554,13 +623,11 @@ fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str,
             "room_not_found",
             "房间不存在".to_string(),
         ),
-        contract::错误码::成员资格不足 => {
-            (
-                StatusCode::FORBIDDEN,
-                "membership_required",
-                "成员资格不足".to_string(),
-            )
-        }
+        contract::错误码::成员资格不足 => (
+            StatusCode::FORBIDDEN,
+            "membership_required",
+            "成员资格不足".to_string(),
+        ),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
@@ -574,5 +641,12 @@ fn err_resp(
     code: &'static str,
     message: impl Into<String>,
 ) -> axum::response::Response {
-    (status, Json(ApiError { code, message: message.into() })).into_response()
+    (
+        status,
+        Json(ApiError {
+            code,
+            message: message.into(),
+        }),
+    )
+        .into_response()
 }

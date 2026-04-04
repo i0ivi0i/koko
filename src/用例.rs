@@ -2,7 +2,9 @@ use crate::{contract, domain};
 
 /// 用例层只编排业务动作，持久化细节通过端口下沉到适配层实现。
 pub trait 仓储端口 {
-    fn 创建匿名会话(&mut self, 显示名: &str) -> Result<contract::快照, contract::错误码>;
+    fn 创建匿名会话(
+        &mut self, 显示名: &str
+    ) -> Result<contract::快照, contract::错误码>;
 
     fn 按短码进房或建房(
         &mut self,
@@ -16,7 +18,9 @@ pub trait 仓储端口 {
         会话标识: &str,
     ) -> Result<bool, contract::错误码>;
 
-    fn 拉取房间快照(&self, 房间标识: &str) -> Result<contract::快照, contract::错误码>;
+    fn 拉取房间快照(
+        &self, 房间标识: &str
+    ) -> Result<contract::快照, contract::错误码>;
 
     fn 创建消息事件(
         &mut self,
