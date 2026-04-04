@@ -11,7 +11,7 @@ pub struct 配置 {
 
 /// 读取启动所需的最小配置。缺关键配置时必须失败，避免静默启动。
 pub fn 读取配置() -> io::Result<配置> {
-    let _ = dotenvy::dotenv();
+    尝试加载dotenv();
     let database_url = 读取必填环境变量("DATABASE_URL")?;
     let admin_password = 读取必填环境变量("ADMIN_PASSWORD")?;
     let app_port = 读取端口("APP_PORT")?;
@@ -27,7 +27,7 @@ pub fn 读取配置() -> io::Result<配置> {
 
 /// 日志系统必须天然存在：启动时默认初始化，开发和生产只在详细度上有差异。
 pub fn 初始化日志() -> io::Result<()> {
-    let _ = dotenvy::dotenv();
+    尝试加载dotenv();
     let filter_text = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     let filter = EnvFilter::try_new(filter_text.clone()).map_err(|_| {
         io::Error::new(
@@ -45,6 +45,13 @@ pub fn 初始化日志() -> io::Result<()> {
 
     let _ = tracing::subscriber::set_global_default(subscriber);
     Ok(())
+}
+
+fn 尝试加载dotenv() {
+    if env::var("KOKO_SKIP_DOTENV").ok().as_deref() == Some("1") {
+        return;
+    }
+    let _ = dotenvy::dotenv();
 }
 
 pub async fn 自动追平迁移(database_url: &str) -> io::Result<()> {

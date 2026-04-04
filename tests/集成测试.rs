@@ -4,8 +4,15 @@ use std::env;
 #[test]
 #[serial]
 fn 启动缺配置即失败() {
-    let keys = ["DATABASE_URL", "ADMIN_PASSWORD", "APP_PORT", "RUST_LOG"];
+    let keys = [
+        "DATABASE_URL",
+        "ADMIN_PASSWORD",
+        "APP_PORT",
+        "RUST_LOG",
+        "KOKO_SKIP_DOTENV",
+    ];
     let backup = 备份并清空环境变量(&keys);
+    env::set_var("KOKO_SKIP_DOTENV", "1");
 
     let result = koko::assembly::读取配置();
     assert!(result.is_err(), "缺关键配置时必须失败");
