@@ -720,6 +720,38 @@ pub fn serde_wire_name<T: Serialize>(value: &T) -> String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceContext {
+    pub request_id: Uuid,
+    pub session_id: Option<Uuid>,
+    pub room_id: Option<Uuid>,
+    pub client_message_id: Option<Uuid>,
+    pub event_position: Option<i64>,
+}
+
+pub fn trace_line(layer: &str, operation: &str, context: &TraceContext) -> String {
+    format!(
+        "layer={layer} operation={operation} request_id={} session_id={} room_id={} client_message_id={} event_position={}",
+        context.request_id,
+        opt_uuid(context.session_id),
+        opt_uuid(context.room_id),
+        opt_uuid(context.client_message_id),
+        opt_i64(context.event_position),
+    )
+}
+
+fn opt_uuid(value: Option<Uuid>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn opt_i64(value: Option<i64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".to_string())
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn load_or_bootstrap_admin_token(
     config_path: &Path,

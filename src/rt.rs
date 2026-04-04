@@ -206,6 +206,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                     async move {
                         let room_id = payload.room_id;
                         let client_message_id = payload.client_message_id;
+                        let request_id = Uuid::now_v7();
                         let input = send_text_message_input(session, payload);
                         match app::send_text_message(
                             &state.store,
@@ -218,7 +219,19 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         .await
                         {
                             Ok(crate::contract::AppEvent::MessageCreated(payload)) => {
+                                let trace = crate::support::trace_line(
+                                    "adapter_rt",
+                                    "send_text_message",
+                                    &crate::support::TraceContext {
+                                        request_id,
+                                        session_id: Some(session.session_id),
+                                        room_id: Some(room_id),
+                                        client_message_id,
+                                        event_position: Some(payload.event_position),
+                                    },
+                                );
                                 info!(
+                                    trace = %trace,
                                     room_id = %room_id,
                                     session_id = %session.session_id,
                                     client_message_id = ?client_message_id,
@@ -236,6 +249,17 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                 emit_to_room(&io, room_id, "message_created", &payload).await;
                             }
                             Err(error) => {
+                                let trace = crate::support::trace_line(
+                                    "adapter_rt",
+                                    "send_text_message",
+                                    &crate::support::TraceContext {
+                                        request_id,
+                                        session_id: Some(session.session_id),
+                                        room_id: Some(room_id),
+                                        client_message_id,
+                                        event_position: None,
+                                    },
+                                );
                                 emit_command_rejected(
                                     &socket,
                                     &error,
@@ -244,6 +268,7 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                     client_message_id,
                                 );
                                 warn!(
+                                    trace = %trace,
                                     room_id = %room_id,
                                     session_id = %session.session_id,
                                     client_message_id = ?client_message_id,

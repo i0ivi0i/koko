@@ -1,7 +1,16 @@
 #[test]
 fn send_message_trace_fields_must_be_present() {
-    // 基线守卫：先确认日志里缺什么，后续重构再补齐。
-    let log_line = "layer=application operation=send_text_message";
+    let log_line = koko::support::trace_line(
+        "application",
+        "send_text_message",
+        &koko::support::TraceContext {
+            request_id: uuid::Uuid::from_u128(1),
+            session_id: Some(uuid::Uuid::from_u128(2)),
+            room_id: Some(uuid::Uuid::from_u128(3)),
+            client_message_id: Some(uuid::Uuid::from_u128(4)),
+            event_position: Some(5),
+        },
+    );
 
     assert!(
         log_line.contains("request_id"),

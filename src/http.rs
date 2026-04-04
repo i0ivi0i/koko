@@ -17,6 +17,7 @@ use tower_http::{
 };
 use tower_sessions::{Expiry, Session, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_sqlx_store::PostgresStore as AdminSessionStore;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -315,7 +316,8 @@ async fn send_room_message(
     Json(request): Json<SendMessageRequest>,
 ) -> Result<Json<MessageCreated>, (StatusCode, Json<ErrorPayload>)> {
     let session_id = resolve_session_id(&jar)?;
-    let event = send_text_message(
+    let request_id = Uuid::now_v7();
+    let event = match send_text_message(
         &state.store,
         &state.store,
         &state.store,
@@ -329,9 +331,45 @@ async fn send_room_message(
         },
     )
     .await
-    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::SendTextMessage))?;
+    {
+        Ok(event) => event,
+        Err(error) => {
+            let trace = support::trace_line(
+                "adapter_http",
+                "send_text_message",
+                &support::TraceContext {
+                    request_id,
+                    session_id: Some(session_id),
+                    room_id: Some(room_id),
+                    client_message_id: request.client_message_id,
+                    event_position: None,
+                },
+            );
+            warn!(
+                trace = %trace,
+                code = support::app_error_code(&error),
+                "send_room_message rejected"
+            );
+            return Err(map_http_error_with_operation(
+                error,
+                ErrorOperation::SendTextMessage,
+            ));
+        }
+    };
 
     let AppEvent::MessageCreated(payload) = event;
+    let trace = support::trace_line(
+        "adapter_http",
+        "send_text_message",
+        &support::TraceContext {
+            request_id,
+            session_id: Some(session_id),
+            room_id: Some(room_id),
+            client_message_id: payload.client_message_id,
+            event_position: Some(payload.event_position),
+        },
+    );
+    info!(trace = %trace, "send_room_message accepted");
     let _ = state
         .io
         .to(room_id.to_string())
