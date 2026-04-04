@@ -113,6 +113,41 @@ async fn join_room_endpoint_returns_invalid_room_code_error_payload(
 }
 
 #[sqlx::test]
+async fn send_room_message_returns_application_error_context_payload(
+    pool: sqlx::PgPool,
+) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
+
+    let (_owner_session, owner_cookie) = bootstrap_session_with_cookie(&harness).await;
+    let joined = join_room(&harness, &owner_cookie, "d1234").await;
+    let (_other_session, other_cookie) = bootstrap_session_with_cookie(&harness).await;
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/rooms/{}/messages", joined.room_id))
+                .header("content-type", "application/json")
+                .header(COOKIE, &other_cookie)
+                .body(Body::from(r#"{ "body": "blocked" }"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let payload: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["code"], "membership_required");
+    assert_eq!(payload["layer"], "application");
+    assert_eq!(payload["operation"], "send_text_message");
+    Ok(())
+}
+
+#[sqlx::test]
 async fn snapshot_endpoint_returns_joined_room_history(pool: sqlx::PgPool) -> sqlx::Result<()> {
     let harness = HttpHarness::new(pool).await;
 

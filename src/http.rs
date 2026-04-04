@@ -11,7 +11,10 @@ use axum::{
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 use tower_sessions::{Expiry, Session, SessionManagerLayer, cookie::SameSite};
 use tower_sessions_sqlx_store::PostgresStore as AdminSessionStore;
 use uuid::Uuid;
@@ -26,7 +29,7 @@ use crate::{
     },
     contract::{
         AdminLoginRequest, AdminOverview, AdminRoomSummary, AdminSessionStatus, AppEvent,
-        JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
+        ErrorOperation, JoinedRoomSummary, MessageCreated, RoomSearchResult, RoomSnapshot,
     },
     store::{ADMIN_SESSION_IDLE_TIMEOUT, PgStore},
     support,
@@ -75,6 +78,10 @@ struct SendMessageRequest {
 #[derive(Debug, Deserialize, serde::Serialize)]
 struct ErrorPayload {
     code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    layer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    operation: Option<String>,
 }
 
 pub const FRONTEND_DIST_DIR: &str = "dist/public";
@@ -138,6 +145,7 @@ fn traced_api_router(
         .merge(admin_api_router(store, admin_token).layer(admin_session_layer))
         .route("/", any(frontend_reserved_not_found))
         .fallback(frontend_reserved_not_found)
+        .layer(TraceLayer::new_for_http())
 }
 
 fn frontend_shell_router_inner(
@@ -321,7 +329,7 @@ async fn send_room_message(
         },
     )
     .await
-    .map_err(map_http_error)?;
+    .map_err(|error| map_http_error_with_operation(error, ErrorOperation::SendTextMessage))?;
 
     let AppEvent::MessageCreated(payload) = event;
     let _ = state
@@ -528,11 +536,27 @@ fn invalid_session_error() -> (StatusCode, Json<ErrorPayload>) {
                 session_id: Uuid::nil(),
             })
             .to_string(),
+            layer: None,
+            operation: None,
         }),
     )
 }
 
 fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {
+    map_http_error_payload(error, None)
+}
+
+fn map_http_error_with_operation(
+    error: AppError,
+    operation: ErrorOperation,
+) -> (StatusCode, Json<ErrorPayload>) {
+    map_http_error_payload(error, Some(operation))
+}
+
+fn map_http_error_payload(
+    error: AppError,
+    operation: Option<ErrorOperation>,
+) -> (StatusCode, Json<ErrorPayload>) {
     let status = match error {
         AppError::SessionNotActive { .. } => StatusCode::UNAUTHORIZED,
         AppError::NotRoomMember { .. } => StatusCode::FORBIDDEN,
@@ -547,9 +571,7 @@ fn map_http_error(error: AppError) -> (StatusCode, Json<ErrorPayload>) {
 
     (
         status,
-        Json(ErrorPayload {
-            code: support::app_error_code(&error).to_string(),
-        }),
+        Json(error_payload(&error, operation)),
     )
 }
 
@@ -565,5 +587,21 @@ fn unauthenticated_admin_session_status() -> AdminSessionStatus {
     AdminSessionStatus {
         authenticated: false,
         idle_timeout_seconds: admin_session_idle_timeout_seconds(),
+    }
+}
+
+fn error_payload(error: &AppError, operation: Option<ErrorOperation>) -> ErrorPayload {
+    let (layer, operation) = match operation.map(|operation| error.error_envelope(operation)) {
+        Some(context) => (
+            Some(support::error_layer_name(context.layer).to_string()),
+            Some(support::error_operation_name(context.operation).to_string()),
+        ),
+        None => (None, None),
+    };
+
+    ErrorPayload {
+        code: support::app_error_code(error).to_string(),
+        layer,
+        operation,
     }
 }

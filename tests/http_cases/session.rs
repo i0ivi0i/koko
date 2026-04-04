@@ -24,6 +24,9 @@ async fn join_requires_bootstrapped_session(pool: sqlx::PgPool) -> sqlx::Result<
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let payload: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["code"], "invalid_session");
     Ok(())
 }
 

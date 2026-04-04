@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::{
     app::{AdminCredentialPort, AppError, Clock, IdGenerator},
-    contract::AppErrorCode,
+    contract::{AppErrorCode, ErrorLayer, ErrorOperation},
 };
 
 pub const APP_NAME: &str = "koko";
@@ -709,6 +709,19 @@ fn auto_open_browser_enabled() -> bool {
         "true" | "1" | "yes" | "on" => true,
         "false" | "0" | "no" | "off" => false,
         _ => default_enabled,
+    }
+}
+
+pub fn error_layer_name(layer: ErrorLayer) -> &'static str {
+    match layer {
+        ErrorLayer::Application => "application",
+    }
+}
+
+pub fn error_operation_name(operation: ErrorOperation) -> &'static str {
+    match operation {
+        ErrorOperation::SubscribeRoomStream => "subscribe_room_stream",
+        ErrorOperation::SendTextMessage => "send_text_message",
     }
 }
 
