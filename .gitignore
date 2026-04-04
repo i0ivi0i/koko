@@ -15,6 +15,7 @@ dist/
 # Keep real SQLx metadata when it exists, but do not track an empty placeholder.
 .sqlx/.gitkeep
 .env
+frontend/node_modules/
 
 # Common local OS noise.
 Thumbs.db
