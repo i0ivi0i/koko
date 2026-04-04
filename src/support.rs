@@ -34,6 +34,7 @@ const DEFAULT_CONFIG_PATH: &str = "config/koko.toml";
 #[cfg(not(target_arch = "wasm32"))]
 const DATABASE_URL_ENV: &str = "KOKO_DATABASE_URL";
 #[cfg(not(target_arch = "wasm32"))]
+const DEFAULT_DEV_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5432/koko_dev_chat";
 #[cfg(not(target_arch = "wasm32"))]
 const ADMIN_TOKEN_ENV: &str = "KOKO_ADMIN_TOKEN";
 #[cfg(not(target_arch = "wasm32"))]
@@ -543,10 +544,15 @@ impl ResolvedAppConfig {
     ) -> Result<Self, ConfigError> {
         let database_url = match database_url {
             Some(raw) => parse_required_value(DATABASE_URL_ENV, Some(raw))?,
-            None => parse_required_value(
-                DATABASE_URL_ENV,
-                env::var(DATABASE_URL_ENV).ok().as_deref(),
-            )?,
+            None => {
+                // 启动真相仍在 Rust：若未显式提供环境变量，则按受控本地默认值启动，
+                // 避免把“默认数据库地址”散落回 run.ps1 这类壳层。
+                env::var(DATABASE_URL_ENV)
+                    .ok()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| DEFAULT_DEV_DATABASE_URL.to_string())
+            }
         };
         let bind_addr_raw = match bind_addr {
             Some(raw) => raw.trim().to_string(),
