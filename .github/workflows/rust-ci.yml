@@ -9,15 +9,20 @@ env:
 
 jobs:
   verify:
-    name: Verify (${{ matrix.toolchain }})
-    runs-on: windows-latest
+    name: Verify (${{ matrix.os }} / ${{ matrix.toolchain }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        toolchain:
-          - stable
-          - beta
-          - nightly
+        include:
+          - os: windows-latest
+            toolchain: stable
+          - os: ubuntu-latest
+            toolchain: stable
+          - os: windows-latest
+            toolchain: beta
+          - os: windows-latest
+            toolchain: nightly
     steps:
       - uses: actions/checkout@v4
 

@@ -15,6 +15,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max_connections(10)
         .connect(&config.database_url)
         .await?;
+    // 启动时由 Rust 主链统一追平 schema，避免把迁移真相分散到脚本或人工步骤。
+    sqlx::migrate!("./migrations").run(&pool).await?;
     let admin_session_store = PostgresStore::new(pool.clone());
     let store = koko::store::PgStore::new(pool);
     let admin_session_layer =
