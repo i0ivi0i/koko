@@ -735,6 +735,10 @@ fn spawn_realtime_bridge(
                     });
                 }
                 RealtimeEvent::MessageAccepted { payload } => {
+                    // 只消费当前打开房间的 accepted，避免旧房间/串线事件误删本地 pending。
+                    if state().room_id() != Some(payload.room_id) {
+                        continue;
+                    }
                     if let Some(client_message_id) = payload.client_message_id {
                         let _ = remove_pending_send(pending_send_ids, client_message_id);
                     }

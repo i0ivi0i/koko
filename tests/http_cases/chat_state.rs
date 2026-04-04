@@ -19,6 +19,23 @@ fn web_state_does_not_promote_pending_on_message_accepted() {
 }
 
 #[test]
+fn web_state_ignores_message_accepted_from_other_room() {
+    let mut state = ChatState::default();
+    let room_id = Uuid::from_u128(95);
+    let session_id = Uuid::from_u128(96);
+    state.enqueue_pending(room_id, session_id, " hello koko ");
+
+    state.note_message_accepted(MessageAccepted {
+        room_id: Uuid::from_u128(97),
+        client_message_id: Some(Uuid::from_u128(98)),
+    });
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Pending);
+    assert!(state.confirmed_messages().is_empty());
+}
+
+#[test]
 fn web_state_promotes_pending_message_only_after_server_confirmation() {
     let mut state = ChatState::default();
     let room_id = Uuid::from_u128(90);

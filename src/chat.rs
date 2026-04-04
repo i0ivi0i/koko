@@ -348,7 +348,10 @@ impl ChatState {
         self.sort_messages();
     }
 
-    pub fn note_message_accepted(&mut self, _accepted: MessageAccepted) {
+    pub fn note_message_accepted(&mut self, accepted: MessageAccepted) {
+        if self.timeline.room_id != Some(accepted.room_id) {
+            return;
+        }
         // message_accepted 只代表命令结果，不得在壳层把 pending 升格成权威历史。
     }
 

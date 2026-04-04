@@ -193,6 +193,23 @@ fn send_message_keeps_pending_until_authoritative_message_created_arrives() {
 }
 
 #[test]
+fn message_accepted_from_other_room_keeps_current_pending_unchanged() {
+    let room_id = Uuid::from_u128(18);
+    let mut state = bootstrapped_state();
+    state.open_room_from_snapshot(room_snapshot(room_id, "A1234", Vec::new()));
+
+    let pending_id = state.enqueue_pending(room_id, state.session_id(), " hello ");
+    state.note_message_accepted(MessageAccepted {
+        room_id: Uuid::from_u128(19),
+        client_message_id: Some(pending_id),
+    });
+
+    assert_eq!(state.messages().len(), 1);
+    assert_eq!(state.messages()[0].delivery, DeliveryState::Pending);
+    assert_eq!(state.confirmed_messages().len(), 0);
+}
+
+#[test]
 fn refill_snapshot_does_not_duplicate_message_created_already_in_timeline() {
     let room_id = Uuid::from_u128(13);
     let mut state = bootstrapped_state();
