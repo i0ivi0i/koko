@@ -169,10 +169,10 @@ impl Drop for TempDirGuard {
     }
 }
 
-fn temp_fake_xtask_cargo(exit_code: i32) -> (PathBuf, PathBuf, TempDirGuard) {
+fn temp_fake_cargo(exit_code: i32) -> (PathBuf, PathBuf, TempDirGuard) {
     let tool_dir = env::temp_dir()
         .join("koko-tests")
-        .join(format!("fake-xtask-cargo-{}", Uuid::now_v7()));
+        .join(format!("fake-cargo-{}", Uuid::now_v7()));
     fs::create_dir_all(&tool_dir).unwrap();
     let log_path = tool_dir.join("cargo.log");
 

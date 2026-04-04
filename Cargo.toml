@@ -5,10 +5,6 @@ edition = "2024"
 rust-version = "1.94.1"
 default-run = "koko"
 
-[workspace]
-members = ["xtask"]
-default-members = [".", "xtask"]
-
 # Default loop:
 # cargo check
 # cargo nextest run

@@ -536,16 +536,16 @@ impl ResolvedAppConfig {
         })
     }
 
-    pub fn load_for_xtask_preview(
+    pub fn load_for_dev_preview(
         database_url: Option<&str>,
         bind_addr: Option<&str>,
         config_path: Option<PathBuf>,
         admin_cookie_secure_override: Option<bool>,
     ) -> Result<Self, ConfigError> {
-        // xtask preview 只需要和主程序同源的地址/数据库/安全位解析结果；
+        // dev preview 只需要和主程序同源的地址/数据库/安全位解析结果；
         // 管理员口令真相仍必须留给真实启动路径去读/写 config/koko.toml。
-        // 但 `cargo xtask dev` 是开发入口，仍需要受控的本地数据库默认值，
-        // 这样 `run.ps1` 和 `xtask dev` 才能保持开箱可跑，而不把薄壳重新做重。
+        // 开发启动入口仍需要受控的本地数据库默认值，
+        // 这样 `run.ps1` 才能保持开箱可跑，而不把薄壳重新做重。
         let dev_database_url = database_url
             .map(ToOwned::to_owned)
             .or_else(|| env::var(DATABASE_URL_ENV).ok())
