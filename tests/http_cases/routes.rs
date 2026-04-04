@@ -503,6 +503,20 @@ fn bundled_index_preloads_socket_io_before_wasm_bootstrap() {
 }
 
 #[test]
+fn bundled_index_never_references_dioxus_dev_runtime() {
+    let index_html = bundled_frontend_index_html();
+
+    assert!(
+        !index_html.contains("/_dioxus"),
+        "Axum static shell must not leak any Dioxus dev runtime path into dist/public/index.html"
+    );
+    assert!(
+        !index_html.contains("dx serve"),
+        "bundled index must stay detached from dx serve-specific runtime hints"
+    );
+}
+
+#[test]
 fn bundled_socket_io_asset_stays_browser_umd() {
     let socket_io_asset = bundled_frontend_asset("socket.io.min.js");
 
@@ -619,6 +633,29 @@ fn default_frontend_paths_point_to_dioxus_public_output() {
     assert_eq!(
         http::default_frontend_asset_dir(),
         PathBuf::from("dist").join("public").join("assets")
+    );
+}
+
+#[test]
+fn dioxus_production_resources_stay_on_static_assets_route() {
+    let dioxus_toml = dioxus_toml_contents();
+
+    assert!(
+        dioxus_toml.contains("[web.resource]\r\nscript = [\"/assets/socket.io.min.js\"]")
+            || dioxus_toml.contains("[web.resource]\nscript = [\"/assets/socket.io.min.js\"]"),
+        "Dioxus production resources must keep socket.io on the static /assets route"
+    );
+    assert!(
+        !dioxus_toml.contains("./public/assets/socket.io.min.js"),
+        "production resources must not point back to the source-only ./public/assets path"
+    );
+    assert!(
+        !dioxus_toml.contains("/_dioxus"),
+        "Dioxus config must not leak dev runtime endpoints into the static shell config"
+    );
+    assert!(
+        !dioxus_toml.contains("socket.io.esm.min.js"),
+        "Dioxus config must not regress to the ESM socket.io bundle for classic script loading"
     );
 }
 

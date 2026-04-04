@@ -135,6 +135,11 @@ fn bundled_frontend_asset(asset_name: &str) -> String {
     .unwrap_or_else(|_| panic!("bundled frontend asset should exist: {asset_name}"))
 }
 
+fn dioxus_toml_contents() -> String {
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Dioxus.toml"))
+        .expect("Dioxus.toml should exist")
+}
+
 fn script_src_position(html: &str, script_name: &str) -> Option<usize> {
     let mut search_from = 0;
     while let Some(script_offset) = html[search_from..].find("<script") {
