@@ -224,20 +224,16 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                     client_message_id = ?client_message_id,
                                     "send_text_message accepted"
                                 );
-                                let socket = socket.clone();
-                                let io = io.clone();
-                                tokio::spawn(async move {
-                                    emit_to_socket(
-                                        &socket,
-                                        "message_accepted",
-                                        &MessageAccepted {
-                                            room_id,
-                                            client_message_id,
-                                        },
-                                    );
-                                    emit_to_room(&io, room_id, "message_created", &payload)
-                                        .await;
-                                });
+                                // transport 级别 accepted 只表示命令已受理，权威成立仍以 message_created 为准。
+                                emit_to_socket(
+                                    &socket,
+                                    "message_accepted",
+                                    &MessageAccepted {
+                                        room_id,
+                                        client_message_id,
+                                    },
+                                );
+                                emit_to_room(&io, room_id, "message_created", &payload).await;
                             }
                             Err(error) => {
                                 emit_command_rejected(

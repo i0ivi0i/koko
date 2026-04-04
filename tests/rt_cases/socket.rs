@@ -129,6 +129,65 @@ async fn sender_receives_message_accepted_and_authoritative_message_created() {
     harness.shutdown().await;
 }
 
+#[tokio::test]
+async fn rejected_send_does_not_emit_message_accepted_or_message_created() {
+    let room_id = Uuid::from_u128(111);
+    let sender_session_id = Uuid::from_u128(112);
+    // 让发送者会话有效，但不具备房间成员资格，确保命令走 rejected 分支。
+    let harness = RealtimeHarness::spawn(
+        RealtimeTestStore::new([sender_session_id], []),
+        Uuid::from_u128(113),
+    )
+    .await;
+
+    let sender_room_stream = mpsc::unbounded_channel();
+    let mut sender_message_accepted = mpsc::unbounded_channel();
+    let mut sender_message_created = mpsc::unbounded_channel();
+    let mut sender_connected = mpsc::unbounded_channel();
+    let mut sender = connect_client(
+        harness.base_url(),
+        sender_session_id,
+        ClientChannels::new(
+            sender_connected.0,
+            sender_room_stream.0,
+            sender_message_accepted.0,
+            sender_message_created.0,
+        ),
+    )
+    .await
+    .unwrap();
+
+    next_event("sender connected", &mut sender_connected.1).await;
+
+    sender
+        .emit(
+            "send_text_message",
+            json!({
+                "room_id": room_id,
+                "body": "blocked",
+                "client_message_id": Uuid::from_u128(114),
+            }),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), sender_message_accepted.1.recv())
+            .await
+            .is_err(),
+        "rejected send must not emit message_accepted"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), sender_message_created.1.recv())
+            .await
+            .is_err(),
+        "rejected send must not emit message_created"
+    );
+
+    sender.disconnect().await.unwrap();
+    harness.shutdown().await;
+}
+
 #[sqlx::test]
 async fn smoke_http_bootstrap_join_then_realtime_subscribe_shares_same_server(
     pool: sqlx::PgPool,
