@@ -8,7 +8,7 @@ use socketioxide::{
     extract::{Data, Extension, SocketRef},
     handler::ConnectHandler,
 };
-use tracing::warn;
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -159,6 +159,11 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         .await
                         {
                             Ok(subscription) => {
+                                info!(
+                                    room_id = %room_id,
+                                    session_id = %session.session_id,
+                                    "subscribe_room_stream ok"
+                                );
                                 socket.join(room_name(room_id));
                                 emit_to_socket(
                                     &socket,
@@ -177,7 +182,13 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                     Some(room_id),
                                     None,
                                 );
-                                warn_handler_failure("subscribe_room_stream", &error);
+                                warn!(
+                                    room_id = %room_id,
+                                    session_id = %session.session_id,
+                                    code = crate::support::app_error_code(&error),
+                                    ?error,
+                                    "subscribe_room_stream rejected"
+                                );
                                 return;
                             }
                         }
@@ -207,6 +218,12 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                         .await
                         {
                             Ok(crate::contract::AppEvent::MessageCreated(payload)) => {
+                                info!(
+                                    room_id = %room_id,
+                                    session_id = %session.session_id,
+                                    client_message_id = ?client_message_id,
+                                    "send_text_message accepted"
+                                );
                                 let socket = socket.clone();
                                 let io = io.clone();
                                 tokio::spawn(async move {
@@ -230,7 +247,14 @@ pub fn install_realtime<Store, IdGen, AppClock>(
                                     Some(room_id),
                                     client_message_id,
                                 );
-                                warn_handler_failure("send_text_message", &error);
+                                warn!(
+                                    room_id = %room_id,
+                                    session_id = %session.session_id,
+                                    client_message_id = ?client_message_id,
+                                    code = crate::support::app_error_code(&error),
+                                    ?error,
+                                    "send_text_message rejected"
+                                );
                             }
                         }
                     }
@@ -242,8 +266,20 @@ pub fn install_realtime<Store, IdGen, AppClock>(
     let auth_middleware = move |socket: SocketRef| {
         let state = auth_state.clone();
         async move {
-            let session =
-                authenticate_realtime_session(&state.store, &socket.req_parts().headers).await?;
+            let session = match authenticate_realtime_session(&state.store, &socket.req_parts().headers)
+                .await
+            {
+                Ok(session) => session,
+                Err(error) => {
+                    warn!(
+                        code = crate::support::app_error_code(&error),
+                        ?error,
+                        "rt auth rejected"
+                    );
+                    return Err(error);
+                }
+            };
+            info!(session_id = %session.session_id, "rt connected");
             socket.extensions.insert(session);
             Ok::<(), AppError>(())
         }
@@ -294,6 +330,11 @@ where
         .await
         .is_err()
     {
-        warn_handler_failure(event, &AppError::DependencyFailure);
+        error!(
+            room_id = %room_id,
+            event,
+            code = crate::support::app_error_code(&AppError::DependencyFailure),
+            "broadcast failed"
+        );
     }
 }
