@@ -8,3 +8,5 @@ pub mod contract;
 pub mod usecase;
 #[path = "领域/mod.rs"]
 pub mod domain;
+#[path = "适配.rs"]
+pub mod adapter;

@@ -60,6 +60,9 @@ pub fn 发送文本消息(
     客户端消息标识: &str,
     文本: &str,
 ) -> Result<contract::领域事件, contract::错误码> {
+    if 客户端消息标识.trim().is_empty() {
+        return Err(contract::错误码::参数非法);
+    }
     let is_member = 仓储.检查成员资格(房间标识, 会话标识)?;
     let msg = domain::message::创建文本消息(is_member, 文本).map_err(映射领域错误)?;
     仓储.创建消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本)
