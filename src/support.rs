@@ -5,6 +5,7 @@ use std::{
     env, fs, io,
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
+    process::Command,
     time::SystemTime,
 };
 
@@ -45,6 +46,8 @@ const ADMIN_COOKIE_SECURE_ENV: &str = "KOKO_ADMIN_COOKIE_SECURE";
 const LOG_FILTER_ENV: &str = "KOKO_LOG";
 #[cfg(not(target_arch = "wasm32"))]
 const AUTO_OPEN_BROWSER_ENV: &str = "KOKO_AUTO_OPEN_BROWSER";
+#[cfg(not(target_arch = "wasm32"))]
+const AUTO_FRONTEND_BUNDLE_ENV: &str = "KOKO_AUTO_FRONTEND_BUNDLE";
 #[cfg(not(target_arch = "wasm32"))]
 const FRONTEND_INDEX_PATH: &str = "dist/public/index.html";
 #[cfg(not(target_arch = "wasm32"))]
@@ -140,14 +143,73 @@ pub fn app_name() -> &'static str {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+pub fn ensure_frontend_bundle_is_ready() -> io::Result<()> {
+    ensure_frontend_bundle_is_ready_in(&env::current_dir()?)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn ensure_frontend_bundle_is_fresh() -> io::Result<()> {
     ensure_frontend_bundle_is_fresh_in(&env::current_dir()?)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn ensure_frontend_bundle_is_ready_in(root: &Path) -> io::Result<()> {
+    let freshness = inspect_frontend_bundle_freshness(root)?;
+    if freshness == FrontendBundleFreshness::Fresh {
+        return Ok(());
+    }
+
+    if !auto_frontend_bundle_enabled() {
+        return Err(frontend_bundle_freshness_error(&freshness));
+    }
+
+    // Rust 启动主链是唯一真源：发现前端产物过期/缺失时，直接在这里触发官方 dx 打包脚本。
+    // run.ps1 仍保持纯启动器，不复制第二套“何时打包”的规则。
+    tracing::warn!("检测到前端产物缺失或过期，正在自动执行前端打包...");
+    run_frontend_bundle_script(root)?;
+
+    let after_bundle = inspect_frontend_bundle_freshness(root)?;
+    if after_bundle == FrontendBundleFreshness::Fresh {
+        return Ok(());
+    }
+
+    Err(frontend_bundle_freshness_error(&after_bundle))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn ensure_frontend_bundle_is_fresh_in(root: &Path) -> io::Result<()> {
+    let freshness = inspect_frontend_bundle_freshness(root)?;
+    if freshness == FrontendBundleFreshness::Fresh {
+        return Ok(());
+    }
+
+    Err(frontend_bundle_freshness_error(&freshness))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FrontendBundleFreshness {
+    Fresh,
+    MissingIndex {
+        index_path: PathBuf,
+    },
+    Stale {
+        index_path: PathBuf,
+        source_path: PathBuf,
+    },
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn inspect_frontend_bundle_freshness(root: &Path) -> io::Result<FrontendBundleFreshness> {
     let index_path = root.join(FRONTEND_INDEX_PATH);
-    let index_modified = fs::metadata(&index_path)?.modified()?;
+    let index_modified = match fs::metadata(&index_path) {
+        Ok(metadata) => metadata.modified()?,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(FrontendBundleFreshness::MissingIndex { index_path });
+        }
+        Err(error) => return Err(error),
+    };
+
     let mut newest_input: Option<(PathBuf, SystemTime)> = None;
 
     for relative_path in FRONTEND_BUNDLE_INPUT_PATHS {
@@ -168,18 +230,62 @@ fn ensure_frontend_bundle_is_fresh_in(root: &Path) -> io::Result<()> {
     }
 
     let Some((source_path, source_modified)) = newest_input else {
-        return Ok(());
+        return Ok(FrontendBundleFreshness::Fresh);
     };
 
     if source_modified > index_modified {
-        return Err(io::Error::other(format!(
-            "前端产物过期：`{}` 早于 `{}`，请先执行 `powershell -ExecutionPolicy Bypass -File scripts/dx-bundle-web.ps1 -Release` 再启动。",
-            index_path.display(),
-            source_path.display()
-        )));
+        return Ok(FrontendBundleFreshness::Stale {
+            index_path,
+            source_path,
+        });
     }
 
-    Ok(())
+    Ok(FrontendBundleFreshness::Fresh)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn frontend_bundle_freshness_error(freshness: &FrontendBundleFreshness) -> io::Error {
+    match freshness {
+        FrontendBundleFreshness::Fresh => io::Error::other("前端产物状态检查失败"),
+        FrontendBundleFreshness::MissingIndex { index_path } => io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "前端产物缺失：`{}` 不存在；请执行 `powershell -ExecutionPolicy Bypass -File scripts/dx-bundle-web.ps1 -Release`，或直接 `run.ps1` 让 Rust 启动链自动重建。",
+                index_path.display()
+            ),
+        ),
+        FrontendBundleFreshness::Stale {
+            index_path,
+            source_path,
+        } => io::Error::other(format!(
+            "前端产物过期：`{}` 早于 `{}`；请执行 `powershell -ExecutionPolicy Bypass -File scripts/dx-bundle-web.ps1 -Release`，或直接 `run.ps1` 让 Rust 启动链自动重建。",
+            index_path.display(),
+            source_path.display()
+        )),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_frontend_bundle_script(root: &Path) -> io::Result<()> {
+    let script_path = root.join("scripts").join("dx-bundle-web.ps1");
+    let status = Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-File")
+        .arg(&script_path)
+        .arg("-Release")
+        .current_dir(root)
+        .status()?;
+
+    if status.success() {
+        return Ok(());
+    }
+
+    Err(io::Error::other(format!(
+        "自动重建前端失败：`{}` 退出状态为 {status}",
+        script_path.display()
+    )))
 }
 
 pub fn app_error_code(error: &AppError) -> &'static str {
@@ -717,6 +823,21 @@ fn auto_open_browser_enabled() -> bool {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn auto_frontend_bundle_enabled() -> bool {
+    // Win11 本地开发默认自动补前端产物；其它平台默认保持显式构建，避免引入额外环境假设。
+    let default_enabled = cfg!(target_os = "windows");
+    let Some(raw) = env::var(AUTO_FRONTEND_BUNDLE_ENV).ok() else {
+        return default_enabled;
+    };
+
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => true,
+        "false" | "0" | "no" | "off" => false,
+        _ => default_enabled,
+    }
+}
+
 pub fn serde_wire_name<T: Serialize>(value: &T) -> String {
     match serde_json::to_value(value).expect("enum serialization should succeed") {
         serde_json::Value::String(name) => name,
@@ -948,6 +1069,21 @@ mod tests {
 
         let error = ensure_frontend_bundle_is_fresh_in(&root).unwrap_err();
         assert!(error.to_string().contains("前端产物过期"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn frontend_bundle_freshness_rejects_missing_index() {
+        let root = env::temp_dir()
+            .join("koko-tests")
+            .join(format!("frontend-missing-index-{}", Uuid::now_v7()));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("public/assets")).unwrap();
+        fs::write(root.join("src/web.rs"), "// source exists\n").unwrap();
+
+        let error = ensure_frontend_bundle_is_fresh_in(&root).unwrap_err();
+        assert!(error.to_string().contains("前端产物缺失"));
 
         let _ = fs::remove_dir_all(root);
     }
