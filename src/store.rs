@@ -275,13 +275,7 @@ impl JoinedRoomsPort for PgStore {
 
         Ok(rows
             .into_iter()
-            .map(|row| JoinedRoomSummary {
-                room_id: row.get("room_id"),
-                room_code: row.get("room_code"),
-                display_title: row.get("display_title"),
-                latest_preview: row.get("latest_preview"),
-                latest_message_at: row.get("latest_message_at"),
-            })
+            .map(|row| map_joined_room_summary_row(&row))
             .collect())
     }
 }
@@ -349,14 +343,7 @@ impl RoomSearchPort for PgStore {
 
         Ok(rows
             .into_iter()
-            .map(|row| RoomSearchResult {
-                room_id: row.get("room_id"),
-                room_code: row.get("room_code"),
-                display_title: row.get("display_title"),
-                latest_preview: row.get("latest_preview"),
-                latest_message_at: row.get("latest_message_at"),
-                is_joined: row.get("is_joined"),
-            })
+            .map(|row| map_room_search_result_row(&row))
             .collect())
     }
 }
@@ -603,12 +590,7 @@ impl AdminRoomsPort for PgStore {
 
         Ok(rows
             .into_iter()
-            .map(|row| AdminRoomSummary {
-                room_code: row.get("room_code"),
-                member_count: row.get("member_count"),
-                message_count: row.get("message_count"),
-                latest_preview: row.get("latest_preview"),
-            })
+            .map(|row| map_admin_room_summary_row(&row))
             .collect())
     }
 }
@@ -728,6 +710,36 @@ fn map_persisted_message_row(row: &sqlx::postgres::PgRow) -> PersistedMessageRec
         body: row.get("body"),
         created_at: row.get::<DateTime<Utc>, _>("created_at"),
         event_position: row.get("event_position"),
+    }
+}
+
+fn map_joined_room_summary_row(row: &sqlx::postgres::PgRow) -> JoinedRoomSummary {
+    JoinedRoomSummary {
+        room_id: row.get("room_id"),
+        room_code: row.get("room_code"),
+        display_title: row.get("display_title"),
+        latest_preview: row.get("latest_preview"),
+        latest_message_at: row.get("latest_message_at"),
+    }
+}
+
+fn map_room_search_result_row(row: &sqlx::postgres::PgRow) -> RoomSearchResult {
+    RoomSearchResult {
+        room_id: row.get("room_id"),
+        room_code: row.get("room_code"),
+        display_title: row.get("display_title"),
+        latest_preview: row.get("latest_preview"),
+        latest_message_at: row.get("latest_message_at"),
+        is_joined: row.get("is_joined"),
+    }
+}
+
+fn map_admin_room_summary_row(row: &sqlx::postgres::PgRow) -> AdminRoomSummary {
+    AdminRoomSummary {
+        room_code: row.get("room_code"),
+        member_count: row.get("member_count"),
+        message_count: row.get("message_count"),
+        latest_preview: row.get("latest_preview"),
     }
 }
 

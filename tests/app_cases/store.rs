@@ -126,6 +126,89 @@ async fn send_text_message_persists_message_and_room_snapshot_reads_it(
 }
 
 #[sqlx::test]
+async fn send_text_message_keeps_event_position_monotonic(pool: PgPool) -> sqlx::Result<()> {
+    let harness = PgHarness::new(pool);
+    let session_id = Uuid::now_v7();
+    let room_code = unique_room_code('h');
+    harness.seed_active_session(session_id).await;
+
+    let joined = join_or_create_room_by_code(
+        &harness.store,
+        &harness.store,
+        &SystemIdGenerator,
+        &SystemClock,
+        JoinOrCreateRoomByCodeCommand {
+            room_code,
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let first = send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FakeIdGenerator::new(Uuid::from_u128(8101)),
+        &FakeClock::new(minute_time(1)),
+        SendTextMessageInput {
+            room_id: joined.room_id,
+            session_id,
+            body: "first".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+    let second = send_text_message(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        &FakeIdGenerator::new(Uuid::from_u128(8102)),
+        &FakeClock::new(minute_time(2)),
+        SendTextMessageInput {
+            room_id: joined.room_id,
+            session_id,
+            body: "second".to_string(),
+            client_message_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let (first_position, second_position) = match (first, second) {
+        (AppEvent::MessageCreated(first), AppEvent::MessageCreated(second)) => {
+            (first.event_position, second.event_position)
+        }
+    };
+    assert_eq!(first_position, 1);
+    assert_eq!(second_position, 2);
+
+    let snapshot = load_room_snapshot(
+        &harness.store,
+        &harness.store,
+        &harness.store,
+        LoadRoomSnapshotQuery {
+            room_id: joined.room_id,
+            session_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(snapshot.latest_event_position, 2);
+    assert_eq!(
+        snapshot
+            .messages
+            .iter()
+            .map(|message| message.event_position)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    Ok(())
+}
+
+#[sqlx::test]
 async fn join_or_create_treats_room_code_as_case_insensitive(pool: PgPool) -> sqlx::Result<()> {
     let harness = PgHarness::new(pool);
     let first_session_id = Uuid::now_v7();
