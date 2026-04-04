@@ -1365,8 +1365,8 @@ mod tests {
         let payload = CommandRejected {
             error: crate::contract::ErrorEnvelope {
                 code: AppErrorCode::InvalidMessageBody,
-                layer: "application".to_string(),
-                operation: "send_text_message".to_string(),
+                layer: crate::contract::ErrorLayer::Application,
+                operation: crate::contract::ErrorOperation::SendTextMessage,
             },
             command: RejectedCommandKind::SendTextMessage,
             room_id: Some(Uuid::from_u128(2)),
@@ -1382,8 +1382,8 @@ mod tests {
         let payload = CommandRejected {
             error: crate::contract::ErrorEnvelope {
                 code: AppErrorCode::MembershipRequired,
-                layer: "application".to_string(),
-                operation: "subscribe_room_stream".to_string(),
+                layer: crate::contract::ErrorLayer::Application,
+                operation: crate::contract::ErrorOperation::SubscribeRoomStream,
             },
             command: RejectedCommandKind::SubscribeRoomStream,
             room_id: Some(Uuid::from_u128(3)),

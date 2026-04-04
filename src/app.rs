@@ -7,8 +7,9 @@ use uuid::Uuid;
 use crate::{
     contract::{
         AdminOverview, AdminRoomSummary, AdminSessionStatus, AppErrorCode, AppEvent,
-        BootstrapSession, ErrorEnvelope, JoinedRoomSummary, MessageCreated, MessageView,
-        RoomSearchResult, RoomSnapshot,
+        BootstrapSession, CommandRejected, ErrorEnvelope, ErrorLayer, ErrorOperation,
+        JoinedRoomSummary, MessageCreated, MessageView, RejectedCommandKind, RoomSearchResult,
+        RoomSnapshot,
     },
     domain::{
         AnonymousSession, DomainError, Message, MessageBody, MessageStatus, NewMemberRecord,
@@ -81,13 +82,34 @@ impl AppError {
         }
     }
 
-    pub fn error_envelope(&self, operation: &'static str) -> ErrorEnvelope {
+    pub fn error_envelope(&self, operation: ErrorOperation) -> ErrorEnvelope {
         ErrorEnvelope {
             code: self.code(),
             // 业务错误语义在 application 层定稿，adapter 只消费这份稳定上下文。
-            layer: "application".to_string(),
-            operation: operation.to_string(),
+            layer: ErrorLayer::Application,
+            operation,
         }
+    }
+}
+
+pub fn rejected_command_operation(command: RejectedCommandKind) -> ErrorOperation {
+    match command {
+        RejectedCommandKind::SubscribeRoomStream => ErrorOperation::SubscribeRoomStream,
+        RejectedCommandKind::SendTextMessage => ErrorOperation::SendTextMessage,
+    }
+}
+
+pub fn command_rejection(
+    error: &AppError,
+    command: RejectedCommandKind,
+    room_id: Option<Uuid>,
+    client_message_id: Option<Uuid>,
+) -> CommandRejected {
+    CommandRejected {
+        error: error.error_envelope(rejected_command_operation(command)),
+        command,
+        room_id,
+        client_message_id,
     }
 }
 

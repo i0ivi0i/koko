@@ -17,8 +17,8 @@ use crate::{
         SendTextMessageInput, SessionPort, SubscribeRoomStreamInput,
     },
     contract::{
-        CommandRejected, MessageAccepted, RejectedCommandKind, RoomStreamSubscribed,
-        SendTextMessageCommand, SubscribeRoomStreamCommand,
+        MessageAccepted, RejectedCommandKind, RoomStreamSubscribed, SendTextMessageCommand,
+        SubscribeRoomStreamCommand,
     },
 };
 
@@ -302,15 +302,7 @@ fn emit_command_rejected(
     emit_to_socket(
         socket,
         "command_rejected",
-        &CommandRejected {
-            error: error.error_envelope(match command {
-                RejectedCommandKind::SubscribeRoomStream => "subscribe_room_stream",
-                RejectedCommandKind::SendTextMessage => "send_text_message",
-            }),
-            command,
-            room_id,
-            client_message_id,
-        },
+        &app::command_rejection(error, command, room_id, client_message_id),
     );
 }
 

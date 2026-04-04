@@ -9,12 +9,31 @@ fn app_error_envelope_marks_application_layer_and_operation() {
     };
 
     assert_eq!(
-        error.error_envelope("send_text_message"),
+        error.error_envelope(koko::contract::ErrorOperation::SendTextMessage),
         koko::contract::ErrorEnvelope {
             code: AppErrorCode::MembershipRequired,
-            layer: "application".to_string(),
-            operation: "send_text_message".to_string(),
+            layer: koko::contract::ErrorLayer::Application,
+            operation: koko::contract::ErrorOperation::SendTextMessage,
         }
+    );
+}
+
+#[test]
+fn command_rejection_uses_application_owned_operation_mapping() {
+    let payload = koko::app::command_rejection(
+        &AppError::NotRoomMember {
+            room_id: Uuid::from_u128(703),
+            session_id: Uuid::from_u128(704),
+        },
+        koko::contract::RejectedCommandKind::SubscribeRoomStream,
+        Some(Uuid::from_u128(703)),
+        None,
+    );
+
+    assert_eq!(payload.error.layer, koko::contract::ErrorLayer::Application);
+    assert_eq!(
+        payload.error.operation,
+        koko::contract::ErrorOperation::SubscribeRoomStream
     );
 }
 

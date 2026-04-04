@@ -1,13 +1,13 @@
 use super::*;
-use koko::contract::{AppErrorCode, RejectedCommandKind};
+use koko::contract::{AppErrorCode, ErrorLayer, ErrorOperation, RejectedCommandKind};
 
 #[test]
 fn command_rejected_must_include_layer_and_operation() {
     let payload = koko::contract::CommandRejected {
         error: koko::contract::ErrorEnvelope {
             code: AppErrorCode::Internal,
-            layer: "application".to_string(),
-            operation: "send_text_message".to_string(),
+            layer: ErrorLayer::Application,
+            operation: ErrorOperation::SendTextMessage,
         },
         command: RejectedCommandKind::SendTextMessage,
         room_id: Some(Uuid::from_u128(1)),

@@ -41,10 +41,23 @@ pub enum RejectedCommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorLayer {
+    Application,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorOperation {
+    SubscribeRoomStream,
+    SendTextMessage,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ErrorEnvelope {
     pub code: AppErrorCode,
-    pub layer: String,
-    pub operation: String,
+    pub layer: ErrorLayer,
+    pub operation: ErrorOperation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
