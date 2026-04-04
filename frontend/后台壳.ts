@@ -1,6 +1,6 @@
 import { css, html, LitElement } from "lit";
-import { HttpRealtime传输, type 前端传输端口 } from "./传输";
-import { 格式化后台概览 } from "./视图";
+import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
+import { 格式化后台概览 } from "./视图.js";
 
 export class 后台壳 extends LitElement {
   static styles = css`

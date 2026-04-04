@@ -1,8 +1,8 @@
 import { css, html, LitElement } from "lit";
-import type { 消息事件 } from "./契约";
-import { HttpRealtime传输, type 前端传输端口 } from "./传输";
-import { 初始聊天状态, type 聊天状态 } from "./状态";
-import { 格式化消息 } from "./视图";
+import type { 消息事件 } from "./契约.js";
+import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
+import { 初始聊天状态, type 聊天状态 } from "./状态.js";
+import { 格式化消息 } from "./视图.js";
 
 export class 聊天壳 extends LitElement {
   static styles = css`

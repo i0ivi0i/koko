@@ -7,7 +7,7 @@ import type {
   后台房间列表,
   后台房间详情,
   后台登录结果,
-} from "./契约";
+} from "./契约.js";
 
 export interface 前端传输端口 {
   bootstrapSession(displayName: string): Promise<会话快照>;

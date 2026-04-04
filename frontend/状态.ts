@@ -1,4 +1,4 @@
-import type { 消息事件 } from "./契约";
+import type { 消息事件 } from "./契约.js";
 
 export interface 聊天状态 {
   sessionId: string;

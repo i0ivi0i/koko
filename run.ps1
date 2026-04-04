@@ -31,9 +31,9 @@ try {
     Write-Host "前端首轮构建: pnpm --dir frontend build"
     & $pnpmPath --dir frontend build
 
-    Write-Host "前端增量编译: pnpm --dir frontend exec tsc -w --preserveWatchOutput"
+    Write-Host "前端增量编译: pnpm --dir frontend run dev:watch"
     $frontendWatch = Start-Process -FilePath $pnpmPath `
-        -ArgumentList @("--dir", "frontend", "exec", "tsc", "-w", "--preserveWatchOutput") `
+        -ArgumentList @("--dir", "frontend", "run", "dev:watch") `
         -WorkingDirectory $repoRoot `
         -PassThru
 

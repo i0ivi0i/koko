@@ -7,7 +7,8 @@
     "test": "vitest run --environment jsdom",
     "test:e2e": "vitest run --environment jsdom tests/端到端测试.spec.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.json"
+    "build": "pnpm typecheck && esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap",
+    "dev:watch": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch"
   },
   "dependencies": {
     "lit": "^3.3.1",
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.6.0",
+    "esbuild": "^0.25.11",
     "jsdom": "^26.1.0",
     "typescript": "^6.0.2",
     "vitest": "^3.2.4"
