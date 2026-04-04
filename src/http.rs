@@ -125,22 +125,36 @@ pub fn frontend_shell_router(
     frontend_dist_dir: impl Into<PathBuf>,
     asset_dir: impl Into<PathBuf>,
 ) -> Router {
+    frontend_shell_router_inner(frontend_dist_dir, asset_dir, true)
+}
+
+fn frontend_shell_router_inner(
+    frontend_dist_dir: impl Into<PathBuf>,
+    asset_dir: impl Into<PathBuf>,
+    reserve_api_paths: bool,
+) -> Router {
     let frontend_dist_dir = frontend_dist_dir.into();
     let index_file = frontend_dist_dir.join("index.html");
     let wasm_dir = frontend_dist_dir.join("wasm");
 
-    Router::new()
-        .route("/api", any(frontend_reserved_not_found))
-        .route("/api/{*path}", any(frontend_reserved_not_found))
-        .nest_service("/assets", ServeDir::new(asset_dir.into()))
+    let router = Router::new().nest_service("/assets", ServeDir::new(asset_dir.into()))
         .nest_service("/wasm", ServeDir::new(wasm_dir))
         .route_service("/", ServeFile::new(index_file.clone()))
         .route_service("/admin", ServeFile::new(index_file.clone()))
-        .route("/admin/{*path}", get(frontend_reserved_not_found))
-        .fallback_service(
-            // 前端静态壳测试只验证入口与回退规则，不该硬走完整生产 router，否则会被真实 session/数据库装配误伤。
-            ServeFile::new(index_file),
-        )
+        .route("/admin/{*path}", get(frontend_reserved_not_found));
+
+    let router = if reserve_api_paths {
+        router
+            .route("/api", any(frontend_reserved_not_found))
+            .route("/api/{*path}", any(frontend_reserved_not_found))
+    } else {
+        router
+    };
+
+    router.fallback_service(
+        // 前端静态壳测试只验证入口与回退规则，不该硬走完整生产 router，否则会被真实 session/数据库装配误伤。
+        ServeFile::new(index_file),
+    )
 }
 
 pub fn server_router(
@@ -158,7 +172,7 @@ pub fn server_router(
     ));
     crate::rt::install_realtime(&io, realtime);
 
-    frontend_shell_router(frontend_dist_dir, asset_dir)
+    frontend_shell_router_inner(frontend_dist_dir, asset_dir, false)
         .nest(
             "/api",
             api_router(store.clone(), io.clone()).layer(TraceLayer::new_for_http()),
@@ -166,8 +180,14 @@ pub fn server_router(
         .nest(
             "/api",
             admin_api_router(store, admin_token)
-                .layer(TraceLayer::new_for_http())
-                .layer(admin_session_layer),
+                .layer(admin_session_layer)
+                .layer(TraceLayer::new_for_http()),
+        )
+        .nest(
+            "/api",
+            Router::new()
+                .fallback(frontend_reserved_not_found)
+                .layer(TraceLayer::new_for_http()),
         )
         .layer(socket_layer)
 }

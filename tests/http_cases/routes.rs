@@ -1,5 +1,8 @@
 use super::*;
 use chrono::{TimeZone, Utc};
+use std::{io, sync::{Arc, Mutex}};
+use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn admin_entry_serves_frontend_shell() {
@@ -43,6 +46,39 @@ async fn bootstrap_then_join_returns_room_snapshot(pool: sqlx::PgPool) -> sqlx::
 
     assert_eq!(snapshot.room_code, "A1234");
     assert!(snapshot.messages.is_empty());
+    Ok(())
+}
+
+#[sqlx::test]
+async fn unknown_api_path_emits_trace_in_full_server_router(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    let harness = HttpHarness::new(pool).await;
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::new("trace"))
+        .with_writer(BufferWriter(buffer.clone()))
+        .with_ansi(false)
+        .compact()
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    let response = harness
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/unknown-path")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let output = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
+    assert!(
+        output.contains("tower_http::trace"),
+        "full server router should trace unknown /api requests, got: {output}"
+    );
     Ok(())
 }
 
@@ -657,5 +693,28 @@ fn dioxus_production_resources_stay_on_static_assets_route() {
         !dioxus_toml.contains("socket.io.esm.min.js"),
         "Dioxus config must not regress to the ESM socket.io bundle for classic script loading"
     );
+}
+
+struct BufferWriter(Arc<Mutex<Vec<u8>>>);
+
+struct BufferGuard(Arc<Mutex<Vec<u8>>>);
+
+impl<'a> MakeWriter<'a> for BufferWriter {
+    type Writer = BufferGuard;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        BufferGuard(self.0.clone())
+    }
+}
+
+impl io::Write for BufferGuard {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
