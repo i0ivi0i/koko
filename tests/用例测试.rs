@@ -2,6 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::{Arc, Mutex};
 
+/// 用例层测试：
+/// - 用假仓储隔离数据库细节
+/// - 验证用例编排、契约输出和日志字段约束
 #[test]
 fn 结构化日志字段存在() {
     let buffer = Arc::new(Mutex::new(Vec::new()));
@@ -66,6 +69,7 @@ struct 假仓储 {
 }
 
 impl koko::usecase::仓储端口 for 假仓储 {
+    /// 假实现：返回稳定会话快照，供用例层断言使用。
     fn 创建匿名会话(
         &mut self,
         显示名: &str,
@@ -77,6 +81,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
         })
     }
 
+    /// 假实现：按短码创建或复用房间，并写入成员关系。
     fn 按短码进房或建房(
         &mut self,
         会话标识: &str,
@@ -101,6 +106,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
         })
     }
 
+    /// 假实现：成员资格查询。
     fn 检查成员资格(
         &self,
         房间标识: &str,
@@ -112,6 +118,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
             .is_some_and(|set| set.contains(会话标识)))
     }
 
+    /// 假实现：房间快照读取。
     fn 拉取房间快照(
         &self,
         房间标识: &str,
@@ -126,6 +133,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
         }
     }
 
+    /// 假实现：直接生成消息已创建事件并推进本地事件位置。
     fn 创建消息事件(
         &mut self,
         房间标识: &str,

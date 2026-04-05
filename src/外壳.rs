@@ -79,58 +79,84 @@ pub fn 构建路由(database_url: String, admin_password: String) -> Router {
         .with_state(state)
 }
 
+/// 引导会话请求体：壳层只提交展示名意图。
 #[derive(Deserialize)]
 struct BootstrapBody {
+    /// 会话展示名（业务上允许匿名名，具体规则由后端决定）。
     display_name: String,
 }
 
+/// 统一错误响应体（跨 HTTP 接口稳定结构）。
 #[derive(Serialize)]
 struct ApiError {
+    /// 稳定错误码，供前端逻辑判断。
     code: &'static str,
+    /// 可读错误信息，主要用于显示和排障。
     message: String,
 }
 
+/// 进房请求体。
 #[derive(Deserialize)]
 struct JoinBody {
+    /// 当前会话标识。
     session_id: String,
+    /// 用户输入的房间短码。
     room_code: String,
 }
 
+/// 房间快照查询参数。
 #[derive(Deserialize)]
 struct SnapshotQuery {
+    /// 请求方会话标识，用于成员资格校验。
     session_id: String,
 }
 
+/// 增量事件查询参数。
 #[derive(Deserialize)]
 struct EventsQuery {
+    /// 从该事件位置之后开始拉取增量。
     from: i64,
 }
 
+/// 后台登录请求体（第一阶段最小门禁）。
 #[derive(Deserialize)]
 struct AdminLoginBody {
+    /// 后台用户名，当前固定要求为 admin。
     username: String,
+    /// 后台密码，由环境变量注入。
     password: String,
 }
 
+/// 后台登录响应。
 #[derive(Serialize)]
 struct AdminLoginResp {
+    /// 后台临时令牌（最小实现）。
     token: String,
 }
 
+/// Realtime 订阅命令负载。
 #[derive(Deserialize, Clone)]
 struct RealtimeSubscribeBody {
+    /// 订阅目标房间。
     room_id: String,
+    /// 客户端已持有的最新位置，用于增量续接。
     from: i64,
 }
 
+/// Realtime 发送消息命令负载。
 #[derive(Deserialize, Clone)]
 struct RealtimeSendBody {
+    /// 目标房间标识。
     room_id: String,
+    /// 发送者会话标识。
     session_id: String,
+    /// 客户端消息标识（幂等链路锚点）。
     client_message_id: String,
+    /// 消息文本原文。
     text: String,
 }
 
+/// 第一阶段后台最小令牌（后续可替换为正式会话机制）。
 const ADMIN_TOKEN: &str = "koko-admin-token";
 
 /// 冷路径：引导匿名会话。

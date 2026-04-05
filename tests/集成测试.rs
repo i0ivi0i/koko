@@ -8,6 +8,9 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
+/// 集成测试总则：
+/// 1. 这里测试“模块接线后”的真实行为，而不是单点纯函数。
+/// 2. 重点覆盖：配置失败、迁移结构、事务顺序、HTTP 冷路径、Realtime 主链。
 #[test]
 #[serial]
 fn 启动缺配置即失败() {
@@ -253,6 +256,7 @@ async fn http冷路径闭环() {
 }
 
 fn 备份并清空环境变量(keys: &[&str]) -> Vec<(String, Option<String>)> {
+    // 先备份再清空，确保测试结束后能完整恢复本机环境，避免污染开发机。
     let mut out = Vec::with_capacity(keys.len());
     for key in keys {
         out.push(((*key).to_string(), env::var(key).ok()));
@@ -262,6 +266,7 @@ fn 备份并清空环境变量(keys: &[&str]) -> Vec<(String, Option<String>)> {
 }
 
 fn 恢复环境变量(backup: Vec<(String, Option<String>)>) {
+    // 按备份回放：有值就恢复、无值就移除，保持测试前后的环境一致性。
     for (key, value) in backup {
         match value {
             Some(v) => env::set_var(key, v),
@@ -270,6 +275,10 @@ fn 恢复环境变量(backup: Vec<(String, Option<String>)>) {
     }
 }
 
+/// HTTP 测试助手：
+/// - 统一构造请求
+/// - 统一解析 JSON 响应
+/// - 让每个测试聚焦业务断言，而不是重复样板代码
 async fn send_json(
     app: axum::Router,
     method: Method,
