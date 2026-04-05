@@ -28,6 +28,19 @@ $frontendWatch = $null
 $frontendTypeWatch = $null
 
 try {
+    # 每次启动前先把依赖锁文件刷新到“约束内最新”，避免长期开发发生版本漂移。
+    Write-Host "刷新 Rust 依赖锁: cargo update"
+    & $cargoPath update
+    if ($LASTEXITCODE -ne 0) {
+        throw "cargo update 失败，已停止启动。"
+    }
+
+    Write-Host "刷新前端依赖锁: pnpm --dir frontend up"
+    & $pnpmPath --dir frontend up
+    if ($LASTEXITCODE -ne 0) {
+        throw "pnpm up 失败，已停止启动。"
+    }
+
     # run.ps1 只做编排：先构建前端产物，再开 watch，最后拉起后端。
     Write-Host "前端首轮构建: pnpm --dir frontend build"
     & $pnpmPath --dir frontend build
