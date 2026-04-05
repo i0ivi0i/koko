@@ -15,12 +15,19 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{adapter::Pg仓储, contract, usecase};
 
+/// 外壳层共享运行态，只存放“接线所需配置”，不承载业务事实。
 #[derive(Clone)]
 pub struct 应用状态 {
     pub database_url: String,
     pub admin_password: String,
 }
 
+/// 组装 HTTP 冷路径 + Realtime 热路径路由。
+///
+/// 分层约束：
+/// 1. 这里做协议接线，不做业务裁决。
+/// 2. 命令是否成立必须交给 usecase + domain + repository 主链。
+/// 3. 前端静态资源同源托管，减少开发期跨域噪音和双端口复杂度。
 pub fn 构建路由(database_url: String, admin_password: String) -> Router {
     let state = 应用状态 {
         database_url,
@@ -32,6 +39,7 @@ pub fn 构建路由(database_url: String, admin_password: String) -> Router {
         let state_for_subscribe = realtime_state.clone();
         let state_for_send = realtime_state.clone();
         async move {
+            // 控制面命令：建立订阅与补洞续接。
             socket.on(
                 "subscribe_room_stream",
                 move |s: SocketRef, Data::<RealtimeSubscribeBody>(payload)| {
@@ -42,6 +50,7 @@ pub fn 构建路由(database_url: String, admin_password: String) -> Router {
                 },
             );
 
+            // 业务热命令：发送文本消息。
             socket.on(
                 "send_text_message",
                 move |s: SocketRef, Data::<RealtimeSendBody>(payload)| {
@@ -124,6 +133,8 @@ struct RealtimeSendBody {
 
 const ADMIN_TOKEN: &str = "koko-admin-token";
 
+/// 冷路径：引导匿名会话。
+/// 只做协议解码和结果转码；业务规则在 usecase 层。
 async fn bootstrap_session(
     State(state): State<应用状态>,
     Json(body): Json<BootstrapBody>,
@@ -131,6 +142,7 @@ async fn bootstrap_session(
     let database_url = state.database_url.clone();
     let display_name = body.display_name.clone();
     let result = task::spawn_blocking(move || {
+        // 统一在阻塞线程做仓储调用，避免在 async 主执行器里直接跑阻塞 IO。
         let mut repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -168,6 +180,7 @@ async fn bootstrap_session(
     }
 }
 
+/// 冷路径：按短码进房或建房。
 async fn join_or_create_room(
     State(state): State<应用状态>,
     Json(body): Json<JoinBody>,
@@ -214,6 +227,7 @@ async fn join_or_create_room(
     }
 }
 
+/// 冷路径：加载房间快照（基线）。
 async fn load_room_snapshot(
     State(state): State<应用状态>,
     Path(room_id): Path<String>,
@@ -261,6 +275,7 @@ async fn load_room_snapshot(
     }
 }
 
+/// 冷路径：按位置拉房间增量事件（补洞兜底）。
 async fn load_room_events(
     State(state): State<应用状态>,
     Path(room_id): Path<String>,
@@ -306,6 +321,8 @@ async fn load_room_events(
     }
 }
 
+/// 后台登录入口（第一阶段最小实现）。
+/// 注意：这里只做认证接入，不在这里叠加复杂后台业务逻辑。
 async fn admin_login(
     State(state): State<应用状态>,
     Json(body): Json<AdminLoginBody>,
@@ -326,6 +343,7 @@ async fn admin_login(
         .into_response()
 }
 
+/// 后台只读：概览查询。
 async fn admin_overview(
     State(state): State<应用状态>, headers: HeaderMap
 ) -> impl IntoResponse {
@@ -371,6 +389,7 @@ async fn admin_overview(
     }
 }
 
+/// 后台只读：房间列表查询。
 async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> impl IntoResponse {
     if let Err((status, code, message)) = require_admin(&headers) {
         return err_resp(status, code, message);
@@ -412,6 +431,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
     }
 }
 
+/// 后台只读：房间详情查询。
 async fn admin_room_detail(
     State(state): State<应用状态>,
     headers: HeaderMap,
@@ -455,6 +475,8 @@ async fn admin_room_detail(
     }
 }
 
+/// 领域事件 -> 传输 JSON 的稳定映射层。
+/// 约束：只做字段翻译，不添加业务语义。
 fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value> {
     events
         .into_iter()
@@ -479,6 +501,7 @@ fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value>
         .collect()
 }
 
+/// 单条领域事件 -> JSON。
 fn event_to_json(event: contract::领域事件) -> serde_json::Value {
     match event {
         contract::领域事件::消息已创建 {
@@ -500,6 +523,11 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
     }
 }
 
+/// Realtime 控制面：订阅房间事件流。
+///
+/// 语义分离约束：
+/// - control_result 仅承载订阅结果/错误，不代表领域事实。
+/// - room_events 仅承载已成立领域事件。
 async fn handle_realtime_subscribe(
     socket: SocketRef,
     payload: RealtimeSubscribeBody,
@@ -527,6 +555,7 @@ async fn handle_realtime_subscribe(
             事件,
             最新事件位置,
         })) => {
+            // 先发控制面结果，再发领域事件列表，便于前端分通道处理。
             let control = serde_json::json!({
                 "kind": "subscribed",
                 "room_id": 房间标识,
@@ -552,6 +581,11 @@ async fn handle_realtime_subscribe(
     }
 }
 
+/// Realtime 业务命令：发送文本消息。
+///
+/// 语义分离约束：
+/// - room_event 仅在“消息已成立”后发出。
+/// - 命令拒绝和系统错误走 control_result。
 async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, state: 应用状态) {
     let db = state.database_url.clone();
     let result = task::spawn_blocking(move || {
@@ -575,6 +609,7 @@ async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, stat
 
     match result {
         Ok(Ok(event)) => {
+            // 只有用例链路返回领域事件，才表示消息真的成立。
             let payload = event_to_json(event);
             let _ = socket.emit("room_event", &payload);
         }
@@ -589,6 +624,8 @@ async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, stat
     }
 }
 
+/// 后台最小鉴权校验。
+/// 返回轻量错误元组，避免返回巨大 Response 造成 clippy result_large_err。
 fn require_admin(headers: &HeaderMap) -> Result<(), (StatusCode, &'static str, &'static str)> {
     let token = headers
         .get("x-admin-token")
@@ -605,11 +642,14 @@ fn require_admin(headers: &HeaderMap) -> Result<(), (StatusCode, &'static str, &
     }
 }
 
+/// 统一把 (status, code, message) 错误元组转为标准 API 错误响应。
 fn tuple_err_to_resp(tuple: (StatusCode, &'static str, String)) -> axum::response::Response {
     let (status, code, message) = tuple;
     err_resp(status, code, message)
 }
 
+/// 领域错误码 -> HTTP 状态码 + 稳定错误码的映射表。
+/// 约束：这里不做领域判断，只做“已得到错误码”的协议转码。
 fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str, String) {
     match code {
         contract::错误码::参数非法 => (
@@ -640,6 +680,7 @@ fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str,
     }
 }
 
+/// 统一 API 错误响应构造器。
 fn err_resp(
     status: StatusCode,
     code: &'static str,

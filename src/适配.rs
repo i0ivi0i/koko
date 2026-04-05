@@ -5,12 +5,22 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use crate::{contract, usecase::仓储端口};
 
 /// PostgreSQL 适配层只做持久化翻译与事务提交，不承载业务规则。
+///
+/// 维护者边界提醒：
+/// 1. 这里可以做 SQL、事务、索引命中相关优化。
+/// 2. 这里不可以改“谁能发/谁是成员/消息是否成立”等业务真相。
+/// 3. 业务真相必须在领域+用例决定，适配层只负责把结果准确落库/读库。
 pub struct Pg仓储 {
     rt: tokio::runtime::Runtime,
     pool: PgPool,
 }
 
 impl Pg仓储 {
+    /// 连接数据库并追平迁移。
+    ///
+    /// 设计原因：
+    /// - 保证任何入口拿到仓储时，库结构已可用。
+    /// - 避免“代码已更新但库未迁移”导致的运行期随机报错。
     pub fn 连接并迁移(database_url: &str) -> io::Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -33,6 +43,7 @@ impl Pg仓储 {
         Ok(Self { rt, pool })
     }
 
+    /// 仅用于测试事务不变量：验证房间锚点、事件条数、消息条数是否同步推进。
     pub fn 查询房间持久化计数(
         &self,
         房间标识: &str,
@@ -66,6 +77,11 @@ impl Pg仓储 {
         })
     }
 
+    /// 按事件位置拉房间增量事件（冷路径补洞接口）。
+    ///
+    /// 约束：
+    /// - 返回顺序必须按 event_position 升序，便于前端做幂等合并。
+    /// - 这里只做数据拼装，不在这里判断成员资格或权限。
     pub fn 拉取房间增量事件(
         &self,
         房间标识: &str,
@@ -121,6 +137,7 @@ impl Pg仓储 {
         })
     }
 
+    /// 后台概览查询（只读）。
     pub fn 后台概览(&self) -> Result<contract::快照, contract::错误码> {
         self.rt.block_on(async {
             let room_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
@@ -138,6 +155,7 @@ impl Pg仓储 {
         })
     }
 
+    /// 后台房间列表查询（只读）。
     pub fn 后台房间列表(&self) -> Result<contract::快照, contract::错误码> {
         self.rt.block_on(async {
             let rows = sqlx::query("SELECT room_id FROM rooms ORDER BY created_at DESC LIMIT 100")
@@ -154,6 +172,7 @@ impl Pg仓储 {
         })
     }
 
+    /// 后台房间详情查询（只读）。
     pub fn 后台房间详情(
         &self,
         房间标识: &str,
@@ -186,6 +205,7 @@ impl Pg仓储 {
 }
 
 impl 仓储端口 for Pg仓储 {
+    /// 创建匿名会话，并返回会话快照。
     fn 创建匿名会话(
         &mut self,
         显示名: &str,
@@ -214,6 +234,7 @@ impl 仓储端口 for Pg仓储 {
         房间短码: &str,
     ) -> Result<contract::快照, contract::错误码> {
         self.rt.block_on(async {
+            // 事务边界：会话校验、房间存在性、成员关系写入需要同一提交语义。
             let mut tx = self
                 .pool
                 .begin()
@@ -262,6 +283,7 @@ impl 仓储端口 for Pg仓储 {
                     )
                 };
 
+            // 成员关系幂等写入：已是当前成员则不重复插入。
             sqlx::query(
                 "INSERT INTO room_members (room_id, session_id, left_at) \
                  VALUES ($1, $2, NULL) \
@@ -284,6 +306,8 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
+    /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
+    /// 规则本身在用例层决定“何时调用、失败如何映射”。
     fn 检查成员资格(
         &self,
         房间标识: &str,
@@ -306,6 +330,7 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
+    /// 拉取房间基线快照：用于首屏基线与补洞失败兜底。
     fn 拉取房间快照(
         &self, 房间标识: &str
     ) -> Result<contract::快照, contract::错误码> {
@@ -334,6 +359,12 @@ impl 仓储端口 for Pg仓储 {
         文本: &str,
     ) -> Result<contract::领域事件, contract::错误码> {
         self.rt.block_on(async {
+            // 核心事务不变量：
+            // 1) 锁定房间并计算 next_position
+            // 2) 写 room_events
+            // 3) 写 messages
+            // 4) 推进 rooms.latest_event_position
+            // 四步必须同事务提交，否则顺序语义会漂移。
             let mut tx = self
                 .pool
                 .begin()
@@ -364,6 +395,7 @@ impl 仓储端口 for Pg仓储 {
 
             let message_id = format!("{房间标识}-{next_position}");
 
+            // 先落事件，再落消息：确保房间事件流锚点始终连续可追。
             sqlx::query(
                 "INSERT INTO room_events (room_id, event_position, event_kind, actor_session_id, message_id) \
                  VALUES ($1, $2, 'message_created', $3, $4)",
