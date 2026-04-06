@@ -32,10 +32,16 @@ function New-LauncherLogDirectory {
         [string]$SessionName
     )
 
-    $path = Join-Path $RootDirectory $SessionName
-    if (-not (Test-Path -LiteralPath $path)) {
-        New-Item -ItemType Directory -Path $path | Out-Null
+    $rootPath = Join-Path $RootDirectory $SessionName
+    if (-not (Test-Path -LiteralPath $rootPath)) {
+        New-Item -ItemType Directory -Path $rootPath | Out-Null
     }
+
+    # 每次启动都分配独立会话目录，避免上一次异常中断后残留的 watcher 继续占用固定日志文件，
+    # 导致新一轮 launcher 还没真正起业务就先因为文件句柄冲突失败。
+    $sessionId = "{0}-{1}-{2}" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"), $PID, ([Guid]::NewGuid().ToString("N").Substring(0, 8))
+    $path = Join-Path $rootPath $sessionId
+    New-Item -ItemType Directory -Path $path -Force | Out-Null
     return $path
 }
 

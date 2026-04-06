@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../聊天壳";
 import type { 前端传输端口 } from "../传输";
