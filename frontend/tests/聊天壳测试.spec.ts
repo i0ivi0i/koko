@@ -13,7 +13,50 @@ import type {
 import { 聊天壳 } from "../聊天壳";
 import type { Socket } from "socket.io-client";
 
+class 假Socket {
+  private handlers = new Map<string, Array<(payload: unknown) => void>>();
+
+  on(event: string, handler: (payload: unknown) => void): this {
+    const list = this.handlers.get(event) ?? [];
+    list.push(handler);
+    this.handlers.set(event, list);
+    return this;
+  }
+
+  emit(event: string, payload: Record<string, unknown>): boolean {
+    if (event === "subscribe_room_stream") {
+      this.fire("control_result", {
+        kind: "subscribed",
+        room_id: payload.room_id,
+        latest_event_position: 0,
+      });
+    }
+    if (event === "send_text_message") {
+      this.fire("room_event", {
+        type: "message_created",
+        room_id: "r-test",
+        message_id: "m-1",
+        client_message_id: payload.client_message_id,
+        sender_session_id: "s-test",
+        body: payload.text,
+        event_position: 1,
+      });
+    }
+    return true;
+  }
+
+  disconnect(): void {}
+
+  private fire(event: string, payload: unknown): void {
+    for (const handler of this.handlers.get(event) ?? []) {
+      handler(payload);
+    }
+  }
+}
+
 class 假传输 implements 前端传输端口 {
+  private readonly socket = new 假Socket();
+
   async bootstrapSession(): Promise<会话快照> {
     return { session_id: "s-test", display_name: "tester" };
   }
@@ -52,8 +95,8 @@ class 假传输 implements 前端传输端口 {
   async adminRoomDetail(): Promise<后台房间详情> {
     return { room_id: "r-test", latest_event_position: 1, message_count: 1 };
   }
-  createSocket(): Socket {
-    throw new Error("not used");
+  createSocket(_sessionId: string): Socket {
+    return this.socket as unknown as Socket;
   }
 }
 

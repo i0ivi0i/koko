@@ -27,8 +27,12 @@ pub async fn 启动() -> std::io::Result<()> {
     migrate_result?;
 
     // 这里仅做路由总装，不参与任何业务语义判断。
-    let app =
-        crate::shell::构建路由(config.database_url.clone(), config.admin_password.clone());
+    let state = crate::shell::构建应用状态(
+        config.database_url.clone(),
+        config.admin_password.clone(),
+    )
+    .await?;
+    let app = crate::shell::构建路由(state);
     let addr = format!("0.0.0.0:{}", config.app_port);
 
     // 端口绑定失败通常是“端口占用/权限问题”，归类为基础设施错误。

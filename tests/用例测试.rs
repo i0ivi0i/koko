@@ -106,6 +106,11 @@ impl koko::usecase::仓储端口 for 假仓储 {
         })
     }
 
+    /// 假实现：当前测试里，形如 `s-*` 的会话都视为已存在。
+    fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, koko::contract::错误码> {
+        Ok(会话标识.starts_with("s-"))
+    }
+
     /// 假实现：成员资格查询。
     fn 检查成员资格(
         &self,
@@ -191,6 +196,19 @@ fn 加载房间快照要求成员资格() {
     };
     let snap = koko::usecase::加载房间快照(&repo, &room_id, "s-1").expect("成员应能加载快照");
     assert!(matches!(snap, koko::contract::快照::房间 { .. }));
+}
+
+#[test]
+fn 校验房间订阅资格会拒绝非成员() {
+    let mut repo = 假仓储::default();
+    let room = koko::usecase::按短码进房或建房(&mut repo, "s-1", "ROOM0009").expect("应成功");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+
+    let result = koko::usecase::校验房间订阅资格(&repo, &room_id, "s-2");
+    assert!(matches!(result, Err(koko::contract::错误码::成员资格不足)));
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use std::io;
+use std::{future::Future, io};
 
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 
@@ -11,11 +11,20 @@ use crate::{contract, usecase::仓储端口};
 /// 2. 这里不可以改“谁能发/谁是成员/消息是否成立”等业务真相。
 /// 3. 业务真相必须在领域+用例决定，适配层只负责把结果准确落库/读库。
 pub struct Pg仓储 {
-    rt: tokio::runtime::Runtime,
+    handle: tokio::runtime::Handle,
+    owned_runtime: Option<tokio::runtime::Runtime>,
     pool: PgPool,
 }
 
 impl Pg仓储 {
+    fn 在运行时执行<T>(&self, future: impl Future<Output = T>) -> T {
+        if let Some(rt) = &self.owned_runtime {
+            rt.block_on(future)
+        } else {
+            self.handle.block_on(future)
+        }
+    }
+
     /// 连接数据库并追平迁移。
     ///
     /// 设计原因：
@@ -40,7 +49,21 @@ impl Pg仓储 {
                 .await
                 .map_err(|err| io::Error::other(format!("执行迁移失败: {err}")))
         })?;
-        Ok(Self { rt, pool })
+        let handle = rt.handle().clone();
+        Ok(Self {
+            handle,
+            owned_runtime: Some(rt),
+            pool,
+        })
+    }
+
+    /// 用共享连接池构造仓储，避免热路径重复创建 `PgPool`。
+    pub fn 从连接池构建(pool: PgPool, handle: tokio::runtime::Handle) -> Self {
+        Self {
+            handle,
+            owned_runtime: None,
+            pool,
+        }
     }
 
     /// 仅用于测试事务不变量：验证房间锚点、事件条数、消息条数是否同步推进。
@@ -48,7 +71,7 @@ impl Pg仓储 {
         &self,
         房间标识: &str,
     ) -> Result<(i64, i64, i64), contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let room =
                 sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
                     .bind(房间标识)
@@ -87,7 +110,7 @@ impl Pg仓储 {
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<contract::快照, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
                 .bind(房间标识)
                 .fetch_optional(&self.pool)
@@ -139,7 +162,7 @@ impl Pg仓储 {
 
     /// 后台概览查询（只读）。
     pub fn 后台概览(&self) -> Result<contract::快照, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let room_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms")
                 .fetch_one(&self.pool)
                 .await
@@ -157,7 +180,7 @@ impl Pg仓储 {
 
     /// 后台房间列表查询（只读）。
     pub fn 后台房间列表(&self) -> Result<contract::快照, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let rows = sqlx::query("SELECT room_id FROM rooms ORDER BY created_at DESC LIMIT 100")
                 .fetch_all(&self.pool)
                 .await
@@ -177,7 +200,7 @@ impl Pg仓储 {
         &self,
         房间标识: &str,
     ) -> Result<contract::快照, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let room =
                 sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
                     .bind(房间标识)
@@ -210,7 +233,7 @@ impl 仓储端口 for Pg仓储 {
         &mut self,
         显示名: &str,
     ) -> Result<contract::快照, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let row = sqlx::query(
                 "INSERT INTO sessions (session_id, display_name) \
                  VALUES (concat('s-', substring(md5(random()::text) from 1 for 12)), $1) \
@@ -235,7 +258,7 @@ impl 仓储端口 for Pg仓储 {
         会话标识: &str,
         房间短码: &str,
     ) -> Result<contract::快照, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             // 事务边界：会话校验、房间存在性、成员关系写入需要同一提交语义。
             let mut tx = self
                 .pool
@@ -310,12 +333,26 @@ impl 仓储端口 for Pg仓储 {
 
     /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
     /// 规则本身在用例层决定“何时调用、失败如何映射”。
+    fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
+        self.在运行时执行(async {
+            let exists =
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions WHERE session_id = $1")
+                    .bind(会话标识)
+                    .fetch_one(&self.pool)
+                    .await
+                    .map_err(|_| contract::错误码::系统错误)?;
+            Ok(exists > 0)
+        })
+    }
+
+    /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
+    /// 规则本身在用例层决定“何时调用、失败如何映射”。
     fn 检查成员资格(
         &self,
         房间标识: &str,
         会话标识: &str,
     ) -> Result<bool, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let exists = sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) \
                  FROM room_members rm \
@@ -336,7 +373,7 @@ impl 仓储端口 for Pg仓储 {
     fn 拉取房间快照(
         &self, 房间标识: &str
     ) -> Result<contract::快照, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             let room =
                 sqlx::query("SELECT room_id, latest_event_position FROM rooms WHERE room_id = $1")
                     .bind(房间标识)
@@ -362,7 +399,7 @@ impl 仓储端口 for Pg仓储 {
         会话标识: &str,
         文本: &str,
     ) -> Result<contract::领域事件, contract::错误码> {
-        self.rt.block_on(async {
+        self.在运行时执行(async {
             // 核心事务不变量：
             // 1) 锁定房间并计算 next_position
             // 2) 写 room_events

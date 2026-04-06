@@ -13,6 +13,16 @@ import type {
 import { 后台壳 } from "../后台壳";
 import type { Socket } from "socket.io-client";
 
+const 空Socket = {
+  on() {
+    return this;
+  },
+  emit() {
+    return true;
+  },
+  disconnect() {},
+} as unknown as Socket;
+
 class 假后台传输 implements 前端传输端口 {
   async bootstrapSession(): Promise<会话快照> {
     return { session_id: "s-x", display_name: "x" };
@@ -38,8 +48,8 @@ class 假后台传输 implements 前端传输端口 {
   async adminRoomDetail(_token: string, roomId: string): Promise<后台房间详情> {
     return { room_id: roomId, latest_event_position: 12, message_count: 99 };
   }
-  createSocket(): Socket {
-    throw new Error("not used");
+  createSocket(_sessionId: string): Socket {
+    return 空Socket;
   }
 }
 

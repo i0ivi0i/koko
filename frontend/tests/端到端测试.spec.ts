@@ -15,7 +15,50 @@ import type {
 } from "../契约";
 import type { Socket } from "socket.io-client";
 
+class 假Socket {
+  private handlers = new Map<string, Array<(payload: unknown) => void>>();
+
+  on(event: string, handler: (payload: unknown) => void): this {
+    const list = this.handlers.get(event) ?? [];
+    list.push(handler);
+    this.handlers.set(event, list);
+    return this;
+  }
+
+  emit(event: string, payload: Record<string, unknown>): boolean {
+    if (event === "subscribe_room_stream") {
+      this.fire("control_result", {
+        kind: "subscribed",
+        room_id: payload.room_id,
+        latest_event_position: 0,
+      });
+    }
+    if (event === "send_text_message") {
+      this.fire("room_event", {
+        type: "message_created",
+        room_id: "r-e2e",
+        message_id: "m-e2e",
+        client_message_id: payload.client_message_id,
+        sender_session_id: "s-e2e",
+        body: payload.text,
+        event_position: 1,
+      });
+    }
+    return true;
+  }
+
+  disconnect(): void {}
+
+  private fire(event: string, payload: unknown): void {
+    for (const handler of this.handlers.get(event) ?? []) {
+      handler(payload);
+    }
+  }
+}
+
 class 端到端假传输 implements 前端传输端口 {
+  private readonly socket = new 假Socket();
+
   async bootstrapSession(): Promise<会话快照> {
     return { session_id: "s-e2e", display_name: "e2e" };
   }
@@ -54,8 +97,8 @@ class 端到端假传输 implements 前端传输端口 {
   async adminRoomDetail(): Promise<后台房间详情> {
     return { room_id: "r-e2e", latest_event_position: 1, message_count: 1 };
   }
-  createSocket(): Socket {
-    throw new Error("not used");
+  createSocket(_sessionId: string): Socket {
+    return this.socket as unknown as Socket;
   }
 }
 
@@ -83,7 +126,7 @@ describe("前后台壳端到端冒烟", () => {
     sendBtn.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
-    expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).toContain("e2e-hello");
+    expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");
 
     const admin = document.createElement("koko-admin-shell") as 后台壳;
     admin.setTransportForTest(transport);

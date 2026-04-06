@@ -1,7 +1,16 @@
 # socketioxide 单节点多房间群聊主通道设计
 
 日期：2026-04-06  
-状态：已确认设计，待按计划实施
+状态：设计已落地，单节点主通道已实现并完成真实链路验收
+
+## 实现状态（2026-04-06）
+
+1. 已完成启动期共享 `PgPool` 与共享 `应用状态`
+2. 已完成 handshake `auth.session_id` + connect middleware + socket extension
+3. 已完成订阅资格回到 usecase，订阅成功后 `join(room)`
+4. 已完成发送成功后统一 `room_event` 房间广播，取消发送者私有成功回显
+5. 已完成前端乐观态通过 `client_message_id` 与权威 `room_event` 收敛
+6. 已完成基于官方 `socket.io-client` 的真实双客户端同房广播验收
 
 ## 1. 目标
 

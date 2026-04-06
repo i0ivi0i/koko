@@ -7,9 +7,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use socketioxide::{
-    extract::{Data, SocketRef},
+    extract::{Data, Extension, SocketRef, TryData},
+    handler::ConnectHandler,
     SocketIo,
 };
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::task;
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -18,7 +20,8 @@ use crate::{adapter::Pg仓储, contract, usecase};
 /// 外壳层共享运行态，只存放“接线所需配置”，不承载业务事实。
 #[derive(Clone)]
 pub struct 应用状态 {
-    pub database_url: String,
+    pub pool: PgPool,
+    pub runtime_handle: tokio::runtime::Handle,
     pub admin_password: String,
 }
 
@@ -28,40 +31,26 @@ pub struct 应用状态 {
 /// 1. 这里做协议接线，不做业务裁决。
 /// 2. 命令是否成立必须交给 usecase + domain + repository 主链。
 /// 3. 前端静态资源同源托管，减少开发期跨域噪音和双端口复杂度。
-pub fn 构建路由(database_url: String, admin_password: String) -> Router {
-    let state = 应用状态 {
-        database_url,
-        admin_password,
-    };
-    let realtime_state = state.clone();
-    let (socket_layer, io) = SocketIo::new_layer();
-    io.ns("/", move |socket: SocketRef| {
-        let state_for_subscribe = realtime_state.clone();
-        let state_for_send = realtime_state.clone();
-        async move {
-            // 控制面命令：建立订阅与补洞续接。
-            socket.on(
-                "subscribe_room_stream",
-                move |s: SocketRef, Data::<RealtimeSubscribeBody>(payload)| {
-                    let state = state_for_subscribe.clone();
-                    async move {
-                        handle_realtime_subscribe(s, payload, state).await;
-                    }
-                },
-            );
+pub async fn 构建应用状态(
+    database_url: String,
+    admin_password: String,
+) -> std::io::Result<应用状态> {
+    let pool = PgPoolOptions::new()
+        .max_connections(20)
+        .connect(&database_url)
+        .await
+        .map_err(|err| std::io::Error::other(format!("连接数据库失败: {err}")))?;
 
-            // 业务热命令：发送文本消息。
-            socket.on(
-                "send_text_message",
-                move |s: SocketRef, Data::<RealtimeSendBody>(payload)| {
-                    let state = state_for_send.clone();
-                    async move {
-                        handle_realtime_send(s, payload, state).await;
-                    }
-                },
-            );
-        }
-    });
+    Ok(应用状态 {
+        pool,
+        runtime_handle: tokio::runtime::Handle::current(),
+        admin_password,
+    })
+}
+
+pub fn 构建路由(state: 应用状态) -> Router {
+    let (socket_layer, io) = SocketIo::new_layer();
+    注册realtime命名空间(&io, state.clone());
 
     Router::new()
         .route("/api/session/bootstrap", post(bootstrap_session))
@@ -77,6 +66,58 @@ pub fn 构建路由(database_url: String, admin_password: String) -> Router {
         .nest_service("/dist", ServeDir::new("frontend/dist"))
         .layer(socket_layer)
         .with_state(state)
+}
+
+/// 注册单节点 realtime 命名空间。
+/// 约束：连接级认证在 connect middleware 完成，消息 handler 不再相信 payload 身份。
+fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
+    let connect_state = state.clone();
+    io.ns(
+        "/",
+        (move |socket: SocketRef| {
+            let state_for_subscribe = state.clone();
+            let state_for_send = state.clone();
+            async move {
+                // 控制面命令：建立订阅与补洞续接。
+                socket.on(
+                    "subscribe_room_stream",
+                    move |s: SocketRef,
+                          Extension(auth): Extension<已认证会话>,
+                          Data::<RealtimeSubscribeBody>(payload)| {
+                        let state = state_for_subscribe.clone();
+                        async move {
+                            handle_realtime_subscribe(s, auth, payload, state).await;
+                        }
+                    },
+                );
+
+                // 业务热命令：发送文本消息。
+                socket.on(
+                    "send_text_message",
+                    move |s: SocketRef,
+                          Extension(auth): Extension<已认证会话>,
+                          Data::<RealtimeSendBody>(payload)| {
+                        let state = state_for_send.clone();
+                        async move {
+                            handle_realtime_send(s, auth, payload, state).await;
+                        }
+                    },
+                );
+            }
+        })
+        .with(
+            move |socket: SocketRef, TryData(auth): TryData<RealtimeConnectAuth>| {
+                let state = connect_state.clone();
+                async move { 认证realtime连接(socket, auth, state).await }
+            },
+        ),
+    );
+}
+
+/// 共享状态 -> 仓储 的唯一构造入口。
+/// 约束：热路径只复用共享连接池，不在 handler 里重复建池。
+fn 构建共享仓储(state: &应用状态) -> Pg仓储 {
+    Pg仓储::从连接池构建(state.pool.clone(), state.runtime_handle.clone())
 }
 
 /// 引导会话请求体：壳层只提交展示名意图。
@@ -118,6 +159,19 @@ struct EventsQuery {
     from: i64,
 }
 
+/// 连接握手携带的最小认证数据。
+#[derive(Deserialize, Clone)]
+struct RealtimeConnectAuth {
+    /// 当前连接声明的会话标识。
+    session_id: String,
+}
+
+/// 存放在 socket extension 内的已认证会话。
+#[derive(Clone)]
+struct 已认证会话 {
+    session_id: String,
+}
+
 /// 后台登录请求体（第一阶段最小门禁）。
 #[derive(Deserialize)]
 struct AdminLoginBody {
@@ -148,8 +202,6 @@ struct RealtimeSubscribeBody {
 struct RealtimeSendBody {
     /// 目标房间标识。
     room_id: String,
-    /// 发送者会话标识。
-    session_id: String,
     /// 客户端消息标识（幂等链路锚点）。
     client_message_id: String,
     /// 消息文本原文。
@@ -165,17 +217,11 @@ async fn bootstrap_session(
     State(state): State<应用状态>,
     Json(body): Json<BootstrapBody>,
 ) -> impl IntoResponse {
-    let database_url = state.database_url.clone();
+    let state = state.clone();
     let display_name = body.display_name.clone();
     let result = task::spawn_blocking(move || {
         // 统一在阻塞线程做仓储调用，避免在 async 主执行器里直接跑阻塞 IO。
-        let mut repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let mut repo = 构建共享仓储(&state);
         usecase::引导匿名会话(&mut repo, &display_name).map_err(map_domain_err_tuple)
     })
     .await;
@@ -211,17 +257,11 @@ async fn join_or_create_room(
     State(state): State<应用状态>,
     Json(body): Json<JoinBody>,
 ) -> impl IntoResponse {
-    let database_url = state.database_url.clone();
+    let state = state.clone();
     let session_id = body.session_id.clone();
     let room_code = body.room_code.clone();
     let result = task::spawn_blocking(move || {
-        let mut repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let mut repo = 构建共享仓储(&state);
         usecase::按短码进房或建房(&mut repo, &session_id, &room_code).map_err(map_domain_err_tuple)
     })
     .await;
@@ -259,17 +299,11 @@ async fn load_room_snapshot(
     Path(room_id): Path<String>,
     Query(query): Query<SnapshotQuery>,
 ) -> impl IntoResponse {
-    let database_url = state.database_url.clone();
+    let state = state.clone();
     let session_id = query.session_id.clone();
     let room_id_copy = room_id.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let repo = 构建共享仓储(&state);
         usecase::加载房间快照(&repo, &room_id_copy, &session_id).map_err(map_domain_err_tuple)
     })
     .await;
@@ -307,17 +341,11 @@ async fn load_room_events(
     Path(room_id): Path<String>,
     Query(query): Query<EventsQuery>,
 ) -> impl IntoResponse {
-    let database_url = state.database_url.clone();
+    let state = state.clone();
     let room_id_copy = room_id.clone();
     let from = query.from;
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let repo = 构建共享仓储(&state);
         repo.拉取房间增量事件(&room_id_copy, from)
             .map_err(map_domain_err_tuple)
     })
@@ -376,15 +404,9 @@ async fn admin_overview(
     if let Err((status, code, message)) = require_admin(&headers) {
         return err_resp(status, code, message);
     }
-    let database_url = state.database_url.clone();
+    let state = state.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let repo = 构建共享仓储(&state);
         repo.后台概览().map_err(map_domain_err_tuple)
     })
     .await;
@@ -420,15 +442,9 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
     if let Err((status, code, message)) = require_admin(&headers) {
         return err_resp(status, code, message);
     }
-    let database_url = state.database_url.clone();
+    let state = state.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let repo = 构建共享仓储(&state);
         repo.后台房间列表().map_err(map_domain_err_tuple)
     })
     .await;
@@ -466,16 +482,10 @@ async fn admin_room_detail(
     if let Err((status, code, message)) = require_admin(&headers) {
         return err_resp(status, code, message);
     }
-    let database_url = state.database_url.clone();
+    let state = state.clone();
     let room_id_copy = room_id.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&database_url).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let repo = 构建共享仓储(&state);
         repo.后台房间详情(&room_id_copy)
             .map_err(map_domain_err_tuple)
     })
@@ -549,6 +559,33 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
     }
 }
 
+/// connect middleware：把会话认证收口到连接握手。
+/// 约束：这里只确认会话存在并写入 socket extension，不裁决房间权限。
+async fn 认证realtime连接(
+    socket: SocketRef,
+    auth: Result<RealtimeConnectAuth, socketioxide::ParserError>,
+    state: 应用状态,
+) -> Result<(), String> {
+    let session_id = auth.map_err(|_| "invalid_session".to_string())?.session_id;
+    let state = state.clone();
+    let session_id_for_check = session_id.clone();
+    let result = task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state);
+        usecase::校验实时连接会话(&repo, &session_id_for_check)
+    })
+    .await
+    .map_err(|err| format!("system_error:{err}"))?;
+
+    match result {
+        Ok(()) => {
+            socket.extensions.insert(已认证会话 { session_id });
+            Ok(())
+        }
+        Err(contract::错误码::会话无效) => Err("invalid_session".to_string()),
+        Err(_) => Err("system_error".to_string()),
+    }
+}
+
 /// Realtime 控制面：订阅房间事件流。
 ///
 /// 语义分离约束：
@@ -556,20 +593,17 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
 /// - room_events 仅承载已成立领域事件。
 async fn handle_realtime_subscribe(
     socket: SocketRef,
+    auth: 已认证会话,
     payload: RealtimeSubscribeBody,
     state: 应用状态,
 ) {
     let room_id = payload.room_id.clone();
     let from = payload.from;
-    let db = state.database_url.clone();
+    let session_id = auth.session_id.clone();
+    let state = state.clone();
     let result = task::spawn_blocking(move || {
-        let repo = Pg仓储::连接并迁移(&db).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let repo = 构建共享仓储(&state);
+        usecase::校验房间订阅资格(&repo, &room_id, &session_id).map_err(map_domain_err_tuple)?;
         repo.拉取房间增量事件(&room_id, from)
             .map_err(map_domain_err_tuple)
     })
@@ -581,6 +615,7 @@ async fn handle_realtime_subscribe(
             事件,
             最新事件位置,
         })) => {
+            socket.join(房间标识.clone());
             // 先发控制面结果，再发领域事件列表，便于前端分通道处理。
             let control = serde_json::json!({
                 "kind": "subscribed",
@@ -612,20 +647,20 @@ async fn handle_realtime_subscribe(
 /// 语义分离约束：
 /// - room_event 仅在“消息已成立”后发出。
 /// - 命令拒绝和系统错误走 control_result。
-async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, state: 应用状态) {
-    let db = state.database_url.clone();
+async fn handle_realtime_send(
+    socket: SocketRef,
+    auth: 已认证会话,
+    payload: RealtimeSendBody,
+    state: 应用状态,
+) {
+    let state = state.clone();
+    let session_id = auth.session_id.clone();
     let result = task::spawn_blocking(move || {
-        let mut repo = Pg仓储::连接并迁移(&db).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                err.to_string(),
-            )
-        })?;
+        let mut repo = 构建共享仓储(&state);
         usecase::发送文本消息(
             &mut repo,
             &payload.room_id,
-            &payload.session_id,
+            &session_id,
             &payload.client_message_id,
             &payload.text,
         )
@@ -636,8 +671,29 @@ async fn handle_realtime_send(socket: SocketRef, payload: RealtimeSendBody, stat
     match result {
         Ok(Ok(event)) => {
             // 只有用例链路返回领域事件，才表示消息真的成立。
+            let (room_id, client_message_id) = match &event {
+                contract::领域事件::消息已创建 {
+                    房间标识,
+                    客户端消息标识,
+                    ..
+                } => (房间标识.clone(), 客户端消息标识.clone()),
+            };
             let payload = event_to_json(event);
-            let _ = socket.emit("room_event", &payload);
+            if let Err(err) = socket
+                .within(room_id.clone())
+                .emit("room_event", &payload)
+                .await
+            {
+                tracing::error!(
+                    usecase = "发送文本消息",
+                    adapter = "socketioxide",
+                    room_id = room_id,
+                    session_id = auth.session_id,
+                    client_message_id = client_message_id,
+                    error = %err,
+                    "房间权威事件广播失败"
+                );
+            }
         }
         Ok(Err((_, code, message))) => {
             let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});

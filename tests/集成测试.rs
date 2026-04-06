@@ -155,9 +155,34 @@ fn realtime主链闭环() {
 
 #[tokio::test]
 #[serial]
+async fn 构建应用状态时持有共享数据库连接池() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let snapshot = tokio::task::spawn_blocking(move || {
+        let repo = koko::adapter::Pg仓储::从连接池构建(
+            state.pool.clone(),
+            state.runtime_handle.clone(),
+        );
+        repo.后台概览()
+    })
+    .await
+    .expect("阻塞任务应完成")
+    .expect("共享连接池上的仓储应可用");
+    assert!(matches!(snapshot, koko::contract::快照::后台概览 { .. }));
+}
+
+#[tokio::test]
+#[serial]
 async fn http冷路径闭环() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
-    let app = koko::shell::构建路由(cfg.database_url.clone(), cfg.admin_password.clone());
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")

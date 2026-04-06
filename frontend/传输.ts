@@ -18,7 +18,7 @@ export interface 前端传输端口 {
   adminLogin(username: string, password: string): Promise<后台登录结果>;
   adminRooms(token: string): Promise<后台房间列表>;
   adminRoomDetail(token: string, roomId: string): Promise<后台房间详情>;
-  createSocket(): Socket;
+  createSocket(sessionId: string): Socket;
 }
 
 export class HttpRealtime传输 implements 前端传输端口 {
@@ -59,8 +59,11 @@ export class HttpRealtime传输 implements 前端传输端口 {
     return this.get(`/api/admin/rooms/${roomId}`, { "x-admin-token": token });
   }
 
-  createSocket(): Socket {
-    return io(this.baseUrl, { transports: ["websocket"] });
+  createSocket(sessionId: string): Socket {
+    return io(this.baseUrl, {
+      transports: ["websocket"],
+      auth: { session_id: sessionId },
+    });
   }
 
   private async get<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
