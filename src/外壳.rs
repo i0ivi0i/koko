@@ -57,6 +57,7 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route("/api/session/bootstrap", post(bootstrap_session))
         .route("/api/rooms/join-or-create", post(join_or_create_room))
         .route("/api/rooms/{room_id}/snapshot", get(load_room_snapshot))
+        .route("/api/rooms/{room_id}/read-anchor", post(update_room_read_anchor))
         .route("/api/rooms/{room_id}/history", get(load_room_history))
         .route("/api/rooms/{room_id}/events", get(load_room_events))
         .route("/api/admin/login", post(admin_login))
@@ -146,6 +147,17 @@ struct JoinBody {
     session_id: String,
     /// 用户输入的房间短码。
     room_code: String,
+}
+
+/// 阅读推进请求体。
+#[derive(Deserialize)]
+struct UpdateReadAnchorBody {
+    /// 当前会话标识。
+    /// 这里仍使用稳定会话锚点承接调用身份，但最终阅读真相不会挂在 session 上。
+    session_id: Option<String>,
+    /// 本次确认已读到的最大事件位置。
+    /// 它表达“用户阅读已经越过哪里”，不是滚动条像素位置。
+    last_read_event_position: Option<i64>,
 }
 
 /// 房间快照查询参数。
@@ -532,6 +544,150 @@ async fn load_room_snapshot(
                 session_id = session_id,
                 error_code = code,
                 "加载房间快照被拒绝"
+            );
+            err_resp(status, code, message)
+        }
+    }
+}
+
+/// 冷路径：推进房间阅读位置。
+/// 约束：
+/// 1. 这是独立写接口，不和 join / snapshot / realtime 订阅耦在一起。
+/// 2. handler 只负责协议解码和错误转码，不猜“应该推进到哪里”。
+/// 3. 阅读真相是否成立，必须交给 usecase + repository 主链裁决。
+async fn update_room_read_anchor(
+    State(state): State<应用状态>,
+    Path(room_id): Path<String>,
+    Json(body): Json<UpdateReadAnchorBody>,
+) -> impl IntoResponse {
+    let Some(session_id) = body
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+    else {
+        tracing::warn!(
+            usecase = "推进房间阅读位置",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "房间阅读位置推进",
+            room_id = room_id.as_str(),
+            error_code = "invalid_argument",
+            "推进房间阅读位置缺少 session_id"
+        );
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 session_id",
+        );
+    };
+    let Some(last_read_event_position) = body.last_read_event_position else {
+        tracing::warn!(
+            usecase = "推进房间阅读位置",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "房间阅读位置推进",
+            room_id = room_id.as_str(),
+            session_id = session_id.as_str(),
+            error_code = "invalid_argument",
+            "推进房间阅读位置缺少 last_read_event_position"
+        );
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 last_read_event_position",
+        );
+    };
+    tracing::info!(
+        usecase = "推进房间阅读位置",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "房间阅读位置推进",
+        room_id = room_id.as_str(),
+        session_id = session_id.as_str(),
+        event_position = last_read_event_position,
+        "HTTP 请求已受理"
+    );
+    let state = state.clone();
+    let room_id_for_usecase = room_id.clone();
+    let session_id_for_usecase = session_id.clone();
+    let result = task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state);
+        usecase::推进房间阅读位置(
+            &mut repo,
+            &room_id_for_usecase,
+            &session_id_for_usecase,
+            last_read_event_position,
+        )
+        .map_err(map_domain_err_tuple)
+    })
+    .await;
+    let result = match result {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(
+                usecase = "推进房间阅读位置",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "房间阅读位置推进",
+                room_id = room_id,
+                session_id = session_id,
+                event_position = last_read_event_position,
+                error_code = "system_error",
+                error = %err,
+                "推进房间阅读位置任务执行失败"
+            );
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("任务执行失败: {err}"),
+            );
+        }
+    };
+    match result {
+        Ok(contract::命令结果::成功) => {
+            tracing::info!(
+                usecase = "推进房间阅读位置",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "房间阅读位置推进",
+                room_id = room_id,
+                session_id = session_id,
+                event_position = last_read_event_position,
+                "推进房间阅读位置成功"
+            );
+            (StatusCode::OK, Json(serde_json::json!({}))).into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "推进房间阅读位置",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "房间阅读位置推进",
+                room_id = room_id,
+                session_id = session_id,
+                event_position = last_read_event_position,
+                error_code = "system_error",
+                "推进房间阅读位置返回了错误的命令结果类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回命令结果类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "推进房间阅读位置",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "房间阅读位置推进",
+                room_id = room_id,
+                session_id = session_id,
+                event_position = last_read_event_position,
+                error_code = code,
+                "推进房间阅读位置被拒绝"
             );
             err_resp(status, code, message)
         }
