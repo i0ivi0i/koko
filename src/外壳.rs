@@ -1072,23 +1072,81 @@ async fn 认证realtime连接(
     auth: Result<RealtimeConnectAuth, socketioxide::ParserError>,
     state: 应用状态,
 ) -> Result<(), String> {
-    let session_id = auth.map_err(|_| "invalid_session".to_string())?.session_id;
+    let session_id = match auth {
+        Ok(auth) => auth.session_id,
+        Err(_) => {
+            tracing::warn!(
+                usecase = "实时连接认证",
+                adapter = "socketioxide",
+                outcome = "rejected",
+                error_code = "invalid_session",
+                "realtime 连接认证载荷非法"
+            );
+            return Err("invalid_session".to_string());
+        }
+    };
+    // 连接认证成功只表示“连接身份成立”；它依然不等于成员资格成立，也不等于任何房间业务成立。
+    tracing::info!(
+        usecase = "实时连接认证",
+        adapter = "socketioxide",
+        outcome = "accepted",
+        session_id = session_id,
+        "realtime 连接认证已受理"
+    );
     let state = state.clone();
     let session_id_for_check = session_id.clone();
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
         usecase::校验实时连接会话(&repo, &session_id_for_check)
     })
-    .await
-    .map_err(|err| format!("system_error:{err}"))?;
+    .await;
 
     match result {
-        Ok(()) => {
+        Ok(Ok(())) => {
+            tracing::info!(
+                usecase = "实时连接认证",
+                adapter = "socketioxide",
+                outcome = "succeeded",
+                session_id = session_id,
+                "realtime 连接认证成功"
+            );
             socket.extensions.insert(已认证会话 { session_id });
             Ok(())
         }
-        Err(contract::错误码::会话无效) => Err("invalid_session".to_string()),
-        Err(_) => Err("system_error".to_string()),
+        Ok(Err(contract::错误码::会话无效)) => {
+            tracing::warn!(
+                usecase = "实时连接认证",
+                adapter = "socketioxide",
+                outcome = "rejected",
+                session_id = session_id,
+                error_code = "invalid_session",
+                "realtime 连接认证被拒绝"
+            );
+            Err("invalid_session".to_string())
+        }
+        Ok(Err(_)) => {
+            tracing::error!(
+                usecase = "实时连接认证",
+                adapter = "socketioxide",
+                outcome = "failed",
+                session_id = session_id,
+                error_code = "system_error",
+                "realtime 连接认证失败"
+            );
+            Err("system_error".to_string())
+        }
+        Err(err) => {
+            tracing::error!(
+                usecase = "实时连接认证",
+                adapter = "socketioxide",
+                outcome = "failed",
+                session_id = session_id,
+                error_code = "system_error",
+                error = %err,
+                "realtime 连接认证任务执行失败"
+            );
+            Err("system_error".to_string())
+        }
     }
 }
 
@@ -1103,6 +1161,15 @@ async fn handle_realtime_subscribe(
     payload: RealtimeSubscribeBody,
     state: 应用状态,
 ) {
+    tracing::info!(
+        usecase = "订阅房间事件流",
+        adapter = "socketioxide",
+        outcome = "accepted",
+        room_id = payload.room_id.as_str(),
+        session_id = auth.session_id.as_str(),
+        from = payload.from,
+        "realtime 订阅请求已受理"
+    );
     let room_id = payload.room_id.clone();
     let from = payload.from;
     let session_id = auth.session_id.clone();
@@ -1122,9 +1189,10 @@ async fn handle_realtime_subscribe(
             最新事件位置,
         })) => {
             if from > 最新事件位置 {
-                tracing::warn!(
+                tracing::info!(
                     usecase = "订阅房间事件流",
                     adapter = "socketioxide",
+                    outcome = "recovered",
                     room_id = 房间标识,
                     session_id = auth.session_id,
                     expected_position = from,
@@ -1136,7 +1204,19 @@ async fn handle_realtime_subscribe(
                     "room_id": 房间标识,
                     "expected_position": from,
                 });
-                let _ = socket.emit("control_result", &control);
+                if let Err(err) = socket.emit("control_result", &control) {
+                    tracing::error!(
+                        usecase = "订阅房间事件流",
+                        adapter = "socketioxide",
+                        outcome = "failed",
+                        room_id = payload.room_id,
+                        session_id = auth.session_id,
+                        from = from,
+                        error_code = "emit_failed",
+                        error = %err,
+                        "订阅恢复控制消息发送失败"
+                    );
+                }
                 return;
             }
             socket.join(房间标识.clone());
@@ -1152,13 +1232,50 @@ async fn handle_realtime_subscribe(
                 "latest_event_position": 最新事件位置,
                 "events": events_to_json(事件)
             });
-            let _ = socket.emit("control_result", &control);
-            let _ = socket.emit("room_events", &events_json);
+            if let Err(err) = socket.emit("control_result", &control) {
+                tracing::error!(
+                    usecase = "订阅房间事件流",
+                    adapter = "socketioxide",
+                    outcome = "failed",
+                    room_id = payload.room_id,
+                    session_id = auth.session_id,
+                    from = from,
+                    error_code = "emit_failed",
+                    error = %err,
+                    "订阅控制消息发送失败"
+                );
+                return;
+            }
+            if let Err(err) = socket.emit("room_events", &events_json) {
+                tracing::error!(
+                    usecase = "订阅房间事件流",
+                    adapter = "socketioxide",
+                    outcome = "failed",
+                    room_id = payload.room_id,
+                    session_id = auth.session_id,
+                    from = from,
+                    error_code = "emit_failed",
+                    error = %err,
+                    "订阅增量事件发送失败"
+                );
+                return;
+            }
+            tracing::info!(
+                usecase = "订阅房间事件流",
+                adapter = "socketioxide",
+                outcome = "succeeded",
+                room_id = 房间标识,
+                session_id = auth.session_id,
+                from = from,
+                event_position = 最新事件位置,
+                "订阅房间事件流成功"
+            );
         }
         Ok(Ok(_)) => {
             tracing::error!(
                 usecase = "订阅房间事件流",
                 adapter = "socketioxide",
+                outcome = "failed",
                 room_id = payload.room_id,
                 session_id = auth.session_id,
                 from = from,
@@ -1172,6 +1289,7 @@ async fn handle_realtime_subscribe(
             tracing::warn!(
                 usecase = "订阅房间事件流",
                 adapter = "socketioxide",
+                outcome = "rejected",
                 room_id = payload.room_id,
                 session_id = auth.session_id,
                 from = from,
@@ -1185,9 +1303,11 @@ async fn handle_realtime_subscribe(
             tracing::error!(
                 usecase = "订阅房间事件流",
                 adapter = "socketioxide",
+                outcome = "failed",
                 room_id = payload.room_id,
                 session_id = auth.session_id,
                 from = from,
+                error_code = "system_error",
                 error = %err,
                 "订阅房间事件流任务执行失败"
             );
@@ -1208,6 +1328,15 @@ async fn handle_realtime_send(
     payload: RealtimeSendBody,
     state: 应用状态,
 ) {
+    tracing::info!(
+        usecase = "发送文本消息",
+        adapter = "socketioxide",
+        outcome = "accepted",
+        room_id = payload.room_id.as_str(),
+        session_id = auth.session_id.as_str(),
+        client_message_id = payload.client_message_id.as_str(),
+        "realtime 发送请求已受理"
+    );
     let state = state.clone();
     let session_id = auth.session_id.clone();
     let room_id_for_log = payload.room_id.clone();
@@ -1228,12 +1357,13 @@ async fn handle_realtime_send(
     match result {
         Ok(Ok(event)) => {
             // 只有用例链路返回领域事件，才表示消息真的成立。
-            let (room_id, client_message_id) = match &event {
+            let (room_id, client_message_id, event_position) = match &event {
                 contract::领域事件::消息已创建 {
                     房间标识,
                     客户端消息标识,
+                    事件位置,
                     ..
-                } => (房间标识.clone(), 客户端消息标识.clone()),
+                } => (房间标识.clone(), 客户端消息标识.clone(), *事件位置),
             };
             let payload = event_to_json(event);
             if let Err(err) = socket
@@ -1244,11 +1374,25 @@ async fn handle_realtime_send(
                 tracing::error!(
                     usecase = "发送文本消息",
                     adapter = "socketioxide",
+                    outcome = "failed",
                     room_id = room_id,
                     session_id = auth.session_id,
                     client_message_id = client_message_id,
+                    error_code = "broadcast_failed",
                     error = %err,
                     "房间权威事件广播失败"
+                );
+            } else {
+                // succeeded 只能在“权威事件已成立且广播实际成功”之后记录，避免把本地 pending/ack 冒充消息成立。
+                tracing::info!(
+                    usecase = "发送文本消息",
+                    adapter = "socketioxide",
+                    outcome = "succeeded",
+                    room_id = room_id,
+                    session_id = auth.session_id,
+                    client_message_id = client_message_id,
+                    event_position = event_position,
+                    "发送文本消息成功"
                 );
             }
         }
@@ -1256,6 +1400,7 @@ async fn handle_realtime_send(
             tracing::warn!(
                 usecase = "发送文本消息",
                 adapter = "socketioxide",
+                outcome = "rejected",
                 room_id = room_id_for_log,
                 session_id = auth.session_id,
                 client_message_id = client_message_id_for_log,
@@ -1269,9 +1414,11 @@ async fn handle_realtime_send(
             tracing::error!(
                 usecase = "发送文本消息",
                 adapter = "socketioxide",
+                outcome = "failed",
                 room_id = room_id_for_log,
                 session_id = auth.session_id,
                 client_message_id = client_message_id_for_log,
+                error_code = "system_error",
                 error = %err,
                 "发送文本消息任务执行失败"
             );
