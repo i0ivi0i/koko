@@ -73,6 +73,7 @@ class 假Socket {
         message_id: "m-1",
         client_message_id: payload.client_message_id,
         sender_session_id: "s-test",
+        sender_display_alias: "暴躁的企鹅",
         body: payload.text,
         event_position: 1,
       });
@@ -133,6 +134,7 @@ class 假传输 implements 前端传输端口 {
           message_id: "m-1",
           client_message_id: "c-1",
           sender_session_id: "s-test",
+          sender_display_alias: "暴躁的企鹅",
           body: "hello",
           event_position: 1,
         },

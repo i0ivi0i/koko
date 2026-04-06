@@ -253,7 +253,7 @@ async fn bootstrap_session(
                         "display_name": out.展示花名,
                     })),
                 )
-                .into_response()
+                    .into_response()
             }
             Err(code) => tuple_err_to_resp(code),
         };
@@ -570,6 +570,7 @@ fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value>
                 消息标识,
                 客户端消息标识,
                 发送者会话标识,
+                发送者花名,
                 文本,
                 事件位置,
             } => serde_json::json!({
@@ -578,6 +579,7 @@ fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value>
                 "message_id": 消息标识,
                 "client_message_id": 客户端消息标识,
                 "sender_session_id": 发送者会话标识,
+                "sender_display_alias": 发送者花名,
                 "body": 文本,
                 "event_position": 事件位置
             }),
@@ -593,6 +595,7 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
             消息标识,
             客户端消息标识,
             发送者会话标识,
+            发送者花名,
             文本,
             事件位置,
         } => serde_json::json!({
@@ -601,6 +604,7 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
             "message_id": 消息标识,
             "client_message_id": 客户端消息标识,
             "sender_session_id": 发送者会话标识,
+            "sender_display_alias": 发送者花名,
             "body": 文本,
             "event_position": 事件位置
         }),

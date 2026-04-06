@@ -6,6 +6,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 
 type 会话快照 = {
   session_id: string;
+  anonymous_identity_id?: string;
+  display_alias?: string;
 };
 
 type 房间快照 = {
@@ -29,6 +31,42 @@ afterEach(() => {
 });
 
 describe("realtime真实链路", () => {
+  it(
+    "同一设备 token 会恢复同一个匿名身份与花名，并可进入不同房间",
+    async () => {
+      const port = await allocatePort();
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const child = startBackend(port);
+      backendChildren.push(child);
+      await waitForServer(baseUrl);
+
+      const first = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        device_anonymous_token: "device-stable-001",
+      });
+      const second = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        device_anonymous_token: "device-stable-001",
+      });
+
+      expect(first.anonymous_identity_id).toBeTruthy();
+      expect(first.anonymous_identity_id).toBe(second.anonymous_identity_id);
+      expect(first.display_alias).toBeTruthy();
+      expect(first.display_alias).toBe(second.display_alias);
+      expect(first.session_id).toBe(second.session_id);
+
+      const room1 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: first.session_id,
+        room_code: uniqueRoomCode("TOKN"),
+      });
+      const room2 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: second.session_id,
+        room_code: uniqueRoomCode("TOKN"),
+      });
+
+      expect(room1.room_id).not.toBe(room2.room_id);
+    },
+    60000
+  );
+
   it(
     "缺少合法session时connect_error，合法双客户端同房收到同一room_event",
     async () => {

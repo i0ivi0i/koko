@@ -38,6 +38,7 @@ export interface 消息事件 {
   message_id: string;
   client_message_id: string;
   sender_session_id: string;
+  sender_display_alias: string;
   body: string;
   event_position: number;
 }

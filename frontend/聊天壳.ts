@@ -197,6 +197,7 @@ export class 聊天壳 extends LitElement {
       message_id: `local-${clientMessageId}`,
       client_message_id: clientMessageId,
       sender_session_id: this.chatState.sessionId,
+      sender_display_alias: this.chatState.displayAlias,
       body: text,
       event_position: this.chatState.latestEventPosition + 1,
     };
@@ -226,43 +227,54 @@ export class 聊天壳 extends LitElement {
   }
 
   override render() {
+    if (!this.chatState.roomId) {
+      return html`
+        <section id="joinView">
+          <div id="alias">alias: ${this.chatState.displayAlias || "-"}</div>
+          <div id="session">session: ${this.chatState.sessionId || "-"}</div>
+          <div class="row">
+            <input
+              id="roomCode"
+              placeholder="房间短码"
+              .value=${this.chatState.roomCodeInput}
+              @input=${(e: Event) => {
+                const target = e.target as HTMLInputElement;
+                this.updateChat({ roomCodeInput: target.value });
+              }}
+            />
+            <button id="joinBtn" @click=${() => this.joinRoom()}>进房</button>
+          </div>
+        </section>
+      `;
+    }
+
     return html`
-      <div class="row">
-        <input
-          id="roomCode"
-          placeholder="房间短码"
-          .value=${this.chatState.roomCodeInput}
-          @input=${(e: Event) => {
-            const target = e.target as HTMLInputElement;
-            this.updateChat({ roomCodeInput: target.value });
-          }}
-        />
-        <button id="joinBtn" @click=${() => this.joinRoom()}>进房</button>
-      </div>
-      <div class="row">
-        <input
-          id="msgInput"
-          placeholder="输入消息"
-          .value=${this.chatState.messageInput}
-          @input=${(e: Event) => {
-            const target = e.target as HTMLInputElement;
-            this.updateChat({ messageInput: target.value });
-          }}
-        />
-        <button
-          id="sendBtn"
-          ?disabled=${this.chatState.pending}
-          @click=${() => this.sendMessage()}
-        >
-          发送
-        </button>
-      </div>
-      <div id="alias">alias: ${this.chatState.displayAlias || "-"}</div>
-      <div id="session">session: ${this.chatState.sessionId || "-"}</div>
-      <div>room: ${this.chatState.roomId || "-"}</div>
-      <ul id="messageList">
-        ${this.chatState.messages.map((m) => html`<li>${格式化消息(m)}</li>`)}
-      </ul>
+      <section id="roomView">
+        <div id="alias">alias: ${this.chatState.displayAlias || "-"}</div>
+        <div id="session">session: ${this.chatState.sessionId || "-"}</div>
+        <div>room: ${this.chatState.roomId || "-"}</div>
+        <div class="row">
+          <input
+            id="msgInput"
+            placeholder="输入消息"
+            .value=${this.chatState.messageInput}
+            @input=${(e: Event) => {
+              const target = e.target as HTMLInputElement;
+              this.updateChat({ messageInput: target.value });
+            }}
+          />
+          <button
+            id="sendBtn"
+            ?disabled=${this.chatState.pending}
+            @click=${() => this.sendMessage()}
+          >
+            发送
+          </button>
+        </div>
+        <ul id="messageList">
+          ${this.chatState.messages.map((m) => html`<li>${格式化消息(m)}</li>`)}
+        </ul>
+      </section>
     `;
   }
 }

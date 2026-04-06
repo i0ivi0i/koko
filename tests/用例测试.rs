@@ -176,6 +176,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
             消息标识: format!("m-{}", self.消息计数),
             客户端消息标识: 客户端消息标识.to_string(),
             发送者会话标识: 会话标识.to_string(),
+            发送者花名: "测试用户".to_string(),
             文本: 文本.to_string(),
             事件位置: self.最新位置,
         })
@@ -240,7 +241,10 @@ fn 未来改花名不应要求替换匿名内部身份() {
             },
         ) => {
             assert_eq!(before_id, after_id, "未来改花名时内部身份不能跟着变");
-            assert_ne!(before_alias, after_alias, "测试前提错误：这里必须是花名变化");
+            assert_ne!(
+                before_alias, after_alias,
+                "测试前提错误：这里必须是花名变化"
+            );
         }
         _ => panic!("应返回匿名身份快照"),
     }
@@ -250,7 +254,8 @@ fn 未来改花名不应要求替换匿名内部身份() {
 fn 同一设备匿名凭证重复bootstrap会恢复同一个内部身份与花名() {
     let mut repo = 假仓储::default();
 
-    let first = koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("首次 bootstrap 应成功");
+    let first =
+        koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("首次 bootstrap 应成功");
     let second =
         koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("重复 bootstrap 应成功");
 
@@ -272,9 +277,10 @@ fn 同一设备匿名凭证重复bootstrap会恢复同一个内部身份与花�
 fn 不同设备匿名凭证会拿到不同内部身份() {
     let mut repo = 假仓储::default();
 
-    let first = koko::usecase::引导匿名身份(&mut repo, "device-token-a").expect("首次 bootstrap 应成功");
-    let second =
-        koko::usecase::引导匿名身份(&mut repo, "device-token-b").expect("第二个设备 bootstrap 应成功");
+    let first =
+        koko::usecase::引导匿名身份(&mut repo, "device-token-a").expect("首次 bootstrap 应成功");
+    let second = koko::usecase::引导匿名身份(&mut repo, "device-token-b")
+        .expect("第二个设备 bootstrap 应成功");
 
     assert_ne!(first.匿名身份标识, second.匿名身份标识);
     assert_ne!(first.会话标识, second.会话标识);
@@ -333,12 +339,14 @@ fn 发送文本消息返回权威事件() {
             房间标识,
             客户端消息标识,
             发送者会话标识,
+            发送者花名,
             文本,
             事件位置: 1,
             ..
         } if 房间标识 == room_id
             && 客户端消息标识 == "c-1"
             && 发送者会话标识 == "s-1"
+            && 发送者花名 == "测试用户"
             && 文本 == "hello"
     ));
 }

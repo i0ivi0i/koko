@@ -41,6 +41,7 @@ class 假Socket {
         message_id: "m-e2e",
         client_message_id: payload.client_message_id,
         sender_session_id: "s-e2e",
+        sender_display_alias: "暴躁的企鹅",
         body: payload.text,
         event_position: 1,
       });
@@ -88,6 +89,7 @@ class 端到端假传输 implements 前端传输端口 {
           message_id: "m-e2e",
           client_message_id: "c-e2e",
           sender_session_id: "s-e2e",
+          sender_display_alias: "暴躁的企鹅",
           body: "e2e-hello",
           event_position: 1,
         },
@@ -121,6 +123,11 @@ describe("前后台壳端到端冒烟", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
 
+    expect(chat.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(chat.shadowRoot!.querySelector("#roomView")).toBeNull();
+    expect(chat.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
+    expect(chat.shadowRoot!.querySelector("#msgInput")).toBeNull();
+
     const roomInput = chat.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
     roomInput.value = "E2E01";
     roomInput.dispatchEvent(new Event("input"));
@@ -128,6 +135,10 @@ describe("前后台壳端到端冒烟", () => {
     joinBtn.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
+
+    expect(chat.shadowRoot!.querySelector("#joinView")).toBeNull();
+    expect(chat.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+
     const msgInput = chat.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
     msgInput.value = "hello";
     msgInput.dispatchEvent(new Event("input"));
@@ -136,6 +147,7 @@ describe("前后台壳端到端冒烟", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
     expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");
+    expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).toContain("暴躁的企鹅");
 
     const admin = document.createElement("koko-admin-shell") as 后台壳;
     admin.setTransportForTest(transport);
