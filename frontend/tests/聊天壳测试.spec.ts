@@ -146,6 +146,7 @@ class 假传输 implements 前端传输端口 {
     sessionId: string;
     lastReadEventPosition: number;
   }> = [];
+  readAnchorUpdateQueue: Array<Error | null> = [];
   snapshotRoomId = "r-test";
   joinRoomId = "r-test";
 
@@ -180,6 +181,10 @@ class 假传输 implements 前端传输端口 {
     sessionId: string,
     lastReadEventPosition: number
   ): Promise<void> {
+    const queued = this.readAnchorUpdateQueue.shift();
+    if (queued instanceof Error) {
+      throw queued;
+    }
     this.readAnchorUpdates.push({ roomId, sessionId, lastReadEventPosition });
   }
   async loadRoomEvents(
@@ -1083,6 +1088,215 @@ describe("聊天壳", () => {
 
     expect(transport.loadRoomHistoryCalls).toBe(1);
     el.remove();
+  });
+
+  it("首屏还未稳定时不会把最新底部误推进为已读", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "第一条未读",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条未读",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+      clientHeight: number;
+      scrollHeight: number;
+    };
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+    scroll.scrollTop = 80;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+
+    expect(transport.readAnchorUpdates).toEqual([]);
+    el.remove();
+  });
+
+  it("用户向下阅读后会节流上报新的 last_read_event_position", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: null,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "未读消息-1",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "未读消息-2",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+      scroll.scrollTop = 80;
+      scroll.dispatchEvent(new Event("scroll"));
+      scroll.dispatchEvent(new Event("scroll"));
+
+      await vi.advanceTimersByTimeAsync(350);
+      expect(transport.readAnchorUpdates).toEqual([]);
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(transport.readAnchorUpdates).toEqual([
+        { roomId: "r-test", sessionId: "s-test", lastReadEventPosition: 3 },
+      ]);
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
+  it("阅读推进失败不会清空消息或踢出房间", async () => {
+    const transport = new 假传输();
+    transport.readAnchorUpdateQueue = [创建传输错误(503, "system_error", "busy")];
+    transport.joinQueue = [
+      创建房间快照("r-test", 2, {
+        last_read_event_position: 0,
+        first_unread_event_position: null,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "还在房间里的消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条消息",
+            event_position: 2,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+      scroll.scrollTop = 80;
+      scroll.dispatchEvent(new Event("scroll"));
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("还在房间里的消息");
+      expect(window.localStorage.getItem("koko_current_room_id")).toBe("r-test");
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
   });
 
   it("history 页和 realtime 新消息同时并入时不会重复 message_id", async () => {

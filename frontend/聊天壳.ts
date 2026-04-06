@@ -8,6 +8,7 @@ import type { Socket } from "socket.io-client";
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
 const 当前房间存储键 = "koko_current_room_id";
 const 历史分页顶部节流毫秒 = 180;
+const 阅读推进节流毫秒 = 400;
 
 type 控制面结果 = {
   kind?: string;
@@ -144,6 +145,8 @@ export class 聊天壳 extends LitElement {
 
   private realtimeSocket: Socket | null = null;
 
+  private readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
   setTransportForTest(transport: 前端传输端口): void {
     this.transport = transport;
   }
@@ -156,6 +159,7 @@ export class 聊天壳 extends LitElement {
   override disconnectedCallback(): void {
     this.realtimeSocket?.disconnect();
     this.realtimeSocket = null;
+    this.cancelPendingReadAnchorFlush();
     super.disconnectedCallback();
   }
 
@@ -402,6 +406,7 @@ export class 聊天壳 extends LitElement {
         recoveryState: "idle",
         lastRecoveryErrorCode: failure.code ?? "",
       });
+      this.cancelPendingReadAnchorFlush();
       return;
     }
 
@@ -466,6 +471,7 @@ export class 聊天壳 extends LitElement {
         recoveryState: "idle",
         lastRecoveryErrorCode: control.code ?? "",
       });
+      this.cancelPendingReadAnchorFlush();
       return;
     }
 
@@ -535,6 +541,7 @@ export class 聊天壳 extends LitElement {
    * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
    */
   private enterRoomFromSnapshot(snapshot: 房间快照): void {
+    this.cancelPendingReadAnchorFlush();
     this.writeCurrentRoomId(snapshot.room_id);
     this.updateChat({
       roomId: snapshot.room_id,
@@ -632,6 +639,88 @@ export class 聊天壳 extends LitElement {
       historyLoadThrottleUntil: now + 历史分页顶部节流毫秒,
     });
     void this.loadOlderHistory();
+  }
+
+  /**
+   * 阅读推进只在“用户已经把当前首屏稳定看完，并且滚到靠近底部”时触发。
+   * 这样可以避免：
+   * 1. 首屏恢复期间把最新位置误写成已读；
+   * 2. 上滑补历史时把顶部旧消息误算成新的已读进度；
+   * 3. 每滚动一点就发一条写请求。
+   */
+  private maybeTrackReadAnchor(scrollContainer: HTMLElement): void {
+    if (
+      !this.chatState.roomId ||
+      !this.chatState.initialUnreadSettled ||
+      this.chatState.historyLoading
+    ) {
+      return;
+    }
+    const nearBottom =
+      scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 24;
+    if (!nearBottom) {
+      return;
+    }
+    const latestMessage = this.chatState.messages[this.chatState.messages.length - 1];
+    if (!latestMessage) {
+      return;
+    }
+    this.scheduleReadAnchorUpdate(latestMessage.event_position);
+  }
+
+  private scheduleReadAnchorUpdate(nextPosition: number): void {
+    const currentReadPosition = this.chatState.lastReadEventPosition ?? 0;
+    const pendingPosition = this.chatState.pendingReadAnchorPosition ?? 0;
+    const floor = Math.max(currentReadPosition, pendingPosition);
+    if (nextPosition <= floor) {
+      return;
+    }
+    this.updateChat({ pendingReadAnchorPosition: nextPosition });
+    if (this.readAnchorFlushTimer !== null) {
+      return;
+    }
+    this.readAnchorFlushTimer = setTimeout(() => {
+      this.readAnchorFlushTimer = null;
+      void this.flushReadAnchorUpdate();
+    }, 阅读推进节流毫秒);
+  }
+
+  private async flushReadAnchorUpdate(): Promise<void> {
+    const nextPosition = this.chatState.pendingReadAnchorPosition;
+    if (!this.chatState.roomId || nextPosition === null) {
+      return;
+    }
+    if (nextPosition <= (this.chatState.lastReadEventPosition ?? 0)) {
+      this.updateChat({ pendingReadAnchorPosition: null });
+      return;
+    }
+    try {
+      await this.transport.updateRoomReadAnchor(
+        this.chatState.roomId,
+        this.chatState.sessionId,
+        nextPosition
+      );
+      this.updateChat({
+        lastReadEventPosition: nextPosition,
+        pendingReadAnchorPosition: null,
+        firstUnreadEventPosition:
+          this.chatState.firstUnreadEventPosition !== null &&
+          nextPosition >= this.chatState.firstUnreadEventPosition
+            ? null
+            : this.chatState.firstUnreadEventPosition,
+      });
+    } catch {
+      // 阅读推进失败不应破坏当前房间内容；丢掉这次 pending，等待后续滚动再重试即可。
+      this.updateChat({ pendingReadAnchorPosition: null });
+    }
+  }
+
+  private cancelPendingReadAnchorFlush(): void {
+    if (this.readAnchorFlushTimer === null) {
+      return;
+    }
+    clearTimeout(this.readAnchorFlushTimer);
+    this.readAnchorFlushTimer = null;
   }
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
@@ -814,6 +903,7 @@ export class 聊天壳 extends LitElement {
           @scroll=${(event: Event) => {
             const target = event.currentTarget as HTMLElement;
             this.maybeLoadOlderHistory(target);
+            this.maybeTrackReadAnchor(target);
           }}
         >
           <ul id="messageList" class="message-list">

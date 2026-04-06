@@ -1033,6 +1033,88 @@ async fn 非成员阅读推进会被拒绝() {
 
 #[tokio::test]
 #[serial]
+async fn 阅读推进失败不会影响房间快照和历史查询可用性() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("X{:011}", uniq % 100_000_000_000);
+    let device_token = format!("read-anchor-failure-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
+        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识;
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+        for index in 0..3 {
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("read-anchor-failure-c-{index}"),
+                &format!("read-anchor-failure-{index}"),
+            )
+            .expect("应能连续发送消息");
+        }
+        (session_id, room_id)
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let (status, body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/rooms/{room_id}/read-anchor"),
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "last_read_event_position": 99
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"].as_str(), Some("invalid_argument"));
+
+    let (snapshot_status, snapshot_body) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/rooms/{room_id}/snapshot?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(snapshot_status, StatusCode::OK);
+    assert_eq!(snapshot_body["room_id"].as_str(), Some(room_id.as_str()));
+
+    let (history_status, history_body) = send_json(
+        app,
+        Method::GET,
+        &format!(
+            "/api/rooms/{room_id}/history?session_id={session_id}&before_event_position=3&limit=2"
+        ),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(history_status, StatusCode::OK);
+    assert!(history_body["messages"].as_array().is_some());
+}
+
+#[tokio::test]
+#[serial]
 async fn 房间历史分页会返回before_event_position之前的消息() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
