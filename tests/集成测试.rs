@@ -62,13 +62,10 @@ fn 发送消息事务性顺序成立() {
         .expect("clock")
         .as_millis();
     let code = format!("T{:011}", uniq % 100_000_000_000);
-    let user_name = format!("tx-user-{uniq}");
-
-    let session = koko::usecase::引导匿名会话(&mut repo, &user_name).expect("应能创建会话");
-    let session_id = match session {
-        koko::contract::快照::会话 { 会话标识, .. } => 会话标识,
-        _ => panic!("引导会话应返回会话快照"),
-    };
+    let device_token = format!("tx-device-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -109,13 +106,10 @@ fn realtime主链闭环() {
         .expect("clock")
         .as_millis();
     let code = format!("R{:011}", uniq % 100_000_000_000);
-    let user_name = format!("rt-user-{uniq}");
-
-    let session = koko::usecase::引导匿名会话(&mut repo, &user_name).expect("应能创建会话");
-    let session_id = match session {
-        koko::contract::快照::会话 { 会话标识, .. } => 会话标识,
-        _ => panic!("引导会话应返回会话快照"),
-    };
+    let device_token = format!("rt-device-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
     let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
     let room_id = match room {
         koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
@@ -195,13 +189,13 @@ async fn http冷路径闭环() {
         .expect("clock")
         .as_millis();
     let code = format!("H{:011}", uniq % 100_000_000_000);
-    let display_name = format!("http-user-{uniq}");
+    let device_token = format!("http-device-{uniq}");
 
     let (status, bootstrap) = send_json(
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"display_name": display_name})),
+        Some(serde_json::json!({"device_anonymous_token": device_token})),
         &[],
     )
     .await;
@@ -353,13 +347,13 @@ async fn http冷路径成功会输出accepted与succeeded日志() {
         .duration_since(UNIX_EPOCH)
         .expect("clock")
         .as_millis();
-    let display_name = format!("http-log-user-{uniq}");
+    let device_token = format!("http-log-device-{uniq}");
 
     let (status, _) = send_json(
         app,
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"display_name": display_name})),
+        Some(serde_json::json!({"device_anonymous_token": device_token})),
         &[],
     )
     .await;
@@ -367,7 +361,7 @@ async fn http冷路径成功会输出accepted与succeeded日志() {
 
     let output = 读取日志缓冲(&buffer);
     assert!(
-        output.contains("usecase") && output.contains("引导匿名会话"),
+        output.contains("usecase") && output.contains("引导匿名身份"),
         "成功主链日志缺少 usecase: {output}"
     );
     assert!(

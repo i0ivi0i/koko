@@ -19,12 +19,6 @@ export interface 匿名身份快照 {
  */
 export interface 匿名身份引导结果 extends 匿名身份快照 {
   session_id: string;
-  display_name: string;
-}
-
-export interface 会话快照 {
-  session_id: string;
-  display_name: string;
 }
 
 export interface 房间快照 {

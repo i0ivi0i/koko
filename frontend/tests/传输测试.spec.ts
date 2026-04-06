@@ -46,7 +46,6 @@ describe("传输", () => {
           anonymous_identity_id: "a-1",
           display_alias: "暴躁的企鹅",
           session_id: "s-1",
-          display_name: "暴躁的企鹅",
         }),
         {
           status: 200,

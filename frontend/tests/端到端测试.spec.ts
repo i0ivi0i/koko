@@ -8,7 +8,6 @@ import { 后台壳 } from "../后台壳";
 import type { 前端传输端口 } from "../传输";
 import type {
   匿名身份引导结果,
-  会话快照,
   增量事件快照,
   后台房间列表,
   后台房间详情,
@@ -68,11 +67,7 @@ class 端到端假传输 implements 前端传输端口 {
       anonymous_identity_id: "a-e2e",
       display_alias: "暴躁的企鹅",
       session_id: "s-e2e",
-      display_name: "暴躁的企鹅",
     };
-  }
-  async bootstrapSession(): Promise<会话快照> {
-    return { session_id: "s-e2e", display_name: "e2e" };
   }
   async joinOrCreateRoom(): Promise<房间快照> {
     return { room_id: "r-e2e", latest_event_position: 0 };

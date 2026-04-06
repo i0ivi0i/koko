@@ -1,7 +1,7 @@
+use serial_test::serial;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::{Arc, Mutex};
-use serial_test::serial;
 
 /// 用例层测试：
 /// - 用假仓储隔离数据库细节
@@ -84,7 +84,7 @@ fn http日志固定字段顺序里能看到usecase_adapter_outcome() {
 
     tracing::subscriber::with_default(subscriber, || {
         tracing::info!(
-            usecase = "引导匿名会话",
+            usecase = "引导匿名身份",
             adapter = "http",
             outcome = "accepted",
             request_kind = "bootstrap_session",
@@ -164,18 +164,6 @@ impl koko::usecase::仓储端口 for 假仓储 {
         Ok(snapshot)
     }
 
-    /// 假实现：返回稳定会话快照，供用例层断言使用。
-    fn 创建匿名会话(
-        &mut self,
-        显示名: &str,
-    ) -> Result<koko::contract::快照, koko::contract::错误码> {
-        self.会话计数 += 1;
-        Ok(koko::contract::快照::会话 {
-            会话标识: format!("s-{}", self.会话计数),
-            显示名: 显示名.to_string(),
-        })
-    }
-
     /// 假实现：按短码创建或复用房间，并写入成员关系。
     fn 按短码进房或建房(
         &mut self,
@@ -252,21 +240,6 @@ impl koko::usecase::仓储端口 for 假仓储 {
             文本: 文本.to_string(),
             事件位置: self.最新位置,
         })
-    }
-}
-
-#[test]
-fn 引导匿名会话可返回会话快照() {
-    let mut repo = 假仓储::default();
-    let out = koko::usecase::引导匿名会话(&mut repo, "测试用户").expect("应创建会话");
-    match out {
-        koko::contract::快照::会话 {
-            会话标识, 显示名
-        } => {
-            assert!(会话标识.starts_with("s-"));
-            assert_eq!(显示名, "测试用户");
-        }
-        _ => panic!("应返回会话快照"),
     }
 }
 

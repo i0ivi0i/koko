@@ -120,17 +120,12 @@ fn 构建共享仓储(state: &应用状态) -> Pg仓储 {
     Pg仓储::从连接池构建(state.pool.clone(), state.runtime_handle.clone())
 }
 
-/// 引导会话请求体：壳层只提交展示名意图。
+/// 匿名身份引导请求体：壳层只提交设备入口凭证。
 #[derive(Deserialize)]
 struct BootstrapBody {
     /// 新 MVP 的设备入口凭证。
     /// 当前 Web 会把它持久化在本地；未来 iOS/Android/CLI 可各自换存储实现。
     device_anonymous_token: Option<String>,
-    /// 会话展示名（业务上允许匿名名，具体规则由后端决定）。
-    ///
-    /// 兼容说明：
-    /// 这是旧 Web 壳仍在使用的过渡字段。等 Task 3 切到设备级匿名身份后应被淘汰。
-    display_name: Option<String>,
 }
 
 /// 统一错误响应体（跨 HTTP 接口稳定结构）。
@@ -217,103 +212,30 @@ struct RealtimeSendBody {
 /// 第一阶段后台最小令牌（后续可替换为正式会话机制）。
 const ADMIN_TOKEN: &str = "koko-admin-token";
 
-/// 冷路径：引导匿名会话。
+/// 冷路径：引导匿名身份。
 /// 只做协议解码和结果转码；业务规则在 usecase 层。
 async fn bootstrap_session(
     State(state): State<应用状态>,
     Json(body): Json<BootstrapBody>,
 ) -> impl IntoResponse {
-    if let Some(device_anonymous_token) = body.device_anonymous_token.clone() {
-        // 设备级匿名身份 bootstrap 是一条独立业务主链，所以入口日志直接使用“引导匿名身份”语义。
-        tracing::info!(
-            usecase = "引导匿名身份",
-            adapter = "http",
-            outcome = "accepted",
-            request_kind = "bootstrap_session",
-            "HTTP 请求已受理"
-        );
-        let state = state.clone();
-        let result = task::spawn_blocking(move || {
-            let mut repo = 构建共享仓储(&state);
-            usecase::引导匿名身份(&mut repo, &device_anonymous_token).map_err(map_domain_err_tuple)
-        })
-        .await;
-        let result = match result {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::error!(
-                    usecase = "引导匿名身份",
-                    adapter = "http",
-                    outcome = "failed",
-                    request_kind = "bootstrap_session",
-                    error_code = "system_error",
-                    error = %err,
-                    "引导匿名身份任务执行失败"
-                );
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("任务执行失败: {err}"),
-                )
-            }
-        };
-        return match result {
-            Ok(out) => {
-                let alias = out.展示花名.clone();
-                tracing::info!(
-                    usecase = "引导匿名身份",
-                    adapter = "http",
-                    outcome = "succeeded",
-                    request_kind = "bootstrap_session",
-                    anonymous_identity_id = out.匿名身份标识,
-                    session_id = out.会话标识,
-                    "引导匿名身份成功"
-                );
-                (
-                    StatusCode::OK,
-                    Json(serde_json::json!({
-                        "anonymous_identity_id": out.匿名身份标识,
-                        "display_alias": alias,
-                        // 兼容当前冷路径和 realtime 主链：继续返回 session_id。
-                        "session_id": out.会话标识,
-                        "display_name": out.展示花名,
-                    })),
-                )
-                    .into_response()
-            }
-            Err((status, code, message)) => {
-                tracing::warn!(
-                    usecase = "引导匿名身份",
-                    adapter = "http",
-                    outcome = "rejected",
-                    request_kind = "bootstrap_session",
-                    error_code = code,
-                    "引导匿名身份被拒绝"
-                );
-                err_resp(status, code, message)
-            }
-        };
-    }
-
-    let state = state.clone();
-    let Some(display_name) = body.display_name.clone() else {
+    let Some(device_anonymous_token) = body.device_anonymous_token else {
         tracing::warn!(
-            usecase = "引导匿名会话",
+            usecase = "引导匿名身份",
             adapter = "http",
             outcome = "rejected",
             request_kind = "bootstrap_session",
             error_code = "invalid_argument",
-            "引导匿名会话缺少必要参数"
+            "引导匿名身份缺少设备入口凭证"
         );
         return err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            "缺少 device_anonymous_token 或 display_name",
+            "缺少 device_anonymous_token",
         );
     };
     // accepted 只说明入口已拿到请求；真正 succeeded 必须等用例给出权威快照后才能记录。
     tracing::info!(
-        usecase = "引导匿名会话",
+        usecase = "引导匿名身份",
         adapter = "http",
         outcome = "accepted",
         request_kind = "bootstrap_session",
@@ -322,69 +244,58 @@ async fn bootstrap_session(
     let result = task::spawn_blocking(move || {
         // 统一在阻塞线程做仓储调用，避免在 async 主执行器里直接跑阻塞 IO。
         let mut repo = 构建共享仓储(&state);
-        usecase::引导匿名会话(&mut repo, &display_name).map_err(map_domain_err_tuple)
+        usecase::引导匿名身份(&mut repo, &device_anonymous_token).map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
         Ok(v) => v,
         Err(err) => {
             tracing::error!(
-                usecase = "引导匿名会话",
+                usecase = "引导匿名身份",
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "bootstrap_session",
                 error_code = "system_error",
                 error = %err,
-                "引导匿名会话任务执行失败"
+                "引导匿名身份任务执行失败"
             );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
-            )
+            );
         }
     };
     match result {
-        Ok(contract::快照::会话 {
-            会话标识, 显示名
-        }) => {
+        Ok(out) => {
             tracing::info!(
-                usecase = "引导匿名会话",
+                usecase = "引导匿名身份",
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "bootstrap_session",
-                session_id = 会话标识,
-                "引导匿名会话成功"
+                anonymous_identity_id = out.匿名身份标识,
+                session_id = out.会话标识,
+                "引导匿名身份成功"
             );
             (
                 StatusCode::OK,
-                Json(serde_json::json!({"session_id": 会话标识, "display_name": 显示名})),
+                Json(serde_json::json!({
+                    "anonymous_identity_id": out.匿名身份标识,
+                    "display_alias": out.展示花名,
+                    // session_id 仍是当前冷/热路径共享的运行锚点，不能因为去旧兼容就丢掉。
+                    "session_id": out.会话标识,
+                })),
             )
                 .into_response()
         }
-        Ok(_) => {
-            tracing::error!(
-                usecase = "引导匿名会话",
-                adapter = "http",
-                outcome = "failed",
-                request_kind = "bootstrap_session",
-                error_code = "system_error",
-                "引导匿名会话返回了错误的快照类型"
-            );
-            err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                "返回快照类型不匹配",
-            )
-        }
         Err((status, code, message)) => {
             tracing::warn!(
-                usecase = "引导匿名会话",
+                usecase = "引导匿名身份",
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "bootstrap_session",
                 error_code = code,
-                "引导匿名会话被拒绝"
+                "引导匿名身份被拒绝"
             );
             err_resp(status, code, message)
         }
@@ -431,7 +342,7 @@ async fn join_or_create_room(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
-            )
+            );
         }
     };
     match result {
@@ -451,7 +362,9 @@ async fn join_or_create_room(
             );
             (
                 StatusCode::OK,
-                Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
+                Json(
+                    serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置}),
+                ),
             )
                 .into_response()
         }
@@ -529,7 +442,7 @@ async fn load_room_snapshot(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
-            )
+            );
         }
     };
     match result {
@@ -549,7 +462,9 @@ async fn load_room_snapshot(
             );
             (
                 StatusCode::OK,
-                Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
+                Json(
+                    serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置}),
+                ),
             )
                 .into_response()
         }
@@ -628,7 +543,7 @@ async fn load_room_events(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
-            )
+            );
         }
     };
     match result {
@@ -772,7 +687,7 @@ async fn admin_overview(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
-            )
+            );
         }
     };
     match result {
@@ -865,7 +780,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
-            )
+            );
         }
     };
     match result {
@@ -965,7 +880,7 @@ async fn admin_room_detail(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("任务执行失败: {err}"),
-            )
+            );
         }
     };
     match result {
@@ -996,7 +911,11 @@ async fn admin_room_detail(
                 error_code = "system_error",
                 "后台房间详情查询返回了错误的快照类型"
             );
-            err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", "返回快照类型不匹配")
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
         }
         Err((status, code, message)) => {
             tracing::warn!(
@@ -1016,29 +935,7 @@ async fn admin_room_detail(
 /// 领域事件 -> 传输 JSON 的稳定映射层。
 /// 约束：只做字段翻译，不添加业务语义。
 fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value> {
-    events
-        .into_iter()
-        .map(|event| match event {
-            contract::领域事件::消息已创建 {
-                房间标识,
-                消息标识,
-                客户端消息标识,
-                发送者会话标识,
-                发送者花名,
-                文本,
-                事件位置,
-            } => serde_json::json!({
-                "type": "message_created",
-                "room_id": 房间标识,
-                "message_id": 消息标识,
-                "client_message_id": 客户端消息标识,
-                "sender_session_id": 发送者会话标识,
-                "sender_display_alias": 发送者花名,
-                "body": 文本,
-                "event_position": 事件位置
-            }),
-        })
-        .collect()
+    events.into_iter().map(event_to_json).collect()
 }
 
 /// 单条领域事件 -> JSON。

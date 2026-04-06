@@ -5,7 +5,6 @@ import "../聊天壳";
 import type { 前端传输端口 } from "../传输";
 import type {
   匿名身份引导结果,
-  会话快照,
   增量事件快照,
   后台概览,
   房间快照,
@@ -110,12 +109,7 @@ class 假传输 implements 前端传输端口 {
       anonymous_identity_id: "a-test",
       display_alias: "暴躁的企鹅",
       session_id: "s-test",
-      display_name: "暴躁的企鹅",
     };
-  }
-
-  async bootstrapSession(): Promise<会话快照> {
-    return { session_id: "s-test", display_name: "tester" };
   }
   async joinOrCreateRoom(): Promise<房间快照> {
     return { room_id: "r-test", latest_event_position: 0 };

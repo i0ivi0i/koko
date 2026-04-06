@@ -86,10 +86,10 @@ describe("realtime真实链路", () => {
       noSessionSocket.disconnect();
 
       const a = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "socket-a",
+        device_anonymous_token: "socket-a",
       });
       const b = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "socket-b",
+        device_anonymous_token: "socket-b",
       });
       const roomCode = uniqueRoomCode("SOCKET");
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
@@ -152,13 +152,13 @@ describe("realtime真实链路", () => {
       await waitForServer(baseUrl);
 
       const a = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "resume-a",
+        device_anonymous_token: "resume-a",
       });
       const b = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "resume-b",
+        device_anonymous_token: "resume-b",
       });
       const c = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "room2-c",
+        device_anonymous_token: "room2-c",
       });
       const roomCode1 = uniqueRoomCode("SOCKET");
       const roomCode2 = uniqueRoomCode("SOCKET");
@@ -263,7 +263,7 @@ describe("realtime真实链路", () => {
       await waitForServer(baseUrl);
 
       const session = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "future-from",
+        device_anonymous_token: "future-from",
       });
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: session.session_id,
@@ -308,10 +308,10 @@ describe("realtime真实链路", () => {
       await waitForServer(baseUrl);
 
       const owner = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "room-owner",
+        device_anonymous_token: "room-owner",
       });
       const stranger = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "room-stranger",
+        device_anonymous_token: "room-stranger",
       });
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: owner.session_id,
@@ -351,7 +351,7 @@ describe("realtime真实链路", () => {
       await waitForServer(baseUrl);
 
       const session = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
-        display_name: "negative-from",
+        device_anonymous_token: "negative-from",
       });
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: session.session_id,

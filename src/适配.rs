@@ -349,29 +349,6 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
-    /// 创建匿名会话，并返回会话快照。
-    fn 创建匿名会话(
-        &mut self,
-        显示名: &str,
-    ) -> Result<contract::快照, contract::错误码> {
-        self.在运行时执行(async {
-            let row = sqlx::query(
-                "INSERT INTO sessions (session_id, display_name) \
-                 VALUES (concat('s-', substring(md5(random()::text) from 1 for 12)), $1) \
-                 RETURNING session_id, display_name",
-            )
-            .bind(显示名)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-
-            Ok(contract::快照::会话 {
-                会话标识: row.get("session_id"),
-                显示名: row.get("display_name"),
-            })
-        })
-    }
-
     /// 进房/建房持久化实现：
     /// 在同一事务内完成会话校验、房间存在性判定与成员关系幂等写入。
     fn 按短码进房或建房(
