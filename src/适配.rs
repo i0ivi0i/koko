@@ -168,7 +168,7 @@ impl Pg仓储 {
             let latest_event_position: i64 = room_row.get("latest_event_position");
 
             let rows = sqlx::query(
-                "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name, m.body \
+                "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
                  FROM room_events re \
                  LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
                  LEFT JOIN sessions s ON s.id = m.sender_session_id \
@@ -186,14 +186,14 @@ impl Pg仓储 {
                 let msg_id: Option<String> = row.get("message_id");
                 let client_id: Option<String> = row.get("client_message_id");
                 let sender_session_id: Option<String> = row.get("session_id");
-                let sender_alias: Option<String> = row.get("display_name");
+                let sender_display_alias: Option<String> = row.get("display_alias");
                 let body: Option<String> = row.get("body");
                 events.push(contract::领域事件::消息已创建 {
                     房间标识: 房间标识.to_string(),
                     消息标识: msg_id.unwrap_or_default(),
                     客户端消息标识: client_id.unwrap_or_default(),
                     发送者会话标识: sender_session_id.unwrap_or_default(),
-                    发送者花名: sender_alias.unwrap_or_default(),
+                    发送者花名: sender_display_alias.unwrap_or_default(),
                     文本: body.unwrap_or_default(),
                     事件位置: row.get("event_position"),
                 });
@@ -326,6 +326,7 @@ impl 仓储端口 for Pg仓储 {
             let identity_db_id: i64 = identity_row.get("id");
 
             sqlx::query(
+                // `sessions.display_name` 是历史表字段名；当前语义上它承载的是展示花名投影。
                 "INSERT INTO sessions (session_id, display_name, anonymous_identity_id, device_anonymous_token) \
                  VALUES ($1, $2, $3, $4)",
             )
@@ -525,7 +526,7 @@ impl 仓储端口 for Pg仓储 {
             let next_position = latest_position + 1;
 
             let session_row = sqlx::query(
-                "SELECT id, display_name FROM sessions WHERE session_id = $1",
+                "SELECT id, display_name AS display_alias FROM sessions WHERE session_id = $1",
             )
             .bind(会话标识)
             .fetch_optional(&mut *tx)
@@ -533,7 +534,7 @@ impl 仓储端口 for Pg仓储 {
             .map_err(|_| contract::错误码::系统错误)?
             .ok_or(contract::错误码::会话无效)?;
             let session_db_id: i64 = session_row.get("id");
-            let sender_alias: String = session_row.get("display_name");
+            let sender_display_alias: String = session_row.get("display_alias");
 
             let message_id = format!("{房间标识}-{next_position}");
 
@@ -580,7 +581,7 @@ impl 仓储端口 for Pg仓储 {
                 消息标识: message_id,
                 客户端消息标识: 客户端消息标识.to_string(),
                 发送者会话标识: 会话标识.to_string(),
-                发送者花名: sender_alias,
+                发送者花名: sender_display_alias,
                 文本: 文本.to_string(),
                 事件位置: next_position,
             })

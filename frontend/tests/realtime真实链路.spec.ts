@@ -4,7 +4,7 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 
-type 会话快照 = {
+type 匿名身份引导响应 = {
   session_id: string;
   anonymous_identity_id?: string;
   display_alias?: string;
@@ -40,10 +40,10 @@ describe("realtime真实链路", () => {
       backendChildren.push(child);
       await waitForServer(baseUrl);
 
-      const first = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const first = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "device-stable-001",
       });
-      const second = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const second = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "device-stable-001",
       });
 
@@ -85,10 +85,10 @@ describe("realtime真实链路", () => {
       expect(connectError.message).toContain("invalid_session");
       noSessionSocket.disconnect();
 
-      const a = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const a = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "socket-a",
       });
-      const b = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const b = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "socket-b",
       });
       const roomCode = uniqueRoomCode("SOCKET");
@@ -151,13 +151,13 @@ describe("realtime真实链路", () => {
       backendChildren.push(child);
       await waitForServer(baseUrl);
 
-      const a = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const a = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "resume-a",
       });
-      const b = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const b = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "resume-b",
       });
-      const c = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const c = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "room2-c",
       });
       const roomCode1 = uniqueRoomCode("SOCKET");
@@ -262,7 +262,7 @@ describe("realtime真实链路", () => {
       backendChildren.push(child);
       await waitForServer(baseUrl);
 
-      const session = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const session = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "future-from",
       });
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
@@ -307,10 +307,10 @@ describe("realtime真实链路", () => {
       backendChildren.push(child);
       await waitForServer(baseUrl);
 
-      const owner = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const owner = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "room-owner",
       });
-      const stranger = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const stranger = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "room-stranger",
       });
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
@@ -350,7 +350,7 @@ describe("realtime真实链路", () => {
       backendChildren.push(child);
       await waitForServer(baseUrl);
 
-      const session = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+      const session = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "negative-from",
       });
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
