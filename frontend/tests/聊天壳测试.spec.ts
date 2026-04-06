@@ -130,7 +130,7 @@ class 假传输 implements 前端传输端口 {
   async joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照> {
     this.joinCalls.push({ sessionId, roomCode });
     this.joinRoomId = roomCode === "ROOM02" ? "r-room-2" : "r-test";
-    return { room_id: this.joinRoomId, latest_event_position: 0 };
+    return { room_id: this.joinRoomId, latest_event_position: 0, recent_messages: [] };
   }
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
     this.loadRoomSnapshotCalls += 1;
@@ -139,7 +139,7 @@ class 假传输 implements 前端传输端口 {
     if (queued instanceof Error) throw queued;
     if (queued) return queued;
     this.snapshotRoomId = roomId;
-    return { room_id: roomId, latest_event_position: 1 };
+    return { room_id: roomId, latest_event_position: 1, recent_messages: [] };
   }
   async loadRoomEvents(
     roomId: string,
@@ -399,6 +399,97 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("首次进入已有历史房间时会直接渲染 recent_messages", async () => {
+    const transport = new 假传输();
+    transport.snapshotQueue = [
+      {
+        room_id: "r-test",
+        latest_event_position: 2,
+        recent_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "历史消息-1",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "历史消息-2",
+            event_position: 2,
+          },
+        ],
+      } as 房间快照,
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const list = el.shadowRoot!.querySelector("#messageList")!;
+    expect(list.textContent).toContain("历史消息-1");
+    expect(list.textContent).toContain("历史消息-2");
+    el.remove();
+  });
+
+  it("刷新恢复房间时会直接渲染 recent_messages", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.snapshotQueue = [
+      {
+        room_id: "r-restore",
+        latest_event_position: 2,
+        recent_messages: [
+          {
+            type: "message_created",
+            room_id: "r-restore",
+            message_id: "m-restore-1",
+            client_message_id: "c-restore-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "恢复历史-1",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-restore",
+            message_id: "m-restore-2",
+            client_message_id: "c-restore-2",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "恢复历史-2",
+            event_position: 2,
+          },
+        ],
+      } as 房间快照,
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const list = el.shadowRoot!.querySelector("#messageList")!;
+    expect(list.textContent).toContain("恢复历史-1");
+    expect(list.textContent).toContain("恢复历史-2");
+    el.remove();
+  });
+
   it("room_not_found 会清掉 current_room_id 并回到搜索页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-missing");
     const transport = new 假传输();
@@ -447,7 +538,7 @@ describe("聊天壳", () => {
     ];
     transport.snapshotQueue = [
       创建传输错误(401, "invalid_session"),
-      { room_id: "r-restore", latest_event_position: 2 },
+      { room_id: "r-restore", latest_event_position: 2, recent_messages: [] },
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);

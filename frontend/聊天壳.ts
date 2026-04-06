@@ -199,7 +199,9 @@ export class 聊天壳 extends LitElement {
       this.updateChat({
         roomId: roomId,
         latestEventPosition,
-        messages: this.reconcileMessages(delta.events),
+        // 重拉快照时，必须先回到快照自带的最近消息基线，再叠加其后的增量。
+        // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
+        messages: this.reconcileMessages([...snapshot.recent_messages, ...delta.events]),
         pending: false,
         recoveryState: "idle",
         lastRecoveryErrorCode: "",
@@ -426,12 +428,18 @@ export class 聊天壳 extends LitElement {
    * 房间基线一旦成立，就统一从这里更新壳层状态与本地恢复锚点。
    * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
    */
-  private enterRoomFromSnapshot(snapshot: { room_id: string; latest_event_position: number }): void {
+  private enterRoomFromSnapshot(snapshot: {
+    room_id: string;
+    latest_event_position: number;
+    recent_messages: 消息事件[];
+  }): void {
     this.writeCurrentRoomId(snapshot.room_id);
     this.updateChat({
       roomId: snapshot.room_id,
       latestEventPosition: snapshot.latest_event_position,
-      messages: [],
+      // recent_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
+      // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
+      messages: this.reconcileMessages(snapshot.recent_messages),
       pending: false,
       recoveryState: "idle",
       lastRecoveryErrorCode: "",

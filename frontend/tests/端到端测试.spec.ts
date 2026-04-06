@@ -70,10 +70,25 @@ class 端到端假传输 implements 前端传输端口 {
     };
   }
   async joinOrCreateRoom(): Promise<房间快照> {
-    return { room_id: "r-e2e", latest_event_position: 0 };
+    return { room_id: "r-e2e", latest_event_position: 0, recent_messages: [] };
   }
   async loadRoomSnapshot(): Promise<房间快照> {
-    return { room_id: "r-e2e", latest_event_position: 0 };
+    return {
+      room_id: "r-e2e",
+      latest_event_position: 1,
+      recent_messages: [
+        {
+          type: "message_created",
+          room_id: "r-e2e",
+          message_id: "m-e2e",
+          client_message_id: "c-e2e",
+          sender_session_id: "s-e2e",
+          sender_display_alias: "暴躁的企鹅",
+          body: "e2e-hello",
+          event_position: 1,
+        },
+      ],
+    };
   }
   async loadRoomEvents(
     _roomId: string,

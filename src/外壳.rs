@@ -352,6 +352,7 @@ async fn join_or_create_room(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
+            最近消息,
         }) => {
             tracing::info!(
                 usecase = "按短码进房或建房",
@@ -366,7 +367,11 @@ async fn join_or_create_room(
             (
                 StatusCode::OK,
                 Json(
-                    serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置}),
+                    serde_json::json!({
+                        "room_id": 房间标识,
+                        "latest_event_position": 最新事件位置,
+                        "recent_messages": events_to_json(最近消息),
+                    }),
                 ),
             )
                 .into_response()
@@ -452,6 +457,7 @@ async fn load_room_snapshot(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
+            最近消息,
         }) => {
             tracing::info!(
                 usecase = "加载房间快照",
@@ -466,7 +472,11 @@ async fn load_room_snapshot(
             (
                 StatusCode::OK,
                 Json(
-                    serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置}),
+                    serde_json::json!({
+                        "room_id": 房间标识,
+                        "latest_event_position": 最新事件位置,
+                        "recent_messages": events_to_json(最近消息),
+                    }),
                 ),
             )
                 .into_response()

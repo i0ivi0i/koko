@@ -59,6 +59,61 @@ fn 生成展示花名() -> String {
 }
 
 impl Pg仓储 {
+    /// 把数据库行翻成共享领域事件。
+    /// 这里统一收口消息读取的字段映射，避免快照基线和增量补洞各写一套。
+    fn 行转消息事件(row: sqlx::postgres::PgRow, 房间标识: &str) -> contract::领域事件 {
+        let msg_id: Option<String> = row.get("message_id");
+        let client_id: Option<String> = row.get("client_message_id");
+        let sender_session_id: Option<String> = row.get("session_id");
+        let sender_display_alias: Option<String> = row.get("display_alias");
+        let body: Option<String> = row.get("body");
+        contract::领域事件::消息已创建 {
+            房间标识: 房间标识.to_string(),
+            消息标识: msg_id.unwrap_or_default(),
+            客户端消息标识: client_id.unwrap_or_default(),
+            发送者会话标识: sender_session_id.unwrap_or_default(),
+            发送者花名: sender_display_alias.unwrap_or_default(),
+            文本: body.unwrap_or_default(),
+            事件位置: row.get("event_position"),
+        }
+    }
+
+    /// 查询当前房间最近一段可直接阅读的消息基线。
+    ///
+    /// 关键约束：
+    /// 1. 数据库里先按 DESC + LIMIT 取最近 N 条，避免把整房历史全拉上来；
+    /// 2. 返回给壳层前再 reverse 成 ASC，保证“老的在前、新的在后”；
+    /// 3. 这段基线属于权威事实，不能让前端自己从 latest_event_position 猜出来。
+    async fn 查询最近消息基线(
+        pool: &PgPool,
+        房间数据库标识: i64,
+        房间标识: &str,
+        limit: i64,
+    ) -> Result<Vec<contract::领域事件>, contract::错误码> {
+        let rows = sqlx::query(
+            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+             FROM room_events re \
+             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+             LEFT JOIN sessions s ON s.id = m.sender_session_id \
+             WHERE re.room_id = $1 \
+             ORDER BY re.event_position DESC \
+             LIMIT $2",
+        )
+        .bind(房间数据库标识)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        let mut events = rows
+            .into_iter()
+            .map(|row| Self::行转消息事件(row, 房间标识))
+            .collect::<Vec<_>>();
+        // DESC LIMIT 更省，但普通阅读顺序必须恢复成 ASC。
+        events.reverse();
+        Ok(events)
+    }
+
     fn 在运行时执行<T>(&self, future: impl Future<Output = T>) -> T {
         if let Some(rt) = &self.owned_runtime {
             rt.block_on(future)
@@ -181,23 +236,10 @@ impl Pg仓储 {
             .await
             .map_err(|_| contract::错误码::系统错误)?;
 
-            let mut events = Vec::with_capacity(rows.len());
-            for row in rows {
-                let msg_id: Option<String> = row.get("message_id");
-                let client_id: Option<String> = row.get("client_message_id");
-                let sender_session_id: Option<String> = row.get("session_id");
-                let sender_display_alias: Option<String> = row.get("display_alias");
-                let body: Option<String> = row.get("body");
-                events.push(contract::领域事件::消息已创建 {
-                    房间标识: 房间标识.to_string(),
-                    消息标识: msg_id.unwrap_or_default(),
-                    客户端消息标识: client_id.unwrap_or_default(),
-                    发送者会话标识: sender_session_id.unwrap_or_default(),
-                    发送者花名: sender_display_alias.unwrap_or_default(),
-                    文本: body.unwrap_or_default(),
-                    事件位置: row.get("event_position"),
-                });
-            }
+            let events = rows
+                .into_iter()
+                .map(|row| Self::行转消息事件(row, 房间标识))
+                .collect::<Vec<_>>();
 
             Ok(contract::快照::房间增量事件 {
                 房间标识: 房间标识.to_string(),
@@ -423,9 +465,12 @@ impl 仓储端口 for Pg仓储 {
                 .await
                 .map_err(|_| contract::错误码::系统错误)?;
 
+            let recent_messages = Self::查询最近消息基线(&self.pool, room_db_id, &room_id, 55).await?;
+
             Ok(contract::快照::房间 {
                 房间标识: room_id,
                 最新事件位置: latest_event_position,
+                最近消息: recent_messages,
             })
         })
     }
@@ -488,7 +533,7 @@ impl 仓储端口 for Pg仓储 {
     ) -> Result<contract::快照, contract::错误码> {
         self.在运行时执行(async {
             let room =
-                sqlx::query("SELECT room_id, latest_event_position FROM rooms WHERE room_id = $1")
+                sqlx::query("SELECT id, room_id, latest_event_position FROM rooms WHERE room_id = $1")
                     .bind(房间标识)
                     .fetch_optional(&self.pool)
                     .await
@@ -496,9 +541,13 @@ impl 仓储端口 for Pg仓储 {
             let Some(row) = room else {
                 return Err(contract::错误码::房间不存在);
             };
+            let room_db_id: i64 = row.get("id");
+            let recent_messages =
+                Self::查询最近消息基线(&self.pool, room_db_id, 房间标识, 55).await?;
             Ok(contract::快照::房间 {
                 房间标识: row.get("room_id"),
                 最新事件位置: row.get("latest_event_position"),
+                最近消息: recent_messages,
             })
         })
     }

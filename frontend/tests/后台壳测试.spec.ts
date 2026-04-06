@@ -34,10 +34,10 @@ class 假后台传输 implements 前端传输端口 {
     };
   }
   async joinOrCreateRoom(): Promise<房间快照> {
-    return { room_id: "r-x", latest_event_position: 0 };
+    return { room_id: "r-x", latest_event_position: 0, recent_messages: [] };
   }
   async loadRoomSnapshot(): Promise<房间快照> {
-    return { room_id: "r-x", latest_event_position: 0 };
+    return { room_id: "r-x", latest_event_position: 0, recent_messages: [] };
   }
   async loadRoomEvents(
     _roomId: string,

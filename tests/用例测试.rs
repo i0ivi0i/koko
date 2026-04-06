@@ -190,6 +190,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
         Ok(koko::contract::快照::房间 {
             房间标识: room_id,
             最新事件位置: self.最新位置,
+            最近消息: Vec::new(),
         })
     }
 
@@ -224,6 +225,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
             Ok(koko::contract::快照::房间 {
                 房间标识: 房间标识.to_string(),
                 最新事件位置: self.最新位置,
+                最近消息: Vec::new(),
             })
         } else {
             Err(koko::contract::错误码::房间不存在)

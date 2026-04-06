@@ -24,6 +24,13 @@ export interface 匿名身份引导结果 extends 匿名身份快照 {
 export interface 房间快照 {
   room_id: string;
   latest_event_position: number;
+  /**
+   * 房间当前可直接阅读的最近消息基线。
+   * 设计原因：
+   * 1. 刷新回房后，前端不能只拿 latest_event_position 就假装历史还在；
+   * 2. 首次进入已有历史的房间时，也应该立刻看到最近聊到哪。
+   */
+  recent_messages: 消息事件[];
 }
 
 export interface 消息事件 {

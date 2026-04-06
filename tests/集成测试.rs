@@ -453,6 +453,182 @@ async fn 不存在的房间通过events接口会返回room_not_found() {
 
 #[tokio::test]
 #[serial]
+async fn 房间快照会返回最近五十五条消息基线() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("S{:011}", uniq % 100_000_000_000);
+    let device_token = format!("snapshot-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
+        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识;
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+        for index in 0..60 {
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("snapshot-c-{index}"),
+                &format!("snapshot-{index}"),
+            )
+            .expect("应能连续发送消息");
+        }
+        (session_id, room_id)
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/{room_id}/snapshot?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let recent = body["recent_messages"]
+        .as_array()
+        .expect("snapshot 必须直接带 recent_messages");
+    assert_eq!(recent.len(), 55, "快照只应返回最近 55 条消息基线");
+    assert_eq!(recent.first().and_then(|msg| msg["body"].as_str()), Some("snapshot-5"));
+    assert_eq!(recent.last().and_then(|msg| msg["body"].as_str()), Some("snapshot-59"));
+}
+
+#[tokio::test]
+#[serial]
+async fn 房间快照返回的最近消息按事件位置升序排列() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("Q{:011}", uniq % 100_000_000_000);
+    let device_token = format!("snapshot-order-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
+        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识;
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+        for index in 0..3 {
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("snapshot-order-c-{index}"),
+                &format!("order-{index}"),
+            )
+            .expect("应能连续发送消息");
+        }
+        (session_id, room_id)
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/{room_id}/snapshot?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let recent = body["recent_messages"]
+        .as_array()
+        .expect("snapshot 必须直接带 recent_messages");
+    let positions = recent
+        .iter()
+        .map(|message| message["event_position"].as_i64().expect("event_position"))
+        .collect::<Vec<_>>();
+    assert_eq!(positions, vec![1, 2, 3], "房间快照里的最近消息必须按升序返回");
+}
+
+#[tokio::test]
+#[serial]
+async fn 房间消息不足五十五条时快照按实际条数返回() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("P{:011}", uniq % 100_000_000_000);
+    let device_token = format!("snapshot-short-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
+        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识;
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+        koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "snapshot-short-c-1", "only-one")
+            .expect("应能发送消息");
+        (session_id, room_id)
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/{room_id}/snapshot?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let recent = body["recent_messages"]
+        .as_array()
+        .expect("snapshot 必须直接带 recent_messages");
+    assert_eq!(recent.len(), 1, "房间消息不足 55 条时应按实际条数返回");
+    assert_eq!(recent[0]["body"].as_str(), Some("only-one"));
+}
+
+#[tokio::test]
+#[serial]
 async fn bootstrap接口会返回稳定花名快照() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
