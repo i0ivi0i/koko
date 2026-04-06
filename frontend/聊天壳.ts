@@ -56,6 +56,27 @@ export class 聊天壳 extends LitElement {
     this.subscribeRoom(0);
   }
 
+  // 当 realtime 锚点闭合不了时，退回 HTTP 基线重建，再回到统一事件流。
+  private async reloadRoomFromSnapshot(roomId: string): Promise<void> {
+    if (!this.chatState.sessionId || roomId !== this.chatState.roomId) return;
+    try {
+      const snapshot = await this.transport.loadRoomSnapshot(roomId, this.chatState.sessionId);
+      const delta = await this.transport.loadRoomEvents(roomId, 0);
+      const latestEventPosition = Math.max(
+        snapshot.latest_event_position,
+        delta.latest_event_position
+      );
+      this.updateChat({
+        latestEventPosition,
+        messages: this.reconcileMessages(delta.events),
+        pending: false,
+      });
+      this.subscribeRoom(latestEventPosition);
+    } catch {
+      this.updateChat({ pending: false });
+    }
+  }
+
   private async sendMessage(): Promise<void> {
     if (!this.chatState.roomId || !this.chatState.messageInput.trim() || !this.realtimeSocket) return;
     const text = this.chatState.messageInput.trim();
@@ -97,9 +118,17 @@ export class 聊天壳 extends LitElement {
     });
     socket.on(
       "control_result",
-      (control: { kind?: string; latest_event_position?: number; code?: string }) => {
+      (control: {
+        kind?: string;
+        latest_event_position?: number;
+        code?: string;
+        room_id?: string;
+      }) => {
         if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
           this.updateChat({ latestEventPosition: control.latest_event_position });
+        }
+        if (control.kind === "need_snapshot_reload" && control.room_id) {
+          void this.reloadRoomFromSnapshot(control.room_id);
         }
         if (control.kind === "rejected" || control.kind === "error") {
           this.updateChat({ pending: false });

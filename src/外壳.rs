@@ -615,6 +615,24 @@ async fn handle_realtime_subscribe(
             事件,
             最新事件位置,
         })) => {
+            if from > 最新事件位置 {
+                tracing::warn!(
+                    usecase = "订阅房间事件流",
+                    adapter = "socketioxide",
+                    room_id = 房间标识,
+                    session_id = auth.session_id,
+                    expected_position = from,
+                    latest_event_position = 最新事件位置,
+                    "订阅锚点超前，要求客户端回退到 HTTP 快照"
+                );
+                let control = serde_json::json!({
+                    "kind": "need_snapshot_reload",
+                    "room_id": 房间标识,
+                    "expected_position": from,
+                });
+                let _ = socket.emit("control_result", &control);
+                return;
+            }
             socket.join(房间标识.clone());
             // 先发控制面结果，再发领域事件列表，便于前端分通道处理。
             let control = serde_json::json!({

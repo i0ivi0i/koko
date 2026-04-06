@@ -211,6 +211,51 @@ describe("realtime真实链路", () => {
     },
     60000
   );
+
+  it(
+    "订阅锚点超前时返回 need_snapshot_reload，而不是假装可以继续补洞",
+    async () => {
+      const port = await allocatePort();
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const child = startBackend(port);
+      backendChildren.push(child);
+      await waitForServer(baseUrl);
+
+      const session = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        display_name: "future-from",
+      });
+      const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: session.session_id,
+        room_code: "SOCKET33",
+      });
+
+      const socket = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: session.session_id },
+        reconnection: false,
+      });
+      await once(socket, "connect");
+
+      const control = once<{
+        kind: string;
+        room_id: string;
+        expected_position: number;
+      }>(socket, "control_result");
+      socket.emit("subscribe_room_stream", {
+        room_id: room.room_id,
+        from: 99,
+      });
+
+      const result = await control;
+      expect(result.kind).toBe("need_snapshot_reload");
+      expect(result.room_id).toBe(room.room_id);
+      expect(result.expected_position).toBe(99);
+      await expectNoEvent(socket, "room_events");
+
+      socket.disconnect();
+    },
+    60000
+  );
 });
 
 function startBackend(port: number): ChildProcess {
