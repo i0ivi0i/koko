@@ -6,8 +6,11 @@ use serde_json::Value;
 use serial_test::serial;
 use std::env;
 use std::io;
+use std::net::TcpListener;
 use std::sync::{Arc, Mutex, Once, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::oneshot;
+use tokio::time::{sleep, timeout, Duration};
 use tower::ServiceExt;
 
 /// 集成测试总则：
@@ -416,6 +419,34 @@ async fn http冷路径拒绝会输出rejected日志与error_code() {
     );
 }
 
+#[tokio::test]
+#[serial]
+async fn 启动收到关闭信号后会优雅停机() {
+    let backup = 备份并清空环境变量(&["APP_PORT"]);
+    let port = 分配测试端口();
+    env::set_var("APP_PORT", port.to_string());
+
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let server = tokio::spawn(async move {
+        koko::entry::启动并等待关闭信号(async move {
+            let _ = shutdown_rx.await;
+        })
+        .await
+    });
+
+    等待端口开始监听(port).await;
+    shutdown_tx.send(()).expect("测试应能发出关闭信号");
+
+    let result = timeout(Duration::from_secs(10), server)
+        .await
+        .expect("服务收到关闭信号后应在超时前完成收尾")
+        .expect("启动任务不应 panic");
+    assert!(result.is_ok(), "优雅停机不应把正常退出当成失败");
+
+    等待端口停止监听(port).await;
+    恢复环境变量(backup);
+}
+
 fn 备份并清空环境变量(keys: &[&str]) -> Vec<(String, Option<String>)> {
     // 先备份再清空，确保测试结束后能完整恢复本机环境，避免污染开发机。
     let mut out = Vec::with_capacity(keys.len());
@@ -434,6 +465,42 @@ fn 恢复环境变量(backup: Vec<(String, Option<String>)>) {
             None => env::remove_var(key),
         }
     }
+}
+
+fn 分配测试端口() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("应能申请临时端口");
+    let port = listener
+        .local_addr()
+        .expect("应能读取本地地址")
+        .port();
+    drop(listener);
+    port
+}
+
+async fn 等待端口开始监听(port: u16) {
+    for _ in 0..40 {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_ok()
+        {
+            return;
+        }
+        sleep(Duration::from_millis(200)).await;
+    }
+    panic!("服务未在预期时间内开始监听端口: {port}");
+}
+
+async fn 等待端口停止监听(port: u16) {
+    for _ in 0..40 {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_err()
+        {
+            return;
+        }
+        sleep(Duration::from_millis(200)).await;
+    }
+    panic!("服务收到关闭信号后仍未释放端口: {port}");
 }
 
 /// HTTP 测试助手：

@@ -206,6 +206,7 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cargoPath = (Get-Command cargo.exe -ErrorAction Stop).Source
 $pnpmPath = (Get-Command pnpm.cmd -ErrorAction Stop).Source
 $logDirectory = New-LauncherLogDirectory -RootDirectory $env:TEMP -SessionName "koko-runner"
+$backendTargetDir = Join-Path $repoRoot "target\\launcher-run"
 $frontendWatch = $null
 $frontendTypeWatch = $null
 $backendProcess = $null
@@ -247,17 +248,21 @@ try {
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 
-    Write-Host "启动后端: cargo run"
+    Write-Host "启动后端: cargo run --target-dir target\\launcher-run"
     $appPort = [Environment]::GetEnvironmentVariable("APP_PORT")
     if ([string]::IsNullOrWhiteSpace($appPort)) {
         $appPort = "8080"
     }
     Write-Host "访问入口: http://127.0.0.1:$appPort/"
     Write-Host "子进程日志目录: $logDirectory"
+    # 启动器使用独立 target 目录：
+    # 1. 不再和开发者手动执行的 `cargo run` 争抢默认 target\\debug\\koko.exe；
+    # 2. 即使本地另有一个默认 target 的后端还活着，也不会把 launcher 自己卡死在编译阶段；
+    # 3. 这不改变源码真相，仍然是 Cargo 官方命令，只是把开发启动器的构建产物隔离开。
     $backendProcess = New-ManagedProcess `
         -Name "backend" `
         -FilePath $cargoPath `
-        -ArgumentList @("run") `
+        -ArgumentList @("run", "--target-dir", $backendTargetDir) `
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 

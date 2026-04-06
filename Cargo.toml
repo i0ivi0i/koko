@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 dotenvy = "0.15"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+# 启动入口现在既要接系统退出信号，也要在测试里注入关闭信号并等待优雅停机，
+# 因此把 signal/sync/time 显式列出来，避免后续继续依赖上游 feature 侧带。
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1"
 # 日志输出只显式保留当前确实使用的格式化、过滤与 ANSI 终端能力，
 # 避免把 tracing-subscriber 的默认特性整包带进来。

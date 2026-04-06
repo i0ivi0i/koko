@@ -1,10 +1,22 @@
+use std::{future::Future, io};
+
 /// 应用启动入口只负责编排，不承载业务规则。
 ///
 /// 维护者阅读指南：
 /// 1. 这里是“启动总管”，职责是：初始化日志 -> 读取配置 -> 自动迁移 -> 绑定端口 -> 启服务。
 /// 2. 这里不允许出现任何“谁能发消息/谁是成员”之类的业务裁决。
 /// 3. 启动失败会统一打结构化日志，便于排查是配置、迁移还是端口问题。
-pub async fn 启动() -> std::io::Result<()> {
+pub async fn 启动() -> io::Result<()> {
+    启动并等待关闭信号(等待退出信号()).await
+}
+
+/// 把“如何判断应该停机”从启动主流程里抽出来：
+/// - 生产运行时由系统信号驱动
+/// - 测试里可以注入自定义关闭 future，验证服务会不会按同一路径优雅退出
+pub async fn 启动并等待关闭信号<F>(shutdown_signal: F) -> io::Result<()>
+where
+    F: Future<Output = ()> + Send + 'static,
+{
     // 约束：日志必须天然存在，不能靠“临时加 println”排错。
     crate::assembly::初始化日志()?;
 
@@ -58,10 +70,27 @@ pub async fn 启动() -> std::io::Result<()> {
         app_port = config.app_port,
         "HTTP 冷路径服务已启动"
     );
-    if let Err(err) = axum::serve(listener, app).await {
+    let serve_result = axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            shutdown_signal.await;
+            tracing::info!(
+                usecase = "服务停止",
+                adapter = "entry",
+                outcome = "accepted",
+                "接收到退出信号，开始优雅停机"
+            );
+        })
+        .await;
+    if let Err(err) = serve_result {
         记录命令失败("服务启动", "entry", "serve_failed", &err.to_string());
-        return Err(std::io::Error::other(format!("服务运行失败: {err}")));
+        return Err(io::Error::other(format!("服务运行失败: {err}")));
     }
+    tracing::info!(
+        usecase = "服务停止",
+        adapter = "entry",
+        outcome = "succeeded",
+        "HTTP 冷路径服务已优雅停止"
+    );
     Ok(())
 }
 
@@ -77,4 +106,36 @@ pub fn 记录命令失败(usecase: &str, adapter: &str, error_code: &str, messag
         message = message,
         "命令执行失败"
     );
+}
+
+/// 运行态的关闭信号统一收口到这里，避免退出语义散落在 main、launcher 或 adapter 里。
+///
+/// 当前先覆盖 Tokio 官方最常见的 Ctrl+C 路径；
+/// Unix 下再顺手承接 SIGTERM，方便以后容器或 service manager 直接复用。
+async fn 等待退出信号() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("安装 Ctrl+C 信号监听失败");
+    };
+
+    #[cfg(unix)]
+    {
+        let terminate = async {
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("安装 SIGTERM 信号监听失败")
+                .recv()
+                .await;
+        };
+
+        tokio::select! {
+            _ = ctrl_c => {},
+            _ = terminate => {},
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        ctrl_c.await;
+    }
 }
