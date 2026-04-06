@@ -1,3 +1,15 @@
+/**
+ * 设备级匿名身份快照。
+ * 约束：
+ * 1. 内部身份与花名必须分离；
+ * 2. Web 只能消费这个快照，不能自造永久身份真相；
+ * 3. 未来注册只能链接到内部身份，而不是替换它。
+ */
+export interface 匿名身份快照 {
+  anonymous_identity_id: string;
+  display_alias: string;
+}
+
 export interface 会话快照 {
   session_id: string;
   display_name: string;

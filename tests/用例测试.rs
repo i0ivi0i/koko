@@ -175,6 +175,55 @@ fn 引导匿名会话可返回会话快照() {
 }
 
 #[test]
+fn bootstrap匿名身份时设备凭证与花名不会混成同一个字段() {
+    let snapshot = koko::contract::快照::匿名身份 {
+        匿名身份标识: "a-1".to_string(),
+        展示花名: "暴躁的企鹅".to_string(),
+    };
+
+    match snapshot {
+        koko::contract::快照::匿名身份 {
+            匿名身份标识,
+            展示花名,
+        } => {
+            assert_eq!(匿名身份标识, "a-1");
+            assert_eq!(展示花名, "暴躁的企鹅");
+            assert_ne!(匿名身份标识, 展示花名, "内部身份与展示花名必须分开");
+        }
+        _ => panic!("应返回匿名身份快照"),
+    }
+}
+
+#[test]
+fn 未来改花名不应要求替换匿名内部身份() {
+    let before = koko::contract::快照::匿名身份 {
+        匿名身份标识: "a-stable".to_string(),
+        展示花名: "暴躁的企鹅".to_string(),
+    };
+    let after = koko::contract::快照::匿名身份 {
+        匿名身份标识: "a-stable".to_string(),
+        展示花名: "冷静的企鹅".to_string(),
+    };
+
+    match (before, after) {
+        (
+            koko::contract::快照::匿名身份 {
+                匿名身份标识: before_id,
+                展示花名: before_alias,
+            },
+            koko::contract::快照::匿名身份 {
+                匿名身份标识: after_id,
+                展示花名: after_alias,
+            },
+        ) => {
+            assert_eq!(before_id, after_id, "未来改花名时内部身份不能跟着变");
+            assert_ne!(before_alias, after_alias, "测试前提错误：这里必须是花名变化");
+        }
+        _ => panic!("应返回匿名身份快照"),
+    }
+}
+
+#[test]
 fn 按短码进房或建房会返回房间快照() {
     let mut repo = 假仓储::default();
     let room = koko::usecase::按短码进房或建房(&mut repo, "s-1", "ABCD1234").expect("应成功");
