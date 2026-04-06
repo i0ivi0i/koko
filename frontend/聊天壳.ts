@@ -59,7 +59,7 @@ export class 聊天壳 extends LitElement {
     );
     const snapshot = await this.transport.loadRoomSnapshot(room.room_id, this.chatState.sessionId);
     this.enterRoomFromSnapshot(snapshot);
-    this.subscribeRoom(0);
+    this.subscribeRoom(snapshot.latest_event_position);
   }
 
   /**
@@ -83,7 +83,12 @@ export class 聊天壳 extends LitElement {
     if (!this.chatState.sessionId || roomId !== this.chatState.roomId) return;
     try {
       const snapshot = await this.transport.loadRoomSnapshot(roomId, this.chatState.sessionId);
-      const delta = await this.transport.loadRoomEvents(roomId, this.chatState.sessionId, 0);
+      // 补洞锚点直接吃权威快照位置；不要再手搓 `0` 或 `+1` 这种第二套语义。
+      const delta = await this.transport.loadRoomEvents(
+        roomId,
+        this.chatState.sessionId,
+        snapshot.latest_event_position
+      );
       const latestEventPosition = Math.max(
         snapshot.latest_event_position,
         delta.latest_event_position

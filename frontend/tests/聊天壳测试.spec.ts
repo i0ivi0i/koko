@@ -230,8 +230,9 @@ describe("聊天壳", () => {
   });
 
   it("可以引导会话、进房并渲染消息", async () => {
+    const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
-    el.setTransportForTest(new 假传输());
+    el.setTransportForTest(transport);
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
@@ -241,6 +242,13 @@ describe("聊天壳", () => {
     const joinBtn = el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement;
     joinBtn.click();
     await 等待组件稳定(el);
+
+    expect(
+      transport.socket.sentEvents.some(
+        ({ event, payload }) =>
+          event === "subscribe_room_stream" && payload.room_id === "r-test" && payload.from === 1
+      )
+    ).toBe(true);
 
     const msgInput = el.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
     msgInput.value = "hello";
@@ -277,6 +285,9 @@ describe("聊天壳", () => {
 
     expect(transport.loadRoomSnapshotCalls).toBe(2);
     expect(transport.loadRoomEventsCalls).toBe(1);
+    expect(transport.loadRoomEventsArgs).toEqual([
+      { roomId: "r-test", sessionId: "s-test", from: 1 },
+    ]);
     expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");
     expect(
       transport.socket.sentEvents.some(
@@ -284,6 +295,9 @@ describe("聊天壳", () => {
           event === "subscribe_room_stream" && payload.room_id === "r-test" && payload.from === 1
       )
     ).toBe(true);
+    expect(
+      transport.loadRoomEventsArgs.some(({ from }) => from === 2)
+    ).toBe(false);
 
     el.remove();
   });
