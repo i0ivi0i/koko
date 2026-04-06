@@ -25,12 +25,37 @@ export interface 房间快照 {
   room_id: string;
   latest_event_position: number;
   /**
-   * 房间当前可直接阅读的最近消息基线。
+   * 当前身份上次已读到的事件位置。
    * 设计原因：
-   * 1. 刷新回房后，前端不能只拿 latest_event_position 就假装历史还在；
-   * 2. 首次进入已有历史的房间时，也应该立刻看到最近聊到哪。
+   * 1. 这是真实的阅读锚点，不是滚动条像素位置；
+   * 2. `null` 表示这个身份在当前房间还没有建立过阅读真相；
+   * 3. Web/iOS/Android/CLI 都必须消费同一语义，不能各猜各的。
    */
-  recent_messages: 消息事件[];
+  last_read_event_position: number | null;
+  /**
+   * 当前首屏里的第一条未读事件位置。
+   * `null` 表示本次恢复不需要画未读分隔条。
+   */
+  first_unread_event_position: number | null;
+  /**
+   * 后端围绕未读起点或最近消息窗口返回的首屏消息。
+   * 它已经是权威恢复基线，不再叫 `recent_messages`，避免误导成“总是最近消息”。
+   */
+  snapshot_messages: 消息事件[];
+  /**
+   * 当前首屏上方是否仍然存在更早历史。
+   * 这是真实查询结果，前端不该再靠长度猜。
+   */
+  has_more_before: boolean;
+}
+
+/**
+ * 阅读推进请求。
+ * 壳层只能汇报“已读到哪个事件位置”，不能把 UI 像素滚动值当成阅读真相上传。
+ */
+export interface 阅读推进请求 {
+  session_id: string;
+  last_read_event_position: number;
 }
 
 export interface 消息事件 {

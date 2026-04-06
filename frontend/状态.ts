@@ -14,12 +14,22 @@ export interface 聊天状态 {
   roomCodeInput: string;
   messageInput: string;
   latestEventPosition: number;
+  /** 当前身份上次已读到的事件位置；`null` 表示还没有阅读锚点。 */
+  lastReadEventPosition: number | null;
+  /** 当前首屏里的第一条未读位置；用于后续未读分隔条与首屏定位。 */
+  firstUnreadEventPosition: number | null;
+  /** 首屏上方是否仍然存在更早历史。 */
+  hasMoreBefore: boolean;
+  /** 首屏未读定位是否已经稳定完成，避免恢复早期误推进已读。 */
+  initialUnreadSettled: boolean;
+  /** 等待节流上报的阅读位置；只属于壳层瞬时状态。 */
+  pendingReadAnchorPosition: number | null;
+  /** 顶部补历史节流截止时间戳。 */
+  historyLoadThrottleUntil: number;
   messages: 消息事件[];
   pending: boolean;
   /** 是否正在加载当前最老消息之前的历史页。 */
   historyLoading: boolean;
-  /** 是否已经明确没有更早历史了。 */
-  historyReachedStart: boolean;
   /** 最近一次历史分页失败的稳定错误码。 */
   historyErrorCode: string;
   /** 恢复相关的临时状态，只服务壳层交互，不是共享契约事实。 */
@@ -37,10 +47,15 @@ export const 初始聊天状态: 聊天状态 = {
   roomCodeInput: "",
   messageInput: "",
   latestEventPosition: 0,
+  lastReadEventPosition: null,
+  firstUnreadEventPosition: null,
+  hasMoreBefore: false,
+  initialUnreadSettled: true,
+  pendingReadAnchorPosition: null,
+  historyLoadThrottleUntil: 0,
   messages: [],
   pending: false,
   historyLoading: false,
-  historyReachedStart: false,
   historyErrorCode: "",
   recoveryState: "idle",
   lastRecoveryErrorCode: "",

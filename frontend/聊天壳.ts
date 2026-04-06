@@ -1,5 +1,5 @@
 import { css, html, LitElement } from "lit";
-import type { 消息事件 } from "./契约.js";
+import type { 房间快照, 消息事件 } from "./契约.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 派生消息展示项 } from "./视图.js";
@@ -156,7 +156,7 @@ export class 聊天壳 extends LitElement {
         this.transport.joinOrCreateRoom(sessionId, roomCode)
       );
       // join-or-create 现在已经返回权威房间快照：
-      // 这里直接消费 recent_messages，避免进房后再额外打一枪 snapshot，
+      // 这里直接消费 snapshot_messages，避免进房后再额外打一枪 snapshot，
       // 否则不仅浪费一次请求，还会人为拉大“进房成功”和“首屏可读”之间的竞态窗口。
       this.enterRoomFromSnapshot(snapshot);
       this.subscribeRoom(snapshot.latest_event_position);
@@ -205,12 +205,16 @@ export class 聊天壳 extends LitElement {
       this.updateChat({
         roomId: roomId,
         latestEventPosition,
-        // 重拉快照时，必须先回到快照自带的最近消息基线，再叠加其后的增量。
+        lastReadEventPosition: snapshot.last_read_event_position,
+        firstUnreadEventPosition: snapshot.first_unread_event_position,
+        hasMoreBefore: snapshot.has_more_before,
+        initialUnreadSettled: false,
+        pendingReadAnchorPosition: null,
+        // 重拉快照时，必须先回到快照自带的权威首屏，再叠加其后的增量。
         // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
-        messages: this.reconcileMessages([...snapshot.recent_messages, ...delta.events]),
+        messages: this.reconcileMessages([...snapshot.snapshot_messages, ...delta.events]),
         pending: false,
         historyLoading: false,
-        historyReachedStart: false,
         historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: "",
@@ -253,7 +257,7 @@ export class 聊天壳 extends LitElement {
    * - 与 snapshot / realtime 共用同一套合流逻辑，避免重复和乱序。
    */
   private async loadOlderHistory(): Promise<void> {
-    if (!this.chatState.roomId || this.chatState.historyLoading || this.chatState.historyReachedStart) {
+    if (!this.chatState.roomId || this.chatState.historyLoading || !this.chatState.hasMoreBefore) {
       return;
     }
 
@@ -279,7 +283,9 @@ export class 聊天壳 extends LitElement {
       this.updateChat({
         messages: this.reconcileMessages([...page.messages, ...this.chatState.messages]),
         historyLoading: false,
-        historyReachedStart: page.messages.length === 0,
+        // 历史分页接口当前还只返回这一页消息本身：
+        // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。
+        hasMoreBefore: page.messages.length > 0,
         historyErrorCode: "",
       });
     } catch (error) {
@@ -354,10 +360,14 @@ export class 聊天壳 extends LitElement {
       this.updateChat({
         roomId: "",
         latestEventPosition: 0,
+        lastReadEventPosition: null,
+        firstUnreadEventPosition: null,
+        hasMoreBefore: false,
+        initialUnreadSettled: true,
+        pendingReadAnchorPosition: null,
         messages: [],
         pending: false,
         historyLoading: false,
-        historyReachedStart: false,
         historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: failure.code ?? "",
@@ -413,10 +423,14 @@ export class 聊天壳 extends LitElement {
       this.updateChat({
         roomId: "",
         latestEventPosition: 0,
+        lastReadEventPosition: null,
+        firstUnreadEventPosition: null,
+        hasMoreBefore: false,
+        initialUnreadSettled: true,
+        pendingReadAnchorPosition: null,
         messages: [],
         pending: false,
         historyLoading: false,
-        historyReachedStart: false,
         historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: control.code ?? "",
@@ -489,21 +503,21 @@ export class 聊天壳 extends LitElement {
    * 房间基线一旦成立，就统一从这里更新壳层状态与本地恢复锚点。
    * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
    */
-  private enterRoomFromSnapshot(snapshot: {
-    room_id: string;
-    latest_event_position: number;
-    recent_messages: 消息事件[];
-  }): void {
+  private enterRoomFromSnapshot(snapshot: 房间快照): void {
     this.writeCurrentRoomId(snapshot.room_id);
     this.updateChat({
       roomId: snapshot.room_id,
       latestEventPosition: snapshot.latest_event_position,
-      // recent_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
+      lastReadEventPosition: snapshot.last_read_event_position,
+      firstUnreadEventPosition: snapshot.first_unread_event_position,
+      hasMoreBefore: snapshot.has_more_before,
+      initialUnreadSettled: false,
+      pendingReadAnchorPosition: null,
+      // snapshot_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
       // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
-      messages: this.reconcileMessages(snapshot.recent_messages),
+      messages: this.reconcileMessages(snapshot.snapshot_messages),
       pending: false,
       historyLoading: false,
-      historyReachedStart: false,
       historyErrorCode: "",
       recoveryState: "idle",
       lastRecoveryErrorCode: "",

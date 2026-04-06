@@ -99,6 +99,22 @@ class 假Socket {
   }
 }
 
+function 创建房间快照(
+  roomId = "r-test",
+  latestEventPosition = 1,
+  patch: Partial<房间快照> = {}
+): 房间快照 {
+  return {
+    room_id: roomId,
+    latest_event_position: latestEventPosition,
+    last_read_event_position: null,
+    first_unread_event_position: null,
+    snapshot_messages: [],
+    has_more_before: false,
+    ...patch,
+  };
+}
+
 class 假传输 implements 前端传输端口 {
   readonly socket = new 假Socket();
   loadRoomSnapshotCalls = 0;
@@ -125,6 +141,11 @@ class 假传输 implements 前端传输端口 {
   snapshotQueue: Array<房间快照 | Error> = [];
   eventsQueue: Array<增量事件快照 | Error> = [];
   historyQueue: Array<房间历史页 | Error> = [];
+  readAnchorUpdates: Array<{
+    roomId: string;
+    sessionId: string;
+    lastReadEventPosition: number;
+  }> = [];
   snapshotRoomId = "r-test";
   joinRoomId = "r-test";
 
@@ -143,7 +164,7 @@ class 假传输 implements 前端传输端口 {
     const queued = this.joinQueue.shift();
     if (queued instanceof Error) throw queued;
     if (queued) return queued;
-    return { room_id: this.joinRoomId, latest_event_position: 1, recent_messages: [] };
+    return 创建房间快照(this.joinRoomId);
   }
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
     this.loadRoomSnapshotCalls += 1;
@@ -152,7 +173,14 @@ class 假传输 implements 前端传输端口 {
     if (queued instanceof Error) throw queued;
     if (queued) return queued;
     this.snapshotRoomId = roomId;
-    return { room_id: roomId, latest_event_position: 1, recent_messages: [] };
+    return 创建房间快照(roomId);
+  }
+  async updateRoomReadAnchor(
+    roomId: string,
+    sessionId: string,
+    lastReadEventPosition: number
+  ): Promise<void> {
+    this.readAnchorUpdates.push({ roomId, sessionId, lastReadEventPosition });
   }
   async loadRoomEvents(
     roomId: string,
@@ -425,13 +453,11 @@ describe("聊天壳", () => {
     el.remove();
   });
 
-  it("首次进入已有历史房间时会直接渲染 recent_messages", async () => {
+  it("首次进入已有历史房间时会直接渲染 snapshot_messages", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
-      {
-        room_id: "r-test",
-        latest_event_position: 2,
-        recent_messages: [
+      创建房间快照("r-test", 2, {
+        snapshot_messages: [
           {
             type: "message_created",
             room_id: "r-test",
@@ -453,7 +479,7 @@ describe("聊天壳", () => {
             event_position: 2,
           },
         ],
-      } as 房间快照,
+      }),
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
@@ -473,13 +499,12 @@ describe("聊天壳", () => {
     el.remove();
   });
 
-  it("进房会直接消费 joinOrCreateRoom 返回的 recent_messages，不再二次拉 snapshot", async () => {
+  it("进房会直接消费 joinOrCreateRoom 返回的 snapshot_messages，不再二次拉 snapshot", async () => {
     const transport = new 假传输();
     transport.joinRoomId = "r-join";
-    vi.spyOn(transport, "joinOrCreateRoom").mockResolvedValue({
-      room_id: "r-join",
-      latest_event_position: 2,
-      recent_messages: [
+    vi.spyOn(transport, "joinOrCreateRoom").mockResolvedValue(
+      创建房间快照("r-join", 2, {
+      snapshot_messages: [
         {
           type: "message_created",
           room_id: "r-join",
@@ -501,7 +526,8 @@ describe("聊天壳", () => {
           event_position: 2,
         },
       ],
-    });
+      })
+    );
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
     document.body.appendChild(el);
@@ -520,14 +546,12 @@ describe("聊天壳", () => {
     el.remove();
   });
 
-  it("刷新恢复房间时会直接渲染 recent_messages", async () => {
+  it("刷新恢复房间时会直接渲染 snapshot_messages", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
     transport.snapshotQueue = [
-      {
-        room_id: "r-restore",
-        latest_event_position: 2,
-        recent_messages: [
+      创建房间快照("r-restore", 2, {
+        snapshot_messages: [
           {
             type: "message_created",
             room_id: "r-restore",
@@ -549,7 +573,7 @@ describe("聊天壳", () => {
             event_position: 2,
           },
         ],
-      } as 房间快照,
+      }),
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
@@ -611,7 +635,7 @@ describe("聊天壳", () => {
     ];
     transport.snapshotQueue = [
       创建传输错误(401, "invalid_session"),
-      { room_id: "r-restore", latest_event_position: 2, recent_messages: [] },
+      创建房间快照("r-restore", 2),
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
@@ -647,10 +671,8 @@ describe("聊天壳", () => {
   it("滚动到顶部时会以当前最老消息的 event_position 触发 history 查询", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
-      {
-        room_id: "r-test",
-        latest_event_position: 3,
-        recent_messages: [
+      创建房间快照("r-test", 3, {
+        snapshot_messages: [
           {
             type: "message_created",
             room_id: "r-test",
@@ -672,7 +694,8 @@ describe("聊天壳", () => {
             event_position: 3,
           },
         ],
-      } as 房间快照,
+        has_more_before: true,
+      }),
     ];
     transport.historyQueue = [
       {
@@ -721,10 +744,8 @@ describe("聊天壳", () => {
   it("history 失败不会清空当前消息列表", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
-      {
-        room_id: "r-test",
-        latest_event_position: 2,
-        recent_messages: [
+      创建房间快照("r-test", 2, {
+        snapshot_messages: [
           {
             type: "message_created",
             room_id: "r-test",
@@ -746,7 +767,8 @@ describe("聊天壳", () => {
             event_position: 2,
           },
         ],
-      } as 房间快照,
+        has_more_before: true,
+      }),
     ];
     transport.historyQueue = [创建传输错误(503, "system_error", "history busy")];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
@@ -776,13 +798,11 @@ describe("聊天壳", () => {
     el.remove();
   });
 
-  it("history 返回空数组后会标记已到最早历史，重复上滑不会再次请求", async () => {
+  it("history 返回空数组后会标记没有更早历史，重复上滑不会再次请求", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
-      {
-        room_id: "r-test",
-        latest_event_position: 1,
-        recent_messages: [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
           {
             type: "message_created",
             room_id: "r-test",
@@ -794,7 +814,8 @@ describe("聊天壳", () => {
             event_position: 1,
           },
         ],
-      } as 房间快照,
+        has_more_before: true,
+      }),
     ];
     transport.historyQueue = [{ room_id: "r-test", messages: [] }];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
@@ -821,18 +842,16 @@ describe("聊天壳", () => {
 
     expect(transport.loadRoomHistoryCalls).toBe(1);
     expect(
-      (el as unknown as { chatState: { historyReachedStart: boolean } }).chatState.historyReachedStart
-    ).toBe(true);
+      (el as unknown as { chatState: { hasMoreBefore: boolean } }).chatState.hasMoreBefore
+    ).toBe(false);
     el.remove();
   });
 
   it("history 页和 realtime 新消息同时并入时不会重复 message_id", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
-      {
-        room_id: "r-test",
-        latest_event_position: 2,
-        recent_messages: [
+      创建房间快照("r-test", 2, {
+        snapshot_messages: [
           {
             type: "message_created",
             room_id: "r-test",
@@ -844,7 +863,8 @@ describe("聊天壳", () => {
             event_position: 2,
           },
         ],
-      } as 房间快照,
+        has_more_before: true,
+      }),
     ];
     transport.historyQueue = [
       {

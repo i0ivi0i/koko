@@ -91,6 +91,54 @@ describe("传输", () => {
     );
   });
 
+  it("loadRoomSnapshot 会返回阅读锚点相关字段", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          room_id: "r-1",
+          latest_event_position: 9,
+          last_read_event_position: 4,
+          first_unread_event_position: 5,
+          snapshot_messages: [],
+          has_more_before: true,
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const snapshot = await transport.loadRoomSnapshot("r-1", "s-1");
+
+    expect(snapshot.last_read_event_position).toBe(4);
+    expect(snapshot.first_unread_event_position).toBe(5);
+    expect(snapshot.snapshot_messages).toEqual([]);
+    expect(snapshot.has_more_before).toBe(true);
+  });
+
+  it("updateRoomReadAnchor 会以 POST 发送 session_id 和 last_read_event_position", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    await transport.updateRoomReadAnchor("r-1", "s-1", 7);
+
+    expect(fetchSpy).toHaveBeenCalledWith("http://localhost:3000/api/rooms/r-1/read-anchor", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        session_id: "s-1",
+        last_read_event_position: 7,
+      }),
+    });
+  });
+
   it("loadRoomHistory 会把 session_id before_event_position limit 编码进 query string", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

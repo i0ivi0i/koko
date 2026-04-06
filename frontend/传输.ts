@@ -2,6 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import type {
   匿名身份引导结果,
   增量事件快照,
+  阅读推进请求,
   房间历史页,
   房间快照,
   后台概览,
@@ -34,6 +35,11 @@ export interface 前端传输端口 {
   bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果>;
   joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
+  updateRoomReadAnchor(
+    roomId: string,
+    sessionId: string,
+    lastReadEventPosition: number
+  ): Promise<void>;
   loadRoomEvents(roomId: string, sessionId: string, from: number): Promise<增量事件快照>;
   loadRoomHistory(
     roomId: string,
@@ -66,6 +72,20 @@ export class HttpRealtime传输 implements 前端传输端口 {
 
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
     return this.get(`/api/rooms/${roomId}/snapshot?session_id=${sessionId}`);
+  }
+
+  async updateRoomReadAnchor(
+    roomId: string,
+    sessionId: string,
+    lastReadEventPosition: number
+  ): Promise<void> {
+    const payload: 阅读推进请求 = {
+      session_id: sessionId,
+      last_read_event_position: lastReadEventPosition,
+    };
+    // 阅读推进属于冷路径写接口：
+    // 它只上报“这个身份已确认读到哪里”，不借道 realtime，也不和进房快照混用。
+    await this.post(`/api/rooms/${roomId}/read-anchor`, payload);
   }
 
   async loadRoomEvents(

@@ -60,6 +60,22 @@ class 假Socket {
   }
 }
 
+function 创建房间快照(
+  roomId = "r-e2e",
+  latestEventPosition = 0,
+  patch: Partial<房间快照> = {}
+): 房间快照 {
+  return {
+    room_id: roomId,
+    latest_event_position: latestEventPosition,
+    last_read_event_position: null,
+    first_unread_event_position: null,
+    snapshot_messages: [],
+    has_more_before: false,
+    ...patch,
+  };
+}
+
 class 端到端假传输 implements 前端传输端口 {
   private readonly socket = new 假Socket();
 
@@ -71,13 +87,11 @@ class 端到端假传输 implements 前端传输端口 {
     };
   }
   async joinOrCreateRoom(): Promise<房间快照> {
-    return { room_id: "r-e2e", latest_event_position: 0, recent_messages: [] };
+    return 创建房间快照();
   }
   async loadRoomSnapshot(): Promise<房间快照> {
-    return {
-      room_id: "r-e2e",
-      latest_event_position: 1,
-      recent_messages: [
+    return 创建房间快照("r-e2e", 1, {
+      snapshot_messages: [
         {
           type: "message_created",
           room_id: "r-e2e",
@@ -89,8 +103,9 @@ class 端到端假传输 implements 前端传输端口 {
           event_position: 1,
         },
       ],
-    };
+    });
   }
+  async updateRoomReadAnchor(): Promise<void> {}
   async loadRoomEvents(
     _roomId: string,
     _sessionId: string,
