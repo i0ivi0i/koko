@@ -444,6 +444,20 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
+    /// 房间存在性检查只回答“有没有这个 room_id”。
+    /// 这样应用层可以先区分 `room_not_found`，再决定成员资格分支。
+    fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
+        self.在运行时执行(async {
+            let exists =
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM rooms WHERE room_id = $1")
+                    .bind(房间标识)
+                    .fetch_one(&self.pool)
+                    .await
+                    .map_err(|_| contract::错误码::系统错误)?;
+            Ok(exists > 0)
+        })
+    }
+
     /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
     /// 规则本身在用例层决定“何时调用、失败如何映射”。
     fn 检查成员资格(
@@ -487,6 +501,16 @@ impl 仓储端口 for Pg仓储 {
                 最新事件位置: row.get("latest_event_position"),
             })
         })
+    }
+
+    /// 拉取房间增量事件：用于冷路径补洞与 realtime 订阅首帧补齐。
+    /// 成员资格不在这里裁决，只保证位置语义和事件顺序稳定。
+    fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        Pg仓储::拉取房间增量事件(self, 房间标识, 从位置开始)
     }
 
     /// 提交“消息已创建”事务链：

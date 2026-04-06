@@ -12,6 +12,7 @@ use socketioxide::{
     SocketIo,
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::collections::HashMap;
 use tokio::task;
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -153,9 +154,11 @@ struct SnapshotQuery {
     session_id: String,
 }
 
-/// 增量事件查询参数。
-#[derive(Deserialize)]
-struct EventsQuery {
+/// 增量事件查询参数的内部稳定形状。
+/// 先用宽松 query map 接住，再手动收口成这个结构，避免 Axum 提前拒绝而绕过项目统一错误 JSON。
+struct ParsedEventsQuery {
+    /// 请求方会话标识，用于会话有效性与成员资格校验。
+    session_id: String,
     /// 从该事件位置之后开始拉取增量。
     from: i64,
 }
@@ -505,23 +508,41 @@ async fn load_room_snapshot(
 async fn load_room_events(
     State(state): State<应用状态>,
     Path(room_id): Path<String>,
-    Query(query): Query<EventsQuery>,
+    Query(raw_query): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
+    let query = match parse_events_query(raw_query) {
+        Ok(query) => query,
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "加载房间增量事件",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "房间增量事件查询",
+                room_id = room_id.as_str(),
+                error_code = code,
+                "加载房间增量事件缺少必要参数"
+            );
+            return err_resp(status, code, message);
+        }
+    };
     tracing::info!(
         usecase = "加载房间增量事件",
         adapter = "http",
         outcome = "accepted",
         request_kind = "房间增量事件查询",
         room_id = room_id.as_str(),
+        session_id = query.session_id.as_str(),
         from = query.from,
         "HTTP 请求已受理"
     );
     let state = state.clone();
     let room_id_copy = room_id.clone();
+    let session_id = query.session_id.clone();
+    let session_id_for_usecase = session_id.clone();
     let from = query.from;
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
-        repo.拉取房间增量事件(&room_id_copy, from)
+        usecase::加载房间增量事件(&repo, &room_id_copy, &session_id_for_usecase, from)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -534,6 +555,7 @@ async fn load_room_events(
                 outcome = "failed",
                 request_kind = "房间增量事件查询",
                 room_id = room_id,
+                session_id = session_id,
                 from = from,
                 error_code = "system_error",
                 error = %err,
@@ -559,6 +581,7 @@ async fn load_room_events(
                 outcome = "succeeded",
                 request_kind = "房间增量事件查询",
                 room_id = 房间标识,
+                session_id = session_id,
                 from = from,
                 event_position = 最新事件位置,
                 event_count = event_count,
@@ -573,6 +596,7 @@ async fn load_room_events(
                 outcome = "failed",
                 request_kind = "房间增量事件查询",
                 room_id = room_id,
+                session_id = session_id,
                 from = from,
                 error_code = "system_error",
                 "加载房间增量事件返回了错误的快照类型"
@@ -590,6 +614,7 @@ async fn load_room_events(
                 outcome = "rejected",
                 request_kind = "房间增量事件查询",
                 room_id = room_id,
+                session_id = session_id,
                 from = from,
                 error_code = code,
                 "加载房间增量事件被拒绝"
@@ -1073,8 +1098,7 @@ async fn handle_realtime_subscribe(
     let state = state.clone();
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
-        usecase::校验房间订阅资格(&repo, &room_id, &session_id).map_err(map_domain_err_tuple)?;
-        repo.拉取房间增量事件(&room_id, from)
+        usecase::加载房间增量事件(&repo, &room_id, &session_id, from)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -1373,6 +1397,42 @@ fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str,
             "系统错误".to_string(),
         ),
     }
+}
+
+/// 先把宽松 query map 收口成稳定内部参数。
+/// 这样 handler 可以自己决定缺参和格式错误的 JSON 语义，而不是让框架提前返回非项目格式。
+fn parse_events_query(
+    raw_query: HashMap<String, String>,
+) -> Result<ParsedEventsQuery, (StatusCode, &'static str, &'static str)> {
+    let Some(session_id) = raw_query
+        .get("session_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 session_id",
+        ));
+    };
+    let Some(from_raw) = raw_query
+        .get("from")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return Err((StatusCode::BAD_REQUEST, "invalid_argument", "缺少 from"));
+    };
+    let Ok(from) = from_raw.parse::<i64>() else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "from 必须是整数",
+        ));
+    };
+    Ok(ParsedEventsQuery {
+        session_id: session_id.to_string(),
+        from,
+    })
 }
 
 /// 统一 API 错误响应构造器。

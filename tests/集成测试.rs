@@ -236,7 +236,7 @@ async fn http冷路径闭环() {
     let (status, events) = send_json(
         app.clone(),
         Method::GET,
-        &format!("/api/rooms/{room_id}/events?from=0"),
+        &format!("/api/rooms/{room_id}/events?session_id={session_id}&from=0"),
         None,
         &[],
     )
@@ -282,6 +282,173 @@ async fn http冷路径闭环() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(room_detail["room_id"].as_str(), Some(room_id.as_str()));
+}
+
+#[tokio::test]
+#[serial]
+async fn 房间增量事件查询缺少session_id会被拒绝() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        "/api/rooms/r-missing/events?from=0",
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"].as_str(), Some("invalid_argument"));
+}
+
+#[tokio::test]
+#[serial]
+async fn 非成员不能通过events接口拉取房间增量() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("E{:011}", uniq % 100_000_000_000);
+
+    let (_, owner) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("owner-device-{uniq}")})),
+        &[],
+    )
+    .await;
+    let owner_session_id = owner["session_id"].as_str().expect("owner session");
+
+    let (_, stranger) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("stranger-device-{uniq}")})),
+        &[],
+    )
+    .await;
+    let stranger_session_id = stranger["session_id"].as_str().expect("stranger session");
+
+    let (_, room) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/rooms/join-or-create",
+        Some(serde_json::json!({"session_id": owner_session_id, "room_code": code})),
+        &[],
+    )
+    .await;
+    let room_id = room["room_id"].as_str().expect("room_id");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/{room_id}/events?session_id={stranger_session_id}&from=0"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"].as_str(), Some("membership_required"));
+}
+
+#[tokio::test]
+#[serial]
+async fn 成员通过events接口只会拿到from之后的事件() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("F{:011}", uniq % 100_000_000_000);
+    let device_token = format!("events-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
+        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识;
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+        koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "c-1", "first")
+            .expect("应能发送第一条消息");
+        koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "c-2", "second")
+            .expect("应能发送第二条消息");
+        (session_id, room_id)
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/{room_id}/events?session_id={session_id}&from=1"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let events = body["events"].as_array().expect("events 应为数组");
+    assert_eq!(events.len(), 1, "只应返回 event_position > from 的事件");
+    assert_eq!(events[0]["event_position"].as_i64(), Some(2));
+    assert_eq!(body["latest_event_position"].as_i64(), Some(2));
+}
+
+#[tokio::test]
+#[serial]
+async fn 不存在的房间通过events接口会返回room_not_found() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": "missing-room-device"})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/r-nope/events?session_id={session_id}&from=0"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"].as_str(), Some("room_not_found"));
 }
 
 #[tokio::test]

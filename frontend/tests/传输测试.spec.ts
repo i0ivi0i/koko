@@ -66,4 +66,28 @@ describe("传输", () => {
     expect(result.display_alias).toBe("暴躁的企鹅");
     expect(result.session_id).toBe("s-1");
   });
+
+  it("loadRoomEvents 会把 session_id 和 from 一起编码进 query string", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          room_id: "r-1",
+          latest_event_position: 7,
+          events: [],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    await transport.loadRoomEvents("r-1", "s-1", 6);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/rooms/r-1/events?session_id=s-1&from=6",
+      { headers: {} }
+    );
+  });
 });

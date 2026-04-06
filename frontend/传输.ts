@@ -13,7 +13,7 @@ export interface 前端传输端口 {
   bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果>;
   joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
-  loadRoomEvents(roomId: string, from: number): Promise<增量事件快照>;
+  loadRoomEvents(roomId: string, sessionId: string, from: number): Promise<增量事件快照>;
   loadAdminOverview(token: string): Promise<后台概览>;
   adminLogin(username: string, password: string): Promise<后台登录结果>;
   adminRooms(token: string): Promise<后台房间列表>;
@@ -41,8 +41,12 @@ export class HttpRealtime传输 implements 前端传输端口 {
     return this.get(`/api/rooms/${roomId}/snapshot?session_id=${sessionId}`);
   }
 
-  async loadRoomEvents(roomId: string, from: number): Promise<增量事件快照> {
-    return this.get(`/api/rooms/${roomId}/events?from=${from}`);
+  async loadRoomEvents(
+    roomId: string,
+    sessionId: string,
+    from: number
+  ): Promise<增量事件快照> {
+    return this.get(`/api/rooms/${roomId}/events?session_id=${sessionId}&from=${from}`);
   }
 
   async loadAdminOverview(token: string): Promise<后台概览> {

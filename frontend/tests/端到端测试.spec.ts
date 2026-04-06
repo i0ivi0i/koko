@@ -75,7 +75,11 @@ class 端到端假传输 implements 前端传输端口 {
   async loadRoomSnapshot(): Promise<房间快照> {
     return { room_id: "r-e2e", latest_event_position: 0 };
   }
-  async loadRoomEvents(): Promise<增量事件快照> {
+  async loadRoomEvents(
+    _roomId: string,
+    _sessionId: string,
+    _from: number
+  ): Promise<增量事件快照> {
     return {
       room_id: "r-e2e",
       latest_event_position: 1,

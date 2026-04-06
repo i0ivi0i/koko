@@ -83,7 +83,7 @@ export class 聊天壳 extends LitElement {
     if (!this.chatState.sessionId || roomId !== this.chatState.roomId) return;
     try {
       const snapshot = await this.transport.loadRoomSnapshot(roomId, this.chatState.sessionId);
-      const delta = await this.transport.loadRoomEvents(roomId, 0);
+      const delta = await this.transport.loadRoomEvents(roomId, this.chatState.sessionId, 0);
       const latestEventPosition = Math.max(
         snapshot.latest_event_position,
         delta.latest_event_position

@@ -198,6 +198,11 @@ impl koko::usecase::仓储端口 for 假仓储 {
         Ok(会话标识.starts_with("s-"))
     }
 
+    /// 假实现：房间存在性查询。
+    fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, koko::contract::错误码> {
+        Ok(self.房间成员.contains_key(房间标识))
+    }
+
     /// 假实现：成员资格查询。
     fn 检查成员资格(
         &self,
@@ -223,6 +228,25 @@ impl koko::usecase::仓储端口 for 假仓储 {
         } else {
             Err(koko::contract::错误码::房间不存在)
         }
+    }
+
+    /// 假实现：房间增量读取只返回当前位置之后的空增量。
+    fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<koko::contract::快照, koko::contract::错误码> {
+        if 从位置开始 < 0 {
+            return Err(koko::contract::错误码::参数非法);
+        }
+        if !self.房间成员.contains_key(房间标识) {
+            return Err(koko::contract::错误码::房间不存在);
+        }
+        Ok(koko::contract::快照::房间增量事件 {
+            房间标识: 房间标识.to_string(),
+            事件: Vec::new(),
+            最新事件位置: self.最新位置,
+        })
     }
 
     /// 假实现：直接生成消息已创建事件并推进本地事件位置。
