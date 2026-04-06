@@ -78,32 +78,52 @@ impl Pg仓储 {
         }
     }
 
-    /// 查询当前房间最近一段可直接阅读的消息基线。
+    /// 查询房间消息页。
     ///
     /// 关键约束：
-    /// 1. 数据库里先按 DESC + LIMIT 取最近 N 条，避免把整房历史全拉上来；
+    /// 1. 数据库里先按 DESC + LIMIT 取一页，避免把整房历史全拉上来；
     /// 2. 返回给壳层前再 reverse 成 ASC，保证“老的在前、新的在后”；
-    /// 3. 这段基线属于权威事实，不能让前端自己从 latest_event_position 猜出来。
-    async fn 查询最近消息基线(
+    /// 3. `截止位置之前` 为 `Some(x)` 时，只返回严格早于该位置的消息；
+    /// 4. `截止位置之前` 为 `None` 时，返回当前最近一页消息基线。
+    async fn 查询消息页(
         pool: &PgPool,
         房间数据库标识: i64,
         房间标识: &str,
+        截止位置之前: Option<i64>,
         limit: i64,
     ) -> Result<Vec<contract::领域事件>, contract::错误码> {
-        let rows = sqlx::query(
-            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
-             FROM room_events re \
-             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
-             LEFT JOIN sessions s ON s.id = m.sender_session_id \
-             WHERE re.room_id = $1 \
-             ORDER BY re.event_position DESC \
-             LIMIT $2",
-        )
-        .bind(房间数据库标识)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?;
+        let rows = if let Some(before) = 截止位置之前 {
+            sqlx::query(
+                "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+                 FROM room_events re \
+                 LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+                 LEFT JOIN sessions s ON s.id = m.sender_session_id \
+                 WHERE re.room_id = $1 AND re.event_position < $2 \
+                 ORDER BY re.event_position DESC \
+                 LIMIT $3",
+            )
+            .bind(房间数据库标识)
+            .bind(before)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?
+        } else {
+            sqlx::query(
+                "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+                 FROM room_events re \
+                 LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+                 LEFT JOIN sessions s ON s.id = m.sender_session_id \
+                 WHERE re.room_id = $1 \
+                 ORDER BY re.event_position DESC \
+                 LIMIT $2",
+            )
+            .bind(房间数据库标识)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?
+        };
 
         let mut events = rows
             .into_iter()
@@ -465,7 +485,8 @@ impl 仓储端口 for Pg仓储 {
                 .await
                 .map_err(|_| contract::错误码::系统错误)?;
 
-            let recent_messages = Self::查询最近消息基线(&self.pool, room_db_id, &room_id, 55).await?;
+            let recent_messages =
+                Self::查询消息页(&self.pool, room_db_id, &room_id, None, 55).await?;
 
             Ok(contract::快照::房间 {
                 房间标识: room_id,
@@ -543,11 +564,47 @@ impl 仓储端口 for Pg仓储 {
             };
             let room_db_id: i64 = row.get("id");
             let recent_messages =
-                Self::查询最近消息基线(&self.pool, room_db_id, 房间标识, 55).await?;
+                Self::查询消息页(&self.pool, room_db_id, 房间标识, None, 55).await?;
             Ok(contract::快照::房间 {
                 房间标识: row.get("room_id"),
                 最新事件位置: row.get("latest_event_position"),
                 最近消息: recent_messages,
+            })
+        })
+    }
+
+    /// 拉取更早历史页：用于“当前最老消息之前再看一页”。
+    /// 这里仍只做数据读取，不把成员资格规则塞进仓储层。
+    fn 拉取房间历史页(
+        &self,
+        房间标识: &str,
+        截止位置之前: i64,
+        限制条数: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        if 截止位置之前 <= 0 || 限制条数 <= 0 {
+            return Err(contract::错误码::参数非法);
+        }
+        self.在运行时执行(async {
+            let room = sqlx::query("SELECT id FROM rooms WHERE room_id = $1")
+                .bind(房间标识)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+            let Some(row) = room else {
+                return Err(contract::错误码::房间不存在);
+            };
+            let room_db_id: i64 = row.get("id");
+            let messages = Self::查询消息页(
+                &self.pool,
+                room_db_id,
+                房间标识,
+                Some(截止位置之前),
+                限制条数,
+            )
+            .await?;
+            Ok(contract::快照::房间历史页 {
+                房间标识: 房间标识.to_string(),
+                消息: messages,
             })
         })
     }

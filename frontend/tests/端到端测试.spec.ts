@@ -13,6 +13,7 @@ import type {
   后台房间详情,
   后台概览,
   后台登录结果,
+  房间历史页,
   房间快照,
 } from "../契约";
 import type { Socket } from "socket.io-client";
@@ -111,6 +112,9 @@ class 端到端假传输 implements 前端传输端口 {
         },
       ],
     };
+  }
+  async loadRoomHistory(): Promise<房间历史页> {
+    return { room_id: "r-e2e", messages: [] };
   }
   async loadAdminOverview(): Promise<后台概览> {
     return { room_count: 1, message_count: 1 };

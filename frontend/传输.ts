@@ -2,6 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import type {
   匿名身份引导结果,
   增量事件快照,
+  房间历史页,
   房间快照,
   后台概览,
   后台房间列表,
@@ -34,6 +35,12 @@ export interface 前端传输端口 {
   joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
   loadRoomEvents(roomId: string, sessionId: string, from: number): Promise<增量事件快照>;
+  loadRoomHistory(
+    roomId: string,
+    sessionId: string,
+    beforeEventPosition: number,
+    limit: number
+  ): Promise<房间历史页>;
   loadAdminOverview(token: string): Promise<后台概览>;
   adminLogin(username: string, password: string): Promise<后台登录结果>;
   adminRooms(token: string): Promise<后台房间列表>;
@@ -67,6 +74,17 @@ export class HttpRealtime传输 implements 前端传输端口 {
     from: number
   ): Promise<增量事件快照> {
     return this.get(`/api/rooms/${roomId}/events?session_id=${sessionId}&from=${from}`);
+  }
+
+  async loadRoomHistory(
+    roomId: string,
+    sessionId: string,
+    beforeEventPosition: number,
+    limit: number
+  ): Promise<房间历史页> {
+    return this.get(
+      `/api/rooms/${roomId}/history?session_id=${sessionId}&before_event_position=${beforeEventPosition}&limit=${limit}`
+    );
   }
 
   async loadAdminOverview(token: string): Promise<后台概览> {

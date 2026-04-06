@@ -251,6 +251,25 @@ impl koko::usecase::仓储端口 for 假仓储 {
         })
     }
 
+    /// 假实现：房间更早历史页读取当前返回空页。
+    fn 拉取房间历史页(
+        &self,
+        房间标识: &str,
+        截止位置之前: i64,
+        限制条数: i64,
+    ) -> Result<koko::contract::快照, koko::contract::错误码> {
+        if 截止位置之前 <= 0 || 限制条数 <= 0 {
+            return Err(koko::contract::错误码::参数非法);
+        }
+        if !self.房间成员.contains_key(房间标识) {
+            return Err(koko::contract::错误码::房间不存在);
+        }
+        Ok(koko::contract::快照::房间历史页 {
+            房间标识: 房间标识.to_string(),
+            消息: Vec::new(),
+        })
+    }
+
     /// 假实现：直接生成消息已创建事件并推进本地事件位置。
     fn 创建消息事件(
         &mut self,

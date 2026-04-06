@@ -7,6 +7,7 @@ import type {
   匿名身份引导结果,
   增量事件快照,
   后台概览,
+  房间历史页,
   房间快照,
   后台登录结果,
   后台房间列表,
@@ -115,6 +116,7 @@ class 假传输 implements 前端传输端口 {
   bootstrapQueue: Array<匿名身份引导结果 | Error> = [];
   snapshotQueue: Array<房间快照 | Error> = [];
   eventsQueue: Array<增量事件快照 | Error> = [];
+  historyQueue: Array<房间历史页 | Error> = [];
   snapshotRoomId = "r-test";
   joinRoomId = "r-test";
 
@@ -167,6 +169,12 @@ class 假传输 implements 前端传输端口 {
         },
       ],
     };
+  }
+  async loadRoomHistory(): Promise<房间历史页> {
+    const queued = this.historyQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
+    return { room_id: "r-test", messages: [] };
   }
   async loadAdminOverview(): Promise<后台概览> {
     return { room_count: 1, message_count: 1 };

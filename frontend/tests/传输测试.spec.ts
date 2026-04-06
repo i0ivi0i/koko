@@ -90,4 +90,27 @@ describe("传输", () => {
       { headers: {} }
     );
   });
+
+  it("loadRoomHistory 会把 session_id before_event_position limit 编码进 query string", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          room_id: "r-1",
+          messages: [],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    await transport.loadRoomHistory("r-1", "s-1", 12, 55);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/rooms/r-1/history?session_id=s-1&before_event_position=12&limit=55",
+      { headers: {} }
+    );
+  });
 });

@@ -57,6 +57,7 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route("/api/session/bootstrap", post(bootstrap_session))
         .route("/api/rooms/join-or-create", post(join_or_create_room))
         .route("/api/rooms/{room_id}/snapshot", get(load_room_snapshot))
+        .route("/api/rooms/{room_id}/history", get(load_room_history))
         .route("/api/rooms/{room_id}/events", get(load_room_events))
         .route("/api/admin/login", post(admin_login))
         .route("/api/admin/overview", get(admin_overview))
@@ -161,6 +162,17 @@ struct ParsedEventsQuery {
     session_id: String,
     /// 从该事件位置之后开始拉取增量。
     from: i64,
+}
+
+/// 房间历史分页查询参数的内部稳定形状。
+/// 仍然先用宽松 query map 接住，再手动收口成项目自己的错误 JSON。
+struct ParsedHistoryQuery {
+    /// 请求方会话标识，用于会话有效性与成员资格校验。
+    session_id: String,
+    /// 只返回严格早于该事件位置的消息。
+    before_event_position: i64,
+    /// 本页最多返回多少条消息。
+    limit: i64,
 }
 
 /// 连接握手携带的最小认证数据。
@@ -628,6 +640,138 @@ async fn load_room_events(
                 from = from,
                 error_code = code,
                 "加载房间增量事件被拒绝"
+            );
+            err_resp(status, code, message)
+        }
+    }
+}
+
+/// 冷路径：按顺序锚点加载更早历史页。
+/// 语义说明：
+/// 1. 这条接口只负责“当前最老这条之前，再拿一页历史”；
+/// 2. 它不是 realtime 的替代品，也不改变 events 补洞语义；
+/// 3. 成员资格裁决继续统一走用例层。
+async fn load_room_history(
+    State(state): State<应用状态>,
+    Path(room_id): Path<String>,
+    Query(raw_query): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let query = match parse_history_query(raw_query) {
+        Ok(query) => query,
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "加载房间历史页",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "房间历史分页查询",
+                room_id = room_id.as_str(),
+                error_code = code,
+                "加载房间历史页缺少必要参数"
+            );
+            return err_resp(status, code, message);
+        }
+    };
+    tracing::info!(
+        usecase = "加载房间历史页",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "房间历史分页查询",
+        room_id = room_id.as_str(),
+        session_id = query.session_id.as_str(),
+        before_event_position = query.before_event_position,
+        limit = query.limit,
+        "HTTP 请求已受理"
+    );
+    let state = state.clone();
+    let room_id_copy = room_id.clone();
+    let session_id = query.session_id.clone();
+    let session_id_for_usecase = session_id.clone();
+    let before_event_position = query.before_event_position;
+    let limit = query.limit;
+    let result = task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state);
+        usecase::加载房间历史页(
+            &repo,
+            &room_id_copy,
+            &session_id_for_usecase,
+            before_event_position,
+            limit,
+        )
+        .map_err(map_domain_err_tuple)
+    })
+    .await;
+    let result = match result {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(
+                usecase = "加载房间历史页",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "房间历史分页查询",
+                room_id = room_id,
+                session_id = session_id,
+                before_event_position = before_event_position,
+                limit = limit,
+                error_code = "system_error",
+                error = %err,
+                "加载房间历史页任务执行失败"
+            );
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("任务执行失败: {err}"),
+            );
+        }
+    };
+    match result {
+        Ok(contract::快照::房间历史页 { 房间标识, 消息 }) => {
+            tracing::info!(
+                usecase = "加载房间历史页",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "房间历史分页查询",
+                room_id = 房间标识,
+                session_id = session_id,
+                before_event_position = before_event_position,
+                limit = limit,
+                "加载房间历史页成功"
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "room_id": 房间标识,
+                    "messages": events_to_json(消息),
+                })),
+            )
+                .into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "加载房间历史页",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "房间历史分页查询",
+                room_id = room_id,
+                session_id = session_id,
+                error_code = "system_error",
+                "加载房间历史页返回了错误的快照类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "加载房间历史页",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "房间历史分页查询",
+                room_id = room_id,
+                session_id = session_id,
+                error_code = code,
+                "加载房间历史页被拒绝"
             );
             err_resp(status, code, message)
         }
@@ -1442,6 +1586,57 @@ fn parse_events_query(
     Ok(ParsedEventsQuery {
         session_id: session_id.to_string(),
         from,
+    })
+}
+
+/// 先把宽松 query map 收口成历史分页的稳定内部参数。
+/// 这样缺参、非法参数和业务拒绝都还能走项目统一错误语义。
+fn parse_history_query(
+    raw_query: HashMap<String, String>,
+) -> Result<ParsedHistoryQuery, (StatusCode, &'static str, &'static str)> {
+    let Some(session_id) = raw_query
+        .get("session_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 session_id",
+        ));
+    };
+    let Some(before_raw) = raw_query
+        .get("before_event_position")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 before_event_position",
+        ));
+    };
+    let Some(limit_raw) = raw_query
+        .get("limit")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return Err((StatusCode::BAD_REQUEST, "invalid_argument", "缺少 limit"));
+    };
+    let Ok(before_event_position) = before_raw.parse::<i64>() else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "before_event_position 必须是整数",
+        ));
+    };
+    let Ok(limit) = limit_raw.parse::<i64>() else {
+        return Err((StatusCode::BAD_REQUEST, "invalid_argument", "limit 必须是整数"));
+    };
+    Ok(ParsedHistoryQuery {
+        session_id: session_id.to_string(),
+        before_event_position,
+        limit,
     })
 }
 

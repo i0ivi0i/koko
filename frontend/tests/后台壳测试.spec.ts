@@ -11,6 +11,7 @@ import type {
   后台概览,
   后台登录结果,
   房间快照,
+  房间历史页,
 } from "../契约";
 import { 后台壳 } from "../后台壳";
 import type { Socket } from "socket.io-client";
@@ -45,6 +46,9 @@ class 假后台传输 implements 前端传输端口 {
     _from: number
   ): Promise<增量事件快照> {
     return { room_id: "r-x", latest_event_position: 0, events: [] };
+  }
+  async loadRoomHistory(): Promise<房间历史页> {
+    return { room_id: "r-x", messages: [] };
   }
   async loadAdminOverview(): Promise<后台概览> {
     return { room_count: 2, message_count: 5 };

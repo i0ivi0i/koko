@@ -50,6 +50,11 @@ export interface 增量事件快照 {
   events: 消息事件[];
 }
 
+export interface 房间历史页 {
+  room_id: string;
+  messages: 消息事件[];
+}
+
 export interface 后台概览 {
   room_count: number;
   message_count: number;
