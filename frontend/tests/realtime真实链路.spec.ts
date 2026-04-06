@@ -358,6 +358,42 @@ describe("realtime真实链路", () => {
   );
 
   it(
+    "订阅不存在的房间时会收到 rejected/room_not_found",
+    async () => {
+      const port = await allocatePort();
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const child = startBackend(port);
+      backendChildren.push(child);
+      await waitForServer(baseUrl);
+
+      const session = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
+        device_anonymous_token: "missing-room-subscribe",
+      });
+
+      const socket = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: session.session_id },
+        reconnection: false,
+      });
+      await once(socket, "connect");
+
+      const control = once<{ kind: string; code: string }>(socket, "control_result");
+      socket.emit("subscribe_room_stream", {
+        room_id: "r-not-found",
+        from: 0,
+      });
+
+      const result = await control;
+      expect(result.kind).toBe("rejected");
+      expect(result.code).toBe("room_not_found");
+      await expectNoEvent(socket, "room_events");
+
+      socket.disconnect();
+    },
+    60000
+  );
+
+  it(
     "负数 from 会被视为非法参数，而不是默默当成从头补发",
     async () => {
       const port = await allocatePort();
