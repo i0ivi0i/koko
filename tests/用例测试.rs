@@ -71,6 +71,37 @@ fn panic_hook会把panic写入统一日志主链() {
     );
 }
 
+#[test]
+#[serial]
+fn http日志固定字段顺序里能看到usecase_adapter_outcome() {
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .without_time()
+        .with_writer(共享写入器(buffer.clone()))
+        .with_target(false)
+        .finish();
+
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::info!(
+            usecase = "引导匿名会话",
+            adapter = "http",
+            outcome = "accepted",
+            request_kind = "bootstrap_session",
+            "HTTP 请求已受理"
+        );
+    });
+
+    let output = 读取缓冲日志(&buffer);
+    let usecase_pos = output.find("usecase").expect("应存在 usecase 字段");
+    let adapter_pos = output.find("adapter").expect("应存在 adapter 字段");
+    let outcome_pos = output.find("outcome").expect("应存在 outcome 字段");
+    assert!(
+        usecase_pos < adapter_pos && adapter_pos < outcome_pos,
+        "日志字段顺序应便于先读 usecase / adapter / outcome: {output}"
+    );
+}
+
 #[derive(Clone)]
 struct 共享写入器(Arc<Mutex<Vec<u8>>>);
 

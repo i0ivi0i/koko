@@ -224,6 +224,14 @@ async fn bootstrap_session(
     Json(body): Json<BootstrapBody>,
 ) -> impl IntoResponse {
     if let Some(device_anonymous_token) = body.device_anonymous_token.clone() {
+        // 设备级匿名身份 bootstrap 是一条独立业务主链，所以入口日志直接使用“引导匿名身份”语义。
+        tracing::info!(
+            usecase = "引导匿名身份",
+            adapter = "http",
+            outcome = "accepted",
+            request_kind = "bootstrap_session",
+            "HTTP 请求已受理"
+        );
         let state = state.clone();
         let result = task::spawn_blocking(move || {
             let mut repo = 构建共享仓储(&state);
@@ -233,6 +241,15 @@ async fn bootstrap_session(
         let result = match result {
             Ok(v) => v,
             Err(err) => {
+                tracing::error!(
+                    usecase = "引导匿名身份",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "bootstrap_session",
+                    error_code = "system_error",
+                    error = %err,
+                    "引导匿名身份任务执行失败"
+                );
                 return err_resp(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
@@ -243,6 +260,15 @@ async fn bootstrap_session(
         return match result {
             Ok(out) => {
                 let alias = out.展示花名.clone();
+                tracing::info!(
+                    usecase = "引导匿名身份",
+                    adapter = "http",
+                    outcome = "succeeded",
+                    request_kind = "bootstrap_session",
+                    anonymous_identity_id = out.匿名身份标识,
+                    session_id = out.会话标识,
+                    "引导匿名身份成功"
+                );
                 (
                     StatusCode::OK,
                     Json(serde_json::json!({
@@ -255,18 +281,44 @@ async fn bootstrap_session(
                 )
                     .into_response()
             }
-            Err(code) => tuple_err_to_resp(code),
+            Err((status, code, message)) => {
+                tracing::warn!(
+                    usecase = "引导匿名身份",
+                    adapter = "http",
+                    outcome = "rejected",
+                    request_kind = "bootstrap_session",
+                    error_code = code,
+                    "引导匿名身份被拒绝"
+                );
+                err_resp(status, code, message)
+            }
         };
     }
 
     let state = state.clone();
     let Some(display_name) = body.display_name.clone() else {
+        tracing::warn!(
+            usecase = "引导匿名会话",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "bootstrap_session",
+            error_code = "invalid_argument",
+            "引导匿名会话缺少必要参数"
+        );
         return err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
             "缺少 device_anonymous_token 或 display_name",
         );
     };
+    // accepted 只说明入口已拿到请求；真正 succeeded 必须等用例给出权威快照后才能记录。
+    tracing::info!(
+        usecase = "引导匿名会话",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "bootstrap_session",
+        "HTTP 请求已受理"
+    );
     let result = task::spawn_blocking(move || {
         // 统一在阻塞线程做仓储调用，避免在 async 主执行器里直接跑阻塞 IO。
         let mut repo = 构建共享仓储(&state);
@@ -276,6 +328,15 @@ async fn bootstrap_session(
     let result = match result {
         Ok(v) => v,
         Err(err) => {
+            tracing::error!(
+                usecase = "引导匿名会话",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "bootstrap_session",
+                error_code = "system_error",
+                error = %err,
+                "引导匿名会话任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -286,17 +347,47 @@ async fn bootstrap_session(
     match result {
         Ok(contract::快照::会话 {
             会话标识, 显示名
-        }) => (
-            StatusCode::OK,
-            Json(serde_json::json!({"session_id": 会话标识, "display_name": 显示名})),
-        )
-            .into_response(),
-        Ok(_) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "返回快照类型不匹配",
-        ),
-        Err(code) => tuple_err_to_resp(code),
+        }) => {
+            tracing::info!(
+                usecase = "引导匿名会话",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "bootstrap_session",
+                session_id = 会话标识,
+                "引导匿名会话成功"
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"session_id": 会话标识, "display_name": 显示名})),
+            )
+                .into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "引导匿名会话",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "bootstrap_session",
+                error_code = "system_error",
+                "引导匿名会话返回了错误的快照类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "引导匿名会话",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "bootstrap_session",
+                error_code = code,
+                "引导匿名会话被拒绝"
+            );
+            err_resp(status, code, message)
+        }
     }
 }
 
@@ -305,17 +396,37 @@ async fn join_or_create_room(
     State(state): State<应用状态>,
     Json(body): Json<JoinBody>,
 ) -> impl IntoResponse {
+    tracing::info!(
+        usecase = "按短码进房或建房",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "join_or_create_room",
+        session_id = body.session_id.as_str(),
+        "HTTP 请求已受理"
+    );
     let state = state.clone();
     let session_id = body.session_id.clone();
+    let session_id_for_usecase = session_id.clone();
     let room_code = body.room_code.clone();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state);
-        usecase::按短码进房或建房(&mut repo, &session_id, &room_code).map_err(map_domain_err_tuple)
+        usecase::按短码进房或建房(&mut repo, &session_id_for_usecase, &room_code)
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
         Ok(v) => v,
         Err(err) => {
+            tracing::error!(
+                usecase = "按短码进房或建房",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "join_or_create_room",
+                session_id = session_id,
+                error_code = "system_error",
+                error = %err,
+                "按短码进房或建房任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -327,17 +438,51 @@ async fn join_or_create_room(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
-        }) => (
-            StatusCode::OK,
-            Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
-        )
-            .into_response(),
-        Ok(_) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "返回快照类型不匹配",
-        ),
-        Err(code) => tuple_err_to_resp(code),
+        }) => {
+            tracing::info!(
+                usecase = "按短码进房或建房",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "join_or_create_room",
+                session_id = session_id,
+                room_id = 房间标识,
+                event_position = 最新事件位置,
+                "按短码进房或建房成功"
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
+            )
+                .into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "按短码进房或建房",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "join_or_create_room",
+                session_id = session_id,
+                error_code = "system_error",
+                "按短码进房或建房返回了错误的快照类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "按短码进房或建房",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "join_or_create_room",
+                session_id = session_id,
+                error_code = code,
+                "按短码进房或建房被拒绝"
+            );
+            err_resp(status, code, message)
+        }
     }
 }
 
@@ -347,17 +492,39 @@ async fn load_room_snapshot(
     Path(room_id): Path<String>,
     Query(query): Query<SnapshotQuery>,
 ) -> impl IntoResponse {
+    tracing::info!(
+        usecase = "加载房间快照",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "load_room_snapshot",
+        room_id = room_id.as_str(),
+        session_id = query.session_id.as_str(),
+        "HTTP 请求已受理"
+    );
     let state = state.clone();
     let session_id = query.session_id.clone();
+    let session_id_for_usecase = session_id.clone();
     let room_id_copy = room_id.clone();
     let result = task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state);
-        usecase::加载房间快照(&repo, &room_id_copy, &session_id).map_err(map_domain_err_tuple)
+        usecase::加载房间快照(&repo, &room_id_copy, &session_id_for_usecase)
+            .map_err(map_domain_err_tuple)
     })
     .await;
     let result = match result {
         Ok(v) => v,
         Err(err) => {
+            tracing::error!(
+                usecase = "加载房间快照",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "load_room_snapshot",
+                room_id = room_id,
+                session_id = session_id,
+                error_code = "system_error",
+                error = %err,
+                "加载房间快照任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -369,17 +536,53 @@ async fn load_room_snapshot(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
-        }) => (
-            StatusCode::OK,
-            Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
-        )
-            .into_response(),
-        Ok(_) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "返回快照类型不匹配",
-        ),
-        Err(code) => tuple_err_to_resp(code),
+        }) => {
+            tracing::info!(
+                usecase = "加载房间快照",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "load_room_snapshot",
+                room_id = 房间标识,
+                session_id = session_id,
+                event_position = 最新事件位置,
+                "加载房间快照成功"
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置})),
+            )
+                .into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "加载房间快照",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "load_room_snapshot",
+                room_id = room_id,
+                session_id = session_id,
+                error_code = "system_error",
+                "加载房间快照返回了错误的快照类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "加载房间快照",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "load_room_snapshot",
+                room_id = room_id,
+                session_id = session_id,
+                error_code = code,
+                "加载房间快照被拒绝"
+            );
+            err_resp(status, code, message)
+        }
     }
 }
 
@@ -389,6 +592,15 @@ async fn load_room_events(
     Path(room_id): Path<String>,
     Query(query): Query<EventsQuery>,
 ) -> impl IntoResponse {
+    tracing::info!(
+        usecase = "加载房间增量事件",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "load_room_events",
+        room_id = room_id.as_str(),
+        from = query.from,
+        "HTTP 请求已受理"
+    );
     let state = state.clone();
     let room_id_copy = room_id.clone();
     let from = query.from;
@@ -401,6 +613,17 @@ async fn load_room_events(
     let result = match result {
         Ok(v) => v,
         Err(err) => {
+            tracing::error!(
+                usecase = "加载房间增量事件",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "load_room_events",
+                room_id = room_id,
+                from = from,
+                error_code = "system_error",
+                error = %err,
+                "加载房间增量事件任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -413,13 +636,51 @@ async fn load_room_events(
             房间标识,
             事件,
             最新事件位置,
-        }) => (StatusCode::OK, Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置, "events": events_to_json(事件)}))).into_response(),
-        Ok(_) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "返回快照类型不匹配",
-        ),
-        Err(code) => tuple_err_to_resp(code),
+        }) => {
+            let event_count = 事件.len();
+            tracing::info!(
+                usecase = "加载房间增量事件",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "load_room_events",
+                room_id = 房间标识,
+                from = from,
+                event_position = 最新事件位置,
+                event_count = event_count,
+                "加载房间增量事件成功"
+            );
+            (StatusCode::OK, Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置, "events": events_to_json(事件)}))).into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "加载房间增量事件",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "load_room_events",
+                room_id = room_id,
+                from = from,
+                error_code = "system_error",
+                "加载房间增量事件返回了错误的快照类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "加载房间增量事件",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "load_room_events",
+                room_id = room_id,
+                from = from,
+                error_code = code,
+                "加载房间增量事件被拒绝"
+            );
+            err_resp(status, code, message)
+        }
     }
 }
 
@@ -429,13 +690,35 @@ async fn admin_login(
     State(state): State<应用状态>,
     Json(body): Json<AdminLoginBody>,
 ) -> impl IntoResponse {
+    tracing::info!(
+        usecase = "管理员登录",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "admin_login",
+        "HTTP 请求已受理"
+    );
     if body.username != "admin" || body.password != state.admin_password {
+        tracing::warn!(
+            usecase = "管理员登录",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "admin_login",
+            error_code = "admin_auth_failed",
+            "管理员登录被拒绝"
+        );
         return err_resp(
             StatusCode::UNAUTHORIZED,
             "admin_auth_failed",
             "管理员账号或密码错误",
         );
     }
+    tracing::info!(
+        usecase = "管理员登录",
+        adapter = "http",
+        outcome = "succeeded",
+        request_kind = "admin_login",
+        "管理员登录成功"
+    );
     (
         StatusCode::OK,
         Json(AdminLoginResp {
@@ -449,7 +732,22 @@ async fn admin_login(
 async fn admin_overview(
     State(state): State<应用状态>, headers: HeaderMap
 ) -> impl IntoResponse {
+    tracing::info!(
+        usecase = "后台概览查询",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "admin_overview",
+        "HTTP 请求已受理"
+    );
     if let Err((status, code, message)) = require_admin(&headers) {
+        tracing::warn!(
+            usecase = "后台概览查询",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "admin_overview",
+            error_code = code,
+            "后台概览查询被拒绝"
+        );
         return err_resp(status, code, message);
     }
     let state = state.clone();
@@ -461,6 +759,15 @@ async fn admin_overview(
     let result = match result {
         Ok(v) => v,
         Err(err) => {
+            tracing::error!(
+                usecase = "后台概览查询",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "admin_overview",
+                error_code = "system_error",
+                error = %err,
+                "后台概览查询任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -471,23 +778,69 @@ async fn admin_overview(
     match result {
         Ok(contract::快照::后台概览 {
             房间总数, 消息总数
-        }) => (
-            StatusCode::OK,
-            Json(serde_json::json!({"room_count": 房间总数, "message_count": 消息总数})),
-        )
-            .into_response(),
-        Ok(_) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "返回快照类型不匹配",
-        ),
-        Err(code) => tuple_err_to_resp(code),
+        }) => {
+            tracing::info!(
+                usecase = "后台概览查询",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "admin_overview",
+                room_count = 房间总数,
+                message_count = 消息总数,
+                "后台概览查询成功"
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"room_count": 房间总数, "message_count": 消息总数})),
+            )
+                .into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "后台概览查询",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "admin_overview",
+                error_code = "system_error",
+                "后台概览查询返回了错误的快照类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "后台概览查询",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "admin_overview",
+                error_code = code,
+                "后台概览查询被拒绝"
+            );
+            err_resp(status, code, message)
+        }
     }
 }
 
 /// 后台只读：房间列表查询。
 async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> impl IntoResponse {
+    tracing::info!(
+        usecase = "后台房间列表查询",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "admin_rooms",
+        "HTTP 请求已受理"
+    );
     if let Err((status, code, message)) = require_admin(&headers) {
+        tracing::warn!(
+            usecase = "后台房间列表查询",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "admin_rooms",
+            error_code = code,
+            "后台房间列表查询被拒绝"
+        );
         return err_resp(status, code, message);
     }
     let state = state.clone();
@@ -499,6 +852,15 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
     let result = match result {
         Ok(v) => v,
         Err(err) => {
+            tracing::error!(
+                usecase = "后台房间列表查询",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "admin_rooms",
+                error_code = "system_error",
+                error = %err,
+                "后台房间列表查询任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -507,17 +869,48 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
         }
     };
     match result {
-        Ok(contract::快照::后台房间列表 { 房间标识列表 }) => (
-            StatusCode::OK,
-            Json(serde_json::json!({"rooms": 房间标识列表})),
-        )
-            .into_response(),
-        Ok(_) => err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "返回快照类型不匹配",
-        ),
-        Err(code) => tuple_err_to_resp(code),
+        Ok(contract::快照::后台房间列表 { 房间标识列表 }) => {
+            let room_count = 房间标识列表.len();
+            tracing::info!(
+                usecase = "后台房间列表查询",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "admin_rooms",
+                room_count = room_count,
+                "后台房间列表查询成功"
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"rooms": 房间标识列表})),
+            )
+                .into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "后台房间列表查询",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "admin_rooms",
+                error_code = "system_error",
+                "后台房间列表查询返回了错误的快照类型"
+            );
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "返回快照类型不匹配",
+            )
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "后台房间列表查询",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "admin_rooms",
+                error_code = code,
+                "后台房间列表查询被拒绝"
+            );
+            err_resp(status, code, message)
+        }
     }
 }
 
@@ -527,7 +920,24 @@ async fn admin_room_detail(
     headers: HeaderMap,
     Path(room_id): Path<String>,
 ) -> impl IntoResponse {
+    tracing::info!(
+        usecase = "后台房间详情查询",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "admin_room_detail",
+        room_id = room_id.as_str(),
+        "HTTP 请求已受理"
+    );
     if let Err((status, code, message)) = require_admin(&headers) {
+        tracing::warn!(
+            usecase = "后台房间详情查询",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "admin_room_detail",
+            room_id = room_id,
+            error_code = code,
+            "后台房间详情查询被拒绝"
+        );
         return err_resp(status, code, message);
     }
     let state = state.clone();
@@ -541,6 +951,16 @@ async fn admin_room_detail(
     let result = match result {
         Ok(v) => v,
         Err(err) => {
+            tracing::error!(
+                usecase = "后台房间详情查询",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "admin_room_detail",
+                room_id = room_id,
+                error_code = "system_error",
+                error = %err,
+                "后台房间详情查询任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -553,9 +973,43 @@ async fn admin_room_detail(
             房间标识,
             最新事件位置,
             消息总数,
-        }) => (StatusCode::OK, Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置, "message_count": 消息总数}))).into_response(),
-        Ok(_) => err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", "返回快照类型不匹配"),
-        Err(code) => tuple_err_to_resp(code),
+        }) => {
+            tracing::info!(
+                usecase = "后台房间详情查询",
+                adapter = "http",
+                outcome = "succeeded",
+                request_kind = "admin_room_detail",
+                room_id = 房间标识,
+                event_position = 最新事件位置,
+                message_count = 消息总数,
+                "后台房间详情查询成功"
+            );
+            (StatusCode::OK, Json(serde_json::json!({"room_id": 房间标识, "latest_event_position": 最新事件位置, "message_count": 消息总数}))).into_response()
+        }
+        Ok(_) => {
+            tracing::error!(
+                usecase = "后台房间详情查询",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "admin_room_detail",
+                room_id = room_id,
+                error_code = "system_error",
+                "后台房间详情查询返回了错误的快照类型"
+            );
+            err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", "返回快照类型不匹配")
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "后台房间详情查询",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "admin_room_detail",
+                room_id = room_id,
+                error_code = code,
+                "后台房间详情查询被拒绝"
+            );
+            err_resp(status, code, message)
+        }
     }
 }
 
@@ -843,12 +1297,6 @@ fn require_admin(headers: &HeaderMap) -> Result<(), (StatusCode, &'static str, &
             "缺少管理员会话",
         ))
     }
-}
-
-/// 统一把 (status, code, message) 错误元组转为标准 API 错误响应。
-fn tuple_err_to_resp(tuple: (StatusCode, &'static str, String)) -> axum::response::Response {
-    let (status, code, message) = tuple;
-    err_resp(status, code, message)
 }
 
 /// 领域错误码 -> HTTP 状态码 + 稳定错误码的映射表。

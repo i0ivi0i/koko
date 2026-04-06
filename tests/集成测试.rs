@@ -5,6 +5,8 @@ use axum::{
 use serde_json::Value;
 use serial_test::serial;
 use std::env;
+use std::io;
+use std::sync::{Arc, Mutex, Once, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
@@ -335,6 +337,91 @@ async fn bootstrap接口会返回稳定花名快照() {
     );
 }
 
+#[tokio::test]
+#[serial]
+async fn http冷路径成功会输出accepted与succeeded日志() {
+    let buffer = 安装集成测试日志采集器();
+    清空日志缓冲(&buffer);
+
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let display_name = format!("http-log-user-{uniq}");
+
+    let (status, _) = send_json(
+        app,
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"display_name": display_name})),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let output = 读取日志缓冲(&buffer);
+    assert!(
+        output.contains("usecase") && output.contains("引导匿名会话"),
+        "成功主链日志缺少 usecase: {output}"
+    );
+    assert!(
+        output.contains("adapter") && output.contains("http"),
+        "成功主链日志缺少 adapter=http: {output}"
+    );
+    assert!(
+        output.contains("outcome") && output.contains("accepted"),
+        "成功主链日志缺少 accepted: {output}"
+    );
+    assert!(
+        output.contains("outcome") && output.contains("succeeded"),
+        "成功主链日志缺少 succeeded: {output}"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn http冷路径拒绝会输出rejected日志与error_code() {
+    let buffer = 安装集成测试日志采集器();
+    清空日志缓冲(&buffer);
+
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, _) = send_json(
+        app,
+        Method::POST,
+        "/api/admin/login",
+        Some(serde_json::json!({"username":"admin","password":"wrong-password"})),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let output = 读取日志缓冲(&buffer);
+    assert!(
+        output.contains("usecase") && output.contains("管理员登录"),
+        "拒绝日志缺少 usecase: {output}"
+    );
+    assert!(
+        output.contains("outcome") && output.contains("rejected"),
+        "拒绝日志缺少 rejected: {output}"
+    );
+    assert!(
+        output.contains("error_code") && output.contains("admin_auth_failed"),
+        "拒绝日志缺少稳定 error_code: {output}"
+    );
+}
+
 fn 备份并清空环境变量(keys: &[&str]) -> Vec<(String, Option<String>)> {
     // 先备份再清空，确保测试结束后能完整恢复本机环境，避免污染开发机。
     let mut out = Vec::with_capacity(keys.len());
@@ -390,5 +477,59 @@ async fn send_json(
     } else {
         let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
         (status, json)
+    }
+}
+
+static 集成测试日志初始化: Once = Once::new();
+static 集成测试日志缓冲: OnceLock<Arc<Mutex<Vec<u8>>>> = OnceLock::new();
+
+fn 安装集成测试日志采集器() -> Arc<Mutex<Vec<u8>>> {
+    let buffer = 集成测试日志缓冲
+        .get_or_init(|| Arc::new(Mutex::new(Vec::new())))
+        .clone();
+    let writer_buffer = buffer.clone();
+    集成测试日志初始化.call_once(|| {
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_writer(共享写入器(writer_buffer))
+            .with_target(false)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("集成测试进程内应能安装全局 subscriber");
+        koko::assembly::安装panic日志钩子();
+    });
+    buffer
+}
+
+fn 清空日志缓冲(buffer: &Arc<Mutex<Vec<u8>>>) {
+    buffer.lock().expect("lock").clear();
+}
+
+fn 读取日志缓冲(buffer: &Arc<Mutex<Vec<u8>>>) -> String {
+    String::from_utf8(buffer.lock().expect("lock").clone()).expect("utf8")
+}
+
+#[derive(Clone)]
+struct 共享写入器(Arc<Mutex<Vec<u8>>>);
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for 共享写入器 {
+    type Writer = 缓冲写入器;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        缓冲写入器(self.0.clone())
+    }
+}
+
+struct 缓冲写入器(Arc<Mutex<Vec<u8>>>);
+
+impl io::Write for 缓冲写入器 {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.lock().expect("lock").extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
