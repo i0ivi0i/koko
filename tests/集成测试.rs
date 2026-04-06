@@ -609,7 +609,7 @@ async fn 不存在的房间通过events接口会返回room_not_found() {
 
 #[tokio::test]
 #[serial]
-async fn 房间快照会返回最近五十五条消息基线() {
+async fn 有阅读锚点时房间快照围绕第一条未读返回首屏() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
@@ -635,7 +635,7 @@ async fn 房间快照会返回最近五十五条消息基线() {
             koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
-        for index in 0..60 {
+        for index in 0..100 {
             koko::usecase::发送文本消息(
                 &mut repo,
                 &room_id,
@@ -645,6 +645,8 @@ async fn 房间快照会返回最近五十五条消息基线() {
             )
             .expect("应能连续发送消息");
         }
+        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &session_id, 80)
+            .expect("应能先建立阅读锚点");
         (session_id, room_id)
     })
     .await
@@ -660,17 +662,25 @@ async fn 房间快照会返回最近五十五条消息基线() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    let recent = body["recent_messages"]
+    assert_eq!(body["last_read_event_position"].as_i64(), Some(80));
+    assert_eq!(body["first_unread_event_position"].as_i64(), Some(81));
+    let messages = body["snapshot_messages"]
         .as_array()
-        .expect("snapshot 必须直接带 recent_messages");
-    assert_eq!(recent.len(), 55, "快照只应返回最近 55 条消息基线");
-    assert_eq!(recent.first().and_then(|msg| msg["body"].as_str()), Some("snapshot-5"));
-    assert_eq!(recent.last().and_then(|msg| msg["body"].as_str()), Some("snapshot-59"));
+        .expect("snapshot 必须直接带 snapshot_messages");
+    let positions = messages
+        .iter()
+        .map(|msg| msg["event_position"].as_i64().expect("event_position"))
+        .collect::<Vec<_>>();
+
+    assert!(positions.iter().any(|position| *position < 81), "首屏必须带已读上下文");
+    assert!(positions.contains(&81), "首屏必须覆盖第一条未读");
+    assert!(positions.first().copied().unwrap_or_default() > 1, "围绕未读恢复时不应回到整房最老消息");
+    assert_eq!(positions.last().copied(), Some(100), "首屏应覆盖当前房间最新位置附近");
 }
 
 #[tokio::test]
 #[serial]
-async fn 房间快照返回的最近消息按事件位置升序排列() {
+async fn 房间快照会返回首条未读事件位置和是否仍有更早历史() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
@@ -696,7 +706,7 @@ async fn 房间快照返回的最近消息按事件位置升序排列() {
             koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
-        for index in 0..3 {
+        for index in 0..100 {
             koko::usecase::发送文本消息(
                 &mut repo,
                 &room_id,
@@ -706,6 +716,8 @@ async fn 房间快照返回的最近消息按事件位置升序排列() {
             )
             .expect("应能连续发送消息");
         }
+        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &session_id, 90)
+            .expect("应能先推进阅读位置");
         (session_id, room_id)
     })
     .await
@@ -721,19 +733,25 @@ async fn 房间快照返回的最近消息按事件位置升序排列() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    let recent = body["recent_messages"]
+    assert_eq!(body["last_read_event_position"].as_i64(), Some(90));
+    assert_eq!(body["first_unread_event_position"].as_i64(), Some(91));
+    assert_eq!(body["has_more_before"].as_bool(), Some(true));
+    let messages = body["snapshot_messages"]
         .as_array()
-        .expect("snapshot 必须直接带 recent_messages");
-    let positions = recent
+        .expect("snapshot 必须直接带 snapshot_messages");
+    let positions = messages
         .iter()
         .map(|message| message["event_position"].as_i64().expect("event_position"))
         .collect::<Vec<_>>();
-    assert_eq!(positions, vec![1, 2, 3], "房间快照里的最近消息必须按升序返回");
+    assert!(
+        positions.windows(2).all(|window| window[0] < window[1]),
+        "房间快照里的首屏消息必须按升序返回"
+    );
 }
 
 #[tokio::test]
 #[serial]
-async fn 房间消息不足五十五条时快照按实际条数返回() {
+async fn 无阅读锚点时房间快照回退到最近一屏消息() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
@@ -759,8 +777,16 @@ async fn 房间消息不足五十五条时快照按实际条数返回() {
             koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
-        koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "snapshot-short-c-1", "only-one")
-            .expect("应能发送消息");
+        for index in 0..60 {
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("snapshot-short-c-{index}"),
+                &format!("latest-{index}"),
+            )
+            .expect("应能连续发送消息");
+        }
         (session_id, room_id)
     })
     .await
@@ -776,11 +802,18 @@ async fn 房间消息不足五十五条时快照按实际条数返回() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    let recent = body["recent_messages"]
+    assert_eq!(body["last_read_event_position"].as_i64(), None);
+    assert_eq!(body["first_unread_event_position"].as_i64(), None);
+    let messages = body["snapshot_messages"]
         .as_array()
-        .expect("snapshot 必须直接带 recent_messages");
-    assert_eq!(recent.len(), 1, "房间消息不足 55 条时应按实际条数返回");
-    assert_eq!(recent[0]["body"].as_str(), Some("only-one"));
+        .expect("snapshot 必须直接带 snapshot_messages");
+    assert!(!messages.is_empty(), "无阅读锚点时也应返回最近一屏消息");
+    assert_eq!(messages.last().and_then(|msg| msg["body"].as_str()), Some("latest-59"));
+    assert_ne!(
+        messages.first().and_then(|msg| msg["body"].as_str()),
+        Some("latest-0"),
+        "无阅读锚点时不应回到整房最老消息"
+    );
 }
 
 #[tokio::test]

@@ -364,7 +364,10 @@ async fn join_or_create_room(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
-            最近消息,
+            上次已读事件位置,
+            首条未读事件位置,
+            首屏消息,
+            首屏前仍有更早历史,
         }) => {
             tracing::info!(
                 usecase = "按短码进房或建房",
@@ -382,7 +385,10 @@ async fn join_or_create_room(
                     serde_json::json!({
                         "room_id": 房间标识,
                         "latest_event_position": 最新事件位置,
-                        "recent_messages": events_to_json(最近消息),
+                        "last_read_event_position": 上次已读事件位置,
+                        "first_unread_event_position": 首条未读事件位置,
+                        "snapshot_messages": events_to_json(首屏消息),
+                        "has_more_before": 首屏前仍有更早历史,
                     }),
                 ),
             )
@@ -469,7 +475,10 @@ async fn load_room_snapshot(
         Ok(contract::快照::房间 {
             房间标识,
             最新事件位置,
-            最近消息,
+            上次已读事件位置,
+            首条未读事件位置,
+            首屏消息,
+            首屏前仍有更早历史,
         }) => {
             tracing::info!(
                 usecase = "加载房间快照",
@@ -487,7 +496,10 @@ async fn load_room_snapshot(
                     serde_json::json!({
                         "room_id": 房间标识,
                         "latest_event_position": 最新事件位置,
-                        "recent_messages": events_to_json(最近消息),
+                        "last_read_event_position": 上次已读事件位置,
+                        "first_unread_event_position": 首条未读事件位置,
+                        "snapshot_messages": events_to_json(首屏消息),
+                        "has_more_before": 首屏前仍有更早历史,
                     }),
                 ),
             )

@@ -196,7 +196,10 @@ impl koko::usecase::仓储端口 for 假仓储 {
         Ok(koko::contract::快照::房间 {
             房间标识: room_id,
             最新事件位置: self.最新位置,
-            最近消息: Vec::new(),
+            上次已读事件位置: None,
+            首条未读事件位置: None,
+            首屏消息: Vec::new(),
+            首屏前仍有更早历史: false,
         })
     }
 
@@ -238,12 +241,17 @@ impl koko::usecase::仓储端口 for 假仓储 {
     fn 拉取房间快照(
         &self,
         房间标识: &str,
+        上次已读事件位置: Option<i64>,
+        首条未读事件位置: Option<i64>,
     ) -> Result<koko::contract::快照, koko::contract::错误码> {
         if self.房间成员.contains_key(房间标识) {
             Ok(koko::contract::快照::房间 {
                 房间标识: 房间标识.to_string(),
                 最新事件位置: self.最新位置,
-                最近消息: Vec::new(),
+                上次已读事件位置,
+                首条未读事件位置,
+                首屏消息: Vec::new(),
+                首屏前仍有更早历史: false,
             })
         } else {
             Err(koko::contract::错误码::房间不存在)
@@ -326,6 +334,20 @@ impl koko::usecase::仓储端口 for 假仓储 {
         self.房间阅读位置
             .insert(key, current.max(已读到事件位置));
         Ok(())
+    }
+
+    fn 查询房间阅读位置(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<Option<i64>, koko::contract::错误码> {
+        let Some(identity) = self.会话到匿名身份.get(会话标识) else {
+            return Ok(None);
+        };
+        Ok(self
+            .房间阅读位置
+            .get(&(identity.clone(), 房间标识.to_string()))
+            .copied())
     }
 }
 

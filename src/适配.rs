@@ -134,6 +134,125 @@ impl Pg仓储 {
         Ok(events)
     }
 
+    /// 查询“某个事件位置及其之后”的消息页。
+    /// 这个 helper 专门给“围绕第一条未读恢复首屏”使用，避免把未读窗口硬塞回历史分页语义。
+    async fn 查询从位置开始的消息页(
+        pool: &PgPool,
+        房间数据库标识: i64,
+        房间标识: &str,
+        起始位置: i64,
+        limit: i64,
+    ) -> Result<Vec<contract::领域事件>, contract::错误码> {
+        let rows = sqlx::query(
+            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+             FROM room_events re \
+             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+             LEFT JOIN sessions s ON s.id = m.sender_session_id \
+             WHERE re.room_id = $1 AND re.event_position >= $2 \
+             ORDER BY re.event_position ASC \
+             LIMIT $3",
+        )
+        .bind(房间数据库标识)
+        .bind(起始位置)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| Self::行转消息事件(row, 房间标识))
+            .collect())
+    }
+
+    /// 统一拼装房间恢复快照。
+    /// 这样 join / snapshot 两条入口就不会各自长出一套“围绕未读恢复首屏”的异形逻辑。
+    async fn 构建房间恢复快照(
+        pool: &PgPool,
+        房间数据库标识: i64,
+        房间标识: &str,
+        最新事件位置: i64,
+        上次已读事件位置: Option<i64>,
+        首条未读事件位置: Option<i64>,
+    ) -> Result<contract::快照, contract::错误码> {
+        let (snapshot_messages, has_more_before) = if let Some(first_unread_event_position) =
+            首条未读事件位置
+        {
+            let before_messages = Self::查询消息页(
+                pool,
+                房间数据库标识,
+                房间标识,
+                Some(first_unread_event_position),
+                8,
+            )
+            .await?;
+            let unread_messages = Self::查询从位置开始的消息页(
+                pool,
+                房间数据库标识,
+                房间标识,
+                first_unread_event_position,
+                47,
+            )
+            .await?;
+            let has_more_before = before_messages
+                .first()
+                .map(|message| {
+                    matches!(
+                        message,
+                        contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
+                    )
+                })
+                .unwrap_or(false);
+            ([before_messages, unread_messages].concat(), has_more_before)
+        } else {
+            let snapshot_messages =
+                Self::查询消息页(pool, 房间数据库标识, 房间标识, None, 55).await?;
+            let has_more_before = snapshot_messages
+                .first()
+                .map(|message| {
+                    matches!(
+                        message,
+                        contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
+                    )
+                })
+                .unwrap_or(false);
+            (snapshot_messages, has_more_before)
+        };
+
+        Ok(contract::快照::房间 {
+            房间标识: 房间标识.to_string(),
+            最新事件位置,
+            上次已读事件位置,
+            首条未读事件位置,
+            首屏消息: snapshot_messages,
+            首屏前仍有更早历史: has_more_before,
+        })
+    }
+
+    /// 查询当前会话在某个房间里的阅读锚点。
+    /// 这里做成 async helper，避免 adapter 内部在 async 上下文里再次 `block_on` 自己。
+    async fn 查询房间阅读位置_异步(
+        pool: &PgPool,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        let fetched = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT rra.last_read_event_position \
+             FROM sessions s \
+             JOIN rooms r ON r.room_id = $1 \
+             LEFT JOIN room_read_anchors rra \
+               ON rra.anonymous_identity_id = s.anonymous_identity_id AND rra.room_id = r.id \
+             WHERE s.session_id = $2",
+        )
+        .bind(房间标识)
+        .bind(会话标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(fetched.flatten())
+    }
+
     fn 在运行时执行<T>(&self, future: impl Future<Output = T>) -> T {
         if let Some(rt) = &self.owned_runtime {
             rt.block_on(future)
@@ -485,14 +604,23 @@ impl 仓储端口 for Pg仓储 {
                 .await
                 .map_err(|_| contract::错误码::系统错误)?;
 
-            let recent_messages =
-                Self::查询消息页(&self.pool, room_db_id, &room_id, None, 55).await?;
-
-            Ok(contract::快照::房间 {
-                房间标识: room_id,
-                最新事件位置: latest_event_position,
-                最近消息: recent_messages,
-            })
+            let last_read_event_position =
+                Self::查询房间阅读位置_异步(&self.pool, &room_id, 会话标识).await?;
+            let first_unread_event_position = match last_read_event_position {
+                Some(last_read_event_position) if last_read_event_position < latest_event_position => {
+                    Some(last_read_event_position + 1)
+                }
+                _ => None,
+            };
+            Self::构建房间恢复快照(
+                &self.pool,
+                room_db_id,
+                &room_id,
+                latest_event_position,
+                last_read_event_position,
+                first_unread_event_position,
+            )
+            .await
         })
     }
 
@@ -563,9 +691,26 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
-    /// 拉取房间基线快照：用于首屏基线与补洞失败兜底。
+    /// 拉取当前身份在房间里的阅读锚点。
+    /// 这里返回的是身份级事实，不是页面态或 socket 连接态。
+    fn 查询房间阅读位置(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        self.在运行时执行(Self::查询房间阅读位置_异步(
+            &self.pool,
+            房间标识,
+            会话标识,
+        ))
+    }
+
+    /// 拉取房间恢复快照：当前由应用层先裁决已读/未读语义，再交给适配层按锚点拼装首屏。
     fn 拉取房间快照(
-        &self, 房间标识: &str
+        &self,
+        房间标识: &str,
+        上次已读事件位置: Option<i64>,
+        首条未读事件位置: Option<i64>,
     ) -> Result<contract::快照, contract::错误码> {
         self.在运行时执行(async {
             let room =
@@ -578,13 +723,16 @@ impl 仓储端口 for Pg仓储 {
                 return Err(contract::错误码::房间不存在);
             };
             let room_db_id: i64 = row.get("id");
-            let recent_messages =
-                Self::查询消息页(&self.pool, room_db_id, 房间标识, None, 55).await?;
-            Ok(contract::快照::房间 {
-                房间标识: row.get("room_id"),
-                最新事件位置: row.get("latest_event_position"),
-                最近消息: recent_messages,
-            })
+            let latest_event_position: i64 = row.get("latest_event_position");
+            Self::构建房间恢复快照(
+                &self.pool,
+                room_db_id,
+                房间标识,
+                latest_event_position,
+                上次已读事件位置,
+                首条未读事件位置,
+            )
+            .await
         })
     }
 
