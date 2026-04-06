@@ -524,6 +524,21 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
+    /// 房间最新事件位置是顺序真相的一部分。
+    /// 这里仅读取，不把它和恢复窗口或阅读推进策略混在一起。
+    fn 查询房间最新事件位置(
+        &self,
+        房间标识: &str,
+    ) -> Result<Option<i64>, contract::错误码> {
+        self.在运行时执行(async {
+            sqlx::query_scalar("SELECT latest_event_position FROM rooms WHERE room_id = $1")
+                .bind(房间标识)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)
+        })
+    }
+
     /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
     /// 规则本身在用例层决定“何时调用、失败如何映射”。
     fn 检查成员资格(
@@ -715,6 +730,68 @@ impl 仓储端口 for Pg仓储 {
                 文本: 文本.to_string(),
                 事件位置: next_position,
             })
+        })
+    }
+
+    /// 身份级阅读锚点写入：
+    /// 1. 会话只用来解析出匿名内部身份；
+    /// 2. 真正持久化主键是 `(anonymous_identity_id, room_id)`；
+    /// 3. 写入只能单调前进，较早位置不会覆盖更靠后的已读事实。
+    fn 推进房间阅读位置(
+        &mut self,
+        房间标识: &str,
+        会话标识: &str,
+        已读到事件位置: i64,
+    ) -> Result<(), contract::错误码> {
+        self.在运行时执行(async {
+            let mut tx = self
+                .pool
+                .begin()
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+
+            let identity_row = sqlx::query(
+                "SELECT anonymous_identity_id \
+                 FROM sessions \
+                 WHERE session_id = $1",
+            )
+            .bind(会话标识)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?
+            .ok_or(contract::错误码::会话无效)?;
+            let anonymous_identity_db_id: Option<i64> = identity_row.get("anonymous_identity_id");
+            let Some(anonymous_identity_db_id) = anonymous_identity_db_id else {
+                // 当前系统约束里，匿名会话必须能回到稳定匿名内部身份。
+                return Err(contract::错误码::系统错误);
+            };
+
+            let room_db_id: i64 = sqlx::query_scalar("SELECT id FROM rooms WHERE room_id = $1")
+                .bind(房间标识)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?
+                .ok_or(contract::错误码::房间不存在)?;
+
+            sqlx::query(
+                "INSERT INTO room_read_anchors (anonymous_identity_id, room_id, last_read_event_position) \
+                 VALUES ($1, $2, $3) \
+                 ON CONFLICT (anonymous_identity_id, room_id) DO UPDATE \
+                 SET last_read_event_position = EXCLUDED.last_read_event_position, \
+                     updated_at = NOW() \
+                 WHERE EXCLUDED.last_read_event_position > room_read_anchors.last_read_event_position",
+            )
+            .bind(anonymous_identity_db_id)
+            .bind(room_db_id)
+            .bind(已读到事件位置)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+
+            tx.commit()
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+            Ok(())
         })
     }
 }

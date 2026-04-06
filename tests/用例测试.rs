@@ -143,7 +143,9 @@ struct 假仓储 {
     最新位置: i64,
     房间短码到标识: HashMap<String, String>,
     房间成员: HashMap<String, HashSet<String>>,
+    会话到匿名身份: HashMap<String, String>,
     设备匿名身份: HashMap<String, koko::contract::匿名身份引导结果>,
+    房间阅读位置: HashMap<(String, String), i64>,
 }
 
 impl koko::usecase::仓储端口 for 假仓储 {
@@ -163,6 +165,10 @@ impl koko::usecase::仓储端口 for 假仓储 {
             展示花名: format!("暴躁的企鹅-{}", self.匿名身份计数),
             会话标识: format!("s-{}", self.会话计数),
         };
+        self.会话到匿名身份.insert(
+            snapshot.会话标识.clone(),
+            snapshot.匿名身份标识.clone(),
+        );
         self.设备匿名身份
             .insert(设备匿名凭证.to_string(), snapshot.clone());
         Ok(snapshot)
@@ -202,6 +208,18 @@ impl koko::usecase::仓储端口 for 假仓储 {
     /// 假实现：房间存在性查询。
     fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, koko::contract::错误码> {
         Ok(self.房间成员.contains_key(房间标识))
+    }
+
+    /// 假实现：房间最新事件位置就是本地计数器。
+    fn 查询房间最新事件位置(
+        &self,
+        房间标识: &str,
+    ) -> Result<Option<i64>, koko::contract::错误码> {
+        if self.房间成员.contains_key(房间标识) {
+            Ok(Some(self.最新位置))
+        } else {
+            Ok(None)
+        }
     }
 
     /// 假实现：成员资格查询。
@@ -289,6 +307,25 @@ impl koko::usecase::仓储端口 for 假仓储 {
             文本: 文本.to_string(),
             事件位置: self.最新位置,
         })
+    }
+
+    /// 假实现：阅读锚点按 `(匿名身份, 房间)` 收口，且只能单调前进。
+    fn 推进房间阅读位置(
+        &mut self,
+        房间标识: &str,
+        会话标识: &str,
+        已读到事件位置: i64,
+    ) -> Result<(), koko::contract::错误码> {
+        let identity = self
+            .会话到匿名身份
+            .get(会话标识)
+            .cloned()
+            .ok_or(koko::contract::错误码::会话无效)?;
+        let key = (identity, 房间标识.to_string());
+        let current = self.房间阅读位置.get(&key).copied().unwrap_or(0);
+        self.房间阅读位置
+            .insert(key, current.max(已读到事件位置));
+        Ok(())
     }
 }
 

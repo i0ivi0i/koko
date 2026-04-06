@@ -4,6 +4,7 @@ use axum::{
 };
 use serde_json::Value;
 use serial_test::serial;
+use sqlx::{postgres::PgPoolOptions, Row};
 use std::env;
 use std::io;
 use std::net::TcpListener;
@@ -52,6 +53,161 @@ fn 数据库真相模型可迁移() {
     assert!(sql_v2.contains("CREATE TABLE IF NOT EXISTS anonymous_identities"));
     assert!(sql_v2.contains("device_anonymous_token"));
     assert!(sql_v2.contains("anonymous_identity_id"));
+}
+
+#[test]
+fn 数据库真相模型包含房间阅读锚点表() {
+    let sql = std::fs::read_to_string("migrations/0003_房间阅读锚点.sql")
+        .expect("应存在房间阅读锚点迁移文件");
+
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS room_read_anchors"));
+    assert!(sql.contains("anonymous_identity_id"));
+    assert!(sql.contains("last_read_event_position"));
+    assert!(sql.contains("UNIQUE (anonymous_identity_id, room_id)"));
+}
+
+#[test]
+fn 共享契约已为房间阅读推进预留稳定命令() {
+    let command = koko::contract::命令::推进房间阅读位置 {
+        房间标识: "r-test".to_string(),
+        已读到事件位置: 3,
+    };
+
+    assert!(matches!(
+        command,
+        koko::contract::命令::推进房间阅读位置 {
+            已读到事件位置: 3,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+#[serial]
+async fn 阅读锚点会写入当前匿名身份与房间的唯一记录() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平阅读锚点迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("RA{:010}", uniq % 10_000_000_000);
+    let device_token = format!("read-anchor-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+
+    let (identity_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity = koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 0)
+            .expect("应能写入初始阅读锚点");
+        (identity.匿名身份标识, room_id)
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库校验阅读锚点");
+    let row = sqlx::query(
+        "SELECT ai.anonymous_identity_id, rra.last_read_event_position \
+         FROM room_read_anchors rra \
+         JOIN anonymous_identities ai ON ai.id = rra.anonymous_identity_id \
+         JOIN rooms r ON r.id = rra.room_id \
+         WHERE r.room_id = $1",
+    )
+    .bind(&room_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应存在阅读锚点记录");
+
+    let stored_identity: String = row.get("anonymous_identity_id");
+    let stored_position: i64 = row.get("last_read_event_position");
+    assert_eq!(stored_identity, identity_id);
+    assert_eq!(stored_position, 0);
+
+    pool.close().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn 阅读锚点只会单调前进不会被回退覆盖() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平阅读锚点迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("RB{:010}", uniq % 10_000_000_000);
+    let device_token = format!("read-anchor-advance-{uniq}");
+    let database_url = cfg.database_url.clone();
+
+    let room_id = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity = koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        for index in 0..5 {
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &identity.会话标识,
+                &format!("read-anchor-c-{index}"),
+                &format!("read-anchor-{index}"),
+            )
+            .expect("应能先制造已成立消息");
+        }
+
+        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 5)
+            .expect("应能先写入更靠后的位置");
+        koko::usecase::推进房间阅读位置(&mut repo, &room_id, &identity.会话标识, 2)
+            .expect("较早位置不应破坏已有锚点");
+        room_id
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库校验阅读锚点");
+    let stored_position: i64 = sqlx::query_scalar(
+        "SELECT rra.last_read_event_position \
+         FROM room_read_anchors rra \
+         JOIN rooms r ON r.id = rra.room_id \
+         WHERE r.room_id = $1",
+    )
+    .bind(&room_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询到阅读位置");
+
+    assert_eq!(stored_position, 5, "较早写入不应把阅读锚点回退");
+    pool.close().await;
 }
 
 #[test]
