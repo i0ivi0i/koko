@@ -1,5 +1,7 @@
-use std::{env, io};
+use std::{env, io, panic, sync::Once};
 use tracing_subscriber::EnvFilter;
+
+static PANIC_HOOK_INIT: Once = Once::new();
 
 /// 启动配置聚合对象：只存“启动必需项”，不混入业务态。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,7 +50,26 @@ pub fn 初始化日志() -> io::Result<()> {
 
     // 进程级全局 subscriber：让任意层都天然可见日志输出。
     let _ = tracing::subscriber::set_global_default(subscriber);
+    // panic 也必须回到同一条后端日志主链，避免终端只有 Rust 默认 stderr 而没有结构化证据。
+    安装panic日志钩子();
     Ok(())
+}
+
+/// 安装全局 panic hook，把不可恢复崩溃也收口进统一日志主链。
+///
+/// 维护者约束：
+/// 1. 这里仍然保留 Rust 默认 panic 输出，不吞掉 stderr/backtrace；
+/// 2. 这里只做“把 panic 翻译成统一日志事件”，不负责恢复进程；
+/// 3. 该 hook 必须幂等，避免测试和运行时重复安装后互相覆盖。
+pub fn 安装panic日志钩子() {
+    PANIC_HOOK_INIT.call_once(|| {
+        let default_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |panic_info| {
+            记录panic日志(panic_info);
+            // 继续调用 Rust 默认 hook：这样后来者既能在统一日志里追踪，也不会丢掉原生 panic 证据。
+            default_hook(panic_info);
+        }));
+    });
 }
 
 /// 可选加载 dotenv。
@@ -58,6 +79,52 @@ fn 尝试加载dotenv() {
         return;
     }
     let _ = dotenvy::dotenv();
+}
+
+/// 把 panic 信息转成统一结构化日志。
+///
+/// 这里故意不做“美化崩溃页面”或“自定义恢复”，只负责提供稳定排障字段：
+/// - `adapter=panic_hook` 说明证据来自全局崩溃入口
+/// - `outcome=failed` 明确这不是业务拒绝，而是不可恢复失败
+/// - `error_code=panic` 让后续搜索与未来落盘规则都能稳定依赖同一个码
+fn 记录panic日志(panic_info: &panic::PanicHookInfo<'_>) {
+    let message = 提取panic消息(panic_info);
+    let (panic_file, panic_line, panic_column) = panic_info
+        .location()
+        .map(|location| {
+            (
+                location.file().to_string(),
+                location.line() as i64,
+                location.column() as i64,
+            )
+        })
+        .unwrap_or_else(|| ("unknown".to_string(), 0, 0));
+
+    tracing::error!(
+        usecase = "未恢复崩溃",
+        adapter = "panic_hook",
+        outcome = "failed",
+        error_code = "panic",
+        panic_file = panic_file,
+        panic_line = panic_line,
+        panic_column = panic_column,
+        panic_message = message,
+        "捕获到未恢复的 panic"
+    );
+}
+
+/// 提取 panic payload，统一转成可检索字符串。
+///
+/// panic payload 既可能是 `&str`，也可能是 `String`，还可能是其他任意类型。
+/// 这里统一收口成字符串，避免后续日志里出现“有 panic 但消息字段为空”的盲区。
+fn 提取panic消息(panic_info: &panic::PanicHookInfo<'_>) -> String {
+    if let Some(message) = panic_info.payload().downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = panic_info.payload().downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "panic payload 不是字符串".to_string()
+    }
 }
 
 /// 启动前自动追平迁移，保证数据库结构与代码版本一致。

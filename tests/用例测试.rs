@@ -1,12 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::{Arc, Mutex};
+use serial_test::serial;
 
 /// 用例层测试：
 /// - 用假仓储隔离数据库细节
 /// - 验证用例编排、契约输出和日志字段约束
 #[test]
-fn 结构化日志字段存在() {
+#[serial]
+fn 结构化日志字段存在且包含outcome() {
     let buffer = Arc::new(Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
         .with_ansi(false)
@@ -19,7 +21,7 @@ fn 结构化日志字段存在() {
         koko::entry::记录命令失败("测试用例", "test_adapter", "bad_request", "示例错误");
     });
 
-    let output = String::from_utf8(buffer.lock().expect("lock").clone()).expect("utf8");
+    let output = 读取缓冲日志(&buffer);
     assert!(
         output.contains("usecase") && output.contains("测试用例"),
         "日志缺少 usecase 字段: {output}"
@@ -31,6 +33,41 @@ fn 结构化日志字段存在() {
     assert!(
         output.contains("error_code") && output.contains("bad_request"),
         "日志缺少 error_code 字段: {output}"
+    );
+    assert!(
+        output.contains("outcome") && output.contains("failed"),
+        "日志缺少 outcome=failed 字段: {output}"
+    );
+}
+
+#[test]
+#[serial]
+fn panic_hook会把panic写入统一日志主链() {
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .without_time()
+        .with_writer(共享写入器(buffer.clone()))
+        .with_target(false)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("测试进程内应能安装全局 subscriber");
+    koko::assembly::安装panic日志钩子();
+
+    let _ = std::panic::catch_unwind(|| panic!("测试 panic"));
+
+    let output = 读取缓冲日志(&buffer);
+    assert!(
+        output.contains("adapter") && output.contains("panic_hook"),
+        "panic 日志缺少 adapter=panic_hook: {output}"
+    );
+    assert!(
+        output.contains("error_code") && output.contains("panic"),
+        "panic 日志缺少 error_code=panic: {output}"
+    );
+    assert!(
+        output.contains("outcome") && output.contains("failed"),
+        "panic 日志缺少 outcome=failed: {output}"
     );
 }
 
@@ -56,6 +93,10 @@ impl io::Write for 缓冲写入器 {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+fn 读取缓冲日志(buffer: &Arc<Mutex<Vec<u8>>>) -> String {
+    String::from_utf8(buffer.lock().expect("lock").clone()).expect("utf8")
 }
 
 #[derive(Default)]

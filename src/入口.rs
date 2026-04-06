@@ -11,6 +11,13 @@ pub async fn 启动() -> std::io::Result<()> {
     // 启动 span 统一携带 usecase/adapter，方便从日志里串联整条启动链路。
     let span = tracing::info_span!("startup", usecase = "服务启动", adapter = "entry");
     let _entered = span.enter();
+    // accepted 表示“入口已接住这次启动动作”，但此时配置、迁移、端口绑定都还没证明成功。
+    tracing::info!(
+        usecase = "服务启动",
+        adapter = "entry",
+        outcome = "accepted",
+        "服务启动请求已受理"
+    );
 
     // 先读配置；配置缺失是“启动前失败”，不是“运行时异常”。
     let config = crate::assembly::读取配置();
@@ -36,18 +43,26 @@ pub async fn 启动() -> std::io::Result<()> {
     let addr = format!("0.0.0.0:{}", config.app_port);
 
     // 端口绑定失败通常是“端口占用/权限问题”，归类为基础设施错误。
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .map_err(|err| std::io::Error::other(format!("监听端口失败: {err}")))?;
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+            记录命令失败("服务启动", "entry", "port_bind_failed", &err.to_string());
+            return Err(std::io::Error::other(format!("监听端口失败: {err}")));
+        }
+    };
+    // 只有监听端口与路由总装都完成后，才允许宣告启动 succeeded。
     tracing::info!(
         usecase = "服务启动",
         adapter = "entry",
+        outcome = "succeeded",
         app_port = config.app_port,
         "HTTP 冷路径服务已启动"
     );
-    axum::serve(listener, app)
-        .await
-        .map_err(|err| std::io::Error::other(format!("服务运行失败: {err}")))
+    if let Err(err) = axum::serve(listener, app).await {
+        记录命令失败("服务启动", "entry", "serve_failed", &err.to_string());
+        return Err(std::io::Error::other(format!("服务运行失败: {err}")));
+    }
+    Ok(())
 }
 
 /// 启动与入口链路的统一错误日志出口。
@@ -57,6 +72,7 @@ pub fn 记录命令失败(usecase: &str, adapter: &str, error_code: &str, messag
     tracing::error!(
         usecase = usecase,
         adapter = adapter,
+        outcome = "failed",
         error_code = error_code,
         message = message,
         "命令执行失败"
