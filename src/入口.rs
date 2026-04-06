@@ -18,6 +18,7 @@ where
     F: Future<Output = ()> + Send + 'static,
 {
     // 约束：日志必须天然存在，不能靠“临时加 println”排错。
+    // main 会尽量在 Tokio runtime 之前先装日志；这里仍保留幂等调用，给测试和其它入口兜底。
     crate::assembly::初始化日志()?;
 
     // 启动 span 统一携带 usecase/adapter，方便从日志里串联整条启动链路。

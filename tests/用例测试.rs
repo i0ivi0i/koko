@@ -73,7 +73,7 @@ fn panic_hook会把panic写入统一日志主链() {
 
 #[test]
 #[serial]
-fn http日志固定字段顺序里能看到usecase_adapter_outcome() {
+fn http日志固定字段顺序里能看到usecase_adapter_outcome与中文请求类型() {
     let buffer = Arc::new(Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
         .with_ansi(false)
@@ -87,7 +87,7 @@ fn http日志固定字段顺序里能看到usecase_adapter_outcome() {
             usecase = "引导匿名身份",
             adapter = "http",
             outcome = "accepted",
-            request_kind = "bootstrap_session",
+            request_kind = "匿名身份引导",
             "HTTP 请求已受理"
         );
     });
@@ -99,6 +99,10 @@ fn http日志固定字段顺序里能看到usecase_adapter_outcome() {
     assert!(
         usecase_pos < adapter_pos && adapter_pos < outcome_pos,
         "日志字段顺序应便于先读 usecase / adapter / outcome: {output}"
+    );
+    assert!(
+        output.contains("request_kind") && output.contains("匿名身份引导"),
+        "日志里的请求类型应改成中文稳定码，减少终端阅读噪音: {output}"
     );
 }
 

@@ -223,7 +223,7 @@ async fn bootstrap_session(
             usecase = "引导匿名身份",
             adapter = "http",
             outcome = "rejected",
-            request_kind = "bootstrap_session",
+            request_kind = "匿名身份引导",
             error_code = "invalid_argument",
             "引导匿名身份缺少设备入口凭证"
         );
@@ -238,7 +238,7 @@ async fn bootstrap_session(
         usecase = "引导匿名身份",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "bootstrap_session",
+        request_kind = "匿名身份引导",
         "HTTP 请求已受理"
     );
     let result = task::spawn_blocking(move || {
@@ -254,7 +254,7 @@ async fn bootstrap_session(
                 usecase = "引导匿名身份",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "bootstrap_session",
+                request_kind = "匿名身份引导",
                 error_code = "system_error",
                 error = %err,
                 "引导匿名身份任务执行失败"
@@ -272,7 +272,7 @@ async fn bootstrap_session(
                 usecase = "引导匿名身份",
                 adapter = "http",
                 outcome = "succeeded",
-                request_kind = "bootstrap_session",
+                request_kind = "匿名身份引导",
                 anonymous_identity_id = out.匿名身份标识,
                 session_id = out.会话标识,
                 "引导匿名身份成功"
@@ -293,7 +293,7 @@ async fn bootstrap_session(
                 usecase = "引导匿名身份",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "bootstrap_session",
+                request_kind = "匿名身份引导",
                 error_code = code,
                 "引导匿名身份被拒绝"
             );
@@ -311,7 +311,7 @@ async fn join_or_create_room(
         usecase = "按短码进房或建房",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "join_or_create_room",
+        request_kind = "短码进房或建房",
         session_id = body.session_id.as_str(),
         "HTTP 请求已受理"
     );
@@ -332,7 +332,7 @@ async fn join_or_create_room(
                 usecase = "按短码进房或建房",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "join_or_create_room",
+                request_kind = "短码进房或建房",
                 session_id = session_id,
                 error_code = "system_error",
                 error = %err,
@@ -354,7 +354,7 @@ async fn join_or_create_room(
                 usecase = "按短码进房或建房",
                 adapter = "http",
                 outcome = "succeeded",
-                request_kind = "join_or_create_room",
+                request_kind = "短码进房或建房",
                 session_id = session_id,
                 room_id = 房间标识,
                 event_position = 最新事件位置,
@@ -373,7 +373,7 @@ async fn join_or_create_room(
                 usecase = "按短码进房或建房",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "join_or_create_room",
+                request_kind = "短码进房或建房",
                 session_id = session_id,
                 error_code = "system_error",
                 "按短码进房或建房返回了错误的快照类型"
@@ -389,7 +389,7 @@ async fn join_or_create_room(
                 usecase = "按短码进房或建房",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "join_or_create_room",
+                request_kind = "短码进房或建房",
                 session_id = session_id,
                 error_code = code,
                 "按短码进房或建房被拒绝"
@@ -409,7 +409,7 @@ async fn load_room_snapshot(
         usecase = "加载房间快照",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "load_room_snapshot",
+        request_kind = "房间快照查询",
         room_id = room_id.as_str(),
         session_id = query.session_id.as_str(),
         "HTTP 请求已受理"
@@ -431,7 +431,7 @@ async fn load_room_snapshot(
                 usecase = "加载房间快照",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "load_room_snapshot",
+                request_kind = "房间快照查询",
                 room_id = room_id,
                 session_id = session_id,
                 error_code = "system_error",
@@ -454,7 +454,7 @@ async fn load_room_snapshot(
                 usecase = "加载房间快照",
                 adapter = "http",
                 outcome = "succeeded",
-                request_kind = "load_room_snapshot",
+                request_kind = "房间快照查询",
                 room_id = 房间标识,
                 session_id = session_id,
                 event_position = 最新事件位置,
@@ -473,7 +473,7 @@ async fn load_room_snapshot(
                 usecase = "加载房间快照",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "load_room_snapshot",
+                request_kind = "房间快照查询",
                 room_id = room_id,
                 session_id = session_id,
                 error_code = "system_error",
@@ -490,7 +490,7 @@ async fn load_room_snapshot(
                 usecase = "加载房间快照",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "load_room_snapshot",
+                request_kind = "房间快照查询",
                 room_id = room_id,
                 session_id = session_id,
                 error_code = code,
@@ -511,7 +511,7 @@ async fn load_room_events(
         usecase = "加载房间增量事件",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "load_room_events",
+        request_kind = "房间增量事件查询",
         room_id = room_id.as_str(),
         from = query.from,
         "HTTP 请求已受理"
@@ -532,7 +532,7 @@ async fn load_room_events(
                 usecase = "加载房间增量事件",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "load_room_events",
+                request_kind = "房间增量事件查询",
                 room_id = room_id,
                 from = from,
                 error_code = "system_error",
@@ -557,7 +557,7 @@ async fn load_room_events(
                 usecase = "加载房间增量事件",
                 adapter = "http",
                 outcome = "succeeded",
-                request_kind = "load_room_events",
+                request_kind = "房间增量事件查询",
                 room_id = 房间标识,
                 from = from,
                 event_position = 最新事件位置,
@@ -571,7 +571,7 @@ async fn load_room_events(
                 usecase = "加载房间增量事件",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "load_room_events",
+                request_kind = "房间增量事件查询",
                 room_id = room_id,
                 from = from,
                 error_code = "system_error",
@@ -588,7 +588,7 @@ async fn load_room_events(
                 usecase = "加载房间增量事件",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "load_room_events",
+                request_kind = "房间增量事件查询",
                 room_id = room_id,
                 from = from,
                 error_code = code,
@@ -609,7 +609,7 @@ async fn admin_login(
         usecase = "管理员登录",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "admin_login",
+        request_kind = "后台登录",
         "HTTP 请求已受理"
     );
     if body.username != "admin" || body.password != state.admin_password {
@@ -617,7 +617,7 @@ async fn admin_login(
             usecase = "管理员登录",
             adapter = "http",
             outcome = "rejected",
-            request_kind = "admin_login",
+            request_kind = "后台登录",
             error_code = "admin_auth_failed",
             "管理员登录被拒绝"
         );
@@ -631,7 +631,7 @@ async fn admin_login(
         usecase = "管理员登录",
         adapter = "http",
         outcome = "succeeded",
-        request_kind = "admin_login",
+        request_kind = "后台登录",
         "管理员登录成功"
     );
     (
@@ -651,7 +651,7 @@ async fn admin_overview(
         usecase = "后台概览查询",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "admin_overview",
+        request_kind = "后台总览查询",
         "HTTP 请求已受理"
     );
     if let Err((status, code, message)) = require_admin(&headers) {
@@ -659,7 +659,7 @@ async fn admin_overview(
             usecase = "后台概览查询",
             adapter = "http",
             outcome = "rejected",
-            request_kind = "admin_overview",
+            request_kind = "后台总览查询",
             error_code = code,
             "后台概览查询被拒绝"
         );
@@ -678,7 +678,7 @@ async fn admin_overview(
                 usecase = "后台概览查询",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "admin_overview",
+                request_kind = "后台总览查询",
                 error_code = "system_error",
                 error = %err,
                 "后台概览查询任务执行失败"
@@ -698,7 +698,7 @@ async fn admin_overview(
                 usecase = "后台概览查询",
                 adapter = "http",
                 outcome = "succeeded",
-                request_kind = "admin_overview",
+                request_kind = "后台总览查询",
                 room_count = 房间总数,
                 message_count = 消息总数,
                 "后台概览查询成功"
@@ -714,7 +714,7 @@ async fn admin_overview(
                 usecase = "后台概览查询",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "admin_overview",
+                request_kind = "后台总览查询",
                 error_code = "system_error",
                 "后台概览查询返回了错误的快照类型"
             );
@@ -729,7 +729,7 @@ async fn admin_overview(
                 usecase = "后台概览查询",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "admin_overview",
+                request_kind = "后台总览查询",
                 error_code = code,
                 "后台概览查询被拒绝"
             );
@@ -744,7 +744,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
         usecase = "后台房间列表查询",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "admin_rooms",
+        request_kind = "后台房间列表查询",
         "HTTP 请求已受理"
     );
     if let Err((status, code, message)) = require_admin(&headers) {
@@ -752,7 +752,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
             usecase = "后台房间列表查询",
             adapter = "http",
             outcome = "rejected",
-            request_kind = "admin_rooms",
+            request_kind = "后台房间列表查询",
             error_code = code,
             "后台房间列表查询被拒绝"
         );
@@ -771,7 +771,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
                 usecase = "后台房间列表查询",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "admin_rooms",
+                request_kind = "后台房间列表查询",
                 error_code = "system_error",
                 error = %err,
                 "后台房间列表查询任务执行失败"
@@ -790,7 +790,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
                 usecase = "后台房间列表查询",
                 adapter = "http",
                 outcome = "succeeded",
-                request_kind = "admin_rooms",
+                request_kind = "后台房间列表查询",
                 room_count = room_count,
                 "后台房间列表查询成功"
             );
@@ -805,7 +805,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
                 usecase = "后台房间列表查询",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "admin_rooms",
+                request_kind = "后台房间列表查询",
                 error_code = "system_error",
                 "后台房间列表查询返回了错误的快照类型"
             );
@@ -820,7 +820,7 @@ async fn admin_rooms(State(state): State<应用状态>, headers: HeaderMap) -> i
                 usecase = "后台房间列表查询",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "admin_rooms",
+                request_kind = "后台房间列表查询",
                 error_code = code,
                 "后台房间列表查询被拒绝"
             );
@@ -839,7 +839,7 @@ async fn admin_room_detail(
         usecase = "后台房间详情查询",
         adapter = "http",
         outcome = "accepted",
-        request_kind = "admin_room_detail",
+        request_kind = "后台房间详情查询",
         room_id = room_id.as_str(),
         "HTTP 请求已受理"
     );
@@ -848,7 +848,7 @@ async fn admin_room_detail(
             usecase = "后台房间详情查询",
             adapter = "http",
             outcome = "rejected",
-            request_kind = "admin_room_detail",
+            request_kind = "后台房间详情查询",
             room_id = room_id,
             error_code = code,
             "后台房间详情查询被拒绝"
@@ -870,7 +870,7 @@ async fn admin_room_detail(
                 usecase = "后台房间详情查询",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "admin_room_detail",
+                request_kind = "后台房间详情查询",
                 room_id = room_id,
                 error_code = "system_error",
                 error = %err,
@@ -893,7 +893,7 @@ async fn admin_room_detail(
                 usecase = "后台房间详情查询",
                 adapter = "http",
                 outcome = "succeeded",
-                request_kind = "admin_room_detail",
+                request_kind = "后台房间详情查询",
                 room_id = 房间标识,
                 event_position = 最新事件位置,
                 message_count = 消息总数,
@@ -906,7 +906,7 @@ async fn admin_room_detail(
                 usecase = "后台房间详情查询",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "admin_room_detail",
+                request_kind = "后台房间详情查询",
                 room_id = room_id,
                 error_code = "system_error",
                 "后台房间详情查询返回了错误的快照类型"
@@ -922,7 +922,7 @@ async fn admin_room_detail(
                 usecase = "后台房间详情查询",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "admin_room_detail",
+                request_kind = "后台房间详情查询",
                 room_id = room_id,
                 error_code = code,
                 "后台房间详情查询被拒绝"

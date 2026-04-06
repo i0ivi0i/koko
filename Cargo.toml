@@ -11,7 +11,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "syn
 tracing = "0.1"
 # 日志输出只显式保留当前确实使用的格式化、过滤与 ANSI 终端能力，
 # 避免把 tracing-subscriber 的默认特性整包带进来。
-tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "ansi"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "ansi", "time", "local-time"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"] }
 # 当前 HTTP 冷路径只需要 JSON、查询解析、Tokio runtime 和 HTTP/1 服务能力，
 # 不需要 axum 默认附带的表单、额外追踪胶水等默认特性。

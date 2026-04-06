@@ -1,7 +1,11 @@
-use std::{env, io, panic, sync::Once};
-use tracing_subscriber::EnvFilter;
+use std::{
+    env, io, panic,
+    sync::{Once, OnceLock},
+};
+use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
 static PANIC_HOOK_INIT: Once = Once::new();
+static LOG_INIT_RESULT: OnceLock<Result<(), String>> = OnceLock::new();
 
 /// 启动配置聚合对象：只存“启动必需项”，不混入业务态。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,28 +35,45 @@ pub fn 读取配置() -> io::Result<配置> {
 
 /// 日志系统必须天然存在：启动时默认初始化，开发和生产只在详细度上有差异。
 pub fn 初始化日志() -> io::Result<()> {
-    // 日志初始化也走同一套环境变量读取，确保 run.ps1 / cargo run 行为一致。
-    尝试加载dotenv();
-    let filter_text = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    let filter = EnvFilter::try_new(filter_text.clone()).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("RUST_LOG 非法: {filter_text}"),
-        )
-    })?;
+    let result = LOG_INIT_RESULT.get_or_init(|| {
+        // 日志初始化也走同一套环境变量读取，确保 run.ps1 / cargo run 行为一致。
+        尝试加载dotenv();
+        let filter_text = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+        let filter = EnvFilter::try_new(filter_text.clone())
+            .map_err(|_| format!("RUST_LOG 非法: {filter_text}"))?;
+        let subscriber = 构建日志订阅器(filter);
 
-    let subscriber = tracing_subscriber::fmt()
+        // 进程级全局 subscriber：让任意层都天然可见日志输出。
+        tracing::subscriber::set_global_default(subscriber)
+            .map_err(|err| format!("安装全局日志订阅器失败: {err}"))?;
+        // panic 也必须回到同一条后端日志主链，避免终端只有 Rust 默认 stderr 而没有结构化证据。
+        安装panic日志钩子();
+        Ok(())
+    });
+
+    result
+        .as_ref()
+        .map_err(|message| io::Error::other(message.clone()))
+        .map(|_| ())
+}
+
+/// 构造进程级日志订阅器。
+///
+/// 设计取舍：
+/// 1. 开发态优先尝试本地时区时间，减少终端里出现 `...Z` 带来的阅读成本；
+/// 2. 如果当前调用点已经在多线程 runtime 内，官方建议的本地 offset 获取可能失败；
+/// 3. 这时宁可优雅回退到默认时间格式，也不能让日志初始化反过来阻断服务启动。
+fn 构建日志订阅器(filter: EnvFilter) -> Box<dyn tracing::Subscriber + Send + Sync> {
+    let builder = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(true)
         .with_thread_ids(true)
-        .with_level(true)
-        .finish();
+        .with_level(true);
 
-    // 进程级全局 subscriber：让任意层都天然可见日志输出。
-    let _ = tracing::subscriber::set_global_default(subscriber);
-    // panic 也必须回到同一条后端日志主链，避免终端只有 Rust 默认 stderr 而没有结构化证据。
-    安装panic日志钩子();
-    Ok(())
+    match OffsetTime::local_rfc_3339() {
+        Ok(timer) => Box::new(builder.with_timer(timer).finish()),
+        Err(_) => Box::new(builder.finish()),
+    }
 }
 
 /// 安装全局 panic hook，把不可恢复崩溃也收口进统一日志主链。

@@ -7,7 +7,7 @@ use serial_test::serial;
 use std::env;
 use std::io;
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex, Once, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout, Duration};
@@ -337,8 +337,7 @@ async fn bootstrap接口会返回稳定花名快照() {
 #[tokio::test]
 #[serial]
 async fn http冷路径成功会输出accepted与succeeded日志() {
-    let buffer = 安装集成测试日志采集器();
-    清空日志缓冲(&buffer);
+    let (buffer, _guard) = 创建集成测试日志采集上下文();
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
@@ -384,8 +383,7 @@ async fn http冷路径成功会输出accepted与succeeded日志() {
 #[tokio::test]
 #[serial]
 async fn http冷路径拒绝会输出rejected日志与error_code() {
-    let buffer = 安装集成测试日志采集器();
-    清空日志缓冲(&buffer);
+    let (buffer, _guard) = 创建集成测试日志采集上下文();
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
@@ -541,30 +539,16 @@ async fn send_json(
     }
 }
 
-static 集成测试日志初始化: Once = Once::new();
-static 集成测试日志缓冲: OnceLock<Arc<Mutex<Vec<u8>>>> = OnceLock::new();
-
-fn 安装集成测试日志采集器() -> Arc<Mutex<Vec<u8>>> {
-    let buffer = 集成测试日志缓冲
-        .get_or_init(|| Arc::new(Mutex::new(Vec::new())))
-        .clone();
-    let writer_buffer = buffer.clone();
-    集成测试日志初始化.call_once(|| {
-        let subscriber = tracing_subscriber::fmt()
-            .with_ansi(false)
-            .without_time()
-            .with_writer(共享写入器(writer_buffer))
-            .with_target(false)
-            .finish();
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("集成测试进程内应能安装全局 subscriber");
-        koko::assembly::安装panic日志钩子();
-    });
-    buffer
-}
-
-fn 清空日志缓冲(buffer: &Arc<Mutex<Vec<u8>>>) {
-    buffer.lock().expect("lock").clear();
+fn 创建集成测试日志采集上下文() -> (Arc<Mutex<Vec<u8>>>, tracing::dispatcher::DefaultGuard) {
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .without_time()
+        .with_writer(共享写入器(buffer.clone()))
+        .with_target(false)
+        .finish();
+    let guard = tracing::subscriber::set_default(subscriber);
+    (buffer, guard)
 }
 
 fn 读取日志缓冲(buffer: &Arc<Mutex<Vec<u8>>>) -> String {
