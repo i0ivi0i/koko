@@ -2,11 +2,12 @@ import { css, html, LitElement } from "lit";
 import type { 房间快照, 消息事件 } from "./契约.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
-import { 派生消息展示项 } from "./视图.js";
+import { 派生聊天列表展示项 } from "./视图.js";
 import type { Socket } from "socket.io-client";
 
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
 const 当前房间存储键 = "koko_current_room_id";
+const 历史分页顶部节流毫秒 = 180;
 
 type 控制面结果 = {
   kind?: string;
@@ -98,6 +99,24 @@ export class 聊天壳 extends LitElement {
 
     .message-row.other {
       justify-content: flex-start;
+    }
+
+    .unread-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #b45309;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .unread-divider::before,
+    .unread-divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: #fdba74;
     }
 
     .message-bubble {
@@ -215,10 +234,12 @@ export class 聊天壳 extends LitElement {
         messages: this.reconcileMessages([...snapshot.snapshot_messages, ...delta.events]),
         pending: false,
         historyLoading: false,
+        historyLoadThrottleUntil: 0,
         historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: "",
       });
+      this.scheduleInitialUnreadSettle();
       this.subscribeRoom(latestEventPosition);
     } catch (error) {
       this.handleRecoveryFailure(roomId, error, true);
@@ -261,6 +282,8 @@ export class 聊天壳 extends LitElement {
       return;
     }
 
+    const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
+    const beforeHeight = scrollContainer?.scrollHeight ?? 0;
     const oldestMessage = this.chatState.messages[0];
     if (!oldestMessage) {
       return;
@@ -288,6 +311,12 @@ export class 聊天壳 extends LitElement {
         hasMoreBefore: page.messages.length > 0,
         historyErrorCode: "",
       });
+      if (page.messages.length > 0 && scrollContainer) {
+        // 历史页是往列表顶部前插的；补偿前后 scrollHeight 差值，才能守住用户当前视口。
+        await this.updateComplete;
+        const afterHeight = scrollContainer.scrollHeight;
+        scrollContainer.scrollTop += afterHeight - beforeHeight;
+      }
     } catch (error) {
       this.updateChat({
         historyLoading: false,
@@ -368,6 +397,7 @@ export class 聊天壳 extends LitElement {
         messages: [],
         pending: false,
         historyLoading: false,
+        historyLoadThrottleUntil: 0,
         historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: failure.code ?? "",
@@ -431,6 +461,7 @@ export class 聊天壳 extends LitElement {
         messages: [],
         pending: false,
         historyLoading: false,
+        historyLoadThrottleUntil: 0,
         historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: control.code ?? "",
@@ -518,10 +549,43 @@ export class 聊天壳 extends LitElement {
       messages: this.reconcileMessages(snapshot.snapshot_messages),
       pending: false,
       historyLoading: false,
+      historyLoadThrottleUntil: 0,
       historyErrorCode: "",
       recoveryState: "idle",
       lastRecoveryErrorCode: "",
     });
+    this.scheduleInitialUnreadSettle();
+  }
+
+  /**
+   * 首屏未读定位和历史前插补偿是两套完全不同的逻辑：
+   * - 这里仅处理“刚恢复房间时，把视口落到第一条未读附近”；
+   * - 不推进阅读真相，也不做历史分页补偿。
+   */
+  private scheduleInitialUnreadSettle(): void {
+    queueMicrotask(() => {
+      void this.settleInitialUnreadAnchor();
+    });
+  }
+
+  private async settleInitialUnreadAnchor(): Promise<void> {
+    if (this.chatState.initialUnreadSettled) {
+      return;
+    }
+    await this.updateComplete;
+    if (this.chatState.initialUnreadSettled) {
+      return;
+    }
+    const firstUnreadEventPosition = this.chatState.firstUnreadEventPosition;
+    if (firstUnreadEventPosition === null) {
+      this.updateChat({ initialUnreadSettled: true });
+      return;
+    }
+    const target = this.shadowRoot?.querySelector(
+      `[data-event-position="${firstUnreadEventPosition}"]`
+    ) as HTMLElement | null;
+    target?.scrollIntoView?.({ block: "center" });
+    this.updateChat({ initialUnreadSettled: true });
   }
 
   private ensureRealtimeSocket(sessionId: string): void {
@@ -550,6 +614,24 @@ export class 聊天壳 extends LitElement {
       room_id: this.chatState.roomId,
       from,
     });
+  }
+
+  /**
+   * 顶部历史分页要防止“已经在顶端时的连续回弹”打出重复请求。
+   * 因此这里先做节流门禁，再进入真正的历史加载逻辑。
+   */
+  private maybeLoadOlderHistory(scrollContainer: HTMLElement): void {
+    if (scrollContainer.scrollTop > 0) {
+      return;
+    }
+    const now = Date.now();
+    if (now < this.chatState.historyLoadThrottleUntil) {
+      return;
+    }
+    this.updateChat({
+      historyLoadThrottleUntil: now + 历史分页顶部节流毫秒,
+    });
+    void this.loadOlderHistory();
   }
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
@@ -731,16 +813,28 @@ export class 聊天壳 extends LitElement {
           class="message-scroll"
           @scroll=${(event: Event) => {
             const target = event.currentTarget as HTMLElement;
-            if (target.scrollTop <= 0) {
-              void this.loadOlderHistory();
-            }
+            this.maybeLoadOlderHistory(target);
           }}
         >
           <ul id="messageList" class="message-list">
-            ${this.chatState.messages.map((message) => {
-              const item = 派生消息展示项(message, this.chatState.sessionId);
+            ${派生聊天列表展示项(
+              this.chatState.messages,
+              this.chatState.sessionId,
+              this.chatState.firstUnreadEventPosition
+            ).map((item) => {
+              if (item.kind === "unread-divider") {
+                return html`
+                  <li id="unreadDivider" class="unread-divider" data-kind="unread-divider">
+                    ${item.label}
+                  </li>
+                `;
+              }
               return html`
-                <li class="message-row ${item.owner}" data-owner=${item.owner}>
+                <li
+                  class="message-row ${item.owner}"
+                  data-owner=${item.owner}
+                  data-event-position=${item.eventPosition}
+                >
                   <article class="message-bubble">
                     ${item.showAlias
                       ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
