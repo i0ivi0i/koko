@@ -82,6 +82,12 @@ export class 聊天壳 extends LitElement {
       list-style: none;
     }
 
+    .message-scroll {
+      max-height: 420px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
     .message-row {
       display: flex;
     }
@@ -146,12 +152,12 @@ export class 聊天壳 extends LitElement {
     const roomCode = this.chatState.roomCodeInput.trim();
     if (!roomCode) return;
     try {
-      const room = await this.withSessionRefreshOnInvalid((sessionId) =>
+      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.joinOrCreateRoom(sessionId, roomCode)
       );
-      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
-        this.transport.loadRoomSnapshot(room.room_id, sessionId)
-      );
+      // join-or-create 现在已经返回权威房间快照：
+      // 这里直接消费 recent_messages，避免进房后再额外打一枪 snapshot，
+      // 否则不仅浪费一次请求，还会人为拉大“进房成功”和“首屏可读”之间的竞态窗口。
       this.enterRoomFromSnapshot(snapshot);
       this.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
@@ -203,6 +209,9 @@ export class 聊天壳 extends LitElement {
         // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
         messages: this.reconcileMessages([...snapshot.recent_messages, ...delta.events]),
         pending: false,
+        historyLoading: false,
+        historyReachedStart: false,
+        historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: "",
       });
@@ -235,6 +244,50 @@ export class 聊天壳 extends LitElement {
   private updateChat(patch: Partial<聊天状态>): void {
     this.chatState = { ...this.chatState, ...patch };
     this.requestUpdate();
+  }
+
+  /**
+   * 历史分页只负责“向更早方向补页”：
+   * - 以当前最老消息的 event_position 作为锚点；
+   * - 只往顶部追加，不动已经可见的消息；
+   * - 与 snapshot / realtime 共用同一套合流逻辑，避免重复和乱序。
+   */
+  private async loadOlderHistory(): Promise<void> {
+    if (!this.chatState.roomId || this.chatState.historyLoading || this.chatState.historyReachedStart) {
+      return;
+    }
+
+    const oldestMessage = this.chatState.messages[0];
+    if (!oldestMessage) {
+      return;
+    }
+
+    this.updateChat({
+      historyLoading: true,
+      historyErrorCode: "",
+    });
+
+    try {
+      const page = await this.withSessionRefreshOnInvalid((sessionId) =>
+        this.transport.loadRoomHistory(
+          this.chatState.roomId,
+          sessionId,
+          oldestMessage.event_position,
+          55
+        )
+      );
+      this.updateChat({
+        messages: this.reconcileMessages([...page.messages, ...this.chatState.messages]),
+        historyLoading: false,
+        historyReachedStart: page.messages.length === 0,
+        historyErrorCode: "",
+      });
+    } catch (error) {
+      this.updateChat({
+        historyLoading: false,
+        historyErrorCode: this.asRecoveryFailure(error).code ?? "system_error",
+      });
+    }
   }
 
   private applyBootstrapIdentity(
@@ -303,6 +356,9 @@ export class 聊天壳 extends LitElement {
         latestEventPosition: 0,
         messages: [],
         pending: false,
+        historyLoading: false,
+        historyReachedStart: false,
+        historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: failure.code ?? "",
       });
@@ -312,6 +368,7 @@ export class 聊天壳 extends LitElement {
     this.updateChat({
       roomId: keepRoomVisible ? roomId : "",
       pending: false,
+      historyLoading: false,
       recoveryState: "retryable_failure",
       lastRecoveryErrorCode: failure.code ?? "system_error",
     });
@@ -358,6 +415,9 @@ export class 聊天壳 extends LitElement {
         latestEventPosition: 0,
         messages: [],
         pending: false,
+        historyLoading: false,
+        historyReachedStart: false,
+        historyErrorCode: "",
         recoveryState: "idle",
         lastRecoveryErrorCode: control.code ?? "",
       });
@@ -366,6 +426,7 @@ export class 聊天壳 extends LitElement {
 
     this.updateChat({
       pending: false,
+      historyLoading: false,
       recoveryState: "retryable_failure",
       lastRecoveryErrorCode: control.code ?? "system_error",
     });
@@ -441,6 +502,9 @@ export class 聊天壳 extends LitElement {
       // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
       messages: this.reconcileMessages(snapshot.recent_messages),
       pending: false,
+      historyLoading: false,
+      historyReachedStart: false,
+      historyErrorCode: "",
       recoveryState: "idle",
       lastRecoveryErrorCode: "",
     });
@@ -499,26 +563,65 @@ export class 聊天壳 extends LitElement {
   }
 
   private reconcileMessages(messages: 消息事件[]): 消息事件[] {
-    const byClientMessageId = new Map<string, number>();
-    const out: 消息事件[] = [];
+    const sorted = [...messages].sort((left, right) => left.event_position - right.event_position);
+    const byClientMessageId = new Map<string, 消息事件>();
+    const authoritativeByMessageId = new Map<string, 消息事件>();
 
-    for (const message of messages) {
-      const existingIndex = byClientMessageId.get(message.client_message_id);
-      if (existingIndex === undefined) {
-        byClientMessageId.set(message.client_message_id, out.length);
+    // 第一层按 client_message_id 收敛，解决“本地乐观态 later 被权威消息替换”的情况。
+    for (const message of sorted) {
+      const existing = byClientMessageId.get(message.client_message_id);
+      byClientMessageId.set(
+        message.client_message_id,
+        existing ? this.pickPreferredMessage(existing, message) : message
+      );
+    }
+
+    // 第二层按真正的 message_id 收敛，解决 snapshot / history / realtime
+    // 三条路径把同一条权威消息重复送进壳层的问题。
+    for (const message of byClientMessageId.values()) {
+      if (message.message_id.startsWith("local-")) {
+        continue;
+      }
+      const existing = authoritativeByMessageId.get(message.message_id);
+      authoritativeByMessageId.set(
+        message.message_id,
+        existing ? this.pickPreferredMessage(existing, message) : message
+      );
+    }
+
+    const out: 消息事件[] = [];
+    const seenMessageIds = new Set<string>();
+    for (const message of byClientMessageId.values()) {
+      if (message.message_id.startsWith("local-")) {
         out.push(message);
         continue;
       }
-
-      const existing = out[existingIndex]!;
-      const existingIsOptimistic = existing.message_id.startsWith("local-");
-      const currentIsOptimistic = message.message_id.startsWith("local-");
-      if (existingIsOptimistic && !currentIsOptimistic) {
-        out[existingIndex] = message;
+      if (seenMessageIds.has(message.message_id)) {
+        continue;
       }
+      seenMessageIds.add(message.message_id);
+      out.push(authoritativeByMessageId.get(message.message_id)!);
     }
 
     return out.sort((left, right) => left.event_position - right.event_position);
+  }
+
+  /**
+   * 合流时优先保留更可信的那份：
+   * - 权威消息覆盖本地乐观态；
+   * - 事件位置更靠后的版本覆盖更早的副本；
+   * - 若完全同位，则取新到的 candidate，保证最后一份统一写回。
+   */
+  private pickPreferredMessage(current: 消息事件, candidate: 消息事件): 消息事件 {
+    const currentIsOptimistic = current.message_id.startsWith("local-");
+    const candidateIsOptimistic = candidate.message_id.startsWith("local-");
+    if (currentIsOptimistic !== candidateIsOptimistic) {
+      return currentIsOptimistic ? candidate : current;
+    }
+    if (current.event_position !== candidate.event_position) {
+      return current.event_position > candidate.event_position ? current : candidate;
+    }
+    return candidate;
   }
 
   private recoveryHintText(): string {
@@ -529,6 +632,16 @@ export class 聊天壳 extends LitElement {
       return "";
     }
     return this.chatState.roomId ? "实时连接暂不可用，可稍后重试" : "恢复失败，可稍后重试";
+  }
+
+  private historyHintText(): string {
+    if (this.chatState.historyLoading) {
+      return "正在加载更早消息";
+    }
+    if (this.chatState.historyErrorCode) {
+      return "更早消息加载失败，可继续上滑重试";
+    }
+    return "";
   }
 
   private isInvalidSessionError(error: unknown): boolean {
@@ -553,6 +666,7 @@ export class 聊天壳 extends LitElement {
 
   override render() {
     const recoveryHint = this.recoveryHintText();
+    const historyHint = this.historyHintText();
     if (!this.chatState.roomId) {
       return html`
         <section id="joinView" class="panel">
@@ -579,6 +693,7 @@ export class 聊天壳 extends LitElement {
         <div id="alias" class="meta">alias: ${this.chatState.displayAlias || "-"}</div>
         <div class="meta">room: ${this.chatState.roomId || "-"}</div>
         ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
+        ${historyHint ? html`<div id="historyHint" class="hint">${historyHint}</div>` : null}
         <div class="row">
           <input
             id="msgInput"
@@ -597,21 +712,32 @@ export class 聊天壳 extends LitElement {
             发送
           </button>
         </div>
-        <ul id="messageList" class="message-list">
-          ${this.chatState.messages.map((message) => {
-            const item = 派生消息展示项(message, this.chatState.sessionId);
-            return html`
-              <li class="message-row ${item.owner}" data-owner=${item.owner}>
-                <article class="message-bubble">
-                  ${item.showAlias
-                    ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
-                    : null}
-                  <div class="message-body">${item.body}</div>
-                </article>
-              </li>
-            `;
-          })}
-        </ul>
+        <div
+          id="messageScroll"
+          class="message-scroll"
+          @scroll=${(event: Event) => {
+            const target = event.currentTarget as HTMLElement;
+            if (target.scrollTop <= 0) {
+              void this.loadOlderHistory();
+            }
+          }}
+        >
+          <ul id="messageList" class="message-list">
+            ${this.chatState.messages.map((message) => {
+              const item = 派生消息展示项(message, this.chatState.sessionId);
+              return html`
+                <li class="message-row ${item.owner}" data-owner=${item.owner}>
+                  <article class="message-bubble">
+                    ${item.showAlias
+                      ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
+                      : null}
+                    <div class="message-body">${item.body}</div>
+                  </article>
+                </li>
+              `;
+            })}
+          </ul>
+        </div>
       </section>
     `;
   }

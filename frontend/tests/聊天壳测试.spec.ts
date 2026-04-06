@@ -67,7 +67,7 @@ class 假Socket {
         this.fire("control_result", {
           kind: "subscribed",
           room_id: payload.room_id,
-          latest_event_position: 0,
+          latest_event_position: Number(payload.from ?? 0),
         });
       }
     }
@@ -103,10 +103,17 @@ class 假传输 implements 前端传输端口 {
   readonly socket = new 假Socket();
   loadRoomSnapshotCalls = 0;
   loadRoomEventsCalls = 0;
+  loadRoomHistoryCalls = 0;
   bootstrapTokens: string[] = [];
   joinCalls: Array<{ sessionId: string; roomCode: string }> = [];
   loadRoomSnapshotArgs: Array<{ roomId: string; sessionId: string }> = [];
   loadRoomEventsArgs: Array<{ roomId: string; sessionId: string; from: number }> = [];
+  loadRoomHistoryArgs: Array<{
+    roomId: string;
+    sessionId: string;
+    beforeEventPosition: number;
+    limit: number;
+  }> = [];
   socketSessionIds: string[] = [];
   bootstrapResult: 匿名身份引导结果 = {
     anonymous_identity_id: "a-test",
@@ -114,6 +121,7 @@ class 假传输 implements 前端传输端口 {
     session_id: "s-test",
   };
   bootstrapQueue: Array<匿名身份引导结果 | Error> = [];
+  joinQueue: Array<房间快照 | Error> = [];
   snapshotQueue: Array<房间快照 | Error> = [];
   eventsQueue: Array<增量事件快照 | Error> = [];
   historyQueue: Array<房间历史页 | Error> = [];
@@ -132,7 +140,10 @@ class 假传输 implements 前端传输端口 {
   async joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照> {
     this.joinCalls.push({ sessionId, roomCode });
     this.joinRoomId = roomCode === "ROOM02" ? "r-room-2" : "r-test";
-    return { room_id: this.joinRoomId, latest_event_position: 0, recent_messages: [] };
+    const queued = this.joinQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
+    return { room_id: this.joinRoomId, latest_event_position: 1, recent_messages: [] };
   }
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
     this.loadRoomSnapshotCalls += 1;
@@ -170,11 +181,18 @@ class 假传输 implements 前端传输端口 {
       ],
     };
   }
-  async loadRoomHistory(): Promise<房间历史页> {
+  async loadRoomHistory(
+    roomId: string,
+    sessionId: string,
+    beforeEventPosition: number,
+    limit: number
+  ): Promise<房间历史页> {
+    this.loadRoomHistoryCalls += 1;
+    this.loadRoomHistoryArgs.push({ roomId, sessionId, beforeEventPosition, limit });
     const queued = this.historyQueue.shift();
     if (queued instanceof Error) throw queued;
     if (queued) return queued;
-    return { room_id: "r-test", messages: [] };
+    return { room_id: roomId, messages: [] };
   }
   async loadAdminOverview(): Promise<后台概览> {
     return { room_count: 1, message_count: 1 };
@@ -315,7 +333,7 @@ describe("聊天壳", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    expect(transport.loadRoomSnapshotCalls).toBe(2);
+    expect(transport.loadRoomSnapshotCalls).toBe(1);
     expect(transport.loadRoomEventsCalls).toBe(1);
     expect(transport.loadRoomEventsArgs).toEqual([
       { roomId: "r-test", sessionId: "s-test", from: 1 },
@@ -409,7 +427,7 @@ describe("聊天壳", () => {
 
   it("首次进入已有历史房间时会直接渲染 recent_messages", async () => {
     const transport = new 假传输();
-    transport.snapshotQueue = [
+    transport.joinQueue = [
       {
         room_id: "r-test",
         latest_event_position: 2,
@@ -452,6 +470,53 @@ describe("聊天壳", () => {
     const list = el.shadowRoot!.querySelector("#messageList")!;
     expect(list.textContent).toContain("历史消息-1");
     expect(list.textContent).toContain("历史消息-2");
+    el.remove();
+  });
+
+  it("进房会直接消费 joinOrCreateRoom 返回的 recent_messages，不再二次拉 snapshot", async () => {
+    const transport = new 假传输();
+    transport.joinRoomId = "r-join";
+    vi.spyOn(transport, "joinOrCreateRoom").mockResolvedValue({
+      room_id: "r-join",
+      latest_event_position: 2,
+      recent_messages: [
+        {
+          type: "message_created",
+          room_id: "r-join",
+          message_id: "m-join-1",
+          client_message_id: "c-join-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "进房基线-1",
+          event_position: 1,
+        },
+        {
+          type: "message_created",
+          room_id: "r-join",
+          message_id: "m-join-2",
+          client_message_id: "c-join-2",
+          sender_session_id: "s-test",
+          sender_display_alias: "暴躁的企鹅",
+          body: "进房基线-2",
+          event_position: 2,
+        },
+      ],
+    });
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(transport.loadRoomSnapshotCalls).toBe(0);
+    expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("进房基线-1");
+    expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("进房基线-2");
     el.remove();
   });
 
@@ -576,6 +641,272 @@ describe("聊天壳", () => {
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBe("r-retry");
     expect(el.shadowRoot!.textContent).toContain("恢复失败");
+    el.remove();
+  });
+
+  it("滚动到顶部时会以当前最老消息的 event_position 触发 history 查询", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      {
+        room_id: "r-test",
+        latest_event_position: 3,
+        recent_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "历史消息-2",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "历史消息-3",
+            event_position: 3,
+          },
+        ],
+      } as 房间快照,
+    ];
+    transport.historyQueue = [
+      {
+        room_id: "r-test",
+        messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "历史消息-1",
+            event_position: 1,
+          },
+        ],
+      },
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(transport.loadRoomHistoryArgs).toEqual([
+      { roomId: "r-test", sessionId: "s-test", beforeEventPosition: 2, limit: 55 },
+    ]);
+    expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("历史消息-1");
+    el.remove();
+  });
+
+  it("history 失败不会清空当前消息列表", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      {
+        room_id: "r-test",
+        latest_event_position: 2,
+        recent_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "保留消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "保留消息-2",
+            event_position: 2,
+          },
+        ],
+      } as 房间快照,
+    ];
+    transport.historyQueue = [创建传输错误(503, "system_error", "history busy")];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("保留消息");
+    expect((el as unknown as { chatState: { historyErrorCode: string } }).chatState.historyErrorCode).toBe(
+      "system_error"
+    );
+    el.remove();
+  });
+
+  it("history 返回空数组后会标记已到最早历史，重复上滑不会再次请求", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      {
+        room_id: "r-test",
+        latest_event_position: 1,
+        recent_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "最早消息",
+            event_position: 1,
+          },
+        ],
+      } as 房间快照,
+    ];
+    transport.historyQueue = [{ room_id: "r-test", messages: [] }];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+
+    expect(transport.loadRoomHistoryCalls).toBe(1);
+    expect(
+      (el as unknown as { chatState: { historyReachedStart: boolean } }).chatState.historyReachedStart
+    ).toBe(true);
+    el.remove();
+  });
+
+  it("history 页和 realtime 新消息同时并入时不会重复 message_id", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      {
+        room_id: "r-test",
+        latest_event_position: 2,
+        recent_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "现在消息",
+            event_position: 2,
+          },
+        ],
+      } as 房间快照,
+    ];
+    transport.historyQueue = [
+      {
+        room_id: "r-test",
+        messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "更早消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2-dup",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "现在消息",
+            event_position: 2,
+          },
+        ],
+      },
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    transport.socket.trigger("room_event", {
+      type: "message_created",
+      room_id: "r-test",
+      message_id: "m-3",
+      client_message_id: "c-3",
+      sender_session_id: "s-other",
+      sender_display_alias: "冷静的水獭",
+      body: "新消息",
+      event_position: 3,
+    });
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const messages = Array.from(el.shadowRoot!.querySelectorAll(".message-body")).map(
+      (node) => node.textContent
+    );
+    expect(messages).toEqual(["更早消息", "现在消息", "新消息"]);
     el.remove();
   });
 
