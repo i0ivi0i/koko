@@ -623,7 +623,11 @@ async fn handle_realtime_subscribe(
                 "from": from,
                 "latest_event_position": 最新事件位置
             });
-            let events_json = events_to_json(事件);
+            let events_json = serde_json::json!({
+                "room_id": 房间标识,
+                "latest_event_position": 最新事件位置,
+                "events": events_to_json(事件)
+            });
             let _ = socket.emit("control_result", &control);
             let _ = socket.emit("room_events", &events_json);
         }

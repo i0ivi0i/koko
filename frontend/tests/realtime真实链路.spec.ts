@@ -102,6 +102,115 @@ describe("realtime真实链路", () => {
     },
     60000
   );
+
+  it(
+    "跨房间广播严格隔离，断线重连后只补发缺失事件",
+    async () => {
+      const port = await allocatePort();
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const child = startBackend(port);
+      backendChildren.push(child);
+      await waitForServer(baseUrl);
+
+      const a = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        display_name: "resume-a",
+      });
+      const b = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        display_name: "resume-b",
+      });
+      const c = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        display_name: "room2-c",
+      });
+      const room1 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: a.session_id,
+        room_code: "SOCKET11",
+      });
+      await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: b.session_id,
+        room_code: "SOCKET11",
+      });
+      const room2 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: c.session_id,
+        room_code: "SOCKET22",
+      });
+
+      const socketA = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: a.session_id },
+        reconnection: false,
+      });
+      const socketB = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: b.session_id },
+        reconnection: false,
+      });
+      const socketC = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: c.session_id },
+        reconnection: false,
+      });
+      await Promise.all([once(socketA, "connect"), once(socketB, "connect"), once(socketC, "connect")]);
+
+      const subA = once<{ kind: string }>(socketA, "control_result");
+      const subB = once<{ kind: string }>(socketB, "control_result");
+      const subC = once<{ kind: string }>(socketC, "control_result");
+      socketA.emit("subscribe_room_stream", { room_id: room1.room_id, from: 0 });
+      socketB.emit("subscribe_room_stream", { room_id: room1.room_id, from: 0 });
+      socketC.emit("subscribe_room_stream", { room_id: room2.room_id, from: 0 });
+      await Promise.all([subA, subB, subC]);
+
+      const firstA = once<房间事件>(socketA, "room_event");
+      const firstB = once<房间事件>(socketB, "room_event");
+      socketA.emit("send_text_message", {
+        room_id: room1.room_id,
+        client_message_id: "c-resume-1",
+        text: "first message",
+      });
+      const [eventA1, eventB1] = await Promise.all([firstA, firstB]);
+      await expectNoEvent(socketC, "room_event");
+
+      socketB.disconnect();
+
+      const secondA = once<房间事件>(socketA, "room_event");
+      socketA.emit("send_text_message", {
+        room_id: room1.room_id,
+        client_message_id: "c-resume-2",
+        text: "second message",
+      });
+      const eventA2 = await secondA;
+      await expectNoEvent(socketC, "room_event");
+
+      const socketB2 = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: b.session_id },
+        reconnection: false,
+      });
+      await once(socketB2, "connect");
+
+      const resumed = once<{ kind: string }>(socketB2, "control_result");
+      const replay = once<{
+        room_id: string;
+        latest_event_position: number;
+        events: 房间事件[];
+      }>(socketB2, "room_events");
+      socketB2.emit("subscribe_room_stream", {
+        room_id: room1.room_id,
+        from: eventB1.event_position,
+      });
+      expect((await resumed).kind).toBe("subscribed");
+      const replayed = await replay;
+
+      expect(replayed.room_id).toBe(room1.room_id);
+      expect(replayed.latest_event_position).toBe(eventA2.event_position);
+      expect(replayed.events).toHaveLength(1);
+      expect(replayed.events[0]?.client_message_id).toBe("c-resume-2");
+
+      socketA.disconnect();
+      socketB2.disconnect();
+      socketC.disconnect();
+    },
+    60000
+  );
 });
 
 function startBackend(port: number): ChildProcess {
@@ -169,5 +278,20 @@ async function once<T>(socket: Socket, event: string): Promise<T> {
       clearTimeout(timer);
       resolve(payload);
     });
+  });
+}
+
+async function expectNoEvent(socket: Socket, event: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off(event, onEvent);
+      resolve();
+    }, 800);
+    const onEvent = () => {
+      clearTimeout(timer);
+      socket.off(event, onEvent);
+      reject(new Error(`不应收到事件: ${event}`));
+    };
+    socket.on(event, onEvent);
   });
 }
