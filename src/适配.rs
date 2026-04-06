@@ -1,6 +1,7 @@
 use std::{future::Future, io};
 
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
+use uuid::Uuid;
 
 use crate::{contract, usecase::仓储端口};
 
@@ -14,6 +15,54 @@ pub struct Pg仓储 {
     handle: tokio::runtime::Handle,
     owned_runtime: Option<tokio::runtime::Runtime>,
     pool: PgPool,
+}
+
+/// 生成稳定格式的匿名内部身份标识。
+/// 约束：这里只负责标识格式，不把展示语义塞进主键。
+fn 生成匿名身份标识() -> String {
+    let raw = Uuid::new_v4().simple().to_string();
+    format!("a-{}", &raw[..12])
+}
+
+/// 生成稳定格式的会话标识。
+/// 约束：会话是运行锚点，不承载展示语义。
+fn 生成会话标识() -> String {
+    let raw = Uuid::new_v4().simple().to_string();
+    format!("s-{}", &raw[..12])
+}
+
+/// 当前 MVP 的花名生成器。
+/// 设计取舍：
+/// 1. 这不是通用基础设施，而是产品展示语义，放在这里足够薄；
+/// 2. 花名首次创建后会持久化，因此这里无需做复杂可重放算法；
+/// 3. 花名只是展示面，未来允许独立修改。
+fn 生成展示花名() -> String {
+    const 前缀: [&str; 8] = [
+        "暴躁的",
+        "爱玩枪的",
+        "火锅味",
+        "潜水的",
+        "早起的",
+        "叛逆的",
+        "失眠的",
+        "开黑的",
+    ];
+    const 后缀: [&str; 8] = [
+        "企鹅",
+        "小鸡",
+        "海豹",
+        "柴犬",
+        "狸猫",
+        "河马",
+        "海鸥",
+        "松鼠",
+    ];
+
+    let seed = Uuid::new_v4();
+    let bytes = seed.as_bytes();
+    let left = 前缀[(bytes[0] as usize) % 前缀.len()];
+    let right = 后缀[(bytes[1] as usize) % 后缀.len()];
+    format!("{left}{right}")
 }
 
 impl Pg仓储 {
@@ -231,6 +280,80 @@ impl Pg仓储 {
 }
 
 impl 仓储端口 for Pg仓储 {
+    /// 设备级匿名身份引导：
+    /// - 同一设备入口凭证恢复同一个匿名内部身份
+    /// - 同一设备入口凭证恢复同一个稳定会话
+    /// - 花名首次生成后持久化，后续直接恢复
+    fn 引导匿名身份(
+        &mut self,
+        设备匿名凭证: &str,
+    ) -> Result<contract::匿名身份引导结果, contract::错误码> {
+        self.在运行时执行(async {
+            let existing = sqlx::query(
+                "SELECT ai.anonymous_identity_id, ai.display_alias, s.session_id \
+                 FROM sessions s \
+                 JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+                 WHERE s.device_anonymous_token = $1",
+            )
+            .bind(设备匿名凭证)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+
+            if let Some(row) = existing {
+                return Ok(contract::匿名身份引导结果 {
+                    匿名身份标识: row.get("anonymous_identity_id"),
+                    展示花名: row.get("display_alias"),
+                    会话标识: row.get("session_id"),
+                });
+            }
+
+            let mut tx = self
+                .pool
+                .begin()
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+
+            let anonymous_identity_id = 生成匿名身份标识();
+            let display_alias = 生成展示花名();
+            let session_id = 生成会话标识();
+
+            let identity_row = sqlx::query(
+                "INSERT INTO anonymous_identities (anonymous_identity_id, display_alias) \
+                 VALUES ($1, $2) \
+                 RETURNING id",
+            )
+            .bind(&anonymous_identity_id)
+            .bind(&display_alias)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+            let identity_db_id: i64 = identity_row.get("id");
+
+            sqlx::query(
+                "INSERT INTO sessions (session_id, display_name, anonymous_identity_id, device_anonymous_token) \
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(&session_id)
+            .bind(&display_alias)
+            .bind(identity_db_id)
+            .bind(设备匿名凭证)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+
+            tx.commit()
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+
+            Ok(contract::匿名身份引导结果 {
+                匿名身份标识: anonymous_identity_id,
+                展示花名: display_alias,
+                会话标识: session_id,
+            })
+        })
+    }
+
     /// 创建匿名会话，并返回会话快照。
     fn 创建匿名会话(
         &mut self,

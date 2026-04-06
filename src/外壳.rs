@@ -123,8 +123,14 @@ fn 构建共享仓储(state: &应用状态) -> Pg仓储 {
 /// 引导会话请求体：壳层只提交展示名意图。
 #[derive(Deserialize)]
 struct BootstrapBody {
+    /// 新 MVP 的设备入口凭证。
+    /// 当前 Web 会把它持久化在本地；未来 iOS/Android/CLI 可各自换存储实现。
+    device_anonymous_token: Option<String>,
     /// 会话展示名（业务上允许匿名名，具体规则由后端决定）。
-    display_name: String,
+    ///
+    /// 兼容说明：
+    /// 这是旧 Web 壳仍在使用的过渡字段。等 Task 3 切到设备级匿名身份后应被淘汰。
+    display_name: Option<String>,
 }
 
 /// 统一错误响应体（跨 HTTP 接口稳定结构）。
@@ -217,8 +223,50 @@ async fn bootstrap_session(
     State(state): State<应用状态>,
     Json(body): Json<BootstrapBody>,
 ) -> impl IntoResponse {
+    if let Some(device_anonymous_token) = body.device_anonymous_token.clone() {
+        let state = state.clone();
+        let result = task::spawn_blocking(move || {
+            let mut repo = 构建共享仓储(&state);
+            usecase::引导匿名身份(&mut repo, &device_anonymous_token).map_err(map_domain_err_tuple)
+        })
+        .await;
+        let result = match result {
+            Ok(v) => v,
+            Err(err) => {
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("任务执行失败: {err}"),
+                )
+            }
+        };
+        return match result {
+            Ok(out) => {
+                let alias = out.展示花名.clone();
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "anonymous_identity_id": out.匿名身份标识,
+                        "display_alias": alias,
+                        // 兼容当前冷路径和 realtime 主链：继续返回 session_id。
+                        "session_id": out.会话标识,
+                        "display_name": out.展示花名,
+                    })),
+                )
+                .into_response()
+            }
+            Err(code) => tuple_err_to_resp(code),
+        };
+    }
+
     let state = state.clone();
-    let display_name = body.display_name.clone();
+    let Some(display_name) = body.display_name.clone() else {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 device_anonymous_token 或 display_name",
+        );
+    };
     let result = task::spawn_blocking(move || {
         // 统一在阻塞线程做仓储调用，避免在 async 主执行器里直接跑阻塞 IO。
         let mut repo = 构建共享仓储(&state);

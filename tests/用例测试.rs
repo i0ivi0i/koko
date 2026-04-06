@@ -61,14 +61,37 @@ impl io::Write for 缓冲写入器 {
 #[derive(Default)]
 struct 假仓储 {
     会话计数: usize,
+    匿名身份计数: usize,
     房间计数: usize,
     消息计数: usize,
     最新位置: i64,
     房间短码到标识: HashMap<String, String>,
     房间成员: HashMap<String, HashSet<String>>,
+    设备匿名身份: HashMap<String, koko::contract::匿名身份引导结果>,
 }
 
 impl koko::usecase::仓储端口 for 假仓储 {
+    /// 假实现：同一设备凭证恢复同一个匿名身份与稳定会话。
+    fn 引导匿名身份(
+        &mut self,
+        设备匿名凭证: &str,
+    ) -> Result<koko::contract::匿名身份引导结果, koko::contract::错误码> {
+        if let Some(existing) = self.设备匿名身份.get(设备匿名凭证) {
+            return Ok(existing.clone());
+        }
+
+        self.匿名身份计数 += 1;
+        self.会话计数 += 1;
+        let snapshot = koko::contract::匿名身份引导结果 {
+            匿名身份标识: format!("a-{}", self.匿名身份计数),
+            展示花名: format!("暴躁的企鹅-{}", self.匿名身份计数),
+            会话标识: format!("s-{}", self.会话计数),
+        };
+        self.设备匿名身份
+            .insert(设备匿名凭证.to_string(), snapshot.clone());
+        Ok(snapshot)
+    }
+
     /// 假实现：返回稳定会话快照，供用例层断言使用。
     fn 创建匿名会话(
         &mut self,
@@ -221,6 +244,40 @@ fn 未来改花名不应要求替换匿名内部身份() {
         }
         _ => panic!("应返回匿名身份快照"),
     }
+}
+
+#[test]
+fn 同一设备匿名凭证重复bootstrap会恢复同一个内部身份与花名() {
+    let mut repo = 假仓储::default();
+
+    let first = koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("首次 bootstrap 应成功");
+    let second =
+        koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("重复 bootstrap 应成功");
+
+    assert_eq!(
+        first.匿名身份标识, second.匿名身份标识,
+        "同一设备匿名凭证必须恢复同一个内部身份"
+    );
+    assert_eq!(
+        first.展示花名, second.展示花名,
+        "同一设备匿名凭证必须恢复同一个展示花名"
+    );
+    assert_eq!(
+        first.会话标识, second.会话标识,
+        "当前 MVP 下同一设备应恢复同一个稳定会话锚点"
+    );
+}
+
+#[test]
+fn 不同设备匿名凭证会拿到不同内部身份() {
+    let mut repo = 假仓储::default();
+
+    let first = koko::usecase::引导匿名身份(&mut repo, "device-token-a").expect("首次 bootstrap 应成功");
+    let second =
+        koko::usecase::引导匿名身份(&mut repo, "device-token-b").expect("第二个设备 bootstrap 应成功");
+
+    assert_ne!(first.匿名身份标识, second.匿名身份标识);
+    assert_ne!(first.会话标识, second.会话标识);
 }
 
 #[test]
