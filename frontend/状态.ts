@@ -7,7 +7,9 @@ export interface 聊天状态 {
   anonymousIdentityId: string;
   /** 当前展示给用户和其他成员看的花名。 */
   displayAlias: string;
+  /** 当前 bootstrap 返回的权威会话锚点。恢复流程只能使用这一份。 */
   sessionId: string;
+  /** 当前壳层记住的房间恢复锚点。它不是成员资格真相。 */
   roomId: string;
   roomCodeInput: string;
   messageInput: string;

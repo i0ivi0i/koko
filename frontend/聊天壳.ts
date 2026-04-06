@@ -6,6 +6,7 @@ import { 格式化消息 } from "./视图.js";
 import type { Socket } from "socket.io-client";
 
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
+const 当前房间存储键 = "koko_current_room_id";
 
 export class 聊天壳 extends LitElement {
   static override styles = css`
@@ -47,6 +48,7 @@ export class 聊天壳 extends LitElement {
       sessionId: identity.session_id,
     });
     this.ensureRealtimeSocket(identity.session_id);
+    await this.restoreCurrentRoomIfNeeded(identity.session_id);
   }
 
   private async joinRoom(): Promise<void> {
@@ -56,12 +58,24 @@ export class 聊天壳 extends LitElement {
       this.chatState.roomCodeInput.trim()
     );
     const snapshot = await this.transport.loadRoomSnapshot(room.room_id, this.chatState.sessionId);
-    this.updateChat({
-      roomId: room.room_id,
-      latestEventPosition: snapshot.latest_event_position,
-      messages: [],
-    });
+    this.enterRoomFromSnapshot(snapshot);
     this.subscribeRoom(0);
+  }
+
+  /**
+   * 启动恢复顺序必须固定：
+   * 1. 先 bootstrap 拿到当前权威 session；
+   * 2. 再读取壳层上次记住的 room_id；
+   * 3. 再用“本次 bootstrap 返回的 session”拉快照恢复。
+   *
+   * 这里故意不复用旧 session_id，也不把 room_id 当成员资格真相。
+   */
+  private async restoreCurrentRoomIfNeeded(sessionId: string): Promise<void> {
+    const roomId = this.readCurrentRoomId();
+    if (!roomId) return;
+    const snapshot = await this.transport.loadRoomSnapshot(roomId, sessionId);
+    this.enterRoomFromSnapshot(snapshot);
+    this.subscribeRoom(snapshot.latest_event_position);
   }
 
   // 当 realtime 锚点闭合不了时，退回 HTTP 基线重建，再回到统一事件流。
@@ -135,6 +149,41 @@ export class 聊天壳 extends LitElement {
       storage.setItem(设备匿名凭证存储键, generated);
     }
     return generated;
+  }
+
+  private readCurrentRoomId(): string {
+    const storage =
+      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
+    const stored =
+      storage && typeof storage.getItem === "function"
+        ? storage.getItem(当前房间存储键)
+        : null;
+    return stored?.trim() ? stored : "";
+  }
+
+  /**
+   * 只有成功拿到房间快照后才写入 room 恢复锚点。
+   * 这样刷新页恢复的是“上次成功进入过的房间”，而不是半路失败的意图输入。
+   */
+  private writeCurrentRoomId(roomId: string): void {
+    const storage =
+      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
+    if (storage && typeof storage.setItem === "function") {
+      storage.setItem(当前房间存储键, roomId);
+    }
+  }
+
+  /**
+   * 房间基线一旦成立，就统一从这里更新壳层状态与本地恢复锚点。
+   * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
+   */
+  private enterRoomFromSnapshot(snapshot: { room_id: string; latest_event_position: number }): void {
+    this.writeCurrentRoomId(snapshot.room_id);
+    this.updateChat({
+      roomId: snapshot.room_id,
+      latestEventPosition: snapshot.latest_event_position,
+      messages: [],
+    });
   }
 
   private ensureRealtimeSocket(sessionId: string): void {
