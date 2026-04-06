@@ -5,6 +5,8 @@ import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 格式化消息 } from "./视图.js";
 import type { Socket } from "socket.io-client";
 
+const 设备匿名凭证存储键 = "koko_device_anonymous_token";
+
 export class 聊天壳 extends LitElement {
   static override styles = css`
     :host { display: block; padding: 16px; font-family: "Microsoft YaHei", sans-serif; }
@@ -36,9 +38,15 @@ export class 聊天壳 extends LitElement {
   }
 
   private async bootstrap(): Promise<void> {
-    const session = await this.transport.bootstrapSession("web-user");
-    this.updateChat({ sessionId: session.session_id });
-    this.ensureRealtimeSocket(session.session_id);
+    const deviceAnonymousToken = this.readOrCreateDeviceAnonymousToken();
+    const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
+    this.updateChat({
+      deviceAnonymousToken,
+      anonymousIdentityId: identity.anonymous_identity_id,
+      displayAlias: identity.display_alias,
+      sessionId: identity.session_id,
+    });
+    this.ensureRealtimeSocket(identity.session_id);
   }
 
   private async joinRoom(): Promise<void> {
@@ -100,6 +108,33 @@ export class 聊天壳 extends LitElement {
   private updateChat(patch: Partial<聊天状态>): void {
     this.chatState = { ...this.chatState, ...patch };
     this.requestUpdate();
+  }
+
+  /**
+   * 设备入口凭证只属于壳层：
+   * - Web 当前用 localStorage 持久化；
+   * - 未来移动端和 CLI 可以换成各自的本地存储；
+   * - 业务核心只消费这个凭证换回后端权威身份。
+   */
+  private readOrCreateDeviceAnonymousToken(): string {
+    const storage =
+      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
+    const stored =
+      storage && typeof storage.getItem === "function"
+        ? storage.getItem(设备匿名凭证存储键)
+        : null;
+    if (stored && stored.trim()) {
+      return stored;
+    }
+
+    const generated =
+      typeof globalThis.crypto !== "undefined" && "randomUUID" in globalThis.crypto
+        ? globalThis.crypto.randomUUID()
+        : `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    if (storage && typeof storage.setItem === "function") {
+      storage.setItem(设备匿名凭证存储键, generated);
+    }
+    return generated;
   }
 
   private ensureRealtimeSocket(sessionId: string): void {
@@ -222,7 +257,8 @@ export class 聊天壳 extends LitElement {
           发送
         </button>
       </div>
-      <div>session: ${this.chatState.sessionId || "-"}</div>
+      <div id="alias">alias: ${this.chatState.displayAlias || "-"}</div>
+      <div id="session">session: ${this.chatState.sessionId || "-"}</div>
       <div>room: ${this.chatState.roomId || "-"}</div>
       <ul id="messageList">
         ${this.chatState.messages.map((m) => html`<li>${格式化消息(m)}</li>`)}

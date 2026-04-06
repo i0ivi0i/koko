@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import "../后台壳";
 import type { 前端传输端口 } from "../传输";
 import type {
+  匿名身份引导结果,
   会话快照,
   增量事件快照,
   后台房间列表,
@@ -24,6 +25,14 @@ const 空Socket = {
 } as unknown as Socket;
 
 class 假后台传输 implements 前端传输端口 {
+  async bootstrapAnonymousIdentity(): Promise<匿名身份引导结果> {
+    return {
+      anonymous_identity_id: "a-x",
+      display_alias: "暴躁的企鹅",
+      session_id: "s-x",
+      display_name: "暴躁的企鹅",
+    };
+  }
   async bootstrapSession(): Promise<会话快照> {
     return { session_id: "s-x", display_name: "x" };
   }

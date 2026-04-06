@@ -1,5 +1,6 @@
 import { io, type Socket } from "socket.io-client";
 import type {
+  匿名身份引导结果,
   会话快照,
   增量事件快照,
   房间快照,
@@ -10,6 +11,7 @@ import type {
 } from "./契约.js";
 
 export interface 前端传输端口 {
+  bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果>;
   bootstrapSession(displayName: string): Promise<会话快照>;
   joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
@@ -23,6 +25,12 @@ export interface 前端传输端口 {
 
 export class HttpRealtime传输 implements 前端传输端口 {
   constructor(private readonly baseUrl: string) {}
+
+  async bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果> {
+    return this.post("/api/session/bootstrap", {
+      device_anonymous_token: deviceToken,
+    });
+  }
 
   async bootstrapSession(displayName: string): Promise<会话快照> {
     return this.post("/api/session/bootstrap", { display_name: displayName });

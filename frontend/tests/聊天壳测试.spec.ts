@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../聊天壳";
 import type { 前端传输端口 } from "../传输";
 import type {
+  匿名身份引导结果,
   会话快照,
   增量事件快照,
   后台概览,
@@ -12,6 +13,30 @@ import type {
 } from "../契约";
 import { 聊天壳 } from "../聊天壳";
 import type { Socket } from "socket.io-client";
+
+function createFakeStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear() {
+      store.clear();
+    },
+    getItem(key: string) {
+      return store.get(key) ?? null;
+    },
+    key(index: number) {
+      return Array.from(store.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      store.delete(key);
+    },
+    setItem(key: string, value: string) {
+      store.set(key, value);
+    },
+  };
+}
 
 class 假Socket {
   private handlers = new Map<string, Array<(payload: unknown) => void>>();
@@ -72,6 +97,19 @@ class 假传输 implements 前端传输端口 {
   readonly socket = new 假Socket();
   loadRoomSnapshotCalls = 0;
   loadRoomEventsCalls = 0;
+  bootstrapTokens: string[] = [];
+
+  async bootstrapAnonymousIdentity(
+    deviceToken: string
+  ): Promise<匿名身份引导结果> {
+    this.bootstrapTokens.push(deviceToken);
+    return {
+      anonymous_identity_id: "a-test",
+      display_alias: "暴躁的企鹅",
+      session_id: "s-test",
+      display_name: "暴躁的企鹅",
+    };
+  }
 
   async bootstrapSession(): Promise<会话快照> {
     return { session_id: "s-test", display_name: "tester" };
@@ -119,6 +157,63 @@ class 假传输 implements 前端传输端口 {
 }
 
 describe("聊天壳", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "localStorage", {
+      value: createFakeStorage(),
+      configurable: true,
+    });
+    vi.restoreAllMocks();
+  });
+
+  it("启动时会从本地设备凭证恢复匿名身份", async () => {
+    window.localStorage.setItem(
+      "koko_device_anonymous_token",
+      "11111111-1111-4111-8111-111111111111"
+    );
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+
+    expect(transport.bootstrapTokens).toEqual(["11111111-1111-4111-8111-111111111111"]);
+    expect(el.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
+    expect(el.shadowRoot!.querySelector("#session")!.textContent).toContain("s-test");
+
+    el.remove();
+  });
+
+  it("首次启动会生成并持久化设备匿名凭证，刷新后恢复同一花名", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "22222222-2222-4222-8222-222222222222"
+    );
+    const firstTransport = new 假传输();
+    const first = document.createElement("koko-chat-shell") as 聊天壳;
+    first.setTransportForTest(firstTransport);
+    document.body.appendChild(first);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await first.updateComplete;
+
+    expect(window.localStorage.getItem("koko_device_anonymous_token")).toBe(
+      "22222222-2222-4222-8222-222222222222"
+    );
+    expect(firstTransport.bootstrapTokens).toEqual(["22222222-2222-4222-8222-222222222222"]);
+    expect(first.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
+    first.remove();
+
+    const secondTransport = new 假传输();
+    const second = document.createElement("koko-chat-shell") as 聊天壳;
+    second.setTransportForTest(secondTransport);
+    document.body.appendChild(second);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await second.updateComplete;
+
+    expect(secondTransport.bootstrapTokens).toEqual(["22222222-2222-4222-8222-222222222222"]);
+    expect(second.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
+    second.remove();
+  });
+
   it("可以引导会话、进房并渲染消息", async () => {
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(new 假传输());

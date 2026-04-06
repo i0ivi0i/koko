@@ -10,6 +10,18 @@ export interface 匿名身份快照 {
   display_alias: string;
 }
 
+/**
+ * 匿名身份引导结果。
+ * 当前 MVP 需要同时带回：
+ * 1. 稳定匿名内部身份；
+ * 2. 展示花名；
+ * 3. 现有冷/热路径继续复用的 session 锚点。
+ */
+export interface 匿名身份引导结果 extends 匿名身份快照 {
+  session_id: string;
+  display_name: string;
+}
+
 export interface 会话快照 {
   session_id: string;
   display_name: string;
