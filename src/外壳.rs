@@ -650,14 +650,41 @@ async fn handle_realtime_subscribe(
             let _ = socket.emit("room_events", &events_json);
         }
         Ok(Ok(_)) => {
+            tracing::error!(
+                usecase = "订阅房间事件流",
+                adapter = "socketioxide",
+                room_id = payload.room_id,
+                session_id = auth.session_id,
+                from = from,
+                error_code = "system_error",
+                "订阅返回了错误的快照类型"
+            );
             let payload = serde_json::json!({"kind":"error","code":"system_error","message":"快照类型不匹配"});
             let _ = socket.emit("control_result", &payload);
         }
         Ok(Err((_, code, message))) => {
+            tracing::warn!(
+                usecase = "订阅房间事件流",
+                adapter = "socketioxide",
+                room_id = payload.room_id,
+                session_id = auth.session_id,
+                from = from,
+                error_code = code,
+                "订阅房间事件流被拒绝"
+            );
             let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
             let _ = socket.emit("control_result", &payload);
         }
         Err(err) => {
+            tracing::error!(
+                usecase = "订阅房间事件流",
+                adapter = "socketioxide",
+                room_id = payload.room_id,
+                session_id = auth.session_id,
+                from = from,
+                error = %err,
+                "订阅房间事件流任务执行失败"
+            );
             let payload = serde_json::json!({"kind":"error","code":"system_error","message": format!("任务执行失败: {err}")});
             let _ = socket.emit("control_result", &payload);
         }
@@ -677,6 +704,8 @@ async fn handle_realtime_send(
 ) {
     let state = state.clone();
     let session_id = auth.session_id.clone();
+    let room_id_for_log = payload.room_id.clone();
+    let client_message_id_for_log = payload.client_message_id.clone();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state);
         usecase::发送文本消息(
@@ -718,10 +747,28 @@ async fn handle_realtime_send(
             }
         }
         Ok(Err((_, code, message))) => {
+            tracing::warn!(
+                usecase = "发送文本消息",
+                adapter = "socketioxide",
+                room_id = room_id_for_log,
+                session_id = auth.session_id,
+                client_message_id = client_message_id_for_log,
+                error_code = code,
+                "发送文本消息被拒绝"
+            );
             let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
             let _ = socket.emit("control_result", &payload);
         }
         Err(err) => {
+            tracing::error!(
+                usecase = "发送文本消息",
+                adapter = "socketioxide",
+                room_id = room_id_for_log,
+                session_id = auth.session_id,
+                client_message_id = client_message_id_for_log,
+                error = %err,
+                "发送文本消息任务执行失败"
+            );
             let payload = serde_json::json!({"kind":"error","code":"system_error","message": format!("任务执行失败: {err}")});
             let _ = socket.emit("control_result", &payload);
         }

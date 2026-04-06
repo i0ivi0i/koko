@@ -53,13 +53,14 @@ describe("realtime真实链路", () => {
       const b = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
         display_name: "socket-b",
       });
+      const roomCode = uniqueRoomCode("SOCKET");
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: a.session_id,
-        room_code: "SOCKET01",
+        room_code: roomCode,
       });
       await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: b.session_id,
-        room_code: "SOCKET01",
+        room_code: roomCode,
       });
 
       const socketA = io(baseUrl, {
@@ -121,17 +122,19 @@ describe("realtime真实链路", () => {
       const c = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
         display_name: "room2-c",
       });
+      const roomCode1 = uniqueRoomCode("SOCKET");
+      const roomCode2 = uniqueRoomCode("SOCKET");
       const room1 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: a.session_id,
-        room_code: "SOCKET11",
+        room_code: roomCode1,
       });
       await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: b.session_id,
-        room_code: "SOCKET11",
+        room_code: roomCode1,
       });
       const room2 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: c.session_id,
-        room_code: "SOCKET22",
+        room_code: roomCode2,
       });
 
       const socketA = io(baseUrl, {
@@ -226,7 +229,7 @@ describe("realtime真实链路", () => {
       });
       const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: session.session_id,
-        room_code: "SOCKET33",
+        room_code: uniqueRoomCode("SOCKET"),
       });
 
       const socket = io(baseUrl, {
@@ -250,6 +253,89 @@ describe("realtime真实链路", () => {
       expect(result.kind).toBe("need_snapshot_reload");
       expect(result.room_id).toBe(room.room_id);
       expect(result.expected_position).toBe(99);
+      await expectNoEvent(socket, "room_events");
+
+      socket.disconnect();
+    },
+    60000
+  );
+
+  it(
+    "非成员订阅房间事件流时被拒绝，不能偷偷建立实时流",
+    async () => {
+      const port = await allocatePort();
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const child = startBackend(port);
+      backendChildren.push(child);
+      await waitForServer(baseUrl);
+
+      const owner = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        display_name: "room-owner",
+      });
+      const stranger = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        display_name: "room-stranger",
+      });
+      const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: owner.session_id,
+        room_code: uniqueRoomCode("SOCKET"),
+      });
+
+      const socket = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: stranger.session_id },
+        reconnection: false,
+      });
+      await once(socket, "connect");
+
+      const control = once<{ kind: string; code: string }>(socket, "control_result");
+      socket.emit("subscribe_room_stream", {
+        room_id: room.room_id,
+        from: 0,
+      });
+
+      const result = await control;
+      expect(result.kind).toBe("rejected");
+      expect(result.code).toBe("membership_required");
+      await expectNoEvent(socket, "room_events");
+
+      socket.disconnect();
+    },
+    60000
+  );
+
+  it(
+    "负数 from 会被视为非法参数，而不是默默当成从头补发",
+    async () => {
+      const port = await allocatePort();
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const child = startBackend(port);
+      backendChildren.push(child);
+      await waitForServer(baseUrl);
+
+      const session = await postJson<会话快照>(`${baseUrl}/api/session/bootstrap`, {
+        display_name: "negative-from",
+      });
+      const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: session.session_id,
+        room_code: uniqueRoomCode("SOCKET"),
+      });
+
+      const socket = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: session.session_id },
+        reconnection: false,
+      });
+      await once(socket, "connect");
+
+      const control = once<{ kind: string; code: string }>(socket, "control_result");
+      socket.emit("subscribe_room_stream", {
+        room_id: room.room_id,
+        from: -1,
+      });
+
+      const result = await control;
+      expect(result.kind).toBe("rejected");
+      expect(result.code).toBe("invalid_argument");
       await expectNoEvent(socket, "room_events");
 
       socket.disconnect();
@@ -339,4 +425,11 @@ async function expectNoEvent(socket: Socket, event: string): Promise<void> {
     };
     socket.on(event, onEvent);
   });
+}
+
+function uniqueRoomCode(prefix: string): string {
+  const normalizedPrefix = prefix.slice(0, 4).toUpperCase();
+  return `${normalizedPrefix}${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)
+    .toString()
+    .padStart(2, "0")}`;
 }

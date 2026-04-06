@@ -110,6 +110,9 @@ impl Pg仓储 {
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<contract::快照, contract::错误码> {
+        if 从位置开始 < 0 {
+            return Err(contract::错误码::参数非法);
+        }
         self.在运行时执行(async {
             let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
                 .bind(房间标识)
