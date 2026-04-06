@@ -16,6 +16,10 @@ export interface 聊天状态 {
   latestEventPosition: number;
   messages: 消息事件[];
   pending: boolean;
+  /** 恢复相关的临时状态，只服务壳层交互，不是共享契约事实。 */
+  recoveryState: "idle" | "retryable_failure" | "reconnecting";
+  /** 最近一次恢复/订阅失败的稳定错误码，供壳层决定提示文案。 */
+  lastRecoveryErrorCode: string;
 }
 
 export const 初始聊天状态: 聊天状态 = {
@@ -29,4 +33,6 @@ export const 初始聊天状态: 聊天状态 = {
   latestEventPosition: 0,
   messages: [],
   pending: false,
+  recoveryState: "idle",
+  lastRecoveryErrorCode: "",
 };

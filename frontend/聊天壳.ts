@@ -1,20 +1,116 @@
 import { css, html, LitElement } from "lit";
 import type { 消息事件 } from "./契约.js";
-import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
+import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
-import { 格式化消息 } from "./视图.js";
+import { 派生消息展示项 } from "./视图.js";
 import type { Socket } from "socket.io-client";
 
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
 const 当前房间存储键 = "koko_current_room_id";
 
+type 控制面结果 = {
+  kind?: string;
+  latest_event_position?: number;
+  code?: string;
+  room_id?: string;
+};
+
+type 恢复失败 = Error & {
+  status?: number;
+  code?: string;
+};
+
 export class 聊天壳 extends LitElement {
   static override styles = css`
-    :host { display: block; padding: 16px; font-family: "Microsoft YaHei", sans-serif; }
-    .row { display: flex; gap: 8px; margin-bottom: 12px; }
-    input { padding: 8px; }
-    button { padding: 8px 12px; }
-    ul { padding-left: 18px; }
+    :host {
+      display: block;
+      padding: 16px;
+      font-family: "Microsoft YaHei", sans-serif;
+      color: #1f2937;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+    }
+
+    button {
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .panel {
+      max-width: 720px;
+    }
+
+    .meta {
+      margin-bottom: 12px;
+      color: #475569;
+    }
+
+    .hint {
+      margin: 10px 0 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fff7ed;
+      color: #9a3412;
+    }
+
+    .message-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 0;
+      margin: 16px 0 0;
+      list-style: none;
+    }
+
+    .message-row {
+      display: flex;
+    }
+
+    .message-row.mine {
+      justify-content: flex-end;
+    }
+
+    .message-row.other {
+      justify-content: flex-start;
+    }
+
+    .message-bubble {
+      max-width: min(80%, 520px);
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: #e2e8f0;
+      word-break: break-word;
+    }
+
+    .message-row.mine .message-bubble {
+      background: #dbeafe;
+    }
+
+    .message-alias {
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: #64748b;
+    }
   `;
 
   private chatState: 聊天状态 = { ...初始聊天状态 };
@@ -41,66 +137,76 @@ export class 聊天壳 extends LitElement {
   private async bootstrap(): Promise<void> {
     const deviceAnonymousToken = this.readOrCreateDeviceAnonymousToken();
     const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
-    this.updateChat({
-      deviceAnonymousToken,
-      anonymousIdentityId: identity.anonymous_identity_id,
-      displayAlias: identity.display_alias,
-      sessionId: identity.session_id,
-    });
+    this.applyBootstrapIdentity(deviceAnonymousToken, identity);
     this.ensureRealtimeSocket(identity.session_id);
-    await this.restoreCurrentRoomIfNeeded(identity.session_id);
+    await this.restoreCurrentRoomIfNeeded();
   }
 
   private async joinRoom(): Promise<void> {
-    if (!this.chatState.roomCodeInput.trim()) return;
-    const room = await this.transport.joinOrCreateRoom(
-      this.chatState.sessionId,
-      this.chatState.roomCodeInput.trim()
-    );
-    const snapshot = await this.transport.loadRoomSnapshot(room.room_id, this.chatState.sessionId);
-    this.enterRoomFromSnapshot(snapshot);
-    this.subscribeRoom(snapshot.latest_event_position);
+    const roomCode = this.chatState.roomCodeInput.trim();
+    if (!roomCode) return;
+    try {
+      const room = await this.withSessionRefreshOnInvalid((sessionId) =>
+        this.transport.joinOrCreateRoom(sessionId, roomCode)
+      );
+      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
+        this.transport.loadRoomSnapshot(room.room_id, sessionId)
+      );
+      this.enterRoomFromSnapshot(snapshot);
+      this.subscribeRoom(snapshot.latest_event_position);
+    } catch (error) {
+      this.handleRecoveryFailure(this.chatState.roomId || this.readCurrentRoomId(), error, false);
+    }
   }
 
   /**
    * 启动恢复顺序必须固定：
-   * 1. 先 bootstrap 拿到当前权威 session；
-   * 2. 再读取壳层上次记住的 room_id；
-   * 3. 再用“本次 bootstrap 返回的 session”拉快照恢复。
-   *
-   * 这里故意不复用旧 session_id，也不把 room_id 当成员资格真相。
+   * 1. bootstrap 拿到当前权威 session；
+   * 2. 读取壳层记住的 room_id；
+   * 3. 用当前 session 拉快照恢复。
    */
-  private async restoreCurrentRoomIfNeeded(sessionId: string): Promise<void> {
+  private async restoreCurrentRoomIfNeeded(): Promise<void> {
     const roomId = this.readCurrentRoomId();
     if (!roomId) return;
-    const snapshot = await this.transport.loadRoomSnapshot(roomId, sessionId);
-    this.enterRoomFromSnapshot(snapshot);
-    this.subscribeRoom(snapshot.latest_event_position);
+    try {
+      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
+        this.transport.loadRoomSnapshot(roomId, sessionId)
+      );
+      this.enterRoomFromSnapshot(snapshot);
+      this.subscribeRoom(snapshot.latest_event_position);
+    } catch (error) {
+      this.handleRecoveryFailure(roomId, error, false);
+    }
   }
 
-  // 当 realtime 锚点闭合不了时，退回 HTTP 基线重建，再回到统一事件流。
+  /**
+   * 当 realtime 锚点闭合不了时，退回 HTTP 快照 + 增量补洞重建基线。
+   * 这里继续沿用同一条权威锚点语义：`from = snapshot.latest_event_position`。
+   */
   private async reloadRoomFromSnapshot(roomId: string): Promise<void> {
-    if (!this.chatState.sessionId || roomId !== this.chatState.roomId) return;
+    if (!this.chatState.roomId || roomId !== this.chatState.roomId) return;
     try {
-      const snapshot = await this.transport.loadRoomSnapshot(roomId, this.chatState.sessionId);
-      // 补洞锚点直接吃权威快照位置；不要再手搓 `0` 或 `+1` 这种第二套语义。
-      const delta = await this.transport.loadRoomEvents(
-        roomId,
-        this.chatState.sessionId,
-        snapshot.latest_event_position
+      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
+        this.transport.loadRoomSnapshot(roomId, sessionId)
+      );
+      const delta = await this.withSessionRefreshOnInvalid((sessionId) =>
+        this.transport.loadRoomEvents(roomId, sessionId, snapshot.latest_event_position)
       );
       const latestEventPosition = Math.max(
         snapshot.latest_event_position,
         delta.latest_event_position
       );
       this.updateChat({
+        roomId: roomId,
         latestEventPosition,
         messages: this.reconcileMessages(delta.events),
         pending: false,
+        recoveryState: "idle",
+        lastRecoveryErrorCode: "",
       });
       this.subscribeRoom(latestEventPosition);
-    } catch {
-      this.updateChat({ pending: false });
+    } catch (error) {
+      this.handleRecoveryFailure(roomId, error, true);
     }
   }
 
@@ -127,6 +233,140 @@ export class 聊天壳 extends LitElement {
   private updateChat(patch: Partial<聊天状态>): void {
     this.chatState = { ...this.chatState, ...patch };
     this.requestUpdate();
+  }
+
+  private applyBootstrapIdentity(
+    deviceAnonymousToken: string,
+    identity: {
+      anonymous_identity_id: string;
+      display_alias: string;
+      session_id: string;
+    }
+  ): void {
+    this.updateChat({
+      deviceAnonymousToken,
+      anonymousIdentityId: identity.anonymous_identity_id,
+      displayAlias: identity.display_alias,
+      sessionId: identity.session_id,
+      recoveryState: "idle",
+      lastRecoveryErrorCode: "",
+    });
+  }
+
+  /**
+   * invalid_session 不是永久房间失效，而是“当前 session 失效，需要重新 bootstrap”。
+   * 刷新后的新 session 建好后，再重试当前恢复步骤一次。
+   */
+  private async withSessionRefreshOnInvalid<T>(
+    operation: (sessionId: string) => Promise<T>
+  ): Promise<T> {
+    try {
+      return await operation(this.chatState.sessionId);
+    } catch (error) {
+      if (!this.isInvalidSessionError(error)) {
+        throw error;
+      }
+      this.updateChat({
+        recoveryState: "reconnecting",
+        lastRecoveryErrorCode: "invalid_session",
+      });
+      const sessionId = await this.bootstrapFreshSession();
+      return operation(sessionId);
+    }
+  }
+
+  private async bootstrapFreshSession(): Promise<string> {
+    const deviceAnonymousToken = this.chatState.deviceAnonymousToken || this.readOrCreateDeviceAnonymousToken();
+    const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
+    this.realtimeSocket?.disconnect();
+    this.realtimeSocket = null;
+    this.applyBootstrapIdentity(deviceAnonymousToken, identity);
+    this.ensureRealtimeSocket(identity.session_id);
+    return identity.session_id;
+  }
+
+  /**
+   * 硬失败要清 room 锚点并退出房间；临时失败则保留锚点，让用户还能重试。
+   */
+  private handleRecoveryFailure(
+    roomId: string,
+    error: unknown,
+    keepRoomVisible: boolean
+  ): void {
+    const failure = this.asRecoveryFailure(error);
+    if (this.isHardRoomFailure(failure)) {
+      this.clearCurrentRoomId();
+      this.updateChat({
+        roomId: "",
+        latestEventPosition: 0,
+        messages: [],
+        pending: false,
+        recoveryState: "idle",
+        lastRecoveryErrorCode: failure.code ?? "",
+      });
+      return;
+    }
+
+    this.updateChat({
+      roomId: keepRoomVisible ? roomId : "",
+      pending: false,
+      recoveryState: "retryable_failure",
+      lastRecoveryErrorCode: failure.code ?? "system_error",
+    });
+  }
+
+  private async handleControlResult(control: 控制面结果): Promise<void> {
+    if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
+      this.updateChat({
+        latestEventPosition: control.latest_event_position,
+        recoveryState: "idle",
+        lastRecoveryErrorCode: "",
+      });
+      return;
+    }
+
+    if (control.kind === "need_snapshot_reload" && control.room_id) {
+      await this.reloadRoomFromSnapshot(control.room_id);
+      return;
+    }
+
+    if (control.kind !== "rejected" && control.kind !== "error") {
+      return;
+    }
+
+    if (!this.chatState.roomId) {
+      this.updateChat({ pending: false });
+      return;
+    }
+
+    if (control.code === "invalid_session") {
+      try {
+        await this.bootstrapFreshSession();
+        await this.reloadRoomFromSnapshot(this.chatState.roomId);
+      } catch (error) {
+        this.handleRecoveryFailure(this.chatState.roomId, error, true);
+      }
+      return;
+    }
+
+    if (this.isHardRoomFailure(control)) {
+      this.clearCurrentRoomId();
+      this.updateChat({
+        roomId: "",
+        latestEventPosition: 0,
+        messages: [],
+        pending: false,
+        recoveryState: "idle",
+        lastRecoveryErrorCode: control.code ?? "",
+      });
+      return;
+    }
+
+    this.updateChat({
+      pending: false,
+      recoveryState: "retryable_failure",
+      lastRecoveryErrorCode: control.code ?? "system_error",
+    });
   }
 
   /**
@@ -166,15 +406,19 @@ export class 聊天壳 extends LitElement {
     return stored?.trim() ? stored : "";
   }
 
-  /**
-   * 只有成功拿到房间快照后才写入 room 恢复锚点。
-   * 这样刷新页恢复的是“上次成功进入过的房间”，而不是半路失败的意图输入。
-   */
   private writeCurrentRoomId(roomId: string): void {
     const storage =
       typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
     if (storage && typeof storage.setItem === "function") {
       storage.setItem(当前房间存储键, roomId);
+    }
+  }
+
+  private clearCurrentRoomId(): void {
+    const storage =
+      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
+    if (storage && typeof storage.removeItem === "function") {
+      storage.removeItem(当前房间存储键);
     }
   }
 
@@ -188,6 +432,9 @@ export class 聊天壳 extends LitElement {
       roomId: snapshot.room_id,
       latestEventPosition: snapshot.latest_event_position,
       messages: [],
+      pending: false,
+      recoveryState: "idle",
+      lastRecoveryErrorCode: "",
     });
   }
 
@@ -205,25 +452,9 @@ export class 聊天壳 extends LitElement {
     socket.on("room_event", (event: 消息事件) => {
       this.applyAuthoritativeEvents([event], event.event_position);
     });
-    socket.on(
-      "control_result",
-      (control: {
-        kind?: string;
-        latest_event_position?: number;
-        code?: string;
-        room_id?: string;
-      }) => {
-        if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
-          this.updateChat({ latestEventPosition: control.latest_event_position });
-        }
-        if (control.kind === "need_snapshot_reload" && control.room_id) {
-          void this.reloadRoomFromSnapshot(control.room_id);
-        }
-        if (control.kind === "rejected" || control.kind === "error") {
-          this.updateChat({ pending: false });
-        }
-      }
-    );
+    socket.on("control_result", (control: 控制面结果) => {
+      void this.handleControlResult(control);
+    });
     this.realtimeSocket = socket;
   }
 
@@ -241,6 +472,8 @@ export class 聊天壳 extends LitElement {
       messages: merged,
       latestEventPosition: Math.max(this.chatState.latestEventPosition, latestEventPosition),
       pending: false,
+      recoveryState: "idle",
+      lastRecoveryErrorCode: "",
     });
   }
 
@@ -280,12 +513,43 @@ export class 聊天壳 extends LitElement {
     return out.sort((left, right) => left.event_position - right.event_position);
   }
 
+  private recoveryHintText(): string {
+    if (this.chatState.recoveryState === "reconnecting") {
+      return "会话已刷新，正在重新恢复";
+    }
+    if (this.chatState.recoveryState !== "retryable_failure") {
+      return "";
+    }
+    return this.chatState.roomId ? "实时连接暂不可用，可稍后重试" : "恢复失败，可稍后重试";
+  }
+
+  private isInvalidSessionError(error: unknown): boolean {
+    return this.asRecoveryFailure(error).code === "invalid_session";
+  }
+
+  private isHardRoomFailure(error: { code?: string; status?: number }): boolean {
+    return (
+      error.code === "room_not_found" ||
+      error.code === "membership_required" ||
+      error.status === 403 ||
+      error.status === 404
+    );
+  }
+
+  private asRecoveryFailure(error: unknown): 恢复失败 {
+    if (error instanceof Http接口错误) {
+      return error;
+    }
+    return error as 恢复失败;
+  }
+
   override render() {
+    const recoveryHint = this.recoveryHintText();
     if (!this.chatState.roomId) {
       return html`
-        <section id="joinView">
-          <div id="alias">alias: ${this.chatState.displayAlias || "-"}</div>
-          <div id="session">session: ${this.chatState.sessionId || "-"}</div>
+        <section id="joinView" class="panel">
+          <div id="alias" class="meta">alias: ${this.chatState.displayAlias || "-"}</div>
+          ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
           <div class="row">
             <input
               id="roomCode"
@@ -303,10 +567,10 @@ export class 聊天壳 extends LitElement {
     }
 
     return html`
-      <section id="roomView">
-        <div id="alias">alias: ${this.chatState.displayAlias || "-"}</div>
-        <div id="session">session: ${this.chatState.sessionId || "-"}</div>
-        <div>room: ${this.chatState.roomId || "-"}</div>
+      <section id="roomView" class="panel">
+        <div id="alias" class="meta">alias: ${this.chatState.displayAlias || "-"}</div>
+        <div class="meta">room: ${this.chatState.roomId || "-"}</div>
+        ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
         <div class="row">
           <input
             id="msgInput"
@@ -325,8 +589,20 @@ export class 聊天壳 extends LitElement {
             发送
           </button>
         </div>
-        <ul id="messageList">
-          ${this.chatState.messages.map((m) => html`<li>${格式化消息(m)}</li>`)}
+        <ul id="messageList" class="message-list">
+          ${this.chatState.messages.map((message) => {
+            const item = 派生消息展示项(message, this.chatState.sessionId);
+            return html`
+              <li class="message-row ${item.owner}" data-owner=${item.owner}>
+                <article class="message-bubble">
+                  ${item.showAlias
+                    ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
+                    : null}
+                  <div class="message-body">${item.body}</div>
+                </article>
+              </li>
+            `;
+          })}
         </ul>
       </section>
     `;

@@ -42,6 +42,7 @@ function createFakeStorage(): Storage {
 class 假Socket {
   private handlers = new Map<string, Array<(payload: unknown) => void>>();
   public sentEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+  public subscribeResults: Array<Record<string, unknown>> = [];
 
   on(event: string, handler: (payload: unknown) => void): this {
     const list = this.handlers.get(event) ?? [];
@@ -53,7 +54,9 @@ class 假Socket {
   emit(event: string, payload: Record<string, unknown>): boolean {
     this.sentEvents.push({ event, payload });
     if (event === "subscribe_room_stream") {
-      if (payload.from === 99) {
+      if (this.subscribeResults.length > 0) {
+        this.fire("control_result", this.subscribeResults.shift()!);
+      } else if (payload.from === 99) {
         this.fire("control_result", {
           kind: "need_snapshot_reload",
           room_id: payload.room_id,
@@ -109,6 +112,9 @@ class 假传输 implements 前端传输端口 {
     display_alias: "暴躁的企鹅",
     session_id: "s-test",
   };
+  bootstrapQueue: Array<匿名身份引导结果 | Error> = [];
+  snapshotQueue: Array<房间快照 | Error> = [];
+  eventsQueue: Array<增量事件快照 | Error> = [];
   snapshotRoomId = "r-test";
   joinRoomId = "r-test";
 
@@ -116,6 +122,9 @@ class 假传输 implements 前端传输端口 {
     deviceToken: string
   ): Promise<匿名身份引导结果> {
     this.bootstrapTokens.push(deviceToken);
+    const queued = this.bootstrapQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
     return this.bootstrapResult;
   }
   async joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照> {
@@ -126,6 +135,9 @@ class 假传输 implements 前端传输端口 {
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
     this.loadRoomSnapshotCalls += 1;
     this.loadRoomSnapshotArgs.push({ roomId, sessionId });
+    const queued = this.snapshotQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
     this.snapshotRoomId = roomId;
     return { room_id: roomId, latest_event_position: 1 };
   }
@@ -136,6 +148,9 @@ class 假传输 implements 前端传输端口 {
   ): Promise<增量事件快照> {
     this.loadRoomEventsCalls += 1;
     this.loadRoomEventsArgs.push({ roomId, sessionId, from });
+    const queued = this.eventsQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
     return {
       room_id: roomId,
       latest_event_position: 1,
@@ -171,6 +186,13 @@ class 假传输 implements 前端传输端口 {
   }
 }
 
+function 创建传输错误(status: number, code: string, message = code): Error {
+  const error = new Error(message) as Error & { status: number; code: string };
+  error.status = status;
+  error.code = code;
+  return error;
+}
+
 async function 等待组件稳定(el: 聊天壳): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -198,6 +220,7 @@ describe("聊天壳", () => {
 
     expect(transport.bootstrapTokens).toEqual(["11111111-1111-4111-8111-111111111111"]);
     expect(el.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
+    expect(el.shadowRoot!.textContent).not.toContain("session:");
     el.remove();
   });
 
@@ -260,6 +283,7 @@ describe("聊天壳", () => {
 
     const list = el.shadowRoot!.querySelector("#messageList")!;
     expect(list.textContent).toContain("hello");
+    expect(list.textContent).not.toContain("[1]");
 
     el.remove();
   });
@@ -372,6 +396,191 @@ describe("聊天壳", () => {
       { roomId: "r-restore", sessionId: "s-fresh" },
     ]);
     expect(transport.socketSessionIds).toEqual(["s-fresh"]);
+    el.remove();
+  });
+
+  it("room_not_found 会清掉 current_room_id 并回到搜索页", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-missing");
+    const transport = new 假传输();
+    transport.snapshotQueue = [创建传输错误(404, "room_not_found")];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
+    el.remove();
+  });
+
+  it("membership_required 会清掉 current_room_id 并回到搜索页", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-blocked");
+    const transport = new 假传输();
+    transport.snapshotQueue = [创建传输错误(403, "membership_required")];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    el.remove();
+  });
+
+  it("invalid_session 会重新 bootstrap 再决定恢复分支", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.bootstrapQueue = [
+      {
+        anonymous_identity_id: "a-old",
+        display_alias: "暴躁的企鹅",
+        session_id: "s-stale",
+      },
+      {
+        anonymous_identity_id: "a-new",
+        display_alias: "冷静的水獭",
+        session_id: "s-refresh",
+      },
+    ];
+    transport.snapshotQueue = [
+      创建传输错误(401, "invalid_session"),
+      { room_id: "r-restore", latest_event_position: 2 },
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(transport.bootstrapTokens).toHaveLength(2);
+    expect(transport.loadRoomSnapshotArgs).toEqual([
+      { roomId: "r-restore", sessionId: "s-stale" },
+      { roomId: "r-restore", sessionId: "s-refresh" },
+    ]);
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    el.remove();
+  });
+
+  it("恢复超时或5xx不会清掉 current_room_id", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-retry");
+    const transport = new 假传输();
+    transport.snapshotQueue = [创建传输错误(503, "system_error", "backend busy")];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(window.localStorage.getItem("koko_current_room_id")).toBe("r-retry");
+    expect(el.shadowRoot!.textContent).toContain("恢复失败");
+    el.remove();
+  });
+
+  it("快照成功后订阅被硬拒绝时会退出房间", async () => {
+    const transport = new 假传输();
+    transport.socket.subscribeResults = [
+      { kind: "rejected", code: "membership_required", message: "成员资格不足" },
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
+    el.remove();
+  });
+
+  it("快照成功后订阅临时失败时会保留房间页并显示重试提示", async () => {
+    const transport = new 假传输();
+    transport.socket.subscribeResults = [
+      { kind: "error", code: "system_error", message: "临时失败" },
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(window.localStorage.getItem("koko_current_room_id")).toBe("r-test");
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("实时连接暂不可用");
+    el.remove();
+  });
+
+  it("自己发送的消息按 mine/right 渲染", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const msgInput = el.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
+    msgInput.value = "hello";
+    msgInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#sendBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const item = el.shadowRoot!.querySelector('[data-owner="mine"]');
+    expect(item).not.toBeNull();
+    expect(item?.textContent).toContain("hello");
+    el.remove();
+  });
+
+  it("其他成员发送的消息按 other/left 渲染", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    transport.socket.trigger("room_event", {
+      type: "message_created",
+      room_id: "r-test",
+      message_id: "m-other",
+      client_message_id: "c-other",
+      sender_session_id: "s-other",
+      sender_display_alias: "冷静的水獭",
+      body: "other hello",
+      event_position: 2,
+    });
+    await 等待组件稳定(el);
+
+    const item = el.shadowRoot!.querySelector('[data-owner="other"]');
+    expect(item).not.toBeNull();
+    expect(item?.textContent).toContain("冷静的水獭");
+    expect(item?.textContent).toContain("other hello");
     el.remove();
   });
 });

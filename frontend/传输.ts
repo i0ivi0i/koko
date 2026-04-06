@@ -9,6 +9,26 @@ import type {
   后台登录结果,
 } from "./契约.js";
 
+type 接口错误响应 = {
+  code?: string;
+  message?: string;
+};
+
+/**
+ * HTTP 失败要把状态码和稳定错误码一起带回壳层。
+ * 这样恢复分类器才能区分“硬失效”与“临时失败”，而不是只看到一串模糊字符串。
+ */
+export class Http接口错误 extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string
+  ) {
+    super(message);
+    this.name = "Http接口错误";
+  }
+}
+
 export interface 前端传输端口 {
   bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果>;
   joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
@@ -75,7 +95,7 @@ export class HttpRealtime传输 implements 前端传输端口 {
   private async get<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, { headers });
     if (!response.ok) {
-      throw new Error(`GET ${path} failed: ${response.status}`);
+      throw await this.buildHttpError("GET", path, response);
     }
     return (await response.json()) as T;
   }
@@ -87,8 +107,29 @@ export class HttpRealtime传输 implements 前端传输端口 {
       body: JSON.stringify(body),
     });
     if (!response.ok) {
-      throw new Error(`POST ${path} failed: ${response.status}`);
+      throw await this.buildHttpError("POST", path, response);
     }
     return (await response.json()) as T;
+  }
+
+  private async buildHttpError(
+    method: "GET" | "POST",
+    path: string,
+    response: Response
+  ): Promise<Http接口错误> {
+    let code = `http_${response.status}`;
+    let message = `${method} ${path} failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as 接口错误响应;
+      if (typeof payload.code === "string" && payload.code.trim()) {
+        code = payload.code;
+      }
+      if (typeof payload.message === "string" && payload.message.trim()) {
+        message = payload.message;
+      }
+    } catch {
+      // 某些 5xx 可能没有 JSON；此时退回通用 HTTP 错误即可。
+    }
+    return new Http接口错误(response.status, code, message);
   }
 }

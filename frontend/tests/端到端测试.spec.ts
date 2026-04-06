@@ -128,6 +128,7 @@ describe("前后台壳端到端冒烟", () => {
     expect(chat.shadowRoot!.querySelector("#roomView")).toBeNull();
     expect(chat.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
     expect(chat.shadowRoot!.querySelector("#msgInput")).toBeNull();
+    expect(chat.shadowRoot!.textContent).not.toContain("session:");
 
     const roomInput = chat.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
     roomInput.value = "E2E01";
@@ -148,7 +149,8 @@ describe("前后台壳端到端冒烟", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
     expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");
-    expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).toContain("暴躁的企鹅");
+    expect(chat.shadowRoot!.querySelector('[data-owner="mine"]')).not.toBeNull();
+    expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).not.toContain("[1]");
 
     const admin = document.createElement("koko-admin-shell") as 后台壳;
     admin.setTransportForTest(transport);
