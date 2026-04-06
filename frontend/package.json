@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch --preserveWatchOutput",
     "build": "pnpm typecheck && esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap",
-    "dev:watch": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch"
+    "dev:watch": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch",
+    "dev:watch:supervised": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch=forever"
   },
   "dependencies": {
     "lit": "^3.3.2",
