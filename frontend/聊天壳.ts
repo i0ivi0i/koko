@@ -488,6 +488,7 @@ export class 聊天壳 extends LitElement {
     消耗恢复补锚标记: () => {
       this.shouldPrimeReadAnchorAfterInitialSettle = false;
     },
+    报告首屏稳定完成: (mode) => this.handleInitialSettleCompleted(mode),
   });
 
   setTransportForTest(transport: 前端传输端口): void {
@@ -1112,6 +1113,26 @@ export class 聊天壳 extends LitElement {
     }
     clearTimeout(this.followLatestReadSampleTimer);
     this.followLatestReadSampleTimer = null;
+  }
+
+  /**
+   * 首屏稳定完成必须显式回灌给房间内核，而不是只在壳层里改一个布尔值。
+   * 这样以后换模板、换滚动实现时，内核仍然能明确知道：
+   * “当前房间已经从恢复阶段进入了可解释阅读语义的稳定状态。”
+   */
+  private handleInitialSettleCompleted(mode: 聊天状态["viewportMode"]): void {
+    if (this.chatState.initialUnreadSettled) {
+      return;
+    }
+    this.roomKernel.send({
+      type: "INITIAL_SETTLE_COMPLETED",
+      mode,
+    });
+    this.updateChat({
+      ...this.roomShellPatch(),
+      initialUnreadSettled: true,
+      scrollPhase: "idle",
+    });
   }
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {

@@ -77,6 +77,7 @@ describe("房间滚动器", () => {
       采样阅读锚点: 已读采样,
       读取是否需要恢复补锚: () => false,
       消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: vi.fn(),
     });
 
     滚动器.安排首屏定位();
@@ -126,6 +127,7 @@ describe("房间滚动器", () => {
       采样阅读锚点: vi.fn(),
       读取是否需要恢复补锚: () => false,
       消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: vi.fn(),
     });
 
     滚动器.安排首屏定位();
@@ -133,6 +135,130 @@ describe("房间滚动器", () => {
 
     expect(状态.initialUnreadSettled).toBe(false);
     expect(状态.scrollPhase).toBe("restoring_unread");
+  });
+
+  it("围绕首条未读稳定落位后，会显式上报首屏完成事件", async () => {
+    const { 房间滚动器 } = await import("../房间滚动器");
+
+    vi.useFakeTimers();
+    try {
+      const 状态: Pick<
+        聊天状态,
+        | "roomId"
+        | "firstUnreadEventPosition"
+        | "initialUnreadSettled"
+        | "scrollPhase"
+        | "historyLoading"
+        | "hasMoreBefore"
+        | "hasUserScrollIntent"
+        | "historyLoadThrottleUntil"
+      > = {
+        roomId: "r-test",
+        firstUnreadEventPosition: 5,
+        initialUnreadSettled: false,
+        scrollPhase: "restoring_unread",
+        historyLoading: false,
+        hasMoreBefore: true,
+        hasUserScrollIntent: false,
+        historyLoadThrottleUntil: 0,
+      };
+      const 容器 = 创建滚动容器();
+      const 首屏完成 = vi.fn();
+      const 未读节点 = document.createElement("div");
+      未读节点.dataset.eventPosition = "5";
+      未读节点.scrollIntoView = vi.fn();
+      Object.defineProperty(未读节点, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({
+          x: 0,
+          y: 60,
+          top: 60,
+          left: 0,
+          right: 320,
+          bottom: 100,
+          width: 320,
+          height: 40,
+          toJSON: () => ({}),
+        }),
+      });
+      const 主机 = {
+        addController() {},
+        removeController() {},
+        requestUpdate() {},
+        updateComplete: Promise.resolve(true),
+      };
+
+      const 滚动器 = new 房间滚动器(主机, {
+        读取状态: () => 状态,
+        更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
+        查询滚动容器: () => 容器,
+        查询消息节点: () => [未读节点],
+        请求更早历史: vi.fn(),
+        采样阅读锚点: vi.fn(),
+        读取是否需要恢复补锚: () => false,
+        消耗恢复补锚标记: () => {},
+        报告首屏稳定完成: 首屏完成,
+      } as ConstructorParameters<typeof 房间滚动器>[1]);
+
+      滚动器.安排首屏定位();
+      await Promise.resolve();
+      await vi.runAllTimersAsync();
+
+      expect(首屏完成).toHaveBeenCalledWith("围绕未读阅读");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("无未读时落到底部后，会显式上报贴底跟随的首屏完成事件", async () => {
+    const { 房间滚动器 } = await import("../房间滚动器");
+
+    const 状态: Pick<
+      聊天状态,
+      | "roomId"
+      | "firstUnreadEventPosition"
+      | "initialUnreadSettled"
+      | "scrollPhase"
+      | "historyLoading"
+      | "hasMoreBefore"
+      | "hasUserScrollIntent"
+      | "historyLoadThrottleUntil"
+    > = {
+      roomId: "r-test",
+      firstUnreadEventPosition: null,
+      initialUnreadSettled: false,
+      scrollPhase: "idle",
+      historyLoading: false,
+      hasMoreBefore: true,
+      hasUserScrollIntent: false,
+      historyLoadThrottleUntil: 0,
+    };
+    const 容器 = 创建滚动容器();
+    const 首屏完成 = vi.fn();
+    const 主机 = {
+      addController() {},
+      removeController() {},
+      requestUpdate() {},
+      updateComplete: Promise.resolve(true),
+    };
+
+    const 滚动器 = new 房间滚动器(主机, {
+      读取状态: () => 状态,
+      更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
+      查询滚动容器: () => 容器,
+      查询消息节点: () => [],
+      请求更早历史: vi.fn(),
+      采样阅读锚点: vi.fn(),
+      读取是否需要恢复补锚: () => false,
+      消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: 首屏完成,
+    } as ConstructorParameters<typeof 房间滚动器>[1]);
+
+    滚动器.安排首屏定位();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(首屏完成).toHaveBeenCalledWith("贴底跟随");
   });
 
   it("长消息达到稳定可读阈值时，也会被采样成候选已读锚点", async () => {
@@ -193,6 +319,7 @@ describe("房间滚动器", () => {
       采样阅读锚点: 已读采样,
       读取是否需要恢复补锚: () => false,
       消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: vi.fn(),
     });
 
     滚动器.处理滚动事件(容器);

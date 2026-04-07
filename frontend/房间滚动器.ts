@@ -1,5 +1,5 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import type { 聊天状态 } from "./状态.js";
+import type { 聊天状态, 房间视口模式 } from "./状态.js";
 
 const 历史分页顶部节流毫秒 = 180;
 const 稳定可读最小可见像素 = 40;
@@ -30,6 +30,7 @@ export interface 房间滚动器依赖 {
   采样阅读锚点(position: number): void;
   读取是否需要恢复补锚(): boolean;
   消耗恢复补锚标记(): void;
+  报告首屏稳定完成(mode: 房间视口模式): void;
 }
 
 /**
@@ -133,10 +134,7 @@ export class 房间滚动器 implements ReactiveController {
         scrollContainer.scrollHeight - scrollContainer.clientHeight
       );
       this.补一次恢复阅读锚点();
-      this.deps.更新状态({
-        initialUnreadSettled: true,
-        scrollPhase: "idle",
-      });
+      this.deps.报告首屏稳定完成("贴底跟随");
       return;
     }
 
@@ -154,8 +152,8 @@ export class 房间滚动器 implements ReactiveController {
 
     target.scrollIntoView?.({ block: "center" });
     this.补一次恢复阅读锚点();
-    this.安排程序滚动释放("restoring_unread", {
-      initialUnreadSettled: true,
+    this.安排程序滚动释放("restoring_unread", {}, () => {
+      this.deps.报告首屏稳定完成("围绕未读阅读");
     });
   }
 
@@ -253,7 +251,8 @@ export class 房间滚动器 implements ReactiveController {
    */
   private 安排程序滚动释放(
     expectedPhase: 聊天状态["scrollPhase"],
-    patch: Partial<聊天状态> = {}
+    patch: Partial<聊天状态> = {},
+    onReleased?: () => void
   ): void {
     this.取消挂起滚动副作用();
     this.scrollPhaseReleaseTimer = setTimeout(() => {
@@ -265,6 +264,7 @@ export class 房间滚动器 implements ReactiveController {
         ...patch,
         scrollPhase: "idle",
       });
+      onReleased?.();
     }, 0);
   }
 }
