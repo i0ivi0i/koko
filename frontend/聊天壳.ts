@@ -147,6 +147,8 @@ export class 聊天壳 extends LitElement {
 
   private readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+
   setTransportForTest(transport: 前端传输端口): void {
     this.transport = transport;
   }
@@ -160,6 +162,7 @@ export class 聊天壳 extends LitElement {
     this.realtimeSocket?.disconnect();
     this.realtimeSocket = null;
     this.cancelPendingReadAnchorFlush();
+    this.cancelPendingScrollPhaseRelease();
     super.disconnectedCallback();
   }
 
@@ -215,6 +218,7 @@ export class 聊天壳 extends LitElement {
   private async reloadRoomFromSnapshot(roomId: string): Promise<void> {
     if (!this.chatState.roomId || roomId !== this.chatState.roomId) return;
     try {
+      this.cancelPendingScrollPhaseRelease();
       const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.loadRoomSnapshot(roomId, sessionId)
       );
@@ -232,6 +236,8 @@ export class 聊天壳 extends LitElement {
         firstUnreadEventPosition: snapshot.first_unread_event_position,
         hasMoreBefore: snapshot.has_more_before,
         initialUnreadSettled: false,
+        scrollPhase:
+          snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
         pendingReadAnchorPosition: null,
         // 重拉快照时，必须先回到快照自带的权威首屏，再叠加其后的增量。
         // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
@@ -314,17 +320,21 @@ export class 聊天壳 extends LitElement {
         // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。
         hasMoreBefore: page.messages.length > 0,
         historyErrorCode: "",
+        scrollPhase: page.messages.length > 0 ? "compensating_history" : this.chatState.scrollPhase,
       });
       if (page.messages.length > 0 && scrollContainer) {
         // 历史页是往列表顶部前插的；补偿前后 scrollHeight 差值，才能守住用户当前视口。
+        // 这段滚动完全由程序发起，因此必须暂时隔离出“用户阅读滚动”语义。
         await this.updateComplete;
         const afterHeight = scrollContainer.scrollHeight;
         scrollContainer.scrollTop += afterHeight - beforeHeight;
+        this.scheduleScrollPhaseRelease("compensating_history");
       }
     } catch (error) {
       this.updateChat({
         historyLoading: false,
         historyErrorCode: this.asRecoveryFailure(error).code ?? "system_error",
+        scrollPhase: this.chatState.scrollPhase === "compensating_history" ? "idle" : this.chatState.scrollPhase,
       });
     }
   }
@@ -397,6 +407,7 @@ export class 聊天壳 extends LitElement {
         firstUnreadEventPosition: null,
         hasMoreBefore: false,
         initialUnreadSettled: true,
+        scrollPhase: "idle",
         pendingReadAnchorPosition: null,
         messages: [],
         pending: false,
@@ -407,6 +418,7 @@ export class 聊天壳 extends LitElement {
         lastRecoveryErrorCode: failure.code ?? "",
       });
       this.cancelPendingReadAnchorFlush();
+      this.cancelPendingScrollPhaseRelease();
       return;
     }
 
@@ -414,9 +426,11 @@ export class 聊天壳 extends LitElement {
       roomId: keepRoomVisible ? roomId : "",
       pending: false,
       historyLoading: false,
+      scrollPhase: "idle",
       recoveryState: "retryable_failure",
       lastRecoveryErrorCode: failure.code ?? "system_error",
     });
+    this.cancelPendingScrollPhaseRelease();
   }
 
   private async handleControlResult(control: 控制面结果): Promise<void> {
@@ -462,6 +476,7 @@ export class 聊天壳 extends LitElement {
         firstUnreadEventPosition: null,
         hasMoreBefore: false,
         initialUnreadSettled: true,
+        scrollPhase: "idle",
         pendingReadAnchorPosition: null,
         messages: [],
         pending: false,
@@ -472,15 +487,18 @@ export class 聊天壳 extends LitElement {
         lastRecoveryErrorCode: control.code ?? "",
       });
       this.cancelPendingReadAnchorFlush();
+      this.cancelPendingScrollPhaseRelease();
       return;
     }
 
     this.updateChat({
       pending: false,
       historyLoading: false,
+      scrollPhase: "idle",
       recoveryState: "retryable_failure",
       lastRecoveryErrorCode: control.code ?? "system_error",
     });
+    this.cancelPendingScrollPhaseRelease();
   }
 
   /**
@@ -542,6 +560,7 @@ export class 聊天壳 extends LitElement {
    */
   private enterRoomFromSnapshot(snapshot: 房间快照): void {
     this.cancelPendingReadAnchorFlush();
+    this.cancelPendingScrollPhaseRelease();
     this.writeCurrentRoomId(snapshot.room_id);
     this.updateChat({
       roomId: snapshot.room_id,
@@ -550,6 +569,9 @@ export class 聊天壳 extends LitElement {
       firstUnreadEventPosition: snapshot.first_unread_event_position,
       hasMoreBefore: snapshot.has_more_before,
       initialUnreadSettled: false,
+      // 只有带着首条未读恢复时，壳层才进入程序性恢复阶段；否则滚动语义直接保持 idle。
+      scrollPhase:
+        snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
       pendingReadAnchorPosition: null,
       // snapshot_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
       // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
@@ -585,14 +607,28 @@ export class 聊天壳 extends LitElement {
     }
     const firstUnreadEventPosition = this.chatState.firstUnreadEventPosition;
     if (firstUnreadEventPosition === null) {
-      this.updateChat({ initialUnreadSettled: true });
+      this.updateChat({
+        initialUnreadSettled: true,
+        scrollPhase: "idle",
+      });
       return;
     }
     const target = this.shadowRoot?.querySelector(
       `[data-event-position="${firstUnreadEventPosition}"]`
     ) as HTMLElement | null;
-    target?.scrollIntoView?.({ block: "center" });
-    this.updateChat({ initialUnreadSettled: true });
+    if (!target) {
+      this.updateChat({
+        initialUnreadSettled: true,
+        scrollPhase: "idle",
+      });
+      return;
+    }
+    target.scrollIntoView?.({ block: "center" });
+    // 首屏恢复滚动是程序行为，不应立刻放行给“已读推进 / 顶部分页”解释。
+    // 这里延后一拍再回到 idle，让浏览器随后抛出的 scroll 先被壳层隔离掉。
+    this.scheduleScrollPhaseRelease("restoring_unread", {
+      initialUnreadSettled: true,
+    });
   }
 
   private ensureRealtimeSocket(sessionId: string): void {
@@ -628,7 +664,7 @@ export class 聊天壳 extends LitElement {
    * 因此这里先做节流门禁，再进入真正的历史加载逻辑。
    */
   private maybeLoadOlderHistory(scrollContainer: HTMLElement): void {
-    if (scrollContainer.scrollTop > 0) {
+    if (scrollContainer.scrollTop > 0 || this.chatState.scrollPhase !== "idle") {
       return;
     }
     const now = Date.now();
@@ -652,7 +688,8 @@ export class 聊天壳 extends LitElement {
     if (
       !this.chatState.roomId ||
       !this.chatState.initialUnreadSettled ||
-      this.chatState.historyLoading
+      this.chatState.historyLoading ||
+      this.chatState.scrollPhase !== "idle"
     ) {
       return;
     }
@@ -748,6 +785,36 @@ export class 聊天壳 extends LitElement {
     }
     clearTimeout(this.readAnchorFlushTimer);
     this.readAnchorFlushTimer = null;
+  }
+
+  /**
+   * 壳层只在一个很短的窗口里隔离程序性滚动：
+   * - 这不是业务状态，不会进入共享契约；
+   * - 目的只是把浏览器随后抛出的 scroll 事件吞掉，避免误判成用户阅读。
+   */
+  private scheduleScrollPhaseRelease(
+    expectedPhase: 聊天状态["scrollPhase"],
+    patch: Partial<聊天状态> = {}
+  ): void {
+    this.cancelPendingScrollPhaseRelease();
+    this.scrollPhaseReleaseTimer = setTimeout(() => {
+      this.scrollPhaseReleaseTimer = null;
+      if (this.chatState.scrollPhase !== expectedPhase) {
+        return;
+      }
+      this.updateChat({
+        ...patch,
+        scrollPhase: "idle",
+      });
+    }, 0);
+  }
+
+  private cancelPendingScrollPhaseRelease(): void {
+    if (this.scrollPhaseReleaseTimer === null) {
+      return;
+    }
+    clearTimeout(this.scrollPhaseReleaseTimer);
+    this.scrollPhaseReleaseTimer = null;
   }
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {

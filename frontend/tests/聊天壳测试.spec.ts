@@ -257,6 +257,32 @@ async function 等待组件稳定(el: 聊天壳): Promise<void> {
   await el.updateComplete;
 }
 
+function 设置测试滚动阶段(
+  el: 聊天壳,
+  patch: {
+    initialUnreadSettled?: boolean;
+    firstUnreadEventPosition?: number | null;
+    scrollPhase?: string;
+  }
+): void {
+  (el as unknown as {
+    chatState: {
+      initialUnreadSettled: boolean;
+      firstUnreadEventPosition: number | null;
+      scrollPhase?: string;
+    };
+  }).chatState = {
+    ...(el as unknown as {
+      chatState: {
+        initialUnreadSettled: boolean;
+        firstUnreadEventPosition: number | null;
+        scrollPhase?: string;
+      };
+    }).chatState,
+    ...patch,
+  };
+}
+
 function 模拟消息滚动视口(
   el: 聊天壳,
   scroll: HTMLElement,
@@ -1201,6 +1227,251 @@ describe("聊天壳", () => {
 
     expect(transport.readAnchorUpdates).toEqual([]);
     el.remove();
+  });
+
+  it("程序性首屏恢复滚动不会触发阅读推进，也不会立刻清空未读分隔条", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "第一条未读",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条未读",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+      模拟消息滚动视口(el, scroll, [
+        { eventPosition: 1, top: -60, bottom: -20 },
+        { eventPosition: 2, top: 0, bottom: 40 },
+        { eventPosition: 3, top: 50, bottom: 90 },
+      ]);
+      // 这次滚动是壳层为了恢复首条未读而触发的程序性滚动，不代表用户已经读完它们。
+      设置测试滚动阶段(el, {
+        initialUnreadSettled: true,
+        firstUnreadEventPosition: 2,
+        scrollPhase: "restoring_unread",
+      });
+
+      scroll.scrollTop = 80;
+      scroll.dispatchEvent(new Event("scroll"));
+      await vi.advanceTimersByTimeAsync(450);
+
+      expect(transport.readAnchorUpdates).toEqual([]);
+      expect(
+        (
+          el as unknown as {
+            chatState: { firstUnreadEventPosition: number | null };
+          }
+        ).chatState.firstUnreadEventPosition
+      ).toBe(2);
+      expect(el.shadowRoot!.querySelector("#unreadDivider")?.textContent).toContain("未读消息");
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
+  it("程序性首屏恢复阶段触顶时不会提前拉取更早历史", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        has_more_before: true,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "第一条未读",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条未读",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    设置测试滚动阶段(el, {
+      initialUnreadSettled: true,
+      scrollPhase: "restoring_unread",
+    });
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+
+    expect(transport.loadRoomHistoryCalls).toBe(0);
+    el.remove();
+  });
+
+  it("历史前插补偿阶段的程序性滚动不会再次触发分页或阅读推进", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        has_more_before: true,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "第一条未读",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条未读",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+      模拟消息滚动视口(el, scroll, [
+        { eventPosition: 1, top: 0, bottom: 40 },
+        { eventPosition: 2, top: 50, bottom: 90 },
+        { eventPosition: 3, top: 100, bottom: 140 },
+      ]);
+      设置测试滚动阶段(el, {
+        initialUnreadSettled: true,
+        scrollPhase: "compensating_history",
+      });
+
+      scroll.scrollTop = 0;
+      scroll.dispatchEvent(new Event("scroll"));
+      await vi.advanceTimersByTimeAsync(450);
+
+      expect(transport.loadRoomHistoryCalls).toBe(0);
+      expect(transport.readAnchorUpdates).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
   });
 
   it("用户向下阅读后会节流上报新的 last_read_event_position", async () => {

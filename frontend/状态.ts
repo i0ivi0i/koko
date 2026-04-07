@@ -22,6 +22,13 @@ export interface 聊天状态 {
   hasMoreBefore: boolean;
   /** 首屏未读定位是否已经稳定完成，避免恢复早期误推进已读。 */
   initialUnreadSettled: boolean;
+  /**
+   * 当前滚动来源只属于壳层瞬时编排：
+   * - `restoring_unread` 表示程序正在把首屏落到第一条未读附近；
+   * - `compensating_history` 表示程序正在为顶部前插历史补偿视口；
+   * - `idle` 才允许把滚动解释成用户真实阅读。
+   */
+  scrollPhase: "idle" | "restoring_unread" | "compensating_history";
   /** 等待节流上报的阅读位置；只属于壳层瞬时状态。 */
   pendingReadAnchorPosition: number | null;
   /** 顶部补历史节流截止时间戳。 */
@@ -51,6 +58,7 @@ export const 初始聊天状态: 聊天状态 = {
   firstUnreadEventPosition: null,
   hasMoreBefore: false,
   initialUnreadSettled: true,
+  scrollPhase: "idle",
   pendingReadAnchorPosition: null,
   historyLoadThrottleUntil: 0,
   messages: [],
