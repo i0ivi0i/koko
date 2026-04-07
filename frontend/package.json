@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "lit": "^3.3.2",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "xstate": "^5.30.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
