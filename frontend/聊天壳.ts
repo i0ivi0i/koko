@@ -63,7 +63,9 @@ export class 聊天壳 extends LitElement {
         rgba(0, 0, 0, 0.24) 0px 10px 24px,
         rgba(0, 0, 0, 0.34) 0px 18px 40px;
       display: block;
+      height: 100%;
       min-height: 100dvh;
+      overflow: hidden;
       background:
         radial-gradient(circle at top, rgba(255, 56, 92, 0.16), transparent 28%),
         radial-gradient(circle at 80% 18%, rgba(118, 35, 55, 0.3), transparent 22%),
@@ -96,11 +98,47 @@ export class 聊天壳 extends LitElement {
     }
 
     .join-screen {
+      height: 100%;
       min-height: 100dvh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 24px 16px;
+    }
+
+    /* bootstrap 未完成时只展示一层中性壳，避免刷新恢复房间时先闪出搜索页。 */
+    .boot-screen {
+      height: 100%;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .boot-card {
+      width: min(100%, 460px);
+      padding: 24px;
+      border: 1px solid var(--line-soft);
+      border-radius: 28px;
+      background:
+        linear-gradient(180deg, var(--surface-panel-top), var(--surface-panel-bottom)),
+        var(--surface-panel);
+      box-shadow: var(--shadow-warm);
+    }
+
+    .boot-title {
+      margin: 0;
+      font-size: clamp(20px, 3vw, 26px);
+      font-weight: 700;
+      letter-spacing: -0.18px;
+      color: var(--text-primary);
+    }
+
+    .boot-subtitle {
+      margin: 10px 0 0;
+      color: var(--text-secondary);
+      line-height: 1.6;
     }
 
     .join-card {
@@ -187,6 +225,7 @@ export class 聊天壳 extends LitElement {
 
     /* 房间页按单屏聊天应用组织：头部、消息流、输入区共用一张屏幕，不再漂浮成网页卡片。 */
     .room-screen {
+      height: 100%;
       min-height: 100dvh;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
@@ -403,6 +442,8 @@ export class 聊天壳 extends LitElement {
 
   private chatState: 聊天状态 = { ...初始聊天状态 };
 
+  private bootstrapState: "booting" | "ready" = "booting";
+
   private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
 
   private realtimeSocket: Socket | null = null;
@@ -429,11 +470,21 @@ export class 聊天壳 extends LitElement {
   }
 
   private async bootstrap(): Promise<void> {
-    const deviceAnonymousToken = this.readOrCreateDeviceAnonymousToken();
-    const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
-    this.applyBootstrapIdentity(deviceAnonymousToken, identity);
-    this.ensureRealtimeSocket(identity.session_id);
-    await this.restoreCurrentRoomIfNeeded();
+    try {
+      const deviceAnonymousToken = this.readOrCreateDeviceAnonymousToken();
+      const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
+      this.applyBootstrapIdentity(deviceAnonymousToken, identity);
+      this.ensureRealtimeSocket(identity.session_id);
+      await this.restoreCurrentRoomIfNeeded();
+    } catch (error) {
+      this.updateChat({
+        recoveryState: "retryable_failure",
+        lastRecoveryErrorCode: this.asRecoveryFailure(error).code ?? "system_error",
+      });
+    } finally {
+      this.bootstrapState = "ready";
+      this.requestUpdate();
+    }
   }
 
   private async joinRoom(): Promise<void> {
@@ -1331,6 +1382,16 @@ export class 聊天壳 extends LitElement {
   override render() {
     const recoveryHint = this.recoveryHintText();
     const historyHint = this.historyHintText();
+    if (this.bootstrapState === "booting") {
+      return html`
+        <section id="bootView" class="boot-screen">
+          <div class="boot-card">
+            <h1 class="boot-title">正在回到聊天空间</h1>
+            <p class="boot-subtitle">正在恢复身份、会话和上次停留的房间，请稍等一下。</p>
+          </div>
+        </section>
+      `;
+    }
     if (!this.chatState.roomId) {
       return html`
         <section id="joinView" class="join-screen">

@@ -368,6 +368,30 @@ describe("聊天壳", () => {
     expect(styles).toContain("--accent-core: #ff385c");
   });
 
+  it("启动恢复房间时在 bootstrap 完成前不会先闪出搜索页", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    vi.spyOn(transport, "bootstrapAnonymousIdentity").mockImplementation(
+      () => new Promise<匿名身份引导结果>(() => {})
+    );
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("#bootView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinView")).toBeNull();
+    el.remove();
+  });
+
+  it("聊天壳会用确定高度锁住房间视图，避免禁掉整页滚动后消息区失去内部滚动", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("height: 100%");
+    expect(styles).toContain("overflow: hidden");
+    expect(styles).toContain(".boot-screen");
+  });
+
   it("搜索页会渲染暖夜大厅结构，而不是普通网页 join 表单", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
