@@ -512,6 +512,27 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("进房成功后会缓存当前房间短码并在标题显示短码", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const roomTitle = el.shadowRoot!.querySelector("#roomTitle");
+
+    expect(window.localStorage.getItem("koko_current_room_code")).toBe("ROOM01");
+    expect(roomTitle).not.toBeNull();
+    expect(roomTitle?.textContent).toContain("ROOM01");
+    el.remove();
+  });
+
   it("启动时若本地已有 koko_current_room_id，会自动恢复该房间", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
@@ -525,8 +546,180 @@ describe("聊天壳", () => {
       { roomId: "r-restore", sessionId: "s-test" },
     ]);
     expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("#roomView")!.textContent).toContain("r-restore");
+    expect(el.shadowRoot!.querySelector("#roomTitle")?.textContent).toContain("群聊房间");
+    expect(el.shadowRoot!.textContent).not.toContain("room:");
+    expect(el.shadowRoot!.textContent).not.toContain("r-restore");
     el.remove();
+  });
+
+  it("恢复进入房间时若存在短码缓存则继续显示短码而不是内部 room_id", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    window.localStorage.setItem("koko_current_room_code", "ROOM01");
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const roomTitle = el.shadowRoot!.querySelector("#roomTitle");
+
+    expect(roomTitle).not.toBeNull();
+    expect(roomTitle?.textContent).toContain("ROOM01");
+    expect(el.shadowRoot!.textContent).not.toContain("room:");
+    expect(el.shadowRoot!.textContent).not.toContain("r-restore");
+    el.remove();
+  });
+
+  it("恢复进入房间时若没有短码缓存则回退通用标题且不泄露内部 room_id", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const roomTitle = el.shadowRoot!.querySelector("#roomTitle");
+
+    expect(roomTitle).not.toBeNull();
+    expect(roomTitle?.textContent).toContain("群聊房间");
+    expect(el.shadowRoot!.textContent).not.toContain("room:");
+    expect(el.shadowRoot!.textContent).not.toContain("r-restore");
+    el.remove();
+  });
+
+  it("点击返回会退出当前房间视图并清掉当前房间锚点", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const backBtn = el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement | null;
+
+    expect(backBtn).not.toBeNull();
+    backBtn?.click();
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
+    expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
+    expect(window.localStorage.getItem("koko_current_room_code")).toBe("ROOM01");
+    el.remove();
+  });
+
+  it("点击返回不会清匿名身份和会话，但会断开当前房间 socket", async () => {
+    const transport = new 假传输();
+    const disconnectSpy = vi.spyOn(transport.socket, "disconnect");
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const backBtn = el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement | null;
+
+    expect(backBtn).not.toBeNull();
+    backBtn?.click();
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.textContent).toContain("暴躁的企鹅");
+    expect(disconnectSpy).toHaveBeenCalledTimes(1);
+    el.remove();
+  });
+
+  it("点击返回后再次进房会重建 realtime 连接并重新订阅", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const backBtn = el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement | null;
+
+    expect(backBtn).not.toBeNull();
+    backBtn?.click();
+    await 等待组件稳定(el);
+
+    const roomInputAgain = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInputAgain.value = "ROOM02";
+    roomInputAgain.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    expect(transport.socketSessionIds).toEqual(["s-test", "s-test"]);
+    expect(
+      transport.socket.sentEvents.some(
+        ({ event, payload }) =>
+          event === "subscribe_room_stream" &&
+          payload.room_id === "r-room-2" &&
+          payload.from === 1
+      )
+    ).toBe(true);
+    el.remove();
+  });
+
+  it("房间页会渲染单屏聊天结构，顶部是导航头部，底部是输入区", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const roomHeader = el.shadowRoot!.querySelector("#roomHeader");
+    const messageScroll = el.shadowRoot!.querySelector("#messageScroll");
+    const composerBar = el.shadowRoot!.querySelector("#composerBar");
+
+    expect(roomHeader).not.toBeNull();
+    expect(messageScroll).not.toBeNull();
+    expect(composerBar).not.toBeNull();
+    expect(
+      roomHeader!.compareDocumentPosition(messageScroll!) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      messageScroll!.compareDocumentPosition(composerBar!) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    el.remove();
+  });
+
+  it("房间页关键样式会吃满视口，并用三行网格把消息区夹在中间", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("min-height: 100dvh");
+    expect(styles).toContain("grid-template-rows: auto minmax(0, 1fr) auto");
+    expect(styles).toContain("padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px))");
+  });
+
+  it("房间页输入区会使用更适合窄屏的自适应栅格，而不是继续复用普通表单行", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain(".composer-bar");
+    expect(styles).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(styles).toContain("@media (max-width: 640px)");
   });
 
   it("恢复房间时 current_session_id 只来自本次 bootstrap", async () => {

@@ -7,6 +7,7 @@ import type { Socket } from "socket.io-client";
 
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
 const 当前房间存储键 = "koko_current_room_id";
+const 当前房间短码存储键 = "koko_current_room_code";
 const 历史分页顶部节流毫秒 = 180;
 const 阅读推进节流毫秒 = 400;
 
@@ -26,72 +27,194 @@ export class 聊天壳 extends LitElement {
   static override styles = css`
     :host {
       display: block;
-      padding: 16px;
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at top, rgba(191, 219, 254, 0.68), transparent 34%),
+        linear-gradient(180deg, #eff6ff 0%, #f8fafc 52%, #eef2ff 100%);
       font-family: "Microsoft YaHei", sans-serif;
-      color: #1f2937;
+      color: #0f172a;
     }
 
-    .row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
+    * {
+      box-sizing: border-box;
     }
 
+    button,
     input {
-      flex: 1;
-      padding: 8px 10px;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
+      font: inherit;
     }
 
     button {
-      padding: 8px 12px;
       border: 0;
-      border-radius: 10px;
-      background: #2563eb;
-      color: white;
       cursor: pointer;
+      transition:
+        transform 140ms ease,
+        opacity 140ms ease,
+        background-color 140ms ease;
     }
 
     button:disabled {
       cursor: not-allowed;
-      opacity: 0.6;
+      opacity: 0.58;
     }
 
-    .panel {
-      max-width: 720px;
+    .join-screen {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
     }
 
-    .meta {
-      margin-bottom: 12px;
+    .join-card {
+      width: min(100%, 560px);
+      padding: 24px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow:
+        0 18px 50px rgba(15, 23, 42, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+      backdrop-filter: blur(18px);
+    }
+
+    .join-title {
+      margin: 0;
+      font-size: clamp(24px, 4vw, 34px);
+      line-height: 1.15;
+      color: #0f172a;
+    }
+
+    .join-subtitle {
+      margin: 10px 0 0;
       color: #475569;
+      line-height: 1.6;
+    }
+
+    .join-meta {
+      margin-top: 18px;
+      color: #64748b;
     }
 
     .hint {
-      margin: 10px 0 14px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #fff7ed;
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: rgba(255, 247, 237, 0.92);
       color: #9a3412;
+    }
+
+    .join-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .text-input {
+      width: 100%;
+      min-width: 0;
+      padding: 12px 16px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #0f172a;
+      outline: none;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .text-input:focus {
+      border-color: rgba(37, 99, 235, 0.45);
+      box-shadow:
+        0 0 0 3px rgba(59, 130, 246, 0.14),
+        inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .primary-button {
+      padding: 12px 18px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #eff6ff;
+      box-shadow: 0 12px 24px rgba(37, 99, 235, 0.2);
+    }
+
+    .primary-button:not(:disabled):hover {
+      transform: translateY(-1px);
+    }
+
+    /* 房间页按单屏聊天应用组织：头部、消息流、输入区共用一张屏幕，不再漂浮成网页卡片。 */
+    .room-screen {
+      min-height: 100dvh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 12px 14px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .room-header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      padding: calc(4px + env(safe-area-inset-top, 0px)) 4px 10px;
+    }
+
+    .back-button {
+      min-width: 72px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.78);
+      color: #1d4ed8;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .room-heading {
+      min-width: 0;
+      text-align: center;
+    }
+
+    .room-title {
+      overflow: hidden;
+      font-size: clamp(18px, 2.4vw, 22px);
+      font-weight: 700;
+      line-height: 1.2;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #0f172a;
+    }
+
+    .room-subtitle {
+      overflow: hidden;
+      margin-top: 4px;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #64748b;
+    }
+
+    /* 消息区必须吃掉中间所有剩余高度，这样不同屏幕高度下输入区都能稳定贴底。 */
+    .message-scroll {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 6px 2px;
+      border-radius: 28px;
+      /* 聊天窗口是内层滚动容器，触顶/触底时不应把浏览器页面回弹和外层滚动链带进来。 */
+      overscroll-behavior-y: contain;
+      /* 历史前插后由壳层按 scrollHeight 差值手动补偿，不能再让浏览器默认滚动锚点重复干预。 */
+      overflow-anchor: none;
+      scrollbar-gutter: stable both-edges;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.12));
     }
 
     .message-list {
       display: flex;
       flex-direction: column;
       gap: 10px;
-      padding: 0;
-      margin: 16px 0 0;
+      min-height: 100%;
+      padding: 8px 4px 0;
+      margin: 0;
       list-style: none;
-    }
-
-    .message-scroll {
-      max-height: 420px;
-      overflow-y: auto;
-      /* 聊天窗口是内层滚动容器，触顶/触底时不应把浏览器页面回弹和外层滚动链带进来。 */
-      overscroll-behavior-y: contain;
-      /* 历史前插后由壳层按 scrollHeight 差值手动补偿，不能再让浏览器默认滚动锚点重复干预。 */
-      overflow-anchor: none;
-      padding-right: 4px;
     }
 
     .message-row {
@@ -125,21 +248,109 @@ export class 聊天壳 extends LitElement {
     }
 
     .message-bubble {
-      max-width: min(80%, 520px);
-      padding: 10px 12px;
-      border-radius: 16px;
-      background: #e2e8f0;
+      max-width: min(82%, 720px);
+      padding: 12px 14px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
       word-break: break-word;
     }
 
     .message-row.mine .message-bubble {
-      background: #dbeafe;
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
     }
 
     .message-alias {
       margin-bottom: 4px;
       font-size: 12px;
       color: #64748b;
+    }
+
+    /* 输入区单独放在底部壳层栏位里，避免消息很多时把输入框重新挤回顶部。 */
+    .composer-bar {
+      display: grid;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow:
+        0 -1px 0 rgba(255, 255, 255, 0.8),
+        0 18px 34px rgba(15, 23, 42, 0.1);
+      backdrop-filter: blur(18px);
+    }
+
+    .composer-status {
+      min-height: 18px;
+      padding: 0 4px;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .composer-status.attention {
+      color: #b45309;
+    }
+
+    .composer-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .composer-input {
+      min-height: 50px;
+      border-radius: 20px;
+    }
+
+    .send-button {
+      min-width: 84px;
+      min-height: 50px;
+      border-radius: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .room-screen {
+        padding-inline: clamp(18px, 4vw, 36px);
+      }
+
+      .message-bubble {
+        max-width: min(70%, 760px);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .join-card {
+        padding: 18px;
+        border-radius: 24px;
+      }
+
+      .join-row,
+      .composer-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .room-screen {
+        gap: 10px;
+        padding-inline: 10px;
+      }
+
+      .room-header {
+        gap: 10px;
+      }
+
+      .back-button {
+        min-width: 60px;
+        padding-inline: 12px;
+      }
+
+      .message-bubble {
+        max-width: 88%;
+      }
+
+      .send-button {
+        min-width: 72px;
+      }
     }
   `;
 
@@ -182,13 +393,14 @@ export class 聊天壳 extends LitElement {
     const roomCode = this.chatState.roomCodeInput.trim();
     if (!roomCode) return;
     try {
+      this.ensureRealtimeSocket(this.chatState.sessionId);
       const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.joinOrCreateRoom(sessionId, roomCode)
       );
       // join-or-create 现在已经返回权威房间快照：
       // 这里直接消费 snapshot_messages，避免进房后再额外打一枪 snapshot，
       // 否则不仅浪费一次请求，还会人为拉大“进房成功”和“首屏可读”之间的竞态窗口。
-      this.enterRoomFromSnapshot(snapshot);
+      this.enterRoomFromSnapshot(snapshot, roomCode);
       this.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
       this.handleRecoveryFailure(this.chatState.roomId || this.readCurrentRoomId(), error, false);
@@ -205,6 +417,7 @@ export class 聊天壳 extends LitElement {
     const roomId = this.readCurrentRoomId();
     if (!roomId) return;
     try {
+      this.ensureRealtimeSocket(this.chatState.sessionId);
       const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.loadRoomSnapshot(roomId, sessionId)
       );
@@ -223,6 +436,7 @@ export class 聊天壳 extends LitElement {
     if (!this.chatState.roomId || roomId !== this.chatState.roomId) return;
     try {
       this.cancelPendingScrollPhaseRelease();
+      this.ensureRealtimeSocket(this.chatState.sessionId);
       const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.loadRoomSnapshot(roomId, sessionId)
       );
@@ -233,8 +447,10 @@ export class 聊天壳 extends LitElement {
         snapshot.latest_event_position,
         delta.latest_event_position
       );
+      const roomDisplayTitle = this.readCurrentRoomCode() || "群聊房间";
       this.updateChat({
         roomId: roomId,
+        roomDisplayTitle,
         latestEventPosition,
         lastReadEventPosition: snapshot.last_read_event_position,
         firstUnreadEventPosition: snapshot.first_unread_event_position,
@@ -395,6 +611,66 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
+   * 房间页相关的壳层状态必须统一从这里清空，避免返回、硬失败、控制面拒绝各自散一份字面量。
+   * 这里故意不碰身份和会话，只清“当前正在看的房间”这层视图事实。
+   */
+  private buildRoomViewResetPatch(): Partial<聊天状态> {
+    return {
+      roomId: "",
+      roomDisplayTitle: "",
+      messageInput: "",
+      latestEventPosition: 0,
+      lastReadEventPosition: null,
+      firstUnreadEventPosition: null,
+      hasMoreBefore: false,
+      initialUnreadSettled: true,
+      scrollPhase: "idle",
+      hasUserScrollIntent: false,
+      pendingReadAnchorPosition: null,
+      historyLoadThrottleUntil: 0,
+      messages: [],
+      pending: false,
+      historyLoading: false,
+      historyErrorCode: "",
+      recoveryState: "idle",
+      lastRecoveryErrorCode: "",
+    };
+  }
+
+  /**
+   * 退出当前房间视图时，必须同时收掉本地锚点和当前 socket。
+   * 否则 UI 回到搜索页了，旧房间事件还在往壳层里灌，会制造“人已经离开房间但消息还在进来”的假状态。
+   */
+  private exitCurrentRoomView(
+    opts: { keepRoomCodeCache: boolean; lastRecoveryErrorCode?: string } = {
+      keepRoomCodeCache: true,
+    }
+  ): void {
+    this.realtimeSocket?.disconnect();
+    this.realtimeSocket = null;
+    this.clearCurrentRoomId();
+    if (!opts.keepRoomCodeCache) {
+      this.clearCurrentRoomCode();
+    }
+    this.cancelPendingReadAnchorFlush();
+    this.cancelPendingScrollPhaseRelease();
+    this.updateChat({
+      ...this.buildRoomViewResetPatch(),
+      lastRecoveryErrorCode: opts.lastRecoveryErrorCode ?? "",
+    });
+  }
+
+  /**
+   * 返回搜索页是软离房，不是退群：
+   * - 当前房间视图退出；
+   * - 当前房间实时连接断开；
+   * - 身份、会话和短码展示缓存保留。
+   */
+  private leaveCurrentRoomView(): void {
+    this.exitCurrentRoomView({ keepRoomCodeCache: true });
+  }
+
+  /**
    * 硬失败要清 room 锚点并退出房间；临时失败则保留锚点，让用户还能重试。
    */
   private handleRecoveryFailure(
@@ -404,32 +680,16 @@ export class 聊天壳 extends LitElement {
   ): void {
     const failure = this.asRecoveryFailure(error);
     if (this.isHardRoomFailure(failure)) {
-      this.clearCurrentRoomId();
-      this.updateChat({
-        roomId: "",
-        latestEventPosition: 0,
-        lastReadEventPosition: null,
-        firstUnreadEventPosition: null,
-        hasMoreBefore: false,
-        initialUnreadSettled: true,
-        scrollPhase: "idle",
-        hasUserScrollIntent: false,
-        pendingReadAnchorPosition: null,
-        messages: [],
-        pending: false,
-        historyLoading: false,
-        historyLoadThrottleUntil: 0,
-        historyErrorCode: "",
-        recoveryState: "idle",
+      this.exitCurrentRoomView({
+        keepRoomCodeCache: false,
         lastRecoveryErrorCode: failure.code ?? "",
       });
-      this.cancelPendingReadAnchorFlush();
-      this.cancelPendingScrollPhaseRelease();
       return;
     }
 
     this.updateChat({
       roomId: keepRoomVisible ? roomId : "",
+      roomDisplayTitle: keepRoomVisible ? this.chatState.roomDisplayTitle : "",
       pending: false,
       historyLoading: false,
       scrollPhase: "idle",
@@ -475,27 +735,10 @@ export class 聊天壳 extends LitElement {
     }
 
     if (this.isHardRoomFailure(control)) {
-      this.clearCurrentRoomId();
-      this.updateChat({
-        roomId: "",
-        latestEventPosition: 0,
-        lastReadEventPosition: null,
-        firstUnreadEventPosition: null,
-        hasMoreBefore: false,
-        initialUnreadSettled: true,
-        scrollPhase: "idle",
-        hasUserScrollIntent: false,
-        pendingReadAnchorPosition: null,
-        messages: [],
-        pending: false,
-        historyLoading: false,
-        historyLoadThrottleUntil: 0,
-        historyErrorCode: "",
-        recoveryState: "idle",
+      this.exitCurrentRoomView({
+        keepRoomCodeCache: false,
         lastRecoveryErrorCode: control.code ?? "",
       });
-      this.cancelPendingReadAnchorFlush();
-      this.cancelPendingScrollPhaseRelease();
       return;
     }
 
@@ -555,6 +798,24 @@ export class 聊天壳 extends LitElement {
     }
   }
 
+  private readCurrentRoomCode(): string {
+    const storage =
+      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
+    const stored =
+      storage && typeof storage.getItem === "function"
+        ? storage.getItem(当前房间短码存储键)
+        : null;
+    return stored?.trim() ? stored : "";
+  }
+
+  private writeCurrentRoomCode(roomCode: string): void {
+    const storage =
+      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
+    if (storage && typeof storage.setItem === "function") {
+      storage.setItem(当前房间短码存储键, roomCode);
+    }
+  }
+
   private clearCurrentRoomId(): void {
     const storage =
       typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
@@ -563,16 +824,39 @@ export class 聊天壳 extends LitElement {
     }
   }
 
+  private clearCurrentRoomCode(): void {
+    const storage =
+      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
+    if (storage && typeof storage.removeItem === "function") {
+      storage.removeItem(当前房间短码存储键);
+    }
+  }
+
+  /**
+   * 房间标题目前优先来自用户实际输入过的短码缓存。
+   * 后端还没有返回房间名或短码时，壳层只能在“不泄露 room_id”和“不给用户空标题”之间取平衡。
+   */
+  private resolveRoomDisplayTitle(roomCodeForDisplay?: string): string {
+    const trimmedRoomCode = roomCodeForDisplay?.trim() ?? "";
+    if (trimmedRoomCode) {
+      this.writeCurrentRoomCode(trimmedRoomCode);
+      return trimmedRoomCode;
+    }
+    return this.readCurrentRoomCode() || "群聊房间";
+  }
+
   /**
    * 房间基线一旦成立，就统一从这里更新壳层状态与本地恢复锚点。
    * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
    */
-  private enterRoomFromSnapshot(snapshot: 房间快照): void {
+  private enterRoomFromSnapshot(snapshot: 房间快照, roomCodeForDisplay?: string): void {
     this.cancelPendingReadAnchorFlush();
     this.cancelPendingScrollPhaseRelease();
     this.writeCurrentRoomId(snapshot.room_id);
+    const roomDisplayTitle = this.resolveRoomDisplayTitle(roomCodeForDisplay);
     this.updateChat({
       roomId: snapshot.room_id,
+      roomDisplayTitle,
       latestEventPosition: snapshot.latest_event_position,
       lastReadEventPosition: snapshot.last_read_event_position,
       firstUnreadEventPosition: snapshot.first_unread_event_position,
@@ -959,6 +1243,24 @@ export class 聊天壳 extends LitElement {
     return "";
   }
 
+  /**
+   * 房间副标题是纯壳层展示槽位：
+   * - 优先承接当前最重要的即时状态提示；
+   * - 没有异常提示时，再退回到“你当前是谁”这种稳定辅助信息。
+   * 这样顶部信息区就不会在正常态和异常态之间反复跳出额外面板。
+   */
+  private roomSubtitleText(recoveryHint: string, historyHint: string): string {
+    if (recoveryHint) {
+      return recoveryHint;
+    }
+    if (historyHint) {
+      return historyHint;
+    }
+    return this.chatState.displayAlias
+      ? `当前匿名身份：${this.chatState.displayAlias}`
+      : "群聊房间";
+  }
+
   private isInvalidSessionError(error: unknown): boolean {
     return this.asRecoveryFailure(error).code === "invalid_session";
   }
@@ -984,49 +1286,48 @@ export class 聊天壳 extends LitElement {
     const historyHint = this.historyHintText();
     if (!this.chatState.roomId) {
       return html`
-        <section id="joinView" class="panel">
-          <div id="alias" class="meta">alias: ${this.chatState.displayAlias || "-"}</div>
+        <section id="joinView" class="join-screen">
+          <div class="join-card">
+            <h1 class="join-title">进入群聊房间</h1>
+            <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
+            <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
           ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
-          <div class="row">
-            <input
-              id="roomCode"
-              placeholder="房间短码"
-              .value=${this.chatState.roomCodeInput}
-              @input=${(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                this.updateChat({ roomCodeInput: target.value });
-              }}
-            />
-            <button id="joinBtn" @click=${() => this.joinRoom()}>进房</button>
+            <div class="join-row">
+              <input
+                id="roomCode"
+                class="text-input"
+                placeholder="房间短码"
+                .value=${this.chatState.roomCodeInput}
+                @input=${(e: Event) => {
+                  const target = e.target as HTMLInputElement;
+                  this.updateChat({ roomCodeInput: target.value });
+                }}
+              />
+              <button id="joinBtn" class="primary-button" @click=${() => this.joinRoom()}>
+                进房
+              </button>
+            </div>
           </div>
         </section>
       `;
     }
 
+    const roomSubtitle = this.roomSubtitleText(recoveryHint, historyHint);
+    const statusAttention = Boolean(recoveryHint || historyHint);
+
     return html`
-      <section id="roomView" class="panel">
-        <div id="alias" class="meta">alias: ${this.chatState.displayAlias || "-"}</div>
-        <div class="meta">room: ${this.chatState.roomId || "-"}</div>
-        ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
-        ${historyHint ? html`<div id="historyHint" class="hint">${historyHint}</div>` : null}
-        <div class="row">
-          <input
-            id="msgInput"
-            placeholder="输入消息"
-            .value=${this.chatState.messageInput}
-            @input=${(e: Event) => {
-              const target = e.target as HTMLInputElement;
-              this.updateChat({ messageInput: target.value });
-            }}
-          />
-          <button
-            id="sendBtn"
-            ?disabled=${this.chatState.pending}
-            @click=${() => this.sendMessage()}
-          >
-            发送
+      <section id="roomView" class="room-screen">
+        <header id="roomHeader" class="room-header">
+          <button id="backBtn" class="back-button" @click=${() => this.leaveCurrentRoomView()}>
+            返回
           </button>
-        </div>
+          <div class="room-heading">
+            <div id="roomTitle" class="room-title">
+              ${this.chatState.roomDisplayTitle || "群聊房间"}
+            </div>
+            <div id="roomSubtitle" class="room-subtitle">${roomSubtitle}</div>
+          </div>
+        </header>
         <div
           id="messageScroll"
           class="message-scroll"
@@ -1069,6 +1370,31 @@ export class 聊天壳 extends LitElement {
             })}
           </ul>
         </div>
+        <footer id="composerBar" class="composer-bar">
+          <div class="composer-status ${statusAttention ? "attention" : ""}">
+            ${statusAttention ? roomSubtitle : "在这里输入消息，发送后会实时出现在房间里。"}
+          </div>
+          <div class="composer-row">
+            <input
+              id="msgInput"
+              class="text-input composer-input"
+              placeholder="输入消息"
+              .value=${this.chatState.messageInput}
+              @input=${(e: Event) => {
+                const target = e.target as HTMLInputElement;
+                this.updateChat({ messageInput: target.value });
+              }}
+            />
+            <button
+              id="sendBtn"
+              class="primary-button send-button"
+              ?disabled=${this.chatState.pending}
+              @click=${() => this.sendMessage()}
+            >
+              发送
+            </button>
+          </div>
+        </footer>
       </section>
     `;
   }

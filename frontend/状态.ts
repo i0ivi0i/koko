@@ -11,6 +11,8 @@ export interface 聊天状态 {
   sessionId: string;
   /** 当前壳层记住的房间恢复锚点。它不是成员资格真相。 */
   roomId: string;
+  /** 当前房间标题只服务壳层展示，可由短码或未来房间名填充。 */
+  roomDisplayTitle: string;
   roomCodeInput: string;
   messageInput: string;
   latestEventPosition: number;
@@ -53,6 +55,7 @@ export const 初始聊天状态: 聊天状态 = {
   displayAlias: "",
   sessionId: "",
   roomId: "",
+  roomDisplayTitle: "",
   roomCodeInput: "",
   messageInput: "",
   latestEventPosition: 0,
