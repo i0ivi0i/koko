@@ -257,6 +257,53 @@ async function 等待组件稳定(el: 聊天壳): Promise<void> {
   await el.updateComplete;
 }
 
+function 模拟消息滚动视口(
+  el: 聊天壳,
+  scroll: HTMLElement,
+  rows: Array<{ eventPosition: number; top: number; bottom: number }>
+): void {
+  const byPosition = new Map(rows.map((row) => [row.eventPosition, row]));
+  Object.defineProperty(scroll, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 320,
+      bottom: 300,
+      width: 320,
+      height: 300,
+      toJSON: () => ({}),
+    }),
+  });
+  const elements = Array.from(
+    el.shadowRoot!.querySelectorAll("[data-event-position]")
+  ) as HTMLElement[];
+  for (const element of elements) {
+    const eventPosition = Number(element.dataset.eventPosition);
+    const row = byPosition.get(eventPosition) ?? {
+      eventPosition,
+      top: 1000 + eventPosition * 10,
+      bottom: 1040 + eventPosition * 10,
+    };
+    Object.defineProperty(element, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: row.top,
+        top: row.top,
+        left: 0,
+        right: 320,
+        bottom: row.bottom,
+        width: 320,
+        height: row.bottom - row.top,
+        toJSON: () => ({}),
+      }),
+    });
+  }
+}
+
 describe("聊天壳", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -1217,6 +1264,11 @@ describe("聊天壳", () => {
       };
       Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
       Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+      模拟消息滚动视口(el, scroll, [
+        { eventPosition: 1, top: 0, bottom: 40 },
+        { eventPosition: 2, top: 50, bottom: 90 },
+        { eventPosition: 3, top: 100, bottom: 140 },
+      ]);
       scroll.scrollTop = 80;
       scroll.dispatchEvent(new Event("scroll"));
       scroll.dispatchEvent(new Event("scroll"));
@@ -1227,6 +1279,69 @@ describe("聊天壳", () => {
 
       expect(transport.readAnchorUpdates).toEqual([
         { roomId: "r-test", sessionId: "s-test", lastReadEventPosition: 3 },
+      ]);
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
+  it("用户停在中段阅读时会按视口里最后完整可见消息推进已读", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 19, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: Array.from({ length: 19 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-test",
+          message_id: `m-${index + 1}`,
+          client_message_id: `c-${index + 1}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `消息-${index + 1}`,
+          event_position: index + 1,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 960 });
+      模拟消息滚动视口(el, scroll, [
+        { eventPosition: 1, top: -60, bottom: -20 },
+        { eventPosition: 2, top: 0, bottom: 40 },
+        { eventPosition: 3, top: 50, bottom: 90 },
+        { eventPosition: 4, top: 100, bottom: 140 },
+        { eventPosition: 5, top: 150, bottom: 190 },
+        { eventPosition: 6, top: 200, bottom: 240 },
+        { eventPosition: 7, top: 250, bottom: 290 },
+        { eventPosition: 8, top: 295, bottom: 335 },
+      ]);
+      scroll.scrollTop = 180;
+      scroll.dispatchEvent(new Event("scroll"));
+
+      await vi.advanceTimersByTimeAsync(450);
+
+      expect(transport.readAnchorUpdates).toEqual([
+        { roomId: "r-test", sessionId: "s-test", lastReadEventPosition: 7 },
       ]);
     } finally {
       vi.useRealTimers();

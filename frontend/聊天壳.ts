@@ -642,11 +642,11 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
-   * 阅读推进只在“用户已经把当前首屏稳定看完，并且滚到靠近底部”时触发。
-   * 这样可以避免：
-   * 1. 首屏恢复期间把最新位置误写成已读；
-   * 2. 上滑补历史时把顶部旧消息误算成新的已读进度；
-   * 3. 每滚动一点就发一条写请求。
+   * 阅读推进必须基于“当前视口里真正读到哪一条消息”：
+   * 1. 首屏恢复期间仍然不能误把未读批量推进成已读；
+   * 2. 上滑补历史时只能单调前进，不能把顶部旧消息写成新的阅读真相；
+   * 3. 用户停在中段刷新时，后端要能拿到准确的 last_read_event_position，
+   *    否则小房间会直接退化成“整房都在首屏里，于是回到最老消息附近”的错误体验。
    */
   private maybeTrackReadAnchor(scrollContainer: HTMLElement): void {
     if (
@@ -656,16 +656,43 @@ export class 聊天壳 extends LitElement {
     ) {
       return;
     }
-    const nearBottom =
-      scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 24;
-    if (!nearBottom) {
+    const nextReadPosition = this.findVisibleReadAnchorPosition(scrollContainer);
+    if (nextReadPosition === null) {
       return;
     }
-    const latestMessage = this.chatState.messages[this.chatState.messages.length - 1];
-    if (!latestMessage) {
-      return;
+    this.scheduleReadAnchorUpdate(nextReadPosition);
+  }
+
+  /**
+   * 只把“完整进入当前滚动视口”的最后一条消息视作已读：
+   * - 刚露出一点的下一条未读，不应被过早推进；
+   * - 这样 last_read / first_unread 的边界才会稳定停在真实阅读断点上。
+   */
+  private findVisibleReadAnchorPosition(scrollContainer: HTMLElement): number | null {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const messageRows = Array.from(
+      this.shadowRoot?.querySelectorAll("[data-event-position]") ?? []
+    ) as HTMLElement[];
+    let nextReadPosition: number | null = null;
+    for (const row of messageRows) {
+      const rawEventPosition = row.dataset.eventPosition;
+      if (!rawEventPosition) {
+        continue;
+      }
+      const eventPosition = Number(rawEventPosition);
+      if (!Number.isFinite(eventPosition)) {
+        continue;
+      }
+      const rowRect = row.getBoundingClientRect();
+      const fullyVisible =
+        rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom;
+      if (!fullyVisible) {
+        continue;
+      }
+      nextReadPosition =
+        nextReadPosition === null ? eventPosition : Math.max(nextReadPosition, eventPosition);
     }
-    this.scheduleReadAnchorUpdate(latestMessage.event_position);
+    return nextReadPosition;
   }
 
   private scheduleReadAnchorUpdate(nextPosition: number): void {
