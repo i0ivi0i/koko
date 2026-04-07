@@ -358,6 +358,40 @@ describe("聊天壳", () => {
     expect(styles).toContain("overflow-anchor: none");
   });
 
+  it("聊天壳样式会声明暖夜会话风 token，而不是浅色网页底板", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("--surface-canvas: #171312");
+    expect(styles).toContain("--surface-panel: #211b19");
+    expect(styles).toContain("--surface-elevated: #2a2321");
+    expect(styles).toContain("--text-primary: #f6ede9");
+    expect(styles).toContain("--accent-core: #ff385c");
+  });
+
+  it("搜索页会渲染暖夜大厅结构，而不是普通网页 join 表单", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".join-card")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("进入群聊房间");
+    expect(el.shadowRoot!.textContent).toContain("身份和会话会继续沿用");
+    el.remove();
+  });
+
+  it("搜索页样式会复用暖夜 token 和圆角材质，而不是浅色网页表单", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain(".join-screen");
+    expect(styles).toContain(".join-card");
+    expect(styles).toContain("backdrop-filter: blur");
+    expect(styles).toContain("border-radius: 28px");
+    expect(styles).toContain("var(--surface-panel)");
+  });
+
   it("启动时会从本地设备凭证恢复匿名身份", async () => {
     window.localStorage.setItem(
       "koko_device_anonymous_token",
