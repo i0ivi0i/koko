@@ -507,6 +507,9 @@ export class 聊天壳 extends LitElement {
     | "roomId"
     | "roomDisplayTitle"
     | "latestEventPosition"
+    | "viewportMode"
+    | "candidateReadAnchorPosition"
+    | "hasUnreadNewerMessages"
     | "recoveryState"
     | "lastRecoveryErrorCode"
   > {
@@ -517,6 +520,9 @@ export class 聊天壳 extends LitElement {
       roomId: roomShell.roomId,
       roomDisplayTitle: roomShell.roomDisplayTitle,
       latestEventPosition: roomShell.latestEventPosition,
+      viewportMode: roomShell.viewportMode,
+      candidateReadAnchorPosition: roomShell.candidateReadAnchorPosition,
+      hasUnreadNewerMessages: roomShell.hasUnreadNewerMessages,
       recoveryState: roomShell.recoveryState,
       lastRecoveryErrorCode: roomShell.lastRecoveryErrorCode,
     };
@@ -804,6 +810,9 @@ export class 聊天壳 extends LitElement {
       scrollPhase: "idle",
       hasUserScrollIntent: false,
       pendingReadAnchorPosition: null,
+      viewportMode: "离底浏览",
+      candidateReadAnchorPosition: null,
+      hasUnreadNewerMessages: false,
       historyLoadThrottleUntil: 0,
       messages: [],
       pending: false,
@@ -975,6 +984,8 @@ export class 聊天壳 extends LitElement {
       roomId: snapshot.room_id,
       roomDisplayTitle,
       latestEventPosition: snapshot.latest_event_position,
+      viewportMode:
+        snapshot.first_unread_event_position === null ? "贴底跟随" : "围绕未读阅读",
     });
     this.updateChat({
       ...this.roomShellPatch(),
@@ -1034,7 +1045,15 @@ export class 聊天壳 extends LitElement {
     if (nextPosition <= floor) {
       return;
     }
-    this.updateChat({ pendingReadAnchorPosition: nextPosition });
+    this.roomKernel.send({
+      type: "VIEWPORT_OBSERVED",
+      candidateReadAnchorPosition: nextPosition,
+      isNearBottom: this.isNearBottom(),
+    });
+    this.updateChat({
+      ...this.roomShellPatch(),
+      pendingReadAnchorPosition: nextPosition,
+    });
     if (this.readAnchorFlushTimer !== null) {
       return;
     }
@@ -1084,8 +1103,9 @@ export class 聊天壳 extends LitElement {
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
     const merged = this.reconcileMessages([...this.chatState.messages, ...events]);
+    const shouldFollowLatest = this.chatState.viewportMode === "贴底跟随";
     this.roomKernel.send({
-      type: "LATEST_EVENT_ADVANCED",
+      type: "AUTHORITATIVE_EVENTS_ARRIVED",
       latestEventPosition,
     });
     this.updateChat({
@@ -1093,6 +1113,48 @@ export class 聊天壳 extends LitElement {
       messages: merged,
       pending: false,
     });
+    if (shouldFollowLatest) {
+      void this.followLatestAfterRealtimeAppend();
+    }
+  }
+
+  /**
+   * 贴底跟随只属于壳层体验：
+   * - 用户本来就在底部，realtime 新消息到达后才允许继续跟底；
+   * - 这不是后端真相，只是前端当前视口该怎么表现。
+   */
+  private async followLatestAfterRealtimeAppend(): Promise<void> {
+    await this.updateComplete;
+    const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
+    if (!scrollContainer) {
+      return;
+    }
+    scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+    this.roomKernel.send({ type: "USER_JUMPED_TO_LATEST" });
+    this.updateChat(this.roomShellPatch());
+  }
+
+  /**
+   * 贴底判断仍是壳层观测，不是业务真相。
+   * 这里只回答“当前视口是否已经足够接近底部，可以允许新消息自然跟随”。
+   */
+  private isNearBottom(scrollContainer?: HTMLElement | null): boolean {
+    const target =
+      scrollContainer ??
+      ((this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null) ?? null);
+    if (!target) {
+      return false;
+    }
+    return target.scrollHeight - target.clientHeight - target.scrollTop <= 24;
+  }
+
+  private observeViewport(scrollContainer: HTMLElement): void {
+    this.roomKernel.send({
+      type: "VIEWPORT_OBSERVED",
+      candidateReadAnchorPosition: null,
+      isNearBottom: this.isNearBottom(scrollContainer),
+    });
+    this.updateChat(this.roomShellPatch());
   }
 
   private createOptimisticMessage(clientMessageId: string, text: string): 消息事件 {
@@ -1260,7 +1322,11 @@ export class 聊天壳 extends LitElement {
           @wheel=${() => this.roomScroller.标记用户滚动意图()}
           @scroll=${(event: Event) => {
             const target = event.currentTarget as HTMLElement;
+            // 历史补偿基线依赖“本次滚动触发前的 scrollHeight”。
+            // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
+            // 否则贴底观测提前读取 scrollHeight，会把补偿基线读脏。
             this.roomScroller.处理滚动事件(target);
+            this.observeViewport(target);
           }}
         >
           <ul id="messageList" class="message-list">

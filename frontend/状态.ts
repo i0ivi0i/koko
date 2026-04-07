@@ -1,5 +1,8 @@
 import type { 消息事件 } from "./契约.js";
 
+/** 房间视口模式只属于前端壳层同步编排，不是后端领域真相。 */
+export type 房间视口模式 = "围绕未读阅读" | "贴底跟随" | "离底浏览";
+
 export interface 聊天状态 {
   /** Web 壳本地持久化的设备入口凭证。它不是最终身份真相。 */
   deviceAnonymousToken: string;
@@ -35,6 +38,17 @@ export interface 聊天状态 {
   hasUserScrollIntent: boolean;
   /** 等待节流上报的阅读位置；只属于壳层瞬时状态。 */
   pendingReadAnchorPosition: number | null;
+  /**
+   * 当前视口模式只回答“壳层现在该怎么解释新消息和滚动”：
+   * - `围绕未读阅读`：用户正在从上次未读继续读；
+   * - `贴底跟随`：用户已经贴近底部，允许新消息自然跟随；
+   * - `离底浏览`：用户在中段浏览历史，新消息不能抢视角。
+   */
+  viewportMode: 房间视口模式;
+  /** 当前壳层观测到的候选已读锚点；真正提交仍要再经过内核裁决。 */
+  candidateReadAnchorPosition: number | null;
+  /** 用户不在底部时，后续新消息是否已经在当前阅读位置之后继续累积。 */
+  hasUnreadNewerMessages: boolean;
   /** 顶部补历史节流截止时间戳。 */
   historyLoadThrottleUntil: number;
   messages: 消息事件[];
@@ -66,6 +80,9 @@ export const 初始聊天状态: 聊天状态 = {
   scrollPhase: "idle",
   hasUserScrollIntent: false,
   pendingReadAnchorPosition: null,
+  viewportMode: "离底浏览",
+  candidateReadAnchorPosition: null,
+  hasUnreadNewerMessages: false,
   historyLoadThrottleUntil: 0,
   messages: [],
   pending: false,

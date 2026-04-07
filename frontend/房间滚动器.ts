@@ -2,6 +2,8 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
 import type { 聊天状态 } from "./状态.js";
 
 const 历史分页顶部节流毫秒 = 180;
+const 稳定可读最小可见像素 = 40;
+const 稳定可读最小可见比例 = 0.55;
 
 type 房间滚动观察态 = Pick<
   聊天状态,
@@ -129,10 +131,9 @@ export class 房间滚动器 implements ReactiveController {
         (node) => Number(node.dataset.eventPosition ?? Number.NaN) === firstUnreadEventPosition
       );
     if (!target) {
-      this.deps.更新状态({
-        initialUnreadSettled: true,
-        scrollPhase: "idle",
-      });
+      // 首条未读节点这轮还没准备好时，不能直接宣布首屏已经恢复完成。
+      // 否则壳层会把一次“没找到目标”的偶发时序问题误记成“已稳定停靠”，
+      // 后续刷新就容易退化成停在错误位置。
       return;
     }
 
@@ -212,9 +213,16 @@ export class 房间滚动器 implements ReactiveController {
         continue;
       }
       const rowRect = row.getBoundingClientRect();
-      const fullyVisible =
-        rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom;
-      if (!fullyVisible) {
+      const 可见顶部 = Math.max(rowRect.top, containerRect.top);
+      const 可见底部 = Math.min(rowRect.bottom, containerRect.bottom);
+      const 可见高度 = Math.max(0, 可见底部 - 可见顶部);
+      const 行高 = Math.max(1, rowRect.bottom - rowRect.top);
+      // 阅读候选不能继续死卡“整条消息必须完全可见”：
+      // 真实 IM 里，长消息只要大部分主体已经稳定进入视口，就应允许它成为候选已读锚点。
+      const 稳定可读 =
+        可见高度 >= Math.min(行高, 稳定可读最小可见像素) ||
+        可见高度 / 行高 >= 稳定可读最小可见比例;
+      if (!稳定可读) {
         continue;
       }
       nextReadPosition =
