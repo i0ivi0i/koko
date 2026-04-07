@@ -1045,20 +1045,39 @@ export class 聊天壳 extends LitElement {
   }
 
   private scheduleReadAnchorUpdate(nextPosition: number): void {
-    const currentReadPosition = this.chatState.lastReadEventPosition ?? 0;
-    const pendingPosition = this.chatState.pendingReadAnchorPosition ?? 0;
-    const floor = Math.max(currentReadPosition, pendingPosition);
-    if (nextPosition <= floor) {
-      return;
-    }
     this.roomKernel.send({
       type: "VIEWPORT_OBSERVED",
       candidateReadAnchorPosition: nextPosition,
       isNearBottom: this.isNearBottom(),
     });
+    this.updateChat(this.roomShellPatch());
+    this.promoteCandidateReadAnchorToPending();
+  }
+
+  /**
+   * 候选已读锚点和“正式待提交”必须分两层：
+   * - 候选只代表壳层观测到“用户大概率已经看到这里”；
+   * - 只有当前房间已经处于稳定阅读阶段，才允许它进入真正的提交队列。
+   */
+  private promoteCandidateReadAnchorToPending(): void {
+    if (!this.chatState.roomId || !this.chatState.initialUnreadSettled) {
+      return;
+    }
+    if (this.chatState.scrollPhase !== "idle") {
+      return;
+    }
+    const candidatePosition = this.chatState.candidateReadAnchorPosition;
+    if (candidatePosition === null) {
+      return;
+    }
+    const currentReadPosition = this.chatState.lastReadEventPosition ?? 0;
+    const pendingPosition = this.chatState.pendingReadAnchorPosition ?? 0;
+    const floor = Math.max(currentReadPosition, pendingPosition);
+    if (candidatePosition <= floor) {
+      return;
+    }
     this.updateChat({
-      ...this.roomShellPatch(),
-      pendingReadAnchorPosition: nextPosition,
+      pendingReadAnchorPosition: candidatePosition,
     });
     if (this.readAnchorFlushTimer !== null) {
       return;
@@ -1133,6 +1152,7 @@ export class 聊天壳 extends LitElement {
       initialUnreadSettled: true,
       scrollPhase: "idle",
     });
+    this.promoteCandidateReadAnchorToPending();
   }
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {

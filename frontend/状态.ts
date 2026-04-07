@@ -36,7 +36,7 @@ export interface 聊天状态 {
   scrollPhase: "idle" | "restoring_unread" | "compensating_history";
   /** 当前房间里用户是否已经明确开始过滚动交互。 */
   hasUserScrollIntent: boolean;
-  /** 等待节流上报的阅读位置；只属于壳层瞬时状态。 */
+  /** 已经通过壳层裁决、等待节流正式提交给后端的阅读位置。 */
   pendingReadAnchorPosition: number | null;
   /**
    * 当前视口模式只回答“壳层现在该怎么解释新消息和滚动”：

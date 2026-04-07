@@ -1204,6 +1204,134 @@ describe("聊天壳", () => {
     }
   });
 
+  it("首屏恢复阶段采样到候选已读后，不会在完成前立刻进入待提交队列", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.snapshotQueue = [
+      创建房间快照("r-restore", 19, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: Array.from({ length: 19 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-restore",
+          message_id: `m-${index + 1}`,
+          client_message_id: `c-${index + 1}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `恢复消息-${index + 1}`,
+          event_position: index + 1,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+      clientHeight: number;
+      scrollHeight: number;
+    };
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
+    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 960 });
+    模拟消息滚动视口(el, scroll, [
+      { eventPosition: 1, top: -60, bottom: -20 },
+      { eventPosition: 2, top: 0, bottom: 40 },
+      { eventPosition: 3, top: 50, bottom: 90 },
+      { eventPosition: 4, top: 100, bottom: 140 },
+      { eventPosition: 5, top: 150, bottom: 190 },
+      { eventPosition: 6, top: 200, bottom: 240 },
+      { eventPosition: 7, top: 250, bottom: 290 },
+      { eventPosition: 8, top: 295, bottom: 335 },
+    ]);
+    设置测试滚动阶段(el, {
+      initialUnreadSettled: false,
+      firstUnreadEventPosition: 2,
+      scrollPhase: "restoring_unread",
+      hasUserScrollIntent: false,
+    });
+
+    (
+      el as unknown as {
+        scheduleReadAnchorUpdate: (position: number) => void;
+      }
+    ).scheduleReadAnchorUpdate(7);
+
+    expect(
+      (
+        el as unknown as {
+          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
+        }
+      ).chatState.pendingReadAnchorPosition
+    ).toBeNull();
+    expect(
+      (
+        el as unknown as {
+          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
+        }
+      ).chatState.candidateReadAnchorPosition
+    ).toBe(7);
+
+    el.remove();
+  });
+
+  it("首屏稳定完成后，已有候选已读才会进入正式待提交队列", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.snapshotQueue = [
+      创建房间快照("r-restore", 19, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: Array.from({ length: 19 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-restore",
+          message_id: `m-${index + 1}`,
+          client_message_id: `c-${index + 1}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `恢复消息-${index + 1}`,
+          event_position: index + 1,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    (
+      el as unknown as {
+        scheduleReadAnchorUpdate: (position: number) => void;
+      }
+    ).scheduleReadAnchorUpdate(7);
+
+    (
+      el as unknown as {
+        handleInitialSettleCompleted: (mode: "围绕未读阅读" | "贴底跟随") => void;
+      }
+    ).handleInitialSettleCompleted("围绕未读阅读");
+
+    expect(
+      (
+        el as unknown as {
+          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
+        }
+      ).chatState.candidateReadAnchorPosition
+    ).toBe(7);
+    expect(
+      (
+        el as unknown as {
+          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
+        }
+      ).chatState.pendingReadAnchorPosition
+    ).toBe(7);
+
+    el.remove();
+  });
+
   it("久未进入房间并围绕首条未读恢复后，会进入围绕未读阅读模式", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
