@@ -452,6 +452,12 @@ export class 聊天壳 extends LitElement {
 
   private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * 只在“刷新恢复 / 快照重拉”这类恢复链路里，才允许首屏程序性补一次阅读锚点。
+   * 首次手动进房仍然保持原语义，避免把恢复专用逻辑扩散到所有入口。
+   */
+  private shouldPrimeReadAnchorAfterInitialSettle = false;
+
   setTransportForTest(transport: 前端传输端口): void {
     this.transport = transport;
   }
@@ -466,6 +472,7 @@ export class 聊天壳 extends LitElement {
     this.realtimeSocket = null;
     this.cancelPendingReadAnchorFlush();
     this.cancelPendingScrollPhaseRelease();
+    this.shouldPrimeReadAnchorAfterInitialSettle = false;
     super.disconnectedCallback();
   }
 
@@ -498,7 +505,7 @@ export class 聊天壳 extends LitElement {
       // join-or-create 现在已经返回权威房间快照：
       // 这里直接消费 snapshot_messages，避免进房后再额外打一枪 snapshot，
       // 否则不仅浪费一次请求，还会人为拉大“进房成功”和“首屏可读”之间的竞态窗口。
-      this.enterRoomFromSnapshot(snapshot, roomCode);
+      this.enterRoomFromSnapshot(snapshot, roomCode, false);
       this.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
       this.handleRecoveryFailure(this.chatState.roomId || this.readCurrentRoomId(), error, false);
@@ -519,7 +526,7 @@ export class 聊天壳 extends LitElement {
       const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.loadRoomSnapshot(roomId, sessionId)
       );
-      this.enterRoomFromSnapshot(snapshot);
+      this.enterRoomFromSnapshot(snapshot, undefined, true);
       this.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
       this.handleRecoveryFailure(roomId, error, false);
@@ -546,6 +553,7 @@ export class 聊天壳 extends LitElement {
         delta.latest_event_position
       );
       const roomDisplayTitle = this.readCurrentRoomCode() || "群聊房间";
+      this.shouldPrimeReadAnchorAfterInitialSettle = true;
       this.updateChat({
         roomId: roomId,
         roomDisplayTitle,
@@ -752,6 +760,7 @@ export class 聊天壳 extends LitElement {
     }
     this.cancelPendingReadAnchorFlush();
     this.cancelPendingScrollPhaseRelease();
+    this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.updateChat({
       ...this.buildRoomViewResetPatch(),
       lastRecoveryErrorCode: opts.lastRecoveryErrorCode ?? "",
@@ -947,9 +956,14 @@ export class 聊天壳 extends LitElement {
    * 房间基线一旦成立，就统一从这里更新壳层状态与本地恢复锚点。
    * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
    */
-  private enterRoomFromSnapshot(snapshot: 房间快照, roomCodeForDisplay?: string): void {
+  private enterRoomFromSnapshot(
+    snapshot: 房间快照,
+    roomCodeForDisplay?: string,
+    primeReadAnchorAfterInitialSettle = false
+  ): void {
     this.cancelPendingReadAnchorFlush();
     this.cancelPendingScrollPhaseRelease();
+    this.shouldPrimeReadAnchorAfterInitialSettle = primeReadAnchorAfterInitialSettle;
     this.writeCurrentRoomId(snapshot.room_id);
     const roomDisplayTitle = this.resolveRoomDisplayTitle(roomCodeForDisplay);
     this.updateChat({
@@ -981,7 +995,9 @@ export class 聊天壳 extends LitElement {
   /**
    * 首屏未读定位和历史前插补偿是两套完全不同的逻辑：
    * - 这里仅处理“刚恢复房间时，把视口落到第一条未读附近”；
-   * - 不推进阅读真相，也不做历史分页补偿。
+   * - 不做历史分页补偿；
+   * - 但落位完成后，要按当前真实可见窗口补一次阅读锚点，
+   *   否则用户已经看到了较新的消息，一刷新又会被后端当成“还停在很早的位置”。
    */
   private scheduleInitialUnreadSettle(): void {
     queueMicrotask(() => {
@@ -1009,6 +1025,7 @@ export class 聊天壳 extends LitElement {
           scrollContainer.scrollHeight - scrollContainer.clientHeight
         );
       }
+      this.captureReadAnchorFromCurrentViewport();
       this.updateChat({
         initialUnreadSettled: true,
         scrollPhase: "idle",
@@ -1026,10 +1043,34 @@ export class 聊天壳 extends LitElement {
       return;
     }
     target.scrollIntoView?.({ block: "center" });
+    this.captureReadAnchorFromCurrentViewport();
     // 首屏恢复滚动是程序行为，不应立刻放行给“已读推进 / 顶部分页”解释。
     // 这里延后一拍再回到 idle，让浏览器随后抛出的 scroll 先被壳层隔离掉。
     this.scheduleScrollPhaseRelease("restoring_unread", {
       initialUnreadSettled: true,
+    });
+  }
+
+  /**
+   * 刚恢复房间时，用户未必会立刻再手动滚一下。
+   * 但如果当前视口已经稳定展示到了更晚的消息，前端就该尽快把这份阅读事实补回后端，
+   * 避免下一次刷新仍按旧锚点把房间恢复到更早位置。
+   */
+  private captureReadAnchorFromCurrentViewport(): void {
+    if (!this.shouldPrimeReadAnchorAfterInitialSettle) {
+      return;
+    }
+    this.shouldPrimeReadAnchorAfterInitialSettle = false;
+    queueMicrotask(() => {
+      const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
+      if (!scrollContainer) {
+        return;
+      }
+      const nextReadPosition = this.findVisibleReadAnchorPosition(scrollContainer);
+      if (nextReadPosition === null) {
+        return;
+      }
+      this.scheduleReadAnchorUpdate(nextReadPosition);
     });
   }
 

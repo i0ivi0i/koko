@@ -1052,6 +1052,71 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("恢复首屏已经把较新的消息放进视口时，会主动推进阅读锚点而不是等用户再手动滚动", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.snapshotQueue = [
+      创建房间快照("r-restore", 19, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: Array.from({ length: 19 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-restore",
+          message_id: `m-${index + 1}`,
+          client_message_id: `c-${index + 1}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `恢复消息-${index + 1}`,
+          event_position: index + 1,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 960 });
+      模拟消息滚动视口(el, scroll, [
+        { eventPosition: 1, top: -60, bottom: -20 },
+        { eventPosition: 2, top: 0, bottom: 40 },
+        { eventPosition: 3, top: 50, bottom: 90 },
+        { eventPosition: 4, top: 100, bottom: 140 },
+        { eventPosition: 5, top: 150, bottom: 190 },
+        { eventPosition: 6, top: 200, bottom: 240 },
+        { eventPosition: 7, top: 250, bottom: 290 },
+        { eventPosition: 8, top: 295, bottom: 335 },
+      ]);
+      设置测试滚动阶段(el, {
+        initialUnreadSettled: false,
+        firstUnreadEventPosition: 2,
+        scrollPhase: "restoring_unread",
+        hasUserScrollIntent: false,
+      });
+
+      await (
+        el as unknown as { settleInitialUnreadAnchor: () => Promise<void> }
+      ).settleInitialUnreadAnchor();
+      await vi.advanceTimersByTimeAsync(450);
+
+      expect(transport.readAnchorUpdates).toEqual([
+        { roomId: "r-restore", sessionId: "s-test", lastReadEventPosition: 7 },
+      ]);
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
   it("room_not_found 会清掉 current_room_id 并回到搜索页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-missing");
     const transport = new 假传输();
