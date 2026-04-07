@@ -352,6 +352,12 @@ describe("聊天壳", () => {
     expect(styles).toContain("overscroll-behavior-y: contain");
   });
 
+  it("聊天滚动容器会显式关闭浏览器默认滚动锚点，避免和手动历史补偿打架", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("overflow-anchor: none");
+  });
+
   it("启动时会从本地设备凭证恢复匿名身份", async () => {
     window.localStorage.setItem(
       "koko_device_anonymous_token",

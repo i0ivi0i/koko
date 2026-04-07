@@ -89,6 +89,8 @@ export class 聊天壳 extends LitElement {
       overflow-y: auto;
       /* 聊天窗口是内层滚动容器，触顶/触底时不应把浏览器页面回弹和外层滚动链带进来。 */
       overscroll-behavior-y: contain;
+      /* 历史前插后由壳层按 scrollHeight 差值手动补偿，不能再让浏览器默认滚动锚点重复干预。 */
+      overflow-anchor: none;
       padding-right: 4px;
     }
 
