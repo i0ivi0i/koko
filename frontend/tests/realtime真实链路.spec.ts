@@ -11,8 +11,17 @@ type 匿名身份引导响应 = {
   display_alias?: string;
 };
 
-type 房间快照 = {
+type 房间响应 = {
   room_id: string;
+};
+
+type 房间恢复快照响应 = {
+  room_id: string;
+  latest_event_position: number;
+  last_read_event_position: number | null;
+  first_unread_event_position: number | null;
+  snapshot_messages: 房间事件[];
+  has_more_before: boolean;
 };
 
 type 房间事件 = {
@@ -69,11 +78,11 @@ describe("realtime真实链路", () => {
       expect(first.display_alias).toBe(second.display_alias);
       expect(first.session_id).toBe(second.session_id);
 
-      const room1 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room1 = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: first.session_id,
         room_code: uniqueRoomCode("TOKN"),
       });
-      const room2 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room2 = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: second.session_id,
         room_code: uniqueRoomCode("TOKN"),
       });
@@ -108,11 +117,11 @@ describe("realtime真实链路", () => {
         device_anonymous_token: "socket-b",
       });
       const roomCode = uniqueRoomCode("SOCKET");
-      const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: a.session_id,
         room_code: roomCode,
       });
-      await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: b.session_id,
         room_code: roomCode,
       });
@@ -178,15 +187,15 @@ describe("realtime真实链路", () => {
       });
       const roomCode1 = uniqueRoomCode("SOCKET");
       const roomCode2 = uniqueRoomCode("SOCKET");
-      const room1 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room1 = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: a.session_id,
         room_code: roomCode1,
       });
-      await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: b.session_id,
         room_code: roomCode1,
       });
-      const room2 = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room2 = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: c.session_id,
         room_code: roomCode2,
       });
@@ -281,7 +290,7 @@ describe("realtime真实链路", () => {
       const session = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "future-from",
       });
-      const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: session.session_id,
         room_code: uniqueRoomCode("SOCKET"),
       });
@@ -329,7 +338,7 @@ describe("realtime真实链路", () => {
       const stranger = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "room-stranger",
       });
-      const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: owner.session_id,
         room_code: uniqueRoomCode("SOCKET"),
       });
@@ -405,7 +414,7 @@ describe("realtime真实链路", () => {
       const session = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
         device_anonymous_token: "negative-from",
       });
-      const room = await postJson<房间快照>(`${baseUrl}/api/rooms/join-or-create`, {
+      const room = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: session.session_id,
         room_code: uniqueRoomCode("SOCKET"),
       });
@@ -429,6 +438,91 @@ describe("realtime真实链路", () => {
       await expectNoEvent(socket, "room_events");
 
       socket.disconnect();
+    },
+    60000
+  );
+
+  it(
+    "HTTP snapshot 会围绕第一条未读开窗，而不是把久未进房用户扔回最早消息",
+    async () => {
+      const port = await allocatePort();
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const child = startBackend(port);
+      backendChildren.push(child);
+      await waitForServer(baseUrl);
+
+      const a = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
+        device_anonymous_token: "snapshot-a",
+      });
+      const b = await postJson<匿名身份引导响应>(`${baseUrl}/api/session/bootstrap`, {
+        device_anonymous_token: "snapshot-b",
+      });
+      const roomCode = uniqueRoomCode("SNAP");
+      const room = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: a.session_id,
+        room_code: roomCode,
+      });
+      await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
+        session_id: b.session_id,
+        room_code: roomCode,
+      });
+
+      const socketB = io(baseUrl, {
+        transports: ["websocket"],
+        auth: { session_id: b.session_id },
+        reconnection: false,
+      });
+      await once(socketB, "connect");
+
+      const subscribed = once<{ kind: string }>(socketB, "control_result");
+      socketB.emit("subscribe_room_stream", { room_id: room.room_id, from: 0 });
+      expect((await subscribed).kind).toBe("subscribed");
+
+      // 先积累一段“更早历史”，再把 A 的已读锚点推进到中间位置。
+      // 后面继续追加新消息后，再用 HTTP snapshot 断言后端会围绕第一条未读开窗。
+      for (let index = 1; index <= 20; index += 1) {
+        const nextEvent = once<房间事件>(socketB, "room_event");
+        socketB.emit("send_text_message", {
+          room_id: room.room_id,
+          client_message_id: `snapshot-before-${index}`,
+          text: `更早消息-${index}`,
+        });
+        await nextEvent;
+      }
+
+      await postJson<Record<string, never>>(
+        `${baseUrl}/api/rooms/${room.room_id}/read-anchor`,
+        {
+          session_id: a.session_id,
+          last_read_event_position: 10,
+        }
+      );
+
+      for (let index = 21; index <= 40; index += 1) {
+        const nextEvent = once<房间事件>(socketB, "room_event");
+        socketB.emit("send_text_message", {
+          room_id: room.room_id,
+          client_message_id: `snapshot-after-${index}`,
+          text: `未读消息-${index}`,
+        });
+        await nextEvent;
+      }
+
+      const snapshot = await getJson<房间恢复快照响应>(
+        `${baseUrl}/api/rooms/${room.room_id}/snapshot?session_id=${a.session_id}`
+      );
+
+      expect(snapshot.room_id).toBe(room.room_id);
+      expect(snapshot.latest_event_position).toBe(40);
+      expect(snapshot.last_read_event_position).toBe(10);
+      expect(snapshot.first_unread_event_position).toBe(11);
+      expect(snapshot.has_more_before).toBe(true);
+      expect(snapshot.snapshot_messages.some((event) => event.event_position === 11)).toBe(true);
+      expect(snapshot.snapshot_messages[0]?.event_position).toBeGreaterThan(1);
+      expect(snapshot.snapshot_messages[0]?.event_position).toBeLessThan(11);
+      expect(snapshot.snapshot_messages.at(-1)?.event_position).toBe(40);
+
+      socketB.disconnect();
     },
     60000
   );
@@ -504,6 +598,14 @@ async function waitForServer(baseUrl: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(`服务未按时启动: ${baseUrl}`);
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`GET ${url} failed: ${response.status}`);
+  }
+  return (await response.json()) as T;
 }
 
 async function postJson<T>(url: string, body: object): Promise<T> {
