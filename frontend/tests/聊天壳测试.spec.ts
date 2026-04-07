@@ -1450,6 +1450,182 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("用户围绕旧未读阅读且有更新时，会出现跳到最新入口", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 8, {
+        last_read_event_position: 2,
+        first_unread_event_position: 3,
+        snapshot_messages: Array.from({ length: 8 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-test",
+          message_id: `m-${index + 1}`,
+          client_message_id: `c-${index + 1}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `消息-${index + 1}`,
+          event_position: index + 1,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+      clientHeight: number;
+      scrollHeight: number;
+    };
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
+    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 960 });
+    模拟消息滚动视口(el, scroll, [
+      { eventPosition: 1, top: -60, bottom: -20 },
+      { eventPosition: 2, top: -10, bottom: 30 },
+      { eventPosition: 3, top: 40, bottom: 80 },
+      { eventPosition: 4, top: 90, bottom: 130 },
+      { eventPosition: 5, top: 140, bottom: 180 },
+      { eventPosition: 6, top: 190, bottom: 230 },
+      { eventPosition: 7, top: 240, bottom: 280 },
+      { eventPosition: 8, top: 290, bottom: 330 },
+    ]);
+    设置测试滚动阶段(el, {
+      initialUnreadSettled: true,
+      firstUnreadEventPosition: 3,
+      hasUserScrollIntent: true,
+      scrollPhase: "idle",
+    });
+    scroll.scrollTop = 180;
+
+    transport.socket.trigger("room_event", {
+      type: "message_created",
+      room_id: "r-test",
+      message_id: "m-9",
+      client_message_id: "c-9",
+      sender_session_id: "s-other",
+      sender_display_alias: "冷静的水獭",
+      body: "新消息-9",
+      event_position: 9,
+    });
+    await 等待组件稳定(el);
+
+    const jumpBtn = el.shadowRoot!.querySelector("#jumpToLatestBtn") as HTMLButtonElement | null;
+    expect(jumpBtn).not.toBeNull();
+    expect(jumpBtn?.textContent).toContain("跳到最新");
+
+    el.remove();
+  });
+
+  it("点击跳到最新入口后才会切到贴底跟随并清掉有更新标记", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 8, {
+        last_read_event_position: 2,
+        first_unread_event_position: 3,
+        snapshot_messages: Array.from({ length: 8 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-test",
+          message_id: `m-${index + 1}`,
+          client_message_id: `c-${index + 1}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `消息-${index + 1}`,
+          event_position: index + 1,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+      clientHeight: number;
+      scrollHeight: number;
+    };
+    let scrollHeight = 960;
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
+    Object.defineProperty(scroll, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    模拟消息滚动视口(el, scroll, [
+      { eventPosition: 1, top: -60, bottom: -20 },
+      { eventPosition: 2, top: -10, bottom: 30 },
+      { eventPosition: 3, top: 40, bottom: 80 },
+      { eventPosition: 4, top: 90, bottom: 130 },
+      { eventPosition: 5, top: 140, bottom: 180 },
+      { eventPosition: 6, top: 190, bottom: 230 },
+      { eventPosition: 7, top: 240, bottom: 280 },
+      { eventPosition: 8, top: 290, bottom: 330 },
+    ]);
+    设置测试滚动阶段(el, {
+      initialUnreadSettled: true,
+      firstUnreadEventPosition: 3,
+      hasUserScrollIntent: true,
+      scrollPhase: "idle",
+    });
+    scroll.scrollTop = 180;
+
+    scrollHeight = 1020;
+    transport.socket.trigger("room_event", {
+      type: "message_created",
+      room_id: "r-test",
+      message_id: "m-9",
+      client_message_id: "c-9",
+      sender_session_id: "s-other",
+      sender_display_alias: "冷静的水獭",
+      body: "新消息-9",
+      event_position: 9,
+    });
+    await 等待组件稳定(el);
+
+    const jumpBtn = el.shadowRoot!.querySelector("#jumpToLatestBtn") as HTMLButtonElement | null;
+    jumpBtn?.click();
+    await 等待组件稳定(el);
+
+    expect(scroll.scrollTop).toBe(720);
+    expect(
+      (
+        el as unknown as {
+          chatState: {
+            viewportMode?: string;
+            hasUnreadNewerMessages?: boolean;
+          };
+        }
+      ).chatState.viewportMode
+    ).toBe("贴底跟随");
+    expect(
+      (
+        el as unknown as {
+          chatState: {
+            viewportMode?: string;
+            hasUnreadNewerMessages?: boolean;
+          };
+        }
+      ).chatState.hasUnreadNewerMessages
+    ).toBe(false);
+    expect(el.shadowRoot!.querySelector("#jumpToLatestBtn")).toBeNull();
+
+    el.remove();
+  });
+
   it("用户贴底时，新消息到达会继续跟随到底部", async () => {
     const transport = new 假传输();
     transport.joinQueue = [

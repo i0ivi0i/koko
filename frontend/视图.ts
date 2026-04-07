@@ -1,4 +1,5 @@
 import type { 消息事件 } from "./契约.js";
+import type { 房间视口模式 } from "./状态.js";
 
 export interface 消息展示项 {
   kind: "message";
@@ -134,4 +135,21 @@ function 派生历史提示文案(historyLoading: boolean, historyErrorCode: str
     return "更早消息加载失败，可继续上滑重试";
   }
   return "";
+}
+
+/**
+ * “跳到最新”入口只属于壳层浮动动作。
+ * 它的存在条件完全来自前端当前视口语义，不回写任何后端真相。
+ */
+export function 派生跳到最新入口文案(input: {
+  viewportMode: 房间视口模式;
+  hasUnreadNewerMessages: boolean;
+}): string {
+  if (!input.hasUnreadNewerMessages) {
+    return "";
+  }
+  if (input.viewportMode === "贴底跟随") {
+    return "";
+  }
+  return "有新消息，跳到最新";
 }

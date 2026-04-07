@@ -5,7 +5,7 @@ import { 房间滚动器 } from "./房间滚动器.js";
 import { 创建浏览器存储, type 前端存储端口 } from "./存储.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
-import { 派生聊天列表展示项, 派生房间提示文案 } from "./视图.js";
+import { 派生聊天列表展示项, 派生房间提示文案, 派生跳到最新入口文案 } from "./视图.js";
 import type { Socket } from "socket.io-client";
 const 阅读推进节流毫秒 = 400;
 
@@ -225,6 +225,7 @@ export class 聊天壳 extends LitElement {
     .room-screen {
       height: 100%;
       min-height: 100dvh;
+      position: relative;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       gap: 12px;
@@ -340,6 +341,22 @@ export class 聊天壳 extends LitElement {
       word-break: break-word;
     }
 
+    /* 新消息提示属于房间壳层浮动入口：用户正在补旧未读时提示可见，但不抢走当前视角。 */
+    .jump-latest-button {
+      position: absolute;
+      right: 18px;
+      bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+      z-index: 1;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line-on-accent);
+      background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent-core) 100%);
+      color: var(--text-on-accent);
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04),
+        0 10px 24px rgba(224, 11, 65, 0.28);
+    }
+
     .message-row.mine .message-bubble {
       background: linear-gradient(135deg, var(--bubble-mine-top) 0%, var(--bubble-mine-bottom) 100%);
     }
@@ -434,6 +451,11 @@ export class 聊天壳 extends LitElement {
 
       .send-button {
         min-width: 72px;
+      }
+
+      .jump-latest-button {
+        right: 12px;
+        bottom: calc(92px + env(safe-area-inset-bottom, 0px));
       }
     }
   `;
@@ -1178,6 +1200,19 @@ export class 聊天壳 extends LitElement {
    * - 这不是后端真相，只是前端当前视口该怎么表现。
    */
   private async followLatestAfterRealtimeAppend(): Promise<void> {
+    await this.scrollToLatestAndEnterFollowMode();
+  }
+
+  /**
+   * “跳到最新”是纯壳层动作：
+   * - 它只改变当前视口落点和本地视口模式；
+   * - 真正的已读推进仍然由后续稳定采样 + 提交链决定。
+   */
+  private async jumpToLatest(): Promise<void> {
+    await this.scrollToLatestAndEnterFollowMode();
+  }
+
+  private async scrollToLatestAndEnterFollowMode(): Promise<void> {
     await this.updateComplete;
     const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
     if (!scrollContainer) {
@@ -1331,6 +1366,10 @@ export class 聊天壳 extends LitElement {
       historyLoading: this.chatState.historyLoading,
       historyErrorCode: this.chatState.historyErrorCode,
     });
+    const jumpToLatestLabel = 派生跳到最新入口文案({
+      viewportMode: this.chatState.viewportMode,
+      hasUnreadNewerMessages: this.chatState.hasUnreadNewerMessages,
+    });
     const roomShell = this.roomShellState();
     if (roomShell.bootstrapState === "booting") {
       return html`
@@ -1430,6 +1469,19 @@ export class 聊天壳 extends LitElement {
             })}
           </ul>
         </div>
+        ${jumpToLatestLabel
+          ? html`
+              <button
+                id="jumpToLatestBtn"
+                class="jump-latest-button"
+                @click=${() => {
+                  void this.jumpToLatest();
+                }}
+              >
+                ${jumpToLatestLabel}
+              </button>
+            `
+          : null}
         <footer id="composerBar" class="composer-bar">
           <div class="composer-status ${statusAttention ? "attention" : ""}">
             ${statusAttention ? roomSubtitle : "在这里输入消息，发送后会实时出现在房间里。"}
