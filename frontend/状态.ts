@@ -29,6 +29,8 @@ export interface 聊天状态 {
    * - `idle` 才允许把滚动解释成用户真实阅读。
    */
   scrollPhase: "idle" | "restoring_unread" | "compensating_history";
+  /** 当前房间里用户是否已经明确开始过滚动交互。 */
+  hasUserScrollIntent: boolean;
   /** 等待节流上报的阅读位置；只属于壳层瞬时状态。 */
   pendingReadAnchorPosition: number | null;
   /** 顶部补历史节流截止时间戳。 */
@@ -59,6 +61,7 @@ export const 初始聊天状态: 聊天状态 = {
   hasMoreBefore: false,
   initialUnreadSettled: true,
   scrollPhase: "idle",
+  hasUserScrollIntent: false,
   pendingReadAnchorPosition: null,
   historyLoadThrottleUntil: 0,
   messages: [],

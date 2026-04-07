@@ -263,6 +263,7 @@ function 设置测试滚动阶段(
     initialUnreadSettled?: boolean;
     firstUnreadEventPosition?: number | null;
     scrollPhase?: string;
+    hasUserScrollIntent?: boolean;
   }
 ): void {
   (el as unknown as {
@@ -270,6 +271,7 @@ function 设置测试滚动阶段(
       initialUnreadSettled: boolean;
       firstUnreadEventPosition: number | null;
       scrollPhase?: string;
+      hasUserScrollIntent?: boolean;
     };
   }).chatState = {
     ...(el as unknown as {
@@ -277,10 +279,15 @@ function 设置测试滚动阶段(
         initialUnreadSettled: boolean;
         firstUnreadEventPosition: number | null;
         scrollPhase?: string;
+        hasUserScrollIntent?: boolean;
       };
     }).chatState,
     ...patch,
   };
+}
+
+function 模拟用户滚动意图(scroll: HTMLElement): void {
+  scroll.dispatchEvent(new Event("pointerdown"));
 }
 
 function 模拟消息滚动视口(
@@ -879,6 +886,7 @@ describe("聊天壳", () => {
     const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
       scrollTop: number;
     };
+    模拟用户滚动意图(scroll);
     scroll.scrollTop = 0;
     scroll.dispatchEvent(new Event("scroll"));
     await 等待组件稳定(el);
@@ -961,6 +969,7 @@ describe("聊天壳", () => {
         return values[Math.min(measureIndex++, values.length - 1)];
       },
     });
+    模拟用户滚动意图(scroll);
     scroll.scrollTop = 0;
     scroll.dispatchEvent(new Event("scroll"));
     await 等待组件稳定(el);
@@ -1015,6 +1024,7 @@ describe("聊天壳", () => {
     const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
       scrollTop: number;
     };
+    模拟用户滚动意图(scroll);
     scroll.scrollTop = 0;
     scroll.dispatchEvent(new Event("scroll"));
     await 等待组件稳定(el);
@@ -1062,6 +1072,7 @@ describe("聊天壳", () => {
     const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
       scrollTop: number;
     };
+    模拟用户滚动意图(scroll);
     scroll.scrollTop = 0;
     scroll.dispatchEvent(new Event("scroll"));
     await 等待组件稳定(el);
@@ -1152,6 +1163,7 @@ describe("聊天壳", () => {
     const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
       scrollTop: number;
     };
+    模拟用户滚动意图(scroll);
     scroll.scrollTop = 0;
     scroll.dispatchEvent(new Event("scroll"));
     await 等待组件稳定(el);
@@ -1474,6 +1486,167 @@ describe("聊天壳", () => {
     }
   });
 
+  it("即使已经回到 idle，只要没有用户滚动意图，程序性滚动也不会推进已读", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "第一条未读",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条未读",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+      模拟消息滚动视口(el, scroll, [
+        { eventPosition: 1, top: -60, bottom: -20 },
+        { eventPosition: 2, top: 0, bottom: 40 },
+        { eventPosition: 3, top: 50, bottom: 90 },
+      ]);
+      设置测试滚动阶段(el, {
+        initialUnreadSettled: true,
+        firstUnreadEventPosition: 2,
+        scrollPhase: "idle",
+        hasUserScrollIntent: false,
+      });
+
+      scroll.scrollTop = 80;
+      scroll.dispatchEvent(new Event("scroll"));
+      await vi.advanceTimersByTimeAsync(450);
+
+      expect(transport.readAnchorUpdates).toEqual([]);
+      expect(
+        (
+          el as unknown as {
+            chatState: { firstUnreadEventPosition: number | null };
+          }
+        ).chatState.firstUnreadEventPosition
+      ).toBe(2);
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
+  it("即使已经回到 idle，只要没有用户滚动意图，程序性触顶也不会拉更早历史", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        has_more_before: true,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "第一条未读",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条未读",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    设置测试滚动阶段(el, {
+      initialUnreadSettled: true,
+      scrollPhase: "idle",
+      hasUserScrollIntent: false,
+    });
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+
+    expect(transport.loadRoomHistoryCalls).toBe(0);
+    el.remove();
+  });
+
   it("用户向下阅读后会节流上报新的 last_read_event_position", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
@@ -1540,6 +1713,7 @@ describe("聊天壳", () => {
         { eventPosition: 2, top: 50, bottom: 90 },
         { eventPosition: 3, top: 100, bottom: 140 },
       ]);
+      模拟用户滚动意图(scroll);
       scroll.scrollTop = 80;
       scroll.dispatchEvent(new Event("scroll"));
       scroll.dispatchEvent(new Event("scroll"));
@@ -1606,6 +1780,7 @@ describe("聊天壳", () => {
         { eventPosition: 7, top: 250, bottom: 290 },
         { eventPosition: 8, top: 295, bottom: 335 },
       ]);
+      模拟用户滚动意图(scroll);
       scroll.scrollTop = 180;
       scroll.dispatchEvent(new Event("scroll"));
 
@@ -1672,6 +1847,7 @@ describe("聊天壳", () => {
       };
       Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
       Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+      模拟用户滚动意图(scroll);
       scroll.scrollTop = 80;
       scroll.dispatchEvent(new Event("scroll"));
       await vi.advanceTimersByTimeAsync(500);
@@ -1746,6 +1922,7 @@ describe("聊天壳", () => {
     const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
       scrollTop: number;
     };
+    模拟用户滚动意图(scroll);
     scroll.scrollTop = 0;
     scroll.dispatchEvent(new Event("scroll"));
     transport.socket.trigger("room_event", {

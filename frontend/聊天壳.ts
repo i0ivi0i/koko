@@ -238,6 +238,7 @@ export class 聊天壳 extends LitElement {
         initialUnreadSettled: false,
         scrollPhase:
           snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
+        hasUserScrollIntent: false,
         pendingReadAnchorPosition: null,
         // 重拉快照时，必须先回到快照自带的权威首屏，再叠加其后的增量。
         // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
@@ -408,6 +409,7 @@ export class 聊天壳 extends LitElement {
         hasMoreBefore: false,
         initialUnreadSettled: true,
         scrollPhase: "idle",
+        hasUserScrollIntent: false,
         pendingReadAnchorPosition: null,
         messages: [],
         pending: false,
@@ -427,6 +429,7 @@ export class 聊天壳 extends LitElement {
       pending: false,
       historyLoading: false,
       scrollPhase: "idle",
+      hasUserScrollIntent: keepRoomVisible ? this.chatState.hasUserScrollIntent : false,
       recoveryState: "retryable_failure",
       lastRecoveryErrorCode: failure.code ?? "system_error",
     });
@@ -477,6 +480,7 @@ export class 聊天壳 extends LitElement {
         hasMoreBefore: false,
         initialUnreadSettled: true,
         scrollPhase: "idle",
+        hasUserScrollIntent: false,
         pendingReadAnchorPosition: null,
         messages: [],
         pending: false,
@@ -495,6 +499,7 @@ export class 聊天壳 extends LitElement {
       pending: false,
       historyLoading: false,
       scrollPhase: "idle",
+      hasUserScrollIntent: this.chatState.hasUserScrollIntent,
       recoveryState: "retryable_failure",
       lastRecoveryErrorCode: control.code ?? "system_error",
     });
@@ -572,6 +577,7 @@ export class 聊天壳 extends LitElement {
       // 只有带着首条未读恢复时，壳层才进入程序性恢复阶段；否则滚动语义直接保持 idle。
       scrollPhase:
         snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
+      hasUserScrollIntent: false,
       pendingReadAnchorPosition: null,
       // snapshot_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
       // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
@@ -664,7 +670,11 @@ export class 聊天壳 extends LitElement {
    * 因此这里先做节流门禁，再进入真正的历史加载逻辑。
    */
   private maybeLoadOlderHistory(scrollContainer: HTMLElement): void {
-    if (scrollContainer.scrollTop > 0 || this.chatState.scrollPhase !== "idle") {
+    if (
+      scrollContainer.scrollTop > 0 ||
+      this.chatState.scrollPhase !== "idle" ||
+      !this.chatState.hasUserScrollIntent
+    ) {
       return;
     }
     const now = Date.now();
@@ -689,7 +699,8 @@ export class 聊天壳 extends LitElement {
       !this.chatState.roomId ||
       !this.chatState.initialUnreadSettled ||
       this.chatState.historyLoading ||
-      this.chatState.scrollPhase !== "idle"
+      this.chatState.scrollPhase !== "idle" ||
+      !this.chatState.hasUserScrollIntent
     ) {
       return;
     }
@@ -815,6 +826,17 @@ export class 聊天壳 extends LitElement {
     }
     clearTimeout(this.scrollPhaseReleaseTimer);
     this.scrollPhaseReleaseTimer = null;
+  }
+
+  /**
+   * 只有用户真的开始拖动 / 触摸 / 滚轮滚动后，后续 scroll 才能被解释成阅读或翻页意图。
+   * 这样不同浏览器对程序性 scroll 的事件时序差异，就不会再把刷新恢复误判成“用户在往上翻历史”。
+   */
+  private markUserScrollIntent(): void {
+    if (this.chatState.hasUserScrollIntent) {
+      return;
+    }
+    this.updateChat({ hasUserScrollIntent: true });
   }
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
@@ -994,6 +1016,9 @@ export class 聊天壳 extends LitElement {
         <div
           id="messageScroll"
           class="message-scroll"
+          @pointerdown=${() => this.markUserScrollIntent()}
+          @touchstart=${() => this.markUserScrollIntent()}
+          @wheel=${() => this.markUserScrollIntent()}
           @scroll=${(event: Event) => {
             const target = event.currentTarget as HTMLElement;
             this.maybeLoadOlderHistory(target);
