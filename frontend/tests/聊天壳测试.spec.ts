@@ -744,6 +744,51 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("全部已读或无未读分隔条时，恢复首屏会落到当前消息窗口底部", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.snapshotQueue = [
+      创建房间快照("r-restore", 60, {
+        last_read_event_position: 60,
+        first_unread_event_position: null,
+        snapshot_messages: Array.from({ length: 55 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-restore",
+          message_id: `m-${index + 6}`,
+          client_message_id: `c-${index + 6}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `恢复消息-${index + 6}`,
+          event_position: index + 6,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+      clientHeight: number;
+      scrollHeight: number;
+    };
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 720 });
+    设置测试滚动阶段(el, {
+      initialUnreadSettled: false,
+      scrollPhase: "idle",
+    });
+
+    await (
+      el as unknown as { settleInitialUnreadAnchor: () => Promise<void> }
+    ).settleInitialUnreadAnchor();
+    await 等待组件稳定(el);
+
+    expect(scroll.scrollTop).toBe(480);
+    el.remove();
+  });
+
   it("room_not_found 会清掉 current_room_id 并回到搜索页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-missing");
     const transport = new 假传输();

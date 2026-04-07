@@ -613,6 +613,16 @@ export class 聊天壳 extends LitElement {
     }
     const firstUnreadEventPosition = this.chatState.firstUnreadEventPosition;
     if (firstUnreadEventPosition === null) {
+      const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
+      if (scrollContainer) {
+        // “没有未读分隔条”不等于应该停在顶部：
+        // 这通常代表“全部已读”或“当前窗口只需要展示最近消息”，
+        // 因此前端要把视口落到这批首屏消息的底部，也就是最新消息附近。
+        scrollContainer.scrollTop = Math.max(
+          0,
+          scrollContainer.scrollHeight - scrollContainer.clientHeight
+        );
+      }
       this.updateChat({
         initialUnreadSettled: true,
         scrollPhase: "idle",
