@@ -1394,6 +1394,98 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("用户贴底跟随后，即使没有新的手动滚动，新消息进入视口也会推进已读", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        last_read_event_position: 3,
+        first_unread_event_position: null,
+        snapshot_messages: Array.from({ length: 3 }, (_, index) => ({
+          type: "message_created" as const,
+          room_id: "r-test",
+          message_id: `m-${index + 1}`,
+          client_message_id: `c-${index + 1}`,
+          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
+          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
+          body: `消息-${index + 1}`,
+          event_position: index + 1,
+        })),
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    vi.useFakeTimers();
+    try {
+      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+        scrollTop: number;
+        clientHeight: number;
+        scrollHeight: number;
+      };
+      let scrollHeight = 320;
+      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 240 });
+      Object.defineProperty(scroll, "scrollHeight", {
+        configurable: true,
+        get: () => scrollHeight,
+      });
+      设置测试滚动阶段(el, {
+        initialUnreadSettled: true,
+        firstUnreadEventPosition: null,
+        hasUserScrollIntent: false,
+        scrollPhase: "idle",
+      });
+      (
+        el as unknown as {
+          chatState: { viewportMode?: string; lastReadEventPosition: number | null };
+        }
+      ).chatState.viewportMode = "贴底跟随";
+      (
+        el as unknown as {
+          chatState: { viewportMode?: string; lastReadEventPosition: number | null };
+        }
+      ).chatState.lastReadEventPosition = 3;
+      scroll.scrollTop = 80;
+
+      scrollHeight = 380;
+      transport.socket.trigger("room_event", {
+        type: "message_created",
+        room_id: "r-test",
+        message_id: "m-4",
+        client_message_id: "c-4",
+        sender_session_id: "s-other",
+        sender_display_alias: "冷静的水獭",
+        body: "新消息-4",
+        event_position: 4,
+      });
+      await Promise.resolve();
+      await el.updateComplete;
+      模拟消息滚动视口(el, scroll, [
+        { eventPosition: 1, top: -120, bottom: -80 },
+        { eventPosition: 2, top: -70, bottom: -30 },
+        { eventPosition: 3, top: -20, bottom: 20 },
+        { eventPosition: 4, top: 40, bottom: 80 },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(450);
+
+      expect(transport.readAnchorUpdates).toEqual([
+        { roomId: "r-test", sessionId: "s-test", lastReadEventPosition: 4 },
+      ]);
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
   it("room_not_found 会清掉 current_room_id 并回到搜索页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-missing");
     const transport = new 假传输();

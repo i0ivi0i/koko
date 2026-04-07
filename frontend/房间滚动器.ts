@@ -72,6 +72,21 @@ export class 房间滚动器 implements ReactiveController {
     this.按需采样阅读锚点(scrollContainer);
   }
 
+  /**
+   * 某些壳层体验允许“非手动滚动也推进已读”，例如：
+   * - 用户本来就贴底，新消息继续进入当前视口；
+   * - 刷新恢复后，权威首屏已经稳定落在较新的消息窗口。
+   *
+   * 这时仍然要复用滚动器自己的“稳定可读”判定，而不是在壳层重新猜一次。
+   */
+  读取当前可见阅读锚点(): number | null {
+    const scrollContainer = this.deps.查询滚动容器();
+    if (!scrollContainer) {
+      return null;
+    }
+    return this.查找可见阅读锚点(scrollContainer);
+  }
+
   读取历史补偿基线(): number {
     return this.deps.查询滚动容器()?.scrollHeight ?? 0;
   }

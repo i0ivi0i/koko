@@ -458,6 +458,8 @@ export class 聊天壳 extends LitElement {
 
   private readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private followLatestReadSampleTimer: ReturnType<typeof setTimeout> | null = null;
+
   /**
    * 只在“刷新恢复 / 快照重拉”这类恢复链路里，才允许首屏程序性补一次阅读锚点。
    * 首次手动进房仍然保持原语义，避免把恢复专用逻辑扩散到所有入口。
@@ -537,6 +539,7 @@ export class 聊天壳 extends LitElement {
     this.realtimeSocket?.disconnect();
     this.realtimeSocket = null;
     this.cancelPendingReadAnchorFlush();
+    this.cancelPendingFollowLatestReadSample();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     super.disconnectedCallback();
@@ -837,6 +840,7 @@ export class 聊天壳 extends LitElement {
       this.storage.清除当前房间短码();
     }
     this.cancelPendingReadAnchorFlush();
+    this.cancelPendingFollowLatestReadSample();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.updateChat({
@@ -975,6 +979,7 @@ export class 聊天壳 extends LitElement {
     primeReadAnchorAfterInitialSettle = false
   ): void {
     this.cancelPendingReadAnchorFlush();
+    this.cancelPendingFollowLatestReadSample();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = primeReadAnchorAfterInitialSettle;
     this.storage.写入当前房间标识(snapshot.room_id);
@@ -1101,6 +1106,14 @@ export class 聊天壳 extends LitElement {
     this.readAnchorFlushTimer = null;
   }
 
+  private cancelPendingFollowLatestReadSample(): void {
+    if (this.followLatestReadSampleTimer === null) {
+      return;
+    }
+    clearTimeout(this.followLatestReadSampleTimer);
+    this.followLatestReadSampleTimer = null;
+  }
+
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
     const merged = this.reconcileMessages([...this.chatState.messages, ...events]);
     const shouldFollowLatest = this.chatState.viewportMode === "贴底跟随";
@@ -1132,6 +1145,23 @@ export class 聊天壳 extends LitElement {
     scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
     this.roomKernel.send({ type: "USER_JUMPED_TO_LATEST" });
     this.updateChat(this.roomShellPatch());
+    this.schedulePassiveReadAnchorAfterFollowLatest();
+  }
+
+  /**
+   * 用户已经处在贴底跟随模式时，新消息进入视口本身就是一次真实阅读推进来源。
+   * 这里额外等一个极短窗口，让 DOM 和布局先稳定，再复用滚动器的“稳定可读”采样。
+   */
+  private schedulePassiveReadAnchorAfterFollowLatest(): void {
+    this.cancelPendingFollowLatestReadSample();
+    this.followLatestReadSampleTimer = setTimeout(() => {
+      this.followLatestReadSampleTimer = null;
+      const nextReadPosition = this.roomScroller.读取当前可见阅读锚点();
+      if (nextReadPosition === null) {
+        return;
+      }
+      this.scheduleReadAnchorUpdate(nextReadPosition);
+    }, 0);
   }
 
   /**
