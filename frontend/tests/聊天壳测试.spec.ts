@@ -552,6 +552,19 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("浏览器存储会在清除当前房间锚点时保留房间短码缓存", async () => {
+    const { 创建浏览器存储 } = await import("../存储");
+
+    const 存储 = 创建浏览器存储(window.localStorage);
+
+    存储.写入当前房间标识("r-test");
+    存储.写入当前房间短码("ROOM01");
+    存储.清除当前房间标识();
+
+    expect(存储.读取当前房间标识()).toBe("");
+    expect(存储.读取当前房间短码()).toBe("ROOM01");
+  });
+
   it("再次进房成功后会覆盖旧的 koko_current_room_id", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;

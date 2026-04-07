@@ -1,13 +1,10 @@
 import { css, html, LitElement } from "lit";
 import type { 房间快照, 消息事件 } from "./契约.js";
+import { 创建浏览器存储, type 前端存储端口 } from "./存储.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 派生聊天列表展示项 } from "./视图.js";
 import type { Socket } from "socket.io-client";
-
-const 设备匿名凭证存储键 = "koko_device_anonymous_token";
-const 当前房间存储键 = "koko_current_room_id";
-const 当前房间短码存储键 = "koko_current_room_code";
 const 历史分页顶部节流毫秒 = 180;
 const 阅读推进节流毫秒 = 400;
 
@@ -446,6 +443,12 @@ export class 聊天壳 extends LitElement {
 
   private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
 
+  /**
+   * 本地存储是壳层能力，不是领域能力。
+   * 这里统一接一个端口，避免房间组件继续散落具体键名和浏览器 API 细节。
+   */
+  private storage: 前端存储端口 = 创建浏览器存储();
+
   private realtimeSocket: Socket | null = null;
 
   private readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -478,7 +481,7 @@ export class 聊天壳 extends LitElement {
 
   private async bootstrap(): Promise<void> {
     try {
-      const deviceAnonymousToken = this.readOrCreateDeviceAnonymousToken();
+      const deviceAnonymousToken = this.storage.读取或创建设备匿名凭证();
       const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
       this.applyBootstrapIdentity(deviceAnonymousToken, identity);
       this.ensureRealtimeSocket(identity.session_id);
@@ -514,7 +517,11 @@ export class 聊天壳 extends LitElement {
       this.enterRoomFromSnapshot(snapshot, roomCode, false);
       this.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
-      this.handleRecoveryFailure(this.chatState.roomId || this.readCurrentRoomId(), error, false);
+      this.handleRecoveryFailure(
+        this.chatState.roomId || this.storage.读取当前房间标识(),
+        error,
+        false
+      );
     }
   }
 
@@ -525,7 +532,7 @@ export class 聊天壳 extends LitElement {
    * 3. 用当前 session 拉快照恢复。
    */
   private async restoreCurrentRoomIfNeeded(): Promise<void> {
-    const roomId = this.readCurrentRoomId();
+    const roomId = this.storage.读取当前房间标识();
     if (!roomId) return;
     try {
       this.ensureRealtimeSocket(this.chatState.sessionId);
@@ -558,7 +565,7 @@ export class 聊天壳 extends LitElement {
         snapshot.latest_event_position,
         delta.latest_event_position
       );
-      const roomDisplayTitle = this.readCurrentRoomCode() || "群聊房间";
+      const roomDisplayTitle = this.storage.读取当前房间短码() || "群聊房间";
       this.shouldPrimeReadAnchorAfterInitialSettle = true;
       this.updateChat({
         roomId: roomId,
@@ -713,7 +720,8 @@ export class 聊天壳 extends LitElement {
   }
 
   private async bootstrapFreshSession(): Promise<string> {
-    const deviceAnonymousToken = this.chatState.deviceAnonymousToken || this.readOrCreateDeviceAnonymousToken();
+    const deviceAnonymousToken =
+      this.chatState.deviceAnonymousToken || this.storage.读取或创建设备匿名凭证();
     const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
     this.realtimeSocket?.disconnect();
     this.realtimeSocket = null;
@@ -760,9 +768,9 @@ export class 聊天壳 extends LitElement {
   ): void {
     this.realtimeSocket?.disconnect();
     this.realtimeSocket = null;
-    this.clearCurrentRoomId();
+    this.storage.清除当前房间标识();
     if (!opts.keepRoomCodeCache) {
-      this.clearCurrentRoomCode();
+      this.storage.清除当前房间短码();
     }
     this.cancelPendingReadAnchorFlush();
     this.cancelPendingScrollPhaseRelease();
@@ -867,95 +875,16 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
-   * 设备入口凭证只属于壳层：
-   * - Web 当前用 localStorage 持久化；
-   * - 未来移动端和 CLI 可以换成各自的本地存储；
-   * - 业务核心只消费这个凭证换回后端权威身份。
-   */
-  private readOrCreateDeviceAnonymousToken(): string {
-    const storage =
-      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
-    const stored =
-      storage && typeof storage.getItem === "function"
-        ? storage.getItem(设备匿名凭证存储键)
-        : null;
-    if (stored && stored.trim()) {
-      return stored;
-    }
-
-    const generated =
-      typeof globalThis.crypto !== "undefined" && "randomUUID" in globalThis.crypto
-        ? globalThis.crypto.randomUUID()
-        : `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    if (storage && typeof storage.setItem === "function") {
-      storage.setItem(设备匿名凭证存储键, generated);
-    }
-    return generated;
-  }
-
-  private readCurrentRoomId(): string {
-    const storage =
-      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
-    const stored =
-      storage && typeof storage.getItem === "function"
-        ? storage.getItem(当前房间存储键)
-        : null;
-    return stored?.trim() ? stored : "";
-  }
-
-  private writeCurrentRoomId(roomId: string): void {
-    const storage =
-      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
-    if (storage && typeof storage.setItem === "function") {
-      storage.setItem(当前房间存储键, roomId);
-    }
-  }
-
-  private readCurrentRoomCode(): string {
-    const storage =
-      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
-    const stored =
-      storage && typeof storage.getItem === "function"
-        ? storage.getItem(当前房间短码存储键)
-        : null;
-    return stored?.trim() ? stored : "";
-  }
-
-  private writeCurrentRoomCode(roomCode: string): void {
-    const storage =
-      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
-    if (storage && typeof storage.setItem === "function") {
-      storage.setItem(当前房间短码存储键, roomCode);
-    }
-  }
-
-  private clearCurrentRoomId(): void {
-    const storage =
-      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
-    if (storage && typeof storage.removeItem === "function") {
-      storage.removeItem(当前房间存储键);
-    }
-  }
-
-  private clearCurrentRoomCode(): void {
-    const storage =
-      typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined;
-    if (storage && typeof storage.removeItem === "function") {
-      storage.removeItem(当前房间短码存储键);
-    }
-  }
-
-  /**
    * 房间标题目前优先来自用户实际输入过的短码缓存。
    * 后端还没有返回房间名或短码时，壳层只能在“不泄露 room_id”和“不给用户空标题”之间取平衡。
    */
   private resolveRoomDisplayTitle(roomCodeForDisplay?: string): string {
     const trimmedRoomCode = roomCodeForDisplay?.trim() ?? "";
     if (trimmedRoomCode) {
-      this.writeCurrentRoomCode(trimmedRoomCode);
+      this.storage.写入当前房间短码(trimmedRoomCode);
       return trimmedRoomCode;
     }
-    return this.readCurrentRoomCode() || "群聊房间";
+    return this.storage.读取当前房间短码() || "群聊房间";
   }
 
   /**
@@ -970,7 +899,7 @@ export class 聊天壳 extends LitElement {
     this.cancelPendingReadAnchorFlush();
     this.cancelPendingScrollPhaseRelease();
     this.shouldPrimeReadAnchorAfterInitialSettle = primeReadAnchorAfterInitialSettle;
-    this.writeCurrentRoomId(snapshot.room_id);
+    this.storage.写入当前房间标识(snapshot.room_id);
     const roomDisplayTitle = this.resolveRoomDisplayTitle(roomCodeForDisplay);
     this.updateChat({
       roomId: snapshot.room_id,
