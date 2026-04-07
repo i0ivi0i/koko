@@ -1,45 +1,86 @@
-import { assign, createActor, createMachine } from "xstate";
+import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
+
+export type 房间阶段 =
+  | "引导中"
+  | "大厅中"
+  | "入房中"
+  | "恢复中"
+  | "房间就绪"
+  | "订阅中"
+  | "在线会话中"
+  | "重连中"
+  | "可重试失败"
+  | "已离房";
 
 /**
- * 房间内核上下文只保存“前端同步编排需要知道的事实”。
+ * 房间内核上下文只保存“前端同步编排需要知道的壳层事实”。
  *
- * 边界约束：
- * 1. 这里不是后端领域真相，不裁决成员资格、权限和消息是否成立；
- * 2. 这里只承载前端壳为了 bootstrap / 恢复 / 续接 所需的最小上下文；
- * 3. 后续状态机扩展，也必须继续守住“同步编排内核，不是领域内核”。
+ * 这里不是后端领域真相：
+ * - 不裁决成员资格；
+ * - 不裁决权限；
+ * - 不裁决消息是否成立。
+ *
+ * 它只为前端回答：
+ * “当前房间编排处在哪个阶段，以及壳层应该展示成什么样子。”
  */
 export interface 房间内核上下文 {
   sessionId: string;
   displayAlias: string;
   roomId: string;
+  roomDisplayTitle: string;
+  latestEventPosition: number;
+  lastRecoveryErrorCode: string;
 }
 
-/**
- * 前端房间编排事件。
- *
- * 当前只先落下最小事件面：
- * - bootstrap 成功后，决定壳层该进大厅还是进恢复链；
- * - 后续 join / subscribe / reconnect 会在这个联合类型上继续追加。
- */
 export type 房间内核事件 =
   | {
       type: "BOOTSTRAP_SUCCEEDED";
       sessionId: string;
       displayAlias: string;
       roomId: string;
+    }
+  | {
+      type: "BOOTSTRAP_FAILED";
+      code: string;
+    }
+  | {
+      type: "SESSION_REFRESHED";
+      sessionId: string;
+      displayAlias: string;
+    }
+  | {
+      type: "JOIN_REQUESTED";
+    }
+  | {
+      type: "SNAPSHOT_LOADED";
+      roomId: string;
+      roomDisplayTitle: string;
+      latestEventPosition: number;
+    }
+  | {
+      type: "LATEST_EVENT_ADVANCED";
+      latestEventPosition: number;
+    }
+  | {
+      type: "SUBSCRIPTION_STARTED";
+    }
+  | {
+      type: "SUBSCRIPTION_ESTABLISHED";
+      latestEventPosition: number;
+    }
+  | {
+      type: "RECONNECTING_STARTED";
+      code: string;
+    }
+  | {
+      type: "RECOVERY_FAILED";
+      code: string;
+      keepRoomVisible: boolean;
+    }
+  | {
+      type: "SOFT_LEAVE_REQUESTED";
     };
 
-/**
- * 房间同步编排机的当前阶段。
- *
- * 当前最小落地只实现：
- * - 引导中
- * - 大厅中
- * - 恢复中
- *
- * 这样先把“壳层不自己拼 bootstrap 结果”的最小骨架钉住，
- * 再继续往 join / subscribe / reconnect 扩。
- */
 const 房间编排机 = createMachine(
   {
     types: {} as {
@@ -52,6 +93,9 @@ const 房间编排机 = createMachine(
       sessionId: "",
       displayAlias: "",
       roomId: "",
+      roomDisplayTitle: "",
+      latestEventPosition: 0,
+      lastRecoveryErrorCode: "",
     },
     states: {
       引导中: {
@@ -67,15 +111,244 @@ const 房间编排机 = createMachine(
               actions: "写入引导结果",
             },
           ],
+          BOOTSTRAP_FAILED: {
+            target: "可重试失败",
+            actions: "记录引导失败",
+          },
         },
       },
-      大厅中: {},
-      恢复中: {},
+      大厅中: {
+        on: {
+          JOIN_REQUESTED: {
+            target: "入房中",
+          },
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      入房中: {
+        on: {
+          SNAPSHOT_LOADED: {
+            target: "房间就绪",
+            actions: "写入房间快照",
+          },
+          RECOVERY_FAILED: [
+            {
+              guard: ({ event }) => event.keepRoomVisible,
+              target: "可重试失败",
+              actions: "保留房间并记录失败",
+            },
+            {
+              target: "可重试失败",
+              actions: "清空房间并记录失败",
+            },
+          ],
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      恢复中: {
+        on: {
+          SNAPSHOT_LOADED: {
+            target: "房间就绪",
+            actions: "写入房间快照",
+          },
+          RECONNECTING_STARTED: {
+            target: "重连中",
+            actions: "标记重连中",
+          },
+          RECOVERY_FAILED: [
+            {
+              guard: ({ event }) => event.keepRoomVisible,
+              target: "可重试失败",
+              actions: "保留房间并记录失败",
+            },
+            {
+              target: "可重试失败",
+              actions: "清空房间并记录失败",
+            },
+          ],
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      房间就绪: {
+        on: {
+          LATEST_EVENT_ADVANCED: {
+            actions: "推进最新事件位置",
+          },
+          SUBSCRIPTION_STARTED: {
+            target: "订阅中",
+          },
+          RECONNECTING_STARTED: {
+            target: "重连中",
+            actions: "标记重连中",
+          },
+          RECOVERY_FAILED: [
+            {
+              guard: ({ event }) => event.keepRoomVisible,
+              target: "可重试失败",
+              actions: "保留房间并记录失败",
+            },
+            {
+              target: "可重试失败",
+              actions: "清空房间并记录失败",
+            },
+          ],
+          SOFT_LEAVE_REQUESTED: {
+            target: "已离房",
+            actions: "清空当前房间",
+          },
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      订阅中: {
+        on: {
+          LATEST_EVENT_ADVANCED: {
+            actions: "推进最新事件位置",
+          },
+          SUBSCRIPTION_ESTABLISHED: {
+            target: "在线会话中",
+            actions: "记录订阅已建立",
+          },
+          RECONNECTING_STARTED: {
+            target: "重连中",
+            actions: "标记重连中",
+          },
+          RECOVERY_FAILED: [
+            {
+              guard: ({ event }) => event.keepRoomVisible,
+              target: "可重试失败",
+              actions: "保留房间并记录失败",
+            },
+            {
+              target: "可重试失败",
+              actions: "清空房间并记录失败",
+            },
+          ],
+          SOFT_LEAVE_REQUESTED: {
+            target: "已离房",
+            actions: "清空当前房间",
+          },
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      在线会话中: {
+        on: {
+          LATEST_EVENT_ADVANCED: {
+            actions: "推进最新事件位置",
+          },
+          RECONNECTING_STARTED: {
+            target: "重连中",
+            actions: "标记重连中",
+          },
+          RECOVERY_FAILED: [
+            {
+              guard: ({ event }) => event.keepRoomVisible,
+              target: "可重试失败",
+              actions: "保留房间并记录失败",
+            },
+            {
+              target: "可重试失败",
+              actions: "清空房间并记录失败",
+            },
+          ],
+          SOFT_LEAVE_REQUESTED: {
+            target: "已离房",
+            actions: "清空当前房间",
+          },
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      重连中: {
+        on: {
+          LATEST_EVENT_ADVANCED: {
+            actions: "推进最新事件位置",
+          },
+          SNAPSHOT_LOADED: {
+            target: "房间就绪",
+            actions: "写入房间快照",
+          },
+          SUBSCRIPTION_ESTABLISHED: {
+            target: "在线会话中",
+            actions: "记录订阅已建立",
+          },
+          RECOVERY_FAILED: [
+            {
+              guard: ({ event }) => event.keepRoomVisible,
+              target: "可重试失败",
+              actions: "保留房间并记录失败",
+            },
+            {
+              target: "可重试失败",
+              actions: "清空房间并记录失败",
+            },
+          ],
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      可重试失败: {
+        on: {
+          LATEST_EVENT_ADVANCED: {
+            actions: "推进最新事件位置",
+          },
+          JOIN_REQUESTED: {
+            target: "入房中",
+          },
+          RECONNECTING_STARTED: {
+            target: "重连中",
+            actions: "标记重连中",
+          },
+          SNAPSHOT_LOADED: {
+            target: "房间就绪",
+            actions: "写入房间快照",
+          },
+          SOFT_LEAVE_REQUESTED: {
+            target: "已离房",
+            actions: "清空当前房间",
+          },
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+        },
+      },
+      已离房: {
+        on: {
+          JOIN_REQUESTED: {
+            target: "入房中",
+          },
+          SESSION_REFRESHED: {
+            actions: "写入刷新身份",
+          },
+          BOOTSTRAP_SUCCEEDED: [
+            {
+              guard: ({ event }) => event.roomId.trim().length > 0,
+              target: "恢复中",
+              actions: "写入引导结果",
+            },
+            {
+              target: "大厅中",
+              actions: "写入引导结果",
+            },
+          ],
+        },
+      },
     },
   },
   {
     actions: {
-      写入引导结果: assign(({ event }) => {
+      写入引导结果: assign(({ event, context }) => {
         if (event.type !== "BOOTSTRAP_SUCCEEDED") {
           return {};
         }
@@ -83,18 +356,133 @@ const 房间编排机 = createMachine(
           sessionId: event.sessionId,
           displayAlias: event.displayAlias,
           roomId: event.roomId,
+          roomDisplayTitle: event.roomId.trim().length > 0 ? context.roomDisplayTitle : "",
+          latestEventPosition: event.roomId.trim().length > 0 ? context.latestEventPosition : 0,
+          lastRecoveryErrorCode: "",
         };
       }),
+      记录引导失败: assign(({ event }) => {
+        if (event.type !== "BOOTSTRAP_FAILED") {
+          return {};
+        }
+        return {
+          roomId: "",
+          roomDisplayTitle: "",
+          latestEventPosition: 0,
+          lastRecoveryErrorCode: event.code,
+        };
+      }),
+      写入刷新身份: assign(({ event }) => {
+        if (event.type !== "SESSION_REFRESHED") {
+          return {};
+        }
+        return {
+          sessionId: event.sessionId,
+          displayAlias: event.displayAlias,
+        };
+      }),
+      写入房间快照: assign(({ event }) => {
+        if (event.type !== "SNAPSHOT_LOADED") {
+          return {};
+        }
+        return {
+          roomId: event.roomId,
+          roomDisplayTitle: event.roomDisplayTitle,
+          latestEventPosition: event.latestEventPosition,
+          lastRecoveryErrorCode: "",
+        };
+      }),
+      记录订阅已建立: assign(({ event }) => {
+        if (event.type !== "SUBSCRIPTION_ESTABLISHED") {
+          return {};
+        }
+        return {
+          latestEventPosition: event.latestEventPosition,
+          lastRecoveryErrorCode: "",
+        };
+      }),
+      推进最新事件位置: assign(({ event, context }) => {
+        if (event.type !== "LATEST_EVENT_ADVANCED") {
+          return {};
+        }
+        return {
+          latestEventPosition: Math.max(context.latestEventPosition, event.latestEventPosition),
+          lastRecoveryErrorCode: "",
+        };
+      }),
+      标记重连中: assign(({ event }) => {
+        if (event.type !== "RECONNECTING_STARTED") {
+          return {};
+        }
+        return {
+          lastRecoveryErrorCode: event.code,
+        };
+      }),
+      保留房间并记录失败: assign(({ event }) => {
+        if (event.type !== "RECOVERY_FAILED") {
+          return {};
+        }
+        return {
+          lastRecoveryErrorCode: event.code,
+        };
+      }),
+      清空房间并记录失败: assign(({ event }) => {
+        if (event.type !== "RECOVERY_FAILED") {
+          return {};
+        }
+        return {
+          roomId: "",
+          roomDisplayTitle: "",
+          latestEventPosition: 0,
+          lastRecoveryErrorCode: event.code,
+        };
+      }),
+      清空当前房间: assign(() => ({
+        roomId: "",
+        roomDisplayTitle: "",
+        latestEventPosition: 0,
+        lastRecoveryErrorCode: "",
+      })),
     },
   }
 );
 
+export type 房间内核快照 = SnapshotFrom<typeof 房间编排机>;
+
+export interface 房间壳外观 {
+  bootstrapState: "booting" | "ready";
+  recoveryState: "idle" | "retryable_failure" | "reconnecting";
+  sessionId: string;
+  displayAlias: string;
+  roomId: string;
+  roomDisplayTitle: string;
+  latestEventPosition: number;
+  lastRecoveryErrorCode: string;
+}
+
 /**
- * 创建一个新的房间内核 actor。
- *
- * 之所以直接返回 actor，而不是先暴露更多 wrapper，
- * 是为了先用最小接口把测试和后续壳层整合跑通，避免过早造抽象。
+ * 壳层只消费这个稳定外观，不需要知道状态机内部细节。
+ * 以后换模板、换主题、换前端框架时，仍然只要围绕这层外观重新适配。
  */
+export function 派生房间壳外观(snapshot: 房间内核快照): 房间壳外观 {
+  const phase = snapshot.value as 房间阶段;
+  return {
+    bootstrapState: phase === "引导中" ? "booting" : "ready",
+    recoveryState:
+      phase === "重连中"
+        ? "reconnecting"
+        : phase === "可重试失败"
+        ? "retryable_failure"
+        : "idle",
+    sessionId: snapshot.context.sessionId,
+    displayAlias: snapshot.context.displayAlias,
+    roomId: snapshot.context.roomId,
+    roomDisplayTitle: snapshot.context.roomDisplayTitle,
+    latestEventPosition: snapshot.context.latestEventPosition,
+    lastRecoveryErrorCode: snapshot.context.lastRecoveryErrorCode,
+  };
+}
+
 export function 创建房间内核() {
   return createActor(房间编排机).start();
 }

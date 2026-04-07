@@ -7,11 +7,11 @@ export interface 聊天状态 {
   anonymousIdentityId: string;
   /** 当前展示给用户和其他成员看的花名。 */
   displayAlias: string;
-  /** 当前 bootstrap 返回的权威会话锚点。恢复流程只能使用这一份。 */
+  /** 当前 bootstrap 返回的权威会话锚点；其来源已统一收口到房间编排内核。 */
   sessionId: string;
-  /** 当前壳层记住的房间恢复锚点。它不是成员资格真相。 */
+  /** 当前壳层记住的房间恢复锚点；字段本身仍给壳层消费，但来源改由房间编排内核驱动。 */
   roomId: string;
-  /** 当前房间标题只服务壳层展示，可由短码或未来房间名填充。 */
+  /** 当前房间标题只服务壳层展示，具体值统一由房间编排内核外观派生。 */
   roomDisplayTitle: string;
   roomCodeInput: string;
   messageInput: string;
@@ -43,9 +43,9 @@ export interface 聊天状态 {
   historyLoading: boolean;
   /** 最近一次历史分页失败的稳定错误码。 */
   historyErrorCode: string;
-  /** 恢复相关的临时状态，只服务壳层交互，不是共享契约事实。 */
+  /** 恢复相关的临时状态，只服务壳层交互，且已改为由房间编排内核统一回填。 */
   recoveryState: "idle" | "retryable_failure" | "reconnecting";
-  /** 最近一次恢复/订阅失败的稳定错误码，供壳层决定提示文案。 */
+  /** 最近一次恢复/订阅失败的稳定错误码，供壳层决定提示文案，来源同样收口到房间编排内核。 */
   lastRecoveryErrorCode: string;
 }
 

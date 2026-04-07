@@ -1,5 +1,6 @@
 import { css, html, LitElement } from "lit";
 import type { 房间快照, 消息事件 } from "./契约.js";
+import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 创建浏览器存储, type 前端存储端口 } from "./存储.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
@@ -439,9 +440,13 @@ export class 聊天壳 extends LitElement {
 
   private chatState: 聊天状态 = { ...初始聊天状态 };
 
-  private bootstrapState: "booting" | "ready" = "booting";
-
   private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
+
+  /**
+   * 房间阶段编排由状态机承载，聊天壳只消费它派生出的外观。
+   * 这样 UI 改版时，就不必再顺手碰 bootstrap / 恢复 / 重连 的阶段逻辑。
+   */
+  private roomKernel = 创建房间内核();
 
   /**
    * 本地存储是壳层能力，不是领域能力。
@@ -465,6 +470,36 @@ export class 聊天壳 extends LitElement {
     this.transport = transport;
   }
 
+  private roomShellState() {
+    return 派生房间壳外观(this.roomKernel.getSnapshot());
+  }
+
+  /**
+   * `聊天状态` 里仍然保留消息流、滚动与输入态；
+   * 但房间外观字段统一从状态机快照回填，避免壳层继续手拼会话阶段。
+   */
+  private roomShellPatch(): Pick<
+    聊天状态,
+    | "sessionId"
+    | "displayAlias"
+    | "roomId"
+    | "roomDisplayTitle"
+    | "latestEventPosition"
+    | "recoveryState"
+    | "lastRecoveryErrorCode"
+  > {
+    const roomShell = this.roomShellState();
+    return {
+      sessionId: roomShell.sessionId,
+      displayAlias: roomShell.displayAlias,
+      roomId: roomShell.roomId,
+      roomDisplayTitle: roomShell.roomDisplayTitle,
+      latestEventPosition: roomShell.latestEventPosition,
+      recoveryState: roomShell.recoveryState,
+      lastRecoveryErrorCode: roomShell.lastRecoveryErrorCode,
+    };
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.bootstrap();
@@ -482,18 +517,25 @@ export class 聊天壳 extends LitElement {
   private async bootstrap(): Promise<void> {
     try {
       const deviceAnonymousToken = this.storage.读取或创建设备匿名凭证();
+      const roomId = this.storage.读取当前房间标识();
       const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
       this.applyBootstrapIdentity(deviceAnonymousToken, identity);
+      this.roomKernel.send({
+        type: "BOOTSTRAP_SUCCEEDED",
+        sessionId: identity.session_id,
+        displayAlias: identity.display_alias,
+        roomId,
+      });
+      this.updateChat(this.roomShellPatch());
       this.ensureRealtimeSocket(identity.session_id);
       await this.restoreCurrentRoomIfNeeded();
     } catch (error) {
-      this.updateChat({
-        recoveryState: "retryable_failure",
-        lastRecoveryErrorCode: this.asRecoveryFailure(error).code ?? "system_error",
+      this.roomKernel.send({
+        type: "BOOTSTRAP_FAILED",
+        code: this.asRecoveryFailure(error).code ?? "system_error",
       });
+      this.updateChat(this.roomShellPatch());
     } finally {
-      this.bootstrapState = "ready";
-      this.requestUpdate();
       await this.updateComplete;
       // 刷新恢复房间时，快照状态可能早于 roomView 真正渲染完成。
       // 因此 bootstrap 解锁后必须再补一次首屏定位调度，避免先对 bootView 做了无效定位。
@@ -507,6 +549,7 @@ export class 聊天壳 extends LitElement {
     const roomCode = this.chatState.roomCodeInput.trim();
     if (!roomCode) return;
     try {
+      this.roomKernel.send({ type: "JOIN_REQUESTED" });
       this.ensureRealtimeSocket(this.chatState.sessionId);
       const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.joinOrCreateRoom(sessionId, roomCode)
@@ -517,11 +560,7 @@ export class 聊天壳 extends LitElement {
       this.enterRoomFromSnapshot(snapshot, roomCode, false);
       this.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
-      this.handleRecoveryFailure(
-        this.chatState.roomId || this.storage.读取当前房间标识(),
-        error,
-        false
-      );
+      this.handleRecoveryFailure(error, false);
     }
   }
 
@@ -542,7 +581,7 @@ export class 聊天壳 extends LitElement {
       this.enterRoomFromSnapshot(snapshot, undefined, true);
       this.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
-      this.handleRecoveryFailure(roomId, error, false);
+      this.handleRecoveryFailure(error, false);
     }
   }
 
@@ -566,11 +605,15 @@ export class 聊天壳 extends LitElement {
         delta.latest_event_position
       );
       const roomDisplayTitle = this.storage.读取当前房间短码() || "群聊房间";
-      this.shouldPrimeReadAnchorAfterInitialSettle = true;
-      this.updateChat({
-        roomId: roomId,
+      this.roomKernel.send({
+        type: "SNAPSHOT_LOADED",
+        roomId,
         roomDisplayTitle,
         latestEventPosition,
+      });
+      this.shouldPrimeReadAnchorAfterInitialSettle = true;
+      this.updateChat({
+        ...this.roomShellPatch(),
         lastReadEventPosition: snapshot.last_read_event_position,
         firstUnreadEventPosition: snapshot.first_unread_event_position,
         hasMoreBefore: snapshot.has_more_before,
@@ -586,13 +629,11 @@ export class 聊天壳 extends LitElement {
         historyLoading: false,
         historyLoadThrottleUntil: 0,
         historyErrorCode: "",
-        recoveryState: "idle",
-        lastRecoveryErrorCode: "",
       });
       this.scheduleInitialUnreadSettle();
       this.subscribeRoom(latestEventPosition);
     } catch (error) {
-      this.handleRecoveryFailure(roomId, error, true);
+      this.handleRecoveryFailure(error, true);
     }
   }
 
@@ -690,10 +731,6 @@ export class 聊天壳 extends LitElement {
     this.updateChat({
       deviceAnonymousToken,
       anonymousIdentityId: identity.anonymous_identity_id,
-      displayAlias: identity.display_alias,
-      sessionId: identity.session_id,
-      recoveryState: "idle",
-      lastRecoveryErrorCode: "",
     });
   }
 
@@ -710,10 +747,11 @@ export class 聊天壳 extends LitElement {
       if (!this.isInvalidSessionError(error)) {
         throw error;
       }
-      this.updateChat({
-        recoveryState: "reconnecting",
-        lastRecoveryErrorCode: "invalid_session",
+      this.roomKernel.send({
+        type: "RECONNECTING_STARTED",
+        code: "invalid_session",
       });
+      this.updateChat(this.roomShellPatch());
       const sessionId = await this.bootstrapFreshSession();
       return operation(sessionId);
     }
@@ -726,6 +764,12 @@ export class 聊天壳 extends LitElement {
     this.realtimeSocket?.disconnect();
     this.realtimeSocket = null;
     this.applyBootstrapIdentity(deviceAnonymousToken, identity);
+    this.roomKernel.send({
+      type: "SESSION_REFRESHED",
+      sessionId: identity.session_id,
+      displayAlias: identity.display_alias,
+    });
+    this.updateChat(this.roomShellPatch());
     this.ensureRealtimeSocket(identity.session_id);
     return identity.session_id;
   }
@@ -736,10 +780,7 @@ export class 聊天壳 extends LitElement {
    */
   private buildRoomViewResetPatch(): Partial<聊天状态> {
     return {
-      roomId: "",
-      roomDisplayTitle: "",
       messageInput: "",
-      latestEventPosition: 0,
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,
       hasMoreBefore: false,
@@ -752,8 +793,6 @@ export class 聊天壳 extends LitElement {
       pending: false,
       historyLoading: false,
       historyErrorCode: "",
-      recoveryState: "idle",
-      lastRecoveryErrorCode: "",
     };
   }
 
@@ -762,7 +801,7 @@ export class 聊天壳 extends LitElement {
    * 否则 UI 回到搜索页了，旧房间事件还在往壳层里灌，会制造“人已经离开房间但消息还在进来”的假状态。
    */
   private exitCurrentRoomView(
-    opts: { keepRoomCodeCache: boolean; lastRecoveryErrorCode?: string } = {
+    opts: { keepRoomCodeCache: boolean } = {
       keepRoomCodeCache: true,
     }
   ): void {
@@ -777,7 +816,6 @@ export class 聊天壳 extends LitElement {
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.updateChat({
       ...this.buildRoomViewResetPatch(),
-      lastRecoveryErrorCode: opts.lastRecoveryErrorCode ?? "",
     });
   }
 
@@ -788,46 +826,49 @@ export class 聊天壳 extends LitElement {
    * - 身份、会话和短码展示缓存保留。
    */
   private leaveCurrentRoomView(): void {
+    this.roomKernel.send({ type: "SOFT_LEAVE_REQUESTED" });
     this.exitCurrentRoomView({ keepRoomCodeCache: true });
+    this.updateChat(this.roomShellPatch());
   }
 
   /**
    * 硬失败要清 room 锚点并退出房间；临时失败则保留锚点，让用户还能重试。
    */
-  private handleRecoveryFailure(
-    roomId: string,
-    error: unknown,
-    keepRoomVisible: boolean
-  ): void {
+  private handleRecoveryFailure(error: unknown, keepRoomVisible: boolean): void {
     const failure = this.asRecoveryFailure(error);
     if (this.isHardRoomFailure(failure)) {
-      this.exitCurrentRoomView({
-        keepRoomCodeCache: false,
-        lastRecoveryErrorCode: failure.code ?? "",
+      this.roomKernel.send({
+        type: "RECOVERY_FAILED",
+        code: failure.code ?? "",
+        keepRoomVisible: false,
       });
+      this.exitCurrentRoomView({ keepRoomCodeCache: false });
+      this.updateChat(this.roomShellPatch());
       return;
     }
 
+    this.roomKernel.send({
+      type: "RECOVERY_FAILED",
+      code: failure.code ?? "system_error",
+      keepRoomVisible,
+    });
     this.updateChat({
-      roomId: keepRoomVisible ? roomId : "",
-      roomDisplayTitle: keepRoomVisible ? this.chatState.roomDisplayTitle : "",
+      ...this.roomShellPatch(),
       pending: false,
       historyLoading: false,
       scrollPhase: "idle",
       hasUserScrollIntent: keepRoomVisible ? this.chatState.hasUserScrollIntent : false,
-      recoveryState: "retryable_failure",
-      lastRecoveryErrorCode: failure.code ?? "system_error",
     });
     this.cancelPendingScrollPhaseRelease();
   }
 
   private async handleControlResult(control: 控制面结果): Promise<void> {
     if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
-      this.updateChat({
+      this.roomKernel.send({
+        type: "SUBSCRIPTION_ESTABLISHED",
         latestEventPosition: control.latest_event_position,
-        recoveryState: "idle",
-        lastRecoveryErrorCode: "",
       });
+      this.updateChat(this.roomShellPatch());
       return;
     }
 
@@ -847,29 +888,41 @@ export class 聊天壳 extends LitElement {
 
     if (control.code === "invalid_session") {
       try {
+        this.roomKernel.send({
+          type: "RECONNECTING_STARTED",
+          code: "invalid_session",
+        });
+        this.updateChat(this.roomShellPatch());
         await this.bootstrapFreshSession();
         await this.reloadRoomFromSnapshot(this.chatState.roomId);
       } catch (error) {
-        this.handleRecoveryFailure(this.chatState.roomId, error, true);
+        this.handleRecoveryFailure(error, true);
       }
       return;
     }
 
     if (this.isHardRoomFailure(control)) {
-      this.exitCurrentRoomView({
-        keepRoomCodeCache: false,
-        lastRecoveryErrorCode: control.code ?? "",
+      this.roomKernel.send({
+        type: "RECOVERY_FAILED",
+        code: control.code ?? "",
+        keepRoomVisible: false,
       });
+      this.exitCurrentRoomView({ keepRoomCodeCache: false });
+      this.updateChat(this.roomShellPatch());
       return;
     }
 
+    this.roomKernel.send({
+      type: "RECOVERY_FAILED",
+      code: control.code ?? "system_error",
+      keepRoomVisible: true,
+    });
     this.updateChat({
+      ...this.roomShellPatch(),
       pending: false,
       historyLoading: false,
       scrollPhase: "idle",
       hasUserScrollIntent: this.chatState.hasUserScrollIntent,
-      recoveryState: "retryable_failure",
-      lastRecoveryErrorCode: control.code ?? "system_error",
     });
     this.cancelPendingScrollPhaseRelease();
   }
@@ -901,10 +954,14 @@ export class 聊天壳 extends LitElement {
     this.shouldPrimeReadAnchorAfterInitialSettle = primeReadAnchorAfterInitialSettle;
     this.storage.写入当前房间标识(snapshot.room_id);
     const roomDisplayTitle = this.resolveRoomDisplayTitle(roomCodeForDisplay);
-    this.updateChat({
+    this.roomKernel.send({
+      type: "SNAPSHOT_LOADED",
       roomId: snapshot.room_id,
       roomDisplayTitle,
       latestEventPosition: snapshot.latest_event_position,
+    });
+    this.updateChat({
+      ...this.roomShellPatch(),
       lastReadEventPosition: snapshot.last_read_event_position,
       firstUnreadEventPosition: snapshot.first_unread_event_position,
       hasMoreBefore: snapshot.has_more_before,
@@ -921,8 +978,6 @@ export class 聊天壳 extends LitElement {
       historyLoading: false,
       historyLoadThrottleUntil: 0,
       historyErrorCode: "",
-      recoveryState: "idle",
-      lastRecoveryErrorCode: "",
     });
     this.scheduleInitialUnreadSettle();
   }
@@ -947,7 +1002,7 @@ export class 聊天壳 extends LitElement {
     await this.updateComplete;
     // 刷新恢复时，第一次 updateComplete 可能对应的还是 bootView。
     // 这时不能把“还没真正渲染房间 DOM”误判成“未读定位已经完成”。
-    if (this.bootstrapState !== "ready") {
+    if (this.roomShellState().bootstrapState !== "ready") {
       return;
     }
     if (!this.shadowRoot?.querySelector("#messageScroll")) {
@@ -1039,6 +1094,7 @@ export class 聊天壳 extends LitElement {
 
   private subscribeRoom(from: number): void {
     if (!this.chatState.roomId || !this.realtimeSocket) return;
+    this.roomKernel.send({ type: "SUBSCRIPTION_STARTED" });
     this.realtimeSocket.emit("subscribe_room_stream", {
       room_id: this.chatState.roomId,
       from,
@@ -1221,12 +1277,14 @@ export class 聊天壳 extends LitElement {
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
     const merged = this.reconcileMessages([...this.chatState.messages, ...events]);
+    this.roomKernel.send({
+      type: "LATEST_EVENT_ADVANCED",
+      latestEventPosition,
+    });
     this.updateChat({
+      ...this.roomShellPatch(),
       messages: merged,
-      latestEventPosition: Math.max(this.chatState.latestEventPosition, latestEventPosition),
       pending: false,
-      recoveryState: "idle",
-      lastRecoveryErrorCode: "",
     });
   }
 
@@ -1366,7 +1424,8 @@ export class 聊天壳 extends LitElement {
   override render() {
     const recoveryHint = this.recoveryHintText();
     const historyHint = this.historyHintText();
-    if (this.bootstrapState === "booting") {
+    const roomShell = this.roomShellState();
+    if (roomShell.bootstrapState === "booting") {
       return html`
         <section id="bootView" class="boot-screen">
           <div class="boot-card">
