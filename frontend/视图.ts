@@ -77,3 +77,61 @@ export function 派生消息展示项(
 export function 格式化后台概览(roomCount: number, messageCount: number): string {
   return `房间 ${roomCount} / 消息 ${messageCount}`;
 }
+
+export interface 房间提示文案输入 {
+  recoveryState: "idle" | "retryable_failure" | "reconnecting";
+  roomId: string;
+  displayAlias: string;
+  historyLoading: boolean;
+  historyErrorCode: string;
+}
+
+/**
+ * 房间头部文案完全属于 presenter：
+ * - 优先展示当前最重要的异常或恢复提示；
+ * - 没有异常时，再退回到身份辅助信息；
+ * - 不把这些优先级规则散落在壳组件里。
+ */
+export function 派生房间提示文案(input: 房间提示文案输入): {
+  recoveryHint: string;
+  historyHint: string;
+  subtitle: string;
+} {
+  const recoveryHint = 派生恢复提示文案(input.recoveryState, input.roomId);
+  const historyHint = 派生历史提示文案(input.historyLoading, input.historyErrorCode);
+
+  if (recoveryHint) {
+    return { recoveryHint, historyHint, subtitle: recoveryHint };
+  }
+  if (historyHint) {
+    return { recoveryHint, historyHint, subtitle: historyHint };
+  }
+  return {
+    recoveryHint,
+    historyHint,
+    subtitle: input.displayAlias ? `当前匿名身份：${input.displayAlias}` : "群聊房间",
+  };
+}
+
+function 派生恢复提示文案(
+  recoveryState: 房间提示文案输入["recoveryState"],
+  roomId: string
+): string {
+  if (recoveryState === "reconnecting") {
+    return "会话已刷新，正在重新恢复";
+  }
+  if (recoveryState !== "retryable_failure") {
+    return "";
+  }
+  return roomId ? "实时连接暂不可用，可稍后重试" : "恢复失败，可稍后重试";
+}
+
+function 派生历史提示文案(historyLoading: boolean, historyErrorCode: string): string {
+  if (historyLoading) {
+    return "正在加载更早消息";
+  }
+  if (historyErrorCode) {
+    return "更早消息加载失败，可继续上滑重试";
+  }
+  return "";
+}

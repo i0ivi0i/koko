@@ -124,8 +124,19 @@ export class HttpRealtime传输 implements 前端传输端口 {
   }
 
   createSocket(sessionId: string): Socket {
+    // 这里先只显式声明“当前协议下可以安全开启”的连接策略：
+    // 1. 保持 websocket-only，继续贴合现在的 realtime 主通道；
+    // 2. 显式保留自动重连，便于断线后继续走 snapshot + 补洞恢复链；
+    // 3. 暂时不启用 retries / ackTimeout。
+    //
+    // 原因不是忘了配，而是 Socket.IO 官方文档明确要求：
+    // `retries` 必须和服务端 ack 配套使用；否则客户端会重发命令。
+    // 我们当前的 send_text_message / subscribe_room_stream 还没有 ack 协议，
+    // 可靠性仍然由 latest_event_position + snapshot + 增量补洞保证，
+    // 不能为了“看起来更可靠”而把同一条命令重放多次。
     return io(this.baseUrl, {
       transports: ["websocket"],
+      reconnection: true,
       auth: { session_id: sessionId },
     });
   }

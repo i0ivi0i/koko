@@ -17,13 +17,14 @@ describe("传输", () => {
     vi.restoreAllMocks();
   });
 
-  it("用auth.session_id建立socket连接", () => {
+  it("socket连接配置只显式声明当前可安全启用的连接策略", () => {
     const transport = new HttpRealtime传输("http://localhost:3000");
 
     transport.createSocket("s-auth");
 
     expect(ioSpy).toHaveBeenCalledWith("http://localhost:3000", {
       transports: ["websocket"],
+      reconnection: true,
       auth: { session_id: "s-auth" },
     });
   });

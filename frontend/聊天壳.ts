@@ -5,7 +5,7 @@ import { 房间滚动器 } from "./房间滚动器.js";
 import { 创建浏览器存储, type 前端存储端口 } from "./存储.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
-import { 派生聊天列表展示项 } from "./视图.js";
+import { 派生聊天列表展示项, 派生房间提示文案 } from "./视图.js";
 import type { Socket } from "socket.io-client";
 const 阅读推进节流毫秒 = 400;
 
@@ -1170,44 +1170,6 @@ export class 聊天壳 extends LitElement {
     return candidate;
   }
 
-  private recoveryHintText(): string {
-    if (this.chatState.recoveryState === "reconnecting") {
-      return "会话已刷新，正在重新恢复";
-    }
-    if (this.chatState.recoveryState !== "retryable_failure") {
-      return "";
-    }
-    return this.chatState.roomId ? "实时连接暂不可用，可稍后重试" : "恢复失败，可稍后重试";
-  }
-
-  private historyHintText(): string {
-    if (this.chatState.historyLoading) {
-      return "正在加载更早消息";
-    }
-    if (this.chatState.historyErrorCode) {
-      return "更早消息加载失败，可继续上滑重试";
-    }
-    return "";
-  }
-
-  /**
-   * 房间副标题是纯壳层展示槽位：
-   * - 优先承接当前最重要的即时状态提示；
-   * - 没有异常提示时，再退回到“你当前是谁”这种稳定辅助信息。
-   * 这样顶部信息区就不会在正常态和异常态之间反复跳出额外面板。
-   */
-  private roomSubtitleText(recoveryHint: string, historyHint: string): string {
-    if (recoveryHint) {
-      return recoveryHint;
-    }
-    if (historyHint) {
-      return historyHint;
-    }
-    return this.chatState.displayAlias
-      ? `当前匿名身份：${this.chatState.displayAlias}`
-      : "群聊房间";
-  }
-
   private isInvalidSessionError(error: unknown): boolean {
     return this.asRecoveryFailure(error).code === "invalid_session";
   }
@@ -1229,8 +1191,13 @@ export class 聊天壳 extends LitElement {
   }
 
   override render() {
-    const recoveryHint = this.recoveryHintText();
-    const historyHint = this.historyHintText();
+    const { recoveryHint, historyHint, subtitle: roomSubtitle } = 派生房间提示文案({
+      recoveryState: this.chatState.recoveryState,
+      roomId: this.chatState.roomId,
+      displayAlias: this.chatState.displayAlias,
+      historyLoading: this.chatState.historyLoading,
+      historyErrorCode: this.chatState.historyErrorCode,
+    });
     const roomShell = this.roomShellState();
     if (roomShell.bootstrapState === "booting") {
       return html`
@@ -1270,7 +1237,6 @@ export class 聊天壳 extends LitElement {
       `;
     }
 
-    const roomSubtitle = this.roomSubtitleText(recoveryHint, historyHint);
     const statusAttention = Boolean(recoveryHint || historyHint);
 
     return html`
