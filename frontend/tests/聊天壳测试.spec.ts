@@ -976,6 +976,63 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("刷新恢复房间时，不会在 boot 阶段过早跳过首屏未读定位", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.snapshotQueue = [
+      创建房间快照("r-restore", 3, {
+        last_read_event_position: 1,
+        first_unread_event_position: 2,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-restore",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "已读消息",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-restore",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "第一条未读",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-restore",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "第二条未读",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    expect(scrollIntoView).toHaveBeenCalled();
+    el.remove();
+  });
+
   it("无 first_unread_event_position 时不会显示未读分隔条", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
@@ -1079,6 +1136,11 @@ describe("聊天壳", () => {
 
     vi.useFakeTimers();
     try {
+      (
+        el as unknown as {
+          readAnchorFlushTimer: ReturnType<typeof setTimeout> | null;
+        }
+      ).readAnchorFlushTimer = null;
       const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
         scrollTop: number;
         clientHeight: number;
@@ -1102,10 +1164,21 @@ describe("聊天壳", () => {
         scrollPhase: "restoring_unread",
         hasUserScrollIntent: false,
       });
+      (
+        el as unknown as {
+          chatState: { pendingReadAnchorPosition: number | null };
+        }
+      ).chatState.pendingReadAnchorPosition = null;
+      (
+        el as unknown as {
+          shouldPrimeReadAnchorAfterInitialSettle: boolean;
+        }
+      ).shouldPrimeReadAnchorAfterInitialSettle = true;
 
-      await (
-        el as unknown as { settleInitialUnreadAnchor: () => Promise<void> }
-      ).settleInitialUnreadAnchor();
+      (
+        el as unknown as { captureReadAnchorFromCurrentViewport: () => void }
+      ).captureReadAnchorFromCurrentViewport();
+      await Promise.resolve();
       await vi.advanceTimersByTimeAsync(450);
 
       expect(transport.readAnchorUpdates).toEqual([

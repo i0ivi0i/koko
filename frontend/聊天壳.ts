@@ -491,6 +491,12 @@ export class 聊天壳 extends LitElement {
     } finally {
       this.bootstrapState = "ready";
       this.requestUpdate();
+      await this.updateComplete;
+      // 刷新恢复房间时，快照状态可能早于 roomView 真正渲染完成。
+      // 因此 bootstrap 解锁后必须再补一次首屏定位调度，避免先对 bootView 做了无效定位。
+      if (this.chatState.roomId && !this.chatState.initialUnreadSettled) {
+        this.scheduleInitialUnreadSettle();
+      }
     }
   }
 
@@ -1010,6 +1016,14 @@ export class 聊天壳 extends LitElement {
       return;
     }
     await this.updateComplete;
+    // 刷新恢复时，第一次 updateComplete 可能对应的还是 bootView。
+    // 这时不能把“还没真正渲染房间 DOM”误判成“未读定位已经完成”。
+    if (this.bootstrapState !== "ready") {
+      return;
+    }
+    if (!this.shadowRoot?.querySelector("#messageScroll")) {
+      return;
+    }
     if (this.chatState.initialUnreadSettled) {
       return;
     }
