@@ -346,6 +346,12 @@ describe("聊天壳", () => {
     vi.restoreAllMocks();
   });
 
+  it("聊天滚动容器会显式收口浏览器边界回弹与滚动链", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("overscroll-behavior-y: contain");
+  });
+
   it("启动时会从本地设备凭证恢复匿名身份", async () => {
     window.localStorage.setItem(
       "koko_device_anonymous_token",

@@ -87,6 +87,8 @@ export class 聊天壳 extends LitElement {
     .message-scroll {
       max-height: 420px;
       overflow-y: auto;
+      /* 聊天窗口是内层滚动容器，触顶/触底时不应把浏览器页面回弹和外层滚动链带进来。 */
+      overscroll-behavior-y: contain;
       padding-right: 4px;
     }
 
