@@ -1113,9 +1113,10 @@ describe("聊天壳", () => {
       scrollPhase: "idle",
     });
 
-    await (
-      el as unknown as { settleInitialUnreadAnchor: () => Promise<void> }
-    ).settleInitialUnreadAnchor();
+    (
+      el as unknown as { roomScroller: { 安排首屏定位: () => void } }
+    ).roomScroller.安排首屏定位();
+    await Promise.resolve();
     await 等待组件稳定(el);
 
     expect(scroll.scrollTop).toBe(480);
@@ -1189,8 +1190,8 @@ describe("聊天壳", () => {
       ).shouldPrimeReadAnchorAfterInitialSettle = true;
 
       (
-        el as unknown as { captureReadAnchorFromCurrentViewport: () => void }
-      ).captureReadAnchorFromCurrentViewport();
+        el as unknown as { roomScroller: { 安排首屏定位: () => void } }
+      ).roomScroller.安排首屏定位();
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(450);
 

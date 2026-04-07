@@ -1,0 +1,247 @@
+import type { ReactiveController, ReactiveControllerHost } from "lit";
+import type { 聊天状态 } from "./状态.js";
+
+const 历史分页顶部节流毫秒 = 180;
+
+type 房间滚动观察态 = Pick<
+  聊天状态,
+  | "roomId"
+  | "firstUnreadEventPosition"
+  | "initialUnreadSettled"
+  | "scrollPhase"
+  | "historyLoading"
+  | "hasMoreBefore"
+  | "hasUserScrollIntent"
+  | "historyLoadThrottleUntil"
+>;
+
+interface 房间滚动器宿主 extends ReactiveControllerHost {
+  readonly updateComplete: Promise<boolean>;
+}
+
+export interface 房间滚动器依赖 {
+  读取状态(): 房间滚动观察态;
+  更新状态(patch: Partial<聊天状态>): void;
+  查询滚动容器(): HTMLElement | null;
+  查询消息节点(): HTMLElement[];
+  请求更早历史(): void;
+  采样阅读锚点(position: number): void;
+  读取是否需要恢复补锚(): boolean;
+  消耗恢复补锚标记(): void;
+}
+
+/**
+ * 房间滚动器只处理 DOM 滚动副作用。
+ *
+ * 它不做业务裁决，不直接打网络：
+ * - 什么时候该补历史，由它观测滚动并发出请求；
+ * - 什么时候采样到更靠后的已读锚点，由它观测视口并回调给壳层；
+ * - 什么时候隔离程序滚动，不让浏览器事件误判成用户行为，也由它负责。
+ */
+export class 房间滚动器 implements ReactiveController {
+  private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    private readonly host: 房间滚动器宿主,
+    private readonly deps: 房间滚动器依赖
+  ) {
+    host.addController(this);
+  }
+
+  hostDisconnected(): void {
+    this.取消挂起滚动副作用();
+  }
+
+  安排首屏定位(): void {
+    queueMicrotask(() => {
+      void this.落实首屏定位();
+    });
+  }
+
+  标记用户滚动意图(): void {
+    if (this.deps.读取状态().hasUserScrollIntent) {
+      return;
+    }
+    this.deps.更新状态({ hasUserScrollIntent: true });
+  }
+
+  处理滚动事件(scrollContainer: HTMLElement): void {
+    this.按需加载更早历史(scrollContainer);
+    this.按需采样阅读锚点(scrollContainer);
+  }
+
+  读取历史补偿基线(): number {
+    return this.deps.查询滚动容器()?.scrollHeight ?? 0;
+  }
+
+  async 应用历史补偿(旧滚动高度: number, 插入了消息: boolean): Promise<void> {
+    if (!插入了消息) {
+      return;
+    }
+    await this.host.updateComplete;
+    const scrollContainer = this.deps.查询滚动容器();
+    if (!scrollContainer) {
+      return;
+    }
+    const 新滚动高度 = scrollContainer.scrollHeight;
+    scrollContainer.scrollTop += 新滚动高度 - 旧滚动高度;
+    this.安排程序滚动释放("compensating_history");
+  }
+
+  取消挂起滚动副作用(): void {
+    if (this.scrollPhaseReleaseTimer === null) {
+      return;
+    }
+    clearTimeout(this.scrollPhaseReleaseTimer);
+    this.scrollPhaseReleaseTimer = null;
+  }
+
+  private async 落实首屏定位(): Promise<void> {
+    const 状态 = this.deps.读取状态();
+    if (状态.initialUnreadSettled) {
+      return;
+    }
+    await this.host.updateComplete;
+    const scrollContainer = this.deps.查询滚动容器();
+    if (!scrollContainer) {
+      return;
+    }
+    if (this.deps.读取状态().initialUnreadSettled) {
+      return;
+    }
+    const firstUnreadEventPosition = this.deps.读取状态().firstUnreadEventPosition;
+    if (firstUnreadEventPosition === null) {
+      scrollContainer.scrollTop = Math.max(
+        0,
+        scrollContainer.scrollHeight - scrollContainer.clientHeight
+      );
+      this.补一次恢复阅读锚点();
+      this.deps.更新状态({
+        initialUnreadSettled: true,
+        scrollPhase: "idle",
+      });
+      return;
+    }
+
+    const target = this.deps
+      .查询消息节点()
+      .find(
+        (node) => Number(node.dataset.eventPosition ?? Number.NaN) === firstUnreadEventPosition
+      );
+    if (!target) {
+      this.deps.更新状态({
+        initialUnreadSettled: true,
+        scrollPhase: "idle",
+      });
+      return;
+    }
+
+    target.scrollIntoView?.({ block: "center" });
+    this.补一次恢复阅读锚点();
+    this.安排程序滚动释放("restoring_unread", {
+      initialUnreadSettled: true,
+    });
+  }
+
+  private 补一次恢复阅读锚点(): void {
+    if (!this.deps.读取是否需要恢复补锚()) {
+      return;
+    }
+    this.deps.消耗恢复补锚标记();
+    queueMicrotask(() => {
+      const scrollContainer = this.deps.查询滚动容器();
+      if (!scrollContainer) {
+        return;
+      }
+      const nextReadPosition = this.查找可见阅读锚点(scrollContainer);
+      if (nextReadPosition === null) {
+        return;
+      }
+      this.deps.采样阅读锚点(nextReadPosition);
+    });
+  }
+
+  private 按需加载更早历史(scrollContainer: HTMLElement): void {
+    const 状态 = this.deps.读取状态();
+    if (
+      scrollContainer.scrollTop > 0 ||
+      状态.scrollPhase !== "idle" ||
+      !状态.hasUserScrollIntent
+    ) {
+      return;
+    }
+    const now = Date.now();
+    if (now < 状态.historyLoadThrottleUntil) {
+      return;
+    }
+    this.deps.更新状态({
+      historyLoadThrottleUntil: now + 历史分页顶部节流毫秒,
+    });
+    this.deps.请求更早历史();
+  }
+
+  private 按需采样阅读锚点(scrollContainer: HTMLElement): void {
+    const 状态 = this.deps.读取状态();
+    if (
+      !状态.roomId ||
+      !状态.initialUnreadSettled ||
+      状态.historyLoading ||
+      状态.scrollPhase !== "idle" ||
+      !状态.hasUserScrollIntent
+    ) {
+      return;
+    }
+    const nextReadPosition = this.查找可见阅读锚点(scrollContainer);
+    if (nextReadPosition === null) {
+      return;
+    }
+    this.deps.采样阅读锚点(nextReadPosition);
+  }
+
+  private 查找可见阅读锚点(scrollContainer: HTMLElement): number | null {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    let nextReadPosition: number | null = null;
+
+    for (const row of this.deps.查询消息节点()) {
+      const rawEventPosition = row.dataset.eventPosition;
+      if (!rawEventPosition) {
+        continue;
+      }
+      const eventPosition = Number(rawEventPosition);
+      if (!Number.isFinite(eventPosition)) {
+        continue;
+      }
+      const rowRect = row.getBoundingClientRect();
+      const fullyVisible =
+        rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom;
+      if (!fullyVisible) {
+        continue;
+      }
+      nextReadPosition =
+        nextReadPosition === null ? eventPosition : Math.max(nextReadPosition, eventPosition);
+    }
+
+    return nextReadPosition;
+  }
+
+  /**
+   * 程序滚动只在一个极短窗口里隔离，避免浏览器随后抛出的 scroll
+   * 被错误解释成“用户正在阅读/翻页”。
+   */
+  private 安排程序滚动释放(
+    expectedPhase: 聊天状态["scrollPhase"],
+    patch: Partial<聊天状态> = {}
+  ): void {
+    this.取消挂起滚动副作用();
+    this.scrollPhaseReleaseTimer = setTimeout(() => {
+      this.scrollPhaseReleaseTimer = null;
+      if (this.deps.读取状态().scrollPhase !== expectedPhase) {
+        return;
+      }
+      this.deps.更新状态({
+        ...patch,
+        scrollPhase: "idle",
+      });
+    }, 0);
+  }
+}

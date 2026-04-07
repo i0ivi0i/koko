@@ -1,12 +1,12 @@
 import { css, html, LitElement } from "lit";
 import type { 房间快照, 消息事件 } from "./契约.js";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
+import { 房间滚动器 } from "./房间滚动器.js";
 import { 创建浏览器存储, type 前端存储端口 } from "./存储.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 派生聊天列表展示项 } from "./视图.js";
 import type { Socket } from "socket.io-client";
-const 历史分页顶部节流毫秒 = 180;
 const 阅读推进节流毫秒 = 400;
 
 type 控制面结果 = {
@@ -458,13 +458,35 @@ export class 聊天壳 extends LitElement {
 
   private readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
-
   /**
    * 只在“刷新恢复 / 快照重拉”这类恢复链路里，才允许首屏程序性补一次阅读锚点。
    * 首次手动进房仍然保持原语义，避免把恢复专用逻辑扩散到所有入口。
    */
   private shouldPrimeReadAnchorAfterInitialSettle = false;
+
+  /**
+   * 滚动器只处理 DOM 滚动副作用：
+   * - 首屏定位
+   * - 历史补偿
+   * - 程序滚动隔离
+   * - 已读采样
+   */
+  private roomScroller = new 房间滚动器(this, {
+    读取状态: () => this.chatState,
+    更新状态: (patch) => this.updateChat(patch),
+    查询滚动容器: () =>
+      (this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null) ?? null,
+    查询消息节点: () =>
+      Array.from(this.shadowRoot?.querySelectorAll("[data-event-position]") ?? []) as HTMLElement[],
+    请求更早历史: () => {
+      void this.loadOlderHistory();
+    },
+    采样阅读锚点: (position) => this.scheduleReadAnchorUpdate(position),
+    读取是否需要恢复补锚: () => this.shouldPrimeReadAnchorAfterInitialSettle,
+    消耗恢复补锚标记: () => {
+      this.shouldPrimeReadAnchorAfterInitialSettle = false;
+    },
+  });
 
   setTransportForTest(transport: 前端传输端口): void {
     this.transport = transport;
@@ -509,7 +531,7 @@ export class 聊天壳 extends LitElement {
     this.realtimeSocket?.disconnect();
     this.realtimeSocket = null;
     this.cancelPendingReadAnchorFlush();
-    this.cancelPendingScrollPhaseRelease();
+    this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     super.disconnectedCallback();
   }
@@ -540,7 +562,7 @@ export class 聊天壳 extends LitElement {
       // 刷新恢复房间时，快照状态可能早于 roomView 真正渲染完成。
       // 因此 bootstrap 解锁后必须再补一次首屏定位调度，避免先对 bootView 做了无效定位。
       if (this.chatState.roomId && !this.chatState.initialUnreadSettled) {
-        this.scheduleInitialUnreadSettle();
+        this.roomScroller.安排首屏定位();
       }
     }
   }
@@ -592,7 +614,7 @@ export class 聊天壳 extends LitElement {
   private async reloadRoomFromSnapshot(roomId: string): Promise<void> {
     if (!this.chatState.roomId || roomId !== this.chatState.roomId) return;
     try {
-      this.cancelPendingScrollPhaseRelease();
+      this.roomScroller.取消挂起滚动副作用();
       this.ensureRealtimeSocket(this.chatState.sessionId);
       const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
         this.transport.loadRoomSnapshot(roomId, sessionId)
@@ -630,7 +652,7 @@ export class 聊天壳 extends LitElement {
         historyLoadThrottleUntil: 0,
         historyErrorCode: "",
       });
-      this.scheduleInitialUnreadSettle();
+      this.roomScroller.安排首屏定位();
       this.subscribeRoom(latestEventPosition);
     } catch (error) {
       this.handleRecoveryFailure(error, true);
@@ -673,8 +695,7 @@ export class 聊天壳 extends LitElement {
       return;
     }
 
-    const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
-    const beforeHeight = scrollContainer?.scrollHeight ?? 0;
+    const beforeHeight = this.roomScroller.读取历史补偿基线();
     const oldestMessage = this.chatState.messages[0];
     if (!oldestMessage) {
       return;
@@ -703,14 +724,9 @@ export class 聊天壳 extends LitElement {
         historyErrorCode: "",
         scrollPhase: page.messages.length > 0 ? "compensating_history" : this.chatState.scrollPhase,
       });
-      if (page.messages.length > 0 && scrollContainer) {
-        // 历史页是往列表顶部前插的；补偿前后 scrollHeight 差值，才能守住用户当前视口。
-        // 这段滚动完全由程序发起，因此必须暂时隔离出“用户阅读滚动”语义。
-        await this.updateComplete;
-        const afterHeight = scrollContainer.scrollHeight;
-        scrollContainer.scrollTop += afterHeight - beforeHeight;
-        this.scheduleScrollPhaseRelease("compensating_history");
-      }
+      // 历史页是往列表顶部前插的；必须补偿前后 scrollHeight 差值，才能守住用户当前视口。
+      // 这段滚动完全由程序发起，因此补偿和程序滚动隔离统一交给房间滚动器处理。
+      await this.roomScroller.应用历史补偿(beforeHeight, page.messages.length > 0);
     } catch (error) {
       this.updateChat({
         historyLoading: false,
@@ -812,7 +828,7 @@ export class 聊天壳 extends LitElement {
       this.storage.清除当前房间短码();
     }
     this.cancelPendingReadAnchorFlush();
-    this.cancelPendingScrollPhaseRelease();
+    this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.updateChat({
       ...this.buildRoomViewResetPatch(),
@@ -859,7 +875,7 @@ export class 聊天壳 extends LitElement {
       scrollPhase: "idle",
       hasUserScrollIntent: keepRoomVisible ? this.chatState.hasUserScrollIntent : false,
     });
-    this.cancelPendingScrollPhaseRelease();
+    this.roomScroller.取消挂起滚动副作用();
   }
 
   private async handleControlResult(control: 控制面结果): Promise<void> {
@@ -924,7 +940,7 @@ export class 聊天壳 extends LitElement {
       scrollPhase: "idle",
       hasUserScrollIntent: this.chatState.hasUserScrollIntent,
     });
-    this.cancelPendingScrollPhaseRelease();
+    this.roomScroller.取消挂起滚动副作用();
   }
 
   /**
@@ -950,7 +966,7 @@ export class 聊天壳 extends LitElement {
     primeReadAnchorAfterInitialSettle = false
   ): void {
     this.cancelPendingReadAnchorFlush();
-    this.cancelPendingScrollPhaseRelease();
+    this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = primeReadAnchorAfterInitialSettle;
     this.storage.写入当前房间标识(snapshot.room_id);
     const roomDisplayTitle = this.resolveRoomDisplayTitle(roomCodeForDisplay);
@@ -979,97 +995,7 @@ export class 聊天壳 extends LitElement {
       historyLoadThrottleUntil: 0,
       historyErrorCode: "",
     });
-    this.scheduleInitialUnreadSettle();
-  }
-
-  /**
-   * 首屏未读定位和历史前插补偿是两套完全不同的逻辑：
-   * - 这里仅处理“刚恢复房间时，把视口落到第一条未读附近”；
-   * - 不做历史分页补偿；
-   * - 但落位完成后，要按当前真实可见窗口补一次阅读锚点，
-   *   否则用户已经看到了较新的消息，一刷新又会被后端当成“还停在很早的位置”。
-   */
-  private scheduleInitialUnreadSettle(): void {
-    queueMicrotask(() => {
-      void this.settleInitialUnreadAnchor();
-    });
-  }
-
-  private async settleInitialUnreadAnchor(): Promise<void> {
-    if (this.chatState.initialUnreadSettled) {
-      return;
-    }
-    await this.updateComplete;
-    // 刷新恢复时，第一次 updateComplete 可能对应的还是 bootView。
-    // 这时不能把“还没真正渲染房间 DOM”误判成“未读定位已经完成”。
-    if (this.roomShellState().bootstrapState !== "ready") {
-      return;
-    }
-    if (!this.shadowRoot?.querySelector("#messageScroll")) {
-      return;
-    }
-    if (this.chatState.initialUnreadSettled) {
-      return;
-    }
-    const firstUnreadEventPosition = this.chatState.firstUnreadEventPosition;
-    if (firstUnreadEventPosition === null) {
-      const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
-      if (scrollContainer) {
-        // “没有未读分隔条”不等于应该停在顶部：
-        // 这通常代表“全部已读”或“当前窗口只需要展示最近消息”，
-        // 因此前端要把视口落到这批首屏消息的底部，也就是最新消息附近。
-        scrollContainer.scrollTop = Math.max(
-          0,
-          scrollContainer.scrollHeight - scrollContainer.clientHeight
-        );
-      }
-      this.captureReadAnchorFromCurrentViewport();
-      this.updateChat({
-        initialUnreadSettled: true,
-        scrollPhase: "idle",
-      });
-      return;
-    }
-    const target = this.shadowRoot?.querySelector(
-      `[data-event-position="${firstUnreadEventPosition}"]`
-    ) as HTMLElement | null;
-    if (!target) {
-      this.updateChat({
-        initialUnreadSettled: true,
-        scrollPhase: "idle",
-      });
-      return;
-    }
-    target.scrollIntoView?.({ block: "center" });
-    this.captureReadAnchorFromCurrentViewport();
-    // 首屏恢复滚动是程序行为，不应立刻放行给“已读推进 / 顶部分页”解释。
-    // 这里延后一拍再回到 idle，让浏览器随后抛出的 scroll 先被壳层隔离掉。
-    this.scheduleScrollPhaseRelease("restoring_unread", {
-      initialUnreadSettled: true,
-    });
-  }
-
-  /**
-   * 刚恢复房间时，用户未必会立刻再手动滚一下。
-   * 但如果当前视口已经稳定展示到了更晚的消息，前端就该尽快把这份阅读事实补回后端，
-   * 避免下一次刷新仍按旧锚点把房间恢复到更早位置。
-   */
-  private captureReadAnchorFromCurrentViewport(): void {
-    if (!this.shouldPrimeReadAnchorAfterInitialSettle) {
-      return;
-    }
-    this.shouldPrimeReadAnchorAfterInitialSettle = false;
-    queueMicrotask(() => {
-      const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
-      if (!scrollContainer) {
-        return;
-      }
-      const nextReadPosition = this.findVisibleReadAnchorPosition(scrollContainer);
-      if (nextReadPosition === null) {
-        return;
-      }
-      this.scheduleReadAnchorUpdate(nextReadPosition);
-    });
+    this.roomScroller.安排首屏定位();
   }
 
   private ensureRealtimeSocket(sessionId: string): void {
@@ -1099,84 +1025,6 @@ export class 聊天壳 extends LitElement {
       room_id: this.chatState.roomId,
       from,
     });
-  }
-
-  /**
-   * 顶部历史分页要防止“已经在顶端时的连续回弹”打出重复请求。
-   * 因此这里先做节流门禁，再进入真正的历史加载逻辑。
-   */
-  private maybeLoadOlderHistory(scrollContainer: HTMLElement): void {
-    if (
-      scrollContainer.scrollTop > 0 ||
-      this.chatState.scrollPhase !== "idle" ||
-      !this.chatState.hasUserScrollIntent
-    ) {
-      return;
-    }
-    const now = Date.now();
-    if (now < this.chatState.historyLoadThrottleUntil) {
-      return;
-    }
-    this.updateChat({
-      historyLoadThrottleUntil: now + 历史分页顶部节流毫秒,
-    });
-    void this.loadOlderHistory();
-  }
-
-  /**
-   * 阅读推进必须基于“当前视口里真正读到哪一条消息”：
-   * 1. 首屏恢复期间仍然不能误把未读批量推进成已读；
-   * 2. 上滑补历史时只能单调前进，不能把顶部旧消息写成新的阅读真相；
-   * 3. 用户停在中段刷新时，后端要能拿到准确的 last_read_event_position，
-   *    否则小房间会直接退化成“整房都在首屏里，于是回到最老消息附近”的错误体验。
-   */
-  private maybeTrackReadAnchor(scrollContainer: HTMLElement): void {
-    if (
-      !this.chatState.roomId ||
-      !this.chatState.initialUnreadSettled ||
-      this.chatState.historyLoading ||
-      this.chatState.scrollPhase !== "idle" ||
-      !this.chatState.hasUserScrollIntent
-    ) {
-      return;
-    }
-    const nextReadPosition = this.findVisibleReadAnchorPosition(scrollContainer);
-    if (nextReadPosition === null) {
-      return;
-    }
-    this.scheduleReadAnchorUpdate(nextReadPosition);
-  }
-
-  /**
-   * 只把“完整进入当前滚动视口”的最后一条消息视作已读：
-   * - 刚露出一点的下一条未读，不应被过早推进；
-   * - 这样 last_read / first_unread 的边界才会稳定停在真实阅读断点上。
-   */
-  private findVisibleReadAnchorPosition(scrollContainer: HTMLElement): number | null {
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const messageRows = Array.from(
-      this.shadowRoot?.querySelectorAll("[data-event-position]") ?? []
-    ) as HTMLElement[];
-    let nextReadPosition: number | null = null;
-    for (const row of messageRows) {
-      const rawEventPosition = row.dataset.eventPosition;
-      if (!rawEventPosition) {
-        continue;
-      }
-      const eventPosition = Number(rawEventPosition);
-      if (!Number.isFinite(eventPosition)) {
-        continue;
-      }
-      const rowRect = row.getBoundingClientRect();
-      const fullyVisible =
-        rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom;
-      if (!fullyVisible) {
-        continue;
-      }
-      nextReadPosition =
-        nextReadPosition === null ? eventPosition : Math.max(nextReadPosition, eventPosition);
-    }
-    return nextReadPosition;
   }
 
   private scheduleReadAnchorUpdate(nextPosition: number): void {
@@ -1232,47 +1080,6 @@ export class 聊天壳 extends LitElement {
     }
     clearTimeout(this.readAnchorFlushTimer);
     this.readAnchorFlushTimer = null;
-  }
-
-  /**
-   * 壳层只在一个很短的窗口里隔离程序性滚动：
-   * - 这不是业务状态，不会进入共享契约；
-   * - 目的只是把浏览器随后抛出的 scroll 事件吞掉，避免误判成用户阅读。
-   */
-  private scheduleScrollPhaseRelease(
-    expectedPhase: 聊天状态["scrollPhase"],
-    patch: Partial<聊天状态> = {}
-  ): void {
-    this.cancelPendingScrollPhaseRelease();
-    this.scrollPhaseReleaseTimer = setTimeout(() => {
-      this.scrollPhaseReleaseTimer = null;
-      if (this.chatState.scrollPhase !== expectedPhase) {
-        return;
-      }
-      this.updateChat({
-        ...patch,
-        scrollPhase: "idle",
-      });
-    }, 0);
-  }
-
-  private cancelPendingScrollPhaseRelease(): void {
-    if (this.scrollPhaseReleaseTimer === null) {
-      return;
-    }
-    clearTimeout(this.scrollPhaseReleaseTimer);
-    this.scrollPhaseReleaseTimer = null;
-  }
-
-  /**
-   * 只有用户真的开始拖动 / 触摸 / 滚轮滚动后，后续 scroll 才能被解释成阅读或翻页意图。
-   * 这样不同浏览器对程序性 scroll 的事件时序差异，就不会再把刷新恢复误判成“用户在往上翻历史”。
-   */
-  private markUserScrollIntent(): void {
-    if (this.chatState.hasUserScrollIntent) {
-      return;
-    }
-    this.updateChat({ hasUserScrollIntent: true });
   }
 
   private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
@@ -1482,13 +1289,12 @@ export class 聊天壳 extends LitElement {
         <div
           id="messageScroll"
           class="message-scroll"
-          @pointerdown=${() => this.markUserScrollIntent()}
-          @touchstart=${() => this.markUserScrollIntent()}
-          @wheel=${() => this.markUserScrollIntent()}
+          @pointerdown=${() => this.roomScroller.标记用户滚动意图()}
+          @touchstart=${() => this.roomScroller.标记用户滚动意图()}
+          @wheel=${() => this.roomScroller.标记用户滚动意图()}
           @scroll=${(event: Event) => {
             const target = event.currentTarget as HTMLElement;
-            this.maybeLoadOlderHistory(target);
-            this.maybeTrackReadAnchor(target);
+            this.roomScroller.处理滚动事件(target);
           }}
         >
           <ul id="messageList" class="message-list">
