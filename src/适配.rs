@@ -61,7 +61,9 @@ fn 生成展示花名() -> String {
 impl Pg仓储 {
     /// 把数据库行翻成共享领域事件。
     /// 这里统一收口消息读取的字段映射，避免快照基线和增量补洞各写一套。
-    fn 行转消息事件(row: sqlx::postgres::PgRow, 房间标识: &str) -> contract::领域事件 {
+    fn 行转消息事件(
+        row: sqlx::postgres::PgRow, 房间标识: &str
+    ) -> contract::领域事件 {
         let msg_id: Option<String> = row.get("message_id");
         let client_id: Option<String> = row.get("client_message_id");
         let sender_session_id: Option<String> = row.get("session_id");
@@ -175,49 +177,48 @@ impl Pg仓储 {
         上次已读事件位置: Option<i64>,
         首条未读事件位置: Option<i64>,
     ) -> Result<contract::快照, contract::错误码> {
-        let (snapshot_messages, has_more_before) = if let Some(first_unread_event_position) =
-            首条未读事件位置
-        {
-            let before_messages = Self::查询消息页(
-                pool,
-                房间数据库标识,
-                房间标识,
-                Some(first_unread_event_position),
-                8,
-            )
-            .await?;
-            let unread_messages = Self::查询从位置开始的消息页(
-                pool,
-                房间数据库标识,
-                房间标识,
-                first_unread_event_position,
-                47,
-            )
-            .await?;
-            let has_more_before = before_messages
-                .first()
-                .map(|message| {
-                    matches!(
-                        message,
-                        contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
-                    )
-                })
-                .unwrap_or(false);
-            ([before_messages, unread_messages].concat(), has_more_before)
-        } else {
-            let snapshot_messages =
-                Self::查询消息页(pool, 房间数据库标识, 房间标识, None, 55).await?;
-            let has_more_before = snapshot_messages
-                .first()
-                .map(|message| {
-                    matches!(
-                        message,
-                        contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
-                    )
-                })
-                .unwrap_or(false);
-            (snapshot_messages, has_more_before)
-        };
+        let (snapshot_messages, has_more_before) =
+            if let Some(first_unread_event_position) = 首条未读事件位置 {
+                let before_messages = Self::查询消息页(
+                    pool,
+                    房间数据库标识,
+                    房间标识,
+                    Some(first_unread_event_position),
+                    8,
+                )
+                .await?;
+                let unread_messages = Self::查询从位置开始的消息页(
+                    pool,
+                    房间数据库标识,
+                    房间标识,
+                    first_unread_event_position,
+                    47,
+                )
+                .await?;
+                let has_more_before = before_messages
+                    .first()
+                    .map(|message| {
+                        matches!(
+                            message,
+                            contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
+                        )
+                    })
+                    .unwrap_or(false);
+                ([before_messages, unread_messages].concat(), has_more_before)
+            } else {
+                let snapshot_messages =
+                    Self::查询消息页(pool, 房间数据库标识, 房间标识, None, 55).await?;
+                let has_more_before = snapshot_messages
+                    .first()
+                    .map(|message| {
+                        matches!(
+                            message,
+                            contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
+                        )
+                    })
+                    .unwrap_or(false);
+                (snapshot_messages, has_more_before)
+            };
 
         Ok(contract::快照::房间 {
             房间标识: 房间标识.to_string(),
@@ -251,6 +252,61 @@ impl Pg仓储 {
         .map_err(|_| contract::错误码::系统错误)?;
 
         Ok(fetched.flatten())
+    }
+
+    /// 发送热路径需要的最小发送者投影。
+    /// 这里只解析数据库内部主键与展示花名，避免事务内再查一次 session。
+    async fn 查询发送者投影_异步(
+        pool: &PgPool,
+        会话标识: &str,
+    ) -> Result<(i64, String), contract::错误码> {
+        let row = sqlx::query(
+            "SELECT id, display_name AS display_alias FROM sessions WHERE session_id = $1",
+        )
+        .bind(会话标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?
+        .ok_or(contract::错误码::会话无效)?;
+        Ok((row.get("id"), row.get("display_alias")))
+    }
+
+    /// 幂等重试回查：当 `(room_id, sender_session_id, client_message_id)` 命中唯一约束时，
+    /// 说明这条用户意图已经成功落成过权威消息，此时应回到既有事件，而不是把重试冒充成系统错误。
+    async fn 查询既有消息事件_异步(
+        pool: &PgPool,
+        房间标识: &str,
+        会话标识: &str,
+        客户端消息标识: &str,
+    ) -> Result<Option<contract::领域事件>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT m.event_position, m.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+             FROM messages m \
+             JOIN rooms r ON r.id = m.room_id \
+             JOIN sessions s ON s.id = m.sender_session_id \
+             WHERE r.room_id = $1 AND s.session_id = $2 AND m.client_message_id = $3",
+        )
+        .bind(房间标识)
+        .bind(会话标识)
+        .bind(客户端消息标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(row.map(|row| Self::行转消息事件(row, 房间标识)))
+    }
+
+    /// 只把“同房间、同发送者、同 client_message_id”的冲突识别为幂等重试。
+    /// 这样既能顺手修掉 IM 重发炸系统错的问题，也不会把别的唯一约束误吞成成功。
+    fn 是消息幂等冲突(err: &sqlx::Error) -> bool {
+        matches!(
+            err,
+            sqlx::Error::Database(db_err)
+                if db_err.code().as_deref() == Some("23505")
+                    && db_err
+                        .constraint()
+                        .is_some_and(|name| name.contains("client_message_id"))
+        )
     }
 
     fn 在运行时执行<T>(&self, future: impl Future<Output = T>) -> T {
@@ -628,13 +684,14 @@ impl 仓储端口 for Pg仓储 {
     /// 规则本身在用例层决定“何时调用、失败如何映射”。
     fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
         self.在运行时执行(async {
-            let exists =
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions WHERE session_id = $1")
-                    .bind(会话标识)
-                    .fetch_one(&self.pool)
-                    .await
-                    .map_err(|_| contract::错误码::系统错误)?;
-            Ok(exists > 0)
+            let exists = sqlx::query_scalar::<_, i32>(
+                "SELECT 1 FROM sessions WHERE session_id = $1 LIMIT 1",
+            )
+            .bind(会话标识)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+            Ok(exists.is_some())
         })
     }
 
@@ -643,12 +700,12 @@ impl 仓储端口 for Pg仓储 {
     fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
         self.在运行时执行(async {
             let exists =
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM rooms WHERE room_id = $1")
+                sqlx::query_scalar::<_, i32>("SELECT 1 FROM rooms WHERE room_id = $1 LIMIT 1")
                     .bind(房间标识)
-                    .fetch_one(&self.pool)
+                    .fetch_optional(&self.pool)
                     .await
                     .map_err(|_| contract::错误码::系统错误)?;
-            Ok(exists > 0)
+            Ok(exists.is_some())
         })
     }
 
@@ -675,19 +732,20 @@ impl 仓储端口 for Pg仓储 {
         会话标识: &str,
     ) -> Result<bool, contract::错误码> {
         self.在运行时执行(async {
-            let exists = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) \
+            let exists = sqlx::query_scalar::<_, i32>(
+                "SELECT 1 \
                  FROM room_members rm \
                  JOIN rooms r ON r.id = rm.room_id \
                  JOIN sessions s ON s.id = rm.session_id \
-                 WHERE r.room_id = $1 AND s.session_id = $2 AND rm.left_at IS NULL",
+                 WHERE r.room_id = $1 AND s.session_id = $2 AND rm.left_at IS NULL \
+                 LIMIT 1",
             )
             .bind(房间标识)
             .bind(会话标识)
-            .fetch_one(&self.pool)
+            .fetch_optional(&self.pool)
             .await
             .map_err(|_| contract::错误码::系统错误)?;
-            Ok(exists > 0)
+            Ok(exists.is_some())
         })
     }
 
@@ -713,12 +771,13 @@ impl 仓储端口 for Pg仓储 {
         首条未读事件位置: Option<i64>,
     ) -> Result<contract::快照, contract::错误码> {
         self.在运行时执行(async {
-            let room =
-                sqlx::query("SELECT id, room_id, latest_event_position FROM rooms WHERE room_id = $1")
-                    .bind(房间标识)
-                    .fetch_optional(&self.pool)
-                    .await
-                    .map_err(|_| contract::错误码::系统错误)?;
+            let room = sqlx::query(
+                "SELECT id, room_id, latest_event_position FROM rooms WHERE room_id = $1",
+            )
+            .bind(房间标识)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
             let Some(row) = room else {
                 return Err(contract::错误码::房间不存在);
             };
@@ -792,12 +851,15 @@ impl 仓储端口 for Pg仓储 {
         文本: &str,
     ) -> Result<contract::领域事件, contract::错误码> {
         self.在运行时执行(async {
+            // 会话投影提前查：它不依赖房间顺序热点，外移后能缩短事务持锁窗口。
+            let (session_db_id, sender_display_alias) =
+                Self::查询发送者投影_异步(&self.pool, 会话标识).await?;
+
             // 核心事务不变量：
-            // 1) 锁定房间并计算 next_position
+            // 1) 锁定并推进房间 latest_event_position
             // 2) 写 room_events
             // 3) 写 messages
-            // 4) 推进 rooms.latest_event_position
-            // 四步必须同事务提交，否则顺序语义会漂移。
+            // 三步必须同事务提交，否则顺序语义会漂移。
             let mut tx = self
                 .pool
                 .begin()
@@ -805,7 +867,10 @@ impl 仓储端口 for Pg仓储 {
                 .map_err(|_| contract::错误码::系统错误)?;
 
             let room_row = sqlx::query(
-                "SELECT id, latest_event_position FROM rooms WHERE room_id = $1 FOR UPDATE",
+                "UPDATE rooms \
+                 SET latest_event_position = latest_event_position + 1 \
+                 WHERE room_id = $1 \
+                 RETURNING id, latest_event_position",
             )
             .bind(房间标识)
             .fetch_optional(&mut *tx)
@@ -815,19 +880,7 @@ impl 仓储端口 for Pg仓储 {
                 return Err(contract::错误码::房间不存在);
             };
             let room_db_id: i64 = room.get("id");
-            let latest_position: i64 = room.get("latest_event_position");
-            let next_position = latest_position + 1;
-
-            let session_row = sqlx::query(
-                "SELECT id, display_name AS display_alias FROM sessions WHERE session_id = $1",
-            )
-            .bind(会话标识)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?
-            .ok_or(contract::错误码::会话无效)?;
-            let session_db_id: i64 = session_row.get("id");
-            let sender_display_alias: String = session_row.get("display_alias");
+            let next_position: i64 = room.get("latest_event_position");
 
             let message_id = format!("{房间标识}-{next_position}");
 
@@ -844,7 +897,7 @@ impl 仓储端口 for Pg仓储 {
             .await
             .map_err(|_| contract::错误码::系统错误)?;
 
-            sqlx::query(
+            let insert_message = sqlx::query(
                 "INSERT INTO messages (message_id, room_id, sender_session_id, client_message_id, event_position, body) \
                  VALUES ($1, $2, $3, $4, $5, $6)",
             )
@@ -855,15 +908,25 @@ impl 仓储端口 for Pg仓储 {
             .bind(next_position)
             .bind(文本)
             .execute(&mut *tx)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-
-            sqlx::query("UPDATE rooms SET latest_event_position = $1 WHERE id = $2")
-                .bind(next_position)
-                .bind(room_db_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|_| contract::错误码::系统错误)?;
+            .await;
+            if let Err(err) = insert_message {
+                // `client_message_id` 冲突表示同一条用户发送意图已成功落库过。
+                // 这里必须回到既有权威事件，而不是把重试冒充成系统错误。
+                if Self::是消息幂等冲突(&err) {
+                    tx.rollback()
+                        .await
+                        .map_err(|_| contract::错误码::系统错误)?;
+                    return Self::查询既有消息事件_异步(
+                        &self.pool,
+                        房间标识,
+                        会话标识,
+                        客户端消息标识,
+                    )
+                    .await?
+                    .ok_or(contract::错误码::系统错误);
+                }
+                return Err(contract::错误码::系统错误);
+            }
 
             tx.commit()
                 .await

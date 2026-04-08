@@ -98,10 +98,9 @@ async fn 阅读锚点会写入当前匿名身份与房间的唯一记录() {
     let database_url = cfg.database_url.clone();
 
     let (identity_id, room_id) = tokio::task::spawn_blocking(move || {
-        let mut repo =
-            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        let identity = koko::usecase::引导匿名身份(&mut repo, &device_token)
-            .expect("应能引导匿名身份");
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
@@ -158,10 +157,9 @@ async fn 阅读锚点只会单调前进不会被回退覆盖() {
     let database_url = cfg.database_url.clone();
 
     let room_id = tokio::task::spawn_blocking(move || {
-        let mut repo =
-            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
-        let identity = koko::usecase::引导匿名身份(&mut repo, &device_token)
-            .expect("应能引导匿名身份");
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");
@@ -311,6 +309,266 @@ fn realtime主链闭环() {
         }
         _ => panic!("应返回房间增量事件快照"),
     }
+}
+
+#[test]
+#[serial]
+fn 重复客户端消息标识应返回同一条已成立消息事件() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("I{:011}", uniq % 100_000_000_000);
+    let device_token = format!("idem-device-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
+    let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("进房应返回房间快照"),
+    };
+
+    // 同一个 client_message_id 表示同一条用户意图；重试时不应制造第二条消息或伪系统错误。
+    let first = koko::usecase::发送文本消息(
+        &mut repo,
+        &room_id,
+        &session_id,
+        "idem-c-1",
+        "hello idem",
+    )
+    .expect("首次发送应成功");
+    let second = koko::usecase::发送文本消息(
+        &mut repo,
+        &room_id,
+        &session_id,
+        "idem-c-1",
+        "hello idem",
+    )
+    .expect("同一 client_message_id 的重试应返回已成立事件，而不是系统错误");
+
+    assert_eq!(first, second, "重试发送应回到同一条权威事件");
+
+    let (latest, events, messages) = repo
+        .查询房间持久化计数(&room_id)
+        .expect("应能查询持久化计数");
+    assert_eq!(latest, 1, "幂等重试不应推进第二个事件位置");
+    assert_eq!(events, 1, "幂等重试不应重复写 room_events");
+    assert_eq!(messages, 1, "幂等重试不应重复写 messages");
+}
+
+#[test]
+#[serial]
+fn 同房并发发送时事件位置仍然连续单调() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("应能创建测试运行时");
+    rt.block_on(async {
+        koko::assembly::自动追平迁移(&cfg.database_url)
+            .await
+            .expect("应先追平迁移");
+    });
+
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("C{:011}", uniq % 100_000_000_000);
+    let device_token = format!("concurrent-room-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+
+    let (room_id, session_id) = std::thread::spawn(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room = koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &code)
+            .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+        (room_id, identity.会话标识)
+    })
+    .join()
+    .expect("建数线程应完成");
+
+    let mut tasks = Vec::new();
+    for index in 0..8 {
+        let database_url = cfg.database_url.clone();
+        let room_id = room_id.clone();
+        let session_id = session_id.clone();
+        tasks.push(std::thread::spawn(move || {
+            let mut repo =
+                koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("same-room-{index}"),
+                &format!("并发消息-{index}"),
+            )
+            .expect("并发发送应成功")
+        }));
+    }
+
+    let mut positions = Vec::new();
+    for task in tasks {
+        let event = task.join().expect("发送线程应完成");
+        match event {
+            koko::contract::领域事件::消息已创建 { 事件位置, .. } => {
+                positions.push(事件位置)
+            }
+        }
+    }
+    positions.sort_unstable();
+    assert_eq!(
+        positions,
+        (1..=8).collect::<Vec<_>>(),
+        "同房并发下事件位置必须连续单调"
+    );
+
+    let repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+    let (latest, events, messages) = repo
+        .查询房间持久化计数(&room_id)
+        .expect("应能查询持久化计数");
+    assert_eq!(latest, 8, "房间最新位置应推进到最后一条");
+    assert_eq!(events, 8, "room_events 条数应与发送数一致");
+    assert_eq!(messages, 8, "messages 条数应与发送数一致");
+}
+
+#[test]
+#[serial]
+fn 不同房间并发发送时互不串号互不污染() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("应能创建测试运行时");
+    rt.block_on(async {
+        koko::assembly::自动追平迁移(&cfg.database_url)
+            .await
+            .expect("应先追平迁移");
+    });
+
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let database_url = cfg.database_url.clone();
+
+    let (room_a, room_b, session_a, session_b) = std::thread::spawn(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity_a = koko::usecase::引导匿名身份(&mut repo, &format!("cross-a-{uniq}"))
+            .expect("A 应能引导匿名身份");
+        let identity_b = koko::usecase::引导匿名身份(&mut repo, &format!("cross-b-{uniq}"))
+            .expect("B 应能引导匿名身份");
+        let room_a = koko::usecase::按短码进房或建房(
+            &mut repo,
+            &identity_a.会话标识,
+            &format!("A{:011}", uniq % 100_000_000_000),
+        )
+        .expect("A 房间应能进房");
+        let room_b = koko::usecase::按短码进房或建房(
+            &mut repo,
+            &identity_b.会话标识,
+            &format!("B{:011}", uniq % 100_000_000_000),
+        )
+        .expect("B 房间应能进房");
+        let room_a = match room_a {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("A 房间应返回房间快照"),
+        };
+        let room_b = match room_b {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("B 房间应返回房间快照"),
+        };
+        (room_a, room_b, identity_a.会话标识, identity_b.会话标识)
+    })
+    .join()
+    .expect("建数线程应完成");
+
+    let mut tasks = Vec::new();
+    for index in 0..4 {
+        let database_url = cfg.database_url.clone();
+        let room_id = room_a.clone();
+        let session_id = session_a.clone();
+        tasks.push(std::thread::spawn(move || {
+            let mut repo =
+                koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("room-a-{index}"),
+                &format!("A-{index}"),
+            )
+            .expect("A 房间发送应成功")
+        }));
+    }
+    for index in 0..4 {
+        let database_url = cfg.database_url.clone();
+        let room_id = room_b.clone();
+        let session_id = session_b.clone();
+        tasks.push(std::thread::spawn(move || {
+            let mut repo =
+                koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("room-b-{index}"),
+                &format!("B-{index}"),
+            )
+            .expect("B 房间发送应成功")
+        }));
+    }
+
+    let mut room_a_positions = Vec::new();
+    let mut room_b_positions = Vec::new();
+    for task in tasks {
+        let event = task.join().expect("发送线程应完成");
+        match event {
+            koko::contract::领域事件::消息已创建 {
+                房间标识, 事件位置,
+            ..
+            } if 房间标识 == room_a => room_a_positions.push(事件位置),
+            koko::contract::领域事件::消息已创建 {
+                房间标识, 事件位置,
+            ..
+            } if 房间标识 == room_b => room_b_positions.push(事件位置),
+            koko::contract::领域事件::消息已创建 { 房间标识, .. } => {
+                panic!("出现了不属于测试房间的事件: {房间标识}")
+            }
+        }
+    }
+
+    room_a_positions.sort_unstable();
+    room_b_positions.sort_unstable();
+    assert_eq!(
+        room_a_positions,
+        (1..=4).collect::<Vec<_>>(),
+        "A 房间事件位置应自洽连续"
+    );
+    assert_eq!(
+        room_b_positions,
+        (1..=4).collect::<Vec<_>>(),
+        "B 房间事件位置应自洽连续"
+    );
+
+    let repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+    let room_a_counts = repo
+        .查询房间持久化计数(&room_a)
+        .expect("应能查询 A 房间持久化计数");
+    let room_b_counts = repo
+        .查询房间持久化计数(&room_b)
+        .expect("应能查询 B 房间持久化计数");
+    assert_eq!(room_a_counts, (4, 4, 4), "A 房间持久化状态应只反映自己");
+    assert_eq!(room_b_counts, (4, 4, 4), "B 房间持久化状态应只反映自己");
 }
 
 #[tokio::test]
@@ -672,10 +930,20 @@ async fn 有阅读锚点时房间快照围绕第一条未读返回首屏() {
         .map(|msg| msg["event_position"].as_i64().expect("event_position"))
         .collect::<Vec<_>>();
 
-    assert!(positions.iter().any(|position| *position < 81), "首屏必须带已读上下文");
+    assert!(
+        positions.iter().any(|position| *position < 81),
+        "首屏必须带已读上下文"
+    );
     assert!(positions.contains(&81), "首屏必须覆盖第一条未读");
-    assert!(positions.first().copied().unwrap_or_default() > 1, "围绕未读恢复时不应回到整房最老消息");
-    assert_eq!(positions.last().copied(), Some(100), "首屏应覆盖当前房间最新位置附近");
+    assert!(
+        positions.first().copied().unwrap_or_default() > 1,
+        "围绕未读恢复时不应回到整房最老消息"
+    );
+    assert_eq!(
+        positions.last().copied(),
+        Some(100),
+        "首屏应覆盖当前房间最新位置附近"
+    );
 }
 
 #[tokio::test]
@@ -808,7 +1076,10 @@ async fn 无阅读锚点时房间快照回退到最近一屏消息() {
         .as_array()
         .expect("snapshot 必须直接带 snapshot_messages");
     assert!(!messages.is_empty(), "无阅读锚点时也应返回最近一屏消息");
-    assert_eq!(messages.last().and_then(|msg| msg["body"].as_str()), Some("latest-59"));
+    assert_eq!(
+        messages.last().and_then(|msg| msg["body"].as_str()),
+        Some("latest-59")
+    );
     assert_ne!(
         messages.first().and_then(|msg| msg["body"].as_str()),
         Some("latest-0"),
@@ -1266,8 +1537,14 @@ async fn 房间历史分页无更早消息时返回空数组() {
             koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
         };
-        koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "history-empty-c-1", "first")
-            .expect("应能发送消息");
+        koko::usecase::发送文本消息(
+            &mut repo,
+            &room_id,
+            &session_id,
+            "history-empty-c-1",
+            "first",
+        )
+        .expect("应能发送消息");
         (session_id, room_id)
     })
     .await
@@ -1532,10 +1809,7 @@ fn 恢复环境变量(backup: Vec<(String, Option<String>)>) {
 
 fn 分配测试端口() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("应能申请临时端口");
-    let port = listener
-        .local_addr()
-        .expect("应能读取本地地址")
-        .port();
+    let port = listener.local_addr().expect("应能读取本地地址").port();
     drop(listener);
     port
 }
