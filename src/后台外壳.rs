@@ -53,6 +53,44 @@ fn require_admin(headers: &HeaderMap) -> Result<(), (StatusCode, &'static str, &
     }
 }
 
+/// 后台冷路径统一鉴权入口。
+///
+/// 这里把“缺少后台令牌时如何记录日志并返回稳定错误响应”收成一个点，
+/// 避免每个 handler 再各写一套同构分支，后面维护时漂出不同错误码或文案。
+fn 校验后台请求(
+    headers: &HeaderMap,
+    usecase_name: &'static str,
+    request_kind: &'static str,
+    room_id: Option<&str>,
+    rejected_message: &'static str,
+) -> Option<axum::response::Response> {
+    let Err((status, code, message)) = require_admin(headers) else {
+        return None;
+    };
+
+    match room_id {
+        Some(room_id) => tracing::warn!(
+            usecase = usecase_name,
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = request_kind,
+            room_id = room_id,
+            error_code = code,
+            "{rejected_message}"
+        ),
+        None => tracing::warn!(
+            usecase = usecase_name,
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = request_kind,
+            error_code = code,
+            "{rejected_message}"
+        ),
+    }
+
+    Some(super::err_resp(status, code, message))
+}
+
 /// 后台登录入口。
 ///
 /// 这里只做认证接入，不在这里堆新的后台业务规则。
@@ -110,16 +148,14 @@ pub(super) async fn admin_overview(
         request_kind = "后台总览查询",
         "HTTP 请求已受理"
     );
-    if let Err((status, code, message)) = require_admin(&headers) {
-        tracing::warn!(
-            usecase = "后台概览查询",
-            adapter = "http",
-            outcome = "rejected",
-            request_kind = "后台总览查询",
-            error_code = code,
-            "后台概览查询被拒绝"
-        );
-        return super::err_resp(status, code, message);
+    if let Some(response) = 校验后台请求(
+        &headers,
+        "后台概览查询",
+        "后台总览查询",
+        None,
+        "后台概览查询被拒绝",
+    ) {
+        return response;
     }
     let state = state.clone();
     let result = task::spawn_blocking(move || {
@@ -207,16 +243,14 @@ pub(super) async fn admin_rooms(
         request_kind = "后台房间列表查询",
         "HTTP 请求已受理"
     );
-    if let Err((status, code, message)) = require_admin(&headers) {
-        tracing::warn!(
-            usecase = "后台房间列表查询",
-            adapter = "http",
-            outcome = "rejected",
-            request_kind = "后台房间列表查询",
-            error_code = code,
-            "后台房间列表查询被拒绝"
-        );
-        return super::err_resp(status, code, message);
+    if let Some(response) = 校验后台请求(
+        &headers,
+        "后台房间列表查询",
+        "后台房间列表查询",
+        None,
+        "后台房间列表查询被拒绝",
+    ) {
+        return response;
     }
     let state = state.clone();
     let result = task::spawn_blocking(move || {
@@ -303,17 +337,14 @@ pub(super) async fn admin_room_detail(
         room_id = room_id.as_str(),
         "HTTP 请求已受理"
     );
-    if let Err((status, code, message)) = require_admin(&headers) {
-        tracing::warn!(
-            usecase = "后台房间详情查询",
-            adapter = "http",
-            outcome = "rejected",
-            request_kind = "后台房间详情查询",
-            room_id = room_id,
-            error_code = code,
-            "后台房间详情查询被拒绝"
-        );
-        return super::err_resp(status, code, message);
+    if let Some(response) = 校验后台请求(
+        &headers,
+        "后台房间详情查询",
+        "后台房间详情查询",
+        Some(room_id.as_str()),
+        "后台房间详情查询被拒绝",
+    ) {
+        return response;
     }
     let state = state.clone();
     let room_id_copy = room_id.clone();
@@ -397,5 +428,52 @@ pub(super) async fn admin_room_detail(
             );
             super::err_resp(status, code, message)
         }
+    }
+}
+
+#[cfg(test)]
+mod 后台外壳测试 {
+    use super::校验后台请求;
+    use axum::{
+        body::to_bytes,
+        http::{HeaderMap, HeaderValue, StatusCode},
+    };
+    use serde_json::Value;
+
+    #[tokio::test]
+    async fn 后台鉴权缺少令牌时返回稳定错误响应() {
+        let response = 校验后台请求(
+            &HeaderMap::new(),
+            "后台概览查询",
+            "后台总览查询",
+            None,
+            "后台概览查询被拒绝",
+        )
+        .expect("缺少令牌时应返回拒绝响应");
+
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("应能读取响应体");
+        let payload: Value = serde_json::from_slice(&body).expect("响应体应是合法 JSON");
+
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(payload["code"], "admin_session_required");
+        assert_eq!(payload["message"], "缺少管理员会话");
+    }
+
+    #[test]
+    fn 后台鉴权令牌正确时直接放行() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-admin-token", HeaderValue::from_static("koko-admin-token"));
+
+        let result = 校验后台请求(
+            &headers,
+            "后台概览查询",
+            "后台总览查询",
+            None,
+            "后台概览查询被拒绝",
+        );
+        assert!(result.is_none(), "正确令牌不应被后台守卫误拒绝");
     }
 }
