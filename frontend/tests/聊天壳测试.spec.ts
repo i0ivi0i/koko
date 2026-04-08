@@ -378,6 +378,23 @@ describe("聊天壳", () => {
     expect(styles).not.toContain("--surface-elevated: #2a2321");
   });
 
+  it("操作台主输入和主动作在不同模式下共用同一套高度约束", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("#shellConsolePrimaryInput");
+    expect(styles).toContain("#shellConsolePrimaryAction");
+    expect(styles).toContain("min-height: 50px");
+  });
+
+  it("状态槽会单行截断，不会因文案变化撑高操作台", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("#shellConsoleStatus");
+    expect(styles).toContain("white-space: nowrap");
+    expect(styles).toContain("text-overflow: ellipsis");
+    expect(styles).toContain("overflow: hidden");
+  });
+
   it("启动恢复房间时在 bootstrap 完成前不会先闪出空态首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();

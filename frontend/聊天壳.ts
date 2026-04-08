@@ -231,13 +231,6 @@ export class 聊天壳 extends LitElement {
       color: var(--text-muted);
     }
 
-    .join-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
-      margin-top: 18px;
-    }
-
     .text-input {
       width: 100%;
       min-width: 0;
@@ -442,6 +435,14 @@ export class 聊天壳 extends LitElement {
       color: var(--status-warn-strong);
     }
 
+    /* 操作台状态槽必须单行收口。
+       如果这里允许两行，home -> room 一切换就会把整块操作台高度撑变。 */
+    #shellConsoleStatus {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
     .shell-console-form {
       margin: 0;
     }
@@ -452,19 +453,21 @@ export class 聊天壳 extends LitElement {
       display: none;
     }
 
-    .composer-row {
+    /* 操作台主控行必须固定成同一套节奏：
+       以后可以扩功能，但这一步先把“同一台设备”的高度和间距钉死。 */
+    #shellConsoleMainRow {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: end;
     }
 
-    .composer-input {
+    #shellConsolePrimaryInput {
       min-height: 50px;
       border-radius: 20px;
     }
 
-    .send-button {
+    #shellConsolePrimaryAction {
       min-width: 84px;
       min-height: 50px;
       border-radius: 20px;
@@ -486,11 +489,6 @@ export class 聊天壳 extends LitElement {
         border-radius: 24px;
       }
 
-      .join-row,
-      .composer-row {
-        grid-template-columns: minmax(0, 1fr) auto;
-      }
-
       .room-screen {
         gap: 10px;
         padding-inline: 0;
@@ -509,7 +507,7 @@ export class 聊天壳 extends LitElement {
         max-width: 88%;
       }
 
-      .send-button {
+      #shellConsolePrimaryAction {
         min-width: 72px;
       }
 
@@ -1595,7 +1593,6 @@ export class 聊天壳 extends LitElement {
         <form id="shellConsoleForm" class="shell-console-form" @submit=${this.submitShellConsole}>
           <div
             id="shellConsoleMainRow"
-            class=${isMessageMode ? "composer-row" : "join-row"}
             ?inert=${isHiddenMode}
           >
             <div
@@ -1606,7 +1603,7 @@ export class 聊天壳 extends LitElement {
             ></div>
             <input
               id="shellConsolePrimaryInput"
-              class=${isMessageMode ? "text-input composer-input" : "text-input"}
+              class="text-input"
               placeholder=${consoleState.primaryInput.placeholder}
               enterkeyhint=${consoleState.primaryInput.enterKeyHint}
               .value=${consoleState.primaryInput.value}
@@ -1622,7 +1619,7 @@ export class 聊天壳 extends LitElement {
             />
             <button
               id="shellConsolePrimaryAction"
-              class=${isMessageMode ? "primary-button send-button" : "primary-button"}
+              class="primary-button"
               type="submit"
               ?disabled=${consoleState.primaryAction.disabled}
             >
