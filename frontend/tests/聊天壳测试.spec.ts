@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../聊天壳";
 import { 创建浏览器存储 } from "../存储";
 import type { 前端传输端口 } from "../传输";
+import { 创建房间内核, 派生房间壳外观 } from "../房间内核";
+import { 初始聊天状态, type 聊天状态 } from "../状态";
 import {
   派生壳主舞台模式,
   派生控制台模式,
@@ -14,6 +16,7 @@ import type {
   匿名身份引导结果,
   增量事件快照,
   后台概览,
+  消息事件,
   房间历史页,
   房间快照,
   后台登录结果,
@@ -376,7 +379,364 @@ function 模拟消息滚动视口(
   }
 }
 
-describe("聊天壳", () => {
+async function 读取房间恢复编排工厂(): Promise<(deps: Record<string, unknown>) => Record<string, unknown>> {
+  let 创建房间恢复编排: unknown;
+  try {
+    const modulePath = "../房间恢复编排";
+    ({ 创建房间恢复编排 } = await import(/* @vite-ignore */ modulePath));
+  } catch {
+    创建房间恢复编排 = undefined;
+  }
+  expect(typeof 创建房间恢复编排).toBe("function");
+  return 创建房间恢复编排 as (deps: Record<string, unknown>) => Record<string, unknown>;
+}
+
+function 创建房间壳补丁(roomKernel: ReturnType<typeof 创建房间内核>): Partial<聊天状态> {
+  const roomShell = 派生房间壳外观(roomKernel.getSnapshot());
+  return {
+    sessionId: roomShell.sessionId,
+    displayAlias: roomShell.displayAlias,
+    roomId: roomShell.roomId,
+    roomDisplayTitle: roomShell.roomDisplayTitle,
+    latestEventPosition: roomShell.latestEventPosition,
+    viewportMode: roomShell.viewportMode,
+    candidateReadAnchorPosition: roomShell.candidateReadAnchorPosition,
+    hasUnreadNewerMessages: roomShell.hasUnreadNewerMessages,
+    recoveryState: roomShell.recoveryState,
+    lastRecoveryErrorCode: roomShell.lastRecoveryErrorCode,
+  };
+}
+
+function 创建房间视图重置补丁(): Partial<聊天状态> {
+  return {
+    messageInput: "",
+    lastReadEventPosition: null,
+    firstUnreadEventPosition: null,
+    hasMoreBefore: false,
+    initialUnreadSettled: true,
+    scrollPhase: "idle",
+    hasUserScrollIntent: false,
+    pendingReadAnchorPosition: null,
+    viewportMode: "离底浏览",
+    candidateReadAnchorPosition: null,
+    hasUnreadNewerMessages: false,
+    historyLoadThrottleUntil: 0,
+    messages: [],
+    pending: false,
+    historyLoading: false,
+    historyErrorCode: "",
+  };
+}
+
+function 创建恢复编排测试场景(input: {
+  roomId?: string;
+  roomCode?: string;
+  sessionId?: string;
+  displayAlias?: string;
+  homeSessionItems?: Array<{ roomId: string; roomCode: string; lastEnteredAt: number }>;
+} = {}) {
+  const rawStorage = createFakeStorage();
+  const storage = 创建浏览器存储(rawStorage);
+  const roomId = input.roomId ?? "";
+  const roomCode = input.roomCode ?? "";
+  if (roomId) {
+    rawStorage.setItem("koko_current_room_id", roomId);
+  }
+  if (roomCode) {
+    rawStorage.setItem("koko_current_room_code", roomCode);
+  }
+  for (const item of input.homeSessionItems ?? []) {
+    storage.写入或更新首页房间历史条目(item);
+  }
+
+  const roomKernel = 创建房间内核();
+  let state: 聊天状态 = {
+    ...初始聊天状态,
+    sessionId: input.sessionId ?? "s-test",
+    displayAlias: input.displayAlias ?? "暴躁的企鹅",
+    homeSessionItems: storage.读取首页房间历史(),
+  };
+
+  roomKernel.send({
+    type: "BOOTSTRAP_SUCCEEDED",
+    sessionId: state.sessionId,
+    displayAlias: state.displayAlias,
+    roomId,
+  });
+  state = {
+    ...state,
+    ...创建房间壳补丁(roomKernel),
+  };
+
+  const transport = new 假传输();
+  const ensureRealtimeSocketCalls: string[] = [];
+  const subscribeCalls: number[] = [];
+  let shouldPrimeReadAnchorAfterInitialSettle = false;
+  const roomScroller = {
+    安排首屏定位: vi.fn(),
+    取消挂起滚动副作用: vi.fn(),
+  };
+  const disconnectRealtime = vi.fn();
+  const cancelPendingReadAnchorFlush = vi.fn();
+  const cancelPendingFollowLatestReadSample = vi.fn();
+
+  const updateState = (patch: Partial<聊天状态>): void => {
+    state = { ...state, ...patch };
+  };
+
+  const deps = {
+    读取状态: () => state,
+    更新状态: updateState,
+    transport,
+    storage,
+    roomKernel,
+    roomShellPatch: () => 创建房间壳补丁(roomKernel),
+    reconcileMessages: (messages: 消息事件[]) =>
+      [...messages].sort((left, right) => left.event_position - right.event_position),
+    roomScroller,
+    ensureRealtimeSocket: (sessionId: string) => {
+      ensureRealtimeSocketCalls.push(sessionId);
+    },
+    subscribeRoom: (from: number) => {
+      subscribeCalls.push(from);
+    },
+    cancelPendingReadAnchorFlush,
+    cancelPendingFollowLatestReadSample,
+    exitCurrentRoomView: (
+      opts: {
+        keepRoomCodeCache?: boolean;
+      } = {}
+    ) => {
+      storage.清除当前房间标识();
+      if (!opts.keepRoomCodeCache) {
+        storage.清除当前房间短码();
+      }
+      updateState(创建房间视图重置补丁());
+    },
+    disconnectRealtime: () => {
+      disconnectRealtime();
+    },
+    写入恢复补锚标记: (value: boolean) => {
+      shouldPrimeReadAnchorAfterInitialSettle = value;
+    },
+    等待壳渲染完成: async () => {},
+    读取恢复补锚标记: () => shouldPrimeReadAnchorAfterInitialSettle,
+  };
+
+  return {
+    transport,
+    storage,
+    roomKernel,
+    roomScroller,
+    ensureRealtimeSocketCalls,
+    subscribeCalls,
+    disconnectRealtime,
+    cancelPendingReadAnchorFlush,
+    cancelPendingFollowLatestReadSample,
+    读取状态: () => state,
+    deps,
+  };
+}
+
+async function 读取房间实时编排工厂(): Promise<(deps: Record<string, unknown>) => Record<string, unknown>> {
+  let 创建房间实时编排: unknown;
+  try {
+    const modulePath = "../房间实时编排";
+    ({ 创建房间实时编排 } = await import(/* @vite-ignore */ modulePath));
+  } catch {
+    创建房间实时编排 = undefined;
+  }
+  expect(typeof 创建房间实时编排).toBe("function");
+  return 创建房间实时编排 as (deps: Record<string, unknown>) => Record<string, unknown>;
+}
+
+function 创建实时编排测试场景(input: {
+  roomId?: string;
+  roomDisplayTitle?: string;
+  sessionId?: string;
+  displayAlias?: string;
+  latestEventPosition?: number;
+  viewportMode?: 聊天状态["viewportMode"];
+  messages?: 消息事件[];
+  messageInput?: string;
+} = {}) {
+  const transport = new 假传输();
+  const roomKernel = 创建房间内核();
+  let state: 聊天状态 = {
+    ...初始聊天状态,
+    sessionId: input.sessionId ?? "s-test",
+    displayAlias: input.displayAlias ?? "暴躁的企鹅",
+    messageInput: input.messageInput ?? "",
+    messages: input.messages ?? [],
+  };
+
+  roomKernel.send({
+    type: "BOOTSTRAP_SUCCEEDED",
+    sessionId: state.sessionId,
+    displayAlias: state.displayAlias,
+    roomId: input.roomId ?? "",
+  });
+  if (input.roomId) {
+    roomKernel.send({
+      type: "SNAPSHOT_LOADED",
+      roomId: input.roomId,
+      roomDisplayTitle: input.roomDisplayTitle ?? "ROOM01",
+      latestEventPosition: input.latestEventPosition ?? 0,
+      viewportMode: input.viewportMode ?? "离底浏览",
+    });
+  }
+  state = {
+    ...state,
+    ...创建房间壳补丁(roomKernel),
+    latestEventPosition: input.latestEventPosition ?? 0,
+    viewportMode: input.viewportMode ?? "离底浏览",
+  };
+
+  const transportErrors: Array<Record<string, unknown>> = [];
+  const recoveryFailures: Array<{ error: unknown; keepRoomVisible: boolean }> = [];
+  const followLatestCalls: number[] = [];
+
+  const updateState = (patch: Partial<聊天状态>): void => {
+    state = { ...state, ...patch };
+  };
+
+  const deps = {
+    读取状态: () => state,
+    更新状态: updateState,
+    transport,
+    roomKernel,
+    roomShellPatch: () => 创建房间壳补丁(roomKernel),
+    上报Transport异常: async (error: Record<string, unknown>) => {
+      transportErrors.push(error);
+    },
+    处理恢复失败: (error: unknown, keepRoomVisible: boolean) => {
+      recoveryFailures.push({ error, keepRoomVisible });
+    },
+    跟随最新消息追加后刷新视口: async () => {
+      followLatestCalls.push(Date.now());
+    },
+  };
+
+  return {
+    transport,
+    roomKernel,
+    读取状态: () => state,
+    transportErrors,
+    recoveryFailures,
+    followLatestCalls,
+    deps,
+  };
+}
+
+async function 读取阅读推进编排工厂(): Promise<(deps: Record<string, unknown>) => Record<string, unknown>> {
+  let 创建阅读推进编排: unknown;
+  try {
+    const modulePath = "../阅读推进编排";
+    ({ 创建阅读推进编排 } = await import(/* @vite-ignore */ modulePath));
+  } catch {
+    创建阅读推进编排 = undefined;
+  }
+  expect(typeof 创建阅读推进编排).toBe("function");
+  return 创建阅读推进编排 as (deps: Record<string, unknown>) => Record<string, unknown>;
+}
+
+function 创建阅读推进测试场景(input: {
+  roomId?: string;
+  roomDisplayTitle?: string;
+  sessionId?: string;
+  displayAlias?: string;
+  latestEventPosition?: number;
+  viewportMode?: 聊天状态["viewportMode"];
+  lastReadEventPosition?: number | null;
+  firstUnreadEventPosition?: number | null;
+  initialUnreadSettled?: boolean;
+  hasMoreBefore?: boolean;
+  messages?: 消息事件[];
+} = {}) {
+  const transport = new 假传输();
+  const roomKernel = 创建房间内核();
+  let state: 聊天状态 = {
+    ...初始聊天状态,
+    sessionId: input.sessionId ?? "s-test",
+    displayAlias: input.displayAlias ?? "暴躁的企鹅",
+    lastReadEventPosition: input.lastReadEventPosition ?? null,
+    firstUnreadEventPosition: input.firstUnreadEventPosition ?? null,
+    initialUnreadSettled: input.initialUnreadSettled ?? true,
+    hasMoreBefore: input.hasMoreBefore ?? false,
+    messages: input.messages ?? [],
+  };
+
+  roomKernel.send({
+    type: "BOOTSTRAP_SUCCEEDED",
+    sessionId: state.sessionId,
+    displayAlias: state.displayAlias,
+    roomId: input.roomId ?? "",
+  });
+  if (input.roomId) {
+    roomKernel.send({
+      type: "SNAPSHOT_LOADED",
+      roomId: input.roomId,
+      roomDisplayTitle: input.roomDisplayTitle ?? "ROOM01",
+      latestEventPosition: input.latestEventPosition ?? 0,
+      viewportMode: input.viewportMode ?? "离底浏览",
+    });
+  }
+  state = {
+    ...state,
+    ...创建房间壳补丁(roomKernel),
+    latestEventPosition: input.latestEventPosition ?? 0,
+    viewportMode: input.viewportMode ?? "离底浏览",
+  };
+
+  const 历史补偿调用: Array<{ oldHeight: number; inserted: boolean }> = [];
+  const 滚到最新调用: number[] = [];
+  const roomScroller = {
+    读取当前可见阅读锚点: vi.fn(() => 8),
+    读取当前是否接近底部: vi.fn(() => false),
+    读取历史补偿基线: vi.fn(() => 320),
+    应用历史补偿: vi.fn(async (oldHeight: number, inserted: boolean) => {
+      历史补偿调用.push({ oldHeight, inserted });
+    }),
+  };
+
+  const updateState = (patch: Partial<聊天状态>): void => {
+    state = { ...state, ...patch };
+  };
+
+  const deps = {
+    读取状态: () => state,
+    更新状态: updateState,
+    transport,
+    roomKernel,
+    roomShellPatch: () => 创建房间壳补丁(roomKernel),
+    roomScroller,
+    withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
+      operation(state.sessionId),
+    reconcileMessages: (messages: 消息事件[]) =>
+      [...messages]
+        .sort((left, right) => left.event_position - right.event_position)
+        .filter(
+          (message, index, array) =>
+            array.findIndex((item) => item.message_id === message.message_id) === index
+        ),
+    等待壳渲染完成: async () => {},
+    滚到最新位置: async () => {
+      滚到最新调用.push(Date.now());
+    },
+  };
+
+  return {
+    transport,
+    roomKernel,
+    roomScroller,
+    历史补偿调用,
+    滚到最新调用,
+    读取状态: () => state,
+    deps,
+  };
+}
+
+describe("聊天壳集成", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
       value: createFakeStorage(),
@@ -1086,6 +1446,45 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("need_snapshot_reload 会先转成恢复编排输入，再由恢复链执行快照重拉", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+
+    const 恢复编排端口 = (
+      el as unknown as {
+        恢复编排端口?: {
+          接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
+        };
+      }
+    ).恢复编排端口;
+    expect(恢复编排端口).toBeDefined();
+
+    const 收到的异常: Array<{ kind: string; roomId?: string }> = [];
+    const 原始方法 = 恢复编排端口!.接收Transport异常.bind(恢复编排端口);
+    vi.spyOn(恢复编排端口!, "接收Transport异常").mockImplementation(async (error) => {
+      收到的异常.push(error);
+      await 原始方法(error);
+    });
+
+    (el as unknown as { chatState: { latestEventPosition: number } }).chatState.latestEventPosition = 99;
+    transport.socket.trigger("connect", undefined);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(收到的异常).toEqual([{ kind: "need_snapshot_reload", roomId: "r-test" }]);
+    expect(transport.loadRoomSnapshotCalls).toBe(1);
+    expect(transport.loadRoomEventsCalls).toBe(1);
+
+    el.remove();
+  });
+
   it("进房成功后会写入 koko_current_room_id", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
@@ -1787,9 +2186,11 @@ describe("聊天壳", () => {
 
     (
       el as unknown as {
-        scheduleReadAnchorUpdate: (position: number) => void;
+        阅读推进编排端口: {
+          接收候选已读位置: (position: number) => void;
+        };
       }
-    ).scheduleReadAnchorUpdate(7);
+    ).阅读推进编排端口.接收候选已读位置(7);
 
     expect(
       (
@@ -1836,15 +2237,21 @@ describe("聊天壳", () => {
 
     (
       el as unknown as {
-        scheduleReadAnchorUpdate: (position: number) => void;
+        阅读推进编排端口: {
+          接收候选已读位置: (position: number) => void;
+          接收首屏稳定完成: (mode: "围绕未读阅读" | "贴底跟随") => void;
+        };
       }
-    ).scheduleReadAnchorUpdate(7);
+    ).阅读推进编排端口.接收候选已读位置(7);
 
     (
       el as unknown as {
-        handleInitialSettleCompleted: (mode: "围绕未读阅读" | "贴底跟随") => void;
+        阅读推进编排端口: {
+          接收候选已读位置: (position: number) => void;
+          接收首屏稳定完成: (mode: "围绕未读阅读" | "贴底跟随") => void;
+        };
       }
-    ).handleInitialSettleCompleted("围绕未读阅读");
+    ).阅读推进编排端口.接收首屏稳定完成("围绕未读阅读");
 
     expect(
       (
@@ -2424,6 +2831,62 @@ describe("聊天壳", () => {
       { roomId: "r-restore", sessionId: "s-refresh" },
     ]);
     expect(transport.socketSessionIds).toEqual(["s-stale", "s-refresh"]);
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    el.remove();
+  });
+
+  it("connect_error invalid_session 会先转成恢复编排输入，再由恢复链执行刷新", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.bootstrapQueue = [
+      {
+        anonymous_identity_id: "a-old",
+        display_alias: "暴躁的企鹅",
+        session_id: "s-stale",
+      },
+      {
+        anonymous_identity_id: "a-new",
+        display_alias: "冷静的水獭",
+        session_id: "s-refresh",
+      },
+    ];
+    transport.snapshotQueue = [
+      创建房间快照("r-restore", 1),
+      创建房间快照("r-restore", 2),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const 恢复编排端口 = (
+      el as unknown as {
+        恢复编排端口?: {
+          接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
+        };
+      }
+    ).恢复编排端口;
+    expect(恢复编排端口).toBeDefined();
+
+    const 收到的异常: Array<{ kind: string; roomId?: string }> = [];
+    const 原始方法 = 恢复编排端口!.接收Transport异常.bind(恢复编排端口);
+    vi.spyOn(恢复编排端口!, "接收Transport异常").mockImplementation(async (error) => {
+      收到的异常.push(error);
+      await 原始方法(error);
+    });
+
+    transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(收到的异常).toEqual([{ kind: "invalid_session" }]);
+    expect(transport.bootstrapTokens).toHaveLength(2);
+    expect(transport.loadRoomSnapshotArgs).toEqual([
+      { roomId: "r-restore", sessionId: "s-stale" },
+      { roomId: "r-restore", sessionId: "s-refresh" },
+    ]);
     expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
     el.remove();
   });
@@ -3628,4 +4091,327 @@ describe("聊天壳", () => {
   });
 });
 
+describe("房间恢复编排", () => {
+  it("收到 invalid_session transport 异常时会刷新会话并重拉当前房间", async () => {
+    const 创建房间恢复编排 = await 读取房间恢复编排工厂();
+    const 场景 = 创建恢复编排测试场景({
+      roomId: "r-restore",
+      roomCode: "ROOM01",
+      sessionId: "s-stale",
+    });
+    场景.transport.bootstrapQueue = [
+      {
+        anonymous_identity_id: "a-new",
+        display_alias: "冷静的水獭",
+        session_id: "s-refresh",
+      },
+    ];
+    场景.transport.snapshotQueue = [创建房间快照("r-restore", 2)];
+    场景.transport.eventsQueue = [
+      {
+        room_id: "r-restore",
+        latest_event_position: 2,
+        events: [],
+      },
+    ];
 
+    const 编排 = 创建房间恢复编排(场景.deps) as {
+      接收Transport异常(error: { kind: "invalid_session"; roomId?: string }): Promise<void>;
+    };
+    await 编排.接收Transport异常({ kind: "invalid_session" });
+
+    expect(场景.transport.bootstrapTokens).toHaveLength(1);
+    expect(场景.transport.loadRoomSnapshotArgs).toEqual([
+      { roomId: "r-restore", sessionId: "s-refresh" },
+    ]);
+    expect(场景.transport.loadRoomEventsArgs).toEqual([
+      { roomId: "r-restore", sessionId: "s-refresh", from: 2 },
+    ]);
+    expect(场景.ensureRealtimeSocketCalls).toEqual(["s-refresh", "s-refresh"]);
+    expect(场景.subscribeCalls).toEqual([2]);
+    expect(场景.读取状态().sessionId).toBe("s-refresh");
+    expect(场景.roomScroller.安排首屏定位).toHaveBeenCalledTimes(1);
+  });
+
+  it("收到 need_snapshot_reload transport 异常时会按 roomId 重拉快照", async () => {
+    const 创建房间恢复编排 = await 读取房间恢复编排工厂();
+    const 场景 = 创建恢复编排测试场景({
+      roomId: "r-test",
+      roomCode: "ROOM01",
+      sessionId: "s-test",
+    });
+    场景.transport.snapshotQueue = [创建房间快照("r-test", 1)];
+    场景.transport.eventsQueue = [
+      {
+        room_id: "r-test",
+        latest_event_position: 1,
+        events: [],
+      },
+    ];
+
+    const 编排 = 创建房间恢复编排(场景.deps) as {
+      接收Transport异常(error: { kind: "need_snapshot_reload"; roomId: string }): Promise<void>;
+    };
+    await 编排.接收Transport异常({
+      kind: "need_snapshot_reload",
+      roomId: "r-test",
+    });
+
+    expect(场景.transport.loadRoomSnapshotArgs).toEqual([
+      { roomId: "r-test", sessionId: "s-test" },
+    ]);
+    expect(场景.transport.loadRoomEventsArgs).toEqual([
+      { roomId: "r-test", sessionId: "s-test", from: 1 },
+    ]);
+    expect(场景.subscribeCalls).toEqual([1]);
+    expect(场景.roomScroller.安排首屏定位).toHaveBeenCalledTimes(1);
+  });
+
+  it("room_not_found 会删历史并退出房间", async () => {
+    const 创建房间恢复编排 = await 读取房间恢复编排工厂();
+    const 场景 = 创建恢复编排测试场景({
+      roomId: "r-missing",
+      roomCode: "ROOM01",
+      homeSessionItems: [{ roomId: "r-missing", roomCode: "ROOM01", lastEnteredAt: 1 }],
+    });
+    场景.transport.snapshotQueue = [创建传输错误(404, "room_not_found")];
+
+    const 编排 = 创建房间恢复编排(场景.deps) as {
+      restoreCurrentRoomIfNeeded(): Promise<void>;
+    };
+    await 编排.restoreCurrentRoomIfNeeded();
+
+    expect(场景.storage.读取当前房间标识()).toBe("");
+    expect(场景.storage.读取首页房间历史()).toEqual([]);
+    expect(场景.读取状态().roomId).toBe("");
+  });
+
+  it("membership_required 会保留历史但退出房间", async () => {
+    const 创建房间恢复编排 = await 读取房间恢复编排工厂();
+    const 场景 = 创建恢复编排测试场景({
+      roomId: "r-private",
+      roomCode: "ROOM02",
+      homeSessionItems: [{ roomId: "r-private", roomCode: "ROOM02", lastEnteredAt: 2 }],
+    });
+    场景.transport.snapshotQueue = [创建传输错误(403, "membership_required")];
+
+    const 编排 = 创建房间恢复编排(场景.deps) as {
+      restoreCurrentRoomIfNeeded(): Promise<void>;
+    };
+    await 编排.restoreCurrentRoomIfNeeded();
+
+    expect(场景.storage.读取当前房间标识()).toBe("");
+    expect(场景.storage.读取首页房间历史()).toEqual([
+      { roomId: "r-private", roomCode: "ROOM02", lastEnteredAt: 2 },
+    ]);
+    expect(场景.读取状态().roomId).toBe("");
+  });
+});
+
+describe("房间实时编排", () => {
+  it("connect_error invalid_session 只上报 transport 异常，不自己刷新会话", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    场景.transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
+
+    expect(场景.transportErrors).toEqual([{ kind: "invalid_session" }]);
+    expect(场景.transport.bootstrapTokens).toEqual([]);
+    expect(场景.recoveryFailures).toEqual([]);
+  });
+
+  it("control_result subscribed 会推进订阅建立事件", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+      subscribeRoom(from: number): void;
+    };
+
+    场景.transport.socket.subscribeResults = [
+      {
+        kind: "subscribed",
+        latest_event_position: 5,
+      },
+    ];
+    编排.ensureRealtimeSocket("s-test");
+    编排.subscribeRoom(1);
+
+    expect(场景.读取状态().latestEventPosition).toBe(5);
+    expect(场景.读取状态().recoveryState).toBe("idle");
+  });
+
+  it("权威事件并入时会保持 message_id 去重", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+      messages: [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-1",
+          client_message_id: "c-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "已有消息",
+          event_position: 1,
+        },
+      ],
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    场景.transport.socket.trigger("room_events", {
+      latest_event_position: 3,
+      events: [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-1",
+          client_message_id: "c-1-dup",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "已有消息",
+          event_position: 1,
+        },
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-2",
+          client_message_id: "c-2",
+          sender_session_id: "s-test",
+          sender_display_alias: "暴躁的企鹅",
+          body: "新增消息",
+          event_position: 2,
+        },
+      ],
+    });
+
+    expect(场景.读取状态().messages.map((message) => message.message_id)).toEqual(["m-1", "m-2"]);
+  });
+});
+
+describe("阅读推进编排", () => {
+  it("首屏稳定完成后，已有候选已读才会进入正式待提交队列", async () => {
+    const 创建阅读推进编排 = await 读取阅读推进编排工厂();
+    const 场景 = 创建阅读推进测试场景({
+      roomId: "r-test",
+      latestEventPosition: 8,
+      initialUnreadSettled: false,
+      lastReadEventPosition: 1,
+      firstUnreadEventPosition: 2,
+    });
+    const 编排 = 创建阅读推进编排(场景.deps) as {
+      接收候选已读位置(position: number): void;
+      接收首屏稳定完成(mode: "围绕未读阅读" | "贴底跟随"): void;
+    };
+
+    编排.接收候选已读位置(7);
+    编排.接收首屏稳定完成("围绕未读阅读");
+
+    expect(场景.读取状态().candidateReadAnchorPosition).toBe(7);
+    expect(场景.读取状态().pendingReadAnchorPosition).toBe(7);
+  });
+
+  it("跳到最新后会进入贴底跟随并在需要时补读", async () => {
+    const 创建阅读推进编排 = await 读取阅读推进编排工厂();
+    const 场景 = 创建阅读推进测试场景({
+      roomId: "r-test",
+      latestEventPosition: 8,
+      viewportMode: "离底浏览",
+      initialUnreadSettled: true,
+      lastReadEventPosition: 1,
+      firstUnreadEventPosition: 2,
+    });
+    const 编排 = 创建阅读推进编排(场景.deps) as {
+      请求跳到最新(): Promise<void>;
+    };
+
+    vi.useFakeTimers();
+    try {
+      场景.roomScroller.读取当前是否接近底部.mockReturnValue(true);
+      await 编排.请求跳到最新();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(场景.滚到最新调用).toHaveLength(1);
+      expect(场景.读取状态().viewportMode).toBe("贴底跟随");
+      expect(场景.读取状态().pendingReadAnchorPosition).toBe(8);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("加载更早历史会合并消息、维持 hasMoreBefore，并保持当前视口不跳动", async () => {
+    const 创建阅读推进编排 = await 读取阅读推进编排工厂();
+    const 场景 = 创建阅读推进测试场景({
+      roomId: "r-test",
+      latestEventPosition: 3,
+      hasMoreBefore: true,
+      messages: [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-2",
+          client_message_id: "c-2",
+          sender_session_id: "s-test",
+          sender_display_alias: "暴躁的企鹅",
+          body: "现在消息",
+          event_position: 2,
+        },
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-3",
+          client_message_id: "c-3",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "更新消息",
+          event_position: 3,
+        },
+      ],
+    });
+    场景.transport.historyQueue = [
+      {
+        room_id: "r-test",
+        messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "更早消息",
+            event_position: 1,
+          },
+        ],
+      },
+    ];
+    const 编排 = 创建阅读推进编排(场景.deps) as {
+      请求加载更早历史(): Promise<void>;
+    };
+
+    await 编排.请求加载更早历史();
+
+    expect(场景.读取状态().messages.map((message) => message.message_id)).toEqual([
+      "m-1",
+      "m-2",
+      "m-3",
+    ]);
+    expect(场景.读取状态().hasMoreBefore).toBe(true);
+    expect(场景.历史补偿调用).toEqual([{ oldHeight: 320, inserted: true }]);
+  });
+});

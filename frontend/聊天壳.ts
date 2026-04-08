@@ -1,13 +1,14 @@
 import { css, html, LitElement } from "lit";
-import type { 房间快照, 消息事件 } from "./契约.js";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
+import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
+import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
+import { 创建阅读推进编排, type 阅读推进编排端口 } from "./阅读推进编排.js";
 import { 房间滚动器 } from "./房间滚动器.js";
 import {
   创建浏览器存储,
-  type 首页房间历史条目,
   type 前端存储端口,
 } from "./存储.js";
-import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
+import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import {
   派生壳主舞台模式,
@@ -18,20 +19,6 @@ import {
   派生房间提示文案,
   派生跳到最新入口文案,
 } from "./视图.js";
-import type { Socket } from "socket.io-client";
-const 阅读推进节流毫秒 = 400;
-
-type 控制面结果 = {
-  kind?: string;
-  latest_event_position?: number;
-  code?: string;
-  room_id?: string;
-};
-
-type 恢复失败 = Error & {
-  status?: number;
-  code?: string;
-};
 
 export class 聊天壳 extends LitElement {
   static override styles = css`
@@ -534,23 +521,109 @@ export class 聊天壳 extends LitElement {
    */
   private storage: 前端存储端口 = 创建浏览器存储();
 
-  private realtimeSocket: Socket | null = null;
-
-  /**
-   * 握手阶段的 invalid_session 可能在短时间内连续冒多次 connect_error。
-   * 这里用一个很薄的门闩避免重复 bootstrap，把前端自己打成恢复风暴。
-   */
-  private socketInvalidSessionRecoveryTask: Promise<void> | null = null;
-
-  private readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
-
-  private followLatestReadSampleTimer: ReturnType<typeof setTimeout> | null = null;
-
   /**
    * 只在“刷新恢复 / 快照重拉”这类恢复链路里，才允许首屏程序性补一次阅读锚点。
    * 首次手动进房仍然保持原语义，避免把恢复专用逻辑扩散到所有入口。
    */
   private shouldPrimeReadAnchorAfterInitialSettle = false;
+
+  private _恢复编排端口: 房间恢复编排端口 | null = null;
+  private _实时编排端口: 房间实时编排端口 | null = null;
+  private _阅读推进编排端口: 阅读推进编排端口 | null = null;
+
+  /**
+   * 恢复编排器通过惰性创建拿到完整依赖：
+   * - 避免字段初始化顺序把 `roomScroller / realtime` 相关依赖提前读成半成品；
+   * - 也避免为了迁模块再造第二套构造流程。
+   */
+  private get 恢复编排端口(): 房间恢复编排端口 {
+    if (!this._恢复编排端口) {
+      this._恢复编排端口 = 创建房间恢复编排({
+        读取状态: () => this.chatState,
+        更新状态: (patch) => this.updateChat(patch),
+        transport: this.transport,
+        storage: this.storage,
+        roomKernel: this.roomKernel,
+        roomShellPatch: () => this.roomShellPatch(),
+        reconcileMessages: (messages) => this.实时编排端口.reconcileMessages(messages),
+        roomScroller: this.roomScroller,
+        ensureRealtimeSocket: (sessionId) => this.实时编排端口.ensureRealtimeSocket(sessionId),
+        subscribeRoom: (from) => this.实时编排端口.subscribeRoom(from),
+        cancelPendingReadAnchorFlush: () => this.阅读推进编排端口.dispose(),
+        cancelPendingFollowLatestReadSample: () => this.阅读推进编排端口.dispose(),
+        exitCurrentRoomView: (opts) => this.exitCurrentRoomView(opts),
+        disconnectRealtime: () => this.实时编排端口.disconnect(),
+        写入恢复补锚标记: (value) => {
+          this.shouldPrimeReadAnchorAfterInitialSettle = value;
+        },
+        等待壳渲染完成: async () => {
+          await this.updateComplete;
+        },
+      });
+    }
+    return this._恢复编排端口;
+  }
+
+  /**
+   * realtime 编排器同样走惰性创建，避免和恢复编排在字段初始化阶段形成半成品循环。
+   */
+  private get 实时编排端口(): 房间实时编排端口 {
+    if (!this._实时编排端口) {
+      this._实时编排端口 = 创建房间实时编排({
+        读取状态: () => this.chatState,
+        更新状态: (patch) => this.updateChat(patch),
+        transport: this.transport,
+        roomKernel: this.roomKernel,
+        roomShellPatch: () => this.roomShellPatch(),
+        上报Transport异常: async (error) => {
+          await this.恢复编排端口.接收Transport异常(error);
+        },
+        处理恢复失败: (error, keepRoomVisible) => {
+          this.恢复编排端口.处理恢复失败(error, keepRoomVisible);
+        },
+        跟随最新消息追加后刷新视口: async () => {
+          await this.阅读推进编排端口.接收Realtime追加后跟随();
+        },
+      });
+    }
+    return this._实时编排端口;
+  }
+
+  /**
+   * 阅读推进编排也走惰性创建：
+   * - 一方面避免和滚动器、恢复编排、realtime 编排互相抢初始化顺序；
+   * - 另一方面让壳层只保留必要的 DOM 转接，不再自己持有阅读推进规则。
+   */
+  private get 阅读推进编排端口(): 阅读推进编排端口 {
+    if (!this._阅读推进编排端口) {
+      this._阅读推进编排端口 = 创建阅读推进编排({
+        读取状态: () => this.chatState,
+        更新状态: (patch) => this.updateChat(patch),
+        transport: this.transport,
+        roomKernel: this.roomKernel,
+        roomShellPatch: () => this.roomShellPatch(),
+        roomScroller: this.roomScroller,
+        withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
+          this.恢复编排端口.withSessionRefreshOnInvalid(operation),
+        reconcileMessages: (messages) => this.实时编排端口.reconcileMessages(messages),
+        等待壳渲染完成: async () => {
+          await this.updateComplete;
+        },
+        滚到最新位置: async () => {
+          await this.updateComplete;
+          const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
+          if (!scrollContainer) {
+            return;
+          }
+          scrollContainer.scrollTop = Math.max(
+            0,
+            scrollContainer.scrollHeight - scrollContainer.clientHeight
+          );
+        },
+      });
+    }
+    return this._阅读推进编排端口;
+  }
 
   /**
    * 滚动器只处理 DOM 滚动副作用：
@@ -567,18 +640,23 @@ export class 聊天壳 extends LitElement {
     查询消息节点: () =>
       Array.from(this.shadowRoot?.querySelectorAll("[data-event-position]") ?? []) as HTMLElement[],
     请求更早历史: () => {
-      void this.loadOlderHistory();
+      void this.阅读推进编排端口.请求加载更早历史();
     },
-    采样阅读锚点: (position) => this.scheduleReadAnchorUpdate(position),
+    采样阅读锚点: (position) => this.阅读推进编排端口.接收候选已读位置(position),
     读取是否需要恢复补锚: () => this.shouldPrimeReadAnchorAfterInitialSettle,
     消耗恢复补锚标记: () => {
       this.shouldPrimeReadAnchorAfterInitialSettle = false;
     },
-    报告首屏稳定完成: (mode) => this.handleInitialSettleCompleted(mode),
+    报告首屏稳定完成: (mode) => this.阅读推进编排端口.接收首屏稳定完成(mode),
   });
 
   setTransportForTest(transport: 前端传输端口): void {
+    this._实时编排端口?.disconnect();
+    this._实时编排端口 = null;
+    this._阅读推进编排端口?.dispose();
+    this._阅读推进编排端口 = null;
     this.transport = transport;
+    this._恢复编排端口 = null;
   }
 
   private roomShellState() {
@@ -619,320 +697,20 @@ export class 聊天壳 extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    void this.bootstrap();
+    void this.恢复编排端口.bootstrap();
   }
 
   override disconnectedCallback(): void {
-    this.realtimeSocket?.disconnect();
-    this.realtimeSocket = null;
-    this.cancelPendingReadAnchorFlush();
-    this.cancelPendingFollowLatestReadSample();
+    this._实时编排端口?.disconnect();
+    this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     super.disconnectedCallback();
   }
 
-  private async bootstrap(): Promise<void> {
-    try {
-      const deviceAnonymousToken = this.storage.读取或创建设备匿名凭证();
-      const roomId = this.storage.读取当前房间标识();
-      this.syncHomeSessionItems();
-      const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
-      this.applyBootstrapIdentity(deviceAnonymousToken, identity);
-      this.roomKernel.send({
-        type: "BOOTSTRAP_SUCCEEDED",
-        sessionId: identity.session_id,
-        displayAlias: identity.display_alias,
-        roomId,
-      });
-      this.updateChat(this.roomShellPatch());
-      this.ensureRealtimeSocket(identity.session_id);
-      await this.restoreCurrentRoomIfNeeded();
-    } catch (error) {
-      this.roomKernel.send({
-        type: "BOOTSTRAP_FAILED",
-        code: this.asRecoveryFailure(error).code ?? "system_error",
-      });
-      this.syncHomeSessionItems();
-      this.updateChat(this.roomShellPatch());
-    } finally {
-      await this.updateComplete;
-      // 刷新恢复房间时，快照状态可能早于 roomView 真正渲染完成。
-      // 因此 bootstrap 解锁后必须再补一次首屏定位调度，避免先对 bootView 做了无效定位。
-      if (this.chatState.roomId && !this.chatState.initialUnreadSettled) {
-        this.roomScroller.安排首屏定位();
-      }
-    }
-  }
-
-  private async joinRoom(): Promise<void> {
-    const roomCode = this.chatState.roomCodeInput.trim();
-    if (!roomCode) return;
-    try {
-      this.roomKernel.send({ type: "JOIN_REQUESTED" });
-      this.ensureRealtimeSocket(this.chatState.sessionId);
-      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
-        this.transport.joinOrCreateRoom(sessionId, roomCode)
-      );
-      // join-or-create 现在已经返回权威房间快照：
-      // 这里直接消费 snapshot_messages，避免进房后再额外打一枪 snapshot，
-      // 否则不仅浪费一次请求，还会人为拉大“进房成功”和“首屏可读”之间的竞态窗口。
-      this.enterRoomFromSnapshot(snapshot, roomCode, false);
-      this.subscribeRoom(snapshot.latest_event_position);
-    } catch (error) {
-      this.handleRecoveryFailure(error, false);
-    }
-  }
-
-  /**
-   * 启动恢复顺序必须固定：
-   * 1. bootstrap 拿到当前权威 session；
-   * 2. 读取壳层记住的 room_id；
-   * 3. 用当前 session 拉快照恢复。
-   */
-  private async restoreCurrentRoomIfNeeded(): Promise<void> {
-    const roomId = this.storage.读取当前房间标识();
-    if (!roomId) return;
-    try {
-      this.ensureRealtimeSocket(this.chatState.sessionId);
-      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
-        this.transport.loadRoomSnapshot(roomId, sessionId)
-      );
-      this.enterRoomFromSnapshot(snapshot, undefined, true);
-      this.subscribeRoom(snapshot.latest_event_position);
-    } catch (error) {
-      this.handleRecoveryFailure(error, false);
-    }
-  }
-
-  /**
-   * 当 realtime 锚点闭合不了时，退回 HTTP 快照 + 增量补洞重建基线。
-   * 这里继续沿用同一条权威锚点语义：`from = snapshot.latest_event_position`。
-   */
-  private async reloadRoomFromSnapshot(roomId: string): Promise<void> {
-    if (!this.chatState.roomId || roomId !== this.chatState.roomId) return;
-    try {
-      this.roomScroller.取消挂起滚动副作用();
-      this.ensureRealtimeSocket(this.chatState.sessionId);
-      const snapshot = await this.withSessionRefreshOnInvalid((sessionId) =>
-        this.transport.loadRoomSnapshot(roomId, sessionId)
-      );
-      const delta = await this.withSessionRefreshOnInvalid((sessionId) =>
-        this.transport.loadRoomEvents(roomId, sessionId, snapshot.latest_event_position)
-      );
-      const latestEventPosition = Math.max(
-        snapshot.latest_event_position,
-        delta.latest_event_position
-      );
-      const roomDisplayTitle = this.storage.读取当前房间短码() || "群聊房间";
-      this.roomKernel.send({
-        type: "SNAPSHOT_LOADED",
-        roomId,
-        roomDisplayTitle,
-        latestEventPosition,
-      });
-      this.shouldPrimeReadAnchorAfterInitialSettle = true;
-      this.updateChat({
-        ...this.roomShellPatch(),
-        lastReadEventPosition: snapshot.last_read_event_position,
-        firstUnreadEventPosition: snapshot.first_unread_event_position,
-        hasMoreBefore: snapshot.has_more_before,
-        initialUnreadSettled: false,
-        scrollPhase:
-          snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
-        hasUserScrollIntent: false,
-        pendingReadAnchorPosition: null,
-        // 重拉快照时，必须先回到快照自带的权威首屏，再叠加其后的增量。
-        // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
-        messages: this.reconcileMessages([...snapshot.snapshot_messages, ...delta.events]),
-        pending: false,
-        historyLoading: false,
-        historyLoadThrottleUntil: 0,
-        historyErrorCode: "",
-      });
-      this.roomScroller.安排首屏定位();
-      this.subscribeRoom(latestEventPosition);
-    } catch (error) {
-      this.handleRecoveryFailure(error, true);
-    }
-  }
-
-  private async sendMessage(): Promise<void> {
-    if (!this.chatState.roomId || !this.chatState.messageInput.trim() || !this.realtimeSocket) return;
-    const text = this.chatState.messageInput.trim();
-    const clientMessageId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `local-${Date.now()}`;
-    const optimistic = this.createOptimisticMessage(clientMessageId, text);
-    this.updateChat({
-      messages: this.reconcileMessages([...this.chatState.messages, optimistic]),
-      messageInput: "",
-      pending: true,
-    });
-    this.realtimeSocket.emit("send_text_message", {
-      room_id: this.chatState.roomId,
-      client_message_id: clientMessageId,
-      text,
-    });
-  }
-
   private updateChat(patch: Partial<聊天状态>): void {
     this.chatState = { ...this.chatState, ...patch };
     this.requestUpdate();
-  }
-
-  /**
-   * 首页历史只是一份壳层本地记忆。
-   * 这里统一从存储刷新回状态，避免 UI 自己再推导一份第二真相。
-   */
-  private syncHomeSessionItems(): void {
-    this.updateChat({
-      homeSessionItems: this.storage.读取首页房间历史(),
-    });
-  }
-
-  /**
-   * 历史分页只负责“向更早方向补页”：
-   * - 以当前最老消息的 event_position 作为锚点；
-   * - 只往顶部追加，不动已经可见的消息；
-   * - 与 snapshot / realtime 共用同一套合流逻辑，避免重复和乱序。
-   */
-  private async loadOlderHistory(): Promise<void> {
-    if (!this.chatState.roomId || this.chatState.historyLoading || !this.chatState.hasMoreBefore) {
-      return;
-    }
-
-    const beforeHeight = this.roomScroller.读取历史补偿基线();
-    const oldestMessage = this.chatState.messages[0];
-    if (!oldestMessage) {
-      return;
-    }
-
-    this.updateChat({
-      historyLoading: true,
-      historyErrorCode: "",
-    });
-
-    try {
-      const page = await this.withSessionRefreshOnInvalid((sessionId) =>
-        this.transport.loadRoomHistory(
-          this.chatState.roomId,
-          sessionId,
-          oldestMessage.event_position,
-          55
-        )
-      );
-      this.updateChat({
-        messages: this.reconcileMessages([...page.messages, ...this.chatState.messages]),
-        historyLoading: false,
-        // 历史分页接口当前还只返回这一页消息本身：
-        // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。
-        hasMoreBefore: page.messages.length > 0,
-        historyErrorCode: "",
-        scrollPhase: page.messages.length > 0 ? "compensating_history" : this.chatState.scrollPhase,
-      });
-      // 历史页是往列表顶部前插的；必须补偿前后 scrollHeight 差值，才能守住用户当前视口。
-      // 这段滚动完全由程序发起，因此补偿和程序滚动隔离统一交给房间滚动器处理。
-      await this.roomScroller.应用历史补偿(beforeHeight, page.messages.length > 0);
-    } catch (error) {
-      this.updateChat({
-        historyLoading: false,
-        historyErrorCode: this.asRecoveryFailure(error).code ?? "system_error",
-        scrollPhase: this.chatState.scrollPhase === "compensating_history" ? "idle" : this.chatState.scrollPhase,
-      });
-    }
-  }
-
-  private applyBootstrapIdentity(
-    deviceAnonymousToken: string,
-    identity: {
-      anonymous_identity_id: string;
-      display_alias: string;
-      session_id: string;
-    }
-  ): void {
-    this.updateChat({
-      deviceAnonymousToken,
-      anonymousIdentityId: identity.anonymous_identity_id,
-    });
-  }
-
-  /**
-   * invalid_session 不是永久房间失效，而是“当前 session 失效，需要重新 bootstrap”。
-   * 刷新后的新 session 建好后，再重试当前恢复步骤一次。
-   */
-  private async withSessionRefreshOnInvalid<T>(
-    operation: (sessionId: string) => Promise<T>
-  ): Promise<T> {
-    try {
-      return await operation(this.chatState.sessionId);
-    } catch (error) {
-      if (!this.isInvalidSessionError(error)) {
-        throw error;
-      }
-      this.roomKernel.send({
-        type: "RECONNECTING_STARTED",
-        code: "invalid_session",
-      });
-      this.updateChat(this.roomShellPatch());
-      const sessionId = await this.bootstrapFreshSession();
-      return operation(sessionId);
-    }
-  }
-
-  private async bootstrapFreshSession(): Promise<string> {
-    const deviceAnonymousToken =
-      this.chatState.deviceAnonymousToken || this.storage.读取或创建设备匿名凭证();
-    const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
-    this.realtimeSocket?.disconnect();
-    this.realtimeSocket = null;
-    this.applyBootstrapIdentity(deviceAnonymousToken, identity);
-    this.roomKernel.send({
-      type: "SESSION_REFRESHED",
-      sessionId: identity.session_id,
-      displayAlias: identity.display_alias,
-    });
-    this.updateChat(this.roomShellPatch());
-    this.ensureRealtimeSocket(identity.session_id);
-    return identity.session_id;
-  }
-
-  /**
-   * socket.io 的 connect_error 发生在握手阶段，此时 control_result 还不存在。
-   * 因此 invalid_session 必须在这里直接转成“刷新 session 再恢复当前房间”的壳层动作。
-   */
-  private async handleRealtimeConnectError(error: unknown): Promise<void> {
-    if (!this.isInvalidSessionError(error) || this.socketInvalidSessionRecoveryTask) {
-      return;
-    }
-    const keepRoomVisible = Boolean(this.chatState.roomId);
-    this.socketInvalidSessionRecoveryTask = (async () => {
-      try {
-        this.roomKernel.send({
-          type: "RECONNECTING_STARTED",
-          code: "invalid_session",
-        });
-        this.updateChat(this.roomShellPatch());
-        await this.bootstrapFreshSession();
-        if (this.chatState.roomId) {
-          await this.reloadRoomFromSnapshot(this.chatState.roomId);
-        }
-      } catch (recoveryError) {
-        if (keepRoomVisible) {
-          this.handleRecoveryFailure(recoveryError, true);
-        } else {
-          this.roomKernel.send({
-            type: "BOOTSTRAP_FAILED",
-            code: this.recoveryCodeOf(recoveryError) ?? "system_error",
-          });
-          this.updateChat(this.roomShellPatch());
-        }
-      } finally {
-        this.socketInvalidSessionRecoveryTask = null;
-      }
-    })();
-    await this.socketInvalidSessionRecoveryTask;
   }
 
   /**
@@ -969,14 +747,12 @@ export class 聊天壳 extends LitElement {
       keepRoomCodeCache: true,
     }
   ): void {
-    this.realtimeSocket?.disconnect();
-    this.realtimeSocket = null;
+    this._实时编排端口?.disconnect();
     this.storage.清除当前房间标识();
     if (!opts.keepRoomCodeCache) {
       this.storage.清除当前房间短码();
     }
-    this.cancelPendingReadAnchorFlush();
-    this.cancelPendingFollowLatestReadSample();
+    this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.updateChat({
@@ -997,534 +773,6 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
-   * 首页历史删除边界必须非常窄：
-   * - 只有明确的 `room_not_found`，才说明这条历史锚点已经失效；
-   * - `membership_required` 仍然可能是有价值的历史房间，只是当前身份暂时进不去。
-   */
-  private pruneHomeSessionIfRoomMissing(code: string | undefined, roomIdHint = ""): void {
-    if (code !== "room_not_found") {
-      return;
-    }
-    const roomId = roomIdHint.trim() || this.chatState.roomId || this.storage.读取当前房间标识();
-    if (!roomId) {
-      return;
-    }
-    this.storage.按房间标识删除首页房间历史条目(roomId);
-    this.syncHomeSessionItems();
-  }
-
-  /**
-   * 硬失败要清 room 锚点并退出房间；临时失败则保留锚点，让用户还能重试。
-   */
-  private handleRecoveryFailure(error: unknown, keepRoomVisible: boolean): void {
-    const failure = this.asRecoveryFailure(error);
-    if (this.isHardRoomFailure(failure)) {
-      this.pruneHomeSessionIfRoomMissing(failure.code);
-      this.roomKernel.send({
-        type: "RECOVERY_FAILED",
-        code: failure.code ?? "",
-        keepRoomVisible: false,
-      });
-      this.exitCurrentRoomView({ keepRoomCodeCache: false });
-      this.updateChat(this.roomShellPatch());
-      return;
-    }
-
-    this.roomKernel.send({
-      type: "RECOVERY_FAILED",
-      code: failure.code ?? "system_error",
-      keepRoomVisible,
-    });
-    this.updateChat({
-      ...this.roomShellPatch(),
-      pending: false,
-      historyLoading: false,
-      scrollPhase: "idle",
-      hasUserScrollIntent: keepRoomVisible ? this.chatState.hasUserScrollIntent : false,
-    });
-    this.roomScroller.取消挂起滚动副作用();
-  }
-
-  private async handleControlResult(control: 控制面结果): Promise<void> {
-    if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
-      this.roomKernel.send({
-        type: "SUBSCRIPTION_ESTABLISHED",
-        latestEventPosition: control.latest_event_position,
-      });
-      this.updateChat(this.roomShellPatch());
-      return;
-    }
-
-    if (control.kind === "need_snapshot_reload" && control.room_id) {
-      await this.reloadRoomFromSnapshot(control.room_id);
-      return;
-    }
-
-    if (control.kind !== "rejected" && control.kind !== "error") {
-      return;
-    }
-
-    if (!this.chatState.roomId) {
-      this.updateChat({ pending: false });
-      return;
-    }
-
-    if (control.code === "invalid_session") {
-      try {
-        this.roomKernel.send({
-          type: "RECONNECTING_STARTED",
-          code: "invalid_session",
-        });
-        this.updateChat(this.roomShellPatch());
-        await this.bootstrapFreshSession();
-        await this.reloadRoomFromSnapshot(this.chatState.roomId);
-      } catch (error) {
-        this.handleRecoveryFailure(error, true);
-      }
-      return;
-    }
-
-    if (this.isHardRoomFailure(control)) {
-      this.pruneHomeSessionIfRoomMissing(control.code, control.room_id ?? "");
-      this.roomKernel.send({
-        type: "RECOVERY_FAILED",
-        code: control.code ?? "",
-        keepRoomVisible: false,
-      });
-      this.exitCurrentRoomView({ keepRoomCodeCache: false });
-      this.updateChat(this.roomShellPatch());
-      return;
-    }
-
-    this.roomKernel.send({
-      type: "RECOVERY_FAILED",
-      code: control.code ?? "system_error",
-      keepRoomVisible: true,
-    });
-    this.updateChat({
-      ...this.roomShellPatch(),
-      pending: false,
-      historyLoading: false,
-      scrollPhase: "idle",
-      hasUserScrollIntent: this.chatState.hasUserScrollIntent,
-    });
-    this.roomScroller.取消挂起滚动副作用();
-  }
-
-  /**
-   * 房间标题目前优先来自用户实际输入过的短码缓存。
-   * 后端还没有返回房间名或短码时，壳层只能在“不泄露 room_id”和“不给用户空标题”之间取平衡。
-   */
-  private resolveRoomDisplayTitle(roomCodeForDisplay?: string): string {
-    const trimmedRoomCode = roomCodeForDisplay?.trim() ?? "";
-    if (trimmedRoomCode) {
-      this.storage.写入当前房间短码(trimmedRoomCode);
-      return trimmedRoomCode;
-    }
-    return this.storage.读取当前房间短码() || "群聊房间";
-  }
-
-  /**
-   * 房间基线一旦成立，就统一从这里更新壳层状态与本地恢复锚点。
-   * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
-   */
-  private enterRoomFromSnapshot(
-    snapshot: 房间快照,
-    roomCodeForDisplay?: string,
-    primeReadAnchorAfterInitialSettle = false
-  ): void {
-    this.cancelPendingReadAnchorFlush();
-    this.cancelPendingFollowLatestReadSample();
-    this.roomScroller.取消挂起滚动副作用();
-    this.shouldPrimeReadAnchorAfterInitialSettle = primeReadAnchorAfterInitialSettle;
-    this.storage.写入当前房间标识(snapshot.room_id);
-    const roomDisplayTitle = this.resolveRoomDisplayTitle(roomCodeForDisplay);
-    this.recordHomeSession(snapshot.room_id, roomCodeForDisplay?.trim() || this.storage.读取当前房间短码());
-    this.roomKernel.send({
-      type: "SNAPSHOT_LOADED",
-      roomId: snapshot.room_id,
-      roomDisplayTitle,
-      latestEventPosition: snapshot.latest_event_position,
-      viewportMode:
-        snapshot.first_unread_event_position === null ? "贴底跟随" : "围绕未读阅读",
-    });
-    this.updateChat({
-      ...this.roomShellPatch(),
-      lastReadEventPosition: snapshot.last_read_event_position,
-      firstUnreadEventPosition: snapshot.first_unread_event_position,
-      hasMoreBefore: snapshot.has_more_before,
-      initialUnreadSettled: false,
-      // 只有带着首条未读恢复时，壳层才进入程序性恢复阶段；否则滚动语义直接保持 idle。
-      scrollPhase:
-        snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
-      hasUserScrollIntent: false,
-      pendingReadAnchorPosition: null,
-      // snapshot_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
-      // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
-      messages: this.reconcileMessages(snapshot.snapshot_messages),
-      pending: false,
-      historyLoading: false,
-      historyLoadThrottleUntil: 0,
-      historyErrorCode: "",
-    });
-    this.roomScroller.安排首屏定位();
-  }
-
-  /**
-   * 只在房间基线成功成立后，才把它记进首页历史。
-   * 这样软离房不会删历史，硬失败也不会留下半成品条目。
-   */
-  private recordHomeSession(roomId: string, roomCode: string): void {
-    const trimmedRoomId = roomId.trim();
-    const trimmedRoomCode = roomCode.trim();
-    if (!trimmedRoomId || !trimmedRoomCode) {
-      return;
-    }
-    const nextItem: 首页房间历史条目 = {
-      roomId: trimmedRoomId,
-      roomCode: trimmedRoomCode,
-      lastEnteredAt: Date.now(),
-    };
-    this.storage.写入或更新首页房间历史条目(nextItem);
-    this.syncHomeSessionItems();
-  }
-
-  private ensureRealtimeSocket(sessionId: string): void {
-    if (this.realtimeSocket) return;
-    const socket = this.transport.createSocket(sessionId);
-    socket.on("connect", () => {
-      if (this.chatState.roomId) {
-        this.subscribeRoom(this.chatState.latestEventPosition);
-      }
-    });
-    socket.on("connect_error", (error: unknown) => {
-      void this.handleRealtimeConnectError(error);
-    });
-    socket.on("room_events", (events: { latest_event_position: number; events: 消息事件[] }) => {
-      this.applyAuthoritativeEvents(events.events, events.latest_event_position);
-    });
-    socket.on("room_event", (event: 消息事件) => {
-      this.applyAuthoritativeEvents([event], event.event_position);
-    });
-    socket.on("control_result", (control: 控制面结果) => {
-      void this.handleControlResult(control);
-    });
-    this.realtimeSocket = socket;
-  }
-
-  private subscribeRoom(from: number): void {
-    if (!this.chatState.roomId || !this.realtimeSocket) return;
-    this.roomKernel.send({ type: "SUBSCRIPTION_STARTED" });
-    this.realtimeSocket.emit("subscribe_room_stream", {
-      room_id: this.chatState.roomId,
-      from,
-    });
-  }
-
-  private scheduleReadAnchorUpdate(nextPosition: number): void {
-    this.roomKernel.send({
-      type: "VIEWPORT_OBSERVED",
-      candidateReadAnchorPosition: nextPosition,
-      isNearBottom: this.isNearBottom(),
-    });
-    this.updateChat(this.roomShellPatch());
-    this.promoteCandidateReadAnchorToPending();
-  }
-
-  /**
-   * 候选已读锚点和“正式待提交”必须分两层：
-   * - 候选只代表壳层观测到“用户大概率已经看到这里”；
-   * - 只有当前房间已经处于稳定阅读阶段，才允许它进入真正的提交队列。
-   */
-  private promoteCandidateReadAnchorToPending(): void {
-    if (!this.chatState.roomId || !this.chatState.initialUnreadSettled) {
-      return;
-    }
-    if (this.chatState.scrollPhase !== "idle") {
-      return;
-    }
-    const candidatePosition = this.chatState.candidateReadAnchorPosition;
-    if (candidatePosition === null) {
-      return;
-    }
-    const currentReadPosition = this.chatState.lastReadEventPosition ?? 0;
-    const pendingPosition = this.chatState.pendingReadAnchorPosition ?? 0;
-    const floor = Math.max(currentReadPosition, pendingPosition);
-    if (candidatePosition <= floor) {
-      return;
-    }
-    this.updateChat({
-      pendingReadAnchorPosition: candidatePosition,
-    });
-    if (this.readAnchorFlushTimer !== null) {
-      return;
-    }
-    this.readAnchorFlushTimer = setTimeout(() => {
-      this.readAnchorFlushTimer = null;
-      void this.flushReadAnchorUpdate();
-    }, 阅读推进节流毫秒);
-  }
-
-  private async flushReadAnchorUpdate(): Promise<void> {
-    const nextPosition = this.chatState.pendingReadAnchorPosition;
-    if (!this.chatState.roomId || nextPosition === null) {
-      return;
-    }
-    if (nextPosition <= (this.chatState.lastReadEventPosition ?? 0)) {
-      this.updateChat({ pendingReadAnchorPosition: null });
-      return;
-    }
-    try {
-      await this.transport.updateRoomReadAnchor(
-        this.chatState.roomId,
-        this.chatState.sessionId,
-        nextPosition
-      );
-      this.updateChat({
-        lastReadEventPosition: nextPosition,
-        pendingReadAnchorPosition: null,
-        firstUnreadEventPosition:
-          this.chatState.firstUnreadEventPosition !== null &&
-          nextPosition >= this.chatState.firstUnreadEventPosition
-            ? null
-            : this.chatState.firstUnreadEventPosition,
-      });
-    } catch {
-      // 阅读推进失败不应破坏当前房间内容；丢掉这次 pending，等待后续滚动再重试即可。
-      this.updateChat({ pendingReadAnchorPosition: null });
-    }
-  }
-
-  private cancelPendingReadAnchorFlush(): void {
-    if (this.readAnchorFlushTimer === null) {
-      return;
-    }
-    clearTimeout(this.readAnchorFlushTimer);
-    this.readAnchorFlushTimer = null;
-  }
-
-  private cancelPendingFollowLatestReadSample(): void {
-    if (this.followLatestReadSampleTimer === null) {
-      return;
-    }
-    clearTimeout(this.followLatestReadSampleTimer);
-    this.followLatestReadSampleTimer = null;
-  }
-
-  /**
-   * 首屏稳定完成必须显式回灌给房间内核，而不是只在壳层里改一个布尔值。
-   * 这样以后换模板、换滚动实现时，内核仍然能明确知道：
-   * “当前房间已经从恢复阶段进入了可解释阅读语义的稳定状态。”
-   */
-  private handleInitialSettleCompleted(mode: 聊天状态["viewportMode"]): void {
-    if (this.chatState.initialUnreadSettled) {
-      return;
-    }
-    this.roomKernel.send({
-      type: "INITIAL_SETTLE_COMPLETED",
-      mode,
-    });
-    this.updateChat({
-      ...this.roomShellPatch(),
-      initialUnreadSettled: true,
-      scrollPhase: "idle",
-    });
-    this.promoteCandidateReadAnchorToPending();
-  }
-
-  private applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
-    const merged = this.reconcileMessages([...this.chatState.messages, ...events]);
-    const shouldFollowLatest = this.chatState.viewportMode === "贴底跟随";
-    this.roomKernel.send({
-      type: "AUTHORITATIVE_EVENTS_ARRIVED",
-      latestEventPosition,
-    });
-    this.updateChat({
-      ...this.roomShellPatch(),
-      messages: merged,
-      pending: false,
-    });
-    if (shouldFollowLatest) {
-      void this.followLatestAfterRealtimeAppend();
-    }
-  }
-
-  /**
-   * 贴底跟随只属于壳层体验：
-   * - 用户本来就在底部，realtime 新消息到达后才允许继续跟底；
-   * - 这不是后端真相，只是前端当前视口该怎么表现。
-   */
-  private async followLatestAfterRealtimeAppend(): Promise<void> {
-    await this.scrollToLatestAndEnterFollowMode();
-  }
-
-  /**
-   * “跳到最新”是纯壳层动作：
-   * - 它只改变当前视口落点和本地视口模式；
-   * - 真正的已读推进仍然由后续稳定采样 + 提交链决定。
-   */
-  private async jumpToLatest(): Promise<void> {
-    await this.scrollToLatestAndEnterFollowMode();
-  }
-
-  private async scrollToLatestAndEnterFollowMode(): Promise<void> {
-    await this.updateComplete;
-    const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
-    if (!scrollContainer) {
-      return;
-    }
-    scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
-    this.roomKernel.send({ type: "USER_JUMPED_TO_LATEST" });
-    this.updateChat(this.roomShellPatch());
-    this.schedulePassiveReadAnchorAfterFollowLatest();
-  }
-
-  /**
-   * 用户已经处在贴底跟随模式时，新消息进入视口本身就是一次真实阅读推进来源。
-   * 这里额外等一个极短窗口，让 DOM 和布局先稳定，再复用滚动器的“稳定可读”采样。
-   */
-  private schedulePassiveReadAnchorAfterFollowLatest(): void {
-    this.cancelPendingFollowLatestReadSample();
-    this.followLatestReadSampleTimer = setTimeout(() => {
-      this.followLatestReadSampleTimer = null;
-      const nextReadPosition = this.roomScroller.读取当前可见阅读锚点();
-      if (nextReadPosition === null) {
-        return;
-      }
-      this.scheduleReadAnchorUpdate(nextReadPosition);
-    }, 0);
-  }
-
-  /**
-   * 贴底判断仍是壳层观测，不是业务真相。
-   * 这里只回答“当前视口是否已经足够接近底部，可以允许新消息自然跟随”。
-   */
-  private isNearBottom(scrollContainer?: HTMLElement | null): boolean {
-    const target =
-      scrollContainer ??
-      ((this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null) ?? null);
-    if (!target) {
-      return false;
-    }
-    return target.scrollHeight - target.clientHeight - target.scrollTop <= 24;
-  }
-
-  private observeViewport(scrollContainer: HTMLElement): void {
-    this.roomKernel.send({
-      type: "VIEWPORT_OBSERVED",
-      candidateReadAnchorPosition: null,
-      isNearBottom: this.isNearBottom(scrollContainer),
-    });
-    this.updateChat(this.roomShellPatch());
-  }
-
-  private createOptimisticMessage(clientMessageId: string, text: string): 消息事件 {
-    return {
-      type: "message_created",
-      room_id: this.chatState.roomId,
-      message_id: `local-${clientMessageId}`,
-      client_message_id: clientMessageId,
-      sender_session_id: this.chatState.sessionId,
-      sender_display_alias: this.chatState.displayAlias,
-      body: text,
-      event_position: this.chatState.latestEventPosition + 1,
-    };
-  }
-
-  private reconcileMessages(messages: 消息事件[]): 消息事件[] {
-    const sorted = [...messages].sort((left, right) => left.event_position - right.event_position);
-    const byClientMessageId = new Map<string, 消息事件>();
-    const authoritativeByMessageId = new Map<string, 消息事件>();
-
-    // 第一层按 client_message_id 收敛，解决“本地乐观态 later 被权威消息替换”的情况。
-    for (const message of sorted) {
-      const existing = byClientMessageId.get(message.client_message_id);
-      byClientMessageId.set(
-        message.client_message_id,
-        existing ? this.pickPreferredMessage(existing, message) : message
-      );
-    }
-
-    // 第二层按真正的 message_id 收敛，解决 snapshot / history / realtime
-    // 三条路径把同一条权威消息重复送进壳层的问题。
-    for (const message of byClientMessageId.values()) {
-      if (message.message_id.startsWith("local-")) {
-        continue;
-      }
-      const existing = authoritativeByMessageId.get(message.message_id);
-      authoritativeByMessageId.set(
-        message.message_id,
-        existing ? this.pickPreferredMessage(existing, message) : message
-      );
-    }
-
-    const out: 消息事件[] = [];
-    const seenMessageIds = new Set<string>();
-    for (const message of byClientMessageId.values()) {
-      if (message.message_id.startsWith("local-")) {
-        out.push(message);
-        continue;
-      }
-      if (seenMessageIds.has(message.message_id)) {
-        continue;
-      }
-      seenMessageIds.add(message.message_id);
-      out.push(authoritativeByMessageId.get(message.message_id)!);
-    }
-
-    return out.sort((left, right) => left.event_position - right.event_position);
-  }
-
-  /**
-   * 合流时优先保留更可信的那份：
-   * - 权威消息覆盖本地乐观态；
-   * - 事件位置更靠后的版本覆盖更早的副本；
-   * - 若完全同位，则取新到的 candidate，保证最后一份统一写回。
-   */
-  private pickPreferredMessage(current: 消息事件, candidate: 消息事件): 消息事件 {
-    const currentIsOptimistic = current.message_id.startsWith("local-");
-    const candidateIsOptimistic = candidate.message_id.startsWith("local-");
-    if (currentIsOptimistic !== candidateIsOptimistic) {
-      return currentIsOptimistic ? candidate : current;
-    }
-    if (current.event_position !== candidate.event_position) {
-      return current.event_position > candidate.event_position ? current : candidate;
-    }
-    return candidate;
-  }
-
-  private recoveryCodeOf(error: unknown): string | undefined {
-    const failure = this.asRecoveryFailure(error);
-    if (typeof failure.code === "string" && failure.code.trim()) {
-      return failure.code;
-    }
-    if (error instanceof Error && error.message.trim()) {
-      return error.message.trim();
-    }
-    return undefined;
-  }
-
-  private isInvalidSessionError(error: unknown): boolean {
-    return this.recoveryCodeOf(error) === "invalid_session";
-  }
-
-  private isHardRoomFailure(error: { code?: string; status?: number }): boolean {
-    return (
-      error.code === "room_not_found" ||
-      error.code === "membership_required" ||
-      error.status === 403 ||
-      error.status === 404
-    );
-  }
-
-  private asRecoveryFailure(error: unknown): 恢复失败 {
-    if (error instanceof Http接口错误) {
-      return error;
-    }
-    return error as 恢复失败;
-  }
-
-  /**
    * 首页历史房间只是另一种“填入短码并进房”的入口，
    * 不能自己再旁路出第二套 join 逻辑。
    */
@@ -1534,13 +782,13 @@ export class 聊天壳 extends LitElement {
       return;
     }
     this.updateChat({ roomCodeInput: trimmedRoomCode });
-    void this.joinRoom();
+    void this.恢复编排端口.joinRoom();
   }
 
   /**
    * 唯一操作台现在只有一条 submit 主链：
-   * - `join` 态派发到 `joinRoom()`；
-   * - `message` 态派发到 `sendMessage()`；
+   * - `join` 态派发到恢复编排的 `joinRoom()`；
+   * - `message` 态派发到 realtime 编排的 `sendMessage()`；
    * - `hidden` 态只阻止默认提交，不允许 boot 骨架误触发业务动作。
    */
   private submitShellConsole(event: SubmitEvent): void {
@@ -1551,11 +799,11 @@ export class 聊天壳 extends LitElement {
       roomId: this.chatState.roomId,
     });
     if (consoleMode === "join") {
-      void this.joinRoom();
+      void this.恢复编排端口.joinRoom();
       return;
     }
     if (consoleMode === "message") {
-      void this.sendMessage();
+      void this.实时编排端口.sendMessage();
     }
   }
 
@@ -1739,7 +987,7 @@ export class 聊天壳 extends LitElement {
               // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
               // 否则贴底观测提前读取 scrollHeight，会把补偿基线读脏。
               this.roomScroller.处理滚动事件(target);
-              this.observeViewport(target);
+              this.阅读推进编排端口.接收视口滚动();
             }}
           >
             <ul id="messageList" class="message-list">
@@ -1778,7 +1026,7 @@ export class 聊天壳 extends LitElement {
                   id="jumpToLatestBtn"
                   class="jump-latest-button"
                   @click=${() => {
-                    void this.jumpToLatest();
+                    void this.阅读推进编排端口.请求跳到最新();
                   }}
                 >
                   ${jumpToLatestLabel}

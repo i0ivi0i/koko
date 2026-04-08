@@ -4,6 +4,7 @@ import type { 聊天状态, 房间视口模式 } from "./状态.js";
 const 历史分页顶部节流毫秒 = 180;
 const 稳定可读最小可见像素 = 40;
 const 稳定可读最小可见比例 = 0.55;
+const 贴底跟随阈值像素 = 24;
 
 type 房间滚动观察态 = Pick<
   聊天状态,
@@ -86,6 +87,21 @@ export class 房间滚动器 implements ReactiveController {
       return null;
     }
     return this.查找可见阅读锚点(scrollContainer);
+  }
+
+  /**
+   * “是否接近底部”依然是滚动器的 DOM 观测结果，不是业务真相。
+   * 应用层只消费这个只读判断，不再自己重复读 scrollTop / scrollHeight。
+   */
+  读取当前是否接近底部(): boolean {
+    const scrollContainer = this.deps.查询滚动容器();
+    if (!scrollContainer) {
+      return false;
+    }
+    return (
+      scrollContainer.scrollHeight - scrollContainer.clientHeight - scrollContainer.scrollTop <=
+      贴底跟随阈值像素
+    );
   }
 
   读取历史补偿基线(): number {
