@@ -716,6 +716,75 @@ async fn 后台缺少令牌时仍返回稳定错误码() {
 
 #[tokio::test]
 #[serial]
+async fn 后台房间详情仍返回最新事件位置和消息总数() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("AD{:010}", uniq % 10_000_000_000);
+    let owner_token = format!("admin-detail-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let room_id = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
+        let session_id = koko::usecase::引导匿名身份(&mut repo, &owner_token)
+            .expect("应能引导匿名身份")
+            .会话标识;
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+        for index in 0..3 {
+            koko::usecase::发送文本消息(
+                &mut repo,
+                &room_id,
+                &session_id,
+                &format!("admin-detail-c-{index}"),
+                &format!("admin-detail-{index}"),
+            )
+            .expect("应能连续发送消息");
+        }
+        room_id
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let (login_status, login_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/admin/login",
+        Some(serde_json::json!({"username":"admin","password":"admin"})),
+        &[],
+    )
+    .await;
+    assert_eq!(login_status, StatusCode::OK);
+    let token = login_body["token"].as_str().expect("应返回 admin token");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/admin/rooms/{room_id}"),
+        None,
+        &[("x-admin-token", token)],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["room_id"].as_str(), Some(room_id.as_str()));
+    assert_eq!(body["latest_event_position"].as_i64(), Some(3));
+    assert_eq!(body["message_count"].as_i64(), Some(3));
+}
+
+#[tokio::test]
+#[serial]
 async fn 房间增量事件查询缺少session_id会被拒绝() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
