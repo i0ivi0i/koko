@@ -67,10 +67,29 @@
 - https://docs.rs/socketioxide/latest/socketioxide/
 - https://docs.rs/socketioxide/latest/socketioxide/socket/struct.Socket.html
 
+### 1.3.1 `Socket.IO` 的 room / 多节点边界，也该从“知道”升级成“强约束”
+
+- 官方 `Rooms` 文档继续强调：room 是 server-only concept，不是客户端真相。
+- 断开连接时，socket 会自动离开自己加入过的 rooms。
+- 官方 `Using multiple nodes` 文档继续明确：只要还启用 polling，多节点部署就需要 sticky session；否则很容易遇到 `Session ID unknown`。
+- 如果你显式只用 WebSocket transport，可以不需要 sticky session，但代价是放弃 long-polling fallback。
+
+对 `koko` 的直接约束：
+
+1. 前端不能把“当前订阅了哪个 room”当成员资格真相。
+2. Realtime adapter 继续只把 room 当广播分组能力，不回灌业务真相。
+3. 如果未来做多节点，只要不彻底放弃 polling，就必须连 sticky session 一起设计，而不是上线后补锅。
+
+来源：
+
+- https://socket.io/docs/v4/rooms/
+- https://socket.io/docs/v4/using-multiple-nodes/
+
 ### 1.4 Telegram 官方更新模型给了一个很重要的提醒：当前正在看的会话，应该获得比“后台会话”更积极的补洞力度
 
 - Telegram 官方更新文档继续坚持 `seq / pts / qts + getDifference` 这一套。
 - 但它更值得学的地方不是字段名，而是同步策略：当前活跃会话/频道不是和其他会话一视同仁地“被动等推送”，而是应当被更积极地检查差量。
+- `dialog` 构造里继续带着 `unread_count`、`read_inbox_max_id`、`read_outbox_max_id` 这类字段，说明成熟 IM 里的“已读推进”一直都是逻辑锚点，不是像素位置。
 - `messages.readHistory` 也继续表达同一件事：已读推进是逻辑锚点推进，不是像素位置。
 
 对 `koko` 的直接约束：
@@ -83,6 +102,7 @@
 
 - https://core.telegram.org/api/updates
 - https://core.telegram.org/method/updates.getDifference
+- https://core.telegram.org/constructor/dialog
 - https://core.telegram.org/method/messages.readHistory
 
 ### 1.5 WhatsApp / Meta 这两年的公开资料，新增了三条比旧笔记更值得学的东西
@@ -188,11 +208,14 @@
 - Socket.IO client options: https://socket.io/docs/v4/client-options/
 - Socket.IO tutorial step 8: https://socket.io/docs/v4/tutorial/step-8
 - Socket.IO tutorial ending notes: https://socket.io/docs/v4/tutorial/ending-notes
+- Socket.IO rooms: https://socket.io/docs/v4/rooms/
+- Socket.IO using multiple nodes: https://socket.io/docs/v4/using-multiple-nodes/
 - socketioxide README (docs.rs source): https://docs.rs/crate/socketioxide/latest/source/README.md
 - socketioxide crate docs: https://docs.rs/socketioxide/latest/socketioxide/
 - socketioxide Socket docs: https://docs.rs/socketioxide/latest/socketioxide/socket/struct.Socket.html
 - Telegram Working with Updates: https://core.telegram.org/api/updates
 - Telegram updates.getDifference: https://core.telegram.org/method/updates.getDifference
+- Telegram dialog: https://core.telegram.org/constructor/dialog
 - Telegram messages.readHistory: https://core.telegram.org/method/messages.readHistory
 - WhatsApp multi-device: https://engineering.fb.com/2021/07/14/security/whatsapp-multi-device/
 - WhatsApp key transparency: https://engineering.fb.com/2023/04/13/security/whatsapp-key-transparency/
