@@ -12,6 +12,7 @@ import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import {
   派生壳主舞台模式,
   派生控制台模式,
+  派生壳级操作台状态,
   派生聊天列表展示项,
   派生首页会话展示项,
   派生房间提示文案,
@@ -1557,35 +1558,46 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
-   * 这一步先只统一“身体”，不统一 presenter：
-   * - boot / home / room 都用同一套操作台骨架；
-   * - 输入语义仍然按当前壳层上下文切换；
-   * - 先把 selector、常驻实体、不可交互边界锁住，再进入下一步视图模型收口。
+   * 操作台本体继续只维护一套骨架；
+   * 真正的显示语义已经上收给 presenter，这里只负责：
+   * - 套用同一套 selector；
+   * - 绑定输入事件；
+   * - 选择当前 submit 入口。
    */
   private renderShellConsole(input: {
     mode: "hidden" | "join" | "message";
     statusText: string;
     statusAttention?: boolean;
   }) {
-    const isMessageMode = input.mode === "message";
-    const isHiddenMode = input.mode === "hidden";
-    const primaryValue = isMessageMode
-      ? this.chatState.messageInput
-      : this.chatState.roomCodeInput;
-    const primaryPlaceholder = isMessageMode ? "输入消息" : "房间短码";
-    const primaryActionLabel = isMessageMode ? "发送" : "进房";
-    const primaryActionDisabled = isHiddenMode || (isMessageMode && this.chatState.pending);
+    const consoleState = 派生壳级操作台状态({
+      consoleMode: input.mode,
+      roomCodeInput: this.chatState.roomCodeInput,
+      messageInput: this.chatState.messageInput,
+      pending: this.chatState.pending,
+      statusText: input.statusText,
+      statusAttention: input.statusAttention,
+    });
+    const isMessageMode = consoleState.mode === "message";
+    const isHiddenMode = consoleState.mode === "hidden";
     const submitHandler = isHiddenMode
       ? this.submitInactiveShellConsole
       : isMessageMode
         ? this.submitComposerForm
         : this.submitJoinForm;
-    const formId = isMessageMode ? "composerForm" : input.mode === "join" ? "joinForm" : "bootForm";
+    const formId =
+      consoleState.mode === "message"
+        ? "composerForm"
+        : consoleState.mode === "join"
+          ? "joinForm"
+          : "bootForm";
 
     return html`
       <footer id="shellConsole" class="composer-bar">
-        <div id="shellConsoleStatus" class="composer-status ${input.statusAttention ? "attention" : ""}">
-          ${input.statusText}
+        <div
+          id="shellConsoleStatus"
+          class="composer-status ${consoleState.statusAttention ? "attention" : ""}"
+        >
+          ${consoleState.statusText}
         </div>
         <form id=${formId} class="shell-console-form" @submit=${submitHandler}>
           <div
@@ -1602,10 +1614,10 @@ export class 聊天壳 extends LitElement {
             <input
               id="shellConsolePrimaryInput"
               class=${isMessageMode ? "text-input composer-input" : "text-input"}
-              placeholder=${primaryPlaceholder}
-              enterkeyhint=${isMessageMode ? "send" : "go"}
-              .value=${primaryValue}
-              ?disabled=${isHiddenMode}
+              placeholder=${consoleState.primaryInput.placeholder}
+              enterkeyhint=${consoleState.primaryInput.enterKeyHint}
+              .value=${consoleState.primaryInput.value}
+              ?disabled=${consoleState.primaryInput.disabled}
               @input=${(e: Event) => {
                 const target = e.target as HTMLInputElement;
                 if (isMessageMode) {
@@ -1619,9 +1631,9 @@ export class 聊天壳 extends LitElement {
               id="shellConsolePrimaryAction"
               class=${isMessageMode ? "primary-button send-button" : "primary-button"}
               type="submit"
-              ?disabled=${primaryActionDisabled}
+              ?disabled=${consoleState.primaryAction.disabled}
             >
-              ${primaryActionLabel}
+              ${consoleState.primaryAction.label}
             </button>
           </div>
         </form>

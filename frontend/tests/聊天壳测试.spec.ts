@@ -7,6 +7,7 @@ import type { 前端传输端口 } from "../传输";
 import {
   派生壳主舞台模式,
   派生控制台模式,
+  派生壳级操作台状态,
   派生首页会话展示项,
 } from "../视图";
 import type {
@@ -734,6 +735,58 @@ describe("聊天壳", () => {
         roomId: "r-1",
       })
     ).toBe("message");
+  });
+
+  it("boot / home / room 都由同一个操作台状态模型派生", () => {
+    expect(
+      派生壳级操作台状态({
+        consoleMode: "hidden",
+        roomCodeInput: "",
+        messageInput: "",
+        pending: false,
+        statusText: "正在恢复",
+      })
+    ).toMatchObject({
+      mode: "hidden",
+      primaryInput: { disabled: true },
+      primaryAction: { disabled: true },
+    });
+
+    expect(
+      派生壳级操作台状态({
+        consoleMode: "join",
+        roomCodeInput: "ROOM01",
+        messageInput: "",
+        pending: false,
+        statusText: "输入房间号进入",
+      })
+    ).toMatchObject({
+      mode: "join",
+      primaryInput: {
+        value: "ROOM01",
+        placeholder: "房间短码",
+        enterKeyHint: "go",
+      },
+      primaryAction: { label: "进房" },
+    });
+
+    expect(
+      派生壳级操作台状态({
+        consoleMode: "message",
+        roomCodeInput: "",
+        messageInput: "hello",
+        pending: true,
+        statusText: "当前房间",
+      })
+    ).toMatchObject({
+      mode: "message",
+      primaryInput: {
+        value: "hello",
+        placeholder: "输入消息",
+        enterKeyHint: "send",
+      },
+      primaryAction: { label: "发送", disabled: true },
+    });
   });
 
   it("首页会话展示项会把房间标题和辅助文案收口到 presenter", () => {

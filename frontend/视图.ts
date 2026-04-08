@@ -29,6 +29,32 @@ export interface 首页会话展示项 {
   meta: string;
 }
 
+export interface 操作台槽位配置 {
+  visible: boolean;
+  disabled: boolean;
+  label: string;
+}
+
+export interface 操作台主输入配置 {
+  value: string;
+  placeholder: string;
+  enterKeyHint: "go" | "send" | "done";
+  disabled: boolean;
+}
+
+/**
+ * 这是壳层 presenter，不是新的业务真状态。
+ * 它只回答一个问题：唯一操作台此刻该如何表现。
+ */
+export interface 壳级操作台状态 {
+  mode: 控制台模式;
+  statusText: string;
+  statusAttention: boolean;
+  auxSlot: 操作台槽位配置;
+  primaryInput: 操作台主输入配置;
+  primaryAction: 操作台槽位配置;
+}
+
 const 未读分隔标识 = "unread-divider" as const;
 
 /**
@@ -115,6 +141,83 @@ export function 派生控制台模式(input: {
     return "hidden";
   }
   return input.roomId ? "message" : "join";
+}
+
+/**
+ * 唯一操作台的显示语义统一从这里派生：
+ * - `hidden` 表示操作台实体常驻，但主输入和主动作暂时冻结；
+ * - `join` / `message` 只切输入值来源、placeholder、主按钮文案与禁用态；
+ * - 这层不拥有第二份真状态，只翻译壳层当前上下文。
+ */
+export function 派生壳级操作台状态(input: {
+  consoleMode: 控制台模式;
+  roomCodeInput: string;
+  messageInput: string;
+  pending: boolean;
+  statusText: string;
+  statusAttention?: boolean;
+}): 壳级操作台状态 {
+  const baseState = {
+    statusText: input.statusText,
+    statusAttention: Boolean(input.statusAttention),
+    auxSlot: {
+      visible: false,
+      disabled: true,
+      label: "",
+    },
+  } satisfies Pick<壳级操作台状态, "statusText" | "statusAttention" | "auxSlot">;
+
+  if (input.consoleMode === "hidden") {
+    return {
+      mode: "hidden",
+      ...baseState,
+      primaryInput: {
+        value: "",
+        placeholder: "房间短码",
+        enterKeyHint: "done",
+        disabled: true,
+      },
+      primaryAction: {
+        visible: true,
+        disabled: true,
+        label: "进房",
+      },
+    };
+  }
+
+  if (input.consoleMode === "message") {
+    return {
+      mode: "message",
+      ...baseState,
+      primaryInput: {
+        value: input.messageInput,
+        placeholder: "输入消息",
+        enterKeyHint: "send",
+        disabled: false,
+      },
+      primaryAction: {
+        visible: true,
+        disabled: input.pending,
+        label: "发送",
+      },
+    };
+  }
+
+  return {
+    mode: "join",
+    ...baseState,
+    primaryInput: {
+      value: input.roomCodeInput,
+      placeholder: "房间短码",
+      enterKeyHint: "go",
+      disabled: false,
+    },
+    primaryAction: {
+      visible: true,
+      disabled: false,
+      label: "进房",
+    },
+  };
 }
 
 /**
