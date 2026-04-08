@@ -55,12 +55,23 @@ export class 后台壳 extends LitElement {
     return this.roomIds.filter((id) => id.includes(this.roomFilter.trim()));
   }
 
+  private submitLoginForm(event: SubmitEvent): void {
+    event.preventDefault();
+    void this.login();
+  }
+
+  private submitRoomSearchForm(event: SubmitEvent): void {
+    event.preventDefault();
+    void this.loadRooms();
+  }
+
   override render() {
     return html`
       <section id="adminShell">
-        <div class="row">
+        <form id="adminLoginForm" class="row" @submit=${this.submitLoginForm}>
           <input
             id="adminUser"
+            enterkeyhint="go"
             .value=${this.username}
             @input=${(e: Event) => {
               this.username = (e.target as HTMLInputElement).value;
@@ -68,26 +79,28 @@ export class 后台壳 extends LitElement {
           />
           <input
             id="adminPass"
+            enterkeyhint="go"
             .value=${this.password}
             @input=${(e: Event) => {
               this.password = (e.target as HTMLInputElement).value;
             }}
           />
-          <button id="adminLoginBtn" @click=${() => this.login()}>登录</button>
-        </div>
+          <button id="adminLoginBtn" type="submit">登录</button>
+        </form>
         <div id="overview">${this.overviewText}</div>
-        <div class="row">
+        <form id="roomSearchForm" class="row" @submit=${this.submitRoomSearchForm}>
           <input
             id="roomSearch"
             placeholder="搜索房间"
+            enterkeyhint="search"
             .value=${this.roomFilter}
             @input=${(e: Event) => {
               this.roomFilter = (e.target as HTMLInputElement).value;
               this.requestUpdate();
             }}
           />
-          <button id="reloadRooms" @click=${() => this.loadRooms()}>刷新房间</button>
-        </div>
+          <button id="reloadRooms" type="submit">刷新房间</button>
+        </form>
         <ul id="roomList">
           ${this.filteredRooms.map(
             (id) => html`<li>${id} <button class="roomDetailBtn" @click=${() => this.loadRoomDetail(id)}>详情</button></li>`

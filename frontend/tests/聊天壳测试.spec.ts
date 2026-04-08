@@ -500,6 +500,57 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("进房输入框会通过表单 submit 支持回车进房", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+
+    const joinForm = el.shadowRoot!.querySelector("#joinForm") as HTMLFormElement | null;
+    expect(joinForm).not.toBeNull();
+    expect(roomInput.getAttribute("enterkeyhint")).toBe("go");
+
+    joinForm!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await 等待组件稳定(el);
+
+    expect(transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "ROOM01" }]);
+    el.remove();
+  });
+
+  it("消息输入框会通过表单 submit 支持回车发送", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const msgInput = el.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
+    msgInput.value = "hello";
+    msgInput.dispatchEvent(new Event("input"));
+
+    const composerForm = el.shadowRoot!.querySelector("#composerForm") as HTMLFormElement | null;
+    expect(composerForm).not.toBeNull();
+    expect(msgInput.getAttribute("enterkeyhint")).toBe("send");
+
+    composerForm!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");
+    el.remove();
+  });
+
   it("收到 need_snapshot_reload 时会回退 HTTP 快照并按最新锚点重订阅", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;

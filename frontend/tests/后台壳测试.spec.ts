@@ -104,4 +104,26 @@ describe("后台壳", () => {
 
     el.remove();
   });
+
+  it("登录输入框会通过表单 submit 支持回车登录", async () => {
+    const el = document.createElement("koko-admin-shell") as 后台壳;
+    el.setTransportForTest(new 假后台传输());
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    const userInput = el.shadowRoot!.querySelector("#adminUser") as HTMLInputElement;
+    const passInput = el.shadowRoot!.querySelector("#adminPass") as HTMLInputElement;
+    const loginForm = el.shadowRoot!.querySelector("#adminLoginForm") as HTMLFormElement | null;
+
+    expect(loginForm).not.toBeNull();
+    expect(userInput.getAttribute("enterkeyhint")).toBe("go");
+    expect(passInput.getAttribute("enterkeyhint")).toBe("go");
+
+    loginForm!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("#overview")!.textContent).toContain("房间 2");
+    el.remove();
+  });
 });

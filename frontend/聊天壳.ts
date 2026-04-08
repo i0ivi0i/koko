@@ -1415,6 +1415,16 @@ export class 聊天壳 extends LitElement {
     return error as 恢复失败;
   }
 
+  private submitJoinForm(event: SubmitEvent): void {
+    event.preventDefault();
+    void this.joinRoom();
+  }
+
+  private submitComposerForm(event: SubmitEvent): void {
+    event.preventDefault();
+    void this.sendMessage();
+  }
+
   override render() {
     const { recoveryHint, historyHint, subtitle: roomSubtitle } = 派生房间提示文案({
       recoveryState: this.chatState.recoveryState,
@@ -1446,21 +1456,22 @@ export class 聊天壳 extends LitElement {
             <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
             <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
           ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
-            <div class="join-row">
+            <form id="joinForm" class="join-row" @submit=${this.submitJoinForm}>
               <input
                 id="roomCode"
                 class="text-input"
                 placeholder="房间短码"
+                enterkeyhint="go"
                 .value=${this.chatState.roomCodeInput}
                 @input=${(e: Event) => {
                   const target = e.target as HTMLInputElement;
                   this.updateChat({ roomCodeInput: target.value });
                 }}
               />
-              <button id="joinBtn" class="primary-button" @click=${() => this.joinRoom()}>
+              <button id="joinBtn" class="primary-button" type="submit">
                 进房
               </button>
-            </div>
+            </form>
           </div>
         </section>
       `;
@@ -1543,11 +1554,12 @@ export class 聊天壳 extends LitElement {
           <div class="composer-status ${statusAttention ? "attention" : ""}">
             ${statusAttention ? roomSubtitle : "在这里输入消息，发送后会实时出现在房间里。"}
           </div>
-          <div class="composer-row">
+          <form id="composerForm" class="composer-row" @submit=${this.submitComposerForm}>
             <input
               id="msgInput"
               class="text-input composer-input"
               placeholder="输入消息"
+              enterkeyhint="send"
               .value=${this.chatState.messageInput}
               @input=${(e: Event) => {
                 const target = e.target as HTMLInputElement;
@@ -1557,12 +1569,12 @@ export class 聊天壳 extends LitElement {
             <button
               id="sendBtn"
               class="primary-button send-button"
+              type="submit"
               ?disabled=${this.chatState.pending}
-              @click=${() => this.sendMessage()}
             >
               发送
             </button>
-          </div>
+          </form>
         </footer>
       </section>
     `;
