@@ -9,7 +9,14 @@ import {
 } from "./存储.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
-import { 派生聊天列表展示项, 派生房间提示文案, 派生跳到最新入口文案 } from "./视图.js";
+import {
+  派生壳主舞台模式,
+  派生控制台模式,
+  派生聊天列表展示项,
+  派生首页会话展示项,
+  派生房间提示文案,
+  派生跳到最新入口文案,
+} from "./视图.js";
 import type { Socket } from "socket.io-client";
 const 阅读推进节流毫秒 = 400;
 
@@ -1501,7 +1508,16 @@ export class 聊天壳 extends LitElement {
       hasUnreadNewerMessages: this.chatState.hasUnreadNewerMessages,
     });
     const roomShell = this.roomShellState();
-    if (roomShell.bootstrapState === "booting") {
+    const shellView = 派生壳主舞台模式({
+      bootstrapState: roomShell.bootstrapState,
+      roomId: this.chatState.roomId,
+    });
+    const consoleMode = 派生控制台模式({
+      bootstrapState: roomShell.bootstrapState,
+      roomId: this.chatState.roomId,
+    });
+    const homeSessionViewItems = 派生首页会话展示项(this.chatState.homeSessionItems);
+    if (shellView === "boot") {
       return html`
         <section id="bootView" class="boot-screen">
           <div class="boot-card">
@@ -1511,7 +1527,7 @@ export class 聊天壳 extends LitElement {
         </section>
       `;
     }
-    if (!this.chatState.roomId) {
+    if (shellView === "home") {
       // 冷启动没有恢复锚点时，只落在空态首页占位。
       // 这里仍保留最小进房表单，避免把“进入房间”能力拆成另一条入口路径。
       return html`
@@ -1521,38 +1537,40 @@ export class 聊天壳 extends LitElement {
             <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
             <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
           ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
-          ${this.chatState.homeSessionItems.length > 0
+          ${homeSessionViewItems.length > 0
             ? html`
                 <ul id="homeRoomList" class="home-room-list">
-                  ${this.chatState.homeSessionItems.map(
+                  ${homeSessionViewItems.map(
                     (item) => html`
                       <li class="home-room-item" data-room-id=${item.roomId}>
-                        <div class="home-room-code">${item.roomCode || item.roomId}</div>
-                        <div class="home-room-meta">
-                          最近进入: ${new Date(item.lastEnteredAt).toLocaleString("zh-CN")}
-                        </div>
+                        <div class="home-room-code">${item.title}</div>
+                        <div class="home-room-meta">${item.meta}</div>
                       </li>
                     `
                   )}
                 </ul>
               `
             : null}
-            <form id="joinForm" class="join-row" @submit=${this.submitJoinForm}>
-              <input
-                id="roomCode"
-                class="text-input"
-                placeholder="房间短码"
-                enterkeyhint="go"
-                .value=${this.chatState.roomCodeInput}
-                @input=${(e: Event) => {
-                  const target = e.target as HTMLInputElement;
-                  this.updateChat({ roomCodeInput: target.value });
-                }}
-              />
-              <button id="joinBtn" class="primary-button" type="submit">
-                进房
-              </button>
-            </form>
+            ${consoleMode === "join"
+              ? html`
+                  <form id="joinForm" class="join-row" @submit=${this.submitJoinForm}>
+                    <input
+                      id="roomCode"
+                      class="text-input"
+                      placeholder="房间短码"
+                      enterkeyhint="go"
+                      .value=${this.chatState.roomCodeInput}
+                      @input=${(e: Event) => {
+                        const target = e.target as HTMLInputElement;
+                        this.updateChat({ roomCodeInput: target.value });
+                      }}
+                    />
+                    <button id="joinBtn" class="primary-button" type="submit">
+                      进房
+                    </button>
+                  </form>
+                `
+              : null}
           </div>
         </section>
       `;
@@ -1631,32 +1649,36 @@ export class 聊天壳 extends LitElement {
               </button>
             `
           : null}
-        <footer id="composerBar" class="composer-bar">
-          <div class="composer-status ${statusAttention ? "attention" : ""}">
-            ${statusAttention ? roomSubtitle : "在这里输入消息，发送后会实时出现在房间里。"}
-          </div>
-          <form id="composerForm" class="composer-row" @submit=${this.submitComposerForm}>
-            <input
-              id="msgInput"
-              class="text-input composer-input"
-              placeholder="输入消息"
-              enterkeyhint="send"
-              .value=${this.chatState.messageInput}
-              @input=${(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                this.updateChat({ messageInput: target.value });
-              }}
-            />
-            <button
-              id="sendBtn"
-              class="primary-button send-button"
-              type="submit"
-              ?disabled=${this.chatState.pending}
-            >
-              发送
-            </button>
-          </form>
-        </footer>
+        ${consoleMode === "message"
+          ? html`
+              <footer id="composerBar" class="composer-bar">
+                <div class="composer-status ${statusAttention ? "attention" : ""}">
+                  ${statusAttention ? roomSubtitle : "在这里输入消息，发送后会实时出现在房间里。"}
+                </div>
+                <form id="composerForm" class="composer-row" @submit=${this.submitComposerForm}>
+                  <input
+                    id="msgInput"
+                    class="text-input composer-input"
+                    placeholder="输入消息"
+                    enterkeyhint="send"
+                    .value=${this.chatState.messageInput}
+                    @input=${(e: Event) => {
+                      const target = e.target as HTMLInputElement;
+                      this.updateChat({ messageInput: target.value });
+                    }}
+                  />
+                  <button
+                    id="sendBtn"
+                    class="primary-button send-button"
+                    type="submit"
+                    ?disabled=${this.chatState.pending}
+                  >
+                    发送
+                  </button>
+                </form>
+              </footer>
+            `
+          : null}
       </section>
     `;
   }

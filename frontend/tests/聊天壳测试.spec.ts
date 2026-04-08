@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../聊天壳";
 import { 创建浏览器存储 } from "../存储";
 import type { 前端传输端口 } from "../传输";
+import {
+  派生壳主舞台模式,
+  派生控制台模式,
+  派生首页会话展示项,
+} from "../视图";
 import type {
   匿名身份引导结果,
   增量事件快照,
@@ -540,6 +545,60 @@ describe("聊天壳", () => {
     expect(list?.querySelectorAll("[data-room-id]").length).toBe(2);
     expect(list?.querySelectorAll("[data-room-id]")[0]?.textContent).toContain("ROOM01");
     el.remove();
+  });
+
+  it("壳主舞台模式和控制台模式都只从 bootstrapState 与 roomId 派生", () => {
+    expect(
+      派生壳主舞台模式({
+        bootstrapState: "booting",
+        roomId: "",
+      })
+    ).toBe("boot");
+    expect(
+      派生壳主舞台模式({
+        bootstrapState: "ready",
+        roomId: "",
+      })
+    ).toBe("home");
+    expect(
+      派生壳主舞台模式({
+        bootstrapState: "ready",
+        roomId: "r-1",
+      })
+    ).toBe("room");
+
+    expect(
+      派生控制台模式({
+        bootstrapState: "booting",
+        roomId: "",
+      })
+    ).toBe("hidden");
+    expect(
+      派生控制台模式({
+        bootstrapState: "ready",
+        roomId: "",
+      })
+    ).toBe("join");
+    expect(
+      派生控制台模式({
+        bootstrapState: "ready",
+        roomId: "r-1",
+      })
+    ).toBe("message");
+  });
+
+  it("首页会话展示项会把房间标题和辅助文案收口到 presenter", () => {
+    expect(
+      派生首页会话展示项([
+        { roomId: "r-1", roomCode: "ROOM01", lastEnteredAt: 1710000000000 },
+      ])
+    ).toEqual([
+      {
+        roomId: "r-1",
+        title: "ROOM01",
+        meta: expect.stringContaining("最近进入"),
+      },
+    ]);
   });
 
   it("空态首页样式会复用暖夜 token 和圆角材质，而不是浅色网页表单", () => {

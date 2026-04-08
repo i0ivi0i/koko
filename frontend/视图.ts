@@ -1,4 +1,5 @@
 import type { 消息事件 } from "./契约.js";
+import type { 首页房间历史条目 } from "./存储.js";
 import type { 房间视口模式 } from "./状态.js";
 
 export interface 消息展示项 {
@@ -18,6 +19,14 @@ export interface 未读分隔展示项 {
 }
 
 export type 聊天列表展示项 = 消息展示项 | 未读分隔展示项;
+export type 壳主舞台模式 = "boot" | "home" | "room";
+export type 控制台模式 = "hidden" | "join" | "message";
+
+export interface 首页会话展示项 {
+  roomId: string;
+  title: string;
+  meta: string;
+}
 
 const 未读分隔标识 = "unread-divider" as const;
 
@@ -77,6 +86,50 @@ export function 派生消息展示项(
 
 export function 格式化后台概览(roomCount: number, messageCount: number): string {
   return `房间 ${roomCount} / 消息 ${messageCount}`;
+}
+
+/**
+ * 主舞台模式只由恢复阶段和当前房间锚点派生。
+ * 它是壳层的只读语义，不允许回写成第二份真状态。
+ */
+export function 派生壳主舞台模式(input: {
+  bootstrapState: "booting" | "ready";
+  roomId: string;
+}): 壳主舞台模式 {
+  if (input.bootstrapState === "booting") {
+    return "boot";
+  }
+  return input.roomId ? "room" : "home";
+}
+
+/**
+ * 控制台模式同样只回答“当前应该展示哪种输入语义”，
+ * 不能演化成和 `roomId/bootstrapState` 脱节的可写状态。
+ */
+export function 派生控制台模式(input: {
+  bootstrapState: "booting" | "ready";
+  roomId: string;
+}): 控制台模式 {
+  if (input.bootstrapState === "booting") {
+    return "hidden";
+  }
+  return input.roomId ? "message" : "join";
+}
+
+/**
+ * 首页会话列表只是历史房间锚点的展示模型：
+ * - `title` 收口主标题；
+ * - `meta` 收口辅助时间文案；
+ * - presenter 负责把原始条目翻译成模板真正消费的形状。
+ */
+export function 派生首页会话展示项(
+  items: 首页房间历史条目[]
+): 首页会话展示项[] {
+  return items.map((item) => ({
+    roomId: item.roomId,
+    title: item.roomCode || item.roomId,
+    meta: `最近进入: ${new Date(item.lastEnteredAt).toLocaleString("zh-CN")}`,
+  }));
 }
 
 export interface 房间提示文案输入 {
