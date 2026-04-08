@@ -202,10 +202,12 @@ export class 聊天壳 extends LitElement {
     .home-room-item {
       display: grid;
       gap: 4px;
+      width: 100%;
       padding: 12px 14px;
       border-radius: 18px;
       border: 1px solid var(--line-soft);
       background: rgba(255, 255, 255, 0.03);
+      text-align: left;
     }
 
     .home-room-code {
@@ -1490,6 +1492,19 @@ export class 聊天壳 extends LitElement {
     void this.joinRoom();
   }
 
+  /**
+   * 首页历史房间只是另一种“填入短码并进房”的入口，
+   * 不能自己再旁路出第二套 join 逻辑。
+   */
+  private joinHistoryRoom(roomCode: string): void {
+    const trimmedRoomCode = roomCode.trim();
+    if (!trimmedRoomCode) {
+      return;
+    }
+    this.updateChat({ roomCodeInput: trimmedRoomCode });
+    void this.joinRoom();
+  }
+
   private submitComposerForm(event: SubmitEvent): void {
     event.preventDefault();
     void this.sendMessage();
@@ -1542,9 +1557,16 @@ export class 聊天壳 extends LitElement {
                 <ul id="homeRoomList" class="home-room-list">
                   ${homeSessionViewItems.map(
                     (item) => html`
-                      <li class="home-room-item" data-room-id=${item.roomId}>
-                        <div class="home-room-code">${item.title}</div>
-                        <div class="home-room-meta">${item.meta}</div>
+                      <li>
+                        <button
+                          type="button"
+                          class="home-room-item"
+                          data-room-id=${item.roomId}
+                          @click=${() => this.joinHistoryRoom(item.roomCode)}
+                        >
+                          <div class="home-room-code">${item.title}</div>
+                          <div class="home-room-meta">${item.meta}</div>
+                        </button>
                       </li>
                     `
                   )}

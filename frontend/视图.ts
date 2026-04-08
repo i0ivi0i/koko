@@ -24,6 +24,7 @@ export type 控制台模式 = "hidden" | "join" | "message";
 
 export interface 首页会话展示项 {
   roomId: string;
+  roomCode: string;
   title: string;
   meta: string;
 }
@@ -127,6 +128,7 @@ export function 派生首页会话展示项(
 ): 首页会话展示项[] {
   return items.map((item) => ({
     roomId: item.roomId,
+    roomCode: item.roomCode,
     title: item.roomCode || item.roomId,
     meta: `最近进入: ${new Date(item.lastEnteredAt).toLocaleString("zh-CN")}`,
   }));

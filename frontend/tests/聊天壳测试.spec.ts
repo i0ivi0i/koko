@@ -547,6 +547,28 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("点击首页历史房间会直接进房并沿用既有进房主链", async () => {
+    window.localStorage.setItem(
+      "koko_home_sessions",
+      JSON.stringify([{ roomId: "r-1", roomCode: "ROOM01", lastEnteredAt: 300 }])
+    );
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const historyEntry = el.shadowRoot!.querySelector('[data-room-id="r-1"]') as HTMLElement | null;
+    expect(historyEntry).not.toBeNull();
+
+    historyEntry!.click();
+    await 等待组件稳定(el);
+
+    expect(transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "ROOM01" }]);
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    el.remove();
+  });
+
   it("壳主舞台模式和控制台模式都只从 bootstrapState 与 roomId 派生", () => {
     expect(
       派生壳主舞台模式({
@@ -595,6 +617,7 @@ describe("聊天壳", () => {
     ).toEqual([
       {
         roomId: "r-1",
+        roomCode: "ROOM01",
         title: "ROOM01",
         meta: expect.stringContaining("最近进入"),
       },
