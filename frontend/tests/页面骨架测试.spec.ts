@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("页面骨架", () => {
-  it("会锁定 html/body 为全屏深色壳层，不允许整页滚动", () => {
+  it("会锁定 html/body 为全屏深空石墨壳层，不允许整页滚动", () => {
     const html = readFileSync(resolve(import.meta.dirname, "../index.html"), "utf8");
 
     expect(html).toContain("html,");
@@ -11,6 +11,6 @@ describe("页面骨架", () => {
     expect(html).toContain("margin: 0");
     expect(html).toContain("height: 100%");
     expect(html).toContain("overflow: hidden");
-    expect(html).toContain("background: #171312");
+    expect(html).toContain("background: #0b0f14");
   });
 });

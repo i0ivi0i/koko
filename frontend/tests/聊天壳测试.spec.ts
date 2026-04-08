@@ -358,14 +358,17 @@ describe("聊天壳", () => {
     expect(styles).toContain("overflow-anchor: none");
   });
 
-  it("聊天壳样式会声明暖夜会话风 token，而不是浅色网页底板", () => {
+  it("聊天壳样式会声明深空石墨色板，而不是棕色底板", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
-    expect(styles).toContain("--surface-canvas: #171312");
-    expect(styles).toContain("--surface-panel: #211b19");
-    expect(styles).toContain("--surface-elevated: #2a2321");
-    expect(styles).toContain("--text-primary: #f6ede9");
+    expect(styles).toContain("--surface-canvas: #0b0f14");
+    expect(styles).toContain("--surface-panel: #151b23");
+    expect(styles).toContain("--surface-elevated: #1b2430");
+    expect(styles).toContain("--text-primary: #f3f7fb");
     expect(styles).toContain("--accent-core: #ff385c");
+    expect(styles).not.toContain("--surface-canvas: #171312");
+    expect(styles).not.toContain("--surface-panel: #211b19");
+    expect(styles).not.toContain("--surface-elevated: #2a2321");
   });
 
   it("启动恢复房间时在 bootstrap 完成前不会先闪出搜索页", async () => {

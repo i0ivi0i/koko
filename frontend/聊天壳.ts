@@ -24,50 +24,50 @@ type 恢复失败 = Error & {
 export class 聊天壳 extends LitElement {
   static override styles = css`
     :host {
-      --surface-canvas: #171312;
-      --surface-panel: #211b19;
-      --surface-elevated: #2a2321;
-      --surface-soft: #332a27;
-      --surface-overlay: rgba(42, 35, 33, 0.92);
-      --surface-input: rgba(36, 30, 28, 0.96);
-      --surface-nav: rgba(46, 38, 35, 0.92);
-      --surface-scroll: rgba(19, 16, 15, 0.46);
-      --surface-panel-top: rgba(49, 40, 37, 0.94);
-      --surface-panel-bottom: rgba(31, 26, 24, 0.96);
-      --surface-elevated-bottom: rgba(35, 29, 27, 0.96);
-      --bubble-other-top: rgba(57, 47, 43, 0.98);
-      --bubble-other-bottom: rgba(42, 35, 33, 0.98);
-      --bubble-mine-top: rgba(255, 56, 92, 0.24);
-      --bubble-mine-bottom: rgba(98, 36, 51, 0.92);
-      --text-primary: #f6ede9;
-      --text-secondary: #cfbdb6;
-      --text-muted: #9f8d86;
+      --surface-canvas: #0b0f14;
+      --surface-panel: #151b23;
+      --surface-elevated: #1b2430;
+      --surface-soft: #243042;
+      --surface-overlay: rgba(21, 27, 35, 0.92);
+      --surface-input: rgba(18, 24, 32, 0.96);
+      --surface-nav: rgba(24, 31, 41, 0.92);
+      --surface-scroll: rgba(9, 13, 18, 0.48);
+      --surface-panel-top: rgba(28, 36, 47, 0.94);
+      --surface-panel-bottom: rgba(16, 21, 29, 0.96);
+      --surface-elevated-bottom: rgba(20, 27, 36, 0.96);
+      --bubble-other-top: rgba(34, 43, 56, 0.98);
+      --bubble-other-bottom: rgba(24, 31, 41, 0.98);
+      --bubble-mine-top: rgba(255, 56, 92, 0.22);
+      --bubble-mine-bottom: rgba(91, 34, 56, 0.92);
+      --text-primary: #f3f7fb;
+      --text-secondary: #c7d1dc;
+      --text-muted: #8a97a8;
       --text-on-accent: #fff7f9;
       --accent-core: #ff385c;
-      --accent-pressed: #e00b41;
-      --accent-hover: #ff5674;
-      --accent-glow: rgba(255, 56, 92, 0.22);
+      --accent-pressed: #d92a4f;
+      --accent-hover: #ff5a78;
+      --accent-glow: rgba(255, 56, 92, 0.2);
       --line-soft: rgba(255, 255, 255, 0.08);
-      --line-strong: rgba(255, 255, 255, 0.14);
-      --line-accent-soft: rgba(255, 188, 146, 0.16);
-      --line-on-accent: rgba(255, 255, 255, 0.06);
-      --line-on-bubble: rgba(255, 255, 255, 0.04);
-      --status-warn-bg: rgba(88, 55, 34, 0.9);
-      --status-warn-text: #ffd7b8;
-      --status-warn-strong: #ffbea2;
-      --status-divider: rgba(255, 188, 146, 0.38);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --line-accent-soft: rgba(255, 107, 132, 0.18);
+      --line-on-accent: rgba(255, 255, 255, 0.08);
+      --line-on-bubble: rgba(255, 255, 255, 0.05);
+      --status-warn-bg: rgba(30, 39, 52, 0.9);
+      --status-warn-text: #dbe7f5;
+      --status-warn-strong: #ff9bb0;
+      --status-divider: rgba(255, 56, 92, 0.32);
       --shadow-warm:
-        rgba(0, 0, 0, 0.18) 0px 0px 0px 1px,
-        rgba(0, 0, 0, 0.24) 0px 10px 24px,
-        rgba(0, 0, 0, 0.34) 0px 18px 40px;
+        rgba(0, 0, 0, 0.2) 0px 0px 0px 1px,
+        rgba(0, 0, 0, 0.28) 0px 12px 28px,
+        rgba(0, 0, 0, 0.38) 0px 22px 44px;
       display: block;
       height: 100%;
       min-height: 100dvh;
       overflow: hidden;
       background:
-        radial-gradient(circle at top, rgba(255, 56, 92, 0.16), transparent 28%),
-        radial-gradient(circle at 80% 18%, rgba(118, 35, 55, 0.3), transparent 22%),
-        linear-gradient(180deg, #171312 0%, #1b1615 54%, #141010 100%);
+        radial-gradient(circle at top, rgba(255, 56, 92, 0.14), transparent 30%),
+        radial-gradient(circle at 82% 18%, rgba(96, 165, 250, 0.12), transparent 24%),
+        linear-gradient(180deg, #0b0f14 0%, #0f141b 52%, #090d12 100%);
       font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
       color: var(--text-primary);
     }
