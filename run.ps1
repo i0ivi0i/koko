@@ -158,13 +158,15 @@ function Read-NewLogLines {
     return $parts[0..($parts.Length - 2)]
 }
 
-function Flush-ManagedProcessLogs {
+function Write-ManagedProcessLogs {
     param($ManagedProcess)
 
     if ($null -eq $ManagedProcess) {
         return
     }
 
+    # 这里按“读取新增日志 -> 立刻写回当前控制台”的真实语义命名，
+    # 避免继续用 PowerShell 未批准的 Flush 动词，同时也让维护者一眼看出它不是在清空日志文件。
     foreach ($line in (Read-NewLogLines -StreamState $ManagedProcess.Stdout)) {
         if ([string]::IsNullOrWhiteSpace($line)) {
             continue
@@ -276,20 +278,20 @@ try {
         -LogDirectory $logDirectory
 
     while ($true) {
-        Flush-ManagedProcessLogs $frontendWatch
-        Flush-ManagedProcessLogs $frontendTypeWatch
-        Flush-ManagedProcessLogs $backendProcess
+        Write-ManagedProcessLogs $frontendWatch
+        Write-ManagedProcessLogs $frontendTypeWatch
+        Write-ManagedProcessLogs $backendProcess
 
         if ($frontendWatch.Process.HasExited) {
-            Flush-ManagedProcessLogs $frontendWatch
+            Write-ManagedProcessLogs $frontendWatch
             throw "前端增量编译进程意外退出，退出码: $($frontendWatch.Process.ExitCode)"
         }
         if ($frontendTypeWatch.Process.HasExited) {
-            Flush-ManagedProcessLogs $frontendTypeWatch
+            Write-ManagedProcessLogs $frontendTypeWatch
             throw "前端类型守卫进程意外退出，退出码: $($frontendTypeWatch.Process.ExitCode)"
         }
         if ($backendProcess.Process.HasExited) {
-            Flush-ManagedProcessLogs $backendProcess
+            Write-ManagedProcessLogs $backendProcess
             $backendExitCode = $backendProcess.Process.ExitCode
             if ($backendExitCode -ne 0) {
                 throw "后端进程异常退出，退出码: $backendExitCode"
@@ -301,9 +303,9 @@ try {
     }
 }
 finally {
-    Flush-ManagedProcessLogs $backendProcess
-    Flush-ManagedProcessLogs $frontendTypeWatch
-    Flush-ManagedProcessLogs $frontendWatch
+    Write-ManagedProcessLogs $backendProcess
+    Write-ManagedProcessLogs $frontendTypeWatch
+    Write-ManagedProcessLogs $frontendWatch
     Stop-ManagedProcess $backendProcess
     Stop-ManagedProcess $frontendTypeWatch
     Stop-ManagedProcess $frontendWatch
