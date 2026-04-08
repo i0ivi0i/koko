@@ -1,3 +1,7 @@
+param(
+    [switch]$UpgradeDependencies
+)
+
 $ErrorActionPreference = "Stop"
 
 function Assert-PowerShellVersion {
@@ -214,16 +218,21 @@ $backendProcess = $null
 try {
     # run.ps1 只是 Win11 开发启动器，不是源码真相；
     # 真相仍然在 Cargo、TypeScript 与 esbuild 的官方命令里，脚本只负责以更稳的方式编排它们。
-    Write-Host "刷新 Rust 依赖锁: cargo update"
-    & $cargoPath update
-    if ($LASTEXITCODE -ne 0) {
-        throw "cargo update 失败，已停止启动。"
-    }
+    # 默认启动路径不应该偷偷升级依赖；
+    # 只有显式进入升级模式时，才允许刷新 Cargo.lock / pnpm-lock.yaml，
+    # 这样日常“改代码 -> 跑项目 -> 模拟真实用户”不会混入依赖漂移噪音。
+    if ($UpgradeDependencies) {
+        Write-Host "刷新 Rust 依赖锁: cargo update"
+        & $cargoPath update
+        if ($LASTEXITCODE -ne 0) {
+            throw "cargo update 失败，已停止启动。"
+        }
 
-    Write-Host "刷新前端依赖锁: pnpm --dir frontend up"
-    & $pnpmPath --dir frontend up
-    if ($LASTEXITCODE -ne 0) {
-        throw "pnpm up 失败，已停止启动。"
+        Write-Host "刷新前端依赖锁: pnpm --dir frontend up"
+        & $pnpmPath --dir frontend up
+        if ($LASTEXITCODE -ne 0) {
+            throw "pnpm up 失败，已停止启动。"
+        }
     }
 
     Write-Host "前端首轮构建: pnpm --dir frontend build"
