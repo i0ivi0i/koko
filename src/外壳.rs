@@ -18,6 +18,15 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{adapter::Pg仓储, contract, usecase};
 
+// 这三个私有子模块是 shell 内部的职责收口点。
+// 当前阶段先只建立文件边界和接线路径，真实实现仍暂时留在总壳里，后续任务再逐步迁入。
+#[path = "房间外壳.rs"]
+mod 房间外壳;
+#[path = "后台外壳.rs"]
+mod 后台外壳;
+#[path = "实时外壳.rs"]
+mod 实时外壳;
+
 /// 外壳层共享运行态，只存放“接线所需配置”，不承载业务事实。
 #[derive(Clone)]
 pub struct 应用状态 {
@@ -54,16 +63,19 @@ pub fn 构建路由(state: 应用状态) -> Router {
     注册realtime命名空间(&io, state.clone());
 
     Router::new()
-        .route("/api/session/bootstrap", post(bootstrap_session))
-        .route("/api/rooms/join-or-create", post(join_or_create_room))
-        .route("/api/rooms/{room_id}/snapshot", get(load_room_snapshot))
-        .route("/api/rooms/{room_id}/read-anchor", post(update_room_read_anchor))
-        .route("/api/rooms/{room_id}/history", get(load_room_history))
-        .route("/api/rooms/{room_id}/events", get(load_room_events))
-        .route("/api/admin/login", post(admin_login))
-        .route("/api/admin/overview", get(admin_overview))
-        .route("/api/admin/rooms", get(admin_rooms))
-        .route("/api/admin/rooms/{room_id}", get(admin_room_detail))
+        .route("/api/session/bootstrap", post(房间外壳::bootstrap_session))
+        .route("/api/rooms/join-or-create", post(房间外壳::join_or_create_room))
+        .route("/api/rooms/{room_id}/snapshot", get(房间外壳::load_room_snapshot))
+        .route(
+            "/api/rooms/{room_id}/read-anchor",
+            post(房间外壳::update_room_read_anchor),
+        )
+        .route("/api/rooms/{room_id}/history", get(房间外壳::load_room_history))
+        .route("/api/rooms/{room_id}/events", get(房间外壳::load_room_events))
+        .route("/api/admin/login", post(后台外壳::admin_login))
+        .route("/api/admin/overview", get(后台外壳::admin_overview))
+        .route("/api/admin/rooms", get(后台外壳::admin_rooms))
+        .route("/api/admin/rooms/{room_id}", get(后台外壳::admin_room_detail))
         // 前端静态资源由后端同源托管，避免开发态跨域和双端口联调噪音。
         .route_service("/", ServeFile::new("frontend/index.html"))
         .nest_service("/dist", ServeDir::new("frontend/dist"))
@@ -89,7 +101,7 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
                           Data::<RealtimeSubscribeBody>(payload)| {
                         let state = state_for_subscribe.clone();
                         async move {
-                            handle_realtime_subscribe(s, auth, payload, state).await;
+                            实时外壳::handle_realtime_subscribe(s, auth, payload, state).await;
                         }
                     },
                 );
@@ -102,7 +114,7 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
                           Data::<RealtimeSendBody>(payload)| {
                         let state = state_for_send.clone();
                         async move {
-                            handle_realtime_send(s, auth, payload, state).await;
+                            实时外壳::handle_realtime_send(s, auth, payload, state).await;
                         }
                     },
                 );
@@ -111,7 +123,7 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
         .with(
             move |socket: SocketRef, TryData(auth): TryData<RealtimeConnectAuth>| {
                 let state = connect_state.clone();
-                async move { 认证realtime连接(socket, auth, state).await }
+                async move { 实时外壳::认证realtime连接(socket, auth, state).await }
             },
         ),
     );
