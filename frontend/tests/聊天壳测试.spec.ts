@@ -371,7 +371,7 @@ describe("聊天壳", () => {
     expect(styles).not.toContain("--surface-elevated: #2a2321");
   });
 
-  it("启动恢复房间时在 bootstrap 完成前不会先闪出搜索页", async () => {
+  it("启动恢复房间时在 bootstrap 完成前不会先闪出空态首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
     vi.spyOn(transport, "bootstrapAnonymousIdentity").mockImplementation(
@@ -383,7 +383,7 @@ describe("聊天壳", () => {
     await el.updateComplete;
 
     expect(el.shadowRoot!.querySelector("#bootView")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("#joinView")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#homeView")).toBeNull();
     el.remove();
   });
 
@@ -395,25 +395,47 @@ describe("聊天壳", () => {
     expect(styles).toContain(".boot-screen");
   });
 
-  it("搜索页会渲染暖夜大厅结构，而不是普通网页 join 表单", async () => {
+  it("没有当前房间恢复锚点时会默认进入空态首页占位并保留最小进房表单", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector(".join-card")).not.toBeNull();
-    expect(el.shadowRoot!.textContent).toContain("进入群聊房间");
-    expect(el.shadowRoot!.textContent).toContain("身份和会话会继续沿用");
+    expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinForm")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#roomCode")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinBtn")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector<HTMLButtonElement>("#joinBtn")?.textContent?.trim()).toBe(
+      "进房"
+    );
     el.remove();
   });
 
-  it("搜索页样式会复用暖夜 token 和圆角材质，而不是浅色网页表单", () => {
+  it("有当前房间恢复锚点时会优先恢复房间而不是退回首页", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(transport.loadRoomSnapshotArgs).toEqual([
+      { roomId: "r-restore", sessionId: "s-test" },
+    ]);
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#homeView")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinView")).toBeNull();
+    el.remove();
+  });
+
+  it("空态首页样式会复用暖夜 token 和圆角材质，而不是浅色网页表单", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
-    expect(styles).toContain(".join-screen");
-    expect(styles).toContain(".join-card");
+    expect(styles).toContain(".home-screen");
+    expect(styles).toContain(".home-card");
     expect(styles).toContain("backdrop-filter: blur");
     expect(styles).toContain("border-radius: 28px");
     expect(styles).toContain("var(--surface-panel)");
@@ -733,7 +755,7 @@ describe("聊天壳", () => {
     backBtn?.click();
     await 等待组件稳定(el);
 
-    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
     expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
     expect(window.localStorage.getItem("koko_current_room_code")).toBe("ROOM01");
@@ -1855,7 +1877,7 @@ describe("聊天壳", () => {
     await 等待组件稳定(el);
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
-    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
     el.remove();
   });
@@ -1871,7 +1893,7 @@ describe("聊天壳", () => {
     await 等待组件稳定(el);
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
-    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     el.remove();
   });
 
@@ -3103,7 +3125,7 @@ describe("聊天壳", () => {
     await 等待组件稳定(el);
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
-    expect(el.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
     el.remove();
   });

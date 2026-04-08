@@ -95,7 +95,7 @@ export class 聊天壳 extends LitElement {
       opacity: 0.58;
     }
 
-    .join-screen {
+    .home-screen {
       height: 100%;
       min-height: 100dvh;
       display: flex;
@@ -104,7 +104,7 @@ export class 聊天壳 extends LitElement {
       padding: 24px 16px;
     }
 
-    /* bootstrap 未完成时只展示一层中性壳，避免刷新恢复房间时先闪出搜索页。 */
+    /* bootstrap 未完成时只展示一层中性壳，避免刷新恢复房间时先闪出空态首页。 */
     .boot-screen {
       height: 100%;
       min-height: 100dvh;
@@ -139,7 +139,7 @@ export class 聊天壳 extends LitElement {
       line-height: 1.6;
     }
 
-    .join-card {
+    .home-card {
       width: min(100%, 560px);
       padding: 24px;
       border: 1px solid var(--line-soft);
@@ -421,7 +421,7 @@ export class 聊天壳 extends LitElement {
     }
 
     @media (max-width: 640px) {
-      .join-card {
+      .home-card {
         padding: 18px;
         border-radius: 24px;
       }
@@ -892,7 +892,7 @@ export class 聊天壳 extends LitElement {
 
   /**
    * 退出当前房间视图时，必须同时收掉本地锚点和当前 socket。
-   * 否则 UI 回到搜索页了，旧房间事件还在往壳层里灌，会制造“人已经离开房间但消息还在进来”的假状态。
+   * 否则 UI 回到空态首页了，旧房间事件还在往壳层里灌，会制造“人已经离开房间但消息还在进来”的假状态。
    */
   private exitCurrentRoomView(
     opts: { keepRoomCodeCache: boolean } = {
@@ -915,7 +915,7 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
-   * 返回搜索页是软离房，不是退群：
+   * 返回空态首页是软离房，不是退群：
    * - 当前房间视图退出；
    * - 当前房间实时连接断开；
    * - 身份、会话和短码展示缓存保留。
@@ -1449,10 +1449,12 @@ export class 聊天壳 extends LitElement {
       `;
     }
     if (!this.chatState.roomId) {
+      // 冷启动没有恢复锚点时，只落在空态首页占位。
+      // 这里仍保留最小进房表单，避免把“进入房间”能力拆成另一条入口路径。
       return html`
-        <section id="joinView" class="join-screen">
-          <div class="join-card">
-            <h1 class="join-title">进入群聊房间</h1>
+        <section id="homeView" class="home-screen">
+          <div class="home-card">
+            <h1 class="join-title">空态首页占位</h1>
             <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
             <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
           ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
