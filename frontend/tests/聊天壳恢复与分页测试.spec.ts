@@ -370,6 +370,84 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     el.remove();
   });
 
+  it("历史前插后原有消息节点会保持同一 DOM 身份", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "历史消息-2",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "历史消息-3",
+            event_position: 3,
+          },
+        ],
+        has_more_before: true,
+      }),
+    ];
+    transport.historyQueue = [
+      {
+        room_id: "r-test",
+        messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "历史消息-1",
+            event_position: 1,
+          },
+        ],
+      },
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const 旧消息节点 = el.shadowRoot!.querySelector(
+      '[data-event-position="2"]'
+    ) as HTMLElement | null;
+    expect(旧消息节点).not.toBeNull();
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    模拟用户滚动意图(scroll);
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const 新消息节点 = el.shadowRoot!.querySelector(
+      '[data-event-position="2"]'
+    ) as HTMLElement | null;
+    expect(新消息节点).not.toBeNull();
+    expect(新消息节点).toBe(旧消息节点);
+    el.remove();
+  });
+
   it("history 失败不会清空当前消息列表", async () => {
     const transport = new 假传输();
     transport.joinQueue = [

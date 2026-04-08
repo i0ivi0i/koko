@@ -1,4 +1,5 @@
 import { css, html, LitElement } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
 import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
@@ -991,33 +992,37 @@ export class 聊天壳 extends LitElement {
             }}
           >
             <ul id="messageList" class="message-list">
-              ${派生聊天列表展示项(
-                this.chatState.messages,
-                this.chatState.sessionId,
-                this.chatState.firstUnreadEventPosition
-              ).map((item) => {
-                if (item.kind === "unread-divider") {
+              ${repeat(
+                派生聊天列表展示项(
+                  this.chatState.messages,
+                  this.chatState.sessionId,
+                  this.chatState.firstUnreadEventPosition
+                ),
+                (item) => item.id,
+                (item) => {
+                  if (item.kind === "unread-divider") {
+                    return html`
+                      <li id="unreadDivider" class="unread-divider" data-kind="unread-divider">
+                        ${item.label}
+                      </li>
+                    `;
+                  }
                   return html`
-                    <li id="unreadDivider" class="unread-divider" data-kind="unread-divider">
-                      ${item.label}
+                    <li
+                      class="message-row ${item.owner}"
+                      data-owner=${item.owner}
+                      data-event-position=${item.eventPosition}
+                    >
+                      <article class="message-bubble">
+                        ${item.showAlias
+                          ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
+                          : null}
+                        <div class="message-body">${item.body}</div>
+                      </article>
                     </li>
                   `;
                 }
-                return html`
-                  <li
-                    class="message-row ${item.owner}"
-                    data-owner=${item.owner}
-                    data-event-position=${item.eventPosition}
-                  >
-                    <article class="message-bubble">
-                      ${item.showAlias
-                        ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
-                        : null}
-                      <div class="message-body">${item.body}</div>
-                    </article>
-                  </li>
-                `;
-              })}
+              )}
             </ul>
           </div>
           ${jumpToLatestLabel
