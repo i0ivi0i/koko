@@ -158,8 +158,9 @@ describe("前后台壳端到端冒烟", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
 
-    expect(chat.shadowRoot!.querySelector("#joinView")).not.toBeNull();
+    expect(chat.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(chat.shadowRoot!.querySelector("#roomView")).toBeNull();
+    expect(chat.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
     expect(chat.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
     expect(chat.shadowRoot!.querySelector("#msgInput")).toBeNull();
     expect(chat.shadowRoot!.textContent).not.toContain("session:");
@@ -172,8 +173,9 @@ describe("前后台壳端到端冒烟", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
 
-    expect(chat.shadowRoot!.querySelector("#joinView")).toBeNull();
+    expect(chat.shadowRoot!.querySelector("#homeView")).toBeNull();
     expect(chat.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    expect(chat.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
 
     const msgInput = chat.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
     msgInput.value = "hello";

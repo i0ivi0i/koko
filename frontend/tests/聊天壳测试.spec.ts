@@ -401,7 +401,7 @@ describe("聊天壳", () => {
     expect(styles).toContain(".boot-screen");
   });
 
-  it("没有当前房间恢复锚点时会默认进入空态首页占位并保留最小进房表单", async () => {
+  it("没有当前房间恢复锚点时会默认进入空态首页占位并保留最小进房控制台", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
@@ -410,6 +410,7 @@ describe("聊天壳", () => {
 
     expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#joinForm")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomCode")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#joinBtn")).not.toBeNull();
@@ -566,6 +567,52 @@ describe("聊天壳", () => {
 
     expect(transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "ROOM01" }]);
     expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    el.remove();
+  });
+
+  it("底部控制台在首页和房间内都存在同一锚点容器", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const homeConsole = el.shadowRoot!.querySelector("#shellConsole");
+    expect(homeConsole).not.toBeNull();
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const roomConsole = el.shadowRoot!.querySelector("#shellConsole");
+    expect(roomConsole).not.toBeNull();
+    expect(homeConsole?.id).toBe(roomConsole?.id);
+    el.remove();
+  });
+
+  it("从房间返回首页后控制台会切回进房语义", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    (el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#roomCode")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#msgInput")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#joinBtn")?.textContent).toContain("进房");
     el.remove();
   });
 
@@ -1031,7 +1078,7 @@ describe("聊天壳", () => {
     el.remove();
   });
 
-  it("房间页会渲染单屏聊天结构，顶部是导航头部，底部是输入区", async () => {
+  it("房间页会渲染主舞台加壳级控制台，顶部是导航头部，底部是固定输入区", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
@@ -1046,25 +1093,28 @@ describe("聊天壳", () => {
 
     const roomHeader = el.shadowRoot!.querySelector("#roomHeader");
     const messageScroll = el.shadowRoot!.querySelector("#messageScroll");
-    const composerBar = el.shadowRoot!.querySelector("#composerBar");
+    const shellConsole = el.shadowRoot!.querySelector("#shellConsole");
 
     expect(roomHeader).not.toBeNull();
     expect(messageScroll).not.toBeNull();
-    expect(composerBar).not.toBeNull();
+    expect(shellConsole).not.toBeNull();
     expect(
       roomHeader!.compareDocumentPosition(messageScroll!) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      messageScroll!.compareDocumentPosition(composerBar!) & Node.DOCUMENT_POSITION_FOLLOWING
+      messageScroll!.compareDocumentPosition(shellConsole!) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     el.remove();
   });
 
-  it("房间页关键样式会吃满视口，并用三行网格把消息区夹在中间", () => {
+  it("壳级布局关键样式会先锁一层主舞台加控制台，再让房间页自己夹住消息区", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain("min-height: 100dvh");
-    expect(styles).toContain("grid-template-rows: auto minmax(0, 1fr) auto");
+    expect(styles).toContain(".shell-screen");
+    expect(styles).toContain("grid-template-rows: minmax(0, 1fr) auto");
+    expect(styles).toContain(".room-screen");
+    expect(styles).toContain("grid-template-rows: auto minmax(0, 1fr)");
     expect(styles).toContain("padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px))");
   });
 

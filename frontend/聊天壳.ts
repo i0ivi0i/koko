@@ -106,13 +106,23 @@ export class 聊天壳 extends LitElement {
       opacity: 0.58;
     }
 
-    .home-screen {
+    .shell-screen {
       height: 100%;
       min-height: 100dvh;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 12px 14px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .home-screen {
+      height: 100%;
+      min-height: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px 16px;
+      padding: 12px 2px 0;
     }
 
     /* bootstrap 未完成时只展示一层中性壳，避免刷新恢复房间时先闪出空态首页。 */
@@ -264,13 +274,12 @@ export class 聊天壳 extends LitElement {
     /* 房间页按单屏聊天应用组织：头部、消息流、输入区共用一张屏幕，不再漂浮成网页卡片。 */
     .room-screen {
       height: 100%;
-      min-height: 100dvh;
+      min-height: 0;
       position: relative;
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-rows: auto minmax(0, 1fr);
       gap: 12px;
-      padding: 12px 14px;
-      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      padding: 0;
     }
 
     .room-header {
@@ -385,7 +394,7 @@ export class 聊天壳 extends LitElement {
     .jump-latest-button {
       position: absolute;
       right: 18px;
-      bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+      bottom: 18px;
       z-index: 1;
       padding: 10px 14px;
       border-radius: 999px;
@@ -452,7 +461,7 @@ export class 聊天壳 extends LitElement {
 
     @media (min-width: 768px) {
       .room-screen {
-        padding-inline: clamp(18px, 4vw, 36px);
+        padding-inline: clamp(4px, 2vw, 12px);
       }
 
       .message-bubble {
@@ -473,7 +482,7 @@ export class 聊天壳 extends LitElement {
 
       .room-screen {
         gap: 10px;
-        padding-inline: 10px;
+        padding-inline: 0;
       }
 
       .room-header {
@@ -495,7 +504,7 @@ export class 聊天壳 extends LitElement {
 
       .jump-latest-button {
         right: 12px;
-        bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+        bottom: 12px;
       }
     }
   `;
@@ -1543,38 +1552,42 @@ export class 聊天壳 extends LitElement {
       `;
     }
     if (shellView === "home") {
-      // 冷启动没有恢复锚点时，只落在空态首页占位。
-      // 这里仍保留最小进房表单，避免把“进入房间”能力拆成另一条入口路径。
+      // 首页与房间页共用同一块壳级控制台；主舞台只负责展示列表和空态说明。
       return html`
-        <section id="homeView" class="home-screen">
-          <div class="home-card">
-            <h1 class="join-title">空态首页占位</h1>
-            <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
-            <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
-          ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
-          ${homeSessionViewItems.length > 0
-            ? html`
-                <ul id="homeRoomList" class="home-room-list">
-                  ${homeSessionViewItems.map(
-                    (item) => html`
-                      <li>
-                        <button
-                          type="button"
-                          class="home-room-item"
-                          data-room-id=${item.roomId}
-                          @click=${() => this.joinHistoryRoom(item.roomCode)}
-                        >
-                          <div class="home-room-code">${item.title}</div>
-                          <div class="home-room-meta">${item.meta}</div>
-                        </button>
-                      </li>
-                    `
-                  )}
-                </ul>
-              `
-            : null}
-            ${consoleMode === "join"
+        <section class="shell-screen">
+          <section id="homeView" class="home-screen">
+            <div class="home-card">
+              <h1 class="join-title">空态首页占位</h1>
+              <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
+              <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
+            ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
+            ${homeSessionViewItems.length > 0
               ? html`
+                  <ul id="homeRoomList" class="home-room-list">
+                    ${homeSessionViewItems.map(
+                      (item) => html`
+                        <li>
+                          <button
+                            type="button"
+                            class="home-room-item"
+                            data-room-id=${item.roomId}
+                            @click=${() => this.joinHistoryRoom(item.roomCode)}
+                          >
+                            <div class="home-room-code">${item.title}</div>
+                            <div class="home-room-meta">${item.meta}</div>
+                          </button>
+                        </li>
+                      `
+                    )}
+                  </ul>
+                `
+              : null}
+            </div>
+          </section>
+          ${consoleMode === "join"
+            ? html`
+                <footer id="shellConsole" class="composer-bar">
+                  <div class="composer-status">在这里输入房间短码，进入对应群聊空间。</div>
                   <form id="joinForm" class="join-row" @submit=${this.submitJoinForm}>
                     <input
                       id="roomCode"
@@ -1591,9 +1604,9 @@ export class 聊天壳 extends LitElement {
                       进房
                     </button>
                   </form>
-                `
-              : null}
-          </div>
+                </footer>
+              `
+            : null}
         </section>
       `;
     }
@@ -1601,79 +1614,81 @@ export class 聊天壳 extends LitElement {
     const statusAttention = Boolean(recoveryHint || historyHint);
 
     return html`
-      <section id="roomView" class="room-screen">
-        <header id="roomHeader" class="room-header">
-          <button id="backBtn" class="back-button" @click=${() => this.leaveCurrentRoomView()}>
-            返回
-          </button>
-          <div class="room-heading">
-            <div id="roomTitle" class="room-title">
-              ${this.chatState.roomDisplayTitle || "群聊房间"}
+      <section class="shell-screen">
+        <section id="roomView" class="room-screen">
+          <header id="roomHeader" class="room-header">
+            <button id="backBtn" class="back-button" @click=${() => this.leaveCurrentRoomView()}>
+              返回
+            </button>
+            <div class="room-heading">
+              <div id="roomTitle" class="room-title">
+                ${this.chatState.roomDisplayTitle || "群聊房间"}
+              </div>
+              <div id="roomSubtitle" class="room-subtitle">${roomSubtitle}</div>
             </div>
-            <div id="roomSubtitle" class="room-subtitle">${roomSubtitle}</div>
-          </div>
-        </header>
-        <div
-          id="messageScroll"
-          class="message-scroll"
-          @pointerdown=${() => this.roomScroller.标记用户滚动意图()}
-          @touchstart=${() => this.roomScroller.标记用户滚动意图()}
-          @wheel=${() => this.roomScroller.标记用户滚动意图()}
-          @scroll=${(event: Event) => {
-            const target = event.currentTarget as HTMLElement;
-            // 历史补偿基线依赖“本次滚动触发前的 scrollHeight”。
-            // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
-            // 否则贴底观测提前读取 scrollHeight，会把补偿基线读脏。
-            this.roomScroller.处理滚动事件(target);
-            this.observeViewport(target);
-          }}
-        >
-          <ul id="messageList" class="message-list">
-            ${派生聊天列表展示项(
-              this.chatState.messages,
-              this.chatState.sessionId,
-              this.chatState.firstUnreadEventPosition
-            ).map((item) => {
-              if (item.kind === "unread-divider") {
+          </header>
+          <div
+            id="messageScroll"
+            class="message-scroll"
+            @pointerdown=${() => this.roomScroller.标记用户滚动意图()}
+            @touchstart=${() => this.roomScroller.标记用户滚动意图()}
+            @wheel=${() => this.roomScroller.标记用户滚动意图()}
+            @scroll=${(event: Event) => {
+              const target = event.currentTarget as HTMLElement;
+              // 历史补偿基线依赖“本次滚动触发前的 scrollHeight”。
+              // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
+              // 否则贴底观测提前读取 scrollHeight，会把补偿基线读脏。
+              this.roomScroller.处理滚动事件(target);
+              this.observeViewport(target);
+            }}
+          >
+            <ul id="messageList" class="message-list">
+              ${派生聊天列表展示项(
+                this.chatState.messages,
+                this.chatState.sessionId,
+                this.chatState.firstUnreadEventPosition
+              ).map((item) => {
+                if (item.kind === "unread-divider") {
+                  return html`
+                    <li id="unreadDivider" class="unread-divider" data-kind="unread-divider">
+                      ${item.label}
+                    </li>
+                  `;
+                }
                 return html`
-                  <li id="unreadDivider" class="unread-divider" data-kind="unread-divider">
-                    ${item.label}
+                  <li
+                    class="message-row ${item.owner}"
+                    data-owner=${item.owner}
+                    data-event-position=${item.eventPosition}
+                  >
+                    <article class="message-bubble">
+                      ${item.showAlias
+                        ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
+                        : null}
+                      <div class="message-body">${item.body}</div>
+                    </article>
                   </li>
                 `;
-              }
-              return html`
-                <li
-                  class="message-row ${item.owner}"
-                  data-owner=${item.owner}
-                  data-event-position=${item.eventPosition}
+              })}
+            </ul>
+          </div>
+          ${jumpToLatestLabel
+            ? html`
+                <button
+                  id="jumpToLatestBtn"
+                  class="jump-latest-button"
+                  @click=${() => {
+                    void this.jumpToLatest();
+                  }}
                 >
-                  <article class="message-bubble">
-                    ${item.showAlias
-                      ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
-                      : null}
-                    <div class="message-body">${item.body}</div>
-                  </article>
-                </li>
-              `;
-            })}
-          </ul>
-        </div>
-        ${jumpToLatestLabel
-          ? html`
-              <button
-                id="jumpToLatestBtn"
-                class="jump-latest-button"
-                @click=${() => {
-                  void this.jumpToLatest();
-                }}
-              >
-                ${jumpToLatestLabel}
-              </button>
-            `
-          : null}
+                  ${jumpToLatestLabel}
+                </button>
+              `
+            : null}
+        </section>
         ${consoleMode === "message"
           ? html`
-              <footer id="composerBar" class="composer-bar">
+              <footer id="shellConsole" class="composer-bar">
                 <div class="composer-status ${statusAttention ? "attention" : ""}">
                   ${statusAttention ? roomSubtitle : "在这里输入消息，发送后会实时出现在房间里。"}
                 </div>
