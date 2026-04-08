@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../聊天壳";
+import { 创建浏览器存储 } from "../存储";
 import type { 前端传输端口 } from "../传输";
 import type {
   匿名身份引导结果,
@@ -413,6 +414,92 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("浏览器存储会按 roomId 去重、按 lastEnteredAt 倒序读取首页房间历史", () => {
+    const rawStorage = createFakeStorage();
+    const browserStorage = 创建浏览器存储(rawStorage) as unknown as {
+      读取首页房间历史(): Array<{
+        roomId: string;
+        roomCode: string;
+        lastEnteredAt: number;
+      }>;
+      写入或更新首页房间历史条目(entry: {
+        roomId: string;
+        roomCode: string;
+        lastEnteredAt: number;
+      }): void;
+    };
+
+    browserStorage.写入或更新首页房间历史条目({
+      roomId: "r-1",
+      roomCode: "ROOM-OLD",
+      lastEnteredAt: 100,
+    });
+    browserStorage.写入或更新首页房间历史条目({
+      roomId: "r-2",
+      roomCode: "ROOM-MID",
+      lastEnteredAt: 200,
+    });
+    browserStorage.写入或更新首页房间历史条目({
+      roomId: "r-1",
+      roomCode: "ROOM-NEW",
+      lastEnteredAt: 300,
+    });
+
+    expect(browserStorage.读取首页房间历史()).toEqual([
+      { roomId: "r-1", roomCode: "ROOM-NEW", lastEnteredAt: 300 },
+      { roomId: "r-2", roomCode: "ROOM-MID", lastEnteredAt: 200 },
+    ]);
+  });
+
+  it("浏览器存储支持按房间标识删除首页房间历史条目", () => {
+    const rawStorage = createFakeStorage();
+    const browserStorage = 创建浏览器存储(rawStorage) as unknown as {
+      读取首页房间历史(): Array<{
+        roomId: string;
+        roomCode: string;
+        lastEnteredAt: number;
+      }>;
+      写入或更新首页房间历史条目(entry: {
+        roomId: string;
+        roomCode: string;
+        lastEnteredAt: number;
+      }): void;
+      按房间标识删除首页房间历史条目(roomId: string): void;
+    };
+
+    browserStorage.写入或更新首页房间历史条目({
+      roomId: "r-1",
+      roomCode: "ROOM01",
+      lastEnteredAt: 100,
+    });
+    browserStorage.写入或更新首页房间历史条目({
+      roomId: "r-2",
+      roomCode: "ROOM02",
+      lastEnteredAt: 200,
+    });
+
+    browserStorage.按房间标识删除首页房间历史条目("r-1");
+
+    expect(browserStorage.读取首页房间历史()).toEqual([
+      { roomId: "r-2", roomCode: "ROOM02", lastEnteredAt: 200 },
+    ]);
+  });
+
+  it("浏览器存储在 JSON 损坏时会安全回退为空列表", () => {
+    const rawStorage = createFakeStorage();
+    rawStorage.setItem("koko_home_sessions", "{broken-json");
+
+    const browserStorage = 创建浏览器存储(rawStorage) as unknown as {
+      读取首页房间历史(): Array<{
+        roomId: string;
+        roomCode: string;
+        lastEnteredAt: number;
+      }>;
+    };
+
+    expect(browserStorage.读取首页房间历史()).toEqual([]);
+  });
+
   it("有当前房间恢复锚点时会优先恢复房间而不是退回首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
@@ -428,6 +515,30 @@ describe("聊天壳", () => {
     expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#homeView")).toBeNull();
     expect(el.shadowRoot!.querySelector("#joinView")).toBeNull();
+    el.remove();
+  });
+
+  it("启动时会把本地恢复的历史房间列表渲染到首页", async () => {
+    window.localStorage.setItem(
+      "koko_home_sessions",
+      JSON.stringify([
+        { roomId: "r-2", roomCode: "ROOM02", lastEnteredAt: 200 },
+        { roomId: "r-1", roomCode: "ROOM01", lastEnteredAt: 300 },
+      ])
+    );
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const list = el.shadowRoot!.querySelector("#homeRoomList");
+    expect(list).not.toBeNull();
+    expect(list?.textContent).toContain("ROOM01");
+    expect(list?.textContent).toContain("ROOM02");
+    expect(list?.querySelectorAll("[data-room-id]").length).toBe(2);
+    expect(list?.querySelectorAll("[data-room-id]")[0]?.textContent).toContain("ROOM01");
     el.remove();
   });
 
@@ -519,6 +630,22 @@ describe("聊天壳", () => {
     expect(list.textContent).toContain("hello");
     expect(list.textContent).not.toContain("[1]");
 
+    const storedHistory = JSON.parse(
+      window.localStorage.getItem("koko_home_sessions") ?? "[]"
+    ) as Array<{ roomId: string; roomCode: string; lastEnteredAt: number }>;
+    expect(storedHistory).toEqual([
+      { roomId: "r-test", roomCode: "ROOM01", lastEnteredAt: expect.any(Number) },
+    ]);
+
+    (el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    const historyAfterLeave = JSON.parse(
+      window.localStorage.getItem("koko_home_sessions") ?? "[]"
+    ) as Array<{ roomId: string; roomCode: string; lastEnteredAt: number }>;
+    expect(historyAfterLeave).toEqual(storedHistory);
+    expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#homeRoomList")?.textContent).toContain("ROOM01");
     el.remove();
   });
 
@@ -629,8 +756,6 @@ describe("聊天壳", () => {
   });
 
   it("浏览器存储会在清除当前房间锚点时保留房间短码缓存", async () => {
-    const { 创建浏览器存储 } = await import("../存储");
-
     const 存储 = 创建浏览器存储(window.localStorage);
 
     存储.写入当前房间标识("r-test");

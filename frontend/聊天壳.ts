@@ -2,7 +2,11 @@ import { css, html, LitElement } from "lit";
 import type { 房间快照, 消息事件 } from "./契约.js";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 房间滚动器 } from "./房间滚动器.js";
-import { 创建浏览器存储, type 前端存储端口 } from "./存储.js";
+import {
+  创建浏览器存储,
+  type 首页房间历史条目,
+  type 前端存储端口,
+} from "./存储.js";
 import { Http接口错误, HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 派生聊天列表展示项, 派生房间提示文案, 派生跳到最新入口文案 } from "./视图.js";
@@ -178,6 +182,33 @@ export class 聊天壳 extends LitElement {
       border: 1px solid var(--line-accent-soft);
       background: var(--status-warn-bg);
       color: var(--status-warn-text);
+    }
+
+    .home-room-list {
+      margin-top: 16px;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .home-room-item {
+      display: grid;
+      gap: 4px;
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line-soft);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .home-room-code {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .home-room-meta {
+      font-size: 12px;
+      color: var(--text-muted);
     }
 
     .join-row {
@@ -578,6 +609,7 @@ export class 聊天壳 extends LitElement {
     try {
       const deviceAnonymousToken = this.storage.读取或创建设备匿名凭证();
       const roomId = this.storage.读取当前房间标识();
+      this.syncHomeSessionItems();
       const identity = await this.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
       this.applyBootstrapIdentity(deviceAnonymousToken, identity);
       this.roomKernel.send({
@@ -594,6 +626,7 @@ export class 聊天壳 extends LitElement {
         type: "BOOTSTRAP_FAILED",
         code: this.asRecoveryFailure(error).code ?? "system_error",
       });
+      this.syncHomeSessionItems();
       this.updateChat(this.roomShellPatch());
     } finally {
       await this.updateComplete;
@@ -720,6 +753,16 @@ export class 聊天壳 extends LitElement {
   private updateChat(patch: Partial<聊天状态>): void {
     this.chatState = { ...this.chatState, ...patch };
     this.requestUpdate();
+  }
+
+  /**
+   * 首页历史只是一份壳层本地记忆。
+   * 这里统一从存储刷新回状态，避免 UI 自己再推导一份第二真相。
+   */
+  private syncHomeSessionItems(): void {
+    this.updateChat({
+      homeSessionItems: this.storage.读取首页房间历史(),
+    });
   }
 
   /**
@@ -1050,6 +1093,7 @@ export class 聊天壳 extends LitElement {
     this.shouldPrimeReadAnchorAfterInitialSettle = primeReadAnchorAfterInitialSettle;
     this.storage.写入当前房间标识(snapshot.room_id);
     const roomDisplayTitle = this.resolveRoomDisplayTitle(roomCodeForDisplay);
+    this.recordHomeSession(snapshot.room_id, roomCodeForDisplay?.trim() || this.storage.读取当前房间短码());
     this.roomKernel.send({
       type: "SNAPSHOT_LOADED",
       roomId: snapshot.room_id,
@@ -1078,6 +1122,25 @@ export class 聊天壳 extends LitElement {
       historyErrorCode: "",
     });
     this.roomScroller.安排首屏定位();
+  }
+
+  /**
+   * 只在房间基线成功成立后，才把它记进首页历史。
+   * 这样软离房不会删历史，硬失败也不会留下半成品条目。
+   */
+  private recordHomeSession(roomId: string, roomCode: string): void {
+    const trimmedRoomId = roomId.trim();
+    const trimmedRoomCode = roomCode.trim();
+    if (!trimmedRoomId || !trimmedRoomCode) {
+      return;
+    }
+    const nextItem: 首页房间历史条目 = {
+      roomId: trimmedRoomId,
+      roomCode: trimmedRoomCode,
+      lastEnteredAt: Date.now(),
+    };
+    this.storage.写入或更新首页房间历史条目(nextItem);
+    this.syncHomeSessionItems();
   }
 
   private ensureRealtimeSocket(sessionId: string): void {
@@ -1458,6 +1521,22 @@ export class 聊天壳 extends LitElement {
             <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
             <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
           ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
+          ${this.chatState.homeSessionItems.length > 0
+            ? html`
+                <ul id="homeRoomList" class="home-room-list">
+                  ${this.chatState.homeSessionItems.map(
+                    (item) => html`
+                      <li class="home-room-item" data-room-id=${item.roomId}>
+                        <div class="home-room-code">${item.roomCode || item.roomId}</div>
+                        <div class="home-room-meta">
+                          最近进入: ${new Date(item.lastEnteredAt).toLocaleString("zh-CN")}
+                        </div>
+                      </li>
+                    `
+                  )}
+                </ul>
+              `
+            : null}
             <form id="joinForm" class="join-row" @submit=${this.submitJoinForm}>
               <input
                 id="roomCode"

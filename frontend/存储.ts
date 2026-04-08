@@ -1,6 +1,13 @@
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
 const 当前房间存储键 = "koko_current_room_id";
 const 当前房间短码存储键 = "koko_current_room_code";
+const 首页房间历史存储键 = "koko_home_sessions";
+
+export interface 首页房间历史条目 {
+  roomId: string;
+  roomCode: string;
+  lastEnteredAt: number;
+}
 
 /**
  * 前端存储端口只承载“壳层自己的本地记忆”。
@@ -18,6 +25,9 @@ export interface 前端存储端口 {
   读取当前房间短码(): string;
   写入当前房间短码(roomCode: string): void;
   清除当前房间短码(): void;
+  读取首页房间历史(): 首页房间历史条目[];
+  写入或更新首页房间历史条目(item: 首页房间历史条目): void;
+  按房间标识删除首页房间历史条目(roomId: string): void;
 }
 
 function 读取字符串(storage: Partial<Storage> | undefined, key: string): string {
@@ -40,6 +50,59 @@ function 删除字符串(storage: Partial<Storage> | undefined, key: string): vo
   if (storage && typeof storage.removeItem === "function") {
     storage.removeItem(key);
   }
+}
+
+function 规范化首页房间历史(items: 首页房间历史条目[]): 首页房间历史条目[] {
+  const byRoomId = new Map<string, 首页房间历史条目>();
+  for (const item of items) {
+    const roomId = item.roomId.trim();
+    const roomCode = item.roomCode.trim();
+    if (!roomId || !roomCode || !Number.isFinite(item.lastEnteredAt)) {
+      continue;
+    }
+    const current = byRoomId.get(roomId);
+    if (!current || item.lastEnteredAt >= current.lastEnteredAt) {
+      byRoomId.set(roomId, {
+        roomId,
+        roomCode,
+        lastEnteredAt: item.lastEnteredAt,
+      });
+    }
+  }
+  return Array.from(byRoomId.values()).sort(
+    (left, right) => right.lastEnteredAt - left.lastEnteredAt
+  );
+}
+
+function 读取首页房间历史条目(
+  storage: Partial<Storage> | undefined
+): 首页房间历史条目[] {
+  const raw = 读取字符串(storage, 首页房间历史存储键);
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return 规范化首页房间历史(
+      parsed.map((item) => ({
+        roomId: typeof item?.roomId === "string" ? item.roomId : "",
+        roomCode: typeof item?.roomCode === "string" ? item.roomCode : "",
+        lastEnteredAt: Number(item?.lastEnteredAt),
+      }))
+    );
+  } catch {
+    return [];
+  }
+}
+
+function 写入首页房间历史条目(
+  storage: Partial<Storage> | undefined,
+  items: 首页房间历史条目[]
+): void {
+  写入字符串(storage, 首页房间历史存储键, JSON.stringify(规范化首页房间历史(items)));
 }
 
 /**
@@ -94,6 +157,32 @@ export function 创建浏览器存储(
 
     清除当前房间短码(): void {
       删除字符串(storage, 当前房间短码存储键);
+    },
+
+    读取首页房间历史(): 首页房间历史条目[] {
+      return 读取首页房间历史条目(storage);
+    },
+
+    /**
+     * 首页历史的去重、更新时间戳排序都收口在存储端口里。
+     * 壳层只表达“这个房间刚刚成功进入过”，不自己再读改写整表。
+     */
+    写入或更新首页房间历史条目(item: 首页房间历史条目): void {
+      写入首页房间历史条目(storage, [item, ...读取首页房间历史条目(storage)]);
+    },
+
+    /**
+     * 删除边界同样收口在端口里，后续 `room_not_found` 等失败路径只需要表达意图。
+     */
+    按房间标识删除首页房间历史条目(roomId: string): void {
+      const trimmedRoomId = roomId.trim();
+      if (!trimmedRoomId) {
+        return;
+      }
+      写入首页房间历史条目(
+        storage,
+        读取首页房间历史条目(storage).filter((item) => item.roomId !== trimmedRoomId)
+      );
     },
   };
 }

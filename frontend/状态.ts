@@ -1,4 +1,5 @@
 import type { 消息事件 } from "./契约.js";
+import type { 首页房间历史条目 } from "./存储.js";
 
 /** 房间视口模式只属于前端壳层同步编排，不是后端领域真相。 */
 export type 房间视口模式 = "围绕未读阅读" | "贴底跟随" | "离底浏览";
@@ -61,6 +62,8 @@ export interface 聊天状态 {
   recoveryState: "idle" | "retryable_failure" | "reconnecting";
   /** 最近一次恢复/订阅失败的稳定错误码，供壳层决定提示文案，来源同样收口到房间编排内核。 */
   lastRecoveryErrorCode: string;
+  /** 首页只保留本地恢复出来的历史房间锚点，不冒充任何后端会话真相。 */
+  homeSessionItems: 首页房间历史条目[];
 }
 
 export const 初始聊天状态: 聊天状态 = {
@@ -90,4 +93,5 @@ export const 初始聊天状态: 聊天状态 = {
   historyErrorCode: "",
   recoveryState: "idle",
   lastRecoveryErrorCode: "",
+  homeSessionItems: [],
 };
