@@ -1569,7 +1569,7 @@ export class 聊天壳 extends LitElement {
   private renderShellConsole(input: {
     mode: "hidden" | "join" | "message";
     statusText: string;
-    statusAttention?: boolean;
+    statusAttention: boolean;
   }) {
     const consoleState = 派生壳级操作台状态({
       consoleMode: input.mode,

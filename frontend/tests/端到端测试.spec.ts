@@ -148,6 +148,22 @@ class 端到端假传输 implements 前端传输端口 {
   }
 }
 
+function 读取聊天操作台主输入(chat: 聊天壳): HTMLInputElement {
+  const input = chat.shadowRoot!.querySelector(
+    "#shellConsolePrimaryInput"
+  ) as HTMLInputElement | null;
+  expect(input).not.toBeNull();
+  return input!;
+}
+
+function 读取聊天操作台主动作(chat: 聊天壳): HTMLButtonElement {
+  const action = chat.shadowRoot!.querySelector(
+    "#shellConsolePrimaryAction"
+  ) as HTMLButtonElement | null;
+  expect(action).not.toBeNull();
+  return action!;
+}
+
 describe("前后台壳端到端冒烟", () => {
   it("聊天壳和后台壳都能走完主流程", async () => {
     const transport = new 端到端假传输();
@@ -162,14 +178,13 @@ describe("前后台壳端到端冒烟", () => {
     expect(chat.shadowRoot!.querySelector("#roomView")).toBeNull();
     expect(chat.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
     expect(chat.shadowRoot!.querySelector("#alias")!.textContent).toContain("暴躁的企鹅");
-    expect(chat.shadowRoot!.querySelector("#msgInput")).toBeNull();
+    expect(读取聊天操作台主输入(chat).getAttribute("placeholder")).toBe("房间短码");
     expect(chat.shadowRoot!.textContent).not.toContain("session:");
 
-    const roomInput = chat.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
+    const roomInput = 读取聊天操作台主输入(chat);
     roomInput.value = "E2E01";
     roomInput.dispatchEvent(new Event("input"));
-    const joinBtn = chat.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement;
-    joinBtn.click();
+    读取聊天操作台主动作(chat).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
 
@@ -177,11 +192,10 @@ describe("前后台壳端到端冒烟", () => {
     expect(chat.shadowRoot!.querySelector("#roomView")).not.toBeNull();
     expect(chat.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
 
-    const msgInput = chat.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
+    const msgInput = 读取聊天操作台主输入(chat);
     msgInput.value = "hello";
     msgInput.dispatchEvent(new Event("input"));
-    const sendBtn = chat.shadowRoot!.querySelector("#sendBtn") as HTMLButtonElement;
-    sendBtn.click();
+    读取聊天操作台主动作(chat).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await chat.updateComplete;
     expect(chat.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");

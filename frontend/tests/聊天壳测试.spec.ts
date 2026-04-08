@@ -264,6 +264,38 @@ async function 等待组件稳定(el: 聊天壳): Promise<void> {
   await el.updateComplete;
 }
 
+function 读取操作台主输入(el: 聊天壳): HTMLInputElement {
+  const input = el.shadowRoot!.querySelector("#shellConsolePrimaryInput") as HTMLInputElement | null;
+  expect(input).not.toBeNull();
+  return input!;
+}
+
+function 读取操作台主动作(el: 聊天壳): HTMLButtonElement {
+  const action = el.shadowRoot!.querySelector(
+    "#shellConsolePrimaryAction"
+  ) as HTMLButtonElement | null;
+  expect(action).not.toBeNull();
+  return action!;
+}
+
+function 读取操作台表单(el: 聊天壳): HTMLFormElement {
+  const form = el.shadowRoot!.querySelector("#shellConsoleForm") as HTMLFormElement | null;
+  expect(form).not.toBeNull();
+  return form!;
+}
+
+function 输入房间短码到操作台(el: 聊天壳, roomCode: string): void {
+  const input = 读取操作台主输入(el);
+  input.value = roomCode;
+  input.dispatchEvent(new Event("input"));
+}
+
+function 输入消息到操作台(el: 聊天壳, message: string): void {
+  const input = 读取操作台主输入(el);
+  input.value = message;
+  input.dispatchEvent(new Event("input"));
+}
+
 function 设置测试滚动阶段(
   el: 聊天壳,
   patch: {
@@ -429,10 +461,10 @@ describe("聊天壳", () => {
     expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
     expect(el.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("#joinForm")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("#roomCode")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("#joinBtn")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector<HTMLButtonElement>("#joinBtn")?.textContent?.trim()).toBe(
+    expect(el.shadowRoot!.querySelector("#shellConsoleForm")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsolePrimaryInput")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsolePrimaryAction")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector<HTMLButtonElement>("#shellConsolePrimaryAction")?.textContent?.trim()).toBe(
       "进房"
     );
     el.remove();
@@ -678,10 +710,8 @@ describe("聊天壳", () => {
     const homeConsole = el.shadowRoot!.querySelector("#shellConsole");
     expect(homeConsole).not.toBeNull();
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     const roomConsole = el.shadowRoot!.querySelector("#shellConsole");
@@ -697,10 +727,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     (el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement).click();
@@ -708,9 +736,9 @@ describe("聊天壳", () => {
 
     expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("#roomCode")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("#msgInput")).toBeNull();
-    expect(el.shadowRoot!.querySelector("#joinBtn")?.textContent).toContain("进房");
+    expect(el.shadowRoot!.querySelector("#shellConsolePrimaryInput")).not.toBeNull();
+    expect(读取操作台主输入(el).getAttribute("placeholder")).toBe("房间短码");
+    expect(读取操作台主动作(el).textContent).toContain("进房");
     el.remove();
   });
 
@@ -941,11 +969,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    const joinBtn = el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement;
-    joinBtn.click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     expect(
@@ -955,11 +980,8 @@ describe("聊天壳", () => {
       )
     ).toBe(true);
 
-    const msgInput = el.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
-    msgInput.value = "hello";
-    msgInput.dispatchEvent(new Event("input"));
-    const sendBtn = el.shadowRoot!.querySelector("#sendBtn") as HTMLButtonElement;
-    sendBtn.click();
+    输入消息到操作台(el, "hello");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -993,15 +1015,12 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
+    输入房间短码到操作台(el, "ROOM01");
 
-    const joinForm = el.shadowRoot!.querySelector("#joinForm") as HTMLFormElement | null;
-    expect(joinForm).not.toBeNull();
-    expect(roomInput.getAttribute("enterkeyhint")).toBe("go");
+    const shellConsoleForm = 读取操作台表单(el);
+    expect(读取操作台主输入(el).getAttribute("enterkeyhint")).toBe("go");
 
-    joinForm!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    shellConsoleForm.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
     await 等待组件稳定(el);
 
     expect(transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "ROOM01" }]);
@@ -1015,21 +1034,16 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
-    const msgInput = el.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
-    msgInput.value = "hello";
-    msgInput.dispatchEvent(new Event("input"));
+    输入消息到操作台(el, "hello");
 
-    const composerForm = el.shadowRoot!.querySelector("#composerForm") as HTMLFormElement | null;
-    expect(composerForm).not.toBeNull();
-    expect(msgInput.getAttribute("enterkeyhint")).toBe("send");
+    const shellConsoleForm = 读取操作台表单(el);
+    expect(读取操作台主输入(el).getAttribute("enterkeyhint")).toBe("send");
 
-    composerForm!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    shellConsoleForm.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -1044,11 +1058,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    const joinBtn = el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement;
-    joinBtn.click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     (el as unknown as { chatState: { latestEventPosition: number } }).chatState.latestEventPosition = 99;
@@ -1082,10 +1093,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBe("r-test");
@@ -1111,10 +1120,8 @@ describe("聊天壳", () => {
     await 等待组件稳定(el);
 
     window.localStorage.setItem("koko_current_room_id", "r-old");
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM02";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM02");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBe("r-room-2");
@@ -1128,10 +1135,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     const roomTitle = el.shadowRoot!.querySelector("#roomTitle");
@@ -1205,10 +1210,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     const backBtn = el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement | null;
@@ -1232,10 +1235,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     const backBtn = el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement | null;
@@ -1256,10 +1257,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     const backBtn = el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement | null;
@@ -1268,10 +1267,8 @@ describe("聊天壳", () => {
     backBtn?.click();
     await 等待组件稳定(el);
 
-    const roomInputAgain = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInputAgain.value = "ROOM02";
-    roomInputAgain.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM02");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     expect(transport.socketSessionIds).toEqual(["s-test", "s-test"]);
@@ -1293,10 +1290,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     const roomHeader = el.shadowRoot!.querySelector("#roomHeader");
@@ -1388,10 +1383,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -1435,10 +1428,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -1934,10 +1925,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2014,10 +2003,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2088,10 +2075,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2190,10 +2175,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2262,10 +2245,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2513,10 +2494,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2587,10 +2566,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2651,10 +2628,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2699,10 +2674,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2790,10 +2763,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -2857,10 +2828,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
@@ -2923,10 +2892,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3016,10 +2983,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3085,10 +3050,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3168,10 +3131,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3260,10 +3221,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3329,10 +3288,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3391,10 +3348,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3468,10 +3423,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3549,10 +3502,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3592,10 +3543,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3615,10 +3564,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3635,16 +3582,12 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
-    const msgInput = el.shadowRoot!.querySelector("#msgInput") as HTMLInputElement;
-    msgInput.value = "hello";
-    msgInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#sendBtn") as HTMLButtonElement).click();
+    输入消息到操作台(el, "hello");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
@@ -3661,10 +3604,8 @@ describe("聊天壳", () => {
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
-    const roomInput = el.shadowRoot!.querySelector("#roomCode") as HTMLInputElement;
-    roomInput.value = "ROOM01";
-    roomInput.dispatchEvent(new Event("input"));
-    (el.shadowRoot!.querySelector("#joinBtn") as HTMLButtonElement).click();
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
     transport.socket.trigger("room_event", {
@@ -3686,3 +3627,5 @@ describe("聊天壳", () => {
     el.remove();
   });
 });
+
+
