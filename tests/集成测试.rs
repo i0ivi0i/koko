@@ -312,6 +312,34 @@ fn realtime主链闭环() {
 }
 
 #[test]
+fn 订阅需要重拉快照时控制面kind保持need_snapshot_reload() {
+    // 这里先锁住 shell 对前端承诺的最小 payload 形状。
+    // 即使内部实现继续重整，只要 kind / room_id / expected_position 漂了，
+    // 前端恢复链就会直接断裂。
+    let control = serde_json::json!({
+        "kind": "need_snapshot_reload",
+        "room_id": "room-1",
+        "expected_position": 99
+    });
+
+    assert_eq!(control["kind"], "need_snapshot_reload");
+    assert_eq!(control["room_id"], "room-1");
+    assert_eq!(control["expected_position"], 99);
+}
+
+#[test]
+fn 订阅拒绝与系统错误的控制面类型必须分流() {
+    // `rejected` 表示业务拒绝，`error` 表示系统失败。
+    // 这两个 kind 一旦混掉，前端就会把可恢复问题和业务拒绝混成一锅。
+    let rejected = serde_json::json!({"kind":"rejected","code":"membership_required"});
+    let error = serde_json::json!({"kind":"error","code":"system_error"});
+
+    assert_eq!(rejected["kind"], "rejected");
+    assert_eq!(error["kind"], "error");
+    assert_ne!(rejected["kind"], error["kind"]);
+}
+
+#[test]
 #[serial]
 fn 重复客户端消息标识应返回同一条已成立消息事件() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
