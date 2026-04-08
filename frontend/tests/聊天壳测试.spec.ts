@@ -2123,8 +2123,12 @@ describe("聊天壳", () => {
     }
   });
 
-  it("room_not_found 会清掉 current_room_id 并回到搜索页", async () => {
+  it("room_not_found 会清掉 current_room_id、删除对应历史并回到首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-missing");
+    window.localStorage.setItem(
+      "koko_home_sessions",
+      JSON.stringify([{ roomId: "r-missing", roomCode: "ROOM01", lastEnteredAt: 100 }])
+    );
     const transport = new 假传输();
     transport.snapshotQueue = [创建传输错误(404, "room_not_found")];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
@@ -2134,13 +2138,18 @@ describe("聊天壳", () => {
     await 等待组件稳定(el);
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
+    expect(window.localStorage.getItem("koko_home_sessions")).toBe("[]");
     expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#roomView")).toBeNull();
     el.remove();
   });
 
-  it("membership_required 会清掉 current_room_id 并回到搜索页", async () => {
+  it("membership_required 会清掉 current_room_id、但保留历史并回到首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-blocked");
+    window.localStorage.setItem(
+      "koko_home_sessions",
+      JSON.stringify([{ roomId: "r-blocked", roomCode: "ROOM02", lastEnteredAt: 100 }])
+    );
     const transport = new 假传输();
     transport.snapshotQueue = [创建传输错误(403, "membership_required")];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
@@ -2150,6 +2159,7 @@ describe("聊天壳", () => {
     await 等待组件稳定(el);
 
     expect(window.localStorage.getItem("koko_current_room_id")).toBeNull();
+    expect(window.localStorage.getItem("koko_home_sessions")).toContain("ROOM02");
     expect(el.shadowRoot!.querySelector("#homeView")).not.toBeNull();
     el.remove();
   });

@@ -988,11 +988,29 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
+   * 首页历史删除边界必须非常窄：
+   * - 只有明确的 `room_not_found`，才说明这条历史锚点已经失效；
+   * - `membership_required` 仍然可能是有价值的历史房间，只是当前身份暂时进不去。
+   */
+  private pruneHomeSessionIfRoomMissing(code: string | undefined, roomIdHint = ""): void {
+    if (code !== "room_not_found") {
+      return;
+    }
+    const roomId = roomIdHint.trim() || this.chatState.roomId || this.storage.读取当前房间标识();
+    if (!roomId) {
+      return;
+    }
+    this.storage.按房间标识删除首页房间历史条目(roomId);
+    this.syncHomeSessionItems();
+  }
+
+  /**
    * 硬失败要清 room 锚点并退出房间；临时失败则保留锚点，让用户还能重试。
    */
   private handleRecoveryFailure(error: unknown, keepRoomVisible: boolean): void {
     const failure = this.asRecoveryFailure(error);
     if (this.isHardRoomFailure(failure)) {
+      this.pruneHomeSessionIfRoomMissing(failure.code);
       this.roomKernel.send({
         type: "RECOVERY_FAILED",
         code: failure.code ?? "",
@@ -1058,6 +1076,7 @@ export class 聊天壳 extends LitElement {
     }
 
     if (this.isHardRoomFailure(control)) {
+      this.pruneHomeSessionIfRoomMissing(control.code, control.room_id ?? "");
       this.roomKernel.send({
         type: "RECOVERY_FAILED",
         code: control.code ?? "",
