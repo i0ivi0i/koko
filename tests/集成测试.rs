@@ -700,6 +700,22 @@ async fn http冷路径闭环() {
 
 #[tokio::test]
 #[serial]
+async fn 后台缺少令牌时仍返回稳定错误码() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, body) = send_json(app, Method::GET, "/api/admin/overview", None, &[]).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["code"].as_str(), Some("admin_session_required"));
+}
+
+#[tokio::test]
+#[serial]
 async fn 房间增量事件查询缺少session_id会被拒绝() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
@@ -1304,6 +1320,56 @@ async fn 非成员阅读推进会被拒绝() {
 
 #[tokio::test]
 #[serial]
+async fn 阅读推进缺少last_read_event_position会返回invalid_argument() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("WM{:010}", uniq % 10_000_000_000);
+
+    let (_, owner) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("read-anchor-missing-owner-{uniq}")})),
+        &[],
+    )
+    .await;
+    let owner_session_id = owner["session_id"].as_str().expect("owner session");
+
+    let (_, room) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/rooms/join-or-create",
+        Some(serde_json::json!({"session_id": owner_session_id, "room_code": code})),
+        &[],
+    )
+    .await;
+    let room_id = room["room_id"].as_str().expect("room_id");
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/rooms/{room_id}/read-anchor"),
+        Some(serde_json::json!({
+            "session_id": owner_session_id
+        })),
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"].as_str(), Some("invalid_argument"));
+}
+
+#[tokio::test]
+#[serial]
 async fn 阅读推进失败不会影响房间快照和历史查询可用性() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
@@ -1443,6 +1509,43 @@ async fn 房间历史分页会返回before_event_position之前的消息() {
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0]["body"].as_str(), Some("history-2"));
     assert_eq!(messages[1]["body"].as_str(), Some("history-3"));
+}
+
+#[tokio::test]
+#[serial]
+async fn 房间历史分页缺少before_event_position会返回invalid_argument() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, identity) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("history-missing-before-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = identity["session_id"].as_str().expect("session_id");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/r-missing/history?session_id={session_id}&limit=20"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"].as_str(), Some("invalid_argument"));
 }
 
 #[tokio::test]
