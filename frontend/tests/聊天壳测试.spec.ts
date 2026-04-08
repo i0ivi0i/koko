@@ -789,6 +789,64 @@ describe("聊天壳", () => {
     });
   });
 
+  it("首页和房间都只存在同一个主输入与同一个主动作节点", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelectorAll("#shellConsolePrimaryInput").length).toBe(1);
+    expect(el.shadowRoot!.querySelectorAll("#shellConsolePrimaryAction").length).toBe(1);
+
+    const primaryInput = el.shadowRoot!.querySelector(
+      "#shellConsolePrimaryInput"
+    ) as HTMLInputElement;
+    primaryInput.value = "ROOM01";
+    primaryInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#shellConsolePrimaryAction") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelectorAll("#shellConsolePrimaryInput").length).toBe(1);
+    expect(el.shadowRoot!.querySelectorAll("#shellConsolePrimaryAction").length).toBe(1);
+    el.remove();
+  });
+
+  it("唯一主 form 会按模式把 submit 派发到进房或发消息主链", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const primaryInput = el.shadowRoot!.querySelector(
+      "#shellConsolePrimaryInput"
+    ) as HTMLInputElement;
+    const shellConsoleForm = el.shadowRoot!.querySelector(
+      "#shellConsoleForm"
+    ) as HTMLFormElement | null;
+
+    expect(shellConsoleForm).not.toBeNull();
+
+    primaryInput.value = "ROOM01";
+    primaryInput.dispatchEvent(new Event("input"));
+    shellConsoleForm!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await 等待组件稳定(el);
+
+    expect(transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "ROOM01" }]);
+
+    const messageInput = el.shadowRoot!.querySelector(
+      "#shellConsolePrimaryInput"
+    ) as HTMLInputElement;
+    messageInput.value = "hello";
+    messageInput.dispatchEvent(new Event("input"));
+    shellConsoleForm!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");
+    el.remove();
+  });
+
   it("首页会话展示项会把房间标题和辅助文案收口到 presenter", () => {
     expect(
       派生首页会话展示项([

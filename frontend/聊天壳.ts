@@ -1526,11 +1526,6 @@ export class 聊天壳 extends LitElement {
     return error as 恢复失败;
   }
 
-  private submitJoinForm(event: SubmitEvent): void {
-    event.preventDefault();
-    void this.joinRoom();
-  }
-
   /**
    * 首页历史房间只是另一种“填入短码并进房”的入口，
    * 不能自己再旁路出第二套 join 逻辑。
@@ -1544,17 +1539,26 @@ export class 聊天壳 extends LitElement {
     void this.joinRoom();
   }
 
-  private submitComposerForm(event: SubmitEvent): void {
-    event.preventDefault();
-    void this.sendMessage();
-  }
-
   /**
-   * boot 阶段必须让唯一操作台实体继续常驻，但这时它还没有可提交的业务目标。
-   * 所以只保留同一套 form 骨架，显式阻止 submit 旁路到 join/send 主链。
+   * 唯一操作台现在只有一条 submit 主链：
+   * - `join` 态派发到 `joinRoom()`；
+   * - `message` 态派发到 `sendMessage()`；
+   * - `hidden` 态只阻止默认提交，不允许 boot 骨架误触发业务动作。
    */
-  private submitInactiveShellConsole(event: SubmitEvent): void {
+  private submitShellConsole(event: SubmitEvent): void {
     event.preventDefault();
+    const roomShell = this.roomShellState();
+    const consoleMode = 派生控制台模式({
+      bootstrapState: roomShell.bootstrapState,
+      roomId: this.chatState.roomId,
+    });
+    if (consoleMode === "join") {
+      void this.joinRoom();
+      return;
+    }
+    if (consoleMode === "message") {
+      void this.sendMessage();
+    }
   }
 
   /**
@@ -1579,17 +1583,6 @@ export class 聊天壳 extends LitElement {
     });
     const isMessageMode = consoleState.mode === "message";
     const isHiddenMode = consoleState.mode === "hidden";
-    const submitHandler = isHiddenMode
-      ? this.submitInactiveShellConsole
-      : isMessageMode
-        ? this.submitComposerForm
-        : this.submitJoinForm;
-    const formId =
-      consoleState.mode === "message"
-        ? "composerForm"
-        : consoleState.mode === "join"
-          ? "joinForm"
-          : "bootForm";
 
     return html`
       <footer id="shellConsole" class="composer-bar">
@@ -1599,7 +1592,7 @@ export class 聊天壳 extends LitElement {
         >
           ${consoleState.statusText}
         </div>
-        <form id=${formId} class="shell-console-form" @submit=${submitHandler}>
+        <form id="shellConsoleForm" class="shell-console-form" @submit=${this.submitShellConsole}>
           <div
             id="shellConsoleMainRow"
             class=${isMessageMode ? "composer-row" : "join-row"}
