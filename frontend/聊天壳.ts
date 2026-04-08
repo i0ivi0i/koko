@@ -478,6 +478,12 @@ export class 聊天壳 extends LitElement {
 
   private realtimeSocket: Socket | null = null;
 
+  /**
+   * 握手阶段的 invalid_session 可能在短时间内连续冒多次 connect_error。
+   * 这里用一个很薄的门闩避免重复 bootstrap，把前端自己打成恢复风暴。
+   */
+  private socketInvalidSessionRecoveryTask: Promise<void> | null = null;
+
   private readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   private followLatestReadSampleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -823,6 +829,43 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
+   * socket.io 的 connect_error 发生在握手阶段，此时 control_result 还不存在。
+   * 因此 invalid_session 必须在这里直接转成“刷新 session 再恢复当前房间”的壳层动作。
+   */
+  private async handleRealtimeConnectError(error: unknown): Promise<void> {
+    if (!this.isInvalidSessionError(error) || this.socketInvalidSessionRecoveryTask) {
+      return;
+    }
+    const keepRoomVisible = Boolean(this.chatState.roomId);
+    this.socketInvalidSessionRecoveryTask = (async () => {
+      try {
+        this.roomKernel.send({
+          type: "RECONNECTING_STARTED",
+          code: "invalid_session",
+        });
+        this.updateChat(this.roomShellPatch());
+        await this.bootstrapFreshSession();
+        if (this.chatState.roomId) {
+          await this.reloadRoomFromSnapshot(this.chatState.roomId);
+        }
+      } catch (recoveryError) {
+        if (keepRoomVisible) {
+          this.handleRecoveryFailure(recoveryError, true);
+        } else {
+          this.roomKernel.send({
+            type: "BOOTSTRAP_FAILED",
+            code: this.recoveryCodeOf(recoveryError) ?? "system_error",
+          });
+          this.updateChat(this.roomShellPatch());
+        }
+      } finally {
+        this.socketInvalidSessionRecoveryTask = null;
+      }
+    })();
+    await this.socketInvalidSessionRecoveryTask;
+  }
+
+  /**
    * 房间页相关的壳层状态必须统一从这里清空，避免返回、硬失败、控制面拒绝各自散一份字面量。
    * 这里故意不碰身份和会话，只清“当前正在看的房间”这层视图事实。
    */
@@ -1044,6 +1087,9 @@ export class 聊天壳 extends LitElement {
       if (this.chatState.roomId) {
         this.subscribeRoom(this.chatState.latestEventPosition);
       }
+    });
+    socket.on("connect_error", (error: unknown) => {
+      void this.handleRealtimeConnectError(error);
     });
     socket.on("room_events", (events: { latest_event_position: number; events: 消息事件[] }) => {
       this.applyAuthoritativeEvents(events.events, events.latest_event_position);
@@ -1338,8 +1384,19 @@ export class 聊天壳 extends LitElement {
     return candidate;
   }
 
+  private recoveryCodeOf(error: unknown): string | undefined {
+    const failure = this.asRecoveryFailure(error);
+    if (typeof failure.code === "string" && failure.code.trim()) {
+      return failure.code;
+    }
+    if (error instanceof Error && error.message.trim()) {
+      return error.message.trim();
+    }
+    return undefined;
+  }
+
   private isInvalidSessionError(error: unknown): boolean {
-    return this.asRecoveryFailure(error).code === "invalid_session";
+    return this.recoveryCodeOf(error) === "invalid_session";
   }
 
   private isHardRoomFailure(error: { code?: string; status?: number }): boolean {

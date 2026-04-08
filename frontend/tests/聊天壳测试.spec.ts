@@ -1859,6 +1859,46 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("connect_error invalid_session 会重新 bootstrap 并重拉当前房间", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-restore");
+    const transport = new 假传输();
+    transport.bootstrapQueue = [
+      {
+        anonymous_identity_id: "a-old",
+        display_alias: "暴躁的企鹅",
+        session_id: "s-stale",
+      },
+      {
+        anonymous_identity_id: "a-new",
+        display_alias: "冷静的水獭",
+        session_id: "s-refresh",
+      },
+    ];
+    transport.snapshotQueue = [
+      创建房间快照("r-restore", 1),
+      创建房间快照("r-restore", 2),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(transport.bootstrapTokens).toHaveLength(2);
+    expect(transport.loadRoomSnapshotArgs).toEqual([
+      { roomId: "r-restore", sessionId: "s-stale" },
+      { roomId: "r-restore", sessionId: "s-refresh" },
+    ]);
+    expect(transport.socketSessionIds).toEqual(["s-stale", "s-refresh"]);
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    el.remove();
+  });
+
   it("恢复超时或5xx不会清掉 current_room_id", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-retry");
     const transport = new 假传输();
