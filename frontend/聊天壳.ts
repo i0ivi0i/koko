@@ -128,7 +128,7 @@ export class 聊天壳 extends LitElement {
     /* bootstrap 未完成时只展示一层中性壳，避免刷新恢复房间时先闪出空态首页。 */
     .boot-screen {
       height: 100%;
-      min-height: 100dvh;
+      min-height: 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -439,6 +439,16 @@ export class 聊天壳 extends LitElement {
 
     .composer-status.attention {
       color: var(--status-warn-strong);
+    }
+
+    .shell-console-form {
+      margin: 0;
+    }
+
+    /* 左侧辅助槽当前只是结构占位：先把唯一操作台骨架钉死，
+       后续再按模式和功能逐步启用，不在这一步抢跑出第二套布局。 */
+    .shell-console-aux-slot {
+      display: none;
     }
 
     .composer-row {
@@ -1538,6 +1548,87 @@ export class 聊天壳 extends LitElement {
     void this.sendMessage();
   }
 
+  /**
+   * boot 阶段必须让唯一操作台实体继续常驻，但这时它还没有可提交的业务目标。
+   * 所以只保留同一套 form 骨架，显式阻止 submit 旁路到 join/send 主链。
+   */
+  private submitInactiveShellConsole(event: SubmitEvent): void {
+    event.preventDefault();
+  }
+
+  /**
+   * 这一步先只统一“身体”，不统一 presenter：
+   * - boot / home / room 都用同一套操作台骨架；
+   * - 输入语义仍然按当前壳层上下文切换；
+   * - 先把 selector、常驻实体、不可交互边界锁住，再进入下一步视图模型收口。
+   */
+  private renderShellConsole(input: {
+    mode: "hidden" | "join" | "message";
+    statusText: string;
+    statusAttention?: boolean;
+  }) {
+    const isMessageMode = input.mode === "message";
+    const isHiddenMode = input.mode === "hidden";
+    const primaryValue = isMessageMode
+      ? this.chatState.messageInput
+      : this.chatState.roomCodeInput;
+    const primaryPlaceholder = isMessageMode ? "输入消息" : "房间短码";
+    const primaryActionLabel = isMessageMode ? "发送" : "进房";
+    const primaryActionDisabled = isHiddenMode || (isMessageMode && this.chatState.pending);
+    const submitHandler = isHiddenMode
+      ? this.submitInactiveShellConsole
+      : isMessageMode
+        ? this.submitComposerForm
+        : this.submitJoinForm;
+    const formId = isMessageMode ? "composerForm" : input.mode === "join" ? "joinForm" : "bootForm";
+
+    return html`
+      <footer id="shellConsole" class="composer-bar">
+        <div id="shellConsoleStatus" class="composer-status ${input.statusAttention ? "attention" : ""}">
+          ${input.statusText}
+        </div>
+        <form id=${formId} class="shell-console-form" @submit=${submitHandler}>
+          <div
+            id="shellConsoleMainRow"
+            class=${isMessageMode ? "composer-row" : "join-row"}
+            ?inert=${isHiddenMode}
+          >
+            <div
+              id="shellConsoleAuxSlot"
+              class="shell-console-aux-slot"
+              aria-hidden="true"
+              hidden
+            ></div>
+            <input
+              id="shellConsolePrimaryInput"
+              class=${isMessageMode ? "text-input composer-input" : "text-input"}
+              placeholder=${primaryPlaceholder}
+              enterkeyhint=${isMessageMode ? "send" : "go"}
+              .value=${primaryValue}
+              ?disabled=${isHiddenMode}
+              @input=${(e: Event) => {
+                const target = e.target as HTMLInputElement;
+                if (isMessageMode) {
+                  this.updateChat({ messageInput: target.value });
+                  return;
+                }
+                this.updateChat({ roomCodeInput: target.value });
+              }}
+            />
+            <button
+              id="shellConsolePrimaryAction"
+              class=${isMessageMode ? "primary-button send-button" : "primary-button"}
+              type="submit"
+              ?disabled=${primaryActionDisabled}
+            >
+              ${primaryActionLabel}
+            </button>
+          </div>
+        </form>
+      </footer>
+    `;
+  }
+
   override render() {
     const { recoveryHint, historyHint, subtitle: roomSubtitle } = 派生房间提示文案({
       recoveryState: this.chatState.recoveryState,
@@ -1560,13 +1651,26 @@ export class 聊天壳 extends LitElement {
       roomId: this.chatState.roomId,
     });
     const homeSessionViewItems = 派生首页会话展示项(this.chatState.homeSessionItems);
+    const shellConsole = this.renderShellConsole({
+      mode: consoleMode,
+      statusText:
+        consoleMode === "hidden"
+          ? "正在恢复身份、会话和上次停留的房间，请稍等一下。"
+          : consoleMode === "message"
+            ? (recoveryHint || historyHint || "在这里输入消息，发送后会实时出现在房间里。")
+            : "在这里输入房间短码，进入对应群聊空间。",
+      statusAttention: consoleMode === "message" ? Boolean(recoveryHint || historyHint) : false,
+    });
     if (shellView === "boot") {
       return html`
-        <section id="bootView" class="boot-screen">
-          <div class="boot-card">
-            <h1 class="boot-title">正在回到聊天空间</h1>
-            <p class="boot-subtitle">正在恢复身份、会话和上次停留的房间，请稍等一下。</p>
-          </div>
+        <section class="shell-screen">
+          <section id="bootView" class="boot-screen">
+            <div class="boot-card">
+              <h1 class="boot-title">正在回到聊天空间</h1>
+              <p class="boot-subtitle">正在恢复身份、会话和上次停留的房间，请稍等一下。</p>
+            </div>
+          </section>
+          ${shellConsole}
         </section>
       `;
     }
@@ -1603,35 +1707,10 @@ export class 聊天壳 extends LitElement {
               : null}
             </div>
           </section>
-          ${consoleMode === "join"
-            ? html`
-                <footer id="shellConsole" class="composer-bar">
-                  <div class="composer-status">在这里输入房间短码，进入对应群聊空间。</div>
-                  <form id="joinForm" class="join-row" @submit=${this.submitJoinForm}>
-                    <input
-                      id="roomCode"
-                      class="text-input"
-                      placeholder="房间短码"
-                      enterkeyhint="go"
-                      .value=${this.chatState.roomCodeInput}
-                      @input=${(e: Event) => {
-                        const target = e.target as HTMLInputElement;
-                        this.updateChat({ roomCodeInput: target.value });
-                      }}
-                    />
-                    <button id="joinBtn" class="primary-button" type="submit">
-                      进房
-                    </button>
-                  </form>
-                </footer>
-              `
-            : null}
+          ${shellConsole}
         </section>
       `;
     }
-
-    const statusAttention = Boolean(recoveryHint || historyHint);
-
     return html`
       <section class="shell-screen">
         <section id="roomView" class="room-screen">
@@ -1705,36 +1784,7 @@ export class 聊天壳 extends LitElement {
               `
             : null}
         </section>
-        ${consoleMode === "message"
-          ? html`
-              <footer id="shellConsole" class="composer-bar">
-                <div class="composer-status ${statusAttention ? "attention" : ""}">
-                  ${statusAttention ? roomSubtitle : "在这里输入消息，发送后会实时出现在房间里。"}
-                </div>
-                <form id="composerForm" class="composer-row" @submit=${this.submitComposerForm}>
-                  <input
-                    id="msgInput"
-                    class="text-input composer-input"
-                    placeholder="输入消息"
-                    enterkeyhint="send"
-                    .value=${this.chatState.messageInput}
-                    @input=${(e: Event) => {
-                      const target = e.target as HTMLInputElement;
-                      this.updateChat({ messageInput: target.value });
-                    }}
-                  />
-                  <button
-                    id="sendBtn"
-                    class="primary-button send-button"
-                    type="submit"
-                    ?disabled=${this.chatState.pending}
-                  >
-                    发送
-                  </button>
-                </form>
-              </footer>
-            `
-          : null}
+        ${shellConsole}
       </section>
     `;
   }

@@ -420,6 +420,86 @@ describe("聊天壳", () => {
     el.remove();
   });
 
+  it("boot 态时唯一操作台骨架仍然常驻，但主输入和主动作不可交互", async () => {
+    const transport = new 假传输();
+    vi.spyOn(transport, "bootstrapAnonymousIdentity").mockImplementation(
+      () => new Promise<匿名身份引导结果>(() => {})
+    );
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("#shellConsole")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsoleMainRow")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsoleAuxSlot")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsolePrimaryInput")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#shellConsolePrimaryAction")).not.toBeNull();
+    expect(
+      (el.shadowRoot!.querySelector("#shellConsolePrimaryInput") as HTMLInputElement).disabled
+    ).toBe(true);
+    expect(
+      (el.shadowRoot!.querySelector("#shellConsolePrimaryAction") as HTMLButtonElement).disabled
+    ).toBe(true);
+    el.remove();
+  });
+
+  it("首页与房间都共用同一套操作台 selector 骨架", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    const homeSelectors = [
+      "#shellConsole",
+      "#shellConsoleStatus",
+      "#shellConsoleMainRow",
+      "#shellConsoleAuxSlot",
+      "#shellConsolePrimaryInput",
+      "#shellConsolePrimaryAction",
+    ].map((selector) => el.shadowRoot!.querySelector(selector));
+
+    const roomInput = el.shadowRoot!.querySelector("#shellConsolePrimaryInput") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#shellConsolePrimaryAction") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    for (const selector of [
+      "#shellConsole",
+      "#shellConsoleStatus",
+      "#shellConsoleMainRow",
+      "#shellConsoleAuxSlot",
+      "#shellConsolePrimaryInput",
+      "#shellConsolePrimaryAction",
+    ]) {
+      expect(el.shadowRoot!.querySelector(selector)).not.toBeNull();
+    }
+    expect(homeSelectors.every(Boolean)).toBe(true);
+    el.remove();
+  });
+
+  it("首页与房间都只存在同一个主 form", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelectorAll("form").length).toBe(1);
+
+    const roomInput = el.shadowRoot!.querySelector("#shellConsolePrimaryInput") as HTMLInputElement;
+    roomInput.value = "ROOM01";
+    roomInput.dispatchEvent(new Event("input"));
+    (el.shadowRoot!.querySelector("#shellConsolePrimaryAction") as HTMLButtonElement).click();
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelectorAll("form").length).toBe(1);
+    el.remove();
+  });
+
   it("浏览器存储会按 roomId 去重、按 lastEnteredAt 倒序读取首页房间历史", () => {
     const rawStorage = createFakeStorage();
     const browserStorage = 创建浏览器存储(rawStorage) as unknown as {
