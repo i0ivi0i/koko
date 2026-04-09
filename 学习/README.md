@@ -12,7 +12,18 @@
 
 ## 推荐阅读路径
 
-先看官方资料，再回头看整理笔记。
+1. 先看 [socket.io 分馆](./socket-io/README.md) 的可靠性、恢复和房间边界。
+2. 再看 [Telegram 分馆](./telegram/README.md) 的事件位置和缺口恢复。
+3. 接着看 [WhatsApp / Meta 分馆](./whatsapp-meta/README.md) 的多设备与安全设计。
+4. 再回到 [socketioxide 分馆](./socketioxide/README.md) 对照你手里正在用的 Rust 轮子。
+5. 最后看 [整理笔记分馆](./整理笔记/README.md)，把判断带回项目。
+
+## 项目最直接的提醒
+
+- ack 不是消息成立。
+- room 不是成员真相。
+- 断线恢复不能只靠重连，必须靠事件位置补洞。
+- 前端不能再替后端宣布消息已成立。
 
 ## graphify 怎么配合这座图书馆
 
