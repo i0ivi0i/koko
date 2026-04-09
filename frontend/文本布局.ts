@@ -129,6 +129,13 @@ export function 创建文本布局器() {
   };
 }
 
+/**
+ * 当前 Web 前端统一复用这一份布局器实例：
+ * - 消息展示项和输入区共享同一套 prepare 缓存；
+ * - 避免同一个页面里为了不同宿主再养多份重复测量状态。
+ */
+export const 默认文本布局器 = 创建文本布局器();
+
 function 读取或创建纯文本预处理(
   input: 纯文本布局输入,
   cache: Map<string, ReturnType<typeof prepareWithSegments>>

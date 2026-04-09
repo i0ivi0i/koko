@@ -2,7 +2,7 @@ import type { 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
 import type { 房间视口模式 } from "./状态.js";
 import {
-  创建文本布局器,
+  默认文本布局器,
   type 文本布局结果,
   type 文本布局环境,
 } from "./文本布局.js";
@@ -22,8 +22,6 @@ export const 默认消息文本布局环境: 消息文本布局环境 = {
   maxContentWidth: 420,
   bubbleHorizontalPadding: 28,
 };
-
-const 默认消息布局器 = 创建文本布局器();
 
 export interface 消息展示项 {
   kind: "message";
@@ -127,7 +125,7 @@ export function 派生消息展示项(
   layoutEnv: 消息文本布局环境 = 默认消息文本布局环境
 ): 消息展示项 {
   const isMine = event.sender_session_id === currentSessionId;
-  const layout = 默认消息布局器.布局纯文本({
+  const layout = 默认文本布局器.布局纯文本({
     text: event.body,
     width: layoutEnv.maxContentWidth,
     fontFamily: layoutEnv.fontFamily,

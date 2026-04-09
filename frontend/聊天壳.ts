@@ -11,6 +11,7 @@ import {
 } from "./存储.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
+import { 默认文本布局器 } from "./文本布局.js";
 import {
   默认消息文本布局环境,
   派生壳主舞台模式,
@@ -25,6 +26,15 @@ import {
 } from "./视图.js";
 
 export class 聊天壳 extends LitElement {
+  /**
+   * 文本几何已经改由 Pretext 主导后，宿主尺寸变化就不能再指望浏览器自然流偷偷兜底。
+   * 这里不引入第二份“宽度状态”，只在 viewport 改变时请求一次重渲染，
+   * 让消息气泡和输入区都重新按当前宿主宽度计算布局。
+   */
+  private readonly handleViewportResize = (): void => {
+    this.requestUpdate();
+  };
+
   static override styles = css`
     :host {
       --surface-canvas: #0b0f14;
@@ -80,7 +90,8 @@ export class 聊天壳 extends LitElement {
     }
 
     button,
-    input {
+    input,
+    textarea {
       font: inherit;
     }
 
@@ -223,6 +234,7 @@ export class 聊天壳 extends LitElement {
     }
 
     .text-input {
+      display: block;
       width: 100%;
       min-width: 0;
       padding: 12px 16px;
@@ -230,8 +242,14 @@ export class 聊天壳 extends LitElement {
       border-radius: 18px;
       background: var(--surface-input);
       color: var(--text-primary);
+      line-height: 22px;
       outline: none;
       box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+    }
+
+    textarea.text-input {
+      resize: none;
+      overflow: hidden;
     }
 
     .text-input:focus {
@@ -722,10 +740,12 @@ export class 聊天壳 extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    globalThis.addEventListener("resize", this.handleViewportResize);
     void this.恢复编排端口.bootstrap();
   }
 
   override disconnectedCallback(): void {
+    globalThis.removeEventListener("resize", this.handleViewportResize);
     this._实时编排端口?.disconnect();
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
@@ -832,6 +852,65 @@ export class 聊天壳 extends LitElement {
     }
   }
 
+  private handleShellConsolePrimaryInput(event: Event, isMessageMode: boolean): void {
+    const target = event.target as HTMLTextAreaElement;
+    if (isMessageMode) {
+      this.updateChat({ messageInput: target.value });
+      return;
+    }
+    this.updateChat({ roomCodeInput: target.value });
+  }
+
+  private handleShellConsolePrimaryKeydown(
+    event: KeyboardEvent,
+    isMessageMode: boolean
+  ): void {
+    if (event.key !== "Enter" || event.isComposing) {
+      return;
+    }
+
+    /**
+     * `textarea` 不会像单行 `input` 那样自动触发表单提交。
+     * 为了保住原有 IM 发送语义，这里显式收口成：
+     * 1. 房间短码模式：Enter 直接进房；
+     * 2. 消息模式：Enter 发送，Shift+Enter 才换行。
+     */
+    if (isMessageMode && event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
+  }
+
+  private 读取操作台主输入高度(isMessageMode: boolean, value: string): number {
+    if (!isMessageMode) {
+      return 50;
+    }
+
+    const mainRow =
+      (this.shadowRoot?.querySelector("#shellConsoleMainRow") as HTMLElement | null) ?? null;
+    const mainRowWidth = mainRow?.clientWidth || Math.min(globalThis.innerWidth || 390, 560);
+    const 输入框总宽度 = Math.max(180, mainRowWidth - 94);
+    const 输入框内容宽度 = Math.max(120, 输入框总宽度 - 34);
+    const layout = 默认文本布局器.布局纯文本({
+      text: value.length > 0 ? value : " ",
+      width: 输入框内容宽度,
+      fontFamily: 默认消息文本布局环境.fontFamily,
+      fontSize: 默认消息文本布局环境.fontSize,
+      fontWeight: 默认消息文本布局环境.fontWeight,
+      lineHeight: 默认消息文本布局环境.lineHeight,
+      whiteSpace: "pre-wrap",
+      wordBreak: "normal",
+    });
+
+    /**
+     * 高度继续由 Pretext 的行数裁决，宿主 textarea 只负责输入事件与焦点。
+     * 这里补上当前输入框的垂直内边距和边框，再用单行最小高度兜住空态。
+     */
+    return Math.max(50, Math.max(1, layout.lineCount) * 22 + 26);
+  }
+
   /**
    * 操作台本体继续只维护一套骨架；
    * 真正的显示语义已经上收给 presenter，这里只负责：
@@ -854,6 +933,10 @@ export class 聊天壳 extends LitElement {
     });
     const isMessageMode = consoleState.mode === "message";
     const isHiddenMode = consoleState.mode === "hidden";
+    const primaryInputHeight = this.读取操作台主输入高度(
+      isMessageMode,
+      consoleState.primaryInput.value
+    );
 
     return html`
       <footer id="shellConsole" class="composer-bar">
@@ -874,22 +957,21 @@ export class 聊天壳 extends LitElement {
               aria-hidden="true"
               hidden
             ></div>
-            <input
+            <textarea
               id="shellConsolePrimaryInput"
               class="text-input"
+              data-role=${isMessageMode ? "composer-editor" : "room-code-editor"}
               placeholder=${consoleState.primaryInput.placeholder}
               enterkeyhint=${consoleState.primaryInput.enterKeyHint}
               .value=${consoleState.primaryInput.value}
               ?disabled=${consoleState.primaryInput.disabled}
-              @input=${(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                if (isMessageMode) {
-                  this.updateChat({ messageInput: target.value });
-                  return;
-                }
-                this.updateChat({ roomCodeInput: target.value });
-              }}
-            />
+              rows="1"
+              style=${`height: ${primaryInputHeight}px;`}
+              @input=${(event: Event) =>
+                this.handleShellConsolePrimaryInput(event, isMessageMode)}
+              @keydown=${(event: KeyboardEvent) =>
+                this.handleShellConsolePrimaryKeydown(event, isMessageMode)}
+            ></textarea>
             <button
               id="shellConsolePrimaryAction"
               class="primary-button"

@@ -5,6 +5,7 @@ import "../聊天壳";
 import "../后台壳";
 import { 聊天壳 } from "../聊天壳";
 import { 后台壳 } from "../后台壳";
+import { 安装测试文本测量画布 } from "./common/聊天测试支架";
 import type { 前端传输端口 } from "../传输";
 import type {
   匿名身份引导结果,
@@ -17,6 +18,16 @@ import type {
   房间快照,
 } from "../契约";
 import type { Socket } from "socket.io-client";
+
+/**
+ * 端到端冒烟 spec 没有复用聊天测试支架里的房间场景构造，
+ * 但现在聊天壳首屏和输入区都会直接走 Pretext。
+ *
+ * 所以这里也要显式补上同一份测试测量宿主，避免：
+ * 1. 集成 spec 是绿的；
+ * 2. 独立 e2e spec 却因为缺测量上下文直接炸掉。
+ */
+安装测试文本测量画布();
 
 class 假Socket {
   private handlers = new Map<string, Array<(payload: unknown) => void>>();
@@ -148,10 +159,10 @@ class 端到端假传输 implements 前端传输端口 {
   }
 }
 
-function 读取聊天操作台主输入(chat: 聊天壳): HTMLInputElement {
+function 读取聊天操作台主输入(chat: 聊天壳): HTMLTextAreaElement | HTMLInputElement {
   const input = chat.shadowRoot!.querySelector(
     "#shellConsolePrimaryInput"
-  ) as HTMLInputElement | null;
+  ) as HTMLTextAreaElement | HTMLInputElement | null;
   expect(input).not.toBeNull();
   return input!;
 }

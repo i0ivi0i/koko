@@ -300,8 +300,12 @@ export async function 等待组件稳定(el: 聊天壳): Promise<void> {
   await el.updateComplete;
 }
 
-export function 读取操作台主输入(el: 聊天壳): HTMLInputElement {
-  const input = el.shadowRoot!.querySelector("#shellConsolePrimaryInput") as HTMLInputElement | null;
+export function 读取操作台主输入(
+  el: 聊天壳
+): HTMLTextAreaElement | HTMLInputElement {
+  const input = el.shadowRoot!.querySelector(
+    "#shellConsolePrimaryInput"
+  ) as HTMLTextAreaElement | HTMLInputElement | null;
   expect(input).not.toBeNull();
   return input!;
 }

@@ -176,6 +176,75 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("窗口宽度变化后会重新计算消息气泡宽度，而不是继续挂着旧的 Pretext 布局结果", async () => {
+    const 原始宽度 = globalThis.innerWidth;
+    Object.defineProperty(globalThis, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1024,
+    });
+
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "这是一条足够长的消息，用来确认聊天壳在窗口宽度变化后，会重新让 Pretext 按新的宿主宽度计算气泡尺寸，而不是继续挂着旧的布局结果。",
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    try {
+      输入房间短码到操作台(el, "ROOM01");
+      读取操作台主动作(el).click();
+      await 等待组件稳定(el);
+      await 等待组件稳定(el);
+
+      const 宽屏气泡 = el.shadowRoot!.querySelector(".message-bubble") as HTMLElement | null;
+      expect(宽屏气泡).not.toBeNull();
+      const 宽屏宽度 = Number.parseFloat(
+        宽屏气泡!.style.width.replace("px", "")
+      );
+
+      Object.defineProperty(globalThis, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: 320,
+      });
+      globalThis.dispatchEvent(new Event("resize"));
+      await 等待组件稳定(el);
+      await 等待组件稳定(el);
+
+      const 窄屏气泡 = el.shadowRoot!.querySelector(".message-bubble") as HTMLElement | null;
+      expect(窄屏气泡).not.toBeNull();
+      const 窄屏宽度 = Number.parseFloat(
+        窄屏气泡!.style.width.replace("px", "")
+      );
+
+      expect(窄屏宽度).toBeLessThan(宽屏宽度);
+    } finally {
+      Object.defineProperty(globalThis, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: 原始宽度,
+      });
+      el.remove();
+    }
+  });
+
   it("boot 态时唯一操作台骨架仍然常驻，但主输入和主动作不可交互", async () => {
     const transport = new 假传输();
     vi.spyOn(transport, "bootstrapAnonymousIdentity").mockImplementation(
