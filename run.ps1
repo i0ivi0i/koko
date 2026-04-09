@@ -79,9 +79,8 @@ function New-ManagedProcess {
     New-Item -ItemType File -Path $stdoutPath -Force | Out-Null
     New-Item -ItemType File -Path $stderrPath -Force | Out-Null
 
-    # 这里明确不用异步 DataReceivedEventHandler：
-    # PowerShell 5.1/7 都可能在无 Runspace 的线程里调用脚本块，导致整个 launcher 崩掉。
-    # 改为“隐藏子进程 + 日志文件重定向 + 主线程轮询输出”，牺牲一点实现长度，换来稳定性与兼容性。
+    # 前端 watcher 仍然保持“隐藏子进程 + 日志文件重定向 + 主线程轮询输出”的稳定方案。
+    # 它们不是服务真相，不必为开发收尾去引入额外 console signal 复杂度。
     $process = Start-Process -FilePath $FilePath `
         -ArgumentList $ArgumentList `
         -WorkingDirectory $WorkingDirectory `
@@ -93,6 +92,7 @@ function New-ManagedProcess {
     return [PSCustomObject]@{
         Name = $Name
         Process = $process
+        ProcessGroupId = $null
         Stdout = New-StreamState -Path $stdoutPath
         Stderr = New-StreamState -Path $stderrPath
     }
@@ -182,6 +182,32 @@ function Write-ManagedProcessLogs {
     }
 }
 
+function Stop-StaleLauncherBackend {
+    param(
+        [string]$BackendTargetDir
+    )
+
+    # run.ps1 只是开发态启动器，所以只收自己留下的 launcher-run 后端残进程，
+    # 不去替项目源码定义“真正的关机协议”，也不碰任何生产部署语义。
+    $launcherTargetPattern = [Regex]::Escape($BackendTargetDir)
+    $staleProcesses = Get-CimInstance Win32_Process | Where-Object {
+        $_.Name -in @("cargo.exe", "koko.exe") -and (
+            $_.ExecutablePath -like "*target\\launcher-run\\debug\\koko.exe" -or
+            $_.CommandLine -match $launcherTargetPattern
+        )
+    }
+
+    foreach ($staleProcess in $staleProcesses) {
+        try {
+            Write-Host "清理上一轮 launcher 残留后端进程: [$($staleProcess.ProcessId)] $($staleProcess.Name)"
+            & taskkill.exe /PID $staleProcess.ProcessId /T /F 2>$null | Out-Null
+        }
+        catch {
+            Write-Warning "清理残留后端进程失败 [$($staleProcess.ProcessId)]: $($_.Exception.Message)"
+        }
+    }
+}
+
 function Stop-ManagedProcess {
     param($ManagedProcess)
 
@@ -196,9 +222,9 @@ function Stop-ManagedProcess {
 
     try {
         Write-Host "停止托管进程 [$($ManagedProcess.Name)]..."
-        # 这里只能按整棵进程树收尾：pnpm watcher 背后还会带 node 子进程，
-        # 单杀父进程会留下孤儿 watcher 继续占用文件句柄与 CPU，开发体验会越来越脏。
-        & taskkill.exe /PID $process.Id /T /F | Out-Null
+        # 这里刻意保持“best effort + 强杀兜底”：
+        # run.ps1 只是 Win11 开发启动器，不负责发明项目的退出真相；真相仍在 Rust 服务和正式部署器里。
+        & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
     }
     catch {
         Write-Warning "停止 [$($ManagedProcess.Name)] 失败: $($_.Exception.Message)"
@@ -236,6 +262,8 @@ try {
             throw "pnpm up 失败，已停止启动。"
         }
     }
+
+    Stop-StaleLauncherBackend -BackendTargetDir $backendTargetDir
 
     Write-Host "前端首轮构建: pnpm --dir frontend build"
     & $pnpmPath --dir frontend build
