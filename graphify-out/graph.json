@@ -4,6 +4,20 @@
   "graph": {
     "hyperedges": [
       {
+        "id": "message_geometry_pipeline",
+        "label": "\u6d88\u606f\u51e0\u4f55\u4e0e\u6c14\u6ce1\u6e32\u67d3\u7ba1\u7ebf",
+        "nodes": [
+          "text_layout",
+          "view_presenters",
+          "chat_shell",
+          "room_message_pane"
+        ],
+        "relation": "participate_in",
+        "confidence": "INFERRED",
+        "confidence_score": 0.86,
+        "source_file": "frontend/\u804a\u5929\u58f3.ts"
+      },
+      {
         "id": "reading_stability_chain",
         "label": "Reading stability chain",
         "nodes": [
@@ -45,6 +59,38 @@
         "source_file": "docs/superpowers/specs/2026-04-08-\u540e\u7aef\u5916\u58f3DDD\u4e0eUnix\u6536\u53e3\u62c6\u5206-design.md"
       },
       {
+        "id": "he_pretext_total_migration",
+        "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316\u95ed\u73af",
+        "nodes": [
+          "concept_pretext_text_sovereignty",
+          "concept_text_layout_core",
+          "concept_message_window_line_rendering",
+          "concept_pretext_rich_inline",
+          "concept_dom_viewport_boundary",
+          "rationale_remove_dual_text_system",
+          "rationale_preserve_runtime_boundaries"
+        ],
+        "evidence_status": "INFERRED",
+        "confidence_score": 0.95,
+        "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md"
+      },
+      {
+        "id": "he_graphify_operational_boundary",
+        "label": "graphify \u81ea\u52a8\u5316\u8fb9\u754c\u4e0e\u4eba\u5de5\u66f4\u65b0\u95ed\u73af",
+        "nodes": [
+          "concept_graphify_pipeline",
+          "concept_graphify_doc_update_boundary",
+          "concept_graphify_feedback_loop",
+          "concept_graphify_watch_bug",
+          "concept_graphify_source_precedence",
+          "rationale_use_manual_doc_updates",
+          "rationale_keep_graph_clean"
+        ],
+        "evidence_status": "INFERRED",
+        "confidence_score": 0.93,
+        "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md"
+      },
+      {
         "id": "telegram_update_integrity_axes",
         "label": "Telegram update integrity axes",
         "nodes": [
@@ -70,6 +116,21 @@
         "confidence": "INFERRED",
         "confidence_score": 0.88,
         "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/ddd-\u9886\u57df\u4e3b\u6743\u4e0e\u4e50\u9ad8\u7cfb\u7edf\u7b14\u8bb0.md"
+      },
+      {
+        "id": "he_cross_document_learning_to_design",
+        "label": "\u5b66\u4e60\u8d44\u6599\u9a71\u52a8\u8bbe\u8ba1\u4e0e\u5b9e\u65bd",
+        "nodes": [
+          "doc_pretext_research",
+          "doc_design_pretext_2026_04_09",
+          "doc_plan_pretext_2026_04_09",
+          "citation_pretext_official_evidence",
+          "doc_graphify_overview",
+          "doc_graphify_versions"
+        ],
+        "evidence_status": "INFERRED",
+        "confidence_score": 0.88,
+        "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md"
       },
       {
         "id": "sync_anchor_repair_pattern",
@@ -123,67 +184,6 @@
         "confidence": "EXTRACTED",
         "confidence_score": 0.9,
         "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/\u8bbe\u5907\u7ea7\u82b1\u540d\u533f\u540d\u8eab\u4efd-mvp\u542f\u53d1.md"
-      },
-      {
-        "id": "message_geometry_pipeline",
-        "label": "\u6d88\u606f\u51e0\u4f55\u4e0e\u6c14\u6ce1\u6e32\u67d3\u7ba1\u7ebf",
-        "nodes": [
-          "text_layout",
-          "view_presenters",
-          "chat_shell",
-          "room_message_pane"
-        ],
-        "relation": "participate_in",
-        "confidence": "INFERRED",
-        "confidence_score": 0.86,
-        "source_file": "frontend/\u804a\u5929\u58f3.ts"
-      },
-      {
-        "id": "he_pretext_total_migration",
-        "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316\u95ed\u73af",
-        "nodes": [
-          "concept_pretext_text_sovereignty",
-          "concept_text_layout_core",
-          "concept_message_window_line_rendering",
-          "concept_pretext_rich_inline",
-          "concept_dom_viewport_boundary",
-          "rationale_remove_dual_text_system",
-          "rationale_preserve_runtime_boundaries"
-        ],
-        "evidence_status": "INFERRED",
-        "confidence_score": 0.95,
-        "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md"
-      },
-      {
-        "id": "he_graphify_operational_boundary",
-        "label": "graphify \u81ea\u52a8\u5316\u8fb9\u754c\u4e0e\u4eba\u5de5\u66f4\u65b0\u95ed\u73af",
-        "nodes": [
-          "concept_graphify_pipeline",
-          "concept_graphify_doc_update_boundary",
-          "concept_graphify_feedback_loop",
-          "concept_graphify_watch_bug",
-          "concept_graphify_source_precedence",
-          "rationale_use_manual_doc_updates",
-          "rationale_keep_graph_clean"
-        ],
-        "evidence_status": "INFERRED",
-        "confidence_score": 0.93,
-        "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md"
-      },
-      {
-        "id": "he_cross_document_learning_to_design",
-        "label": "\u5b66\u4e60\u8d44\u6599\u9a71\u52a8\u8bbe\u8ba1\u4e0e\u5b9e\u65bd",
-        "nodes": [
-          "doc_pretext_research",
-          "doc_design_pretext_2026_04_09",
-          "doc_plan_pretext_2026_04_09",
-          "citation_pretext_official_evidence",
-          "doc_graphify_overview",
-          "doc_graphify_versions"
-        ],
-        "evidence_status": "INFERRED",
-        "confidence_score": 0.88,
-        "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md"
       }
     ]
   },
@@ -194,7 +194,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L1",
       "id": "run",
-      "community": 13
+      "community": 14
     },
     {
       "label": "Assert-PowerShellVersion()",
@@ -202,7 +202,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L7",
       "id": "run_assert_powershellversion",
-      "community": 13
+      "community": 14
     },
     {
       "label": "Import-DotEnv()",
@@ -210,7 +210,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L14",
       "id": "run_import_dotenv",
-      "community": 13
+      "community": 14
     },
     {
       "label": "New-LauncherLogDirectory()",
@@ -218,7 +218,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L33",
       "id": "run_new_launcherlogdirectory",
-      "community": 13
+      "community": 14
     },
     {
       "label": "New-StreamState()",
@@ -226,7 +226,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L52",
       "id": "run_new_streamstate",
-      "community": 13
+      "community": 14
     },
     {
       "label": "New-ManagedProcess()",
@@ -234,7 +234,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L66",
       "id": "run_new_managedprocess",
-      "community": 13
+      "community": 14
     },
     {
       "label": "Read-NewLogLines()",
@@ -242,7 +242,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L101",
       "id": "run_read_newloglines",
-      "community": 13
+      "community": 14
     },
     {
       "label": "Write-ManagedProcessLogs()",
@@ -250,7 +250,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L161",
       "id": "run_write_managedprocesslogs",
-      "community": 13
+      "community": 14
     },
     {
       "label": "Stop-ManagedProcess()",
@@ -258,7 +258,7 @@
       "source_file": "E:\\koko\\run.ps1",
       "source_location": "L185",
       "id": "run_stop_managedprocess",
-      "community": 13
+      "community": 14
     },
     {
       "label": "up.ps1",
@@ -266,7 +266,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 20
+      "community": 19
     },
     {
       "label": "\u9886\u57df\u6d4b\u8bd5.rs",
@@ -274,7 +274,7 @@
       "source_file": "E:\\koko\\tests\\\u9886\u57df\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "",
-      "community": 0
+      "community": 2
     },
     {
       "label": "http\u51b7\u8def\u5f84\u95ed\u73af()",
@@ -282,7 +282,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L625",
       "id": "http",
-      "community": 0
+      "community": 2
     },
     {
       "label": ".constructor()",
@@ -290,7 +290,7 @@
       "source_file": "E:\\koko\\frontend\\\u4f20\u8f93.ts",
       "source_location": "L24",
       "id": "http_constructor",
-      "community": 0
+      "community": 2
     },
     {
       "label": "HttpRealtime\u4f20\u8f93",
@@ -423,10 +423,10 @@
     {
       "label": "setTransportForTest()",
       "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L687",
+      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L22",
       "id": "settransportfortest",
-      "community": 0
+      "community": 2
     },
     {
       "label": "login()",
@@ -434,7 +434,7 @@
       "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L26",
       "id": "login",
-      "community": 0
+      "community": 2
     },
     {
       "label": "loadOverview()",
@@ -442,7 +442,7 @@
       "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L34",
       "id": "loadoverview",
-      "community": 0
+      "community": 2
     },
     {
       "label": "loadRooms()",
@@ -450,7 +450,7 @@
       "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L40",
       "id": "loadrooms",
-      "community": 0
+      "community": 2
     },
     {
       "label": "loadRoomDetail()",
@@ -458,7 +458,7 @@
       "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L46",
       "id": "loadroomdetail",
-      "community": 0
+      "community": 2
     },
     {
       "label": "filteredRooms()",
@@ -466,7 +466,7 @@
       "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L53",
       "id": "filteredrooms",
-      "community": 0
+      "community": 2
     },
     {
       "label": "submitLoginForm()",
@@ -474,7 +474,7 @@
       "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L58",
       "id": "submitloginform",
-      "community": 0
+      "community": 2
     },
     {
       "label": "submitRoomSearchForm()",
@@ -482,15 +482,15 @@
       "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L63",
       "id": "submitroomsearchform",
-      "community": 0
+      "community": 2
     },
     {
       "label": "render()",
       "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1025",
+      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L68",
       "id": "render",
-      "community": 0
+      "community": 2
     },
     {
       "label": "frontend/\u5b58\u50a8.ts",
@@ -502,7 +502,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_storage_ts",
-      "community": 3
+      "community": 6
     },
     {
       "label": "frontend/\u623f\u95f4\u5185\u6838.ts",
@@ -514,7 +514,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_kernel_ts",
-      "community": 3
+      "community": 5
     },
     {
       "label": "frontend/\u623f\u95f4\u5b9e\u65f6\u7f16\u6392.ts",
@@ -526,7 +526,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_realtime_orchestrator_ts",
-      "community": 21
+      "community": 20
     },
     {
       "label": "frontend/\u623f\u95f4\u6062\u590d\u7f16\u6392.ts",
@@ -538,55 +538,19 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_recovery_orchestrator_ts",
-      "community": 22
+      "community": 21
     },
     {
-      "label": "constructor()",
+      "label": "\u623f\u95f4\u6d88\u606f\u7a97",
       "file_type": "code",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L26",
-      "id": "constructor",
-      "community": 0
-    },
-    {
-      "label": "createRenderRoot()",
-      "file_type": "code",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L38",
-      "id": "createrenderroot",
-      "community": 0
-    },
-    {
-      "label": "dispatchScrollIntent()",
-      "file_type": "code",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L42",
-      "id": "dispatchscrollintent",
-      "community": 0
-    },
-    {
-      "label": "dispatchScroll()",
-      "file_type": "code",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L51",
-      "id": "dispatchscroll",
-      "community": 0
-    },
-    {
-      "label": "dispatchJumpToLatest()",
-      "file_type": "code",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L61",
-      "id": "dispatchjumptolatest",
-      "community": 0
-    },
-    {
-      "label": "renderMessageBody()",
-      "file_type": "code",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L70",
-      "id": "rendermessagebody",
-      "community": 0
+      "source_file": "frontend/\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "room_message_pane",
+      "community": 12
     },
     {
       "label": "frontend/\u623f\u95f4\u6eda\u52a8\u5668.ts",
@@ -598,111 +562,43 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_scroller_ts",
-      "community": 3
+      "community": 5
     },
     {
-      "label": "roomShellState()",
+      "label": "\u6587\u672c\u5e03\u5c40",
       "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L696",
-      "id": "roomshellstate",
-      "community": 0
+      "source_file": "frontend/\u6587\u672c\u5e03\u5c40.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "text_layout",
+      "community": 12
     },
     {
-      "label": "roomShellPatch()",
+      "label": "\u804a\u5929\u58f3",
       "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L704",
-      "id": "roomshellpatch",
-      "community": 0
+      "source_file": "frontend/\u804a\u5929\u58f3.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "chat_shell",
+      "community": 12
     },
     {
-      "label": "connectedCallback()",
+      "label": "\u89c6\u56fe",
       "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L732",
-      "id": "connectedcallback",
-      "community": 0
-    },
-    {
-      "label": "disconnectedCallback()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L738",
-      "id": "disconnectedcallback",
-      "community": 0
-    },
-    {
-      "label": "updateChat()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L747",
-      "id": "updatechat",
-      "community": 0
-    },
-    {
-      "label": "buildRoomViewResetPatch()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L756",
-      "id": "buildroomviewresetpatch",
-      "community": 0
-    },
-    {
-      "label": "exitCurrentRoomView()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L781",
-      "id": "exitcurrentroomview",
-      "community": 0
-    },
-    {
-      "label": "leaveCurrentRoomView()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L805",
-      "id": "leavecurrentroomview",
-      "community": 0
-    },
-    {
-      "label": "joinHistoryRoom()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L815",
-      "id": "joinhistoryroom",
-      "community": 0
-    },
-    {
-      "label": "submitShellConsole()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L830",
-      "id": "submitshellconsole",
-      "community": 0
-    },
-    {
-      "label": "handleShellConsolePrimaryInput()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L846",
-      "id": "handleshellconsoleprimaryinput",
-      "community": 0
-    },
-    {
-      "label": "handleShellConsolePrimaryKeydown()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L855",
-      "id": "handleshellconsoleprimarykeydown",
-      "community": 0
-    },
-    {
-      "label": "renderShellConsole()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L912",
-      "id": "rendershellconsole",
-      "community": 0
+      "source_file": "frontend/\u89c6\u56fe.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "view_presenters",
+      "community": 12
     },
     {
       "label": "frontend/\u9605\u8bfb\u63a8\u8fdb\u7f16\u6392.ts",
@@ -714,7 +610,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_read_progress_orchestrator_ts",
-      "community": 3
+      "community": 5
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -722,7 +618,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L1",
       "id": "realtime_spec",
-      "community": 11
+      "community": 13
     },
     {
       "label": "startBackend()",
@@ -730,7 +626,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L531",
       "id": "realtime_spec_startbackend",
-      "community": 11
+      "community": 13
     },
     {
       "label": "ensureBackendBinaryPrepared()",
@@ -738,7 +634,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L546",
       "id": "realtime_spec_ensurebackendbinaryprepared",
-      "community": 11
+      "community": 13
     },
     {
       "label": "allocatePort()",
@@ -746,7 +642,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L573",
       "id": "realtime_spec_allocateport",
-      "community": 11
+      "community": 13
     },
     {
       "label": "waitForServer()",
@@ -754,7 +650,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L592",
       "id": "realtime_spec_waitforserver",
-      "community": 11
+      "community": 13
     },
     {
       "label": "getJson()",
@@ -762,7 +658,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L603",
       "id": "realtime_spec_getjson",
-      "community": 11
+      "community": 13
     },
     {
       "label": "postJson()",
@@ -770,7 +666,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L611",
       "id": "realtime_spec_postjson",
-      "community": 11
+      "community": 13
     },
     {
       "label": "once()",
@@ -778,7 +674,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L623",
       "id": "realtime_spec_once",
-      "community": 11
+      "community": 13
     },
     {
       "label": "expectNoEvent()",
@@ -786,7 +682,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L635",
       "id": "realtime_spec_expectnoevent",
-      "community": 11
+      "community": 13
     },
     {
       "label": "uniqueRoomCode()",
@@ -794,7 +690,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L650",
       "id": "realtime_spec_uniqueroomcode",
-      "community": 11
+      "community": 13
     },
     {
       "label": "\u9875\u9762\u9aa8\u67b6\u6d4b\u8bd5.spec.ts",
@@ -802,135 +698,119 @@
       "source_file": "E:\\koko\\frontend\\tests\\\u9875\u9762\u9aa8\u67b6\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "spec",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".bootstrapAnonymousIdentity()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L93",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L41",
       "id": "spec_bootstrapanonymousidentity",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".joinOrCreateRoom()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L100",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L48",
       "id": "spec_joinorcreateroom",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".loadRoomSnapshot()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L103",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L51",
       "id": "spec_loadroomsnapshot",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".updateRoomReadAnchor()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L119",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L54",
       "id": "spec_updateroomreadanchor",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".loadRoomEvents()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L120",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L55",
       "id": "spec_loadroomevents",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".loadRoomHistory()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L142",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L62",
       "id": "spec_loadroomhistory",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".loadAdminOverview()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L145",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L65",
       "id": "spec_loadadminoverview",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".adminLogin()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L148",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L68",
       "id": "spec_adminlogin",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".adminRooms()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L151",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L71",
       "id": "spec_adminrooms",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".adminRoomDetail()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L154",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L74",
       "id": "spec_adminroomdetail",
-      "community": 6
+      "community": 9
     },
     {
       "label": ".createSocket()",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L157",
+      "source_file": "E:\\koko\\frontend\\tests\\\u540e\u53f0\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": "L77",
       "id": "spec_createsocket",
-      "community": 6
+      "community": 9
     },
     {
-      "label": "\u5047Socket",
+      "label": "\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L32",
-      "id": "spec_socket",
-      "community": 6
+      "source_file": "frontend/tests/\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "text_layout_spec",
+      "community": 12
     },
     {
-      "label": ".on()",
+      "label": "\u7aef\u5230\u7aef\u6d4b\u8bd5",
       "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L35",
-      "id": "spec_socket_on",
-      "community": 6
-    },
-    {
-      "label": ".emit()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L42",
-      "id": "spec_socket_emit",
-      "community": 6
-    },
-    {
-      "label": ".disconnect()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L65",
-      "id": "spec_socket_disconnect",
-      "community": 6
-    },
-    {
-      "label": ".fire()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L67",
-      "id": "spec_socket_fire",
-      "community": 6
+      "source_file": "frontend/tests/\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "e2e_spec",
+      "community": 12
     },
     {
       "label": "get()",
@@ -938,151 +818,55 @@
       "source_file": "E:\\koko\\frontend\\tests\\\u804a\u5929\u58f3\u6062\u590d\u4e0e\u5206\u9875\u6d4b\u8bd5.spec.ts",
       "source_location": "L358",
       "id": "spec_get",
-      "community": 6
+      "community": 9
     },
     {
-      "label": "createFakeStorage()",
+      "label": "\u804a\u5929\u58f3\u6d4b\u8bd5",
       "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L62",
-      "id": "createfakestorage",
-      "community": 0
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "chat_shell_spec",
+      "community": 12
     },
     {
-      "label": "\u5047Socket",
+      "label": "\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5",
       "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L86",
-      "id": "socket",
-      "community": 14
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "chat_shell_reading_messages_spec",
+      "community": 12
     },
     {
-      "label": ".on()",
+      "label": "\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5",
       "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L91",
-      "id": "socket_on",
-      "community": 14
+      "source_file": "frontend/tests/\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "input_area_layout_spec",
+      "community": 12
     },
     {
-      "label": ".emit()",
+      "label": "\u804a\u5929\u6d4b\u8bd5\u652f\u67b6",
       "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L98",
-      "id": "socket_emit",
-      "community": 14
-    },
-    {
-      "label": ".disconnect()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L132",
-      "id": "socket_disconnect",
-      "community": 14
-    },
-    {
-      "label": ".trigger()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L134",
-      "id": "socket_trigger",
-      "community": 14
-    },
-    {
-      "label": ".fire()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L138",
-      "id": "socket_fire",
-      "community": 14
-    },
-    {
-      "label": "bootstrapAnonymousIdentity()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L196",
-      "id": "bootstrapanonymousidentity",
-      "community": 0
-    },
-    {
-      "label": "joinOrCreateRoom()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L205",
-      "id": "joinorcreateroom",
-      "community": 0
-    },
-    {
-      "label": "loadRoomSnapshot()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L213",
-      "id": "loadroomsnapshot",
-      "community": 0
-    },
-    {
-      "label": "updateRoomReadAnchor()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L222",
-      "id": "updateroomreadanchor",
-      "community": 0
-    },
-    {
-      "label": "loadRoomEvents()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L233",
-      "id": "loadroomevents",
-      "community": 0
-    },
-    {
-      "label": "loadRoomHistory()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L260",
-      "id": "loadroomhistory",
-      "community": 0
-    },
-    {
-      "label": "loadAdminOverview()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L273",
-      "id": "loadadminoverview",
-      "community": 0
-    },
-    {
-      "label": "adminLogin()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L276",
-      "id": "adminlogin",
-      "community": 0
-    },
-    {
-      "label": "adminRooms()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L279",
-      "id": "adminrooms",
-      "community": 0
-    },
-    {
-      "label": "adminRoomDetail()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L282",
-      "id": "adminroomdetail",
-      "community": 0
-    },
-    {
-      "label": "createSocket()",
-      "file_type": "code",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L285",
-      "id": "createsocket",
-      "community": 0
+      "source_file": "frontend/tests/common/\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "chat_test_harness",
+      "community": 12
     },
     {
       "label": "lib.rs",
@@ -1090,7 +874,7 @@
       "source_file": "E:\\koko\\src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 23
+      "community": 22
     },
     {
       "label": "main.rs",
@@ -1098,7 +882,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 18
+      "community": 17
     },
     {
       "label": "main()",
@@ -1106,7 +890,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 18
+      "community": 17
     },
     {
       "label": "src/\u540e\u53f0\u5916\u58f3.rs",
@@ -1118,7 +902,7 @@
       "author": null,
       "contributor": null,
       "id": "src_admin_shell_rs",
-      "community": 5
+      "community": 4
     },
     {
       "label": "src/\u5916\u58f3.rs",
@@ -1130,7 +914,7 @@
       "author": null,
       "contributor": null,
       "id": "src_shell_rs",
-      "community": 5
+      "community": 4
     },
     {
       "label": "src/\u5b9e\u65f6\u5916\u58f3.rs",
@@ -1142,7 +926,7 @@
       "author": null,
       "contributor": null,
       "id": "src_realtime_shell_rs",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u5b89\u88c5panic\u65e5\u5fd7\u94a9\u5b50()",
@@ -1150,7 +934,7 @@
       "source_file": "E:\\koko\\src\\\u603b\u88c5.rs",
       "source_location": "L85",
       "id": "panic",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u5c1d\u8bd5\u52a0\u8f7ddotenv()",
@@ -1158,7 +942,7 @@
       "source_file": "E:\\koko\\src\\\u603b\u88c5.rs",
       "source_location": "L98",
       "id": "dotenv",
-      "community": 0
+      "community": 2
     },
     {
       "label": "src/\u623f\u95f4\u5916\u58f3.rs",
@@ -1170,7 +954,7 @@
       "author": null,
       "contributor": null,
       "id": "src_room_shell_rs",
-      "community": 5
+      "community": 4
     },
     {
       "label": "src/\u7528\u4f8b.rs",
@@ -1182,7 +966,7 @@
       "author": null,
       "contributor": null,
       "id": "src_usecase_rs",
-      "community": 5
+      "community": 4
     },
     {
       "label": "src/\u9002\u914d.rs",
@@ -1194,7 +978,7 @@
       "author": null,
       "contributor": null,
       "id": "src_adapter_rs",
-      "community": 5
+      "community": 4
     },
     {
       "label": "mod.rs",
@@ -1202,7 +986,7 @@
       "source_file": "E:\\koko\\src\\\u9886\u57df\\mod.rs",
       "source_location": "L1",
       "id": "mod",
-      "community": 0
+      "community": 2
     },
     {
       "label": "Assert-True()",
@@ -1210,7 +994,7 @@
       "source_file": "E:\\koko\\tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u7ed3\u6784\u5316\u65e5\u5fd7\u5b57\u6bb5\u5b58\u5728\u4e14\u5305\u542boutcome()",
@@ -1218,7 +1002,7 @@
       "source_file": "E:\\koko\\tests\\\u7528\u4f8b\u6d4b\u8bd5.rs",
       "source_location": "L11",
       "id": "outcome",
-      "community": 0
+      "community": 2
     },
     {
       "label": "panic_hook\u4f1a\u628apanic\u5199\u5165\u7edf\u4e00\u65e5\u5fd7\u4e3b\u94fe()",
@@ -1226,7 +1010,7 @@
       "source_file": "E:\\koko\\tests\\\u7528\u4f8b\u6d4b\u8bd5.rs",
       "source_location": "L45",
       "id": "panic_hook_panic",
-      "community": 0
+      "community": 2
     },
     {
       "label": "http\u65e5\u5fd7\u56fa\u5b9a\u5b57\u6bb5\u987a\u5e8f\u91cc\u80fd\u770b\u5230usecase_adapter_outcome\u4e0e\u4e2d\u6587\u8bf7\u6c42\u7c7b\u578b()",
@@ -1234,7 +1018,7 @@
       "source_file": "E:\\koko\\tests\\\u7528\u4f8b\u6d4b\u8bd5.rs",
       "source_location": "L76",
       "id": "http_usecase_adapter_outcome",
-      "community": 0
+      "community": 2
     },
     {
       "label": "make_writer()",
@@ -1242,7 +1026,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L2103",
       "id": "make_writer",
-      "community": 0
+      "community": 2
     },
     {
       "label": "write()",
@@ -1250,7 +1034,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L2111",
       "id": "write",
-      "community": 0
+      "community": 2
     },
     {
       "label": "flush()",
@@ -1258,7 +1042,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L2116",
       "id": "flush",
-      "community": 0
+      "community": 2
     },
     {
       "label": "bootstrap\u63a5\u53e3\u4f1a\u8fd4\u56de\u7a33\u5b9a\u82b1\u540d\u5feb\u7167()",
@@ -1266,7 +1050,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L1831",
       "id": "bootstrap",
-      "community": 0
+      "community": 2
     },
     {
       "label": "realtime\u4e3b\u94fe\u95ed\u73af()",
@@ -1274,7 +1058,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L257",
       "id": "realtime",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u8ba2\u9605\u9700\u8981\u91cd\u62c9\u5feb\u7167\u65f6\u63a7\u5236\u9762kind\u4fdd\u6301need_snapshot_reload()",
@@ -1282,7 +1066,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L315",
       "id": "kind_need_snapshot_reload",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u623f\u95f4\u589e\u91cf\u4e8b\u4ef6\u67e5\u8be2\u7f3a\u5c11session_id\u4f1a\u88ab\u62d2\u7edd()",
@@ -1290,7 +1074,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L816",
       "id": "session_id",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u975e\u6210\u5458\u4e0d\u80fd\u901a\u8fc7events\u63a5\u53e3\u62c9\u53d6\u623f\u95f4\u589e\u91cf()",
@@ -1298,7 +1082,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L839",
       "id": "events",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u6210\u5458\u901a\u8fc7events\u63a5\u53e3\u53ea\u4f1a\u62ff\u5230from\u4e4b\u540e\u7684\u4e8b\u4ef6()",
@@ -1306,7 +1090,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L897",
       "id": "events_from",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u4e0d\u5b58\u5728\u7684\u623f\u95f4\u901a\u8fc7events\u63a5\u53e3\u4f1a\u8fd4\u56deroom_not_found()",
@@ -1314,7 +1098,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L950",
       "id": "events_room_not_found",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u9605\u8bfb\u63a8\u8fdb\u7f3a\u5c11last_read_event_position\u4f1a\u8fd4\u56deinvalid_argument()",
@@ -1322,7 +1106,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L1420",
       "id": "last_read_event_position_invalid_argument",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u623f\u95f4\u5386\u53f2\u5206\u9875\u4f1a\u8fd4\u56debefore_event_position\u4e4b\u524d\u7684\u6d88\u606f()",
@@ -1330,7 +1114,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L1552",
       "id": "before_event_position",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u623f\u95f4\u5386\u53f2\u5206\u9875\u7f3a\u5c11before_event_position\u4f1a\u8fd4\u56deinvalid_argument()",
@@ -1338,7 +1122,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L1613",
       "id": "before_event_position_invalid_argument",
-      "community": 0
+      "community": 2
     },
     {
       "label": "\u975e\u6210\u5458\u4e0d\u80fd\u901a\u8fc7history\u63a5\u53e3\u8bfb\u53d6\u66f4\u65e9\u6d88\u606f()",
@@ -1346,7 +1130,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L1771",
       "id": "history",
-      "community": 0
+      "community": 2
     },
     {
       "label": "http\u51b7\u8def\u5f84\u6210\u529f\u4f1a\u8f93\u51faaccepted\u4e0esucceeded\u65e5\u5fd7()",
@@ -1354,7 +1138,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L1881",
       "id": "http_accepted_succeeded",
-      "community": 0
+      "community": 2
     },
     {
       "label": "http\u51b7\u8def\u5f84\u62d2\u7edd\u4f1a\u8f93\u51farejected\u65e5\u5fd7\u4e0eerror_code()",
@@ -1362,7 +1146,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L1927",
       "id": "http_rejected_error_code",
-      "community": 0
+      "community": 2
     },
     {
       "label": "send_json()",
@@ -1370,7 +1154,7 @@
       "source_file": "E:\\koko\\tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L2047",
       "id": "send_json",
-      "community": 0
+      "community": 2
     },
     {
       "label": "graphify Codex \u89c4\u5219",
@@ -1382,7 +1166,7 @@
       "author": null,
       "contributor": null,
       "id": "graphify_codex_rules",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u5148\u8bfb GRAPH_REPORT",
@@ -1394,7 +1178,7 @@
       "author": null,
       "contributor": null,
       "id": "graph_report_first",
-      "community": 19
+      "community": 18
     },
     {
       "label": "DESIGN.md",
@@ -1406,7 +1190,7 @@
       "author": null,
       "contributor": null,
       "id": "design_md",
-      "community": 3
+      "community": 5
     },
     {
       "label": "socketioxide \u5b9e\u65f6\u9002\u914d\u5668",
@@ -1418,7 +1202,7 @@
       "author": null,
       "contributor": null,
       "id": "socketioxide_adapter",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u4ee3\u7801\u5baa\u6cd5",
@@ -1430,7 +1214,7 @@
       "author": null,
       "contributor": null,
       "id": "code_constitution",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u9886\u57df\u4e3b\u6743",
@@ -1442,7 +1226,7 @@
       "author": null,
       "contributor": null,
       "id": "domain_sovereignty",
-      "community": 5
+      "community": 4
     },
     {
       "label": "contract \u5951\u7ea6\u8fb9\u754c",
@@ -1454,7 +1238,7 @@
       "author": null,
       "contributor": null,
       "id": "contract_boundary",
-      "community": 5
+      "community": 4
     },
     {
       "label": "shell / adapter \u8fb9\u754c",
@@ -1466,7 +1250,7 @@
       "author": null,
       "contributor": null,
       "id": "shell_adapter_boundary",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u5907\u5fd8",
@@ -1538,7 +1322,7 @@
       "author": null,
       "contributor": null,
       "id": "plan_frontend_room_orchestration_kernel_rewrite",
-      "community": 3
+      "community": 5
     },
     {
       "label": "XState 5 \u72b6\u6001\u673a",
@@ -1550,7 +1334,7 @@
       "author": null,
       "contributor": null,
       "id": "xstate_state_machine",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u5df2\u8bfb\u951a\u70b9\u7a33\u5b9a\u5316\u4e0e\u9996\u5c4f\u505c\u9760",
@@ -1562,7 +1346,7 @@
       "author": null,
       "contributor": null,
       "id": "plan_read_anchor_stabilization",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u89c6\u53e3\u6a21\u5f0f",
@@ -1574,7 +1358,7 @@
       "author": null,
       "contributor": null,
       "id": "viewport_mode",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u5019\u9009\u5df2\u8bfb\u951a\u70b9",
@@ -1586,7 +1370,7 @@
       "author": null,
       "contributor": null,
       "id": "candidate_read_anchor",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u524d\u7aef\u804a\u5929\u58f3\u4e09\u7f16\u6392\u5668\u7626\u8eab\u91cd\u6784",
@@ -1598,7 +1382,7 @@
       "author": null,
       "contributor": null,
       "id": "plan_frontend_chat_shell_orchestrator_trimming",
-      "community": 17
+      "community": 5
     },
     {
       "label": "\u623f\u95f4\u6062\u590d\u7f16\u6392",
@@ -1610,7 +1394,7 @@
       "author": null,
       "contributor": null,
       "id": "room_recovery_orchestrator",
-      "community": 17
+      "community": 5
     },
     {
       "label": "\u623f\u95f4\u5b9e\u65f6\u7f16\u6392",
@@ -1622,7 +1406,7 @@
       "author": null,
       "contributor": null,
       "id": "room_realtime_orchestrator",
-      "community": 17
+      "community": 5
     },
     {
       "label": "\u9605\u8bfb\u63a8\u8fdb\u7f16\u6392",
@@ -1634,7 +1418,7 @@
       "author": null,
       "contributor": null,
       "id": "read_progress_orchestrator",
-      "community": 17
+      "community": 5
     },
     {
       "label": "\u524d\u7aef\u9996\u9875\u7fa4\u5217\u8868\u4e0e\u53cc\u6001\u63a7\u5236\u53f0",
@@ -1646,7 +1430,7 @@
       "author": null,
       "contributor": null,
       "id": "plan_home_group_list_console",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u53d1\u9001\u70ed\u8def\u5f84\u4e0e\u591a\u623f\u95f4\u5b9e\u65f6\u56de\u6d41\u4f18\u5316",
@@ -1658,7 +1442,7 @@
       "author": null,
       "contributor": null,
       "id": "plan_send_hot_path_multi_room_reflow",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u540e\u7aef\u5916\u58f3DDD\u4e0eUnix\u6536\u53e3\u62c6\u5206",
@@ -1670,7 +1454,7 @@
       "author": null,
       "contributor": null,
       "id": "plan_backend_shell_split",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u552f\u4e00\u58f3\u7ea7\u64cd\u4f5c\u53f0",
@@ -1682,6 +1466,38 @@
       "author": null,
       "contributor": null,
       "id": "plan_unique_shell_console",
+      "community": 6
+    },
+    {
+      "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316 Implementation Plan",
+      "type": "document",
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "file_type": "document",
+      "id": "doc_plan_pretext_2026_04_09",
+      "community": 3
+    },
+    {
+      "label": "\u552f\u4e00 text layout core / frontend/\u6587\u672c\u5e03\u5c40.ts",
+      "type": "concept",
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "file_type": "document",
+      "id": "concept_text_layout_core",
+      "community": 3
+    },
+    {
+      "label": "\u6d88\u606f\u7a97\u53ea\u8868\u8fbe\u5e03\u5c40\u7ed3\u679c\u800c\u4e0d\u518d\u4f9d\u8d56\u6d4f\u89c8\u5668\u81ea\u7136\u6362\u884c",
+      "type": "concept",
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "file_type": "document",
+      "id": "concept_message_window_line_rendering",
+      "community": 3
+    },
+    {
+      "label": "\u4fdd\u6301 contract/transport/orchestrator \u4e0e\u6eda\u52a8\u6062\u590d\u8bed\u4e49\u4e0d\u9000\u5316",
+      "type": "rationale",
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "file_type": "document",
+      "id": "rationale_preserve_runtime_boundaries",
       "community": 3
     },
     {
@@ -1706,7 +1522,7 @@
       "author": null,
       "contributor": null,
       "id": "plan_room_message_window_rewrite",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u524d\u7aef\u623f\u95f4\u7f16\u6392\u5185\u6838\u91cd\u6784\u8bbe\u8ba1",
@@ -1718,7 +1534,7 @@
       "author": null,
       "contributor": null,
       "id": "spec_room_orchestration_kernel",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u524d\u7aef\u540c\u6b65\u7f16\u6392",
@@ -1730,7 +1546,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_sync_orchestration",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u672c\u5730\u5b58\u50a8\u7aef\u53e3",
@@ -1742,7 +1558,7 @@
       "author": null,
       "contributor": null,
       "id": "local_storage_port",
-      "community": 3
+      "community": 5
     },
     {
       "label": "event_position \u540c\u6b65\u951a\u70b9",
@@ -1754,7 +1570,7 @@
       "author": null,
       "contributor": null,
       "id": "event_position_anchor",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u804a\u5929IM\u53cd\u7f51\u9875\u5316\u8bbe\u8ba1\u5baa\u6cd5",
@@ -1766,7 +1582,7 @@
       "author": null,
       "contributor": null,
       "id": "spec_im_anti_webification",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u53cd\u7f51\u9875\u5316",
@@ -1778,7 +1594,7 @@
       "author": null,
       "contributor": null,
       "id": "no_webification",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u524d\u7aef\u9996\u9875\u7fa4\u5217\u8868\u4e0e\u53cc\u6001\u63a7\u5236\u53f0\u8bbe\u8ba1",
@@ -1790,7 +1606,7 @@
       "author": null,
       "contributor": null,
       "id": "spec_home_group_list_console",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u56fa\u5b9a\u5e95\u90e8\u64cd\u4f5c\u53f0",
@@ -1802,7 +1618,7 @@
       "author": null,
       "contributor": null,
       "id": "fixed_bottom_console",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u9996\u9875\u7fa4\u5217\u8868",
@@ -1814,7 +1630,7 @@
       "author": null,
       "contributor": null,
       "id": "home_group_list",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u53d1\u9001\u70ed\u8def\u5f84\u4e0e\u591a\u623f\u95f4\u5b9e\u65f6\u56de\u6d41\u4f18\u5316\u8bbe\u8ba1",
@@ -1826,7 +1642,7 @@
       "author": null,
       "contributor": null,
       "id": "spec_send_hot_path_multi_room",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u6743\u5a01\u623f\u95f4\u4e8b\u4ef6",
@@ -1838,7 +1654,7 @@
       "author": null,
       "contributor": null,
       "id": "authoritative_room_event",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u63d0\u4ea4\u540e\u5e7f\u64ad",
@@ -1850,7 +1666,7 @@
       "author": null,
       "contributor": null,
       "id": "broadcast_after_commit",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u4e50\u89c2\u6001\u4e0e\u6743\u5a01\u6001\u5206\u5c42",
@@ -1862,7 +1678,7 @@
       "author": null,
       "contributor": null,
       "id": "optimistic_vs_authoritative",
-      "community": 5
+      "community": 4
     },
     {
       "label": "\u552f\u4e00\u58f3\u7ea7\u64cd\u4f5c\u53f0\u8bbe\u8ba1",
@@ -1874,7 +1690,7 @@
       "author": null,
       "contributor": null,
       "id": "spec_unique_shell_console",
-      "community": 3
+      "community": 6
     },
     {
       "label": "ShellConsoleState",
@@ -1886,7 +1702,7 @@
       "author": null,
       "contributor": null,
       "id": "shell_console_state",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u552f\u4e00\u58f3\u7ea7\u64cd\u4f5c\u53f0",
@@ -1898,7 +1714,7 @@
       "author": null,
       "contributor": null,
       "id": "unique_shell_console",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u552f\u4e00\u58f3\u7ea7\u8868\u5355\u64cd\u4f5c\u53f0",
@@ -1910,7 +1726,7 @@
       "author": null,
       "contributor": null,
       "id": "single_form_shell_console",
-      "community": 3
+      "community": 6
     },
     {
       "label": "Lit render \u7eaf\u51fd\u6570",
@@ -1922,7 +1738,7 @@
       "author": null,
       "contributor": null,
       "id": "lit_render_purity",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u539f\u751f\u8868\u5355\u63d0\u4ea4\u8bed\u4e49",
@@ -1934,7 +1750,7 @@
       "author": null,
       "contributor": null,
       "id": "native_form_submit_semantics",
-      "community": 3
+      "community": 6
     },
     {
       "label": "disabled / inert \u4ea4\u4e92\u8bed\u4e49",
@@ -1946,7 +1762,7 @@
       "author": null,
       "contributor": null,
       "id": "disabled_inert_semantics",
-      "community": 3
+      "community": 6
     },
     {
       "label": "\u5355\u58f3\u5355\u64cd\u4f5c\u53f0",
@@ -1958,6 +1774,46 @@
       "author": null,
       "contributor": null,
       "id": "one_shell_one_console",
+      "community": 6
+    },
+    {
+      "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316\u8bbe\u8ba1",
+      "type": "document",
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "file_type": "document",
+      "id": "doc_design_pretext_2026_04_09",
+      "community": 3
+    },
+    {
+      "label": "Pretext \u4f5c\u4e3a Web \u524d\u7aef\u6587\u672c\u51e0\u4f55\u552f\u4e00\u4e3b\u6743\u5c42",
+      "type": "concept",
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "file_type": "document",
+      "id": "concept_pretext_text_sovereignty",
+      "community": 3
+    },
+    {
+      "label": "DOM \u53ea\u4fdd\u7559\u6e32\u67d3\u540e\u89c6\u53e3\u89c2\u6d4b",
+      "type": "concept",
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "file_type": "document",
+      "id": "concept_dom_viewport_boundary",
+      "community": 3
+    },
+    {
+      "label": "\u6d88\u9664\u53cc\u4e3b\u6743\u6587\u672c\u7cfb\u7edf",
+      "type": "rationale",
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "file_type": "document",
+      "id": "rationale_remove_dual_text_system",
+      "community": 3
+    },
+    {
+      "label": "Pretext \u5b98\u65b9 README/demo/API \u8bc1\u636e\u94fe",
+      "type": "citation",
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "file_type": "document",
+      "id": "citation_pretext_official_evidence",
       "community": 3
     },
     {
@@ -2018,7 +1874,7 @@
       "author": null,
       "contributor": null,
       "id": "spec_room_message_window",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u951a\u70b9\u6062\u590d\u8865\u507f",
@@ -2030,7 +1886,7 @@
       "author": null,
       "contributor": null,
       "id": "anchor_based_history_compensation",
-      "community": 3
+      "community": 5
     },
     {
       "label": "\u5386\u53f2\u52a0\u8f7d\u5c40\u90e8\u6027",
@@ -2042,6 +1898,126 @@
       "author": null,
       "contributor": null,
       "id": "history_loading_locality",
+      "community": 5
+    },
+    {
+      "label": "\u5b66\u4e60\u8d44\u6599\u603b\u5730\u56fe",
+      "type": "document",
+      "source_file": "\u5b66\u4e60/README.md",
+      "file_type": "document",
+      "id": "doc_learning_readme",
+      "community": 3
+    },
+    {
+      "label": "graphify \u7528\u4e8e\u8de8\u6765\u6e90\u5173\u8054\u800c\u975e\u66ff\u4ee3\u7269\u7406\u76ee\u5f55",
+      "type": "concept",
+      "source_file": "\u5b66\u4e60/README.md",
+      "file_type": "document",
+      "id": "concept_graphify_cross_source_map",
+      "community": 3
+    },
+    {
+      "label": "graphify \u5b98\u65b9\u7528\u6cd5\u603b\u89c8",
+      "type": "document",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5b98\u65b9\u7528\u6cd5\u603b\u89c8.md",
+      "file_type": "document",
+      "id": "doc_graphify_overview",
+      "community": 3
+    },
+    {
+      "label": "graphify detect -> extract -> build -> cluster -> analyze -> report -> export \u7ba1\u7ebf",
+      "type": "concept",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5b98\u65b9\u7528\u6cd5\u603b\u89c8.md",
+      "file_type": "document",
+      "id": "concept_graphify_pipeline",
+      "community": 3
+    },
+    {
+      "label": "graphify \u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def",
+      "type": "document",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
+      "file_type": "document",
+      "id": "doc_graphify_ignore",
+      "community": 3
+    },
+    {
+      "label": "graphify-out/memory \u53cd\u9988\u56de\u8def",
+      "type": "concept",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
+      "file_type": "document",
+      "id": "concept_graphify_feedback_loop",
+      "community": 3
+    },
+    {
+      "label": "\u907f\u514d\u628a graphify \u751f\u6210\u7269\u548c\u4e8c\u624b\u603b\u7ed3\u53cd\u590d\u5582\u56de\u56fe\u8c31",
+      "type": "rationale",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
+      "file_type": "document",
+      "id": "rationale_keep_graph_clean",
+      "community": 3
+    },
+    {
+      "label": "graphify \u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9",
+      "type": "document",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
+      "file_type": "document",
+      "id": "doc_graphify_versions",
+      "community": 3
+    },
+    {
+      "label": "graphify watch._rebuild_code \u7ed3\u6784\u6027 bug",
+      "type": "concept",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
+      "file_type": "document",
+      "id": "concept_graphify_watch_bug",
+      "community": 3
+    },
+    {
+      "label": "graphify CLI/\u6e90\u7801/tests/CHANGELOG \u8bc1\u636e\u94fe",
+      "type": "citation",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
+      "file_type": "document",
+      "id": "citation_graphify_official_evidence",
+      "community": 3
+    },
+    {
+      "label": "graphify \u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c",
+      "type": "document",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
+      "file_type": "document",
+      "id": "doc_graphify_auto",
+      "community": 3
+    },
+    {
+      "label": "\u6587\u6863\u53d8\u66f4\u9700\u8981\u624b\u52a8 graphify --update",
+      "type": "concept",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
+      "file_type": "document",
+      "id": "concept_graphify_doc_update_boundary",
+      "community": 3
+    },
+    {
+      "label": "\u81ea\u52a8\u5316\u5bf9\u6587\u6863\u8bed\u4e49\u66f4\u65b0\u5e76\u4e0d\u5b8c\u6574",
+      "type": "rationale",
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
+      "file_type": "document",
+      "id": "rationale_use_manual_doc_updates",
+      "community": 3
+    },
+    {
+      "label": "graphify \u5206\u9986",
+      "type": "document",
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "file_type": "document",
+      "id": "doc_graphify_readme",
+      "community": 3
+    },
+    {
+      "label": "graphify \u8d44\u6599\u4fe1\u4efb\u987a\u5e8f\u4ee5 CLI \u548c\u6e90\u7801\u4f18\u5148",
+      "type": "concept",
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "file_type": "document",
+      "id": "concept_graphify_source_precedence",
       "community": 3
     },
     {
@@ -2054,7 +2030,7 @@
       "author": null,
       "contributor": null,
       "id": "connection_state_recovery",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Session Recovery",
@@ -2066,7 +2042,7 @@
       "author": null,
       "contributor": null,
       "id": "session_recovery",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Delivery Guarantees",
@@ -2078,7 +2054,7 @@
       "author": null,
       "contributor": null,
       "id": "delivery_guarantees",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Message Ordering",
@@ -2090,7 +2066,7 @@
       "author": null,
       "contributor": null,
       "id": "message_ordering",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Ack Timeout Retries",
@@ -2102,7 +2078,7 @@
       "author": null,
       "contributor": null,
       "id": "ack_timeout_retries",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Emitting Events",
@@ -2114,7 +2090,7 @@
       "author": null,
       "contributor": null,
       "id": "emitting_events",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Volatile Events",
@@ -2126,7 +2102,7 @@
       "author": null,
       "contributor": null,
       "id": "volatile_events",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Acknowledgement Callback",
@@ -2138,7 +2114,7 @@
       "author": null,
       "contributor": null,
       "id": "acknowledgement_callback",
-      "community": 9
+      "community": 10
     },
     {
       "label": "socket.io \u5206\u9986\u5730\u56fe",
@@ -2150,7 +2126,7 @@
       "author": null,
       "contributor": null,
       "id": "socketio_readme_doc",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Rooms",
@@ -2162,7 +2138,7 @@
       "author": null,
       "contributor": null,
       "id": "rooms",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Room Broadcasting",
@@ -2174,7 +2150,7 @@
       "author": null,
       "contributor": null,
       "id": "room_broadcasting",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Testing",
@@ -2186,7 +2162,7 @@
       "author": null,
       "contributor": null,
       "id": "testing",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Socket.IO Test Harness",
@@ -2198,7 +2174,7 @@
       "author": null,
       "contributor": null,
       "id": "socket_testing",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Socketioxide API docs",
@@ -2390,7 +2366,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_readme_doc",
-      "community": 10
+      "community": 11
     },
     {
       "label": "updateNewChannelMessage",
@@ -2402,7 +2378,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_update_new_channel_message",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Telegram updates handling",
@@ -2414,7 +2390,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_updates_handling_documentation",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Telegram Updates object",
@@ -2426,7 +2402,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_updates_object",
-      "community": 10
+      "community": 11
     },
     {
       "label": "pts sequence",
@@ -2438,7 +2414,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_pts_sequence",
-      "community": 10
+      "community": 11
     },
     {
       "label": "seq sequence",
@@ -2450,7 +2426,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_seq_sequence",
-      "community": 10
+      "community": 11
     },
     {
       "label": "qts sequence",
@@ -2462,7 +2438,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_qts_sequence",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Update state fetching",
@@ -2474,7 +2450,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_state_fetching",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Channel update state",
@@ -2486,7 +2462,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_channel_update_state",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Gap recovery",
@@ -2498,7 +2474,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_gap_recovery",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Channel difference polling",
@@ -2510,7 +2486,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_channel_difference_polling",
-      "community": 10
+      "community": 11
     },
     {
       "label": "The Labyrinth Encrypted Message Storage Protocol",
@@ -2522,7 +2498,7 @@
       "author": null,
       "contributor": null,
       "id": "labyrinth_encrypted_message_storage_protocol_2023",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Baseline Message Secrecy",
@@ -2534,7 +2510,7 @@
       "author": null,
       "contributor": null,
       "id": "baseline_message_secrecy",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Post-Revocation Message Secrecy",
@@ -2546,7 +2522,7 @@
       "author": null,
       "contributor": null,
       "id": "post_revocation_message_secrecy",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Attachment Unlinkability",
@@ -2558,7 +2534,7 @@
       "author": null,
       "contributor": null,
       "id": "attachment_unlinkability",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Cryptographic Primitives",
@@ -2570,7 +2546,7 @@
       "author": null,
       "contributor": null,
       "id": "cryptographic_primitives",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Oblivious Revocable Function",
@@ -2582,7 +2558,7 @@
       "author": null,
       "contributor": null,
       "id": "oblivious_revocable_function",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Data Recovery Methods",
@@ -2594,7 +2570,7 @@
       "author": null,
       "contributor": null,
       "id": "data_recovery_methods",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Recovery Codes",
@@ -2606,7 +2582,7 @@
       "author": null,
       "contributor": null,
       "id": "recovery_codes",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Virtual Devices",
@@ -2618,7 +2594,7 @@
       "author": null,
       "contributor": null,
       "id": "virtual_devices",
-      "community": 2
+      "community": 1
     },
     {
       "label": "One-Time Codes",
@@ -2630,7 +2606,7 @@
       "author": null,
       "contributor": null,
       "id": "one_time_codes",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Third-Party Cloud Storage",
@@ -2642,7 +2618,7 @@
       "author": null,
       "contributor": null,
       "id": "third_party_cloud_storage",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Device Keychain",
@@ -2654,7 +2630,7 @@
       "author": null,
       "contributor": null,
       "id": "device_keychain",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Known Limitations",
@@ -2666,7 +2642,7 @@
       "author": null,
       "contributor": null,
       "id": "known_limitations",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Epoch Integrity",
@@ -2678,7 +2654,7 @@
       "author": null,
       "contributor": null,
       "id": "epoch_integrity",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Membership Enumeration",
@@ -2690,7 +2666,7 @@
       "author": null,
       "contributor": null,
       "id": "membership_enumeration",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Security Principles for Private Messaging",
@@ -2702,7 +2678,7 @@
       "author": null,
       "contributor": null,
       "id": "meta_security_principles_private_messaging_2022",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Security Principles",
@@ -2714,7 +2690,7 @@
       "author": null,
       "contributor": null,
       "id": "security_principles",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Client-Centric Architecture",
@@ -2726,7 +2702,7 @@
       "author": null,
       "contributor": null,
       "id": "client_centric_architecture",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Reduce the Attack Surface",
@@ -2738,7 +2714,7 @@
       "author": null,
       "contributor": null,
       "id": "reduce_attack_surface",
-      "community": 2
+      "community": 1
     },
     {
       "label": "WhatsApp / Meta \u5206\u9986\u5730\u56fe",
@@ -2750,7 +2726,7 @@
       "author": null,
       "contributor": null,
       "id": "whatsapp_meta_readme_doc",
-      "community": 2
+      "community": 1
     },
     {
       "label": "De-identified Data Collection on WhatsApp",
@@ -2762,7 +2738,7 @@
       "author": null,
       "contributor": null,
       "id": "whatsapp_dit_deidentified_data_collection",
-      "community": 2
+      "community": 1
     },
     {
       "label": "De-identified Telemetry",
@@ -2774,7 +2750,7 @@
       "author": null,
       "contributor": null,
       "id": "deidentified_telemetry",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Anonymous Credentials System",
@@ -2786,7 +2762,7 @@
       "author": null,
       "contributor": null,
       "id": "anonymous_credentials_system",
-      "community": 2
+      "community": 1
     },
     {
       "label": "VOPRF",
@@ -2798,7 +2774,7 @@
       "author": null,
       "contributor": null,
       "id": "voprf",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Privacy Pass",
@@ -2810,7 +2786,7 @@
       "author": null,
       "contributor": null,
       "id": "privacy_pass",
-      "community": 2
+      "community": 1
     },
     {
       "label": "WhatsApp Multi-Device",
@@ -2822,7 +2798,7 @@
       "author": null,
       "contributor": null,
       "id": "whatsapp_multi_device",
-      "community": 2
+      "community": 1
     },
     {
       "label": "WhatsApp Multi-Device Architecture",
@@ -2834,7 +2810,7 @@
       "author": null,
       "contributor": null,
       "id": "whatsapp_multi_device_architecture",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Automatic Device Verification",
@@ -2846,7 +2822,7 @@
       "author": null,
       "contributor": null,
       "id": "automatic_device_verification",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Message History Sync",
@@ -2858,7 +2834,7 @@
       "author": null,
       "contributor": null,
       "id": "message_history_sync",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Application State Sync",
@@ -2870,7 +2846,7 @@
       "author": null,
       "contributor": null,
       "id": "application_state_sync",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Primary Device",
@@ -2882,7 +2858,7 @@
       "author": null,
       "contributor": null,
       "id": "primary_device",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Companion Devices",
@@ -2894,7 +2870,7 @@
       "author": null,
       "contributor": null,
       "id": "companion_devices",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Device List Keys",
@@ -2906,7 +2882,7 @@
       "author": null,
       "contributor": null,
       "id": "device_list_keys",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Safety Code",
@@ -2918,7 +2894,7 @@
       "author": null,
       "contributor": null,
       "id": "safety_code",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Client Fanout",
@@ -2930,7 +2906,7 @@
       "author": null,
       "contributor": null,
       "id": "client_fanout",
-      "community": 2
+      "community": 1
     },
     {
       "label": "Pairwise E2EE",
@@ -2942,7 +2918,7 @@
       "author": null,
       "contributor": null,
       "id": "pairwise_e2ee",
-      "community": 2
+      "community": 1
     },
     {
       "label": "SRTP Master Secret",
@@ -2954,7 +2930,7 @@
       "author": null,
       "contributor": null,
       "id": "srtp_master_secret",
-      "community": 2
+      "community": 1
     },
     {
       "label": "DDD \u9886\u57df\u4e3b\u6743\u4e0e\u4e50\u9ad8\u5f0f\u53ef\u63d2\u62d4\u7cfb\u7edf\u7406\u89e3\u7b14\u8bb0",
@@ -2966,7 +2942,7 @@
       "author": null,
       "contributor": null,
       "id": "ddd_domain_sovereignty_notes",
-      "community": 5
+      "community": 4
     },
     {
       "label": "Bounded Context",
@@ -2978,7 +2954,7 @@
       "author": null,
       "contributor": null,
       "id": "bounded_context",
-      "community": 5
+      "community": 4
     },
     {
       "label": "Ports & Adapters",
@@ -2990,7 +2966,23 @@
       "author": null,
       "contributor": null,
       "id": "ports_and_adapters",
-      "community": 5
+      "community": 4
+    },
+    {
+      "label": "2026-04-09 pretext \u8c03\u7814\u8bb0\u5f55",
+      "type": "document",
+      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
+      "file_type": "document",
+      "id": "doc_pretext_research",
+      "community": 3
+    },
+    {
+      "label": "@chenglou/pretext/rich-inline",
+      "type": "concept",
+      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
+      "file_type": "document",
+      "id": "concept_pretext_rich_inline",
+      "community": 3
     },
     {
       "label": "\u6574\u7406\u7b14\u8bb0\u5206\u9986\u5730\u56fe",
@@ -3002,7 +2994,7 @@
       "author": null,
       "contributor": null,
       "id": "notes_readme_doc",
-      "community": 1
+      "community": 0
     },
     {
       "label": "socketioxide \u4e0e\u7fa4\u804a IM \u5b98\u65b9\u6700\u4f73\u5b9e\u8df5\u8865\u5145",
@@ -3014,7 +3006,7 @@
       "author": null,
       "contributor": null,
       "id": "socketioxide_im_best_practices_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "socketioxide \u5b9e\u65f6\u9002\u914d\u5668",
@@ -3026,7 +3018,7 @@
       "author": null,
       "contributor": null,
       "id": "socketioxide_realtime_adapter",
-      "community": 1
+      "community": 0
     },
     {
       "label": "room \u4e0d\u662f\u6210\u5458\u771f\u76f8",
@@ -3038,7 +3030,7 @@
       "author": null,
       "contributor": null,
       "id": "room_is_not_member_truth",
-      "community": 1
+      "community": 0
     },
     {
       "label": "ACK \u4e0d\u662f\u6d88\u606f\u6210\u7acb",
@@ -3050,7 +3042,7 @@
       "author": null,
       "contributor": null,
       "id": "ack_is_not_message_created",
-      "community": 1
+      "community": 0
     },
     {
       "label": "connection state recovery \u7f13\u51b2\u57ab",
@@ -3062,7 +3054,7 @@
       "author": null,
       "contributor": null,
       "id": "connection_state_recovery_buffer",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u4e0d\u8981\u957f\u671f\u4fdd\u5b58 SocketRef",
@@ -3074,7 +3066,7 @@
       "author": null,
       "contributor": null,
       "id": "no_long_lived_socketref",
-      "community": 1
+      "community": 0
     },
     {
       "label": "socketioxide \u5b98\u65b9\u6700\u4f73\u5b9e\u8df5\u4e0e\u591a\u623f\u95f4\u7fa4\u804a\u843d\u5730\u7b14\u8bb0",
@@ -3086,7 +3078,7 @@
       "author": null,
       "contributor": null,
       "id": "socketioxide_multiroom_landing_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "connect middleware \u8ba4\u8bc1\u95e8",
@@ -3098,7 +3090,7 @@
       "author": null,
       "contributor": null,
       "id": "socketioxide_connect_middleware_auth",
-      "community": 1
+      "community": 0
     },
     {
       "label": "Socket.IO room \u5e7f\u64ad\u5206\u7ec4",
@@ -3110,7 +3102,7 @@
       "author": null,
       "contributor": null,
       "id": "socketio_room_broadcast_group",
-      "community": 1
+      "community": 0
     },
     {
       "label": "global state \u4e0e socket extension \u5206\u5c42",
@@ -3122,7 +3114,7 @@
       "author": null,
       "contributor": null,
       "id": "state_vs_extension",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u4e0d\u8981\u81ea\u5efa room -> sockets \u5e7f\u64ad\u8868",
@@ -3134,7 +3126,7 @@
       "author": null,
       "contributor": null,
       "id": "no_private_room_socket_table",
-      "community": 1
+      "community": 0
     },
     {
       "label": "socketioxide \u5355\u8282\u70b9\u5230\u591a\u8282\u70b9\u90e8\u7f72\u4e0e\u95e8\u7981\u7b14\u8bb0",
@@ -3146,7 +3138,7 @@
       "author": null,
       "contributor": null,
       "id": "socketioxide_multinode_gates_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "sticky session \u4e0e\u4ee3\u7406\u8d85\u65f6\u95e8\u7981",
@@ -3158,7 +3150,7 @@
       "author": null,
       "contributor": null,
       "id": "sticky_session_proxy_timeout_gate",
-      "community": 1
+      "community": 0
     },
     {
       "label": "websocket only \u4e0e polling \u53d6\u820d",
@@ -3170,7 +3162,7 @@
       "author": null,
       "contributor": null,
       "id": "websocket_only_vs_polling",
-      "community": 1
+      "community": 0
     },
     {
       "label": "socketioxide-redis \u4e0e JS Redis adapter \u4e0d\u517c\u5bb9",
@@ -3182,7 +3174,7 @@
       "author": null,
       "contributor": null,
       "id": "socketioxide_redis_incompatibility",
-      "community": 1
+      "community": 0
     },
     {
       "label": "Telegram / WhatsApp \u9ad8\u6027\u80fd IM \u8bbe\u8ba1\u4e0e\u540c\u6b65\u951a\u70b9\u7b14\u8bb0",
@@ -3194,7 +3186,7 @@
       "author": null,
       "contributor": null,
       "id": "telegram_whatsapp_sync_anchor_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "gap repair + snapshot \u515c\u5e95",
@@ -3206,7 +3198,7 @@
       "author": null,
       "contributor": null,
       "id": "gap_repair_snapshot_fallback",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u5355\u673a\u591a\u623f\u95f4\u5b9e\u65f6\u4e3b\u94fe\u5b98\u65b9\u8d44\u6599\u518d\u5b66\u4e60\u6574\u7406",
@@ -3218,7 +3210,7 @@
       "author": null,
       "contributor": null,
       "id": "single_machine_multiroom_restudy_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "room \u5e7f\u64ad union \u8bed\u4e49",
@@ -3230,7 +3222,7 @@
       "author": null,
       "contributor": null,
       "id": "room_broadcast_union_semantics",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u5355\u8282\u70b9\u591a\u623f\u95f4\u7fa4\u804a\u4e3b\u901a\u9053\u5173\u952e\u8f6e\u5b50\u5b98\u65b9\u6700\u4f73\u5b9e\u8df5\u6e05\u5355",
@@ -3242,7 +3234,7 @@
       "author": null,
       "contributor": null,
       "id": "single_node_multiroom_checklist",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u5171\u4eab PgPool",
@@ -3254,7 +3246,7 @@
       "author": null,
       "contributor": null,
       "id": "shared_sqlx_pool",
-      "community": 1
+      "community": 0
     },
     {
       "label": "axum \u5171\u4eab\u72b6\u6001",
@@ -3266,7 +3258,7 @@
       "author": null,
       "contributor": null,
       "id": "axum_shared_state",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u552f\u4e00\u58f3\u7ea7\u64cd\u4f5c\u53f0\u5b98\u65b9\u6700\u4f73\u5b9e\u8df5\u4e0e\u4e0d\u624b\u6413\u8f6e\u5b50\u4f9d\u636e",
@@ -3278,7 +3270,7 @@
       "author": null,
       "contributor": null,
       "id": "unique_shell_console_notes",
-      "community": 3
+      "community": 6
     },
     {
       "label": "socketioxide / socket.io \u4e0e Telegram / WhatsApp \u5b98\u65b9\u8d44\u6599\u518d\u8865\u5f3a",
@@ -3290,7 +3282,7 @@
       "author": null,
       "contributor": null,
       "id": "socketio_telegram_whatsapp_reinforcement_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u6062\u590d\u5931\u8d25\u9700\u8981\u91cd\u65b0\u540c\u6b65",
@@ -3302,7 +3294,7 @@
       "author": null,
       "contributor": null,
       "id": "recovery_failure_requires_resync",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u547d\u4ee4\u9001\u8fbe\u91cd\u8bd5",
@@ -3314,7 +3306,7 @@
       "author": null,
       "contributor": null,
       "id": "command_delivery_retries",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u6d3b\u8dc3\u623f\u95f4\u4f18\u5148\u8865\u6d1e",
@@ -3326,7 +3318,7 @@
       "author": null,
       "contributor": null,
       "id": "active_room_priority",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u8bbe\u5907\u76ee\u5f55\u4e0e Key Transparency",
@@ -3338,7 +3330,7 @@
       "author": null,
       "contributor": null,
       "id": "key_transparency_device_directory",
-      "community": 1
+      "community": 0
     },
     {
       "label": "Rust \u5b89\u5168\u70ed\u8def\u5f84",
@@ -3350,7 +3342,7 @@
       "author": null,
       "contributor": null,
       "id": "rust_safe_hot_paths",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u6062\u590d\u95e8\u7981\u89c2\u6d4b\u4e0e\u5355\u8282\u70b9\u6027\u80fd\u5b98\u65b9\u8d44\u6599\u8865\u5145",
@@ -3362,7 +3354,7 @@
       "author": null,
       "contributor": null,
       "id": "recovery_observability_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u7ed3\u6784\u5316\u89c2\u6d4b",
@@ -3374,7 +3366,7 @@
       "author": null,
       "contributor": null,
       "id": "structured_tracing_observability",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u7eaf Rust \u7fa4\u804a\u8f6e\u5b50\u4e8c\u526f\u5019\u9009\u4e0e\u7be1\u4f4d\u98ce\u9669\u76d8\u70b9",
@@ -3386,7 +3378,7 @@
       "author": null,
       "contributor": null,
       "id": "pure_rust_second_mate_risk_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "headless \u7fa4\u804a\u6838\u5fc3\u7a7a\u6863",
@@ -3398,7 +3390,7 @@
       "author": null,
       "contributor": null,
       "id": "headless_chat_core_gap",
-      "community": 1
+      "community": 0
     },
     {
       "label": "vodozemac E2EE \u4e8c\u526f",
@@ -3410,7 +3402,7 @@
       "author": null,
       "contributor": null,
       "id": "vodozemac_e2ee_adapter",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u7fa4\u804a IM \u5b98\u65b9\u5efa\u8bae\u4e0e\u5927\u795e\u5b9e\u8df5\u5bf9\u9f50\u6e05\u5355",
@@ -3422,7 +3414,7 @@
       "author": null,
       "contributor": null,
       "id": "im_practice_alignment_checklist",
-      "community": 1
+      "community": 0
     },
     {
       "label": "client_message_id \u5e42\u7b49\u952e",
@@ -3434,7 +3426,7 @@
       "author": null,
       "contributor": null,
       "id": "client_message_id_idempotency",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u7fa4\u804a\u4e3b\u901a\u9053\u4e0b\u4e00\u6b65\u5b98\u65b9\u8d44\u6599\u4e0e\u9ad8\u6027\u80fd\u699c\u6837\u8865\u5145",
@@ -3446,7 +3438,7 @@
       "author": null,
       "contributor": null,
       "id": "next_step_official_sources_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u8bbe\u5907\u7ea7\u82b1\u540d\u533f\u540d\u8eab\u4efd MVP \u5b98\u65b9\u8d44\u6599\u4e0e\u8bbe\u8ba1\u542f\u53d1",
@@ -3458,7 +3450,7 @@
       "author": null,
       "contributor": null,
       "id": "device_identity_mvp_notes",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u8bbe\u5907\u533f\u540d token",
@@ -3470,7 +3462,7 @@
       "author": null,
       "contributor": null,
       "id": "device_anonymous_token",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u533f\u540d\u8eab\u4efd\u53ef\u5347\u7ea7",
@@ -3482,7 +3474,7 @@
       "author": null,
       "contributor": null,
       "id": "anonymous_identity_upgrade",
-      "community": 1
+      "community": 0
     },
     {
       "label": "localStorage \u8bbe\u5907\u6301\u4e45\u5316",
@@ -3494,335 +3486,7 @@
       "author": null,
       "contributor": null,
       "id": "localstorage_device_persistence",
-      "community": 1
-    },
-    {
-      "label": "\u623f\u95f4\u6d88\u606f\u7a97",
-      "file_type": "code",
-      "source_file": "frontend/\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "room_message_pane",
-      "community": 12
-    },
-    {
-      "label": "\u6587\u672c\u5e03\u5c40",
-      "file_type": "code",
-      "source_file": "frontend/\u6587\u672c\u5e03\u5c40.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "text_layout",
-      "community": 12
-    },
-    {
-      "label": "\u804a\u5929\u58f3",
-      "file_type": "code",
-      "source_file": "frontend/\u804a\u5929\u58f3.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "chat_shell",
-      "community": 12
-    },
-    {
-      "label": "\u89c6\u56fe",
-      "file_type": "code",
-      "source_file": "frontend/\u89c6\u56fe.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "view_presenters",
-      "community": 12
-    },
-    {
-      "label": "\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5",
-      "file_type": "code",
-      "source_file": "frontend/tests/\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "text_layout_spec",
-      "community": 12
-    },
-    {
-      "label": "\u7aef\u5230\u7aef\u6d4b\u8bd5",
-      "file_type": "code",
-      "source_file": "frontend/tests/\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "e2e_spec",
-      "community": 12
-    },
-    {
-      "label": "\u804a\u5929\u58f3\u6d4b\u8bd5",
-      "file_type": "code",
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "chat_shell_spec",
-      "community": 12
-    },
-    {
-      "label": "\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5",
-      "file_type": "code",
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "chat_shell_reading_messages_spec",
-      "community": 12
-    },
-    {
-      "label": "\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5",
-      "file_type": "code",
-      "source_file": "frontend/tests/\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "input_area_layout_spec",
-      "community": 12
-    },
-    {
-      "label": "\u804a\u5929\u6d4b\u8bd5\u652f\u67b6",
-      "file_type": "code",
-      "source_file": "frontend/tests/common/\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "chat_test_harness",
-      "community": 12
-    },
-    {
-      "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316 Implementation Plan",
-      "type": "document",
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "file_type": "document",
-      "id": "doc_plan_pretext_2026_04_09",
-      "community": 4
-    },
-    {
-      "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316\u8bbe\u8ba1",
-      "type": "document",
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "file_type": "document",
-      "id": "doc_design_pretext_2026_04_09",
-      "community": 4
-    },
-    {
-      "label": "\u5b66\u4e60\u8d44\u6599\u603b\u5730\u56fe",
-      "type": "document",
-      "source_file": "\u5b66\u4e60/README.md",
-      "file_type": "document",
-      "id": "doc_learning_readme",
-      "community": 4
-    },
-    {
-      "label": "graphify \u5206\u9986",
-      "type": "document",
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "file_type": "document",
-      "id": "doc_graphify_readme",
-      "community": 4
-    },
-    {
-      "label": "graphify \u5b98\u65b9\u7528\u6cd5\u603b\u89c8",
-      "type": "document",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5b98\u65b9\u7528\u6cd5\u603b\u89c8.md",
-      "file_type": "document",
-      "id": "doc_graphify_overview",
-      "community": 4
-    },
-    {
-      "label": "graphify \u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def",
-      "type": "document",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
-      "file_type": "document",
-      "id": "doc_graphify_ignore",
-      "community": 4
-    },
-    {
-      "label": "graphify \u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9",
-      "type": "document",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
-      "file_type": "document",
-      "id": "doc_graphify_versions",
-      "community": 4
-    },
-    {
-      "label": "graphify \u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c",
-      "type": "document",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
-      "file_type": "document",
-      "id": "doc_graphify_auto",
-      "community": 4
-    },
-    {
-      "label": "2026-04-09 pretext \u8c03\u7814\u8bb0\u5f55",
-      "type": "document",
-      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
-      "file_type": "document",
-      "id": "doc_pretext_research",
-      "community": 4
-    },
-    {
-      "label": "Pretext \u4f5c\u4e3a Web \u524d\u7aef\u6587\u672c\u51e0\u4f55\u552f\u4e00\u4e3b\u6743\u5c42",
-      "type": "concept",
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "file_type": "document",
-      "id": "concept_pretext_text_sovereignty",
-      "community": 4
-    },
-    {
-      "label": "\u552f\u4e00 text layout core / frontend/\u6587\u672c\u5e03\u5c40.ts",
-      "type": "concept",
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "file_type": "document",
-      "id": "concept_text_layout_core",
-      "community": 4
-    },
-    {
-      "label": "DOM \u53ea\u4fdd\u7559\u6e32\u67d3\u540e\u89c6\u53e3\u89c2\u6d4b",
-      "type": "concept",
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "file_type": "document",
-      "id": "concept_dom_viewport_boundary",
-      "community": 4
-    },
-    {
-      "label": "\u6d88\u606f\u7a97\u53ea\u8868\u8fbe\u5e03\u5c40\u7ed3\u679c\u800c\u4e0d\u518d\u4f9d\u8d56\u6d4f\u89c8\u5668\u81ea\u7136\u6362\u884c",
-      "type": "concept",
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "file_type": "document",
-      "id": "concept_message_window_line_rendering",
-      "community": 4
-    },
-    {
-      "label": "@chenglou/pretext/rich-inline",
-      "type": "concept",
-      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
-      "file_type": "document",
-      "id": "concept_pretext_rich_inline",
-      "community": 4
-    },
-    {
-      "label": "graphify detect -> extract -> build -> cluster -> analyze -> report -> export \u7ba1\u7ebf",
-      "type": "concept",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5b98\u65b9\u7528\u6cd5\u603b\u89c8.md",
-      "file_type": "document",
-      "id": "concept_graphify_pipeline",
-      "community": 4
-    },
-    {
-      "label": "\u6587\u6863\u53d8\u66f4\u9700\u8981\u624b\u52a8 graphify --update",
-      "type": "concept",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
-      "file_type": "document",
-      "id": "concept_graphify_doc_update_boundary",
-      "community": 4
-    },
-    {
-      "label": "graphify-out/memory \u53cd\u9988\u56de\u8def",
-      "type": "concept",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
-      "file_type": "document",
-      "id": "concept_graphify_feedback_loop",
-      "community": 4
-    },
-    {
-      "label": "graphify watch._rebuild_code \u7ed3\u6784\u6027 bug",
-      "type": "concept",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
-      "file_type": "document",
-      "id": "concept_graphify_watch_bug",
-      "community": 4
-    },
-    {
-      "label": "graphify \u8d44\u6599\u4fe1\u4efb\u987a\u5e8f\u4ee5 CLI \u548c\u6e90\u7801\u4f18\u5148",
-      "type": "concept",
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "file_type": "document",
-      "id": "concept_graphify_source_precedence",
-      "community": 4
-    },
-    {
-      "label": "graphify \u7528\u4e8e\u8de8\u6765\u6e90\u5173\u8054\u800c\u975e\u66ff\u4ee3\u7269\u7406\u76ee\u5f55",
-      "type": "concept",
-      "source_file": "\u5b66\u4e60/README.md",
-      "file_type": "document",
-      "id": "concept_graphify_cross_source_map",
-      "community": 4
-    },
-    {
-      "label": "\u6d88\u9664\u53cc\u4e3b\u6743\u6587\u672c\u7cfb\u7edf",
-      "type": "rationale",
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "file_type": "document",
-      "id": "rationale_remove_dual_text_system",
-      "community": 4
-    },
-    {
-      "label": "\u4fdd\u6301 contract/transport/orchestrator \u4e0e\u6eda\u52a8\u6062\u590d\u8bed\u4e49\u4e0d\u9000\u5316",
-      "type": "rationale",
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "file_type": "document",
-      "id": "rationale_preserve_runtime_boundaries",
-      "community": 4
-    },
-    {
-      "label": "\u907f\u514d\u628a graphify \u751f\u6210\u7269\u548c\u4e8c\u624b\u603b\u7ed3\u53cd\u590d\u5582\u56de\u56fe\u8c31",
-      "type": "rationale",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
-      "file_type": "document",
-      "id": "rationale_keep_graph_clean",
-      "community": 4
-    },
-    {
-      "label": "\u81ea\u52a8\u5316\u5bf9\u6587\u6863\u8bed\u4e49\u66f4\u65b0\u5e76\u4e0d\u5b8c\u6574",
-      "type": "rationale",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
-      "file_type": "document",
-      "id": "rationale_use_manual_doc_updates",
-      "community": 4
-    },
-    {
-      "label": "Pretext \u5b98\u65b9 README/demo/API \u8bc1\u636e\u94fe",
-      "type": "citation",
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "file_type": "document",
-      "id": "citation_pretext_official_evidence",
-      "community": 4
-    },
-    {
-      "label": "graphify CLI/\u6e90\u7801/tests/CHANGELOG \u8bc1\u636e\u94fe",
-      "type": "citation",
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
-      "file_type": "document",
-      "id": "citation_graphify_official_evidence",
-      "community": 4
+      "community": 0
     }
   ],
   "links": [
@@ -4091,234 +3755,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L26",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "constructor",
-      "source": "",
-      "target": "constructor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L38",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "createrenderroot",
-      "source": "",
-      "target": "createrenderroot",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L42",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "dispatchscrollintent",
-      "source": "",
-      "target": "dispatchscrollintent",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L51",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "dispatchscroll",
-      "source": "",
-      "target": "dispatchscroll",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L61",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "dispatchjumptolatest",
-      "source": "",
-      "target": "dispatchjumptolatest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L70",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "rendermessagebody",
-      "source": "",
-      "target": "rendermessagebody",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L696",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "roomshellstate",
-      "source": "",
-      "target": "roomshellstate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L704",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "roomshellpatch",
-      "source": "",
-      "target": "roomshellpatch",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L732",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "connectedcallback",
-      "source": "",
-      "target": "connectedcallback",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L738",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "disconnectedcallback",
-      "source": "",
-      "target": "disconnectedcallback",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L747",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "updatechat",
-      "source": "",
-      "target": "updatechat",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L756",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "buildroomviewresetpatch",
-      "source": "",
-      "target": "buildroomviewresetpatch",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L781",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "exitcurrentroomview",
-      "source": "",
-      "target": "exitcurrentroomview",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L805",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "leavecurrentroomview",
-      "source": "",
-      "target": "leavecurrentroomview",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L815",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "joinhistoryroom",
-      "source": "",
-      "target": "joinhistoryroom",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L830",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "submitshellconsole",
-      "source": "",
-      "target": "submitshellconsole",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L846",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "handleshellconsoleprimaryinput",
-      "source": "",
-      "target": "handleshellconsoleprimaryinput",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L855",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "handleshellconsoleprimarykeydown",
-      "source": "",
-      "target": "handleshellconsoleprimarykeydown",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L912",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "rendershellconsole",
-      "source": "",
-      "target": "rendershellconsole",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "E:\\koko\\frontend\\tests\\\u9605\u8bfb\u63a8\u8fdb\u7f16\u6392\u6d4b\u8bd5.spec.ts",
@@ -4328,162 +3764,6 @@
       "_tgt": "",
       "source": "",
       "target": "spec",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L476",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "createfakestorage",
-      "source": "",
-      "target": "createfakestorage",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L86",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "socket",
-      "source": "",
-      "target": "socket",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L196",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "bootstrapanonymousidentity",
-      "source": "",
-      "target": "bootstrapanonymousidentity",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L205",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "joinorcreateroom",
-      "source": "",
-      "target": "joinorcreateroom",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L213",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "loadroomsnapshot",
-      "source": "",
-      "target": "loadroomsnapshot",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L222",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "updateroomreadanchor",
-      "source": "",
-      "target": "updateroomreadanchor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L233",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "loadroomevents",
-      "source": "",
-      "target": "loadroomevents",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L260",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "loadroomhistory",
-      "source": "",
-      "target": "loadroomhistory",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L273",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "loadadminoverview",
-      "source": "",
-      "target": "loadadminoverview",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L276",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "adminlogin",
-      "source": "",
-      "target": "adminlogin",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L279",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "adminrooms",
-      "source": "",
-      "target": "adminrooms",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L282",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "adminroomdetail",
-      "source": "",
-      "target": "adminroomdetail",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L285",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "createsocket",
-      "source": "",
-      "target": "createsocket",
       "confidence_score": 1.0
     },
     {
@@ -5171,30 +4451,6 @@
       "confidence_score": 0.5
     },
     {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1039",
-      "weight": 1.0,
-      "_src": "render",
-      "_tgt": "roomshellstate",
-      "source": "render",
-      "target": "roomshellstate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1050",
-      "weight": 1.0,
-      "_src": "render",
-      "_tgt": "rendershellconsole",
-      "source": "render",
-      "target": "rendershellconsole",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -5303,6 +4559,30 @@
       "target": "frontend_room_scroller_ts"
     },
     {
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.84,
+      "source_file": "frontend/\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "room_message_pane",
+      "_tgt": "view_presenters",
+      "source": "room_message_pane",
+      "target": "view_presenters"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/\u804a\u5929\u58f3.ts",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "chat_shell",
+      "_tgt": "room_message_pane",
+      "source": "room_message_pane",
+      "target": "chat_shell"
+    },
+    {
       "relation": "conceptually_related_to",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -5389,110 +4669,122 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L717",
+      "confidence_score": 1.0,
+      "source_file": "frontend/\u804a\u5929\u58f3.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "roomshellpatch",
-      "_tgt": "roomshellstate",
-      "source": "roomshellstate",
-      "target": "roomshellpatch",
-      "confidence_score": 1.0
+      "_src": "chat_shell",
+      "_tgt": "text_layout",
+      "source": "text_layout",
+      "target": "chat_shell"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L832",
+      "confidence_score": 1.0,
+      "source_file": "frontend/\u89c6\u56fe.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "submitshellconsole",
-      "_tgt": "roomshellstate",
-      "source": "roomshellstate",
-      "target": "submitshellconsole",
-      "confidence_score": 1.0
+      "_src": "view_presenters",
+      "_tgt": "text_layout",
+      "source": "text_layout",
+      "target": "view_presenters"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L808",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "leavecurrentroomview",
-      "_tgt": "roomshellpatch",
-      "source": "roomshellpatch",
-      "target": "leavecurrentroomview",
-      "confidence_score": 1.0
+      "_src": "text_layout_spec",
+      "_tgt": "text_layout",
+      "source": "text_layout",
+      "target": "text_layout_spec"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L794",
+      "confidence_score": 1.0,
+      "source_file": "frontend/\u804a\u5929\u58f3.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "exitcurrentroomview",
-      "_tgt": "updatechat",
-      "source": "updatechat",
-      "target": "exitcurrentroomview",
-      "confidence_score": 1.0
+      "_src": "chat_shell",
+      "_tgt": "view_presenters",
+      "source": "chat_shell",
+      "target": "view_presenters"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "e2e_spec",
+      "_tgt": "chat_shell",
+      "source": "chat_shell",
+      "target": "e2e_spec"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "chat_shell_spec",
+      "_tgt": "chat_shell",
+      "source": "chat_shell",
+      "target": "chat_shell_spec"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "chat_shell_reading_messages_spec",
+      "_tgt": "chat_shell",
+      "source": "chat_shell",
+      "target": "chat_shell_reading_messages_spec"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "input_area_layout_spec",
+      "_tgt": "chat_shell",
+      "source": "chat_shell",
+      "target": "input_area_layout_spec"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L808",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "leavecurrentroomview",
-      "_tgt": "updatechat",
-      "source": "updatechat",
-      "target": "leavecurrentroomview",
-      "confidence_score": 1.0
+      "_src": "chat_shell_spec",
+      "_tgt": "view_presenters",
+      "source": "view_presenters",
+      "target": "chat_shell_spec"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L820",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "joinhistoryroom",
-      "_tgt": "updatechat",
-      "source": "updatechat",
-      "target": "joinhistoryroom",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L849",
-      "weight": 1.0,
-      "_src": "handleshellconsoleprimaryinput",
-      "_tgt": "updatechat",
-      "source": "updatechat",
-      "target": "handleshellconsoleprimaryinput",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L795",
-      "weight": 1.0,
-      "_src": "exitcurrentroomview",
-      "_tgt": "buildroomviewresetpatch",
-      "source": "buildroomviewresetpatch",
-      "target": "exitcurrentroomview",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L807",
-      "weight": 1.0,
-      "_src": "leavecurrentroomview",
-      "_tgt": "exitcurrentroomview",
-      "source": "exitcurrentroomview",
-      "target": "leavecurrentroomview",
-      "confidence_score": 1.0
+      "_src": "chat_shell_reading_messages_spec",
+      "_tgt": "view_presenters",
+      "source": "view_presenters",
+      "target": "chat_shell_reading_messages_spec"
     },
     {
       "relation": "rationale_for",
@@ -5785,18 +5077,6 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L32",
-      "weight": 1.0,
-      "_src": "spec",
-      "_tgt": "spec_socket",
-      "source": "spec",
-      "target": "spec_socket",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
       "source_file": "E:\\koko\\frontend\\tests\\\u804a\u5929\u58f3\u6062\u590d\u4e0e\u5206\u9875\u6d4b\u8bd5.spec.ts",
       "source_location": "L358",
       "weight": 1.0,
@@ -5807,148 +5087,64 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "method",
+      "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L35",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "spec_socket",
-      "_tgt": "spec_socket_on",
-      "source": "spec_socket",
-      "target": "spec_socket_on",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L42",
-      "weight": 1.0,
-      "_src": "spec_socket",
-      "_tgt": "spec_socket_emit",
-      "source": "spec_socket",
-      "target": "spec_socket_emit",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L65",
-      "weight": 1.0,
-      "_src": "spec_socket",
-      "_tgt": "spec_socket_disconnect",
-      "source": "spec_socket",
-      "target": "spec_socket_disconnect",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L67",
-      "weight": 1.0,
-      "_src": "spec_socket",
-      "_tgt": "spec_socket_fire",
-      "source": "spec_socket",
-      "target": "spec_socket_fire",
-      "confidence_score": 1.0
+      "_src": "text_layout_spec",
+      "_tgt": "chat_test_harness",
+      "source": "text_layout_spec",
+      "target": "chat_test_harness"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L44",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "spec_socket_emit",
-      "_tgt": "spec_socket_fire",
-      "source": "spec_socket_emit",
-      "target": "spec_socket_fire",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L91",
-      "weight": 1.0,
-      "_src": "socket",
-      "_tgt": "socket_on",
-      "source": "socket",
-      "target": "socket_on",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L98",
-      "weight": 1.0,
-      "_src": "socket",
-      "_tgt": "socket_emit",
-      "source": "socket",
-      "target": "socket_emit",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L132",
-      "weight": 1.0,
-      "_src": "socket",
-      "_tgt": "socket_disconnect",
-      "source": "socket",
-      "target": "socket_disconnect",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L134",
-      "weight": 1.0,
-      "_src": "socket",
-      "_tgt": "socket_trigger",
-      "source": "socket",
-      "target": "socket_trigger",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "method",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L138",
-      "weight": 1.0,
-      "_src": "socket",
-      "_tgt": "socket_fire",
-      "source": "socket",
-      "target": "socket_fire",
-      "confidence_score": 1.0
+      "_src": "e2e_spec",
+      "_tgt": "chat_test_harness",
+      "source": "e2e_spec",
+      "target": "chat_test_harness"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L102",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "socket_emit",
-      "_tgt": "socket_fire",
-      "source": "socket_emit",
-      "target": "socket_fire",
-      "confidence_score": 1.0
+      "_src": "chat_shell_spec",
+      "_tgt": "chat_test_harness",
+      "source": "chat_shell_spec",
+      "target": "chat_test_harness"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L135",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
       "weight": 1.0,
-      "_src": "socket_trigger",
-      "_tgt": "socket_fire",
-      "source": "socket_trigger",
-      "target": "socket_fire",
-      "confidence_score": 1.0
+      "_src": "chat_shell_reading_messages_spec",
+      "_tgt": "chat_test_harness",
+      "source": "chat_shell_reading_messages_spec",
+      "target": "chat_test_harness"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "frontend/tests/\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "input_area_layout_spec",
+      "_tgt": "chat_test_harness",
+      "source": "input_area_layout_spec",
+      "target": "chat_test_harness"
     },
     {
       "relation": "contains",
@@ -7091,6 +6287,102 @@
       "target": "one_shell_one_console"
     },
     {
+      "relation": "implements_via",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_plan_pretext_2026_04_09",
+      "_tgt": "concept_text_layout_core",
+      "source": "doc_plan_pretext_2026_04_09",
+      "target": "concept_text_layout_core"
+    },
+    {
+      "relation": "specifies",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_plan_pretext_2026_04_09",
+      "_tgt": "concept_message_window_line_rendering",
+      "source": "doc_plan_pretext_2026_04_09",
+      "target": "concept_message_window_line_rendering"
+    },
+    {
+      "relation": "implements_design_of",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.99,
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_plan_pretext_2026_04_09",
+      "_tgt": "doc_design_pretext_2026_04_09",
+      "source": "doc_plan_pretext_2026_04_09",
+      "target": "doc_design_pretext_2026_04_09"
+    },
+    {
+      "relation": "conflicts_with",
+      "evidence_status": "AMBIGUOUS",
+      "confidence_score": 0.58,
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "confidence": "AMBIGUOUS",
+      "weight": 1.0,
+      "_src": "doc_plan_pretext_2026_04_09",
+      "_tgt": "concept_graphify_watch_bug",
+      "source": "doc_plan_pretext_2026_04_09",
+      "target": "concept_graphify_watch_bug"
+    },
+    {
+      "relation": "enables",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.98,
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_text_layout_core",
+      "_tgt": "concept_pretext_text_sovereignty",
+      "source": "concept_text_layout_core",
+      "target": "concept_pretext_text_sovereignty"
+    },
+    {
+      "relation": "motivates",
+      "evidence_status": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
+      "confidence": "INFERRED",
+      "weight": 1.0,
+      "_src": "doc_pretext_research",
+      "_tgt": "concept_text_layout_core",
+      "source": "concept_text_layout_core",
+      "target": "doc_pretext_research"
+    },
+    {
+      "relation": "operationalizes",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.97,
+      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_message_window_line_rendering",
+      "_tgt": "concept_pretext_text_sovereignty",
+      "source": "concept_message_window_line_rendering",
+      "target": "concept_pretext_text_sovereignty"
+    },
+    {
+      "relation": "supports",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_dom_viewport_boundary",
+      "_tgt": "rationale_preserve_runtime_boundaries",
+      "source": "rationale_preserve_runtime_boundaries",
+      "target": "concept_dom_viewport_boundary"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -7739,6 +7031,78 @@
       "target": "unique_shell_console_notes"
     },
     {
+      "relation": "defines",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_design_pretext_2026_04_09",
+      "_tgt": "concept_pretext_text_sovereignty",
+      "source": "doc_design_pretext_2026_04_09",
+      "target": "concept_pretext_text_sovereignty"
+    },
+    {
+      "relation": "constrains",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_design_pretext_2026_04_09",
+      "_tgt": "concept_dom_viewport_boundary",
+      "source": "doc_design_pretext_2026_04_09",
+      "target": "concept_dom_viewport_boundary"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "evidence_status": "INFERRED",
+      "confidence_score": 0.92,
+      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
+      "confidence": "INFERRED",
+      "weight": 1.0,
+      "_src": "doc_pretext_research",
+      "_tgt": "doc_design_pretext_2026_04_09",
+      "source": "doc_design_pretext_2026_04_09",
+      "target": "doc_pretext_research"
+    },
+    {
+      "relation": "rationale_for",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.99,
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_pretext_text_sovereignty",
+      "_tgt": "rationale_remove_dual_text_system",
+      "source": "concept_pretext_text_sovereignty",
+      "target": "rationale_remove_dual_text_system"
+    },
+    {
+      "relation": "extends",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.96,
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_pretext_rich_inline",
+      "_tgt": "concept_pretext_text_sovereignty",
+      "source": "concept_pretext_text_sovereignty",
+      "target": "concept_pretext_rich_inline"
+    },
+    {
+      "relation": "supports",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "citation_pretext_official_evidence",
+      "_tgt": "concept_pretext_text_sovereignty",
+      "source": "concept_pretext_text_sovereignty",
+      "target": "citation_pretext_official_evidence"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -7797,6 +7161,198 @@
       "_tgt": "history_loading_locality",
       "source": "spec_room_message_window",
       "target": "history_loading_locality"
+    },
+    {
+      "relation": "defines",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/README.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_learning_readme",
+      "_tgt": "concept_graphify_cross_source_map",
+      "source": "doc_learning_readme",
+      "target": "concept_graphify_cross_source_map"
+    },
+    {
+      "relation": "references",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.99,
+      "source_file": "\u5b66\u4e60/README.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_graphify_cross_source_map",
+      "_tgt": "doc_graphify_readme",
+      "source": "concept_graphify_cross_source_map",
+      "target": "doc_graphify_readme"
+    },
+    {
+      "relation": "defines",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5b98\u65b9\u7528\u6cd5\u603b\u89c8.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_overview",
+      "_tgt": "concept_graphify_pipeline",
+      "source": "doc_graphify_overview",
+      "target": "concept_graphify_pipeline"
+    },
+    {
+      "relation": "recommends_reading",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_readme",
+      "_tgt": "doc_graphify_overview",
+      "source": "doc_graphify_overview",
+      "target": "doc_graphify_readme"
+    },
+    {
+      "relation": "defines",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_ignore",
+      "_tgt": "concept_graphify_feedback_loop",
+      "source": "doc_graphify_ignore",
+      "target": "concept_graphify_feedback_loop"
+    },
+    {
+      "relation": "recommends_reading",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_readme",
+      "_tgt": "doc_graphify_ignore",
+      "source": "doc_graphify_ignore",
+      "target": "doc_graphify_readme"
+    },
+    {
+      "relation": "qualified_by",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.94,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_graphify_feedback_loop",
+      "_tgt": "rationale_keep_graph_clean",
+      "source": "concept_graphify_feedback_loop",
+      "target": "rationale_keep_graph_clean"
+    },
+    {
+      "relation": "documents",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_versions",
+      "_tgt": "concept_graphify_watch_bug",
+      "source": "doc_graphify_versions",
+      "target": "concept_graphify_watch_bug"
+    },
+    {
+      "relation": "recommends_reading",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_readme",
+      "_tgt": "doc_graphify_versions",
+      "source": "doc_graphify_versions",
+      "target": "doc_graphify_readme"
+    },
+    {
+      "relation": "reinforces",
+      "evidence_status": "INFERRED",
+      "confidence_score": 0.87,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
+      "confidence": "INFERRED",
+      "weight": 1.0,
+      "_src": "concept_graphify_watch_bug",
+      "_tgt": "concept_graphify_doc_update_boundary",
+      "source": "concept_graphify_watch_bug",
+      "target": "concept_graphify_doc_update_boundary"
+    },
+    {
+      "relation": "explains_interpretation_of",
+      "evidence_status": "INFERRED",
+      "confidence_score": 0.84,
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "confidence": "INFERRED",
+      "weight": 1.0,
+      "_src": "concept_graphify_source_precedence",
+      "_tgt": "concept_graphify_watch_bug",
+      "source": "concept_graphify_watch_bug",
+      "target": "concept_graphify_source_precedence"
+    },
+    {
+      "relation": "supports",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.97,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "citation_graphify_official_evidence",
+      "_tgt": "concept_graphify_source_precedence",
+      "source": "citation_graphify_official_evidence",
+      "target": "concept_graphify_source_precedence"
+    },
+    {
+      "relation": "defines",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_auto",
+      "_tgt": "concept_graphify_doc_update_boundary",
+      "source": "doc_graphify_auto",
+      "target": "concept_graphify_doc_update_boundary"
+    },
+    {
+      "relation": "recommends_reading",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_readme",
+      "_tgt": "doc_graphify_auto",
+      "source": "doc_graphify_auto",
+      "target": "doc_graphify_readme"
+    },
+    {
+      "relation": "rationale_for",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 0.98,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "concept_graphify_doc_update_boundary",
+      "_tgt": "rationale_use_manual_doc_updates",
+      "source": "concept_graphify_doc_update_boundary",
+      "target": "rationale_use_manual_doc_updates"
+    },
+    {
+      "relation": "defines",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/graphify/README.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_graphify_readme",
+      "_tgt": "concept_graphify_source_precedence",
+      "source": "doc_graphify_readme",
+      "target": "concept_graphify_source_precedence"
     },
     {
       "relation": "references",
@@ -9179,6 +8735,18 @@
       "target": "ports_and_adapters"
     },
     {
+      "relation": "documents",
+      "evidence_status": "EXTRACTED",
+      "confidence_score": 1,
+      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
+      "confidence": "EXTRACTED",
+      "weight": 1.0,
+      "_src": "doc_pretext_research",
+      "_tgt": "concept_pretext_rich_inline",
+      "source": "doc_pretext_research",
+      "target": "concept_pretext_rich_inline"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -10149,585 +9717,23 @@
       "_tgt": "device_anonymous_token",
       "source": "device_anonymous_token",
       "target": "anonymous_identity_upgrade"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/\u804a\u5929\u58f3.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell",
-      "_tgt": "room_message_pane",
-      "source": "room_message_pane",
-      "target": "chat_shell"
-    },
-    {
-      "relation": "shares_data_with",
-      "confidence": "INFERRED",
-      "confidence_score": 0.84,
-      "source_file": "frontend/\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "room_message_pane",
-      "_tgt": "view_presenters",
-      "source": "room_message_pane",
-      "target": "view_presenters"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/\u804a\u5929\u58f3.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell",
-      "_tgt": "text_layout",
-      "source": "text_layout",
-      "target": "chat_shell"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/\u89c6\u56fe.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "view_presenters",
-      "_tgt": "text_layout",
-      "source": "text_layout",
-      "target": "view_presenters"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "text_layout_spec",
-      "_tgt": "text_layout",
-      "source": "text_layout",
-      "target": "text_layout_spec"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/\u804a\u5929\u58f3.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell",
-      "_tgt": "view_presenters",
-      "source": "chat_shell",
-      "target": "view_presenters"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "e2e_spec",
-      "_tgt": "chat_shell",
-      "source": "chat_shell",
-      "target": "e2e_spec"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell_spec",
-      "_tgt": "chat_shell",
-      "source": "chat_shell",
-      "target": "chat_shell_spec"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell_reading_messages_spec",
-      "_tgt": "chat_shell",
-      "source": "chat_shell",
-      "target": "chat_shell_reading_messages_spec"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "input_area_layout_spec",
-      "_tgt": "chat_shell",
-      "source": "chat_shell",
-      "target": "input_area_layout_spec"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell_spec",
-      "_tgt": "view_presenters",
-      "source": "view_presenters",
-      "target": "chat_shell_spec"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell_reading_messages_spec",
-      "_tgt": "view_presenters",
-      "source": "view_presenters",
-      "target": "chat_shell_reading_messages_spec"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "text_layout_spec",
-      "_tgt": "chat_test_harness",
-      "source": "text_layout_spec",
-      "target": "chat_test_harness"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "e2e_spec",
-      "_tgt": "chat_test_harness",
-      "source": "e2e_spec",
-      "target": "chat_test_harness"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell_spec",
-      "_tgt": "chat_test_harness",
-      "source": "chat_shell_spec",
-      "target": "chat_test_harness"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u804a\u5929\u58f3\u9605\u8bfb\u4e0e\u6d88\u606f\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "chat_shell_reading_messages_spec",
-      "_tgt": "chat_test_harness",
-      "source": "chat_shell_reading_messages_spec",
-      "target": "chat_test_harness"
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "frontend/tests/\u8f93\u5165\u533a\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
-      "source_location": null,
-      "weight": 1.0,
-      "_src": "input_area_layout_spec",
-      "_tgt": "chat_test_harness",
-      "source": "input_area_layout_spec",
-      "target": "chat_test_harness"
-    },
-    {
-      "relation": "implements_via",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_plan_pretext_2026_04_09",
-      "_tgt": "concept_text_layout_core",
-      "source": "doc_plan_pretext_2026_04_09",
-      "target": "concept_text_layout_core"
-    },
-    {
-      "relation": "specifies",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_plan_pretext_2026_04_09",
-      "_tgt": "concept_message_window_line_rendering",
-      "source": "doc_plan_pretext_2026_04_09",
-      "target": "concept_message_window_line_rendering"
-    },
-    {
-      "relation": "implements_design_of",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.99,
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_plan_pretext_2026_04_09",
-      "_tgt": "doc_design_pretext_2026_04_09",
-      "source": "doc_plan_pretext_2026_04_09",
-      "target": "doc_design_pretext_2026_04_09"
-    },
-    {
-      "relation": "conflicts_with",
-      "evidence_status": "AMBIGUOUS",
-      "confidence_score": 0.58,
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "confidence": "AMBIGUOUS",
-      "weight": 1.0,
-      "_src": "doc_plan_pretext_2026_04_09",
-      "_tgt": "concept_graphify_watch_bug",
-      "source": "doc_plan_pretext_2026_04_09",
-      "target": "concept_graphify_watch_bug"
-    },
-    {
-      "relation": "defines",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_design_pretext_2026_04_09",
-      "_tgt": "concept_pretext_text_sovereignty",
-      "source": "doc_design_pretext_2026_04_09",
-      "target": "concept_pretext_text_sovereignty"
-    },
-    {
-      "relation": "constrains",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_design_pretext_2026_04_09",
-      "_tgt": "concept_dom_viewport_boundary",
-      "source": "doc_design_pretext_2026_04_09",
-      "target": "concept_dom_viewport_boundary"
-    },
-    {
-      "relation": "conceptually_related_to",
-      "evidence_status": "INFERRED",
-      "confidence_score": 0.92,
-      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
-      "confidence": "INFERRED",
-      "weight": 1.0,
-      "_src": "doc_pretext_research",
-      "_tgt": "doc_design_pretext_2026_04_09",
-      "source": "doc_design_pretext_2026_04_09",
-      "target": "doc_pretext_research"
-    },
-    {
-      "relation": "defines",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/README.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_learning_readme",
-      "_tgt": "concept_graphify_cross_source_map",
-      "source": "doc_learning_readme",
-      "target": "concept_graphify_cross_source_map"
-    },
-    {
-      "relation": "defines",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_readme",
-      "_tgt": "concept_graphify_source_precedence",
-      "source": "doc_graphify_readme",
-      "target": "concept_graphify_source_precedence"
-    },
-    {
-      "relation": "references",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.99,
-      "source_file": "\u5b66\u4e60/README.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_graphify_cross_source_map",
-      "_tgt": "doc_graphify_readme",
-      "source": "doc_graphify_readme",
-      "target": "concept_graphify_cross_source_map"
-    },
-    {
-      "relation": "recommends_reading",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_readme",
-      "_tgt": "doc_graphify_overview",
-      "source": "doc_graphify_readme",
-      "target": "doc_graphify_overview"
-    },
-    {
-      "relation": "recommends_reading",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_readme",
-      "_tgt": "doc_graphify_auto",
-      "source": "doc_graphify_readme",
-      "target": "doc_graphify_auto"
-    },
-    {
-      "relation": "recommends_reading",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_readme",
-      "_tgt": "doc_graphify_ignore",
-      "source": "doc_graphify_readme",
-      "target": "doc_graphify_ignore"
-    },
-    {
-      "relation": "recommends_reading",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_readme",
-      "_tgt": "doc_graphify_versions",
-      "source": "doc_graphify_readme",
-      "target": "doc_graphify_versions"
-    },
-    {
-      "relation": "defines",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5b98\u65b9\u7528\u6cd5\u603b\u89c8.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_overview",
-      "_tgt": "concept_graphify_pipeline",
-      "source": "doc_graphify_overview",
-      "target": "concept_graphify_pipeline"
-    },
-    {
-      "relation": "defines",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_ignore",
-      "_tgt": "concept_graphify_feedback_loop",
-      "source": "doc_graphify_ignore",
-      "target": "concept_graphify_feedback_loop"
-    },
-    {
-      "relation": "documents",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_versions",
-      "_tgt": "concept_graphify_watch_bug",
-      "source": "doc_graphify_versions",
-      "target": "concept_graphify_watch_bug"
-    },
-    {
-      "relation": "defines",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_graphify_auto",
-      "_tgt": "concept_graphify_doc_update_boundary",
-      "source": "doc_graphify_auto",
-      "target": "concept_graphify_doc_update_boundary"
-    },
-    {
-      "relation": "documents",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 1,
-      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "doc_pretext_research",
-      "_tgt": "concept_pretext_rich_inline",
-      "source": "doc_pretext_research",
-      "target": "concept_pretext_rich_inline"
-    },
-    {
-      "relation": "motivates",
-      "evidence_status": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md",
-      "confidence": "INFERRED",
-      "weight": 1.0,
-      "_src": "doc_pretext_research",
-      "_tgt": "concept_text_layout_core",
-      "source": "doc_pretext_research",
-      "target": "concept_text_layout_core"
-    },
-    {
-      "relation": "enables",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.98,
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_text_layout_core",
-      "_tgt": "concept_pretext_text_sovereignty",
-      "source": "concept_pretext_text_sovereignty",
-      "target": "concept_text_layout_core"
-    },
-    {
-      "relation": "rationale_for",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.99,
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_pretext_text_sovereignty",
-      "_tgt": "rationale_remove_dual_text_system",
-      "source": "concept_pretext_text_sovereignty",
-      "target": "rationale_remove_dual_text_system"
-    },
-    {
-      "relation": "operationalizes",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.97,
-      "source_file": "docs/superpowers/plans/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_message_window_line_rendering",
-      "_tgt": "concept_pretext_text_sovereignty",
-      "source": "concept_pretext_text_sovereignty",
-      "target": "concept_message_window_line_rendering"
-    },
-    {
-      "relation": "extends",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.96,
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_pretext_rich_inline",
-      "_tgt": "concept_pretext_text_sovereignty",
-      "source": "concept_pretext_text_sovereignty",
-      "target": "concept_pretext_rich_inline"
-    },
-    {
-      "relation": "supports",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.95,
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "citation_pretext_official_evidence",
-      "_tgt": "concept_pretext_text_sovereignty",
-      "source": "concept_pretext_text_sovereignty",
-      "target": "citation_pretext_official_evidence"
-    },
-    {
-      "relation": "supports",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.95,
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_dom_viewport_boundary",
-      "_tgt": "rationale_preserve_runtime_boundaries",
-      "source": "concept_dom_viewport_boundary",
-      "target": "rationale_preserve_runtime_boundaries"
-    },
-    {
-      "relation": "rationale_for",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.98,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_graphify_doc_update_boundary",
-      "_tgt": "rationale_use_manual_doc_updates",
-      "source": "concept_graphify_doc_update_boundary",
-      "target": "rationale_use_manual_doc_updates"
-    },
-    {
-      "relation": "reinforces",
-      "evidence_status": "INFERRED",
-      "confidence_score": 0.87,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
-      "confidence": "INFERRED",
-      "weight": 1.0,
-      "_src": "concept_graphify_watch_bug",
-      "_tgt": "concept_graphify_doc_update_boundary",
-      "source": "concept_graphify_doc_update_boundary",
-      "target": "concept_graphify_watch_bug"
-    },
-    {
-      "relation": "qualified_by",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.94,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u5ffd\u7565\u89c4\u5219\u7f13\u5b58\u4e0e\u53cd\u9988\u56de\u8def.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "concept_graphify_feedback_loop",
-      "_tgt": "rationale_keep_graph_clean",
-      "source": "concept_graphify_feedback_loop",
-      "target": "rationale_keep_graph_clean"
-    },
-    {
-      "relation": "explains_interpretation_of",
-      "evidence_status": "INFERRED",
-      "confidence_score": 0.84,
-      "source_file": "\u5b66\u4e60/graphify/README.md",
-      "confidence": "INFERRED",
-      "weight": 1.0,
-      "_src": "concept_graphify_source_precedence",
-      "_tgt": "concept_graphify_watch_bug",
-      "source": "concept_graphify_watch_bug",
-      "target": "concept_graphify_source_precedence"
-    },
-    {
-      "relation": "supports",
-      "evidence_status": "EXTRACTED",
-      "confidence_score": 0.97,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u7248\u672c\u53d8\u5316\u4e0e\u5b9e\u6218\u5751\u70b9.md",
-      "confidence": "EXTRACTED",
-      "weight": 1.0,
-      "_src": "citation_graphify_official_evidence",
-      "_tgt": "concept_graphify_source_precedence",
-      "source": "concept_graphify_source_precedence",
-      "target": "citation_graphify_official_evidence"
     }
   ],
   "hyperedges": [
+    {
+      "id": "message_geometry_pipeline",
+      "label": "\u6d88\u606f\u51e0\u4f55\u4e0e\u6c14\u6ce1\u6e32\u67d3\u7ba1\u7ebf",
+      "nodes": [
+        "text_layout",
+        "view_presenters",
+        "chat_shell",
+        "room_message_pane"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.86,
+      "source_file": "frontend/\u804a\u5929\u58f3.ts"
+    },
     {
       "id": "reading_stability_chain",
       "label": "Reading stability chain",
@@ -10770,6 +9776,38 @@
       "source_file": "docs/superpowers/specs/2026-04-08-\u540e\u7aef\u5916\u58f3DDD\u4e0eUnix\u6536\u53e3\u62c6\u5206-design.md"
     },
     {
+      "id": "he_pretext_total_migration",
+      "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316\u95ed\u73af",
+      "nodes": [
+        "concept_pretext_text_sovereignty",
+        "concept_text_layout_core",
+        "concept_message_window_line_rendering",
+        "concept_pretext_rich_inline",
+        "concept_dom_viewport_boundary",
+        "rationale_remove_dual_text_system",
+        "rationale_preserve_runtime_boundaries"
+      ],
+      "evidence_status": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md"
+    },
+    {
+      "id": "he_graphify_operational_boundary",
+      "label": "graphify \u81ea\u52a8\u5316\u8fb9\u754c\u4e0e\u4eba\u5de5\u66f4\u65b0\u95ed\u73af",
+      "nodes": [
+        "concept_graphify_pipeline",
+        "concept_graphify_doc_update_boundary",
+        "concept_graphify_feedback_loop",
+        "concept_graphify_watch_bug",
+        "concept_graphify_source_precedence",
+        "rationale_use_manual_doc_updates",
+        "rationale_keep_graph_clean"
+      ],
+      "evidence_status": "INFERRED",
+      "confidence_score": 0.93,
+      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md"
+    },
+    {
       "id": "telegram_update_integrity_axes",
       "label": "Telegram update integrity axes",
       "nodes": [
@@ -10795,6 +9833,21 @@
       "confidence": "INFERRED",
       "confidence_score": 0.88,
       "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/ddd-\u9886\u57df\u4e3b\u6743\u4e0e\u4e50\u9ad8\u7cfb\u7edf\u7b14\u8bb0.md"
+    },
+    {
+      "id": "he_cross_document_learning_to_design",
+      "label": "\u5b66\u4e60\u8d44\u6599\u9a71\u52a8\u8bbe\u8ba1\u4e0e\u5b9e\u65bd",
+      "nodes": [
+        "doc_pretext_research",
+        "doc_design_pretext_2026_04_09",
+        "doc_plan_pretext_2026_04_09",
+        "citation_pretext_official_evidence",
+        "doc_graphify_overview",
+        "doc_graphify_versions"
+      ],
+      "evidence_status": "INFERRED",
+      "confidence_score": 0.88,
+      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md"
     },
     {
       "id": "sync_anchor_repair_pattern",
@@ -10848,67 +9901,6 @@
       "confidence": "EXTRACTED",
       "confidence_score": 0.9,
       "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/\u8bbe\u5907\u7ea7\u82b1\u540d\u533f\u540d\u8eab\u4efd-mvp\u542f\u53d1.md"
-    },
-    {
-      "id": "message_geometry_pipeline",
-      "label": "\u6d88\u606f\u51e0\u4f55\u4e0e\u6c14\u6ce1\u6e32\u67d3\u7ba1\u7ebf",
-      "nodes": [
-        "text_layout",
-        "view_presenters",
-        "chat_shell",
-        "room_message_pane"
-      ],
-      "relation": "participate_in",
-      "confidence": "INFERRED",
-      "confidence_score": 0.86,
-      "source_file": "frontend/\u804a\u5929\u58f3.ts"
-    },
-    {
-      "id": "he_pretext_total_migration",
-      "label": "Web \u524d\u7aef\u5168\u9762 Pretext \u5316\u95ed\u73af",
-      "nodes": [
-        "concept_pretext_text_sovereignty",
-        "concept_text_layout_core",
-        "concept_message_window_line_rendering",
-        "concept_pretext_rich_inline",
-        "concept_dom_viewport_boundary",
-        "rationale_remove_dual_text_system",
-        "rationale_preserve_runtime_boundaries"
-      ],
-      "evidence_status": "INFERRED",
-      "confidence_score": 0.95,
-      "source_file": "docs/superpowers/specs/2026-04-09-Web\u524d\u7aef\u5168\u9762Pretext\u5316-design.md"
-    },
-    {
-      "id": "he_graphify_operational_boundary",
-      "label": "graphify \u81ea\u52a8\u5316\u8fb9\u754c\u4e0e\u4eba\u5de5\u66f4\u65b0\u95ed\u73af",
-      "nodes": [
-        "concept_graphify_pipeline",
-        "concept_graphify_doc_update_boundary",
-        "concept_graphify_feedback_loop",
-        "concept_graphify_watch_bug",
-        "concept_graphify_source_precedence",
-        "rationale_use_manual_doc_updates",
-        "rationale_keep_graph_clean"
-      ],
-      "evidence_status": "INFERRED",
-      "confidence_score": 0.93,
-      "source_file": "\u5b66\u4e60/graphify/graphify-\u81ea\u52a8\u66f4\u65b0\u5e38\u9a7b\u89c4\u5219\u4e0e\u8fb9\u754c.md"
-    },
-    {
-      "id": "he_cross_document_learning_to_design",
-      "label": "\u5b66\u4e60\u8d44\u6599\u9a71\u52a8\u8bbe\u8ba1\u4e0e\u5b9e\u65bd",
-      "nodes": [
-        "doc_pretext_research",
-        "doc_design_pretext_2026_04_09",
-        "doc_plan_pretext_2026_04_09",
-        "citation_pretext_official_evidence",
-        "doc_graphify_overview",
-        "doc_graphify_versions"
-      ],
-      "evidence_status": "INFERRED",
-      "confidence_score": 0.88,
-      "source_file": "\u5b66\u4e60/\u6574\u7406\u7b14\u8bb0/pretext-\u8c03\u7814\u8bb0\u5f55.md"
     }
   ]
 }
