@@ -5,7 +5,7 @@
 这次学习不是只看 README，我实际对的是：
 
 - 官方仓库 `v3`
-- 当前本机包版本 `graphifyy 0.3.19`
+- 当前本机包版本 `graphifyy 0.3.20`
 - `README.md`
 - `README.zh-CN.md`
 - `CHANGELOG.md`
@@ -20,6 +20,20 @@
 - `tests/test_watch.py`
 
 ## 近几版最该记住的变化
+
+### `0.3.20`
+
+- 发布时间是 `2026-04-09`
+- 交互式 HTML 图把节点标签、文件类型、社区名、源文件和边关系都做了 HTML escaping，顺手堵上了一类 XSS 风险
+- `graphify opencode install` 现在会写 `tool.execute.before` plugin，不再只改 `AGENTS.md`
+- AST 调用边现在标成 `EXTRACTED / 1.0`，不再继续伪装成 `INFERRED / 0.8`
+- `tree-sitter` 现在显式要求 `>= 0.23.0`，并加了版本守卫，旧环境会给更清楚的报错
+
+这一版的方向很明确：
+
+- 一部分是在修安全和标注准确性
+- 一部分是在补 OpenCode 集成
+- 另一部分是在收紧 `tree-sitter` 环境边界
 
 ### `0.3.19`
 
@@ -138,10 +152,33 @@
 
 如果目录大到离谱，先切子目录，不要机械全仓猛跑。
 
+### 坑 7：`watch.py` 里的代码重建现在仍然有结构性 bug
+
+我这次把本机从 `0.3.19` 升到 `0.3.20` 后，重新跑：
+
+- `py -3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"`
+
+结果依然是：
+
+- `[graphify watch] Rebuild failed: <FileType.CODE: 'code'>`
+
+根因不是 koko 仓库私有逻辑，而是当前官方包里的：
+
+- `detect()` 返回的是 `{"files": {"code": [...]}}`
+- 但 `watch.py::_rebuild_code()` 还在读 `detected[FileType.CODE]`
+
+也就是：
+
+- 检测结果已经改成“字符串 key 包一层 `files`”
+- watcher 这边却还按旧结构直接拿 `Enum key`
+
+所以在当前 `0.3.20`，`_rebuild_code()` / hook 这条链对我们来说还不能当成可靠自动化。
+
 ## 对 koko 当前最实用的结论
 
-- 我们现在用的 `0.3.19` 比早期版靠谱很多
+- 我们现在已经升到 `0.3.20`
 - `watch`、`hook`、`codex install` 三套机制在概念上能配合
+- 但当前官方包里的 `watch.py` 仍有结构性 bug，`_rebuild_code()` 这条链在我们这里还是会炸
 - 但 `codex install` 写进去的 PreToolUse hook，在当前 Windows native 环境下不能默认当成已生效
 - 但文档类更新依旧不要幻想成全自动
 - 长期最好保留 `.graphifyignore`
