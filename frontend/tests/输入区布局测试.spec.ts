@@ -22,6 +22,13 @@ describe("聊天壳集成 / 输入区布局", () => {
     vi.restoreAllMocks();
   });
 
+  it("图片辅助按钮是紧凑图标按钮，不再保留图片文案的宽按钮约束", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain(".composer-aux-button");
+    expect(styles).not.toContain("min-width: 68px");
+  });
+
   it("消息模式会把主输入切成多行 textarea，并按 Pretext 结果增长高度", async () => {
     const transport = new 假传输();
     transport.joinQueue = [创建房间快照("r-test", 1)];

@@ -1,5 +1,6 @@
 import type { 图片附件快照, 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
+import type { 图片附件草稿 } from "./状态.js";
 import type { 房间视口模式 } from "./状态.js";
 import {
   默认文本布局器,
@@ -341,7 +342,11 @@ export function 派生壳级操作台状态(input: {
   pending: boolean;
   statusText: string;
   statusAttention?: boolean;
+  composerImageDrafts?: 图片附件草稿[];
 }): 壳级操作台状态 {
+  const 图片草稿列表 = input.composerImageDrafts ?? [];
+  const 上传中的图片数 = 图片草稿列表.filter((draft) => draft.status === "uploading").length;
+  const 失败图片数 = 图片草稿列表.filter((draft) => draft.status === "failed").length;
   const baseState = {
     statusText: input.statusText,
     statusAttention: Boolean(input.statusAttention),
@@ -371,13 +376,32 @@ export function 派生壳级操作台状态(input: {
   }
 
   if (input.consoleMode === "message") {
+    /**
+     * 发送区的禁用理由必须和按钮状态同源派生：
+     * 1. 先看失败草稿，因为这是用户最需要处理的阻塞项；
+     * 2. 再看仍在上传中的草稿；
+     * 3. 最后才回到房间普通状态文案。
+     *
+     * 这样 Enter 提交和按钮点击至少会看到同一份可见原因，
+     * 不再出现“按钮看起来能点，但命令层 silent return”的体验落差。
+     */
+    const statusText =
+      失败图片数 > 0
+        ? `${失败图片数} 张图片上传失败，请重试或删除`
+        : 上传中的图片数 > 0
+          ? `正在上传 ${上传中的图片数} 张图片`
+          : input.statusText;
+    const statusAttention = 失败图片数 > 0 || Boolean(input.statusAttention);
+    const hasBlockingDraft = 上传中的图片数 > 0 || 失败图片数 > 0;
     return {
       mode: "message",
       ...baseState,
+      statusText,
+      statusAttention,
       auxSlot: {
         visible: true,
         disabled: input.pending,
-        label: "图片",
+        label: "+",
       },
       primaryInput: {
         value: input.messageInput,
@@ -387,7 +411,7 @@ export function 派生壳级操作台状态(input: {
       },
       primaryAction: {
         visible: true,
-        disabled: input.pending,
+        disabled: input.pending || hasBlockingDraft,
         label: "发送",
       },
     };

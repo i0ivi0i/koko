@@ -3,7 +3,7 @@ import "../../聊天壳";
 import { 创建浏览器存储 } from "../../存储";
 import type { 前端传输端口 } from "../../传输";
 import { 创建房间内核, 派生房间壳外观 } from "../../房间内核";
-import { 初始聊天状态, type 聊天状态 } from "../../状态";
+import { 初始聊天状态, type 图片附件草稿, type 聊天状态 } from "../../状态";
 import type {
   匿名身份引导结果,
   增量事件快照,
@@ -341,6 +341,48 @@ export function 创建传输错误(status: number, code: string, message = code)
 export async function 等待组件稳定(el: 聊天壳): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
+}
+
+/**
+ * 绝大多数聊天壳集成都先需要一个“已经入房”的壳。
+ * 这里把重复的 DOM 挂载、假传输注入、进房动作收口成一个测试辅助器，
+ * 避免每个 spec 自己再拼一遍样板流程。
+ */
+export async function 创建已入房聊天壳(
+  transport = new 假传输(),
+  roomCode = "ROOM01"
+): Promise<聊天壳> {
+  const el = document.createElement("koko-chat-shell") as 聊天壳;
+  el.setTransportForTest(transport);
+  document.body.appendChild(el);
+  await 等待组件稳定(el);
+  输入房间短码到操作台(el, roomCode);
+  读取操作台主动作(el).click();
+  await 等待组件稳定(el);
+  await 等待组件稳定(el);
+  return el;
+}
+
+/**
+ * 图片草稿属于前端本地体验态，测试里不需要真的走上传器。
+ * 这里直接注入草稿，只为了锁住 presenter 和渲染结果，
+ * 不把测试耦合到 Uppy 的内部事件细节。
+ */
+export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): void {
+  (
+    el as unknown as {
+      chatState: 聊天状态;
+    }
+  ).chatState = {
+    ...(el as unknown as { chatState: 聊天状态 }).chatState,
+    composerImageDrafts: [
+      ...(el as unknown as { chatState: 聊天状态 }).chatState.composerImageDrafts.filter(
+        (item) => item.localId !== draft.localId
+      ),
+      draft,
+    ],
+  };
+  el.requestUpdate();
 }
 
 export function 读取操作台主输入(

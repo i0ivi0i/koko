@@ -1,6 +1,5 @@
 import { css, html, LitElement } from "lit";
 import Uppy, { type UppyFile } from "@uppy/core";
-import Dashboard from "@uppy/dashboard";
 import XHRUpload from "@uppy/xhr-upload";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
@@ -98,14 +97,8 @@ export class 聊天壳 extends LitElement {
       });
       return;
     }
-    const thumbnailUrl = this.transport.buildAttachmentContentUrl(
-      body.attachment_id,
-      this.chatState.sessionId,
-      "thumbnail"
-    );
     this.更新图片草稿状态(file.id, {
       attachmentId: body.attachment_id,
-      previewUrl: thumbnailUrl,
       width: body.width,
       height: body.height,
       status: "ready",
@@ -134,6 +127,29 @@ export class 聊天壳 extends LitElement {
     file: UppyFile<图片上传Meta, 图片上传响应体>
   ): void => {
     this.移除图片草稿(file.id);
+  };
+
+  /**
+   * 输入区图片入口现在直接走系统文件选择器：
+   * 1. 交互上更像 IM，而不是“打开一个上传工具面板”；
+   * 2. 选完文件后仍继续复用现有 Uppy 上传内核；
+   * 3. 这里只做壳层入口桥接，不制造第二套上传器。
+   */
+  private readonly handleImageFileInputChange = (event: Event): void => {
+    const input = event.currentTarget as HTMLInputElement | null;
+    if (!input?.files || input.files.length === 0) {
+      return;
+    }
+    const uploader = this.ensureImageUploader();
+    for (const file of Array.from(input.files)) {
+      uploader.addFile({
+        name: file.name,
+        type: file.type,
+        data: file,
+      });
+    }
+    // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
+    input.value = "";
   };
 
   static override styles = css`
@@ -665,13 +681,15 @@ export class 聊天壳 extends LitElement {
     }
 
     .composer-aux-button {
-      min-width: 68px;
+      width: 50px;
       min-height: 50px;
-      padding: 0 14px;
+      padding: 0;
       border-radius: 18px;
       border: 1px solid var(--line-soft);
       background: rgba(255, 255, 255, 0.04);
       color: var(--text-secondary);
+      font-size: 24px;
+      line-height: 1;
     }
 
     /* 操作台主控行必须固定成同一套节奏：
@@ -939,8 +957,9 @@ export class 聊天壳 extends LitElement {
 
     /**
      * 图片上传继续复用成熟轮子：
-     * 1. Uppy 负责选图、modal、上传状态与失败重试；
-     * 2. 我们自己的壳层只维护“发送区草稿”和“消息命令”；
+     * 1. Uppy 负责上传队列、状态推进与失败重试；
+     * 2. 选图入口改回原生 file input，避免把 IM 输入区做成大面板上传器；
+     * 3. 我们自己的壳层只维护“发送区草稿”和“消息命令”；
      * 3. 不再自己手搓第二套上传状态机。
      */
     const uppy = new Uppy<图片上传Meta, 图片上传响应体>({
@@ -951,12 +970,6 @@ export class 聊天壳 extends LitElement {
         allowedFileTypes: ["image/*"],
       },
     })
-      .use(Dashboard, {
-        inline: false,
-        target: document.body,
-        closeAfterFinish: true,
-        proudlyDisplayPoweredByUppy: false,
-      })
       .use(XHRUpload, {
         endpoint: `${window.location.origin}/api/attachments/image`,
         formData: true,
@@ -977,10 +990,10 @@ export class 聊天壳 extends LitElement {
     if (!this.chatState.sessionId) {
       return;
     }
-    const dashboard = this.ensureImageUploader().getPlugin("Dashboard") as
-      | { openModal(): void }
-      | undefined;
-    dashboard?.openModal();
+    this.ensureImageUploader();
+    this.shadowRoot
+      ?.querySelector<HTMLInputElement>("#composerImageFileInput")
+      ?.click();
   }
 
   private revokeDraftPreviewUrl(previewUrl: string): void {
@@ -1055,6 +1068,34 @@ export class 聊天壳 extends LitElement {
     if (!this.imageUploader?.getFile(localId)) {
       this.移除图片草稿(localId);
     }
+  }
+
+  /**
+   * 失败草稿的重试仍然复用同一个 localId：
+   * 1. UI 立即回到 uploading，避免用户点了“重试”却还看到旧失败态；
+   * 2. 真正的上传结果继续由 Uppy 事件回填；
+   * 3. 不新建第二个草稿项，避免同一张图在草稿带里长出幽灵副本。
+   */
+  private retryComposerDraft(localId: string): void {
+    const uploader = this.imageUploader;
+    if (!uploader) {
+      return;
+    }
+    this.更新图片草稿状态(localId, {
+      attachmentId: "",
+      status: "uploading",
+      errorCode: "",
+    });
+    void uploader.retryUpload(localId).catch((error: unknown) => {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : "attachment_upload_failed";
+      this.更新图片草稿状态(localId, {
+        status: "failed",
+        errorCode: message,
+      });
+    });
   }
 
   override connectedCallback(): void {
@@ -1167,6 +1208,9 @@ export class 聊天壳 extends LitElement {
       bootstrapState: roomShell.bootstrapState,
       roomId: this.chatState.roomId,
     });
+    if (this.操作台主动作已禁用(consoleMode)) {
+      return;
+    }
     if (consoleMode === "join") {
       void this.恢复编排端口.joinRoom();
       return;
@@ -1217,8 +1261,28 @@ export class 聊天壳 extends LitElement {
       return;
     }
 
+    if (this.操作台主动作已禁用(isMessageMode ? "message" : "join")) {
+      event.preventDefault();
+      return;
+    }
+
     event.preventDefault();
     (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
+  }
+
+  /**
+   * 键盘 Enter、表单 submit、按钮点击都必须尊重同一套 presenter 禁用态。
+   * 否则视觉上已经“禁发”，但另一条入口仍然偷偷触发发送，就会重新长出 silent return。
+   */
+  private 操作台主动作已禁用(consoleMode: "hidden" | "join" | "message"): boolean {
+    return 派生壳级操作台状态({
+      consoleMode,
+      roomCodeInput: this.chatState.roomCodeInput,
+      messageInput: this.chatState.messageInput,
+      pending: this.chatState.pending,
+      statusText: "",
+      composerImageDrafts: this.chatState.composerImageDrafts,
+    }).primaryAction.disabled;
   }
 
   private 读取操作台主输入高度(isMessageMode: boolean, value: string): number {
@@ -1269,6 +1333,7 @@ export class 聊天壳 extends LitElement {
       pending: this.chatState.pending,
       statusText: input.statusText,
       statusAttention: input.statusAttention,
+      composerImageDrafts: this.chatState.composerImageDrafts,
     });
     const isMessageMode = consoleState.mode === "message";
     const isHiddenMode = consoleState.mode === "hidden";
@@ -1291,7 +1356,10 @@ export class 聊天壳 extends LitElement {
               <div id="composerImageDrafts" class="composer-drafts">
                 ${composerDrafts.map(
                   (draft) => html`
-                    <div class="composer-draft">
+                    <div
+                      class="composer-draft"
+                      data-draft-card-id=${draft.localId}
+                    >
                       <img
                         class="composer-draft-thumb"
                         data-draft-id=${draft.localId}
@@ -1314,10 +1382,23 @@ export class 聊天壳 extends LitElement {
                       <button
                         type="button"
                         class="composer-draft-remove"
+                        data-draft-remove-id=${draft.localId}
                         @click=${() => this.removeComposerDraft(draft.localId)}
                       >
                         移除
                       </button>
+                      ${draft.status === "failed"
+                        ? html`
+                            <button
+                              type="button"
+                              class="composer-draft-remove"
+                              data-draft-retry-id=${draft.localId}
+                              @click=${() => this.retryComposerDraft(draft.localId)}
+                            >
+                              重试
+                            </button>
+                          `
+                        : null}
                     </div>
                   `
                 )}
@@ -1335,10 +1416,19 @@ export class 聊天壳 extends LitElement {
                 class="shell-console-aux-slot"
                 ?hidden=${!consoleState.auxSlot.visible}
               >
+                <input
+                  id="composerImageFileInput"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  @change=${this.handleImageFileInputChange}
+                />
                 <button
                   id="composerImagePickerBtn"
                   type="button"
                   class="composer-aux-button"
+                  aria-label="选择图片"
                   ?disabled=${consoleState.auxSlot.disabled}
                   @click=${() => this.openImagePicker()}
                 >

@@ -183,6 +183,36 @@ describe("房间实时编排", () => {
         .messages.every((message) => !message.message_id.startsWith("local-"))
     ).toBe(true);
   });
+
+  it("存在 uploading 图片草稿时不会上送 create_message", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 3,
+      messageInput: "还在上传",
+    });
+    场景.读取状态().composerImageDrafts = [
+      {
+        localId: "draft-uploading",
+        attachmentId: "",
+        previewUrl: "blob:http://test.local/draft-uploading",
+        width: 120,
+        height: 90,
+        status: "uploading",
+        fileName: "uploading.png",
+        errorCode: "",
+      },
+    ];
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+      sendMessage(): Promise<void>;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    await 编排.sendMessage();
+
+    expect(场景.transport.socket.sentEvents).toEqual([]);
+  });
 });
 
 

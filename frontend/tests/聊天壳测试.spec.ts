@@ -5,8 +5,10 @@ import { 创建浏览器存储 } from "../存储";
 import {
   createFakeStorage,
   假传输,
+  创建已入房聊天壳,
   创建房间快照,
   创建传输错误,
+  注入图片草稿,
   等待组件稳定,
   读取操作台主输入,
   读取操作台主动作,
@@ -239,62 +241,48 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("发送区图片草稿会渲染在本地预览带里，而不是伪造成时间线消息", async () => {
-    const transport = new 假传输();
-    const el = document.createElement("koko-chat-shell") as 聊天壳;
-    el.setTransportForTest(transport);
-    document.body.appendChild(el);
-    await 等待组件稳定(el);
+  it("图片入口是小号加号按钮，而不是大号图片文案按钮", async () => {
+    const el = await 创建已入房聊天壳();
 
-    输入房间短码到操作台(el, "ROOM01");
-    读取操作台主动作(el).click();
-    await 等待组件稳定(el);
-    await 等待组件稳定(el);
+    const button = el.shadowRoot!.querySelector(
+      "#composerImagePickerBtn"
+    ) as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    expect(button?.textContent?.trim()).toBe("+");
+    expect(button?.getAttribute("aria-label")).toBe("选择图片");
+
+    el.remove();
+  });
+
+  it("点击加号会直接触发原生文件输入，而不是打开 Dashboard", async () => {
+    const el = await 创建已入房聊天壳();
+
+    const input = el.shadowRoot!.querySelector(
+      "#composerImageFileInput"
+    ) as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    const clickSpy = vi.spyOn(input!, "click");
 
     (
-      el as unknown as {
-        chatState: {
-          composerImageDrafts: Array<{
-            localId: string;
-            attachmentId: string;
-            previewUrl: string;
-            width: number;
-            height: number;
-            status: "uploading" | "ready" | "failed";
-            fileName: string;
-            errorCode: string;
-          }>;
-        };
-      }
-    ).chatState = {
-      ...(el as unknown as {
-        chatState: {
-          composerImageDrafts: Array<{
-            localId: string;
-            attachmentId: string;
-            previewUrl: string;
-            width: number;
-            height: number;
-            status: "uploading" | "ready" | "failed";
-            fileName: string;
-            errorCode: string;
-          }>;
-        };
-      }).chatState,
-      composerImageDrafts: [
-        {
-          localId: "draft-1",
-          attachmentId: "att-1",
-          previewUrl: "https://example.com/thumb.png",
-          width: 120,
-          height: 90,
-          status: "ready",
-          fileName: "demo.png",
-          errorCode: "",
-        },
-      ],
-    };
-    el.requestUpdate();
+      el.shadowRoot!.querySelector("#composerImagePickerBtn") as HTMLButtonElement
+    ).click();
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    el.remove();
+  });
+
+  it("发送区图片草稿会渲染在本地预览带里，而不是伪造成时间线消息", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-1",
+      attachmentId: "att-1",
+      previewUrl: "https://example.com/thumb.png",
+      width: 120,
+      height: 90,
+      status: "ready",
+      fileName: "demo.png",
+      errorCode: "",
+    });
     await 等待组件稳定(el);
 
     const draftImage = el.shadowRoot!.querySelector(
@@ -303,6 +291,150 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(draftImage).not.toBeNull();
     expect(draftImage?.src).toBe("https://example.com/thumb.png");
     expect(el.shadowRoot!.querySelectorAll('[data-event-position]').length).toBe(0);
+    el.remove();
+  });
+
+  it("图片草稿预览优先使用本地 previewUrl，而不是远端缩略图地址", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-local-preview",
+      attachmentId: "att-1",
+      previewUrl: "blob:http://test.local/draft-local-preview",
+      width: 120,
+      height: 90,
+      status: "ready",
+      fileName: "demo.png",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    const draftImage = el.shadowRoot!.querySelector(
+      'img[data-draft-id="draft-local-preview"]'
+    ) as HTMLImageElement | null;
+    expect(draftImage).not.toBeNull();
+    expect(draftImage?.src).toBe("blob:http://test.local/draft-local-preview");
+
+    el.remove();
+  });
+
+  it("上传中时发送按钮会被禁用并显示明确原因", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-uploading",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-uploading",
+      width: 120,
+      height: 90,
+      status: "uploading",
+      fileName: "demo.png",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    expect(读取操作台主动作(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在上传");
+
+    el.remove();
+  });
+
+  it("存在失败图片草稿时发送按钮会禁用并提示重试或删除", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-failed",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-failed",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "broken.png",
+      errorCode: "attachment_upload_failed",
+    });
+    await 等待组件稳定(el);
+
+    expect(读取操作台主动作(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain(
+      "上传失败"
+    );
+
+    el.remove();
+  });
+
+  it("删除图片草稿会立刻把它从草稿带移除", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-remove",
+      attachmentId: "att-remove",
+      previewUrl: "blob:http://test.local/draft-remove",
+      width: 120,
+      height: 90,
+      status: "ready",
+      fileName: "remove.png",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    (
+      el.shadowRoot!.querySelector(
+        '[data-draft-remove-id="draft-remove"]'
+      ) as HTMLButtonElement
+    ).click();
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector('img[data-draft-id="draft-remove"]')).toBeNull();
+    el.remove();
+  });
+
+  it("失败图片点击重试后会重新进入 uploading，而不是新建第二个草稿", async () => {
+    const el = await 创建已入房聊天壳();
+    (
+      el as unknown as {
+        imageUploader: {
+          retryUpload: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).imageUploader = {
+      retryUpload: vi.fn().mockResolvedValue(undefined),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+    注入图片草稿(el, {
+      localId: "draft-retry",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-retry",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "retry.png",
+      errorCode: "attachment_upload_failed",
+    });
+    await 等待组件稳定(el);
+
+    (
+      el.shadowRoot!.querySelector(
+        '[data-draft-retry-id="draft-retry"]'
+      ) as HTMLButtonElement
+    ).click();
+    await 等待组件稳定(el);
+
+    const draftStatus = el.shadowRoot!.querySelector(
+      '[data-draft-card-id="draft-retry"] .composer-draft-status'
+    ) as HTMLElement | null;
+    expect(draftStatus?.dataset.status).toBe("uploading");
+    expect(el.shadowRoot!.querySelectorAll('[data-draft-card-id="draft-retry"]').length).toBe(1);
+    expect(
+      (
+        el as unknown as {
+          imageUploader: {
+            retryUpload: ReturnType<typeof vi.fn>;
+            cancelAll: ReturnType<typeof vi.fn>;
+            destroy: ReturnType<typeof vi.fn>;
+          };
+        }
+      ).imageUploader.retryUpload
+    ).toHaveBeenCalledWith("draft-retry");
+
     el.remove();
   });
 
@@ -794,6 +926,54 @@ describe("聊天壳集成 / 首页与控制台", () => {
     await 等待组件稳定(el);
 
     expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("hello");
+    el.remove();
+  });
+
+  it("存在阻塞图片草稿时，主 form submit 不会再偷偷进入发送主链", async () => {
+    const el = await 创建已入房聊天壳();
+    输入消息到操作台(el, "hello");
+    注入图片草稿(el, {
+      localId: "draft-uploading-submit",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-uploading-submit",
+      width: 120,
+      height: 90,
+      status: "uploading",
+      fileName: "demo.png",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    const sendSpy = vi.spyOn(el as unknown as { sendCurrentMessage(): Promise<void> }, "sendCurrentMessage");
+    读取操作台表单(el).dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await 等待组件稳定(el);
+
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在上传");
+    el.remove();
+  });
+
+  it("存在阻塞图片草稿时，按 Enter 不会再绕过禁用态偷偷触发发送", async () => {
+    const el = await 创建已入房聊天壳();
+    输入消息到操作台(el, "hello");
+    注入图片草稿(el, {
+      localId: "draft-uploading-enter",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-uploading-enter",
+      width: 120,
+      height: 90,
+      status: "uploading",
+      fileName: "demo.png",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    const sendSpy = vi.spyOn(el as unknown as { sendCurrentMessage(): Promise<void> }, "sendCurrentMessage");
+    读取操作台主输入(el).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await 等待组件稳定(el);
+
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在上传");
     el.remove();
   });
 
