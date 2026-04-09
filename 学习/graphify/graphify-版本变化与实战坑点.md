@@ -1,0 +1,134 @@
+# graphify 版本变化与实战坑点
+
+## 这份笔记基于什么
+
+这次学习不是只看 README，我实际对的是：
+
+- 官方仓库 `v3`
+- 当前本机包版本 `graphifyy 0.3.19`
+- `README.md`
+- `README.zh-CN.md`
+- `CHANGELOG.md`
+- `ARCHITECTURE.md`
+- `graphify/__main__.py`
+- `graphify/detect.py`
+- `graphify/watch.py`
+- `graphify/hooks.py`
+- `tests/test_install.py`
+- `tests/test_detect.py`
+- `tests/test_hooks.py`
+- `tests/test_watch.py`
+
+## 近几版最该记住的变化
+
+### `0.3.19`
+
+- 安装步骤先尝试普通 `pip install`，再回退到 `--break-system-packages`
+- 对托管 Python 环境更稳，少一点把环境装坏的风险
+
+### `0.3.18`
+
+- `--watch` 终于会尊重 `.graphifyignore`
+- Codex 的 `PreToolUse` hook 改成 `systemMessage`
+- 官方新增 `graphify save-result`
+- skill 模板不再靠一大段内联 Python 保存问答
+
+这是非常关键的一版，因为它直接影响我们这种长期项目的日常使用感。
+
+### `0.3.17`
+
+- 语义提取 chunk 会按目录分组
+- 大项目 AST 提取会打印进度
+- `tree-sitter` 依赖约束更严
+
+这版解决的是“看起来卡死”和“抽取结果不稳定”的问题。
+
+### `0.3.14`
+
+- `graphify codex install` 会写 `.codex/hooks.json`
+- `--update` 会清掉已删除文件留下的 ghost nodes
+
+这版之后，Codex 集成才真正比较像样。
+
+## 目前最容易踩的坑
+
+### 坑 1：把 README 当成唯一真相
+
+官方 README 有时会落后于当前实现。
+
+这次我实际核到的一个例子就是：
+
+- 当前 `__main__.py` 和更新日志都表明 Codex 会注册 `.codex/hooks.json`
+- 但中文 README 某段仍保留了“Codex 没有 PreToolUse hook”的旧说法
+
+遇到这种冲突，别猜，直接以：
+
+- `graphify --help`
+- `graphify/__main__.py`
+- `tests/`
+
+为准。
+
+### 坑 2：以为 `--watch` 会自动重建一切
+
+不是。
+
+- 代码变更：自动
+- 文档、PDF、图片变更：只打 `needs_update` 旗子
+
+所以整理 `学习/` 这类文档工作，最后还是要手动 `$graphify . --update`。
+
+### 坑 3：以为 `codex install` 只是加一段说明
+
+不是。
+
+它会改项目里的：
+
+- `AGENTS.md`
+- `.codex/hooks.json`
+
+这是项目级长期规则，不是一次性命令提示。
+
+### 坑 4：以为忽略规则一直都对
+
+`--watch` 对 `.graphifyignore` 的尊重是 `0.3.18` 才修好的。
+
+如果版本太旧，你以为自己排除了某些目录，后台 watcher 可能还是会吃进去。
+
+### 坑 5：把自己的旧报告反复喂回去
+
+如果不排 `graphify-out/`，图谱很容易被自己上一次产出的二手总结污染。
+
+但 `graphify-out/memory/` 又是官方刻意保留的反馈回路。
+
+所以要分清：
+
+- 哪些是垃圾回声
+- 哪些是有价值的问答沉淀
+
+### 坑 6：没看 corpus warning 就硬跑大目录
+
+当前官方检测里：
+
+- 词数太少，会提示你“可能不需要图”
+- 词数太大或文件太多，会提示你 token 成本高
+
+如果目录大到离谱，先切子目录，不要机械全仓猛跑。
+
+## 对 koko 当前最实用的结论
+
+- 我们现在用的 `0.3.19` 比早期版靠谱很多
+- `watch`、`hook`、`codex install` 三套机制已经能配合起来
+- 但文档类更新依旧不要幻想成全自动
+- 长期最好保留 `.graphifyignore`
+- 发生官方文档冲突时，先信当前 CLI 和源码
+
+## 官方依据
+
+- `CHANGELOG.md`
+- `graphify/__main__.py`
+- `graphify/detect.py`
+- `graphify/watch.py`
+- `tests/test_install.py`
+- `tests/test_detect.py`
+- `tests/test_hooks.py`

@@ -4,6 +4,7 @@
 
 ## 分馆一览
 
+- [graphify 分馆](./graphify/README.md)
 - [socket.io 分馆](./socket-io/README.md)
 - [socketioxide 分馆](./socketioxide/README.md)
 - [Telegram 分馆](./telegram/README.md)
@@ -16,7 +17,8 @@
 2. 再看 [Telegram 分馆](./telegram/README.md) 的事件位置和缺口恢复。
 3. 接着看 [WhatsApp / Meta 分馆](./whatsapp-meta/README.md) 的多设备与安全设计。
 4. 再回到 [socketioxide 分馆](./socketioxide/README.md) 对照你手里正在用的 Rust 轮子。
-5. 最后看 [整理笔记分馆](./整理笔记/README.md)，把判断带回项目。
+5. 想把知识图谱真正用顺手，再看 [graphify 分馆](./graphify/README.md)。
+6. 最后看 [整理笔记分馆](./整理笔记/README.md)，把判断带回项目。
 
 ## 项目最直接的提醒
 
