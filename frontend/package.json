@@ -18,6 +18,7 @@
     "dev:watch:supervised": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch=forever"
   },
   "dependencies": {
+    "@chenglou/pretext": "0.0.5",
     "lit": "^3.3.2",
     "socket.io-client": "^4.8.3",
     "xstate": "^5.30.0"
