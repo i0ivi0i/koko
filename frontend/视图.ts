@@ -128,6 +128,7 @@ export function 派生消息展示项(
   const layout = 默认文本布局器.布局纯文本({
     text: event.body,
     width: layoutEnv.maxContentWidth,
+    shrinkWrap: "same-line-count",
     fontFamily: layoutEnv.fontFamily,
     fontSize: layoutEnv.fontSize,
     fontWeight: layoutEnv.fontWeight,
@@ -154,10 +155,13 @@ function 计算消息气泡宽度(
   layoutEnv: 消息文本布局环境
 ): number {
   /**
-   * 气泡宽度不再继续交给浏览器天然 shrink-wrap。
-   * 这里直接以文本自然宽度为主，再补上气泡水平内边距，并受最大内容宽度钳制。
+   * 消息气泡宽度不再用“单行自然宽度”粗暴裁决。
+   * 这里直接消费布局结果里最宽的那一行：
+   * 1. 普通多行消息会得到真正已断行后的最宽行；
+   * 2. shrinkwrap 消息会得到“保持相同行数但更紧”的那组行里的最宽行；
+   * 3. 最后再补上气泡内边距。
    */
-  const 文本宽度 = Math.min(layout.naturalWidth, layoutEnv.maxContentWidth);
+  const 文本宽度 = Math.min(layout.maxLineWidth, layoutEnv.maxContentWidth);
   return 文本宽度 + layoutEnv.bubbleHorizontalPadding;
 }
 

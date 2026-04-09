@@ -1,4 +1,5 @@
 import {
+  layout,
   layoutWithLines,
   measureNaturalWidth,
   prepareWithSegments,
@@ -14,6 +15,7 @@ import {
 export type 文本白空格模式 = "normal" | "pre-wrap";
 export type 文本断词模式 = "normal" | "keep-all";
 export type 富文本片段种类 = "text" | "code" | "chip" | "link";
+export type 文本收缩策略 = "same-line-count";
 
 export interface 文本布局环境 {
   fontFamily: string;
@@ -27,6 +29,7 @@ export interface 文本布局环境 {
 export interface 纯文本布局输入 extends 文本布局环境 {
   text: string;
   width: number;
+  shrinkWrap?: 文本收缩策略;
 }
 
 export interface 富文本片段输入 {
@@ -60,6 +63,7 @@ export interface 文本布局结果 {
   height: number;
   lineCount: number;
   naturalWidth: number;
+  maxLineWidth: number;
   lines: 文本布局行[];
 }
 
@@ -80,12 +84,22 @@ export function 创建文本布局器() {
   return {
     布局纯文本(input: 纯文本布局输入): 文本布局结果 {
       const 预处理结果 = 读取或创建纯文本预处理(input, 纯文本预处理缓存);
-      const 布局结果 = layoutWithLines(预处理结果, input.width, input.lineHeight);
+      const 初始布局结果 = layoutWithLines(预处理结果, input.width, input.lineHeight);
+      const 最终布局宽度 =
+        input.shrinkWrap === "same-line-count"
+          ? 查找保持相同行数的最窄宽度(预处理结果, input.width, 初始布局结果.lineCount, input.lineHeight)
+          : input.width;
+      const 布局结果 =
+        最终布局宽度 === input.width
+          ? 初始布局结果
+          : layoutWithLines(预处理结果, 最终布局宽度, input.lineHeight);
+      const maxLineWidth = 读取最宽行宽度(布局结果.lines);
 
       return {
         height: 布局结果.height,
         lineCount: 布局结果.lineCount,
         naturalWidth: measureNaturalWidth(预处理结果),
+        maxLineWidth,
         lines: 布局结果.lines.map((line, index) => ({
           index,
           width: line.width,
@@ -123,6 +137,7 @@ export function 创建文本布局器() {
         height: 统计结果.lineCount * input.lineHeight,
         lineCount: 统计结果.lineCount,
         naturalWidth: 单行自然宽度统计.maxLineWidth,
+        maxLineWidth: lines.reduce((max, line) => Math.max(max, line.width), 0),
         lines,
       };
     },
@@ -201,4 +216,43 @@ function 构建布局选项(input: 文本布局环境): PrepareOptions {
     whiteSpace: input.whiteSpace ?? "normal",
     wordBreak: input.wordBreak ?? "normal",
   };
+}
+
+function 查找保持相同行数的最窄宽度(
+  prepared: ReturnType<typeof prepareWithSegments>,
+  maxWidth: number,
+  targetLineCount: number,
+  lineHeight: number
+): number {
+  /**
+   * 这里直接照官方 bubbles demo 的思路：
+   * 1. 先拿当前最大宽度下的目标行数；
+   * 2. 再二分搜索“仍然不增加行数”的最窄宽度；
+   * 3. 最后再按这个更紧的宽度 materialize 最终逐行结果。
+   *
+   * 这样消息气泡不会只停在“浏览器 fit-content 风格”的最宽一行，
+   * 而会像官方 demo 一样，在相同行数下继续压掉最后一行后的浪费空间。
+   */
+  if (targetLineCount <= 1) {
+    return maxWidth;
+  }
+
+  let lo = 1;
+  let hi = Math.max(1, Math.ceil(maxWidth));
+
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const lineCount = layout(prepared, mid, lineHeight).lineCount;
+    if (lineCount <= targetLineCount) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+
+  return lo;
+}
+
+function 读取最宽行宽度(lines: Array<{ width: number }>): number {
+  return lines.reduce((max, line) => Math.max(max, line.width), 0);
 }

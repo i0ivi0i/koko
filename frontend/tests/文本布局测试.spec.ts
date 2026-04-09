@@ -56,6 +56,35 @@ describe("文本布局器", () => {
     expect(窄布局.naturalWidth).toBe(宽布局.naturalWidth);
   });
 
+  it("会按官方 bubbles 思路收窄到保持相同行数的最小气泡宽度", () => {
+    const 布局器 = 创建文本布局器();
+    const 普通布局 = 布局器.布局纯文本({
+      text: "did you see the new library today",
+      width: 140,
+      fontFamily: "Microsoft YaHei",
+      fontSize: 16,
+      fontWeight: 400,
+      lineHeight: 22,
+    });
+    const 紧凑布局 = 布局器.布局纯文本({
+      text: "did you see the new library today",
+      width: 140,
+      fontFamily: "Microsoft YaHei",
+      fontSize: 16,
+      fontWeight: 400,
+      lineHeight: 22,
+      shrinkWrap: "same-line-count",
+    });
+
+    const 读取最宽行 = (lines: Array<{ width: number }>) =>
+      lines.reduce((max, line) => Math.max(max, line.width), 0);
+
+    // 官方 bubbles demo 的关键不是“少一行”，而是：
+    // 在不增加行数的前提下，重新找一组更紧的断行，让气泡少浪费最后一行后的空白。
+    expect(紧凑布局.lineCount).toBe(普通布局.lineCount);
+    expect(读取最宽行(紧凑布局.lines)).toBeLessThan(读取最宽行(普通布局.lines));
+  });
+
   it("会为 rich inline 返回带片段种类的逐行结果", () => {
     const 布局器 = 创建文本布局器();
     const 结果 = 布局器.布局富文本({

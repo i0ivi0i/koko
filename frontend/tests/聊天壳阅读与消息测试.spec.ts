@@ -69,6 +69,37 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     expect(items[0].bubbleWidth).toBeGreaterThan(0);
   });
 
+  it("消息气泡宽度会按紧凑 shrinkwrap 结果收窄，而不是继续等于自然单行宽度", () => {
+    const items = 派生聊天列表展示项(
+      [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-1",
+          client_message_id: "c-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "did you see the new library today",
+          event_position: 1,
+        },
+      ],
+      "s-test",
+      null,
+      {
+        ...默认消息文本布局环境,
+        maxContentWidth: 140,
+      }
+    );
+
+    if (items[0]?.kind !== "message") {
+      throw new Error("测试前提不成立：首个展示项必须是消息");
+    }
+
+    // 如果还在用 `naturalWidth + padding`，这里会接近单行自然宽度；
+    // 真正的 bubbles 式 shrinkwrap 应该看紧凑布局后的最宽一行。
+    expect(items[0].bubbleWidth).toBeLessThan(items[0].layout.naturalWidth + 28);
+  });
+
   it("用户向下阅读后会节流上报新的 last_read_event_position", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
