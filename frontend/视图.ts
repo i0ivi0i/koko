@@ -9,6 +9,7 @@ import {
 
 export interface 消息文本布局环境 extends 文本布局环境 {
   maxContentWidth: number;
+  singleLineMaxContentWidth: number;
   bubbleHorizontalPadding: number;
 }
 
@@ -20,6 +21,7 @@ export const 默认消息文本布局环境: 消息文本布局环境 = {
   whiteSpace: "normal",
   wordBreak: "normal",
   maxContentWidth: 420,
+  singleLineMaxContentWidth: 420,
   bubbleHorizontalPadding: 28,
 };
 
@@ -125,7 +127,7 @@ export function 派生消息展示项(
   layoutEnv: 消息文本布局环境 = 默认消息文本布局环境
 ): 消息展示项 {
   const isMine = event.sender_session_id === currentSessionId;
-  const layout = 默认文本布局器.布局纯文本({
+  const 多行紧凑候选 = 默认文本布局器.布局纯文本({
     text: event.body,
     width: layoutEnv.maxContentWidth,
     shrinkWrap: "same-line-count",
@@ -136,6 +138,32 @@ export function 派生消息展示项(
     ...(layoutEnv.whiteSpace ? { whiteSpace: layoutEnv.whiteSpace } : {}),
     ...(layoutEnv.wordBreak ? { wordBreak: layoutEnv.wordBreak } : {}),
   });
+  const 单行直通上限 = Math.max(
+    layoutEnv.maxContentWidth,
+    layoutEnv.singleLineMaxContentWidth
+  );
+  const layout =
+    多行紧凑候选.naturalWidth <= 单行直通上限
+      ? 默认文本布局器.布局纯文本({
+          text: event.body,
+          width: Math.max(1, Math.ceil(多行紧凑候选.naturalWidth)),
+          fontFamily: layoutEnv.fontFamily,
+          fontSize: layoutEnv.fontSize,
+          fontWeight: layoutEnv.fontWeight,
+          lineHeight: layoutEnv.lineHeight,
+          ...(layoutEnv.whiteSpace ? { whiteSpace: layoutEnv.whiteSpace } : {}),
+          ...(layoutEnv.wordBreak ? { wordBreak: layoutEnv.wordBreak } : {}),
+        })
+      : 多行紧凑候选;
+
+  /**
+   * 宽度裁决顺序在这里收口：
+   * 1. 先按多行上限拿一版紧凑候选；
+   * 2. 如果它的单行自然宽度仍落在单行直通上限内，就直接回到单行；
+   * 3. 只有单行真的放不下，才继续使用 bubbles 式多行 shrinkwrap。
+   *
+   * 这样既保住了 Pretext 的零 reflow 优势，也避免把短消息硬压成两行。
+   */
 
   return {
     kind: "message",
@@ -159,9 +187,15 @@ function 计算消息气泡宽度(
    * 这里直接消费布局结果里最宽的那一行：
    * 1. 普通多行消息会得到真正已断行后的最宽行；
    * 2. shrinkwrap 消息会得到“保持相同行数但更紧”的那组行里的最宽行；
-   * 3. 最后再补上气泡内边距。
+   * 3. 如果当前消息被判定为“单行直通”，这里也允许它超过多行上限，
+   *    但仍然受单行直通上限约束；
+   * 4. 最后再补上气泡内边距。
    */
-  const 文本宽度 = Math.min(layout.maxLineWidth, layoutEnv.maxContentWidth);
+  const 文本宽度上限 = Math.max(
+    layoutEnv.maxContentWidth,
+    layoutEnv.singleLineMaxContentWidth
+  );
+  const 文本宽度 = Math.min(layout.maxLineWidth, 文本宽度上限);
   return 文本宽度 + layoutEnv.bubbleHorizontalPadding;
 }
 

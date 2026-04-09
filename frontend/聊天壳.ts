@@ -996,6 +996,18 @@ export class 聊天壳 extends LitElement {
         : roomWidth >= 768
           ? Math.min(roomWidth * 0.7, 760)
           : Math.min(roomWidth * 0.82, 720);
+    const 多行正文上限 = Math.max(
+      120,
+      bubbleMaxWidth - 默认消息文本布局环境.bubbleHorizontalPadding
+    );
+    const 单行正文直通上限 = Math.max(
+      多行正文上限,
+      Math.min(
+        多行正文上限 + 56,
+        Math.max(120, roomWidth - 默认消息文本布局环境.bubbleHorizontalPadding - 8),
+        420
+      )
+    );
 
     /**
      * 这里把当前 CSS 气泡宽度规则翻译成 Presenter 可消费的稳定布局环境：
@@ -1005,7 +1017,13 @@ export class 聊天壳 extends LitElement {
      */
     return {
       ...默认消息文本布局环境,
-      maxContentWidth: Math.max(120, bubbleMaxWidth - 默认消息文本布局环境.bubbleHorizontalPadding),
+      maxContentWidth: 多行正文上限,
+      /**
+       * 单行直通上限只做很小幅度放宽：
+       * - 让本来就短的消息有机会保持单行；
+       * - 但不把长消息一路放大成超长单行。
+       */
+      singleLineMaxContentWidth: 单行正文直通上限,
     };
   }
 

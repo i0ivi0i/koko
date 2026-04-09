@@ -88,6 +88,7 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
       {
         ...默认消息文本布局环境,
         maxContentWidth: 140,
+        singleLineMaxContentWidth: 140,
       }
     );
 
@@ -98,6 +99,40 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     // 如果还在用 `naturalWidth + padding`，这里会接近单行自然宽度；
     // 真正的 bubbles 式 shrinkwrap 应该看紧凑布局后的最宽一行。
     expect(items[0].bubbleWidth).toBeLessThan(items[0].layout.naturalWidth + 28);
+  });
+
+  it("单行自然宽度落在单行直通上限内时，会保持单行而不是被压成两行", () => {
+    const items = 派生聊天列表展示项(
+      [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-1",
+          client_message_id: "c-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "alpha beta gamma",
+          event_position: 1,
+        },
+      ],
+      "s-test",
+      null,
+      {
+        ...默认消息文本布局环境,
+        maxContentWidth: 140,
+        singleLineMaxContentWidth: 220,
+      }
+    );
+
+    if (items[0]?.kind !== "message") {
+      throw new Error("测试前提不成立：首个展示项必须是消息");
+    }
+
+    // 这条消息在 140px 下会被断成两行，但它的单行自然宽度仍在单行直通上限内。
+    // 所以正确行为是回到单行，而不是继续执行多行 shrinkwrap。
+    expect(items[0].layout.naturalWidth).toBeGreaterThan(140);
+    expect(items[0].layout.lineCount).toBe(1);
+    expect(items[0].bubbleWidth).toBeGreaterThan(140 + 28);
   });
 
   it("用户向下阅读后会节流上报新的 last_read_event_position", async () => {
