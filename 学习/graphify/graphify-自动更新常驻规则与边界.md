@@ -64,11 +64,31 @@
 
 但它仍然不是系统级文件监控器。你自己在 IDE 里瞎改一堆文档，不会因为装了 `codex install` 就自动重建整张图。
 
-## 对 Codex 还要补一个前提
+## 但要加上 Codex 官方文档这层边界
 
-官方 `skill-codex.md` 里明确写了：
+只看 `graphify` 仓库，很容易误会成：
 
-- `~/.codex/config.toml` 里要开 `multi_agent = true`
+- 只要写了 `.codex/hooks.json`，PreToolUse hook 就会在 Codex 里稳定工作
+
+但 Codex 官方文档把边界写得更细：
+
+- hooks 是实验功能
+- 要在 `config.toml` 里显式打开 `features.codex_hooks = true`
+- `PreToolUse` 现在只拦 `Bash`
+- 它不拦 MCP、Write、WebSearch 这类非 shell 工具
+- 更关键的是：**hooks 目前在 Windows 上整体禁用**
+
+这意味着：
+
+- `graphify codex install` 写 `.codex/hooks.json` 这步没错
+- 但在 Windows 原生 Codex app 里，不能默认认为这个 hook 已经实际生效
+- 对你现在这台 Win11 上的 Codex app，长期真正稳定的仍然是 `AGENTS.md`
+
+## 对 Codex 还要补两个前提
+
+第一，`graphify` 自己的 skill 还要求：
+
+- `~/.codex/config.toml` 里开 `multi_agent = true`
 
 这不是为了日常查询，而是为了全量建图时的并行语义提取。
 
@@ -77,13 +97,25 @@
 - 没开这个，不一定完全不能用
 - 但并行抽取会受影响，官方技能也会退化
 
+第二，Codex 官方 Windows 文档写得很直白：
+
+- Windows app 默认用的是 Windows-native agent
+- 也就是默认在 PowerShell 里跑
+- 如果想让 agent 真正在 WSL 里跑，要去设置里切到 WSL，然后重启 app
+
+这和 hooks 的现实边界是绑在一起看的：
+
+- Windows-native agent：官方说 hooks 目前禁用
+- 切到 WSL/Linux 路线：才更接近 hooks 能工作的官方支持路径
+
 ## 你在 koko 里怎么理解最稳
 
 最稳的日常判断是：
 
 - 我刚改的是代码：`--watch` 或 git hook 可能已经帮上忙了
 - 我刚改的是 `学习/`、文档、笔记：手动 `$graphify . --update`
-- 我想让 Codex 长期记住先看图：`graphify codex install`
+- 我想让 Codex 长期记住先看图：先靠 `graphify codex install` 写进 `AGENTS.md`
+- 如果未来切到 WSL/Linux，再把 `.codex/hooks.json` 当成额外加成
 
 别把这三件事混成一个“自动同步总开关”。
 
@@ -94,3 +126,7 @@
 - `graphify/__main__.py`
 - `tests/test_hooks.py`
 - `graphify/skill-codex.md`
+- [Hooks – Codex](https://developers.openai.com/codex/hooks)
+- [Configuration Reference – Codex](https://developers.openai.com/codex/config-reference)
+- [Config basics – Codex](https://developers.openai.com/codex/config-basic)
+- [Windows – Codex app](https://developers.openai.com/codex/app/windows)

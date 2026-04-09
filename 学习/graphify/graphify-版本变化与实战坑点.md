@@ -69,6 +69,14 @@
 
 为准。
 
+如果问题已经牵扯到 Codex 自己的能力边界，比如：
+
+- `PreToolUse` hook 到底支不支持
+- `hooks.json` 在哪一层生效
+- Windows 和 WSL 有没有差别
+
+那就不能只看 `graphify` 仓库，还得继续往上看 Codex 官方文档。
+
 ### 坑 2：以为 `--watch` 会自动重建一切
 
 不是。
@@ -88,6 +96,21 @@
 - `.codex/hooks.json`
 
 这是项目级长期规则，不是一次性命令提示。
+
+但这里还要再补半句，不然又会误会：
+
+- `写进去了` 不等于 `当前环境已经真生效了`
+
+按 Codex 官方文档：
+
+- hooks 是实验功能
+- 要开 `features.codex_hooks = true`
+- hooks 目前在 Windows 上禁用
+
+所以对你现在这个 Windows 原生 Codex app，更稳的认知是：
+
+- `AGENTS.md` 在生效
+- `.codex/hooks.json` 已经配置好，但不要默认它在当前环境真跑起来了
 
 ### 坑 4：以为忽略规则一直都对
 
@@ -118,10 +141,12 @@
 ## 对 koko 当前最实用的结论
 
 - 我们现在用的 `0.3.19` 比早期版靠谱很多
-- `watch`、`hook`、`codex install` 三套机制已经能配合起来
+- `watch`、`hook`、`codex install` 三套机制在概念上能配合
+- 但 `codex install` 写进去的 PreToolUse hook，在当前 Windows native 环境下不能默认当成已生效
 - 但文档类更新依旧不要幻想成全自动
 - 长期最好保留 `.graphifyignore`
-- 发生官方文档冲突时，先信当前 CLI 和源码
+- 发生 `graphify` 文档冲突时，先信当前 CLI 和源码
+- 发生 Codex 能力边界冲突时，再往上信 Codex 官方文档
 
 ## 官方依据
 
@@ -132,3 +157,6 @@
 - `tests/test_install.py`
 - `tests/test_detect.py`
 - `tests/test_hooks.py`
+- [Hooks – Codex](https://developers.openai.com/codex/hooks)
+- [Configuration Reference – Codex](https://developers.openai.com/codex/config-reference)
+- [Windows – Codex app](https://developers.openai.com/codex/app/windows)
