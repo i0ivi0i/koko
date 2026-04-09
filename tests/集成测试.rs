@@ -67,6 +67,18 @@ fn 数据库真相模型包含房间阅读锚点表() {
 }
 
 #[test]
+fn 数据库真相模型包含attachments与message_attachment_refs表() {
+    let sql = std::fs::read_to_string("migrations/0004_附件与图片消息.sql")
+        .expect("应存在附件迁移文件");
+
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachments"));
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS message_attachment_refs"));
+    assert!(sql.contains("thumbnail_storage_key"));
+    assert!(sql.contains("committed_at"));
+    assert!(sql.contains("UNIQUE (message_id, sort_order)"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),
@@ -250,6 +262,389 @@ fn 发送消息事务性顺序成立() {
     assert_eq!(latest, 1, "房间锚点应推进到 1");
     assert_eq!(events, 1, "房间事件应写入 1 条");
     assert_eq!(messages, 1, "消息表应写入 1 条");
+}
+
+#[tokio::test]
+#[serial]
+async fn 图片消息会把附件引用和事件一起持久化() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("PA{:010}", uniq % 10_000_000_000);
+    let device_token = format!("persist-attachment-device-{uniq}");
+    let attachment_id = format!("att-persist-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let (room_id, message_id) = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入附件");
+            插入ready图片附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            pool.close().await;
+        });
+
+        let event = koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("persist-client-{uniq}"),
+            "带图消息",
+            &[attachment_id_for_worker.clone()],
+        )
+        .expect("应能创建带图片附件的消息");
+
+        match event {
+            koko::contract::领域事件::消息已创建 {
+                消息标识,
+                文本,
+                附件,
+                ..
+            } => {
+                assert_eq!(文本, "带图消息");
+                assert_eq!(附件.len(), 1, "权威事件应直接带出图片附件快照");
+                assert!(matches!(
+                    附件.first(),
+                    Some(koko::contract::附件快照::图片(图片))
+                        if 图片.附件标识 == attachment_id_for_worker && 图片.宽 == 1 && 图片.高 == 1
+                ));
+                (room_id, 消息标识)
+            }
+        }
+    })
+    .await
+    .expect("阻塞写入任务应完成");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库校验附件引用");
+    let row = sqlx::query(
+        "SELECT mar.sort_order, a.attachment_id, a.committed_at \
+         FROM message_attachment_refs mar \
+         JOIN attachments a ON a.id = mar.attachment_id \
+         WHERE mar.message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("消息附件引用应已落库");
+
+    let stored_attachment_id: String = row.get("attachment_id");
+    let sort_order: i32 = row.get("sort_order");
+    let committed_at_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT committed_at IS NOT NULL FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能读取附件提交时间");
+
+    assert_eq!(stored_attachment_id, attachment_id);
+    assert_eq!(sort_order, 0);
+    assert!(committed_at_exists, "附件首次被消息引用后应写入 committed_at");
+
+    let ref_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM message_attachment_refs mar \
+         JOIN messages m ON m.message_id = mar.message_id \
+         JOIN rooms r ON r.id = m.room_id \
+         WHERE r.room_id = $1",
+    )
+    .bind(&room_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能统计房间附件引用数");
+    assert_eq!(ref_count, 1, "当前测试只应有一条附件引用");
+    pool.close().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn 房间快照读回时仍能拿到图片附件列表() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("PB{:010}", uniq % 10_000_000_000);
+    let device_token = format!("snapshot-attachment-device-{uniq}");
+    let attachment_id = format!("att-snapshot-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let room_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入附件");
+            插入ready图片附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("snapshot-client-{uniq}"),
+            "",
+            &[attachment_id_for_worker.clone()],
+        )
+        .expect("应能创建纯图片消息");
+
+        let snapshot = koko::usecase::加载房间快照(&repo, &room_id, &identity.会话标识)
+            .expect("成员应能读回房间快照");
+        match snapshot {
+            koko::contract::快照::房间 { 首屏消息, .. } => {
+                assert_eq!(首屏消息.len(), 1, "当前只应读回一条消息");
+                match &首屏消息[0] {
+                    koko::contract::领域事件::消息已创建 { 文本, 附件, .. } => {
+                        assert_eq!(文本, "", "纯图片消息允许文本为空");
+                        assert_eq!(附件.len(), 1, "快照里的消息应保留图片附件列表");
+                        assert!(matches!(
+                            附件.first(),
+                            Some(koko::contract::附件快照::图片(图片))
+                                if 图片.附件标识 == attachment_id_for_worker
+                        ));
+                    }
+                }
+            }
+            _ => panic!("应返回房间快照"),
+        }
+        room_id
+    })
+    .await
+    .expect("阻塞快照任务应完成");
+
+    assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
+}
+
+#[tokio::test]
+#[serial]
+async fn 图片上传成功会返回ready附件快照() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("upload-image-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (status, body) = send_multipart(
+        app,
+        "/api/attachments/image",
+        session_id,
+        "a.png",
+        "image/png",
+        &最小png字节(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"].as_str(), Some("image"));
+    assert_eq!(body["status"].as_str(), Some("ready"));
+    assert_eq!(body["mime_type"].as_str(), Some("image/png"));
+    assert_eq!(body["width"].as_i64(), Some(1));
+    assert_eq!(body["height"].as_i64(), Some(1));
+    assert!(body["attachment_id"].as_str().is_some());
+}
+
+#[tokio::test]
+#[serial]
+async fn 非图片上传会返回attachment_type_not_allowed() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("upload-text-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (status, body) = send_multipart(
+        app,
+        "/api/attachments/image",
+        session_id,
+        "note.txt",
+        "text/plain",
+        b"not an image",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"].as_str(), Some("attachment_type_not_allowed"));
+}
+
+#[tokio::test]
+#[serial]
+async fn 非成员不能读取房间消息里的图片内容() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("RC{:010}", uniq % 10_000_000_000);
+
+    let (_, owner_bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("owner-image-read-{uniq}")})),
+        &[],
+    )
+    .await;
+    let owner_session_id = owner_bootstrap["session_id"].as_str().expect("owner session");
+
+    let (_, stranger_bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("stranger-image-read-{uniq}")})),
+        &[],
+    )
+    .await;
+    let stranger_session_id = stranger_bootstrap["session_id"].as_str().expect("stranger session");
+
+    let (_, room_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/rooms/join-or-create",
+        Some(serde_json::json!({"session_id": owner_session_id, "room_code": room_code})),
+        &[],
+    )
+    .await;
+    let room_id = room_body["room_id"].as_str().expect("room_id").to_string();
+
+    let (_, upload_body) = send_multipart(
+        app.clone(),
+        "/api/attachments/image",
+        owner_session_id,
+        "owner.png",
+        "image/png",
+        &最小png字节(),
+    )
+    .await;
+    let attachment_id = upload_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+
+    let database_url = cfg.database_url.clone();
+    let owner_session_id_owned = owner_session_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &owner_session_id_owned,
+            &format!("read-content-client-{uniq}"),
+            "",
+            &[attachment_id],
+        )
+        .expect("应能创建带图片附件的消息");
+    })
+    .await
+    .expect("阻塞发送任务应完成");
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(format!(
+            "/api/attachments/{}/content?session_id={}&variant=original",
+            upload_body["attachment_id"].as_str().expect("attachment_id"),
+            stranger_session_id
+        ))
+        .body(Body::empty())
+        .expect("request");
+    let response = app.oneshot(request).await.expect("response");
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    let body = serde_json::from_slice::<Value>(&bytes).expect("json body");
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"].as_str(), Some("membership_required"));
 }
 
 #[test]
@@ -2076,6 +2471,94 @@ async fn send_json(
         let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
         (status, json)
     }
+}
+
+/// multipart 测试助手：
+/// 用固定边界手工拼 form-data，避免为了测试再引入额外 HTTP 客户端依赖。
+async fn send_multipart(
+    app: axum::Router,
+    uri: &str,
+    session_id: &str,
+    filename: &str,
+    content_type: &str,
+    file_bytes: &[u8],
+) -> (StatusCode, Value) {
+    let boundary = "----koko-test-boundary";
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n{session_id}\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: {content_type}\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(file_bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(uri)
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(body))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
+    (status, json)
+}
+
+/// 直接往数据库写入一条 ready 图片附件真相。
+/// 这个 helper 只服务集成测试建数，避免为了 Task 2 先倒逼上传 HTTP 提前实现。
+async fn 插入ready图片附件记录(
+    pool: &sqlx::PgPool,
+    会话标识: &str,
+    附件标识: &str,
+) {
+    let owner_identity_db_id = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",
+    )
+    .bind(会话标识)
+    .fetch_one(pool)
+    .await
+    .expect("应能查询会话对应的匿名身份")
+    .expect("附件 owner 必须能落到稳定匿名身份");
+
+    sqlx::query(
+        "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
+         VALUES ($1, $2, 'image', 'image/png', 68, 1, 1, $3, $4, 'ready')",
+    )
+    .bind(附件标识)
+    .bind(owner_identity_db_id)
+    .bind(format!("original/{附件标识}.png"))
+    .bind(format!("thumbnail/{附件标识}.png"))
+    .execute(pool)
+    .await
+    .expect("应能插入 ready 图片附件");
+}
+
+fn 最小png字节() -> Vec<u8> {
+    vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+        0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+        0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78,
+        0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0x00, 0x05, 0x00, 0x01, 0xFF, 0x89, 0x99,
+        0x3D, 0x1D, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ]
 }
 
 fn 创建集成测试日志采集上下文() -> (Arc<Mutex<Vec<u8>>>, tracing::dispatcher::DefaultGuard) {

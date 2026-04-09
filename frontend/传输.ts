@@ -2,6 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import type {
   匿名身份引导结果,
   增量事件快照,
+  图片附件上传结果,
   阅读推进请求,
   房间历史页,
   房间快照,
@@ -35,6 +36,12 @@ export interface 前端传输端口 {
   bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果>;
   joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
+  uploadImageAttachment(sessionId: string, file: File): Promise<图片附件上传结果>;
+  buildAttachmentContentUrl(
+    attachmentId: string,
+    sessionId: string,
+    variant?: "original" | "thumbnail"
+  ): string;
   updateRoomReadAnchor(
     roomId: string,
     sessionId: string,
@@ -72,6 +79,39 @@ export class HttpRealtime传输 implements 前端传输端口 {
 
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
     return this.get(`/api/rooms/${roomId}/snapshot?session_id=${sessionId}`);
+  }
+
+  async uploadImageAttachment(
+    sessionId: string,
+    file: File
+  ): Promise<图片附件上传结果> {
+    /**
+     * 这里故意不手写 multipart boundary。
+     * 浏览器原生 FormData 已经是成熟能力，壳层只负责把 session 与文件交给后端统一上传入口。
+     */
+    const body = new FormData();
+    body.set("session_id", sessionId);
+    body.set("file", file);
+    const response = await fetch(`${this.baseUrl}/api/attachments/image`, {
+      method: "POST",
+      body,
+    });
+    if (!response.ok) {
+      throw await this.buildHttpError("POST", "/api/attachments/image", response);
+    }
+    return (await response.json()) as 图片附件上传结果;
+  }
+
+  buildAttachmentContentUrl(
+    attachmentId: string,
+    sessionId: string,
+    variant: "original" | "thumbnail" = "original"
+  ): string {
+    const params = new URLSearchParams({
+      session_id: sessionId,
+      variant,
+    });
+    return `${this.baseUrl}/api/attachments/${attachmentId}/content?${params.toString()}`;
   }
 
   async updateRoomReadAnchor(
@@ -131,7 +171,7 @@ export class HttpRealtime传输 implements 前端传输端口 {
     //
     // 原因不是忘了配，而是 Socket.IO 官方文档明确要求：
     // `retries` 必须和服务端 ack 配套使用；否则客户端会重发命令。
-    // 我们当前的 send_text_message / subscribe_room_stream 还没有 ack 协议，
+    // 我们当前的 create_message / subscribe_room_stream 还没有 ack 协议，
     // 可靠性仍然由 latest_event_position + snapshot + 增量补洞保证，
     // 不能为了“看起来更可靠”而把同一条命令重放多次。
     return io(this.baseUrl, {

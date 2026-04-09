@@ -146,6 +146,31 @@ struct 假仓储 {
     会话到匿名身份: HashMap<String, String>,
     设备匿名身份: HashMap<String, koko::contract::匿名身份引导结果>,
     房间阅读位置: HashMap<(String, String), i64>,
+    附件: HashMap<String, koko::usecase::附件读取结果>,
+}
+
+impl 假仓储 {
+    /// 用例层红测需要显式控制附件 owner / kind / status，
+    /// 这里用最小 helper 造假数据，避免每个测试都手拼同一坨附件快照。
+    fn 放入附件(
+        &mut self,
+        附件标识: &str,
+        所属匿名身份标识: &str,
+        种类: koko::usecase::附件种类读取结果,
+        状态: koko::usecase::附件状态读取结果,
+    ) {
+        self.附件.insert(
+            附件标识.to_string(),
+            koko::usecase::附件读取结果 {
+                附件标识: 附件标识.to_string(),
+                所属匿名身份标识: 所属匿名身份标识.to_string(),
+                种类,
+                状态,
+                宽: Some(320),
+                高: Some(240),
+            },
+        );
+    }
 }
 
 impl koko::usecase::仓储端口 for 假仓储 {
@@ -313,6 +338,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
             发送者会话标识: 会话标识.to_string(),
             发送者花名: "测试用户".to_string(),
             文本: 文本.to_string(),
+            附件: Vec::new(),
             事件位置: self.最新位置,
         })
     }
@@ -348,6 +374,20 @@ impl koko::usecase::仓储端口 for 假仓储 {
             .房间阅读位置
             .get(&(identity.clone(), 房间标识.to_string()))
             .copied())
+    }
+
+    fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, koko::contract::错误码> {
+        Ok(self.会话到匿名身份.get(会话标识).cloned())
+    }
+
+    fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<koko::usecase::附件读取结果>, koko::contract::错误码> {
+        Ok(self.附件.get(附件标识).cloned())
     }
 }
 
@@ -501,5 +541,72 @@ fn 发送文本消息返回权威事件() {
             && 发送者会话标识 == "s-1"
             && 发送者花名 == "测试用户"
             && 文本 == "hello"
+    ));
+}
+
+#[test]
+fn 非ready附件不能创建消息() {
+    let mut repo = 假仓储::default();
+    let identity =
+        koko::usecase::引导匿名身份(&mut repo, "device-attachment-processing")
+            .expect("应能引导匿名身份");
+    let room =
+        koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, "ROOM0010")
+            .expect("应成功");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+    repo.放入附件(
+        "att-1",
+        &identity.匿名身份标识,
+        koko::usecase::附件种类读取结果::图片,
+        koko::usecase::附件状态读取结果::处理中,
+    );
+
+    let result = koko::usecase::创建消息(
+        &mut repo,
+        &room_id,
+        &identity.会话标识,
+        "c-attachment-processing",
+        "",
+        &["att-1".to_string()],
+    );
+
+    assert!(matches!(result, Err(koko::contract::错误码::附件未就绪)));
+}
+
+#[test]
+fn 附件owner不匹配时拒绝创建消息() {
+    let mut repo = 假仓储::default();
+    let sender =
+        koko::usecase::引导匿名身份(&mut repo, "device-attachment-owner")
+            .expect("应能引导匿名身份");
+    let room =
+        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOM0011")
+            .expect("应成功");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+    repo.放入附件(
+        "att-owner-mismatch",
+        "a-other",
+        koko::usecase::附件种类读取结果::图片,
+        koko::usecase::附件状态读取结果::就绪,
+    );
+
+    let result = koko::usecase::创建消息(
+        &mut repo,
+        &room_id,
+        &sender.会话标识,
+        "c-attachment-owner",
+        "hello",
+        &["att-owner-mismatch".to_string()],
+    );
+
+    assert!(matches!(
+        result,
+        Err(koko::contract::错误码::附件不属于当前发送者)
     ));
 }

@@ -29,15 +29,18 @@ pub(super) struct RealtimeSubscribeBody {
     pub(super) from: i64,
 }
 
-/// Realtime 发送消息命令负载。
+/// Realtime 统一创建消息命令负载。
 #[derive(Deserialize, Clone)]
-pub(super) struct RealtimeSendBody {
+pub(super) struct RealtimeCreateMessageBody {
     /// 目标房间标识。
     pub(super) room_id: String,
     /// 客户端消息标识（幂等链路锚点）。
     pub(super) client_message_id: String,
     /// 消息文本原文。
     pub(super) text: String,
+    /// 当前消息挂载的附件标识列表。
+    /// 纯文本消息时这里为空数组。
+    pub(super) attachment_ids: Vec<String>,
 }
 
 /// Realtime 发送失败分级。
@@ -379,25 +382,25 @@ pub(super) async fn handle_realtime_subscribe(
     }
 }
 
-/// Realtime 业务命令：发送文本消息。
+/// Realtime 业务命令：创建统一消息。
 ///
 /// 语义分离约束：
 /// 1. `room_event` 仅在“消息已成立”后发出。
 /// 2. 命令拒绝和系统错误走 `control_result`。
-pub(super) async fn handle_realtime_send(
+pub(super) async fn handle_realtime_create_message(
     socket: SocketRef,
     auth: 已认证会话,
-    payload: RealtimeSendBody,
+    payload: RealtimeCreateMessageBody,
     state: 应用状态,
 ) {
     tracing::info!(
-        usecase = "发送文本消息",
+        usecase = "创建消息",
         adapter = "socketioxide",
         outcome = "accepted",
         room_id = payload.room_id.as_str(),
         session_id = auth.session_id.as_str(),
         client_message_id = payload.client_message_id.as_str(),
-        "realtime 发送请求已受理"
+        "realtime 创建消息请求已受理"
     );
     let state = state.clone();
     let session_id = auth.session_id.clone();
@@ -405,12 +408,13 @@ pub(super) async fn handle_realtime_send(
     let client_message_id_for_log = payload.client_message_id.clone();
     let result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state);
-        usecase::发送文本消息(
+        usecase::创建消息(
             &mut repo,
             &payload.room_id,
             &session_id,
             &payload.client_message_id,
             &payload.text,
+            &payload.attachment_ids,
         )
         .map_err(map_domain_err_tuple)
     })
@@ -430,7 +434,7 @@ pub(super) async fn handle_realtime_send(
             if let Err(err) = socket.within(room_id.clone()).emit("room_event", &payload).await {
                 match 分类广播发送失败(&err) {
                     实时发送失败级别::正常断开 => tracing::info!(
-                        usecase = "发送文本消息",
+                        usecase = "创建消息",
                         adapter = "socketioxide",
                         outcome = "dropped",
                         room_id = room_id,
@@ -441,7 +445,7 @@ pub(super) async fn handle_realtime_send(
                         "房间权威事件在连接关闭后被丢弃"
                     ),
                     实时发送失败级别::背压 => tracing::error!(
-                        usecase = "发送文本消息",
+                        usecase = "创建消息",
                         adapter = "socketioxide",
                         outcome = "failed",
                         room_id = room_id,
@@ -452,7 +456,7 @@ pub(super) async fn handle_realtime_send(
                         "房间权威事件广播失败：存在 socket 内部通道已满"
                     ),
                     实时发送失败级别::序列化 => tracing::error!(
-                        usecase = "发送文本消息",
+                        usecase = "创建消息",
                         adapter = "socketioxide",
                         outcome = "failed",
                         room_id = room_id,
@@ -463,7 +467,7 @@ pub(super) async fn handle_realtime_send(
                         "房间权威事件广播失败：事件序列化失败"
                     ),
                     实时发送失败级别::适配器 => tracing::error!(
-                        usecase = "发送文本消息",
+                        usecase = "创建消息",
                         adapter = "socketioxide",
                         outcome = "failed",
                         room_id = room_id,
@@ -476,34 +480,34 @@ pub(super) async fn handle_realtime_send(
                 }
             } else {
                 tracing::info!(
-                    usecase = "发送文本消息",
+                    usecase = "创建消息",
                     adapter = "socketioxide",
                     outcome = "succeeded",
                     room_id = room_id,
                     session_id = auth.session_id,
                     client_message_id = client_message_id,
                     event_position = event_position,
-                    "发送文本消息成功"
+                    "创建消息成功"
                 );
             }
         }
         Ok(Err((_, code, message))) => {
             tracing::info!(
-                usecase = "发送文本消息",
+                usecase = "创建消息",
                 adapter = "socketioxide",
                 outcome = "rejected",
                 room_id = room_id_for_log,
                 session_id = auth.session_id,
                 client_message_id = client_message_id_for_log,
                 error_code = code,
-                "发送文本消息被拒绝"
+                "创建消息被拒绝"
             );
             let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
             let _ = socket.emit("control_result", &payload);
         }
         Err(err) => {
             tracing::error!(
-                usecase = "发送文本消息",
+                usecase = "创建消息",
                 adapter = "socketioxide",
                 outcome = "failed",
                 room_id = room_id_for_log,
@@ -511,7 +515,7 @@ pub(super) async fn handle_realtime_send(
                 client_message_id = client_message_id_for_log,
                 error_code = "system_error",
                 error = %err,
-                "发送文本消息任务执行失败"
+                "创建消息任务执行失败"
             );
             let payload = serde_json::json!({
                 "kind":"error",
@@ -528,6 +532,22 @@ mod 实时外壳测试 {
     use super::{分类单连接发送失败, 分类广播发送失败, 实时发送失败级别};
     use crate::contract;
     use socketioxide::{BroadcastError, SendError, SocketError};
+
+    #[test]
+    fn create_message负载允许文本和附件列表并存() {
+        let payload: super::RealtimeCreateMessageBody = serde_json::from_value(serde_json::json!({
+            "room_id": "room-1",
+            "client_message_id": "client-1",
+            "text": "hello",
+            "attachment_ids": ["att-1", "att-2"]
+        }))
+        .expect("应能解析统一 create_message 负载");
+
+        assert_eq!(payload.room_id, "room-1");
+        assert_eq!(payload.client_message_id, "client-1");
+        assert_eq!(payload.text, "hello");
+        assert_eq!(payload.attachment_ids, vec!["att-1", "att-2"]);
+    }
 
     #[test]
     fn 单连接发送到已关闭socket时降级为正常断开() {
@@ -555,6 +575,7 @@ mod 实时外壳测试 {
             发送者会话标识: "session-1".to_string(),
             发送者花名: "花名-1".to_string(),
             文本: "hello".to_string(),
+            附件: Vec::new(),
             事件位置: 1,
         });
 

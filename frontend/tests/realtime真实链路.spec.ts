@@ -148,10 +148,11 @@ describe("realtime真实链路", () => {
 
       const eventA = once<房间事件>(socketA, "room_event");
       const eventB = once<房间事件>(socketB, "room_event");
-      socketA.emit("send_text_message", {
+      socketA.emit("create_message", {
         room_id: room.room_id,
         client_message_id: "c-real-1",
         text: "hello realtime",
+        attachment_ids: [],
       });
 
       const [roomEventA, roomEventB] = await Promise.all([eventA, eventB]);
@@ -227,10 +228,11 @@ describe("realtime真实链路", () => {
 
       const firstA = once<房间事件>(socketA, "room_event");
       const firstB = once<房间事件>(socketB, "room_event");
-      socketA.emit("send_text_message", {
+      socketA.emit("create_message", {
         room_id: room1.room_id,
         client_message_id: "c-resume-1",
         text: "first message",
+        attachment_ids: [],
       });
       const [eventA1, eventB1] = await Promise.all([firstA, firstB]);
       await expectNoEvent(socketC, "room_event");
@@ -238,10 +240,11 @@ describe("realtime真实链路", () => {
       socketB.disconnect();
 
       const secondA = once<房间事件>(socketA, "room_event");
-      socketA.emit("send_text_message", {
+      socketA.emit("create_message", {
         room_id: room1.room_id,
         client_message_id: "c-resume-2",
         text: "second message",
+        attachment_ids: [],
       });
       const eventA2 = await secondA;
       await expectNoEvent(socketC, "room_event");
@@ -482,10 +485,11 @@ describe("realtime真实链路", () => {
       // 后面继续追加新消息后，再用 HTTP snapshot 断言后端会围绕第一条未读开窗。
       for (let index = 1; index <= 20; index += 1) {
         const nextEvent = once<房间事件>(socketB, "room_event");
-        socketB.emit("send_text_message", {
+        socketB.emit("create_message", {
           room_id: room.room_id,
           client_message_id: `snapshot-before-${index}`,
           text: `更早消息-${index}`,
+          attachment_ids: [],
         });
         await nextEvent;
       }
@@ -500,10 +504,11 @@ describe("realtime真实链路", () => {
 
       for (let index = 21; index <= 40; index += 1) {
         const nextEvent = once<房间事件>(socketB, "room_event");
-        socketB.emit("send_text_message", {
+        socketB.emit("create_message", {
           room_id: room.room_id,
           client_message_id: `snapshot-after-${index}`,
           text: `未读消息-${index}`,
+          attachment_ids: [],
         });
         await nextEvent;
       }

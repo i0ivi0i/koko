@@ -100,6 +100,89 @@ describe("房间实时编排", () => {
 
     expect(场景.读取状态().messages.map((message) => message.message_id)).toEqual(["m-1", "m-2"]);
   });
+
+  it("纯文本发送会发 create_message，而不是旧的 send_text_message", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+      messageInput: "hello text",
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+      sendMessage(): Promise<void>;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    await 编排.sendMessage();
+
+    expect(场景.transport.socket.sentEvents.at(-1)).toMatchObject({
+      event: "create_message",
+      payload: {
+        room_id: "r-test",
+        text: "hello text",
+        attachment_ids: [],
+      },
+    });
+  });
+
+  it("带图片附件发送时不会插入本地伪权威消息，只会上送 create_message", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 3,
+      messageInput: "带图消息",
+      messages: [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-1",
+          client_message_id: "c-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "已有消息",
+          event_position: 1,
+        },
+      ],
+    });
+    const 状态 = 场景.读取状态() as ReturnType<typeof 场景.读取状态> & {
+      composerImageDrafts?: Array<{ attachmentId: string; status: string }>;
+    };
+    状态.composerImageDrafts = [
+      {
+        localId: "draft-1",
+        attachmentId: "att-1",
+        previewUrl: "https://example.com/thumb.png",
+        width: 120,
+        height: 90,
+        status: "ready",
+        fileName: "demo.png",
+        errorCode: "",
+      },
+    ];
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+      sendMessage(): Promise<void>;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    await 编排.sendMessage();
+
+    expect(场景.transport.socket.sentEvents.at(-1)).toMatchObject({
+      event: "create_message",
+      payload: {
+        room_id: "r-test",
+        text: "带图消息",
+        attachment_ids: ["att-1"],
+      },
+    });
+    expect(场景.读取状态().messages.map((message) => message.message_id)).toEqual(["m-1"]);
+    expect(
+      场景
+        .读取状态()
+        .messages.every((message) => !message.message_id.startsWith("local-"))
+    ).toBe(true);
+  });
 });
 
 

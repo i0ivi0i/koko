@@ -14,6 +14,7 @@ pub struct 配置 {
     pub admin_password: String,
     pub app_port: u16,
     pub rust_log: String,
+    pub attachment_storage_dir: String,
 }
 
 /// 读取启动所需的最小配置。缺关键配置时必须失败，避免静默启动。
@@ -24,12 +25,14 @@ pub fn 读取配置() -> io::Result<配置> {
     let admin_password = 读取必填环境变量("ADMIN_PASSWORD")?;
     let app_port = 读取端口("APP_PORT")?;
     let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    let attachment_storage_dir = 读取附件存储目录();
 
     Ok(配置 {
         database_url,
         admin_password,
         app_port,
         rust_log,
+        attachment_storage_dir,
     })
 }
 
@@ -190,4 +193,15 @@ fn 读取端口(key: &str) -> io::Result<u16> {
             format!("环境变量 {key} 不是合法端口: {raw}"),
         )
     })
+}
+
+/// 附件存储根目录是可选配置：
+/// 1. 显式设置时尊重环境变量
+/// 2. 没设置时统一回到项目内 `data/attachments`
+pub fn 读取附件存储目录() -> String {
+    env::var("ATTACHMENT_STORAGE_DIR")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "data/attachments".to_string())
 }

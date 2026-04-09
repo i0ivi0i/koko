@@ -14,6 +14,7 @@ import type {
   后台房间详情,
   后台概览,
   后台登录结果,
+  图片附件上传结果,
   房间历史页,
   房间快照,
 } from "../契约";
@@ -47,7 +48,13 @@ class 假Socket {
         latest_event_position: 0,
       });
     }
-    if (event === "send_text_message") {
+    if (event === "create_message" || event === "send_text_message") {
+      const text =
+        typeof payload.text === "string"
+          ? payload.text
+          : typeof payload.body === "string"
+            ? payload.body
+            : "";
       this.fire("room_event", {
         type: "message_created",
         room_id: "r-e2e",
@@ -55,7 +62,9 @@ class 假Socket {
         client_message_id: payload.client_message_id,
         sender_session_id: "s-e2e",
         sender_display_alias: "暴躁的企鹅",
-        body: payload.text,
+        text,
+        body: text,
+        attachments: [],
         event_position: 1,
       });
     }
@@ -110,7 +119,9 @@ class 端到端假传输 implements 前端传输端口 {
           client_message_id: "c-e2e",
           sender_session_id: "s-e2e",
           sender_display_alias: "暴躁的企鹅",
+          text: "e2e-hello",
           body: "e2e-hello",
+          attachments: [],
           event_position: 1,
         },
       ],
@@ -133,11 +144,31 @@ class 端到端假传输 implements 前端传输端口 {
           client_message_id: "c-e2e",
           sender_session_id: "s-e2e",
           sender_display_alias: "暴躁的企鹅",
+          text: "e2e-hello",
           body: "e2e-hello",
+          attachments: [],
           event_position: 1,
         },
       ],
     };
+  }
+  async uploadImageAttachment(_sessionId: string, file: File): Promise<图片附件上传结果> {
+    return {
+      attachment_id: "att-e2e",
+      kind: "image",
+      mime_type: file.type || "image/png",
+      byte_size: file.size,
+      width: 120,
+      height: 90,
+      status: "ready",
+    };
+  }
+  buildAttachmentContentUrl(
+    attachmentId: string,
+    sessionId: string,
+    variant: "original" | "thumbnail" = "original"
+  ): string {
+    return `http://test.local/api/attachments/${attachmentId}/content?session_id=${sessionId}&variant=${variant}`;
   }
   async loadRoomHistory(): Promise<房间历史页> {
     return { room_id: "r-e2e", messages: [] };

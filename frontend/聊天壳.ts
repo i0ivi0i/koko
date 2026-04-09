@@ -1,4 +1,7 @@
 import { css, html, LitElement } from "lit";
+import Uppy, { type UppyFile } from "@uppy/core";
+import Dashboard from "@uppy/dashboard";
+import XHRUpload from "@uppy/xhr-upload";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
 import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
@@ -10,8 +13,9 @@ import {
   type 前端存储端口,
 } from "./存储.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
-import { 初始聊天状态, type 聊天状态 } from "./状态.js";
+import { 初始聊天状态, type 图片附件草稿, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
+import type { 图片附件上传结果 } from "./契约.js";
 import {
   默认消息文本布局环境,
   派生壳主舞台模式,
@@ -25,6 +29,28 @@ import {
   type 消息文本布局环境,
 } from "./视图.js";
 
+type 图片上传Meta = { session_id?: string };
+type 图片上传响应体 = Record<string, unknown>;
+
+function 解析图片上传结果(body: unknown): 图片附件上传结果 | null {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+  const candidate = body as Partial<图片附件上传结果>;
+  if (
+    candidate.kind !== "image" ||
+    typeof candidate.attachment_id !== "string" ||
+    typeof candidate.mime_type !== "string" ||
+    typeof candidate.byte_size !== "number" ||
+    typeof candidate.width !== "number" ||
+    typeof candidate.height !== "number" ||
+    candidate.status !== "ready"
+  ) {
+    return null;
+  }
+  return candidate as 图片附件上传结果;
+}
+
 export class 聊天壳 extends LitElement {
   /**
    * 文本几何已经改由 Pretext 主导后，宿主尺寸变化就不能再指望浏览器自然流偷偷兜底。
@@ -33,6 +59,81 @@ export class 聊天壳 extends LitElement {
    */
   private readonly handleViewportResize = (): void => {
     this.requestUpdate();
+  };
+
+  private imageUploader: Uppy<图片上传Meta, 图片上传响应体> | null = null;
+
+  private readonly handleImageUploadAdded = (
+    file: UppyFile<图片上传Meta, 图片上传响应体>
+  ): void => {
+    const previewUrl =
+      file.data instanceof Blob ? URL.createObjectURL(file.data) : "";
+    this.imageUploader?.setFileMeta(file.id, {
+      session_id: this.chatState.sessionId,
+    });
+    this.写入图片草稿({
+      localId: file.id,
+      attachmentId: "",
+      previewUrl,
+      width: 0,
+      height: 0,
+      status: "uploading",
+      fileName: file.name ?? "未命名图片",
+      errorCode: "",
+    });
+  };
+
+  private readonly handleImageUploadSuccess = (
+    file: UppyFile<图片上传Meta, 图片上传响应体> | undefined,
+    response: { body?: 图片上传响应体 } | undefined
+  ): void => {
+    if (!file) {
+      return;
+    }
+    const body = 解析图片上传结果(response?.body);
+    if (!body || body.kind !== "image") {
+      this.更新图片草稿状态(file.id, {
+        status: "failed",
+        errorCode: "attachment_upload_failed",
+      });
+      return;
+    }
+    const thumbnailUrl = this.transport.buildAttachmentContentUrl(
+      body.attachment_id,
+      this.chatState.sessionId,
+      "thumbnail"
+    );
+    this.更新图片草稿状态(file.id, {
+      attachmentId: body.attachment_id,
+      previewUrl: thumbnailUrl,
+      width: body.width,
+      height: body.height,
+      status: "ready",
+      errorCode: "",
+    });
+  };
+
+  private readonly handleImageUploadError = (
+    file: UppyFile<图片上传Meta, 图片上传响应体> | undefined,
+    error: { message: string },
+    response?: { body?: 图片上传响应体 }
+  ): void => {
+    if (!file) {
+      return;
+    }
+    this.更新图片草稿状态(file.id, {
+      status: "failed",
+      errorCode:
+        (typeof response?.body?.code === "string" && response.body.code) ||
+        error.message ||
+        "attachment_upload_failed",
+    });
+  };
+
+  private readonly handleImageUploadRemoved = (
+    file: UppyFile<图片上传Meta, 图片上传响应体>
+  ): void => {
+    this.移除图片草稿(file.id);
   };
 
   static override styles = css`
@@ -413,6 +514,33 @@ export class 聊天壳 extends LitElement {
       word-break: break-word;
     }
 
+    .message-attachment-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .message-attachment-grid[data-attachment-count="1"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .message-image-link {
+      display: block;
+      line-height: 0;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .message-image {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
     /* 新消息提示属于房间壳层浮动入口：用户正在补旧未读时提示可见，但不抢走当前视角。 */
     .jump-latest-button {
       position: absolute;
@@ -453,6 +581,61 @@ export class 聊天壳 extends LitElement {
       backdrop-filter: blur(18px);
     }
 
+    .composer-drafts {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+      gap: 10px;
+    }
+
+    .composer-draft {
+      display: grid;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 18px;
+      border: 1px solid var(--line-soft);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .composer-draft-thumb {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 14px;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .composer-draft-meta {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .composer-draft-name {
+      overflow: hidden;
+      font-size: 12px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+
+    .composer-draft-status {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .composer-draft-status[data-status="failed"] {
+      color: var(--status-warn-strong);
+    }
+
+    .composer-draft-remove {
+      justify-self: start;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+    }
+
     .composer-status {
       min-height: 18px;
       padding: 0 4px;
@@ -476,10 +659,19 @@ export class 聊天壳 extends LitElement {
       margin: 0;
     }
 
-    /* 左侧辅助槽当前只是结构占位：先把唯一操作台骨架钉死，
-       后续再按模式和功能逐步启用，不在这一步抢跑出第二套布局。 */
     .shell-console-aux-slot {
-      display: none;
+      display: flex;
+      align-items: stretch;
+    }
+
+    .composer-aux-button {
+      min-width: 68px;
+      min-height: 50px;
+      padding: 0 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line-soft);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-secondary);
     }
 
     /* 操作台主控行必须固定成同一套节奏：
@@ -489,6 +681,14 @@ export class 聊天壳 extends LitElement {
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: end;
+    }
+
+    #shellConsoleInputGroup {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: end;
+      min-width: 0;
     }
 
     #shellConsolePrimaryInput {
@@ -689,6 +889,8 @@ export class 聊天壳 extends LitElement {
     this._实时编排端口 = null;
     this._阅读推进编排端口?.dispose();
     this._阅读推进编排端口 = null;
+    this.imageUploader?.destroy();
+    this.imageUploader = null;
     this.transport = transport;
     this._恢复编排端口 = null;
   }
@@ -729,6 +931,132 @@ export class 聊天壳 extends LitElement {
     };
   }
 
+  private ensureImageUploader(): Uppy<图片上传Meta, 图片上传响应体> {
+    if (this.imageUploader) {
+      this.imageUploader.setMeta({ session_id: this.chatState.sessionId });
+      return this.imageUploader;
+    }
+
+    /**
+     * 图片上传继续复用成熟轮子：
+     * 1. Uppy 负责选图、modal、上传状态与失败重试；
+     * 2. 我们自己的壳层只维护“发送区草稿”和“消息命令”；
+     * 3. 不再自己手搓第二套上传状态机。
+     */
+    const uppy = new Uppy<图片上传Meta, 图片上传响应体>({
+      autoProceed: true,
+      allowMultipleUploadBatches: true,
+      restrictions: {
+        maxNumberOfFiles: 9,
+        allowedFileTypes: ["image/*"],
+      },
+    })
+      .use(Dashboard, {
+        inline: false,
+        target: document.body,
+        closeAfterFinish: true,
+        proudlyDisplayPoweredByUppy: false,
+      })
+      .use(XHRUpload, {
+        endpoint: `${window.location.origin}/api/attachments/image`,
+        formData: true,
+        fieldName: "file",
+        allowedMetaFields: ["session_id"],
+      });
+
+    uppy.on("file-added", this.handleImageUploadAdded);
+    uppy.on("upload-success", this.handleImageUploadSuccess);
+    uppy.on("upload-error", this.handleImageUploadError);
+    uppy.on("file-removed", this.handleImageUploadRemoved);
+    uppy.setMeta({ session_id: this.chatState.sessionId });
+    this.imageUploader = uppy;
+    return uppy;
+  }
+
+  private openImagePicker(): void {
+    if (!this.chatState.sessionId) {
+      return;
+    }
+    const dashboard = this.ensureImageUploader().getPlugin("Dashboard") as
+      | { openModal(): void }
+      | undefined;
+    dashboard?.openModal();
+  }
+
+  private revokeDraftPreviewUrl(previewUrl: string): void {
+    if (!previewUrl.startsWith("blob:")) {
+      return;
+    }
+    URL.revokeObjectURL(previewUrl);
+  }
+
+  private 写入图片草稿(draft: 图片附件草稿): void {
+    const existing = this.chatState.composerImageDrafts.find(
+      (item) => item.localId === draft.localId
+    );
+    if (existing) {
+      this.revokeDraftPreviewUrl(existing.previewUrl);
+    }
+    const nextDrafts = [
+      ...this.chatState.composerImageDrafts.filter((item) => item.localId !== draft.localId),
+      draft,
+    ];
+    this.updateChat({
+      composerImageDrafts: nextDrafts,
+    });
+  }
+
+  private 更新图片草稿状态(
+    localId: string,
+    patch: Partial<Omit<图片附件草稿, "localId" | "fileName">> & { fileName?: string }
+  ): void {
+    const nextDrafts = this.chatState.composerImageDrafts.map((draft) => {
+      if (draft.localId !== localId) {
+        return draft;
+      }
+      if (patch.previewUrl && patch.previewUrl !== draft.previewUrl) {
+        this.revokeDraftPreviewUrl(draft.previewUrl);
+      }
+      return {
+        ...draft,
+        ...patch,
+      };
+    });
+    this.updateChat({
+      composerImageDrafts: nextDrafts,
+    });
+  }
+
+  private 移除图片草稿(localId: string): void {
+    const target = this.chatState.composerImageDrafts.find((draft) => draft.localId === localId);
+    if (target) {
+      this.revokeDraftPreviewUrl(target.previewUrl);
+    }
+    this.updateChat({
+      composerImageDrafts: this.chatState.composerImageDrafts.filter(
+        (draft) => draft.localId !== localId
+      ),
+    });
+  }
+
+  private clearImageUploaderState(): void {
+    const currentDrafts = this.chatState.composerImageDrafts;
+    this.imageUploader?.cancelAll();
+    for (const draft of currentDrafts) {
+      this.revokeDraftPreviewUrl(draft.previewUrl);
+    }
+    this.updateChat({
+      composerImageDrafts: [],
+    });
+  }
+
+  private removeComposerDraft(localId: string): void {
+    this.imageUploader?.removeFile(localId);
+    if (!this.imageUploader?.getFile(localId)) {
+      this.移除图片草稿(localId);
+    }
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     globalThis.addEventListener("resize", this.handleViewportResize);
@@ -741,6 +1069,9 @@ export class 聊天壳 extends LitElement {
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
+    this.clearImageUploaderState();
+    this.imageUploader?.destroy();
+    this.imageUploader = null;
     super.disconnectedCallback();
   }
 
@@ -756,6 +1087,7 @@ export class 聊天壳 extends LitElement {
   private buildRoomViewResetPatch(): Partial<聊天状态> {
     return {
       messageInput: "",
+      composerImageDrafts: [],
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,
       hasMoreBefore: false,
@@ -784,6 +1116,7 @@ export class 聊天壳 extends LitElement {
     }
   ): void {
     this._实时编排端口?.disconnect();
+    this.clearImageUploaderState();
     this.storage.清除当前房间标识();
     if (!opts.keepRoomCodeCache) {
       this.storage.清除当前房间短码();
@@ -839,8 +1172,22 @@ export class 聊天壳 extends LitElement {
       return;
     }
     if (consoleMode === "message") {
-      void this.实时编排端口.sendMessage();
+      void this.sendCurrentMessage();
     }
+  }
+
+  private async sendCurrentMessage(): Promise<void> {
+    const currentDrafts = this.chatState.composerImageDrafts;
+    const hasReadyDraft = currentDrafts.some((draft) => draft.status === "ready");
+    const hasBlockingDraft = currentDrafts.some((draft) => draft.status !== "ready");
+    await this.实时编排端口.sendMessage();
+    if (!hasReadyDraft || hasBlockingDraft) {
+      return;
+    }
+    for (const draft of currentDrafts) {
+      this.revokeDraftPreviewUrl(draft.previewUrl);
+    }
+    this.imageUploader?.cancelAll();
   }
 
   private handleShellConsolePrimaryInput(event: Event, isMessageMode: boolean): void {
@@ -879,10 +1226,11 @@ export class 聊天壳 extends LitElement {
       return 50;
     }
 
-    const mainRow =
-      (this.shadowRoot?.querySelector("#shellConsoleMainRow") as HTMLElement | null) ?? null;
-    const mainRowWidth = mainRow?.clientWidth || Math.min(globalThis.innerWidth || 390, 560);
-    const 输入框总宽度 = Math.max(180, mainRowWidth - 94);
+    const inputGroup =
+      (this.shadowRoot?.querySelector("#shellConsoleInputGroup") as HTMLElement | null) ?? null;
+    const inputGroupWidth = inputGroup?.clientWidth || Math.min(globalThis.innerWidth || 390, 560);
+    const 附件入口宽度 = this.chatState.roomId ? 84 : 0;
+    const 输入框总宽度 = Math.max(180, inputGroupWidth - 附件入口宽度);
     const 输入框内容宽度 = Math.max(120, 输入框总宽度 - 34);
     const layout = 默认文本布局器.布局纯文本({
       text: value.length > 0 ? value : " ",
@@ -928,6 +1276,7 @@ export class 聊天壳 extends LitElement {
       isMessageMode,
       consoleState.primaryInput.value
     );
+    const composerDrafts = isMessageMode ? this.chatState.composerImageDrafts : [];
 
     return html`
       <footer id="shellConsole" class="composer-bar">
@@ -937,32 +1286,81 @@ export class 聊天壳 extends LitElement {
         >
           ${consoleState.statusText}
         </div>
+        ${composerDrafts.length > 0
+          ? html`
+              <div id="composerImageDrafts" class="composer-drafts">
+                ${composerDrafts.map(
+                  (draft) => html`
+                    <div class="composer-draft">
+                      <img
+                        class="composer-draft-thumb"
+                        data-draft-id=${draft.localId}
+                        src=${draft.previewUrl}
+                        alt=${draft.fileName}
+                      />
+                      <div class="composer-draft-meta">
+                        <div class="composer-draft-name">${draft.fileName}</div>
+                        <div
+                          class="composer-draft-status"
+                          data-status=${draft.status}
+                        >
+                          ${draft.status === "ready"
+                            ? "可发送"
+                            : draft.status === "uploading"
+                              ? "上传中"
+                              : `失败：${draft.errorCode || "attachment_upload_failed"}`}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="composer-draft-remove"
+                        @click=${() => this.removeComposerDraft(draft.localId)}
+                      >
+                        移除
+                      </button>
+                    </div>
+                  `
+                )}
+              </div>
+            `
+          : null}
         <form id="shellConsoleForm" class="shell-console-form" @submit=${this.submitShellConsole}>
           <div
             id="shellConsoleMainRow"
             ?inert=${isHiddenMode}
           >
-            <div
-              id="shellConsoleAuxSlot"
-              class="shell-console-aux-slot"
-              aria-hidden="true"
-              hidden
-            ></div>
-            <textarea
-              id="shellConsolePrimaryInput"
-              class="text-input"
-              data-role=${isMessageMode ? "composer-editor" : "room-code-editor"}
-              placeholder=${consoleState.primaryInput.placeholder}
-              enterkeyhint=${consoleState.primaryInput.enterKeyHint}
-              .value=${consoleState.primaryInput.value}
-              ?disabled=${consoleState.primaryInput.disabled}
-              rows="1"
-              style=${`height: ${primaryInputHeight}px;`}
-              @input=${(event: Event) =>
-                this.handleShellConsolePrimaryInput(event, isMessageMode)}
-              @keydown=${(event: KeyboardEvent) =>
-                this.handleShellConsolePrimaryKeydown(event, isMessageMode)}
-            ></textarea>
+            <div id="shellConsoleInputGroup">
+              <div
+                id="shellConsoleAuxSlot"
+                class="shell-console-aux-slot"
+                ?hidden=${!consoleState.auxSlot.visible}
+              >
+                <button
+                  id="composerImagePickerBtn"
+                  type="button"
+                  class="composer-aux-button"
+                  ?disabled=${consoleState.auxSlot.disabled}
+                  @click=${() => this.openImagePicker()}
+                >
+                  ${consoleState.auxSlot.label}
+                </button>
+              </div>
+              <textarea
+                id="shellConsolePrimaryInput"
+                class="text-input"
+                data-role=${isMessageMode ? "composer-editor" : "room-code-editor"}
+                placeholder=${consoleState.primaryInput.placeholder}
+                enterkeyhint=${consoleState.primaryInput.enterKeyHint}
+                .value=${consoleState.primaryInput.value}
+                ?disabled=${consoleState.primaryInput.disabled}
+                rows="1"
+                style=${`height: ${primaryInputHeight}px;`}
+                @input=${(event: Event) =>
+                  this.handleShellConsolePrimaryInput(event, isMessageMode)}
+                @keydown=${(event: KeyboardEvent) =>
+                  this.handleShellConsolePrimaryKeydown(event, isMessageMode)}
+              ></textarea>
+            </div>
             <button
               id="shellConsolePrimaryAction"
               class="primary-button"
@@ -1126,7 +1524,13 @@ export class 聊天壳 extends LitElement {
               this.chatState.messages,
               this.chatState.sessionId,
               this.chatState.firstUnreadEventPosition,
-              消息文本布局环境
+              消息文本布局环境,
+              (attachmentId, variant) =>
+                this.transport.buildAttachmentContentUrl(
+                  attachmentId,
+                  this.chatState.sessionId,
+                  variant
+                )
             )}
             .historyHint=${historyHint}
             .jumpToLatestLabel=${jumpToLatestLabel}

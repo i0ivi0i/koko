@@ -1,9 +1,12 @@
-use std::{future::Future, io};
+use std::{collections::HashMap, future::Future, io};
 
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use uuid::Uuid;
 
-use crate::{contract, usecase::仓储端口};
+use crate::{
+    contract, domain,
+    usecase::{self, 仓储端口},
+};
 
 /// PostgreSQL 适配层只做持久化翻译与事务提交，不承载业务规则。
 ///
@@ -62,7 +65,9 @@ impl Pg仓储 {
     /// 把数据库行翻成共享领域事件。
     /// 这里统一收口消息读取的字段映射，避免快照基线和增量补洞各写一套。
     fn 行转消息事件(
-        row: sqlx::postgres::PgRow, 房间标识: &str
+        row: sqlx::postgres::PgRow,
+        房间标识: &str,
+        附件: Vec<contract::附件快照>,
     ) -> contract::领域事件 {
         let msg_id: Option<String> = row.get("message_id");
         let client_id: Option<String> = row.get("client_message_id");
@@ -76,8 +81,232 @@ impl Pg仓储 {
             发送者会话标识: sender_session_id.unwrap_or_default(),
             发送者花名: sender_display_alias.unwrap_or_default(),
             文本: body.unwrap_or_default(),
+            附件,
             事件位置: row.get("event_position"),
         }
+    }
+
+    /// 领域层已经校验通过的附件引用，落到共享契约时只保留稳定渲染事实。
+    fn 已校验附件转契约快照(附件: &domain::message::已校验附件引用) -> contract::附件快照 {
+        match 附件 {
+            domain::message::已校验附件引用::图片 {
+                附件标识,
+                宽,
+                高,
+            } => contract::附件快照::图片(contract::图片附件快照 {
+                附件标识: 附件标识.clone(),
+                宽: *宽,
+                高: *高,
+            }),
+        }
+    }
+
+    /// 批量拉取消息附件快照，避免快照/历史/增量各自长出一套 N+1 查询。
+    async fn 查询消息附件映射_异步(
+        pool: &PgPool,
+        消息标识列表: &[String],
+    ) -> Result<HashMap<String, Vec<contract::附件快照>>, contract::错误码> {
+        if 消息标识列表.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let rows = sqlx::query(
+            "SELECT mar.message_id, mar.sort_order, a.attachment_id, a.kind, a.width, a.height \
+             FROM message_attachment_refs mar \
+             JOIN attachments a ON a.id = mar.attachment_id \
+             WHERE mar.message_id = ANY($1) \
+             ORDER BY mar.message_id ASC, mar.sort_order ASC",
+        )
+        .bind(消息标识列表.to_vec())
+        .fetch_all(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        let mut grouped = HashMap::<String, Vec<contract::附件快照>>::new();
+        for row in rows {
+            let message_id: String = row.get("message_id");
+            let kind: String = row.get("kind");
+            let attachment = match kind.as_str() {
+                "image" => contract::附件快照::图片(contract::图片附件快照 {
+                    附件标识: row.get("attachment_id"),
+                    宽: row
+                        .get::<Option<i32>, _>("width")
+                        .ok_or(contract::错误码::系统错误)?,
+                    高: row
+                        .get::<Option<i32>, _>("height")
+                        .ok_or(contract::错误码::系统错误)?,
+                }),
+                _ => return Err(contract::错误码::系统错误),
+            };
+            grouped.entry(message_id).or_default().push(attachment);
+        }
+        Ok(grouped)
+    }
+
+    /// 把消息行和附件映射合成为共享领域事件列表。
+    async fn 组装消息事件列表_异步(
+        pool: &PgPool,
+        房间标识: &str,
+        rows: Vec<sqlx::postgres::PgRow>,
+    ) -> Result<Vec<contract::领域事件>, contract::错误码> {
+        let message_ids = rows
+            .iter()
+            .filter_map(|row| row.get::<Option<String>, _>("message_id"))
+            .collect::<Vec<_>>();
+        let mut attachment_map = Self::查询消息附件映射_异步(pool, &message_ids).await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let message_id = row.get::<Option<String>, _>("message_id").unwrap_or_default();
+                let attachments = attachment_map.remove(&message_id).unwrap_or_default();
+                Self::行转消息事件(row, 房间标识, attachments)
+            })
+            .collect())
+    }
+
+    /// 查询上传链已形成的附件快照，供统一消息用例在进入领域前校验。
+    async fn 查询附件快照_异步(
+        pool: &PgPool,
+        附件标识: &str,
+    ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT a.attachment_id, ai.anonymous_identity_id, a.kind, a.status, a.width, a.height \
+             FROM attachments a \
+             JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
+             WHERE a.attachment_id = $1",
+        )
+        .bind(附件标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        row.map(|row| {
+            let kind = match row.get::<String, _>("kind").as_str() {
+                "image" => usecase::附件种类读取结果::图片,
+                "video" => usecase::附件种类读取结果::视频,
+                "audio" => usecase::附件种类读取结果::语音,
+                "gif" => usecase::附件种类读取结果::GIF,
+                "file" => usecase::附件种类读取结果::文件,
+                _ => return Err(contract::错误码::系统错误),
+            };
+            let status = match row.get::<String, _>("status").as_str() {
+                "uploading" => usecase::附件状态读取结果::上传中,
+                "processing" => usecase::附件状态读取结果::处理中,
+                "ready" => usecase::附件状态读取结果::就绪,
+                "failed" => usecase::附件状态读取结果::失败,
+                "expired" | "canceled" => usecase::附件状态读取结果::已过期,
+                _ => return Err(contract::错误码::系统错误),
+            };
+            Ok(usecase::附件读取结果 {
+                附件标识: row.get("attachment_id"),
+                所属匿名身份标识: row.get("anonymous_identity_id"),
+                种类: kind,
+                状态: status,
+                宽: row.get("width"),
+                高: row.get("height"),
+            })
+        })
+        .transpose()
+    }
+
+    /// 写入 ready 图片附件真相。
+    async fn 创建图片附件记录_异步(
+        pool: &PgPool,
+        所属匿名身份标识: &str,
+        附件: &usecase::图片附件写入请求,
+    ) -> Result<usecase::图片附件快照, contract::错误码> {
+        let owner_db_id = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM anonymous_identities WHERE anonymous_identity_id = $1",
+        )
+        .bind(所属匿名身份标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?
+        .ok_or(contract::错误码::会话无效)?;
+
+        sqlx::query(
+            "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
+             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, 'ready')",
+        )
+        .bind(&附件.附件标识)
+        .bind(owner_db_id)
+        .bind(&附件.mime_type)
+        .bind(附件.字节大小)
+        .bind(附件.宽)
+        .bind(附件.高)
+        .bind(&附件.原图存储键)
+        .bind(&附件.缩略图存储键)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(usecase::图片附件快照 {
+            附件标识: 附件.附件标识.clone(),
+            mime_type: 附件.mime_type.clone(),
+            字节大小: 附件.字节大小,
+            宽: 附件.宽,
+            高: 附件.高,
+            状态: usecase::附件状态读取结果::就绪,
+        })
+    }
+
+    /// 按消息可见性反查附件内容目标。
+    /// 只要当前会话仍然是某个引用该附件消息所在房间的成员，就允许读取。
+    async fn 查询附件可读内容_异步(
+        pool: &PgPool,
+        附件标识: &str,
+        会话标识: &str,
+        变体: usecase::附件内容变体,
+    ) -> Result<Option<usecase::附件内容读取结果>, contract::错误码> {
+        let wants_thumbnail = matches!(变体, usecase::附件内容变体::缩略图);
+        let row = sqlx::query(
+            "SELECT \
+                CASE \
+                    WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
+                    ELSE a.storage_key \
+                END AS storage_key, \
+                CASE \
+                    WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
+                    ELSE a.mime_type \
+                END AS mime_type \
+             FROM attachments a \
+             JOIN message_attachment_refs mar ON mar.attachment_id = a.id \
+             JOIN messages m ON m.message_id = mar.message_id \
+             JOIN room_members rm ON rm.room_id = m.room_id AND rm.left_at IS NULL \
+             JOIN sessions s ON s.id = rm.session_id \
+             WHERE a.attachment_id = $1 AND s.session_id = $2 \
+             ORDER BY m.created_at DESC \
+             LIMIT 1",
+        )
+        .bind(附件标识)
+        .bind(会话标识)
+        .bind(wants_thumbnail)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(row.map(|row| usecase::附件内容读取结果 {
+            mime_type: row.get("mime_type"),
+            存储键: row.get("storage_key"),
+        }))
+    }
+
+    /// 读取当前会话对应的稳定匿名内部身份标识。
+    async fn 查询会话所属匿名身份_异步(
+        pool: &PgPool,
+        会话标识: &str,
+    ) -> Result<Option<String>, contract::错误码> {
+        sqlx::query_scalar(
+            "SELECT ai.anonymous_identity_id \
+             FROM sessions s \
+             JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+             WHERE s.session_id = $1",
+        )
+        .bind(会话标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)
     }
 
     /// 查询房间消息页。
@@ -127,10 +356,7 @@ impl Pg仓储 {
             .map_err(|_| contract::错误码::系统错误)?
         };
 
-        let mut events = rows
-            .into_iter()
-            .map(|row| Self::行转消息事件(row, 房间标识))
-            .collect::<Vec<_>>();
+        let mut events = Self::组装消息事件列表_异步(pool, 房间标识, rows).await?;
         // DESC LIMIT 更省，但普通阅读顺序必须恢复成 ASC。
         events.reverse();
         Ok(events)
@@ -161,10 +387,7 @@ impl Pg仓储 {
         .await
         .map_err(|_| contract::错误码::系统错误)?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| Self::行转消息事件(row, 房间标识))
-            .collect())
+        Self::组装消息事件列表_异步(pool, 房间标识, rows).await
     }
 
     /// 统一拼装房间恢复快照。
@@ -293,7 +516,138 @@ impl Pg仓储 {
         .await
         .map_err(|_| contract::错误码::系统错误)?;
 
-        Ok(row.map(|row| Self::行转消息事件(row, 房间标识)))
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let mut events = Self::组装消息事件列表_异步(pool, 房间标识, vec![row]).await?;
+        Ok(events.pop())
+    }
+
+    /// 统一消息事务提交：
+    /// 1. 推进房间顺序锚点
+    /// 2. 写入 room_events / messages
+    /// 3. 按 sort_order 写入 message_attachment_refs
+    /// 4. 首次引用时把附件标记为 committed
+    async fn 提交统一消息事件_异步(
+        pool: &PgPool,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码> {
+        // 会话投影提前查：它不依赖房间顺序热点，外移后能缩短事务持锁窗口。
+        let (session_db_id, sender_display_alias) =
+            Self::查询发送者投影_异步(pool, 会话标识).await?;
+
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+
+        let room_row = sqlx::query(
+            "UPDATE rooms \
+             SET latest_event_position = latest_event_position + 1 \
+             WHERE room_id = $1 \
+             RETURNING id, latest_event_position",
+        )
+        .bind(房间标识)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+        let Some(room) = room_row else {
+            return Err(contract::错误码::房间不存在);
+        };
+        let room_db_id: i64 = room.get("id");
+        let next_position: i64 = room.get("latest_event_position");
+        let message_id = format!("{房间标识}-{next_position}");
+
+        sqlx::query(
+            "INSERT INTO room_events (room_id, event_position, event_kind, actor_session_id, message_id) \
+             VALUES ($1, $2, 'message_created', $3, $4)",
+        )
+        .bind(room_db_id)
+        .bind(next_position)
+        .bind(session_db_id)
+        .bind(&message_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        let insert_message = sqlx::query(
+            "INSERT INTO messages (message_id, room_id, sender_session_id, client_message_id, event_position, body) \
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(&message_id)
+        .bind(room_db_id)
+        .bind(session_db_id)
+        .bind(客户端消息标识)
+        .bind(next_position)
+        .bind(文本)
+        .execute(&mut *tx)
+        .await;
+        if let Err(err) = insert_message {
+            // `client_message_id` 冲突表示同一条用户发送意图已成功落库过。
+            // 这里必须回到既有权威事件，而不是把重试冒充成系统错误。
+            if Self::是消息幂等冲突(&err) {
+                tx.rollback()
+                    .await
+                    .map_err(|_| contract::错误码::系统错误)?;
+                return Self::查询既有消息事件_异步(pool, 房间标识, 会话标识, 客户端消息标识)
+                    .await?
+                    .ok_or(contract::错误码::系统错误);
+            }
+            return Err(contract::错误码::系统错误);
+        }
+
+        for (sort_order, attachment) in 附件.iter().enumerate() {
+            let attachment_id = match attachment {
+                domain::message::已校验附件引用::图片 { 附件标识, .. } => 附件标识,
+            };
+            let inserted_ref = sqlx::query(
+                "INSERT INTO message_attachment_refs (message_id, attachment_id, sort_order, display_role) \
+                 SELECT $1, a.id, $2, 'inline' \
+                 FROM attachments a \
+                 WHERE a.attachment_id = $3",
+            )
+            .bind(&message_id)
+            .bind(sort_order as i32)
+            .bind(attachment_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+            if inserted_ref.rows_affected() != 1 {
+                return Err(contract::错误码::附件不存在);
+            }
+
+            sqlx::query(
+                "UPDATE attachments \
+                 SET committed_at = COALESCE(committed_at, NOW()) \
+                 WHERE attachment_id = $1",
+            )
+            .bind(attachment_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(contract::领域事件::消息已创建 {
+            房间标识: 房间标识.to_string(),
+            消息标识: message_id,
+            客户端消息标识: 客户端消息标识.to_string(),
+            发送者会话标识: 会话标识.to_string(),
+            发送者花名: sender_display_alias,
+            文本: 文本.to_string(),
+            附件: 附件
+                .iter()
+                .map(Self::已校验附件转契约快照)
+                .collect(),
+            事件位置: next_position,
+        })
     }
 
     /// 只把“同房间、同发送者、同 client_message_id”的冲突识别为幂等重试。
@@ -431,10 +785,7 @@ impl Pg仓储 {
             .await
             .map_err(|_| contract::错误码::系统错误)?;
 
-            let events = rows
-                .into_iter()
-                .map(|row| Self::行转消息事件(row, 房间标识))
-                .collect::<Vec<_>>();
+            let events = Self::组装消息事件列表_异步(&self.pool, 房间标识, rows).await?;
 
             Ok(contract::快照::房间增量事件 {
                 房间标识: 房间标识.to_string(),
@@ -695,6 +1046,14 @@ impl 仓储端口 for Pg仓储 {
         })
     }
 
+    /// 会话 -> 匿名内部身份的解析留在 adapter 查询，不把数据库主键暴露给应用层。
+    fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, contract::错误码> {
+        self.在运行时执行(Self::查询会话所属匿名身份_异步(&self.pool, 会话标识))
+    }
+
     /// 房间存在性检查只回答“有没有这个 room_id”。
     /// 这样应用层可以先区分 `room_not_found`，再决定成员资格分支。
     fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
@@ -747,6 +1106,42 @@ impl 仓储端口 for Pg仓储 {
             .map_err(|_| contract::错误码::系统错误)?;
             Ok(exists.is_some())
         })
+    }
+
+    /// 统一消息用例通过这个只读端口拿附件事实，不直连数据库字段名。
+    fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
+        self.在运行时执行(Self::查询附件快照_异步(&self.pool, 附件标识))
+    }
+
+    /// 图片上传链的元数据落库入口。
+    fn 创建图片附件记录(
+        &mut self,
+        所属匿名身份标识: &str,
+        附件: &usecase::图片附件写入请求,
+    ) -> Result<usecase::图片附件快照, contract::错误码> {
+        self.在运行时执行(Self::创建图片附件记录_异步(
+            &self.pool,
+            所属匿名身份标识,
+            附件,
+        ))
+    }
+
+    /// 附件内容读取仍然走成员可见性，不单独再长一套 ACL。
+    fn 查询附件可读内容(
+        &self,
+        附件标识: &str,
+        会话标识: &str,
+        变体: usecase::附件内容变体,
+    ) -> Result<Option<usecase::附件内容读取结果>, contract::错误码> {
+        self.在运行时执行(Self::查询附件可读内容_异步(
+            &self.pool,
+            附件标识,
+            会话标识,
+            变体,
+        ))
     }
 
     /// 拉取当前身份在房间里的阅读锚点。
@@ -850,98 +1245,33 @@ impl 仓储端口 for Pg仓储 {
         会话标识: &str,
         文本: &str,
     ) -> Result<contract::领域事件, contract::错误码> {
-        self.在运行时执行(async {
-            // 会话投影提前查：它不依赖房间顺序热点，外移后能缩短事务持锁窗口。
-            let (session_db_id, sender_display_alias) =
-                Self::查询发送者投影_异步(&self.pool, 会话标识).await?;
+        self.在运行时执行(Self::提交统一消息事件_异步(
+            &self.pool,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+            &[],
+        ))
+    }
 
-            // 核心事务不变量：
-            // 1) 锁定并推进房间 latest_event_position
-            // 2) 写 room_events
-            // 3) 写 messages
-            // 三步必须同事务提交，否则顺序语义会漂移。
-            let mut tx = self
-                .pool
-                .begin()
-                .await
-                .map_err(|_| contract::错误码::系统错误)?;
-
-            let room_row = sqlx::query(
-                "UPDATE rooms \
-                 SET latest_event_position = latest_event_position + 1 \
-                 WHERE room_id = $1 \
-                 RETURNING id, latest_event_position",
-            )
-            .bind(房间标识)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-            let Some(room) = room_row else {
-                return Err(contract::错误码::房间不存在);
-            };
-            let room_db_id: i64 = room.get("id");
-            let next_position: i64 = room.get("latest_event_position");
-
-            let message_id = format!("{房间标识}-{next_position}");
-
-            // 先落事件，再落消息：确保房间事件流锚点始终连续可追。
-            sqlx::query(
-                "INSERT INTO room_events (room_id, event_position, event_kind, actor_session_id, message_id) \
-                 VALUES ($1, $2, 'message_created', $3, $4)",
-            )
-            .bind(room_db_id)
-            .bind(next_position)
-            .bind(session_db_id)
-            .bind(&message_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-
-            let insert_message = sqlx::query(
-                "INSERT INTO messages (message_id, room_id, sender_session_id, client_message_id, event_position, body) \
-                 VALUES ($1, $2, $3, $4, $5, $6)",
-            )
-            .bind(&message_id)
-            .bind(room_db_id)
-            .bind(session_db_id)
-            .bind(客户端消息标识)
-            .bind(next_position)
-            .bind(文本)
-            .execute(&mut *tx)
-            .await;
-            if let Err(err) = insert_message {
-                // `client_message_id` 冲突表示同一条用户发送意图已成功落库过。
-                // 这里必须回到既有权威事件，而不是把重试冒充成系统错误。
-                if Self::是消息幂等冲突(&err) {
-                    tx.rollback()
-                        .await
-                        .map_err(|_| contract::错误码::系统错误)?;
-                    return Self::查询既有消息事件_异步(
-                        &self.pool,
-                        房间标识,
-                        会话标识,
-                        客户端消息标识,
-                    )
-                    .await?
-                    .ok_or(contract::错误码::系统错误);
-                }
-                return Err(contract::错误码::系统错误);
-            }
-
-            tx.commit()
-                .await
-                .map_err(|_| contract::错误码::系统错误)?;
-
-            Ok(contract::领域事件::消息已创建 {
-                房间标识: 房间标识.to_string(),
-                消息标识: message_id,
-                客户端消息标识: 客户端消息标识.to_string(),
-                发送者会话标识: 会话标识.to_string(),
-                发送者花名: sender_display_alias,
-                文本: 文本.to_string(),
-                事件位置: next_position,
-            })
-        })
+    /// 统一消息主链把纯文本和附件消息都收口到同一个事务提交入口。
+    fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码> {
+        self.在运行时执行(Self::提交统一消息事件_异步(
+            &self.pool,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+            附件,
+        ))
     }
 
     /// 身份级阅读锚点写入：

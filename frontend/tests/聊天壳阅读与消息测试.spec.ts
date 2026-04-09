@@ -69,6 +69,52 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     expect(items[0].bubbleWidth).toBeGreaterThan(0);
   });
 
+  it("图片附件会被派生成可渲染的消息展示项，而不是丢在壳层临时态里", () => {
+    const items = 派生聊天列表展示项(
+      [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-img-1",
+          client_message_id: "c-img-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          text: "看图",
+          body: "看图",
+          attachments: [
+            {
+              kind: "image",
+              attachment_id: "att-1",
+              width: 960,
+              height: 640,
+            },
+          ],
+          event_position: 1,
+        },
+      ],
+      "s-test",
+      null,
+      默认消息文本布局环境,
+      (attachmentId, variant) =>
+        `/api/attachments/${attachmentId}/${variant === "thumbnail" ? "thumb" : "origin"}`
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("message");
+    if (items[0]?.kind !== "message") {
+      throw new Error("测试前提不成立：首个展示项必须是消息");
+    }
+
+    expect(items[0].attachments).toEqual([
+      expect.objectContaining({
+        attachmentId: "att-1",
+        thumbnailSrc: "/api/attachments/att-1/thumb",
+        originalSrc: "/api/attachments/att-1/origin",
+      }),
+    ]);
+    expect(items[0].bubbleWidth).toBeGreaterThan(0);
+  });
+
   it("消息气泡宽度会按紧凑 shrinkwrap 结果收窄，而不是继续等于自然单行宽度", () => {
     const 气泡外框附加宽度 =
       默认消息文本布局环境.bubbleHorizontalPadding +

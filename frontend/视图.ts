@@ -1,4 +1,4 @@
-import type { 消息事件 } from "./契约.js";
+import type { 图片附件快照, 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
 import type { 房间视口模式 } from "./状态.js";
 import {
@@ -32,11 +32,23 @@ export interface 消息展示项 {
   id: string;
   owner: "mine" | "other";
   body: string;
+  hasText: boolean;
+  attachments: 图片附件展示项[];
   layout: 文本布局结果;
   bubbleWidth: number;
   senderDisplayAlias: string;
   showAlias: boolean;
   eventPosition: number;
+}
+
+export interface 图片附件展示项 {
+  attachmentId: string;
+  width: number;
+  height: number;
+  displayWidth: number;
+  displayHeight: number;
+  thumbnailSrc: string;
+  originalSrc: string;
 }
 
 export interface 未读分隔展示项 {
@@ -94,7 +106,11 @@ export function 派生聊天列表展示项(
   messages: 消息事件[],
   currentSessionId: string,
   firstUnreadEventPosition: number | null,
-  layoutEnv: 消息文本布局环境 = 默认消息文本布局环境
+  layoutEnv: 消息文本布局环境 = 默认消息文本布局环境,
+  构建附件内容地址: (
+    attachmentId: string,
+    variant: "original" | "thumbnail"
+  ) => string = (attachmentId, variant) => `/api/attachments/${attachmentId}/${variant}`
 ): 聊天列表展示项[] {
   const items: 聊天列表展示项[] = [];
   let unreadDividerInserted = false;
@@ -112,7 +128,7 @@ export function 派生聊天列表展示项(
       });
       unreadDividerInserted = true;
     }
-    items.push(派生消息展示项(message, currentSessionId, layoutEnv));
+    items.push(派生消息展示项(message, currentSessionId, layoutEnv, 构建附件内容地址));
   }
 
   return items;
@@ -126,11 +142,22 @@ export function 派生聊天列表展示项(
 export function 派生消息展示项(
   event: 消息事件,
   currentSessionId: string,
-  layoutEnv: 消息文本布局环境 = 默认消息文本布局环境
+  layoutEnv: 消息文本布局环境 = 默认消息文本布局环境,
+  构建附件内容地址: (
+    attachmentId: string,
+    variant: "original" | "thumbnail"
+  ) => string = (attachmentId, variant) => `/api/attachments/${attachmentId}/${variant}`
 ): 消息展示项 {
   const isMine = event.sender_session_id === currentSessionId;
+  const body = 读取消息文本(event);
+  const hasText = body.trim().length > 0;
+  const attachments = 派生图片附件展示项列表(
+    event.attachments ?? [],
+    layoutEnv,
+    构建附件内容地址
+  );
   const 多行紧凑候选 = 默认文本布局器.布局纯文本({
-    text: event.body,
+    text: hasText ? body : " ",
     width: layoutEnv.maxContentWidth,
     shrinkWrap: "same-line-count",
     fontFamily: layoutEnv.fontFamily,
@@ -147,7 +174,7 @@ export function 派生消息展示项(
   const layout =
     多行紧凑候选.naturalWidth <= 单行直通上限
       ? 默认文本布局器.布局纯文本({
-          text: event.body,
+          text: hasText ? body : " ",
           width: Math.max(1, Math.ceil(多行紧凑候选.naturalWidth)),
           fontFamily: layoutEnv.fontFamily,
           fontSize: layoutEnv.fontSize,
@@ -157,6 +184,8 @@ export function 派生消息展示项(
           ...(layoutEnv.wordBreak ? { wordBreak: layoutEnv.wordBreak } : {}),
         })
       : 多行紧凑候选;
+  const 文本气泡宽度 = hasText ? 计算消息气泡宽度(layout, layoutEnv) : 0;
+  const 图片气泡宽度 = attachments.length > 0 ? 计算图片附件气泡宽度(attachments, layoutEnv) : 0;
 
   /**
    * 宽度裁决顺序在这里收口：
@@ -171,13 +200,69 @@ export function 派生消息展示项(
     kind: "message",
     id: event.message_id,
     owner: isMine ? "mine" : "other",
-    body: event.body,
+    body,
+    hasText,
+    attachments,
     layout,
-    bubbleWidth: 计算消息气泡宽度(layout, layoutEnv),
+    bubbleWidth: Math.max(文本气泡宽度, 图片气泡宽度),
     senderDisplayAlias: event.sender_display_alias,
     showAlias: !isMine,
     eventPosition: event.event_position,
   };
+}
+
+function 读取消息文本(event: 消息事件): string {
+  return event.text ?? event.body ?? "";
+}
+
+function 派生图片附件展示项列表(
+  attachments: 图片附件快照[],
+  layoutEnv: 消息文本布局环境,
+  构建附件内容地址: (
+    attachmentId: string,
+    variant: "original" | "thumbnail"
+  ) => string
+): 图片附件展示项[] {
+  if (attachments.length === 0) {
+    return [];
+  }
+  const 多图宫格宽度 = Math.max(96, Math.floor((Math.min(layoutEnv.maxContentWidth, 320) - 8) / 2));
+  const 单图宽度上限 = Math.max(140, Math.min(layoutEnv.maxContentWidth, 320));
+  return attachments
+    .filter((attachment) => attachment.kind === "image")
+    .map((attachment, index, list) => {
+      const displayWidth =
+        list.length === 1 ? Math.min(attachment.width, 单图宽度上限) : 多图宫格宽度;
+      const displayHeight = Math.max(
+        72,
+        Math.round((displayWidth * attachment.height) / Math.max(1, attachment.width))
+      );
+      return {
+        attachmentId: attachment.attachment_id,
+        width: attachment.width,
+        height: attachment.height,
+        displayWidth,
+        displayHeight,
+        thumbnailSrc: 构建附件内容地址(attachment.attachment_id, "thumbnail"),
+        originalSrc: 构建附件内容地址(attachment.attachment_id, "original"),
+      };
+    });
+}
+
+function 计算图片附件气泡宽度(
+  attachments: 图片附件展示项[],
+  layoutEnv: 消息文本布局环境
+): number {
+  const 宫格间距 = 8;
+  const 列数 = attachments.length >= 2 ? 2 : 1;
+  const 正文宽度 =
+    列数 === 1
+      ? attachments[0]?.displayWidth ?? 0
+      : Math.min(
+          layoutEnv.maxContentWidth,
+          (attachments[0]?.displayWidth ?? 0) * 2 + 宫格间距
+        );
+  return 正文宽度 + layoutEnv.bubbleHorizontalPadding + layoutEnv.bubbleHorizontalBorderWidth;
 }
 
 function 计算消息气泡宽度(
@@ -289,6 +374,11 @@ export function 派生壳级操作台状态(input: {
     return {
       mode: "message",
       ...baseState,
+      auxSlot: {
+        visible: true,
+        disabled: input.pending,
+        label: "图片",
+      },
       primaryInput: {
         value: input.messageInput,
         placeholder: "输入消息",

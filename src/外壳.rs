@@ -1,9 +1,11 @@
 use axum::{
+    extract::DefaultBodyLimit,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
+use object_store::{local::LocalFileSystem, ObjectStore};
 use serde::Serialize;
 use socketioxide::{
     extract::{Data, Extension, SocketRef, TryData},
@@ -11,6 +13,7 @@ use socketioxide::{
     SocketIo,
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::{fs, sync::Arc};
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{adapter::Pg仓储, contract};
@@ -30,6 +33,8 @@ pub struct 应用状态 {
     pub pool: PgPool,
     pub runtime_handle: tokio::runtime::Handle,
     pub admin_password: String,
+    pub attachment_storage_dir: String,
+    pub attachment_store: Arc<dyn ObjectStore>,
 }
 
 /// 组装 HTTP 冷路径 + Realtime 热路径路由。
@@ -42,6 +47,11 @@ pub async fn 构建应用状态(
     database_url: String,
     admin_password: String,
 ) -> std::io::Result<应用状态> {
+    let attachment_storage_dir = crate::assembly::读取附件存储目录();
+    fs::create_dir_all(&attachment_storage_dir)
+        .map_err(|err| std::io::Error::other(format!("创建附件目录失败: {err}")))?;
+    let attachment_store = LocalFileSystem::new_with_prefix(&attachment_storage_dir)
+        .map_err(|err| std::io::Error::other(format!("初始化附件存储失败: {err}")))?;
     let pool = PgPoolOptions::new()
         .max_connections(20)
         .connect(&database_url)
@@ -52,6 +62,8 @@ pub async fn 构建应用状态(
         pool,
         runtime_handle: tokio::runtime::Handle::current(),
         admin_password,
+        attachment_storage_dir,
+        attachment_store: Arc::new(attachment_store),
     })
 }
 
@@ -62,6 +74,11 @@ pub fn 构建路由(state: 应用状态) -> Router {
     Router::new()
         .route("/api/session/bootstrap", post(房间外壳::bootstrap_session))
         .route("/api/rooms/join-or-create", post(房间外壳::join_or_create_room))
+        .route("/api/attachments/image", post(房间外壳::upload_image_attachment))
+        .route(
+            "/api/attachments/{attachment_id}/content",
+            get(房间外壳::load_attachment_content),
+        )
         .route("/api/rooms/{room_id}/snapshot", get(房间外壳::load_room_snapshot))
         .route(
             "/api/rooms/{room_id}/read-anchor",
@@ -76,6 +93,7 @@ pub fn 构建路由(state: 应用状态) -> Router {
         // 前端静态资源由后端同源托管，避免开发态跨域和双端口联调噪音。
         .route_service("/", ServeFile::new("frontend/index.html"))
         .nest_service("/dist", ServeDir::new("frontend/dist"))
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(socket_layer)
         .with_state(state)
 }
@@ -103,15 +121,16 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
                     },
                 );
 
-                // 业务热命令：发送文本消息。
+                // 业务热命令：创建统一消息。
                 socket.on(
-                    "send_text_message",
+                    "create_message",
                     move |s: SocketRef,
                           Extension(auth): Extension<实时外壳::已认证会话>,
-                          Data::<实时外壳::RealtimeSendBody>(payload)| {
+                          Data::<实时外壳::RealtimeCreateMessageBody>(payload)| {
                         let state = state_for_send.clone();
                         async move {
-                            实时外壳::handle_realtime_send(s, auth, payload, state).await;
+                            实时外壳::handle_realtime_create_message(s, auth, payload, state)
+                                .await;
                         }
                     },
                 );
@@ -148,6 +167,20 @@ fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value>
     events.into_iter().map(event_to_json).collect()
 }
 
+fn attachments_to_json(attachments: &[contract::附件快照]) -> Vec<serde_json::Value> {
+    attachments
+        .iter()
+        .map(|attachment| match attachment {
+            contract::附件快照::图片(image) => serde_json::json!({
+                "kind": "image",
+                "attachment_id": image.附件标识,
+                "width": image.宽,
+                "height": image.高
+            }),
+        })
+        .collect()
+}
+
 /// 单条领域事件 -> JSON。
 fn event_to_json(event: contract::领域事件) -> serde_json::Value {
     match event {
@@ -158,6 +191,7 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
             发送者会话标识,
             发送者花名,
             文本,
+            附件,
             事件位置,
         } => serde_json::json!({
             "type": "message_created",
@@ -166,7 +200,9 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
             "client_message_id": 客户端消息标识,
             "sender_session_id": 发送者会话标识,
             "sender_display_alias": 发送者花名,
+            "text": 文本,
             "body": 文本,
+            "attachments": attachments_to_json(&附件),
             "event_position": 事件位置
         }),
     }
@@ -195,6 +231,31 @@ fn map_domain_err_tuple(code: contract::错误码) -> (StatusCode, &'static str,
             StatusCode::FORBIDDEN,
             "membership_required",
             "成员资格不足".to_string(),
+        ),
+        contract::错误码::附件不存在 => (
+            StatusCode::NOT_FOUND,
+            "attachment_not_found",
+            "附件不存在".to_string(),
+        ),
+        contract::错误码::附件不属于当前发送者 => (
+            StatusCode::FORBIDDEN,
+            "attachment_not_owned",
+            "附件不属于当前发送者".to_string(),
+        ),
+        contract::错误码::附件未就绪 => (
+            StatusCode::CONFLICT,
+            "attachment_not_ready",
+            "附件尚未就绪".to_string(),
+        ),
+        contract::错误码::附件类型不支持 => (
+            StatusCode::BAD_REQUEST,
+            "attachment_type_not_allowed",
+            "附件类型不支持".to_string(),
+        ),
+        contract::错误码::附件数量超限 => (
+            StatusCode::BAD_REQUEST,
+            "attachment_count_exceeded",
+            "附件数量超限".to_string(),
         ),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -23,6 +23,6 @@
     "watchDirectory": "useFsEvents",
     "fallbackPolling": "dynamicPriority"
   },
-  "include": ["./**/*.ts"],
+  "include": ["./**/*.ts", "./**/*.d.ts"],
   "exclude": ["./dist", "./node_modules"]
 }

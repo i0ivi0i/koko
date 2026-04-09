@@ -10,6 +10,7 @@ import type {
   后台房间详情,
   后台概览,
   后台登录结果,
+  图片附件上传结果,
   房间快照,
   房间历史页,
 } from "../契约";
@@ -50,6 +51,24 @@ class 假后台传输 implements 前端传输端口 {
   }
   async loadRoomSnapshot(): Promise<房间快照> {
     return 创建房间快照();
+  }
+  async uploadImageAttachment(_sessionId: string, file: File): Promise<图片附件上传结果> {
+    return {
+      attachment_id: "att-admin",
+      kind: "image",
+      mime_type: file.type || "image/png",
+      byte_size: file.size,
+      width: 120,
+      height: 90,
+      status: "ready",
+    };
+  }
+  buildAttachmentContentUrl(
+    attachmentId: string,
+    sessionId: string,
+    variant: "original" | "thumbnail" = "original"
+  ): string {
+    return `http://test.local/api/attachments/${attachmentId}/content?session_id=${sessionId}&variant=${variant}`;
   }
   async updateRoomReadAnchor(): Promise<void> {}
   async loadRoomEvents(

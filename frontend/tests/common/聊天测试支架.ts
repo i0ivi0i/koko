@@ -9,6 +9,7 @@ import type {
   增量事件快照,
   后台概览,
   消息事件,
+  图片附件上传结果,
   房间历史页,
   房间快照,
   后台登录结果,
@@ -114,7 +115,16 @@ export class 假Socket {
         });
       }
     }
-    if (event === "send_text_message") {
+    if (event === "create_message" || event === "send_text_message") {
+      const text =
+        typeof payload.text === "string"
+          ? payload.text
+          : typeof payload.body === "string"
+            ? payload.body
+            : "";
+      const attachmentIds = Array.isArray(payload.attachment_ids)
+        ? payload.attachment_ids
+        : [];
       this.fire("room_event", {
         type: "message_created",
         room_id: "r-test",
@@ -122,7 +132,14 @@ export class 假Socket {
         client_message_id: payload.client_message_id,
         sender_session_id: "s-test",
         sender_display_alias: "暴躁的企鹅",
-        body: payload.text,
+        text,
+        body: text,
+        attachments: attachmentIds.map((attachmentId) => ({
+          kind: "image" as const,
+          attachment_id: String(attachmentId),
+          width: 120,
+          height: 90,
+        })),
         event_position: 1,
       });
     }
@@ -174,6 +191,7 @@ export class 假传输 implements 前端传输端口 {
     limit: number;
   }> = [];
   socketSessionIds: string[] = [];
+  uploadImageCalls: Array<{ sessionId: string; file: File }> = [];
   bootstrapResult: 匿名身份引导结果 = {
     anonymous_identity_id: "a-test",
     display_alias: "暴躁的企鹅",
@@ -184,6 +202,7 @@ export class 假传输 implements 前端传输端口 {
   snapshotQueue: Array<房间快照 | Error> = [];
   eventsQueue: Array<增量事件快照 | Error> = [];
   historyQueue: Array<房间历史页 | Error> = [];
+  uploadQueue: Array<图片附件上传结果 | Error> = [];
   readAnchorUpdates: Array<{
     roomId: string;
     sessionId: string;
@@ -219,6 +238,28 @@ export class 假传输 implements 前端传输端口 {
     this.snapshotRoomId = roomId;
     return 创建房间快照(roomId);
   }
+  async uploadImageAttachment(sessionId: string, file: File): Promise<图片附件上传结果> {
+    this.uploadImageCalls.push({ sessionId, file });
+    const queued = this.uploadQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
+    return {
+      attachment_id: "att-test",
+      kind: "image",
+      mime_type: file.type || "image/png",
+      byte_size: file.size,
+      width: 120,
+      height: 90,
+      status: "ready",
+    };
+  }
+  buildAttachmentContentUrl(
+    attachmentId: string,
+    sessionId: string,
+    variant: "original" | "thumbnail" = "original"
+  ): string {
+    return `http://test.local/api/attachments/${attachmentId}/content?session_id=${sessionId}&variant=${variant}`;
+  }
   async updateRoomReadAnchor(
     roomId: string,
     sessionId: string,
@@ -251,7 +292,9 @@ export class 假传输 implements 前端传输端口 {
           client_message_id: "c-1",
           sender_session_id: "s-test",
           sender_display_alias: "暴躁的企鹅",
+          text: "hello",
           body: "hello",
+          attachments: [],
           event_position: 1,
         },
       ],

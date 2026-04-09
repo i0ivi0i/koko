@@ -176,6 +176,136 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("带图片附件的权威消息会在消息窗口里渲染缩略图", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-img-1",
+            client_message_id: "c-img-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "看图",
+            body: "看图",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-1",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const image = el.shadowRoot!.querySelector(
+      'img[data-attachment-id="att-1"]'
+    ) as HTMLImageElement | null;
+    expect(image).not.toBeNull();
+    expect(image?.src).toContain(
+      "/api/attachments/att-1/content?session_id=s-test&variant=thumbnail"
+    );
+    el.remove();
+  });
+
+  it("进入房间后发送区会显示图片选择入口", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#composerImagePickerBtn")).not.toBeNull();
+    el.remove();
+  });
+
+  it("发送区图片草稿会渲染在本地预览带里，而不是伪造成时间线消息", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    (
+      el as unknown as {
+        chatState: {
+          composerImageDrafts: Array<{
+            localId: string;
+            attachmentId: string;
+            previewUrl: string;
+            width: number;
+            height: number;
+            status: "uploading" | "ready" | "failed";
+            fileName: string;
+            errorCode: string;
+          }>;
+        };
+      }
+    ).chatState = {
+      ...(el as unknown as {
+        chatState: {
+          composerImageDrafts: Array<{
+            localId: string;
+            attachmentId: string;
+            previewUrl: string;
+            width: number;
+            height: number;
+            status: "uploading" | "ready" | "failed";
+            fileName: string;
+            errorCode: string;
+          }>;
+        };
+      }).chatState,
+      composerImageDrafts: [
+        {
+          localId: "draft-1",
+          attachmentId: "att-1",
+          previewUrl: "https://example.com/thumb.png",
+          width: 120,
+          height: 90,
+          status: "ready",
+          fileName: "demo.png",
+          errorCode: "",
+        },
+      ],
+    };
+    el.requestUpdate();
+    await 等待组件稳定(el);
+
+    const draftImage = el.shadowRoot!.querySelector(
+      'img[data-draft-id="draft-1"]'
+    ) as HTMLImageElement | null;
+    expect(draftImage).not.toBeNull();
+    expect(draftImage?.src).toBe("https://example.com/thumb.png");
+    expect(el.shadowRoot!.querySelectorAll('[data-event-position]').length).toBe(0);
+    el.remove();
+  });
+
   it("窗口宽度变化后会重新计算消息气泡宽度，而不是继续挂着旧的 Pretext 布局结果", async () => {
     const 原始宽度 = globalThis.innerWidth;
     Object.defineProperty(globalThis, "innerWidth", {

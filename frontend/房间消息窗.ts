@@ -84,6 +84,39 @@ export class 房间消息窗 extends LitElement {
     )}</div>`;
   }
 
+  private renderMessageAttachments(item: 消息展示项) {
+    if (item.attachments.length === 0) {
+      return null;
+    }
+    return html`
+      <div
+        class="message-attachment-grid"
+        data-attachment-count=${item.attachments.length}
+      >
+        ${item.attachments.map(
+          (attachment) => html`
+            <a
+              class="message-image-link"
+              href=${attachment.originalSrc}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img
+                class="message-image"
+                data-attachment-id=${attachment.attachmentId}
+                src=${attachment.thumbnailSrc}
+                alt="图片附件"
+                width=${attachment.displayWidth}
+                height=${attachment.displayHeight}
+                loading="lazy"
+              />
+            </a>
+          `
+        )}
+      </div>
+    `;
+  }
+
   override render() {
     return html`
       <div
@@ -116,7 +149,8 @@ export class 房间消息窗 extends LitElement {
                     ${item.showAlias
                       ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
                       : null}
-                    ${this.renderMessageBody(item)}
+                    ${item.hasText ? this.renderMessageBody(item) : null}
+                    ${this.renderMessageAttachments(item)}
                   </article>
                 </li>
               `;

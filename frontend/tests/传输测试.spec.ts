@@ -162,4 +162,56 @@ describe("传输", () => {
       { headers: {} }
     );
   });
+
+  it("uploadImageAttachment 会以 multipart/form-data 上传 session_id 和图片文件", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-1",
+          kind: "image",
+          mime_type: "image/png",
+          byte_size: 3,
+          width: 120,
+          height: 90,
+          status: "ready",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+    const file = new File([new Uint8Array([1, 2, 3])], "demo.png", {
+      type: "image/png",
+    });
+
+    const result = await transport.uploadImageAttachment("s-1", file);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe("http://localhost:3000/api/attachments/image");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBeInstanceOf(FormData);
+    const body = init?.body as FormData;
+    expect(body.get("session_id")).toBe("s-1");
+    expect(body.get("file")).toBe(file);
+    expect(result.attachment_id).toBe("att-1");
+    expect(result.kind).toBe("image");
+    expect(result.status).toBe("ready");
+  });
+
+  it("buildAttachmentContentUrl 会生成受控图片内容地址", () => {
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const originalUrl = transport.buildAttachmentContentUrl("att-1", "s-1");
+    const thumbnailUrl = transport.buildAttachmentContentUrl("att-1", "s-1", "thumbnail");
+
+    expect(originalUrl).toBe(
+      "http://localhost:3000/api/attachments/att-1/content?session_id=s-1&variant=original"
+    );
+    expect(thumbnailUrl).toBe(
+      "http://localhost:3000/api/attachments/att-1/content?session_id=s-1&variant=thumbnail"
+    );
+  });
 });

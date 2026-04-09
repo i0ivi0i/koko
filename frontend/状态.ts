@@ -4,6 +4,23 @@ import type { 首页房间历史条目 } from "./存储.js";
 /** 房间视口模式只属于前端壳层同步编排，不是后端领域真相。 */
 export type 房间视口模式 = "围绕未读阅读" | "贴底跟随" | "离底浏览";
 
+/**
+ * 发送区图片草稿只属于前端本地体验态：
+ * 1. 它描述上传进度、缩略图和失败提示；
+ * 2. 它不是后端权威附件真相；
+ * 3. 真正可发送时，仍然只认 attachment_id。
+ */
+export interface 图片附件草稿 {
+  localId: string;
+  attachmentId: string;
+  previewUrl: string;
+  width: number;
+  height: number;
+  status: "uploading" | "ready" | "failed";
+  fileName: string;
+  errorCode: string;
+}
+
 export interface 聊天状态 {
   /** Web 壳本地持久化的设备入口凭证。它不是最终身份真相。 */
   deviceAnonymousToken: string;
@@ -19,6 +36,8 @@ export interface 聊天状态 {
   roomDisplayTitle: string;
   roomCodeInput: string;
   messageInput: string;
+  /** 发送区当前暂存的图片草稿。 */
+  composerImageDrafts: 图片附件草稿[];
   latestEventPosition: number;
   /** 当前身份上次已读到的事件位置；`null` 表示还没有阅读锚点。 */
   lastReadEventPosition: number | null;
@@ -75,6 +94,7 @@ export const 初始聊天状态: 聊天状态 = {
   roomDisplayTitle: "",
   roomCodeInput: "",
   messageInput: "",
+  composerImageDrafts: [],
   latestEventPosition: 0,
   lastReadEventPosition: null,
   firstUnreadEventPosition: null,
