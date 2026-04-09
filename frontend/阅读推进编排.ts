@@ -1,5 +1,6 @@
 import type { 消息事件 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
+import type { 历史补偿上下文 } from "./房间滚动器.js";
 import type { 聊天状态 } from "./状态.js";
 import type { 前端传输端口 } from "./传输.js";
 
@@ -12,8 +13,8 @@ type 房间内核端口 = {
 type 房间滚动器端口 = {
   读取当前可见阅读锚点(): number | null;
   读取当前是否接近底部(): boolean;
-  读取历史补偿基线(): number;
-  应用历史补偿(旧滚动高度: number, 插入了消息: boolean): Promise<void>;
+  读取历史补偿上下文(): 历史补偿上下文;
+  应用历史补偿(补偿上下文: 历史补偿上下文, 插入了消息: boolean): Promise<void>;
 };
 
 export interface 阅读推进编排依赖 {
@@ -189,11 +190,11 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       return;
     }
 
-    const beforeHeight = deps.roomScroller.读取历史补偿基线();
     const oldestMessage = state.messages[0];
     if (!oldestMessage) {
       return;
     }
+    const 补偿上下文 = deps.roomScroller.读取历史补偿上下文();
 
     更新状态({
       historyLoading: true,
@@ -213,9 +214,9 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
         historyErrorCode: "",
         scrollPhase: page.messages.length > 0 ? "compensating_history" : 读取状态().scrollPhase,
       });
-      // 历史页是往列表顶部前插的；必须补偿前后 scrollHeight 差值，才能守住用户当前视口。
-      // 这段滚动完全由程序发起，因此补偿和程序滚动隔离统一交给房间滚动器处理。
-      await deps.roomScroller.应用历史补偿(beforeHeight, page.messages.length > 0);
+      // 历史页是往列表顶部前插的，但守视口不能再只靠 scrollHeight 差值。
+      // 新策略优先围绕旧锚点恢复；只有锚点彻底找不回时，才退回高度差值兜底。
+      await deps.roomScroller.应用历史补偿(补偿上下文, page.messages.length > 0);
     } catch (error) {
       const code =
         typeof (error as { code?: unknown })?.code === "string"

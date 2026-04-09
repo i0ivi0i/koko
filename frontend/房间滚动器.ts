@@ -22,6 +22,19 @@ interface 房间滚动器宿主 extends ReactiveControllerHost {
   readonly updateComplete: Promise<boolean>;
 }
 
+export interface 历史补偿上下文 {
+  旧滚动高度: number;
+  锚点消息位置: number | null;
+  锚点距容器顶部: number | null;
+}
+
+interface 消息可见片段 {
+  eventPosition: number;
+  行顶部相对容器: number;
+  可见高度: number;
+  行高: number;
+}
+
 export interface 房间滚动器依赖 {
   读取状态(): 房间滚动观察态;
   更新状态(patch: Partial<聊天状态>): void;
@@ -104,11 +117,34 @@ export class 房间滚动器 implements ReactiveController {
     );
   }
 
-  读取历史补偿基线(): number {
-    return this.deps.查询滚动容器()?.scrollHeight ?? 0;
+  /**
+   * 历史补偿不能再只记一个旧 scrollHeight：
+   * - 前插历史期间如果同时有 realtime 新消息追加，单看总高度会把“顶部前插”和“底部追加”混成一锅；
+   * - 真正需要守住的是“用户刚才正在看的那条消息相对视口顶部的位置”。
+   *
+   * 所以这里改成读取一份补偿上下文：
+   * 1. 先尽量挑一个当前视口里最靠近顶部、且足够稳定可读的消息当锚点；
+   * 2. 实在没有稳定可读锚点，再退回到最靠近顶部的重叠消息；
+   * 3. 最后仍保留旧 scrollHeight，作为彻底找不回锚点时的兜底。
+   */
+  读取历史补偿上下文(): 历史补偿上下文 {
+    const scrollContainer = this.deps.查询滚动容器();
+    if (!scrollContainer) {
+      return {
+        旧滚动高度: 0,
+        锚点消息位置: null,
+        锚点距容器顶部: null,
+      };
+    }
+    const 锚点 = this.查找历史补偿锚点(scrollContainer);
+    return {
+      旧滚动高度: scrollContainer.scrollHeight,
+      锚点消息位置: 锚点?.eventPosition ?? null,
+      锚点距容器顶部: 锚点?.行顶部相对容器 ?? null,
+    };
   }
 
-  async 应用历史补偿(旧滚动高度: number, 插入了消息: boolean): Promise<void> {
+  async 应用历史补偿(补偿上下文: 历史补偿上下文, 插入了消息: boolean): Promise<void> {
     if (!插入了消息) {
       return;
     }
@@ -117,8 +153,10 @@ export class 房间滚动器 implements ReactiveController {
     if (!scrollContainer) {
       return;
     }
-    const 新滚动高度 = scrollContainer.scrollHeight;
-    scrollContainer.scrollTop += 新滚动高度 - 旧滚动高度;
+    if (!this.按历史锚点恢复视口(scrollContainer, 补偿上下文)) {
+      const 新滚动高度 = scrollContainer.scrollHeight;
+      scrollContainer.scrollTop += 新滚动高度 - 补偿上下文.旧滚动高度;
+    }
     this.安排程序滚动释放("compensating_history");
   }
 
@@ -228,37 +266,119 @@ export class 房间滚动器 implements ReactiveController {
     this.deps.采样阅读锚点(nextReadPosition);
   }
 
+  private 查找历史补偿锚点(scrollContainer: HTMLElement): 消息可见片段 | null {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    let 最靠近顶部的稳定锚点: 消息可见片段 | null = null;
+    let 最靠近顶部的重叠锚点: 消息可见片段 | null = null;
+
+    for (const row of this.deps.查询消息节点()) {
+      const 片段 = this.读取消息可见片段(row, containerRect);
+      if (!片段 || 片段.可见高度 <= 0) {
+        continue;
+      }
+      if (
+        this.消息片段稳定可读(片段) &&
+        (最靠近顶部的稳定锚点 === null ||
+          片段.行顶部相对容器 < 最靠近顶部的稳定锚点.行顶部相对容器)
+      ) {
+        最靠近顶部的稳定锚点 = 片段;
+      }
+      if (
+        最靠近顶部的重叠锚点 === null ||
+        片段.行顶部相对容器 < 最靠近顶部的重叠锚点.行顶部相对容器
+      ) {
+        最靠近顶部的重叠锚点 = 片段;
+      }
+    }
+
+    return 最靠近顶部的稳定锚点 ?? 最靠近顶部的重叠锚点;
+  }
+
   private 查找可见阅读锚点(scrollContainer: HTMLElement): number | null {
     const containerRect = scrollContainer.getBoundingClientRect();
     let nextReadPosition: number | null = null;
 
     for (const row of this.deps.查询消息节点()) {
-      const rawEventPosition = row.dataset.eventPosition;
-      if (!rawEventPosition) {
+      const 片段 = this.读取消息可见片段(row, containerRect);
+      if (!片段) {
         continue;
       }
-      const eventPosition = Number(rawEventPosition);
-      if (!Number.isFinite(eventPosition)) {
-        continue;
-      }
-      const rowRect = row.getBoundingClientRect();
-      const 可见顶部 = Math.max(rowRect.top, containerRect.top);
-      const 可见底部 = Math.min(rowRect.bottom, containerRect.bottom);
-      const 可见高度 = Math.max(0, 可见底部 - 可见顶部);
-      const 行高 = Math.max(1, rowRect.bottom - rowRect.top);
       // 阅读候选不能继续死卡“整条消息必须完全可见”：
       // 真实 IM 里，长消息只要大部分主体已经稳定进入视口，就应允许它成为候选已读锚点。
-      const 稳定可读 =
-        可见高度 >= Math.min(行高, 稳定可读最小可见像素) ||
-        可见高度 / 行高 >= 稳定可读最小可见比例;
-      if (!稳定可读) {
+      if (!this.消息片段稳定可读(片段)) {
         continue;
       }
       nextReadPosition =
-        nextReadPosition === null ? eventPosition : Math.max(nextReadPosition, eventPosition);
+        nextReadPosition === null
+          ? 片段.eventPosition
+          : Math.max(nextReadPosition, 片段.eventPosition);
     }
 
     return nextReadPosition;
+  }
+
+  private 读取消息可见片段(
+    row: HTMLElement,
+    containerRect: ReturnType<HTMLElement["getBoundingClientRect"]>
+  ): 消息可见片段 | null {
+    const rawEventPosition = row.dataset.eventPosition;
+    if (!rawEventPosition) {
+      return null;
+    }
+    const eventPosition = Number(rawEventPosition);
+    if (!Number.isFinite(eventPosition)) {
+      return null;
+    }
+    const rowRect = row.getBoundingClientRect();
+    const 可见顶部 = Math.max(rowRect.top, containerRect.top);
+    const 可见底部 = Math.min(rowRect.bottom, containerRect.bottom);
+    return {
+      eventPosition,
+      行顶部相对容器: rowRect.top - containerRect.top,
+      可见高度: Math.max(0, 可见底部 - 可见顶部),
+      行高: Math.max(1, rowRect.bottom - rowRect.top),
+    };
+  }
+
+  private 消息片段稳定可读(片段: 消息可见片段): boolean {
+    return (
+      片段.可见高度 >= Math.min(片段.行高, 稳定可读最小可见像素) ||
+      片段.可见高度 / 片段.行高 >= 稳定可读最小可见比例
+    );
+  }
+
+  /**
+   * 历史补偿优先尝试“把旧锚点拉回到原来的相对顶部位置”。
+   * 这样即使顶部前插和底部 realtime 追加同时发生，也只会围绕用户真正正在看的那条消息恢复视口。
+   */
+  private 按历史锚点恢复视口(
+    scrollContainer: HTMLElement,
+    补偿上下文: 历史补偿上下文
+  ): boolean {
+    if (
+      补偿上下文.锚点消息位置 === null ||
+      补偿上下文.锚点距容器顶部 === null
+    ) {
+      return false;
+    }
+    const target = this.deps
+      .查询消息节点()
+      .find(
+        (node) =>
+          Number(node.dataset.eventPosition ?? Number.NaN) === 补偿上下文.锚点消息位置
+      );
+    if (!target) {
+      return false;
+    }
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const 当前位置差值 =
+      targetRect.top - containerRect.top - 补偿上下文.锚点距容器顶部;
+    if (!Number.isFinite(当前位置差值)) {
+      return false;
+    }
+    scrollContainer.scrollTop += 当前位置差值;
+    return true;
   }
 
   /**

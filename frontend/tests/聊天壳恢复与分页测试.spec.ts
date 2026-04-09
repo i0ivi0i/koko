@@ -292,7 +292,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     el.remove();
   });
 
-  it("上滑历史前插后会按 scrollHeight 差值补偿 scrollTop", async () => {
+  it("上滑历史前插后会守住旧消息锚点的视口位置", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 3, {

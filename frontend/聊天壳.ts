@@ -315,7 +315,7 @@ export class 聊天壳 extends LitElement {
       border-radius: 28px;
       /* 聊天窗口是内层滚动容器，触顶/触底时不应把浏览器页面回弹和外层滚动链带进来。 */
       overscroll-behavior-y: contain;
-      /* 历史前插后由壳层按 scrollHeight 差值手动补偿，不能再让浏览器默认滚动锚点重复干预。 */
+      /* 历史前插后由壳层自己做锚点恢复与兜底补偿，不能再让浏览器默认滚动锚点重复干预。 */
       overflow-anchor: none;
       scrollbar-gutter: stable both-edges;
       background:
@@ -1003,9 +1003,9 @@ export class 聊天壳 extends LitElement {
               const target = (
                 event as CustomEvent<{ scrollContainer: HTMLElement }>
               ).detail.scrollContainer;
-              // 历史补偿基线依赖“本次滚动触发前的 scrollHeight”。
+              // 历史补偿上下文依赖“本次滚动触发前的旧高度 + 旧锚点相对位置”。
               // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
-              // 否则贴底观测提前读取 scrollHeight，会把补偿基线读脏。
+              // 否则后续观测过早读到新布局，会把这次补偿上下文读脏。
               this.roomScroller.处理滚动事件(target);
               this.阅读推进编排端口.接收视口滚动();
             }}

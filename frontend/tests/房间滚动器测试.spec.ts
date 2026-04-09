@@ -35,6 +35,26 @@ function 创建滚动容器(): HTMLElement {
   return container;
 }
 
+function 创建消息节点(eventPosition: number, top: number, bottom: number): HTMLElement {
+  const row = document.createElement("li");
+  row.dataset.eventPosition = String(eventPosition);
+  Object.defineProperty(row, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      x: 0,
+      y: top,
+      top,
+      left: 0,
+      right: 320,
+      bottom,
+      width: 320,
+      height: bottom - top,
+      toJSON: () => ({}),
+    }),
+  });
+  return row;
+}
+
 describe("房间滚动器", () => {
   it("首屏恢复期间的程序滚动不会立刻采样成用户已读", async () => {
     const { 房间滚动器 } = await import("../房间滚动器");
@@ -325,5 +345,190 @@ describe("房间滚动器", () => {
     滚动器.处理滚动事件(容器);
 
     expect(已读采样).toHaveBeenCalledWith(7);
+  });
+
+  it("历史补偿会优先守住最靠近顶部的稳定可读消息锚点", async () => {
+    const { 房间滚动器 } = await import("../房间滚动器");
+
+    const 状态: Pick<
+      聊天状态,
+      | "roomId"
+      | "firstUnreadEventPosition"
+      | "initialUnreadSettled"
+      | "scrollPhase"
+      | "historyLoading"
+      | "hasMoreBefore"
+      | "hasUserScrollIntent"
+      | "historyLoadThrottleUntil"
+    > = {
+      roomId: "r-test",
+      firstUnreadEventPosition: null,
+      initialUnreadSettled: true,
+      scrollPhase: "compensating_history",
+      historyLoading: true,
+      hasMoreBefore: true,
+      hasUserScrollIntent: true,
+      historyLoadThrottleUntil: 0,
+    };
+    const 容器 = 创建滚动容器();
+    let 消息节点 = [
+      创建消息节点(1, -20, 20),
+      创建消息节点(2, 12, 92),
+      创建消息节点(3, 108, 188),
+    ];
+    const 主机 = {
+      addController() {},
+      removeController() {},
+      requestUpdate() {},
+      updateComplete: Promise.resolve(true),
+    };
+    const 滚动器 = new 房间滚动器(主机, {
+      读取状态: () => 状态,
+      更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
+      查询滚动容器: () => 容器,
+      查询消息节点: () => 消息节点,
+      请求更早历史: vi.fn(),
+      采样阅读锚点: vi.fn(),
+      读取是否需要恢复补锚: () => false,
+      消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: vi.fn(),
+    });
+
+    const 补偿上下文 = 滚动器.读取历史补偿上下文();
+    Object.defineProperty(容器, "scrollHeight", {
+      configurable: true,
+      value: 790,
+    });
+    消息节点 = [
+      创建消息节点(-1, -120, -40),
+      创建消息节点(0, -32, 48),
+      创建消息节点(1, 100, 140),
+      创建消息节点(2, 132, 212),
+      创建消息节点(3, 228, 308),
+    ];
+
+    await 滚动器.应用历史补偿(补偿上下文, true);
+
+    expect(容器.scrollTop).toBe(240);
+  });
+
+  it("历史补偿在没有稳定可读消息时，会退回到最靠近顶部的重叠消息锚点", async () => {
+    const { 房间滚动器 } = await import("../房间滚动器");
+
+    const 状态: Pick<
+      聊天状态,
+      | "roomId"
+      | "firstUnreadEventPosition"
+      | "initialUnreadSettled"
+      | "scrollPhase"
+      | "historyLoading"
+      | "hasMoreBefore"
+      | "hasUserScrollIntent"
+      | "historyLoadThrottleUntil"
+    > = {
+      roomId: "r-test",
+      firstUnreadEventPosition: null,
+      initialUnreadSettled: true,
+      scrollPhase: "compensating_history",
+      historyLoading: true,
+      hasMoreBefore: true,
+      hasUserScrollIntent: true,
+      historyLoadThrottleUntil: 0,
+    };
+    const 容器 = 创建滚动容器();
+    let 消息节点 = [
+      创建消息节点(1, -70, 30),
+      创建消息节点(2, 220, 320),
+      创建消息节点(3, 320, 420),
+    ];
+    const 主机 = {
+      addController() {},
+      removeController() {},
+      requestUpdate() {},
+      updateComplete: Promise.resolve(true),
+    };
+    const 滚动器 = new 房间滚动器(主机, {
+      读取状态: () => 状态,
+      更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
+      查询滚动容器: () => 容器,
+      查询消息节点: () => 消息节点,
+      请求更早历史: vi.fn(),
+      采样阅读锚点: vi.fn(),
+      读取是否需要恢复补锚: () => false,
+      消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: vi.fn(),
+    });
+
+    const 补偿上下文 = 滚动器.读取历史补偿上下文();
+    Object.defineProperty(容器, "scrollHeight", {
+      configurable: true,
+      value: 800,
+    });
+    消息节点 = [
+      创建消息节点(-1, -160, -80),
+      创建消息节点(0, -60, 20),
+      创建消息节点(1, 50, 150),
+      创建消息节点(2, 340, 440),
+      创建消息节点(3, 440, 540),
+    ];
+
+    await 滚动器.应用历史补偿(补偿上下文, true);
+
+    expect(容器.scrollTop).toBe(240);
+  });
+
+  it("历史补偿在找不回旧锚点时，会退回到 scrollHeight 差值补偿", async () => {
+    const { 房间滚动器 } = await import("../房间滚动器");
+
+    const 状态: Pick<
+      聊天状态,
+      | "roomId"
+      | "firstUnreadEventPosition"
+      | "initialUnreadSettled"
+      | "scrollPhase"
+      | "historyLoading"
+      | "hasMoreBefore"
+      | "hasUserScrollIntent"
+      | "historyLoadThrottleUntil"
+    > = {
+      roomId: "r-test",
+      firstUnreadEventPosition: null,
+      initialUnreadSettled: true,
+      scrollPhase: "compensating_history",
+      historyLoading: true,
+      hasMoreBefore: true,
+      hasUserScrollIntent: true,
+      historyLoadThrottleUntil: 0,
+    };
+    const 容器 = 创建滚动容器();
+    let 消息节点 = [创建消息节点(2, 16, 96)];
+    const 主机 = {
+      addController() {},
+      removeController() {},
+      requestUpdate() {},
+      updateComplete: Promise.resolve(true),
+    };
+    const 滚动器 = new 房间滚动器(主机, {
+      读取状态: () => 状态,
+      更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
+      查询滚动容器: () => 容器,
+      查询消息节点: () => 消息节点,
+      请求更早历史: vi.fn(),
+      采样阅读锚点: vi.fn(),
+      读取是否需要恢复补锚: () => false,
+      消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: vi.fn(),
+    });
+
+    const 补偿上下文 = 滚动器.读取历史补偿上下文();
+    Object.defineProperty(容器, "scrollHeight", {
+      configurable: true,
+      value: 780,
+    });
+    消息节点 = [创建消息节点(-1, -120, -40)];
+
+    await 滚动器.应用历史补偿(补偿上下文, true);
+
+    expect(容器.scrollTop).toBe(260);
   });
 });

@@ -688,15 +688,35 @@ export function 创建阅读推进测试场景(input: {
     viewportMode: input.viewportMode ?? "离底浏览",
   };
 
-  const 历史补偿调用: Array<{ oldHeight: number; inserted: boolean }> = [];
+  const 历史补偿调用: Array<{
+    context: {
+      旧滚动高度: number;
+      锚点消息位置: number | null;
+      锚点距容器顶部: number | null;
+    };
+    inserted: boolean;
+  }> = [];
   const 滚到最新调用: number[] = [];
   const roomScroller = {
     读取当前可见阅读锚点: vi.fn(() => 8),
     读取当前是否接近底部: vi.fn(() => false),
-    读取历史补偿基线: vi.fn(() => 320),
-    应用历史补偿: vi.fn(async (oldHeight: number, inserted: boolean) => {
-      历史补偿调用.push({ oldHeight, inserted });
-    }),
+    读取历史补偿上下文: vi.fn(() => ({
+      旧滚动高度: 320,
+      锚点消息位置: 2,
+      锚点距容器顶部: 18,
+    })),
+    应用历史补偿: vi.fn(
+      async (
+        context: {
+          旧滚动高度: number;
+          锚点消息位置: number | null;
+          锚点距容器顶部: number | null;
+        },
+        inserted: boolean
+      ) => {
+        历史补偿调用.push({ context, inserted });
+      }
+    ),
   };
 
   const updateState = (patch: Partial<聊天状态>): void => {

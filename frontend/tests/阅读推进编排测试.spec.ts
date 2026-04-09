@@ -113,7 +113,16 @@ describe("阅读推进编排", () => {
       "m-3",
     ]);
     expect(场景.读取状态().hasMoreBefore).toBe(true);
-    expect(场景.历史补偿调用).toEqual([{ oldHeight: 320, inserted: true }]);
+    expect(场景.历史补偿调用).toEqual([
+      {
+        context: {
+          旧滚动高度: 320,
+          锚点消息位置: 2,
+          锚点距容器顶部: 18,
+        },
+        inserted: true,
+      },
+    ]);
   });
 });
 
