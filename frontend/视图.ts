@@ -1,12 +1,37 @@
 import type { 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
 import type { 房间视口模式 } from "./状态.js";
+import {
+  创建文本布局器,
+  type 文本布局结果,
+  type 文本布局环境,
+} from "./文本布局.js";
+
+export interface 消息文本布局环境 extends 文本布局环境 {
+  maxContentWidth: number;
+  bubbleHorizontalPadding: number;
+}
+
+export const 默认消息文本布局环境: 消息文本布局环境 = {
+  fontFamily: "Microsoft YaHei",
+  fontSize: 16,
+  fontWeight: 400,
+  lineHeight: 22,
+  whiteSpace: "normal",
+  wordBreak: "normal",
+  maxContentWidth: 420,
+  bubbleHorizontalPadding: 28,
+};
+
+const 默认消息布局器 = 创建文本布局器();
 
 export interface 消息展示项 {
   kind: "message";
   id: string;
   owner: "mine" | "other";
   body: string;
+  layout: 文本布局结果;
+  bubbleWidth: number;
   senderDisplayAlias: string;
   showAlias: boolean;
   eventPosition: number;
@@ -66,7 +91,8 @@ const 未读分隔标识 = "unread-divider" as const;
 export function 派生聊天列表展示项(
   messages: 消息事件[],
   currentSessionId: string,
-  firstUnreadEventPosition: number | null
+  firstUnreadEventPosition: number | null,
+  layoutEnv: 消息文本布局环境 = 默认消息文本布局环境
 ): 聊天列表展示项[] {
   const items: 聊天列表展示项[] = [];
   let unreadDividerInserted = false;
@@ -84,7 +110,7 @@ export function 派生聊天列表展示项(
       });
       unreadDividerInserted = true;
     }
-    items.push(派生消息展示项(message, currentSessionId));
+    items.push(派生消息展示项(message, currentSessionId, layoutEnv));
   }
 
   return items;
@@ -97,18 +123,44 @@ export function 派生聊天列表展示项(
  */
 export function 派生消息展示项(
   event: 消息事件,
-  currentSessionId: string
+  currentSessionId: string,
+  layoutEnv: 消息文本布局环境 = 默认消息文本布局环境
 ): 消息展示项 {
   const isMine = event.sender_session_id === currentSessionId;
+  const layout = 默认消息布局器.布局纯文本({
+    text: event.body,
+    width: layoutEnv.maxContentWidth,
+    fontFamily: layoutEnv.fontFamily,
+    fontSize: layoutEnv.fontSize,
+    fontWeight: layoutEnv.fontWeight,
+    lineHeight: layoutEnv.lineHeight,
+    ...(layoutEnv.whiteSpace ? { whiteSpace: layoutEnv.whiteSpace } : {}),
+    ...(layoutEnv.wordBreak ? { wordBreak: layoutEnv.wordBreak } : {}),
+  });
+
   return {
     kind: "message",
     id: event.message_id,
     owner: isMine ? "mine" : "other",
     body: event.body,
+    layout,
+    bubbleWidth: 计算消息气泡宽度(layout, layoutEnv),
     senderDisplayAlias: event.sender_display_alias,
     showAlias: !isMine,
     eventPosition: event.event_position,
   };
+}
+
+function 计算消息气泡宽度(
+  layout: 文本布局结果,
+  layoutEnv: 消息文本布局环境
+): number {
+  /**
+   * 气泡宽度不再继续交给浏览器天然 shrink-wrap。
+   * 这里直接以文本自然宽度为主，再补上气泡水平内边距，并受最大内容宽度钳制。
+   */
+  const 文本宽度 = Math.min(layout.naturalWidth, layoutEnv.maxContentWidth);
+  return 文本宽度 + layoutEnv.bubbleHorizontalPadding;
 }
 
 export function 格式化后台概览(roomCount: number, messageCount: number): string {

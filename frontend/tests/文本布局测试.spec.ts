@@ -1,42 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { 安装测试文本测量画布 } from "./common/聊天测试支架";
 import { 创建文本布局器 } from "../文本布局";
-
-/**
- * Pretext 在 Node 下要求 OffscreenCanvas 或 DOM canvas context。
- * 当前 Vitest 默认环境没有可用的测量上下文，所以这里显式补一个最小测试 shim：
- * 1. 只覆盖 Pretext 真正会调用到的 `font` 与 `measureText()`；
- * 2. 目标是让我们验证“封装契约与数据流”，不是在测试里重写字体引擎；
- * 3. 这个 shim 只存在测试进程，不会进入运行时代码。
- */
-function 安装测试测量画布(): void {
-  class 假二维上下文 {
-    font = "16px Microsoft YaHei";
-
-    measureText(text: string): { width: number } {
-      const px = Number(this.font.match(/(\d+(?:\.\d+)?)px/)?.[1] ?? "16");
-      return { width: text.length * px * 0.58 };
-    }
-  }
-
-  class 假OffscreenCanvas {
-    getContext(kind: string): 假二维上下文 | null {
-      if (kind !== "2d") {
-        return null;
-      }
-      return new 假二维上下文();
-    }
-  }
-
-  Object.defineProperty(globalThis, "OffscreenCanvas", {
-    value: 假OffscreenCanvas,
-    configurable: true,
-    writable: true,
-  });
-}
 
 describe("文本布局器", () => {
   beforeEach(() => {
-    安装测试测量画布();
+    安装测试文本测量画布();
   });
 
   it("会为同一段文本返回稳定的行数和高度", () => {

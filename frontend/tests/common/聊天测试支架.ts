@@ -19,6 +19,42 @@ import { 聊天壳 } from "../../聊天壳";
 import type { Socket } from "socket.io-client";
 
 /**
+ * Pretext 在测试进程里也需要一个可用的测量上下文。
+ *
+ * 当前 happy-dom 不提供真正的 canvas 2D context，所以这里补一个最小 OffscreenCanvas shim：
+ * 1. 只实现 Pretext 会读取的 `font` 和 `measureText()`；
+ * 2. 只用于验证“我们的前端封装有没有把数据流接对”；
+ * 3. 不把测试用近似测量混进运行时代码。
+ */
+export function 安装测试文本测量画布(): void {
+  class 假二维上下文 {
+    font = "16px Microsoft YaHei";
+
+    measureText(text: string): { width: number } {
+      const px = Number(this.font.match(/(\d+(?:\.\d+)?)px/)?.[1] ?? "16");
+      return { width: text.length * px * 0.58 };
+    }
+  }
+
+  class 假OffscreenCanvas {
+    getContext(kind: string): 假二维上下文 | null {
+      if (kind !== "2d") {
+        return null;
+      }
+      return new 假二维上下文();
+    }
+  }
+
+  Object.defineProperty(globalThis, "OffscreenCanvas", {
+    value: 假OffscreenCanvas,
+    configurable: true,
+    writable: true,
+  });
+}
+
+安装测试文本测量画布();
+
+/**
  * 聊天测试支架只承接假对象、场景构造器和 DOM 辅助器。
  * 这样壳层集成与编排器直测共享同一套测试基础设施，
  * 不再把多种职责继续堆在一个超大 spec 文件里。

@@ -12,6 +12,7 @@ import {
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import {
+  默认消息文本布局环境,
   派生壳主舞台模式,
   派生控制台模式,
   派生壳级操作台状态,
@@ -20,6 +21,7 @@ import {
   派生房间壳提示文案,
   派生消息窗口提示文案,
   派生跳到最新入口文案,
+  type 消息文本布局环境,
 } from "./视图.js";
 
 export class 聊天壳 extends LitElement {
@@ -902,6 +904,29 @@ export class 聊天壳 extends LitElement {
     `;
   }
 
+  private 读取消息文本布局环境(): 消息文本布局环境 {
+    const roomView =
+      (this.shadowRoot?.querySelector("#roomView") as HTMLElement | null) ?? null;
+    const roomWidth = roomView?.clientWidth || globalThis.innerWidth || 1024;
+    const bubbleMaxWidth =
+      roomWidth <= 640
+        ? Math.min(roomWidth * 0.88, 720)
+        : roomWidth >= 768
+          ? Math.min(roomWidth * 0.7, 760)
+          : Math.min(roomWidth * 0.82, 720);
+
+    /**
+     * 这里把当前 CSS 气泡宽度规则翻译成 Presenter 可消费的稳定布局环境：
+     * 1. 宽度来源收口到壳层，避免 Presenter 和消息窗各自再猜；
+     * 2. 传给 Pretext 的是正文可用内容宽度，不是整个气泡外框宽度；
+     * 3. 真正的边框、阴影和视口观测仍留给 DOM 宿主。
+     */
+    return {
+      ...默认消息文本布局环境,
+      maxContentWidth: Math.max(120, bubbleMaxWidth - 默认消息文本布局环境.bubbleHorizontalPadding),
+    };
+  }
+
   override render() {
     const { recoveryHint, subtitle: roomSubtitle } = 派生房间壳提示文案({
       recoveryState: this.chatState.recoveryState,
@@ -925,6 +950,7 @@ export class 聊天壳 extends LitElement {
       bootstrapState: roomShell.bootstrapState,
       roomId: this.chatState.roomId,
     });
+    const 消息文本布局环境 = this.读取消息文本布局环境();
     const homeSessionViewItems = 派生首页会话展示项(this.chatState.homeSessionItems);
     const shellConsole = this.renderShellConsole({
       mode: consoleMode,
@@ -1004,7 +1030,8 @@ export class 聊天壳 extends LitElement {
             .items=${派生聊天列表展示项(
               this.chatState.messages,
               this.chatState.sessionId,
-              this.chatState.firstUnreadEventPosition
+              this.chatState.firstUnreadEventPosition,
+              消息文本布局环境
             )}
             .historyHint=${historyHint}
             .jumpToLatestLabel=${jumpToLatestLabel}

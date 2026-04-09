@@ -18,6 +18,8 @@ import {
   模拟消息滚动视口,
 } from "./common/聊天测试支架";
 import {
+  默认消息文本布局环境,
+  派生聊天列表展示项,
   派生壳主舞台模式,
   派生控制台模式,
   派生壳级操作台状态,
@@ -33,6 +35,40 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     });
     vi.restoreAllMocks();
   });
+  it("消息展示项会绑定布局结果，但保留原始 body 作为消息事实", () => {
+    const items = 派生聊天列表展示项(
+      [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-1",
+          client_message_id: "c-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "需要换行的展示文本 hello hello hello",
+          event_position: 1,
+        },
+      ],
+      "s-test",
+      null,
+      {
+        ...默认消息文本布局环境,
+        maxContentWidth: 120,
+      }
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("message");
+    if (items[0]?.kind !== "message") {
+      throw new Error("测试前提不成立：首个展示项必须是消息");
+    }
+
+    expect(items[0].body).toBe("需要换行的展示文本 hello hello hello");
+    expect(items[0].layout.lineCount).toBeGreaterThan(0);
+    expect(items[0].layout.lines.length).toBe(items[0].layout.lineCount);
+    expect(items[0].bubbleWidth).toBeGreaterThan(0);
+  });
+
   it("用户向下阅读后会节流上报新的 last_read_event_position", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
