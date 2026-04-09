@@ -405,7 +405,6 @@ export class 聊天壳 extends LitElement {
     }
 
     .message-bubble {
-      max-width: min(82%, 720px);
       padding: 12px 14px;
       border-radius: 20px;
       border: 1px solid var(--line-on-bubble);
@@ -507,10 +506,6 @@ export class 聊天壳 extends LitElement {
       .room-screen {
         padding-inline: clamp(4px, 2vw, 12px);
       }
-
-      .message-bubble {
-        max-width: min(70%, 760px);
-      }
     }
 
     @media (max-width: 640px) {
@@ -531,10 +526,6 @@ export class 聊天壳 extends LitElement {
       .back-button {
         min-width: 60px;
         padding-inline: 12px;
-      }
-
-      .message-bubble {
-        max-width: 88%;
       }
 
       #shellConsolePrimaryAction {
@@ -990,6 +981,9 @@ export class 聊天壳 extends LitElement {
     const roomView =
       (this.shadowRoot?.querySelector("#roomView") as HTMLElement | null) ?? null;
     const roomWidth = roomView?.clientWidth || globalThis.innerWidth || 1024;
+    const 气泡外框附加宽度 =
+      默认消息文本布局环境.bubbleHorizontalPadding +
+      默认消息文本布局环境.bubbleHorizontalBorderWidth;
     const bubbleMaxWidth =
       roomWidth <= 640
         ? Math.min(roomWidth * 0.88, 720)
@@ -998,13 +992,13 @@ export class 聊天壳 extends LitElement {
           : Math.min(roomWidth * 0.82, 720);
     const 多行正文上限 = Math.max(
       120,
-      bubbleMaxWidth - 默认消息文本布局环境.bubbleHorizontalPadding
+      bubbleMaxWidth - 气泡外框附加宽度
     );
     const 单行正文直通上限 = Math.max(
       多行正文上限,
       Math.min(
         多行正文上限 + 56,
-        Math.max(120, roomWidth - 默认消息文本布局环境.bubbleHorizontalPadding - 8),
+        Math.max(120, roomWidth - 气泡外框附加宽度 - 8),
         420
       )
     );
@@ -1013,7 +1007,8 @@ export class 聊天壳 extends LitElement {
      * 这里把当前 CSS 气泡宽度规则翻译成 Presenter 可消费的稳定布局环境：
      * 1. 宽度来源收口到壳层，避免 Presenter 和消息窗各自再猜；
      * 2. 传给 Pretext 的是正文可用内容宽度，不是整个气泡外框宽度；
-     * 3. 真正的边框、阴影和视口观测仍留给 DOM 宿主。
+     * 3. 当前宿主使用 `border-box`，所以左右边框也必须一起扣掉；
+     * 4. `.message-bubble` 不再保留 CSS `max-width` 第二裁决，真正的宽度主权只留给 Presenter。
      */
     return {
       ...默认消息文本布局环境,

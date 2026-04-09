@@ -70,6 +70,9 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
   });
 
   it("消息气泡宽度会按紧凑 shrinkwrap 结果收窄，而不是继续等于自然单行宽度", () => {
+    const 气泡外框附加宽度 =
+      默认消息文本布局环境.bubbleHorizontalPadding +
+      默认消息文本布局环境.bubbleHorizontalBorderWidth;
     const items = 派生聊天列表展示项(
       [
         {
@@ -98,10 +101,13 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
 
     // 如果还在用 `naturalWidth + padding`，这里会接近单行自然宽度；
     // 真正的 bubbles 式 shrinkwrap 应该看紧凑布局后的最宽一行。
-    expect(items[0].bubbleWidth).toBeLessThan(items[0].layout.naturalWidth + 28);
+    expect(items[0].bubbleWidth).toBeLessThan(items[0].layout.naturalWidth + 气泡外框附加宽度);
   });
 
   it("单行自然宽度落在单行直通上限内时，会保持单行而不是被压成两行", () => {
+    const 气泡外框附加宽度 =
+      默认消息文本布局环境.bubbleHorizontalPadding +
+      默认消息文本布局环境.bubbleHorizontalBorderWidth;
     const items = 派生聊天列表展示项(
       [
         {
@@ -132,7 +138,49 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     // 所以正确行为是回到单行，而不是继续执行多行 shrinkwrap。
     expect(items[0].layout.naturalWidth).toBeGreaterThan(140);
     expect(items[0].layout.lineCount).toBe(1);
-    expect(items[0].bubbleWidth).toBeGreaterThan(140 + 28);
+    expect(items[0].bubbleWidth).toBeGreaterThan(140 + 气泡外框附加宽度);
+  });
+
+  it("单行短消息的气泡外框宽度会把 border-box 边框也算进去，避免正文少 2px 被挤成两行", () => {
+    const 气泡外框附加宽度 =
+      默认消息文本布局环境.bubbleHorizontalPadding +
+      默认消息文本布局环境.bubbleHorizontalBorderWidth;
+    const items = 派生聊天列表展示项(
+      [
+        {
+          type: "message_created",
+          room_id: "r-test",
+          message_id: "m-1",
+          client_message_id: "c-1",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          body: "三个字",
+          event_position: 1,
+        },
+      ],
+      "s-test",
+      null,
+      {
+        ...默认消息文本布局环境,
+        maxContentWidth: 120,
+        singleLineMaxContentWidth: 120,
+      }
+    );
+
+    if (items[0]?.kind !== "message") {
+      throw new Error("测试前提不成立：首个展示项必须是消息");
+    }
+
+    /**
+     * 这里锁的是运行时宽度契约，而不是某个体验文案：
+     * 在 `box-sizing: border-box` 下，Presenter 给 `.message-bubble` 的宽度
+     * 必须覆盖正文、左右 padding 和左右边框，否则真实 DOM 可用正文宽度会比
+     * Pretext 预算少 2px，短中文就会稳定出现 `2+1 / 3+1 / 4+1` 断行。
+     */
+    expect(items[0].layout.lineCount).toBe(1);
+    expect(items[0].bubbleWidth - 气泡外框附加宽度).toBeGreaterThanOrEqual(
+      items[0].layout.maxLineWidth
+    );
   });
 
   it("用户向下阅读后会节流上报新的 last_read_event_position", async () => {

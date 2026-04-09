@@ -11,6 +11,7 @@ export interface 消息文本布局环境 extends 文本布局环境 {
   maxContentWidth: number;
   singleLineMaxContentWidth: number;
   bubbleHorizontalPadding: number;
+  bubbleHorizontalBorderWidth: number;
 }
 
 export const 默认消息文本布局环境: 消息文本布局环境 = {
@@ -23,6 +24,7 @@ export const 默认消息文本布局环境: 消息文本布局环境 = {
   maxContentWidth: 420,
   singleLineMaxContentWidth: 420,
   bubbleHorizontalPadding: 28,
+  bubbleHorizontalBorderWidth: 2,
 };
 
 export interface 消息展示项 {
@@ -189,14 +191,24 @@ function 计算消息气泡宽度(
    * 2. shrinkwrap 消息会得到“保持相同行数但更紧”的那组行里的最宽行；
    * 3. 如果当前消息被判定为“单行直通”，这里也允许它超过多行上限，
    *    但仍然受单行直通上限约束；
-   * 4. 最后再补上气泡内边距。
+   * 4. 最后再补上气泡的整块外框宽度。
+   *
+   * 注意这里必须把左右边框也一起算进去：
+   * 当前宿主全局使用 `box-sizing: border-box`，而 `.message-bubble`
+   * 还有左右各 1px 边框。如果只补 padding，不补 border，
+   * 真实 DOM 可用正文宽度就会比 Pretext 预算少 2px，
+   * 短中文会稳定出现 `2+1 / 3+1 / 4+1` 的假换行。
    */
   const 文本宽度上限 = Math.max(
     layoutEnv.maxContentWidth,
     layoutEnv.singleLineMaxContentWidth
   );
   const 文本宽度 = Math.min(layout.maxLineWidth, 文本宽度上限);
-  return 文本宽度 + layoutEnv.bubbleHorizontalPadding;
+  return (
+    文本宽度 +
+    layoutEnv.bubbleHorizontalPadding +
+    layoutEnv.bubbleHorizontalBorderWidth
+  );
 }
 
 export function 格式化后台概览(roomCount: number, messageCount: number): string {
