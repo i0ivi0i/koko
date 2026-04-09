@@ -23,7 +23,7 @@ import {
   派生壳级操作台状态,
   派生首页会话展示项,
 } from "../视图";
-import type { 匿名身份引导结果 } from "../契约";
+import type { 匿名身份引导结果, 房间历史页 } from "../契约";
 import { 聊天壳 } from "../聊天壳";
 describe("聊天壳集成 / 恢复失败与历史分页", () => {
   beforeEach(() => {
@@ -549,6 +549,73 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     expect(
       (el as unknown as { chatState: { hasMoreBefore: boolean } }).chatState.hasMoreBefore
     ).toBe(false);
+    el.remove();
+  });
+
+  it("历史加载中时房间头部和底部不再跟着切到更早消息文案", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "历史消息-2",
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "历史消息-3",
+            event_position: 3,
+          },
+        ],
+        has_more_before: true,
+      }),
+    ];
+    let resolveHistory: ((value: 房间历史页) => void) | undefined;
+    transport.loadRoomHistory = vi.fn(
+      () =>
+        new Promise<房间历史页>((resolve) => {
+          resolveHistory = resolve;
+        })
+    );
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const roomSubtitle = el.shadowRoot!.querySelector("#roomSubtitle") as HTMLElement;
+    const shellConsoleStatus = el.shadowRoot!.querySelector("#shellConsoleStatus") as HTMLElement;
+    const subtitleBefore = roomSubtitle.textContent;
+    const consoleBefore = shellConsoleStatus.textContent;
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    模拟用户滚动意图(scroll);
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+
+    expect(roomSubtitle.textContent).toBe(subtitleBefore);
+    expect(shellConsoleStatus.textContent).toBe(consoleBefore);
+
+    resolveHistory?.({ room_id: "r-test", messages: [] });
+    await 等待组件稳定(el);
     el.remove();
   });
 

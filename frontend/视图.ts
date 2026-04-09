@@ -237,43 +237,53 @@ export function 派生首页会话展示项(
   }));
 }
 
-export interface 房间提示文案输入 {
+export interface 房间壳提示文案输入 {
   recoveryState: "idle" | "retryable_failure" | "reconnecting";
   roomId: string;
   displayAlias: string;
+}
+
+export interface 消息窗口提示文案输入 {
   historyLoading: boolean;
   historyErrorCode: string;
 }
 
 /**
- * 房间头部文案完全属于 presenter：
+ * 房间壳只承接“整个房间页都该知道”的稳定提示：
  * - 优先展示当前最重要的异常或恢复提示；
- * - 没有异常时，再退回到身份辅助信息；
- * - 不把这些优先级规则散落在壳组件里。
+ * - 没有异常时，再退回到身份辅助信息。
+ *
+ * 历史分页只属于消息窗口局部体验，不允许继续从这里泄漏到头部或底部操作台。
  */
-export function 派生房间提示文案(input: 房间提示文案输入): {
+export function 派生房间壳提示文案(input: 房间壳提示文案输入): {
   recoveryHint: string;
-  historyHint: string;
   subtitle: string;
 } {
   const recoveryHint = 派生恢复提示文案(input.recoveryState, input.roomId);
-  const historyHint = 派生历史提示文案(input.historyLoading, input.historyErrorCode);
-
   if (recoveryHint) {
-    return { recoveryHint, historyHint, subtitle: recoveryHint };
-  }
-  if (historyHint) {
-    return { recoveryHint, historyHint, subtitle: historyHint };
+    return { recoveryHint, subtitle: recoveryHint };
   }
   return {
     recoveryHint,
-    historyHint,
     subtitle: input.displayAlias ? `当前匿名身份：${input.displayAlias}` : "群聊房间",
   };
 }
 
+/**
+ * 历史分页提示严格收口在消息窗口内部：
+ * - 这里只翻译局部“更早消息加载中/失败”文案；
+ * - 不让调用方再把这类局部态抬升成整页级提示。
+ */
+export function 派生消息窗口提示文案(input: 消息窗口提示文案输入): {
+  historyHint: string;
+} {
+  return {
+    historyHint: 派生历史提示文案(input.historyLoading, input.historyErrorCode),
+  };
+}
+
 function 派生恢复提示文案(
-  recoveryState: 房间提示文案输入["recoveryState"],
+  recoveryState: 房间壳提示文案输入["recoveryState"],
   roomId: string
 ): string {
   if (recoveryState === "reconnecting") {

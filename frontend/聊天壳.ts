@@ -17,7 +17,7 @@ import {
   派生壳级操作台状态,
   派生聊天列表展示项,
   派生首页会话展示项,
-  派生房间提示文案,
+  派生房间壳提示文案,
   派生跳到最新入口文案,
 } from "./视图.js";
 
@@ -881,12 +881,10 @@ export class 聊天壳 extends LitElement {
   }
 
   override render() {
-    const { recoveryHint, historyHint, subtitle: roomSubtitle } = 派生房间提示文案({
+    const { recoveryHint, subtitle: roomSubtitle } = 派生房间壳提示文案({
       recoveryState: this.chatState.recoveryState,
       roomId: this.chatState.roomId,
       displayAlias: this.chatState.displayAlias,
-      historyLoading: this.chatState.historyLoading,
-      historyErrorCode: this.chatState.historyErrorCode,
     });
     const jumpToLatestLabel = 派生跳到最新入口文案({
       viewportMode: this.chatState.viewportMode,
@@ -908,9 +906,9 @@ export class 聊天壳 extends LitElement {
         consoleMode === "hidden"
           ? "正在恢复身份、会话和上次停留的房间，请稍等一下。"
           : consoleMode === "message"
-            ? (recoveryHint || historyHint || "在这里输入消息，发送后会实时出现在房间里。")
+            ? (recoveryHint || "在这里输入消息，发送后会实时出现在房间里。")
             : "在这里输入房间短码，进入对应群聊空间。",
-      statusAttention: consoleMode === "message" ? Boolean(recoveryHint || historyHint) : false,
+      statusAttention: consoleMode === "message" ? Boolean(recoveryHint) : false,
     });
     if (shellView === "boot") {
       return html`
