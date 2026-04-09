@@ -118,6 +118,50 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("进入房间后会通过独立消息窗口组件承接消息区，但保留现有滚动查询入口", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 2, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-1",
+            client_message_id: "c-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "消息-1",
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "消息-2",
+            event_position: 2,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("koko-room-message-pane")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#messageScroll")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#messageList")).not.toBeNull();
+    el.remove();
+  });
+
   it("boot 态时唯一操作台骨架仍然常驻，但主输入和主动作不可交互", async () => {
     const transport = new 假传输();
     vi.spyOn(transport, "bootstrapAnonymousIdentity").mockImplementation(

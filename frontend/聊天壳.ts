@@ -1,10 +1,10 @@
 import { css, html, LitElement } from "lit";
-import { repeat } from "lit/directives/repeat.js";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
 import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
 import { 创建阅读推进编排, type 阅读推进编排端口 } from "./阅读推进编排.js";
 import { 房间滚动器 } from "./房间滚动器.js";
+import "./房间消息窗.js";
 import {
   创建浏览器存储,
   type 前端存储端口,
@@ -18,6 +18,7 @@ import {
   派生聊天列表展示项,
   派生首页会话展示项,
   派生房间壳提示文案,
+  派生消息窗口提示文案,
   派生跳到最新入口文案,
 } from "./视图.js";
 
@@ -330,6 +331,17 @@ export class 聊天壳 extends LitElement {
       padding: 8px 4px 0;
       margin: 0;
       list-style: none;
+    }
+
+    /* 历史提示只属于消息窗口局部体验。
+       它出现在消息区内部，不再把房间头部和底部壳层一起拖着重排。 */
+    .message-history-hint {
+      margin: 8px 8px 0;
+      padding: 0 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-muted);
+      text-align: center;
     }
 
     .message-row {
@@ -886,6 +898,10 @@ export class 聊天壳 extends LitElement {
       roomId: this.chatState.roomId,
       displayAlias: this.chatState.displayAlias,
     });
+    const { historyHint } = 派生消息窗口提示文案({
+      historyLoading: this.chatState.historyLoading,
+      historyErrorCode: this.chatState.historyErrorCode,
+    });
     const jumpToLatestLabel = 派生跳到最新入口文案({
       viewportMode: this.chatState.viewportMode,
       hasUnreadNewerMessages: this.chatState.hasUnreadNewerMessages,
@@ -974,68 +990,29 @@ export class 聊天壳 extends LitElement {
               <div id="roomSubtitle" class="room-subtitle">${roomSubtitle}</div>
             </div>
           </header>
-          <div
-            id="messageScroll"
-            class="message-scroll"
-            @pointerdown=${() => this.roomScroller.标记用户滚动意图()}
-            @touchstart=${() => this.roomScroller.标记用户滚动意图()}
-            @wheel=${() => this.roomScroller.标记用户滚动意图()}
-            @scroll=${(event: Event) => {
-              const target = event.currentTarget as HTMLElement;
+          <koko-room-message-pane
+            .items=${派生聊天列表展示项(
+              this.chatState.messages,
+              this.chatState.sessionId,
+              this.chatState.firstUnreadEventPosition
+            )}
+            .historyHint=${historyHint}
+            .jumpToLatestLabel=${jumpToLatestLabel}
+            @room-scroll-intent=${() => this.roomScroller.标记用户滚动意图()}
+            @room-scroll=${(event: Event) => {
+              const target = (
+                event as CustomEvent<{ scrollContainer: HTMLElement }>
+              ).detail.scrollContainer;
               // 历史补偿基线依赖“本次滚动触发前的 scrollHeight”。
               // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
               // 否则贴底观测提前读取 scrollHeight，会把补偿基线读脏。
               this.roomScroller.处理滚动事件(target);
               this.阅读推进编排端口.接收视口滚动();
             }}
-          >
-            <ul id="messageList" class="message-list">
-              ${repeat(
-                派生聊天列表展示项(
-                  this.chatState.messages,
-                  this.chatState.sessionId,
-                  this.chatState.firstUnreadEventPosition
-                ),
-                (item) => item.id,
-                (item) => {
-                  if (item.kind === "unread-divider") {
-                    return html`
-                      <li id="unreadDivider" class="unread-divider" data-kind="unread-divider">
-                        ${item.label}
-                      </li>
-                    `;
-                  }
-                  return html`
-                    <li
-                      class="message-row ${item.owner}"
-                      data-owner=${item.owner}
-                      data-event-position=${item.eventPosition}
-                    >
-                      <article class="message-bubble">
-                        ${item.showAlias
-                          ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
-                          : null}
-                        <div class="message-body">${item.body}</div>
-                      </article>
-                    </li>
-                  `;
-                }
-              )}
-            </ul>
-          </div>
-          ${jumpToLatestLabel
-            ? html`
-                <button
-                  id="jumpToLatestBtn"
-                  class="jump-latest-button"
-                  @click=${() => {
-                    void this.阅读推进编排端口.请求跳到最新();
-                  }}
-                >
-                  ${jumpToLatestLabel}
-                </button>
-              `
-            : null}
+            @jump-to-latest=${() => {
+              void this.阅读推进编排端口.请求跳到最新();
+            }}
+          ></koko-room-message-pane>
         </section>
         ${shellConsole}
       </section>
