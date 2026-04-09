@@ -45,6 +45,18 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("overflow-anchor: none");
   });
 
+  it("消息窗口宿主会在壳层里接住房间 1fr 行的布局契约，保证内部滚动容器还能缩放", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("koko-room-message-pane");
+    expect(styles).toContain("display: grid");
+    expect(styles).toContain("min-height: 0");
+    expect(styles).toContain("grid-template-rows: minmax(0, 1fr) auto");
+    expect(styles).toContain(".message-scroll");
+    expect(styles).toContain("height: 100%");
+    expect(styles).toContain("overflow-y: auto");
+  });
+
   it("聊天壳样式会声明深空石墨色板，而不是棕色底板", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 

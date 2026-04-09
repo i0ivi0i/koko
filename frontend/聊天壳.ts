@@ -307,9 +307,19 @@ export class 聊天壳 extends LitElement {
       color: var(--text-muted);
     }
 
-    /* 消息区必须吃掉中间所有剩余高度，这样不同屏幕高度下输入区都能稳定贴底。 */
+    /* 消息窗宿主现在接管 room-screen 里的 1fr 那一格。
+       如果宿主自己不声明最小尺寸和内部网格，真正的 message-scroll 就会失去“可缩可滚”的布局前提。 */
+    koko-room-message-pane {
+      position: relative;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      min-height: 0;
+    }
+
+    /* 输入区单独放在底部壳层栏位里，避免消息很多时把输入框重新挤回顶部。 */
     .message-scroll {
       min-height: 0;
+      height: 100%;
       overflow-y: auto;
       padding: 6px 2px;
       border-radius: 28px;
