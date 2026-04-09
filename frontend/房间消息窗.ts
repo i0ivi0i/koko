@@ -1,6 +1,6 @@
 import { html, LitElement } from "lit";
 import { repeat } from "lit/directives/repeat.js";
-import type { 聊天列表展示项 } from "./视图.js";
+import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 
 /**
  * 房间消息窗只承接消息视口内部的表达与交互转发：
@@ -67,6 +67,23 @@ export class 房间消息窗 extends LitElement {
     );
   }
 
+  private renderMessageBody(item: 消息展示项) {
+    /**
+     * 从这里开始，消息正文不再把裸字符串直接交给浏览器自然换行。
+     * DOM 只负责表达 Presenter 已经绑定好的布局结果：
+     * 1. `.message-body` 这个稳定入口继续保留给现有测试与查询使用；
+     * 2. 真正的逐行结果由 `item.layout.lines` 驱动；
+     * 3. 每个片段带上种类标记，为后续 rich inline 样式接入留稳定钩子。
+     */
+    return html`<div class="message-body">${item.layout.lines.map(
+      (line) =>
+        html`<div class="message-line" data-line-index=${line.index}>${line.segments.map(
+          (segment) =>
+            html`<span class="message-segment segment-${segment.kind}">${segment.text}</span>`
+        )}</div>`
+    )}</div>`;
+  }
+
   override render() {
     return html`
       <div
@@ -95,11 +112,11 @@ export class 房间消息窗 extends LitElement {
                   data-owner=${item.owner}
                   data-event-position=${item.eventPosition}
                 >
-                  <article class="message-bubble">
+                  <article class="message-bubble" style=${`width: ${item.bubbleWidth}px;`}>
                     ${item.showAlias
                       ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
                       : null}
-                    <div class="message-body">${item.body}</div>
+                    ${this.renderMessageBody(item)}
                   </article>
                 </li>
               `;

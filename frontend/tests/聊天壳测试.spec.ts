@@ -171,6 +171,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(el.shadowRoot!.querySelector("koko-room-message-pane")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#messageScroll")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("#messageList")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".message-body [data-line-index='0']")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".message-bubble")?.getAttribute("style")).toContain("width:");
     el.remove();
   });
 
