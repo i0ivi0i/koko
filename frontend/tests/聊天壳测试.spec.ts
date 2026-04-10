@@ -256,6 +256,19 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
   it("点击加号会直接触发原生文件输入，而不是打开 Dashboard", async () => {
     const el = await 创建已入房聊天壳();
+    const fake图片收发器 = {
+      准备选择图片: vi.fn(),
+      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      移除草稿: vi.fn(),
+      重试草稿: vi.fn().mockResolvedValue(undefined),
+      清空: vi.fn(),
+      销毁: vi.fn(),
+    };
+    (
+      el as unknown as {
+        图片收发器: typeof fake图片收发器;
+      }
+    ).图片收发器 = fake图片收发器;
 
     const input = el.shadowRoot!.querySelector(
       "#composerImageFileInput"
@@ -267,6 +280,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       el.shadowRoot!.querySelector("#composerImagePickerBtn") as HTMLButtonElement
     ).click();
 
+    expect(fake图片收发器.准备选择图片).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
     el.remove();
   });
@@ -384,23 +398,33 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("失败图片点击重试后会重新进入 uploading，而不是新建第二个草稿", async () => {
+  it("图片选择器会显式放行 HEIC/HEIF 文件，而不是只靠 image/*", async () => {
     const el = await 创建已入房聊天壳();
+
+    const input = el.shadowRoot!.querySelector(
+      "#composerImageFileInput"
+    ) as HTMLInputElement | null;
+    expect(input?.accept).toContain(".heic");
+    expect(input?.accept).toContain(".heif");
+
+    el.remove();
+  });
+
+  it("失败图片点击重试时会把 localId 转交给图片收发器", async () => {
+    const el = await 创建已入房聊天壳();
+    const fake图片收发器 = {
+      准备选择图片: vi.fn(),
+      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      移除草稿: vi.fn(),
+      重试草稿: vi.fn().mockResolvedValue(undefined),
+      清空: vi.fn(),
+      销毁: vi.fn(),
+    };
     (
       el as unknown as {
-        imageUploader: {
-          getFile: ReturnType<typeof vi.fn>;
-          retryUpload: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
+        图片收发器: typeof fake图片收发器;
       }
-    ).imageUploader = {
-      getFile: vi.fn().mockReturnValue({ id: "draft-retry" }),
-      retryUpload: vi.fn().mockResolvedValue(undefined),
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
-    };
+    ).图片收发器 = fake图片收发器;
     注入图片草稿(el, {
       localId: "draft-retry",
       attachmentId: "",
@@ -420,113 +444,32 @@ describe("聊天壳集成 / 首页与控制台", () => {
     ).click();
     await 等待组件稳定(el);
 
-    const draftStatus = el.shadowRoot!.querySelector(
-      '[data-draft-card-id="draft-retry"] .composer-draft-status'
-    ) as HTMLElement | null;
-    expect(draftStatus?.dataset.status).toBe("uploading");
-    expect(el.shadowRoot!.querySelectorAll('[data-draft-card-id="draft-retry"]').length).toBe(1);
-    expect(
-      (
-        el as unknown as {
-          imageUploader: {
-            getFile: ReturnType<typeof vi.fn>;
-            retryUpload: ReturnType<typeof vi.fn>;
-            cancelAll: ReturnType<typeof vi.fn>;
-            destroy: ReturnType<typeof vi.fn>;
-          };
-        }
-      ).imageUploader.retryUpload
-    ).toHaveBeenCalledWith("draft-retry");
-
+    expect(fake图片收发器.重试草稿).toHaveBeenCalledWith("draft-retry");
     el.remove();
   });
 
-  it("超出后端上限的图片会立即进入 failed 草稿，而不是卡在 uploading", async () => {
+  it("文件输入 change 时会把选中的文件转交给图片收发器并清空 input 值", async () => {
     const el = await 创建已入房聊天壳();
-    const addFile = vi.fn();
+    const fake图片收发器 = {
+      准备选择图片: vi.fn(),
+      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      移除草稿: vi.fn(),
+      重试草稿: vi.fn().mockResolvedValue(undefined),
+      清空: vi.fn(),
+      销毁: vi.fn(),
+    };
     (
       el as unknown as {
-        imageUploader: {
-          addFile: ReturnType<typeof vi.fn>;
-          setMeta: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
+        图片收发器: typeof fake图片收发器;
       }
-    ).imageUploader = {
-      addFile,
-      setMeta: vi.fn(),
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
-    };
-    const tooLargeFile = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "too-large.jpg", {
+    ).图片收发器 = fake图片收发器;
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "selected.jpg", {
       type: "image/jpeg",
     });
-
-    (
-      el as unknown as {
-        handleImageFileInputChange(event: Event): void;
-      }
-    ).handleImageFileInputChange({
-      currentTarget: {
-        files: [tooLargeFile],
-        value: "selected",
-      },
-    } as unknown as Event);
-    await 等待组件稳定(el);
-
-    expect(addFile).not.toHaveBeenCalled();
-    const draftStatus = el.shadowRoot!.querySelector(
-      ".composer-draft-status"
-    ) as HTMLElement | null;
-    expect(draftStatus?.dataset.status).toBe("failed");
-    expect(draftStatus?.textContent).toContain("超过");
-    el.remove();
-  });
-
-  it("图片选择器会显式放行 HEIC/HEIF 文件，而不是只靠 image/*", async () => {
-    const el = await 创建已入房聊天壳();
-
-    const input = el.shadowRoot!.querySelector(
-      "#composerImageFileInput"
-    ) as HTMLInputElement | null;
-    expect(input?.accept).toContain(".heic");
-    expect(input?.accept).toContain(".heif");
-
-    el.remove();
-  });
-
-  it("手机 HEIC 图片会先在前端转成标准图片，再交给 Uppy 上传", async () => {
-    const el = await 创建已入房聊天壳();
-    const addFile = vi.fn();
     const input = {
-      files: [new File([new Uint8Array([1, 2, 3])], "mobile.heic", { type: "image/heic" })],
+      files: [sourceFile],
       value: "selected",
     };
-    const normalizedFile = new File([new Uint8Array([9, 8, 7])], "mobile.jpg", {
-      type: "image/jpeg",
-    });
-    (
-      el as unknown as {
-        imageUploader: {
-          addFile: ReturnType<typeof vi.fn>;
-          setMeta: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
-        准备待上传图片文件(file: File): Promise<File>;
-      }
-    ).imageUploader = {
-      addFile,
-      setMeta: vi.fn(),
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
-    };
-    (
-      el as unknown as {
-        准备待上传图片文件: ReturnType<typeof vi.fn>;
-      }
-    ).准备待上传图片文件 = vi.fn().mockResolvedValue(normalizedFile);
 
     await (
       el as unknown as {
@@ -535,646 +478,31 @@ describe("聊天壳集成 / 首页与控制台", () => {
     ).handleImageFileInputChange({
       currentTarget: input,
     } as unknown as Event);
-    await 等待组件稳定(el);
 
-    expect(
-      (
-        el as unknown as {
-          准备待上传图片文件: ReturnType<typeof vi.fn>;
-        }
-      ).准备待上传图片文件
-    ).toHaveBeenCalledWith(input.files[0]);
-    expect(addFile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "mobile.jpg",
-        type: "image/jpeg",
-        data: normalizedFile,
-      })
-    );
+    expect(fake图片收发器.处理选择文件).toHaveBeenCalledWith([sourceFile]);
     expect(input.value).toBe("");
-
     el.remove();
   });
 
-  it("选图后会先 prepare，再把 attachmentId 记到草稿里", async () => {
-    const transport = new 假传输();
-    transport.prepareQueue = [
-      {
-        attachment_id: "att-prepared-1",
-        upload_method: "PUT",
-        upload_url: "http://storage.local/test-bucket/images/att-prepared-1/original?sig=1",
-        upload_headers: { "content-type": "image/jpeg" },
-        expires_at: "2026-04-10T12:00:00Z",
-      },
-    ];
-    const el = await 创建已入房聊天壳(transport);
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "prepared.jpg", {
-      type: "image/jpeg",
-    });
-    (
-      el as unknown as {
-        imageUploader: {
-          addFile: ReturnType<typeof vi.fn>;
-          setMeta: ReturnType<typeof vi.fn>;
-          setFileMeta: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
-        handleImageUploadAdded(file: {
-          id: string;
-          name: string;
-          data: File;
-          meta?: Record<string, unknown>;
-        }): void;
-      }
-    ).imageUploader = {
-      addFile: vi.fn((input: { name: string; data: File; meta?: Record<string, unknown> }) => {
-        const addedFile: {
-          id: string;
-          name: string;
-          data: File;
-          meta?: Record<string, unknown>;
-        } = {
-          id: "draft-prepared-1",
-          name: input.name,
-          data: input.data,
-        };
-        if (input.meta) {
-          addedFile.meta = input.meta;
-        }
-        (
-          el as unknown as {
-            handleImageUploadAdded(file: {
-              id: string;
-              name: string;
-              data: File;
-              meta?: Record<string, unknown>;
-            }): void;
-          }
-        ).handleImageUploadAdded(addedFile);
-        return "draft-prepared-1";
-      }),
-      setMeta: vi.fn(),
-      setFileMeta: vi.fn(),
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
-    };
-
-    await (
-      el as unknown as {
-        handleImageFileInputChange(event: Event): Promise<void>;
-      }
-    ).handleImageFileInputChange({
-      currentTarget: {
-        files: [sourceFile],
-        value: "selected",
-      },
-    } as unknown as Event);
-    await 等待组件稳定(el);
-
-    expect(transport.prepareImageCalls).toEqual([
-      { sessionId: "s-test", fileName: "prepared.jpg" },
-    ]);
-    const drafts = (
-      el as unknown as {
-        chatState: {
-          composerImageDrafts: Array<{ attachmentId: string; status: string }>;
-        };
-      }
-    ).chatState.composerImageDrafts;
-    expect(drafts).toHaveLength(1);
-    expect(drafts[0]?.attachmentId).toBe("att-prepared-1");
-    expect(drafts[0]?.status).toBe("uploading");
-
-    el.remove();
-  });
-
-  it("直传成功后必须 complete 成功，草稿才会变成 ready", async () => {
-    const transport = new 假传输();
-    transport.completeQueue = [
-      {
-        attachment_id: "att-prepared-2",
-        kind: "image",
-        mime_type: "image/jpeg",
-        byte_size: 3,
-        width: 120,
-        height: 90,
-        status: "ready",
-      },
-    ];
-    const el = await 创建已入房聊天壳(transport);
-    注入图片草稿(el, {
-      localId: "draft-complete-ok",
-      attachmentId: "att-prepared-2",
-      previewUrl: "blob:http://test.local/draft-complete-ok",
-      width: 0,
-      height: 0,
-      status: "uploading",
-      fileName: "complete-ok.jpg",
-      errorCode: "",
-      sourceFile: new File([new Uint8Array([1, 2, 3])], "complete-ok.jpg", {
-        type: "image/jpeg",
-      }),
-    });
-
-    await Promise.resolve(
-      (
-        el as unknown as {
-          handleImageUploadSuccess(
-            file: { id: string },
-            response: { body?: Record<string, unknown> }
-          ): Promise<void> | void;
-        }
-      ).handleImageUploadSuccess({ id: "draft-complete-ok" }, {})
-    );
-    await 等待组件稳定(el);
-
-    expect(transport.completeImageCalls).toEqual([
-      { sessionId: "s-test", attachmentId: "att-prepared-2" },
-    ]);
-    const draftStatus = el.shadowRoot!.querySelector(
-      '[data-draft-card-id="draft-complete-ok"] .composer-draft-status'
-    ) as HTMLElement | null;
-    expect(draftStatus?.dataset.status).toBe("ready");
-    expect(draftStatus?.textContent).toContain("可发送");
-
-    el.remove();
-  });
-
-  it("complete 失败时草稿会收口成 failed，而不是假 ready", async () => {
-    const transport = new 假传输();
-    transport.completeQueue = [创建传输错误(500, "system_error", "system_error")];
-    const el = await 创建已入房聊天壳(transport);
-    注入图片草稿(el, {
-      localId: "draft-complete-failed",
-      attachmentId: "att-prepared-3",
-      previewUrl: "blob:http://test.local/draft-complete-failed",
-      width: 0,
-      height: 0,
-      status: "uploading",
-      fileName: "complete-failed.jpg",
-      errorCode: "",
-      sourceFile: new File([new Uint8Array([1, 2, 3])], "complete-failed.jpg", {
-        type: "image/jpeg",
-      }),
-    });
-
-    await Promise.resolve(
-      (
-        el as unknown as {
-          handleImageUploadSuccess(
-            file: { id: string },
-            response: { body?: Record<string, unknown> }
-          ): Promise<void> | void;
-        }
-      ).handleImageUploadSuccess({ id: "draft-complete-failed" }, {})
-    );
-    await 等待组件稳定(el);
-
-    expect(transport.completeImageCalls).toEqual([
-      { sessionId: "s-test", attachmentId: "att-prepared-3" },
-    ]);
-    const draftStatus = el.shadowRoot!.querySelector(
-      '[data-draft-card-id="draft-complete-failed"] .composer-draft-status'
-    ) as HTMLElement | null;
-    expect(draftStatus?.dataset.status).toBe("failed");
-    expect(draftStatus?.textContent).toContain("服务器处理失败");
-
-    el.remove();
-  });
-
-  it("上传 stalled 后会把草稿转成 failed，避免一直停在 uploading", async () => {
+  it("组件销毁时会销毁图片收发器，避免旧上传器泄漏到下一次挂载", async () => {
     const el = await 创建已入房聊天壳();
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "stall.jpg", {
-      type: "image/jpeg",
-    });
-    注入图片草稿(el, {
-      localId: "draft-stalled",
-      attachmentId: "",
-      previewUrl: "blob:http://test.local/draft-stalled",
-      width: 120,
-      height: 90,
-      status: "uploading",
-      fileName: "stall.jpg",
-      errorCode: "",
-      sourceFile,
-    });
-    (
-      el as unknown as {
-        imageUploader: {
-          getFile: ReturnType<typeof vi.fn>;
-          removeFile: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
-      }
-    ).imageUploader = {
-      getFile: vi.fn().mockReturnValue({
-        id: "draft-stalled",
-        name: "stall.jpg",
-        data: sourceFile,
-      }),
-      removeFile: vi.fn(),
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
+    const fake图片收发器 = {
+      准备选择图片: vi.fn(),
+      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      移除草稿: vi.fn(),
+      重试草稿: vi.fn().mockResolvedValue(undefined),
+      清空: vi.fn(),
+      销毁: vi.fn(),
     };
-
     (
       el as unknown as {
-        handleImageUploadStalled(
-          error: { message: string },
-          files: Array<{ id: string; name: string; data: File }>
-        ): void;
+        图片收发器: typeof fake图片收发器;
       }
-    ).handleImageUploadStalled(
-      { message: "upload stalled" },
-      [{ id: "draft-stalled", name: "stall.jpg", data: sourceFile }]
-    );
-    await 等待组件稳定(el);
-
-    expect(
-      (
-        el as unknown as {
-          imageUploader: {
-            removeFile: ReturnType<typeof vi.fn>;
-          };
-        }
-      ).imageUploader.removeFile
-    ).toHaveBeenCalledWith("draft-stalled");
-    const draftStatus = el.shadowRoot!.querySelector(
-      '[data-draft-card-id="draft-stalled"] .composer-draft-status'
-    ) as HTMLElement | null;
-    expect(draftStatus?.dataset.status).toBe("failed");
-    expect(draftStatus?.textContent).toContain("超时");
-    el.remove();
-  });
-
-  it("upload-error 会从原始 xhr JSON 响应里提取稳定错误码并记录诊断", async () => {
-    const el = await 创建已入房聊天壳();
-    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    注入图片草稿(el, {
-      localId: "draft-xhr-error",
-      attachmentId: "att-xhr-error",
-      previewUrl: "blob:http://test.local/draft-xhr-error",
-      width: 120,
-      height: 90,
-      status: "uploading",
-      fileName: "xhr-error.jpg",
-      errorCode: "",
-      sourceFile: new File([new Uint8Array([1, 2, 3])], "xhr-error.jpg", {
-        type: "image/jpeg",
-      }),
-    });
-
-    (
-      el as unknown as {
-        handleImageUploadError(
-          file: { id: string; name: string },
-          error: { message: string },
-          response: {
-            status: number;
-            responseText: string;
-            readyState: number;
-            responseURL: string;
-            getResponseHeader(name: string): string | null;
-          }
-        ): void;
-      }
-    ).handleImageUploadError(
-      { id: "draft-xhr-error", name: "xhr-error.jpg" },
-      { message: "Upload error" },
-      {
-        status: 401,
-        responseText: JSON.stringify({
-          code: "invalid_session",
-          message: "会话无效",
-        }),
-        readyState: 4,
-        responseURL: "http://test.local/api/attachments/image",
-        getResponseHeader(name: string) {
-          return name === "x-koko-upload-id" ? "upl-debug-1" : null;
-        },
-      }
-    );
-    await 等待组件稳定(el);
-
-    const draftStatus = el.shadowRoot!.querySelector(
-      '[data-draft-card-id="draft-xhr-error"] .composer-draft-status'
-    ) as HTMLElement | null;
-    expect(draftStatus?.dataset.status).toBe("failed");
-    expect(draftStatus?.textContent).toContain("会话");
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      "[koko:image-upload:error]",
-      expect.objectContaining({
-        attachmentId: "att-xhr-error",
-        localId: "draft-xhr-error",
-        fileName: "xhr-error.jpg",
-        status: 401,
-        errorCode: "invalid_session",
-        receivedUploadResponse: true,
-      })
-    );
+    ).图片收发器 = fake图片收发器;
 
     el.remove();
-  });
 
-  it("upload-error 在 status=0 时会收口成网络失败，而不是继续停在模糊 uploading", async () => {
-    const el = await 创建已入房聊天壳();
-    注入图片草稿(el, {
-      localId: "draft-network-error",
-      attachmentId: "",
-      previewUrl: "blob:http://test.local/draft-network-error",
-      width: 120,
-      height: 90,
-      status: "uploading",
-      fileName: "network-error.jpg",
-      errorCode: "",
-      sourceFile: new File([new Uint8Array([1, 2, 3])], "network-error.jpg", {
-        type: "image/jpeg",
-      }),
-    });
-
-    (
-      el as unknown as {
-        handleImageUploadError(
-          file: { id: string; name: string },
-          error: { message: string },
-          response: {
-            status: number;
-            responseText: string;
-            readyState: number;
-            responseURL: string;
-            getResponseHeader(name: string): string | null;
-          }
-        ): void;
-      }
-    ).handleImageUploadError(
-      { id: "draft-network-error", name: "network-error.jpg" },
-      { message: "Network Error" },
-      {
-        status: 0,
-        responseText: "",
-        readyState: 4,
-        responseURL: "",
-        getResponseHeader() {
-          return null;
-        },
-      }
-    );
-    await 等待组件稳定(el);
-
-    const draftStatus = el.shadowRoot!.querySelector(
-      '[data-draft-card-id="draft-network-error"] .composer-draft-status'
-    ) as HTMLElement | null;
-    expect(draftStatus?.dataset.status).toBe("failed");
-    expect(draftStatus?.textContent).toContain("网络");
-
-    el.remove();
-  });
-
-  it("浏览器长期不回 upload-error 或 stalled 时，看门狗也会把草稿收口成 failed", async () => {
-    const el = await 创建已入房聊天壳();
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "watchdog.jpg", {
-      type: "image/jpeg",
-    });
-    const removeFile = vi.fn((localId: string) => {
-      (
-        el as unknown as {
-          handleImageUploadRemoved(file: {
-            id: string;
-            name: string;
-            data: File;
-          }): void;
-        }
-      ).handleImageUploadRemoved({
-        id: localId,
-        name: "watchdog.jpg",
-        data: sourceFile,
-      });
-    });
-    (
-      el as unknown as {
-        imageUploader: {
-          setFileMeta: ReturnType<typeof vi.fn>;
-          getFile: ReturnType<typeof vi.fn>;
-          removeFile: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
-      }
-    ).imageUploader = {
-      setFileMeta: vi.fn(),
-      getFile: vi.fn().mockReturnValue({
-        id: "draft-watchdog",
-        name: "watchdog.jpg",
-        data: sourceFile,
-      }),
-      removeFile,
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
-    };
-
-    vi.useFakeTimers();
-    try {
-      (
-        el as unknown as {
-          handleImageUploadAdded(file: {
-            id: string;
-            name: string;
-            data: File;
-            meta?: Record<string, unknown>;
-          }): void;
-        }
-      ).handleImageUploadAdded({
-        id: "draft-watchdog",
-        name: "watchdog.jpg",
-        data: sourceFile,
-      });
-      await el.updateComplete;
-
-      await vi.advanceTimersByTimeAsync(16000);
-      await el.updateComplete;
-
-      expect(
-        (
-          el as unknown as {
-            imageUploader: {
-              removeFile: ReturnType<typeof vi.fn>;
-            };
-          }
-        ).imageUploader.removeFile
-      ).toHaveBeenCalledWith("draft-watchdog");
-      const draftStatus = el.shadowRoot!.querySelector(
-        '[data-draft-card-id="draft-watchdog"] .composer-draft-status'
-      ) as HTMLElement | null;
-      expect(draftStatus?.dataset.status).toBe("failed");
-      expect(draftStatus?.textContent).toContain("超时");
-    } finally {
-      vi.useRealTimers();
-      el.remove();
-    }
-  });
-
-  it("已经 ready 的图片草稿不会再被上传看门狗误伤回 failed", async () => {
-    const transport = new 假传输();
-    transport.completeQueue = [
-      {
-        attachment_id: "att-watchdog-ready",
-        kind: "image",
-        mime_type: "image/jpeg",
-        byte_size: 3,
-        width: 120,
-        height: 90,
-        status: "ready",
-      },
-    ];
-    const el = await 创建已入房聊天壳(transport);
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "watchdog-ready.jpg", {
-      type: "image/jpeg",
-    });
-    (
-      el as unknown as {
-        imageUploader: {
-          setFileMeta: ReturnType<typeof vi.fn>;
-          getFile: ReturnType<typeof vi.fn>;
-          removeFile: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
-      }
-    ).imageUploader = {
-      setFileMeta: vi.fn(),
-      getFile: vi.fn().mockReturnValue({
-        id: "draft-watchdog-ready",
-        name: "watchdog-ready.jpg",
-        data: sourceFile,
-      }),
-      removeFile: vi.fn(),
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
-    };
-
-    vi.useFakeTimers();
-    try {
-      (
-        el as unknown as {
-          handleImageUploadAdded(file: {
-            id: string;
-            name: string;
-            data: File;
-            meta?: Record<string, unknown>;
-          }): void;
-          handleImageUploadSuccess(
-            file: { id: string },
-            response: { body: Record<string, unknown> }
-          ): Promise<void> | void;
-        }
-      ).handleImageUploadAdded({
-        id: "draft-watchdog-ready",
-        name: "watchdog-ready.jpg",
-        data: sourceFile,
-        meta: {
-          attachment_id: "att-watchdog-ready",
-        },
-      });
-      await Promise.resolve(
-        (
-        el as unknown as {
-          handleImageUploadSuccess(
-            file: { id: string },
-            response: { body: Record<string, unknown> }
-          ): Promise<void> | void;
-        }
-      ).handleImageUploadSuccess(
-        { id: "draft-watchdog-ready" },
-        {
-          body: {
-            ok: true,
-          },
-        }
-        )
-      );
-      await el.updateComplete;
-
-      await vi.advanceTimersByTimeAsync(16000);
-      await el.updateComplete;
-
-      const draftStatus = el.shadowRoot!.querySelector(
-        '[data-draft-card-id="draft-watchdog-ready"] .composer-draft-status'
-      ) as HTMLElement | null;
-      expect(draftStatus?.dataset.status).toBe("ready");
-      expect(transport.completeImageCalls).toEqual([
-        { sessionId: "s-test", attachmentId: "att-watchdog-ready" },
-      ]);
-      expect(
-        (
-          el as unknown as {
-            imageUploader: {
-              removeFile: ReturnType<typeof vi.fn>;
-            };
-          }
-        ).imageUploader.removeFile
-      ).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-      el.remove();
-    }
-  });
-
-  it("stalled 后的失败草稿重试会重新 addFile，而不是调用失效的 retryUpload", async () => {
-    const el = await 创建已入房聊天壳();
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "retry-stalled.jpg", {
-      type: "image/jpeg",
-    });
-    注入图片草稿(el, {
-      localId: "draft-stalled-retry",
-      attachmentId: "",
-      previewUrl: "blob:http://test.local/draft-stalled-retry",
-      width: 120,
-      height: 90,
-      status: "failed",
-      fileName: "retry-stalled.jpg",
-      errorCode: "attachment_upload_stalled",
-      sourceFile,
-    });
-    (
-      el as unknown as {
-        imageUploader: {
-          getFile: ReturnType<typeof vi.fn>;
-          addFile: ReturnType<typeof vi.fn>;
-          retryUpload: ReturnType<typeof vi.fn>;
-          cancelAll: ReturnType<typeof vi.fn>;
-          destroy: ReturnType<typeof vi.fn>;
-        };
-      }
-    ).imageUploader = {
-      getFile: vi.fn().mockReturnValue(undefined),
-      addFile: vi.fn().mockReturnValue("draft-stalled-retry"),
-      retryUpload: vi.fn(),
-      cancelAll: vi.fn(),
-      destroy: vi.fn(),
-    };
-    await 等待组件稳定(el);
-
-    (
-      el.shadowRoot!.querySelector(
-        '[data-draft-retry-id="draft-stalled-retry"]'
-      ) as HTMLButtonElement
-    ).click();
-    await 等待组件稳定(el);
-
-    const uploader = (
-      el as unknown as {
-        imageUploader: {
-          getFile: ReturnType<typeof vi.fn>;
-          addFile: ReturnType<typeof vi.fn>;
-          retryUpload: ReturnType<typeof vi.fn>;
-        };
-      }
-    ).imageUploader;
-    expect(uploader.addFile).toHaveBeenCalled();
-    expect(uploader.retryUpload).not.toHaveBeenCalled();
-    el.remove();
+    expect(fake图片收发器.销毁).toHaveBeenCalledTimes(1);
   });
 
   it("窗口宽度变化后会重新计算消息气泡宽度，而不是继续挂着旧的 Pretext 布局结果", async () => {

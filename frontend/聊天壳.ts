@@ -1,6 +1,4 @@
 import { css, html, LitElement } from "lit";
-import Uppy, { type UppyFile } from "@uppy/core";
-import AwsS3 from "@uppy/aws-s3";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
 import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
@@ -15,25 +13,14 @@ import {
   写入图片草稿 as 写入图片草稿状态,
   更新图片草稿状态 as 更新图片草稿状态值,
   移除图片草稿 as 移除图片草稿状态,
+  创建图片收发器,
   type 图片附件草稿,
   type 图片草稿状态补丁,
-} from "./图像/图片草稿.js";
-import {
-  创建本地图片预览地址,
-  准备待上传图片文件 as 规范化待上传图片文件,
   可选择图片文件类型,
-  图片附件上传上限字节数,
-} from "./图像/图片预处理.js";
-import {
-  记录图片上传失败诊断,
-  解析图片上传失败代码,
-  解析传输错误代码,
-  type 图片上传失败响应,
-} from "./图像/图片上传诊断.js";
+} from "./图像/index.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
-import type { 图片上传准备结果, 图片附件上传结果 } from "./契约.js";
 import {
   默认消息文本布局环境,
   派生壳主舞台模式,
@@ -47,15 +34,6 @@ import {
   type 消息文本布局环境,
 } from "./视图.js";
 
-type 图片上传Meta = {
-  session_id?: string;
-  attachment_id?: string;
-  upload_method?: "PUT";
-  upload_url?: string;
-  upload_headers_json?: string;
-};
-type 图片上传响应体 = Record<string, unknown>;
-const 图片上传失活超时毫秒 = 15_000;
 function 派生图片草稿失败文案(errorCode: string): string {
   switch (errorCode) {
     case "attachment_too_large":
@@ -79,46 +57,6 @@ function 派生图片草稿失败文案(errorCode: string): string {
   }
 }
 
-function 读取图片上传头信息(meta: 图片上传Meta): Record<string, string> {
-  if (!meta.upload_headers_json?.trim()) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(meta.upload_headers_json) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    const output: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === "string" && value.trim()) {
-        output[key] = value;
-      }
-    }
-    return output;
-  } catch {
-    return {};
-  }
-}
-
-function 读取图片直传参数(
-  file: UppyFile<图片上传Meta, 图片上传响应体>
-): { method: "PUT"; url: string; headers: Record<string, string> } | null {
-  const meta = (file.meta ?? {}) as 图片上传Meta;
-  if (meta.upload_method !== "PUT" || !meta.upload_url?.trim()) {
-    return null;
-  }
-  return {
-    method: "PUT",
-    url: meta.upload_url,
-    headers: 读取图片上传头信息(meta),
-  };
-}
-
-function 提取图片附件标识(file: UppyFile<图片上传Meta, 图片上传响应体>): string {
-  const meta = (file.meta ?? {}) as 图片上传Meta;
-  return typeof meta.attachment_id === "string" ? meta.attachment_id : "";
-}
-
 export class 聊天壳 extends LitElement {
   /**
    * 文本几何已经改由 Pretext 主导后，宿主尺寸变化就不能再指望浏览器自然流偷偷兜底。
@@ -129,226 +67,12 @@ export class 聊天壳 extends LitElement {
     this.requestUpdate();
   };
 
-  private imageUploader: Uppy<图片上传Meta, 图片上传响应体> | null = null;
-  private readonly 图片上传失活计时器 = new Map<string, ReturnType<typeof setTimeout>>();
-
-  /**
-   * 某些移动浏览器在网络异常或系统级中断时，不一定会把 XHR 超时/失败事件稳定抛回 Uppy。
-   * 壳层因此还要补一层“失活看门狗”：
-   * 1. 只要文件还处于 uploading，就要求它在固定时间窗内继续产生进展或最终结果；
-   * 2. 一旦超时仍无 success/error/stalled，就主动收口成 failed；
-   * 3. 这层只改前端体验态，不改变后端附件真相。
-   */
-  private 重置图片上传失活计时(localId: string): void {
-    this.清理图片上传失活计时(localId);
-    this.图片上传失活计时器.set(
-      localId,
-      setTimeout(() => {
-        this.处理图片上传失活(localId);
-      }, 图片上传失活超时毫秒)
-    );
-  }
-
-  private 清理图片上传失活计时(localId: string): void {
-    const timer = this.图片上传失活计时器.get(localId);
-    if (timer) {
-      clearTimeout(timer);
-      this.图片上传失活计时器.delete(localId);
-    }
-  }
-
-  private 清理全部图片上传失活计时(): void {
-    for (const timer of this.图片上传失活计时器.values()) {
-      clearTimeout(timer);
-    }
-    this.图片上传失活计时器.clear();
-  }
-
-  private 处理图片上传失活(localId: string): void {
-    this.图片上传失活计时器.delete(localId);
-    const draft = this.读取图片草稿(localId);
-    if (!draft || draft.status !== "uploading") {
-      return;
-    }
-    const sourceFile = draft.sourceFile ?? null;
-    const previewUrl = 创建本地图片预览地址(sourceFile);
-    this.imageUploader?.removeFile(localId);
-    console.warn("[koko:image-upload:watchdog]", {
-      localId,
-      fileName: draft.fileName,
-      userAgent: globalThis.navigator?.userAgent ?? "",
-      reason: "no_terminal_upload_event",
-    });
-    this.写入图片草稿({
-      localId,
-      attachmentId: "",
-      previewUrl,
-      width: draft.width,
-      height: draft.height,
-      status: "failed",
-      fileName: draft.fileName,
-      errorCode: "attachment_upload_stalled",
-      sourceFile,
-    });
-  }
-
   /**
    * 图片草稿是发送区唯一的本地体验态真相。
    * 统一从这里读取，避免 success/error/watchdog 各自再扫一遍数组。
    */
   private 读取图片草稿(localId: string): 图片附件草稿 | undefined {
     return this.chatState.composerImageDrafts.find((item) => item.localId === localId);
-  }
-
-  private readonly handleImageUploadAdded = (
-    file: UppyFile<图片上传Meta, 图片上传响应体>
-  ): void => {
-    const sourceFile = file.data instanceof File ? file.data : null;
-    this.写入图片草稿({
-      localId: file.id,
-      attachmentId: 提取图片附件标识(file),
-      previewUrl: file.data instanceof Blob ? 创建本地图片预览地址(file.data) : "",
-      width: 0,
-      height: 0,
-      status: "uploading",
-      fileName: file.name ?? "未命名图片",
-      errorCode: "",
-      sourceFile,
-    });
-    this.重置图片上传失活计时(file.id);
-  };
-
-  private readonly handleImageUploadSuccess = async (
-    file: UppyFile<图片上传Meta, 图片上传响应体> | undefined,
-    _response: { body?: 图片上传响应体 } | undefined
-  ): Promise<void> => {
-    if (!file) {
-      return;
-    }
-    const attachmentId = 提取图片附件标识(file) || this.读取图片草稿(file.id)?.attachmentId || "";
-    if (!attachmentId) {
-      this.清理图片上传失活计时(file.id);
-      this.更新图片草稿状态(file.id, {
-        status: "failed",
-        errorCode: "attachment_upload_failed",
-      });
-      return;
-    }
-    this.重置图片上传失活计时(file.id);
-    try {
-      const ready = await this.transport.completeImageUpload(this.chatState.sessionId, attachmentId);
-      const currentDraft = this.读取图片草稿(file.id);
-      if (!currentDraft || currentDraft.status !== "uploading") {
-        return;
-      }
-      this.清理图片上传失活计时(file.id);
-      this.更新图片草稿状态(file.id, {
-        attachmentId: ready.attachment_id,
-        width: ready.width,
-        height: ready.height,
-        status: "ready",
-        errorCode: "",
-      });
-    } catch (error: unknown) {
-      const currentDraft = this.读取图片草稿(file.id);
-      if (!currentDraft || currentDraft.status !== "uploading") {
-        return;
-      }
-      this.清理图片上传失活计时(file.id);
-      this.更新图片草稿状态(file.id, {
-        status: "failed",
-        errorCode: 解析传输错误代码(error, "system_error"),
-      });
-    }
-  };
-
-  private readonly handleImageUploadError = (
-    file: UppyFile<图片上传Meta, 图片上传响应体> | undefined,
-    error: { message: string },
-    response?: 图片上传失败响应
-  ): void => {
-    if (!file) {
-      return;
-    }
-    this.清理图片上传失活计时(file.id);
-    const attachmentId = 提取图片附件标识(file) || this.读取图片草稿(file.id)?.attachmentId || "";
-    const errorCode = 解析图片上传失败代码(error, response);
-    记录图片上传失败诊断({
-      attachmentId,
-      localId: file.id,
-      fileName: file.name ?? "未命名图片",
-      error,
-      response,
-      errorCode,
-    });
-    this.更新图片草稿状态(file.id, {
-      status: "failed",
-      errorCode,
-    });
-  };
-
-  private readonly handleImageUploadRemoved = (
-    file: UppyFile<图片上传Meta, 图片上传响应体>
-  ): void => {
-    this.清理图片上传失活计时(file.id);
-    this.移除图片草稿(file.id);
-  };
-
-  private readonly handleImageUploadProgress = (
-    file: UppyFile<图片上传Meta, 图片上传响应体> | undefined
-  ): void => {
-    if (!file) {
-      return;
-    }
-    this.重置图片上传失活计时(file.id);
-  };
-
-  /**
-   * Uppy 官方的 `upload-stalled` 只会发出 warning，不会自动把文件改成 failed。
-   * 为了避免真实用户永远看到“上传中”，这里把 stalled 明确收口成：
-   * 1. 中止当前这条卡住的上传；
-   * 2. 把草稿恢复成可删除、可重试的 failed 态；
-   * 3. 继续保留本地图预览，不把失败变成“图片凭空消失”。
-   */
-  private readonly handleImageUploadStalled = (
-    _error: { message: string },
-    files: Array<UppyFile<图片上传Meta, 图片上传响应体>>
-  ): void => {
-    const uploader = this.imageUploader;
-    if (!uploader) {
-      return;
-    }
-    for (const file of files) {
-      this.清理图片上传失活计时(file.id);
-      const existingDraft = this.chatState.composerImageDrafts.find(
-        (draft) => draft.localId === file.id
-      );
-      const sourceFile =
-        file.data instanceof File ? file.data : existingDraft?.sourceFile ?? null;
-      const previewUrl = 创建本地图片预览地址(sourceFile);
-      uploader.removeFile(file.id);
-      this.写入图片草稿({
-        localId: file.id,
-        attachmentId: "",
-        previewUrl,
-        width: existingDraft?.width ?? 0,
-        height: existingDraft?.height ?? 0,
-        status: "failed",
-        fileName: file.name ?? existingDraft?.fileName ?? "未命名图片",
-        errorCode: "attachment_upload_stalled",
-        sourceFile,
-      });
-    }
-  };
-
-  /**
-   * 输入区图片入口现在直接走系统文件选择器：
-   * 1. 交互上更像 IM，而不是“打开一个上传工具面板”；
-   * 2. 选完文件后仍继续复用现有 Uppy 上传内核；
-   * 3. 这里只做壳层入口桥接，不制造第二套上传器。
-   */
-  private async 准备待上传图片文件(file: File): Promise<File> {
-    return 规范化待上传图片文件(file);
   }
 
   private readonly handleImageFileInputChange = async (event: Event): Promise<void> => {
@@ -359,73 +83,7 @@ export class 聊天壳 extends LitElement {
     const selectedFiles = Array.from(input.files);
     // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
     input.value = "";
-    const uploader = this.ensureImageUploader();
-    for (const sourceFile of selectedFiles) {
-      if (sourceFile.size > 图片附件上传上限字节数) {
-        this.写入图片草稿({
-          localId: `too-large-${sourceFile.name}-${sourceFile.size}-${sourceFile.lastModified}`,
-          attachmentId: "",
-          previewUrl: 创建本地图片预览地址(sourceFile),
-          width: 0,
-          height: 0,
-          status: "failed",
-          fileName: sourceFile.name,
-          errorCode: "attachment_too_large",
-          sourceFile,
-        });
-        continue;
-      }
-      try {
-        const file = await this.准备待上传图片文件(sourceFile);
-        if (file.size > 图片附件上传上限字节数) {
-          this.写入图片草稿({
-            localId: `too-large-${file.name}-${file.size}-${file.lastModified}`,
-            attachmentId: "",
-            previewUrl: 创建本地图片预览地址(file),
-            width: 0,
-            height: 0,
-            status: "failed",
-            fileName: file.name,
-            errorCode: "attachment_too_large",
-            sourceFile: file,
-          });
-          continue;
-        }
-        const prepared: 图片上传准备结果 = await this.transport.prepareImageUpload(
-          this.chatState.sessionId,
-          file
-        );
-        uploader.addFile({
-          // 这里把 prepared 结果直接绑进 Uppy 文件元数据：
-          // 1. 上传插件只消费运输参数；
-          // 2. 壳层草稿直接拿 attachment_id；
-          // 3. 不再长出“上传成功后再猜 attachment_id”的第二条真相。
-          id: prepared.attachment_id,
-          name: file.name,
-          type: file.type,
-          data: file,
-          meta: {
-            session_id: this.chatState.sessionId,
-            attachment_id: prepared.attachment_id,
-            upload_method: prepared.upload_method,
-            upload_url: prepared.upload_url,
-            upload_headers_json: JSON.stringify(prepared.upload_headers),
-          },
-        });
-      } catch (error: unknown) {
-        this.写入图片草稿({
-          localId: `rejected-${sourceFile.name}-${sourceFile.size}-${sourceFile.lastModified}`,
-          attachmentId: "",
-          previewUrl: 创建本地图片预览地址(sourceFile),
-          width: 0,
-          height: 0,
-          status: "failed",
-          fileName: sourceFile.name,
-          errorCode: 解析传输错误代码(error),
-          sourceFile,
-        });
-      }
-    }
+    await this.图片收发器.处理选择文件(selectedFiles);
   };
 
   static override styles = css`
@@ -1036,6 +694,17 @@ export class 聊天壳 extends LitElement {
   private chatState: 聊天状态 = { ...初始聊天状态 };
 
   private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
+  private readonly 图片收发器 = 创建图片收发器({
+    getSessionId: () => this.chatState.sessionId,
+    prepareImageUpload: (sessionId, file) => this.transport.prepareImageUpload(sessionId, file),
+    completeImageUpload: (sessionId, attachmentId) =>
+      this.transport.completeImageUpload(sessionId, attachmentId),
+    readDrafts: () => this.chatState.composerImageDrafts,
+    writeDraft: (draft) => this.写入图片草稿(draft),
+    updateDraft: (localId, patch) => this.更新图片草稿状态(localId, patch),
+    removeDraft: (localId) => this.移除图片草稿(localId),
+    clearDrafts: () => this.清空图片草稿(),
+  });
 
   /**
    * 房间阶段编排由状态机承载，聊天壳只消费它派生出的外观。
@@ -1183,8 +852,7 @@ export class 聊天壳 extends LitElement {
     this._实时编排端口 = null;
     this._阅读推进编排端口?.dispose();
     this._阅读推进编排端口 = null;
-    this.imageUploader?.destroy();
-    this.imageUploader = null;
+    this.图片收发器.销毁();
     this.transport = transport;
     this._恢复编排端口 = null;
   }
@@ -1225,53 +893,11 @@ export class 聊天壳 extends LitElement {
     };
   }
 
-  private ensureImageUploader(): Uppy<图片上传Meta, 图片上传响应体> {
-    if (this.imageUploader) {
-      return this.imageUploader;
-    }
-
-    /**
-     * 图片上传继续复用成熟轮子：
-     * 1. Uppy 负责上传队列、状态推进与失败重试；
-     * 2. 选图入口改回原生 file input，避免把 IM 输入区做成大面板上传器；
-     * 3. 我们自己的壳层只维护“发送区草稿”和“消息命令”；
-     * 3. 不再自己手搓第二套上传状态机。
-     */
-    const uppy = new Uppy<图片上传Meta, 图片上传响应体>({
-      autoProceed: true,
-      allowMultipleUploadBatches: true,
-      restrictions: {
-        maxNumberOfFiles: 9,
-        allowedFileTypes: [...可选择图片文件类型],
-        maxFileSize: 图片附件上传上限字节数,
-      },
-    })
-      .use(AwsS3, {
-        shouldUseMultipart: false,
-        getUploadParameters: async (file) => {
-          const parameters = 读取图片直传参数(file);
-          if (!parameters) {
-            throw new Error("attachment_upload_failed");
-          }
-          return parameters;
-        },
-      });
-
-    uppy.on("file-added", this.handleImageUploadAdded);
-    uppy.on("upload-progress", this.handleImageUploadProgress);
-    uppy.on("upload-success", this.handleImageUploadSuccess);
-    uppy.on("upload-error", this.handleImageUploadError);
-    uppy.on("upload-stalled", this.handleImageUploadStalled);
-    uppy.on("file-removed", this.handleImageUploadRemoved);
-    this.imageUploader = uppy;
-    return uppy;
-  }
-
   private openImagePicker(): void {
     if (!this.chatState.sessionId) {
       return;
     }
-    this.ensureImageUploader();
+    this.图片收发器.准备选择图片();
     this.shadowRoot
       ?.querySelector<HTMLInputElement>("#composerImageFileInput")
       ?.click();
@@ -1318,11 +944,8 @@ export class 聊天壳 extends LitElement {
     });
   }
 
-  private clearImageUploaderState(): void {
-    const currentDrafts = this.chatState.composerImageDrafts;
-    this.imageUploader?.cancelAll();
-    this.清理全部图片上传失活计时();
-    for (const draft of currentDrafts) {
+  private 清空图片草稿(): void {
+    for (const draft of this.chatState.composerImageDrafts) {
       this.revokeDraftPreviewUrl(draft.previewUrl);
     }
     this.updateChat({
@@ -1330,11 +953,12 @@ export class 聊天壳 extends LitElement {
     });
   }
 
+  private clearImageUploaderState(): void {
+    this.图片收发器.清空();
+  }
+
   private removeComposerDraft(localId: string): void {
-    this.imageUploader?.removeFile(localId);
-    if (!this.imageUploader?.getFile(localId)) {
-      this.移除图片草稿(localId);
-    }
+    this.图片收发器.移除草稿(localId);
   }
 
   /**
@@ -1344,59 +968,7 @@ export class 聊天壳 extends LitElement {
    * 3. 不新建第二个草稿项，避免同一张图在草稿带里长出幽灵副本。
    */
   private async retryComposerDraft(localId: string): Promise<void> {
-    const uploader = this.imageUploader;
-    if (!uploader) {
-      return;
-    }
-    const draft = this.chatState.composerImageDrafts.find((item) => item.localId === localId);
-    if (!draft) {
-      return;
-    }
-    this.更新图片草稿状态(localId, {
-      attachmentId: "",
-      status: "uploading",
-      errorCode: "",
-    });
-    if (!uploader.getFile(localId)) {
-      if (!draft.sourceFile) {
-        this.更新图片草稿状态(localId, {
-          status: "failed",
-          errorCode: "attachment_upload_failed",
-        });
-        return;
-      }
-      try {
-        const prepared = await this.transport.prepareImageUpload(
-          this.chatState.sessionId,
-          draft.sourceFile
-        );
-        uploader.addFile({
-          id: localId,
-          name: draft.fileName,
-          type: draft.sourceFile.type,
-          data: draft.sourceFile,
-          meta: {
-            session_id: this.chatState.sessionId,
-            attachment_id: prepared.attachment_id,
-            upload_method: prepared.upload_method,
-            upload_url: prepared.upload_url,
-            upload_headers_json: JSON.stringify(prepared.upload_headers),
-          },
-        });
-      } catch (error: unknown) {
-        this.更新图片草稿状态(localId, {
-          status: "failed",
-          errorCode: 解析传输错误代码(error),
-        });
-      }
-      return;
-    }
-    void uploader.retryUpload(localId).catch((error: unknown) => {
-      this.更新图片草稿状态(localId, {
-        status: "failed",
-        errorCode: 解析传输错误代码(error),
-      });
-    });
+    await this.图片收发器.重试草稿(localId);
   }
 
   override connectedCallback(): void {
@@ -1411,10 +983,7 @@ export class 聊天壳 extends LitElement {
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
-    this.clearImageUploaderState();
-    this.清理全部图片上传失活计时();
-    this.imageUploader?.destroy();
-    this.imageUploader = null;
+    this.图片收发器.销毁();
     super.disconnectedCallback();
   }
 
@@ -1530,10 +1099,7 @@ export class 聊天壳 extends LitElement {
     if (!hasReadyDraft || hasBlockingDraft) {
       return;
     }
-    for (const draft of currentDrafts) {
-      this.revokeDraftPreviewUrl(draft.previewUrl);
-    }
-    this.imageUploader?.cancelAll();
+    this.图片收发器.清空();
   }
 
   private handleShellConsolePrimaryInput(event: Event, isMessageMode: boolean): void {
