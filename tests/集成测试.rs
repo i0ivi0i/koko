@@ -467,7 +467,7 @@ async fn 房间快照读回时仍能拿到图片附件列表() {
 
 #[tokio::test]
 #[serial]
-async fn 图片上传成功会返回ready附件快照() {
+async fn 旧图片上传路由已移除() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -486,13 +486,15 @@ async fn 图片上传成功会返回ready附件快照() {
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("upload-image-{uniq}")})),
+        Some(serde_json::json!({"device_anonymous_token": format!("legacy-upload-route-{uniq}")})),
         &[],
     )
     .await;
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
-    let (status, body) = send_multipart(
+    // 这条回归测试专门锁住“旧 multipart 入口必须彻底消失”。
+    // 只要旧链还活着，这里就不会返回 404，后续删除 route 时才有安全网。
+    let response = send_multipart_response(
         app,
         "/api/attachments/image",
         session_id,
@@ -502,13 +504,7 @@ async fn 图片上传成功会返回ready附件快照() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"].as_str(), Some("image"));
-    assert_eq!(body["status"].as_str(), Some("ready"));
-    assert_eq!(body["mime_type"].as_str(), Some("image/png"));
-    assert_eq!(body["width"].as_i64(), Some(1));
-    assert_eq!(body["height"].as_i64(), Some(1));
-    assert!(body["attachment_id"].as_str().is_some());
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -672,6 +668,91 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     assert!(thumbnail_storage_key.is_some());
 }
 
+#[tokio::test]
+#[serial]
+async fn complete图片上传遇到非图片原图会返回attachment_type_not_allowed() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("complete-invalid-image-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+    let invalid_bytes = b"not an image";
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "broken.png",
+            "mime_type": "image/png",
+            "byte_size": invalid_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let storage_key = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询原图存储键")
+    .expect("prepare 后必须写入原图存储键");
+    state
+        .attachment_store
+        .put(&ObjectPath::from(storage_key), invalid_bytes.as_slice().into())
+        .await
+        .expect("测试应能预先写入非法原图对象");
+
+    // complete 必须以真实字节内容为准，不能信 prepare 阶段宣称的图片 MIME。
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+
+    assert_eq!(complete_status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        complete_body["code"].as_str(),
+        Some("attachment_type_not_allowed")
+    );
+}
+
 #[test]
 #[serial]
 fn prepared附件在complete之前不能进入消息发送主链() {
@@ -813,133 +894,6 @@ async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
 
 #[tokio::test]
 #[serial]
-async fn 图片上传成功响应会携带upload_trace_header() {
-    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
-    koko::assembly::自动追平迁移(&cfg.database_url)
-        .await
-        .expect("应先追平附件迁移");
-    let state =
-        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
-            .await
-            .expect("应能构建共享应用状态");
-    let app = koko::shell::构建路由(state);
-    let uniq = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_millis();
-
-    let (_, bootstrap) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("upload-image-header-{uniq}")})),
-        &[],
-    )
-    .await;
-    let session_id = bootstrap["session_id"].as_str().expect("session_id");
-
-    let response = send_multipart_response(
-        app,
-        "/api/attachments/image",
-        session_id,
-        "a.png",
-        "image/png",
-        &最小png字节(),
-    )
-    .await;
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let header = response
-        .headers()
-        .get("x-koko-upload-id")
-        .and_then(|value| value.to_str().ok())
-        .expect("应返回 upload trace header");
-    assert!(header.starts_with("upl-"));
-}
-
-#[tokio::test]
-#[serial]
-async fn 非图片上传会返回attachment_type_not_allowed() {
-    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
-    let state =
-        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
-            .await
-            .expect("应能构建共享应用状态");
-    let app = koko::shell::构建路由(state);
-    let uniq = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_millis();
-
-    let (_, bootstrap) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("upload-text-{uniq}")})),
-        &[],
-    )
-    .await;
-    let session_id = bootstrap["session_id"].as_str().expect("session_id");
-
-    let (status, body) = send_multipart(
-        app,
-        "/api/attachments/image",
-        session_id,
-        "note.txt",
-        "text/plain",
-        b"not an image",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["code"].as_str(), Some("attachment_type_not_allowed"));
-}
-
-#[tokio::test]
-#[serial]
-async fn 图片上传被拒绝时也会携带upload_trace_header() {
-    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
-    let state =
-        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
-            .await
-            .expect("应能构建共享应用状态");
-    let app = koko::shell::构建路由(state);
-    let uniq = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_millis();
-
-    let (_, bootstrap) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("upload-reject-header-{uniq}")})),
-        &[],
-    )
-    .await;
-    let session_id = bootstrap["session_id"].as_str().expect("session_id");
-
-    let response = send_multipart_response(
-        app,
-        "/api/attachments/image",
-        session_id,
-        "note.txt",
-        "text/plain",
-        b"not an image",
-    )
-    .await;
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let header = response
-        .headers()
-        .get("x-koko-upload-id")
-        .and_then(|value| value.to_str().ok())
-        .expect("应返回 upload trace header");
-    assert!(header.starts_with("upl-"));
-}
-
-#[tokio::test]
-#[serial]
 async fn 非成员不能读取房间消息里的图片内容() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -986,22 +940,58 @@ async fn 非成员不能读取房间消息里的图片内容() {
     .await;
     let room_id = room_body["room_id"].as_str().expect("room_id").to_string();
 
-    let (_, upload_body) = send_multipart(
+    let (prepare_status, prepare_body) = send_json(
         app.clone(),
-        "/api/attachments/image",
-        owner_session_id,
-        "owner.png",
-        "image/png",
-        &最小png字节(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": owner_session_id,
+            "file_name": "owner.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
     )
     .await;
-    let attachment_id = upload_body["attachment_id"]
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
         .as_str()
         .expect("attachment_id")
         .to_string();
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let storage_key = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询原图存储键")
+    .expect("prepare 后必须写入原图存储键");
+    state
+        .attachment_store
+        .put(&ObjectPath::from(storage_key), 最小png字节().into())
+        .await
+        .expect("测试应能预先写入原图对象");
+    let (complete_status, complete_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": owner_session_id
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(complete_status, StatusCode::OK);
+    assert_eq!(complete_body["status"].as_str(), Some("ready"));
 
     let database_url = cfg.database_url.clone();
     let owner_session_id_owned = owner_session_id.to_string();
+    let attachment_id_for_message = attachment_id.clone();
     tokio::task::spawn_blocking(move || {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         koko::usecase::创建消息(
@@ -1010,7 +1000,7 @@ async fn 非成员不能读取房间消息里的图片内容() {
             &owner_session_id_owned,
             &format!("read-content-client-{uniq}"),
             "",
-            &[attachment_id],
+            &[attachment_id_for_message],
         )
         .expect("应能创建带图片附件的消息");
     })
@@ -1021,7 +1011,7 @@ async fn 非成员不能读取房间消息里的图片内容() {
         .method(Method::GET)
         .uri(format!(
             "/api/attachments/{}/content?session_id={}&variant=original",
-            upload_body["attachment_id"].as_str().expect("attachment_id"),
+            attachment_id,
             stranger_session_id
         ))
         .body(Body::empty())
@@ -2868,26 +2858,6 @@ fn 提取静态资源路径<'a>(html: &'a str, prefix: &str, suffix: &str) -> Op
     let rest = &html[start..];
     let end = rest.find(suffix)?;
     Some(&rest[..end])
-}
-
-/// multipart 测试助手：
-/// 用固定边界手工拼 form-data，避免为了测试再引入额外 HTTP 客户端依赖。
-async fn send_multipart(
-    app: axum::Router,
-    uri: &str,
-    session_id: &str,
-    filename: &str,
-    content_type: &str,
-    file_bytes: &[u8],
-) -> (StatusCode, Value) {
-    let response = send_multipart_response(app, uri, session_id, filename, content_type, file_bytes)
-        .await;
-    let status = response.status();
-    let bytes = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("read body");
-    let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
-    (status, json)
 }
 
 async fn send_multipart_response(

@@ -185,7 +185,6 @@ pub fn 构建路由(state: 应用状态) -> Router {
             "/api/media/{attachment_id}/complete",
             post(房间外壳::complete_image_upload),
         )
-        .route("/api/attachments/image", post(房间外壳::upload_image_attachment))
         .route(
             "/api/attachments/{attachment_id}/content",
             get(房间外壳::load_attachment_content),
