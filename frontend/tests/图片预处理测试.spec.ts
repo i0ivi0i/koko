@@ -5,7 +5,7 @@ import {
   可选择图片文件类型,
   图片附件上传上限字节数,
   推导图片Mime类型,
-} from "../图像/图片预处理";
+} from "../媒体/图片预处理";
 
 const heic2anyMock = vi.fn();
 

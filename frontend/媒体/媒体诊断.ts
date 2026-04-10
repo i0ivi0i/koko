@@ -1,8 +1,8 @@
-export type 图片上传失败响应体 = Record<string, unknown>;
+export type 媒体上传失败响应体 = Record<string, unknown>;
 
-export type 图片上传失败响应 =
+export type 媒体上传失败响应 =
   | {
-      body?: 图片上传失败响应体;
+      body?: 媒体上传失败响应体;
       status?: number;
       responseText?: string;
       readyState?: number;
@@ -11,7 +11,7 @@ export type 图片上传失败响应 =
     }
   | undefined;
 
-function 安全解析上传失败响应体(response: 图片上传失败响应): 图片上传失败响应体 | null {
+function 安全解析上传失败响应体(response: 媒体上传失败响应): 媒体上传失败响应体 | null {
   if (response?.body && typeof response.body === "object") {
     return response.body;
   }
@@ -20,13 +20,13 @@ function 安全解析上传失败响应体(response: 图片上传失败响应): 
   }
   try {
     const payload = JSON.parse(response.responseText) as unknown;
-    return payload && typeof payload === "object" ? (payload as 图片上传失败响应体) : null;
+    return payload && typeof payload === "object" ? (payload as 媒体上传失败响应体) : null;
   } catch {
     return null;
   }
 }
 
-function 判断是否已收到上传层响应(response: 图片上传失败响应): boolean {
+function 判断是否已收到上传层响应(response: 媒体上传失败响应): boolean {
   if (!response) {
     return false;
   }
@@ -38,9 +38,9 @@ function 判断是否已收到上传层响应(response: 图片上传失败响应
   );
 }
 
-export function 解析图片上传失败代码(
+export function 解析媒体上传失败代码(
   error: { message: string },
-  response: 图片上传失败响应
+  response: 媒体上传失败响应
 ): string {
   const responseBody = 安全解析上传失败响应体(response);
   if (typeof responseBody?.code === "string" && responseBody.code.trim()) {
@@ -65,16 +65,16 @@ export function 解析图片上传失败代码(
 }
 
 /**
- * 图片上传失败后的排障锚点必须落在 `attachmentId` 上。
+ * 媒体上传失败后的排障锚点必须落在 `attachmentId` 上。
  * 这条主链里 prepare 已经先生成附件真相，所以排查时要围绕 attachmentId 串 prepare / PUT / complete，
- * 不能再依赖旧 `/api/attachments/image` 时代遗留的 header 诊断语义。
+ * 不能再依赖历史特化链路里遗留的 header 诊断语义。
  */
-export function 记录图片上传失败诊断(input: {
+export function 记录媒体上传失败诊断(input: {
   attachmentId: string;
   localId: string;
   fileName: string;
   error: { message: string };
-  response: 图片上传失败响应;
+  response: 媒体上传失败响应;
   errorCode: string;
 }): void {
   const responseText =

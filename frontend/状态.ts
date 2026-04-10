@@ -1,6 +1,6 @@
 import type { 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
-import type { 图片附件草稿 } from "./图像/图片草稿.js";
+import type { 媒体附件草稿 as 图片附件草稿 } from "./媒体/媒体草稿.js";
 
 /** 房间视口模式只属于前端壳层同步编排，不是后端领域真相。 */
 export type 房间视口模式 = "围绕未读阅读" | "贴底跟随" | "离底浏览";
@@ -20,7 +20,7 @@ export interface 聊天状态 {
   roomDisplayTitle: string;
   roomCodeInput: string;
   messageInput: string;
-  /** 发送区当前暂存的图片草稿。 */
+  /** 发送区当前暂存的媒体草稿；当前主链仍先承接图片。 */
   composerImageDrafts: 图片附件草稿[];
   latestEventPosition: number;
   /** 当前身份上次已读到的事件位置；`null` 表示还没有阅读锚点。 */

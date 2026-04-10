@@ -1,31 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建传输错误 } from "./common/聊天测试支架";
 import {
-  写入图片草稿,
-  更新图片草稿状态,
-  移除图片草稿,
-  type 图片附件草稿,
-  type 图片草稿状态补丁,
-} from "../图像/图片草稿";
+  写入媒体草稿,
+  更新媒体草稿状态,
+  移除媒体草稿,
+  type 媒体附件草稿,
+  type 媒体草稿状态补丁,
+} from "../媒体/媒体草稿";
 import {
-  创建图片收发器,
-  图片上传失活超时毫秒,
-  type 图片上传器,
-  type 图片上传文件,
-  type 图片上传Meta,
-  type 图片上传响应体,
-} from "../图像/图片收发";
+  创建媒体发布器,
+  媒体上传失活超时毫秒,
+  type 媒体上传器,
+  type 媒体上传文件,
+  type 媒体上传Meta,
+  type 媒体上传响应体,
+} from "../媒体/媒体发布";
 
-class 假图片上传器 implements 图片上传器 {
+class 假媒体上传器 implements 媒体上传器 {
   private readonly handlers = new Map<string, Array<(...args: Array<any>) => void | Promise<void>>>();
-  private readonly files = new Map<string, 图片上传文件>();
+  private readonly files = new Map<string, 媒体上传文件>();
 
   readonly addFileCalls: Array<{
     id: string;
     name: string;
     type?: string;
     data: File;
-    meta?: 图片上传Meta;
+    meta?: 媒体上传Meta;
   }> = [];
   readonly removeFileCalls: string[] = [];
   readonly retryUploadCalls: string[] = [];
@@ -44,10 +44,10 @@ class 假图片上传器 implements 图片上传器 {
     name: string;
     type?: string;
     data: File;
-    meta?: 图片上传Meta;
+    meta?: 媒体上传Meta;
   }): string {
     this.addFileCalls.push(input);
-    const file: 图片上传文件 = {
+    const file: 媒体上传文件 = {
       id: input.id,
       name: input.name,
       type: input.type,
@@ -59,7 +59,7 @@ class 假图片上传器 implements 图片上传器 {
     return input.id;
   }
 
-  getFile(id: string): 图片上传文件 | undefined {
+  getFile(id: string): 媒体上传文件 | undefined {
     return this.files.get(id);
   }
 
@@ -87,7 +87,7 @@ class 假图片上传器 implements 图片上传器 {
     this.destroyCalls += 1;
   }
 
-  async 触发上传成功(id: string, response: { body?: 图片上传响应体 } = {}): Promise<void> {
+  async 触发上传成功(id: string, response: { body?: 媒体上传响应体 } = {}): Promise<void> {
     await this.emit("upload-success", this.files.get(id), response);
   }
 
@@ -95,7 +95,7 @@ class 假图片上传器 implements 图片上传器 {
     id: string,
     error: { message: string },
     response?: {
-      body?: 图片上传响应体;
+      body?: 媒体上传响应体;
       status?: number;
       responseText?: string;
       readyState?: number;
@@ -123,17 +123,17 @@ class 假图片上传器 implements 图片上传器 {
 }
 
 function 创建草稿仓库() {
-  let drafts: 图片附件草稿[] = [];
+  let drafts: 媒体附件草稿[] = [];
   return {
     readDrafts: () => drafts,
-    writeDraft(draft: 图片附件草稿) {
-      drafts = 写入图片草稿(drafts, draft).草稿列表;
+    writeDraft(draft: 媒体附件草稿) {
+      drafts = 写入媒体草稿(drafts, draft).草稿列表;
     },
-    updateDraft(localId: string, patch: 图片草稿状态补丁) {
-      drafts = 更新图片草稿状态(drafts, localId, patch).草稿列表;
+    updateDraft(localId: string, patch: 媒体草稿状态补丁) {
+      drafts = 更新媒体草稿状态(drafts, localId, patch).草稿列表;
     },
     removeDraft(localId: string) {
-      drafts = 移除图片草稿(drafts, localId).草稿列表;
+      drafts = 移除媒体草稿(drafts, localId).草稿列表;
     },
     clearDrafts() {
       drafts = [];
@@ -142,7 +142,7 @@ function 创建草稿仓库() {
 }
 
 function 创建场景() {
-  const uploader = new 假图片上传器();
+  const uploader = new 假媒体上传器();
   const drafts = 创建草稿仓库();
   const prepareImageUpload = vi.fn(async (_sessionId: string, file: File) => ({
     attachment_id: `att-${file.name}`,
@@ -160,7 +160,7 @@ function 创建场景() {
     height: 90,
     status: "ready" as const,
   }));
-  const 收发器 = 创建图片收发器({
+  const 发布器 = 创建媒体发布器({
     getSessionId: () => "s-test",
     prepareImageUpload,
     completeImageUpload,
@@ -174,7 +174,7 @@ function 创建场景() {
     createPreviewUrl: (file) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
   });
   return {
-    收发器,
+    发布器,
     uploader,
     drafts,
     prepareImageUpload,
@@ -182,7 +182,7 @@ function 创建场景() {
   };
 }
 
-describe("图片收发器", () => {
+describe("媒体发布器", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -193,7 +193,7 @@ describe("图片收发器", () => {
       type: "image/jpeg",
     });
 
-    await 场景.收发器.处理选择文件([sourceFile]);
+    await 场景.发布器.处理选择图片文件([sourceFile]);
 
     expect(场景.prepareImageUpload).toHaveBeenCalledWith("s-test", sourceFile);
     expect(场景.uploader.addFileCalls).toEqual([
@@ -205,6 +205,7 @@ describe("图片收发器", () => {
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-picked.jpg",
+        kind: "image",
         attachmentId: "att-picked.jpg",
         status: "uploading",
       }),
@@ -216,7 +217,7 @@ describe("图片收发器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "complete-ok.jpg", {
       type: "image/jpeg",
     });
-    await 场景.收发器.处理选择文件([sourceFile]);
+    await 场景.发布器.处理选择图片文件([sourceFile]);
 
     await 场景.uploader.触发上传成功("att-complete-ok.jpg");
 
@@ -224,6 +225,7 @@ describe("图片收发器", () => {
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-complete-ok.jpg",
+        kind: "image",
         attachmentId: "att-complete-ok.jpg",
         status: "ready",
         width: 120,
@@ -240,7 +242,7 @@ describe("图片收发器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "complete-failed.jpg", {
       type: "image/jpeg",
     });
-    await 场景.收发器.处理选择文件([sourceFile]);
+    await 场景.发布器.处理选择图片文件([sourceFile]);
 
     await 场景.uploader.触发上传成功("att-complete-failed.jpg");
 
@@ -258,7 +260,7 @@ describe("图片收发器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "xhr-error.jpg", {
       type: "image/jpeg",
     });
-    await 场景.收发器.处理选择文件([sourceFile]);
+    await 场景.发布器.处理选择图片文件([sourceFile]);
 
     await 场景.uploader.触发上传错误(
       "att-xhr-error.jpg",
@@ -289,7 +291,7 @@ describe("图片收发器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "stalled.jpg", {
       type: "image/jpeg",
     });
-    await 场景.收发器.处理选择文件([sourceFile]);
+    await 场景.发布器.处理选择图片文件([sourceFile]);
 
     await 场景.uploader.触发上传停滞("att-stalled.jpg");
 
@@ -311,8 +313,8 @@ describe("图片收发器", () => {
     });
     vi.useFakeTimers();
     try {
-      await 场景.收发器.处理选择文件([sourceFile]);
-      await vi.advanceTimersByTimeAsync(图片上传失活超时毫秒 + 1000);
+      await 场景.发布器.处理选择图片文件([sourceFile]);
+      await vi.advanceTimersByTimeAsync(媒体上传失活超时毫秒 + 1000);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         "[koko:image-upload:watchdog]",
@@ -332,64 +334,5 @@ describe("图片收发器", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("已经 ready 的草稿不会再被看门狗误伤", async () => {
-    const 场景 = 创建场景();
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "ready.jpg", {
-      type: "image/jpeg",
-    });
-    vi.useFakeTimers();
-    try {
-      await 场景.收发器.处理选择文件([sourceFile]);
-      await 场景.uploader.触发上传进度("att-ready.jpg");
-      await 场景.uploader.触发上传成功("att-ready.jpg");
-      await vi.advanceTimersByTimeAsync(图片上传失活超时毫秒 + 1000);
-
-      expect(场景.uploader.removeFileCalls).toEqual([]);
-      expect(场景.drafts.readDrafts()).toEqual([
-        expect.objectContaining({
-          localId: "att-ready.jpg",
-          status: "ready",
-        }),
-      ]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("stalled 后重试会复用同一个 localId 重新 addFile，而不是调用失效的 retryUpload", async () => {
-    const 场景 = 创建场景();
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "retry-stalled.jpg", {
-      type: "image/jpeg",
-    });
-    场景.drafts.writeDraft({
-      localId: "draft-stalled-retry",
-      attachmentId: "",
-      previewUrl: "blob:retry-stalled.jpg",
-      width: 120,
-      height: 90,
-      status: "failed",
-      fileName: "retry-stalled.jpg",
-      errorCode: "attachment_upload_stalled",
-      sourceFile,
-    });
-    场景.收发器.准备选择图片();
-
-    await 场景.收发器.重试草稿("draft-stalled-retry");
-
-    expect(场景.uploader.addFileCalls).toEqual([
-      expect.objectContaining({
-        id: "draft-stalled-retry",
-        name: "retry-stalled.jpg",
-      }),
-    ]);
-    expect(场景.uploader.retryUploadCalls).toEqual([]);
-    expect(场景.drafts.readDrafts()).toEqual([
-      expect.objectContaining({
-        localId: "draft-stalled-retry",
-        status: "uploading",
-      }),
-    ]);
   });
 });

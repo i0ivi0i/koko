@@ -1,7 +1,7 @@
 import type { Socket } from "socket.io-client";
 import type { 消息事件 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
-import { 提取可发送图片附件标识 } from "./图像/图片草稿.js";
+import { 提取可发送媒体附件标识 } from "./媒体/媒体草稿.js";
 import type { 聊天状态 } from "./状态.js";
 import { Http接口错误, type 前端传输端口 } from "./传输.js";
 import type { Transport异常 } from "./房间恢复编排.js";
@@ -271,7 +271,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       return;
     }
     const text = state.messageInput.trim();
-    const attachmentIds = 提取可发送图片附件标识(state.composerImageDrafts);
+    const attachmentIds = 提取可发送媒体附件标识(state.composerImageDrafts);
     if (attachmentIds === null) {
       return;
     }

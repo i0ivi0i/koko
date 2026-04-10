@@ -10,14 +10,15 @@ import {
   type 前端存储端口,
 } from "./存储.js";
 import {
-  写入图片草稿 as 写入图片草稿状态,
-  更新图片草稿状态 as 更新图片草稿状态值,
-  移除图片草稿 as 移除图片草稿状态,
-  创建图片收发器,
-  type 图片附件草稿,
-  type 图片草稿状态补丁,
+  写入媒体草稿 as 写入图片草稿状态,
+  更新媒体草稿状态 as 更新图片草稿状态值,
+  移除媒体草稿 as 移除图片草稿状态,
+  创建媒体发布器 as 创建图片收发器,
+  type 媒体附件草稿 as 图片附件草稿,
+  type 媒体草稿状态补丁 as 图片草稿状态补丁,
   可选择图片文件类型,
-} from "./图像/index.js";
+  可选择视频文件类型,
+} from "./媒体/index.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
@@ -33,8 +34,6 @@ import {
   派生跳到最新入口文案,
   type 消息文本布局环境,
 } from "./视图.js";
-
-const 可选择视频文件类型 = ["video/*"];
 
 function 派生图片草稿失败文案(errorCode: string): string {
   switch (errorCode) {
@@ -92,7 +91,7 @@ export class 聊天壳 extends LitElement {
     const selectedFiles = Array.from(input.files);
     // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
     input.value = "";
-    await this.图片收发器.处理选择文件(selectedFiles);
+    await this.图片收发器.处理选择图片文件(selectedFiles);
   };
 
   private readonly handleVideoFileInputChange = (event: Event): void => {

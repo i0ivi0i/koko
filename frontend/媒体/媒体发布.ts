@@ -1,7 +1,7 @@
 import Uppy from "@uppy/core";
 import AwsS3 from "@uppy/aws-s3";
 import type { 图片附件上传结果, 图片上传准备结果 } from "../契约.js";
-import type { 图片附件草稿, 图片草稿状态补丁 } from "./图片草稿.js";
+import type { 媒体附件草稿, 媒体草稿状态补丁 } from "./媒体草稿.js";
 import {
   创建本地图片预览地址,
   准备待上传图片文件,
@@ -9,13 +9,13 @@ import {
   图片附件上传上限字节数,
 } from "./图片预处理.js";
 import {
-  记录图片上传失败诊断,
-  解析图片上传失败代码,
+  记录媒体上传失败诊断,
+  解析媒体上传失败代码,
   解析传输错误代码,
-  type 图片上传失败响应,
-} from "./图片上传诊断.js";
+  type 媒体上传失败响应,
+} from "./媒体诊断.js";
 
-export type 图片上传Meta = {
+export type 媒体上传Meta = {
   session_id?: string;
   attachment_id?: string;
   upload_method?: "PUT";
@@ -23,25 +23,25 @@ export type 图片上传Meta = {
   upload_headers_json?: string;
 };
 
-export type 图片上传响应体 = Record<string, unknown>;
+export type 媒体上传响应体 = Record<string, unknown>;
 
-export type 图片上传文件 = {
+export type 媒体上传文件 = {
   id: string;
   name?: string | undefined;
   type?: string | undefined;
   data?: unknown;
-  meta?: 图片上传Meta | undefined;
+  meta?: 媒体上传Meta | undefined;
 };
 
-export interface 图片上传器 {
+export interface 媒体上传器 {
   addFile(input: {
     id: string;
     name: string;
     type?: string;
     data: File;
-    meta?: 图片上传Meta;
+    meta?: 媒体上传Meta;
   }): string;
-  getFile(id: string): 图片上传文件 | undefined;
+  getFile(id: string): 媒体上传文件 | undefined;
   removeFile(id: string): void;
   retryUpload(id: string): Promise<void>;
   cancelAll(): void;
@@ -49,23 +49,23 @@ export interface 图片上传器 {
   on(event: string, handler: (...args: Array<any>) => void | Promise<void>): void;
 }
 
-export const 图片上传失活超时毫秒 = 15_000;
+export const 媒体上传失活超时毫秒 = 15_000;
 
-type 图片收发器依赖 = {
+type 媒体发布器依赖 = {
   getSessionId(): string;
   prepareImageUpload(sessionId: string, file: File): Promise<图片上传准备结果>;
   completeImageUpload(sessionId: string, attachmentId: string): Promise<图片附件上传结果>;
-  readDrafts(): 图片附件草稿[];
-  writeDraft(draft: 图片附件草稿): void;
-  updateDraft(localId: string, patch: 图片草稿状态补丁): void;
+  readDrafts(): 媒体附件草稿[];
+  writeDraft(draft: 媒体附件草稿): void;
+  updateDraft(localId: string, patch: 媒体草稿状态补丁): void;
   removeDraft(localId: string): void;
   clearDrafts(): void;
-  createUploader?(): 图片上传器;
+  createUploader?(): 媒体上传器;
   normalizeUploadFile?(file: File): Promise<File>;
   createPreviewUrl?(file: Blob | null): string;
 };
 
-function 读取图片上传头信息(meta: 图片上传Meta): Record<string, string> {
+function 读取媒体上传头信息(meta: 媒体上传Meta): Record<string, string> {
   if (!meta.upload_headers_json?.trim()) {
     return {};
   }
@@ -86,32 +86,31 @@ function 读取图片上传头信息(meta: 图片上传Meta): Record<string, str
   }
 }
 
-function 读取图片直传参数(
-  file: 图片上传文件
+function 读取媒体直传参数(
+  file: 媒体上传文件
 ): { method: "PUT"; url: string; headers: Record<string, string> } | null {
-  const meta = (file.meta ?? {}) as 图片上传Meta;
+  const meta = (file.meta ?? {}) as 媒体上传Meta;
   if (meta.upload_method !== "PUT" || !meta.upload_url?.trim()) {
     return null;
   }
   return {
     method: "PUT",
     url: meta.upload_url,
-    headers: 读取图片上传头信息(meta),
+    headers: 读取媒体上传头信息(meta),
   };
 }
 
-function 提取图片附件标识(file: 图片上传文件 | undefined): string {
-  const meta = (file?.meta ?? {}) as 图片上传Meta;
+function 提取媒体附件标识(file: 媒体上传文件 | undefined): string {
+  const meta = (file?.meta ?? {}) as 媒体上传Meta;
   return typeof meta.attachment_id === "string" ? meta.attachment_id : "";
 }
 
 /**
  * 生产环境继续直接复用 Uppy + AwsS3。
- * 这层模块只负责把 canonical `prepare -> PUT -> complete` 串起来，
- * 不再在壳层里散着维护第二套上传状态机。
+ * 当前 `媒体发布.ts` 先收口图片这条已稳定主链，等视频 prepare/complete 接上后再复用同一编排骨架。
  */
-function 创建默认图片上传器(): 图片上传器 {
-  return new Uppy<图片上传Meta, 图片上传响应体>({
+function 创建默认媒体上传器(): 媒体上传器 {
+  return new Uppy<媒体上传Meta, 媒体上传响应体>({
     autoProceed: true,
     allowMultipleUploadBatches: true,
     restrictions: {
@@ -122,26 +121,26 @@ function 创建默认图片上传器(): 图片上传器 {
   }).use(AwsS3, {
     shouldUseMultipart: false,
     getUploadParameters: async (file) => {
-      const parameters = 读取图片直传参数(file as unknown as 图片上传文件);
+      const parameters = 读取媒体直传参数(file as unknown as 媒体上传文件);
       if (!parameters) {
         throw new Error("attachment_upload_failed");
       }
       return parameters;
     },
-  }) as unknown as 图片上传器;
+  }) as unknown as 媒体上传器;
 }
 
-export function 创建图片收发器(deps: 图片收发器依赖) {
-  const createUploader = deps.createUploader ?? 创建默认图片上传器;
+export function 创建媒体发布器(deps: 媒体发布器依赖) {
+  const createUploader = deps.createUploader ?? 创建默认媒体上传器;
   const normalizeUploadFile = deps.normalizeUploadFile ?? 准备待上传图片文件;
   const createPreviewUrl = deps.createPreviewUrl ?? 创建本地图片预览地址;
   const 上传失活计时器 = new Map<string, ReturnType<typeof setTimeout>>();
-  let uploader: 图片上传器 | null = null;
+  let uploader: 媒体上传器 | null = null;
 
-  const 读取图片草稿 = (localId: string): 图片附件草稿 | undefined =>
+  const 读取媒体草稿 = (localId: string): 媒体附件草稿 | undefined =>
     deps.readDrafts().find((item) => item.localId === localId);
 
-  const 清理图片上传失活计时 = (localId: string): void => {
+  const 清理媒体上传失活计时 = (localId: string): void => {
     const timer = 上传失活计时器.get(localId);
     if (timer) {
       clearTimeout(timer);
@@ -149,9 +148,9 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
     }
   };
 
-  const 处理图片上传失活 = (localId: string): void => {
+  const 处理媒体上传失活 = (localId: string): void => {
     上传失活计时器.delete(localId);
-    const draft = 读取图片草稿(localId);
+    const draft = 读取媒体草稿(localId);
     if (!draft || draft.status !== "uploading") {
       return;
     }
@@ -165,6 +164,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
     });
     deps.writeDraft({
       localId,
+      kind: draft.kind,
       attachmentId: "",
       previewUrl: createPreviewUrl(sourceFile),
       width: draft.width,
@@ -176,28 +176,29 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
     });
   };
 
-  const 重置图片上传失活计时 = (localId: string): void => {
-    清理图片上传失活计时(localId);
+  const 重置媒体上传失活计时 = (localId: string): void => {
+    清理媒体上传失活计时(localId);
     上传失活计时器.set(
       localId,
       setTimeout(() => {
-        处理图片上传失活(localId);
-      }, 图片上传失活超时毫秒)
+        处理媒体上传失活(localId);
+      }, 媒体上传失活超时毫秒)
     );
   };
 
-  const 清理全部图片上传失活计时 = (): void => {
+  const 清理全部媒体上传失活计时 = (): void => {
     for (const timer of 上传失活计时器.values()) {
       clearTimeout(timer);
     }
     上传失活计时器.clear();
   };
 
-  const handleImageUploadAdded = (file: 图片上传文件): void => {
+  const handleImageUploadAdded = (file: 媒体上传文件): void => {
     const sourceFile = file.data instanceof File ? file.data : null;
     deps.writeDraft({
       localId: file.id,
-      attachmentId: 提取图片附件标识(file),
+      kind: "image",
+      attachmentId: 提取媒体附件标识(file),
       previewUrl: file.data instanceof Blob ? createPreviewUrl(file.data) : "",
       width: 0,
       height: 0,
@@ -206,33 +207,33 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
       errorCode: "",
       sourceFile,
     });
-    重置图片上传失活计时(file.id);
+    重置媒体上传失活计时(file.id);
   };
 
   const handleImageUploadSuccess = async (
-    file: 图片上传文件 | undefined,
-    _response: { body?: 图片上传响应体 } | undefined
+    file: 媒体上传文件 | undefined,
+    _response: { body?: 媒体上传响应体 } | undefined
   ): Promise<void> => {
     if (!file) {
       return;
     }
-    const attachmentId = 提取图片附件标识(file) || 读取图片草稿(file.id)?.attachmentId || "";
+    const attachmentId = 提取媒体附件标识(file) || 读取媒体草稿(file.id)?.attachmentId || "";
     if (!attachmentId) {
-      清理图片上传失活计时(file.id);
+      清理媒体上传失活计时(file.id);
       deps.updateDraft(file.id, {
         status: "failed",
         errorCode: "attachment_upload_failed",
       });
       return;
     }
-    重置图片上传失活计时(file.id);
+    重置媒体上传失活计时(file.id);
     try {
       const ready = await deps.completeImageUpload(deps.getSessionId(), attachmentId);
-      const currentDraft = 读取图片草稿(file.id);
+      const currentDraft = 读取媒体草稿(file.id);
       if (!currentDraft || currentDraft.status !== "uploading") {
         return;
       }
-      清理图片上传失活计时(file.id);
+      清理媒体上传失活计时(file.id);
       deps.updateDraft(file.id, {
         attachmentId: ready.attachment_id,
         width: ready.width,
@@ -241,11 +242,11 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
         errorCode: "",
       });
     } catch (error: unknown) {
-      const currentDraft = 读取图片草稿(file.id);
+      const currentDraft = 读取媒体草稿(file.id);
       if (!currentDraft || currentDraft.status !== "uploading") {
         return;
       }
-      清理图片上传失活计时(file.id);
+      清理媒体上传失活计时(file.id);
       deps.updateDraft(file.id, {
         status: "failed",
         errorCode: 解析传输错误代码(error, "system_error"),
@@ -254,17 +255,17 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
   };
 
   const handleImageUploadError = (
-    file: 图片上传文件 | undefined,
+    file: 媒体上传文件 | undefined,
     error: { message: string },
-    response?: 图片上传失败响应
+    response?: 媒体上传失败响应
   ): void => {
     if (!file) {
       return;
     }
-    清理图片上传失活计时(file.id);
-    const attachmentId = 提取图片附件标识(file) || 读取图片草稿(file.id)?.attachmentId || "";
-    const errorCode = 解析图片上传失败代码(error, response);
-    记录图片上传失败诊断({
+    清理媒体上传失活计时(file.id);
+    const attachmentId = 提取媒体附件标识(file) || 读取媒体草稿(file.id)?.attachmentId || "";
+    const errorCode = 解析媒体上传失败代码(error, response);
+    记录媒体上传失败诊断({
       attachmentId,
       localId: file.id,
       fileName: file.name ?? "未命名图片",
@@ -278,16 +279,16 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
     });
   };
 
-  const handleImageUploadRemoved = (file: 图片上传文件): void => {
-    清理图片上传失活计时(file.id);
+  const handleImageUploadRemoved = (file: 媒体上传文件): void => {
+    清理媒体上传失活计时(file.id);
     deps.removeDraft(file.id);
   };
 
-  const handleImageUploadProgress = (file: 图片上传文件 | undefined): void => {
+  const handleImageUploadProgress = (file: 媒体上传文件 | undefined): void => {
     if (!file) {
       return;
     }
-    重置图片上传失活计时(file.id);
+    重置媒体上传失活计时(file.id);
   };
 
   /**
@@ -299,18 +300,19 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
    */
   const handleImageUploadStalled = (
     _error: { message: string },
-    files: 图片上传文件[]
+    files: 媒体上传文件[]
   ): void => {
     if (!uploader) {
       return;
     }
     for (const file of files) {
-      清理图片上传失活计时(file.id);
-      const existingDraft = 读取图片草稿(file.id);
+      清理媒体上传失活计时(file.id);
+      const existingDraft = 读取媒体草稿(file.id);
       const sourceFile = file.data instanceof File ? file.data : existingDraft?.sourceFile ?? null;
       uploader.removeFile(file.id);
       deps.writeDraft({
         localId: file.id,
+        kind: existingDraft?.kind ?? "image",
         attachmentId: "",
         previewUrl: createPreviewUrl(sourceFile),
         width: existingDraft?.width ?? 0,
@@ -323,7 +325,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
     }
   };
 
-  const ensureUploader = (): 图片上传器 => {
+  const ensureUploader = (): 媒体上传器 => {
     if (uploader) {
       return uploader;
     }
@@ -343,7 +345,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
       ensureUploader();
     },
 
-    async 处理选择文件(files: Iterable<File>): Promise<void> {
+    async 处理选择图片文件(files: Iterable<File>): Promise<void> {
       const selectedFiles = Array.from(files);
       if (selectedFiles.length === 0) {
         return;
@@ -353,6 +355,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
         if (sourceFile.size > 图片附件上传上限字节数) {
           deps.writeDraft({
             localId: `too-large-${sourceFile.name}-${sourceFile.size}-${sourceFile.lastModified}`,
+            kind: "image",
             attachmentId: "",
             previewUrl: createPreviewUrl(sourceFile),
             width: 0,
@@ -369,6 +372,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
           if (file.size > 图片附件上传上限字节数) {
             deps.writeDraft({
               localId: `too-large-${file.name}-${file.size}-${file.lastModified}`,
+              kind: "image",
               attachmentId: "",
               previewUrl: createPreviewUrl(file),
               width: 0,
@@ -399,6 +403,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
         } catch (error: unknown) {
           deps.writeDraft({
             localId: `rejected-${sourceFile.name}-${sourceFile.size}-${sourceFile.lastModified}`,
+            kind: "image",
             attachmentId: "",
             previewUrl: createPreviewUrl(sourceFile),
             width: 0,
@@ -421,7 +426,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
 
     async 重试草稿(localId: string): Promise<void> {
       const currentUploader = ensureUploader();
-      const draft = 读取图片草稿(localId);
+      const draft = 读取媒体草稿(localId);
       if (!draft) {
         return;
       }
@@ -471,7 +476,7 @@ export function 创建图片收发器(deps: 图片收发器依赖) {
 
     清空(): void {
       uploader?.cancelAll();
-      清理全部图片上传失活计时();
+      清理全部媒体上传失活计时();
       deps.clearDrafts();
     },
 

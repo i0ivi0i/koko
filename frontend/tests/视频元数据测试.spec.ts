@@ -1,0 +1,64 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  可选择视频文件类型,
+  读取视频文件元数据,
+  解析视频元数据失败代码,
+} from "../媒体/视频元数据";
+
+type 假视频探针 = {
+  preload: string;
+  src: string;
+  videoWidth: number;
+  videoHeight: number;
+  duration: number;
+  onloadedmetadata: null | (() => void);
+  onerror: null | (() => void);
+  load(): void;
+};
+
+function 创建成功探针(): 假视频探针 {
+  return {
+    preload: "",
+    src: "",
+    videoWidth: 1920,
+    videoHeight: 1080,
+    duration: 12.5,
+    onloadedmetadata: null,
+    onerror: null,
+    load() {
+      this.onloadedmetadata?.();
+    },
+  };
+}
+
+describe("视频元数据", () => {
+  it("能从探针读取稳定的宽高和时长", async () => {
+    const revokeObjectUrl = vi.fn();
+    const file = new File([new Uint8Array([1, 2, 3])], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    const result = await 读取视频文件元数据(file, {
+      createObjectUrl: () => "blob:clip.mp4",
+      revokeObjectUrl,
+      createProbeElement: () => 创建成功探针() as unknown as HTMLVideoElement,
+    });
+
+    expect(result).toEqual({
+      width: 1920,
+      height: 1080,
+      durationSeconds: 12.5,
+    });
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:clip.mp4");
+  });
+
+  it("探针失败时会归一成稳定错误码", () => {
+    const errorCode = 解析视频元数据失败代码(new Error("NotSupportedError"));
+
+    expect(errorCode).toBe("attachment_type_not_allowed");
+  });
+
+  it("导出的视频 accept 类型保持稳定", () => {
+    expect(可选择视频文件类型).toEqual(["video/*"]);
+  });
+});

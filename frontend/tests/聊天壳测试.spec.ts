@@ -274,7 +274,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     const fake图片收发器 = {
       准备选择图片: vi.fn(),
-      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -305,6 +305,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     注入图片草稿(el, {
       localId: "draft-1",
+      kind: "image",
       attachmentId: "att-1",
       previewUrl: "https://example.com/thumb.png",
       width: 120,
@@ -328,6 +329,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     注入图片草稿(el, {
       localId: "draft-local-preview",
+      kind: "image",
       attachmentId: "att-1",
       previewUrl: "blob:http://test.local/draft-local-preview",
       width: 120,
@@ -351,6 +353,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     注入图片草稿(el, {
       localId: "draft-uploading",
+      kind: "image",
       attachmentId: "",
       previewUrl: "blob:http://test.local/draft-uploading",
       width: 120,
@@ -371,6 +374,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     注入图片草稿(el, {
       localId: "draft-failed",
+      kind: "image",
       attachmentId: "",
       previewUrl: "blob:http://test.local/draft-failed",
       width: 120,
@@ -393,6 +397,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     注入图片草稿(el, {
       localId: "draft-remove",
+      kind: "image",
       attachmentId: "att-remove",
       previewUrl: "blob:http://test.local/draft-remove",
       width: 120,
@@ -430,7 +435,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     const fake图片收发器 = {
       准备选择图片: vi.fn(),
-      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -443,6 +448,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     ).图片收发器 = fake图片收发器;
     注入图片草稿(el, {
       localId: "draft-retry",
+      kind: "image",
       attachmentId: "",
       previewUrl: "blob:http://test.local/draft-retry",
       width: 120,
@@ -468,7 +474,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     const fake图片收发器 = {
       准备选择图片: vi.fn(),
-      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -495,7 +501,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       currentTarget: input,
     } as unknown as Event);
 
-    expect(fake图片收发器.处理选择文件).toHaveBeenCalledWith([sourceFile]);
+    expect(fake图片收发器.处理选择图片文件).toHaveBeenCalledWith([sourceFile]);
     expect(input.value).toBe("");
     el.remove();
   });
@@ -504,7 +510,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const el = await 创建已入房聊天壳();
     const fake图片收发器 = {
       准备选择图片: vi.fn(),
-      处理选择文件: vi.fn().mockResolvedValue(undefined),
+      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -1017,6 +1023,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     输入消息到操作台(el, "hello");
     注入图片草稿(el, {
       localId: "draft-uploading-submit",
+      kind: "image",
       attachmentId: "",
       previewUrl: "blob:http://test.local/draft-uploading-submit",
       width: 120,
@@ -1041,6 +1048,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     输入消息到操作台(el, "hello");
     注入图片草稿(el, {
       localId: "draft-uploading-enter",
+      kind: "image",
       attachmentId: "",
       previewUrl: "blob:http://test.local/draft-uploading-enter",
       width: 120,

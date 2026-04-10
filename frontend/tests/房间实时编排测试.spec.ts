@@ -151,6 +151,7 @@ describe("房间实时编排", () => {
     状态.composerImageDrafts = [
       {
         localId: "draft-1",
+        kind: "image",
         attachmentId: "att-1",
         previewUrl: "https://example.com/thumb.png",
         width: 120,
@@ -194,6 +195,7 @@ describe("房间实时编排", () => {
     场景.读取状态().composerImageDrafts = [
       {
         localId: "draft-uploading",
+        kind: "image",
         attachmentId: "",
         previewUrl: "blob:http://test.local/draft-uploading",
         width: 120,

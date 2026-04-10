@@ -1,11 +1,12 @@
 /**
- * 图片草稿只表达前端发送区的本地体验态：
+ * 媒体草稿只表达前端发送区的本地体验态：
  * 1. 上传进度、失败码、预览地址都留在这里；
  * 2. 真正可发送时只认 ready + attachmentId；
  * 3. 模块只做纯状态演算，不碰 DOM、不碰 URL API、不碰壳层副作用。
  */
-export interface 图片附件草稿 {
+export interface 媒体附件草稿 {
   localId: string;
+  kind: "image" | "video";
   attachmentId: string;
   previewUrl: string;
   width: number;
@@ -20,12 +21,12 @@ export interface 图片附件草稿 {
   sourceFile?: File | null;
 }
 
-export type 图片草稿状态补丁 = Partial<Omit<图片附件草稿, "localId" | "fileName">> & {
+export type 媒体草稿状态补丁 = Partial<Omit<媒体附件草稿, "localId" | "fileName">> & {
   fileName?: string;
 };
 
-export type 图片草稿状态结果 = {
-  草稿列表: 图片附件草稿[];
+export type 媒体草稿状态结果 = {
+  草稿列表: 媒体附件草稿[];
   需要回收的预览地址: string[];
 };
 
@@ -36,13 +37,13 @@ function 需要回收旧预览地址(current: string, next?: string): string[] {
   return [current];
 }
 
-export function 提取可发送图片附件标识(草稿列表: 图片附件草稿[]): string[] | null {
+export function 提取可发送媒体附件标识(草稿列表: 媒体附件草稿[]): string[] | null {
   if (草稿列表.length === 0) {
     return [];
   }
   /**
-   * 发送命令不能静默吞掉仍在上传或已经失败的图片。
-   * 这里宁可阻止发送，也不制造“文本发出去了，但图被悄悄丢了”的假成功。
+   * 发送命令不能静默吞掉仍在上传或已经失败的媒体。
+   * 这里宁可阻止发送，也不制造“文本发出去了，但附件被悄悄丢了”的假成功。
    */
   if (草稿列表.some((draft) => draft.status !== "ready" || !draft.attachmentId)) {
     return null;
@@ -50,10 +51,10 @@ export function 提取可发送图片附件标识(草稿列表: 图片附件草�
   return 草稿列表.map((draft) => draft.attachmentId);
 }
 
-export function 写入图片草稿(
-  当前草稿列表: 图片附件草稿[],
-  草稿: 图片附件草稿
-): 图片草稿状态结果 {
+export function 写入媒体草稿(
+  当前草稿列表: 媒体附件草稿[],
+  草稿: 媒体附件草稿
+): 媒体草稿状态结果 {
   const existing = 当前草稿列表.find((item) => item.localId === 草稿.localId);
   return {
     草稿列表: [
@@ -66,11 +67,11 @@ export function 写入图片草稿(
   };
 }
 
-export function 更新图片草稿状态(
-  当前草稿列表: 图片附件草稿[],
+export function 更新媒体草稿状态(
+  当前草稿列表: 媒体附件草稿[],
   localId: string,
-  patch: 图片草稿状态补丁
-): 图片草稿状态结果 {
+  patch: 媒体草稿状态补丁
+): 媒体草稿状态结果 {
   let 需要回收的预览地址: string[] = [];
   return {
     草稿列表: 当前草稿列表.map((draft) => {
@@ -89,10 +90,10 @@ export function 更新图片草稿状态(
   };
 }
 
-export function 移除图片草稿(
-  当前草稿列表: 图片附件草稿[],
+export function 移除媒体草稿(
+  当前草稿列表: 媒体附件草稿[],
   localId: string
-): 图片草稿状态结果 {
+): 媒体草稿状态结果 {
   const target = 当前草稿列表.find((draft) => draft.localId === localId);
   return {
     草稿列表: 当前草稿列表.filter((draft) => draft.localId !== localId),

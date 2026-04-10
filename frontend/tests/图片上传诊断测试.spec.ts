@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  记录图片上传失败诊断,
-  解析图片上传失败代码,
+  记录媒体上传失败诊断,
+  解析媒体上传失败代码,
   解析传输错误代码,
-} from "../图像/图片上传诊断";
+} from "../媒体/媒体诊断";
 
 describe("图片上传诊断", () => {
   it("会优先提取响应体里的稳定错误码", () => {
-    const errorCode = 解析图片上传失败代码(
+    const errorCode = 解析媒体上传失败代码(
       { message: "Upload error" },
       {
         status: 401,
@@ -22,7 +22,7 @@ describe("图片上传诊断", () => {
   });
 
   it("status=0 时会归一化成网络错误", () => {
-    const errorCode = 解析图片上传失败代码(
+    const errorCode = 解析媒体上传失败代码(
       { message: "Network Error" },
       {
         status: 0,
@@ -36,7 +36,7 @@ describe("图片上传诊断", () => {
   });
 
   it("超时消息会归一化成 stalled 错误", () => {
-    const errorCode = 解析图片上传失败代码(
+    const errorCode = 解析媒体上传失败代码(
       { message: "Request timed out" },
       undefined
     );
@@ -47,7 +47,7 @@ describe("图片上传诊断", () => {
   it("诊断日志会以 attachmentId 作为主关联锚点", () => {
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    记录图片上传失败诊断({
+    记录媒体上传失败诊断({
       attachmentId: "att-diagnostic-1",
       localId: "draft-diagnostic-1",
       fileName: "broken.jpg",
