@@ -144,11 +144,18 @@ function 创建草稿仓库() {
 function 创建场景() {
   const uploader = new 假媒体上传器();
   const drafts = 创建草稿仓库();
+  const uploaderEndpoints: string[] = [];
   const prepareMediaUpload = vi.fn(async (_kind: "image" | "video", _sessionId: string, file: File) => ({
     attachment_id: `att-${file.name}`,
-    upload_method: "PUT" as const,
-    upload_url: `http://storage.local/${file.name}`,
-    upload_headers: { "content-type": file.type || "application/octet-stream" },
+    upload_method: "tus" as const,
+    tus_endpoint: "http://storage.local/files",
+    tus_headers: { Authorization: "Bearer media-upload-token" },
+    tus_metadata: {
+      attachment_id: `att-${file.name}`,
+      file_name: file.name,
+      mime_type: file.type || "application/octet-stream",
+      byte_size: String(file.size),
+    },
     expires_at: "2026-04-10T12:00:00Z",
   }));
   const completeMediaUpload = vi.fn(async (_sessionId: string, attachmentId: string) => ({
@@ -169,7 +176,10 @@ function 创建场景() {
     updateDraft: drafts.updateDraft,
     removeDraft: drafts.removeDraft,
     clearDrafts: drafts.clearDrafts,
-    createUploader: () => uploader,
+    createUploader: (endpoint) => {
+      uploaderEndpoints.push(endpoint);
+      return uploader;
+    },
     readVideoMetadata: async () => ({ width: 1280, height: 720 }),
     createPreviewUrl: (file) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
   });
@@ -179,6 +189,7 @@ function 创建场景() {
     drafts,
     prepareMediaUpload,
     completeMediaUpload,
+    uploaderEndpoints,
   };
 }
 
@@ -200,8 +211,17 @@ describe("媒体发布器", () => {
       expect.objectContaining({
         id: "att-picked.jpg",
         name: "picked.jpg",
+        meta: expect.objectContaining({
+          upload_method: "tus",
+          tus_endpoint: "http://storage.local/files",
+          attachment_id: "att-picked.jpg",
+          file_name: "picked.jpg",
+          mime_type: "image/jpeg",
+          byte_size: "3",
+        }),
       }),
     ]);
+    expect(场景.uploaderEndpoints).toEqual(["http://storage.local/files"]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-picked.jpg",

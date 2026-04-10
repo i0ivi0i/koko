@@ -177,9 +177,15 @@ describe("传输", () => {
       new Response(
         JSON.stringify({
           attachment_id: "att-prepared-1",
-          upload_method: "PUT",
-          upload_url: "http://storage.local/test-bucket/images/att-prepared-1/original?sig=1",
-          upload_headers: { "content-type": "image/jpeg" },
+          upload_method: "tus",
+          tus_endpoint: "http://storage.local/files",
+          tus_headers: { Authorization: "Bearer upload-token-1" },
+          tus_metadata: {
+            attachment_id: "att-prepared-1",
+            file_name: "photo.jpg",
+            mime_type: "image/jpeg",
+            byte_size: "3",
+          },
           expires_at: "2026-04-10T12:00:00Z",
         }),
         {
@@ -198,8 +204,9 @@ describe("传输", () => {
         prepareMediaUpload(kind: "image" | "video", sessionId: string, file: File): Promise<{
           attachment_id: string;
           upload_method: string;
-          upload_url: string;
-          upload_headers: Record<string, string>;
+          tus_endpoint: string;
+          tus_headers: Record<string, string>;
+          tus_metadata: Record<string, string>;
           expires_at: string;
         }>;
       }
@@ -210,17 +217,23 @@ describe("传输", () => {
       expect.objectContaining({ method: "POST" })
     );
     expect(result.attachment_id).toBe("att-prepared-1");
-    expect(result.upload_method).toBe("PUT");
+    expect(result.upload_method).toBe("tus");
   });
 
-  it("prepareMediaUpload 会把本地回环返回的相对 upload_url 收口成绝对地址", async () => {
+  it("prepareMediaUpload 会把后端返回的相对 tus_endpoint 收口成绝对地址", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           attachment_id: "att-prepared-local-1",
-          upload_method: "PUT",
-          upload_url: "/api/media/att-prepared-local-1/upload",
-          upload_headers: { "content-type": "video/mp4" },
+          upload_method: "tus",
+          tus_endpoint: "/files",
+          tus_headers: { Authorization: "Bearer upload-token-local" },
+          tus_metadata: {
+            attachment_id: "att-prepared-local-1",
+            file_name: "clip.mp4",
+            mime_type: "video/mp4",
+            byte_size: "3",
+          },
           expires_at: "2026-04-10T12:00:00Z",
         }),
         {
@@ -236,8 +249,14 @@ describe("传输", () => {
 
     const result = await transport.prepareMediaUpload("video", "s-1", file);
 
-    expect(result.upload_url).toBe("http://localhost:3000/api/media/att-prepared-local-1/upload");
-    expect(result.upload_headers).toEqual({ "content-type": "video/mp4" });
+    expect(result.tus_endpoint).toBe("http://localhost:3000/files");
+    expect(result.tus_headers).toEqual({ Authorization: "Bearer upload-token-local" });
+    expect(result.tus_metadata).toEqual({
+      attachment_id: "att-prepared-local-1",
+      file_name: "clip.mp4",
+      mime_type: "video/mp4",
+      byte_size: "3",
+    });
   });
 
   it("completeMediaUpload 会调用新的 complete 路由并返回 ready 附件快照", async () => {

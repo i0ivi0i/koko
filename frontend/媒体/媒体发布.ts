@@ -1,5 +1,5 @@
 import Uppy from "@uppy/core";
-import AwsS3 from "@uppy/aws-s3";
+import Tus from "@uppy/tus";
 import type { 媒体附件上传结果, 媒体上传准备结果, 媒体种类 } from "../契约.js";
 import type { 媒体附件草稿, 媒体草稿状态补丁 } from "./媒体草稿.js";
 import {
@@ -24,9 +24,12 @@ export type 媒体上传Meta = {
   session_id?: string;
   attachment_id?: string;
   attachment_kind?: 媒体种类;
-  upload_method?: "PUT";
-  upload_url?: string;
-  upload_headers_json?: string;
+  upload_method?: "tus";
+  tus_endpoint?: string;
+  tus_headers_json?: string;
+  file_name?: string;
+  mime_type?: string;
+  byte_size?: string;
   preview_width?: number;
   preview_height?: number;
 };
@@ -72,17 +75,17 @@ type 媒体发布器依赖 = {
   updateDraft(localId: string, patch: 媒体草稿状态补丁): void;
   removeDraft(localId: string): void;
   clearDrafts(): void;
-  createUploader?(): 媒体上传器;
+  createUploader?(tusEndpoint: string): 媒体上传器;
   readVideoMetadata?(file: File): Promise<{ width: number; height: number }>;
   createPreviewUrl?(file: Blob | null): string;
 };
 
-function 读取媒体上传头信息(meta: 媒体上传Meta): Record<string, string> {
-  if (!meta.upload_headers_json?.trim()) {
+function 读取媒体Tus请求头(meta: 媒体上传Meta): Record<string, string> {
+  if (!meta.tus_headers_json?.trim()) {
     return {};
   }
   try {
-    const parsed = JSON.parse(meta.upload_headers_json) as unknown;
+    const parsed = JSON.parse(meta.tus_headers_json) as unknown;
     if (!parsed || typeof parsed !== "object") {
       return {};
     }
@@ -96,20 +99,6 @@ function 读取媒体上传头信息(meta: 媒体上传Meta): Record<string, str
   } catch {
     return {};
   }
-}
-
-function 读取媒体直传参数(
-  file: 媒体上传文件
-): { method: "PUT"; url: string; headers: Record<string, string> } | null {
-  const meta = (file.meta ?? {}) as 媒体上传Meta;
-  if (meta.upload_method !== "PUT" || !meta.upload_url?.trim()) {
-    return null;
-  }
-  return {
-    method: "PUT",
-    url: meta.upload_url,
-    headers: 读取媒体上传头信息(meta),
-  };
 }
 
 function 提取媒体附件标识(file: 媒体上传文件 | undefined): string {
@@ -143,11 +132,11 @@ function 创建失败草稿标识(kind: 媒体种类, prefix: string, file: File
 }
 
 /**
- * 生产环境继续直接复用 Uppy + AwsS3。
- * 这里的职责只有“把媒体文件稳定送进 prepare -> PUT -> complete 主链”，
+ * 生产环境继续直接复用 Uppy + Tus。
+ * 这里的职责只有“把媒体文件稳定送进 prepare -> tus -> complete 主链”，
  * 不再额外长第二套私有上传器。
  */
-function 创建默认媒体上传器(): 媒体上传器 {
+function 创建默认媒体上传器(tusEndpoint: string): 媒体上传器 {
   return new Uppy<媒体上传Meta, 媒体上传响应体>({
     autoProceed: true,
     allowMultipleUploadBatches: true,
@@ -156,16 +145,55 @@ function 创建默认媒体上传器(): 媒体上传器 {
       allowedFileTypes: [...可选择图片文件类型, ...可选择视频文件类型],
       maxFileSize: 视频附件上传上限字节数,
     },
-  }).use(AwsS3, {
-    shouldUseMultipart: false,
-    getUploadParameters: async (file) => {
-      const parameters = 读取媒体直传参数(file as unknown as 媒体上传文件);
-      if (!parameters) {
-        throw new Error("attachment_upload_failed");
-      }
-      return parameters;
-    },
+  }).use(Tus, {
+    endpoint: tusEndpoint,
+    /**
+     * Rustus sidecar 只需要业务最小元数据，不应该把 session_id、预览尺寸这类壳层字段也透传进去。
+     * 这里显式收口 allowedMetaFields，避免 transport sidecar 反向长成业务真相持有者。
+     */
+    allowedMetaFields: ["attachment_id", "file_name", "mime_type", "byte_size"],
+    headers: (file) => 读取媒体Tus请求头((file.meta ?? {}) as 媒体上传Meta),
   }) as unknown as 媒体上传器;
+}
+
+function 构造媒体上传Meta(input: {
+  sessionId: string;
+  kind: 媒体种类;
+  prepared: 媒体上传准备结果;
+  previewWidth: number;
+  previewHeight: number;
+}): 媒体上传Meta {
+  const {
+    sessionId,
+    kind,
+    prepared,
+    previewWidth,
+    previewHeight,
+  } = input;
+  const meta: 媒体上传Meta = {
+    session_id: sessionId,
+    attachment_id: prepared.attachment_id,
+    attachment_kind: kind,
+    upload_method: prepared.upload_method,
+    tus_endpoint: prepared.tus_endpoint,
+    tus_headers_json: JSON.stringify(prepared.tus_headers),
+    preview_width: previewWidth,
+    preview_height: previewHeight,
+  };
+  /**
+   * exactOptionalPropertyTypes 打开后，可选字段不能显式写成 `undefined`。
+   * 这里按后端实际给到的 metadata 逐项落值，既满足类型约束，也避免把空值误当成有效 Tus metadata。
+   */
+  if (typeof prepared.tus_metadata.file_name === "string") {
+    meta.file_name = prepared.tus_metadata.file_name;
+  }
+  if (typeof prepared.tus_metadata.mime_type === "string") {
+    meta.mime_type = prepared.tus_metadata.mime_type;
+  }
+  if (typeof prepared.tus_metadata.byte_size === "string") {
+    meta.byte_size = prepared.tus_metadata.byte_size;
+  }
+  return meta;
 }
 
 export function 创建媒体发布器(deps: 媒体发布器依赖) {
@@ -174,6 +202,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const createPreviewUrl = deps.createPreviewUrl ?? 创建本地媒体预览地址;
   const 上传失活计时器 = new Map<string, ReturnType<typeof setTimeout>>();
   let uploader: 媒体上传器 | null = null;
+  let 当前TusEndpoint = "";
 
   const 读取媒体草稿 = (localId: string): 媒体附件草稿 | undefined =>
     deps.readDrafts().find((item) => item.localId === localId);
@@ -373,11 +402,19 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     }
   };
 
-  const ensureUploader = (): 媒体上传器 => {
-    if (uploader) {
+  const ensureUploader = (tusEndpoint: string): 媒体上传器 => {
+    if (uploader && 当前TusEndpoint === tusEndpoint) {
       return uploader;
     }
-    const nextUploader = createUploader();
+    if (uploader && 当前TusEndpoint !== tusEndpoint) {
+      /**
+       * 当前实现下整个会话只应有一个权威 Tus endpoint。
+       * 这里保留显式切换能力，是为了防止未来环境差异把旧 endpoint 悄悄复用到新附件上。
+       */
+      uploader.destroy();
+      uploader = null;
+    }
+    const nextUploader = createUploader(tusEndpoint);
     nextUploader.on("file-added", handleMediaUploadAdded);
     nextUploader.on("upload-progress", handleMediaUploadProgress);
     nextUploader.on("upload-success", handleMediaUploadSuccess);
@@ -385,6 +422,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     nextUploader.on("upload-stalled", handleMediaUploadStalled);
     nextUploader.on("file-removed", handleMediaUploadRemoved);
     uploader = nextUploader;
+    当前TusEndpoint = tusEndpoint;
     return nextUploader;
   };
 
@@ -439,7 +477,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     if (selectedFiles.length === 0) {
       return;
     }
-    const currentUploader = ensureUploader();
     const maxFileSize = 读取媒体上传上限(kind);
     for (const sourceFile of selectedFiles) {
       if (sourceFile.size > maxFileSize) {
@@ -453,23 +490,21 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           continue;
         }
         const prepared = await deps.prepareMediaUpload(kind, deps.getSessionId(), preparedFile.file);
+        const currentUploader = ensureUploader(prepared.tus_endpoint);
         currentUploader.addFile({
           // 让 prepared 生成的 attachment_id 直接成为上传文件主键，
-          // 可以保证 prepare / PUT / complete / 草稿日志 全部围绕一条真相关联。
+          // 可以保证 prepare / tus / complete / 草稿日志 全部围绕一条真相关联。
           id: prepared.attachment_id,
           name: preparedFile.file.name,
           type: preparedFile.file.type,
           data: preparedFile.file,
-          meta: {
-            session_id: deps.getSessionId(),
-            attachment_id: prepared.attachment_id,
-            attachment_kind: kind,
-            upload_method: prepared.upload_method,
-            upload_url: prepared.upload_url,
-            upload_headers_json: JSON.stringify(prepared.upload_headers),
-            preview_width: preparedFile.width,
-            preview_height: preparedFile.height,
-          },
+          meta: 构造媒体上传Meta({
+            sessionId: deps.getSessionId(),
+            kind,
+            prepared,
+            previewWidth: preparedFile.width,
+            previewHeight: preparedFile.height,
+          }),
         });
       } catch (error: unknown) {
         deps.writeDraft({
@@ -490,11 +525,11 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
 
   return {
     准备选择图片(): void {
-      ensureUploader();
+      // Tus endpoint 只能从 prepare 权威返回里拿；选择文件前不再抢跑创建上传器。
     },
 
     准备选择视频(): void {
-      ensureUploader();
+      // Tus endpoint 只能从 prepare 权威返回里拿；选择文件前不再抢跑创建上传器。
     },
 
     async 处理选择图片文件(files: Iterable<File>): Promise<void> {
@@ -513,17 +548,17 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     },
 
     async 重试草稿(localId: string): Promise<void> {
-      const currentUploader = ensureUploader();
       const draft = 读取媒体草稿(localId);
       if (!draft) {
         return;
       }
+      const currentUploader = uploader;
       deps.updateDraft(localId, {
         attachmentId: "",
         status: "uploading",
         errorCode: "",
       });
-      if (!currentUploader.getFile(localId)) {
+      if (!currentUploader || !currentUploader.getFile(localId)) {
         if (!draft.sourceFile) {
           deps.updateDraft(localId, {
             status: "failed",
@@ -537,21 +572,19 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             deps.getSessionId(),
             draft.sourceFile
           );
+          const currentUploader = ensureUploader(prepared.tus_endpoint);
           currentUploader.addFile({
             id: localId,
             name: draft.fileName,
             type: draft.sourceFile.type,
             data: draft.sourceFile,
-            meta: {
-              session_id: deps.getSessionId(),
-              attachment_id: prepared.attachment_id,
-              attachment_kind: draft.kind,
-              upload_method: prepared.upload_method,
-              upload_url: prepared.upload_url,
-              upload_headers_json: JSON.stringify(prepared.upload_headers),
-              preview_width: draft.width,
-              preview_height: draft.height,
-            },
+            meta: 构造媒体上传Meta({
+              sessionId: deps.getSessionId(),
+              kind: draft.kind,
+              prepared,
+              previewWidth: draft.width,
+              previewHeight: draft.height,
+            }),
           });
         } catch (error: unknown) {
           deps.updateDraft(localId, {
@@ -579,6 +612,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       this.清空();
       uploader?.destroy();
       uploader = null;
+      当前TusEndpoint = "";
     },
   };
 }

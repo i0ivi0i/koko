@@ -61,10 +61,16 @@ class 假后台传输 implements 前端传输端口 {
   ): Promise<媒体上传准备结果> {
     return {
       attachment_id: "att-admin-prepared",
-      upload_method: "PUT",
-      upload_url: `http://storage.local/admin/${kind === "video" ? "videos" : "images"}/original`,
-      upload_headers: {
-        "content-type": file.type || (kind === "video" ? "video/mp4" : "image/png"),
+      upload_method: "tus",
+      tus_endpoint: "http://storage.local/files",
+      tus_headers: {
+        Authorization: "Bearer admin-upload-token",
+      },
+      tus_metadata: {
+        attachment_id: "att-admin-prepared",
+        file_name: file.name,
+        mime_type: file.type || (kind === "video" ? "video/mp4" : "image/png"),
+        byte_size: String(file.size),
       },
       expires_at: "2026-04-10T12:00:00Z",
     };

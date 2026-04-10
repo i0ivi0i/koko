@@ -23,9 +23,10 @@ import type { Socket } from "socket.io-client";
 
 type 假媒体上传准备结果 = {
   attachment_id: string;
-  upload_method: "PUT";
-  upload_url: string;
-  upload_headers: Record<string, string>;
+  upload_method: "tus";
+  tus_endpoint: string;
+  tus_headers: Record<string, string>;
+  tus_metadata: Record<string, string>;
   expires_at: string;
 };
 
@@ -261,10 +262,16 @@ export class 假传输 implements 前端传输端口 {
     if (queued) return queued;
     return {
       attachment_id: "att-prepared-test",
-      upload_method: "PUT",
-      upload_url: `http://storage.local/test-bucket/${kind === "video" ? "videos" : "images"}/att-prepared-test/original?sig=1`,
-      upload_headers: {
-        "content-type": file.type || (kind === "video" ? "video/mp4" : "image/png"),
+      upload_method: "tus",
+      tus_endpoint: "http://storage.local/files",
+      tus_headers: {
+        Authorization: "Bearer test-upload-token",
+      },
+      tus_metadata: {
+        attachment_id: "att-prepared-test",
+        file_name: file.name,
+        mime_type: file.type || (kind === "video" ? "video/mp4" : "image/png"),
+        byte_size: String(file.size),
       },
       expires_at: "2026-04-10T12:00:00Z",
     };

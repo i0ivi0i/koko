@@ -127,9 +127,10 @@ export type 图片附件上传结果 = 媒体附件上传结果;
  */
 export interface 媒体上传准备结果 {
   attachment_id: string;
-  upload_method: "PUT";
-  upload_url: string;
-  upload_headers: Record<string, string>;
+  upload_method: "tus";
+  tus_endpoint: string;
+  tus_headers: Record<string, string>;
+  tus_metadata: Record<string, string>;
   expires_at: string;
 }
 

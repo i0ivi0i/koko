@@ -74,9 +74,9 @@ export class HttpRealtime传输 implements 前端传输端口 {
   constructor(private readonly baseUrl: string) {}
 
   /**
-   * 后端在本地回环模式下会返回相对 upload_url，例如 `/api/media/{id}/upload`。
-   * Uppy 的 AwsS3 单段上传在成功后会再次把这个 URL 交给 `new URL()` 解析，
-   * 如果这里不先正规化成绝对地址，就会在浏览器里直接抛 `Invalid URL`。
+   * 后端在本地回环模式下会返回相对 Tus endpoint，例如 `/files`。
+   * Uppy Tus 会直接拿这个地址去发 `POST/HEAD/PATCH`，所以前端必须先收口成绝对地址，
+   * 否则浏览器端的 resumable 上传会在构造请求时直接失败。
    */
   private 解析绝对地址(pathOrUrl: string): string {
     return new URL(pathOrUrl, this.baseUrl).href;
@@ -116,7 +116,7 @@ export class HttpRealtime传输 implements 前端传输端口 {
     });
     return {
       ...prepared,
-      upload_url: this.解析绝对地址(prepared.upload_url),
+      tus_endpoint: this.解析绝对地址(prepared.tus_endpoint),
     };
   }
 
