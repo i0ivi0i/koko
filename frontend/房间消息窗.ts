@@ -94,24 +94,39 @@ export class 房间消息窗 extends LitElement {
         data-attachment-count=${item.attachments.length}
       >
         ${item.attachments.map(
-          (attachment) => html`
-            <a
-              class="message-image-link"
-              href=${attachment.originalSrc}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <img
-                class="message-image"
-                data-attachment-id=${attachment.attachmentId}
-                src=${attachment.thumbnailSrc}
-                alt="图片附件"
-                width=${attachment.displayWidth}
-                height=${attachment.displayHeight}
-                loading="lazy"
-              />
-            </a>
-          `
+          (attachment) =>
+            attachment.kind === "video"
+              ? html`
+                  <video
+                    class="message-video"
+                    data-attachment-id=${attachment.attachmentId}
+                    src=${attachment.originalSrc}
+                    width=${attachment.displayWidth}
+                    height=${attachment.displayHeight}
+                    controls
+                    playsinline
+                    preload="metadata"
+                    poster=${attachment.posterSrc ?? ""}
+                  ></video>
+                `
+              : html`
+                  <a
+                    class="message-image-link"
+                    href=${attachment.originalSrc}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      class="message-image"
+                      data-attachment-id=${attachment.attachmentId}
+                      src=${attachment.thumbnailSrc}
+                      alt="图片附件"
+                      width=${attachment.displayWidth}
+                      height=${attachment.displayHeight}
+                      loading="lazy"
+                    />
+                  </a>
+                `
         )}
       </div>
     `;

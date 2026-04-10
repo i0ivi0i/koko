@@ -226,6 +226,53 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("带视频附件的权威消息会在消息窗口里渲染原生视频预览", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-1",
+            client_message_id: "c-video-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "看视频",
+            body: "看视频",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const video = el.shadowRoot!.querySelector(
+      'video[data-attachment-id="att-video-1"]'
+    ) as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+    expect(video?.src).toContain(
+      "/api/attachments/att-video-1/content?session_id=s-test&variant=original"
+    );
+    el.remove();
+  });
+
   it("进入房间后发送区会显示图片选择入口", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;

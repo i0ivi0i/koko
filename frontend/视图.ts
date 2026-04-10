@@ -1,4 +1,4 @@
-import type { 图片附件快照, 附件快照, 消息事件 } from "./契约.js";
+import type { 附件快照, 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
 import type { 媒体附件草稿 } from "./媒体/媒体草稿.js";
 import type { 房间视口模式 } from "./状态.js";
@@ -34,7 +34,7 @@ export interface 消息展示项 {
   owner: "mine" | "other";
   body: string;
   hasText: boolean;
-  attachments: 图片附件展示项[];
+  attachments: 媒体附件展示项[];
   layout: 文本布局结果;
   bubbleWidth: number;
   senderDisplayAlias: string;
@@ -43,6 +43,7 @@ export interface 消息展示项 {
 }
 
 export interface 图片附件展示项 {
+  kind: "image";
   attachmentId: string;
   width: number;
   height: number;
@@ -51,6 +52,19 @@ export interface 图片附件展示项 {
   thumbnailSrc: string;
   originalSrc: string;
 }
+
+export interface 视频附件展示项 {
+  kind: "video";
+  attachmentId: string;
+  width: number;
+  height: number;
+  displayWidth: number;
+  displayHeight: number;
+  originalSrc: string;
+  posterSrc: string | null;
+}
+
+export type 媒体附件展示项 = 图片附件展示项 | 视频附件展示项;
 
 export interface 未读分隔展示项 {
   kind: "unread-divider";
@@ -152,7 +166,7 @@ export function 派生消息展示项(
   const isMine = event.sender_session_id === currentSessionId;
   const body = 读取消息文本(event);
   const hasText = body.trim().length > 0;
-  const attachments = 派生图片附件展示项列表(
+  const attachments = 派生媒体附件展示项列表(
     event.attachments ?? [],
     layoutEnv,
     构建附件内容地址
@@ -186,7 +200,7 @@ export function 派生消息展示项(
         })
       : 多行紧凑候选;
   const 文本气泡宽度 = hasText ? 计算消息气泡宽度(layout, layoutEnv) : 0;
-  const 图片气泡宽度 = attachments.length > 0 ? 计算图片附件气泡宽度(attachments, layoutEnv) : 0;
+  const 媒体气泡宽度 = attachments.length > 0 ? 计算媒体附件气泡宽度(attachments, layoutEnv) : 0;
 
   /**
    * 宽度裁决顺序在这里收口：
@@ -205,7 +219,7 @@ export function 派生消息展示项(
     hasText,
     attachments,
     layout,
-    bubbleWidth: Math.max(文本气泡宽度, 图片气泡宽度),
+    bubbleWidth: Math.max(文本气泡宽度, 媒体气泡宽度),
     senderDisplayAlias: event.sender_display_alias,
     showAlias: !isMine,
     eventPosition: event.event_position,
@@ -216,22 +230,20 @@ function 读取消息文本(event: 消息事件): string {
   return event.text ?? event.body ?? "";
 }
 
-function 派生图片附件展示项列表(
+function 派生媒体附件展示项列表(
   attachments: 附件快照[],
   layoutEnv: 消息文本布局环境,
   构建附件内容地址: (
     attachmentId: string,
     variant: "original" | "thumbnail"
   ) => string
-): 图片附件展示项[] {
+): 媒体附件展示项[] {
   if (attachments.length === 0) {
     return [];
   }
   const 多图宫格宽度 = Math.max(96, Math.floor((Math.min(layoutEnv.maxContentWidth, 320) - 8) / 2));
   const 单图宽度上限 = Math.max(140, Math.min(layoutEnv.maxContentWidth, 320));
   return attachments
-    // 当前视图切片先继续稳定渲染图片；视频展示组件会在后续媒体播放切片单独接上。
-    .filter((attachment): attachment is 图片附件快照 => attachment.kind === "image")
     .map((attachment, index, list) => {
       const displayWidth =
         list.length === 1 ? Math.min(attachment.width, 单图宽度上限) : 多图宫格宽度;
@@ -239,7 +251,20 @@ function 派生图片附件展示项列表(
         72,
         Math.round((displayWidth * attachment.height) / Math.max(1, attachment.width))
       );
+      if (attachment.kind === "video") {
+        return {
+          kind: "video",
+          attachmentId: attachment.attachment_id,
+          width: attachment.width,
+          height: attachment.height,
+          displayWidth,
+          displayHeight,
+          originalSrc: 构建附件内容地址(attachment.attachment_id, "original"),
+          posterSrc: null,
+        };
+      }
       return {
+        kind: "image",
         attachmentId: attachment.attachment_id,
         width: attachment.width,
         height: attachment.height,
@@ -251,8 +276,8 @@ function 派生图片附件展示项列表(
     });
 }
 
-function 计算图片附件气泡宽度(
-  attachments: 图片附件展示项[],
+function 计算媒体附件气泡宽度(
+  attachments: 媒体附件展示项[],
   layoutEnv: 消息文本布局环境
 ): number {
   const 宫格间距 = 8;
