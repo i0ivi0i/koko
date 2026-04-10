@@ -102,6 +102,18 @@ export interface 图片附件上传结果 {
   status: "ready";
 }
 
+/**
+ * 图片上传 prepare 结果只回答“下一步该往哪儿传”。
+ * 它不声明消息已成立，也不提前伪造 ready 元数据。
+ */
+export interface 图片上传准备结果 {
+  attachment_id: string;
+  upload_method: "PUT";
+  upload_url: string;
+  upload_headers: Record<string, string>;
+  expires_at: string;
+}
+
 export interface 增量事件快照 {
   room_id: string;
   latest_event_position: number;

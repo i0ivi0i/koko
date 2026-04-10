@@ -11,6 +11,7 @@ import type {
   后台概览,
   后台登录结果,
   图片附件上传结果,
+  图片上传准备结果,
   房间快照,
   房间历史页,
 } from "../契约";
@@ -51,6 +52,31 @@ class 假后台传输 implements 前端传输端口 {
   }
   async loadRoomSnapshot(): Promise<房间快照> {
     return 创建房间快照();
+  }
+  async prepareImageUpload(_sessionId: string, file: File): Promise<图片上传准备结果> {
+    return {
+      attachment_id: "att-admin-prepared",
+      upload_method: "PUT",
+      upload_url: "http://storage.local/admin/original",
+      upload_headers: {
+        "content-type": file.type || "image/png",
+      },
+      expires_at: "2026-04-10T12:00:00Z",
+    };
+  }
+  async completeImageUpload(
+    _sessionId: string,
+    attachmentId: string
+  ): Promise<图片附件上传结果> {
+    return {
+      attachment_id: attachmentId,
+      kind: "image",
+      mime_type: "image/png",
+      byte_size: 68,
+      width: 120,
+      height: 90,
+      status: "ready",
+    };
   }
   async uploadImageAttachment(_sessionId: string, file: File): Promise<图片附件上传结果> {
     return {

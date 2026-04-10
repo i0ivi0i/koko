@@ -166,6 +166,33 @@ impl Pg仓储 {
     }
 
     /// 查询上传链已形成的附件快照，供统一消息用例在进入领域前校验。
+    fn 解析附件状态(raw_status: &str) -> Result<usecase::附件状态读取结果, contract::错误码> {
+        match raw_status {
+            "prepared" => Ok(usecase::附件状态读取结果::已准备),
+            "uploading" => Ok(usecase::附件状态读取结果::上传中),
+            "processing" => Ok(usecase::附件状态读取结果::处理中),
+            "ready" => Ok(usecase::附件状态读取结果::就绪),
+            "failed" => Ok(usecase::附件状态读取结果::失败),
+            "expired" | "canceled" => Ok(usecase::附件状态读取结果::已过期),
+            _ => Err(contract::错误码::系统错误),
+        }
+    }
+
+    async fn 查询匿名身份数据库主键_异步(
+        pool: &PgPool,
+        所属匿名身份标识: &str,
+    ) -> Result<i64, contract::错误码> {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM anonymous_identities WHERE anonymous_identity_id = $1",
+        )
+        .bind(所属匿名身份标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?
+        .ok_or(contract::错误码::会话无效)
+    }
+
+    /// 查询上传链已形成的附件快照，供统一消息用例在进入领域前校验。
     async fn 查询附件快照_异步(
         pool: &PgPool,
         附件标识: &str,
@@ -190,14 +217,7 @@ impl Pg仓储 {
                 "file" => usecase::附件种类读取结果::文件,
                 _ => return Err(contract::错误码::系统错误),
             };
-            let status = match row.get::<String, _>("status").as_str() {
-                "uploading" => usecase::附件状态读取结果::上传中,
-                "processing" => usecase::附件状态读取结果::处理中,
-                "ready" => usecase::附件状态读取结果::就绪,
-                "failed" => usecase::附件状态读取结果::失败,
-                "expired" | "canceled" => usecase::附件状态读取结果::已过期,
-                _ => return Err(contract::错误码::系统错误),
-            };
+            let status = Self::解析附件状态(row.get::<String, _>("status").as_str())?;
             Ok(usecase::附件读取结果 {
                 附件标识: row.get("attachment_id"),
                 所属匿名身份标识: row.get("anonymous_identity_id"),
@@ -210,24 +230,85 @@ impl Pg仓储 {
         .transpose()
     }
 
+    /// 查询某个 prepared 附件占位，供本地回环上传与 complete 共同复用。
+    async fn 查询待完成图片附件_异步(
+        pool: &PgPool,
+        附件标识: &str,
+    ) -> Result<Option<usecase::待完成图片附件读取结果>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT a.attachment_id, ai.anonymous_identity_id, a.mime_type, a.byte_size, a.storage_key, a.status \
+             FROM attachments a \
+             JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
+             WHERE a.attachment_id = $1",
+        )
+        .bind(附件标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        row.map(|row| {
+            Ok(usecase::待完成图片附件读取结果 {
+                附件标识: row.get("attachment_id"),
+                所属匿名身份标识: row.get("anonymous_identity_id"),
+                mime_type: row.get("mime_type"),
+                字节大小: row.get("byte_size"),
+                原图存储键: row.get("storage_key"),
+                状态: Self::解析附件状态(row.get::<String, _>("status").as_str())?,
+            })
+        })
+        .transpose()
+    }
+
+    /// 写入 prepared 图片附件占位。
+    async fn 创建预备图片附件记录_异步(
+        pool: &PgPool,
+        所属匿名身份标识: &str,
+        附件: &usecase::图片附件准备请求,
+    ) -> Result<usecase::图片附件准备快照, contract::错误码> {
+        let owner_db_id = Self::查询匿名身份数据库主键_异步(pool, 所属匿名身份标识).await?;
+
+        sqlx::query(
+            "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
+             VALUES ($1, $2, 'image', $3, $4, NULL, NULL, $5, NULL, 'prepared')",
+        )
+        .bind(&附件.附件标识)
+        .bind(owner_db_id)
+        .bind(&附件.mime_type)
+        .bind(附件.字节大小)
+        .bind(&附件.原图存储键)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(usecase::图片附件准备快照 {
+            附件标识: 附件.附件标识.clone(),
+            mime_type: 附件.mime_type.clone(),
+            字节大小: 附件.字节大小,
+            原图存储键: 附件.原图存储键.clone(),
+            状态: usecase::附件状态读取结果::已准备,
+        })
+    }
+
     /// 写入 ready 图片附件真相。
     async fn 创建图片附件记录_异步(
         pool: &PgPool,
         所属匿名身份标识: &str,
         附件: &usecase::图片附件写入请求,
     ) -> Result<usecase::图片附件快照, contract::错误码> {
-        let owner_db_id = sqlx::query_scalar::<_, i64>(
-            "SELECT id FROM anonymous_identities WHERE anonymous_identity_id = $1",
-        )
-        .bind(所属匿名身份标识)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?
-        .ok_or(contract::错误码::会话无效)?;
+        let owner_db_id = Self::查询匿名身份数据库主键_异步(pool, 所属匿名身份标识).await?;
 
         sqlx::query(
             "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
-             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, 'ready')",
+             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, 'ready') \
+             ON CONFLICT (attachment_id) DO UPDATE SET \
+                 mime_type = EXCLUDED.mime_type, \
+                 byte_size = EXCLUDED.byte_size, \
+                 width = EXCLUDED.width, \
+                 height = EXCLUDED.height, \
+                 storage_key = EXCLUDED.storage_key, \
+                 thumbnail_storage_key = EXCLUDED.thumbnail_storage_key, \
+                 status = 'ready' \
+             WHERE attachments.owner_anonymous_identity_id = EXCLUDED.owner_anonymous_identity_id",
         )
         .bind(&附件.附件标识)
         .bind(owner_db_id)
@@ -1114,6 +1195,27 @@ impl 仓储端口 for Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
         self.在运行时执行(Self::查询附件快照_异步(&self.pool, 附件标识))
+    }
+
+    /// prepared 附件读取只暴露给上传链，不下放到其它业务入口。
+    fn 查询待完成图片附件(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<usecase::待完成图片附件读取结果>, contract::错误码> {
+        self.在运行时执行(Self::查询待完成图片附件_异步(&self.pool, 附件标识))
+    }
+
+    /// prepare 阶段先只落占位记录，不提前伪造 ready 元数据。
+    fn 创建预备图片附件记录(
+        &mut self,
+        所属匿名身份标识: &str,
+        附件: &usecase::图片附件准备请求,
+    ) -> Result<usecase::图片附件准备快照, contract::错误码> {
+        self.在运行时执行(Self::创建预备图片附件记录_异步(
+            &self.pool,
+            所属匿名身份标识,
+            附件,
+        ))
     }
 
     /// 图片上传链的元数据落库入口。

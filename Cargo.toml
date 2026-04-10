@@ -21,7 +21,13 @@ serde_json = "1"
 uuid = { version = "1", default-features = false, features = ["v4", "std"] }
 socketioxide = { version = "0.18.2", features = ["extensions"] }
 tower-http = { version = "0.6", features = ["fs", "set-header"] }
-object_store = { version = "0.13", default-features = false, features = ["fs"] }
+# 对象存储现在同时承担两类职责：
+# 1. 本地测试/回滚窗继续用文件系统；
+# 2. 新主链需要生成 S3 兼容直传签名。
+object_store = { version = "0.13", default-features = false, features = ["aws", "fs"] }
+# `object_store::signer::Signer` 依赖 reqwest 的 Method 类型来生成预签名 URL。
+# 这里显式声明，避免后续在 shell 里再手搓一层自己的 HTTP 方法翻译。
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 image = "0.25"
 infer = "0.19"
 kamadak-exif = "0.6"

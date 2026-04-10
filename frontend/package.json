@@ -19,9 +19,8 @@
   },
   "dependencies": {
     "@chenglou/pretext": "0.0.5",
+    "@uppy/aws-s3": "^5.1.0",
     "@uppy/core": "^5.2.0",
-    "@uppy/dashboard": "^5.1.1",
-    "@uppy/xhr-upload": "^5.2.0",
     "heic2any": "^0.0.4",
     "lit": "^3.3.2",
     "socket.io-client": "^4.8.3",

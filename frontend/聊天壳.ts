@@ -1,6 +1,6 @@
 import { css, html, LitElement } from "lit";
 import Uppy, { type UppyFile } from "@uppy/core";
-import XHRUpload from "@uppy/xhr-upload";
+import AwsS3 from "@uppy/aws-s3";
 import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
 import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
 import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
@@ -14,7 +14,7 @@ import {
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 图片附件草稿, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
-import type { 图片附件上传结果 } from "./契约.js";
+import type { 图片上传准备结果, 图片附件上传结果 } from "./契约.js";
 import {
   默认消息文本布局环境,
   派生壳主舞台模式,
@@ -28,7 +28,13 @@ import {
   type 消息文本布局环境,
 } from "./视图.js";
 
-type 图片上传Meta = { session_id?: string };
+type 图片上传Meta = {
+  session_id?: string;
+  attachment_id?: string;
+  upload_method?: "PUT";
+  upload_url?: string;
+  upload_headers_json?: string;
+};
 type 图片上传响应体 = Record<string, unknown>;
 type 图片上传失败响应 =
   | {
@@ -231,23 +237,57 @@ function 记录图片上传失败诊断(input: {
   });
 }
 
-function 解析图片上传结果(body: unknown): 图片附件上传结果 | null {
-  if (!body || typeof body !== "object") {
+function 读取图片上传头信息(meta: 图片上传Meta): Record<string, string> {
+  if (!meta.upload_headers_json?.trim()) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(meta.upload_headers_json) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+    const output: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "string" && value.trim()) {
+        output[key] = value;
+      }
+    }
+    return output;
+  } catch {
+    return {};
+  }
+}
+
+function 读取图片直传参数(
+  file: UppyFile<图片上传Meta, 图片上传响应体>
+): { method: "PUT"; url: string; headers: Record<string, string> } | null {
+  const meta = (file.meta ?? {}) as 图片上传Meta;
+  if (meta.upload_method !== "PUT" || !meta.upload_url?.trim()) {
     return null;
   }
-  const candidate = body as Partial<图片附件上传结果>;
-  if (
-    candidate.kind !== "image" ||
-    typeof candidate.attachment_id !== "string" ||
-    typeof candidate.mime_type !== "string" ||
-    typeof candidate.byte_size !== "number" ||
-    typeof candidate.width !== "number" ||
-    typeof candidate.height !== "number" ||
-    candidate.status !== "ready"
-  ) {
-    return null;
+  return {
+    method: "PUT",
+    url: meta.upload_url,
+    headers: 读取图片上传头信息(meta),
+  };
+}
+
+function 提取图片附件标识(file: UppyFile<图片上传Meta, 图片上传响应体>): string {
+  const meta = (file.meta ?? {}) as 图片上传Meta;
+  return typeof meta.attachment_id === "string" ? meta.attachment_id : "";
+}
+
+function 解析传输错误代码(error: unknown, fallbackCode = "attachment_upload_failed"): string {
+  if (error && typeof error === "object" && typeof (error as { code?: unknown }).code === "string") {
+    const code = ((error as { code: string }).code || "").trim();
+    if (code) {
+      return code;
+    }
   }
-  return candidate as 图片附件上传结果;
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return fallbackCode;
 }
 
 export class 聊天壳 extends LitElement {
@@ -297,7 +337,7 @@ export class 聊天壳 extends LitElement {
 
   private 处理图片上传失活(localId: string): void {
     this.图片上传失活计时器.delete(localId);
-    const draft = this.chatState.composerImageDrafts.find((item) => item.localId === localId);
+    const draft = this.读取图片草稿(localId);
     if (!draft || draft.status !== "uploading") {
       return;
     }
@@ -314,16 +354,21 @@ export class 聊天壳 extends LitElement {
     });
   }
 
+  /**
+   * 图片草稿是发送区唯一的本地体验态真相。
+   * 统一从这里读取，避免 success/error/watchdog 各自再扫一遍数组。
+   */
+  private 读取图片草稿(localId: string): 图片附件草稿 | undefined {
+    return this.chatState.composerImageDrafts.find((item) => item.localId === localId);
+  }
+
   private readonly handleImageUploadAdded = (
     file: UppyFile<图片上传Meta, 图片上传响应体>
   ): void => {
     const sourceFile = file.data instanceof File ? file.data : null;
-    this.imageUploader?.setFileMeta(file.id, {
-      session_id: this.chatState.sessionId,
-    });
     this.写入图片草稿({
       localId: file.id,
-      attachmentId: "",
+      attachmentId: 提取图片附件标识(file),
       previewUrl: file.data instanceof Blob ? 创建本地图片预览地址(file.data) : "",
       width: 0,
       height: 0,
@@ -335,29 +380,48 @@ export class 聊天壳 extends LitElement {
     this.重置图片上传失活计时(file.id);
   };
 
-  private readonly handleImageUploadSuccess = (
+  private readonly handleImageUploadSuccess = async (
     file: UppyFile<图片上传Meta, 图片上传响应体> | undefined,
-    response: { body?: 图片上传响应体 } | undefined
-  ): void => {
+    _response: { body?: 图片上传响应体 } | undefined
+  ): Promise<void> => {
     if (!file) {
       return;
     }
-    this.清理图片上传失活计时(file.id);
-    const body = 解析图片上传结果(response?.body);
-    if (!body || body.kind !== "image") {
+    const attachmentId = 提取图片附件标识(file) || this.读取图片草稿(file.id)?.attachmentId || "";
+    if (!attachmentId) {
+      this.清理图片上传失活计时(file.id);
       this.更新图片草稿状态(file.id, {
         status: "failed",
         errorCode: "attachment_upload_failed",
       });
       return;
     }
-    this.更新图片草稿状态(file.id, {
-      attachmentId: body.attachment_id,
-      width: body.width,
-      height: body.height,
-      status: "ready",
-      errorCode: "",
-    });
+    this.重置图片上传失活计时(file.id);
+    try {
+      const ready = await this.transport.completeImageUpload(this.chatState.sessionId, attachmentId);
+      const currentDraft = this.读取图片草稿(file.id);
+      if (!currentDraft || currentDraft.status !== "uploading") {
+        return;
+      }
+      this.清理图片上传失活计时(file.id);
+      this.更新图片草稿状态(file.id, {
+        attachmentId: ready.attachment_id,
+        width: ready.width,
+        height: ready.height,
+        status: "ready",
+        errorCode: "",
+      });
+    } catch (error: unknown) {
+      const currentDraft = this.读取图片草稿(file.id);
+      if (!currentDraft || currentDraft.status !== "uploading") {
+        return;
+      }
+      this.清理图片上传失活计时(file.id);
+      this.更新图片草稿状态(file.id, {
+        status: "failed",
+        errorCode: 解析传输错误代码(error, "system_error"),
+      });
+    }
   };
 
   private readonly handleImageUploadError = (
@@ -508,10 +572,26 @@ export class 聊天壳 extends LitElement {
           });
           continue;
         }
+        const prepared: 图片上传准备结果 = await this.transport.prepareImageUpload(
+          this.chatState.sessionId,
+          file
+        );
         uploader.addFile({
+          // 这里把 prepared 结果直接绑进 Uppy 文件元数据：
+          // 1. 上传插件只消费运输参数；
+          // 2. 壳层草稿直接拿 attachment_id；
+          // 3. 不再长出“上传成功后再猜 attachment_id”的第二条真相。
+          id: prepared.attachment_id,
           name: file.name,
           type: file.type,
           data: file,
+          meta: {
+            session_id: this.chatState.sessionId,
+            attachment_id: prepared.attachment_id,
+            upload_method: prepared.upload_method,
+            upload_url: prepared.upload_url,
+            upload_headers_json: JSON.stringify(prepared.upload_headers),
+          },
         });
       } catch (error: unknown) {
         this.写入图片草稿({
@@ -522,10 +602,7 @@ export class 聊天壳 extends LitElement {
           height: 0,
           status: "failed",
           fileName: sourceFile.name,
-          errorCode:
-            error instanceof Error && error.message.trim()
-              ? error.message.trim()
-              : "attachment_upload_failed",
+          errorCode: 解析传输错误代码(error),
           sourceFile,
         });
       }
@@ -1331,7 +1408,6 @@ export class 聊天壳 extends LitElement {
 
   private ensureImageUploader(): Uppy<图片上传Meta, 图片上传响应体> {
     if (this.imageUploader) {
-      this.imageUploader.setMeta({ session_id: this.chatState.sessionId });
       return this.imageUploader;
     }
 
@@ -1351,11 +1427,15 @@ export class 聊天壳 extends LitElement {
         maxFileSize: 图片附件上传上限字节数,
       },
     })
-      .use(XHRUpload, {
-        endpoint: `${window.location.origin}/api/attachments/image`,
-        formData: true,
-        fieldName: "file",
-        allowedMetaFields: ["session_id"],
+      .use(AwsS3, {
+        shouldUseMultipart: false,
+        getUploadParameters: async (file) => {
+          const parameters = 读取图片直传参数(file);
+          if (!parameters) {
+            throw new Error("attachment_upload_failed");
+          }
+          return parameters;
+        },
       });
 
     uppy.on("file-added", this.handleImageUploadAdded);
@@ -1364,7 +1444,6 @@ export class 聊天壳 extends LitElement {
     uppy.on("upload-error", this.handleImageUploadError);
     uppy.on("upload-stalled", this.handleImageUploadStalled);
     uppy.on("file-removed", this.handleImageUploadRemoved);
-    uppy.setMeta({ session_id: this.chatState.sessionId });
     this.imageUploader = uppy;
     return uppy;
   }
@@ -1460,7 +1539,7 @@ export class 聊天壳 extends LitElement {
    * 2. 真正的上传结果继续由 Uppy 事件回填；
    * 3. 不新建第二个草稿项，避免同一张图在草稿带里长出幽灵副本。
    */
-  private retryComposerDraft(localId: string): void {
+  private async retryComposerDraft(localId: string): Promise<void> {
     const uploader = this.imageUploader;
     if (!uploader) {
       return;
@@ -1483,30 +1562,35 @@ export class 聊天壳 extends LitElement {
         return;
       }
       try {
+        const prepared = await this.transport.prepareImageUpload(
+          this.chatState.sessionId,
+          draft.sourceFile
+        );
         uploader.addFile({
+          id: localId,
           name: draft.fileName,
           type: draft.sourceFile.type,
           data: draft.sourceFile,
+          meta: {
+            session_id: this.chatState.sessionId,
+            attachment_id: prepared.attachment_id,
+            upload_method: prepared.upload_method,
+            upload_url: prepared.upload_url,
+            upload_headers_json: JSON.stringify(prepared.upload_headers),
+          },
         });
       } catch (error: unknown) {
         this.更新图片草稿状态(localId, {
           status: "failed",
-          errorCode:
-            error instanceof Error && error.message.trim()
-              ? error.message.trim()
-              : "attachment_upload_failed",
+          errorCode: 解析传输错误代码(error),
         });
       }
       return;
     }
     void uploader.retryUpload(localId).catch((error: unknown) => {
-      const message =
-        error instanceof Error && error.message.trim()
-          ? error.message.trim()
-          : "attachment_upload_failed";
       this.更新图片草稿状态(localId, {
         status: "failed",
-        errorCode: message,
+        errorCode: 解析传输错误代码(error),
       });
     });
   }

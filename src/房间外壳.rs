@@ -1,15 +1,20 @@
-use super::{应用状态, 构建共享仓储, err_resp, events_to_json, map_domain_err_tuple};
+use super::{应用状态, 构建共享仓储, err_resp, events_to_json, map_domain_err_tuple, 附件上传模式};
 use crate::{contract, usecase};
 use axum::{
+    body::Bytes,
     extract::{Multipart, Path, Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use image::{DynamicImage, ImageFormat};
-use object_store::{path::Path as ObjectPath, ObjectStoreExt};
+use object_store::{path::Path as ObjectPath, signer::Signer, ObjectStoreExt};
 use serde::Deserialize;
-use std::{collections::HashMap, io::Cursor};
+use std::{
+    collections::HashMap,
+    io::Cursor,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tokio::task;
 use uuid::Uuid;
 
@@ -30,6 +35,21 @@ pub(super) struct JoinBody {
     session_id: String,
     /// 用户输入的房间短码。
     room_code: String,
+}
+
+/// 图片 prepare 请求体。
+#[derive(Deserialize)]
+pub(super) struct PrepareImageUploadBody {
+    session_id: Option<String>,
+    file_name: Option<String>,
+    mime_type: Option<String>,
+    byte_size: Option<i64>,
+}
+
+/// 图片 complete 请求体。
+#[derive(Deserialize)]
+pub(super) struct CompleteImageUploadBody {
+    session_id: Option<String>,
 }
 
 /// 阅读推进请求体。
@@ -266,6 +286,87 @@ fn 生成缩略图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageEr
     let mut cursor = Cursor::new(Vec::new());
     thumbnail.write_to(&mut cursor, ImageFormat::Png)?;
     Ok(cursor.into_inner())
+}
+
+struct 图片内容解析结果 {
+    mime_type: String,
+    宽: i32,
+    高: i32,
+    缩略图字节: Vec<u8>,
+}
+
+enum 图片内容解析错误 {
+    类型不允许(&'static str),
+    系统错误(&'static str),
+}
+
+/// 旧直传和新 complete 都必须走同一条图片解析链：
+/// - 真 MIME 以后端探测为准；
+/// - 宽高和缩略图以后端解码结果为准；
+/// - 不把“文件后缀/前端 mime”冒充成权威事实。
+fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结果, 图片内容解析错误> {
+    let Some(kind) = infer::get(bytes) else {
+        return Err(图片内容解析错误::类型不允许("只允许上传图片"));
+    };
+    if !kind.mime_type().starts_with("image/") {
+        return Err(图片内容解析错误::类型不允许("只允许上传图片"));
+    }
+    let decoded =
+        image::load_from_memory(bytes).map_err(|_| 图片内容解析错误::类型不允许("图片内容非法"))?;
+    let normalized_image = 应用exif方向(decoded, 读取exif方向(bytes));
+    let 缩略图字节 =
+        生成缩略图字节(&normalized_image).map_err(|_| 图片内容解析错误::系统错误("生成图片缩略图失败"))?;
+    Ok(图片内容解析结果 {
+        mime_type: kind.mime_type().to_string(),
+        宽: normalized_image.width() as i32,
+        高: normalized_image.height() as i32,
+        缩略图字节,
+    })
+}
+
+fn 读取非空会话标识(
+    raw_session_id: Option<String>,
+) -> Result<String, (StatusCode, &'static str, &'static str)> {
+    raw_session_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or((StatusCode::BAD_REQUEST, "invalid_argument", "缺少 session_id"))
+}
+
+fn 校验图片准备请求(
+    mime_type: &str,
+    byte_size: i64,
+) -> Result<(), (StatusCode, &'static str, &'static str)> {
+    if !mime_type.starts_with("image/") {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "attachment_type_not_allowed",
+            "只允许上传图片",
+        ));
+    }
+    if byte_size <= 0 {
+        return Err((StatusCode::BAD_REQUEST, "invalid_argument", "图片大小非法"));
+    }
+    if byte_size > 10 * 1024 * 1024 {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "attachment_too_large",
+            "图片超过 10MB 上限",
+        ));
+    }
+    Ok(())
+}
+
+fn 图片附件快照转响应体(snapshot: &usecase::图片附件快照) -> serde_json::Value {
+    serde_json::json!({
+        "attachment_id": snapshot.附件标识,
+        "kind": "image",
+        "mime_type": snapshot.mime_type,
+        "byte_size": snapshot.字节大小,
+        "width": snapshot.宽,
+        "height": snapshot.高,
+        "status": "ready",
+    })
 }
 
 /// 冷路径：引导匿名身份。
@@ -969,6 +1070,364 @@ pub(super) async fn load_room_history(
     }
 }
 
+/// 冷路径：申请图片附件上传占位。
+/// 这一步只创建 prepared 真相，并返回后续直传所需参数；不在这里上传字节。
+pub(super) async fn prepare_image_upload(
+    State(state): State<应用状态>,
+    Json(body): Json<PrepareImageUploadBody>,
+) -> impl IntoResponse {
+    let session_id = match 读取非空会话标识(body.session_id) {
+        Ok(session_id) => session_id,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let file_name = match body
+        .file_name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        Some(file_name) => file_name,
+        None => return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 file_name"),
+    };
+    let mime_type = match body
+        .mime_type
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+    {
+        Some(mime_type) => mime_type,
+        None => return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 mime_type"),
+    };
+    let byte_size = match body.byte_size {
+        Some(byte_size) => byte_size,
+        None => return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 byte_size"),
+    };
+    if let Err((status, code, message)) = 校验图片准备请求(&mime_type, byte_size) {
+        return err_resp(status, code, message);
+    }
+
+    let attachment_id = 生成附件标识();
+    let original_storage_key = format!(
+        "images/{attachment_id}/original{}",
+        推导原图扩展名(mime_type.as_str())
+    );
+    let prepare_request = usecase::图片附件准备请求 {
+        附件标识: attachment_id.clone(),
+        mime_type: mime_type.clone(),
+        字节大小: byte_size,
+        原图存储键: original_storage_key.clone(),
+    };
+    let state_for_usecase = state.clone();
+    let session_id_for_usecase = session_id.clone();
+    let prepare_result = task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_usecase);
+        usecase::准备图片附件上传(&mut repo, &session_id_for_usecase, &prepare_request)
+            .map_err(map_domain_err_tuple)
+    })
+    .await;
+    let snapshot = match prepare_result {
+        Ok(Ok(snapshot)) => snapshot,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("prepare 任务执行失败: {err}"),
+            )
+        }
+    };
+
+    // 这里把“浏览器该往哪儿 PUT”收口到 shell 层：
+    // - local 回环用于测试与最小回滚窗；
+    // - s3 兼容直传则返回真正的预签名 URL。
+    let (upload_url, upload_headers) = match &state.attachment_upload_mode {
+        附件上传模式::本地回环 => (
+            format!("/api/media/{}/upload", snapshot.附件标识),
+            serde_json::json!({
+                "content-type": snapshot.mime_type,
+                "x-koko-session-id": session_id,
+            }),
+        ),
+        附件上传模式::S3兼容直传 { signer } => {
+            let signed_url = match signer
+                .signed_url(
+                    reqwest::Method::PUT,
+                    &ObjectPath::from(snapshot.原图存储键.clone()),
+                    Duration::from_secs(15 * 60),
+                )
+                .await
+            {
+                Ok(url) => url,
+                Err(err) => {
+                    tracing::error!(
+                        usecase = "准备图片上传",
+                        adapter = "http",
+                        outcome = "failed",
+                        request_kind = "图片上传 prepare",
+                        session_id = session_id.as_str(),
+                        attachment_id = snapshot.附件标识.as_str(),
+                        file_name = file_name.as_str(),
+                        error_code = "system_error",
+                        error = %err,
+                        "生成对象存储预签名 URL 失败"
+                    );
+                    return err_resp(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        "生成上传地址失败",
+                    );
+                }
+            };
+            (
+                signed_url.to_string(),
+                serde_json::json!({
+                    "content-type": snapshot.mime_type,
+                }),
+            )
+        }
+    };
+    let expires_at = (SystemTime::now() + Duration::from_secs(15 * 60))
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs().to_string())
+        .unwrap_or_else(|_| "0".to_string());
+
+    tracing::info!(
+        usecase = "准备图片上传",
+        adapter = "http",
+        outcome = "succeeded",
+        request_kind = "图片上传 prepare",
+        session_id = session_id.as_str(),
+        attachment_id = snapshot.附件标识.as_str(),
+        file_name = file_name.as_str(),
+        byte_size = byte_size,
+        "图片上传占位已创建"
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "attachment_id": snapshot.附件标识,
+            "upload_method": "PUT",
+            "upload_url": upload_url,
+            "upload_headers": upload_headers,
+            "expires_at": expires_at,
+        })),
+    )
+        .into_response()
+}
+
+/// 本地对象存储回环上传入口：
+/// 1. 只在 local 存储模式下作为开发/测试兜底；
+/// 2. 仍然复用 prepared 真相校验，不允许旁路写对象。
+pub(super) async fn upload_prepared_image_content(
+    State(state): State<应用状态>,
+    Path(attachment_id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl IntoResponse {
+    let session_id = match headers
+        .get("x-koko-session-id")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        Some(session_id) => session_id,
+        None => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "缺少 x-koko-session-id",
+            )
+        }
+    };
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = session_id.clone();
+    let prepared = match task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_usecase);
+        usecase::读取待完成图片附件(&repo, &session_id_for_usecase, &attachment_id_for_usecase)
+            .map_err(map_domain_err_tuple)
+    })
+    .await
+    {
+        Ok(Ok(prepared)) => prepared,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("本地上传任务执行失败: {err}"),
+            )
+        }
+    };
+    if body.len() as i64 != prepared.字节大小 {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "上传文件大小与 prepare 不一致",
+        );
+    }
+
+    if let Err(err) = state
+        .attachment_store
+        .put(&ObjectPath::from(prepared.原图存储键), body.into())
+        .await
+    {
+        tracing::error!(
+            usecase = "本地回环上传原图",
+            adapter = "http",
+            outcome = "failed",
+            request_kind = "图片原图 PUT",
+            session_id = session_id.as_str(),
+            attachment_id = attachment_id.as_str(),
+            error_code = "system_error",
+            error = %err,
+            "写入 prepared 原图对象失败"
+        );
+        return err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "写入原图对象失败",
+        );
+    }
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// 冷路径：完成图片附件上传。
+/// 这里读取已经落到对象存储里的原图，解码并生成缩略图后，再把 prepared 升级成 ready。
+pub(super) async fn complete_image_upload(
+    State(state): State<应用状态>,
+    Path(attachment_id): Path<String>,
+    Json(body): Json<CompleteImageUploadBody>,
+) -> impl IntoResponse {
+    let session_id = match 读取非空会话标识(body.session_id) {
+        Ok(session_id) => session_id,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = session_id.clone();
+    let prepared = match task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_usecase);
+        usecase::读取待完成图片附件(&repo, &session_id_for_usecase, &attachment_id_for_usecase)
+            .map_err(map_domain_err_tuple)
+    })
+    .await
+    {
+        Ok(Ok(prepared)) => prepared,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("complete 任务执行失败: {err}"),
+            )
+        }
+    };
+
+    let original_path = ObjectPath::from(prepared.原图存储键.clone());
+    let get_result = match state.attachment_store.get(&original_path).await {
+        Ok(result) => result,
+        Err(err) => {
+            tracing::warn!(
+                usecase = "完成图片上传",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "图片上传 complete",
+                session_id = session_id.as_str(),
+                attachment_id = attachment_id.as_str(),
+                error_code = "attachment_not_ready",
+                error = %err,
+                "complete 时原图对象尚未可读"
+            );
+            return err_resp(StatusCode::CONFLICT, "attachment_not_ready", "原图尚未上传完成");
+        }
+    };
+    let original_bytes = match get_result.bytes().await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            tracing::error!(
+                usecase = "完成图片上传",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "图片上传 complete",
+                session_id = session_id.as_str(),
+                attachment_id = attachment_id.as_str(),
+                error_code = "system_error",
+                error = %err,
+                "读取原图对象失败"
+            );
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "读取原图对象失败",
+            );
+        }
+    };
+    let parsed = match 解析图片内容(original_bytes.as_ref()) {
+        Ok(parsed) => parsed,
+        Err(图片内容解析错误::类型不允许(message)) => {
+            return err_resp(StatusCode::BAD_REQUEST, "attachment_type_not_allowed", message)
+        }
+        Err(图片内容解析错误::系统错误(message)) => {
+            return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message)
+        }
+    };
+
+    let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
+    let thumbnail_path = ObjectPath::from(thumbnail_storage_key.clone());
+    if let Err(err) = state
+        .attachment_store
+        .put(&thumbnail_path, parsed.缩略图字节.into())
+        .await
+    {
+        tracing::error!(
+            usecase = "完成图片上传",
+            adapter = "http",
+            outcome = "failed",
+            request_kind = "图片上传 complete",
+            session_id = session_id.as_str(),
+            attachment_id = attachment_id.as_str(),
+            error_code = "system_error",
+            error = %err,
+            "写入缩略图对象失败"
+        );
+        return err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "写入缩略图对象失败",
+        );
+    }
+
+    let ready_request = usecase::图片附件写入请求 {
+        附件标识: attachment_id.clone(),
+        mime_type: parsed.mime_type,
+        字节大小: original_bytes.len() as i64,
+        宽: parsed.宽,
+        高: parsed.高,
+        原图存储键: prepared.原图存储键.clone(),
+        缩略图存储键: Some(thumbnail_storage_key),
+    };
+    let state_for_usecase = state.clone();
+    let session_id_for_usecase = session_id.clone();
+    let complete_result = task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_usecase);
+        usecase::完成图片附件上传(&mut repo, &session_id_for_usecase, &ready_request)
+            .map_err(map_domain_err_tuple)
+    })
+    .await;
+    match complete_result {
+        Ok(Ok(snapshot)) => (
+            StatusCode::OK,
+            Json(图片附件快照转响应体(&snapshot)),
+        )
+            .into_response(),
+        Ok(Err((status, code, message))) => err_resp(status, code, message),
+        Err(err) => err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("complete 任务执行失败: {err}"),
+        ),
+    }
+}
+
 /// 冷路径：上传图片附件。
 /// 约束：
 /// 1. 上传成功只创建附件，不创建消息
@@ -1128,52 +1587,9 @@ pub(super) async fn upload_image_attachment(
         "HTTP 请求已受理"
     );
 
-    let sniffed = infer::get(file_bytes.as_ref());
-    let Some(kind) = sniffed else {
-        tracing::warn!(
-            usecase = "上传图片附件",
-            adapter = "http",
-            outcome = "rejected",
-            request_kind = "图片附件上传",
-            upload_trace_id = upload_trace_id.as_str(),
-            session_id = session_id.as_str(),
-            error_code = "attachment_type_not_allowed",
-            "无法识别上传文件类型"
-        );
-        return 附带上传诊断头(
-            err_resp(
-                StatusCode::BAD_REQUEST,
-                "attachment_type_not_allowed",
-                "只允许上传图片",
-            ),
-            &upload_trace_id,
-        );
-    };
-    if !kind.mime_type().starts_with("image/") {
-        tracing::warn!(
-            usecase = "上传图片附件",
-            adapter = "http",
-            outcome = "rejected",
-            request_kind = "图片附件上传",
-            upload_trace_id = upload_trace_id.as_str(),
-            session_id = session_id.as_str(),
-            sniffed_mime = kind.mime_type(),
-            error_code = "attachment_type_not_allowed",
-            "上传文件不是图片"
-        );
-        return 附带上传诊断头(
-            err_resp(
-                StatusCode::BAD_REQUEST,
-                "attachment_type_not_allowed",
-                "只允许上传图片",
-            ),
-            &upload_trace_id,
-        );
-    }
-
-    let decoded = match image::load_from_memory(file_bytes.as_ref()) {
-        Ok(image) => image,
-        Err(err) => {
+    let parsed = match 解析图片内容(file_bytes.as_ref()) {
+        Ok(parsed) => parsed,
+        Err(图片内容解析错误::类型不允许(message)) => {
             tracing::warn!(
                 usecase = "上传图片附件",
                 adapter = "http",
@@ -1181,27 +1597,16 @@ pub(super) async fn upload_image_attachment(
                 request_kind = "图片附件上传",
                 upload_trace_id = upload_trace_id.as_str(),
                 session_id = session_id.as_str(),
-                sniffed_mime = kind.mime_type(),
                 error_code = "attachment_type_not_allowed",
-                error = %err,
-                "图片解码失败"
+                rejected_reason = message,
+                "上传图片附件被类型校验拒绝"
             );
             return 附带上传诊断头(
-                err_resp(
-                    StatusCode::BAD_REQUEST,
-                    "attachment_type_not_allowed",
-                    "图片内容非法",
-                ),
+                err_resp(StatusCode::BAD_REQUEST, "attachment_type_not_allowed", message),
                 &upload_trace_id,
             );
         }
-    };
-    let normalized_image = 应用exif方向(decoded, 读取exif方向(file_bytes.as_ref()));
-    let width = normalized_image.width() as i32;
-    let height = normalized_image.height() as i32;
-    let thumbnail_bytes = match 生成缩略图字节(&normalized_image) {
-        Ok(bytes) => bytes,
-        Err(err) => {
+        Err(图片内容解析错误::系统错误(message)) => {
             tracing::error!(
                 usecase = "上传图片附件",
                 adapter = "http",
@@ -1210,15 +1615,11 @@ pub(super) async fn upload_image_attachment(
                 upload_trace_id = upload_trace_id.as_str(),
                 session_id = session_id.as_str(),
                 error_code = "system_error",
-                error = %err,
-                "生成图片缩略图失败"
+                failed_reason = message,
+                "上传图片附件在图片解析阶段失败"
             );
             return 附带上传诊断头(
-                err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "生成图片缩略图失败",
-                ),
+                err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message),
                 &upload_trace_id,
             );
         }
@@ -1227,7 +1628,7 @@ pub(super) async fn upload_image_attachment(
     let attachment_id = 生成附件标识();
     let original_storage_key = format!(
         "images/{attachment_id}/original{}",
-        推导原图扩展名(kind.mime_type())
+        推导原图扩展名(parsed.mime_type.as_str())
     );
     let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
     let original_path = ObjectPath::from(original_storage_key.clone());
@@ -1260,7 +1661,7 @@ pub(super) async fn upload_image_attachment(
     }
     if let Err(err) = state
         .attachment_store
-        .put(&thumbnail_path, thumbnail_bytes.into())
+        .put(&thumbnail_path, parsed.缩略图字节.clone().into())
         .await
     {
         let _ = state.attachment_store.delete(&original_path).await;
@@ -1288,10 +1689,10 @@ pub(super) async fn upload_image_attachment(
     let state_for_usecase = state.clone();
     let request = usecase::图片附件写入请求 {
         附件标识: attachment_id.clone(),
-        mime_type: kind.mime_type().to_string(),
+        mime_type: parsed.mime_type,
         字节大小: file_bytes.len() as i64,
-        宽: width,
-        高: height,
+        宽: parsed.宽,
+        高: parsed.高,
         原图存储键: original_storage_key.clone(),
         缩略图存储键: Some(thumbnail_storage_key.clone()),
     };
@@ -1345,15 +1746,7 @@ pub(super) async fn upload_image_attachment(
             附带上传诊断头(
                 (
                     StatusCode::OK,
-                    Json(serde_json::json!({
-                        "attachment_id": snapshot.附件标识,
-                        "kind": "image",
-                        "mime_type": snapshot.mime_type,
-                        "byte_size": snapshot.字节大小,
-                        "width": snapshot.宽,
-                        "height": snapshot.高,
-                        "status": "ready",
-                    })),
+                    Json(图片附件快照转响应体(&snapshot)),
                 ),
                 &upload_trace_id,
             )

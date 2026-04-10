@@ -2,10 +2,14 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, StatusCode},
     response::{Html, IntoResponse},
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
-use object_store::{local::LocalFileSystem, ObjectStore};
+use object_store::{
+    aws::{AmazonS3, AmazonS3Builder},
+    local::LocalFileSystem,
+    ObjectStore,
+};
 use serde::{Deserialize, Serialize};
 use socketioxide::{
     extract::{Data, Extension, SocketRef, TryData},
@@ -38,6 +42,14 @@ pub struct 应用状态 {
     pub admin_password: String,
     pub attachment_storage_dir: String,
     pub attachment_store: Arc<dyn ObjectStore>,
+    pub attachment_upload_mode: 附件上传模式,
+}
+
+/// 上传模式只回答“字节该走哪条运输线”，不混入消息或附件业务真相。
+#[derive(Clone)]
+pub enum 附件上传模式 {
+    本地回环,
+    S3兼容直传 { signer: Arc<AmazonS3> },
 }
 
 /// 组装 HTTP 冷路径 + Realtime 热路径路由。
@@ -50,11 +62,10 @@ pub async fn 构建应用状态(
     database_url: String,
     admin_password: String,
 ) -> std::io::Result<应用状态> {
+    let media_storage = crate::assembly::读取媒体存储配置()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
-    fs::create_dir_all(&attachment_storage_dir)
-        .map_err(|err| std::io::Error::other(format!("创建附件目录失败: {err}")))?;
-    let attachment_store = LocalFileSystem::new_with_prefix(&attachment_storage_dir)
-        .map_err(|err| std::io::Error::other(format!("初始化附件存储失败: {err}")))?;
+    let (attachment_store, attachment_upload_mode) =
+        构建附件对象存储(&media_storage, &attachment_storage_dir)?;
     let pool = PgPoolOptions::new()
         .max_connections(20)
         .connect(&database_url)
@@ -66,8 +77,96 @@ pub async fn 构建应用状态(
         runtime_handle: tokio::runtime::Handle::current(),
         admin_password,
         attachment_storage_dir,
-        attachment_store: Arc::new(attachment_store),
+        attachment_store,
+        attachment_upload_mode,
     })
+}
+
+/// 统一装配附件对象存储：
+/// - local 继续服务测试与回滚窗；
+/// - s3 兼容模式同时给“服务端对象读写”和“浏览器直传签名”准备实例。
+fn 构建附件对象存储(
+    media_storage: &crate::assembly::媒体存储配置,
+    attachment_storage_dir: &str,
+) -> std::io::Result<(Arc<dyn ObjectStore>, 附件上传模式)> {
+    match media_storage.驱动 {
+        crate::assembly::媒体存储驱动::本地目录 => {
+            fs::create_dir_all(attachment_storage_dir)
+                .map_err(|err| std::io::Error::other(format!("创建附件目录失败: {err}")))?;
+            let attachment_store = LocalFileSystem::new_with_prefix(attachment_storage_dir)
+                .map_err(|err| std::io::Error::other(format!("初始化附件存储失败: {err}")))?;
+            Ok((Arc::new(attachment_store), 附件上传模式::本地回环))
+        }
+        crate::assembly::媒体存储驱动::S3兼容 => {
+            let bucket = media_storage.bucket.as_deref().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "缺少 MEDIA_STORAGE_BUCKET")
+            })?;
+            let access_key_id = media_storage.access_key_id.as_deref().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "缺少 MEDIA_STORAGE_ACCESS_KEY_ID",
+                )
+            })?;
+            let secret_access_key =
+                media_storage.secret_access_key.as_deref().ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "缺少 MEDIA_STORAGE_SECRET_ACCESS_KEY",
+                    )
+                })?;
+
+            let store = 构建_s3客户端(
+                media_storage.endpoint.as_deref(),
+                bucket,
+                media_storage.region.as_str(),
+                access_key_id,
+                secret_access_key,
+                media_storage.path_style,
+            )?;
+            let signer = 构建_s3客户端(
+                media_storage
+                    .public_endpoint
+                    .as_deref()
+                    .or(media_storage.endpoint.as_deref()),
+                bucket,
+                media_storage.region.as_str(),
+                access_key_id,
+                secret_access_key,
+                media_storage.path_style,
+            )?;
+            Ok((
+                Arc::new(store),
+                附件上传模式::S3兼容直传 {
+                    signer: Arc::new(signer),
+                },
+            ))
+        }
+    }
+}
+
+fn 构建_s3客户端(
+    endpoint: Option<&str>,
+    bucket: &str,
+    region: &str,
+    access_key_id: &str,
+    secret_access_key: &str,
+    path_style: bool,
+) -> std::io::Result<AmazonS3> {
+    let mut builder = AmazonS3Builder::new()
+        .with_region(region)
+        .with_bucket_name(bucket)
+        .with_access_key_id(access_key_id)
+        .with_secret_access_key(secret_access_key)
+        .with_virtual_hosted_style_request(!path_style);
+    if let Some(endpoint) = endpoint {
+        builder = builder.with_endpoint(endpoint);
+        if endpoint.starts_with("http://") {
+            builder = builder.with_allow_http(true);
+        }
+    }
+    builder
+        .build()
+        .map_err(|err| std::io::Error::other(format!("初始化 S3 兼容对象存储失败: {err}")))
 }
 
 pub fn 构建路由(state: 应用状态) -> Router {
@@ -77,6 +176,15 @@ pub fn 构建路由(state: 应用状态) -> Router {
     Router::new()
         .route("/api/session/bootstrap", post(房间外壳::bootstrap_session))
         .route("/api/rooms/join-or-create", post(房间外壳::join_or_create_room))
+        .route("/api/media/image/prepare", post(房间外壳::prepare_image_upload))
+        .route(
+            "/api/media/{attachment_id}/upload",
+            put(房间外壳::upload_prepared_image_content),
+        )
+        .route(
+            "/api/media/{attachment_id}/complete",
+            post(房间外壳::complete_image_upload),
+        )
         .route("/api/attachments/image", post(房间外壳::upload_image_attachment))
         .route(
             "/api/attachments/{attachment_id}/content",

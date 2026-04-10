@@ -544,11 +544,13 @@ describe("聊天壳集成 / 首页与控制台", () => {
         }
       ).准备待上传图片文件
     ).toHaveBeenCalledWith(input.files[0]);
-    expect(addFile).toHaveBeenCalledWith({
-      name: "mobile.jpg",
-      type: "image/jpeg",
-      data: normalizedFile,
-    });
+    expect(addFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "mobile.jpg",
+        type: "image/jpeg",
+        data: normalizedFile,
+      })
+    );
     expect(input.value).toBe("");
 
     el.remove();
@@ -587,6 +589,19 @@ describe("聊天壳集成 / 首页与控制台", () => {
       }
     ).imageUploader = {
       addFile: vi.fn((input: { name: string; data: File; meta?: Record<string, unknown> }) => {
+        const addedFile: {
+          id: string;
+          name: string;
+          data: File;
+          meta?: Record<string, unknown>;
+        } = {
+          id: "draft-prepared-1",
+          name: input.name,
+          data: input.data,
+        };
+        if (input.meta) {
+          addedFile.meta = input.meta;
+        }
         (
           el as unknown as {
             handleImageUploadAdded(file: {
@@ -596,12 +611,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
               meta?: Record<string, unknown>;
             }): void;
           }
-        ).handleImageUploadAdded({
-          id: "draft-prepared-1",
-          name: input.name,
-          data: input.data,
-          meta: input.meta,
-        });
+        ).handleImageUploadAdded(addedFile);
         return "draft-prepared-1";
       }),
       setMeta: vi.fn(),
@@ -728,7 +738,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       '[data-draft-card-id="draft-complete-failed"] .composer-draft-status'
     ) as HTMLElement | null;
     expect(draftStatus?.dataset.status).toBe("failed");
-    expect(draftStatus?.textContent).toContain("system_error");
+    expect(draftStatus?.textContent).toContain("服务器处理失败");
 
     el.remove();
   });
@@ -953,7 +963,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
     try {
       (
         el as unknown as {
-          handleImageUploadAdded(file: { id: string; name: string; data: File }): void;
+          handleImageUploadAdded(file: {
+            id: string;
+            name: string;
+            data: File;
+            meta?: Record<string, unknown>;
+          }): void;
         }
       ).handleImageUploadAdded({
         id: "draft-watchdog",
@@ -1028,7 +1043,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
     try {
       (
         el as unknown as {
-          handleImageUploadAdded(file: { id: string; name: string; data: File }): void;
+          handleImageUploadAdded(file: {
+            id: string;
+            name: string;
+            data: File;
+            meta?: Record<string, unknown>;
+          }): void;
           handleImageUploadSuccess(
             file: { id: string },
             response: { body: Record<string, unknown> }
@@ -1038,6 +1058,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
         id: "draft-watchdog-ready",
         name: "watchdog-ready.jpg",
         data: sourceFile,
+        meta: {
+          attachment_id: "att-watchdog-ready",
+        },
       });
       await Promise.resolve(
         (

@@ -11,15 +11,12 @@ importers:
       '@chenglou/pretext':
         specifier: 0.0.5
         version: 0.0.5
+      '@uppy/aws-s3':
+        specifier: ^5.1.0
+        version: 5.1.0(@uppy/core@5.2.0)
       '@uppy/core':
         specifier: ^5.2.0
         version: 5.2.0
-      '@uppy/dashboard':
-        specifier: ^5.1.1
-        version: 5.1.1(@uppy/core@5.2.0)
-      '@uppy/xhr-upload':
-        specifier: ^5.2.0
-        version: 5.2.0(@uppy/core@5.2.0)
       heic2any:
         specifier: ^0.0.4
         version: 0.0.4
@@ -606,6 +603,11 @@ packages:
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
+  '@uppy/aws-s3@5.1.0':
+    resolution: {integrity: sha512-UBz+shrtDbnOf11AboDrkc9Fq2Cdf8HbFftE+gqfxig6fkv5rHpHhBCLkl8wCGAq+X/CxdqvvNhm/OM23Uzw2w==}
+    peerDependencies:
+      '@uppy/core': ^5.2.0
+
   '@uppy/companion-client@5.1.1':
     resolution: {integrity: sha512-DzrOWTbIZHvtgAFXBMYHk2wD27NjpBSVhY2tEiEIUhPd2CxbFRZjHM/N3HOt3VwZEAP471QWFLlJRWPcIY3A2Q==}
     peerDependencies:
@@ -614,31 +616,11 @@ packages:
   '@uppy/core@5.2.0':
     resolution: {integrity: sha512-uvfNyz4cnaplt7LYJmEZHuqOuav0tKp4a9WKJIaH6iIj7XiqYvS2J5SEByexAlUFlzefOAyjzj4Ja2dd/8aMrw==}
 
-  '@uppy/dashboard@5.1.1':
-    resolution: {integrity: sha512-6H/xVvhhdfwp1+FRMp2C+tudyaedqD5+LMDB8Iw20k9+QCL1eGzOh4wXm6MCqJtNfQ1tLaprGMG1jlo7yS/uyw==}
-    peerDependencies:
-      '@uppy/core': ^5.2.0
-
-  '@uppy/provider-views@5.2.2':
-    resolution: {integrity: sha512-NAazIJ5sjrAc6++CeJ/u9dB5gDaaAOLHrYeEmWs/HqLlftlIinRZOybnyzJRXwI8jWI/FK5moluzt2HXu6dPQQ==}
-    peerDependencies:
-      '@uppy/core': ^5.2.0
-
   '@uppy/store-default@5.0.0':
     resolution: {integrity: sha512-hQtCSQ1yGiaval/wVYUWquYGDJ+bpQ7e4FhUUAsRQz1x1K+o7NBtjfp63O9I4Ks1WRoKunpkarZ+as09l02cPw==}
 
-  '@uppy/thumbnail-generator@5.1.0':
-    resolution: {integrity: sha512-QAKJHHkMrD/30GOyUb5U9HyJ7Ie3jiMLp4pVdw27PoA4pNV7fDQz0tyDeRPj2H+BWPEB1NsTSSfHI2pjHNI+OQ==}
-    peerDependencies:
-      '@uppy/core': ^5.2.0
-
   '@uppy/utils@7.2.0':
     resolution: {integrity: sha512-6lC246qszMv6bTyl/+QyHwrudgeguWkA94ME1wHn+a6uRAvmtAEaUManIfGqTJfoKvWAiCJqdJPl5xRJjhAloQ==}
-
-  '@uppy/xhr-upload@5.2.0':
-    resolution: {integrity: sha512-3LV/X5Of6BINnKplP+CwUJ0a4/7cRFfzxwGyXnW+uCrNQHoo09dttcz3begWHejGvzenQHuUnMO3Fxyc71Pryg==}
-    peerDependencies:
-      '@uppy/core': ^5.2.0
 
   '@vitest/expect@4.1.3':
     resolution: {integrity: sha512-CW8Q9KMtXDGHj0vCsqui0M5KqRsu0zm0GNDW7Gd3U7nZ2RFpPKSCpeCXoT+/+5zr1TNlsoQRDEz+LzZUyq6gnQ==}
@@ -679,9 +661,6 @@ packages:
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
-
-  classnames@2.5.1:
-    resolution: {integrity: sha512-saHYOzhIQs6wy2sVxTM6bUDsQO4F50V9RQ22qBpEdCW+I+/Wmke2HOl6lS6dTpdxVhb88/I6+Hs+438c3lfUow==}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -736,12 +715,6 @@ packages:
 
   estree-walker@3.0.3:
     resolution: {integrity: sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g==}
-
-  eventemitter3@5.0.4:
-    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
-
-  exifr@7.1.3:
-    resolution: {integrity: sha512-g/aje2noHivrRSLbAUtBPWFbxKdKhgj/xr1vATDdUXPOFYJlQ62Ft0oy+72V6XLIpDJfHs6gXLbBLAolqOXYRw==}
 
   expect-type@1.3.0:
     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
@@ -832,17 +805,9 @@ packages:
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
 
-  p-queue@8.1.1:
-    resolution: {integrity: sha512-aNZ+VfjobsWryoiPnEApGGmf5WmNsCo9xu8dfaYamG5qaLP7ClhLN6NgsFe6SwJ2UbLEBK5dv9x8Mn5+RVhMWQ==}
-    engines: {node: '>=18'}
-
   p-retry@6.2.1:
     resolution: {integrity: sha512-hEt02O4hUct5wtwg4H4KcWgDdm+l1bOaEy/hWzd8xtXB9BqxTWBBhb+2ImAtH4Cv4rPjV76xN3Zumqk3k3AhhQ==}
     engines: {node: '>=16.17'}
-
-  p-timeout@6.1.4:
-    resolution: {integrity: sha512-MyIV3ZA/PmyBN/ud8vV9XzwTrNtR4jFrObymZYnZqMmW0zA8Z17vnT0rBgFE/TlohB+YCHqXMgZzb3Csp49vqg==}
-    engines: {node: '>=14.16'}
 
   parse5@8.0.0:
     resolution: {integrity: sha512-9m4m5GSgXjL4AjumKzq1Fgfp3Z8rsvjRNbnkVwfu2ImRqE5D0LnY2QfDen18FSY9C573YU5XxSapdHZTZ2WolA==}
@@ -884,9 +849,6 @@ packages:
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
     engines: {node: '>=v12.22.7'}
-
-  shallow-equal@3.1.0:
-    resolution: {integrity: sha512-pfVOw8QZIXpMbhBWvzBISicvToTiM5WBF1EeAUZDDSb5Dt29yl4AYbyywbJFSEsRUMr7gJaxqCdr4L3tQf9wVg==}
 
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
@@ -1430,6 +1392,12 @@ snapshots:
     dependencies:
       '@types/node': 25.5.2
 
+  '@uppy/aws-s3@5.1.0(@uppy/core@5.2.0)':
+    dependencies:
+      '@uppy/companion-client': 5.1.1(@uppy/core@5.2.0)
+      '@uppy/core': 5.2.0
+      '@uppy/utils': 7.2.0
+
   '@uppy/companion-client@5.1.1(@uppy/core@5.2.0)':
     dependencies:
       '@uppy/core': 5.2.0
@@ -1448,47 +1416,12 @@ snapshots:
       nanoid: 5.1.7
       preact: 10.29.1
 
-  '@uppy/dashboard@5.1.1(@uppy/core@5.2.0)':
-    dependencies:
-      '@transloadit/prettier-bytes': 0.3.5
-      '@uppy/core': 5.2.0
-      '@uppy/provider-views': 5.2.2(@uppy/core@5.2.0)
-      '@uppy/thumbnail-generator': 5.1.0(@uppy/core@5.2.0)
-      '@uppy/utils': 7.2.0
-      classnames: 2.5.1
-      lodash: 4.18.1
-      nanoid: 5.1.7
-      preact: 10.29.1
-      shallow-equal: 3.1.0
-
-  '@uppy/provider-views@5.2.2(@uppy/core@5.2.0)':
-    dependencies:
-      '@uppy/core': 5.2.0
-      '@uppy/utils': 7.2.0
-      classnames: 2.5.1
-      lodash: 4.18.1
-      nanoid: 5.1.7
-      p-queue: 8.1.1
-      preact: 10.29.1
-
   '@uppy/store-default@5.0.0': {}
-
-  '@uppy/thumbnail-generator@5.1.0(@uppy/core@5.2.0)':
-    dependencies:
-      '@uppy/core': 5.2.0
-      '@uppy/utils': 7.2.0
-      exifr: 7.1.3
 
   '@uppy/utils@7.2.0':
     dependencies:
       lodash: 4.18.1
       preact: 10.29.1
-
-  '@uppy/xhr-upload@5.2.0(@uppy/core@5.2.0)':
-    dependencies:
-      '@uppy/companion-client': 5.1.1(@uppy/core@5.2.0)
-      '@uppy/core': 5.2.0
-      '@uppy/utils': 7.2.0
 
   '@vitest/expect@4.1.3':
     dependencies:
@@ -1539,8 +1472,6 @@ snapshots:
     optional: true
 
   chai@6.2.2: {}
-
-  classnames@2.5.1: {}
 
   convert-source-map@2.0.0: {}
 
@@ -1648,10 +1579,6 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.8
 
-  eventemitter3@5.0.4: {}
-
-  exifr@7.1.3: {}
-
   expect-type@1.3.0: {}
 
   fdir@6.5.0(picomatch@4.0.4):
@@ -1756,18 +1683,11 @@ snapshots:
 
   obug@2.1.1: {}
 
-  p-queue@8.1.1:
-    dependencies:
-      eventemitter3: 5.0.4
-      p-timeout: 6.1.4
-
   p-retry@6.2.1:
     dependencies:
       '@types/retry': 0.12.2
       is-network-error: 1.3.1
       retry: 0.13.1
-
-  p-timeout@6.1.4: {}
 
   parse5@8.0.0:
     dependencies:
@@ -1831,8 +1751,6 @@ snapshots:
     dependencies:
       xmlchars: 2.2.0
     optional: true
-
-  shallow-equal@3.1.0: {}
 
   siginfo@2.0.0: {}
 

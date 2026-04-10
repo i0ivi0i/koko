@@ -14,6 +14,7 @@ pub enum 附件种类读取结果 {
 /// 用例层读取到的附件状态快照。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum 附件状态读取结果 {
+    已准备,
     上传中,
     处理中,
     就绪,
@@ -31,6 +32,38 @@ pub struct 附件读取结果 {
     pub 状态: 附件状态读取结果,
     pub 宽: Option<i32>,
     pub 高: Option<i32>,
+}
+
+/// 上传链完成图片解析后，进入应用层持久化所需的最小字段。
+/// 存储键属于 adapter 细节，但仍需通过应用层编排把 owner 真相和持久化动作收口。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 图片附件准备请求 {
+    pub 附件标识: String,
+    pub mime_type: String,
+    pub 字节大小: i64,
+    pub 原图存储键: String,
+}
+
+/// prepare 阶段只落“媒体占位真相”，不把 ready 元数据提前伪造出来。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 图片附件准备快照 {
+    pub 附件标识: String,
+    pub mime_type: String,
+    pub 字节大小: i64,
+    pub 原图存储键: String,
+    pub 状态: 附件状态读取结果,
+}
+
+/// complete 前要读到的最小附件事实。
+/// 它只服务“继续上传/完成上传”的业务编排，不外泄到共享 contract。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 待完成图片附件读取结果 {
+    pub 附件标识: String,
+    pub 所属匿名身份标识: String,
+    pub mime_type: String,
+    pub 字节大小: i64,
+    pub 原图存储键: String,
+    pub 状态: 附件状态读取结果,
 }
 
 /// 上传链完成图片解析后，进入应用层持久化所需的最小字段。
@@ -204,6 +237,25 @@ pub trait 仓储端口 {
     ) -> Result<图片附件快照, contract::错误码> {
         let _ = (所属匿名身份标识, 附件);
         Err(contract::错误码::系统错误)
+    }
+
+    /// 创建 prepared 附件占位，供浏览器后续直传对象内容。
+    fn 创建预备图片附件记录(
+        &mut self,
+        所属匿名身份标识: &str,
+        附件: &图片附件准备请求,
+    ) -> Result<图片附件准备快照, contract::错误码> {
+        let _ = (所属匿名身份标识, 附件);
+        Err(contract::错误码::系统错误)
+    }
+
+    /// 读取“当前还能否继续上传/完成上传”的最小附件事实。
+    fn 查询待完成图片附件(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<待完成图片附件读取结果>, contract::错误码> {
+        let _ = 附件标识;
+        Ok(None)
     }
 
     /// 查询当前会话是否有权读取某个附件内容变体。
@@ -471,6 +523,65 @@ pub fn 创建消息(
 
     let msg = domain::message::创建消息(true, 文本, &attachments).map_err(映射领域错误)?;
     仓储.创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
+}
+
+/// 先在业务真相里申请一个图片附件占位，再把字节上传交给运输层。
+pub fn 准备图片附件上传(
+    仓储: &mut dyn 仓储端口,
+    会话标识: &str,
+    附件: &图片附件准备请求,
+) -> Result<图片附件准备快照, contract::错误码> {
+    if 附件.附件标识.trim().is_empty()
+        || 附件.mime_type.trim().is_empty()
+        || 附件.原图存储键.trim().is_empty()
+        || 附件.字节大小 <= 0
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    校验实时连接会话(仓储, 会话标识)?;
+    let 所属匿名身份标识 = 仓储
+        .查询会话所属匿名身份(会话标识)?
+        .ok_or(contract::错误码::会话无效)?;
+    仓储.创建预备图片附件记录(&所属匿名身份标识, 附件)
+}
+
+/// complete 前必须先验证：
+/// 1. 当前会话仍然有效；
+/// 2. 附件仍归当前发送者所有；
+/// 3. 附件现在确实还处于 prepared。
+pub fn 读取待完成图片附件(
+    仓储: &dyn 仓储端口,
+    会话标识: &str,
+    附件标识: &str,
+) -> Result<待完成图片附件读取结果, contract::错误码> {
+    if 附件标识.trim().is_empty() {
+        return Err(contract::错误码::参数非法);
+    }
+    校验实时连接会话(仓储, 会话标识)?;
+    let 所属匿名身份标识 = 仓储
+        .查询会话所属匿名身份(会话标识)?
+        .ok_or(contract::错误码::会话无效)?;
+    let prepared = 仓储
+        .查询待完成图片附件(附件标识)?
+        .ok_or(contract::错误码::附件不存在)?;
+    if prepared.所属匿名身份标识 != 所属匿名身份标识 {
+        return Err(contract::错误码::附件不属于当前发送者);
+    }
+    if prepared.状态 != 附件状态读取结果::已准备 {
+        return Err(contract::错误码::附件未就绪);
+    }
+    Ok(prepared)
+}
+
+/// 完成上传只负责把 prepared 升级成 ready。
+/// 它不创建消息，也不改变消息发送主链。
+pub fn 完成图片附件上传(
+    仓储: &mut dyn 仓储端口,
+    会话标识: &str,
+    附件: &图片附件写入请求,
+) -> Result<图片附件快照, contract::错误码> {
+    let prepared = 读取待完成图片附件(仓储, 会话标识, &附件.附件标识)?;
+    仓储.创建图片附件记录(&prepared.所属匿名身份标识, 附件)
 }
 
 /// 上传链完成后的图片附件登记：

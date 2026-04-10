@@ -15,6 +15,30 @@ pub struct 配置 {
     pub app_port: u16,
     pub rust_log: String,
     pub attachment_storage_dir: String,
+    pub media_storage: 媒体存储配置,
+}
+
+/// 媒体存储驱动只回答“上传对象最终落在哪类后端”。
+/// 它不回答消息业务问题，也不夹带前端页面流程。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum 媒体存储驱动 {
+    本地目录,
+    S3兼容,
+}
+
+/// 媒体存储配置是启动期真相：
+/// - local 只需要本地目录；
+/// - s3 兼容直传则需要 endpoint / bucket / credentials 等信息。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体存储配置 {
+    pub 驱动: 媒体存储驱动,
+    pub endpoint: Option<String>,
+    pub public_endpoint: Option<String>,
+    pub bucket: Option<String>,
+    pub region: String,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    pub path_style: bool,
 }
 
 /// 读取启动所需的最小配置。缺关键配置时必须失败，避免静默启动。
@@ -26,6 +50,7 @@ pub fn 读取配置() -> io::Result<配置> {
     let app_port = 读取端口("APP_PORT")?;
     let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     let attachment_storage_dir = 读取附件存储目录();
+    let media_storage = 读取媒体存储配置()?;
 
     Ok(配置 {
         database_url,
@@ -33,6 +58,7 @@ pub fn 读取配置() -> io::Result<配置> {
         app_port,
         rust_log,
         attachment_storage_dir,
+        media_storage,
     })
 }
 
@@ -204,4 +230,92 @@ pub fn 读取附件存储目录() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "data/attachments".to_string())
+}
+
+/// 媒体存储驱动默认保持在本地目录，保证测试和最小回滚窗仍然可自洽。
+/// 真正要切对象存储直传时，必须显式把驱动切到 `s3` 并给全套配置。
+pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
+    let raw_driver = env::var("MEDIA_STORAGE_DRIVER")
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "local".to_string());
+    let 驱动 = match raw_driver.as_str() {
+        "local" => 媒体存储驱动::本地目录,
+        "s3" => 媒体存储驱动::S3兼容,
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("MEDIA_STORAGE_DRIVER 非法: {raw_driver}"),
+            ))
+        }
+    };
+    let endpoint = 读取可选环境变量("MEDIA_STORAGE_ENDPOINT");
+    let public_endpoint = 读取可选环境变量("MEDIA_STORAGE_PUBLIC_ENDPOINT");
+    let bucket = 读取可选环境变量("MEDIA_STORAGE_BUCKET");
+    let access_key_id = 读取可选环境变量("MEDIA_STORAGE_ACCESS_KEY_ID");
+    let secret_access_key = 读取可选环境变量("MEDIA_STORAGE_SECRET_ACCESS_KEY");
+    let region = env::var("MEDIA_STORAGE_REGION")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "us-east-1".to_string());
+    let path_style = 读取布尔环境变量("MEDIA_STORAGE_PATH_STYLE", false)?;
+
+    if matches!(驱动, 媒体存储驱动::S3兼容) {
+        if bucket.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "MEDIA_STORAGE_BUCKET 不能为空",
+            ));
+        }
+        if access_key_id.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "MEDIA_STORAGE_ACCESS_KEY_ID 不能为空",
+            ));
+        }
+        if secret_access_key.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "MEDIA_STORAGE_SECRET_ACCESS_KEY 不能为空",
+            ));
+        }
+    }
+
+    Ok(媒体存储配置 {
+        驱动,
+        endpoint,
+        public_endpoint,
+        bucket,
+        region,
+        access_key_id,
+        secret_access_key,
+        path_style,
+    })
+}
+
+fn 读取可选环境变量(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn 读取布尔环境变量(key: &str, default_value: bool) -> io::Result<bool> {
+    let Some(raw) = env::var(key)
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(default_value);
+    };
+    match raw.as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" => Ok(false),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("环境变量 {key} 不是合法布尔值: {raw}"),
+        )),
+    }
 }
