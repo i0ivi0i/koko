@@ -1,20 +1,20 @@
 # Graph Report - .  (2026-04-11)
 
 ## Corpus Check
-- 72 files · ~1,480,780 words
+- 72 files · ~1,483,097 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 245 nodes · 320 edges · 27 communities detected
+- 246 nodes · 323 edges · 27 communities detected
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 22 edges
-2. `send_json()` - 20 edges
+2. `send_json()` - 21 edges
 3. `写入rustus测试文件()` - 7 edges
-4. `单连接发送到已关闭socket时降级为正常断开()` - 6 edges
-5. `构造rustus_hook请求体()` - 6 edges
+4. `构造rustus_hook请求体()` - 7 edges
+5. `单连接发送到已关闭socket时降级为正常断开()` - 6 edges
 6. `complete图片上传会把prepared附件升级成ready并写入缩略图()` - 6 edges
 7. `updateChat()` - 5 edges
 8. `exitCurrentRoomView()` - 5 edges
@@ -43,7 +43,7 @@ Nodes (1): 假Socket
 
 ### Community 2 - "Community 2"
 Cohesion: 0.09
-Nodes (27): 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), bootstrap接口会返回稳定花名快照(), 没有上传回执时complete媒体上传会返回attachment_not_ready(), complete图片上传遇到非图片原图会返回attachment_type_not_allowed(), complete_media_upload(), complete图片上传会把prepared附件升级成ready并写入缩略图(), 非成员不能通过events接口拉取房间增量() (+19 more)
+Nodes (28): 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), bootstrap接口会返回稳定花名快照(), 没有上传回执时complete媒体上传会返回attachment_not_ready(), complete图片上传遇到非图片原图会返回attachment_type_not_allowed(), complete_media_upload(), complete图片上传会把prepared附件升级成ready并写入缩略图(), 非成员不能通过events接口拉取房间增量() (+20 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.17
@@ -87,11 +87,11 @@ Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
@@ -99,7 +99,7 @@ Nodes (2): 文本布局, 文本布局测试
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
@@ -107,11 +107,11 @@ Nodes (1): Pg仓储
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
@@ -135,20 +135,20 @@ Nodes (1): frontend/阅读推进编排.ts
 
 ### Community 25 - "Community 25"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 26 - "Community 26"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ## Knowledge Gaps
 - **24 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+19 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 12`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 13`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 14`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 15`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
