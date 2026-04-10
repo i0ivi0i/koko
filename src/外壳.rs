@@ -1,6 +1,6 @@
 use axum::{
     extract::DefaultBodyLimit,
-    http::StatusCode,
+    http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -14,7 +14,10 @@ use socketioxide::{
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{fs, sync::Arc};
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    set_header::response::SetResponseHeaderLayer,
+};
 
 use crate::{adapter::Pg仓储, contract};
 
@@ -90,12 +93,22 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route("/api/admin/overview", get(后台外壳::admin_overview))
         .route("/api/admin/rooms", get(后台外壳::admin_rooms))
         .route("/api/admin/rooms/{room_id}", get(后台外壳::admin_room_detail))
-        // 前端静态资源由后端同源托管，避免开发态跨域和双端口联调噪音。
-        .route_service("/", ServeFile::new("frontend/index.html"))
-        .nest_service("/dist", ServeDir::new("frontend/dist"))
+        .merge(构建前端静态资源路由())
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(socket_layer)
         .with_state(state)
+}
+
+fn 构建前端静态资源路由() -> Router<应用状态> {
+    Router::<应用状态>::new()
+        // 这些静态壳资源目前还是固定 URL，没有 hash/version cache busting。
+        // 因此必须显式返回 `Cache-Control: no-cache`，避免 Safari 等移动端继续吃旧包。
+        .route_service("/", ServeFile::new("frontend/index.html"))
+        .nest_service("/dist", ServeDir::new("frontend/dist"))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
 }
 
 /// 注册单节点 realtime 命名空间。

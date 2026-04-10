@@ -1,6 +1,6 @@
 use axum::{
     body::{to_bytes, Body},
-    http::{Method, Request, StatusCode},
+    http::{header, Method, Request, StatusCode},
 };
 use serde_json::Value;
 use serial_test::serial;
@@ -508,6 +508,39 @@ async fn 图片上传成功会返回ready附件快照() {
     assert_eq!(body["width"].as_i64(), Some(1));
     assert_eq!(body["height"].as_i64(), Some(1));
     assert!(body["attachment_id"].as_str().is_some());
+}
+
+#[tokio::test]
+#[serial]
+async fn 静态壳资源会显式返回no_cache避免移动端继续吃旧包() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    for uri in ["/", "/dist/app.js", "/dist/app.css"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK, "{uri} 应可读取");
+        let cache_control = response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok())
+            .expect("静态资源必须显式返回 Cache-Control");
+        assert_eq!(cache_control, "no-cache", "{uri} 不应继续走启发式缓存");
+    }
 }
 
 #[tokio::test]

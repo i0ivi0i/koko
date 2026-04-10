@@ -20,7 +20,7 @@ serde = { version = "1", default-features = false, features = ["derive", "std"] 
 serde_json = "1"
 uuid = { version = "1", default-features = false, features = ["v4", "std"] }
 socketioxide = { version = "0.18.2", features = ["extensions"] }
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.6", features = ["fs", "set-header"] }
 object_store = { version = "0.13", default-features = false, features = ["fs"] }
 image = "0.25"
 infer = "0.19"
