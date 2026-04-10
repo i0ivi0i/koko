@@ -16,6 +16,7 @@ pub struct 配置 {
     pub rust_log: String,
     pub attachment_storage_dir: String,
     pub media_storage: 媒体存储配置,
+    pub rustus: Rustus配置,
 }
 
 /// 媒体存储驱动只回答“上传对象最终落在哪类后端”。
@@ -41,6 +42,16 @@ pub struct 媒体存储配置 {
     pub path_style: bool,
 }
 
+/// Rustus 配置只描述“Tus sidecar 如何暴露与落盘”。
+/// 它不回答业务问题，也不拥有附件/消息真相。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rustus配置 {
+    pub public_endpoint: String,
+    pub server_port: u16,
+    pub data_dir: String,
+    pub info_dir: String,
+}
+
 /// 读取启动所需的最小配置。缺关键配置时必须失败，避免静默启动。
 pub fn 读取配置() -> io::Result<配置> {
     // 先尝试读取 .env，再读系统环境变量；缺失必填项直接失败。
@@ -51,6 +62,7 @@ pub fn 读取配置() -> io::Result<配置> {
     let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     let attachment_storage_dir = 读取附件存储目录();
     let media_storage = 读取媒体存储配置()?;
+    let rustus = 读取rustus配置()?;
 
     Ok(配置 {
         database_url,
@@ -59,6 +71,7 @@ pub fn 读取配置() -> io::Result<配置> {
         rust_log,
         attachment_storage_dir,
         media_storage,
+        rustus,
     })
 }
 
@@ -232,6 +245,27 @@ pub fn 读取附件存储目录() -> String {
         .unwrap_or_else(|| "data/attachments".to_string())
 }
 
+/// Rustus 运输配置默认保持“本机 + 本地目录”：
+/// 1. 浏览器默认连 `127.0.0.1:1081/files`；
+/// 2. 上传字节和 `.info` 元数据分别落到两个稳定目录；
+/// 3. 这些值都允许环境变量覆盖，方便后续 Linux 同机部署。
+pub fn 读取rustus配置() -> io::Result<Rustus配置> {
+    let server_port = 读取可选端口("RUSTUS_SERVER_PORT", 1081)?;
+    let public_endpoint = 读取可选环境变量("RUSTUS_PUBLIC_ENDPOINT")
+        .unwrap_or_else(|| format!("http://127.0.0.1:{server_port}/files"));
+    let data_dir =
+        读取可选环境变量("RUSTUS_DATA_DIR").unwrap_or_else(|| "data/rustus".to_string());
+    let info_dir = 读取可选环境变量("RUSTUS_INFO_DIR")
+        .unwrap_or_else(|| "data/rustus-info".to_string());
+
+    Ok(Rustus配置 {
+        public_endpoint,
+        server_port,
+        data_dir,
+        info_dir,
+    })
+}
+
 /// 媒体存储驱动默认保持在本地目录，保证测试和最小回滚窗仍然可自洽。
 /// 真正要切对象存储直传时，必须显式把驱动切到 `s3` 并给全套配置。
 pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
@@ -302,6 +336,22 @@ fn 读取可选环境变量(key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn 读取可选端口(key: &str, default_value: u16) -> io::Result<u16> {
+    let Some(raw) = env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(default_value);
+    };
+    raw.parse::<u16>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("环境变量 {key} 不是合法端口: {raw}"),
+        )
+    })
+}
+
 fn 读取布尔环境变量(key: &str, default_value: bool) -> io::Result<bool> {
     let Some(raw) = env::var(key)
         .ok()
@@ -317,5 +367,72 @@ fn 读取布尔环境变量(key: &str, default_value: bool) -> io::Result<bool> 
             io::ErrorKind::InvalidInput,
             format!("环境变量 {key} 不是合法布尔值: {raw}"),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    fn 读并清空环境变量(key: &str) -> Option<String> {
+        let old = env::var(key).ok();
+        env::remove_var(key);
+        old
+    }
+
+    fn 恢复环境变量(key: &str, old: Option<String>) {
+        if let Some(value) = old {
+            env::set_var(key, value);
+        } else {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn 读取rustus配置会给出本地默认值() {
+        let old_public_endpoint = 读并清空环境变量("RUSTUS_PUBLIC_ENDPOINT");
+        let old_server_port = 读并清空环境变量("RUSTUS_SERVER_PORT");
+        let old_data_dir = 读并清空环境变量("RUSTUS_DATA_DIR");
+        let old_info_dir = 读并清空环境变量("RUSTUS_INFO_DIR");
+
+        let config = 读取rustus配置().expect("默认 rustus 配置应可读");
+
+        assert_eq!(config.public_endpoint, "http://127.0.0.1:1081/files");
+        assert_eq!(config.server_port, 1081);
+        assert_eq!(config.data_dir, "data/rustus");
+        assert_eq!(config.info_dir, "data/rustus-info");
+
+        恢复环境变量("RUSTUS_PUBLIC_ENDPOINT", old_public_endpoint);
+        恢复环境变量("RUSTUS_SERVER_PORT", old_server_port);
+        恢复环境变量("RUSTUS_DATA_DIR", old_data_dir);
+        恢复环境变量("RUSTUS_INFO_DIR", old_info_dir);
+    }
+
+    #[test]
+    #[serial]
+    fn 读取rustus配置会尊重显式环境变量() {
+        let old_public_endpoint = env::var("RUSTUS_PUBLIC_ENDPOINT").ok();
+        let old_server_port = env::var("RUSTUS_SERVER_PORT").ok();
+        let old_data_dir = env::var("RUSTUS_DATA_DIR").ok();
+        let old_info_dir = env::var("RUSTUS_INFO_DIR").ok();
+
+        env::set_var("RUSTUS_PUBLIC_ENDPOINT", "https://im.example.com/files");
+        env::set_var("RUSTUS_SERVER_PORT", "2081");
+        env::set_var("RUSTUS_DATA_DIR", "E:/tmp/rustus-data");
+        env::set_var("RUSTUS_INFO_DIR", "E:/tmp/rustus-info");
+
+        let config = 读取rustus配置().expect("显式 rustus 配置应可读");
+
+        assert_eq!(config.public_endpoint, "https://im.example.com/files");
+        assert_eq!(config.server_port, 2081);
+        assert_eq!(config.data_dir, "E:/tmp/rustus-data");
+        assert_eq!(config.info_dir, "E:/tmp/rustus-info");
+
+        恢复环境变量("RUSTUS_PUBLIC_ENDPOINT", old_public_endpoint);
+        恢复环境变量("RUSTUS_SERVER_PORT", old_server_port);
+        恢复环境变量("RUSTUS_DATA_DIR", old_data_dir);
+        恢复环境变量("RUSTUS_INFO_DIR", old_info_dir);
     }
 }

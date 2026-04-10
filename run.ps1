@@ -208,6 +208,16 @@ function Stop-StaleLauncherBackend {
     }
 }
 
+function Resolve-RustusBinaryPath {
+    # Rustus 是独立 sidecar，不属于主服务二进制；这里只负责确认它存在，
+    # 缺失时直接让启动失败，避免开发脚本偷偷改机器状态。
+    $command = Get-Command rustus.exe -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        $command = Get-Command rustus -ErrorAction Stop
+    }
+    return $command.Source
+}
+
 function Stop-ManagedProcess {
     param($ManagedProcess)
 
@@ -237,11 +247,13 @@ Import-DotEnv
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cargoPath = (Get-Command cargo.exe -ErrorAction Stop).Source
 $pnpmPath = (Get-Command pnpm.cmd -ErrorAction Stop).Source
+$rustusPath = Resolve-RustusBinaryPath
 $logDirectory = New-LauncherLogDirectory -RootDirectory $env:TEMP -SessionName "koko-runner"
 $backendTargetDir = Join-Path $repoRoot "target\\launcher-run"
 $frontendWatch = $null
 $frontendTypeWatch = $null
 $backendProcess = $null
+$rustusProcess = $null
 
 try {
     # run.ps1 只是 Win11 开发启动器，不是源码真相；
@@ -292,7 +304,29 @@ try {
     if ([string]::IsNullOrWhiteSpace($appPort)) {
         $appPort = "8080"
     }
+    $rustusPort = [Environment]::GetEnvironmentVariable("RUSTUS_SERVER_PORT")
+    if ([string]::IsNullOrWhiteSpace($rustusPort)) {
+        $rustusPort = "1081"
+    }
+    $rustusDataDir = [Environment]::GetEnvironmentVariable("RUSTUS_DATA_DIR")
+    if ([string]::IsNullOrWhiteSpace($rustusDataDir)) {
+        $rustusDataDir = "data/rustus"
+    }
+    $rustusInfoDir = [Environment]::GetEnvironmentVariable("RUSTUS_INFO_DIR")
+    if ([string]::IsNullOrWhiteSpace($rustusInfoDir)) {
+        $rustusInfoDir = "data/rustus-info"
+    }
+    $rustusUrl = [Environment]::GetEnvironmentVariable("RUSTUS_URL")
+    if ([string]::IsNullOrWhiteSpace($rustusUrl)) {
+        $rustusUrl = "/files"
+    }
+    $rustusHookUrl = "http://127.0.0.1:$appPort/internal/rustus/hooks"
+    $resolvedRustusDataDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusDataDir))
+    $resolvedRustusInfoDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusInfoDir))
+    New-Item -ItemType Directory -Path $resolvedRustusDataDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $resolvedRustusInfoDir -Force | Out-Null
     Write-Host "访问入口: http://127.0.0.1:$appPort/"
+    Write-Host "Rustus 入口: http://127.0.0.1:$rustusPort$rustusUrl"
     Write-Host "子进程日志目录: $logDirectory"
     # 启动器使用独立 target 目录：
     # 1. 不再和开发者手动执行的 `cargo run` 争抢默认 target\\debug\\koko.exe；
@@ -305,10 +339,33 @@ try {
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 
+    # Rustus 只负责字节运输与断点续传：
+    # 1. `--url` 固定前端要访问的 Tus 基础路径；
+    # 2. hooks 回调主服务做令牌校验和上传回执登记；
+    # 3. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
+    Write-Host "启动 Rustus: rustus --port $rustusPort --url $rustusUrl"
+    $rustusProcess = New-ManagedProcess `
+        -Name "rustus" `
+        -FilePath $rustusPath `
+        -ArgumentList @(
+            "--host", "127.0.0.1",
+            "--port", $rustusPort,
+            "--url", $rustusUrl,
+            "--storage", "file-storage",
+            "--data-dir", $resolvedRustusDataDir,
+            "--info-storage", "file-info-storage",
+            "--info-dir", $resolvedRustusInfoDir,
+            "--hooks-http-urls", $rustusHookUrl,
+            "--hooks-http-proxy-headers", "Authorization"
+        ) `
+        -WorkingDirectory $repoRoot `
+        -LogDirectory $logDirectory
+
     while ($true) {
         Write-ManagedProcessLogs $frontendWatch
         Write-ManagedProcessLogs $frontendTypeWatch
         Write-ManagedProcessLogs $backendProcess
+        Write-ManagedProcessLogs $rustusProcess
 
         if ($frontendWatch.Process.HasExited) {
             Write-ManagedProcessLogs $frontendWatch
@@ -326,14 +383,24 @@ try {
             }
             break
         }
+        if ($rustusProcess.Process.HasExited) {
+            Write-ManagedProcessLogs $rustusProcess
+            $rustusExitCode = $rustusProcess.Process.ExitCode
+            if ($rustusExitCode -ne 0) {
+                throw "Rustus 进程异常退出，退出码: $rustusExitCode"
+            }
+            break
+        }
 
         Start-Sleep -Milliseconds 200
     }
 }
 finally {
+    Write-ManagedProcessLogs $rustusProcess
     Write-ManagedProcessLogs $backendProcess
     Write-ManagedProcessLogs $frontendTypeWatch
     Write-ManagedProcessLogs $frontendWatch
+    Stop-ManagedProcess $rustusProcess
     Stop-ManagedProcess $backendProcess
     Stop-ManagedProcess $frontendTypeWatch
     Stop-ManagedProcess $frontendWatch
