@@ -80,6 +80,24 @@ fn 数据库真相模型包含attachments与message_attachment_refs表() {
 }
 
 #[test]
+#[allow(non_snake_case)]
+fn 数据库真相模型包含媒体Tus运输记录表() {
+    let sql = std::fs::read_to_string("migrations/0005_媒体Tus上传运输记录.sql")
+        .expect("应存在 Tus 运输记录迁移文件");
+
+    // 运输层事实必须独立持久化，避免把 upload token / upload id 污染到附件业务真相表。
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachment_upload_transports"));
+    assert!(sql.contains("attachment_id TEXT PRIMARY KEY"));
+    assert!(sql.contains("transport_kind TEXT NOT NULL"));
+    assert!(sql.contains("upload_token TEXT NOT NULL"));
+    assert!(sql.contains("token_expires_at TIMESTAMPTZ NOT NULL"));
+    assert!(sql.contains("transport_upload_id TEXT"));
+    assert!(sql.contains("storage_locator TEXT"));
+    assert!(sql.contains("byte_size BIGINT"));
+    assert!(sql.contains("finished_at TIMESTAMPTZ"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),
@@ -512,7 +530,8 @@ async fn 旧图片上传路由已移除() {
 
 #[tokio::test]
 #[serial]
-async fn prepare图片上传会创建prepared附件并返回直传参数() {
+#[allow(non_snake_case)]
+async fn prepare媒体上传会返回Tus契约() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -552,9 +571,7 @@ async fn prepare图片上传会创建prepared附件并返回直传参数() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["upload_method"].as_str(), Some("PUT"));
-    assert!(body["upload_url"].as_str().is_some());
-    assert!(body["expires_at"].as_str().is_some());
+    断言媒体准备结果是Tus契约(&body, "image", "prepared.png", "image/png", 68);
     let attachment_id = body["attachment_id"].as_str().expect("attachment_id");
 
     let pool = PgPoolOptions::new()
@@ -571,85 +588,24 @@ async fn prepare图片上传会创建prepared附件并返回直传参数() {
     .expect("应能查询附件状态")
     .expect("prepare 后应存在 prepared 附件记录");
     assert_eq!(status_in_db, "prepared");
-}
 
-#[tokio::test]
-#[serial]
-async fn 本地回环图片上传成功响应会返回etag供uppy结束上传() {
-    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
-    koko::assembly::自动追平迁移(&cfg.database_url)
-        .await
-        .expect("应先追平附件迁移");
-    let state =
-        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
-            .await
-            .expect("应能构建共享应用状态");
-    let app = koko::shell::构建路由(state);
-    let uniq = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_millis();
-    let png_bytes = 最小png字节();
-
-    let (_, bootstrap) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("loopback-upload-etag-{uniq}")})),
-        &[],
+    let transport_row = sqlx::query(
+        "SELECT transport_kind, upload_token, byte_size \
+         FROM attachment_upload_transports WHERE attachment_id = $1",
     )
-    .await;
-    let session_id = bootstrap["session_id"].as_str().expect("session_id");
-
-    let (prepare_status, prepare_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/media/image/prepare",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "file_name": "loopback.png",
-            "mime_type": "image/png",
-            "byte_size": png_bytes.len()
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(prepare_status, StatusCode::OK);
-
-    let upload_url = prepare_body["upload_url"].as_str().expect("upload_url");
-    let upload_headers = prepare_body["upload_headers"]
-        .as_object()
-        .expect("upload_headers");
-    let mut request = Request::builder().method(Method::PUT).uri(upload_url);
-    for (key, value) in upload_headers {
-        request = request.header(
-            key,
-            value.as_str().expect("upload_headers 里的值必须是字符串"),
-        );
-    }
-
-    // 这条回归测试锁住浏览器真实依赖：
-    // Uppy 单段上传在 2xx 后还会继续读取 ETag；缺这个头时，请求虽然成功，
-    // 上传器却不会触发 upload-success，前端只会卡在“上传中”直到 watchdog 超时。
-    let response = app
-        .oneshot(
-            request
-                .body(Body::from(png_bytes))
-                .expect("loopback upload request"),
-        )
-        .await
-        .expect("loopback upload response");
-
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    let etag = response
-        .headers()
-        .get(header::ETAG)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
+    .bind(attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("prepare 后应同时写入运输授权记录");
+    let transport_kind: String = transport_row.get("transport_kind");
+    let upload_token: String = transport_row.get("upload_token");
+    let transport_byte_size: Option<i64> = transport_row.get("byte_size");
+    assert_eq!(transport_kind, "tus");
     assert!(
-        !etag.trim().is_empty(),
-        "本地回环 PUT 成功后必须返回 ETag，浏览器上传器才会结束上传"
+        !upload_token.trim().is_empty(),
+        "运输授权记录必须保存非空 upload_token"
     );
+    assert_eq!(transport_byte_size, Some(68));
 }
 
 #[tokio::test]
@@ -716,6 +672,9 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
         .put(&ObjectPath::from(storage_key), 最小png字节().into())
         .await
         .expect("测试应能预先写入原图对象");
+    标记媒体上传运输已完成(&pool, &attachment_id, 68)
+        .await
+        .expect("测试应能补运输 finished 回执");
 
     let (complete_status, complete_body) = send_json(
         app,
@@ -756,7 +715,8 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
 
 #[tokio::test]
 #[serial]
-async fn prepare媒体上传会返回统一媒体准备结果() {
+#[allow(non_snake_case)]
+async fn prepare图片和视频都会返回统一Tus契约() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -811,25 +771,79 @@ async fn prepare媒体上传会返回统一媒体准备结果() {
     .await;
     assert_eq!(video_status, StatusCode::OK);
 
-    for body in [&image_body, &video_body] {
-        assert!(
-            body["attachment_id"].as_str().is_some(),
-            "统一媒体 prepare 至少要返回稳定 attachment_id"
-        );
-        assert_eq!(body["upload_method"].as_str(), Some("PUT"));
-        assert!(
-            body["upload_url"].as_str().is_some(),
-            "媒体 prepare 必须返回后续上传地址"
-        );
-        assert!(
-            body["upload_headers"].is_object(),
-            "媒体 prepare 必须返回上传头集合"
-        );
-        assert!(
-            body["expires_at"].as_str().is_some(),
-            "媒体 prepare 必须返回过期时间"
-        );
-    }
+    断言媒体准备结果是Tus契约(&image_body, "image", "prepare.png", "image/png", 68);
+    断言媒体准备结果是Tus契约(
+        &video_body,
+        "video",
+        "prepare.mp4",
+        "video/mp4",
+        最小mp4字节().len() as i64,
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 没有上传回执时complete媒体上传会返回attachment_not_ready() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("complete-without-receipt-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "missing-receipt.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
+
+    // complete 不允许把“prepare 成功”误读成“上传完成”；
+    // 没有运输层回执时，prepared 附件必须继续被拒绝。
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+
+    assert_eq!(complete_status, StatusCode::CONFLICT);
+    assert_eq!(
+        complete_body["code"].as_str(),
+        Some("attachment_not_ready")
+    );
 }
 
 #[tokio::test]
@@ -860,6 +874,7 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
     let session_id = bootstrap["session_id"].as_str().expect("session_id");
 
     let video_bytes = 最小mp4字节();
+    let video_byte_size = video_bytes.len() as i64;
     let (prepare_status, prepare_body) = send_json(
         app.clone(),
         Method::POST,
@@ -897,6 +912,9 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
         .put(&ObjectPath::from(storage_key), video_bytes.into())
         .await
         .expect("测试应能预先写入原始视频对象");
+    标记媒体上传运输已完成(&pool, &attachment_id, video_byte_size)
+        .await
+        .expect("测试应能补运输 finished 回执");
 
     let (complete_status, complete_body) = send_json(
         app,
@@ -1017,6 +1035,9 @@ async fn complete图片上传遇到非图片原图会返回attachment_type_not_a
         )
         .await
         .expect("测试应能预先写入非法原图对象");
+    标记媒体上传运输已完成(&pool, &attachment_id, invalid_bytes.len() as i64)
+        .await
+        .expect("测试应能补运输 finished 回执");
 
     // complete 必须以真实字节内容为准，不能信 prepare 阶段宣称的图片 MIME。
     let (complete_status, complete_body) = send_json(
@@ -1413,6 +1434,9 @@ async fn 非成员不能读取房间消息里的图片内容() {
         .put(&ObjectPath::from(storage_key), 最小png字节().into())
         .await
         .expect("测试应能预先写入原图对象");
+    标记媒体上传运输已完成(&pool, &attachment_id, 68)
+        .await
+        .expect("测试应能补运输 finished 回执");
     let (complete_status, complete_body) = send_json(
         app.clone(),
         Method::POST,
@@ -3289,6 +3313,88 @@ async fn send_json(
         let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
         (status, json)
     }
+}
+
+/// 测试里的 canonical store fixture 仍然沿用现有路径，因此这里手动补一条 finished 回执，
+/// 明确表达“sidecar 已经把上传结束事实交回来”，避免 complete 把 prepare 成功误读成上传完成。
+async fn 标记媒体上传运输已完成(
+    pool: &sqlx::PgPool,
+    attachment_id: &str,
+    byte_size: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE attachment_upload_transports \
+         SET byte_size = $2, finished_at = NOW() \
+         WHERE attachment_id = $1",
+    )
+    .bind(attachment_id)
+    .bind(byte_size)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// 统一校验媒体 prepare 的 Tus 契约，避免图片/视频在迁移过程中各自漂移出第二套字段约定。
+/// 这里同时锁住“必须给出 Tus 所需元数据”和“旧 PUT 字段必须下线”两个边界。
+#[allow(non_snake_case)]
+fn 断言媒体准备结果是Tus契约(
+    body: &Value,
+    expected_kind: &str,
+    expected_file_name: &str,
+    expected_mime_type: &str,
+    expected_byte_size: i64,
+) {
+    let attachment_id = body["attachment_id"]
+        .as_str()
+        .expect("统一媒体 prepare 至少要返回稳定 attachment_id");
+    assert_eq!(body["kind"].as_str(), Some(expected_kind));
+    assert_eq!(body["upload_method"].as_str(), Some("tus"));
+    assert!(
+        body["tus_endpoint"].as_str().is_some(),
+        "媒体 prepare 必须返回 Tus endpoint"
+    );
+    assert!(
+        body["tus_headers"].is_object(),
+        "媒体 prepare 必须返回 Tus 头集合"
+    );
+    assert!(
+        body["tus_metadata"].is_object(),
+        "媒体 prepare 必须返回 Tus metadata"
+    );
+    assert!(
+        body["expires_at"].as_str().is_some(),
+        "媒体 prepare 必须返回过期时间"
+    );
+    assert!(
+        body["upload_url"].is_null(),
+        "切到 Tus 后不应继续暴露旧 upload_url"
+    );
+    assert!(
+        body["upload_headers"].is_null(),
+        "切到 Tus 后不应继续暴露旧 upload_headers"
+    );
+
+    let tus_metadata = body["tus_metadata"]
+        .as_object()
+        .expect("tus_metadata 必须是对象");
+    assert_eq!(
+        tus_metadata.get("attachment_id").and_then(Value::as_str),
+        Some(attachment_id)
+    );
+    assert_eq!(
+        tus_metadata.get("file_name").and_then(Value::as_str),
+        Some(expected_file_name)
+    );
+    assert_eq!(
+        tus_metadata.get("mime_type").and_then(Value::as_str),
+        Some(expected_mime_type)
+    );
+    assert_eq!(
+        tus_metadata
+            .get("byte_size")
+            .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse::<i64>().ok())),
+        Some(expected_byte_size)
+    );
 }
 
 fn 提取静态资源路径<'a>(html: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {

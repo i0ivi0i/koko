@@ -39,14 +39,8 @@ pub struct 应用状态 {
     pub admin_password: String,
     pub attachment_storage_dir: String,
     pub attachment_store: Arc<dyn ObjectStore>,
-    pub attachment_upload_mode: 附件上传模式,
-}
-
-/// 上传模式只回答“字节该走哪条运输线”，不混入消息或附件业务真相。
-#[derive(Clone)]
-pub enum 附件上传模式 {
-    本地回环,
-    S3兼容直传 { signer: Arc<AmazonS3> },
+    pub rustus_public_endpoint: String,
+    pub rustus_data_dir: String,
 }
 
 /// 组装 HTTP 冷路径 + Realtime 热路径路由。
@@ -60,9 +54,9 @@ pub async fn 构建应用状态(
     admin_password: String,
 ) -> std::io::Result<应用状态> {
     let media_storage = crate::assembly::读取媒体存储配置()?;
+    let rustus = crate::assembly::读取rustus配置()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
-    let (attachment_store, attachment_upload_mode) =
-        构建附件对象存储(&media_storage, &attachment_storage_dir)?;
+    let attachment_store = 构建附件对象存储(&media_storage, &attachment_storage_dir)?;
     let pool = PgPoolOptions::new()
         .max_connections(20)
         .connect(&database_url)
@@ -75,24 +69,25 @@ pub async fn 构建应用状态(
         admin_password,
         attachment_storage_dir,
         attachment_store,
-        attachment_upload_mode,
+        rustus_public_endpoint: rustus.public_endpoint,
+        rustus_data_dir: rustus.data_dir,
     })
 }
 
 /// 统一装配附件对象存储：
 /// - local 继续服务测试与回滚窗；
-/// - s3 兼容模式同时给“服务端对象读写”和“浏览器直传签名”准备实例。
+/// - s3 兼容模式只负责 canonical 附件对象读写，不再承担浏览器直传签名。
 fn 构建附件对象存储(
     media_storage: &crate::assembly::媒体存储配置,
     attachment_storage_dir: &str,
-) -> std::io::Result<(Arc<dyn ObjectStore>, 附件上传模式)> {
+) -> std::io::Result<Arc<dyn ObjectStore>> {
     match media_storage.驱动 {
         crate::assembly::媒体存储驱动::本地目录 => {
             fs::create_dir_all(attachment_storage_dir)
                 .map_err(|err| std::io::Error::other(format!("创建附件目录失败: {err}")))?;
             let attachment_store = LocalFileSystem::new_with_prefix(attachment_storage_dir)
                 .map_err(|err| std::io::Error::other(format!("初始化附件存储失败: {err}")))?;
-            Ok((Arc::new(attachment_store), 附件上传模式::本地回环))
+            Ok(Arc::new(attachment_store))
         }
         crate::assembly::媒体存储驱动::S3兼容 => {
             let bucket = media_storage.bucket.as_deref().ok_or_else(|| {
@@ -123,23 +118,7 @@ fn 构建附件对象存储(
                 secret_access_key,
                 media_storage.path_style,
             )?;
-            let signer = 构建_s3客户端(
-                media_storage
-                    .public_endpoint
-                    .as_deref()
-                    .or(media_storage.endpoint.as_deref()),
-                bucket,
-                media_storage.region.as_str(),
-                access_key_id,
-                secret_access_key,
-                media_storage.path_style,
-            )?;
-            Ok((
-                Arc::new(store),
-                附件上传模式::S3兼容直传 {
-                    signer: Arc::new(signer),
-                },
-            ))
+            Ok(Arc::new(store))
         }
     }
 }

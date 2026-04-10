@@ -1,7 +1,7 @@
 use super::{
-    err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储, 附件上传模式
+    err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储,
 };
-use crate::{contract, usecase};
+use crate::{adapter::媒体上传运输授权写入请求, contract, usecase};
 use axum::{
     body::Bytes,
     extract::{Path, Query, State},
@@ -11,7 +11,7 @@ use axum::{
 };
 use image::{DynamicImage, ImageFormat};
 use nom_exif::{MediaParser, MediaSource, TrackInfo, TrackInfoTag};
-use object_store::{path::Path as ObjectPath, signer::Signer, ObjectStoreExt};
+use object_store::{path::Path as ObjectPath, ObjectStoreExt};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -20,6 +20,9 @@ use std::{
 };
 use tokio::task;
 use uuid::Uuid;
+
+const 媒体上传运输方式_TUS: &str = "tus";
+const 媒体上传授权有效期秒数: u64 = 15 * 60;
 
 /// 匿名身份引导请求体。
 ///
@@ -228,6 +231,11 @@ pub(super) fn parse_attachment_content_query(
 fn 生成附件标识() -> String {
     let raw = Uuid::new_v4().simple().to_string();
     format!("att-{}", &raw[..12])
+}
+
+fn 生成媒体上传令牌() -> String {
+    let raw = Uuid::new_v4().simple().to_string();
+    format!("tus-{}", raw)
 }
 
 fn 解析媒体类型(
@@ -1290,57 +1298,38 @@ pub(super) async fn prepare_media_upload(
         }
     };
 
-    // 这里把“浏览器该往哪儿 PUT”收口到 shell 层：
-    // - local 回环用于测试与最小回滚窗；
-    // - s3 兼容直传则返回真正的预签名 URL。
-    let (upload_url, upload_headers) = match &state.attachment_upload_mode {
-        附件上传模式::本地回环 => (
-            format!("/api/media/{}/upload", snapshot.附件标识),
-            serde_json::json!({
-                "content-type": snapshot.mime_type,
-                "x-koko-session-id": session_id,
-            }),
-        ),
-        附件上传模式::S3兼容直传 { signer } => {
-            let signed_url = match signer
-                .signed_url(
-                    reqwest::Method::PUT,
-                    &ObjectPath::from(snapshot.原始内容存储键.clone()),
-                    Duration::from_secs(15 * 60),
-                )
-                .await
-            {
-                Ok(url) => url,
-                Err(err) => {
-                    tracing::error!(
-                        usecase = "准备媒体上传",
-                        adapter = "http",
-                        outcome = "failed",
-                        request_kind = "媒体上传 prepare",
-                        session_id = session_id.as_str(),
-                        attachment_id = snapshot.附件标识.as_str(),
-                        attachment_kind = 媒体类型转标签(&snapshot.种类),
-                        file_name = file_name.as_str(),
-                        error_code = "system_error",
-                        error = %err,
-                        "生成对象存储预签名 URL 失败"
-                    );
-                    return err_resp(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        "生成上传地址失败",
-                    );
-                }
-            };
-            (
-                signed_url.to_string(),
-                serde_json::json!({
-                    "content-type": snapshot.mime_type,
-                }),
+    // prepare 只负责：
+    // 1. 落 prepared 附件真相；
+    // 2. 下发一段短期 Tus 运输授权；
+    // 3. 不把 transport token/upload id 倒灌进附件业务表。
+    let upload_token = 生成媒体上传令牌();
+    let transport_auth = 媒体上传运输授权写入请求 {
+        附件标识: snapshot.附件标识.clone(),
+        运输方式: 媒体上传运输方式_TUS.to_string(),
+        上传令牌: upload_token.clone(),
+        令牌有效期秒数: 媒体上传授权有效期秒数 as i64,
+        字节大小: snapshot.字节大小,
+    };
+    let state_for_transport = state.clone();
+    let transport_result = task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_transport);
+        repo.写入媒体上传运输授权(&transport_auth)
+            .map_err(map_domain_err_tuple)
+    })
+    .await;
+    match transport_result {
+        Ok(Ok(())) => {}
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("prepare 运输授权任务执行失败: {err}"),
             )
         }
-    };
-    let expires_at = (SystemTime::now() + Duration::from_secs(15 * 60))
+    }
+
+    let expires_at = (SystemTime::now() + Duration::from_secs(媒体上传授权有效期秒数))
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_secs().to_string())
         .unwrap_or_else(|_| "0".to_string());
@@ -1357,14 +1346,26 @@ pub(super) async fn prepare_media_upload(
         byte_size = byte_size,
         "媒体上传占位已创建"
     );
+    let response_attachment_id = snapshot.附件标识.clone();
+    let response_kind = 媒体类型转标签(&snapshot.种类);
+    let response_mime_type = snapshot.mime_type.clone();
+    let response_byte_size = snapshot.字节大小;
     (
         StatusCode::OK,
         Json(serde_json::json!({
-            "attachment_id": snapshot.附件标识,
-            "kind": 媒体类型转标签(&snapshot.种类),
-            "upload_method": "PUT",
-            "upload_url": upload_url,
-            "upload_headers": upload_headers,
+            "attachment_id": response_attachment_id,
+            "kind": response_kind,
+            "upload_method": 媒体上传运输方式_TUS,
+            "tus_endpoint": state.rustus_public_endpoint,
+            "tus_headers": {
+                "Authorization": format!("Bearer {upload_token}"),
+            },
+            "tus_metadata": {
+                "attachment_id": snapshot.附件标识,
+                "file_name": file_name,
+                "mime_type": response_mime_type,
+                "byte_size": response_byte_size.to_string(),
+            },
             "expires_at": expires_at,
         })),
     )
@@ -1492,18 +1493,22 @@ pub(super) async fn complete_media_upload(
     let state_for_usecase = state.clone();
     let attachment_id_for_usecase = attachment_id.clone();
     let session_id_for_usecase = session_id.clone();
-    let prepared = match task::spawn_blocking(move || {
+    let prepared_and_transport = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
-        usecase::读取待完成媒体附件(
+        let prepared = usecase::读取待完成媒体附件(
             &repo,
             &session_id_for_usecase,
             &attachment_id_for_usecase,
         )
-        .map_err(map_domain_err_tuple)
+        .map_err(map_domain_err_tuple)?;
+        let transport = repo
+            .查询媒体上传运输记录(&attachment_id_for_usecase)
+            .map_err(map_domain_err_tuple)?;
+        Ok::<_, (StatusCode, &'static str, String)>((prepared, transport))
     })
     .await
     {
-        Ok(Ok(prepared)) => prepared,
+        Ok(Ok(payload)) => payload,
         Ok(Err((status, code, message))) => return err_resp(status, code, message),
         Err(err) => {
             return err_resp(
@@ -1513,6 +1518,25 @@ pub(super) async fn complete_media_upload(
             )
         }
     };
+    let (prepared, transport) = prepared_and_transport;
+    // transport finished 是 complete 的前置 gate：
+    // - prepare 成功不等于上传完成；
+    // - sidecar 还没给出 finished 回执时，不能偷跑 ready 升级；
+    // - 这一层先只做 gate，后续再把 shared file 消费完全切过来。
+    let Some(transport) = transport else {
+        return err_resp(
+            StatusCode::CONFLICT,
+            "attachment_not_ready",
+            "原图尚未上传完成",
+        );
+    };
+    if transport.完成时间戳秒.is_none() {
+        return err_resp(
+            StatusCode::CONFLICT,
+            "attachment_not_ready",
+            "原图尚未上传完成",
+        );
+    }
 
     let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
     let get_result = match state.attachment_store.get(&original_path).await {

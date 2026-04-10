@@ -20,6 +20,32 @@ pub struct Pg仓储 {
     pool: PgPool,
 }
 
+/// 运输授权写入请求只描述 Tus sidecar 所需的最小事实：
+/// - 业务锚点仍然是 attachment_id；
+/// - upload_token 只是一段短期运输凭证，不升级成领域主键；
+/// - 有效期继续用秒数表达，避免把时间库类型扩散到壳层。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct 媒体上传运输授权写入请求 {
+    pub 附件标识: String,
+    pub 运输方式: String,
+    pub 上传令牌: String,
+    pub 令牌有效期秒数: i64,
+    pub 字节大小: i64,
+}
+
+/// 运输记录读取结果服务于 shell 对 sidecar 状态的受控判断。
+/// 它不是附件业务真相，因此仍然停留在 adapter 边界。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct 媒体上传运输记录 {
+    pub 附件标识: String,
+    pub 运输方式: String,
+    pub 上传令牌: String,
+    pub transport_upload_id: Option<String>,
+    pub storage_locator: Option<String>,
+    pub 字节大小: Option<i64>,
+    pub 完成时间戳秒: Option<i64>,
+}
+
 /// 生成稳定格式的匿名内部身份标识。
 /// 约束：这里只负责标识格式，不把展示语义塞进主键。
 fn 生成匿名身份标识() -> String {
@@ -369,6 +395,69 @@ impl Pg仓储 {
             高: 附件.高,
             状态: usecase::附件状态读取结果::就绪,
         })
+    }
+
+    /// prepare 阶段只登记一条运输授权记录，不把 transport token 塞进附件真相表。
+    async fn 写入媒体上传运输授权_异步(
+        pool: &PgPool,
+        授权: &媒体上传运输授权写入请求,
+    ) -> Result<(), contract::错误码> {
+        sqlx::query(
+            "INSERT INTO attachment_upload_transports \
+                (attachment_id, transport_kind, upload_token, token_expires_at, transport_upload_id, storage_locator, byte_size, finished_at) \
+             VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 second'), NULL, NULL, $5, NULL) \
+             ON CONFLICT (attachment_id) DO UPDATE SET \
+                transport_kind = EXCLUDED.transport_kind, \
+                upload_token = EXCLUDED.upload_token, \
+                token_expires_at = EXCLUDED.token_expires_at, \
+                transport_upload_id = NULL, \
+                storage_locator = NULL, \
+                byte_size = EXCLUDED.byte_size, \
+                finished_at = NULL",
+        )
+        .bind(&授权.附件标识)
+        .bind(&授权.运输方式)
+        .bind(&授权.上传令牌)
+        .bind(授权.令牌有效期秒数)
+        .bind(授权.字节大小)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(())
+    }
+
+    /// 读取 sidecar 当前登记的运输状态，供 complete/hook 做受控 gate。
+    async fn 查询媒体上传运输记录_异步(
+        pool: &PgPool,
+        附件标识: &str,
+    ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT \
+                attachment_id, \
+                transport_kind, \
+                upload_token, \
+                transport_upload_id, \
+                storage_locator, \
+                byte_size, \
+                EXTRACT(EPOCH FROM finished_at)::BIGINT AS finished_at_epoch \
+             FROM attachment_upload_transports \
+             WHERE attachment_id = $1",
+        )
+        .bind(附件标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(row.map(|row| 媒体上传运输记录 {
+            附件标识: row.get("attachment_id"),
+            运输方式: row.get("transport_kind"),
+            上传令牌: row.get("upload_token"),
+            transport_upload_id: row.get("transport_upload_id"),
+            storage_locator: row.get("storage_locator"),
+            字节大小: row.get("byte_size"),
+            完成时间戳秒: row.get("finished_at_epoch"),
+        }))
     }
 
     /// 按消息可见性反查附件内容目标。
@@ -787,6 +876,22 @@ impl Pg仓储 {
         } else {
             self.handle.block_on(future)
         }
+    }
+
+    /// 共享连接池仓储也要暴露运输授权写入口，避免 shell 重新手搓 SQL。
+    pub(crate) fn 写入媒体上传运输授权(
+        &mut self,
+        授权: &媒体上传运输授权写入请求,
+    ) -> Result<(), contract::错误码> {
+        self.在运行时执行(Self::写入媒体上传运输授权_异步(&self.pool, 授权))
+    }
+
+    /// shell 用它判断 transport 是否已经真正 finished，避免把 prepare 成功误判成 ready。
+    pub(crate) fn 查询媒体上传运输记录(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+        self.在运行时执行(Self::查询媒体上传运输记录_异步(&self.pool, 附件标识))
     }
 
     /// 连接数据库并追平迁移。
