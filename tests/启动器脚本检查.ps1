@@ -28,6 +28,8 @@ Assert-True ($runScript -match 'launcher-run') "run.ps1 应该把开发启动器
 Assert-True ($runScript -match 'Get-Command rustus(?:\.exe)?') "run.ps1 应该显式检查 rustus 可执行文件是否存在。"
 Assert-True ($runScript -match '--hooks-http-urls') "run.ps1 应该显式给 rustus 配置 http hooks。"
 Assert-True ($runScript -match '--hooks-http-proxy-headers') "run.ps1 应该让 rustus 透传 Authorization 给 hook 接收方。"
+Assert-True ($runScript -match '--hooks') "run.ps1 应该显式限制 rustus 只启用当前后端真正处理的 hooks。"
+Assert-True ($runScript -match 'pre-create,post-finish') "run.ps1 应该只启用 pre-create 和 post-finish，避免 post-create 等默认 hooks 反向打坏上传创建。"
 Assert-True ($runScript -match '--url') "run.ps1 应该显式固定 rustus 的 Tus base url。"
 Assert-True ($runScript -match '--data-dir') "run.ps1 应该显式固定 rustus 的共享上传目录。"
 Assert-True ($runScript -match '--info-dir') "run.ps1 应该显式固定 rustus 的上传 info 目录。"
