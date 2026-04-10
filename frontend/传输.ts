@@ -73,6 +73,15 @@ export interface 前端传输端口 {
 export class HttpRealtime传输 implements 前端传输端口 {
   constructor(private readonly baseUrl: string) {}
 
+  /**
+   * 后端在本地回环模式下会返回相对 upload_url，例如 `/api/media/{id}/upload`。
+   * Uppy 的 AwsS3 单段上传在成功后会再次把这个 URL 交给 `new URL()` 解析，
+   * 如果这里不先正规化成绝对地址，就会在浏览器里直接抛 `Invalid URL`。
+   */
+  private 解析绝对地址(pathOrUrl: string): string {
+    return new URL(pathOrUrl, this.baseUrl).href;
+  }
+
   async bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果> {
     return this.post("/api/session/bootstrap", {
       device_anonymous_token: deviceToken,
@@ -99,12 +108,16 @@ export class HttpRealtime传输 implements 前端传输端口 {
     sessionId: string,
     file: File
   ): Promise<媒体上传准备结果> {
-    return this.post(`/api/media/${kind}/prepare`, {
+    const prepared = await this.post<媒体上传准备结果>(`/api/media/${kind}/prepare`, {
       session_id: sessionId,
       file_name: file.name,
       mime_type: file.type,
       byte_size: file.size,
     });
+    return {
+      ...prepared,
+      upload_url: this.解析绝对地址(prepared.upload_url),
+    };
   }
 
   /**
@@ -124,7 +137,16 @@ export class HttpRealtime传输 implements 前端传输端口 {
     sessionId: string,
     attachmentId: string
   ): Promise<媒体定位结果> {
-    return this.get(`/api/media/${attachmentId}/locator?session_id=${sessionId}`);
+    const locator = await this.get<媒体定位结果>(
+      `/api/media/${attachmentId}/locator?session_id=${sessionId}`
+    );
+    return {
+      ...locator,
+      original_url: this.解析绝对地址(locator.original_url),
+      thumbnail_url: locator.thumbnail_url
+        ? this.解析绝对地址(locator.thumbnail_url)
+        : null,
+    };
   }
 
   buildAttachmentContentUrl(

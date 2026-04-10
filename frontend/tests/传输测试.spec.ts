@@ -213,6 +213,33 @@ describe("传输", () => {
     expect(result.upload_method).toBe("PUT");
   });
 
+  it("prepareMediaUpload 会把本地回环返回的相对 upload_url 收口成绝对地址", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-prepared-local-1",
+          upload_method: "PUT",
+          upload_url: "/api/media/att-prepared-local-1/upload",
+          upload_headers: { "content-type": "video/mp4" },
+          expires_at: "2026-04-10T12:00:00Z",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+    const file = new File([new Uint8Array([1, 2, 3])], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    const result = await transport.prepareMediaUpload("video", "s-1", file);
+
+    expect(result.upload_url).toBe("http://localhost:3000/api/media/att-prepared-local-1/upload");
+    expect(result.upload_headers).toEqual({ "content-type": "video/mp4" });
+  });
+
   it("completeMediaUpload 会调用新的 complete 路由并返回 ready 附件快照", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -248,6 +275,37 @@ describe("传输", () => {
     );
     expect(result.attachment_id).toBe("att-ready-1");
     expect(result.status).toBe("ready");
+  });
+
+  it("loadMediaLocator 会把受控相对地址收口成绝对媒体地址", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-locator-1",
+          kind: "video",
+          status: "ready",
+          original_url: "/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
+          thumbnail_url: "/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const locator = await transport.loadMediaLocator("s-1", "att-locator-1");
+
+    expect(locator).toEqual({
+      attachment_id: "att-locator-1",
+      kind: "video",
+      status: "ready",
+      original_url:
+        "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
+      thumbnail_url:
+        "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+    });
   });
 
   it("buildAttachmentContentUrl 会生成受控图片内容地址", () => {
