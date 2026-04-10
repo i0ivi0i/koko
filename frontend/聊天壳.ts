@@ -45,10 +45,97 @@ type 图片上传失败响应 =
  * 否则前端放行、后端拒绝时，就会重新长出“某些设备永远卡在上传中”的错位体验。
  */
 const 图片附件上传上限字节数 = 10 * 1024 * 1024;
-const 图片上传失活超时毫秒 = 45_000;
+const 图片上传失活超时毫秒 = 15_000;
+const 可选择图片文件类型 = ["image/*", ".heic", ".heif", ".heics", ".heifs"];
+const 常见图片扩展名到Mime类型 = {
+  avif: "image/avif",
+  bmp: "image/bmp",
+  gif: "image/gif",
+  heic: "image/heic",
+  heics: "image/heic-sequence",
+  heif: "image/heif",
+  heifs: "image/heif-sequence",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  webp: "image/webp",
+} as const;
+const 需要转码的手机图片Mime类型 = new Set([
+  "image/heic",
+  "image/heic-sequence",
+  "image/heif",
+  "image/heif-sequence",
+]);
+const 需要转码的手机图片扩展名 = new Set(["heic", "heics", "heif", "heifs"]);
 
 function 创建本地图片预览地址(file: Blob | File | null | undefined): string {
   return file instanceof Blob ? URL.createObjectURL(file) : "";
+}
+
+function 读取文件扩展名(fileName: string): string {
+  const extension = fileName.split(".").pop()?.trim().toLowerCase();
+  return extension ?? "";
+}
+
+function 推导图片Mime类型(file: File): string {
+  const normalizedType = file.type.trim().toLowerCase();
+  if (normalizedType) {
+    return normalizedType;
+  }
+  const fallbackMimeType = 常见图片扩展名到Mime类型[
+    读取文件扩展名(file.name) as keyof typeof 常见图片扩展名到Mime类型
+  ];
+  return typeof fallbackMimeType === "string" ? fallbackMimeType : "";
+}
+
+function 是图片文件(file: File): boolean {
+  return 推导图片Mime类型(file).startsWith("image/");
+}
+
+function 是需要前端转码的手机图片(file: File): boolean {
+  const mimeType = 推导图片Mime类型(file);
+  return (
+    需要转码的手机图片Mime类型.has(mimeType) ||
+    需要转码的手机图片扩展名.has(读取文件扩展名(file.name))
+  );
+}
+
+function 替换文件扩展名(fileName: string, extension: string): string {
+  const normalizedExtension = extension.replace(/^\./u, "");
+  const lastDot = fileName.lastIndexOf(".");
+  if (lastDot <= 0) {
+    return `${fileName}.${normalizedExtension}`;
+  }
+  return `${fileName.slice(0, lastDot)}.${normalizedExtension}`;
+}
+
+function 补全图片文件Mime类型(file: File): File {
+  const mimeType = 推导图片Mime类型(file);
+  if (!mimeType || file.type === mimeType) {
+    return file;
+  }
+  return new File([file], file.name, {
+    type: mimeType,
+    lastModified: file.lastModified,
+  });
+}
+
+async function 转码手机图片为标准Jpeg(file: File): Promise<File> {
+  const { default: heic2any } = await import("heic2any");
+  const result = await heic2any({
+    blob: file,
+    toType: "image/jpeg",
+  });
+  const blob = Array.isArray(result) ? result[0] : result;
+  if (!(blob instanceof Blob)) {
+    throw new Error("attachment_upload_failed");
+  }
+  return new File([blob], 替换文件扩展名(file.name, "jpg"), {
+    type: blob.type || "image/jpeg",
+    lastModified: file.lastModified,
+  });
 }
 
 function 派生图片草稿失败文案(errorCode: string): string {
@@ -356,28 +443,71 @@ export class 聊天壳 extends LitElement {
    * 2. 选完文件后仍继续复用现有 Uppy 上传内核；
    * 3. 这里只做壳层入口桥接，不制造第二套上传器。
    */
-  private readonly handleImageFileInputChange = (event: Event): void => {
+  private async 准备待上传图片文件(file: File): Promise<File> {
+    if (!是图片文件(file)) {
+      throw new Error("attachment_type_not_allowed");
+    }
+    try {
+      return 是需要前端转码的手机图片(file)
+        ? await 转码手机图片为标准Jpeg(file)
+        : 补全图片文件Mime类型(file);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === "attachment_type_not_allowed") {
+        throw error;
+      }
+      console.warn("[koko:image-upload:prepare]", {
+        fileName: file.name,
+        fileType: file.type,
+        fileByteSize: file.size,
+        error:
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : "attachment_upload_failed",
+      });
+      throw new Error("attachment_upload_failed");
+    }
+  }
+
+  private readonly handleImageFileInputChange = async (event: Event): Promise<void> => {
     const input = event.currentTarget as HTMLInputElement | null;
     if (!input?.files || input.files.length === 0) {
       return;
     }
+    const selectedFiles = Array.from(input.files);
+    // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
+    input.value = "";
     const uploader = this.ensureImageUploader();
-    for (const file of Array.from(input.files)) {
-      if (file.size > 图片附件上传上限字节数) {
+    for (const sourceFile of selectedFiles) {
+      if (sourceFile.size > 图片附件上传上限字节数) {
         this.写入图片草稿({
-          localId: `too-large-${file.name}-${file.size}-${file.lastModified}`,
+          localId: `too-large-${sourceFile.name}-${sourceFile.size}-${sourceFile.lastModified}`,
           attachmentId: "",
-          previewUrl: 创建本地图片预览地址(file),
+          previewUrl: 创建本地图片预览地址(sourceFile),
           width: 0,
           height: 0,
           status: "failed",
-          fileName: file.name,
+          fileName: sourceFile.name,
           errorCode: "attachment_too_large",
-          sourceFile: file,
+          sourceFile,
         });
         continue;
       }
       try {
+        const file = await this.准备待上传图片文件(sourceFile);
+        if (file.size > 图片附件上传上限字节数) {
+          this.写入图片草稿({
+            localId: `too-large-${file.name}-${file.size}-${file.lastModified}`,
+            attachmentId: "",
+            previewUrl: 创建本地图片预览地址(file),
+            width: 0,
+            height: 0,
+            status: "failed",
+            fileName: file.name,
+            errorCode: "attachment_too_large",
+            sourceFile: file,
+          });
+          continue;
+        }
         uploader.addFile({
           name: file.name,
           type: file.type,
@@ -385,23 +515,21 @@ export class 聊天壳 extends LitElement {
         });
       } catch (error: unknown) {
         this.写入图片草稿({
-          localId: `rejected-${file.name}-${file.size}-${file.lastModified}`,
+          localId: `rejected-${sourceFile.name}-${sourceFile.size}-${sourceFile.lastModified}`,
           attachmentId: "",
-          previewUrl: 创建本地图片预览地址(file),
+          previewUrl: 创建本地图片预览地址(sourceFile),
           width: 0,
           height: 0,
           status: "failed",
-          fileName: file.name,
+          fileName: sourceFile.name,
           errorCode:
             error instanceof Error && error.message.trim()
               ? error.message.trim()
               : "attachment_upload_failed",
-          sourceFile: file,
+          sourceFile,
         });
       }
     }
-    // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
-    input.value = "";
   };
 
   static override styles = css`
@@ -1219,7 +1347,7 @@ export class 聊天壳 extends LitElement {
       allowMultipleUploadBatches: true,
       restrictions: {
         maxNumberOfFiles: 9,
-        allowedFileTypes: ["image/*"],
+        allowedFileTypes: 可选择图片文件类型,
         maxFileSize: 图片附件上传上限字节数,
       },
     })
@@ -1707,7 +1835,7 @@ export class 聊天壳 extends LitElement {
                 <input
                   id="composerImageFileInput"
                   type="file"
-                  accept="image/*"
+                  accept=${可选择图片文件类型.join(",")}
                   multiple
                   hidden
                   @change=${this.handleImageFileInputChange}

@@ -484,6 +484,76 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("图片选择器会显式放行 HEIC/HEIF 文件，而不是只靠 image/*", async () => {
+    const el = await 创建已入房聊天壳();
+
+    const input = el.shadowRoot!.querySelector(
+      "#composerImageFileInput"
+    ) as HTMLInputElement | null;
+    expect(input?.accept).toContain(".heic");
+    expect(input?.accept).toContain(".heif");
+
+    el.remove();
+  });
+
+  it("手机 HEIC 图片会先在前端转成标准图片，再交给 Uppy 上传", async () => {
+    const el = await 创建已入房聊天壳();
+    const addFile = vi.fn();
+    const input = {
+      files: [new File([new Uint8Array([1, 2, 3])], "mobile.heic", { type: "image/heic" })],
+      value: "selected",
+    };
+    const normalizedFile = new File([new Uint8Array([9, 8, 7])], "mobile.jpg", {
+      type: "image/jpeg",
+    });
+    (
+      el as unknown as {
+        imageUploader: {
+          addFile: ReturnType<typeof vi.fn>;
+          setMeta: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+        准备待上传图片文件(file: File): Promise<File>;
+      }
+    ).imageUploader = {
+      addFile,
+      setMeta: vi.fn(),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+    (
+      el as unknown as {
+        准备待上传图片文件: ReturnType<typeof vi.fn>;
+      }
+    ).准备待上传图片文件 = vi.fn().mockResolvedValue(normalizedFile);
+
+    await (
+      el as unknown as {
+        handleImageFileInputChange(event: Event): Promise<void>;
+      }
+    ).handleImageFileInputChange({
+      currentTarget: input,
+    } as unknown as Event);
+    await 等待组件稳定(el);
+
+    expect(
+      (
+        el as unknown as {
+          准备待上传图片文件: ReturnType<typeof vi.fn>;
+        }
+      ).准备待上传图片文件
+    ).toHaveBeenCalledWith(input.files[0]);
+    expect(addFile).toHaveBeenCalledWith({
+      name: "mobile.jpg",
+      type: "image/jpeg",
+      data: normalizedFile,
+    });
+    expect(input.value).toBe("");
+
+    el.remove();
+  });
+
   it("上传 stalled 后会把草稿转成 failed，避免一直停在 uploading", async () => {
     const el = await 创建已入房聊天壳();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "stall.jpg", {
@@ -713,7 +783,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       });
       await el.updateComplete;
 
-      await vi.advanceTimersByTimeAsync(46000);
+      await vi.advanceTimersByTimeAsync(16000);
       await el.updateComplete;
 
       expect(
@@ -801,7 +871,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       );
       await el.updateComplete;
 
-      await vi.advanceTimersByTimeAsync(46000);
+      await vi.advanceTimersByTimeAsync(16000);
       await el.updateComplete;
 
       const draftStatus = el.shadowRoot!.querySelector(
