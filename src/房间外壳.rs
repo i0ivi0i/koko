@@ -1550,11 +1550,19 @@ async fn handle_rustus_hook_pre_create(
         Ok(value) => value,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    if body.upload.length != metadata_byte_size || body.upload.offset != metadata_byte_size {
+    /*
+     * `pre-create` 发生在 Rustus 真正接收字节之前：
+     * - `length` 代表客户端声明的总长度；
+     * - `offset` 此时应当还是 0；
+     * - 真正“offset == length”的完成事实只允许出现在 `post-finish`。
+     *
+     * 之前这里把 pre-create 误当成完成回执去校验，导致浏览器刚创建上传就被 400 拒掉。
+     */
+    if body.upload.length != metadata_byte_size || body.upload.offset != 0 {
         return err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            "hook length/offset 与 metadata.byte_size 不一致",
+            "pre-create 要求 length 等于 metadata.byte_size，且 offset 必须为 0",
         )
         .into_response();
     }

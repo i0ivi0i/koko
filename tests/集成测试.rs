@@ -877,7 +877,7 @@ async fn rustus_pre_create非法token会被拒绝() {
             "invalid.png",
             "image/png",
             68,
-            68,
+            0,
             None,
         )),
         &[
@@ -889,6 +889,77 @@ async fn rustus_pre_create非法token会被拒绝() {
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["code"].as_str(), Some("attachment_upload_unauthorized"));
+}
+
+#[tokio::test]
+#[serial]
+async fn rustus_pre_create允许offset为0且length等于metadata_byte_size() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({
+            "device_anonymous_token": format!("rustus-pre-create-{uniq}")
+        })),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "pre-create.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
+    let authorization = 提取媒体上传授权头(&prepare_body);
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &format!("upload-pre-create-{attachment_id}"),
+            attachment_id,
+            "pre-create.png",
+            "image/png",
+            68,
+            0,
+            None,
+        )),
+        &[
+            ("Hook-Name", "pre-create"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
 }
 
 #[tokio::test]
@@ -3502,7 +3573,7 @@ fn 写入rustus测试文件(
 }
 
 /// 这里构造的是我们当前 shell 关心的最小 Rustus hook 负载：
-/// - upload.id/path/length/offset 描述运输完成事实；
+/// - upload.id/path/length/offset 只表达“当前 hook 所处的运输状态”；
 /// - metadata 继续把 attachment_id 作为业务锚点传回来；
 /// - 其余字段即便 Rustus 实际会发，也不应该成为我们判断业务真相的依赖。
 fn 构造rustus_hook请求体(
