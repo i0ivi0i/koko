@@ -2,8 +2,9 @@ import { expect, vi } from "vitest";
 import "../../聊天壳";
 import { 创建浏览器存储 } from "../../存储";
 import type { 前端传输端口 } from "../../传输";
+import type { 图片附件草稿 } from "../../图像/图片草稿";
 import { 创建房间内核, 派生房间壳外观 } from "../../房间内核";
-import { 初始聊天状态, type 图片附件草稿, type 聊天状态 } from "../../状态";
+import { 初始聊天状态, type 聊天状态 } from "../../状态";
 import type {
   匿名身份引导结果,
   增量事件快照,

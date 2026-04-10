@@ -11,8 +11,15 @@ import {
   创建浏览器存储,
   type 前端存储端口,
 } from "./存储.js";
+import {
+  写入图片草稿 as 写入图片草稿状态,
+  更新图片草稿状态 as 更新图片草稿状态值,
+  移除图片草稿 as 移除图片草稿状态,
+  type 图片附件草稿,
+  type 图片草稿状态补丁,
+} from "./图像/图片草稿.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
-import { 初始聊天状态, type 图片附件草稿, type 聊天状态 } from "./状态.js";
+import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
 import type { 图片上传准备结果, 图片附件上传结果 } from "./契约.js";
 import {
@@ -1474,52 +1481,37 @@ export class 聊天壳 extends LitElement {
     URL.revokeObjectURL(previewUrl);
   }
 
-  private 写入图片草稿(draft: 图片附件草稿): void {
-    const existing = this.chatState.composerImageDrafts.find(
-      (item) => item.localId === draft.localId
-    );
-    if (existing) {
-      this.revokeDraftPreviewUrl(existing.previewUrl);
+  /**
+   * 纯状态模块只告诉壳层“哪些旧 blob URL 应该作废”。
+   * 真正的浏览器资源回收仍留在壳层执行，避免把 DOM/URL API 倒灌进纯状态模块。
+   */
+  private 回收图片草稿预览地址(previewUrls: string[]): void {
+    for (const previewUrl of previewUrls) {
+      this.revokeDraftPreviewUrl(previewUrl);
     }
-    const nextDrafts = [
-      ...this.chatState.composerImageDrafts.filter((item) => item.localId !== draft.localId),
-      draft,
-    ];
+  }
+
+  private 写入图片草稿(draft: 图片附件草稿): void {
+    const result = 写入图片草稿状态(this.chatState.composerImageDrafts, draft);
+    this.回收图片草稿预览地址(result.需要回收的预览地址);
     this.updateChat({
-      composerImageDrafts: nextDrafts,
+      composerImageDrafts: result.草稿列表,
     });
   }
 
-  private 更新图片草稿状态(
-    localId: string,
-    patch: Partial<Omit<图片附件草稿, "localId" | "fileName">> & { fileName?: string }
-  ): void {
-    const nextDrafts = this.chatState.composerImageDrafts.map((draft) => {
-      if (draft.localId !== localId) {
-        return draft;
-      }
-      if (patch.previewUrl && patch.previewUrl !== draft.previewUrl) {
-        this.revokeDraftPreviewUrl(draft.previewUrl);
-      }
-      return {
-        ...draft,
-        ...patch,
-      };
-    });
+  private 更新图片草稿状态(localId: string, patch: 图片草稿状态补丁): void {
+    const result = 更新图片草稿状态值(this.chatState.composerImageDrafts, localId, patch);
+    this.回收图片草稿预览地址(result.需要回收的预览地址);
     this.updateChat({
-      composerImageDrafts: nextDrafts,
+      composerImageDrafts: result.草稿列表,
     });
   }
 
   private 移除图片草稿(localId: string): void {
-    const target = this.chatState.composerImageDrafts.find((draft) => draft.localId === localId);
-    if (target) {
-      this.revokeDraftPreviewUrl(target.previewUrl);
-    }
+    const result = 移除图片草稿状态(this.chatState.composerImageDrafts, localId);
+    this.回收图片草稿预览地址(result.需要回收的预览地址);
     this.updateChat({
-      composerImageDrafts: this.chatState.composerImageDrafts.filter(
-        (draft) => draft.localId !== localId
-      ),
+      composerImageDrafts: result.草稿列表,
     });
   }
 

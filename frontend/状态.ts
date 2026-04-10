@@ -1,30 +1,9 @@
 import type { 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
+import type { 图片附件草稿 } from "./图像/图片草稿.js";
 
 /** 房间视口模式只属于前端壳层同步编排，不是后端领域真相。 */
 export type 房间视口模式 = "围绕未读阅读" | "贴底跟随" | "离底浏览";
-
-/**
- * 发送区图片草稿只属于前端本地体验态：
- * 1. 它描述上传进度、缩略图和失败提示；
- * 2. 它不是后端权威附件真相；
- * 3. 真正可发送时，仍然只认 attachment_id。
- */
-export interface 图片附件草稿 {
-  localId: string;
-  attachmentId: string;
-  previewUrl: string;
-  width: number;
-  height: number;
-  status: "uploading" | "ready" | "failed";
-  fileName: string;
-  errorCode: string;
-  /**
-   * 失败重试仍然属于壳层本地体验态，所以只在前端草稿里短暂保留原始文件对象。
-   * 它不进入共享 contract，也不冒充后端附件真相。
-   */
-  sourceFile?: File | null;
-}
 
 export interface 聊天状态 {
   /** Web 壳本地持久化的设备入口凭证。它不是最终身份真相。 */

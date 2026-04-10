@@ -1,7 +1,8 @@
 import type { Socket } from "socket.io-client";
 import type { 消息事件 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
-import type { 图片附件草稿, 聊天状态 } from "./状态.js";
+import { 提取可发送图片附件标识 } from "./图像/图片草稿.js";
+import type { 聊天状态 } from "./状态.js";
 import { Http接口错误, type 前端传输端口 } from "./传输.js";
 import type { Transport异常 } from "./房间恢复编排.js";
 
@@ -173,20 +174,6 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     if (shouldFollowLatest) {
       void deps.跟随最新消息追加后刷新视口();
     }
-  }
-
-  function 提取可发送图片附件标识(草稿列表: 图片附件草稿[]): string[] | null {
-    if (草稿列表.length === 0) {
-      return [];
-    }
-    /**
-     * 发送命令不能静默丢掉仍在上传或失败的草稿。
-     * 这里宁可阻止发送，也不偷偷把用户选中的图片“当作不存在”。
-     */
-    if (草稿列表.some((draft) => draft.status !== "ready" || !draft.attachmentId)) {
-      return null;
-    }
-    return 草稿列表.map((draft) => draft.attachmentId);
   }
 
   async function handleConnectError(error: unknown): Promise<void> {

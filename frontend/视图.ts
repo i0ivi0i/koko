@@ -1,6 +1,6 @@
 import type { 图片附件快照, 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
-import type { 图片附件草稿 } from "./状态.js";
+import type { 图片附件草稿 } from "./图像/图片草稿.js";
 import type { 房间视口模式 } from "./状态.js";
 import {
   默认文本布局器,
