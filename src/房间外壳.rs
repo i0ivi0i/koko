@@ -2,8 +2,8 @@ use super::{应用状态, 构建共享仓储, err_resp, events_to_json, map_doma
 use crate::{contract, usecase};
 use axum::{
     extract::{Multipart, Path, Query, State},
-    http::{header, StatusCode},
-    response::IntoResponse,
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use image::{DynamicImage, ImageFormat};
@@ -201,6 +201,28 @@ pub(super) fn parse_attachment_content_query(
 fn 生成附件标识() -> String {
     let raw = Uuid::new_v4().simple().to_string();
     format!("att-{}", &raw[..12])
+}
+
+fn 生成上传诊断标识() -> String {
+    let raw = Uuid::new_v4().simple().to_string();
+    format!("upl-{}", &raw[..12])
+}
+
+/// 上传链诊断头只服务排障：
+/// 1. 它不进入共享 contract；
+/// 2. 也不参与业务判断；
+/// 3. 只用于把“前端这次失败”和“后端哪条日志”快速对上。
+fn 附带上传诊断头(
+    response: impl IntoResponse,
+    upload_trace_id: &str,
+) -> Response {
+    let mut response = response.into_response();
+    if let Ok(value) = HeaderValue::from_str(upload_trace_id) {
+        response
+            .headers_mut()
+            .insert(header::HeaderName::from_static("x-koko-upload-id"), value);
+    }
+    response
 }
 
 fn 推导原图扩展名(mime_type: &str) -> &'static str {
@@ -954,8 +976,18 @@ pub(super) async fn load_room_history(
 /// 3. 存储写入失败时不应留下“已 ready 的数据库真相”
 pub(super) async fn upload_image_attachment(
     State(state): State<应用状态>,
+    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    let upload_trace_id = 生成上传诊断标识();
+    let content_length = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("-");
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("-");
     let mut session_id: Option<String> = None;
     let mut file_bytes: Option<axum::body::Bytes> = None;
 
@@ -968,14 +1000,20 @@ pub(super) async fn upload_image_attachment(
                     adapter = "http",
                     outcome = "rejected",
                     request_kind = "图片附件上传",
+                    upload_trace_id = upload_trace_id.as_str(),
+                    content_length = content_length,
+                    user_agent = user_agent,
                     error_code = "invalid_argument",
                     error = %err,
                     "multipart 载荷解析失败"
                 );
-                return err_resp(
-                    StatusCode::BAD_REQUEST,
-                    "invalid_argument",
-                    "multipart 载荷非法",
+                return 附带上传诊断头(
+                    err_resp(
+                        StatusCode::BAD_REQUEST,
+                        "invalid_argument",
+                        "multipart 载荷非法",
+                    ),
+                    &upload_trace_id,
                 );
             }
         };
@@ -991,14 +1029,20 @@ pub(super) async fn upload_image_attachment(
                         adapter = "http",
                         outcome = "rejected",
                         request_kind = "图片附件上传",
+                        upload_trace_id = upload_trace_id.as_str(),
+                        content_length = content_length,
+                        user_agent = user_agent,
                         error_code = "invalid_argument",
                         error = %err,
                         "session_id 字段读取失败"
                     );
-                    return err_resp(
-                        StatusCode::BAD_REQUEST,
-                        "invalid_argument",
-                        "session_id 字段非法",
+                    return 附带上传诊断头(
+                        err_resp(
+                            StatusCode::BAD_REQUEST,
+                            "invalid_argument",
+                            "session_id 字段非法",
+                        ),
+                        &upload_trace_id,
                     );
                 }
             },
@@ -1010,14 +1054,20 @@ pub(super) async fn upload_image_attachment(
                         adapter = "http",
                         outcome = "rejected",
                         request_kind = "图片附件上传",
+                        upload_trace_id = upload_trace_id.as_str(),
+                        content_length = content_length,
+                        user_agent = user_agent,
                         error_code = "invalid_argument",
                         error = %err,
                         "图片文件字段读取失败"
                     );
-                    return err_resp(
-                        StatusCode::BAD_REQUEST,
-                        "invalid_argument",
-                        "图片文件字段非法",
+                    return 附带上传诊断头(
+                        err_resp(
+                            StatusCode::BAD_REQUEST,
+                            "invalid_argument",
+                            "图片文件字段非法",
+                        ),
+                        &upload_trace_id,
                     );
                 }
             },
@@ -1031,13 +1081,19 @@ pub(super) async fn upload_image_attachment(
             adapter = "http",
             outcome = "rejected",
             request_kind = "图片附件上传",
+            upload_trace_id = upload_trace_id.as_str(),
+            content_length = content_length,
+            user_agent = user_agent,
             error_code = "invalid_argument",
             "上传图片附件缺少 session_id"
         );
-        return err_resp(
-            StatusCode::BAD_REQUEST,
-            "invalid_argument",
-            "缺少 session_id",
+        return 附带上传诊断头(
+            err_resp(
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "缺少 session_id",
+            ),
+            &upload_trace_id,
         );
     };
     let Some(file_bytes) = file_bytes else {
@@ -1046,11 +1102,17 @@ pub(super) async fn upload_image_attachment(
             adapter = "http",
             outcome = "rejected",
             request_kind = "图片附件上传",
+            upload_trace_id = upload_trace_id.as_str(),
+            content_length = content_length,
+            user_agent = user_agent,
             session_id = session_id.as_str(),
             error_code = "invalid_argument",
             "上传图片附件缺少 file"
         );
-        return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 file");
+        return 附带上传诊断头(
+            err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 file"),
+            &upload_trace_id,
+        );
     };
 
     tracing::info!(
@@ -1058,7 +1120,11 @@ pub(super) async fn upload_image_attachment(
         adapter = "http",
         outcome = "accepted",
         request_kind = "图片附件上传",
+        upload_trace_id = upload_trace_id.as_str(),
+        content_length = content_length,
+        user_agent = user_agent,
         session_id = session_id.as_str(),
+        file_byte_size = file_bytes.len(),
         "HTTP 请求已受理"
     );
 
@@ -1069,14 +1135,18 @@ pub(super) async fn upload_image_attachment(
             adapter = "http",
             outcome = "rejected",
             request_kind = "图片附件上传",
+            upload_trace_id = upload_trace_id.as_str(),
             session_id = session_id.as_str(),
             error_code = "attachment_type_not_allowed",
             "无法识别上传文件类型"
         );
-        return err_resp(
-            StatusCode::BAD_REQUEST,
-            "attachment_type_not_allowed",
-            "只允许上传图片",
+        return 附带上传诊断头(
+            err_resp(
+                StatusCode::BAD_REQUEST,
+                "attachment_type_not_allowed",
+                "只允许上传图片",
+            ),
+            &upload_trace_id,
         );
     };
     if !kind.mime_type().starts_with("image/") {
@@ -1085,14 +1155,19 @@ pub(super) async fn upload_image_attachment(
             adapter = "http",
             outcome = "rejected",
             request_kind = "图片附件上传",
+            upload_trace_id = upload_trace_id.as_str(),
             session_id = session_id.as_str(),
+            sniffed_mime = kind.mime_type(),
             error_code = "attachment_type_not_allowed",
             "上传文件不是图片"
         );
-        return err_resp(
-            StatusCode::BAD_REQUEST,
-            "attachment_type_not_allowed",
-            "只允许上传图片",
+        return 附带上传诊断头(
+            err_resp(
+                StatusCode::BAD_REQUEST,
+                "attachment_type_not_allowed",
+                "只允许上传图片",
+            ),
+            &upload_trace_id,
         );
     }
 
@@ -1104,15 +1179,20 @@ pub(super) async fn upload_image_attachment(
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "图片附件上传",
+                upload_trace_id = upload_trace_id.as_str(),
                 session_id = session_id.as_str(),
+                sniffed_mime = kind.mime_type(),
                 error_code = "attachment_type_not_allowed",
                 error = %err,
                 "图片解码失败"
             );
-            return err_resp(
-                StatusCode::BAD_REQUEST,
-                "attachment_type_not_allowed",
-                "图片内容非法",
+            return 附带上传诊断头(
+                err_resp(
+                    StatusCode::BAD_REQUEST,
+                    "attachment_type_not_allowed",
+                    "图片内容非法",
+                ),
+                &upload_trace_id,
             );
         }
     };
@@ -1127,15 +1207,19 @@ pub(super) async fn upload_image_attachment(
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "图片附件上传",
+                upload_trace_id = upload_trace_id.as_str(),
                 session_id = session_id.as_str(),
                 error_code = "system_error",
                 error = %err,
                 "生成图片缩略图失败"
             );
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                "生成图片缩略图失败",
+            return 附带上传诊断头(
+                err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "生成图片缩略图失败",
+                ),
+                &upload_trace_id,
             );
         }
     };
@@ -1159,15 +1243,19 @@ pub(super) async fn upload_image_attachment(
             adapter = "http",
             outcome = "failed",
             request_kind = "图片附件上传",
+            upload_trace_id = upload_trace_id.as_str(),
             session_id = session_id.as_str(),
             error_code = "system_error",
             error = %err,
             "写入原图对象失败"
         );
-        return err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "写入原图对象失败",
+        return 附带上传诊断头(
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "写入原图对象失败",
+            ),
+            &upload_trace_id,
         );
     }
     if let Err(err) = state
@@ -1181,15 +1269,19 @@ pub(super) async fn upload_image_attachment(
             adapter = "http",
             outcome = "failed",
             request_kind = "图片附件上传",
+            upload_trace_id = upload_trace_id.as_str(),
             session_id = session_id.as_str(),
             error_code = "system_error",
             error = %err,
             "写入图片缩略图失败"
         );
-        return err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "写入图片缩略图失败",
+        return 附带上传诊断头(
+            err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "写入图片缩略图失败",
+            ),
+            &upload_trace_id,
         );
     }
 
@@ -1221,15 +1313,19 @@ pub(super) async fn upload_image_attachment(
                 adapter = "http",
                 outcome = "failed",
                 request_kind = "图片附件上传",
+                upload_trace_id = upload_trace_id.as_str(),
                 session_id = session_id.as_str(),
                 error_code = "system_error",
                 error = %err,
                 "上传图片附件任务执行失败"
             );
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("任务执行失败: {err}"),
+            return 附带上传诊断头(
+                err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("任务执行失败: {err}"),
+                ),
+                &upload_trace_id,
             );
         }
     };
@@ -1241,23 +1337,26 @@ pub(super) async fn upload_image_attachment(
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "图片附件上传",
+                upload_trace_id = upload_trace_id.as_str(),
                 session_id = session_id.as_str(),
                 attachment_id = snapshot.附件标识.as_str(),
                 "上传图片附件成功"
             );
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "attachment_id": snapshot.附件标识,
-                    "kind": "image",
-                    "mime_type": snapshot.mime_type,
-                    "byte_size": snapshot.字节大小,
-                    "width": snapshot.宽,
-                    "height": snapshot.高,
-                    "status": "ready",
-                })),
+            附带上传诊断头(
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "attachment_id": snapshot.附件标识,
+                        "kind": "image",
+                        "mime_type": snapshot.mime_type,
+                        "byte_size": snapshot.字节大小,
+                        "width": snapshot.宽,
+                        "height": snapshot.高,
+                        "status": "ready",
+                    })),
+                ),
+                &upload_trace_id,
             )
-                .into_response()
         }
         Err((status, code, message)) => {
             let _ = state.attachment_store.delete(&original_path).await;
@@ -1267,11 +1366,12 @@ pub(super) async fn upload_image_attachment(
                 adapter = "http",
                 outcome = "rejected",
                 request_kind = "图片附件上传",
+                upload_trace_id = upload_trace_id.as_str(),
                 session_id = session_id.as_str(),
                 error_code = code,
                 "上传图片附件被拒绝"
             );
-            err_resp(status, code, message)
+            附带上传诊断头(err_resp(status, code, message), &upload_trace_id)
         }
     }
 }

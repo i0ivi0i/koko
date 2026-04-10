@@ -550,6 +550,129 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("upload-error 会从原始 xhr JSON 响应里提取稳定错误码并记录诊断", async () => {
+    const el = await 创建已入房聊天壳();
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    注入图片草稿(el, {
+      localId: "draft-xhr-error",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-xhr-error",
+      width: 120,
+      height: 90,
+      status: "uploading",
+      fileName: "xhr-error.jpg",
+      errorCode: "",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "xhr-error.jpg", {
+        type: "image/jpeg",
+      }),
+    });
+
+    (
+      el as unknown as {
+        handleImageUploadError(
+          file: { id: string; name: string },
+          error: { message: string },
+          response: {
+            status: number;
+            responseText: string;
+            readyState: number;
+            responseURL: string;
+            getResponseHeader(name: string): string | null;
+          }
+        ): void;
+      }
+    ).handleImageUploadError(
+      { id: "draft-xhr-error", name: "xhr-error.jpg" },
+      { message: "Upload error" },
+      {
+        status: 401,
+        responseText: JSON.stringify({
+          code: "invalid_session",
+          message: "会话无效",
+        }),
+        readyState: 4,
+        responseURL: "http://test.local/api/attachments/image",
+        getResponseHeader(name: string) {
+          return name === "x-koko-upload-id" ? "upl-debug-1" : null;
+        },
+      }
+    );
+    await 等待组件稳定(el);
+
+    const draftStatus = el.shadowRoot!.querySelector(
+      '[data-draft-card-id="draft-xhr-error"] .composer-draft-status'
+    ) as HTMLElement | null;
+    expect(draftStatus?.dataset.status).toBe("failed");
+    expect(draftStatus?.textContent).toContain("会话");
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      "[koko:image-upload:error]",
+      expect.objectContaining({
+        localId: "draft-xhr-error",
+        fileName: "xhr-error.jpg",
+        status: 401,
+        errorCode: "invalid_session",
+        uploadTraceId: "upl-debug-1",
+        reachedHandler: true,
+      })
+    );
+
+    el.remove();
+  });
+
+  it("upload-error 在 status=0 时会收口成网络失败，而不是继续停在模糊 uploading", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-network-error",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-network-error",
+      width: 120,
+      height: 90,
+      status: "uploading",
+      fileName: "network-error.jpg",
+      errorCode: "",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "network-error.jpg", {
+        type: "image/jpeg",
+      }),
+    });
+
+    (
+      el as unknown as {
+        handleImageUploadError(
+          file: { id: string; name: string },
+          error: { message: string },
+          response: {
+            status: number;
+            responseText: string;
+            readyState: number;
+            responseURL: string;
+            getResponseHeader(name: string): string | null;
+          }
+        ): void;
+      }
+    ).handleImageUploadError(
+      { id: "draft-network-error", name: "network-error.jpg" },
+      { message: "Network Error" },
+      {
+        status: 0,
+        responseText: "",
+        readyState: 4,
+        responseURL: "",
+        getResponseHeader() {
+          return null;
+        },
+      }
+    );
+    await 等待组件稳定(el);
+
+    const draftStatus = el.shadowRoot!.querySelector(
+      '[data-draft-card-id="draft-network-error"] .composer-draft-status'
+    ) as HTMLElement | null;
+    expect(draftStatus?.dataset.status).toBe("failed");
+    expect(draftStatus?.textContent).toContain("网络");
+
+    el.remove();
+  });
+
   it("stalled 后的失败草稿重试会重新 addFile，而不是调用失效的 retryUpload", async () => {
     const el = await 创建已入房聊天壳();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "retry-stalled.jpg", {

@@ -30,6 +30,16 @@ import {
 
 type 图片上传Meta = { session_id?: string };
 type 图片上传响应体 = Record<string, unknown>;
+type 图片上传失败响应 =
+  | {
+      body?: 图片上传响应体;
+      status?: number;
+      responseText?: string;
+      readyState?: number;
+      responseURL?: string;
+      getResponseHeader?(name: string): string | null;
+    }
+  | undefined;
 /**
  * 这里必须和 Rust 外壳里的 `DefaultBodyLimit` 同步。
  * 否则前端放行、后端拒绝时，就会重新长出“某些设备永远卡在上传中”的错位体验。
@@ -46,13 +56,91 @@ function 派生图片草稿失败文案(errorCode: string): string {
       return "失败：图片超过 10MB 上限";
     case "attachment_upload_stalled":
       return "失败：上传超时，请重试";
+    case "attachment_upload_network_error":
+      return "失败：网络中断或浏览器拦截了上传";
     case "attachment_type_not_allowed":
       return "失败：只允许上传图片";
+    case "invalid_session":
+      return "失败：会话已失效，请刷新后重试";
+    case "invalid_argument":
+      return "失败：上传请求无效，请重试";
+    case "system_error":
+      return "失败：服务器处理失败，请稍后重试";
     case "attachment_upload_failed":
       return "失败：上传失败，请重试";
     default:
       return `失败：${errorCode || "attachment_upload_failed"}`;
   }
+}
+
+function 安全解析上传失败响应体(response: 图片上传失败响应): Record<string, unknown> | null {
+  if (response?.body && typeof response.body === "object") {
+    return response.body;
+  }
+  if (typeof response?.responseText !== "string" || !response.responseText.trim()) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(response.responseText) as unknown;
+    return payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function 提取上传失败诊断标识(response: 图片上传失败响应): string {
+  const headerValue = response?.getResponseHeader?.("x-koko-upload-id");
+  return typeof headerValue === "string" ? headerValue.trim() : "";
+}
+
+function 解析图片上传失败代码(
+  error: { message: string },
+  response: 图片上传失败响应
+): string {
+  const responseBody = 安全解析上传失败响应体(response);
+  if (typeof responseBody?.code === "string" && responseBody.code.trim()) {
+    return responseBody.code.trim();
+  }
+  if (response?.status === 413) {
+    return "attachment_too_large";
+  }
+  const normalizedMessage = error.message.trim().toLowerCase();
+  if (
+    response?.status === 0 ||
+    normalizedMessage.includes("network error") ||
+    normalizedMessage.includes("failed to fetch") ||
+    normalizedMessage.includes("load failed")
+  ) {
+    return "attachment_upload_network_error";
+  }
+  if (normalizedMessage.includes("timeout") || normalizedMessage.includes("timed out")) {
+    return "attachment_upload_stalled";
+  }
+  return error.message.trim() || "attachment_upload_failed";
+}
+
+function 记录图片上传失败诊断(input: {
+  localId: string;
+  fileName: string;
+  error: { message: string };
+  response: 图片上传失败响应;
+  errorCode: string;
+}): void {
+  const responseText =
+    typeof input.response?.responseText === "string" ? input.response.responseText.trim() : "";
+  const uploadTraceId = 提取上传失败诊断标识(input.response);
+  console.warn("[koko:image-upload:error]", {
+    localId: input.localId,
+    fileName: input.fileName,
+    status: input.response?.status ?? null,
+    readyState: input.response?.readyState ?? null,
+    responseURL: input.response?.responseURL ?? "",
+    errorCode: input.errorCode,
+    originalMessage: input.error.message,
+    uploadTraceId,
+    reachedHandler: Boolean(uploadTraceId),
+    responseText: responseText ? responseText.slice(0, 240) : "",
+  });
 }
 
 function 解析图片上传结果(body: unknown): 图片附件上传结果 | null {
@@ -133,17 +221,22 @@ export class 聊天壳 extends LitElement {
   private readonly handleImageUploadError = (
     file: UppyFile<图片上传Meta, 图片上传响应体> | undefined,
     error: { message: string },
-    response?: { body?: 图片上传响应体 }
+    response?: 图片上传失败响应
   ): void => {
     if (!file) {
       return;
     }
+    const errorCode = 解析图片上传失败代码(error, response);
+    记录图片上传失败诊断({
+      localId: file.id,
+      fileName: file.name ?? "未命名图片",
+      error,
+      response,
+      errorCode,
+    });
     this.更新图片草稿状态(file.id, {
       status: "failed",
-      errorCode:
-        (typeof response?.body?.code === "string" && response.body.code) ||
-        error.message ||
-        "attachment_upload_failed",
+      errorCode,
     });
   };
 

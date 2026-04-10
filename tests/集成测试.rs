@@ -512,6 +512,52 @@ async fn 图片上传成功会返回ready附件快照() {
 
 #[tokio::test]
 #[serial]
+async fn 图片上传成功响应会携带upload_trace_header() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("upload-image-header-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let response = send_multipart_response(
+        app,
+        "/api/attachments/image",
+        session_id,
+        "a.png",
+        "image/png",
+        &最小png字节(),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let header = response
+        .headers()
+        .get("x-koko-upload-id")
+        .and_then(|value| value.to_str().ok())
+        .expect("应返回 upload trace header");
+    assert!(header.starts_with("upl-"));
+}
+
+#[tokio::test]
+#[serial]
 async fn 非图片上传会返回attachment_type_not_allowed() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
@@ -546,6 +592,49 @@ async fn 非图片上传会返回attachment_type_not_allowed() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["code"].as_str(), Some("attachment_type_not_allowed"));
+}
+
+#[tokio::test]
+#[serial]
+async fn 图片上传被拒绝时也会携带upload_trace_header() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("upload-reject-header-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let response = send_multipart_response(
+        app,
+        "/api/attachments/image",
+        session_id,
+        "note.txt",
+        "text/plain",
+        b"not an image",
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let header = response
+        .headers()
+        .get("x-koko-upload-id")
+        .and_then(|value| value.to_str().ok())
+        .expect("应返回 upload trace header");
+    assert!(header.starts_with("upl-"));
 }
 
 #[tokio::test]
@@ -2483,6 +2572,24 @@ async fn send_multipart(
     content_type: &str,
     file_bytes: &[u8],
 ) -> (StatusCode, Value) {
+    let response = send_multipart_response(app, uri, session_id, filename, content_type, file_bytes)
+        .await;
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
+    (status, json)
+}
+
+async fn send_multipart_response(
+    app: axum::Router,
+    uri: &str,
+    session_id: &str,
+    filename: &str,
+    content_type: &str,
+    file_bytes: &[u8],
+) -> axum::response::Response {
     let boundary = "----koko-test-boundary";
     let mut body = Vec::new();
     body.extend_from_slice(
@@ -2500,7 +2607,7 @@ async fn send_multipart(
     body.extend_from_slice(file_bytes);
     body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
 
-    let response = app
+    app
         .oneshot(
             Request::builder()
                 .method(Method::POST)
@@ -2513,13 +2620,7 @@ async fn send_multipart(
                 .expect("request"),
         )
         .await
-        .expect("response");
-    let status = response.status();
-    let bytes = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("read body");
-    let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
-    (status, json)
+        .expect("response")
 }
 
 /// 直接往数据库写入一条 ready 图片附件真相。
