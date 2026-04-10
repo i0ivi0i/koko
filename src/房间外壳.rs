@@ -1,12 +1,15 @@
 use super::{
     err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储,
 };
-use crate::{adapter::媒体上传运输授权写入请求, contract, usecase};
+use crate::{
+    adapter::媒体上传运输授权写入请求,
+    contract,
+    usecase::{self, 仓储端口},
+};
 use axum::{
-    body::Bytes,
     extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     Json,
 };
 use image::{DynamicImage, ImageFormat};
@@ -16,8 +19,10 @@ use serde::Deserialize;
 use std::{
     collections::HashMap,
     io::Cursor,
+    path::{Path as StdPath, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use tokio::fs;
 use tokio::task;
 use uuid::Uuid;
 
@@ -56,6 +61,23 @@ pub(super) struct PrepareMediaUploadBody {
 #[derive(Deserialize)]
 pub(super) struct CompleteMediaUploadBody {
     session_id: Option<String>,
+}
+
+/// Rustus hook 顶层负载。
+/// 我们只解析自己真正依赖的最小字段，其余字段继续留给 Rustus 自己演进。
+#[derive(Deserialize)]
+pub(super) struct RustusHookBody {
+    upload: RustusUploadBody,
+}
+
+/// Rustus v2 hook 里和我们有关的上传字段。
+#[derive(Deserialize)]
+pub(super) struct RustusUploadBody {
+    id: String,
+    offset: i64,
+    length: i64,
+    path: Option<String>,
+    metadata: HashMap<String, String>,
 }
 
 /// 阅读推进请求体。
@@ -441,6 +463,120 @@ fn 读取非空会话标识(
             "invalid_argument",
             "缺少 session_id",
         ))
+}
+
+fn 读取rustus_hook名称(
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, &'static str, &'static str)> {
+    headers
+        .get("Hook-Name")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 Hook-Name",
+        ))
+}
+
+fn 读取媒体上传令牌(
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, &'static str, &'static str)> {
+    let Some(raw_authorization) = headers
+        .get("Authorization")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+    else {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "attachment_upload_unauthorized",
+            "缺少 Authorization",
+        ));
+    };
+    raw_authorization
+        .strip_prefix("Bearer ")
+        .or_else(|| raw_authorization.strip_prefix("bearer "))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or((
+            StatusCode::UNAUTHORIZED,
+            "attachment_upload_unauthorized",
+            "上传令牌非法",
+        ))
+}
+
+fn 读取rustus_metadata字段(
+    metadata: &HashMap<String, String>,
+    key: &'static str,
+) -> Result<String, (StatusCode, &'static str, String)> {
+    metadata
+        .get(key)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            format!("缺少 metadata.{key}"),
+        ))
+}
+
+fn 解析rustus_metadata字节大小(
+    metadata: &HashMap<String, String>,
+) -> Result<i64, (StatusCode, &'static str, String)> {
+    let raw = 读取rustus_metadata字段(metadata, "byte_size")?;
+    raw.parse::<i64>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "metadata.byte_size 非法".to_string(),
+        )
+    })
+}
+
+/// storage locator 来自 sidecar，不可被客户端随意扩展成任意磁盘路径。
+/// 这里统一解析并锁死在 Rustus shared data dir 之内，避免 token 持有者伪造路径探测主机文件。
+fn 解析rustus临时文件路径(
+    rustus_data_dir: &str,
+    storage_locator: &str,
+) -> Result<PathBuf, (StatusCode, &'static str, String)> {
+    let shared_root = PathBuf::from(rustus_data_dir);
+    let candidate = PathBuf::from(storage_locator);
+    let resolved = if candidate.is_absolute() {
+        candidate
+    } else {
+        shared_root.join(candidate)
+    };
+    let canonical_root = std::fs::canonicalize(&shared_root).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("解析 Rustus shared dir 失败: {err}"),
+        )
+    })?;
+    let canonical_file = std::fs::canonicalize(&resolved).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("解析 Rustus 临时文件失败: {err}"),
+        )
+    })?;
+    if !canonical_file.starts_with(&canonical_root) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "storage locator 超出 Rustus data dir".to_string(),
+        ));
+    }
+    if !StdPath::new(&canonical_file).is_file() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "storage locator 不是文件".to_string(),
+        ));
+    }
+    Ok(canonical_file)
 }
 
 fn 校验媒体准备请求(
@@ -1372,115 +1508,242 @@ pub(super) async fn prepare_media_upload(
         .into_response()
 }
 
-/// 本地对象存储回环上传入口：
-/// 1. 只在 local 存储模式下作为开发/测试兜底；
-/// 2. 仍然复用 prepared 真相校验，不允许旁路写对象。
-pub(super) async fn upload_prepared_media_content(
+/// Rustus hook 收口点：
+/// 1. `pre-create` 负责阻止非法上传创建；
+/// 2. `post-finish` 只登记运输回执；
+/// 3. 无论哪个 hook，都不能越权把 prepared 直接升级成 ready。
+pub(super) async fn handle_rustus_hook(
     State(state): State<应用状态>,
-    Path(attachment_id): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
-) -> impl IntoResponse {
-    let session_id = match headers
-        .get("x-koko-session-id")
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.trim().to_string())
+    Json(body): Json<RustusHookBody>,
+) -> Response {
+    let hook_name = match 读取rustus_hook名称(&headers) {
+        Ok(name) => name,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    match hook_name.as_str() {
+        "pre-create" => handle_rustus_hook_pre_create(state, headers, body).await,
+        "post-finish" => handle_rustus_hook_post_finish(state, headers, body).await,
+        _ => err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            format!("不支持的 Hook-Name: {hook_name}"),
+        )
+        .into_response(),
+    }
+}
+
+async fn handle_rustus_hook_pre_create(
+    state: 应用状态,
+    headers: HeaderMap,
+    body: RustusHookBody,
+) -> Response {
+    let upload_token = match 读取媒体上传令牌(&headers) {
+        Ok(token) => token,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    let attachment_id = match 读取rustus_metadata字段(&body.upload.metadata, "attachment_id") {
+        Ok(value) => value,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    let metadata_byte_size = match 解析rustus_metadata字节大小(&body.upload.metadata) {
+        Ok(value) => value,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    if body.upload.length != metadata_byte_size || body.upload.offset != metadata_byte_size {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "hook length/offset 与 metadata.byte_size 不一致",
+        )
+        .into_response();
+    }
+
+    let state_for_repo = state.clone();
+    let check_result = match task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_repo);
+        let Some(transport) = repo
+            .根据上传令牌查询媒体上传运输记录(&upload_token)
+            .map_err(map_domain_err_tuple)?
+        else {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "attachment_upload_unauthorized",
+                "上传令牌无效".to_string(),
+            ));
+        };
+        if !transport.令牌仍有效 || transport.运输方式 != 媒体上传运输方式_TUS {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "attachment_upload_unauthorized",
+                "上传令牌已失效".to_string(),
+            ));
+        }
+        if transport.附件标识 != attachment_id {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "attachment_id 与上传令牌不匹配".to_string(),
+            ));
+        }
+        let Some(prepared) = repo
+            .查询待完成媒体附件(&transport.附件标识)
+            .map_err(map_domain_err_tuple)?
+        else {
+            return Err((
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件不再处于待上传状态".to_string(),
+            ));
+        };
+        if !matches!(prepared.状态, usecase::附件状态读取结果::已准备) {
+            return Err((
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件不再处于待上传状态".to_string(),
+            ));
+        }
+        if prepared.字节大小 != body.upload.length {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "上传文件大小与 prepare 不一致".to_string(),
+            ));
+        }
+        Ok::<_, (StatusCode, &'static str, String)>(())
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("Rustus pre-create 任务执行失败: {err}"),
+            )
+            .into_response()
+        }
+    };
+    match check_result {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err((status, code, message)) => err_resp(status, code, message).into_response(),
+    }
+}
+
+async fn handle_rustus_hook_post_finish(
+    state: 应用状态,
+    headers: HeaderMap,
+    body: RustusHookBody,
+) -> Response {
+    let upload_token = match 读取媒体上传令牌(&headers) {
+        Ok(token) => token,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    let attachment_id = match 读取rustus_metadata字段(&body.upload.metadata, "attachment_id") {
+        Ok(value) => value,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    let storage_locator = match body
+        .upload
+        .path
+        .as_deref()
+        .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        Some(session_id) => session_id,
+        Some(path) => path.to_string(),
         None => {
             return err_resp(
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
-                "缺少 x-koko-session-id",
+                "post-finish 缺少 upload.path",
             )
+            .into_response()
         }
     };
-    let state_for_usecase = state.clone();
-    let attachment_id_for_usecase = attachment_id.clone();
-    let session_id_for_usecase = session_id.clone();
-    let prepared = match task::spawn_blocking(move || {
-        let repo = 构建共享仓储(&state_for_usecase);
-        usecase::读取待完成媒体附件(
-            &repo,
-            &session_id_for_usecase,
-            &attachment_id_for_usecase,
-        )
-        .map_err(map_domain_err_tuple)
-    })
-    .await
-    {
-        Ok(Ok(prepared)) => prepared,
-        Ok(Err((status, code, message))) => return err_resp(status, code, message),
-        Err(err) => {
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("本地上传任务执行失败: {err}"),
-            )
-        }
-    };
-    if body.len() as i64 != prepared.字节大小 {
+    if body.upload.offset != body.upload.length {
         return err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            "上传文件大小与 prepare 不一致",
-        );
+            "post-finish 只接受 offset 等于 length 的完成回执",
+        )
+        .into_response();
     }
 
-    let put_result = match state
-        .attachment_store
-        .put(&ObjectPath::from(prepared.原始内容存储键), body.into())
-        .await
+    let state_for_repo = state.clone();
+    let upload_id = body.upload.id.clone();
+    let update_result = match task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_repo);
+        let Some(transport) = repo
+            .根据上传令牌查询媒体上传运输记录(&upload_token)
+            .map_err(map_domain_err_tuple)?
+        else {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "attachment_upload_unauthorized",
+                "上传令牌无效".to_string(),
+            ));
+        };
+        if !transport.令牌仍有效 || transport.运输方式 != 媒体上传运输方式_TUS {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "attachment_upload_unauthorized",
+                "上传令牌已失效".to_string(),
+            ));
+        }
+        if transport.附件标识 != attachment_id {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "attachment_id 与上传令牌不匹配".to_string(),
+            ));
+        }
+        let Some(prepared) = repo
+            .查询待完成媒体附件(&transport.附件标识)
+            .map_err(map_domain_err_tuple)?
+        else {
+            return Err((
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件不再处于待上传状态".to_string(),
+            ));
+        };
+        if !matches!(prepared.状态, usecase::附件状态读取结果::已准备) {
+            return Err((
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件不再处于待上传状态".to_string(),
+            ));
+        }
+        解析rustus临时文件路径(&state_for_repo.rustus_data_dir, &storage_locator)?;
+        repo.更新媒体上传运输回执(
+            &transport.附件标识,
+            &upload_id,
+            &storage_locator,
+            body.upload.length,
+        )
+        .map_err(map_domain_err_tuple)?;
+        Ok::<_, (StatusCode, &'static str, String)>(())
+    })
+    .await
     {
         Ok(result) => result,
         Err(err) => {
-            tracing::error!(
-                usecase = "本地回环上传原图",
-                adapter = "http",
-                outcome = "failed",
-                request_kind = "图片原图 PUT",
-                session_id = session_id.as_str(),
-                attachment_id = attachment_id.as_str(),
-                error_code = "system_error",
-                error = %err,
-                "写入 prepared 原图对象失败"
-            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
-                "写入原图对象失败",
-            );
+                format!("Rustus post-finish 任务执行失败: {err}"),
+            )
+            .into_response()
         }
     };
-
-    // 这里必须把对象写入后的 ETag 原样回给浏览器上传器：
-    // - Uppy 单段 PUT 在 2xx 后还会读取 ETag 作为完成信号；
-    // - 如果我们只回 204 不带 ETag，前端就会一直停留在“上传中”，直到 watchdog 超时；
-    // - 因此缺少 ETag 不能伪装成成功，必须明确报错。
-    let Some(etag) = put_result.e_tag.filter(|value| !value.trim().is_empty()) else {
-        tracing::error!(
-            usecase = "本地回环上传原图",
-            adapter = "http",
-            outcome = "failed",
-            request_kind = "图片原图 PUT",
-            session_id = session_id.as_str(),
-            attachment_id = attachment_id.as_str(),
-            error_code = "system_error",
-            "本地回环上传成功但对象存储未返回 ETag"
-        );
-        return err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "上传响应缺少 ETag",
-        );
-    };
-
-    (StatusCode::NO_CONTENT, [(header::ETAG, etag)]).into_response()
+    match update_result {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err((status, code, message)) => err_resp(status, code, message).into_response(),
+    }
 }
 
 /// 冷路径：完成媒体附件上传。
-/// 这里读取已经落到对象存储里的原始媒体，完成后端探测后，再把 prepared 升级成 ready。
+/// 这里消费 Rustus finished 回执指向的 shared file，写回 canonical store 后，再把 prepared 升级成 ready。
 pub(super) async fn complete_media_upload(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
@@ -1538,29 +1801,23 @@ pub(super) async fn complete_media_upload(
         );
     }
 
-    let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
-    let get_result = match state.attachment_store.get(&original_path).await {
-        Ok(result) => result,
-        Err(err) => {
-            tracing::warn!(
-                usecase = "完成媒体上传",
-                adapter = "http",
-                outcome = "rejected",
-                request_kind = "媒体上传 complete",
-                session_id = session_id.as_str(),
-                attachment_id = attachment_id.as_str(),
-                error_code = "attachment_not_ready",
-                error = %err,
-                "complete 时原图对象尚未可读"
-            );
-            return err_resp(
-                StatusCode::CONFLICT,
-                "attachment_not_ready",
-                "原图尚未上传完成",
-            );
-        }
+    let Some(storage_locator) = transport
+        .storage_locator
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return err_resp(
+            StatusCode::CONFLICT,
+            "attachment_not_ready",
+            "原图尚未上传完成",
+        );
     };
-    let original_bytes = match get_result.bytes().await {
+    let temp_file_path = match 解析rustus临时文件路径(&state.rustus_data_dir, storage_locator) {
+        Ok(path) => path,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let original_bytes = match fs::read(&temp_file_path).await {
         Ok(bytes) => bytes,
         Err(err) => {
             tracing::error!(
@@ -1572,12 +1829,12 @@ pub(super) async fn complete_media_upload(
                 attachment_id = attachment_id.as_str(),
                 error_code = "system_error",
                 error = %err,
-                "读取原图对象失败"
+                "读取 Rustus 临时原图文件失败"
             );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
-                "读取原图对象失败",
+                "读取原图临时文件失败",
             );
         }
     };
@@ -1594,6 +1851,29 @@ pub(super) async fn complete_media_upload(
             return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message)
         }
     };
+    let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
+    if let Err(err) = state
+        .attachment_store
+        .put(&original_path, original_bytes.clone().into())
+        .await
+    {
+        tracing::error!(
+            usecase = "完成媒体上传",
+            adapter = "http",
+            outcome = "failed",
+            request_kind = "媒体上传 complete",
+            session_id = session_id.as_str(),
+            attachment_id = attachment_id.as_str(),
+            error_code = "system_error",
+            error = %err,
+            "写入 canonical 原图对象失败"
+        );
+        return err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "写入原图对象失败",
+        );
+    }
 
     let ready_request = match parsed {
         媒体内容解析结果::图片(parsed) => {

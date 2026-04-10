@@ -40,6 +40,7 @@ pub(crate) struct 媒体上传运输记录 {
     pub 附件标识: String,
     pub 运输方式: String,
     pub 上传令牌: String,
+    pub 令牌仍有效: bool,
     pub transport_upload_id: Option<String>,
     pub storage_locator: Option<String>,
     pub 字节大小: Option<i64>,
@@ -437,6 +438,7 @@ impl Pg仓储 {
                 attachment_id, \
                 transport_kind, \
                 upload_token, \
+                token_expires_at > NOW() AS token_is_active, \
                 transport_upload_id, \
                 storage_locator, \
                 byte_size, \
@@ -453,11 +455,71 @@ impl Pg仓储 {
             附件标识: row.get("attachment_id"),
             运输方式: row.get("transport_kind"),
             上传令牌: row.get("upload_token"),
+            令牌仍有效: row.get("token_is_active"),
             transport_upload_id: row.get("transport_upload_id"),
             storage_locator: row.get("storage_locator"),
             字节大小: row.get("byte_size"),
             完成时间戳秒: row.get("finished_at_epoch"),
         }))
+    }
+
+    /// hook 侧通过 upload_token 反查运输授权，避免把 transport id 冒充成业务锚点。
+    async fn 根据上传令牌查询媒体上传运输记录_异步(
+        pool: &PgPool,
+        上传令牌: &str,
+    ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT \
+                attachment_id, \
+                transport_kind, \
+                upload_token, \
+                token_expires_at > NOW() AS token_is_active, \
+                transport_upload_id, \
+                storage_locator, \
+                byte_size, \
+                EXTRACT(EPOCH FROM finished_at)::BIGINT AS finished_at_epoch \
+             FROM attachment_upload_transports \
+             WHERE upload_token = $1",
+        )
+        .bind(上传令牌)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(row.map(|row| 媒体上传运输记录 {
+            附件标识: row.get("attachment_id"),
+            运输方式: row.get("transport_kind"),
+            上传令牌: row.get("upload_token"),
+            令牌仍有效: row.get("token_is_active"),
+            transport_upload_id: row.get("transport_upload_id"),
+            storage_locator: row.get("storage_locator"),
+            字节大小: row.get("byte_size"),
+            完成时间戳秒: row.get("finished_at_epoch"),
+        }))
+    }
+
+    /// post-finish 只登记“运输完成事实”，不越权升级附件 ready。
+    async fn 更新媒体上传运输回执_异步(
+        pool: &PgPool,
+        附件标识: &str,
+        transport_upload_id: &str,
+        storage_locator: &str,
+        byte_size: i64,
+    ) -> Result<(), contract::错误码> {
+        sqlx::query(
+            "UPDATE attachment_upload_transports \
+             SET transport_upload_id = $2, storage_locator = $3, byte_size = $4, finished_at = NOW() \
+             WHERE attachment_id = $1",
+        )
+        .bind(附件标识)
+        .bind(transport_upload_id)
+        .bind(storage_locator)
+        .bind(byte_size)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(())
     }
 
     /// 按消息可见性反查附件内容目标。
@@ -892,6 +954,34 @@ impl Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
         self.在运行时执行(Self::查询媒体上传运输记录_异步(&self.pool, 附件标识))
+    }
+
+    /// hook 只靠上传令牌做 sidecar 鉴权，不把会话/成员判断塞进 transport 层。
+    pub(crate) fn 根据上传令牌查询媒体上传运输记录(
+        &self,
+        上传令牌: &str,
+    ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+        self.在运行时执行(Self::根据上传令牌查询媒体上传运输记录_异步(
+            &self.pool,
+            上传令牌,
+        ))
+    }
+
+    /// transport finished 只登记回执；prepared -> ready 仍由 complete 主链完成。
+    pub(crate) fn 更新媒体上传运输回执(
+        &mut self,
+        附件标识: &str,
+        transport_upload_id: &str,
+        storage_locator: &str,
+        byte_size: i64,
+    ) -> Result<(), contract::错误码> {
+        self.在运行时执行(Self::更新媒体上传运输回执_异步(
+            &self.pool,
+            附件标识,
+            transport_upload_id,
+            storage_locator,
+            byte_size,
+        ))
     }
 
     /// 连接数据库并追平迁移。

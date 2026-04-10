@@ -2,7 +2,6 @@ use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
-use object_store::{path::Path as ObjectPath, ObjectStoreExt};
 use serde_json::Value;
 use serial_test::serial;
 use sqlx::{postgres::PgPoolOptions, Row};
@@ -659,22 +658,31 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
         .connect(&cfg.database_url)
         .await
         .expect("应能连接数据库");
-    let storage_key = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let upload_id = format!("upload-complete-image-{attachment_id}");
+    let temp_file =
+        写入rustus测试文件(&state.rustus_data_dir, &attachment_id, "complete.png", &最小png字节())
+            .expect("应能写入 rustus 原图文件");
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "complete.png",
+            "image/png",
+            68,
+            68,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
     )
-    .bind(&attachment_id)
-    .fetch_one(&pool)
-    .await
-    .expect("应能查询原图存储键")
-    .expect("prepare 后必须写入原图存储键");
-    state
-        .attachment_store
-        .put(&ObjectPath::from(storage_key), 最小png字节().into())
-        .await
-        .expect("测试应能预先写入原图对象");
-    标记媒体上传运输已完成(&pool, &attachment_id, 68)
-        .await
-        .expect("测试应能补运输 finished 回执");
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
 
     let (complete_status, complete_body) = send_json(
         app,
@@ -848,6 +856,137 @@ async fn 没有上传回执时complete媒体上传会返回attachment_not_ready(
 
 #[tokio::test]
 #[serial]
+async fn rustus_pre_create非法token会被拒绝() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            "upload-invalid-token",
+            "att-invalid-token",
+            "invalid.png",
+            "image/png",
+            68,
+            68,
+            None,
+        )),
+        &[
+            ("Hook-Name", "pre-create"),
+            ("Authorization", "Bearer not-a-real-token"),
+        ],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["code"].as_str(), Some("attachment_upload_unauthorized"));
+}
+
+#[tokio::test]
+#[serial]
+async fn rustus_post_finish会登记上传回执() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("rustus-post-finish-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "hook.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let expected_upload_id = format!("upload-post-finish-{attachment_id}");
+    let temp_file =
+        写入rustus测试文件(&state.rustus_data_dir, attachment_id, "hook.png", &最小png字节())
+            .expect("应能写入 rustus 测试文件");
+
+    let (status, _) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &expected_upload_id,
+            attachment_id,
+            "hook.png",
+            "image/png",
+            68,
+            68,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let row = sqlx::query(
+        "SELECT transport_upload_id, storage_locator, byte_size, finished_at IS NOT NULL AS is_finished \
+         FROM attachment_upload_transports WHERE attachment_id = $1",
+    )
+    .bind(attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("post-finish 后应存在运输回执");
+    let upload_id: Option<String> = row.get("transport_upload_id");
+    let storage_locator: Option<String> = row.get("storage_locator");
+    let byte_size: Option<i64> = row.get("byte_size");
+    let is_finished: bool = row.get("is_finished");
+    assert_eq!(upload_id.as_deref(), Some(expected_upload_id.as_str()));
+    assert_eq!(storage_locator.as_deref(), Some(temp_file.as_str()));
+    assert_eq!(byte_size, Some(68));
+    assert!(is_finished, "post-finish 必须把 finished 回执落库");
+}
+
+#[tokio::test]
+#[serial]
 async fn complete视频上传会把prepared附件升级成ready并写入视频元数据() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -899,22 +1038,35 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
         .connect(&cfg.database_url)
         .await
         .expect("应能连接数据库");
-    let storage_key = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let upload_id = format!("upload-complete-video-{attachment_id}");
+    let temp_file = 写入rustus测试文件(
+        &state.rustus_data_dir,
+        &attachment_id,
+        "complete.mp4",
+        &video_bytes,
     )
-    .bind(&attachment_id)
-    .fetch_one(&pool)
-    .await
-    .expect("应能查询原始视频存储键")
-    .expect("prepare 后必须写入原始视频存储键");
-    state
-        .attachment_store
-        .put(&ObjectPath::from(storage_key), video_bytes.into())
-        .await
-        .expect("测试应能预先写入原始视频对象");
-    标记媒体上传运输已完成(&pool, &attachment_id, video_byte_size)
-        .await
-        .expect("测试应能补运输 finished 回执");
+    .expect("应能写入 rustus 临时视频文件");
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "complete.mp4",
+            "video/mp4",
+            video_byte_size,
+            video_byte_size,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
 
     let (complete_status, complete_body) = send_json(
         app,
@@ -1014,30 +1166,35 @@ async fn complete图片上传遇到非图片原图会返回attachment_type_not_a
         .expect("attachment_id")
         .to_string();
 
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect(&cfg.database_url)
-        .await
-        .expect("应能连接数据库");
-    let storage_key = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let upload_id = format!("upload-invalid-image-{attachment_id}");
+    let temp_file = 写入rustus测试文件(
+        &state.rustus_data_dir,
+        &attachment_id,
+        "broken.png",
+        invalid_bytes,
     )
-    .bind(&attachment_id)
-    .fetch_one(&pool)
-    .await
-    .expect("应能查询原图存储键")
-    .expect("prepare 后必须写入原图存储键");
-    state
-        .attachment_store
-        .put(
-            &ObjectPath::from(storage_key),
-            invalid_bytes.as_slice().into(),
-        )
-        .await
-        .expect("测试应能预先写入非法原图对象");
-    标记媒体上传运输已完成(&pool, &attachment_id, invalid_bytes.len() as i64)
-        .await
-        .expect("测试应能补运输 finished 回执");
+    .expect("应能写入 rustus 非法图片文件");
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "broken.png",
+            "image/png",
+            invalid_bytes.len() as i64,
+            invalid_bytes.len() as i64,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
 
     // complete 必须以真实字节内容为准，不能信 prepare 阶段宣称的图片 MIME。
     let (complete_status, complete_body) = send_json(
@@ -1416,27 +1573,31 @@ async fn 非成员不能读取房间消息里的图片内容() {
         .as_str()
         .expect("attachment_id")
         .to_string();
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect(&cfg.database_url)
-        .await
-        .expect("应能连接数据库");
-    let storage_key = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let upload_id = format!("upload-owner-image-{attachment_id}");
+    let temp_file =
+        写入rustus测试文件(&state.rustus_data_dir, &attachment_id, "owner.png", &最小png字节())
+            .expect("应能写入 rustus 原图文件");
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "owner.png",
+            "image/png",
+            68,
+            68,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
     )
-    .bind(&attachment_id)
-    .fetch_one(&pool)
-    .await
-    .expect("应能查询原图存储键")
-    .expect("prepare 后必须写入原图存储键");
-    state
-        .attachment_store
-        .put(&ObjectPath::from(storage_key), 最小png字节().into())
-        .await
-        .expect("测试应能预先写入原图对象");
-    标记媒体上传运输已完成(&pool, &attachment_id, 68)
-        .await
-        .expect("测试应能补运输 finished 回执");
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
     let (complete_status, complete_body) = send_json(
         app.clone(),
         Method::POST,
@@ -3315,23 +3476,58 @@ async fn send_json(
     }
 }
 
-/// 测试里的 canonical store fixture 仍然沿用现有路径，因此这里手动补一条 finished 回执，
-/// 明确表达“sidecar 已经把上传结束事实交回来”，避免 complete 把 prepare 成功误读成上传完成。
-async fn 标记媒体上传运输已完成(
-    pool: &sqlx::PgPool,
+/// prepare 返回的 Tus headers 当前只要求一条稳定 Authorization。
+/// 测试统一从这里拿，避免每个用例各自硬编码字段路径。
+fn 提取媒体上传授权头(body: &Value) -> String {
+    body["tus_headers"]["Authorization"]
+        .as_str()
+        .expect("Tus prepare 必须返回 Authorization 头")
+        .to_string()
+}
+
+/// Rustus file storage 在测试里直接共享本地目录，因此 fixture 也应写进同一个 data dir。
+/// 这样 complete 读到的就是真正 sidecar 会交回来的临时文件，而不是测试私造的第二套输入源。
+fn 写入rustus测试文件(
+    rustus_data_dir: &str,
     attachment_id: &str,
-    byte_size: i64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE attachment_upload_transports \
-         SET byte_size = $2, finished_at = NOW() \
-         WHERE attachment_id = $1",
-    )
-    .bind(attachment_id)
-    .bind(byte_size)
-    .execute(pool)
-    .await?;
-    Ok(())
+    file_name: &str,
+    bytes: &[u8],
+) -> io::Result<String> {
+    let root = std::path::PathBuf::from(rustus_data_dir);
+    let fixture_dir = root.join("tests");
+    std::fs::create_dir_all(&fixture_dir)?;
+    let path = fixture_dir.join(format!("{attachment_id}-{file_name}"));
+    std::fs::write(&path, bytes)?;
+    Ok(std::fs::canonicalize(path)?.to_string_lossy().to_string())
+}
+
+/// 这里构造的是我们当前 shell 关心的最小 Rustus hook 负载：
+/// - upload.id/path/length/offset 描述运输完成事实；
+/// - metadata 继续把 attachment_id 作为业务锚点传回来；
+/// - 其余字段即便 Rustus 实际会发，也不应该成为我们判断业务真相的依赖。
+fn 构造rustus_hook请求体(
+    upload_id: &str,
+    attachment_id: &str,
+    file_name: &str,
+    mime_type: &str,
+    length: i64,
+    offset: i64,
+    storage_locator: Option<&str>,
+) -> Value {
+    serde_json::json!({
+        "upload": {
+            "id": upload_id,
+            "offset": offset,
+            "length": length,
+            "path": storage_locator,
+            "metadata": {
+                "attachment_id": attachment_id,
+                "file_name": file_name,
+                "mime_type": mime_type,
+                "byte_size": length.to_string(),
+            }
+        }
+    })
 }
 
 /// 统一校验媒体 prepare 的 Tus 契约，避免图片/视频在迁移过程中各自漂移出第二套字段约定。

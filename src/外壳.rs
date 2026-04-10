@@ -2,7 +2,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, StatusCode},
     response::{Html, IntoResponse},
-    routing::{get, post, put},
+    routing::{get, post},
     Json, Router,
 };
 use object_store::{
@@ -56,6 +56,8 @@ pub async fn 构建应用状态(
     let media_storage = crate::assembly::读取媒体存储配置()?;
     let rustus = crate::assembly::读取rustus配置()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
+    fs::create_dir_all(&rustus.data_dir)
+        .map_err(|err| std::io::Error::other(format!("创建 Rustus data dir 失败: {err}")))?;
     let attachment_store = 构建附件对象存储(&media_storage, &attachment_storage_dir)?;
     let pool = PgPoolOptions::new()
         .max_connections(20)
@@ -163,13 +165,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
             post(房间外壳::prepare_media_upload),
         )
         .route(
-            "/api/media/{attachment_id}/upload",
-            put(房间外壳::upload_prepared_media_content),
-        )
-        .route(
             "/api/media/{attachment_id}/complete",
             post(房间外壳::complete_media_upload),
         )
+        .route("/internal/rustus/hooks", post(房间外壳::handle_rustus_hook))
         .route(
             "/api/media/{attachment_id}/locator",
             get(房间外壳::load_media_locator),
