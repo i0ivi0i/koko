@@ -10,12 +10,12 @@ import {
   type 前端存储端口,
 } from "./存储.js";
 import {
-  写入媒体草稿 as 写入图片草稿状态,
-  更新媒体草稿状态 as 更新图片草稿状态值,
-  移除媒体草稿 as 移除图片草稿状态,
-  创建媒体发布器 as 创建图片收发器,
-  type 媒体附件草稿 as 图片附件草稿,
-  type 媒体草稿状态补丁 as 图片草稿状态补丁,
+  写入媒体草稿 as 写入媒体草稿状态,
+  更新媒体草稿状态 as 更新媒体草稿状态值,
+  移除媒体草稿 as 移除媒体草稿状态,
+  创建媒体发布器,
+  type 媒体附件草稿,
+  type 媒体草稿状态补丁,
   可选择图片文件类型,
   可选择视频文件类型,
 } from "./媒体/index.js";
@@ -35,16 +35,16 @@ import {
   type 消息文本布局环境,
 } from "./视图.js";
 
-function 派生图片草稿失败文案(errorCode: string): string {
+function 派生媒体草稿失败文案(errorCode: string): string {
   switch (errorCode) {
     case "attachment_too_large":
-      return "失败：图片超过 10MB 上限";
+      return "失败：附件超过大小上限";
     case "attachment_upload_stalled":
       return "失败：上传超时，请重试";
     case "attachment_upload_network_error":
       return "失败：网络中断或浏览器拦截了上传";
     case "attachment_type_not_allowed":
-      return "失败：只允许上传图片";
+      return "失败：不支持的媒体类型";
     case "invalid_session":
       return "失败：会话已失效，请刷新后重试";
     case "invalid_argument":
@@ -60,13 +60,6 @@ function 派生图片草稿失败文案(errorCode: string): string {
 
 export class 聊天壳 extends LitElement {
   /**
-   * 这轮只先把“视频也是媒体主链的一等公民”钉进领域和契约里。
-   * 真正的视频上传/发布状态机要等后续 `frontend/媒体/` 共核模块接管后再放开，
-   * 因此壳层这里先保留禁用入口位，避免制造“按钮已经可用”的假成功。
-   */
-  private readonly 视频发送开发中 = true;
-
-  /**
    * 文本几何已经改由 Pretext 主导后，宿主尺寸变化就不能再指望浏览器自然流偷偷兜底。
    * 这里不引入第二份“宽度状态”，只在 viewport 改变时请求一次重渲染，
    * 让消息气泡和输入区都重新按当前宿主宽度计算布局。
@@ -76,11 +69,11 @@ export class 聊天壳 extends LitElement {
   };
 
   /**
-   * 图片草稿是发送区唯一的本地体验态真相。
+   * 媒体草稿是发送区唯一的本地体验态真相。
    * 统一从这里读取，避免 success/error/watchdog 各自再扫一遍数组。
    */
-  private 读取图片草稿(localId: string): 图片附件草稿 | undefined {
-    return this.chatState.composerImageDrafts.find((item) => item.localId === localId);
+  private 读取媒体草稿(localId: string): 媒体附件草稿 | undefined {
+    return this.chatState.composerMediaDrafts.find((item) => item.localId === localId);
   }
 
   private readonly handleImageFileInputChange = async (event: Event): Promise<void> => {
@@ -91,16 +84,17 @@ export class 聊天壳 extends LitElement {
     const selectedFiles = Array.from(input.files);
     // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
     input.value = "";
-    await this.图片收发器.处理选择图片文件(selectedFiles);
+    await this.媒体发布器.处理选择图片文件(selectedFiles);
   };
 
-  private readonly handleVideoFileInputChange = (event: Event): void => {
+  private readonly handleVideoFileInputChange = async (event: Event): Promise<void> => {
     const input = event.currentTarget as HTMLInputElement | null;
-    if (!input) {
+    if (!input?.files || input.files.length === 0) {
       return;
     }
-    // 当前切片先只保留稳定入口位；即使测试或脚本直接灌进 change 事件，也不能伪装成已开始上传。
+    const selectedFiles = Array.from(input.files);
     input.value = "";
+    await this.媒体发布器.处理选择视频文件(selectedFiles);
   };
 
   static override styles = css`
@@ -711,16 +705,17 @@ export class 聊天壳 extends LitElement {
   private chatState: 聊天状态 = { ...初始聊天状态 };
 
   private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
-  private readonly 图片收发器 = 创建图片收发器({
+  private readonly 媒体发布器 = 创建媒体发布器({
     getSessionId: () => this.chatState.sessionId,
-    prepareImageUpload: (sessionId, file) => this.transport.prepareImageUpload(sessionId, file),
-    completeImageUpload: (sessionId, attachmentId) =>
-      this.transport.completeImageUpload(sessionId, attachmentId),
-    readDrafts: () => this.chatState.composerImageDrafts,
-    writeDraft: (draft) => this.写入图片草稿(draft),
-    updateDraft: (localId, patch) => this.更新图片草稿状态(localId, patch),
-    removeDraft: (localId) => this.移除图片草稿(localId),
-    clearDrafts: () => this.清空图片草稿(),
+    prepareMediaUpload: (kind, sessionId, file) =>
+      this.transport.prepareMediaUpload(kind, sessionId, file),
+    completeMediaUpload: (sessionId, attachmentId) =>
+      this.transport.completeMediaUpload(sessionId, attachmentId),
+    readDrafts: () => this.chatState.composerMediaDrafts,
+    writeDraft: (draft) => this.写入媒体草稿(draft),
+    updateDraft: (localId, patch) => this.更新媒体草稿状态(localId, patch),
+    removeDraft: (localId) => this.移除媒体草稿(localId),
+    clearDrafts: () => this.清空媒体草稿(),
   });
 
   /**
@@ -869,7 +864,7 @@ export class 聊天壳 extends LitElement {
     this._实时编排端口 = null;
     this._阅读推进编排端口?.dispose();
     this._阅读推进编排端口 = null;
-    this.图片收发器.销毁();
+    this.媒体发布器.销毁();
     this.transport = transport;
     this._恢复编排端口 = null;
   }
@@ -914,16 +909,17 @@ export class 聊天壳 extends LitElement {
     if (!this.chatState.sessionId) {
       return;
     }
-    this.图片收发器.准备选择图片();
+    this.媒体发布器.准备选择图片();
     this.shadowRoot
       ?.querySelector<HTMLInputElement>("#composerImageFileInput")
       ?.click();
   }
 
   private openVideoPicker(): void {
-    if (!this.chatState.sessionId || this.视频发送开发中) {
+    if (!this.chatState.sessionId) {
       return;
     }
+    this.媒体发布器.准备选择视频();
     this.shadowRoot
       ?.querySelector<HTMLInputElement>("#composerVideoFileInput")
       ?.click();
@@ -940,51 +936,51 @@ export class 聊天壳 extends LitElement {
    * 纯状态模块只告诉壳层“哪些旧 blob URL 应该作废”。
    * 真正的浏览器资源回收仍留在壳层执行，避免把 DOM/URL API 倒灌进纯状态模块。
    */
-  private 回收图片草稿预览地址(previewUrls: string[]): void {
+  private 回收媒体草稿预览地址(previewUrls: string[]): void {
     for (const previewUrl of previewUrls) {
       this.revokeDraftPreviewUrl(previewUrl);
     }
   }
 
-  private 写入图片草稿(draft: 图片附件草稿): void {
-    const result = 写入图片草稿状态(this.chatState.composerImageDrafts, draft);
-    this.回收图片草稿预览地址(result.需要回收的预览地址);
+  private 写入媒体草稿(draft: 媒体附件草稿): void {
+    const result = 写入媒体草稿状态(this.chatState.composerMediaDrafts, draft);
+    this.回收媒体草稿预览地址(result.需要回收的预览地址);
     this.updateChat({
-      composerImageDrafts: result.草稿列表,
+      composerMediaDrafts: result.草稿列表,
     });
   }
 
-  private 更新图片草稿状态(localId: string, patch: 图片草稿状态补丁): void {
-    const result = 更新图片草稿状态值(this.chatState.composerImageDrafts, localId, patch);
-    this.回收图片草稿预览地址(result.需要回收的预览地址);
+  private 更新媒体草稿状态(localId: string, patch: 媒体草稿状态补丁): void {
+    const result = 更新媒体草稿状态值(this.chatState.composerMediaDrafts, localId, patch);
+    this.回收媒体草稿预览地址(result.需要回收的预览地址);
     this.updateChat({
-      composerImageDrafts: result.草稿列表,
+      composerMediaDrafts: result.草稿列表,
     });
   }
 
-  private 移除图片草稿(localId: string): void {
-    const result = 移除图片草稿状态(this.chatState.composerImageDrafts, localId);
-    this.回收图片草稿预览地址(result.需要回收的预览地址);
+  private 移除媒体草稿(localId: string): void {
+    const result = 移除媒体草稿状态(this.chatState.composerMediaDrafts, localId);
+    this.回收媒体草稿预览地址(result.需要回收的预览地址);
     this.updateChat({
-      composerImageDrafts: result.草稿列表,
+      composerMediaDrafts: result.草稿列表,
     });
   }
 
-  private 清空图片草稿(): void {
-    for (const draft of this.chatState.composerImageDrafts) {
+  private 清空媒体草稿(): void {
+    for (const draft of this.chatState.composerMediaDrafts) {
       this.revokeDraftPreviewUrl(draft.previewUrl);
     }
     this.updateChat({
-      composerImageDrafts: [],
+      composerMediaDrafts: [],
     });
   }
 
-  private clearImageUploaderState(): void {
-    this.图片收发器.清空();
+  private clearMediaPublisherState(): void {
+    this.媒体发布器.清空();
   }
 
   private removeComposerDraft(localId: string): void {
-    this.图片收发器.移除草稿(localId);
+    this.媒体发布器.移除草稿(localId);
   }
 
   /**
@@ -994,7 +990,7 @@ export class 聊天壳 extends LitElement {
    * 3. 不新建第二个草稿项，避免同一张图在草稿带里长出幽灵副本。
    */
   private async retryComposerDraft(localId: string): Promise<void> {
-    await this.图片收发器.重试草稿(localId);
+    await this.媒体发布器.重试草稿(localId);
   }
 
   override connectedCallback(): void {
@@ -1009,7 +1005,7 @@ export class 聊天壳 extends LitElement {
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
-    this.图片收发器.销毁();
+    this.媒体发布器.销毁();
     super.disconnectedCallback();
   }
 
@@ -1025,7 +1021,7 @@ export class 聊天壳 extends LitElement {
   private buildRoomViewResetPatch(): Partial<聊天状态> {
     return {
       messageInput: "",
-      composerImageDrafts: [],
+      composerMediaDrafts: [],
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,
       hasMoreBefore: false,
@@ -1054,7 +1050,7 @@ export class 聊天壳 extends LitElement {
     }
   ): void {
     this._实时编排端口?.disconnect();
-    this.clearImageUploaderState();
+    this.clearMediaPublisherState();
     this.storage.清除当前房间标识();
     if (!opts.keepRoomCodeCache) {
       this.storage.清除当前房间短码();
@@ -1118,14 +1114,14 @@ export class 聊天壳 extends LitElement {
   }
 
   private async sendCurrentMessage(): Promise<void> {
-    const currentDrafts = this.chatState.composerImageDrafts;
+    const currentDrafts = this.chatState.composerMediaDrafts;
     const hasReadyDraft = currentDrafts.some((draft) => draft.status === "ready");
     const hasBlockingDraft = currentDrafts.some((draft) => draft.status !== "ready");
     await this.实时编排端口.sendMessage();
     if (!hasReadyDraft || hasBlockingDraft) {
       return;
     }
-    this.图片收发器.清空();
+    this.媒体发布器.清空();
   }
 
   private handleShellConsolePrimaryInput(event: Event, isMessageMode: boolean): void {
@@ -1175,7 +1171,7 @@ export class 聊天壳 extends LitElement {
       messageInput: this.chatState.messageInput,
       pending: this.chatState.pending,
       statusText: "",
-      composerImageDrafts: this.chatState.composerImageDrafts,
+      composerMediaDrafts: this.chatState.composerMediaDrafts,
     }).primaryAction.disabled;
   }
 
@@ -1227,7 +1223,7 @@ export class 聊天壳 extends LitElement {
       pending: this.chatState.pending,
       statusText: input.statusText,
       statusAttention: input.statusAttention,
-      composerImageDrafts: this.chatState.composerImageDrafts,
+      composerMediaDrafts: this.chatState.composerMediaDrafts,
     });
     const isMessageMode = consoleState.mode === "message";
     const isHiddenMode = consoleState.mode === "hidden";
@@ -1235,7 +1231,7 @@ export class 聊天壳 extends LitElement {
       isMessageMode,
       consoleState.primaryInput.value
     );
-    const composerDrafts = isMessageMode ? this.chatState.composerImageDrafts : [];
+    const composerDrafts = isMessageMode ? this.chatState.composerMediaDrafts : [];
 
     return html`
       <footer id="shellConsole" class="composer-bar">
@@ -1247,19 +1243,32 @@ export class 聊天壳 extends LitElement {
         </div>
         ${composerDrafts.length > 0
           ? html`
-              <div id="composerImageDrafts" class="composer-drafts">
+              <div id="composerMediaDrafts" class="composer-drafts">
                 ${composerDrafts.map(
                   (draft) => html`
                     <div
                       class="composer-draft"
                       data-draft-card-id=${draft.localId}
                     >
-                      <img
-                        class="composer-draft-thumb"
-                        data-draft-id=${draft.localId}
-                        src=${draft.previewUrl}
-                        alt=${draft.fileName}
-                      />
+                      ${draft.kind === "video"
+                        ? html`
+                            <video
+                              class="composer-draft-thumb"
+                              data-draft-id=${draft.localId}
+                              src=${draft.previewUrl}
+                              muted
+                              playsinline
+                              preload="metadata"
+                            ></video>
+                          `
+                        : html`
+                            <img
+                              class="composer-draft-thumb"
+                              data-draft-id=${draft.localId}
+                              src=${draft.previewUrl}
+                              alt=${draft.fileName}
+                            />
+                          `}
                       <div class="composer-draft-meta">
                         <div class="composer-draft-name">${draft.fileName}</div>
                         <div
@@ -1270,7 +1279,7 @@ export class 聊天壳 extends LitElement {
                             ? "可发送"
                             : draft.status === "uploading"
                               ? "上传中"
-                              : 派生图片草稿失败文案(draft.errorCode)}
+                              : 派生媒体草稿失败文案(draft.errorCode)}
                         </div>
                       </div>
                       <button
@@ -1342,8 +1351,8 @@ export class 聊天壳 extends LitElement {
                   type="button"
                   class="composer-aux-button"
                   aria-label="选择视频"
-                  title="视频发送主链将在后续媒体切片接入"
-                  ?disabled=${consoleState.auxSlot.disabled || this.视频发送开发中}
+                  title=""
+                  ?disabled=${consoleState.auxSlot.disabled}
                   @click=${() => this.openVideoPicker()}
                 >
                   视频

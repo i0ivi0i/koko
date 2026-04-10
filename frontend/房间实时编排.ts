@@ -271,7 +271,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       return;
     }
     const text = state.messageInput.trim();
-    const attachmentIds = 提取可发送媒体附件标识(state.composerImageDrafts);
+    const attachmentIds = 提取可发送媒体附件标识(state.composerMediaDrafts);
     if (attachmentIds === null) {
       return;
     }
@@ -289,7 +289,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     更新状态({
       messages: nextMessages,
       messageInput: "",
-      composerImageDrafts: [],
+      composerMediaDrafts: [],
       pending: true,
     });
     realtimeSocket.emit("create_message", {

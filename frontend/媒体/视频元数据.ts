@@ -1,5 +1,11 @@
 export const 可选择视频文件类型 = ["video/*"] as const;
 
+/**
+ * 这里必须和 Rust 外壳里的 `视频` 上传上限保持一致。
+ * 前端先拦一次，可以避免大文件在本地白传一轮才被后端拒绝。
+ */
+export const 视频附件上传上限字节数 = 50 * 1024 * 1024;
+
 export type 视频文件元数据 = {
   width: number;
   height: number;

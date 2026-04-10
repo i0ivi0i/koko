@@ -144,41 +144,41 @@ function 创建草稿仓库() {
 function 创建场景() {
   const uploader = new 假媒体上传器();
   const drafts = 创建草稿仓库();
-  const prepareImageUpload = vi.fn(async (_sessionId: string, file: File) => ({
+  const prepareMediaUpload = vi.fn(async (_kind: "image" | "video", _sessionId: string, file: File) => ({
     attachment_id: `att-${file.name}`,
     upload_method: "PUT" as const,
     upload_url: `http://storage.local/${file.name}`,
-    upload_headers: { "content-type": file.type || "image/jpeg" },
+    upload_headers: { "content-type": file.type || "application/octet-stream" },
     expires_at: "2026-04-10T12:00:00Z",
   }));
-  const completeImageUpload = vi.fn(async (_sessionId: string, attachmentId: string) => ({
+  const completeMediaUpload = vi.fn(async (_sessionId: string, attachmentId: string) => ({
     attachment_id: attachmentId,
-    kind: "image" as const,
-    mime_type: "image/jpeg",
+    kind: attachmentId.endsWith(".mp4") ? ("video" as const) : ("image" as const),
+    mime_type: attachmentId.endsWith(".mp4") ? "video/mp4" : "image/jpeg",
     byte_size: 3,
-    width: 120,
-    height: 90,
+    width: attachmentId.endsWith(".mp4") ? 1280 : 120,
+    height: attachmentId.endsWith(".mp4") ? 720 : 90,
     status: "ready" as const,
   }));
   const 发布器 = 创建媒体发布器({
     getSessionId: () => "s-test",
-    prepareImageUpload,
-    completeImageUpload,
+    prepareMediaUpload,
+    completeMediaUpload,
     readDrafts: drafts.readDrafts,
     writeDraft: drafts.writeDraft,
     updateDraft: drafts.updateDraft,
     removeDraft: drafts.removeDraft,
     clearDrafts: drafts.clearDrafts,
     createUploader: () => uploader,
-    normalizeUploadFile: async (file) => file,
+    readVideoMetadata: async () => ({ width: 1280, height: 720 }),
     createPreviewUrl: (file) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
   });
   return {
     发布器,
     uploader,
     drafts,
-    prepareImageUpload,
-    completeImageUpload,
+    prepareMediaUpload,
+    completeMediaUpload,
   };
 }
 
@@ -195,7 +195,7 @@ describe("媒体发布器", () => {
 
     await 场景.发布器.处理选择图片文件([sourceFile]);
 
-    expect(场景.prepareImageUpload).toHaveBeenCalledWith("s-test", sourceFile);
+    expect(场景.prepareMediaUpload).toHaveBeenCalledWith("image", "s-test", sourceFile);
     expect(场景.uploader.addFileCalls).toEqual([
       expect.objectContaining({
         id: "att-picked.jpg",
@@ -221,7 +221,7 @@ describe("媒体发布器", () => {
 
     await 场景.uploader.触发上传成功("att-complete-ok.jpg");
 
-    expect(场景.completeImageUpload).toHaveBeenCalledWith("s-test", "att-complete-ok.jpg");
+    expect(场景.completeMediaUpload).toHaveBeenCalledWith("s-test", "att-complete-ok.jpg");
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-complete-ok.jpg",
@@ -236,7 +236,7 @@ describe("媒体发布器", () => {
 
   it("complete 失败时会把草稿收口成 failed", async () => {
     const 场景 = 创建场景();
-    场景.completeImageUpload.mockRejectedValueOnce(
+    场景.completeMediaUpload.mockRejectedValueOnce(
       创建传输错误(500, "system_error", "system_error")
     );
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "complete-failed.jpg", {
@@ -286,6 +286,49 @@ describe("媒体发布器", () => {
     ]);
   });
 
+  it("选视频后会先走媒体 prepare 再写入 uploading 视频草稿", async () => {
+    const 场景 = 创建场景();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "picked.mp4", {
+      type: "video/mp4",
+    });
+
+    await 场景.发布器.处理选择视频文件([sourceFile]);
+
+    expect(场景.prepareMediaUpload).toHaveBeenCalledWith("video", "s-test", sourceFile);
+    expect(场景.drafts.readDrafts()).toEqual([
+      expect.objectContaining({
+        localId: "att-picked.mp4",
+        kind: "video",
+        attachmentId: "att-picked.mp4",
+        status: "uploading",
+        width: 1280,
+        height: 720,
+      }),
+    ]);
+  });
+
+  it("视频 upload-success 后 complete 成功，草稿会变成 ready 视频", async () => {
+    const 场景 = 创建场景();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    await 场景.发布器.处理选择视频文件([sourceFile]);
+    await 场景.uploader.触发上传成功("att-clip.mp4");
+
+    expect(场景.completeMediaUpload).toHaveBeenCalledWith("s-test", "att-clip.mp4");
+    expect(场景.drafts.readDrafts()).toEqual([
+      expect.objectContaining({
+        localId: "att-clip.mp4",
+        kind: "video",
+        attachmentId: "att-clip.mp4",
+        status: "ready",
+        width: 1280,
+        height: 720,
+      }),
+    ]);
+  });
+
   it("upload-stalled 后不会把 failed 草稿误删成空白", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "stalled.jpg", {
@@ -317,9 +360,10 @@ describe("媒体发布器", () => {
       await vi.advanceTimersByTimeAsync(媒体上传失活超时毫秒 + 1000);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        "[koko:image-upload:watchdog]",
+        "[koko:media-upload:watchdog]",
         expect.objectContaining({
           localId: "att-watchdog.jpg",
+          kind: "image",
           fileName: "watchdog.jpg",
         })
       );

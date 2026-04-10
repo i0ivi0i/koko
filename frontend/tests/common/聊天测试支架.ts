@@ -10,7 +10,8 @@ import type {
   增量事件快照,
   后台概览,
   消息事件,
-  图片附件上传结果,
+  媒体附件上传结果,
+  媒体定位结果,
   房间历史页,
   房间快照,
   后台登录结果,
@@ -20,7 +21,7 @@ import type {
 import { 聊天壳 } from "../../聊天壳";
 import type { Socket } from "socket.io-client";
 
-type 假图片上传准备结果 = {
+type 假媒体上传准备结果 = {
   attachment_id: string;
   upload_method: "PUT";
   upload_url: string;
@@ -144,10 +145,10 @@ export class 假Socket {
         text,
         body: text,
         attachments: attachmentIds.map((attachmentId) => ({
-          kind: "image" as const,
+          kind: String(attachmentId).includes("video") ? ("video" as const) : ("image" as const),
           attachment_id: String(attachmentId),
-          width: 120,
-          height: 90,
+          width: String(attachmentId).includes("video") ? 1280 : 120,
+          height: String(attachmentId).includes("video") ? 720 : 90,
         })),
         event_position: 1,
       });
@@ -200,8 +201,8 @@ export class 假传输 implements 前端传输端口 {
     limit: number;
   }> = [];
   socketSessionIds: string[] = [];
-  prepareImageCalls: Array<{ sessionId: string; fileName: string }> = [];
-  completeImageCalls: Array<{ sessionId: string; attachmentId: string }> = [];
+  prepareMediaCalls: Array<{ kind: "image" | "video"; sessionId: string; fileName: string }> = [];
+  completeMediaCalls: Array<{ sessionId: string; attachmentId: string }> = [];
   bootstrapResult: 匿名身份引导结果 = {
     anonymous_identity_id: "a-test",
     display_alias: "暴躁的企鹅",
@@ -212,8 +213,8 @@ export class 假传输 implements 前端传输端口 {
   snapshotQueue: Array<房间快照 | Error> = [];
   eventsQueue: Array<增量事件快照 | Error> = [];
   historyQueue: Array<房间历史页 | Error> = [];
-  prepareQueue: Array<假图片上传准备结果 | Error> = [];
-  completeQueue: Array<图片附件上传结果 | Error> = [];
+  prepareQueue: Array<假媒体上传准备结果 | Error> = [];
+  completeQueue: Array<媒体附件上传结果 | Error> = [];
   readAnchorUpdates: Array<{
     roomId: string;
     sessionId: string;
@@ -249,40 +250,52 @@ export class 假传输 implements 前端传输端口 {
     this.snapshotRoomId = roomId;
     return 创建房间快照(roomId);
   }
-  async prepareImageUpload(
+  async prepareMediaUpload(
+    kind: "image" | "video",
     sessionId: string,
     file: File
-  ): Promise<假图片上传准备结果> {
-    this.prepareImageCalls.push({ sessionId, fileName: file.name });
+  ): Promise<假媒体上传准备结果> {
+    this.prepareMediaCalls.push({ kind, sessionId, fileName: file.name });
     const queued = this.prepareQueue.shift();
     if (queued instanceof Error) throw queued;
     if (queued) return queued;
     return {
       attachment_id: "att-prepared-test",
       upload_method: "PUT",
-      upload_url: "http://storage.local/test-bucket/images/att-prepared-test/original?sig=1",
+      upload_url: `http://storage.local/test-bucket/${kind === "video" ? "videos" : "images"}/att-prepared-test/original?sig=1`,
       upload_headers: {
-        "content-type": file.type || "image/png",
+        "content-type": file.type || (kind === "video" ? "video/mp4" : "image/png"),
       },
       expires_at: "2026-04-10T12:00:00Z",
     };
   }
-  async completeImageUpload(
+  async completeMediaUpload(
     sessionId: string,
     attachmentId: string
-  ): Promise<图片附件上传结果> {
-    this.completeImageCalls.push({ sessionId, attachmentId });
+  ): Promise<媒体附件上传结果> {
+    this.completeMediaCalls.push({ sessionId, attachmentId });
     const queued = this.completeQueue.shift();
     if (queued instanceof Error) throw queued;
     if (queued) return queued;
     return {
       attachment_id: attachmentId,
-      kind: "image",
-      mime_type: "image/png",
+      kind: attachmentId.includes("video") ? "video" : "image",
+      mime_type: attachmentId.includes("video") ? "video/mp4" : "image/png",
       byte_size: 68,
-      width: 1,
-      height: 1,
+      width: attachmentId.includes("video") ? 1280 : 1,
+      height: attachmentId.includes("video") ? 720 : 1,
       status: "ready",
+    };
+  }
+  async loadMediaLocator(_sessionId: string, attachmentId: string): Promise<媒体定位结果> {
+    return {
+      attachment_id: attachmentId,
+      kind: attachmentId.includes("video") ? "video" : "image",
+      status: "ready",
+      original_url: this.buildAttachmentContentUrl(attachmentId, "s-test"),
+      thumbnail_url: attachmentId.includes("video")
+        ? null
+        : this.buildAttachmentContentUrl(attachmentId, "s-test", "thumbnail"),
     };
   }
   buildAttachmentContentUrl(
@@ -396,25 +409,37 @@ export async function 创建已入房聊天壳(
 }
 
 /**
- * 图片草稿属于前端本地体验态，测试里不需要真的走上传器。
+ * 媒体草稿属于前端本地体验态，测试里不需要真的走上传器。
  * 这里直接注入草稿，只为了锁住 presenter 和渲染结果，
  * 不把测试耦合到 Uppy 的内部事件细节。
  */
-export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): void {
+export function 注入媒体草稿(el: 聊天壳, draft: 图片附件草稿): void {
   (
     el as unknown as {
-      chatState: 聊天状态;
+      chatState: 聊天状态 & {
+        composerMediaDrafts?: 图片附件草稿[];
+      };
     }
   ).chatState = {
     ...(el as unknown as { chatState: 聊天状态 }).chatState,
-    composerImageDrafts: [
-      ...(el as unknown as { chatState: 聊天状态 }).chatState.composerImageDrafts.filter(
+    composerMediaDrafts: [
+      ...(
+        (el as unknown as {
+          chatState: 聊天状态 & {
+            composerMediaDrafts?: 图片附件草稿[];
+          };
+        }).chatState.composerMediaDrafts ?? []
+      ).filter(
         (item) => item.localId !== draft.localId
       ),
       draft,
     ],
   };
   el.requestUpdate();
+}
+
+export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): void {
+  注入媒体草稿(el, draft);
 }
 
 export function 读取操作台主输入(

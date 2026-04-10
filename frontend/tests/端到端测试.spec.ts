@@ -14,8 +14,9 @@ import type {
   后台房间详情,
   后台概览,
   后台登录结果,
-  图片附件上传结果,
-  图片上传准备结果,
+  媒体附件上传结果,
+  媒体定位结果,
+  媒体上传准备结果,
   房间历史页,
   房间快照,
 } from "../契约";
@@ -128,21 +129,25 @@ class 端到端假传输 implements 前端传输端口 {
       ],
     });
   }
-  async prepareImageUpload(_sessionId: string, file: File): Promise<图片上传准备结果> {
+  async prepareMediaUpload(
+    kind: "image" | "video",
+    _sessionId: string,
+    file: File
+  ): Promise<媒体上传准备结果> {
     return {
       attachment_id: "att-e2e-prepared",
       upload_method: "PUT",
-      upload_url: "http://storage.local/e2e/original",
+      upload_url: `http://storage.local/e2e/${kind === "video" ? "videos" : "images"}/original`,
       upload_headers: {
-        "content-type": file.type || "image/png",
+        "content-type": file.type || (kind === "video" ? "video/mp4" : "image/png"),
       },
       expires_at: "2026-04-10T12:00:00Z",
     };
   }
-  async completeImageUpload(
+  async completeMediaUpload(
     _sessionId: string,
     attachmentId: string
-  ): Promise<图片附件上传结果> {
+  ): Promise<媒体附件上传结果> {
     return {
       attachment_id: attachmentId,
       kind: "image",
@@ -151,6 +156,15 @@ class 端到端假传输 implements 前端传输端口 {
       width: 120,
       height: 90,
       status: "ready",
+    };
+  }
+  async loadMediaLocator(_sessionId: string, attachmentId: string): Promise<媒体定位结果> {
+    return {
+      attachment_id: attachmentId,
+      kind: "image",
+      status: "ready",
+      original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
+      thumbnail_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e", "thumbnail"),
     };
   }
   async updateRoomReadAnchor(): Promise<void> {}

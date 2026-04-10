@@ -2,8 +2,10 @@ import { io, type Socket } from "socket.io-client";
 import type {
   匿名身份引导结果,
   增量事件快照,
-  图片附件上传结果,
-  图片上传准备结果,
+  媒体附件上传结果,
+  媒体定位结果,
+  媒体上传准备结果,
+  媒体种类,
   阅读推进请求,
   房间历史页,
   房间快照,
@@ -37,8 +39,13 @@ export interface 前端传输端口 {
   bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果>;
   joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
-  prepareImageUpload(sessionId: string, file: File): Promise<图片上传准备结果>;
-  completeImageUpload(sessionId: string, attachmentId: string): Promise<图片附件上传结果>;
+  prepareMediaUpload(
+    kind: 媒体种类,
+    sessionId: string,
+    file: File
+  ): Promise<媒体上传准备结果>;
+  completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
+  loadMediaLocator(sessionId: string, attachmentId: string): Promise<媒体定位结果>;
   buildAttachmentContentUrl(
     attachmentId: string,
     sessionId: string,
@@ -85,13 +92,14 @@ export class HttpRealtime传输 implements 前端传输端口 {
 
   /**
    * prepare 只向 Rust 申请权威 media 占位和浏览器直传参数。
-   * 真正的图片字节不会经过聊天主服务主链。
+   * 真正的媒体字节不会经过聊天主服务主链。
    */
-  async prepareImageUpload(
+  async prepareMediaUpload(
+    kind: 媒体种类,
     sessionId: string,
     file: File
-  ): Promise<图片上传准备结果> {
-    return this.post("/api/media/image/prepare", {
+  ): Promise<媒体上传准备结果> {
+    return this.post(`/api/media/${kind}/prepare`, {
       session_id: sessionId,
       file_name: file.name,
       mime_type: file.type,
@@ -103,13 +111,20 @@ export class HttpRealtime传输 implements 前端传输端口 {
    * complete 负责把 prepared 附件升级成 ready。
    * 只有这里成功后，壳层才允许把草稿显示成“可发送”。
    */
-  async completeImageUpload(
+  async completeMediaUpload(
     sessionId: string,
     attachmentId: string
-  ): Promise<图片附件上传结果> {
+  ): Promise<媒体附件上传结果> {
     return this.post(`/api/media/${attachmentId}/complete`, {
       session_id: sessionId,
     });
+  }
+
+  async loadMediaLocator(
+    sessionId: string,
+    attachmentId: string
+  ): Promise<媒体定位结果> {
+    return this.get(`/api/media/${attachmentId}/locator?session_id=${sessionId}`);
   }
 
   buildAttachmentContentUrl(

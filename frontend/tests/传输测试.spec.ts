@@ -172,7 +172,7 @@ describe("传输", () => {
     expect("uploadImageAttachment" in transport).toBe(false);
   });
 
-  it("prepareImageUpload 会向新的 prepare 路由请求上传参数", async () => {
+  it("prepareMediaUpload 会按媒体种类请求新的 prepare 路由", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -195,7 +195,7 @@ describe("传输", () => {
 
     const result = await (
       transport as unknown as {
-        prepareImageUpload(sessionId: string, file: File): Promise<{
+        prepareMediaUpload(kind: "image" | "video", sessionId: string, file: File): Promise<{
           attachment_id: string;
           upload_method: string;
           upload_url: string;
@@ -203,7 +203,7 @@ describe("传输", () => {
           expires_at: string;
         }>;
       }
-    ).prepareImageUpload("s-1", file);
+    ).prepareMediaUpload("image", "s-1", file);
 
     expect(fetchSpy).toHaveBeenCalledWith(
       "http://localhost:3000/api/media/image/prepare",
@@ -213,7 +213,7 @@ describe("传输", () => {
     expect(result.upload_method).toBe("PUT");
   });
 
-  it("completeImageUpload 会调用新的 complete 路由并返回 ready 附件快照", async () => {
+  it("completeMediaUpload 会调用新的 complete 路由并返回 ready 附件快照", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -235,12 +235,12 @@ describe("传输", () => {
 
     const result = await (
       transport as unknown as {
-        completeImageUpload(sessionId: string, attachmentId: string): Promise<{
+        completeMediaUpload(sessionId: string, attachmentId: string): Promise<{
           attachment_id: string;
           status: string;
         }>;
       }
-    ).completeImageUpload("s-1", "att-ready-1");
+    ).completeMediaUpload("s-1", "att-ready-1");
 
     expect(fetchSpy).toHaveBeenCalledWith(
       "http://localhost:3000/api/media/att-ready-1/complete",

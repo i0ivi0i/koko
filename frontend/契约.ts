@@ -103,9 +103,15 @@ export interface 视频附件快照 {
 
 export type 附件快照 = 图片附件快照 | 视频附件快照;
 
-export interface 图片附件上传结果 {
+export type 媒体种类 = 附件快照["kind"];
+
+/**
+ * 媒体 ready 快照只承接上传主链完成后的稳定元数据。
+ * 它不夹带播放策略、P2P 运行态或权限语义。
+ */
+export interface 媒体附件上传结果 {
   attachment_id: string;
-  kind: "image";
+  kind: 媒体种类;
   mime_type: string;
   byte_size: number;
   width: number;
@@ -113,16 +119,32 @@ export interface 图片附件上传结果 {
   status: "ready";
 }
 
+export type 图片附件上传结果 = 媒体附件上传结果;
+
 /**
- * 图片上传 prepare 结果只回答“下一步该往哪儿传”。
+ * 媒体上传 prepare 结果只回答“下一步该往哪儿传”。
  * 它不声明消息已成立，也不提前伪造 ready 元数据。
  */
-export interface 图片上传准备结果 {
+export interface 媒体上传准备结果 {
   attachment_id: string;
   upload_method: "PUT";
   upload_url: string;
   upload_headers: Record<string, string>;
   expires_at: string;
+}
+
+export type 图片上传准备结果 = 媒体上传准备结果;
+
+/**
+ * locator 只暴露当前客户端下一步该去哪里读媒体。
+ * 业务权限、房间成员真相仍然由后端用例层裁决，不下放给 Web 壳猜。
+ */
+export interface 媒体定位结果 {
+  attachment_id: string;
+  kind: 媒体种类;
+  status: "ready" | "degraded" | "deleted";
+  original_url: string;
+  thumbnail_url: string | null;
 }
 
 export interface 增量事件快照 {

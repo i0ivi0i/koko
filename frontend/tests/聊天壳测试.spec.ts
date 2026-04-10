@@ -8,6 +8,7 @@ import {
   创建已入房聊天壳,
   创建房间快照,
   创建传输错误,
+  注入媒体草稿,
   注入图片草稿,
   等待组件稳定,
   读取操作台主输入,
@@ -257,6 +258,19 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("进入房间后视频选择按钮是可交互的，而不是开发中占位", async () => {
+    const el = await 创建已入房聊天壳();
+
+    const button = el.shadowRoot!.querySelector(
+      "#composerVideoPickerBtn"
+    ) as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    expect(button?.disabled).toBe(false);
+    expect(button?.getAttribute("title") ?? "").toBe("");
+
+    el.remove();
+  });
+
   it("图片入口是小号加号按钮，而不是大号图片文案按钮", async () => {
     const el = await 创建已入房聊天壳();
 
@@ -272,9 +286,11 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
   it("点击加号会直接触发原生文件输入，而不是打开 Dashboard", async () => {
     const el = await 创建已入房聊天壳();
-    const fake图片收发器 = {
+    const fake媒体发布器 = {
       准备选择图片: vi.fn(),
+      准备选择视频: vi.fn(),
       处理选择图片文件: vi.fn().mockResolvedValue(undefined),
+      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -282,9 +298,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
     };
     (
       el as unknown as {
-        图片收发器: typeof fake图片收发器;
+        媒体发布器: typeof fake媒体发布器;
       }
-    ).图片收发器 = fake图片收发器;
+    ).媒体发布器 = fake媒体发布器;
 
     const input = el.shadowRoot!.querySelector(
       "#composerImageFileInput"
@@ -296,7 +312,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       el.shadowRoot!.querySelector("#composerImagePickerBtn") as HTMLButtonElement
     ).click();
 
-    expect(fake图片收发器.准备选择图片).toHaveBeenCalledTimes(1);
+    expect(fake媒体发布器.准备选择图片).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
     el.remove();
   });
@@ -431,11 +447,13 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("失败图片点击重试时会把 localId 转交给图片收发器", async () => {
+  it("失败图片点击重试时会把 localId 转交给媒体发布器", async () => {
     const el = await 创建已入房聊天壳();
-    const fake图片收发器 = {
+    const fake媒体发布器 = {
       准备选择图片: vi.fn(),
+      准备选择视频: vi.fn(),
       处理选择图片文件: vi.fn().mockResolvedValue(undefined),
+      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -443,9 +461,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
     };
     (
       el as unknown as {
-        图片收发器: typeof fake图片收发器;
+        媒体发布器: typeof fake媒体发布器;
       }
-    ).图片收发器 = fake图片收发器;
+    ).媒体发布器 = fake媒体发布器;
     注入图片草稿(el, {
       localId: "draft-retry",
       kind: "image",
@@ -466,15 +484,17 @@ describe("聊天壳集成 / 首页与控制台", () => {
     ).click();
     await 等待组件稳定(el);
 
-    expect(fake图片收发器.重试草稿).toHaveBeenCalledWith("draft-retry");
+    expect(fake媒体发布器.重试草稿).toHaveBeenCalledWith("draft-retry");
     el.remove();
   });
 
-  it("文件输入 change 时会把选中的文件转交给图片收发器并清空 input 值", async () => {
+  it("文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
     const el = await 创建已入房聊天壳();
-    const fake图片收发器 = {
+    const fake媒体发布器 = {
       准备选择图片: vi.fn(),
+      准备选择视频: vi.fn(),
       处理选择图片文件: vi.fn().mockResolvedValue(undefined),
+      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -482,9 +502,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
     };
     (
       el as unknown as {
-        图片收发器: typeof fake图片收发器;
+        媒体发布器: typeof fake媒体发布器;
       }
-    ).图片收发器 = fake图片收发器;
+    ).媒体发布器 = fake媒体发布器;
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "selected.jpg", {
       type: "image/jpeg",
     });
@@ -501,16 +521,18 @@ describe("聊天壳集成 / 首页与控制台", () => {
       currentTarget: input,
     } as unknown as Event);
 
-    expect(fake图片收发器.处理选择图片文件).toHaveBeenCalledWith([sourceFile]);
+    expect(fake媒体发布器.处理选择图片文件).toHaveBeenCalledWith([sourceFile]);
     expect(input.value).toBe("");
     el.remove();
   });
 
-  it("组件销毁时会销毁图片收发器，避免旧上传器泄漏到下一次挂载", async () => {
+  it("视频文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
     const el = await 创建已入房聊天壳();
-    const fake图片收发器 = {
+    const fake媒体发布器 = {
       准备选择图片: vi.fn(),
+      准备选择视频: vi.fn(),
       处理选择图片文件: vi.fn().mockResolvedValue(undefined),
+      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
       重试草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
@@ -518,13 +540,51 @@ describe("聊天壳集成 / 首页与控制台", () => {
     };
     (
       el as unknown as {
-        图片收发器: typeof fake图片收发器;
+        媒体发布器: typeof fake媒体发布器;
       }
-    ).图片收发器 = fake图片收发器;
+    ).媒体发布器 = fake媒体发布器;
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "selected.mp4", {
+      type: "video/mp4",
+    });
+    const input = {
+      files: [sourceFile],
+      value: "selected",
+    };
+
+    await (
+      el as unknown as {
+        handleVideoFileInputChange(event: Event): Promise<void>;
+      }
+    ).handleVideoFileInputChange({
+      currentTarget: input,
+    } as unknown as Event);
+
+    expect(fake媒体发布器.处理选择视频文件).toHaveBeenCalledWith([sourceFile]);
+    expect(input.value).toBe("");
+    el.remove();
+  });
+
+  it("组件销毁时会销毁媒体发布器，避免旧上传器泄漏到下一次挂载", async () => {
+    const el = await 创建已入房聊天壳();
+    const fake媒体发布器 = {
+      准备选择图片: vi.fn(),
+      准备选择视频: vi.fn(),
+      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
+      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
+      移除草稿: vi.fn(),
+      重试草稿: vi.fn().mockResolvedValue(undefined),
+      清空: vi.fn(),
+      销毁: vi.fn(),
+    };
+    (
+      el as unknown as {
+        媒体发布器: typeof fake媒体发布器;
+      }
+    ).媒体发布器 = fake媒体发布器;
 
     el.remove();
 
-    expect(fake图片收发器.销毁).toHaveBeenCalledTimes(1);
+    expect(fake媒体发布器.销毁).toHaveBeenCalledTimes(1);
   });
 
   it("窗口宽度变化后会重新计算消息气泡宽度，而不是继续挂着旧的 Pretext 布局结果", async () => {
@@ -1040,6 +1100,55 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
     expect(sendSpy).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在上传");
+    el.remove();
+  });
+
+  it("存在 uploading 视频草稿时主发送按钮仍会被禁用", async () => {
+    const el = await 创建已入房聊天壳();
+    输入消息到操作台(el, "video pending");
+    注入媒体草稿(el, {
+      localId: "draft-video-uploading",
+      kind: "video",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-video-uploading",
+      width: 1280,
+      height: 720,
+      status: "uploading",
+      fileName: "demo.mp4",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    expect(读取操作台主动作(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("媒体附件");
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).not.toContain("图片");
+    el.remove();
+  });
+
+  it("视频草稿失败后不会伪造成时间线消息", async () => {
+    const el = await 创建已入房聊天壳();
+    输入消息到操作台(el, "失败视频不要伪装成已发送");
+    注入媒体草稿(el, {
+      localId: "draft-video-failed",
+      kind: "video",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-video-failed",
+      width: 1280,
+      height: 720,
+      status: "failed",
+      fileName: "failed.mp4",
+      errorCode: "attachment_upload_failed",
+    });
+    await 等待组件稳定(el);
+
+    读取操作台表单(el).dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector('[data-draft-card-id="draft-video-failed"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#messageList")?.textContent ?? "").not.toContain(
+      "失败视频不要伪装成已发送"
+    );
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("媒体附件");
     el.remove();
   });
 

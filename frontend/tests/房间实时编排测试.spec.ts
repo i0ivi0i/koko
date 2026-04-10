@@ -146,9 +146,9 @@ describe("房间实时编排", () => {
       ],
     });
     const 状态 = 场景.读取状态() as ReturnType<typeof 场景.读取状态> & {
-      composerImageDrafts?: Array<{ attachmentId: string; status: string }>;
+      composerMediaDrafts?: Array<{ attachmentId: string; status: string }>;
     };
-    状态.composerImageDrafts = [
+    状态.composerMediaDrafts = [
       {
         localId: "draft-1",
         kind: "image",
@@ -185,6 +185,58 @@ describe("房间实时编排", () => {
     ).toBe(true);
   });
 
+  it("ready 视频草稿会被提取成 attachment_ids", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 3,
+      messageInput: "带视频消息",
+    });
+    (
+      场景.读取状态() as ReturnType<typeof 场景.读取状态> & {
+        composerMediaDrafts?: Array<{
+          localId: string;
+          kind: "video";
+          attachmentId: string;
+          previewUrl: string;
+          width: number;
+          height: number;
+          status: string;
+          fileName: string;
+          errorCode: string;
+        }>;
+      }
+    ).composerMediaDrafts = [
+      {
+        localId: "draft-video-1",
+        kind: "video",
+        attachmentId: "att-video-1",
+        previewUrl: "blob:http://test.local/draft-video-1",
+        width: 1280,
+        height: 720,
+        status: "ready",
+        fileName: "demo.mp4",
+        errorCode: "",
+      },
+    ];
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+      sendMessage(): Promise<void>;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    await 编排.sendMessage();
+
+    expect(场景.transport.socket.sentEvents.at(-1)).toMatchObject({
+      event: "create_message",
+      payload: {
+        room_id: "r-test",
+        text: "带视频消息",
+        attachment_ids: ["att-video-1"],
+      },
+    });
+  });
+
   it("存在 uploading 图片草稿时不会上送 create_message", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({
@@ -192,7 +244,7 @@ describe("房间实时编排", () => {
       latestEventPosition: 3,
       messageInput: "还在上传",
     });
-    场景.读取状态().composerImageDrafts = [
+    场景.读取状态().composerMediaDrafts = [
       {
         localId: "draft-uploading",
         kind: "image",
@@ -202,6 +254,51 @@ describe("房间实时编排", () => {
         height: 90,
         status: "uploading",
         fileName: "uploading.png",
+        errorCode: "",
+      },
+    ];
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+      sendMessage(): Promise<void>;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    await 编排.sendMessage();
+
+    expect(场景.transport.socket.sentEvents).toEqual([]);
+  });
+
+  it("存在 uploading 视频草稿时不会上送 create_message", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 3,
+      messageInput: "视频还在上传",
+    });
+    (
+      场景.读取状态() as ReturnType<typeof 场景.读取状态> & {
+        composerMediaDrafts?: Array<{
+          localId: string;
+          kind: "video";
+          attachmentId: string;
+          previewUrl: string;
+          width: number;
+          height: number;
+          status: string;
+          fileName: string;
+          errorCode: string;
+        }>;
+      }
+    ).composerMediaDrafts = [
+      {
+        localId: "draft-video-uploading",
+        kind: "video",
+        attachmentId: "",
+        previewUrl: "blob:http://test.local/draft-video-uploading",
+        width: 1280,
+        height: 720,
+        status: "uploading",
+        fileName: "uploading.mp4",
         errorCode: "",
       },
     ];
