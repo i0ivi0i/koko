@@ -1,17 +1,17 @@
 # Graph Report - .  (2026-04-10)
 
 ## Corpus Check
-- 66 files · ~1,193,752 words
+- 66 files · ~1,239,752 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 218 nodes · 266 edges · 27 communities detected
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
+- 219 nodes · 269 edges · 27 communities detected
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 19 edges
-2. `send_json()` - 16 edges
+2. `send_json()` - 17 edges
 3. `单连接发送到已关闭socket时降级为正常断开()` - 6 edges
 4. `updateChat()` - 5 edges
 5. `exitCurrentRoomView()` - 5 edges
@@ -41,7 +41,7 @@ Nodes (1): HttpRealtime传输
 
 ### Community 3 - "Community 3"
 Cohesion: 0.11
-Nodes (17): 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), bootstrap接口会返回稳定花名快照(), complete图片上传遇到非图片原图会返回attachment_type_not_allowed(), complete图片上传会把prepared附件升级成ready并写入缩略图(), 非成员不能通过events接口拉取房间增量(), 成员通过events接口只会拿到from之后的事件(), 不存在的房间通过events接口会返回room_not_found() (+9 more)
+Nodes (18): 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), bootstrap接口会返回稳定花名快照(), complete图片上传遇到非图片原图会返回attachment_type_not_allowed(), complete图片上传会把prepared附件升级成ready并写入缩略图(), 本地回环图片上传成功响应会返回etag供uppy结束上传(), 非成员不能通过events接口拉取房间增量(), 成员通过events接口只会拿到from之后的事件() (+10 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.17
@@ -73,7 +73,7 @@ Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
 
 ### Community 11 - "Community 11"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
@@ -81,7 +81,7 @@ Nodes (2): load_attachment_content(), parse_attachment_content_query()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
@@ -138,11 +138,11 @@ Nodes (1): src/后台外壳.rs
 ## Knowledge Gaps
 - **21 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+16 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 11`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 11`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 12`** (2 nodes): `load_attachment_content()`, `parse_attachment_content_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 13`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 14`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -175,7 +175,7 @@ Nodes (1): src/后台外壳.rs
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 2` to `Community 0`?**
-  _High betweenness centrality (0.132) - this node is a cross-community bridge._
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 7` to `Community 0`?**
   _High betweenness centrality (0.038) - this node is a cross-community bridge._
 - **Why does `假Socket` connect `Community 9` to `Community 1`?**
