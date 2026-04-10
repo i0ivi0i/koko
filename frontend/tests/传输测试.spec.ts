@@ -201,6 +201,84 @@ describe("传输", () => {
     expect(result.status).toBe("ready");
   });
 
+  it("prepareImageUpload 会向新的 prepare 路由请求上传参数", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-prepared-1",
+          upload_method: "PUT",
+          upload_url: "http://storage.local/test-bucket/images/att-prepared-1/original?sig=1",
+          upload_headers: { "content-type": "image/jpeg" },
+          expires_at: "2026-04-10T12:00:00Z",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+    const file = new File([new Uint8Array([1, 2, 3])], "photo.jpg", {
+      type: "image/jpeg",
+    });
+
+    const result = await (
+      transport as unknown as {
+        prepareImageUpload(sessionId: string, file: File): Promise<{
+          attachment_id: string;
+          upload_method: string;
+          upload_url: string;
+          upload_headers: Record<string, string>;
+          expires_at: string;
+        }>;
+      }
+    ).prepareImageUpload("s-1", file);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/media/image/prepare",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(result.attachment_id).toBe("att-prepared-1");
+    expect(result.upload_method).toBe("PUT");
+  });
+
+  it("completeImageUpload 会调用新的 complete 路由并返回 ready 附件快照", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-ready-1",
+          kind: "image",
+          mime_type: "image/png",
+          byte_size: 68,
+          width: 1,
+          height: 1,
+          status: "ready",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const result = await (
+      transport as unknown as {
+        completeImageUpload(sessionId: string, attachmentId: string): Promise<{
+          attachment_id: string;
+          status: string;
+        }>;
+      }
+    ).completeImageUpload("s-1", "att-ready-1");
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/media/att-ready-1/complete",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(result.attachment_id).toBe("att-ready-1");
+    expect(result.status).toBe("ready");
+  });
+
   it("buildAttachmentContentUrl 会生成受控图片内容地址", () => {
     const transport = new HttpRealtime传输("http://localhost:3000");
 

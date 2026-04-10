@@ -2,6 +2,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
+use object_store::{path::Path as ObjectPath, ObjectStoreExt};
 use serde_json::Value;
 use serial_test::serial;
 use sqlx::{postgres::PgPoolOptions, Row};
@@ -508,6 +509,231 @@ async fn 图片上传成功会返回ready附件快照() {
     assert_eq!(body["width"].as_i64(), Some(1));
     assert_eq!(body["height"].as_i64(), Some(1));
     assert!(body["attachment_id"].as_str().is_some());
+}
+
+#[tokio::test]
+#[serial]
+async fn prepare图片上传会创建prepared附件并返回直传参数() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("prepare-image-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "prepared.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["upload_method"].as_str(), Some("PUT"));
+    assert!(body["upload_url"].as_str().is_some());
+    assert!(body["expires_at"].as_str().is_some());
+    let attachment_id = body["attachment_id"].as_str().expect("attachment_id");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let status_in_db = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT status FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询附件状态")
+    .expect("prepare 后应存在 prepared 附件记录");
+    assert_eq!(status_in_db, "prepared");
+}
+
+#[tokio::test]
+#[serial]
+async fn complete图片上传会把prepared附件升级成ready并写入缩略图() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("complete-image-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "complete.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let storage_key = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询原图存储键")
+    .expect("prepare 后必须写入原图存储键");
+    state
+        .attachment_store
+        .put(&ObjectPath::from(storage_key), 最小png字节().into())
+        .await
+        .expect("测试应能预先写入原图对象");
+
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+
+    assert_eq!(complete_status, StatusCode::OK);
+    assert_eq!(complete_body["status"].as_str(), Some("ready"));
+    assert_eq!(complete_body["width"].as_i64(), Some(1));
+    assert_eq!(complete_body["height"].as_i64(), Some(1));
+
+    let row = sqlx::query(
+        "SELECT status, width, height, thumbnail_storage_key FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询 complete 后的附件记录");
+    let status_in_db: String = row.get("status");
+    let width_in_db: Option<i32> = row.get("width");
+    let height_in_db: Option<i32> = row.get("height");
+    let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
+    assert_eq!(status_in_db, "ready");
+    assert_eq!(width_in_db, Some(1));
+    assert_eq!(height_in_db, Some(1));
+    assert!(thumbnail_storage_key.is_some());
+}
+
+#[test]
+#[serial]
+fn prepared附件在complete之前不能进入消息发送主链() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("RP{:010}", uniq % 10_000_000_000);
+    let device_token = format!("prepared-attachment-device-{uniq}");
+    let attachment_id = format!("att-prepared-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
+    let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("进房应返回房间快照"),
+    };
+
+    let runtime = tokio::runtime::Runtime::new().expect("应能创建测试 runtime");
+    let pool = runtime.block_on(async {
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&cfg.database_url)
+            .await
+            .expect("应能连接数据库")
+    });
+    let owner_identity_db_id = runtime.block_on(async {
+        sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",
+        )
+        .bind(&session_id)
+        .fetch_one(&pool)
+        .await
+        .expect("应能查询会话对应的匿名身份")
+        .expect("prepared 附件 owner 必须存在")
+    });
+    runtime.block_on(async {
+        sqlx::query(
+            "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
+             VALUES ($1, $2, 'image', 'image/png', 68, NULL, NULL, $3, NULL, 'prepared')",
+        )
+        .bind(&attachment_id)
+        .bind(owner_identity_db_id)
+        .bind(format!("images/{attachment_id}/original.png"))
+        .execute(&pool)
+        .await
+        .expect("应能插入 prepared 附件");
+    });
+
+    let result = koko::usecase::创建消息(
+        &mut repo,
+        &room_id,
+        &session_id,
+        &format!("prepared-message-{uniq}"),
+        "",
+        &[attachment_id],
+    );
+    let err = result.expect_err("prepared 附件在 complete 前不允许进入发送主链");
+    assert_eq!(err, koko::contract::错误码::附件未就绪);
 }
 
 #[tokio::test]

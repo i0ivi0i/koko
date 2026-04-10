@@ -19,6 +19,14 @@ import type {
 import { 聊天壳 } from "../../聊天壳";
 import type { Socket } from "socket.io-client";
 
+type 假图片上传准备结果 = {
+  attachment_id: string;
+  upload_method: "PUT";
+  upload_url: string;
+  upload_headers: Record<string, string>;
+  expires_at: string;
+};
+
 /**
  * Pretext 在测试进程里也需要一个可用的测量上下文。
  *
@@ -192,6 +200,8 @@ export class 假传输 implements 前端传输端口 {
   }> = [];
   socketSessionIds: string[] = [];
   uploadImageCalls: Array<{ sessionId: string; file: File }> = [];
+  prepareImageCalls: Array<{ sessionId: string; fileName: string }> = [];
+  completeImageCalls: Array<{ sessionId: string; attachmentId: string }> = [];
   bootstrapResult: 匿名身份引导结果 = {
     anonymous_identity_id: "a-test",
     display_alias: "暴躁的企鹅",
@@ -203,6 +213,8 @@ export class 假传输 implements 前端传输端口 {
   eventsQueue: Array<增量事件快照 | Error> = [];
   historyQueue: Array<房间历史页 | Error> = [];
   uploadQueue: Array<图片附件上传结果 | Error> = [];
+  prepareQueue: Array<假图片上传准备结果 | Error> = [];
+  completeQueue: Array<图片附件上传结果 | Error> = [];
   readAnchorUpdates: Array<{
     roomId: string;
     sessionId: string;
@@ -250,6 +262,42 @@ export class 假传输 implements 前端传输端口 {
       byte_size: file.size,
       width: 120,
       height: 90,
+      status: "ready",
+    };
+  }
+  async prepareImageUpload(
+    sessionId: string,
+    file: File
+  ): Promise<假图片上传准备结果> {
+    this.prepareImageCalls.push({ sessionId, fileName: file.name });
+    const queued = this.prepareQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
+    return {
+      attachment_id: "att-prepared-test",
+      upload_method: "PUT",
+      upload_url: "http://storage.local/test-bucket/images/att-prepared-test/original?sig=1",
+      upload_headers: {
+        "content-type": file.type || "image/png",
+      },
+      expires_at: "2026-04-10T12:00:00Z",
+    };
+  }
+  async completeImageUpload(
+    sessionId: string,
+    attachmentId: string
+  ): Promise<图片附件上传结果> {
+    this.completeImageCalls.push({ sessionId, attachmentId });
+    const queued = this.completeQueue.shift();
+    if (queued instanceof Error) throw queued;
+    if (queued) return queued;
+    return {
+      attachment_id: attachmentId,
+      kind: "image",
+      mime_type: "image/png",
+      byte_size: 68,
+      width: 1,
+      height: 1,
       status: "ready",
     };
   }

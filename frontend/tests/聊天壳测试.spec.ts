@@ -554,6 +554,185 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("选图后会先 prepare，再把 attachmentId 记到草稿里", async () => {
+    const transport = new 假传输();
+    transport.prepareQueue = [
+      {
+        attachment_id: "att-prepared-1",
+        upload_method: "PUT",
+        upload_url: "http://storage.local/test-bucket/images/att-prepared-1/original?sig=1",
+        upload_headers: { "content-type": "image/jpeg" },
+        expires_at: "2026-04-10T12:00:00Z",
+      },
+    ];
+    const el = await 创建已入房聊天壳(transport);
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "prepared.jpg", {
+      type: "image/jpeg",
+    });
+    (
+      el as unknown as {
+        imageUploader: {
+          addFile: ReturnType<typeof vi.fn>;
+          setMeta: ReturnType<typeof vi.fn>;
+          setFileMeta: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+        handleImageUploadAdded(file: {
+          id: string;
+          name: string;
+          data: File;
+          meta?: Record<string, unknown>;
+        }): void;
+      }
+    ).imageUploader = {
+      addFile: vi.fn((input: { name: string; data: File; meta?: Record<string, unknown> }) => {
+        (
+          el as unknown as {
+            handleImageUploadAdded(file: {
+              id: string;
+              name: string;
+              data: File;
+              meta?: Record<string, unknown>;
+            }): void;
+          }
+        ).handleImageUploadAdded({
+          id: "draft-prepared-1",
+          name: input.name,
+          data: input.data,
+          meta: input.meta,
+        });
+        return "draft-prepared-1";
+      }),
+      setMeta: vi.fn(),
+      setFileMeta: vi.fn(),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+
+    await (
+      el as unknown as {
+        handleImageFileInputChange(event: Event): Promise<void>;
+      }
+    ).handleImageFileInputChange({
+      currentTarget: {
+        files: [sourceFile],
+        value: "selected",
+      },
+    } as unknown as Event);
+    await 等待组件稳定(el);
+
+    expect(transport.prepareImageCalls).toEqual([
+      { sessionId: "s-test", fileName: "prepared.jpg" },
+    ]);
+    const drafts = (
+      el as unknown as {
+        chatState: {
+          composerImageDrafts: Array<{ attachmentId: string; status: string }>;
+        };
+      }
+    ).chatState.composerImageDrafts;
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]?.attachmentId).toBe("att-prepared-1");
+    expect(drafts[0]?.status).toBe("uploading");
+
+    el.remove();
+  });
+
+  it("直传成功后必须 complete 成功，草稿才会变成 ready", async () => {
+    const transport = new 假传输();
+    transport.completeQueue = [
+      {
+        attachment_id: "att-prepared-2",
+        kind: "image",
+        mime_type: "image/jpeg",
+        byte_size: 3,
+        width: 120,
+        height: 90,
+        status: "ready",
+      },
+    ];
+    const el = await 创建已入房聊天壳(transport);
+    注入图片草稿(el, {
+      localId: "draft-complete-ok",
+      attachmentId: "att-prepared-2",
+      previewUrl: "blob:http://test.local/draft-complete-ok",
+      width: 0,
+      height: 0,
+      status: "uploading",
+      fileName: "complete-ok.jpg",
+      errorCode: "",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "complete-ok.jpg", {
+        type: "image/jpeg",
+      }),
+    });
+
+    await Promise.resolve(
+      (
+        el as unknown as {
+          handleImageUploadSuccess(
+            file: { id: string },
+            response: { body?: Record<string, unknown> }
+          ): Promise<void> | void;
+        }
+      ).handleImageUploadSuccess({ id: "draft-complete-ok" }, {})
+    );
+    await 等待组件稳定(el);
+
+    expect(transport.completeImageCalls).toEqual([
+      { sessionId: "s-test", attachmentId: "att-prepared-2" },
+    ]);
+    const draftStatus = el.shadowRoot!.querySelector(
+      '[data-draft-card-id="draft-complete-ok"] .composer-draft-status'
+    ) as HTMLElement | null;
+    expect(draftStatus?.dataset.status).toBe("ready");
+    expect(draftStatus?.textContent).toContain("可发送");
+
+    el.remove();
+  });
+
+  it("complete 失败时草稿会收口成 failed，而不是假 ready", async () => {
+    const transport = new 假传输();
+    transport.completeQueue = [创建传输错误(500, "system_error", "system_error")];
+    const el = await 创建已入房聊天壳(transport);
+    注入图片草稿(el, {
+      localId: "draft-complete-failed",
+      attachmentId: "att-prepared-3",
+      previewUrl: "blob:http://test.local/draft-complete-failed",
+      width: 0,
+      height: 0,
+      status: "uploading",
+      fileName: "complete-failed.jpg",
+      errorCode: "",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "complete-failed.jpg", {
+        type: "image/jpeg",
+      }),
+    });
+
+    await Promise.resolve(
+      (
+        el as unknown as {
+          handleImageUploadSuccess(
+            file: { id: string },
+            response: { body?: Record<string, unknown> }
+          ): Promise<void> | void;
+        }
+      ).handleImageUploadSuccess({ id: "draft-complete-failed" }, {})
+    );
+    await 等待组件稳定(el);
+
+    expect(transport.completeImageCalls).toEqual([
+      { sessionId: "s-test", attachmentId: "att-prepared-3" },
+    ]);
+    const draftStatus = el.shadowRoot!.querySelector(
+      '[data-draft-card-id="draft-complete-failed"] .composer-draft-status'
+    ) as HTMLElement | null;
+    expect(draftStatus?.dataset.status).toBe("failed");
+    expect(draftStatus?.textContent).toContain("system_error");
+
+    el.remove();
+  });
+
   it("上传 stalled 后会把草稿转成 failed，避免一直停在 uploading", async () => {
     const el = await 创建已入房聊天壳();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "stall.jpg", {
@@ -807,7 +986,19 @@ describe("聊天壳集成 / 首页与控制台", () => {
   });
 
   it("已经 ready 的图片草稿不会再被上传看门狗误伤回 failed", async () => {
-    const el = await 创建已入房聊天壳();
+    const transport = new 假传输();
+    transport.completeQueue = [
+      {
+        attachment_id: "att-watchdog-ready",
+        kind: "image",
+        mime_type: "image/jpeg",
+        byte_size: 3,
+        width: 120,
+        height: 90,
+        status: "ready",
+      },
+    ];
+    const el = await 创建已入房聊天壳(transport);
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "watchdog-ready.jpg", {
       type: "image/jpeg",
     });
@@ -841,33 +1032,29 @@ describe("聊天壳集成 / 首页与控制台", () => {
           handleImageUploadSuccess(
             file: { id: string },
             response: { body: Record<string, unknown> }
-          ): void;
+          ): Promise<void> | void;
         }
       ).handleImageUploadAdded({
         id: "draft-watchdog-ready",
         name: "watchdog-ready.jpg",
         data: sourceFile,
       });
-      (
+      await Promise.resolve(
+        (
         el as unknown as {
           handleImageUploadSuccess(
             file: { id: string },
             response: { body: Record<string, unknown> }
-          ): void;
+          ): Promise<void> | void;
         }
       ).handleImageUploadSuccess(
         { id: "draft-watchdog-ready" },
         {
           body: {
-            attachment_id: "att-watchdog-ready",
-            kind: "image",
-            mime_type: "image/jpeg",
-            byte_size: 3,
-            width: 120,
-            height: 90,
-            status: "ready",
+            ok: true,
           },
         }
+        )
       );
       await el.updateComplete;
 
@@ -878,6 +1065,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
         '[data-draft-card-id="draft-watchdog-ready"] .composer-draft-status'
       ) as HTMLElement | null;
       expect(draftStatus?.dataset.status).toBe("ready");
+      expect(transport.completeImageCalls).toEqual([
+        { sessionId: "s-test", attachmentId: "att-watchdog-ready" },
+      ]);
       expect(
         (
           el as unknown as {
