@@ -77,7 +77,7 @@ export interface 消息事件 {
   body: string;
   /**
    * 附件列表属于权威消息事实，不再让前端靠本地上传态猜。
-   * 第一阶段先只真正落地图片附件。
+   * 当前最小媒体切片先放开图片和视频，其余媒体类型仍沿后续主链逐步接入。
    */
   attachments?: 附件快照[];
   event_position: number;
@@ -90,7 +90,18 @@ export interface 图片附件快照 {
   height: number;
 }
 
-export type 附件快照 = 图片附件快照;
+/**
+ * 视频附件快照先只暴露时间线渲染需要的最小稳定事实。
+ * 时长、locator、peer 等运行态后续由媒体模块单独承接，不混进共享事件契约。
+ */
+export interface 视频附件快照 {
+  kind: "video";
+  attachment_id: string;
+  width: number;
+  height: number;
+}
+
+export type 附件快照 = 图片附件快照 | 视频附件快照;
 
 export interface 图片附件上传结果 {
   attachment_id: string;

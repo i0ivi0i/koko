@@ -34,6 +34,8 @@ import {
   type 消息文本布局环境,
 } from "./视图.js";
 
+const 可选择视频文件类型 = ["video/*"];
+
 function 派生图片草稿失败文案(errorCode: string): string {
   switch (errorCode) {
     case "attachment_too_large":
@@ -58,6 +60,13 @@ function 派生图片草稿失败文案(errorCode: string): string {
 }
 
 export class 聊天壳 extends LitElement {
+  /**
+   * 这轮只先把“视频也是媒体主链的一等公民”钉进领域和契约里。
+   * 真正的视频上传/发布状态机要等后续 `frontend/媒体/` 共核模块接管后再放开，
+   * 因此壳层这里先保留禁用入口位，避免制造“按钮已经可用”的假成功。
+   */
+  private readonly 视频发送开发中 = true;
+
   /**
    * 文本几何已经改由 Pretext 主导后，宿主尺寸变化就不能再指望浏览器自然流偷偷兜底。
    * 这里不引入第二份“宽度状态”，只在 viewport 改变时请求一次重渲染，
@@ -84,6 +93,15 @@ export class 聊天壳 extends LitElement {
     // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
     input.value = "";
     await this.图片收发器.处理选择文件(selectedFiles);
+  };
+
+  private readonly handleVideoFileInputChange = (event: Event): void => {
+    const input = event.currentTarget as HTMLInputElement | null;
+    if (!input) {
+      return;
+    }
+    // 当前切片先只保留稳定入口位；即使测试或脚本直接灌进 change 事件，也不能伪装成已开始上传。
+    input.value = "";
   };
 
   static override styles = css`
@@ -903,6 +921,15 @@ export class 聊天壳 extends LitElement {
       ?.click();
   }
 
+  private openVideoPicker(): void {
+    if (!this.chatState.sessionId || this.视频发送开发中) {
+      return;
+    }
+    this.shadowRoot
+      ?.querySelector<HTMLInputElement>("#composerVideoFileInput")
+      ?.click();
+  }
+
   private revokeDraftPreviewUrl(previewUrl: string): void {
     if (!previewUrl.startsWith("blob:")) {
       return;
@@ -1294,6 +1321,13 @@ export class 聊天壳 extends LitElement {
                   hidden
                   @change=${this.handleImageFileInputChange}
                 />
+                <input
+                  id="composerVideoFileInput"
+                  type="file"
+                  accept=${可选择视频文件类型.join(",")}
+                  hidden
+                  @change=${this.handleVideoFileInputChange}
+                />
                 <button
                   id="composerImagePickerBtn"
                   type="button"
@@ -1303,6 +1337,17 @@ export class 聊天壳 extends LitElement {
                   @click=${() => this.openImagePicker()}
                 >
                   ${consoleState.auxSlot.label}
+                </button>
+                <button
+                  id="composerVideoPickerBtn"
+                  type="button"
+                  class="composer-aux-button"
+                  aria-label="选择视频"
+                  title="视频发送主链将在后续媒体切片接入"
+                  ?disabled=${consoleState.auxSlot.disabled || this.视频发送开发中}
+                  @click=${() => this.openVideoPicker()}
+                >
+                  视频
                 </button>
               </div>
               <textarea

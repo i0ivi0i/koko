@@ -1,4 +1,4 @@
-import type { 图片附件快照, 消息事件 } from "./契约.js";
+import type { 图片附件快照, 附件快照, 消息事件 } from "./契约.js";
 import type { 首页房间历史条目 } from "./存储.js";
 import type { 图片附件草稿 } from "./图像/图片草稿.js";
 import type { 房间视口模式 } from "./状态.js";
@@ -217,7 +217,7 @@ function 读取消息文本(event: 消息事件): string {
 }
 
 function 派生图片附件展示项列表(
-  attachments: 图片附件快照[],
+  attachments: 附件快照[],
   layoutEnv: 消息文本布局环境,
   构建附件内容地址: (
     attachmentId: string,
@@ -230,7 +230,8 @@ function 派生图片附件展示项列表(
   const 多图宫格宽度 = Math.max(96, Math.floor((Math.min(layoutEnv.maxContentWidth, 320) - 8) / 2));
   const 单图宽度上限 = Math.max(140, Math.min(layoutEnv.maxContentWidth, 320));
   return attachments
-    .filter((attachment) => attachment.kind === "image")
+    // 当前视图切片先继续稳定渲染图片；视频展示组件会在后续媒体播放切片单独接上。
+    .filter((attachment): attachment is 图片附件快照 => attachment.kind === "image")
     .map((attachment, index, list) => {
       const displayWidth =
         list.length === 1 ? Math.min(attachment.width, 单图宽度上限) : 多图宫格宽度;

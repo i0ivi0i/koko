@@ -241,6 +241,22 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("进入房间后发送区会显示视频选择入口", async () => {
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(el.shadowRoot!.querySelector("#composerVideoPickerBtn")).not.toBeNull();
+    el.remove();
+  });
+
   it("图片入口是小号加号按钮，而不是大号图片文案按钮", async () => {
     const el = await 创建已入房聊天壳();
 

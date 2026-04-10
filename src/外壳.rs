@@ -338,6 +338,12 @@ fn attachments_to_json(attachments: &[contract::附件快照]) -> Vec<serde_json
                 "width": image.宽,
                 "height": image.高
             }),
+            contract::附件快照::视频(video) => serde_json::json!({
+                "kind": "video",
+                "attachment_id": video.附件标识,
+                "width": video.宽,
+                "height": video.高
+            }),
         })
         .collect()
 }

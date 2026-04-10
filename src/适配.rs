@@ -98,6 +98,15 @@ impl Pg仓储 {
                 宽: *宽,
                 高: *高,
             }),
+            domain::message::已校验附件引用::视频 {
+                附件标识,
+                宽,
+                高,
+            } => contract::附件快照::视频(contract::视频附件快照 {
+                附件标识: 附件标识.clone(),
+                宽: *宽,
+                高: *高,
+            }),
         }
     }
 
@@ -128,6 +137,15 @@ impl Pg仓储 {
             let kind: String = row.get("kind");
             let attachment = match kind.as_str() {
                 "image" => contract::附件快照::图片(contract::图片附件快照 {
+                    附件标识: row.get("attachment_id"),
+                    宽: row
+                        .get::<Option<i32>, _>("width")
+                        .ok_or(contract::错误码::系统错误)?,
+                    高: row
+                        .get::<Option<i32>, _>("height")
+                        .ok_or(contract::错误码::系统错误)?,
+                }),
+                "video" => contract::附件快照::视频(contract::视频附件快照 {
                     附件标识: row.get("attachment_id"),
                     宽: row
                         .get::<Option<i32>, _>("width")
@@ -684,6 +702,7 @@ impl Pg仓储 {
         for (sort_order, attachment) in 附件.iter().enumerate() {
             let attachment_id = match attachment {
                 domain::message::已校验附件引用::图片 { 附件标识, .. } => 附件标识,
+                domain::message::已校验附件引用::视频 { 附件标识, .. } => 附件标识,
             };
             let inserted_ref = sqlx::query(
                 "INSERT INTO message_attachment_refs (message_id, attachment_id, sort_order, display_role) \

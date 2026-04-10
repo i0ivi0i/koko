@@ -38,13 +38,28 @@ fn 纯图片附件消息允许文本为空() {
 }
 
 #[test]
-fn 第一阶段非图片附件不允许进入消息() {
+fn 纯视频附件消息允许文本为空() {
+    let result = koko::domain::message::创建消息(
+        true,
+        "   ",
+        &[koko::domain::message::待发送附件 {
+            附件标识: "att-video-1".to_string(),
+            种类: koko::domain::message::附件种类::视频,
+            宽: 1280,
+            高: 720,
+        }],
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn 当前仍不允许语音附件进入消息() {
     let result = koko::domain::message::创建消息(
         true,
         "",
         &[koko::domain::message::待发送附件 {
             附件标识: "att-2".to_string(),
-            种类: koko::domain::message::附件种类::视频,
+            种类: koko::domain::message::附件种类::语音,
             宽: 0,
             高: 0,
         }],
