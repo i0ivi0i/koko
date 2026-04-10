@@ -1,4 +1,6 @@
-use super::{应用状态, 构建共享仓储, err_resp, events_to_json, map_domain_err_tuple, 附件上传模式};
+use super::{
+    err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储, 附件上传模式
+};
 use crate::{contract, usecase};
 use axum::{
     body::Bytes,
@@ -8,6 +10,7 @@ use axum::{
     Json,
 };
 use image::{DynamicImage, ImageFormat};
+use nom_exif::{MediaParser, MediaSource, TrackInfo, TrackInfoTag};
 use object_store::{path::Path as ObjectPath, signer::Signer, ObjectStoreExt};
 use serde::Deserialize;
 use std::{
@@ -37,18 +40,18 @@ pub(super) struct JoinBody {
     room_code: String,
 }
 
-/// 图片 prepare 请求体。
+/// 媒体 prepare 请求体。
 #[derive(Deserialize)]
-pub(super) struct PrepareImageUploadBody {
+pub(super) struct PrepareMediaUploadBody {
     session_id: Option<String>,
     file_name: Option<String>,
     mime_type: Option<String>,
     byte_size: Option<i64>,
 }
 
-/// 图片 complete 请求体。
+/// 媒体 complete 请求体。
 #[derive(Deserialize)]
-pub(super) struct CompleteImageUploadBody {
+pub(super) struct CompleteMediaUploadBody {
     session_id: Option<String>,
 }
 
@@ -174,7 +177,11 @@ pub(super) fn parse_history_query(
         ));
     };
     let Ok(limit) = limit_raw.parse::<i64>() else {
-        return Err((StatusCode::BAD_REQUEST, "invalid_argument", "limit 必须是整数"));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "limit 必须是整数",
+        ));
     };
     Ok(ParsedHistoryQuery {
         session_id: session_id.to_string(),
@@ -223,13 +230,56 @@ fn 生成附件标识() -> String {
     format!("att-{}", &raw[..12])
 }
 
-fn 推导原图扩展名(mime_type: &str) -> &'static str {
-    match mime_type {
-        "image/png" => ".png",
-        "image/jpeg" => ".jpg",
-        "image/webp" => ".webp",
-        "image/gif" => ".gif",
-        _ => ".bin",
+fn 解析媒体类型(
+    raw_kind: &str,
+) -> Result<usecase::媒体附件类型, (StatusCode, &'static str, &'static str)> {
+    match raw_kind {
+        "image" => Ok(usecase::媒体附件类型::图片),
+        "video" => Ok(usecase::媒体附件类型::视频),
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            "attachment_type_not_allowed",
+            "只允许上传图片或视频",
+        )),
+    }
+}
+
+fn 媒体类型转标签(kind: &usecase::媒体附件类型) -> &'static str {
+    match kind {
+        usecase::媒体附件类型::图片 => "image",
+        usecase::媒体附件类型::视频 => "video",
+    }
+}
+
+fn 附件状态转标签(status: &usecase::附件状态读取结果) -> &'static str {
+    match status {
+        usecase::附件状态读取结果::已准备 => "prepared",
+        usecase::附件状态读取结果::上传中 => "uploading",
+        usecase::附件状态读取结果::处理中 => "processing",
+        usecase::附件状态读取结果::就绪 => "ready",
+        usecase::附件状态读取结果::失败 => "failed",
+        usecase::附件状态读取结果::已过期 => "expired",
+    }
+}
+
+fn 推导原始内容扩展名(
+    kind: &usecase::媒体附件类型, mime_type: &str
+) -> &'static str {
+    match kind {
+        usecase::媒体附件类型::图片 => match mime_type {
+            "image/png" => ".png",
+            "image/jpeg" => ".jpg",
+            "image/webp" => ".webp",
+            "image/gif" => ".gif",
+            _ => ".bin",
+        },
+        usecase::媒体附件类型::视频 => match mime_type {
+            "video/mp4" => ".mp4",
+            "video/webm" => ".webm",
+            "video/quicktime" => ".mov",
+            "video/3gpp" => ".3gp",
+            _ => ".bin",
+        },
     }
 }
 
@@ -273,7 +323,18 @@ struct 图片内容解析结果 {
     缩略图字节: Vec<u8>,
 }
 
-enum 图片内容解析错误 {
+struct 视频内容解析结果 {
+    mime_type: String,
+    宽: i32,
+    高: i32,
+}
+
+enum 媒体内容解析结果 {
+    图片(图片内容解析结果),
+    视频(视频内容解析结果),
+}
+
+enum 媒体内容解析错误 {
     类型不允许(&'static str),
     系统错误(&'static str),
 }
@@ -282,18 +343,18 @@ enum 图片内容解析错误 {
 /// - 真 MIME 以后端探测为准；
 /// - 宽高和缩略图以后端解码结果为准；
 /// - 不把“文件后缀/前端 mime”冒充成权威事实。
-fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结果, 图片内容解析错误> {
+fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结果, 媒体内容解析错误> {
     let Some(kind) = infer::get(bytes) else {
-        return Err(图片内容解析错误::类型不允许("只允许上传图片"));
+        return Err(媒体内容解析错误::类型不允许("只允许上传图片"));
     };
     if !kind.mime_type().starts_with("image/") {
-        return Err(图片内容解析错误::类型不允许("只允许上传图片"));
+        return Err(媒体内容解析错误::类型不允许("只允许上传图片"));
     }
-    let decoded =
-        image::load_from_memory(bytes).map_err(|_| 图片内容解析错误::类型不允许("图片内容非法"))?;
+    let decoded = image::load_from_memory(bytes)
+        .map_err(|_| 媒体内容解析错误::类型不允许("图片内容非法"))?;
     let normalized_image = 应用exif方向(decoded, 读取exif方向(bytes));
-    let 缩略图字节 =
-        生成缩略图字节(&normalized_image).map_err(|_| 图片内容解析错误::系统错误("生成图片缩略图失败"))?;
+    let 缩略图字节 = 生成缩略图字节(&normalized_image)
+        .map_err(|_| 媒体内容解析错误::系统错误("生成图片缩略图失败"))?;
     Ok(图片内容解析结果 {
         mime_type: kind.mime_type().to_string(),
         宽: normalized_image.width() as i32,
@@ -302,48 +363,132 @@ fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结果, 图片�
     })
 }
 
+/// 视频元数据探测继续复用成熟纯 Rust 轮子：
+/// - 真 MIME 仍以后端探测为准；
+/// - 宽高从容器元数据读取，不靠前端 file.type 或文件后缀冒充；
+/// - 当前只收口 ready 所需的最小事实，不在后端手搓转码或截图链。
+fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结果, 媒体内容解析错误> {
+    let Some(kind) = infer::get(bytes) else {
+        return Err(媒体内容解析错误::类型不允许("只允许上传视频"));
+    };
+    if !kind.mime_type().starts_with("video/") {
+        return Err(媒体内容解析错误::类型不允许("只允许上传视频"));
+    }
+    let mut parser = MediaParser::new();
+    let media_source = MediaSource::seekable(Cursor::new(bytes))
+        .map_err(|_| 媒体内容解析错误::系统错误("构建视频元数据数据源失败"))?;
+    if !media_source.has_track() {
+        return Err(媒体内容解析错误::类型不允许("视频内容非法"));
+    }
+    let info: TrackInfo = parser
+        .parse(media_source)
+        .map_err(|_| 媒体内容解析错误::类型不允许("视频内容非法"))?;
+    let 宽 = info
+        .get(TrackInfoTag::ImageWidth)
+        .and_then(解析视频轨道整数)
+        .filter(|value| *value > 0)
+        .ok_or(媒体内容解析错误::类型不允许(
+            "视频缺少宽度元数据",
+        ))?;
+    let 高 = info
+        .get(TrackInfoTag::ImageHeight)
+        .and_then(解析视频轨道整数)
+        .filter(|value| *value > 0)
+        .ok_or(媒体内容解析错误::类型不允许(
+            "视频缺少高度元数据",
+        ))?;
+    Ok(视频内容解析结果 {
+        mime_type: kind.mime_type().to_string(),
+        宽: 宽 as i32,
+        高: 高 as i32,
+    })
+}
+
+fn 解析视频轨道整数(value: &nom_exif::EntryValue) -> Option<u64> {
+    value
+        .as_u64()
+        .or_else(|| value.as_u32().map(u64::from))
+        .or_else(|| value.as_u16().map(u64::from))
+        .or_else(|| value.as_str().and_then(|raw| raw.parse::<u64>().ok()))
+}
+
+fn 解析媒体内容(
+    kind: &usecase::媒体附件类型,
+    bytes: &[u8],
+) -> Result<媒体内容解析结果, 媒体内容解析错误> {
+    match kind {
+        usecase::媒体附件类型::图片 => 解析图片内容(bytes).map(媒体内容解析结果::图片),
+        usecase::媒体附件类型::视频 => 解析视频内容(bytes).map(媒体内容解析结果::视频),
+    }
+}
+
 fn 读取非空会话标识(
     raw_session_id: Option<String>,
 ) -> Result<String, (StatusCode, &'static str, &'static str)> {
     raw_session_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .ok_or((StatusCode::BAD_REQUEST, "invalid_argument", "缺少 session_id"))
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 session_id",
+        ))
 }
 
-fn 校验图片准备请求(
+fn 校验媒体准备请求(
+    kind: &usecase::媒体附件类型,
     mime_type: &str,
     byte_size: i64,
 ) -> Result<(), (StatusCode, &'static str, &'static str)> {
-    if !mime_type.starts_with("image/") {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "attachment_type_not_allowed",
-            "只允许上传图片",
-        ));
-    }
     if byte_size <= 0 {
-        return Err((StatusCode::BAD_REQUEST, "invalid_argument", "图片大小非法"));
+        return Err((StatusCode::BAD_REQUEST, "invalid_argument", "媒体大小非法"));
     }
-    if byte_size > 10 * 1024 * 1024 {
-        return Err((
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "attachment_too_large",
-            "图片超过 10MB 上限",
-        ));
+    match kind {
+        usecase::媒体附件类型::图片 => {
+            if !mime_type.starts_with("image/") {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "attachment_type_not_allowed",
+                    "只允许上传图片",
+                ));
+            }
+            if byte_size > 10 * 1024 * 1024 {
+                return Err((
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "attachment_too_large",
+                    "图片超过 10MB 上限",
+                ));
+            }
+        }
+        usecase::媒体附件类型::视频 => {
+            if !mime_type.starts_with("video/") {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "attachment_type_not_allowed",
+                    "只允许上传视频",
+                ));
+            }
+            if byte_size > 50 * 1024 * 1024 {
+                return Err((
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "attachment_too_large",
+                    "视频超过 50MB 上限",
+                ));
+            }
+        }
     }
     Ok(())
 }
 
-fn 图片附件快照转响应体(snapshot: &usecase::图片附件快照) -> serde_json::Value {
+fn 媒体附件快照转响应体(snapshot: &usecase::媒体附件快照) -> serde_json::Value {
     serde_json::json!({
         "attachment_id": snapshot.附件标识,
-        "kind": "image",
+        "kind": 媒体类型转标签(&snapshot.种类),
         "mime_type": snapshot.mime_type,
         "byte_size": snapshot.字节大小,
         "width": snapshot.宽,
         "height": snapshot.高,
-        "status": "ready",
+        "status": 附件状态转标签(&snapshot.状态),
     })
 }
 
@@ -994,7 +1139,9 @@ pub(super) async fn load_room_history(
         }
     };
     match result {
-        Ok(contract::快照::房间历史页 { 房间标识, 消息 }) => {
+        Ok(contract::快照::房间历史页 {
+            房间标识, 消息
+        }) => {
             tracing::info!(
                 usecase = "加载房间历史页",
                 adapter = "http",
@@ -1048,12 +1195,17 @@ pub(super) async fn load_room_history(
     }
 }
 
-/// 冷路径：申请图片附件上传占位。
+/// 冷路径：申请媒体附件上传占位。
 /// 这一步只创建 prepared 真相，并返回后续直传所需参数；不在这里上传字节。
-pub(super) async fn prepare_image_upload(
+pub(super) async fn prepare_media_upload(
+    Path(raw_kind): Path<String>,
     State(state): State<应用状态>,
-    Json(body): Json<PrepareImageUploadBody>,
+    Json(body): Json<PrepareMediaUploadBody>,
 ) -> impl IntoResponse {
+    let media_kind = match 解析媒体类型(raw_kind.as_str()) {
+        Ok(kind) => kind,
+        Err(err) => return err_resp(err.0, err.1, err.2),
+    };
     let session_id = match 读取非空会话标识(body.session_id) {
         Ok(session_id) => session_id,
         Err((status, code, message)) => return err_resp(status, code, message),
@@ -1064,7 +1216,13 @@ pub(super) async fn prepare_image_upload(
         .filter(|value| !value.is_empty())
     {
         Some(file_name) => file_name,
-        None => return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 file_name"),
+        None => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "缺少 file_name",
+            )
+        }
     };
     let mime_type = match body
         .mime_type
@@ -1072,32 +1230,51 @@ pub(super) async fn prepare_image_upload(
         .filter(|value| !value.is_empty())
     {
         Some(mime_type) => mime_type,
-        None => return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 mime_type"),
+        None => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "缺少 mime_type",
+            )
+        }
     };
     let byte_size = match body.byte_size {
         Some(byte_size) => byte_size,
-        None => return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 byte_size"),
+        None => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "缺少 byte_size",
+            )
+        }
     };
-    if let Err((status, code, message)) = 校验图片准备请求(&mime_type, byte_size) {
+    if let Err((status, code, message)) =
+        校验媒体准备请求(&media_kind, &mime_type, byte_size)
+    {
         return err_resp(status, code, message);
     }
 
     let attachment_id = 生成附件标识();
+    let storage_prefix = match media_kind {
+        usecase::媒体附件类型::图片 => "images",
+        usecase::媒体附件类型::视频 => "videos",
+    };
     let original_storage_key = format!(
-        "images/{attachment_id}/original{}",
-        推导原图扩展名(mime_type.as_str())
+        "{storage_prefix}/{attachment_id}/original{}",
+        推导原始内容扩展名(&media_kind, mime_type.as_str())
     );
-    let prepare_request = usecase::图片附件准备请求 {
+    let prepare_request = usecase::媒体附件准备请求 {
         附件标识: attachment_id.clone(),
+        种类: media_kind.clone(),
         mime_type: mime_type.clone(),
         字节大小: byte_size,
-        原图存储键: original_storage_key.clone(),
+        原始内容存储键: original_storage_key.clone(),
     };
     let state_for_usecase = state.clone();
     let session_id_for_usecase = session_id.clone();
     let prepare_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        usecase::准备图片附件上传(&mut repo, &session_id_for_usecase, &prepare_request)
+        usecase::准备媒体附件上传(&mut repo, &session_id_for_usecase, &prepare_request)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -1128,7 +1305,7 @@ pub(super) async fn prepare_image_upload(
             let signed_url = match signer
                 .signed_url(
                     reqwest::Method::PUT,
-                    &ObjectPath::from(snapshot.原图存储键.clone()),
+                    &ObjectPath::from(snapshot.原始内容存储键.clone()),
                     Duration::from_secs(15 * 60),
                 )
                 .await
@@ -1136,12 +1313,13 @@ pub(super) async fn prepare_image_upload(
                 Ok(url) => url,
                 Err(err) => {
                     tracing::error!(
-                        usecase = "准备图片上传",
+                        usecase = "准备媒体上传",
                         adapter = "http",
                         outcome = "failed",
-                        request_kind = "图片上传 prepare",
+                        request_kind = "媒体上传 prepare",
                         session_id = session_id.as_str(),
                         attachment_id = snapshot.附件标识.as_str(),
+                        attachment_kind = 媒体类型转标签(&snapshot.种类),
                         file_name = file_name.as_str(),
                         error_code = "system_error",
                         error = %err,
@@ -1168,20 +1346,22 @@ pub(super) async fn prepare_image_upload(
         .unwrap_or_else(|_| "0".to_string());
 
     tracing::info!(
-        usecase = "准备图片上传",
+        usecase = "准备媒体上传",
         adapter = "http",
         outcome = "succeeded",
-        request_kind = "图片上传 prepare",
+        request_kind = "媒体上传 prepare",
         session_id = session_id.as_str(),
         attachment_id = snapshot.附件标识.as_str(),
+        attachment_kind = 媒体类型转标签(&snapshot.种类),
         file_name = file_name.as_str(),
         byte_size = byte_size,
-        "图片上传占位已创建"
+        "媒体上传占位已创建"
     );
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "attachment_id": snapshot.附件标识,
+            "kind": 媒体类型转标签(&snapshot.种类),
             "upload_method": "PUT",
             "upload_url": upload_url,
             "upload_headers": upload_headers,
@@ -1194,7 +1374,7 @@ pub(super) async fn prepare_image_upload(
 /// 本地对象存储回环上传入口：
 /// 1. 只在 local 存储模式下作为开发/测试兜底；
 /// 2. 仍然复用 prepared 真相校验，不允许旁路写对象。
-pub(super) async fn upload_prepared_image_content(
+pub(super) async fn upload_prepared_media_content(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
     headers: HeaderMap,
@@ -1220,8 +1400,12 @@ pub(super) async fn upload_prepared_image_content(
     let session_id_for_usecase = session_id.clone();
     let prepared = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
-        usecase::读取待完成图片附件(&repo, &session_id_for_usecase, &attachment_id_for_usecase)
-            .map_err(map_domain_err_tuple)
+        usecase::读取待完成媒体附件(
+            &repo,
+            &session_id_for_usecase,
+            &attachment_id_for_usecase,
+        )
+        .map_err(map_domain_err_tuple)
     })
     .await
     {
@@ -1245,7 +1429,7 @@ pub(super) async fn upload_prepared_image_content(
 
     let put_result = match state
         .attachment_store
-        .put(&ObjectPath::from(prepared.原图存储键), body.into())
+        .put(&ObjectPath::from(prepared.原始内容存储键), body.into())
         .await
     {
         Ok(result) => result,
@@ -1294,12 +1478,12 @@ pub(super) async fn upload_prepared_image_content(
     (StatusCode::NO_CONTENT, [(header::ETAG, etag)]).into_response()
 }
 
-/// 冷路径：完成图片附件上传。
-/// 这里读取已经落到对象存储里的原图，解码并生成缩略图后，再把 prepared 升级成 ready。
-pub(super) async fn complete_image_upload(
+/// 冷路径：完成媒体附件上传。
+/// 这里读取已经落到对象存储里的原始媒体，完成后端探测后，再把 prepared 升级成 ready。
+pub(super) async fn complete_media_upload(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
-    Json(body): Json<CompleteImageUploadBody>,
+    Json(body): Json<CompleteMediaUploadBody>,
 ) -> impl IntoResponse {
     let session_id = match 读取非空会话标识(body.session_id) {
         Ok(session_id) => session_id,
@@ -1310,8 +1494,12 @@ pub(super) async fn complete_image_upload(
     let session_id_for_usecase = session_id.clone();
     let prepared = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_usecase);
-        usecase::读取待完成图片附件(&repo, &session_id_for_usecase, &attachment_id_for_usecase)
-            .map_err(map_domain_err_tuple)
+        usecase::读取待完成媒体附件(
+            &repo,
+            &session_id_for_usecase,
+            &attachment_id_for_usecase,
+        )
+        .map_err(map_domain_err_tuple)
     })
     .await
     {
@@ -1326,32 +1514,36 @@ pub(super) async fn complete_image_upload(
         }
     };
 
-    let original_path = ObjectPath::from(prepared.原图存储键.clone());
+    let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
     let get_result = match state.attachment_store.get(&original_path).await {
         Ok(result) => result,
         Err(err) => {
             tracing::warn!(
-                usecase = "完成图片上传",
+                usecase = "完成媒体上传",
                 adapter = "http",
                 outcome = "rejected",
-                request_kind = "图片上传 complete",
+                request_kind = "媒体上传 complete",
                 session_id = session_id.as_str(),
                 attachment_id = attachment_id.as_str(),
                 error_code = "attachment_not_ready",
                 error = %err,
                 "complete 时原图对象尚未可读"
             );
-            return err_resp(StatusCode::CONFLICT, "attachment_not_ready", "原图尚未上传完成");
+            return err_resp(
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "原图尚未上传完成",
+            );
         }
     };
     let original_bytes = match get_result.bytes().await {
         Ok(bytes) => bytes,
         Err(err) => {
             tracing::error!(
-                usecase = "完成图片上传",
+                usecase = "完成媒体上传",
                 adapter = "http",
                 outcome = "failed",
-                request_kind = "图片上传 complete",
+                request_kind = "媒体上传 complete",
                 session_id = session_id.as_str(),
                 attachment_id = attachment_id.as_str(),
                 error_code = "system_error",
@@ -1365,64 +1557,79 @@ pub(super) async fn complete_image_upload(
             );
         }
     };
-    let parsed = match 解析图片内容(original_bytes.as_ref()) {
+    let parsed = match 解析媒体内容(&prepared.种类, original_bytes.as_ref()) {
         Ok(parsed) => parsed,
-        Err(图片内容解析错误::类型不允许(message)) => {
-            return err_resp(StatusCode::BAD_REQUEST, "attachment_type_not_allowed", message)
+        Err(媒体内容解析错误::类型不允许(message)) => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "attachment_type_not_allowed",
+                message,
+            )
         }
-        Err(图片内容解析错误::系统错误(message)) => {
+        Err(媒体内容解析错误::系统错误(message)) => {
             return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message)
         }
     };
 
-    let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
-    let thumbnail_path = ObjectPath::from(thumbnail_storage_key.clone());
-    if let Err(err) = state
-        .attachment_store
-        .put(&thumbnail_path, parsed.缩略图字节.into())
-        .await
-    {
-        tracing::error!(
-            usecase = "完成图片上传",
-            adapter = "http",
-            outcome = "failed",
-            request_kind = "图片上传 complete",
-            session_id = session_id.as_str(),
-            attachment_id = attachment_id.as_str(),
-            error_code = "system_error",
-            error = %err,
-            "写入缩略图对象失败"
-        );
-        return err_resp(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "写入缩略图对象失败",
-        );
-    }
-
-    let ready_request = usecase::图片附件写入请求 {
-        附件标识: attachment_id.clone(),
-        mime_type: parsed.mime_type,
-        字节大小: original_bytes.len() as i64,
-        宽: parsed.宽,
-        高: parsed.高,
-        原图存储键: prepared.原图存储键.clone(),
-        缩略图存储键: Some(thumbnail_storage_key),
+    let ready_request = match parsed {
+        媒体内容解析结果::图片(parsed) => {
+            let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
+            let thumbnail_path = ObjectPath::from(thumbnail_storage_key.clone());
+            if let Err(err) = state
+                .attachment_store
+                .put(&thumbnail_path, parsed.缩略图字节.into())
+                .await
+            {
+                tracing::error!(
+                    usecase = "完成媒体上传",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "媒体上传 complete",
+                    session_id = session_id.as_str(),
+                    attachment_id = attachment_id.as_str(),
+                    attachment_kind = 媒体类型转标签(&prepared.种类),
+                    error_code = "system_error",
+                    error = %err,
+                    "写入图片缩略图对象失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "写入图片缩略图对象失败",
+                );
+            }
+            usecase::媒体附件写入请求 {
+                附件标识: attachment_id.clone(),
+                种类: prepared.种类.clone(),
+                mime_type: parsed.mime_type,
+                字节大小: original_bytes.len() as i64,
+                宽: parsed.宽,
+                高: parsed.高,
+                原始内容存储键: prepared.原始内容存储键.clone(),
+                缩略图存储键: Some(thumbnail_storage_key),
+            }
+        }
+        媒体内容解析结果::视频(parsed) => usecase::媒体附件写入请求 {
+            附件标识: attachment_id.clone(),
+            种类: prepared.种类.clone(),
+            mime_type: parsed.mime_type,
+            字节大小: original_bytes.len() as i64,
+            宽: parsed.宽,
+            高: parsed.高,
+            原始内容存储键: prepared.原始内容存储键.clone(),
+            缩略图存储键: None,
+        },
     };
     let state_for_usecase = state.clone();
     let session_id_for_usecase = session_id.clone();
     let complete_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        usecase::完成图片附件上传(&mut repo, &session_id_for_usecase, &ready_request)
+        usecase::完成媒体附件上传(&mut repo, &session_id_for_usecase, &ready_request)
             .map_err(map_domain_err_tuple)
     })
     .await;
     match complete_result {
-        Ok(Ok(snapshot)) => (
-            StatusCode::OK,
-            Json(图片附件快照转响应体(&snapshot)),
-        )
-            .into_response(),
+        Ok(Ok(snapshot)) => (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot))).into_response(),
         Ok(Err((status, code, message))) => err_resp(status, code, message),
         Err(err) => err_resp(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1430,6 +1637,61 @@ pub(super) async fn complete_image_upload(
             format!("complete 任务执行失败: {err}"),
         ),
     }
+}
+
+/// locator 只暴露受控 transport 线索：
+/// - 当前先统一收口成受控 HTTP 内容地址；
+/// - 后续接入 WebTorrent/锚点时，也继续在这里追加 transport 线索，而不是把存储键下发给壳层。
+pub(super) async fn load_media_locator(
+    State(state): State<应用状态>,
+    Path(attachment_id): Path<String>,
+    Query(raw_query): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let query = match parse_attachment_content_query(raw_query) {
+        Ok(query) => query,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = query.session_id.clone();
+    let locator = match task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_usecase);
+        usecase::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
+            .map_err(map_domain_err_tuple)
+    })
+    .await
+    {
+        Ok(Ok(locator)) => locator,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("locator 任务执行失败: {err}"),
+            )
+        }
+    };
+    let original_url = format!(
+        "/api/attachments/{attachment_id}/content?session_id={}&variant=original",
+        query.session_id
+    );
+    let thumbnail_url = locator.允许缩略图.then(|| {
+        format!(
+            "/api/attachments/{attachment_id}/content?session_id={}&variant=thumbnail",
+            query.session_id
+        )
+    });
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "attachment_id": locator.附件标识,
+            "kind": 媒体类型转标签(&locator.种类),
+            "status": 附件状态转标签(&locator.状态),
+            "original_url": original_url,
+            "thumbnail_url": thumbnail_url,
+        })),
+    )
+        .into_response()
 }
 
 /// 冷路径：受控读取附件内容。

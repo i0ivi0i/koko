@@ -31,6 +31,9 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 image = "0.25"
 infer = "0.19"
 kamadak-exif = "0.6"
+# 视频元数据提取继续站在纯 Rust 成熟轮子肩膀上，
+# 避免为了 MP4/WebM 的宽高探测再手搓一套脆弱解析器。
+nom-exif = "2.7"
 
 [dev-dependencies]
 serial_test = "3"

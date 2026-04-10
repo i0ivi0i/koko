@@ -18,21 +18,18 @@ use socketioxide::{
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{fs, sync::Arc};
-use tower_http::{
-    services::ServeDir,
-    set_header::response::SetResponseHeaderLayer,
-};
+use tower_http::{services::ServeDir, set_header::response::SetResponseHeaderLayer};
 
 use crate::{adapter::Pg仓储, contract};
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
-#[path = "房间外壳.rs"]
-mod 房间外壳;
 #[path = "后台外壳.rs"]
 mod 后台外壳;
 #[path = "实时外壳.rs"]
 mod 实时外壳;
+#[path = "房间外壳.rs"]
+mod 房间外壳;
 
 /// 外壳层共享运行态，只存放“接线所需配置”，不承载业务事实。
 #[derive(Clone)]
@@ -99,7 +96,10 @@ fn 构建附件对象存储(
         }
         crate::assembly::媒体存储驱动::S3兼容 => {
             let bucket = media_storage.bucket.as_deref().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "缺少 MEDIA_STORAGE_BUCKET")
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "缺少 MEDIA_STORAGE_BUCKET",
+                )
             })?;
             let access_key_id = media_storage.access_key_id.as_deref().ok_or_else(|| {
                 std::io::Error::new(
@@ -175,33 +175,55 @@ pub fn 构建路由(state: 应用状态) -> Router {
 
     Router::new()
         .route("/api/session/bootstrap", post(房间外壳::bootstrap_session))
-        .route("/api/rooms/join-or-create", post(房间外壳::join_or_create_room))
-        .route("/api/media/image/prepare", post(房间外壳::prepare_image_upload))
+        .route(
+            "/api/rooms/join-or-create",
+            post(房间外壳::join_or_create_room),
+        )
+        .route(
+            "/api/media/{attachment_kind}/prepare",
+            post(房间外壳::prepare_media_upload),
+        )
         .route(
             "/api/media/{attachment_id}/upload",
-            put(房间外壳::upload_prepared_image_content),
+            put(房间外壳::upload_prepared_media_content),
         )
         .route(
             "/api/media/{attachment_id}/complete",
-            post(房间外壳::complete_image_upload),
+            post(房间外壳::complete_media_upload),
+        )
+        .route(
+            "/api/media/{attachment_id}/locator",
+            get(房间外壳::load_media_locator),
         )
         .route(
             "/api/attachments/{attachment_id}/content",
             get(房间外壳::load_attachment_content),
         )
-        .route("/api/rooms/{room_id}/snapshot", get(房间外壳::load_room_snapshot))
+        .route(
+            "/api/rooms/{room_id}/snapshot",
+            get(房间外壳::load_room_snapshot),
+        )
         .route(
             "/api/rooms/{room_id}/read-anchor",
             post(房间外壳::update_room_read_anchor),
         )
-        .route("/api/rooms/{room_id}/history", get(房间外壳::load_room_history))
-        .route("/api/rooms/{room_id}/events", get(房间外壳::load_room_events))
+        .route(
+            "/api/rooms/{room_id}/history",
+            get(房间外壳::load_room_history),
+        )
+        .route(
+            "/api/rooms/{room_id}/events",
+            get(房间外壳::load_room_events),
+        )
         .route("/api/admin/login", post(后台外壳::admin_login))
         .route("/api/admin/overview", get(后台外壳::admin_overview))
         .route("/api/admin/rooms", get(后台外壳::admin_rooms))
-        .route("/api/admin/rooms/{room_id}", get(后台外壳::admin_room_detail))
+        .route(
+            "/api/admin/rooms/{room_id}",
+            get(后台外壳::admin_room_detail),
+        )
         .merge(构建前端静态资源路由())
-        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
         .layer(socket_layer)
         .with_state(state)
 }
@@ -298,8 +320,7 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
             }
         })
         .with(
-            move |socket: SocketRef,
-                  TryData(auth): TryData<实时外壳::RealtimeConnectAuth>| {
+            move |socket: SocketRef, TryData(auth): TryData<实时外壳::RealtimeConnectAuth>| {
                 let state = connect_state.clone();
                 async move { 实时外壳::认证realtime连接(socket, auth, state).await }
             },

@@ -34,60 +34,82 @@ pub struct 附件读取结果 {
     pub 高: Option<i32>,
 }
 
-/// 上传链完成图片解析后，进入应用层持久化所需的最小字段。
+/// 媒体上传主链当前只点亮图片和视频两种附件。
+/// 其它附件种类以后若要接入，也必须复用同一条 prepared -> ready 主链。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum 媒体附件类型 {
+    图片,
+    视频,
+}
+
+/// 上传链完成 prepare 后，进入应用层持久化所需的最小字段。
 /// 存储键属于 adapter 细节，但仍需通过应用层编排把 owner 真相和持久化动作收口。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 图片附件准备请求 {
+pub struct 媒体附件准备请求 {
     pub 附件标识: String,
+    pub 种类: 媒体附件类型,
     pub mime_type: String,
     pub 字节大小: i64,
-    pub 原图存储键: String,
+    pub 原始内容存储键: String,
 }
 
 /// prepare 阶段只落“媒体占位真相”，不把 ready 元数据提前伪造出来。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 图片附件准备快照 {
+pub struct 媒体附件准备快照 {
     pub 附件标识: String,
+    pub 种类: 媒体附件类型,
     pub mime_type: String,
     pub 字节大小: i64,
-    pub 原图存储键: String,
+    pub 原始内容存储键: String,
     pub 状态: 附件状态读取结果,
 }
 
 /// complete 前要读到的最小附件事实。
 /// 它只服务“继续上传/完成上传”的业务编排，不外泄到共享 contract。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 待完成图片附件读取结果 {
+pub struct 待完成媒体附件读取结果 {
     pub 附件标识: String,
     pub 所属匿名身份标识: String,
+    pub 种类: 媒体附件类型,
     pub mime_type: String,
     pub 字节大小: i64,
-    pub 原图存储键: String,
+    pub 原始内容存储键: String,
     pub 状态: 附件状态读取结果,
 }
 
-/// 上传链完成图片解析后，进入应用层持久化所需的最小字段。
-/// 存储键属于 adapter 细节，但仍需通过应用层编排把 owner 真相和持久化动作收口。
+/// complete 阶段拿到真实字节后，进入应用层持久化所需的最小媒体字段。
+/// 这里明确把“种类 / 宽高 / 缩略图键”收口，避免壳层或 handler 自行拼真相。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 图片附件写入请求 {
+pub struct 媒体附件写入请求 {
     pub 附件标识: String,
+    pub 种类: 媒体附件类型,
     pub mime_type: String,
     pub 字节大小: i64,
     pub 宽: i32,
     pub 高: i32,
-    pub 原图存储键: String,
+    pub 原始内容存储键: String,
     pub 缩略图存储键: Option<String>,
 }
 
-/// 图片上传成功后返回给壳层的最小快照。
+/// 媒体上传成功后返回给壳层的最小快照。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct 图片附件快照 {
+pub struct 媒体附件快照 {
     pub 附件标识: String,
+    pub 种类: 媒体附件类型,
     pub mime_type: String,
     pub 字节大小: i64,
     pub 宽: i32,
     pub 高: i32,
     pub 状态: 附件状态读取结果,
+}
+
+/// locator 只回答“当前怎么受控取媒体”，不暴露存储键、权限投影或 swarm 运行态。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体定位结果 {
+    pub 附件标识: String,
+    pub 种类: 媒体附件类型,
+    pub 状态: 附件状态读取结果,
+    pub 允许缩略图: bool,
 }
 
 /// 附件内容读取变体。
@@ -229,31 +251,31 @@ pub trait 仓储端口 {
         Ok(None)
     }
 
-    /// 把已校验好的图片附件写入权威真相。
-    fn 创建图片附件记录(
+    /// 把已校验好的媒体附件写入权威真相。
+    fn 创建媒体附件记录(
         &mut self,
         所属匿名身份标识: &str,
-        附件: &图片附件写入请求,
-    ) -> Result<图片附件快照, contract::错误码> {
+        附件: &媒体附件写入请求,
+    ) -> Result<媒体附件快照, contract::错误码> {
         let _ = (所属匿名身份标识, 附件);
         Err(contract::错误码::系统错误)
     }
 
     /// 创建 prepared 附件占位，供浏览器后续直传对象内容。
-    fn 创建预备图片附件记录(
+    fn 创建预备媒体附件记录(
         &mut self,
         所属匿名身份标识: &str,
-        附件: &图片附件准备请求,
-    ) -> Result<图片附件准备快照, contract::错误码> {
+        附件: &媒体附件准备请求,
+    ) -> Result<媒体附件准备快照, contract::错误码> {
         let _ = (所属匿名身份标识, 附件);
         Err(contract::错误码::系统错误)
     }
 
     /// 读取“当前还能否继续上传/完成上传”的最小附件事实。
-    fn 查询待完成图片附件(
+    fn 查询待完成媒体附件(
         &self,
         附件标识: &str,
-    ) -> Result<Option<待完成图片附件读取结果>, contract::错误码> {
+    ) -> Result<Option<待完成媒体附件读取结果>, contract::错误码> {
         let _ = 附件标识;
         Ok(None)
     }
@@ -437,8 +459,7 @@ pub fn 校验房间订阅资格(
 /// 房间存在性校验只负责把“有没有这个房间”说清楚。
 /// 这样后续成员资格失败就不会把 `room_not_found` 吞成 `membership_required`。
 fn 校验房间存在(
-    仓储: &dyn 仓储端口,
-    房间标识: &str,
+    仓储: &dyn 仓储端口, 房间标识: &str
 ) -> Result<(), contract::错误码> {
     if 仓储.检查房间存在(房间标识)? {
         Ok(())
@@ -504,9 +525,12 @@ pub fn 创建消息(
                     宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
                     高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
                 },
-                附件种类读取结果::视频 => {
-                    return Err(contract::错误码::附件类型不支持);
-                }
+                附件种类读取结果::视频 => domain::message::待发送附件 {
+                    附件标识: snapshot.附件标识,
+                    种类: domain::message::附件种类::视频,
+                    宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
+                    高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
+                },
                 附件种类读取结果::语音 => {
                     return Err(contract::错误码::附件类型不支持);
                 }
@@ -525,15 +549,15 @@ pub fn 创建消息(
     仓储.创建统一消息事件(房间标识, 客户端消息标识, 会话标识, &msg.文本, &msg.附件)
 }
 
-/// 先在业务真相里申请一个图片附件占位，再把字节上传交给运输层。
-pub fn 准备图片附件上传(
+/// 先在业务真相里申请一个媒体附件占位，再把字节上传交给运输层。
+pub fn 准备媒体附件上传(
     仓储: &mut dyn 仓储端口,
     会话标识: &str,
-    附件: &图片附件准备请求,
-) -> Result<图片附件准备快照, contract::错误码> {
+    附件: &媒体附件准备请求,
+) -> Result<媒体附件准备快照, contract::错误码> {
     if 附件.附件标识.trim().is_empty()
         || 附件.mime_type.trim().is_empty()
-        || 附件.原图存储键.trim().is_empty()
+        || 附件.原始内容存储键.trim().is_empty()
         || 附件.字节大小 <= 0
     {
         return Err(contract::错误码::参数非法);
@@ -542,18 +566,18 @@ pub fn 准备图片附件上传(
     let 所属匿名身份标识 = 仓储
         .查询会话所属匿名身份(会话标识)?
         .ok_or(contract::错误码::会话无效)?;
-    仓储.创建预备图片附件记录(&所属匿名身份标识, 附件)
+    仓储.创建预备媒体附件记录(&所属匿名身份标识, 附件)
 }
 
 /// complete 前必须先验证：
 /// 1. 当前会话仍然有效；
 /// 2. 附件仍归当前发送者所有；
 /// 3. 附件现在确实还处于 prepared。
-pub fn 读取待完成图片附件(
+pub fn 读取待完成媒体附件(
     仓储: &dyn 仓储端口,
     会话标识: &str,
     附件标识: &str,
-) -> Result<待完成图片附件读取结果, contract::错误码> {
+) -> Result<待完成媒体附件读取结果, contract::错误码> {
     if 附件标识.trim().is_empty() {
         return Err(contract::错误码::参数非法);
     }
@@ -562,7 +586,7 @@ pub fn 读取待完成图片附件(
         .查询会话所属匿名身份(会话标识)?
         .ok_or(contract::错误码::会话无效)?;
     let prepared = 仓储
-        .查询待完成图片附件(附件标识)?
+        .查询待完成媒体附件(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;
     if prepared.所属匿名身份标识 != 所属匿名身份标识 {
         return Err(contract::错误码::附件不属于当前发送者);
@@ -575,13 +599,16 @@ pub fn 读取待完成图片附件(
 
 /// 完成上传只负责把 prepared 升级成 ready。
 /// 它不创建消息，也不改变消息发送主链。
-pub fn 完成图片附件上传(
+pub fn 完成媒体附件上传(
     仓储: &mut dyn 仓储端口,
     会话标识: &str,
-    附件: &图片附件写入请求,
-) -> Result<图片附件快照, contract::错误码> {
-    let prepared = 读取待完成图片附件(仓储, 会话标识, &附件.附件标识)?;
-    仓储.创建图片附件记录(&prepared.所属匿名身份标识, 附件)
+    附件: &媒体附件写入请求,
+) -> Result<媒体附件快照, contract::错误码> {
+    let prepared = 读取待完成媒体附件(仓储, 会话标识, &附件.附件标识)?;
+    if prepared.种类 != 附件.种类 {
+        return Err(contract::错误码::附件类型不支持);
+    }
+    仓储.创建媒体附件记录(&prepared.所属匿名身份标识, 附件)
 }
 
 /// 读取附件内容：
@@ -609,6 +636,40 @@ pub fn 读取附件内容(
         .ok_or(contract::错误码::成员资格不足)
 }
 
+/// locator 是受控 transport 入口：
+/// - 业务层只回答“当前附件是什么、是否 ready、当前会话是否允许拿到 transport 线索”；
+/// - 不把存储键、房间 id、owner 等实现细节交给壳层。
+pub fn 查询媒体定位(
+    仓储: &dyn 仓储端口,
+    附件标识: &str,
+    会话标识: &str,
+) -> Result<媒体定位结果, contract::错误码> {
+    if 附件标识.trim().is_empty() {
+        return Err(contract::错误码::参数非法);
+    }
+    校验实时连接会话(仓储, 会话标识)?;
+    let snapshot = 仓储
+        .查询附件快照(附件标识)?
+        .ok_or(contract::错误码::附件不存在)?;
+    if snapshot.状态 != 附件状态读取结果::就绪 {
+        return Err(contract::错误码::附件未就绪);
+    }
+    仓储
+        .查询附件可读内容(附件标识, 会话标识, 附件内容变体::原图)?
+        .ok_or(contract::错误码::成员资格不足)?;
+    let kind = match snapshot.种类 {
+        附件种类读取结果::图片 => 媒体附件类型::图片,
+        附件种类读取结果::视频 => 媒体附件类型::视频,
+        _ => return Err(contract::错误码::附件类型不支持),
+    };
+    Ok(媒体定位结果 {
+        附件标识: snapshot.附件标识,
+        种类: kind.clone(),
+        状态: snapshot.状态,
+        允许缩略图: matches!(kind, 媒体附件类型::图片),
+    })
+}
+
 /// 领域错误 -> 契约错误码映射。
 /// 约束：这里只做语义映射，不改动错误事实本身。
 fn 映射领域错误(err: domain::领域错误) -> contract::错误码 {
@@ -616,9 +677,7 @@ fn 映射领域错误(err: domain::领域错误) -> contract::错误码 {
         domain::领域错误::成员资格不足 => contract::错误码::成员资格不足,
         domain::领域错误::消息文本为空
         | domain::领域错误::消息内容为空
-        | domain::领域错误::房间短码非法 => {
-            contract::错误码::参数非法
-        }
+        | domain::领域错误::房间短码非法 => contract::错误码::参数非法,
         domain::领域错误::附件类型不支持 => contract::错误码::附件类型不支持,
         domain::领域错误::附件数量超限 => contract::错误码::附件数量超限,
     }

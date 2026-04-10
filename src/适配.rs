@@ -87,21 +87,19 @@ impl Pg仓储 {
     }
 
     /// 领域层已经校验通过的附件引用，落到共享契约时只保留稳定渲染事实。
-    fn 已校验附件转契约快照(附件: &domain::message::已校验附件引用) -> contract::附件快照 {
+    fn 已校验附件转契约快照(
+        附件: &domain::message::已校验附件引用,
+    ) -> contract::附件快照 {
         match 附件 {
             domain::message::已校验附件引用::图片 {
-                附件标识,
-                宽,
-                高,
+                附件标识, 宽, 高
             } => contract::附件快照::图片(contract::图片附件快照 {
                 附件标识: 附件标识.clone(),
                 宽: *宽,
                 高: *高,
             }),
             domain::message::已校验附件引用::视频 {
-                附件标识,
-                宽,
-                高,
+                附件标识, 宽, 高
             } => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: 附件标识.clone(),
                 宽: *宽,
@@ -176,7 +174,9 @@ impl Pg仓储 {
         Ok(rows
             .into_iter()
             .map(|row| {
-                let message_id = row.get::<Option<String>, _>("message_id").unwrap_or_default();
+                let message_id = row
+                    .get::<Option<String>, _>("message_id")
+                    .unwrap_or_default();
                 let attachments = attachment_map.remove(&message_id).unwrap_or_default();
                 Self::行转消息事件(row, 房间标识, attachments)
             })
@@ -184,7 +184,9 @@ impl Pg仓储 {
     }
 
     /// 查询上传链已形成的附件快照，供统一消息用例在进入领域前校验。
-    fn 解析附件状态(raw_status: &str) -> Result<usecase::附件状态读取结果, contract::错误码> {
+    fn 解析附件状态(
+        raw_status: &str,
+    ) -> Result<usecase::附件状态读取结果, contract::错误码> {
         match raw_status {
             "prepared" => Ok(usecase::附件状态读取结果::已准备),
             "uploading" => Ok(usecase::附件状态读取结果::上传中),
@@ -248,13 +250,13 @@ impl Pg仓储 {
         .transpose()
     }
 
-    /// 查询某个 prepared 附件占位，供本地回环上传与 complete 共同复用。
-    async fn 查询待完成图片附件_异步(
+    /// 查询某个 prepared 媒体附件占位，供本地回环上传与 complete 共同复用。
+    async fn 查询待完成媒体附件_异步(
         pool: &PgPool,
         附件标识: &str,
-    ) -> Result<Option<usecase::待完成图片附件读取结果>, contract::错误码> {
+    ) -> Result<Option<usecase::待完成媒体附件读取结果>, contract::错误码> {
         let row = sqlx::query(
-            "SELECT a.attachment_id, ai.anonymous_identity_id, a.mime_type, a.byte_size, a.storage_key, a.status \
+            "SELECT a.attachment_id, ai.anonymous_identity_id, a.kind, a.mime_type, a.byte_size, a.storage_key, a.status \
              FROM attachments a \
              JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
              WHERE a.attachment_id = $1",
@@ -265,60 +267,77 @@ impl Pg仓储 {
         .map_err(|_| contract::错误码::系统错误)?;
 
         row.map(|row| {
-            Ok(usecase::待完成图片附件读取结果 {
+            let kind = match row.get::<String, _>("kind").as_str() {
+                "image" => usecase::媒体附件类型::图片,
+                "video" => usecase::媒体附件类型::视频,
+                _ => return Err(contract::错误码::系统错误),
+            };
+            Ok(usecase::待完成媒体附件读取结果 {
                 附件标识: row.get("attachment_id"),
                 所属匿名身份标识: row.get("anonymous_identity_id"),
+                种类: kind,
                 mime_type: row.get("mime_type"),
                 字节大小: row.get("byte_size"),
-                原图存储键: row.get("storage_key"),
+                原始内容存储键: row.get("storage_key"),
                 状态: Self::解析附件状态(row.get::<String, _>("status").as_str())?,
             })
         })
         .transpose()
     }
 
-    /// 写入 prepared 图片附件占位。
-    async fn 创建预备图片附件记录_异步(
+    /// 写入 prepared 媒体附件占位。
+    async fn 创建预备媒体附件记录_异步(
         pool: &PgPool,
         所属匿名身份标识: &str,
-        附件: &usecase::图片附件准备请求,
-    ) -> Result<usecase::图片附件准备快照, contract::错误码> {
+        附件: &usecase::媒体附件准备请求,
+    ) -> Result<usecase::媒体附件准备快照, contract::错误码> {
         let owner_db_id = Self::查询匿名身份数据库主键_异步(pool, 所属匿名身份标识).await?;
+        let kind = match 附件.种类 {
+            usecase::媒体附件类型::图片 => "image",
+            usecase::媒体附件类型::视频 => "video",
+        };
 
         sqlx::query(
             "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
-             VALUES ($1, $2, 'image', $3, $4, NULL, NULL, $5, NULL, 'prepared')",
+             VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, NULL, 'prepared')",
         )
         .bind(&附件.附件标识)
         .bind(owner_db_id)
+        .bind(kind)
         .bind(&附件.mime_type)
         .bind(附件.字节大小)
-        .bind(&附件.原图存储键)
+        .bind(&附件.原始内容存储键)
         .execute(pool)
         .await
         .map_err(|_| contract::错误码::系统错误)?;
 
-        Ok(usecase::图片附件准备快照 {
+        Ok(usecase::媒体附件准备快照 {
             附件标识: 附件.附件标识.clone(),
+            种类: 附件.种类.clone(),
             mime_type: 附件.mime_type.clone(),
             字节大小: 附件.字节大小,
-            原图存储键: 附件.原图存储键.clone(),
+            原始内容存储键: 附件.原始内容存储键.clone(),
             状态: usecase::附件状态读取结果::已准备,
         })
     }
 
-    /// 写入 ready 图片附件真相。
-    async fn 创建图片附件记录_异步(
+    /// 写入 ready 媒体附件真相。
+    async fn 创建媒体附件记录_异步(
         pool: &PgPool,
         所属匿名身份标识: &str,
-        附件: &usecase::图片附件写入请求,
-    ) -> Result<usecase::图片附件快照, contract::错误码> {
+        附件: &usecase::媒体附件写入请求,
+    ) -> Result<usecase::媒体附件快照, contract::错误码> {
         let owner_db_id = Self::查询匿名身份数据库主键_异步(pool, 所属匿名身份标识).await?;
+        let kind = match 附件.种类 {
+            usecase::媒体附件类型::图片 => "image",
+            usecase::媒体附件类型::视频 => "video",
+        };
 
         sqlx::query(
             "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
-             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, 'ready') \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ready') \
              ON CONFLICT (attachment_id) DO UPDATE SET \
+                 kind = EXCLUDED.kind, \
                  mime_type = EXCLUDED.mime_type, \
                  byte_size = EXCLUDED.byte_size, \
                  width = EXCLUDED.width, \
@@ -330,18 +349,20 @@ impl Pg仓储 {
         )
         .bind(&附件.附件标识)
         .bind(owner_db_id)
+        .bind(kind)
         .bind(&附件.mime_type)
         .bind(附件.字节大小)
         .bind(附件.宽)
         .bind(附件.高)
-        .bind(&附件.原图存储键)
+        .bind(&附件.原始内容存储键)
         .bind(&附件.缩略图存储键)
         .execute(pool)
         .await
         .map_err(|_| contract::错误码::系统错误)?;
 
-        Ok(usecase::图片附件快照 {
+        Ok(usecase::媒体附件快照 {
             附件标识: 附件.附件标识.clone(),
+            种类: 附件.种类.clone(),
             mime_type: 附件.mime_type.clone(),
             字节大小: 附件.字节大小,
             宽: 附件.宽,
@@ -639,10 +660,7 @@ impl Pg仓储 {
         let (session_db_id, sender_display_alias) =
             Self::查询发送者投影_异步(pool, 会话标识).await?;
 
-        let mut tx = pool
-            .begin()
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
+        let mut tx = pool.begin().await.map_err(|_| contract::错误码::系统错误)?;
 
         let room_row = sqlx::query(
             "UPDATE rooms \
@@ -692,9 +710,14 @@ impl Pg仓储 {
                 tx.rollback()
                     .await
                     .map_err(|_| contract::错误码::系统错误)?;
-                return Self::查询既有消息事件_异步(pool, 房间标识, 会话标识, 客户端消息标识)
-                    .await?
-                    .ok_or(contract::错误码::系统错误);
+                return Self::查询既有消息事件_异步(
+                    pool,
+                    房间标识,
+                    会话标识,
+                    客户端消息标识,
+                )
+                .await?
+                .ok_or(contract::错误码::系统错误);
             }
             return Err(contract::错误码::系统错误);
         }
@@ -731,9 +754,7 @@ impl Pg仓储 {
             .map_err(|_| contract::错误码::系统错误)?;
         }
 
-        tx.commit()
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
+        tx.commit().await.map_err(|_| contract::错误码::系统错误)?;
 
         Ok(contract::领域事件::消息已创建 {
             房间标识: 房间标识.to_string(),
@@ -742,10 +763,7 @@ impl Pg仓储 {
             发送者会话标识: 会话标识.to_string(),
             发送者花名: sender_display_alias,
             文本: 文本.to_string(),
-            附件: 附件
-                .iter()
-                .map(Self::已校验附件转契约快照)
-                .collect(),
+            附件: 附件.iter().map(Self::已校验附件转契约快照).collect(),
             事件位置: next_position,
         })
     }
@@ -1151,7 +1169,10 @@ impl 仓储端口 for Pg仓储 {
         &self,
         会话标识: &str,
     ) -> Result<Option<String>, contract::错误码> {
-        self.在运行时执行(Self::查询会话所属匿名身份_异步(&self.pool, 会话标识))
+        self.在运行时执行(Self::查询会话所属匿名身份_异步(
+            &self.pool,
+            会话标识,
+        ))
     }
 
     /// 房间存在性检查只回答“有没有这个 room_id”。
@@ -1217,33 +1238,36 @@ impl 仓储端口 for Pg仓储 {
     }
 
     /// prepared 附件读取只暴露给上传链，不下放到其它业务入口。
-    fn 查询待完成图片附件(
+    fn 查询待完成媒体附件(
         &self,
         附件标识: &str,
-    ) -> Result<Option<usecase::待完成图片附件读取结果>, contract::错误码> {
-        self.在运行时执行(Self::查询待完成图片附件_异步(&self.pool, 附件标识))
+    ) -> Result<Option<usecase::待完成媒体附件读取结果>, contract::错误码> {
+        self.在运行时执行(Self::查询待完成媒体附件_异步(
+            &self.pool,
+            附件标识,
+        ))
     }
 
     /// prepare 阶段先只落占位记录，不提前伪造 ready 元数据。
-    fn 创建预备图片附件记录(
+    fn 创建预备媒体附件记录(
         &mut self,
         所属匿名身份标识: &str,
-        附件: &usecase::图片附件准备请求,
-    ) -> Result<usecase::图片附件准备快照, contract::错误码> {
-        self.在运行时执行(Self::创建预备图片附件记录_异步(
+        附件: &usecase::媒体附件准备请求,
+    ) -> Result<usecase::媒体附件准备快照, contract::错误码> {
+        self.在运行时执行(Self::创建预备媒体附件记录_异步(
             &self.pool,
             所属匿名身份标识,
             附件,
         ))
     }
 
-    /// 图片上传链的元数据落库入口。
-    fn 创建图片附件记录(
+    /// 媒体上传链的元数据落库入口。
+    fn 创建媒体附件记录(
         &mut self,
         所属匿名身份标识: &str,
-        附件: &usecase::图片附件写入请求,
-    ) -> Result<usecase::图片附件快照, contract::错误码> {
-        self.在运行时执行(Self::创建图片附件记录_异步(
+        附件: &usecase::媒体附件写入请求,
+    ) -> Result<usecase::媒体附件快照, contract::错误码> {
+        self.在运行时执行(Self::创建媒体附件记录_异步(
             &self.pool,
             所属匿名身份标识,
             附件,

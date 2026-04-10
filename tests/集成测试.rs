@@ -69,8 +69,8 @@ fn 数据库真相模型包含房间阅读锚点表() {
 
 #[test]
 fn 数据库真相模型包含attachments与message_attachment_refs表() {
-    let sql = std::fs::read_to_string("migrations/0004_附件与图片消息.sql")
-        .expect("应存在附件迁移文件");
+    let sql =
+        std::fs::read_to_string("migrations/0004_附件与图片消息.sql").expect("应存在附件迁移文件");
 
     assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachments"));
     assert!(sql.contains("CREATE TABLE IF NOT EXISTS message_attachment_refs"));
@@ -368,7 +368,10 @@ async fn 图片消息会把附件引用和事件一起持久化() {
 
     assert_eq!(stored_attachment_id, attachment_id);
     assert_eq!(sort_order, 0);
-    assert!(committed_at_exists, "附件首次被消息引用后应写入 committed_at");
+    assert!(
+        committed_at_exists,
+        "附件首次被消息引用后应写入 committed_at"
+    );
 
     let ref_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM message_attachment_refs mar \
@@ -725,7 +728,11 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     )
     .await;
 
-    assert_eq!(complete_status, StatusCode::OK);
+    assert_eq!(
+        complete_status,
+        StatusCode::OK,
+        "视频 complete 当前返回: {complete_body:?}"
+    );
     assert_eq!(complete_body["status"].as_str(), Some("ready"));
     assert_eq!(complete_body["width"].as_i64(), Some(1));
     assert_eq!(complete_body["height"].as_i64(), Some(1));
@@ -749,6 +756,199 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
 
 #[tokio::test]
 #[serial]
+async fn prepare媒体上传会返回统一媒体准备结果() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("prepare-media-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (image_status, image_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "prepare.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(image_status, StatusCode::OK);
+
+    let (video_status, video_body) = send_json(
+        app,
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "prepare.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 最小mp4字节().len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(video_status, StatusCode::OK);
+
+    for body in [&image_body, &video_body] {
+        assert!(
+            body["attachment_id"].as_str().is_some(),
+            "统一媒体 prepare 至少要返回稳定 attachment_id"
+        );
+        assert_eq!(body["upload_method"].as_str(), Some("PUT"));
+        assert!(
+            body["upload_url"].as_str().is_some(),
+            "媒体 prepare 必须返回后续上传地址"
+        );
+        assert!(
+            body["upload_headers"].is_object(),
+            "媒体 prepare 必须返回上传头集合"
+        );
+        assert!(
+            body["expires_at"].as_str().is_some(),
+            "媒体 prepare 必须返回过期时间"
+        );
+    }
+}
+
+#[tokio::test]
+#[serial]
+async fn complete视频上传会把prepared附件升级成ready并写入视频元数据() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("complete-video-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let video_bytes = 最小mp4字节();
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "complete.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": video_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let storage_key = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT storage_key FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询原始视频存储键")
+    .expect("prepare 后必须写入原始视频存储键");
+    state
+        .attachment_store
+        .put(&ObjectPath::from(storage_key), video_bytes.into())
+        .await
+        .expect("测试应能预先写入原始视频对象");
+
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+
+    assert_eq!(
+        complete_status,
+        StatusCode::OK,
+        "视频 complete 当前返回: {complete_body:?}"
+    );
+    assert_eq!(complete_body["status"].as_str(), Some("ready"));
+    assert_eq!(complete_body["kind"].as_str(), Some("video"));
+    assert!(
+        complete_body["width"].as_i64().unwrap_or_default() > 0,
+        "视频 complete 后必须写入真实宽度"
+    );
+    assert!(
+        complete_body["height"].as_i64().unwrap_or_default() > 0,
+        "视频 complete 后必须写入真实高度"
+    );
+
+    let row = sqlx::query(
+        "SELECT kind, status, width, height, thumbnail_storage_key FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询 complete 后的视频附件记录");
+    let kind_in_db: String = row.get("kind");
+    let status_in_db: String = row.get("status");
+    let width_in_db: Option<i32> = row.get("width");
+    let height_in_db: Option<i32> = row.get("height");
+    let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
+    assert_eq!(kind_in_db, "video");
+    assert_eq!(status_in_db, "ready");
+    assert!(width_in_db.unwrap_or_default() > 0);
+    assert!(height_in_db.unwrap_or_default() > 0);
+    assert!(
+        thumbnail_storage_key.is_none(),
+        "当前视频主链不应伪造图片缩略图存储键"
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn complete图片上传遇到非图片原图会返回attachment_type_not_allowed() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -768,7 +968,9 @@ async fn complete图片上传遇到非图片原图会返回attachment_type_not_a
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("complete-invalid-image-{uniq}")})),
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("complete-invalid-image-{uniq}")}),
+        ),
         &[],
     )
     .await;
@@ -809,7 +1011,10 @@ async fn complete图片上传遇到非图片原图会返回attachment_type_not_a
     .expect("prepare 后必须写入原图存储键");
     state
         .attachment_store
-        .put(&ObjectPath::from(storage_key), invalid_bytes.as_slice().into())
+        .put(
+            &ObjectPath::from(storage_key),
+            invalid_bytes.as_slice().into(),
+        )
         .await
         .expect("测试应能预先写入非法原图对象");
 
@@ -896,6 +1101,153 @@ fn prepared附件在complete之前不能进入消息发送主链() {
     assert_eq!(err, koko::contract::错误码::附件未就绪);
 }
 
+#[test]
+#[serial]
+fn ready视频附件可以进入create_message主链() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("RV{:010}", uniq % 10_000_000_000);
+    let device_token = format!("ready-video-device-{uniq}");
+    let attachment_id = format!("att-ready-video-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
+    let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("进房应返回房间快照"),
+    };
+
+    let runtime = tokio::runtime::Runtime::new().expect("应能创建测试 runtime");
+    let pool = runtime.block_on(async {
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&cfg.database_url)
+            .await
+            .expect("应能连接数据库")
+    });
+    runtime.block_on(async {
+        插入ready视频附件记录(&pool, &session_id, &attachment_id).await;
+    });
+
+    let event = koko::usecase::创建消息(
+        &mut repo,
+        &room_id,
+        &session_id,
+        &format!("ready-video-message-{uniq}"),
+        "",
+        &[attachment_id.clone()],
+    )
+    .expect("ready 视频附件应能进入统一消息主链");
+
+    match event {
+        koko::contract::领域事件::消息已创建 { 文本, 附件, .. } => {
+            assert_eq!(文本, "", "纯视频消息允许文本为空");
+            assert_eq!(附件.len(), 1);
+            assert!(matches!(
+                附件.first(),
+                Some(koko::contract::附件快照::视频(视频))
+                    if 视频.附件标识 == attachment_id
+            ));
+        }
+    }
+}
+
+#[tokio::test]
+#[serial]
+async fn locator只暴露受控transport信息而不暴露业务权限私货() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("ML{:010}", uniq % 10_000_000_000);
+    let device_token = format!("media-locator-device-{uniq}");
+    let attachment_id = format!("att-locator-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入附件");
+            插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("locator-client-{uniq}"),
+            "",
+            &[attachment_id_for_worker.clone()],
+        )
+        .expect("应能先创建带视频附件的消息");
+
+        (identity.会话标识, room_id)
+    })
+    .await
+    .expect("阻塞 locator 任务应完成");
+
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["attachment_id"].as_str(), Some(attachment_id.as_str()));
+    assert_eq!(body["kind"].as_str(), Some("video"));
+    assert_eq!(body["status"].as_str(), Some("ready"));
+    assert!(
+        body["original_url"].as_str().is_some(),
+        "locator 必须返回受控原始内容地址"
+    );
+    assert!(
+        body.get("storage_key").is_none()
+            && body.get("owner_anonymous_identity_id").is_none()
+            && body.get("room_id").is_none()
+            && body.get("thumbnail_storage_key").is_none(),
+        "locator 只能暴露 transport 信息，不能把仓储私货和业务真相泄漏给壳层"
+    );
+    assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
+}
+
 #[tokio::test]
 #[serial]
 async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
@@ -923,7 +1275,10 @@ async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
         .get(header::CACHE_CONTROL)
         .and_then(|value| value.to_str().ok())
         .expect("入口 HTML 必须显式返回 Cache-Control");
-    assert_eq!(root_cache_control, "no-cache", "入口 HTML 必须总是回源确认新版本");
+    assert_eq!(
+        root_cache_control, "no-cache",
+        "入口 HTML 必须总是回源确认新版本"
+    );
     let root_html = String::from_utf8(
         to_bytes(root_response.into_body(), usize::MAX)
             .await
@@ -934,8 +1289,8 @@ async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
 
     let css_path =
         提取静态资源路径(&root_html, "<link rel=\"stylesheet\" href=\"", "\"").expect("应引用 CSS");
-    let js_path = 提取静态资源路径(&root_html, "<script type=\"module\" src=\"", "\"")
-        .expect("应引用 JS");
+    let js_path =
+        提取静态资源路径(&root_html, "<script type=\"module\" src=\"", "\"").expect("应引用 JS");
     assert!(
         css_path.starts_with("/dist/app-") && css_path.ends_with(".css"),
         "CSS 应使用 hashed 文件名，实际为 {css_path}"
@@ -964,8 +1319,7 @@ async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
             .and_then(|value| value.to_str().ok())
             .expect("静态资源必须显式返回 Cache-Control");
         assert_eq!(
-            cache_control,
-            "public, max-age=31536000, immutable",
+            cache_control, "public, max-age=31536000, immutable",
             "{uri} 应走长期强缓存"
         );
     }
@@ -997,7 +1351,9 @@ async fn 非成员不能读取房间消息里的图片内容() {
         &[],
     )
     .await;
-    let owner_session_id = owner_bootstrap["session_id"].as_str().expect("owner session");
+    let owner_session_id = owner_bootstrap["session_id"]
+        .as_str()
+        .expect("owner session");
 
     let (_, stranger_bootstrap) = send_json(
         app.clone(),
@@ -1007,7 +1363,9 @@ async fn 非成员不能读取房间消息里的图片内容() {
         &[],
     )
     .await;
-    let stranger_session_id = stranger_bootstrap["session_id"].as_str().expect("stranger session");
+    let stranger_session_id = stranger_bootstrap["session_id"]
+        .as_str()
+        .expect("stranger session");
 
     let (_, room_body) = send_json(
         app.clone(),
@@ -1090,8 +1448,7 @@ async fn 非成员不能读取房间消息里的图片内容() {
         .method(Method::GET)
         .uri(format!(
             "/api/attachments/{}/content?session_id={}&variant=original",
-            attachment_id,
-            stranger_session_id
+            attachment_id, stranger_session_id
         ))
         .body(Body::empty())
         .expect("request");
@@ -2480,7 +2837,9 @@ async fn 房间历史分页缺少before_event_position会返回invalid_argument(
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("history-missing-before-{uniq}")})),
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("history-missing-before-{uniq}")}),
+        ),
         &[],
     )
     .await;
@@ -2964,28 +3323,25 @@ async fn send_multipart_response(
     body.extend_from_slice(file_bytes);
     body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
 
-    app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(uri)
-                .header(
-                    "content-type",
-                    format!("multipart/form-data; boundary={boundary}"),
-                )
-                .body(Body::from(body))
-                .expect("request"),
-        )
-        .await
-        .expect("response")
+    app.oneshot(
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(body))
+            .expect("request"),
+    )
+    .await
+    .expect("response")
 }
 
 /// 直接往数据库写入一条 ready 图片附件真相。
 /// 这个 helper 只服务集成测试建数，避免为了 Task 2 先倒逼上传 HTTP 提前实现。
 async fn 插入ready图片附件记录(
-    pool: &sqlx::PgPool,
-    会话标识: &str,
-    附件标识: &str,
+    pool: &sqlx::PgPool, 会话标识: &str, 附件标识: &str
 ) {
     let owner_identity_db_id = sqlx::query_scalar::<_, Option<i64>>(
         "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",
@@ -3009,14 +3365,48 @@ async fn 插入ready图片附件记录(
     .expect("应能插入 ready 图片附件");
 }
 
+/// 视频 ready helper 和图片 helper 保持同一层级：
+/// - 它只负责给集成测试准备“附件真相已成立”的前置条件；
+/// - 不替代真实上传链，也不把 HTTP/对象存储细节混进消息主链测试。
+async fn 插入ready视频附件记录(
+    pool: &sqlx::PgPool, 会话标识: &str, 附件标识: &str
+) {
+    let owner_identity_db_id = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",
+    )
+    .bind(会话标识)
+    .fetch_one(pool)
+    .await
+    .expect("应能查询会话对应的匿名身份")
+    .expect("附件 owner 必须能落到稳定匿名身份");
+
+    sqlx::query(
+        "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
+         VALUES ($1, $2, 'video', 'video/mp4', $3, 320, 240, $4, NULL, 'ready')",
+    )
+    .bind(附件标识)
+    .bind(owner_identity_db_id)
+    .bind(最小mp4字节().len() as i64)
+    .bind(format!("original/{附件标识}.mp4"))
+    .execute(pool)
+    .await
+    .expect("应能插入 ready 视频附件");
+}
+
 fn 最小png字节() -> Vec<u8> {
     vec![
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
-        0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
-        0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78,
-        0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0x00, 0x05, 0x00, 0x01, 0xFF, 0x89, 0x99,
-        0x3D, 0x1D, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8,
+        0xCF, 0xC0, 0xF0, 0x1F, 0x00, 0x05, 0x00, 0x01, 0xFF, 0x89, 0x99, 0x3D, 0x1D, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
     ]
+}
+
+/// 最小 MP4 样本来自上游公开测试夹具，避免我们在仓库里手搓一份脆弱的伪视频字节。
+/// 后端视频 complete 与 locator 回归都统一复用这份 fixture，确保测试针对真实容器格式。
+fn 最小mp4字节() -> Vec<u8> {
+    include_bytes!("fixtures/minimal.mp4").to_vec()
 }
 
 fn 创建集成测试日志采集上下文() -> (Arc<Mutex<Vec<u8>>>, tracing::dispatcher::DefaultGuard) {
