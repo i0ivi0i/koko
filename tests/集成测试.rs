@@ -572,6 +572,85 @@ async fn prepare图片上传会创建prepared附件并返回直传参数() {
 
 #[tokio::test]
 #[serial]
+async fn 本地回环图片上传成功响应会返回etag供uppy结束上传() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let png_bytes = 最小png字节();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("loopback-upload-etag-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "loopback.png",
+            "mime_type": "image/png",
+            "byte_size": png_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+
+    let upload_url = prepare_body["upload_url"].as_str().expect("upload_url");
+    let upload_headers = prepare_body["upload_headers"]
+        .as_object()
+        .expect("upload_headers");
+    let mut request = Request::builder().method(Method::PUT).uri(upload_url);
+    for (key, value) in upload_headers {
+        request = request.header(
+            key,
+            value.as_str().expect("upload_headers 里的值必须是字符串"),
+        );
+    }
+
+    // 这条回归测试锁住浏览器真实依赖：
+    // Uppy 单段上传在 2xx 后还会继续读取 ETag；缺这个头时，请求虽然成功，
+    // 上传器却不会触发 upload-success，前端只会卡在“上传中”直到 watchdog 超时。
+    let response = app
+        .oneshot(
+            request
+                .body(Body::from(png_bytes))
+                .expect("loopback upload request"),
+        )
+        .await
+        .expect("loopback upload response");
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let etag = response
+        .headers()
+        .get(header::ETAG)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    assert!(
+        !etag.trim().is_empty(),
+        "本地回环 PUT 成功后必须返回 ETag，浏览器上传器才会结束上传"
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn complete图片上传会把prepared附件升级成ready并写入缩略图() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

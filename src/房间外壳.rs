@@ -1243,11 +1243,37 @@ pub(super) async fn upload_prepared_image_content(
         );
     }
 
-    if let Err(err) = state
+    let put_result = match state
         .attachment_store
         .put(&ObjectPath::from(prepared.原图存储键), body.into())
         .await
     {
+        Ok(result) => result,
+        Err(err) => {
+            tracing::error!(
+                usecase = "本地回环上传原图",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "图片原图 PUT",
+                session_id = session_id.as_str(),
+                attachment_id = attachment_id.as_str(),
+                error_code = "system_error",
+                error = %err,
+                "写入 prepared 原图对象失败"
+            );
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "写入原图对象失败",
+            );
+        }
+    };
+
+    // 这里必须把对象写入后的 ETag 原样回给浏览器上传器：
+    // - Uppy 单段 PUT 在 2xx 后还会读取 ETag 作为完成信号；
+    // - 如果我们只回 204 不带 ETag，前端就会一直停留在“上传中”，直到 watchdog 超时；
+    // - 因此缺少 ETag 不能伪装成成功，必须明确报错。
+    let Some(etag) = put_result.e_tag.filter(|value| !value.trim().is_empty()) else {
         tracing::error!(
             usecase = "本地回环上传原图",
             adapter = "http",
@@ -1256,16 +1282,16 @@ pub(super) async fn upload_prepared_image_content(
             session_id = session_id.as_str(),
             attachment_id = attachment_id.as_str(),
             error_code = "system_error",
-            error = %err,
-            "写入 prepared 原图对象失败"
+            "本地回环上传成功但对象存储未返回 ETag"
         );
         return err_resp(
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
-            "写入原图对象失败",
+            "上传响应缺少 ETag",
         );
-    }
-    StatusCode::NO_CONTENT.into_response()
+    };
+
+    (StatusCode::NO_CONTENT, [(header::ETAG, etag)]).into_response()
 }
 
 /// 冷路径：完成图片附件上传。
