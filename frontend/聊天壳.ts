@@ -45,6 +45,7 @@ type 图片上传失败响应 =
  * 否则前端放行、后端拒绝时，就会重新长出“某些设备永远卡在上传中”的错位体验。
  */
 const 图片附件上传上限字节数 = 10 * 1024 * 1024;
+const 图片上传失活超时毫秒 = 45_000;
 
 function 创建本地图片预览地址(file: Blob | File | null | undefined): string {
   return file instanceof Blob ? URL.createObjectURL(file) : "";
@@ -173,6 +174,58 @@ export class 聊天壳 extends LitElement {
   };
 
   private imageUploader: Uppy<图片上传Meta, 图片上传响应体> | null = null;
+  private readonly 图片上传失活计时器 = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * 某些移动浏览器在网络异常或系统级中断时，不一定会把 XHR 超时/失败事件稳定抛回 Uppy。
+   * 壳层因此还要补一层“失活看门狗”：
+   * 1. 只要文件还处于 uploading，就要求它在固定时间窗内继续产生进展或最终结果；
+   * 2. 一旦超时仍无 success/error/stalled，就主动收口成 failed；
+   * 3. 这层只改前端体验态，不改变后端附件真相。
+   */
+  private 重置图片上传失活计时(localId: string): void {
+    this.清理图片上传失活计时(localId);
+    this.图片上传失活计时器.set(
+      localId,
+      setTimeout(() => {
+        this.处理图片上传失活(localId);
+      }, 图片上传失活超时毫秒)
+    );
+  }
+
+  private 清理图片上传失活计时(localId: string): void {
+    const timer = this.图片上传失活计时器.get(localId);
+    if (timer) {
+      clearTimeout(timer);
+      this.图片上传失活计时器.delete(localId);
+    }
+  }
+
+  private 清理全部图片上传失活计时(): void {
+    for (const timer of this.图片上传失活计时器.values()) {
+      clearTimeout(timer);
+    }
+    this.图片上传失活计时器.clear();
+  }
+
+  private 处理图片上传失活(localId: string): void {
+    this.图片上传失活计时器.delete(localId);
+    const draft = this.chatState.composerImageDrafts.find((item) => item.localId === localId);
+    if (!draft || draft.status !== "uploading") {
+      return;
+    }
+    this.imageUploader?.removeFile(localId);
+    console.warn("[koko:image-upload:watchdog]", {
+      localId,
+      fileName: draft.fileName,
+      userAgent: globalThis.navigator?.userAgent ?? "",
+      reason: "no_terminal_upload_event",
+    });
+    this.更新图片草稿状态(localId, {
+      status: "failed",
+      errorCode: "attachment_upload_stalled",
+    });
+  }
 
   private readonly handleImageUploadAdded = (
     file: UppyFile<图片上传Meta, 图片上传响应体>
@@ -192,6 +245,7 @@ export class 聊天壳 extends LitElement {
       errorCode: "",
       sourceFile,
     });
+    this.重置图片上传失活计时(file.id);
   };
 
   private readonly handleImageUploadSuccess = (
@@ -201,6 +255,7 @@ export class 聊天壳 extends LitElement {
     if (!file) {
       return;
     }
+    this.清理图片上传失活计时(file.id);
     const body = 解析图片上传结果(response?.body);
     if (!body || body.kind !== "image") {
       this.更新图片草稿状态(file.id, {
@@ -226,6 +281,7 @@ export class 聊天壳 extends LitElement {
     if (!file) {
       return;
     }
+    this.清理图片上传失活计时(file.id);
     const errorCode = 解析图片上传失败代码(error, response);
     记录图片上传失败诊断({
       localId: file.id,
@@ -243,7 +299,17 @@ export class 聊天壳 extends LitElement {
   private readonly handleImageUploadRemoved = (
     file: UppyFile<图片上传Meta, 图片上传响应体>
   ): void => {
+    this.清理图片上传失活计时(file.id);
     this.移除图片草稿(file.id);
+  };
+
+  private readonly handleImageUploadProgress = (
+    file: UppyFile<图片上传Meta, 图片上传响应体> | undefined
+  ): void => {
+    if (!file) {
+      return;
+    }
+    this.重置图片上传失活计时(file.id);
   };
 
   /**
@@ -262,6 +328,7 @@ export class 聊天壳 extends LitElement {
       return;
     }
     for (const file of files) {
+      this.清理图片上传失活计时(file.id);
       const existingDraft = this.chatState.composerImageDrafts.find(
         (draft) => draft.localId === file.id
       );
@@ -1164,6 +1231,7 @@ export class 聊天壳 extends LitElement {
       });
 
     uppy.on("file-added", this.handleImageUploadAdded);
+    uppy.on("upload-progress", this.handleImageUploadProgress);
     uppy.on("upload-success", this.handleImageUploadSuccess);
     uppy.on("upload-error", this.handleImageUploadError);
     uppy.on("upload-stalled", this.handleImageUploadStalled);
@@ -1242,6 +1310,7 @@ export class 聊天壳 extends LitElement {
   private clearImageUploaderState(): void {
     const currentDrafts = this.chatState.composerImageDrafts;
     this.imageUploader?.cancelAll();
+    this.清理全部图片上传失活计时();
     for (const draft of currentDrafts) {
       this.revokeDraftPreviewUrl(draft.previewUrl);
     }
@@ -1327,6 +1396,7 @@ export class 聊天壳 extends LitElement {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.clearImageUploaderState();
+    this.清理全部图片上传失活计时();
     this.imageUploader?.destroy();
     this.imageUploader = null;
     super.disconnectedCallback();

@@ -673,6 +673,156 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("浏览器长期不回 upload-error 或 stalled 时，看门狗也会把草稿收口成 failed", async () => {
+    const el = await 创建已入房聊天壳();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "watchdog.jpg", {
+      type: "image/jpeg",
+    });
+    (
+      el as unknown as {
+        imageUploader: {
+          setFileMeta: ReturnType<typeof vi.fn>;
+          getFile: ReturnType<typeof vi.fn>;
+          removeFile: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).imageUploader = {
+      setFileMeta: vi.fn(),
+      getFile: vi.fn().mockReturnValue({
+        id: "draft-watchdog",
+        name: "watchdog.jpg",
+        data: sourceFile,
+      }),
+      removeFile: vi.fn(),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+
+    vi.useFakeTimers();
+    try {
+      (
+        el as unknown as {
+          handleImageUploadAdded(file: { id: string; name: string; data: File }): void;
+        }
+      ).handleImageUploadAdded({
+        id: "draft-watchdog",
+        name: "watchdog.jpg",
+        data: sourceFile,
+      });
+      await el.updateComplete;
+
+      await vi.advanceTimersByTimeAsync(46000);
+      await el.updateComplete;
+
+      expect(
+        (
+          el as unknown as {
+            imageUploader: {
+              removeFile: ReturnType<typeof vi.fn>;
+            };
+          }
+        ).imageUploader.removeFile
+      ).toHaveBeenCalledWith("draft-watchdog");
+      const draftStatus = el.shadowRoot!.querySelector(
+        '[data-draft-card-id="draft-watchdog"] .composer-draft-status'
+      ) as HTMLElement | null;
+      expect(draftStatus?.dataset.status).toBe("failed");
+      expect(draftStatus?.textContent).toContain("超时");
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
+  it("已经 ready 的图片草稿不会再被上传看门狗误伤回 failed", async () => {
+    const el = await 创建已入房聊天壳();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "watchdog-ready.jpg", {
+      type: "image/jpeg",
+    });
+    (
+      el as unknown as {
+        imageUploader: {
+          setFileMeta: ReturnType<typeof vi.fn>;
+          getFile: ReturnType<typeof vi.fn>;
+          removeFile: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).imageUploader = {
+      setFileMeta: vi.fn(),
+      getFile: vi.fn().mockReturnValue({
+        id: "draft-watchdog-ready",
+        name: "watchdog-ready.jpg",
+        data: sourceFile,
+      }),
+      removeFile: vi.fn(),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+
+    vi.useFakeTimers();
+    try {
+      (
+        el as unknown as {
+          handleImageUploadAdded(file: { id: string; name: string; data: File }): void;
+          handleImageUploadSuccess(
+            file: { id: string },
+            response: { body: Record<string, unknown> }
+          ): void;
+        }
+      ).handleImageUploadAdded({
+        id: "draft-watchdog-ready",
+        name: "watchdog-ready.jpg",
+        data: sourceFile,
+      });
+      (
+        el as unknown as {
+          handleImageUploadSuccess(
+            file: { id: string },
+            response: { body: Record<string, unknown> }
+          ): void;
+        }
+      ).handleImageUploadSuccess(
+        { id: "draft-watchdog-ready" },
+        {
+          body: {
+            attachment_id: "att-watchdog-ready",
+            kind: "image",
+            mime_type: "image/jpeg",
+            byte_size: 3,
+            width: 120,
+            height: 90,
+            status: "ready",
+          },
+        }
+      );
+      await el.updateComplete;
+
+      await vi.advanceTimersByTimeAsync(46000);
+      await el.updateComplete;
+
+      const draftStatus = el.shadowRoot!.querySelector(
+        '[data-draft-card-id="draft-watchdog-ready"] .composer-draft-status'
+      ) as HTMLElement | null;
+      expect(draftStatus?.dataset.status).toBe("ready");
+      expect(
+        (
+          el as unknown as {
+            imageUploader: {
+              removeFile: ReturnType<typeof vi.fn>;
+            };
+          }
+        ).imageUploader.removeFile
+      ).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      el.remove();
+    }
+  });
+
   it("stalled 后的失败草稿重试会重新 addFile，而不是调用失效的 retryUpload", async () => {
     const el = await 创建已入房聊天壳();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "retry-stalled.jpg", {

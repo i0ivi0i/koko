@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-10)
 
 ## Corpus Check
-- 57 files · ~1,096,251 words
+- 57 files · ~1,170,793 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -69,19 +69,19 @@ Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
 
 ### Community 10 - "Community 10"
 Cohesion: 1.0
-Nodes (2): 读取exif方向(), upload_image_attachment()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 11 - "Community 11"
 Cohesion: 1.0
-Nodes (2): load_attachment_content(), parse_attachment_content_query()
+Nodes (2): 读取exif方向(), upload_image_attachment()
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): load_attachment_content(), parse_attachment_content_query()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
@@ -138,13 +138,13 @@ Nodes (1): src/后台外壳.rs
 ## Knowledge Gaps
 - **19 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+14 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 10`** (2 nodes): `读取exif方向()`, `upload_image_attachment()`
+- **Thin community `Community 10`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 11`** (2 nodes): `load_attachment_content()`, `parse_attachment_content_query()`
+- **Thin community `Community 11`** (2 nodes): `读取exif方向()`, `upload_image_attachment()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 12`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 12`** (2 nodes): `load_attachment_content()`, `parse_attachment_content_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 13`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 14`** (2 nodes): `ensureImageUploader()`, `openImagePicker()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
