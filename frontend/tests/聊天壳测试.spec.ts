@@ -937,6 +937,21 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "watchdog.jpg", {
       type: "image/jpeg",
     });
+    const removeFile = vi.fn((localId: string) => {
+      (
+        el as unknown as {
+          handleImageUploadRemoved(file: {
+            id: string;
+            name: string;
+            data: File;
+          }): void;
+        }
+      ).handleImageUploadRemoved({
+        id: localId,
+        name: "watchdog.jpg",
+        data: sourceFile,
+      });
+    });
     (
       el as unknown as {
         imageUploader: {
@@ -954,7 +969,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
         name: "watchdog.jpg",
         data: sourceFile,
       }),
-      removeFile: vi.fn(),
+      removeFile,
       cancelAll: vi.fn(),
       destroy: vi.fn(),
     };

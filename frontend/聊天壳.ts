@@ -341,6 +341,8 @@ export class 聊天壳 extends LitElement {
     if (!draft || draft.status !== "uploading") {
       return;
     }
+    const sourceFile = draft.sourceFile ?? null;
+    const previewUrl = 创建本地图片预览地址(sourceFile);
     this.imageUploader?.removeFile(localId);
     console.warn("[koko:image-upload:watchdog]", {
       localId,
@@ -348,9 +350,16 @@ export class 聊天壳 extends LitElement {
       userAgent: globalThis.navigator?.userAgent ?? "",
       reason: "no_terminal_upload_event",
     });
-    this.更新图片草稿状态(localId, {
+    this.写入图片草稿({
+      localId,
+      attachmentId: "",
+      previewUrl,
+      width: draft.width,
+      height: draft.height,
       status: "failed",
+      fileName: draft.fileName,
       errorCode: "attachment_upload_stalled",
+      sourceFile,
     });
   }
 
