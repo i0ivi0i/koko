@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-10)
 
 ## Corpus Check
-- 57 files · ~1,091,312 words
+- 57 files · ~1,096,251 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 197 nodes · 252 edges · 26 communities detected
+- 199 nodes · 256 edges · 27 communities detected
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
@@ -64,40 +64,40 @@ Cohesion: 0.4
 Nodes (5): loadOverview(), loadRooms(), login(), submitLoginForm(), submitRoomSearchForm()
 
 ### Community 9 - "Community 9"
-Cohesion: 1.0
-Nodes (2): ensureImageUploader(), openImagePicker()
+Cohesion: 0.67
+Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
 
 ### Community 10 - "Community 10"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): 读取exif方向(), upload_image_attachment()
 
 ### Community 11 - "Community 11"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): load_attachment_content(), parse_attachment_content_query()
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
-Nodes (2): 读取exif方向(), upload_image_attachment()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (2): load_attachment_content(), parse_attachment_content_query()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (2): 文本布局, 文本布局测试
+Nodes (2): ensureImageUploader(), openImagePicker()
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): 文本布局, 文本布局测试
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (1): Pg仓储
+Nodes (0): 
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): Pg仓储
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
@@ -105,77 +105,81 @@ Nodes (0):
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (1): frontend/存储.ts
+Nodes (0): 
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (1): frontend/房间内核.ts
+Nodes (1): frontend/存储.ts
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
-Nodes (1): frontend/房间恢复编排.ts
+Nodes (1): frontend/房间内核.ts
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
-Nodes (1): frontend/房间滚动器.ts
+Nodes (1): frontend/房间恢复编排.ts
 
 ### Community 23 - "Community 23"
 Cohesion: 1.0
-Nodes (1): frontend/阅读推进编排.ts
+Nodes (1): frontend/房间滚动器.ts
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): frontend/阅读推进编排.ts
 
 ### Community 25 - "Community 25"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 26 - "Community 26"
 Cohesion: 1.0
 Nodes (1): src/后台外壳.rs
 
 ## Knowledge Gaps
 - **19 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+14 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 9`** (2 nodes): `ensureImageUploader()`, `openImagePicker()`
+- **Thin community `Community 10`** (2 nodes): `读取exif方向()`, `upload_image_attachment()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 10`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 11`** (2 nodes): `load_attachment_content()`, `parse_attachment_content_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 11`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 12`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 12`** (2 nodes): `读取exif方向()`, `upload_image_attachment()`
+- **Thin community `Community 13`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (2 nodes): `load_attachment_content()`, `parse_attachment_content_query()`
+- **Thin community `Community 14`** (2 nodes): `ensureImageUploader()`, `openImagePicker()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `文本布局`, `文本布局测试`
+- **Thin community `Community 15`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
+- **Thin community `Community 16`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (1 nodes): `Pg仓储`
+- **Thin community `Community 17`** (1 nodes): `Pg仓储`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (1 nodes): `up.ps1`
+- **Thin community `Community 18`** (1 nodes): `up.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (1 nodes): `css.d.ts`
+- **Thin community `Community 19`** (1 nodes): `css.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (1 nodes): `frontend/存储.ts`
+- **Thin community `Community 20`** (1 nodes): `frontend/存储.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (1 nodes): `frontend/房间内核.ts`
+- **Thin community `Community 21`** (1 nodes): `frontend/房间内核.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 21`** (1 nodes): `frontend/房间恢复编排.ts`
+- **Thin community `Community 22`** (1 nodes): `frontend/房间恢复编排.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (1 nodes): `frontend/房间滚动器.ts`
+- **Thin community `Community 23`** (1 nodes): `frontend/房间滚动器.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (1 nodes): `frontend/阅读推进编排.ts`
+- **Thin community `Community 24`** (1 nodes): `frontend/阅读推进编排.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (1 nodes): `lib.rs`
+- **Thin community `Community 25`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (1 nodes): `src/后台外壳.rs`
+- **Thin community `Community 26`** (1 nodes): `src/后台外壳.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 3` to `Community 0`?**
-  _High betweenness centrality (0.135) - this node is a cross-community bridge._
+  _High betweenness centrality (0.134) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 7` to `Community 0`?**
-  _High betweenness centrality (0.042) - this node is a cross-community bridge._
+  _High betweenness centrality (0.041) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts` to the rest of the system?**
   _19 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**

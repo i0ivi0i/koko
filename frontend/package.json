@@ -13,9 +13,9 @@
     "test:e2e": "vitest run --exclude dist/** tests/端到端测试.spec.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch --preserveWatchOutput",
-    "build": "pnpm typecheck && esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap",
-    "dev:watch": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch",
-    "dev:watch:supervised": "esbuild 入口.ts --bundle --outfile=dist/app.js --format=esm --platform=browser --target=es2022 --sourcemap --watch=forever"
+    "build": "pnpm typecheck && node build.mjs",
+    "dev:watch": "node build.mjs --watch",
+    "dev:watch:supervised": "node build.mjs --watch=forever"
   },
   "dependencies": {
     "@chenglou/pretext": "0.0.5",

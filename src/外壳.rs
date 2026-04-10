@@ -1,12 +1,12 @@
 use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue, StatusCode},
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
 use object_store::{local::LocalFileSystem, ObjectStore};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use socketioxide::{
     extract::{Data, Extension, SocketRef, TryData},
     handler::ConnectHandler,
@@ -15,7 +15,7 @@ use socketioxide::{
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{fs, sync::Arc};
 use tower_http::{
-    services::{ServeDir, ServeFile},
+    services::ServeDir,
     set_header::response::SetResponseHeaderLayer,
 };
 
@@ -100,15 +100,56 @@ pub fn 构建路由(state: 应用状态) -> Router {
 }
 
 fn 构建前端静态资源路由() -> Router<应用状态> {
-    Router::<应用状态>::new()
-        // 这些静态壳资源目前还是固定 URL，没有 hash/version cache busting。
-        // 因此必须显式返回 `Cache-Control: no-cache`，避免 Safari 等移动端继续吃旧包。
-        .route_service("/", ServeFile::new("frontend/index.html"))
-        .nest_service("/dist", ServeDir::new("frontend/dist"))
+    let html_router = Router::<应用状态>::new()
+        // 入口 HTML 必须始终回源确认最新 manifest。
+        // 只有这样，浏览器才能持续拿到当前这轮构建对应的 hashed 资源 URL。
+        .route("/", get(load_frontend_index))
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache"),
-        ))
+        ));
+    let assets_router = Router::<应用状态>::new()
+        // 带 hash 的静态资源 URL 已经自带内容指纹。
+        // 因此这里改成长期强缓存，避免继续让移动端在每个子资源上反复回源。
+        .nest_service("/dist", ServeDir::new("frontend/dist"))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        ));
+    html_router.merge(assets_router)
+}
+
+#[derive(Deserialize)]
+struct 前端静态资源清单 {
+    app_js: String,
+    app_css: String,
+}
+
+fn 读取前端静态资源清单() -> Result<前端静态资源清单, String> {
+    let raw = fs::read_to_string("frontend/dist/asset-manifest.json")
+        .map_err(|err| format!("读取前端静态资源清单失败: {err}"))?;
+    serde_json::from_str::<前端静态资源清单>(&raw)
+        .map_err(|err| format!("解析前端静态资源清单失败: {err}"))
+}
+
+fn 渲染前端入口_html() -> Result<String, String> {
+    let template = fs::read_to_string("frontend/index.html")
+        .map_err(|err| format!("读取前端入口模板失败: {err}"))?;
+    let manifest = 读取前端静态资源清单()?;
+    Ok(template
+        .replace("{{APP_CSS_PATH}}", manifest.app_css.as_str())
+        .replace("{{APP_JS_PATH}}", manifest.app_js.as_str()))
+}
+
+async fn load_frontend_index() -> impl IntoResponse {
+    match 渲染前端入口_html() {
+        Ok(html) => Html(html).into_response(),
+        Err(err) => err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("渲染前端入口失败: {err}"),
+        ),
+    }
 }
 
 /// 注册单节点 realtime 命名空间。

@@ -512,7 +512,7 @@ async fn 图片上传成功会返回ready附件快照() {
 
 #[tokio::test]
 #[serial]
-async fn 静态壳资源会显式返回no_cache避免移动端继续吃旧包() {
+async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
@@ -520,7 +520,46 @@ async fn 静态壳资源会显式返回no_cache避免移动端继续吃旧包() 
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state);
 
-    for uri in ["/", "/dist/app.js", "/dist/app.css"] {
+    let root_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(root_response.status(), StatusCode::OK, "/ 应可读取");
+    let root_cache_control = root_response
+        .headers()
+        .get(header::CACHE_CONTROL)
+        .and_then(|value| value.to_str().ok())
+        .expect("入口 HTML 必须显式返回 Cache-Control");
+    assert_eq!(root_cache_control, "no-cache", "入口 HTML 必须总是回源确认新版本");
+    let root_html = String::from_utf8(
+        to_bytes(root_response.into_body(), usize::MAX)
+            .await
+            .expect("应能读取入口 HTML")
+            .to_vec(),
+    )
+    .expect("入口 HTML 应是 UTF-8");
+
+    let css_path =
+        提取静态资源路径(&root_html, "<link rel=\"stylesheet\" href=\"", "\"").expect("应引用 CSS");
+    let js_path = 提取静态资源路径(&root_html, "<script type=\"module\" src=\"", "\"")
+        .expect("应引用 JS");
+    assert!(
+        css_path.starts_with("/dist/app-") && css_path.ends_with(".css"),
+        "CSS 应使用 hashed 文件名，实际为 {css_path}"
+    );
+    assert!(
+        js_path.starts_with("/dist/app-") && js_path.ends_with(".js"),
+        "JS 应使用 hashed 文件名，实际为 {js_path}"
+    );
+
+    for uri in [css_path, js_path] {
         let response = app
             .clone()
             .oneshot(
@@ -532,14 +571,17 @@ async fn 静态壳资源会显式返回no_cache避免移动端继续吃旧包() 
             )
             .await
             .expect("response");
-
         assert_eq!(response.status(), StatusCode::OK, "{uri} 应可读取");
         let cache_control = response
             .headers()
             .get(header::CACHE_CONTROL)
             .and_then(|value| value.to_str().ok())
             .expect("静态资源必须显式返回 Cache-Control");
-        assert_eq!(cache_control, "no-cache", "{uri} 不应继续走启发式缓存");
+        assert_eq!(
+            cache_control,
+            "public, max-age=31536000, immutable",
+            "{uri} 应走长期强缓存"
+        );
     }
 }
 
@@ -2593,6 +2635,13 @@ async fn send_json(
         let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
         (status, json)
     }
+}
+
+fn 提取静态资源路径<'a>(html: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
+    let start = html.find(prefix)? + prefix.len();
+    let rest = &html[start..];
+    let end = rest.find(suffix)?;
+    Some(&rest[..end])
 }
 
 /// multipart 测试助手：

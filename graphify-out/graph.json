@@ -89,7 +89,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 17
+      "community": 18
     },
     {
       "label": "css.d.ts",
@@ -97,7 +97,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u9886\u57df\u6d4b\u8bd5.rs",
@@ -111,7 +111,7 @@
       "label": "http\u51b7\u8def\u5f84\u95ed\u73af()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1142",
+      "source_location": "L1184",
       "id": "http",
       "community": 2
     },
@@ -349,7 +349,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_storage_ts",
-      "community": 19
+      "community": 20
     },
     {
       "label": "frontend/\u623f\u95f4\u5185\u6838.ts",
@@ -361,7 +361,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_kernel_ts",
-      "community": 20
+      "community": 21
     },
     {
       "label": "frontend/\u623f\u95f4\u6062\u590d\u7f16\u6392.ts",
@@ -373,7 +373,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_recovery_orchestrator_ts",
-      "community": 21
+      "community": 22
     },
     {
       "label": "constructor()",
@@ -441,7 +441,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_scroller_ts",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u6587\u672c\u5e03\u5c40",
@@ -453,7 +453,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 14
+      "community": 15
     },
     {
       "label": "roomShellState()",
@@ -477,7 +477,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1137",
       "id": "ensureimageuploader",
-      "community": 9
+      "community": 14
     },
     {
       "label": "openImagePicker()",
@@ -485,7 +485,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1176",
       "id": "openimagepicker",
-      "community": 9
+      "community": 14
     },
     {
       "label": "revokeDraftPreviewUrl()",
@@ -625,7 +625,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_read_progress_orchestrator_ts",
-      "community": 23
+      "community": 24
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -829,7 +829,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 14
+      "community": 15
     },
     {
       "label": "\u5047Socket",
@@ -1053,7 +1053,7 @@
       "source_file": "E:\\koko\\src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 24
+      "community": 25
     },
     {
       "label": "main.rs",
@@ -1061,7 +1061,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 15
+      "community": 16
     },
     {
       "label": "main()",
@@ -1069,7 +1069,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 15
+      "community": 16
     },
     {
       "label": "src/\u540e\u53f0\u5916\u58f3.rs",
@@ -1081,13 +1081,29 @@
       "author": null,
       "contributor": null,
       "id": "src_admin_shell_rs",
-      "community": 25
+      "community": 26
+    },
+    {
+      "label": "\u6e32\u67d3\u524d\u7aef\u5165\u53e3_html()",
+      "file_type": "code",
+      "source_file": "src\\\u5916\u58f3.rs",
+      "source_location": "L135",
+      "id": "html",
+      "community": 9
+    },
+    {
+      "label": "load_frontend_index()",
+      "file_type": "code",
+      "source_file": "src\\\u5916\u58f3.rs",
+      "source_location": "L144",
+      "id": "load_frontend_index",
+      "community": 9
     },
     {
       "label": "realtime\u4e3b\u94fe\u95ed\u73af()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L774",
+      "source_location": "L816",
       "id": "realtime",
       "community": 0
     },
@@ -1095,7 +1111,7 @@
       "label": "ApiError",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L170",
+      "source_location": "L211",
       "id": "apierror",
       "community": 0
     },
@@ -1103,7 +1119,7 @@
       "label": "events_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L179",
+      "source_location": "L220",
       "id": "events_to_json",
       "community": 0
     },
@@ -1111,7 +1127,7 @@
       "label": "attachments_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L183",
+      "source_location": "L224",
       "id": "attachments_to_json",
       "community": 0
     },
@@ -1119,7 +1135,7 @@
       "label": "event_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L198",
+      "source_location": "L239",
       "id": "event_to_json",
       "community": 0
     },
@@ -1127,7 +1143,7 @@
       "label": "map_domain_err_tuple()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L226",
+      "source_location": "L267",
       "id": "map_domain_err_tuple",
       "community": 0
     },
@@ -1135,9 +1151,9 @@
       "label": "err_resp()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L282",
+      "source_location": "L323",
       "id": "err_resp",
-      "community": 0
+      "community": 9
     },
     {
       "label": "RealtimeConnectAuth",
@@ -1273,7 +1289,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L82",
       "id": "parse_events_query",
-      "community": 11
+      "community": 13
     },
     {
       "label": "parse_history_query()",
@@ -1281,7 +1297,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L117",
       "id": "parse_history_query",
-      "community": 10
+      "community": 12
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1289,7 +1305,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L166",
       "id": "parse_attachment_content_query",
-      "community": 13
+      "community": 11
     },
     {
       "label": "\u8bfb\u53d6exif\u65b9\u5411()",
@@ -1297,7 +1313,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L238",
       "id": "exif",
-      "community": 12
+      "community": 10
     },
     {
       "label": "bootstrap_session()",
@@ -1337,7 +1353,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L717",
       "id": "load_room_events",
-      "community": 11
+      "community": 13
     },
     {
       "label": "load_room_history()",
@@ -1345,7 +1361,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L845",
       "id": "load_room_history",
-      "community": 10
+      "community": 12
     },
     {
       "label": "upload_image_attachment()",
@@ -1353,7 +1369,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L977",
       "id": "upload_image_attachment",
-      "community": 12
+      "community": 10
     },
     {
       "label": "load_attachment_content()",
@@ -1361,7 +1377,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1380",
       "id": "load_attachment_content",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Pg\u4ed3\u50a8",
@@ -1369,7 +1385,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L17",
       "id": "pg",
-      "community": 16
+      "community": 17
     },
     {
       "label": "mod.rs",
@@ -1415,7 +1431,7 @@
       "label": "make_writer()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2720",
+      "source_location": "L2769",
       "id": "make_writer",
       "community": 0
     },
@@ -1423,7 +1439,7 @@
       "label": "write()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2728",
+      "source_location": "L2777",
       "id": "write",
       "community": 0
     },
@@ -1431,7 +1447,7 @@
       "label": "flush()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2733",
+      "source_location": "L2782",
       "id": "flush",
       "community": 0
     },
@@ -1439,7 +1455,7 @@
       "label": "bootstrap\u63a5\u53e3\u4f1a\u8fd4\u56de\u7a33\u5b9a\u82b1\u540d\u5feb\u7167()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2348",
+      "source_location": "L2390",
       "id": "bootstrap",
       "community": 2
     },
@@ -1468,18 +1484,18 @@
       "community": 0
     },
     {
-      "label": "\u9759\u6001\u58f3\u8d44\u6e90\u4f1a\u663e\u5f0f\u8fd4\u56deno_cache\u907f\u514d\u79fb\u52a8\u7aef\u7ee7\u7eed\u5403\u65e7\u5305()",
+      "label": "\u9759\u6001\u58f3\u5165\u53e3\u4f1ano_cache\u4e14hashed\u9759\u6001\u8d44\u6e90\u4f1a\u957f\u7f13\u5b58()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L515",
-      "id": "no_cache",
+      "id": "no_cache_hashed",
       "community": 0
     },
     {
       "label": "\u56fe\u7247\u4e0a\u4f20\u6210\u529f\u54cd\u5e94\u4f1a\u643a\u5e26upload_trace_header()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L548",
+      "source_location": "L590",
       "id": "upload_trace_header",
       "community": 2
     },
@@ -1487,7 +1503,7 @@
       "label": "\u975e\u56fe\u7247\u4e0a\u4f20\u4f1a\u8fd4\u56deattachment_type_not_allowed()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L594",
+      "source_location": "L636",
       "id": "attachment_type_not_allowed",
       "community": 2
     },
@@ -1495,7 +1511,7 @@
       "label": "\u8ba2\u9605\u9700\u8981\u91cd\u62c9\u5feb\u7167\u65f6\u63a7\u5236\u9762kind\u4fdd\u6301need_snapshot_reload()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L832",
+      "source_location": "L874",
       "id": "kind_need_snapshot_reload",
       "community": 0
     },
@@ -1503,7 +1519,7 @@
       "label": "\u623f\u95f4\u589e\u91cf\u4e8b\u4ef6\u67e5\u8be2\u7f3a\u5c11session_id\u4f1a\u88ab\u62d2\u7edd()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1333",
+      "source_location": "L1375",
       "id": "session_id",
       "community": 2
     },
@@ -1511,7 +1527,7 @@
       "label": "\u975e\u6210\u5458\u4e0d\u80fd\u901a\u8fc7events\u63a5\u53e3\u62c9\u53d6\u623f\u95f4\u589e\u91cf()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1356",
+      "source_location": "L1398",
       "id": "events",
       "community": 2
     },
@@ -1519,7 +1535,7 @@
       "label": "\u6210\u5458\u901a\u8fc7events\u63a5\u53e3\u53ea\u4f1a\u62ff\u5230from\u4e4b\u540e\u7684\u4e8b\u4ef6()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1414",
+      "source_location": "L1456",
       "id": "events_from",
       "community": 2
     },
@@ -1527,7 +1543,7 @@
       "label": "\u4e0d\u5b58\u5728\u7684\u623f\u95f4\u901a\u8fc7events\u63a5\u53e3\u4f1a\u8fd4\u56deroom_not_found()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1467",
+      "source_location": "L1509",
       "id": "events_room_not_found",
       "community": 2
     },
@@ -1535,7 +1551,7 @@
       "label": "\u9605\u8bfb\u63a8\u8fdb\u7f3a\u5c11last_read_event_position\u4f1a\u8fd4\u56deinvalid_argument()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1937",
+      "source_location": "L1979",
       "id": "last_read_event_position_invalid_argument",
       "community": 2
     },
@@ -1543,7 +1559,7 @@
       "label": "\u623f\u95f4\u5386\u53f2\u5206\u9875\u4f1a\u8fd4\u56debefore_event_position\u4e4b\u524d\u7684\u6d88\u606f()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2069",
+      "source_location": "L2111",
       "id": "before_event_position",
       "community": 2
     },
@@ -1551,7 +1567,7 @@
       "label": "\u623f\u95f4\u5386\u53f2\u5206\u9875\u7f3a\u5c11before_event_position\u4f1a\u8fd4\u56deinvalid_argument()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2130",
+      "source_location": "L2172",
       "id": "before_event_position_invalid_argument",
       "community": 2
     },
@@ -1559,7 +1575,7 @@
       "label": "\u975e\u6210\u5458\u4e0d\u80fd\u901a\u8fc7history\u63a5\u53e3\u8bfb\u53d6\u66f4\u65e9\u6d88\u606f()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2288",
+      "source_location": "L2330",
       "id": "history",
       "community": 2
     },
@@ -1567,7 +1583,7 @@
       "label": "http\u51b7\u8def\u5f84\u6210\u529f\u4f1a\u8f93\u51faaccepted\u4e0esucceeded\u65e5\u5fd7()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2398",
+      "source_location": "L2440",
       "id": "http_accepted_succeeded",
       "community": 2
     },
@@ -1575,7 +1591,7 @@
       "label": "http\u51b7\u8def\u5f84\u62d2\u7edd\u4f1a\u8f93\u51farejected\u65e5\u5fd7\u4e0eerror_code()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2444",
+      "source_location": "L2486",
       "id": "http_rejected_error_code",
       "community": 2
     },
@@ -1583,7 +1599,7 @@
       "label": "send_json()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2564",
+      "source_location": "L2606",
       "id": "send_json",
       "community": 2
     },
@@ -1591,7 +1607,7 @@
       "label": "send_multipart()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2600",
+      "source_location": "L2649",
       "id": "send_multipart",
       "community": 2
     },
@@ -1599,7 +1615,7 @@
       "label": "send_multipart_response()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2618",
+      "source_location": "L2667",
       "id": "send_multipart_response",
       "community": 2
     },
@@ -1607,7 +1623,7 @@
       "label": "\u6700\u5c0fpng\u5b57\u8282()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2688",
+      "source_location": "L2737",
       "id": "png",
       "community": 2
     }
@@ -1749,7 +1765,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1142",
+      "source_location": "L1184",
       "weight": 1.0,
       "_src": "",
       "_tgt": "http",
@@ -2408,8 +2424,32 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "src\\\u5916\u58f3.rs",
+      "source_location": "L135",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "html",
+      "source": "",
+      "target": "html",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u5916\u58f3.rs",
+      "source_location": "L144",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "load_frontend_index",
+      "source": "",
+      "target": "load_frontend_index",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L774",
+      "source_location": "L816",
       "weight": 1.0,
       "_src": "",
       "_tgt": "realtime",
@@ -2421,7 +2461,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L170",
+      "source_location": "L211",
       "weight": 1.0,
       "_src": "",
       "_tgt": "apierror",
@@ -2433,7 +2473,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L179",
+      "source_location": "L220",
       "weight": 1.0,
       "_src": "",
       "_tgt": "events_to_json",
@@ -2445,7 +2485,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L183",
+      "source_location": "L224",
       "weight": 1.0,
       "_src": "",
       "_tgt": "attachments_to_json",
@@ -2457,7 +2497,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L198",
+      "source_location": "L239",
       "weight": 1.0,
       "_src": "",
       "_tgt": "event_to_json",
@@ -2469,7 +2509,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L226",
+      "source_location": "L267",
       "weight": 1.0,
       "_src": "",
       "_tgt": "map_domain_err_tuple",
@@ -2481,7 +2521,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L282",
+      "source_location": "L323",
       "weight": 1.0,
       "_src": "",
       "_tgt": "err_resp",
@@ -2901,7 +2941,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2720",
+      "source_location": "L2769",
       "weight": 1.0,
       "_src": "",
       "_tgt": "make_writer",
@@ -2913,7 +2953,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2728",
+      "source_location": "L2777",
       "weight": 1.0,
       "_src": "",
       "_tgt": "write",
@@ -2925,7 +2965,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2733",
+      "source_location": "L2782",
       "weight": 1.0,
       "_src": "",
       "_tgt": "flush",
@@ -2937,7 +2977,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2348",
+      "source_location": "L2390",
       "weight": 1.0,
       "_src": "",
       "_tgt": "bootstrap",
@@ -2949,7 +2989,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2661",
+      "source_location": "L2710",
       "weight": 1.0,
       "_src": "",
       "_tgt": "ready",
@@ -2988,16 +3028,16 @@
       "source_location": "L515",
       "weight": 1.0,
       "_src": "",
-      "_tgt": "no_cache",
+      "_tgt": "no_cache_hashed",
       "source": "",
-      "target": "no_cache",
+      "target": "no_cache_hashed",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L632",
+      "source_location": "L674",
       "weight": 1.0,
       "_src": "",
       "_tgt": "upload_trace_header",
@@ -3009,7 +3049,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L594",
+      "source_location": "L636",
       "weight": 1.0,
       "_src": "",
       "_tgt": "attachment_type_not_allowed",
@@ -3021,7 +3061,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L832",
+      "source_location": "L874",
       "weight": 1.0,
       "_src": "",
       "_tgt": "kind_need_snapshot_reload",
@@ -3033,7 +3073,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1333",
+      "source_location": "L1375",
       "weight": 1.0,
       "_src": "",
       "_tgt": "session_id",
@@ -3045,7 +3085,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1356",
+      "source_location": "L1398",
       "weight": 1.0,
       "_src": "",
       "_tgt": "events",
@@ -3057,7 +3097,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1414",
+      "source_location": "L1456",
       "weight": 1.0,
       "_src": "",
       "_tgt": "events_from",
@@ -3069,7 +3109,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1467",
+      "source_location": "L1509",
       "weight": 1.0,
       "_src": "",
       "_tgt": "events_room_not_found",
@@ -3081,7 +3121,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1937",
+      "source_location": "L1979",
       "weight": 1.0,
       "_src": "",
       "_tgt": "last_read_event_position_invalid_argument",
@@ -3093,7 +3133,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2069",
+      "source_location": "L2111",
       "weight": 1.0,
       "_src": "",
       "_tgt": "before_event_position",
@@ -3105,7 +3145,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2130",
+      "source_location": "L2172",
       "weight": 1.0,
       "_src": "",
       "_tgt": "before_event_position_invalid_argument",
@@ -3117,7 +3157,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2288",
+      "source_location": "L2330",
       "weight": 1.0,
       "_src": "",
       "_tgt": "history",
@@ -3129,7 +3169,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2398",
+      "source_location": "L2440",
       "weight": 1.0,
       "_src": "",
       "_tgt": "http_accepted_succeeded",
@@ -3141,7 +3181,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2444",
+      "source_location": "L2486",
       "weight": 1.0,
       "_src": "",
       "_tgt": "http_rejected_error_code",
@@ -3153,7 +3193,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L691",
+      "source_location": "L733",
       "weight": 1.0,
       "_src": "",
       "_tgt": "send_json",
@@ -3165,7 +3205,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L721",
+      "source_location": "L763",
       "weight": 1.0,
       "_src": "",
       "_tgt": "send_multipart",
@@ -3177,7 +3217,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2618",
+      "source_location": "L2667",
       "weight": 1.0,
       "_src": "",
       "_tgt": "send_multipart_response",
@@ -3189,7 +3229,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L727",
+      "source_location": "L769",
       "weight": 1.0,
       "_src": "",
       "_tgt": "png",
@@ -3213,7 +3253,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1156",
+      "source_location": "L1198",
       "weight": 1.0,
       "_src": "http",
       "_tgt": "send_json",
@@ -4340,6 +4380,30 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
+      "source_file": "src\\\u5916\u58f3.rs",
+      "source_location": "L145",
+      "weight": 1.0,
+      "_src": "load_frontend_index",
+      "_tgt": "html",
+      "source": "html",
+      "target": "load_frontend_index",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u5916\u58f3.rs",
+      "source_location": "L147",
+      "weight": 1.0,
+      "_src": "load_frontend_index",
+      "_tgt": "err_resp",
+      "source": "load_frontend_index",
+      "target": "err_resp",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L722",
       "weight": 1.0,
@@ -4401,7 +4465,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2359",
+      "source_location": "L2401",
       "weight": 1.0,
       "_src": "bootstrap",
       "_tgt": "send_json",
@@ -4449,7 +4513,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L563",
+      "source_location": "L605",
       "weight": 1.0,
       "_src": "upload_trace_header",
       "_tgt": "send_json",
@@ -4461,7 +4525,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L573",
+      "source_location": "L615",
       "weight": 1.0,
       "_src": "upload_trace_header",
       "_tgt": "send_multipart_response",
@@ -4473,7 +4537,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L579",
+      "source_location": "L621",
       "weight": 1.0,
       "_src": "upload_trace_header",
       "_tgt": "png",
@@ -4485,7 +4549,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L606",
+      "source_location": "L648",
       "weight": 1.0,
       "_src": "attachment_type_not_allowed",
       "_tgt": "send_json",
@@ -4497,7 +4561,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L616",
+      "source_location": "L658",
       "weight": 1.0,
       "_src": "attachment_type_not_allowed",
       "_tgt": "send_multipart",
@@ -4509,7 +4573,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1341",
+      "source_location": "L1383",
       "weight": 1.0,
       "_src": "session_id",
       "_tgt": "send_json",
@@ -4521,7 +4585,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1369",
+      "source_location": "L1411",
       "weight": 1.0,
       "_src": "events",
       "_tgt": "send_json",
@@ -4533,7 +4597,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1449",
+      "source_location": "L1491",
       "weight": 1.0,
       "_src": "events_from",
       "_tgt": "send_json",
@@ -4545,7 +4609,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1475",
+      "source_location": "L1517",
       "weight": 1.0,
       "_src": "events_room_not_found",
       "_tgt": "send_json",
@@ -4557,7 +4621,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1950",
+      "source_location": "L1992",
       "weight": 1.0,
       "_src": "last_read_event_position_invalid_argument",
       "_tgt": "send_json",
@@ -4569,7 +4633,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2110",
+      "source_location": "L2152",
       "weight": 1.0,
       "_src": "before_event_position",
       "_tgt": "send_json",
@@ -4581,7 +4645,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2142",
+      "source_location": "L2184",
       "weight": 1.0,
       "_src": "before_event_position_invalid_argument",
       "_tgt": "send_json",
@@ -4593,7 +4657,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2301",
+      "source_location": "L2343",
       "weight": 1.0,
       "_src": "history",
       "_tgt": "send_json",
@@ -4605,7 +4669,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2413",
+      "source_location": "L2455",
       "weight": 1.0,
       "_src": "http_accepted_succeeded",
       "_tgt": "send_json",
@@ -4617,7 +4681,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2454",
+      "source_location": "L2496",
       "weight": 1.0,
       "_src": "http_rejected_error_code",
       "_tgt": "send_json",
@@ -4629,7 +4693,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2608",
+      "source_location": "L2657",
       "weight": 1.0,
       "_src": "send_multipart",
       "_tgt": "send_multipart_response",
