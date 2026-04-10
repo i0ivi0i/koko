@@ -964,6 +964,85 @@ async fn rustus_pre_create允许offset为0且length等于metadata_byte_size() {
 
 #[tokio::test]
 #[serial]
+async fn rustus_pre_create缺少byte_size元数据时仍按prepare权威长度放行() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({
+            "device_anonymous_token": format!("rustus-pre-create-metadata-{uniq}")
+        })),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "pre-create-metadata.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let mut hook_body = 构造rustus_hook请求体(
+        &format!("upload-pre-create-metadata-{attachment_id}"),
+        attachment_id,
+        "pre-create-metadata.png",
+        "image/png",
+        68,
+        0,
+        None,
+    );
+    /*
+     * 真实 Rustus create-upload 场景里，hook 不保证把每个 metadata 键都稳定回显给主服务。
+     * 这里故意只保留 attachment_id，锁住“pre-create 应依赖 prepare 权威长度，而不是重复 metadata.byte_size”。
+     */
+    hook_body["upload"]["metadata"] = serde_json::json!({
+        "attachment_id": attachment_id
+    });
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(hook_body),
+        &[
+            ("Hook-Name", "pre-create"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+}
+
+#[tokio::test]
+#[serial]
 async fn rustus_post_finish会登记上传回执() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

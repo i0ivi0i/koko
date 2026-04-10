@@ -522,19 +522,6 @@ fn 读取rustus_metadata字段(
         ))
 }
 
-fn 解析rustus_metadata字节大小(
-    metadata: &HashMap<String, String>,
-) -> Result<i64, (StatusCode, &'static str, String)> {
-    let raw = 读取rustus_metadata字段(metadata, "byte_size")?;
-    raw.parse::<i64>().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "invalid_argument",
-            "metadata.byte_size 非法".to_string(),
-        )
-    })
-}
-
 /// storage locator 来自 sidecar，不可被客户端随意扩展成任意磁盘路径。
 /// 这里统一解析并锁死在 Rustus shared data dir 之内，避免 token 持有者伪造路径探测主机文件。
 fn 解析rustus临时文件路径(
@@ -1546,23 +1533,22 @@ async fn handle_rustus_hook_pre_create(
         Ok(value) => value,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let metadata_byte_size = match 解析rustus_metadata字节大小(&body.upload.metadata) {
-        Ok(value) => value,
-        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
-    };
     /*
      * `pre-create` 发生在 Rustus 真正接收字节之前：
      * - `length` 代表客户端声明的总长度；
      * - `offset` 此时应当还是 0；
      * - 真正“offset == length”的完成事实只允许出现在 `post-finish`。
      *
-     * 之前这里把 pre-create 误当成完成回执去校验，导致浏览器刚创建上传就被 400 拒掉。
+     * 同时，这里不能再把 `metadata.byte_size` 当成硬依赖：
+     * - prepare / transport 授权里已经持有权威字节大小；
+     * - create-upload 场景下 sidecar 透传回来的 metadata 并不保证完整回显所有键；
+     * - attachment_id 继续作为 sidecar -> 主服务之间唯一稳定的业务锚点。
      */
-    if body.upload.length != metadata_byte_size || body.upload.offset != 0 {
+    if body.upload.offset != 0 {
         return err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            "pre-create 要求 length 等于 metadata.byte_size，且 offset 必须为 0",
+            "pre-create 要求 offset 必须为 0",
         )
         .into_response();
     }
