@@ -199,7 +199,6 @@ export class 假传输 implements 前端传输端口 {
     limit: number;
   }> = [];
   socketSessionIds: string[] = [];
-  uploadImageCalls: Array<{ sessionId: string; file: File }> = [];
   prepareImageCalls: Array<{ sessionId: string; fileName: string }> = [];
   completeImageCalls: Array<{ sessionId: string; attachmentId: string }> = [];
   bootstrapResult: 匿名身份引导结果 = {
@@ -212,7 +211,6 @@ export class 假传输 implements 前端传输端口 {
   snapshotQueue: Array<房间快照 | Error> = [];
   eventsQueue: Array<增量事件快照 | Error> = [];
   historyQueue: Array<房间历史页 | Error> = [];
-  uploadQueue: Array<图片附件上传结果 | Error> = [];
   prepareQueue: Array<假图片上传准备结果 | Error> = [];
   completeQueue: Array<图片附件上传结果 | Error> = [];
   readAnchorUpdates: Array<{
@@ -249,21 +247,6 @@ export class 假传输 implements 前端传输端口 {
     if (queued) return queued;
     this.snapshotRoomId = roomId;
     return 创建房间快照(roomId);
-  }
-  async uploadImageAttachment(sessionId: string, file: File): Promise<图片附件上传结果> {
-    this.uploadImageCalls.push({ sessionId, file });
-    const queued = this.uploadQueue.shift();
-    if (queued instanceof Error) throw queued;
-    if (queued) return queued;
-    return {
-      attachment_id: "att-test",
-      kind: "image",
-      mime_type: file.type || "image/png",
-      byte_size: file.size,
-      width: 120,
-      height: 90,
-      status: "ready",
-    };
   }
   async prepareImageUpload(
     sessionId: string,

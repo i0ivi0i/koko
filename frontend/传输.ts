@@ -39,7 +39,6 @@ export interface 前端传输端口 {
   loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
   prepareImageUpload(sessionId: string, file: File): Promise<图片上传准备结果>;
   completeImageUpload(sessionId: string, attachmentId: string): Promise<图片附件上传结果>;
-  uploadImageAttachment(sessionId: string, file: File): Promise<图片附件上传结果>;
   buildAttachmentContentUrl(
     attachmentId: string,
     sessionId: string,
@@ -111,27 +110,6 @@ export class HttpRealtime传输 implements 前端传输端口 {
     return this.post(`/api/media/${attachmentId}/complete`, {
       session_id: sessionId,
     });
-  }
-
-  async uploadImageAttachment(
-    sessionId: string,
-    file: File
-  ): Promise<图片附件上传结果> {
-    /**
-     * 这里故意不手写 multipart boundary。
-     * 浏览器原生 FormData 已经是成熟能力，壳层只负责把 session 与文件交给后端统一上传入口。
-     */
-    const body = new FormData();
-    body.set("session_id", sessionId);
-    body.set("file", file);
-    const response = await fetch(`${this.baseUrl}/api/attachments/image`, {
-      method: "POST",
-      body,
-    });
-    if (!response.ok) {
-      throw await this.buildHttpError("POST", "/api/attachments/image", response);
-    }
-    return (await response.json()) as 图片附件上传结果;
   }
 
   buildAttachmentContentUrl(

@@ -78,17 +78,6 @@ class 假后台传输 implements 前端传输端口 {
       status: "ready",
     };
   }
-  async uploadImageAttachment(_sessionId: string, file: File): Promise<图片附件上传结果> {
-    return {
-      attachment_id: "att-admin",
-      kind: "image",
-      mime_type: file.type || "image/png",
-      byte_size: file.size,
-      width: 120,
-      height: 90,
-      status: "ready",
-    };
-  }
   buildAttachmentContentUrl(
     attachmentId: string,
     sessionId: string,
