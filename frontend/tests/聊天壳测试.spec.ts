@@ -389,12 +389,14 @@ describe("聊天壳集成 / 首页与控制台", () => {
     (
       el as unknown as {
         imageUploader: {
+          getFile: ReturnType<typeof vi.fn>;
           retryUpload: ReturnType<typeof vi.fn>;
           cancelAll: ReturnType<typeof vi.fn>;
           destroy: ReturnType<typeof vi.fn>;
         };
       }
     ).imageUploader = {
+      getFile: vi.fn().mockReturnValue({ id: "draft-retry" }),
       retryUpload: vi.fn().mockResolvedValue(undefined),
       cancelAll: vi.fn(),
       destroy: vi.fn(),
@@ -427,6 +429,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       (
         el as unknown as {
           imageUploader: {
+            getFile: ReturnType<typeof vi.fn>;
             retryUpload: ReturnType<typeof vi.fn>;
             cancelAll: ReturnType<typeof vi.fn>;
             destroy: ReturnType<typeof vi.fn>;
@@ -435,6 +438,171 @@ describe("聊天壳集成 / 首页与控制台", () => {
       ).imageUploader.retryUpload
     ).toHaveBeenCalledWith("draft-retry");
 
+    el.remove();
+  });
+
+  it("超出后端上限的图片会立即进入 failed 草稿，而不是卡在 uploading", async () => {
+    const el = await 创建已入房聊天壳();
+    const addFile = vi.fn();
+    (
+      el as unknown as {
+        imageUploader: {
+          addFile: ReturnType<typeof vi.fn>;
+          setMeta: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).imageUploader = {
+      addFile,
+      setMeta: vi.fn(),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const tooLargeFile = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "too-large.jpg", {
+      type: "image/jpeg",
+    });
+
+    (
+      el as unknown as {
+        handleImageFileInputChange(event: Event): void;
+      }
+    ).handleImageFileInputChange({
+      currentTarget: {
+        files: [tooLargeFile],
+        value: "selected",
+      },
+    } as unknown as Event);
+    await 等待组件稳定(el);
+
+    expect(addFile).not.toHaveBeenCalled();
+    const draftStatus = el.shadowRoot!.querySelector(
+      ".composer-draft-status"
+    ) as HTMLElement | null;
+    expect(draftStatus?.dataset.status).toBe("failed");
+    expect(draftStatus?.textContent).toContain("超过");
+    el.remove();
+  });
+
+  it("上传 stalled 后会把草稿转成 failed，避免一直停在 uploading", async () => {
+    const el = await 创建已入房聊天壳();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "stall.jpg", {
+      type: "image/jpeg",
+    });
+    注入图片草稿(el, {
+      localId: "draft-stalled",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-stalled",
+      width: 120,
+      height: 90,
+      status: "uploading",
+      fileName: "stall.jpg",
+      errorCode: "",
+      sourceFile,
+    });
+    (
+      el as unknown as {
+        imageUploader: {
+          getFile: ReturnType<typeof vi.fn>;
+          removeFile: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).imageUploader = {
+      getFile: vi.fn().mockReturnValue({
+        id: "draft-stalled",
+        name: "stall.jpg",
+        data: sourceFile,
+      }),
+      removeFile: vi.fn(),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+
+    (
+      el as unknown as {
+        handleImageUploadStalled(
+          error: { message: string },
+          files: Array<{ id: string; name: string; data: File }>
+        ): void;
+      }
+    ).handleImageUploadStalled(
+      { message: "upload stalled" },
+      [{ id: "draft-stalled", name: "stall.jpg", data: sourceFile }]
+    );
+    await 等待组件稳定(el);
+
+    expect(
+      (
+        el as unknown as {
+          imageUploader: {
+            removeFile: ReturnType<typeof vi.fn>;
+          };
+        }
+      ).imageUploader.removeFile
+    ).toHaveBeenCalledWith("draft-stalled");
+    const draftStatus = el.shadowRoot!.querySelector(
+      '[data-draft-card-id="draft-stalled"] .composer-draft-status'
+    ) as HTMLElement | null;
+    expect(draftStatus?.dataset.status).toBe("failed");
+    expect(draftStatus?.textContent).toContain("超时");
+    el.remove();
+  });
+
+  it("stalled 后的失败草稿重试会重新 addFile，而不是调用失效的 retryUpload", async () => {
+    const el = await 创建已入房聊天壳();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "retry-stalled.jpg", {
+      type: "image/jpeg",
+    });
+    注入图片草稿(el, {
+      localId: "draft-stalled-retry",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-stalled-retry",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "retry-stalled.jpg",
+      errorCode: "attachment_upload_stalled",
+      sourceFile,
+    });
+    (
+      el as unknown as {
+        imageUploader: {
+          getFile: ReturnType<typeof vi.fn>;
+          addFile: ReturnType<typeof vi.fn>;
+          retryUpload: ReturnType<typeof vi.fn>;
+          cancelAll: ReturnType<typeof vi.fn>;
+          destroy: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).imageUploader = {
+      getFile: vi.fn().mockReturnValue(undefined),
+      addFile: vi.fn().mockReturnValue("draft-stalled-retry"),
+      retryUpload: vi.fn(),
+      cancelAll: vi.fn(),
+      destroy: vi.fn(),
+    };
+    await 等待组件稳定(el);
+
+    (
+      el.shadowRoot!.querySelector(
+        '[data-draft-retry-id="draft-stalled-retry"]'
+      ) as HTMLButtonElement
+    ).click();
+    await 等待组件稳定(el);
+
+    const uploader = (
+      el as unknown as {
+        imageUploader: {
+          getFile: ReturnType<typeof vi.fn>;
+          addFile: ReturnType<typeof vi.fn>;
+          retryUpload: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).imageUploader;
+    expect(uploader.addFile).toHaveBeenCalled();
+    expect(uploader.retryUpload).not.toHaveBeenCalled();
     el.remove();
   });
 

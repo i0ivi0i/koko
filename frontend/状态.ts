@@ -19,6 +19,11 @@ export interface 图片附件草稿 {
   status: "uploading" | "ready" | "failed";
   fileName: string;
   errorCode: string;
+  /**
+   * 失败重试仍然属于壳层本地体验态，所以只在前端草稿里短暂保留原始文件对象。
+   * 它不进入共享 contract，也不冒充后端附件真相。
+   */
+  sourceFile?: File | null;
 }
 
 export interface 聊天状态 {

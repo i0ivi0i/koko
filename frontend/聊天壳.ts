@@ -30,6 +30,30 @@ import {
 
 type 图片上传Meta = { session_id?: string };
 type 图片上传响应体 = Record<string, unknown>;
+/**
+ * 这里必须和 Rust 外壳里的 `DefaultBodyLimit` 同步。
+ * 否则前端放行、后端拒绝时，就会重新长出“某些设备永远卡在上传中”的错位体验。
+ */
+const 图片附件上传上限字节数 = 10 * 1024 * 1024;
+
+function 创建本地图片预览地址(file: Blob | File | null | undefined): string {
+  return file instanceof Blob ? URL.createObjectURL(file) : "";
+}
+
+function 派生图片草稿失败文案(errorCode: string): string {
+  switch (errorCode) {
+    case "attachment_too_large":
+      return "失败：图片超过 10MB 上限";
+    case "attachment_upload_stalled":
+      return "失败：上传超时，请重试";
+    case "attachment_type_not_allowed":
+      return "失败：只允许上传图片";
+    case "attachment_upload_failed":
+      return "失败：上传失败，请重试";
+    default:
+      return `失败：${errorCode || "attachment_upload_failed"}`;
+  }
+}
 
 function 解析图片上传结果(body: unknown): 图片附件上传结果 | null {
   if (!body || typeof body !== "object") {
@@ -65,20 +89,20 @@ export class 聊天壳 extends LitElement {
   private readonly handleImageUploadAdded = (
     file: UppyFile<图片上传Meta, 图片上传响应体>
   ): void => {
-    const previewUrl =
-      file.data instanceof Blob ? URL.createObjectURL(file.data) : "";
+    const sourceFile = file.data instanceof File ? file.data : null;
     this.imageUploader?.setFileMeta(file.id, {
       session_id: this.chatState.sessionId,
     });
     this.写入图片草稿({
       localId: file.id,
       attachmentId: "",
-      previewUrl,
+      previewUrl: file.data instanceof Blob ? 创建本地图片预览地址(file.data) : "",
       width: 0,
       height: 0,
       status: "uploading",
       fileName: file.name ?? "未命名图片",
       errorCode: "",
+      sourceFile,
     });
   };
 
@@ -130,6 +154,43 @@ export class 聊天壳 extends LitElement {
   };
 
   /**
+   * Uppy 官方的 `upload-stalled` 只会发出 warning，不会自动把文件改成 failed。
+   * 为了避免真实用户永远看到“上传中”，这里把 stalled 明确收口成：
+   * 1. 中止当前这条卡住的上传；
+   * 2. 把草稿恢复成可删除、可重试的 failed 态；
+   * 3. 继续保留本地图预览，不把失败变成“图片凭空消失”。
+   */
+  private readonly handleImageUploadStalled = (
+    _error: { message: string },
+    files: Array<UppyFile<图片上传Meta, 图片上传响应体>>
+  ): void => {
+    const uploader = this.imageUploader;
+    if (!uploader) {
+      return;
+    }
+    for (const file of files) {
+      const existingDraft = this.chatState.composerImageDrafts.find(
+        (draft) => draft.localId === file.id
+      );
+      const sourceFile =
+        file.data instanceof File ? file.data : existingDraft?.sourceFile ?? null;
+      const previewUrl = 创建本地图片预览地址(sourceFile);
+      uploader.removeFile(file.id);
+      this.写入图片草稿({
+        localId: file.id,
+        attachmentId: "",
+        previewUrl,
+        width: existingDraft?.width ?? 0,
+        height: existingDraft?.height ?? 0,
+        status: "failed",
+        fileName: file.name ?? existingDraft?.fileName ?? "未命名图片",
+        errorCode: "attachment_upload_stalled",
+        sourceFile,
+      });
+    }
+  };
+
+  /**
    * 输入区图片入口现在直接走系统文件选择器：
    * 1. 交互上更像 IM，而不是“打开一个上传工具面板”；
    * 2. 选完文件后仍继续复用现有 Uppy 上传内核；
@@ -142,11 +203,42 @@ export class 聊天壳 extends LitElement {
     }
     const uploader = this.ensureImageUploader();
     for (const file of Array.from(input.files)) {
-      uploader.addFile({
-        name: file.name,
-        type: file.type,
-        data: file,
-      });
+      if (file.size > 图片附件上传上限字节数) {
+        this.写入图片草稿({
+          localId: `too-large-${file.name}-${file.size}-${file.lastModified}`,
+          attachmentId: "",
+          previewUrl: 创建本地图片预览地址(file),
+          width: 0,
+          height: 0,
+          status: "failed",
+          fileName: file.name,
+          errorCode: "attachment_too_large",
+          sourceFile: file,
+        });
+        continue;
+      }
+      try {
+        uploader.addFile({
+          name: file.name,
+          type: file.type,
+          data: file,
+        });
+      } catch (error: unknown) {
+        this.写入图片草稿({
+          localId: `rejected-${file.name}-${file.size}-${file.lastModified}`,
+          attachmentId: "",
+          previewUrl: 创建本地图片预览地址(file),
+          width: 0,
+          height: 0,
+          status: "failed",
+          fileName: file.name,
+          errorCode:
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : "attachment_upload_failed",
+          sourceFile: file,
+        });
+      }
     }
     // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
     input.value = "";
@@ -968,6 +1060,7 @@ export class 聊天壳 extends LitElement {
       restrictions: {
         maxNumberOfFiles: 9,
         allowedFileTypes: ["image/*"],
+        maxFileSize: 图片附件上传上限字节数,
       },
     })
       .use(XHRUpload, {
@@ -980,6 +1073,7 @@ export class 聊天壳 extends LitElement {
     uppy.on("file-added", this.handleImageUploadAdded);
     uppy.on("upload-success", this.handleImageUploadSuccess);
     uppy.on("upload-error", this.handleImageUploadError);
+    uppy.on("upload-stalled", this.handleImageUploadStalled);
     uppy.on("file-removed", this.handleImageUploadRemoved);
     uppy.setMeta({ session_id: this.chatState.sessionId });
     this.imageUploader = uppy;
@@ -1081,11 +1175,40 @@ export class 聊天壳 extends LitElement {
     if (!uploader) {
       return;
     }
+    const draft = this.chatState.composerImageDrafts.find((item) => item.localId === localId);
+    if (!draft) {
+      return;
+    }
     this.更新图片草稿状态(localId, {
       attachmentId: "",
       status: "uploading",
       errorCode: "",
     });
+    if (!uploader.getFile(localId)) {
+      if (!draft.sourceFile) {
+        this.更新图片草稿状态(localId, {
+          status: "failed",
+          errorCode: "attachment_upload_failed",
+        });
+        return;
+      }
+      try {
+        uploader.addFile({
+          name: draft.fileName,
+          type: draft.sourceFile.type,
+          data: draft.sourceFile,
+        });
+      } catch (error: unknown) {
+        this.更新图片草稿状态(localId, {
+          status: "failed",
+          errorCode:
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : "attachment_upload_failed",
+        });
+      }
+      return;
+    }
     void uploader.retryUpload(localId).catch((error: unknown) => {
       const message =
         error instanceof Error && error.message.trim()
@@ -1376,7 +1499,7 @@ export class 聊天壳 extends LitElement {
                             ? "可发送"
                             : draft.status === "uploading"
                               ? "上传中"
-                              : `失败：${draft.errorCode || "attachment_upload_failed"}`}
+                              : 派生图片草稿失败文案(draft.errorCode)}
                         </div>
                       </div>
                       <button
@@ -1387,7 +1510,9 @@ export class 聊天壳 extends LitElement {
                       >
                         移除
                       </button>
-                      ${draft.status === "failed"
+                      ${draft.status === "failed" &&
+                      draft.errorCode !== "attachment_too_large" &&
+                      draft.errorCode !== "attachment_type_not_allowed"
                         ? html`
                             <button
                               type="button"
