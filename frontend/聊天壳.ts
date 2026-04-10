@@ -24,6 +24,12 @@ import {
   可选择图片文件类型,
   图片附件上传上限字节数,
 } from "./图像/图片预处理.js";
+import {
+  记录图片上传失败诊断,
+  解析图片上传失败代码,
+  解析传输错误代码,
+  type 图片上传失败响应,
+} from "./图像/图片上传诊断.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
@@ -49,16 +55,6 @@ type 图片上传Meta = {
   upload_headers_json?: string;
 };
 type 图片上传响应体 = Record<string, unknown>;
-type 图片上传失败响应 =
-  | {
-      body?: 图片上传响应体;
-      status?: number;
-      responseText?: string;
-      readyState?: number;
-      responseURL?: string;
-      getResponseHeader?(name: string): string | null;
-    }
-  | undefined;
 const 图片上传失活超时毫秒 = 15_000;
 function 派生图片草稿失败文案(errorCode: string): string {
   switch (errorCode) {
@@ -81,76 +77,6 @@ function 派生图片草稿失败文案(errorCode: string): string {
     default:
       return `失败：${errorCode || "attachment_upload_failed"}`;
   }
-}
-
-function 安全解析上传失败响应体(response: 图片上传失败响应): Record<string, unknown> | null {
-  if (response?.body && typeof response.body === "object") {
-    return response.body;
-  }
-  if (typeof response?.responseText !== "string" || !response.responseText.trim()) {
-    return null;
-  }
-  try {
-    const payload = JSON.parse(response.responseText) as unknown;
-    return payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function 提取上传失败诊断标识(response: 图片上传失败响应): string {
-  const headerValue = response?.getResponseHeader?.("x-koko-upload-id");
-  return typeof headerValue === "string" ? headerValue.trim() : "";
-}
-
-function 解析图片上传失败代码(
-  error: { message: string },
-  response: 图片上传失败响应
-): string {
-  const responseBody = 安全解析上传失败响应体(response);
-  if (typeof responseBody?.code === "string" && responseBody.code.trim()) {
-    return responseBody.code.trim();
-  }
-  if (response?.status === 413) {
-    return "attachment_too_large";
-  }
-  const normalizedMessage = error.message.trim().toLowerCase();
-  if (
-    response?.status === 0 ||
-    normalizedMessage.includes("network error") ||
-    normalizedMessage.includes("failed to fetch") ||
-    normalizedMessage.includes("load failed")
-  ) {
-    return "attachment_upload_network_error";
-  }
-  if (normalizedMessage.includes("timeout") || normalizedMessage.includes("timed out")) {
-    return "attachment_upload_stalled";
-  }
-  return error.message.trim() || "attachment_upload_failed";
-}
-
-function 记录图片上传失败诊断(input: {
-  localId: string;
-  fileName: string;
-  error: { message: string };
-  response: 图片上传失败响应;
-  errorCode: string;
-}): void {
-  const responseText =
-    typeof input.response?.responseText === "string" ? input.response.responseText.trim() : "";
-  const uploadTraceId = 提取上传失败诊断标识(input.response);
-  console.warn("[koko:image-upload:error]", {
-    localId: input.localId,
-    fileName: input.fileName,
-    status: input.response?.status ?? null,
-    readyState: input.response?.readyState ?? null,
-    responseURL: input.response?.responseURL ?? "",
-    errorCode: input.errorCode,
-    originalMessage: input.error.message,
-    uploadTraceId,
-    reachedHandler: Boolean(uploadTraceId),
-    responseText: responseText ? responseText.slice(0, 240) : "",
-  });
 }
 
 function 读取图片上传头信息(meta: 图片上传Meta): Record<string, string> {
@@ -191,19 +117,6 @@ function 读取图片直传参数(
 function 提取图片附件标识(file: UppyFile<图片上传Meta, 图片上传响应体>): string {
   const meta = (file.meta ?? {}) as 图片上传Meta;
   return typeof meta.attachment_id === "string" ? meta.attachment_id : "";
-}
-
-function 解析传输错误代码(error: unknown, fallbackCode = "attachment_upload_failed"): string {
-  if (error && typeof error === "object" && typeof (error as { code?: unknown }).code === "string") {
-    const code = ((error as { code: string }).code || "").trim();
-    if (code) {
-      return code;
-    }
-  }
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
-  }
-  return fallbackCode;
 }
 
 export class 聊天壳 extends LitElement {
@@ -358,8 +271,10 @@ export class 聊天壳 extends LitElement {
       return;
     }
     this.清理图片上传失活计时(file.id);
+    const attachmentId = 提取图片附件标识(file) || this.读取图片草稿(file.id)?.attachmentId || "";
     const errorCode = 解析图片上传失败代码(error, response);
     记录图片上传失败诊断({
+      attachmentId,
       localId: file.id,
       fileName: file.name ?? "未命名图片",
       error,

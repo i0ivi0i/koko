@@ -814,7 +814,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     注入图片草稿(el, {
       localId: "draft-xhr-error",
-      attachmentId: "",
+      attachmentId: "att-xhr-error",
       previewUrl: "blob:http://test.local/draft-xhr-error",
       width: 120,
       height: 90,
@@ -866,12 +866,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       "[koko:image-upload:error]",
       expect.objectContaining({
+        attachmentId: "att-xhr-error",
         localId: "draft-xhr-error",
         fileName: "xhr-error.jpg",
         status: 401,
         errorCode: "invalid_session",
-        uploadTraceId: "upl-debug-1",
-        reachedHandler: true,
+        receivedUploadResponse: true,
       })
     );
 
