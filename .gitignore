@@ -11,6 +11,7 @@ dist/
 
 # Editor-local workflow files should stay local, not in the shared repo.
 .vscode/
+.serena/
 
 # Keep real SQLx metadata when it exists, but do not track an empty placeholder.
 .sqlx/.gitkeep
