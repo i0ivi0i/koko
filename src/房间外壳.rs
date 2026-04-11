@@ -556,20 +556,46 @@ fn 推导rustus对外入口(
     rustus_server_port: u16,
     rustus_url: &str,
 ) -> Option<String> {
-    let raw_host = 读取首个非空请求头(headers, "x-forwarded-host")
+    let forwarded_host = 读取首个非空请求头(headers, "x-forwarded-host");
+    let raw_host = forwarded_host
+        .clone()
         .or_else(|| 读取首个非空请求头(headers, "host"))?;
     let authority = raw_host.parse::<Authority>().ok()?;
-    let scheme = 读取首个非空请求头(headers, "x-forwarded-proto")
-        .or_else(|| 读取首个非空请求头(headers, "x-forwarded-scheme"))
+    let forwarded_proto = 读取首个非空请求头(headers, "x-forwarded-proto")
+        .or_else(|| 读取首个非空请求头(headers, "x-forwarded-scheme"));
+    let forwarded_port = 读取首个非空请求头(headers, "x-forwarded-port")
+        .and_then(|value| value.parse::<u16>().ok());
+    let scheme = forwarded_proto
+        .clone()
         .unwrap_or_else(|| "http".to_string());
     let hostname = authority.host();
     let host_for_url = 包装url主机(hostname);
+
+    // 端口推导要区分“公网 authority”与“内部 Rustus 监听端口”：
+    // 1. 开发/LAN 直连时，Host 通常只是应用入口端口（例如 8080），Tus 仍应落到单独的 Rustus 端口；
+    // 2. 反向代理场景若已经通过 forwarded 头给出公网端口/authority，就应该优先沿用公网信息，
+    //    不能再把内部 1081 一类监听端口泄漏给浏览器。
+    let should_trust_authority_port =
+        forwarded_host.is_some() || forwarded_proto.is_some() || forwarded_port.is_some();
+    let inferred_proxy_default_port = if should_trust_authority_port {
+        match scheme.as_str() {
+            "https" => Some(443),
+            "http" => Some(80),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let public_port = forwarded_port
+        .or_else(|| should_trust_authority_port.then(|| authority.port_u16()).flatten())
+        .or(inferred_proxy_default_port)
+        .unwrap_or(rustus_server_port);
     let should_omit_port =
-        (scheme == "http" && rustus_server_port == 80) || (scheme == "https" && rustus_server_port == 443);
+        (scheme == "http" && public_port == 80) || (scheme == "https" && public_port == 443);
     let authority_for_url = if should_omit_port {
         host_for_url
     } else {
-        format!("{host_for_url}:{rustus_server_port}")
+        format!("{host_for_url}:{public_port}")
     };
     Some(format!("{scheme}://{authority_for_url}{rustus_url}"))
 }
