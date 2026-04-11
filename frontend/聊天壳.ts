@@ -20,8 +20,10 @@ import {
   创建媒体定位器,
   创建媒体播放器,
   创建媒体发布器,
+  创建媒体查看器,
   解析协作分发源,
   type 媒体附件草稿,
+  type 媒体查看器打开请求,
   type 媒体播放结果,
   type 媒体草稿状态补丁,
 } from "./媒体/index.js";
@@ -574,69 +576,6 @@ export class 聊天壳 extends LitElement {
       background: rgba(255, 255, 255, 0.04);
     }
 
-    .message-media-preview-backdrop {
-      position: absolute;
-      inset: 0;
-      z-index: 3;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      border-radius: 28px;
-      background: rgba(5, 8, 12, 0.78);
-      backdrop-filter: blur(14px);
-      cursor: zoom-out;
-    }
-
-    .message-media-preview {
-      position: relative;
-      max-width: min(100%, 860px);
-      max-height: 100%;
-      margin: 0;
-      cursor: default;
-    }
-
-    .message-video-preview-frame {
-      display: grid;
-      width: min(100%, 860px);
-      place-items: center;
-    }
-
-    .message-image-preview-original {
-      display: block;
-      width: auto;
-      max-width: 100%;
-      height: auto;
-      max-height: 100%;
-      border-radius: 22px;
-      object-fit: contain;
-      background: rgba(255, 255, 255, 0.04);
-      box-shadow: var(--shadow-warm);
-    }
-
-    .message-media-preview-video {
-      display: block;
-      width: auto;
-      max-width: 100%;
-      height: auto;
-      max-height: 100%;
-      border-radius: 22px;
-      object-fit: contain;
-      background: rgba(0, 0, 0, 0.72);
-      box-shadow: var(--shadow-warm);
-    }
-
-    .message-media-preview-close {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      z-index: 2;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(9, 13, 18, 0.76);
-      color: var(--text-primary);
-      box-shadow: 0 0 0 1px var(--line-soft);
-    }
-
     /* 新消息提示属于房间壳层浮动入口：用户正在补旧未读时提示可见，但不抢走当前视角。 */
     .jump-latest-button {
       position: absolute;
@@ -846,6 +785,7 @@ export class 聊天壳 extends LitElement {
       this.transport.loadMediaLocator(sessionId, attachmentId),
   });
   private 媒体播放器 = this.创建页面级媒体播放器();
+  private 媒体查看器 = 创建媒体查看器();
   private 媒体播放结果表: Record<string, 媒体播放结果> = {};
   private readonly 正在解析媒体播放 = new Map<string, Promise<void>>();
   private readonly 媒体发布器 = 创建媒体发布器({
@@ -1017,6 +957,11 @@ export class 聊天壳 extends LitElement {
     this.清空媒体播放状态();
     this.媒体播放器 = player;
     this.requestUpdate();
+  }
+
+  setMediaViewerForTest(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void {
+    this.媒体查看器.销毁();
+    this.媒体查看器 = viewer;
   }
 
   setTransportForTest(transport: 前端传输端口): void {
@@ -1216,6 +1161,7 @@ export class 聊天壳 extends LitElement {
 
   override disconnectedCallback(): void {
     globalThis.removeEventListener("resize", this.handleViewportResize);
+    this.媒体查看器.销毁();
     this._实时编排端口?.disconnect();
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
@@ -1771,6 +1717,9 @@ export class 聊天壳 extends LitElement {
             }}
             @jump-to-latest=${() => {
               void this.阅读推进编排端口.请求跳到最新();
+            }}
+            @room-open-media-viewer=${(event: CustomEvent<媒体查看器打开请求>) => {
+              this.媒体查看器.打开(event.detail);
             }}
           ></koko-room-message-pane>
         </section>

@@ -1,4 +1,5 @@
 import "@uppy/core/css/style.min.css";
+import "glightbox/dist/css/glightbox.css";
 import "./聊天壳.js";
 
 if ("serviceWorker" in navigator) {

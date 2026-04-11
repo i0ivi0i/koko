@@ -2,26 +2,8 @@ import { html, LitElement } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { 媒体播放结果 } from "./媒体/媒体播放.js";
+import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
-
-type 媒体预览状态 =
-  | {
-      kind: "image";
-      attachmentId: string;
-      src: string;
-      alt: string;
-      width: number;
-      height: number;
-    }
-  | {
-      kind: "video";
-      attachmentId: string;
-      src: string;
-      posterSrc: string | null;
-      width: number;
-      height: number;
-    }
-  | null;
 
 const 构建视频首帧预览源 = (src: string, posterSrc: string | null): string => {
   // 没有服务端 poster 时，用媒体片段让浏览器预取首帧，避免群聊里出现一片黑的视频卡片。
@@ -47,14 +29,12 @@ export class 房间消息窗 extends LitElement {
     historyHint: { type: String },
     jumpToLatestLabel: { type: String },
     mediaPlaybackByAttachmentId: { attribute: false },
-    媒体预览: { attribute: false, state: true },
   };
 
   declare items: 聊天列表展示项[];
   declare historyHint: string;
   declare jumpToLatestLabel: string;
   declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
-  declare 媒体预览: 媒体预览状态;
 
   constructor() {
     super();
@@ -62,7 +42,6 @@ export class 房间消息窗 extends LitElement {
     this.historyHint = "";
     this.jumpToLatestLabel = "";
     this.mediaPlaybackByAttachmentId = {};
-    this.媒体预览 = null;
   }
 
   /**
@@ -102,25 +81,63 @@ export class 房间消息窗 extends LitElement {
     );
   }
 
-  private 打开媒体预览(event: Event, preview: NonNullable<媒体预览状态>): void {
+  private 读取附件播放源(attachmentId: string, originalSrc: string): string {
+    const playback = this.mediaPlaybackByAttachmentId[attachmentId];
+    return playback?.mode === "swarm" || playback?.mode === "anchor" ? playback.src : originalSrc;
+  }
+
+  private 读取媒体查看器项目(): 媒体查看器项目[] {
+    const items: 媒体查看器项目[] = [];
+    for (const item of this.items) {
+      if (item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
+        if (playback?.mode === "expired" || playback?.mode === "degraded") {
+          continue;
+        }
+        if (attachment.kind === "image") {
+          items.push({
+            kind: "image",
+            attachmentId: attachment.attachmentId,
+            src: this.读取附件播放源(attachment.attachmentId, attachment.originalSrc),
+            alt: "图片附件原图",
+            width: attachment.width,
+            height: attachment.height,
+          });
+          continue;
+        }
+        items.push({
+          kind: "video",
+          attachmentId: attachment.attachmentId,
+          src: this.读取附件播放源(attachment.attachmentId, attachment.originalSrc),
+          posterSrc: attachment.posterSrc,
+          width: attachment.width,
+          height: attachment.height,
+        });
+      }
+    }
+    return items;
+  }
+
+  private 打开媒体查看器(event: Event, startAttachmentId: string): void {
     event.preventDefault();
     event.stopPropagation();
-    this.媒体预览 = preview;
-    void this.updateComplete.then(() => {
-      this.querySelector<HTMLElement>(".message-media-preview-backdrop")?.focus();
-    });
-  }
-
-  private 关闭媒体预览(): void {
-    this.媒体预览 = null;
-  }
-
-  private 处理媒体预览键盘(event: KeyboardEvent): void {
-    if (event.key !== "Escape") {
+    const items = this.读取媒体查看器项目();
+    if (!items.some((item) => item.attachmentId === startAttachmentId)) {
       return;
     }
-    event.stopPropagation();
-    this.关闭媒体预览();
+    this.dispatchEvent(
+      new CustomEvent<媒体查看器打开请求>("room-open-media-viewer", {
+        detail: {
+          startAttachmentId,
+          items,
+        },
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   private renderMessageBody(item: 消息展示项) {
@@ -186,14 +203,7 @@ export class 房间消息窗 extends LitElement {
                   data-attachment-id=${attachment.attachmentId}
                   aria-label="观看视频"
                   @click=${(event: Event) =>
-                    this.打开媒体预览(event, {
-                      kind: "video",
-                      attachmentId: attachment.attachmentId,
-                      src: videoSrc,
-                      posterSrc: attachment.posterSrc,
-                      width: attachment.width,
-                      height: attachment.height,
-                    })}
+                    this.打开媒体查看器(event, attachment.attachmentId)}
                 >
                   <video
                     class="message-video-preview"
@@ -228,14 +238,7 @@ export class 房间消息窗 extends LitElement {
                     data-attachment-id=${attachment.attachmentId}
                     aria-label="查看图片原图"
                     @click=${(event: Event) =>
-                      this.打开媒体预览(event, {
-                        kind: "image",
-                        attachmentId: attachment.attachmentId,
-                        src: imagePreviewSrc,
-                        alt: "图片附件原图",
-                        width: attachment.width,
-                        height: attachment.height,
-                      })}
+                      this.打开媒体查看器(event, attachment.attachmentId)}
                   >
                     <img
                       class="message-image"
@@ -253,66 +256,6 @@ export class 房间消息窗 extends LitElement {
             </div>
           `;
         })}
-      </div>
-    `;
-  }
-
-  private renderMediaPreview() {
-    const preview = this.媒体预览;
-    if (!preview) {
-      return null;
-    }
-    return html`
-      <div
-        class="message-media-preview-backdrop ${preview.kind === "image"
-          ? "message-image-preview-backdrop"
-          : "message-video-preview-backdrop"}"
-        data-media-preview=${preview.attachmentId}
-        data-image-preview=${ifDefined(preview.kind === "image" ? preview.attachmentId : undefined)}
-        data-video-preview=${ifDefined(preview.kind === "video" ? preview.attachmentId : undefined)}
-        role="dialog"
-        aria-modal="true"
-        aria-label=${preview.kind === "image" ? "图片原图预览" : "视频预览"}
-        tabindex="0"
-        @click=${() => this.关闭媒体预览()}
-        @keydown=${(event: KeyboardEvent) => this.处理媒体预览键盘(event)}
-      >
-        <figure
-          class="message-media-preview ${preview.kind === "image"
-            ? "message-image-preview"
-            : "message-video-preview-frame"}"
-          @click=${(event: Event) => event.stopPropagation()}
-        >
-          <button
-            class="message-media-preview-close ${preview.kind === "image"
-              ? "message-image-preview-close"
-              : "message-video-preview-close"}"
-            type="button"
-            aria-label=${preview.kind === "image" ? "关闭图片预览" : "关闭视频预览"}
-            @click=${() => this.关闭媒体预览()}
-          >
-            关闭
-          </button>
-          ${preview.kind === "image"
-            ? html`<img
-                class="message-image-preview-original"
-                src=${preview.src}
-                alt=${preview.alt}
-                width=${preview.width}
-                height=${preview.height}
-              />`
-            : html`<video
-                class="message-media-preview-video"
-                src=${构建视频首帧预览源(preview.src, preview.posterSrc)}
-                width=${preview.width}
-                height=${preview.height}
-                controls
-                autoplay
-                playsinline
-                preload="metadata"
-                poster=${ifDefined(preview.posterSrc ?? undefined)}
-              ></video>`}
-        </figure>
       </div>
     `;
   }
@@ -380,7 +323,6 @@ export class 房间消息窗 extends LitElement {
             </button>
           `
         : null}
-      ${this.renderMediaPreview()}
     `;
   }
 }

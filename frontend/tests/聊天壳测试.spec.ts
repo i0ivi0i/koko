@@ -68,7 +68,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("box-shadow: none");
     expect(styles).toContain(".message-video-card");
     expect(styles).toContain(".message-video-preview-trigger");
-    expect(styles).toContain(".message-media-preview-video");
+    expect(styles).not.toContain(".message-media-preview-video");
+    expect(styles).not.toContain(".message-media-preview-backdrop");
     expect(styles).toContain("z-index: 0");
   });
 
@@ -231,7 +232,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
       }),
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
+    const viewer = {
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    };
     el.setTransportForTest(transport);
+    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
@@ -260,15 +266,21 @@ describe("聊天壳集成 / 首页与控制台", () => {
     previewTrigger!.click();
     await 等待组件稳定(el);
 
-    const previewImage = el.shadowRoot!.querySelector(
-      '[data-image-preview="att-1"] .message-image-preview-original'
-    ) as HTMLImageElement | null;
-    expect(previewImage?.src).toContain(
-      "/api/attachments/att-1/content?session_id=s-test&variant=original"
+    expect(viewer.打开).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startAttachmentId: "att-1",
+        items: [
+          expect.objectContaining({
+            attachmentId: "att-1",
+            kind: "image",
+            src: expect.stringContaining(
+              "/api/attachments/att-1/content?session_id=s-test&variant=original"
+            ),
+          }),
+        ],
+      })
     );
 
-    el.shadowRoot!.querySelector<HTMLButtonElement>(".message-image-preview-close")?.click();
-    await 等待组件稳定(el);
     expect(el.shadowRoot!.querySelector('[data-image-preview="att-1"]')).toBeNull();
     el.remove();
   });
@@ -301,7 +313,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
       }),
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
+    const viewer = {
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    };
     el.setTransportForTest(transport);
+    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
@@ -327,17 +344,21 @@ describe("聊天壳集成 / 首页与控制台", () => {
     previewTrigger!.click();
     await 等待组件稳定(el);
 
-    const viewerVideo = el.shadowRoot!.querySelector(
-      '[data-video-preview="att-video-1"] .message-media-preview-video'
-    ) as HTMLVideoElement | null;
-    expect(viewerVideo).not.toBeNull();
-    expect(viewerVideo?.hasAttribute("controls")).toBe(true);
-    expect(viewerVideo?.getAttribute("src")).toContain(
-      "/api/attachments/att-video-1/content?session_id=s-test&variant=original#t=0.1"
+    expect(viewer.打开).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startAttachmentId: "att-video-1",
+        items: [
+          expect.objectContaining({
+            attachmentId: "att-video-1",
+            kind: "video",
+            src: expect.stringContaining(
+              "/api/attachments/att-video-1/content?session_id=s-test&variant=original"
+            ),
+          }),
+        ],
+      })
     );
 
-    el.shadowRoot!.querySelector<HTMLButtonElement>(".message-media-preview-close")?.click();
-    await 等待组件稳定(el);
     expect(el.shadowRoot!.querySelector('[data-video-preview="att-video-1"]')).toBeNull();
     el.remove();
   });
@@ -370,7 +391,12 @@ describe("聊天壳集成 / 首页与控制台", () => {
       }),
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
+    const viewer = {
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    };
     el.setTransportForTest(transport);
+    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
     el.setMediaPlayerForTest({
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "swarm",
@@ -406,11 +432,91 @@ describe("聊天壳集成 / 首页与控制台", () => {
     previewTrigger!.click();
     await 等待组件稳定(el);
 
-    const viewerVideo = el.shadowRoot!.querySelector(
-      '[data-video-preview="att-video-swarm-1"] .message-media-preview-video'
-    ) as HTMLVideoElement | null;
-    expect(viewerVideo?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1#t=0.1");
-    expect(viewerVideo?.hasAttribute("controls")).toBe(true);
+    expect(viewer.打开).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startAttachmentId: "att-video-swarm-1",
+        items: [
+          expect.objectContaining({
+            attachmentId: "att-video-swarm-1",
+            kind: "video",
+            src: "blob:http://localhost/swarm-video-1",
+          }),
+        ],
+      })
+    );
+    el.remove();
+  });
+
+  it("点击视频附件时会把 WebTorrent 播放源交给页面级媒体查看器", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-viewer-1",
+            client_message_id: "c-video-viewer-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "看协作分发视频",
+            body: "看协作分发视频",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-viewer-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const viewer = {
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
+    el.setMediaPlayerForTest({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "swarm",
+        attachmentId: "att-video-viewer-1",
+        kind: "video",
+        src: "blob:http://localhost/webtorrent-viewer-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      }),
+    });
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    el.shadowRoot!
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-viewer-1"]'
+      )
+      ?.click();
+
+    expect(viewer.打开).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startAttachmentId: "att-video-viewer-1",
+        items: [
+          expect.objectContaining({
+            attachmentId: "att-video-viewer-1",
+            kind: "video",
+            src: "blob:http://localhost/webtorrent-viewer-video-1",
+          }),
+        ],
+      })
+    );
     el.remove();
   });
 
