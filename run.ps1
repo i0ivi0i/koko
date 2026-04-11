@@ -324,6 +324,10 @@ try {
     if ([string]::IsNullOrWhiteSpace($rustusHooks)) {
         $rustusHooks = "pre-create,post-finish"
     }
+    $rustusMaxBodySize = [Environment]::GetEnvironmentVariable("RUSTUS_MAX_BODY_SIZE")
+    if ([string]::IsNullOrWhiteSpace($rustusMaxBodySize)) {
+        $rustusMaxBodySize = (50 * 1024 * 1024).ToString()
+    }
     $rustusHookUrl = "http://127.0.0.1:$appPort/internal/rustus/hooks"
     $resolvedRustusDataDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusDataDir))
     $resolvedRustusInfoDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusInfoDir))
@@ -348,8 +352,11 @@ try {
     # 2. `--hooks` 只打开当前后端真正消费的 `pre-create/post-finish`，
     #    避免默认的 post-create/post-receive 等事件把 sidecar 配置漂移升级成上传失败；
     # 3. hooks 回调主服务做令牌校验和上传回执登记；
-    # 4. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
-    Write-Host "启动 Rustus: rustus --port $rustusPort --url $rustusUrl"
+    # 4. `max-body-size` 默认至少覆盖当前群聊 50 MiB 视频上限。
+    #    Uppy/Tus 默认会直接把整块文件作为 PATCH 发送，若沿用 Rustus 256 KiB 默认值，
+    #    正常图片也会在 transport 层被 413 拦死，业务层根本看不到。
+    # 5. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
+    Write-Host "启动 Rustus: rustus --port $rustusPort --url $rustusUrl --max-body-size $rustusMaxBodySize"
     $rustusProcess = New-ManagedProcess `
         -Name "rustus" `
         -FilePath $rustusPath `
@@ -357,6 +364,7 @@ try {
             "--host", "127.0.0.1",
             "--port", $rustusPort,
             "--url", $rustusUrl,
+            "--max-body-size", $rustusMaxBodySize,
             "--hooks", $rustusHooks,
             "--storage", "file-storage",
             "--data-dir", $resolvedRustusDataDir,

@@ -44,6 +44,37 @@ describe("图片上传诊断", () => {
     expect(errorCode).toBe("attachment_upload_stalled");
   });
 
+  it("Tus DetailedError 会优先读取 originalResponse 里的稳定错误码", () => {
+    const errorCode = 解析媒体上传失败代码(
+      {
+        message: "tus upload failed",
+        originalResponse: {
+          getStatus: () => 400,
+          getBody: () =>
+            JSON.stringify({
+              code: "invalid_argument",
+              message: "hook length/offset 与 metadata.byte_size 不一致",
+            }),
+        },
+      },
+      undefined
+    );
+
+    expect(errorCode).toBe("invalid_argument");
+  });
+
+  it("Tus DetailedError 缺少显式 response 参数时仍能把 413 识别成大小超限", () => {
+    const errorCode = 解析媒体上传失败代码(
+      {
+        message:
+          "tus: unexpected response while uploading chunk, originated from request (method: PATCH, url: http://127.0.0.1:1081/files/demo, response code: 413, response text: , request id: n/a)",
+      },
+      undefined
+    );
+
+    expect(errorCode).toBe("attachment_too_large");
+  });
+
   it("诊断日志会以 attachmentId 作为主关联锚点", () => {
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
