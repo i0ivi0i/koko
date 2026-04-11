@@ -103,6 +103,30 @@ pub struct 媒体附件快照 {
     pub 状态: 附件状态读取结果,
 }
 
+/// 协作分发元数据是 ready 附件旁边的稳定分发表面：
+/// 1. 业务锚点仍然是 attachment_id；
+/// 2. 这里只记录 Phase 1 真正需要的稳定字段；
+/// 3. tracker ticket、announce、peer 数等运行态以后单独扩展，不污染当前真相面。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 协作分发元数据写入请求 {
+    pub 附件标识: String,
+    pub content_id: String,
+    pub content_hash: String,
+    pub swarm_id: String,
+    pub web_seed_until秒: i64,
+}
+
+/// locator 带出的协作分发快照只暴露“稳定可缓存的分发片段”。
+/// 这不是运行态，也不等于 tracker 准入凭证。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 协作分发元数据快照 {
+    pub 附件标识: String,
+    pub content_id: String,
+    pub content_hash: String,
+    pub swarm_id: String,
+    pub web_seed_until秒: i64,
+}
+
 /// locator 只回答“当前怎么受控取媒体”，不暴露存储键、权限投影或 swarm 运行态。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 媒体定位结果 {
@@ -110,6 +134,7 @@ pub struct 媒体定位结果 {
     pub 种类: 媒体附件类型,
     pub 状态: 附件状态读取结果,
     pub 允许缩略图: bool,
+    pub 协作分发: Option<协作分发元数据快照>,
 }
 
 /// 附件内容读取变体。
@@ -259,6 +284,25 @@ pub trait 仓储端口 {
     ) -> Result<媒体附件快照, contract::错误码> {
         let _ = (所属匿名身份标识, 附件);
         Err(contract::错误码::系统错误)
+    }
+
+    /// 协作分发元数据是 ready 后的补充真相面。
+    /// 第一版只允许写入稳定片段，不让壳层自己拼 hash / swarm_id。
+    fn 写入协作分发元数据(
+        &mut self,
+        请求: &协作分发元数据写入请求,
+    ) -> Result<协作分发元数据快照, contract::错误码> {
+        let _ = 请求;
+        Err(contract::错误码::系统错误)
+    }
+
+    /// locator 需要把稳定分发片段一起带给壳层，但这里仍然只回答“有没有这份片段”。
+    fn 查询协作分发元数据(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<协作分发元数据快照>, contract::错误码> {
+        let _ = 附件标识;
+        Ok(None)
     }
 
     /// 创建 prepared 附件占位，供浏览器后续直传对象内容。
@@ -784,6 +828,22 @@ pub fn 完成媒体附件上传(
     仓储.创建媒体附件记录(&prepared.所属匿名身份标识, 附件)
 }
 
+/// Phase 1 先把“ready 后立刻补齐分发元数据”也收口在用例层语义里。
+/// 这样 handler 只负责调度，不直接越层操纵仓储。
+pub fn 写入协作分发元数据(
+    仓储: &mut dyn 仓储端口,
+    请求: &协作分发元数据写入请求,
+) -> Result<协作分发元数据快照, contract::错误码> {
+    if 请求.附件标识.trim().is_empty()
+        || 请求.content_id.trim().is_empty()
+        || 请求.content_hash.trim().is_empty()
+        || 请求.swarm_id.trim().is_empty()
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.写入协作分发元数据(请求)
+}
+
 /// 读取附件内容：
 /// 1. 会话必须有效
 /// 2. 附件必须存在且 ready
@@ -830,6 +890,7 @@ pub fn 查询媒体定位(
     仓储
         .查询附件可读内容(附件标识, 会话标识, 附件内容变体::原图)?
         .ok_or(contract::错误码::成员资格不足)?;
+    let distribution = 仓储.查询协作分发元数据(附件标识)?;
     let kind = match snapshot.种类 {
         附件种类读取结果::图片 => 媒体附件类型::图片,
         附件种类读取结果::视频 => 媒体附件类型::视频,
@@ -840,6 +901,7 @@ pub fn 查询媒体定位(
         种类: kind.clone(),
         状态: snapshot.状态,
         允许缩略图: matches!(kind, 媒体附件类型::图片),
+        协作分发: distribution,
     })
 }
 

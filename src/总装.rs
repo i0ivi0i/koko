@@ -193,6 +193,9 @@ fn 提取panic消息(panic_info: &panic::PanicHookInfo<'_>) -> String {
 
 /// 启动前自动追平迁移，保证数据库结构与代码版本一致。
 /// 这是“基础设施准备动作”，不是业务语义。
+/// 维护者注意：
+/// - 这里必须忠实执行 migrations 目录里的每一个顺序迁移；
+/// - 发现真实线上/本地 bug 时，优先补顺序迁移修正，不要回改已发布迁移编号。
 pub async fn 自动追平迁移(database_url: &str) -> io::Result<()> {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(1)

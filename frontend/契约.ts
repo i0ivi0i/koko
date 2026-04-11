@@ -140,12 +140,30 @@ export type 图片上传准备结果 = 媒体上传准备结果;
  * locator 只暴露当前客户端下一步该去哪里读媒体。
  * 业务权限、房间成员真相仍然由后端用例层裁决，不下放给 Web 壳猜。
  */
+export interface 媒体协作分发定位片段 {
+  /**
+   * content_id 是 attachment_id 之上的稳定分发锚点。
+   * 第一版先不把它伪装成 info_hash，避免 Phase 1 就把 metainfo 语义写死。
+   */
+  content_id: string;
+  content_hash: string;
+  swarm_id: string;
+  /**
+   * 继续沿用“秒数字符串”而不是 Date 对象：
+   * 1. 和现有 expires_at 心智一致；
+   * 2. contract 不绑定具体运行时时间类型；
+   * 3. 前端缓存 / 多壳读取都更稳定。
+   */
+  web_seed_until: string;
+}
+
 export interface 媒体定位结果 {
   attachment_id: string;
   kind: 媒体种类;
   status: "ready" | "degraded" | "deleted";
   original_url: string;
   thumbnail_url: string | null;
+  distribution: 媒体协作分发定位片段 | null;
 }
 
 export interface 增量事件快照 {

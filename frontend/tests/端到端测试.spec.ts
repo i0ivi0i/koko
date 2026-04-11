@@ -171,6 +171,7 @@ class 端到端假传输 implements 前端传输端口 {
       status: "ready",
       original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
       thumbnail_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e", "thumbnail"),
+      distribution: null,
     };
   }
   async updateRoomReadAnchor(): Promise<void> {}

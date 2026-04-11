@@ -16,5 +16,7 @@ pub mod domain;
 pub mod entry;
 #[path = "外壳.rs"]
 pub mod shell;
+#[path = "媒体协作分发.rs"]
+pub mod media_distribution;
 #[path = "用例.rs"]
 pub mod usecase;

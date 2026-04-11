@@ -9,6 +9,12 @@ describe("媒体播放器", () => {
       status: "ready" as const,
       original_url: "http://media.local/original-video-1",
       thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-1",
+        content_hash: "hash-video-1",
+        swarm_id: "swarm-hash-video-1",
+        web_seed_until: "1775942400",
+      },
     }));
     const 播放器 = 创建媒体播放器({
       locate,
@@ -39,6 +45,7 @@ describe("媒体播放器", () => {
         status: "ready" as const,
         original_url: "http://media.local/original-stale",
         thumbnail_url: "http://media.local/thumb-stale",
+        distribution: null,
       })
       .mockResolvedValueOnce({
         attachment_id: "att-image-1",
@@ -46,6 +53,7 @@ describe("媒体播放器", () => {
         status: "ready" as const,
         original_url: "http://media.local/original-refresh",
         thumbnail_url: "http://media.local/thumb-refresh",
+        distribution: null,
       });
     const probeAnchor = vi
       .fn()
@@ -80,6 +88,7 @@ describe("媒体播放器", () => {
       status: "ready" as const,
       original_url: "http://media.local/original-down",
       thumbnail_url: null,
+      distribution: null,
     }));
     const 播放器 = 创建媒体播放器({
       locate,

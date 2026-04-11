@@ -305,6 +305,12 @@ describe("传输", () => {
           status: "ready",
           original_url: "/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
           thumbnail_url: "/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+          distribution: {
+            content_id: "content_att-locator-1",
+            content_hash: "hash-att-locator-1",
+            swarm_id: "swarm-hash-att-locator-1",
+            web_seed_until: "1775942400",
+          },
         }),
         {
           status: 200,
@@ -324,6 +330,12 @@ describe("传输", () => {
         "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
       thumbnail_url:
         "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+      distribution: {
+        content_id: "content_att-locator-1",
+        content_hash: "hash-att-locator-1",
+        swarm_id: "swarm-hash-att-locator-1",
+        web_seed_until: "1775942400",
+      },
     });
   });
 

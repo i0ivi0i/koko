@@ -96,6 +96,7 @@ class 假后台传输 implements 前端传输端口 {
       status: "ready",
       original_url: this.buildAttachmentContentUrl(attachmentId, "s-x"),
       thumbnail_url: this.buildAttachmentContentUrl(attachmentId, "s-x", "thumbnail"),
+      distribution: null,
     };
   }
   buildAttachmentContentUrl(

@@ -1,4 +1,5 @@
 import type { 媒体定位结果, 媒体种类 } from "../契约.js";
+import { 读取协作分发定位片段 } from "./媒体协作分发.js";
 
 type 媒体播放输入 = {
   attachmentId: string;
@@ -113,6 +114,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     if (locator.status !== "ready") {
       return 创建降级结果(input, locator, "attachment_not_ready");
+    }
+    const distribution = 读取协作分发定位片段(locator);
+    if (!distribution) {
+      return 尝试锚点(input, locator, true);
     }
     try {
       const swarmSource = await resolveSwarmSource({

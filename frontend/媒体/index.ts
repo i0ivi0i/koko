@@ -1,4 +1,5 @@
 export * from "./媒体草稿.js";
+export * from "./媒体协作分发.js";
 export * from "./媒体诊断.js";
 export * from "./媒体发布.js";
 export * from "./媒体定位.js";

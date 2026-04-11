@@ -303,6 +303,7 @@ export class 假传输 implements 前端传输端口 {
       thumbnail_url: attachmentId.includes("video")
         ? null
         : this.buildAttachmentContentUrl(attachmentId, "s-test", "thumbnail"),
+      distribution: null,
     };
   }
   buildAttachmentContentUrl(

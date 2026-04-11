@@ -398,6 +398,67 @@ impl Pg仓储 {
         })
     }
 
+    /// 协作分发元数据和附件真相分表存放：
+    /// - attachment 继续回答“附件是否 ready”；
+    /// - distribution 继续回答“ready 后怎样协作分发”；
+    /// - 两张表都围绕 attachment_id 收口，避免再造第二主键。
+    async fn 写入协作分发元数据_异步(
+        pool: &PgPool,
+        请求: &usecase::协作分发元数据写入请求,
+    ) -> Result<usecase::协作分发元数据快照, contract::错误码> {
+        sqlx::query(
+            "INSERT INTO attachment_distribution_metadata \
+                (attachment_id, content_id, content_hash, swarm_id, web_seed_until) \
+             VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5)) \
+             ON CONFLICT (attachment_id) DO UPDATE SET \
+                content_id = EXCLUDED.content_id, \
+                content_hash = EXCLUDED.content_hash, \
+                swarm_id = EXCLUDED.swarm_id, \
+                web_seed_until = EXCLUDED.web_seed_until",
+        )
+        .bind(&请求.附件标识)
+        .bind(&请求.content_id)
+        .bind(&请求.content_hash)
+        .bind(&请求.swarm_id)
+        .bind(请求.web_seed_until秒)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(usecase::协作分发元数据快照 {
+            附件标识: 请求.附件标识.clone(),
+            content_id: 请求.content_id.clone(),
+            content_hash: 请求.content_hash.clone(),
+            swarm_id: 请求.swarm_id.clone(),
+            web_seed_until秒: 请求.web_seed_until秒,
+        })
+    }
+
+    /// locator 只读这份稳定分发片段，不掺入 tracker/runtime 状态。
+    async fn 查询协作分发元数据_异步(
+        pool: &PgPool,
+        附件标识: &str,
+    ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT attachment_id, content_id, content_hash, swarm_id, \
+                    EXTRACT(EPOCH FROM web_seed_until)::BIGINT AS web_seed_until_epoch \
+             FROM attachment_distribution_metadata \
+             WHERE attachment_id = $1",
+        )
+        .bind(附件标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(row.map(|row| usecase::协作分发元数据快照 {
+            附件标识: row.get("attachment_id"),
+            content_id: row.get("content_id"),
+            content_hash: row.get("content_hash"),
+            swarm_id: row.get("swarm_id"),
+            web_seed_until秒: row.get("web_seed_until_epoch"),
+        }))
+    }
+
     /// prepare 阶段只登记一条运输授权记录，不把 transport token 塞进附件真相表。
     async fn 写入媒体上传运输授权_异步(
         pool: &PgPool,
@@ -1497,6 +1558,21 @@ impl 仓储端口 for Pg仓储 {
             所属匿名身份标识,
             附件,
         ))
+    }
+
+    /// 用例层只通过这个端口写入 Phase 1 分发元数据，不绕过应用层去拼 SQL。
+    fn 写入协作分发元数据(
+        &mut self,
+        请求: &usecase::协作分发元数据写入请求,
+    ) -> Result<usecase::协作分发元数据快照, contract::错误码> {
+        self.在运行时执行(Self::写入协作分发元数据_异步(&self.pool, 请求))
+    }
+
+    fn 查询协作分发元数据(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
+        self.在运行时执行(Self::查询协作分发元数据_异步(&self.pool, 附件标识))
     }
 
     /// 附件内容读取仍然走成员可见性，不单独再长一套 ACL。

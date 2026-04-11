@@ -1,25 +1,25 @@
 # Graph Report - .  (2026-04-11)
 
 ## Corpus Check
-- 78 files · ~3,790,032 words
+- 81 files · ~3,977,935 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 253 nodes · 342 edges · 28 communities detected
+- 254 nodes · 347 edges · 28 communities detected
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
-1. `send_json()` - 27 edges
+1. `send_json()` - 28 edges
 2. `HttpRealtime传输` - 22 edges
-3. `构造rustus_hook请求体()` - 9 edges
-4. `写入rustus测试文件()` - 8 edges
+3. `构造rustus_hook请求体()` - 10 edges
+4. `写入rustus测试文件()` - 9 edges
 5. `单连接发送到已关闭socket时降级为正常断开()` - 6 edges
-6. `complete图片上传会把prepared附件升级成ready并写入缩略图()` - 6 edges
-7. `updateChat()` - 5 edges
-8. `exitCurrentRoomView()` - 5 edges
-9. `假Socket` - 5 edges
-10. `post_finish稍后到达时complete媒体上传会等待回执并成功()` - 5 edges
+6. `ready附件会落协作分发元数据()` - 6 edges
+7. `complete图片上传会把prepared附件升级成ready并写入缩略图()` - 6 edges
+8. `updateChat()` - 5 edges
+9. `exitCurrentRoomView()` - 5 edges
+10. `假Socket` - 5 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `写入rustus测试文件()` --calls--> `包装url主机()`  [EXTRACTED]
@@ -38,7 +38,7 @@ Cohesion: 0.02
 Nodes (17): AdminLoginBody, AdminLoginResp, ApiError, BootstrapBody, CompleteMediaUploadBody, JoinBody, ParsedAttachmentContentQuery, ParsedEventsQuery (+9 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.07
+Cohesion: 0.08
 Nodes (36): 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), bootstrap接口会返回稳定花名快照(), 没有上传回执时complete媒体上传会返回attachment_not_ready(), complete图片上传遇到非图片原图会返回attachment_type_not_allowed(), complete图片上传会把prepared附件升级成ready并写入缩略图(), 非成员不能通过events接口拉取房间增量(), 成员通过events接口只会拿到from之后的事件() (+28 more)
 
 ### Community 2 - "Community 2"
@@ -193,6 +193,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.08 - nodes in this community are weakly interconnected._

@@ -4,6 +4,7 @@ use super::{
 use crate::{
     adapter::{媒体上传运输授权写入请求, 媒体上传运输记录},
     contract,
+    media_distribution,
     usecase::{self, 仓储端口},
 };
 use axum::{
@@ -2097,7 +2098,38 @@ pub(super) async fn complete_media_upload(
     })
     .await;
     match complete_result {
-        Ok(Ok(snapshot)) => (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot))).into_response(),
+        Ok(Ok(snapshot)) => {
+            // ready 真相已经成立后，马上补齐协作分发元数据。
+            // 这里故意不把 hash / swarm_id 交给前端推导，避免多端各算各的。
+            let ready_epoch秒 = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|value| value.as_secs() as i64)
+                .unwrap_or(0);
+            let distribution_request = media_distribution::构造协作分发元数据写入请求(
+                &attachment_id,
+                original_bytes.as_ref(),
+                ready_epoch秒,
+            );
+            let state_for_distribution = state.clone();
+            let distribution_result = task::spawn_blocking(move || {
+                let mut repo = 构建共享仓储(&state_for_distribution);
+                usecase::写入协作分发元数据(&mut repo, &distribution_request)
+                    .map_err(map_domain_err_tuple)
+            })
+            .await;
+
+            match distribution_result {
+                Ok(Ok(_)) => {
+                    (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot))).into_response()
+                }
+                Ok(Err((status, code, message))) => err_resp(status, code, message),
+                Err(err) => err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("分发元数据任务执行失败: {err}"),
+                ),
+            }
+        }
         Ok(Err((status, code, message))) => err_resp(status, code, message),
         Err(err) => err_resp(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -2157,6 +2189,10 @@ pub(super) async fn load_media_locator(
             "status": 附件状态转标签(&locator.状态),
             "original_url": original_url,
             "thumbnail_url": thumbnail_url,
+            "distribution": locator
+                .协作分发
+                .as_ref()
+                .map(media_distribution::协作分发快照转响应值),
         })),
     )
         .into_response()

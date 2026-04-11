@@ -1,0 +1,48 @@
+use crate::usecase;
+use sha2::{Digest, Sha256};
+
+/// 第一版保底窗口固定 24 小时。
+/// 这里故意收口成常量，避免 shell、adapter、前端各自写一份“24 * 60 * 60”。
+pub(crate) const WEB_SEED_TTL秒: i64 = 24 * 60 * 60;
+
+/// 协作分发的内容哈希先只认 canonical 原始字节。
+/// 这样 Phase 1 就能稳定得到：
+/// 1. 与上传主链解耦的内容标识；
+/// 2. 不依赖 torrent/runtime 的 swarm 锚点；
+/// 3. 后续 Phase 2 生成 metainfo 时仍可继续复用的内容摘要。
+pub(crate) fn 生成内容哈希(原始字节: &[u8]) -> String {
+    let digest = Sha256::digest(原始字节);
+    hex::encode(digest)
+}
+
+/// Phase 1 只组装“稳定分发真相”，不生成 metainfo、不碰 tracker ticket。
+/// attachment_id 继续是业务锚点，content_hash / swarm_id 只是分发层的稳定附属事实。
+pub(crate) fn 构造协作分发元数据写入请求(
+    附件标识: &str,
+    原始字节: &[u8],
+    ready_epoch秒: i64,
+) -> usecase::协作分发元数据写入请求 {
+    let content_hash = 生成内容哈希(原始字节);
+    usecase::协作分发元数据写入请求 {
+        附件标识: 附件标识.to_string(),
+        content_id: format!("content_{附件标识}"),
+        content_hash: content_hash.clone(),
+        swarm_id: format!("swarm_{content_hash}"),
+        web_seed_until秒: ready_epoch秒 + WEB_SEED_TTL秒,
+    }
+}
+
+/// locator 对外只下发稳定分发片段：
+/// - 不下发存储键；
+/// - 不下发 tracker/runtime 私货；
+/// - `web_seed_until` 保持字符串秒值，和现有 expires_at 心智一致。
+pub(crate) fn 协作分发快照转响应值(
+    snapshot: &usecase::协作分发元数据快照,
+) -> serde_json::Value {
+    serde_json::json!({
+        "content_id": snapshot.content_id,
+        "content_hash": snapshot.content_hash,
+        "swarm_id": snapshot.swarm_id,
+        "web_seed_until": snapshot.web_seed_until秒.to_string(),
+    })
+}

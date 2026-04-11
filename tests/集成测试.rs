@@ -97,6 +97,21 @@ fn 数据库真相模型包含媒体Tus运输记录表() {
 }
 
 #[test]
+fn 协作分发迁移已包含元数据表() {
+    let sql = std::fs::read_to_string("migrations/0006_附件协作分发元数据.sql")
+        .expect("应能读到 Phase 1 协作分发迁移文件");
+
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachment_distribution_metadata"));
+    assert!(sql.contains(
+        "attachment_id TEXT PRIMARY KEY REFERENCES attachments(attachment_id) ON DELETE CASCADE"
+    ));
+    assert!(sql.contains("content_id TEXT NOT NULL"));
+    assert!(sql.contains("content_hash TEXT NOT NULL"));
+    assert!(sql.contains("swarm_id TEXT NOT NULL"));
+    assert!(sql.contains("web_seed_until TIMESTAMPTZ NOT NULL"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),
@@ -1185,6 +1200,214 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
 
 #[tokio::test]
 #[serial]
+async fn ready附件会落协作分发元数据() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("distribution-ready-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id").to_string();
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "distribution-ready.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let temp_file = 写入rustus测试文件(
+        &state.rustus_data_dir,
+        &attachment_id,
+        "distribution-ready.png",
+        &最小png字节(),
+    )
+    .expect("应能写入 rustus 临时图片文件");
+    let upload_id = format!("upload-distribution-ready-{attachment_id}");
+
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "distribution-ready.png",
+            "image/png",
+            68,
+            68,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库校验协作分发元数据");
+    let row = sqlx::query(
+        "SELECT content_id, content_hash, swarm_id, \
+                EXTRACT(EPOCH FROM web_seed_until)::BIGINT AS web_seed_until_epoch \
+         FROM attachment_distribution_metadata \
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ready 后应存在协作分发元数据");
+
+    let content_id: String = row.get("content_id");
+    let content_hash: String = row.get("content_hash");
+    let swarm_id: String = row.get("swarm_id");
+    let web_seed_until_epoch: i64 = row.get("web_seed_until_epoch");
+
+    assert_eq!(content_id, format!("content_{attachment_id}"));
+    assert_eq!(swarm_id, format!("swarm_{content_hash}"));
+    assert_eq!(content_hash.len(), 64, "SHA-256 十六进制摘要长度应为 64");
+    assert!(
+        web_seed_until_epoch
+            > SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_secs() as i64,
+        "24 小时保底窗口至少应落到未来时刻"
+    );
+    pool.close().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn 相同内容的不同附件可以共享同一swarm_id() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let device_token = format!("distribution-share-device-{uniq}");
+    let attachment_id_first = format!("att-share-first-{uniq}");
+    let attachment_id_second = format!("att-share-second-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let session_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库插入 ready 附件");
+    插入ready图片附件记录(&pool, &session_id, &attachment_id_first).await;
+    插入ready图片附件记录(&pool, &session_id, &attachment_id_second).await;
+    pool.close().await;
+
+    let shared_hash = format!("{uniq:016x}{uniq:016x}{uniq:016x}{uniq:016x}");
+    let shared_swarm_id = format!("swarm_{shared_hash}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_first_for_worker = attachment_id_first.clone();
+    let attachment_id_second_for_worker = attachment_id_second.clone();
+    let shared_swarm_id_for_worker = shared_swarm_id.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let first = koko::usecase::写入协作分发元数据(
+            &mut repo,
+            &koko::usecase::协作分发元数据写入请求 {
+                附件标识: attachment_id_first_for_worker.clone(),
+                content_id: format!("content_{attachment_id_first_for_worker}"),
+                content_hash: shared_hash.to_string(),
+                swarm_id: shared_swarm_id_for_worker.clone(),
+                web_seed_until秒: 1_775_942_400,
+            },
+        );
+        let second = koko::usecase::写入协作分发元数据(
+            &mut repo,
+            &koko::usecase::协作分发元数据写入请求 {
+                附件标识: attachment_id_second_for_worker.clone(),
+                content_id: format!("content_{attachment_id_second_for_worker}"),
+                content_hash: shared_hash.to_string(),
+                swarm_id: shared_swarm_id_for_worker.clone(),
+                web_seed_until秒: 1_775_942_500,
+            },
+        );
+        (first, second)
+    })
+    .await
+    .expect("阻塞写入任务应完成");
+
+    assert!(result.0.is_ok(), "第一条相同内容附件应能落协作分发元数据");
+    assert!(result.1.is_ok(), "第二条相同内容附件不应因为相同 swarm_id 被唯一索引卡死");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库校验共享 swarm_id");
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM attachment_distribution_metadata WHERE swarm_id = $1",
+    )
+    .bind(&shared_swarm_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能统计共享 swarm_id 的记录数");
+    assert_eq!(count, 2, "同一内容的不同附件应该都能挂到同一个 swarm_id 下");
+    pool.close().await;
+}
+
+#[tokio::test]
+#[serial]
 async fn rustus_pre_create非法token会被拒绝() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -1816,7 +2039,7 @@ fn ready视频附件可以进入create_message主链() {
 
 #[tokio::test]
 #[serial]
-async fn locator只暴露受控transport信息而不暴露业务权限私货() {
+async fn locator会返回协作分发片段但不泄漏仓储私货() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -1855,6 +2078,7 @@ async fn locator只暴露受控transport信息而不暴露业务权限私货() {
                 .await
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
             pool.close().await;
         });
 
@@ -1895,11 +2119,19 @@ async fn locator只暴露受控transport信息而不暴露业务权限私货() {
         body["original_url"].as_str().is_some(),
         "locator 必须返回受控原始内容地址"
     );
+    assert_eq!(
+        body["distribution"]["content_id"].as_str(),
+        Some(format!("content_{attachment_id}").as_str())
+    );
+    assert!(body["distribution"]["content_hash"].as_str().is_some());
+    assert!(body["distribution"]["swarm_id"].as_str().is_some());
+    assert!(body["distribution"]["web_seed_until"].as_str().is_some());
     assert!(
         body.get("storage_key").is_none()
             && body.get("owner_anonymous_identity_id").is_none()
             && body.get("room_id").is_none()
-            && body.get("thumbnail_storage_key").is_none(),
+            && body.get("thumbnail_storage_key").is_none()
+            && body["distribution"].get("announce_urls").is_none(),
         "locator 只能暴露 transport 信息，不能把仓储私货和业务真相泄漏给壳层"
     );
     assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
@@ -4172,6 +4404,26 @@ async fn 插入ready视频附件记录(
     .execute(pool)
     .await
     .expect("应能插入 ready 视频附件");
+}
+
+/// Phase 1 先把协作分发元数据视作独立真相面，
+/// 这里直接插入最小记录，专门服务 locator 回归测试。
+async fn 插入附件协作分发元数据记录(pool: &sqlx::PgPool, 附件标识: &str) {
+    sqlx::query(
+        "INSERT INTO attachment_distribution_metadata \
+            (attachment_id, content_id, content_hash, swarm_id, web_seed_until) \
+         VALUES ($1, $2, $3, $4, NOW() + INTERVAL '24 hours')",
+    )
+    .bind(附件标识)
+    .bind(format!("content_{附件标识}"))
+    .bind("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+    .bind(format!(
+        "swarm_{}",
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    ))
+    .execute(pool)
+    .await
+    .expect("应能插入协作分发元数据");
 }
 
 fn 最小png字节() -> Vec<u8> {
