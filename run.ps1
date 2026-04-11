@@ -247,13 +247,20 @@ Import-DotEnv
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cargoPath = (Get-Command cargo.exe -ErrorAction Stop).Source
 $pnpmPath = (Get-Command pnpm.cmd -ErrorAction Stop).Source
+$nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+if ($null -eq $nodeCommand) {
+    $nodeCommand = Get-Command node -ErrorAction Stop
+}
+$nodePath = $nodeCommand.Source
 $rustusPath = Resolve-RustusBinaryPath
 $logDirectory = New-LauncherLogDirectory -RootDirectory $env:TEMP -SessionName "koko-runner"
 $backendTargetDir = Join-Path $repoRoot "target\\launcher-run"
+$frontendRoot = Join-Path $repoRoot "frontend"
 $frontendWatch = $null
 $frontendTypeWatch = $null
 $backendProcess = $null
 $rustusProcess = $null
+$trackerProcess = $null
 
 try {
     # run.ps1 只是 Win11 开发启动器，不是源码真相；
@@ -332,6 +339,14 @@ try {
     if ([string]::IsNullOrWhiteSpace($rustusMaxBodySize)) {
         $rustusMaxBodySize = (50 * 1024 * 1024).ToString()
     }
+    $trackerPort = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_PORT")
+    if ([string]::IsNullOrWhiteSpace($trackerPort)) {
+        $trackerPort = "7072"
+    }
+    $trackerPublicUrl = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL")
+    if ([string]::IsNullOrWhiteSpace($trackerPublicUrl)) {
+        $trackerPublicUrl = "ws://127.0.0.1:$trackerPort"
+    }
     $rustusHookUrl = "http://127.0.0.1:$appPort/internal/rustus/hooks"
     $resolvedRustusDataDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusDataDir))
     $resolvedRustusInfoDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusInfoDir))
@@ -339,6 +354,7 @@ try {
     New-Item -ItemType Directory -Path $resolvedRustusInfoDir -Force | Out-Null
     Write-Host "访问入口: http://127.0.0.1:$appPort/"
     Write-Host "Rustus 监听: http://${rustusHost}:$rustusPort$rustusUrl"
+    Write-Host "WebTorrent tracker 对外 announce: $trackerPublicUrl"
     Write-Host "子进程日志目录: $logDirectory"
     # 启动器使用独立 target 目录：
     # 1. 不再和开发者手动执行的 `cargo run` 争抢默认 target\\debug\\koko.exe；
@@ -380,11 +396,25 @@ try {
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 
+    # 这里不用官方 `bittorrent-tracker` CLI：
+    # 1. 当前 11.2.2 的 `bin/cmd.js` 会先 import 整个 index，再把 client/node-datachannel 一起拖进 Node 进程；
+    # 2. 这台 Win11 + Node 25 开发机上会先炸在原生模块缺失，真正的 websocket tracker 还没开始监听；
+    # 3. 我们仍然站在成熟轮子上，只调用官方 `bittorrent-tracker/server` 子入口，
+    #    让 `frontend/dev-tracker.mjs` 负责极薄的端口、announce 地址和日志胶水。
+    Write-Host "启动 WebTorrent tracker: node dev-tracker.mjs --port $trackerPort --public-url $trackerPublicUrl"
+    $trackerProcess = New-ManagedProcess `
+        -Name "tracker" `
+        -FilePath $nodePath `
+        -ArgumentList @("dev-tracker.mjs", "--port", $trackerPort, "--public-url", $trackerPublicUrl) `
+        -WorkingDirectory $frontendRoot `
+        -LogDirectory $logDirectory
+
     while ($true) {
         Write-ManagedProcessLogs $frontendWatch
         Write-ManagedProcessLogs $frontendTypeWatch
         Write-ManagedProcessLogs $backendProcess
         Write-ManagedProcessLogs $rustusProcess
+        Write-ManagedProcessLogs $trackerProcess
 
         if ($frontendWatch.Process.HasExited) {
             Write-ManagedProcessLogs $frontendWatch
@@ -410,15 +440,21 @@ try {
             }
             break
         }
+        if ($trackerProcess.Process.HasExited) {
+            Write-ManagedProcessLogs $trackerProcess
+            throw "tracker 进程异常退出，退出码: $($trackerProcess.Process.ExitCode)"
+        }
 
         Start-Sleep -Milliseconds 200
     }
 }
 finally {
+    Write-ManagedProcessLogs $trackerProcess
     Write-ManagedProcessLogs $rustusProcess
     Write-ManagedProcessLogs $backendProcess
     Write-ManagedProcessLogs $frontendTypeWatch
     Write-ManagedProcessLogs $frontendWatch
+    Stop-ManagedProcess $trackerProcess
     Stop-ManagedProcess $rustusProcess
     Stop-ManagedProcess $backendProcess
     Stop-ManagedProcess $frontendTypeWatch

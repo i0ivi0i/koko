@@ -14,12 +14,18 @@ function Assert-True {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runScriptPath = Join-Path $repoRoot "run.ps1"
 $upScriptPath = Join-Path $repoRoot "up.ps1"
+$trackerScriptPath = Join-Path $repoRoot "frontend\\dev-tracker.mjs"
 
 Assert-True (Test-Path -LiteralPath $runScriptPath) "缺少 run.ps1。"
 Assert-True (Test-Path -LiteralPath $upScriptPath) "缺少 up.ps1；应该提供显式升级入口，而不是让 run.ps1 偷偷升级依赖。"
 
 $runScript = Get-Content -LiteralPath $runScriptPath -Raw
 $upScript = Get-Content -LiteralPath $upScriptPath -Raw
+$trackerScript = if (Test-Path -LiteralPath $trackerScriptPath) {
+    Get-Content -LiteralPath $trackerScriptPath -Raw
+} else {
+    ""
+}
 $runScriptTokens = $null
 $runScriptParseErrors = $null
 [System.Management.Automation.Language.Parser]::ParseFile(
@@ -51,6 +57,12 @@ Assert-True ($runScript -match '--url') "run.ps1 应该显式固定 rustus 的 T
 Assert-True ($runScript -match '--data-dir') "run.ps1 应该显式固定 rustus 的共享上传目录。"
 Assert-True ($runScript -match '--info-dir') "run.ps1 应该显式固定 rustus 的上传 info 目录。"
 Assert-True ($runScript -match '-Name "rustus"') "run.ps1 应该把 rustus 作为独立托管进程拉起。"
+Assert-True ($runScript -match 'bittorrent-tracker') "run.ps1 应该启动 bittorrent-tracker 开发进程，避免 Phase 2 还要靠手工另开一个窗口。"
+Assert-True ($runScript -match 'SWARM_TRACKER_PORT') "run.ps1 应该允许显式覆写 tracker 端口。"
+Assert-True ($runScript -match 'SWARM_TRACKER_PUBLIC_URL') "run.ps1 应该允许显式覆写前端 announce 用的 tracker 公网地址。"
+Assert-True ($runScript -match '-Name "tracker"') "run.ps1 应该把 tracker 当成独立受管进程拉起。"
+Assert-True (Test-Path -LiteralPath $trackerScriptPath) "应该提供 frontend/dev-tracker.mjs，把官方 tracker server 子入口收口成可复用开发脚本。"
+Assert-True ($trackerScript -match 'bittorrent-tracker/server') "frontend/dev-tracker.mjs 应该直接复用官方 bittorrent-tracker/server 子入口，而不是手搓 tracker。"
 Assert-True (-not ($runScript -match 'cargo\s+install\s+rustus')) "run.ps1 不应该偷偷安装 rustus；缺失时应该直接失败。"
 Assert-True (-not ($runScript -match 'GenerateConsoleCtrlEvent')) "run.ps1 不应该为了开发态收尾引入 Windows 控制台信号桥接这种过度设计。"
 Assert-True (-not ($runScript -match 'CREATE_NEW_PROCESS_GROUP')) "run.ps1 不应该内建 Win32 进程组控制，避免开发脚本反客为主。"

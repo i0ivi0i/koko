@@ -120,12 +120,14 @@ README 同时还写明：
 - `ws` 是内置能力。
 - 可以通过 `/stats` 或 `/stats.json` 看统计。
 - CLI 有 `--interval` 和 `--trust-proxy` 等现成参数。
+- README 也明确给了 `import Server from 'bittorrent-tracker/server'` 这个官方子入口。
 
 这说明：
 
 1. 将来严门禁时，优先把短期 ticket 放进 announce 参数，再在服务端 `filter()` 里校验。
 2. 没必要再发明“tracker 前先打一个私有握手 socket”的第二协议。
 3. 第一版浏览器 swarm 至少要有 `ws / wss`，`udp` 可以等后面真有原生客户端再说。
+4. 当前 Win11 + Node 25 开发机上，如果官方 CLI 先把 client/node-datachannel 一并拖进来，优先改用官方 `server` 子入口，不要为了 CLI 坏掉就手搓 tracker。
 
 来源：
 

@@ -1125,7 +1125,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 14
+      "community": 16
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1133,7 +1133,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 14
+      "community": 16
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1613,7 +1613,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 16
+      "community": 14
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1709,7 +1709,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1394",
       "id": "load_room_history",
-      "community": 16
+      "community": 14
     },
     {
       "label": "prepare_media_upload()",
