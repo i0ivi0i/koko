@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { 媒体定位结果 } from "../契约.js";
 import {
   获取或创建协作分发浏览器运行时,
   解析协作分发源,
@@ -9,7 +10,7 @@ import {
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
 
-function 准备好的定位结果(attachmentId: string) {
+function 准备好的定位结果(attachmentId: string): 媒体定位结果 {
   return {
     attachment_id: attachmentId,
     kind: "video" as const,
@@ -106,8 +107,14 @@ describe("媒体协作分发", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     vi.resetModules();
     重置协作分发浏览器运行时();
+  });
+
+  afterEach(() => {
+    重置协作分发浏览器运行时();
+    vi.useRealTimers();
   });
 
   it("会从 locator 中读出稳定的协作分发片段", () => {
@@ -266,5 +273,47 @@ describe("媒体协作分发", () => {
       eagerCompleting: false,
       hint: "正在协作分发",
     });
+  });
+
+  it("开始协作分发后会按 presence_url 周期上报存活，而不是前端自己裁决 expired", async () => {
+    vi.useFakeTimers();
+    安装假媒体浏览器环境();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-3");
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-3")) {
+        expect(init?.method).toBe("GET");
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      }
+      expect(url).toContain("/api/media/att-3/presence");
+      expect(init?.method).toBe("POST");
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor);
+
+    const locator = 准备好的定位结果("att-3");
+    expect(locator.distribution).not.toBeNull();
+    locator.distribution!.presence_url = "/api/media/att-3/presence?session_id=s-test";
+    await 解析协作分发源({
+      attachmentId: "att-3",
+      kind: "video",
+      locator,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

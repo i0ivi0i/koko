@@ -45,11 +45,14 @@ export interface 协作分发媒体源 {
   hint: "正在协作分发" | "正在补块";
 }
 
+const 协作分发存活上报间隔毫秒 = 60_000;
+
 type 协作分发会话 = {
   sourcePromise: Promise<{ src: string } | null>;
   refs: number;
   eagerCompleting: boolean;
   hint: 协作分发媒体源["hint"] | null;
+  presenceIntervalId: ReturnType<typeof setInterval> | null;
 };
 
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
@@ -97,7 +100,12 @@ function 读取可用协作分发片段(locator: 媒体定位结果): 媒体协�
   ) {
     return null;
   }
-  return distribution;
+  return {
+    ...distribution,
+    presence_url: distribution.presence_url
+      ? new URL(distribution.presence_url, locator.original_url).href
+      : null,
+  };
 }
 
 async function 拉取受控Torrent字节(torrentUrl: string): Promise<Uint8Array> {
@@ -108,6 +116,15 @@ async function 拉取受控Torrent字节(torrentUrl: string): Promise<Uint8Array
     throw new Error(`加载受控 torrent 失败: ${response.status}`);
   }
   return new Uint8Array(await response.arrayBuffer());
+}
+
+async function 上报协作分发存活(presenceUrl: string): Promise<void> {
+  const response = await fetch(presenceUrl, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(`上报协作分发存活失败: ${response.status}`);
+  }
 }
 
 async function 接入协作分发种子(
@@ -177,6 +194,27 @@ function 绑定协作分发会话事件(session: 协作分发会话, torrent: We
   });
 }
 
+function 启动协作分发存活上报(
+  session: 协作分发会话,
+  distribution: 媒体协作分发定位片段
+) {
+  if (!distribution.presence_url || session.presenceIntervalId !== null) {
+    return;
+  }
+
+  const 推送存活 = () => {
+    // presence 只是“我还在线帮传”的受控上报。
+    // 失败时保持静默，不允许把临时网络抖动升级成前端自己裁决 expired。
+    void 上报协作分发存活(distribution.presence_url!).catch(() => {});
+  };
+
+  推送存活();
+  session.presenceIntervalId = setInterval(
+    推送存活,
+    协作分发存活上报间隔毫秒
+  );
+}
+
 async function 确保协作分发会话(input: {
   attachmentId: string;
   kind: 媒体种类;
@@ -185,6 +223,7 @@ async function 确保协作分发会话(input: {
   let session = 协作分发会话表.get(input.distribution.swarm_id);
   if (session) {
     session.refs += 1;
+    启动协作分发存活上报(session, input.distribution);
     return session;
   }
 
@@ -193,8 +232,10 @@ async function 确保协作分发会话(input: {
     refs: 1,
     eagerCompleting: true,
     hint: input.distribution.web_seed_url ? "正在补块" : null,
+    presenceIntervalId: null,
   };
   协作分发会话表.set(input.distribution.swarm_id, session);
+  启动协作分发存活上报(session, input.distribution);
 
   session.sourcePromise = (async () => {
     const runtime = await 获取或创建协作分发浏览器运行时();
@@ -205,6 +246,10 @@ async function 确保协作分发会话(input: {
       src: file.streamURL,
     };
   })().catch((error) => {
+    if (session.presenceIntervalId !== null) {
+      clearInterval(session.presenceIntervalId);
+      session.presenceIntervalId = null;
+    }
     协作分发会话表.delete(input.distribution.swarm_id);
     throw error;
   });
@@ -267,5 +312,10 @@ export async function 获取或创建协作分发浏览器运行时(
 
 export function 重置协作分发浏览器运行时() {
   协作分发浏览器运行时Promise = null;
+  for (const session of 协作分发会话表.values()) {
+    if (session.presenceIntervalId !== null) {
+      clearInterval(session.presenceIntervalId);
+    }
+  }
   协作分发会话表.clear();
 }

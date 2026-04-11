@@ -161,6 +161,8 @@ export interface 媒体协作分发定位片段 {
   announce_urls: string[];
   /** web seed 是 24 小时保底源地址；前端可以继续把相对地址收口成绝对地址。 */
   web_seed_url: string;
+  /** presence 仍然是后端裁决链的一部分，前端只负责按受控 URL 上报活跃，不自己判过期。 */
+  presence_url?: string | null;
   join_ticket: string | null;
   ticket_expires_at: string | null;
   availability: "available" | "expired";

@@ -194,6 +194,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
             get(房间外壳::load_media_torrent),
         )
         .route(
+            "/api/media/{attachment_id}/presence",
+            post(房间外壳::update_media_distribution_presence),
+        )
+        .route(
             "/api/attachments/{attachment_id}/content",
             get(房间外壳::load_attachment_content),
         )

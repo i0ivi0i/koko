@@ -126,6 +126,15 @@ pub struct 协作分发torrent元信息写入请求 {
     pub piece_length字节: i32,
 }
 
+/// cooperative 分发只上报“最近仍有 peer 存活”的事实。
+/// 浏览器是否在线、有没有 peer 仍属于运行态，但最近活跃时间戳要交给后端统一落权威记录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 协作分发存活写入请求 {
+    pub 附件标识: String,
+    pub 会话标识: String,
+    pub 最近peer存活时间戳秒: i64,
+}
+
 /// 受控 torrent 出口读取需要完整 metainfo 字节。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 协作分发torrent元信息快照 {
@@ -144,6 +153,7 @@ pub struct 协作分发元数据快照 {
     pub content_hash: String,
     pub swarm_id: String,
     pub web_seed_until秒: i64,
+    pub 最近peer存活时间戳秒: Option<i64>,
     pub torrent_info_hash: Option<String>,
 }
 
@@ -323,6 +333,16 @@ pub trait 仓储端口 {
     ) -> Result<Option<协作分发元数据快照>, contract::错误码> {
         let _ = 附件标识;
         Ok(None)
+    }
+
+    /// cooperative 客户端活跃时只刷新最近一次 peer 存活时间。
+    fn 写入协作分发最近peer存活时间(
+        &mut self,
+        附件标识: &str,
+        最近peer存活时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let _ = (附件标识, 最近peer存活时间戳秒);
+        Err(contract::错误码::系统错误)
     }
 
     /// metainfo 字节读取单独收口，避免 locator 查询每次都拖大字段。
@@ -880,6 +900,26 @@ pub fn 写入协作分发元数据(
         return Err(contract::错误码::参数非法);
     }
     仓储.写入协作分发元数据(请求)
+}
+
+pub fn 写入协作分发存活(
+    仓储: &mut dyn 仓储端口,
+    请求: &协作分发存活写入请求,
+) -> Result<(), contract::错误码> {
+    if 请求.附件标识.trim().is_empty()
+        || 请求.会话标识.trim().is_empty()
+        || 请求.最近peer存活时间戳秒 <= 0
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    let locator = 查询媒体定位(仓储, &请求.附件标识, &请求.会话标识)?;
+    if locator.协作分发.is_none() {
+        return Err(contract::错误码::附件未就绪);
+    }
+    仓储.写入协作分发最近peer存活时间(
+        &请求.附件标识,
+        请求.最近peer存活时间戳秒,
+    )
 }
 
 pub fn 写入协作分发torrent元信息(

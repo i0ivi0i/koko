@@ -2332,6 +2332,7 @@ pub(super) async fn load_media_locator(
                         state.swarm_tracker_public_url.as_str(),
                         state.swarm_web_seed_public_endpoint.as_deref(),
                         now_epoch秒,
+                        state.swarm_peer_presence_stale_seconds,
                     )
                 }),
         })),
@@ -2384,6 +2385,52 @@ pub(super) async fn load_media_torrent(
         torrent.torrent_bytes,
     )
         .into_response()
+}
+
+/// cooperative 分发 presence 只回答“当前会话仍在参与这份附件的协作分发”。
+/// 真正能不能看这份附件，仍然必须复用现有 locator 可见性主链来裁决。
+pub(super) async fn update_media_distribution_presence(
+    State(state): State<应用状态>,
+    Path(attachment_id): Path<String>,
+    Query(raw_query): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let query = match parse_attachment_content_query(raw_query) {
+        Ok(query) => query,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let now_epoch秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = query.session_id.clone();
+    let result = match task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_usecase);
+        usecase::写入协作分发存活(
+            &mut repo,
+            &usecase::协作分发存活写入请求 {
+                附件标识: attachment_id_for_usecase,
+                会话标识: session_id_for_usecase,
+                最近peer存活时间戳秒: now_epoch秒,
+            },
+        )
+        .map_err(map_domain_err_tuple)
+    })
+    .await
+    {
+        Ok(Ok(())) => (),
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("presence 任务执行失败: {err}"),
+            )
+        }
+    };
+    let _ = result;
+    StatusCode::NO_CONTENT.into_response()
 }
 
 /// 冷路径：受控读取附件内容。

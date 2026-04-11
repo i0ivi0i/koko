@@ -431,6 +431,7 @@ impl Pg仓储 {
             content_hash: 请求.content_hash.clone(),
             swarm_id: 请求.swarm_id.clone(),
             web_seed_until秒: 请求.web_seed_until秒,
+            最近peer存活时间戳秒: None,
             torrent_info_hash: None,
         })
     }
@@ -471,7 +472,8 @@ impl Pg仓储 {
     ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
         let row = sqlx::query(
             "SELECT attachment_id, content_id, content_hash, swarm_id, torrent_info_hash, \
-                    EXTRACT(EPOCH FROM web_seed_until)::BIGINT AS web_seed_until_epoch \
+                    EXTRACT(EPOCH FROM web_seed_until)::BIGINT AS web_seed_until_epoch, \
+                    EXTRACT(EPOCH FROM last_peer_seen_at)::BIGINT AS last_peer_seen_epoch \
              FROM attachment_distribution_metadata \
              WHERE attachment_id = $1",
         )
@@ -486,8 +488,31 @@ impl Pg仓储 {
             content_hash: row.get("content_hash"),
             swarm_id: row.get("swarm_id"),
             web_seed_until秒: row.get("web_seed_until_epoch"),
+            最近peer存活时间戳秒: row.get("last_peer_seen_epoch"),
             torrent_info_hash: row.get("torrent_info_hash"),
         }))
+    }
+
+    async fn 写入协作分发最近peer存活时间_异步(
+        pool: &PgPool,
+        附件标识: &str,
+        最近peer存活时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let result = sqlx::query(
+            "UPDATE attachment_distribution_metadata \
+             SET last_peer_seen_at = TO_TIMESTAMP($2) \
+             WHERE attachment_id = $1",
+        )
+        .bind(附件标识)
+        .bind(最近peer存活时间戳秒)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        if result.rows_affected() == 0 {
+            return Err(contract::错误码::附件不存在);
+        }
+        Ok(())
     }
 
     async fn 查询协作分发torrent元信息_异步(
@@ -1629,6 +1654,18 @@ impl 仓储端口 for Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
         self.在运行时执行(Self::查询协作分发元数据_异步(&self.pool, 附件标识))
+    }
+
+    fn 写入协作分发最近peer存活时间(
+        &mut self,
+        附件标识: &str,
+        最近peer存活时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        self.在运行时执行(Self::写入协作分发最近peer存活时间_异步(
+            &self.pool,
+            附件标识,
+            最近peer存活时间戳秒,
+        ))
     }
 
     fn 查询协作分发torrent元信息(

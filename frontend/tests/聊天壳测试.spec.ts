@@ -341,6 +341,64 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("媒体播放结果是 expired 时，时间线会统一显示内容已过期", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-expired-1",
+            client_message_id: "c-video-expired-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "过期视频",
+            body: "过期视频",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-expired-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    el.setMediaPlayerForTest({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "expired",
+        attachmentId: "att-video-expired-1",
+        kind: "video",
+        src: "",
+        thumbnailUrl: null,
+        hint: "内容已过期",
+      }),
+    });
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const video = el.shadowRoot!.querySelector(
+      'video[data-attachment-id="att-video-expired-1"]'
+    ) as HTMLVideoElement | null;
+    const hint = el.shadowRoot!.querySelector(
+      '[data-media-hint="att-video-expired-1"]'
+    ) as HTMLElement | null;
+    expect(video).toBeNull();
+    expect(hint?.textContent).toContain("内容已过期");
+    el.remove();
+  });
+
   it("进入房间后发送区会显示统一附件入口和统一媒体文件输入", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
