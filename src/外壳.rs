@@ -273,6 +273,10 @@ fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
             let state_for_subscribe = state.clone();
             let state_for_send = state.clone();
             async move {
+                socket.on_disconnect(|s: SocketRef, reason| async move {
+                    实时外壳::记录realtime断开(s, reason);
+                });
+
                 // 控制面命令：建立订阅与补洞续接。
                 socket.on(
                     "subscribe_room_stream",

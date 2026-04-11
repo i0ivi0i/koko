@@ -3,6 +3,7 @@ use crate::{contract, usecase};
 use serde::Deserialize;
 use socketioxide::{
     extract::SocketRef,
+    socket::DisconnectReason,
     BroadcastError, SendError, SocketError,
 };
 use tokio::task;
@@ -74,6 +75,52 @@ pub(super) fn 分类广播发送失败(err: &BroadcastError) -> 实时发送失�
         BroadcastError::Socket(_) => 实时发送失败级别::背压,
         BroadcastError::Serialize(_) => 实时发送失败级别::序列化,
         BroadcastError::Adapter(_) => 实时发送失败级别::适配器,
+    }
+}
+
+pub(super) fn 分类断开原因(reason: DisconnectReason) -> 实时发送失败级别 {
+    match reason {
+        DisconnectReason::TransportClose
+        | DisconnectReason::ClientNSDisconnect
+        | DisconnectReason::ServerNSDisconnect
+        | DisconnectReason::ClosingServer => 实时发送失败级别::正常断开,
+        DisconnectReason::HeartbeatTimeout
+        | DisconnectReason::TransportError
+        | DisconnectReason::PacketParsingError
+        | DisconnectReason::MultipleHttpPollingError => 实时发送失败级别::适配器,
+    }
+}
+
+/// 统一记录 realtime 连接断开，给后续排查断线/心跳超时留一条稳定主链。
+///
+/// 这里故意只记录“连接运行态事实”，不把房间成员资格或在线真相塞进 socket 层。
+pub(super) fn 记录realtime断开(socket: SocketRef, reason: DisconnectReason) {
+    let session_id = socket
+        .extensions
+        .get::<已认证会话>()
+        .map(|auth| auth.session_id)
+        .unwrap_or_else(|| "unknown".to_string());
+    match 分类断开原因(reason) {
+        实时发送失败级别::正常断开 => tracing::info!(
+            usecase = "实时连接断开",
+            adapter = "socketioxide",
+            outcome = "dropped",
+            session_id = session_id,
+            disconnect_reason = %reason,
+            "realtime 连接已正常断开"
+        ),
+        实时发送失败级别::适配器 => tracing::warn!(
+            usecase = "实时连接断开",
+            adapter = "socketioxide",
+            outcome = "failed",
+            session_id = session_id,
+            disconnect_reason = %reason,
+            error_code = "socket_disconnect_abnormal",
+            "realtime 连接异常断开"
+        ),
+        实时发送失败级别::背压 | 实时发送失败级别::序列化 => {
+            unreachable!("断开原因分类不应落到发送失败语义")
+        }
     }
 }
 
@@ -529,9 +576,9 @@ pub(super) async fn handle_realtime_create_message(
 
 #[cfg(test)]
 mod 实时外壳测试 {
-    use super::{分类单连接发送失败, 分类广播发送失败, 实时发送失败级别};
+    use super::{分类单连接发送失败, 分类广播发送失败, 分类断开原因, 实时发送失败级别};
     use crate::contract;
-    use socketioxide::{BroadcastError, SendError, SocketError};
+    use socketioxide::{socket::DisconnectReason, BroadcastError, SendError, SocketError};
 
     #[test]
     fn create_message负载允许文本和附件列表并存() {
@@ -562,6 +609,34 @@ mod 实时外壳测试 {
             SocketError::InternalChannelFull,
         ]));
         assert_eq!(level, 实时发送失败级别::背压);
+    }
+
+    #[test]
+    fn 主动断开和客户端正常关闭都归类为正常断开() {
+        assert_eq!(
+            分类断开原因(DisconnectReason::TransportClose),
+            实时发送失败级别::正常断开
+        );
+        assert_eq!(
+            分类断开原因(DisconnectReason::ClientNSDisconnect),
+            实时发送失败级别::正常断开
+        );
+        assert_eq!(
+            分类断开原因(DisconnectReason::ServerNSDisconnect),
+            实时发送失败级别::正常断开
+        );
+    }
+
+    #[test]
+    fn 心跳超时和传输错误会归类为失败() {
+        assert_eq!(
+            分类断开原因(DisconnectReason::HeartbeatTimeout),
+            实时发送失败级别::适配器
+        );
+        assert_eq!(
+            分类断开原因(DisconnectReason::TransportError),
+            实时发送失败级别::适配器
+        );
     }
 
     #[test]
