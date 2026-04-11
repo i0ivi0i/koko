@@ -1149,7 +1149,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 18
+      "community": 16
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1157,7 +1157,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 18
+      "community": 16
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1629,7 +1629,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L144",
       "id": "parse_events_query",
-      "community": 15
+      "community": 18
     },
     {
       "label": "parse_history_query()",
@@ -1637,7 +1637,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 16
+      "community": 19
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1725,7 +1725,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1266",
       "id": "load_room_events",
-      "community": 15
+      "community": 18
     },
     {
       "label": "load_room_history()",
@@ -1733,7 +1733,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1394",
       "id": "load_room_history",
-      "community": 16
+      "community": 19
     },
     {
       "label": "prepare_media_upload()",
@@ -1773,7 +1773,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1944",
       "id": "complete",
-      "community": 17
+      "community": 15
     },
     {
       "label": "complete_media_upload()",
@@ -1781,7 +1781,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1985",
       "id": "complete_media_upload",
-      "community": 17
+      "community": 15
     },
     {
       "label": "load_media_locator()",
@@ -1853,7 +1853,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 19
+      "community": 17
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
@@ -2253,7 +2253,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 19
+      "community": 17
     }
   ],
   "links": [
