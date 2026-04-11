@@ -6,6 +6,10 @@ import { 创建阅读推进编排, type 阅读推进编排端口 } from "./阅�
 import { 房间滚动器 } from "./房间滚动器.js";
 import "./房间消息窗.js";
 import {
+  创建操作台附件入口编排,
+  默认统一媒体文件选择配置,
+} from "./操作台/index.js";
+import {
   创建浏览器存储,
   type 前端存储端口,
 } from "./存储.js";
@@ -16,8 +20,6 @@ import {
   创建媒体发布器,
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
-  可选择图片文件类型,
-  可选择视频文件类型,
 } from "./媒体/index.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
@@ -75,27 +77,6 @@ export class 聊天壳 extends LitElement {
   private 读取媒体草稿(localId: string): 媒体附件草稿 | undefined {
     return this.chatState.composerMediaDrafts.find((item) => item.localId === localId);
   }
-
-  private readonly handleImageFileInputChange = async (event: Event): Promise<void> => {
-    const input = event.currentTarget as HTMLInputElement | null;
-    if (!input?.files || input.files.length === 0) {
-      return;
-    }
-    const selectedFiles = Array.from(input.files);
-    // 同一张图连续重选时，原生 input 只有在 value 被清空后才会再次触发 change。
-    input.value = "";
-    await this.媒体发布器.处理选择图片文件(selectedFiles);
-  };
-
-  private readonly handleVideoFileInputChange = async (event: Event): Promise<void> => {
-    const input = event.currentTarget as HTMLInputElement | null;
-    if (!input?.files || input.files.length === 0) {
-      return;
-    }
-    const selectedFiles = Array.from(input.files);
-    input.value = "";
-    await this.媒体发布器.处理选择视频文件(selectedFiles);
-  };
 
   static override styles = css`
     :host {
@@ -905,26 +886,6 @@ export class 聊天壳 extends LitElement {
     };
   }
 
-  private openImagePicker(): void {
-    if (!this.chatState.sessionId) {
-      return;
-    }
-    this.媒体发布器.准备选择图片();
-    this.shadowRoot
-      ?.querySelector<HTMLInputElement>("#composerImageFileInput")
-      ?.click();
-  }
-
-  private openVideoPicker(): void {
-    if (!this.chatState.sessionId) {
-      return;
-    }
-    this.媒体发布器.准备选择视频();
-    this.shadowRoot
-      ?.querySelector<HTMLInputElement>("#composerVideoFileInput")
-      ?.click();
-  }
-
   private revokeDraftPreviewUrl(previewUrl: string): void {
     if (!previewUrl.startsWith("blob:")) {
       return;
@@ -1233,6 +1194,17 @@ export class 聊天壳 extends LitElement {
       consoleState.primaryInput.value
     );
     const composerDrafts = isMessageMode ? this.chatState.composerMediaDrafts : [];
+    const 附件入口编排 = 创建操作台附件入口编排({
+      auxSlot: consoleState.auxSlot,
+      获取统一媒体文件输入: () =>
+        this.shadowRoot?.querySelector<HTMLInputElement>(
+          `#${默认统一媒体文件选择配置.inputId}`
+        ) ?? null,
+      处理选择媒体文件: async (files) => {
+        await this.媒体发布器.处理选择媒体文件(files);
+      },
+    });
+    const 统一媒体文件选择配置 = 附件入口编排.统一媒体文件选择配置;
 
     return html`
       <footer id="shellConsole" class="composer-bar">
@@ -1323,40 +1295,22 @@ export class 聊天壳 extends LitElement {
                 ?hidden=${!consoleState.auxSlot.visible}
               >
                 <input
-                  id="composerImageFileInput"
+                  id=${统一媒体文件选择配置.inputId}
                   type="file"
-                  accept=${可选择图片文件类型.join(",")}
-                  multiple
+                  accept=${统一媒体文件选择配置.accept}
+                  ?multiple=${统一媒体文件选择配置.multiple}
                   hidden
-                  @change=${this.handleImageFileInputChange}
-                />
-                <input
-                  id="composerVideoFileInput"
-                  type="file"
-                  accept=${可选择视频文件类型.join(",")}
-                  hidden
-                  @change=${this.handleVideoFileInputChange}
+                  @change=${附件入口编排.处理统一媒体文件变更}
                 />
                 <button
-                  id="composerImagePickerBtn"
+                  id=${统一媒体文件选择配置.buttonId}
                   type="button"
                   class="composer-aux-button"
-                  aria-label="选择图片"
+                  aria-label="选择图片或视频"
                   ?disabled=${consoleState.auxSlot.disabled}
-                  @click=${() => this.openImagePicker()}
+                  @click=${() => 附件入口编排.执行默认附件能力()}
                 >
                   ${consoleState.auxSlot.label}
-                </button>
-                <button
-                  id="composerVideoPickerBtn"
-                  type="button"
-                  class="composer-aux-button"
-                  aria-label="选择视频"
-                  title=""
-                  ?disabled=${consoleState.auxSlot.disabled}
-                  @click=${() => this.openVideoPicker()}
-                >
-                  视频
                 </button>
               </div>
               <textarea

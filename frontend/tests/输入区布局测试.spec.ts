@@ -22,7 +22,7 @@ describe("聊天壳集成 / 输入区布局", () => {
     vi.restoreAllMocks();
   });
 
-  it("图片辅助按钮是紧凑图标按钮，不再保留图片文案的宽按钮约束", () => {
+  it("附件辅助按钮是紧凑图标按钮，不再保留大号文案按钮约束", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain(".composer-aux-button");

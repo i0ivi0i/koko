@@ -473,6 +473,22 @@ export function 读取操作台表单(el: 聊天壳): HTMLFormElement {
   return form!;
 }
 
+export function 读取附件入口按钮(el: 聊天壳): HTMLButtonElement {
+  const button = el.shadowRoot!.querySelector(
+    "#composerMediaPickerBtn"
+  ) as HTMLButtonElement | null;
+  expect(button).not.toBeNull();
+  return button!;
+}
+
+export function 读取统一媒体文件输入(el: 聊天壳): HTMLInputElement {
+  const input = el.shadowRoot!.querySelector(
+    "#composerMediaFileInput"
+  ) as HTMLInputElement | null;
+  expect(input).not.toBeNull();
+  return input!;
+}
+
 export function 输入房间短码到操作台(el: 聊天壳, roomCode: string): void {
   const input = 读取操作台主输入(el);
   input.value = roomCode;

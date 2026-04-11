@@ -244,13 +244,55 @@ describe("媒体发布器", () => {
     expect(thirdId).not.toBe(secondId);
   });
 
+  it("统一媒体入口会按文件逐个识别图片和视频，再进入同一条上传主链", async () => {
+    const 场景 = 创建场景();
+    const imageFile = new File([new Uint8Array([1, 2, 3])], "mixed.jpg", {
+      type: "",
+    });
+    const videoFile = new File([new Uint8Array([4, 5, 6])], "mixed.mp4", {
+      type: "video/mp4",
+    });
+
+    await 场景.发布器.处理选择媒体文件([imageFile, videoFile]);
+
+    expect(场景.prepareMediaUpload.mock.calls).toEqual([
+      ["image", "s-test", expect.objectContaining({ name: "mixed.jpg" })],
+      ["video", "s-test", videoFile],
+    ]);
+    expect(场景.drafts.readDrafts()).toEqual([
+      expect.objectContaining({
+        localId: "att-mixed.jpg",
+        kind: "image",
+        status: "uploading",
+      }),
+      expect.objectContaining({
+        localId: "att-mixed.mp4",
+        kind: "video",
+        status: "uploading",
+      }),
+    ]);
+  });
+
+  it("统一媒体入口遇到不支持文件时不会误进 prepare/upload 主链", async () => {
+    const 场景 = 创建场景();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "blocked.pdf", {
+      type: "application/pdf",
+    });
+
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
+
+    expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
+    expect(场景.uploader.addFileCalls).toEqual([]);
+    expect(场景.drafts.readDrafts()).toEqual([]);
+  });
+
   it("选图后会先 prepare 再写入 uploading 草稿", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "picked.jpg", {
       type: "image/jpeg",
     });
 
-    await 场景.发布器.处理选择图片文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     expect(场景.prepareMediaUpload).toHaveBeenCalledWith("image", "s-test", sourceFile);
     expect(场景.uploader.addFileCalls).toEqual([
@@ -284,7 +326,7 @@ describe("媒体发布器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "complete-ok.jpg", {
       type: "image/jpeg",
     });
-    await 场景.发布器.处理选择图片文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     await 场景.uploader.触发上传成功("att-complete-ok.jpg");
 
@@ -309,7 +351,7 @@ describe("媒体发布器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "complete-failed.jpg", {
       type: "image/jpeg",
     });
-    await 场景.发布器.处理选择图片文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     await 场景.uploader.触发上传成功("att-complete-failed.jpg");
 
@@ -327,7 +369,7 @@ describe("媒体发布器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "xhr-error.jpg", {
       type: "image/jpeg",
     });
-    await 场景.发布器.处理选择图片文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     await 场景.uploader.触发上传错误(
       "att-xhr-error.jpg",
@@ -359,7 +401,7 @@ describe("媒体发布器", () => {
       type: "video/mp4",
     });
 
-    await 场景.发布器.处理选择视频文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     expect(场景.prepareMediaUpload).toHaveBeenCalledWith("video", "s-test", sourceFile);
     expect(场景.drafts.readDrafts()).toEqual([
@@ -380,7 +422,7 @@ describe("媒体发布器", () => {
       type: "video/mp4",
     });
 
-    await 场景.发布器.处理选择视频文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
     await 场景.uploader.触发上传成功("att-clip.mp4");
 
     expect(场景.completeMediaUpload).toHaveBeenCalledWith("s-test", "att-clip.mp4");
@@ -401,7 +443,7 @@ describe("媒体发布器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "stalled.jpg", {
       type: "image/jpeg",
     });
-    await 场景.发布器.处理选择图片文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     await 场景.uploader.触发上传停滞("att-stalled.jpg");
 
@@ -423,7 +465,7 @@ describe("媒体发布器", () => {
     });
     vi.useFakeTimers();
     try {
-      await 场景.发布器.处理选择图片文件([sourceFile]);
+      await 场景.发布器.处理选择媒体文件([sourceFile]);
       await vi.advanceTimersByTimeAsync(媒体上传失活超时毫秒 + 1000);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -452,7 +494,7 @@ describe("媒体发布器", () => {
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "retry.jpg", {
       type: "image/jpeg",
     });
-    await 场景.发布器.处理选择图片文件([sourceFile]);
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
     场景.drafts.updateDraft("att-retry.jpg", {
       status: "failed",
       errorCode: "attachment_upload_failed",

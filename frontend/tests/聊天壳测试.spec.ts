@@ -11,9 +11,11 @@ import {
   注入媒体草稿,
   注入图片草稿,
   等待组件稳定,
+  读取附件入口按钮,
   读取操作台主输入,
   读取操作台主动作,
   读取操作台表单,
+  读取统一媒体文件输入,
   输入房间短码到操作台,
   输入消息到操作台,
   设置测试滚动阶段,
@@ -35,6 +37,14 @@ describe("聊天壳集成 / 首页与控制台", () => {
       configurable: true,
     });
     vi.restoreAllMocks();
+  });
+
+  const 创建假媒体发布器 = () => ({
+    处理选择媒体文件: vi.fn().mockResolvedValue(undefined),
+    移除草稿: vi.fn(),
+    重试草稿: vi.fn().mockResolvedValue(undefined),
+    清空: vi.fn(),
+    销毁: vi.fn(),
   });
   it("聊天滚动容器会显式收口浏览器边界回弹与滚动链", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
@@ -273,7 +283,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("进入房间后发送区会显示图片选择入口", async () => {
+  it("进入房间后发送区会显示统一附件入口和统一媒体文件输入", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
@@ -285,81 +295,36 @@ describe("聊天壳集成 / 首页与控制台", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    expect(el.shadowRoot!.querySelector("#composerImagePickerBtn")).not.toBeNull();
+    expect(读取附件入口按钮(el)).not.toBeNull();
+    expect(读取统一媒体文件输入(el)).not.toBeNull();
+
     el.remove();
   });
 
-  it("进入房间后发送区会显示视频选择入口", async () => {
-    const transport = new 假传输();
-    const el = document.createElement("koko-chat-shell") as 聊天壳;
-    el.setTransportForTest(transport);
-    document.body.appendChild(el);
-    await 等待组件稳定(el);
-
-    输入房间短码到操作台(el, "ROOM01");
-    读取操作台主动作(el).click();
-    await 等待组件稳定(el);
-    await 等待组件稳定(el);
-
-    expect(el.shadowRoot!.querySelector("#composerVideoPickerBtn")).not.toBeNull();
-    el.remove();
-  });
-
-  it("进入房间后视频选择按钮是可交互的，而不是开发中占位", async () => {
+  it("附件入口是小号加号按钮，而不是大号文案按钮", async () => {
     const el = await 创建已入房聊天壳();
 
-    const button = el.shadowRoot!.querySelector(
-      "#composerVideoPickerBtn"
-    ) as HTMLButtonElement | null;
-    expect(button).not.toBeNull();
-    expect(button?.disabled).toBe(false);
-    expect(button?.getAttribute("title") ?? "").toBe("");
-
-    el.remove();
-  });
-
-  it("图片入口是小号加号按钮，而不是大号图片文案按钮", async () => {
-    const el = await 创建已入房聊天壳();
-
-    const button = el.shadowRoot!.querySelector(
-      "#composerImagePickerBtn"
-    ) as HTMLButtonElement | null;
-    expect(button).not.toBeNull();
+    const button = 读取附件入口按钮(el);
     expect(button?.textContent?.trim()).toBe("+");
-    expect(button?.getAttribute("aria-label")).toBe("选择图片");
+    expect(button?.getAttribute("aria-label")).toBe("选择图片或视频");
 
     el.remove();
   });
 
   it("点击加号会直接触发原生文件输入，而不是打开 Dashboard", async () => {
     const el = await 创建已入房聊天壳();
-    const fake媒体发布器 = {
-      准备选择图片: vi.fn(),
-      准备选择视频: vi.fn(),
-      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
-      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
-      移除草稿: vi.fn(),
-      重试草稿: vi.fn().mockResolvedValue(undefined),
-      清空: vi.fn(),
-      销毁: vi.fn(),
-    };
+    const fake媒体发布器 = 创建假媒体发布器();
     (
       el as unknown as {
         媒体发布器: typeof fake媒体发布器;
       }
     ).媒体发布器 = fake媒体发布器;
 
-    const input = el.shadowRoot!.querySelector(
-      "#composerImageFileInput"
-    ) as HTMLInputElement | null;
-    expect(input).not.toBeNull();
-    const clickSpy = vi.spyOn(input!, "click");
+    const input = 读取统一媒体文件输入(el);
+    const clickSpy = vi.spyOn(input, "click");
 
-    (
-      el.shadowRoot!.querySelector("#composerImagePickerBtn") as HTMLButtonElement
-    ).click();
+    读取附件入口按钮(el).click();
 
-    expect(fake媒体发布器.准备选择图片).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
     el.remove();
   });
@@ -482,30 +447,21 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("图片选择器会显式放行 HEIC/HEIF 文件，而不是只靠 image/*", async () => {
+  it("统一媒体文件输入会同时放行图片和视频，并显式带上 HEIC/HEIF 兜底", async () => {
     const el = await 创建已入房聊天壳();
 
-    const input = el.shadowRoot!.querySelector(
-      "#composerImageFileInput"
-    ) as HTMLInputElement | null;
-    expect(input?.accept).toContain(".heic");
-    expect(input?.accept).toContain(".heif");
+    const input = 读取统一媒体文件输入(el);
+    expect(input.accept).toContain(".heic");
+    expect(input.accept).toContain(".heif");
+    expect(input.accept).toContain("video/*");
+    expect(input.multiple).toBe(true);
 
     el.remove();
   });
 
   it("失败图片点击重试时会把 localId 转交给媒体发布器", async () => {
     const el = await 创建已入房聊天壳();
-    const fake媒体发布器 = {
-      准备选择图片: vi.fn(),
-      准备选择视频: vi.fn(),
-      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
-      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
-      移除草稿: vi.fn(),
-      重试草稿: vi.fn().mockResolvedValue(undefined),
-      清空: vi.fn(),
-      销毁: vi.fn(),
-    };
+    const fake媒体发布器 = 创建假媒体发布器();
     (
       el as unknown as {
         媒体发布器: typeof fake媒体发布器;
@@ -535,94 +491,42 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
+  it("统一媒体文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
     const el = await 创建已入房聊天壳();
-    const fake媒体发布器 = {
-      准备选择图片: vi.fn(),
-      准备选择视频: vi.fn(),
-      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
-      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
-      移除草稿: vi.fn(),
-      重试草稿: vi.fn().mockResolvedValue(undefined),
-      清空: vi.fn(),
-      销毁: vi.fn(),
-    };
+    const fake媒体发布器 = 创建假媒体发布器();
     (
       el as unknown as {
         媒体发布器: typeof fake媒体发布器;
       }
     ).媒体发布器 = fake媒体发布器;
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "selected.jpg", {
+    const imageFile = new File([new Uint8Array([1, 2, 3])], "selected.jpg", {
       type: "image/jpeg",
     });
-    const input = {
-      files: [sourceFile],
-      value: "selected",
-    };
-
-    await (
-      el as unknown as {
-        handleImageFileInputChange(event: Event): Promise<void>;
-      }
-    ).handleImageFileInputChange({
-      currentTarget: input,
-    } as unknown as Event);
-
-    expect(fake媒体发布器.处理选择图片文件).toHaveBeenCalledWith([sourceFile]);
-    expect(input.value).toBe("");
-    el.remove();
-  });
-
-  it("视频文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
-    const el = await 创建已入房聊天壳();
-    const fake媒体发布器 = {
-      准备选择图片: vi.fn(),
-      准备选择视频: vi.fn(),
-      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
-      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
-      移除草稿: vi.fn(),
-      重试草稿: vi.fn().mockResolvedValue(undefined),
-      清空: vi.fn(),
-      销毁: vi.fn(),
-    };
-    (
-      el as unknown as {
-        媒体发布器: typeof fake媒体发布器;
-      }
-    ).媒体发布器 = fake媒体发布器;
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "selected.mp4", {
+    const videoFile = new File([new Uint8Array([4, 5, 6])], "selected.mp4", {
       type: "video/mp4",
     });
-    const input = {
-      files: [sourceFile],
+    const input = 读取统一媒体文件输入(el);
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [imageFile, videoFile],
+    });
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      writable: true,
       value: "selected",
-    };
+    });
 
-    await (
-      el as unknown as {
-        handleVideoFileInputChange(event: Event): Promise<void>;
-      }
-    ).handleVideoFileInputChange({
-      currentTarget: input,
-    } as unknown as Event);
+    input.dispatchEvent(new Event("change"));
+    await 等待组件稳定(el);
 
-    expect(fake媒体发布器.处理选择视频文件).toHaveBeenCalledWith([sourceFile]);
+    expect(fake媒体发布器.处理选择媒体文件).toHaveBeenCalledWith([imageFile, videoFile]);
     expect(input.value).toBe("");
     el.remove();
   });
 
   it("组件销毁时会销毁媒体发布器，避免旧上传器泄漏到下一次挂载", async () => {
     const el = await 创建已入房聊天壳();
-    const fake媒体发布器 = {
-      准备选择图片: vi.fn(),
-      准备选择视频: vi.fn(),
-      处理选择图片文件: vi.fn().mockResolvedValue(undefined),
-      处理选择视频文件: vi.fn().mockResolvedValue(undefined),
-      移除草稿: vi.fn(),
-      重试草稿: vi.fn().mockResolvedValue(undefined),
-      清空: vi.fn(),
-      销毁: vi.fn(),
-    };
+    const fake媒体发布器 = 创建假媒体发布器();
     (
       el as unknown as {
         媒体发布器: typeof fake媒体发布器;

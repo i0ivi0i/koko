@@ -295,7 +295,7 @@
       "label": "setTransportForTest()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L862",
+      "source_location": "L843",
       "id": "settransportfortest",
       "community": 0
     },
@@ -359,7 +359,7 @@
       "label": "render()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1437",
+      "source_location": "L1391",
       "id": "render",
       "community": 4
     },
@@ -483,7 +483,7 @@
       "label": "roomShellState()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L872",
+      "source_location": "L853",
       "id": "roomshellstate",
       "community": 4
     },
@@ -491,31 +491,15 @@
       "label": "roomShellPatch()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L880",
+      "source_location": "L861",
       "id": "roomshellpatch",
       "community": 4
-    },
-    {
-      "label": "openImagePicker()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L908",
-      "id": "openimagepicker",
-      "community": 0
-    },
-    {
-      "label": "openVideoPicker()",
-      "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L918",
-      "id": "openvideopicker",
-      "community": 0
     },
     {
       "label": "revokeDraftPreviewUrl()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L928",
+      "source_location": "L889",
       "id": "revokedraftpreviewurl",
       "community": 0
     },
@@ -523,7 +507,7 @@
       "label": "clearMediaPublisherState()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L978",
+      "source_location": "L939",
       "id": "clearmediapublisherstate",
       "community": 4
     },
@@ -531,7 +515,7 @@
       "label": "removeComposerDraft()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L982",
+      "source_location": "L943",
       "id": "removecomposerdraft",
       "community": 0
     },
@@ -539,7 +523,7 @@
       "label": "retryComposerDraft()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L993",
+      "source_location": "L954",
       "id": "retrycomposerdraft",
       "community": 0
     },
@@ -547,7 +531,7 @@
       "label": "connectedCallback()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L997",
+      "source_location": "L958",
       "id": "connectedcallback",
       "community": 0
     },
@@ -555,7 +539,7 @@
       "label": "disconnectedCallback()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1003",
+      "source_location": "L964",
       "id": "disconnectedcallback",
       "community": 0
     },
@@ -563,7 +547,7 @@
       "label": "updateChat()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1013",
+      "source_location": "L974",
       "id": "updatechat",
       "community": 4
     },
@@ -571,7 +555,7 @@
       "label": "buildRoomViewResetPatch()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1022",
+      "source_location": "L983",
       "id": "buildroomviewresetpatch",
       "community": 4
     },
@@ -579,7 +563,7 @@
       "label": "exitCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1048",
+      "source_location": "L1009",
       "id": "exitcurrentroomview",
       "community": 4
     },
@@ -587,7 +571,7 @@
       "label": "leaveCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1073",
+      "source_location": "L1034",
       "id": "leavecurrentroomview",
       "community": 4
     },
@@ -595,7 +579,7 @@
       "label": "joinHistoryRoom()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1083",
+      "source_location": "L1044",
       "id": "joinhistoryroom",
       "community": 4
     },
@@ -603,7 +587,7 @@
       "label": "submitShellConsole()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1098",
+      "source_location": "L1059",
       "id": "submitshellconsole",
       "community": 4
     },
@@ -611,7 +595,7 @@
       "label": "sendCurrentMessage()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1117",
+      "source_location": "L1078",
       "id": "sendcurrentmessage",
       "community": 4
     },
@@ -619,7 +603,7 @@
       "label": "handleShellConsolePrimaryInput()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1128",
+      "source_location": "L1089",
       "id": "handleshellconsoleprimaryinput",
       "community": 4
     },
@@ -627,7 +611,7 @@
       "label": "handleShellConsolePrimaryKeydown()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1137",
+      "source_location": "L1098",
       "id": "handleshellconsoleprimarykeydown",
       "community": 0
     },
@@ -635,7 +619,7 @@
       "label": "renderShellConsole()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1215",
+      "source_location": "L1176",
       "id": "rendershellconsole",
       "community": 4
     },
@@ -1093,7 +1077,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 13
+      "community": 12
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1101,7 +1085,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L308",
       "id": "buildattachmentcontenturl",
-      "community": 13
+      "community": 12
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1170,7 +1154,7 @@
     {
       "label": "index.ts",
       "file_type": "code",
-      "source_file": "frontend\\\u5a92\u4f53\\index.ts",
+      "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
       "source_location": "L1",
       "id": "index",
       "community": 26
@@ -1203,7 +1187,7 @@
       "label": "\u6784\u9020\u5a92\u4f53\u4e0a\u4f20Meta()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L171",
+      "source_location": "L207",
       "id": "meta",
       "community": 0
     },
@@ -1301,7 +1285,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L246",
       "id": "html",
-      "community": 10
+      "community": 11
     },
     {
       "label": "load_frontend_index()",
@@ -1309,7 +1293,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L255",
       "id": "load_frontend_index",
-      "community": 10
+      "community": 11
     },
     {
       "label": "realtime\u4e3b\u94fe\u95ed\u73af()",
@@ -1365,7 +1349,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L439",
       "id": "err_resp",
-      "community": 10
+      "community": 11
     },
     {
       "label": "RealtimeConnectAuth",
@@ -1549,7 +1533,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L167",
       "id": "parse_history_query",
-      "community": 14
+      "community": 13
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1557,7 +1541,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L220",
       "id": "parse_attachment_content_query",
-      "community": 11
+      "community": 10
     },
     {
       "label": "\u8bfb\u53d6exif\u65b9\u5411()",
@@ -1637,7 +1621,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1286",
       "id": "load_room_history",
-      "community": 14
+      "community": 13
     },
     {
       "label": "prepare_media_upload()",
@@ -1677,7 +1661,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1836",
       "id": "complete",
-      "community": 12
+      "community": 14
     },
     {
       "label": "complete_media_upload()",
@@ -1685,7 +1669,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1877",
       "id": "complete_media_upload",
-      "community": 12
+      "community": 14
     },
     {
       "label": "load_media_locator()",
@@ -1693,7 +1677,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2113",
       "id": "load_media_locator",
-      "community": 11
+      "community": 10
     },
     {
       "label": "load_attachment_content()",
@@ -1701,7 +1685,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2166",
       "id": "load_attachment_content",
-      "community": 11
+      "community": 10
     },
     {
       "label": "Pg\u4ed3\u50a8",
@@ -2249,7 +2233,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L862",
+      "source_location": "L843",
       "weight": 1.0,
       "_src": "",
       "_tgt": "settransportfortest",
@@ -2345,7 +2329,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1437",
+      "source_location": "L1391",
       "weight": 1.0,
       "_src": "",
       "_tgt": "render",
@@ -2441,7 +2425,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L872",
+      "source_location": "L853",
       "weight": 1.0,
       "_src": "",
       "_tgt": "roomshellstate",
@@ -2453,7 +2437,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L880",
+      "source_location": "L861",
       "weight": 1.0,
       "_src": "",
       "_tgt": "roomshellpatch",
@@ -2462,34 +2446,10 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L908",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "openimagepicker",
-      "source": "",
-      "target": "openimagepicker",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L918",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "openvideopicker",
-      "source": "",
-      "target": "openvideopicker",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L941",
+      "source_location": "L902",
       "weight": 1.0,
       "_src": "",
       "_tgt": "revokedraftpreviewurl",
@@ -2501,7 +2461,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L978",
+      "source_location": "L939",
       "weight": 1.0,
       "_src": "",
       "_tgt": "clearmediapublisherstate",
@@ -2513,7 +2473,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L982",
+      "source_location": "L943",
       "weight": 1.0,
       "_src": "",
       "_tgt": "removecomposerdraft",
@@ -2525,7 +2485,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L993",
+      "source_location": "L954",
       "weight": 1.0,
       "_src": "",
       "_tgt": "retrycomposerdraft",
@@ -2537,7 +2497,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L997",
+      "source_location": "L958",
       "weight": 1.0,
       "_src": "",
       "_tgt": "connectedcallback",
@@ -2549,7 +2509,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1003",
+      "source_location": "L964",
       "weight": 1.0,
       "_src": "",
       "_tgt": "disconnectedcallback",
@@ -2561,7 +2521,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L948",
+      "source_location": "L909",
       "weight": 1.0,
       "_src": "",
       "_tgt": "updatechat",
@@ -2573,7 +2533,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1022",
+      "source_location": "L983",
       "weight": 1.0,
       "_src": "",
       "_tgt": "buildroomviewresetpatch",
@@ -2585,7 +2545,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1048",
+      "source_location": "L1009",
       "weight": 1.0,
       "_src": "",
       "_tgt": "exitcurrentroomview",
@@ -2597,7 +2557,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1073",
+      "source_location": "L1034",
       "weight": 1.0,
       "_src": "",
       "_tgt": "leavecurrentroomview",
@@ -2609,7 +2569,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1083",
+      "source_location": "L1044",
       "weight": 1.0,
       "_src": "",
       "_tgt": "joinhistoryroom",
@@ -2621,7 +2581,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1098",
+      "source_location": "L1059",
       "weight": 1.0,
       "_src": "",
       "_tgt": "submitshellconsole",
@@ -2633,7 +2593,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1117",
+      "source_location": "L1078",
       "weight": 1.0,
       "_src": "",
       "_tgt": "sendcurrentmessage",
@@ -2645,7 +2605,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1128",
+      "source_location": "L1089",
       "weight": 1.0,
       "_src": "",
       "_tgt": "handleshellconsoleprimaryinput",
@@ -2657,7 +2617,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1137",
+      "source_location": "L1098",
       "weight": 1.0,
       "_src": "",
       "_tgt": "handleshellconsoleprimarykeydown",
@@ -2669,7 +2629,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1215",
+      "source_location": "L1176",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rendershellconsole",
@@ -2693,7 +2653,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L625",
+      "source_location": "L641",
       "weight": 1.0,
       "_src": "",
       "_tgt": "createfakestorage",
@@ -2933,7 +2893,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L171",
+      "source_location": "L207",
       "weight": 1.0,
       "_src": "",
       "_tgt": "meta",
@@ -4661,7 +4621,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1451",
+      "source_location": "L1405",
       "weight": 1.0,
       "_src": "render",
       "_tgt": "roomshellstate",
@@ -4673,7 +4633,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1462",
+      "source_location": "L1416",
       "weight": 1.0,
       "_src": "render",
       "_tgt": "rendershellconsole",
@@ -4697,7 +4657,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L893",
+      "source_location": "L874",
       "weight": 1.0,
       "_src": "roomshellpatch",
       "_tgt": "roomshellstate",
@@ -4709,7 +4669,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1100",
+      "source_location": "L1061",
       "weight": 1.0,
       "_src": "submitshellconsole",
       "_tgt": "roomshellstate",
@@ -4721,7 +4681,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1076",
+      "source_location": "L1037",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "roomshellpatch",
@@ -4733,7 +4693,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1054",
+      "source_location": "L1015",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "clearmediapublisherstate",
@@ -4745,7 +4705,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1062",
+      "source_location": "L1023",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "updatechat",
@@ -4757,7 +4717,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1076",
+      "source_location": "L1037",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "updatechat",
@@ -4769,7 +4729,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1088",
+      "source_location": "L1049",
       "weight": 1.0,
       "_src": "joinhistoryroom",
       "_tgt": "updatechat",
@@ -4781,7 +4741,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1131",
+      "source_location": "L1092",
       "weight": 1.0,
       "_src": "handleshellconsoleprimaryinput",
       "_tgt": "updatechat",
@@ -4793,7 +4753,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1063",
+      "source_location": "L1024",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "buildroomviewresetpatch",
@@ -4805,7 +4765,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1075",
+      "source_location": "L1036",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "exitcurrentroomview",
@@ -4817,7 +4777,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1113",
+      "source_location": "L1074",
       "weight": 1.0,
       "_src": "submitshellconsole",
       "_tgt": "sendcurrentmessage",
@@ -4948,8 +4908,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\tests\\\u89c6\u9891\u5143\u6570\u636e\u6d4b\u8bd5.spec.ts",
-      "source_location": "L19",
+      "source_file": "frontend\\tests\\\u9644\u4ef6\u80fd\u529b\u6ce8\u518c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L8",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec",

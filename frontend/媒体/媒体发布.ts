@@ -7,6 +7,7 @@ import {
   准备待上传图片文件,
   可选择图片文件类型,
   图片附件上传上限字节数,
+  推导图片Mime类型,
 } from "./图片预处理.js";
 import {
   可选择视频文件类型,
@@ -135,12 +136,47 @@ function 读取媒体上传上限(kind: 媒体种类): number {
   return kind === "video" ? 视频附件上传上限字节数 : 图片附件上传上限字节数;
 }
 
+/**
+ * 统一附件入口先判断“这是不是我们认识的媒体”，再决定走哪条最小预处理分支。
+ * 这里故意保持克制：
+ * 1. 图片复用既有 MIME 推导，继续兜住空 MIME 与 HEIC/HEIF；
+ * 2. 视频先继续信任浏览器给出的 `video/*`，不额外手搓第二套大而全的扩展名表；
+ * 3. 识别不出来就明确拒绝，不伪造 kind，不让未知文件偷偷滑进上传主链。
+ */
+function 识别待上传媒体种类(file: File): 媒体种类 | null {
+  const normalizedType = file.type.trim().toLowerCase();
+  if (normalizedType.startsWith("image/")) {
+    return "image";
+  }
+  if (normalizedType.startsWith("video/")) {
+    return "video";
+  }
+  return 推导图片Mime类型(file).startsWith("image/") ? "image" : null;
+}
+
 function 默认文件名(kind: 媒体种类): string {
   return kind === "video" ? "未命名视频" : "未命名图片";
 }
 
 function 创建失败草稿标识(kind: 媒体种类, prefix: string, file: File): string {
   return `${prefix}-${kind}-${file.name}-${file.size}-${file.lastModified}`;
+}
+
+/**
+ * 统一入口下可能出现“用户选到非媒体文件”的情况。
+ *
+ * 当前草稿模型只承认 `image | video` 两种真实媒体种类，
+ * 所以这里不能为了报错方便就硬塞一个假的 unknown 草稿。
+ * 在新增通用附件能力前，这类输入只做显式诊断并中止主链，
+ * 避免 prepare/upload/complete 收到不成立的媒体事实。
+ */
+function 记录不支持媒体文件(sourceFile: File): void {
+  console.warn("[koko:media-upload:reject]", {
+    fileName: sourceFile.name,
+    fileType: sourceFile.type,
+    fileByteSize: sourceFile.size,
+    errorCode: "attachment_type_not_allowed",
+  });
 }
 
 /**
@@ -482,7 +518,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     });
   };
 
-  const 处理选择媒体文件 = async (
+  const 处理选择同类媒体文件 = async (
     kind: 媒体种类,
     files: Iterable<File>
   ): Promise<void> => {
@@ -537,20 +573,19 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   };
 
   return {
-    准备选择图片(): void {
-      // Tus endpoint 只能从 prepare 权威返回里拿；选择文件前不再抢跑创建上传器。
-    },
-
-    准备选择视频(): void {
-      // Tus endpoint 只能从 prepare 权威返回里拿；选择文件前不再抢跑创建上传器。
-    },
-
-    async 处理选择图片文件(files: Iterable<File>): Promise<void> {
-      await 处理选择媒体文件("image", files);
-    },
-
-    async 处理选择视频文件(files: Iterable<File>): Promise<void> {
-      await 处理选择媒体文件("video", files);
+    async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
+      const selectedFiles = Array.from(files);
+      if (selectedFiles.length === 0) {
+        return;
+      }
+      for (const sourceFile of selectedFiles) {
+        const kind = 识别待上传媒体种类(sourceFile);
+        if (!kind) {
+          记录不支持媒体文件(sourceFile);
+          continue;
+        }
+        await 处理选择同类媒体文件(kind, [sourceFile]);
+      }
     },
 
     移除草稿(localId: string): void {
