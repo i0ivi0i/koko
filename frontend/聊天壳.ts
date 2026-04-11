@@ -984,10 +984,11 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
-   * 失败草稿的重试仍然复用同一个 localId：
-   * 1. UI 立即回到 uploading，避免用户点了“重试”却还看到旧失败态；
-   * 2. 真正的上传结果继续由 Uppy 事件回填；
-   * 3. 不新建第二个草稿项，避免同一张图在草稿带里长出幽灵副本。
+   * 失败草稿点“重试”后，UI 会立刻回到 uploading。
+   * 真正的上传文件 id 仍以底层上传器回填为准：
+   * - 如果底层沿用旧 localId，草稿会原地更新；
+   * - 如果底层为新一轮 prepare 生成了新的 localId，媒体发布器会在 file-added 后清掉旧草稿，
+   *   继续保证草稿带里只保留一条真上传项，不长幽灵副本。
    */
   private async retryComposerDraft(localId: string): Promise<void> {
     await this.媒体发布器.重试草稿(localId);

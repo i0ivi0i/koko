@@ -24,6 +24,18 @@ export type 媒体上传Meta = {
   session_id?: string;
   attachment_id?: string;
   attachment_kind?: 媒体种类;
+  /**
+   * 这是只给 Uppy 本地文件标识使用的内部字段：
+   * Uppy 对浏览器本地文件会忽略我们传入的 `id`，转而用 `name/type/size/lastModified/meta.relativePath`
+   * 生成自己的 `file.id`。Tus 又会把这个 `file.id` 当作 resumable fingerprint。
+   *
+   * 如果这里不把 prepare 生成的 attachment_id 喂进去，同一物理文件在新一轮 prepare 后
+   * 仍可能撞上旧 fingerprint，直接复用旧 upload URL，最终导致新 attachment 永远等不到
+   * 对应的 post-finish 回执。
+   *
+   * 该字段不会进入 Rustus metadata，因为 allowedMetaFields 已明确把它排除在 transport 契约外。
+   */
+  relativePath?: string;
   upload_method?: "tus";
   tus_endpoint?: string;
   tus_headers_json?: string;
@@ -174,6 +186,7 @@ function 构造媒体上传Meta(input: {
     session_id: sessionId,
     attachment_id: prepared.attachment_id,
     attachment_kind: kind,
+    relativePath: prepared.attachment_id,
     upload_method: prepared.upload_method,
     tus_endpoint: prepared.tus_endpoint,
     tus_headers_json: JSON.stringify(prepared.tus_headers),
@@ -573,7 +586,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             draft.sourceFile
           );
           const currentUploader = ensureUploader(prepared.tus_endpoint);
-          currentUploader.addFile({
+          const nextLocalId = currentUploader.addFile({
             id: localId,
             name: draft.fileName,
             type: draft.sourceFile.type,
@@ -586,6 +599,15 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
               previewHeight: draft.height,
             }),
           });
+          /**
+           * 真正的 Uppy 本地文件 id 由它自己根据文件属性和 meta.relativePath 生成，
+           * 不保证等于我们传给 addFile 的 `id`。如果这里还把旧草稿留着，就会让失败重试
+           * 长出“旧 localId + 新 localId”两条草稿，形成幽灵副本。
+           */
+          if (nextLocalId !== localId) {
+            清理媒体上传失活计时(localId);
+            deps.removeDraft(localId);
+          }
         } catch (error: unknown) {
           deps.updateDraft(localId, {
             status: "failed",

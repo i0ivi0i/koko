@@ -1,3 +1,4 @@
+import Uppy from "@uppy/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建传输错误 } from "./common/聊天测试支架";
 import {
@@ -32,6 +33,7 @@ class 假媒体上传器 implements 媒体上传器 {
   cancelAllCalls = 0;
   destroyCalls = 0;
   retryUploadError: unknown = null;
+  nextAddFileReturnedId: string | null = null;
 
   on(event: string, handler: (...args: Array<any>) => void | Promise<void>): void {
     const list = this.handlers.get(event) ?? [];
@@ -47,16 +49,18 @@ class 假媒体上传器 implements 媒体上传器 {
     meta?: 媒体上传Meta;
   }): string {
     this.addFileCalls.push(input);
+    const returnedId = this.nextAddFileReturnedId ?? input.id;
+    this.nextAddFileReturnedId = null;
     const file: 媒体上传文件 = {
-      id: input.id,
+      id: returnedId,
       name: input.name,
       type: input.type,
       data: input.data,
       meta: input.meta,
     };
-    this.files.set(input.id, file);
+    this.files.set(returnedId, file);
     void this.emit("file-added", file);
-    return input.id;
+    return returnedId;
   }
 
   getFile(id: string): 媒体上传文件 | undefined {
@@ -70,6 +74,10 @@ class 假媒体上传器 implements 媒体上传器 {
     if (file) {
       void this.emit("file-removed", file);
     }
+  }
+
+  静默丢弃文件(id: string): void {
+    this.files.delete(id);
   }
 
   async retryUpload(id: string): Promise<void> {
@@ -198,6 +206,44 @@ describe("媒体发布器", () => {
     vi.restoreAllMocks();
   });
 
+  it("Uppy 本地文件会忽略传入 id，只有 relativePath 变化才会改变内部 file.id", () => {
+    const uppy = new Uppy<媒体上传Meta, 媒体上传响应体>();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "same.jpg", {
+      type: "image/jpeg",
+      lastModified: 1,
+    });
+
+    const firstId = uppy.addFile({
+      id: "att-first",
+      name: sourceFile.name,
+      type: sourceFile.type,
+      data: sourceFile,
+      meta: { attachment_id: "att-first" },
+    });
+    uppy.removeFile(firstId);
+    const secondId = uppy.addFile({
+      id: "att-second",
+      name: sourceFile.name,
+      type: sourceFile.type,
+      data: sourceFile,
+      meta: { attachment_id: "att-second" },
+    });
+    expect(secondId).toBe(firstId);
+
+    uppy.removeFile(secondId);
+    const thirdId = uppy.addFile({
+      id: "att-third",
+      name: sourceFile.name,
+      type: sourceFile.type,
+      data: sourceFile,
+      meta: {
+        attachment_id: "att-third",
+        relativePath: "att-third",
+      },
+    });
+    expect(thirdId).not.toBe(secondId);
+  });
+
   it("选图后会先 prepare 再写入 uploading 草稿", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "picked.jpg", {
@@ -215,6 +261,7 @@ describe("媒体发布器", () => {
           upload_method: "tus",
           tus_endpoint: "http://storage.local/files",
           attachment_id: "att-picked.jpg",
+          relativePath: "att-picked.jpg",
           file_name: "picked.jpg",
           mime_type: "image/jpeg",
           byte_size: "3",
@@ -398,5 +445,43 @@ describe("媒体发布器", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("重试失败草稿时若底层上传器分配了新 localId，不会留下旧草稿幽灵副本", async () => {
+    const 场景 = 创建场景();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "retry.jpg", {
+      type: "image/jpeg",
+    });
+    await 场景.发布器.处理选择图片文件([sourceFile]);
+    场景.drafts.updateDraft("att-retry.jpg", {
+      status: "failed",
+      errorCode: "attachment_upload_failed",
+    });
+    场景.uploader.静默丢弃文件("att-retry.jpg");
+    场景.prepareMediaUpload.mockResolvedValueOnce({
+      attachment_id: "att-retry-second",
+      upload_method: "tus" as const,
+      tus_endpoint: "http://storage.local/files",
+      tus_headers: { Authorization: "Bearer media-upload-token" },
+      tus_metadata: {
+        attachment_id: "att-retry-second",
+        file_name: sourceFile.name,
+        mime_type: sourceFile.type,
+        byte_size: String(sourceFile.size),
+      },
+      expires_at: "2026-04-10T12:00:00Z",
+    });
+    场景.uploader.nextAddFileReturnedId = "uppy-retry-second-local-id";
+
+    await 场景.发布器.重试草稿("att-retry.jpg");
+
+    expect(场景.drafts.readDrafts()).toEqual([
+      expect.objectContaining({
+        localId: "uppy-retry-second-local-id",
+        attachmentId: "att-retry-second",
+        status: "uploading",
+        errorCode: "",
+      }),
+    ]);
   });
 });
