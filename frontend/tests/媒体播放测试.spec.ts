@@ -16,8 +16,11 @@ describe("媒体播放器", () => {
         web_seed_until: "1775942400",
         torrent_url: "http://media.local/torrent-video-1",
         torrent_info_hash: "torrent-info-hash-video-1",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-1",
         join_ticket: null,
         ticket_expires_at: null,
+        availability: "available" as const,
       },
     }));
     const 播放器 = 创建媒体播放器({

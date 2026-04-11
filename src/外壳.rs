@@ -39,6 +39,10 @@ pub struct 应用状态 {
     pub admin_password: String,
     pub attachment_storage_dir: String,
     pub attachment_store: Arc<dyn ObjectStore>,
+    pub swarm_tracker_public_url: String,
+    pub swarm_tracker_port: u16,
+    pub swarm_web_seed_public_endpoint: Option<String>,
+    pub swarm_peer_presence_stale_seconds: i64,
     pub rustus_public_endpoint: Option<String>,
     pub rustus_server_port: u16,
     pub rustus_url: String,
@@ -56,6 +60,7 @@ pub async fn 构建应用状态(
     admin_password: String,
 ) -> std::io::Result<应用状态> {
     let media_storage = crate::assembly::读取媒体存储配置()?;
+    let swarm = crate::assembly::读取协作分发配置()?;
     let rustus = crate::assembly::读取rustus配置()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
     fs::create_dir_all(&rustus.data_dir)
@@ -73,6 +78,10 @@ pub async fn 构建应用状态(
         admin_password,
         attachment_storage_dir,
         attachment_store,
+        swarm_tracker_public_url: swarm.tracker_public_url,
+        swarm_tracker_port: swarm.tracker_port,
+        swarm_web_seed_public_endpoint: swarm.web_seed_public_endpoint,
+        swarm_peer_presence_stale_seconds: swarm.peer_presence_stale_seconds,
         rustus_public_endpoint: rustus.public_endpoint,
         rustus_server_port: rustus.server_port,
         rustus_url: rustus.url,

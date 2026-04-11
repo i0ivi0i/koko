@@ -149,9 +149,15 @@ export class HttpRealtime传输 implements 前端传输端口 {
       distribution: locator.distribution
         ? {
             ...locator.distribution,
+            announce_urls: locator.distribution.announce_urls.map((url) =>
+              this.解析绝对地址(url)
+            ),
             torrent_url: locator.distribution.torrent_url
               ? this.解析绝对地址(locator.distribution.torrent_url)
               : null,
+            web_seed_url: this.解析绝对地址(
+              locator.distribution.web_seed_url
+            ),
           }
         : null,
     };

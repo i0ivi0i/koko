@@ -15,7 +15,7 @@ use axum::{
 };
 use image::{DynamicImage, ImageFormat};
 use nom_exif::{MediaParser, MediaSource, TrackInfo, TrackInfoTag};
-use object_store::{path::Path as ObjectPath, ObjectStoreExt};
+use object_store::{path::Path as ObjectPath, GetOptions, GetRange, ObjectStoreExt};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -125,6 +125,17 @@ pub(super) struct ParsedHistoryQuery {
 pub(super) struct ParsedAttachmentContentQuery {
     session_id: String,
     variant: usecase::附件内容变体,
+}
+
+/// 标准单段 bytes range。
+/// 这里仍然只服务 HTTP adapter：
+/// - 业务层不关心传输切片；
+/// - shell 只负责把 Range 翻译成 object_store 的成熟能力；
+/// - 目前先明确拒绝多段 range，避免在 Phase 2 提前手搓 multipart/byteranges。
+struct 标准字节范围 {
+    请求: GetRange,
+    起始字节: u64,
+    结束字节_不含: u64,
 }
 
 /// 先把宽松 query map 收口成稳定内部参数。
@@ -251,6 +262,102 @@ pub(super) fn parse_attachment_content_query(
         session_id: session_id.to_string(),
         variant,
     })
+}
+
+fn 解析标准字节范围(
+    raw_range: Option<&axum::http::HeaderValue>,
+    总字节数: u64,
+) -> Result<Option<标准字节范围>, (StatusCode, &'static str, String)> {
+    let Some(raw_range) = raw_range else {
+        return Ok(None);
+    };
+    let raw_range = raw_range.to_str().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "Range 请求头必须是合法 ASCII".to_string(),
+        )
+    })?;
+    let raw_range = raw_range.trim();
+    let Some(range_spec) = raw_range.strip_prefix("bytes=") else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "Range 只支持 bytes 单位".to_string(),
+        ));
+    };
+    if range_spec.contains(',') {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "当前只支持单段 bytes Range".to_string(),
+        ));
+    }
+    let Some((start_raw, end_raw)) = range_spec.split_once('-') else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "Range 必须形如 bytes=start-end".to_string(),
+        ));
+    };
+
+    let range = if start_raw.is_empty() {
+        let suffix_len = end_raw.parse::<u64>().map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "Range suffix 必须是非负整数".to_string(),
+            )
+        })?;
+        GetRange::Suffix(suffix_len)
+    } else if end_raw.is_empty() {
+        let start = start_raw.parse::<u64>().map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "Range 起始偏移必须是非负整数".to_string(),
+            )
+        })?;
+        GetRange::Offset(start)
+    } else {
+        let start = start_raw.parse::<u64>().map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "Range 起始偏移必须是非负整数".to_string(),
+            )
+        })?;
+        let end_inclusive = end_raw.parse::<u64>().map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "Range 结束偏移必须是非负整数".to_string(),
+            )
+        })?;
+        GetRange::Bounded(start..end_inclusive.saturating_add(1))
+    };
+
+    let resolved = range.as_range(总字节数).map_err(|err| {
+        (
+            StatusCode::RANGE_NOT_SATISFIABLE,
+            "requested_range_not_satisfiable",
+            format!("Range 超出对象范围: {err}"),
+        )
+    })?;
+    Ok(Some(标准字节范围 {
+        请求: range,
+        起始字节: resolved.start,
+        结束字节_不含: resolved.end,
+    }))
+}
+
+fn 构造content_range值(range: &标准字节范围, 总字节数: u64) -> String {
+    format!(
+        "bytes {}-{}/{}",
+        range.起始字节,
+        range.结束字节_不含.saturating_sub(1),
+        总字节数
+    )
 }
 
 fn 生成附件标识() -> String {
@@ -2202,6 +2309,10 @@ pub(super) async fn load_media_locator(
             query.session_id
         )
     });
+    let now_epoch秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -2218,6 +2329,9 @@ pub(super) async fn load_media_locator(
                         snapshot,
                         attachment_id.as_str(),
                         query.session_id.as_str(),
+                        state.swarm_tracker_public_url.as_str(),
+                        state.swarm_web_seed_public_endpoint.as_deref(),
+                        now_epoch秒,
                     )
                 }),
         })),
@@ -2277,6 +2391,7 @@ pub(super) async fn load_attachment_content(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
     Query(raw_query): Query<HashMap<String, String>>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     let query = match parse_attachment_content_query(raw_query) {
         Ok(query) => query,
@@ -2358,7 +2473,48 @@ pub(super) async fn load_attachment_content(
     };
 
     let object_path = ObjectPath::from(target.存储键.clone());
-    let get_result = match state.attachment_store.get(&object_path).await {
+    let range = if headers.contains_key(header::RANGE) {
+        let head_result = match state.attachment_store.head(&object_path).await {
+            Ok(meta) => meta,
+            Err(err) => {
+                tracing::error!(
+                    usecase = "读取附件内容",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "附件内容读取",
+                    attachment_id = attachment_id.as_str(),
+                    session_id = query.session_id.as_str(),
+                    error_code = "system_error",
+                    error = %err,
+                    "对象存储读取元数据失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "附件内容读取失败",
+                );
+            }
+        };
+        match 解析标准字节范围(headers.get(header::RANGE), head_result.size) {
+            Ok(range) => range,
+            Err((status, code, message)) => return err_resp(status, code, message),
+        }
+    } else {
+        None
+    };
+    let get_result = match range.as_ref() {
+        Some(range) => {
+            state
+                .attachment_store
+                .get_opts(
+                    &object_path,
+                    GetOptions::new().with_range(Some(range.请求.clone())),
+                )
+                .await
+        }
+        None => state.attachment_store.get(&object_path).await,
+    };
+    let get_result = match get_result {
         Ok(result) => result,
         Err(err) => {
             tracing::error!(
@@ -2379,6 +2535,7 @@ pub(super) async fn load_attachment_content(
             );
         }
     };
+    let object_size = get_result.meta.size;
     let body = match get_result.bytes().await {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -2410,5 +2567,27 @@ pub(super) async fn load_attachment_content(
         session_id = query.session_id.as_str(),
         "读取附件内容成功"
     );
-    ([(header::CONTENT_TYPE, target.mime_type)], body).into_response()
+    match range {
+        Some(range) => (
+            StatusCode::PARTIAL_CONTENT,
+            [
+                (header::CONTENT_TYPE, target.mime_type),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+                (
+                    header::CONTENT_RANGE,
+                    构造content_range值(&range, object_size),
+                ),
+            ],
+            body,
+        )
+            .into_response(),
+        None => (
+            [
+                (header::CONTENT_TYPE, target.mime_type),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+            ],
+            body,
+        )
+            .into_response(),
+    }
 }

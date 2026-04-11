@@ -634,6 +634,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -676,7 +677,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     let authorization = 提取媒体上传授权头(&prepare_body);
     let upload_id = format!("upload-complete-image-{attachment_id}");
     let temp_file =
-        写入rustus测试文件(&state.rustus_data_dir, &attachment_id, "complete.png", &最小png字节())
+        写入rustus测试文件(&rustus_data_dir, &attachment_id, "complete.png", &最小png字节())
             .expect("应能写入 rustus 原图文件");
     let (hook_status, hook_body) = send_json(
         app.clone(),
@@ -1103,6 +1104,7 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -1138,7 +1140,7 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
     let temp_file = 写入rustus测试文件(
-        &state.rustus_data_dir,
+        &rustus_data_dir,
         &attachment_id,
         "complete-race.png",
         &最小png字节(),
@@ -1605,6 +1607,7 @@ async fn rustus_post_finish会登记上传回执() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -1640,7 +1643,7 @@ async fn rustus_post_finish会登记上传回执() {
     let authorization = 提取媒体上传授权头(&prepare_body);
     let expected_upload_id = format!("upload-post-finish-{attachment_id}");
     let temp_file =
-        写入rustus测试文件(&state.rustus_data_dir, attachment_id, "hook.png", &最小png字节())
+        写入rustus测试文件(&rustus_data_dir, attachment_id, "hook.png", &最小png字节())
             .expect("应能写入 rustus 测试文件");
 
     let (status, _) = send_json(
@@ -1699,6 +1702,7 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -1743,7 +1747,7 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
     let authorization = 提取媒体上传授权头(&prepare_body);
     let upload_id = format!("upload-complete-video-{attachment_id}");
     let temp_file = 写入rustus测试文件(
-        &state.rustus_data_dir,
+        &rustus_data_dir,
         &attachment_id,
         "complete.mp4",
         &video_bytes,
@@ -2130,9 +2134,12 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
         body.get("storage_key").is_none()
             && body.get("owner_anonymous_identity_id").is_none()
             && body.get("room_id").is_none()
-            && body.get("thumbnail_storage_key").is_none()
-            && body["distribution"].get("announce_urls").is_none(),
+            && body.get("thumbnail_storage_key").is_none(),
         "locator 只能暴露 transport 信息，不能把仓储私货和业务真相泄漏给壳层"
+    );
+    assert!(
+        body["distribution"]["announce_urls"].is_array(),
+        "Phase 2 允许 locator 下发 runtime transport 线索"
     );
     assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
 }
@@ -2148,6 +2155,7 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
             .await
             .expect("应能构建共享应用状态");
+    let rustus_data_dir = state.rustus_data_dir.clone();
     let app = koko::shell::构建路由(state.clone());
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2197,7 +2205,7 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
     let temp_file = 写入rustus测试文件(
-        &state.rustus_data_dir,
+        &rustus_data_dir,
         &attachment_id,
         "torrent-route.mp4",
         &最小mp4字节(),
@@ -2297,6 +2305,328 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
         locator_body["distribution"]["torrent_info_hash"].as_str(),
         Some(info_hash_hex.as_str())
     );
+}
+
+#[tokio::test]
+#[serial]
+async fn locator会返回announce与web_seed并保留ticket占位() {
+    let backup = 备份并清空环境变量(&[
+        "SWARM_TRACKER_PUBLIC_URL",
+        "SWARM_TRACKER_PORT",
+        "SWARM_WEB_SEED_PUBLIC_ENDPOINT",
+        "SWARM_PEER_PRESENCE_STALE_SECONDS",
+    ]);
+    env::set_var("SWARM_TRACKER_PUBLIC_URL", "wss://swarm.example.com/announce");
+    env::set_var("SWARM_TRACKER_PORT", "7072");
+    env::set_var("SWARM_WEB_SEED_PUBLIC_ENDPOINT", "https://cdn.example.com");
+    env::set_var("SWARM_PEER_PRESENCE_STALE_SECONDS", "180");
+
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("locator-runtime-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id").to_string();
+    let room_code = format!("LR{:010}", uniq % 10_000_000_000);
+    let database_url = cfg.database_url.clone();
+    let room_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
+        match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        }
+    })
+    .await
+    .expect("阻塞建房任务应完成");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": bootstrap["session_id"].as_str().expect("session_id"),
+            "file_name": "locator-runtime.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 最小mp4字节().len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let temp_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "locator-runtime.mp4",
+        &最小mp4字节(),
+    )
+    .expect("应能写入 rustus 临时视频文件");
+    let upload_id = format!("upload-locator-runtime-{attachment_id}");
+
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "locator-runtime.mp4",
+            "video/mp4",
+            最小mp4字节().len() as i64,
+            最小mp4字节().len() as i64,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+
+    let (complete_status, complete_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": bootstrap["session_id"].as_str().expect("session_id")
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+
+    let session_id_for_message = bootstrap["session_id"]
+        .as_str()
+        .expect("session_id")
+        .to_string();
+    let attachment_id_for_message = attachment_id.clone();
+    let database_url = cfg.database_url.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &session_id_for_message,
+            &format!("locator-runtime-message-{uniq}"),
+            "",
+            &[attachment_id_for_message],
+        )
+        .expect("应能创建带视频附件的消息");
+    })
+    .await
+    .expect("阻塞写消息任务应完成");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!(
+            "/api/media/{attachment_id}/locator?session_id={}",
+            bootstrap["session_id"].as_str().expect("session_id")
+        ),
+        None,
+        &[],
+    )
+    .await;
+
+    恢复环境变量(backup);
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["distribution"]["announce_urls"]
+            .as_array()
+            .map(|values| values.is_empty()),
+        Some(false)
+    );
+    let expected_web_seed_url = format!(
+        "https://cdn.example.com/api/attachments/{attachment_id}/content?session_id={}&variant=original",
+        bootstrap["session_id"].as_str().expect("session_id")
+    );
+    assert_eq!(
+        body["distribution"]["web_seed_url"].as_str(),
+        Some(expected_web_seed_url.as_str())
+    );
+    assert!(body["distribution"]["join_ticket"].is_null());
+    assert_eq!(
+        body["distribution"]["availability"].as_str(),
+        Some("available")
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 原图内容接口支持标准range读取() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("range-original-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id").to_string();
+    let room_code = format!("RG{:010}", uniq % 10_000_000_000);
+    let database_url = cfg.database_url.clone();
+    let room_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
+        match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        }
+    })
+    .await
+    .expect("阻塞建房任务应完成");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": bootstrap["session_id"].as_str().expect("session_id"),
+            "file_name": "range-original.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 最小mp4字节().len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let temp_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "range-original.mp4",
+        &最小mp4字节(),
+    )
+    .expect("应能写入 rustus 临时视频文件");
+    let upload_id = format!("upload-range-original-{attachment_id}");
+
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "range-original.mp4",
+            "video/mp4",
+            最小mp4字节().len() as i64,
+            最小mp4字节().len() as i64,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+
+    let (complete_status, complete_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": bootstrap["session_id"].as_str().expect("session_id")
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+
+    let session_id_for_message = bootstrap["session_id"]
+        .as_str()
+        .expect("session_id")
+        .to_string();
+    let attachment_id_for_message = attachment_id.clone();
+    let database_url = cfg.database_url.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &session_id_for_message,
+            &format!("range-original-message-{uniq}"),
+            "",
+            &[attachment_id_for_message],
+        )
+        .expect("应能创建带视频附件的消息");
+    })
+    .await
+    .expect("阻塞写消息任务应完成");
+
+    let (status, headers, body) = send_bytes(
+        app,
+        Method::GET,
+        &format!(
+            "/api/attachments/{attachment_id}/content?session_id={}&variant=original",
+            bootstrap["session_id"].as_str().expect("session_id")
+        ),
+        &[("range", "bytes=0-63")],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        headers
+            .get(header::ACCEPT_RANGES)
+            .and_then(|value| value.to_str().ok()),
+        Some("bytes")
+    );
+    let expected_content_range = format!("bytes 0-63/{}", 最小mp4字节().len());
+    assert_eq!(
+        headers
+            .get(header::CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok()),
+        Some(expected_content_range.as_str())
+    );
+    assert_eq!(body.len(), 64);
+    assert_eq!(body, 最小mp4字节()[0..64].to_vec());
 }
 
 #[tokio::test]

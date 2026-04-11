@@ -62,15 +62,31 @@ pub(crate) fn 生成附件torrent元信息(
     })
 }
 
-/// locator 对外只下发稳定分发片段：
-/// - 不下发存储键；
-/// - 不下发 tracker/runtime 私货；
-/// - `web_seed_until` 保持字符串秒值，和现有 expires_at 心智一致。
+fn 拼接公开地址(public_endpoint: Option<&str>, path: &str) -> String {
+    public_endpoint
+        .map(|value| format!("{}{}", value.trim_end_matches('/'), path))
+        .unwrap_or_else(|| path.to_string())
+}
+
+/// Phase 2 的 runtime locator 仍然服从同一条边界：
+/// 1. 不下发存储键；
+/// 2. runtime 线索只包含浏览器真正要用到的 announce / web seed / availability；
+/// 3. ticket 位置先留空，不提前伪造门禁真相。
 pub(crate) fn 协作分发快照转响应值(
     snapshot: &usecase::协作分发元数据快照,
     attachment_id: &str,
     session_id: &str,
+    tracker_public_url: &str,
+    web_seed_public_endpoint: Option<&str>,
+    now_epoch秒: i64,
 ) -> serde_json::Value {
+    let web_seed_relative_path =
+        format!("/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original");
+    let availability = if snapshot.web_seed_until秒 > now_epoch秒 {
+        "available"
+    } else {
+        "expired"
+    };
     serde_json::json!({
         "content_id": snapshot.content_id,
         "content_hash": snapshot.content_hash,
@@ -81,7 +97,10 @@ pub(crate) fn 协作分发快照转响应值(
             .as_ref()
             .map(|_| format!("/api/media/{attachment_id}/torrent?session_id={session_id}")),
         "torrent_info_hash": snapshot.torrent_info_hash,
+        "announce_urls": [tracker_public_url],
+        "web_seed_url": 拼接公开地址(web_seed_public_endpoint, web_seed_relative_path.as_str()),
         "join_ticket": serde_json::Value::Null,
         "ticket_expires_at": serde_json::Value::Null,
+        "availability": availability,
     })
 }

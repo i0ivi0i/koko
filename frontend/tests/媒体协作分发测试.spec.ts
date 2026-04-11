@@ -16,8 +16,11 @@ describe("媒体协作分发", () => {
         web_seed_until: "1775942400",
         torrent_url: "http://media.local/torrent-1",
         torrent_info_hash: "torrent-info-hash-1",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-1",
         join_ticket: null,
         ticket_expires_at: null,
+        availability: "available" as const,
       },
     });
 
@@ -28,8 +31,11 @@ describe("媒体协作分发", () => {
       web_seed_until: "1775942400",
       torrent_url: "http://media.local/torrent-1",
       torrent_info_hash: "torrent-info-hash-1",
+      announce_urls: ["http://media.local/announce"],
+      web_seed_url: "http://media.local/web-seed-1",
       join_ticket: null,
       ticket_expires_at: null,
+      availability: "available" as const,
     });
   });
 

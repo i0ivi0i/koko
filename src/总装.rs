@@ -17,6 +17,7 @@ pub struct 配置 {
     pub attachment_storage_dir: String,
     pub media_storage: 媒体存储配置,
     pub rustus: Rustus配置,
+    pub 协作分发: 协作分发配置,
 }
 
 /// 媒体存储驱动只回答“上传对象最终落在哪类后端”。
@@ -53,6 +54,18 @@ pub struct Rustus配置 {
     pub info_dir: String,
 }
 
+/// 协作分发配置只回答“runtime 线索怎么暴露给前端”：
+/// 1. tracker public URL 提供给浏览器进入 swarm；
+/// 2. web seed public endpoint 决定 24 小时保底源的公开地址；
+/// 3. peer presence staleness 为后续 Phase 3 的过期裁决预留稳定配置源。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 协作分发配置 {
+    pub tracker_public_url: String,
+    pub tracker_port: u16,
+    pub web_seed_public_endpoint: Option<String>,
+    pub peer_presence_stale_seconds: i64,
+}
+
 /// 读取启动所需的最小配置。缺关键配置时必须失败，避免静默启动。
 pub fn 读取配置() -> io::Result<配置> {
     // 先尝试读取 .env，再读系统环境变量；缺失必填项直接失败。
@@ -64,6 +77,7 @@ pub fn 读取配置() -> io::Result<配置> {
     let attachment_storage_dir = 读取附件存储目录();
     let media_storage = 读取媒体存储配置()?;
     let rustus = 读取rustus配置()?;
+    let 协作分发 = 读取协作分发配置()?;
 
     Ok(配置 {
         database_url,
@@ -73,6 +87,7 @@ pub fn 读取配置() -> io::Result<配置> {
         attachment_storage_dir,
         media_storage,
         rustus,
+        协作分发,
     })
 }
 
@@ -341,6 +356,26 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
     })
 }
 
+/// 协作分发运行参数默认保持“本机直接能跑”：
+/// 1. tracker 默认落在本机 `7072`；
+/// 2. web seed public endpoint 为空时，后端继续下发同源相对地址；
+/// 3. stale 秒数先保守收口为 180 秒，给后续 Phase 3 的 presence 裁决复用。
+pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
+    let tracker_port = 读取可选端口("SWARM_TRACKER_PORT", 7072)?;
+    let tracker_public_url = 读取可选环境变量("SWARM_TRACKER_PUBLIC_URL")
+        .unwrap_or_else(|| format!("ws://127.0.0.1:{tracker_port}"));
+    let web_seed_public_endpoint = 读取可选环境变量("SWARM_WEB_SEED_PUBLIC_ENDPOINT");
+    let peer_presence_stale_seconds =
+        读取可选整数("SWARM_PEER_PRESENCE_STALE_SECONDS", 180)?;
+
+    Ok(协作分发配置 {
+        tracker_public_url,
+        tracker_port,
+        web_seed_public_endpoint,
+        peer_presence_stale_seconds,
+    })
+}
+
 fn 读取可选环境变量(key: &str) -> Option<String> {
     env::var(key)
         .ok()
@@ -360,6 +395,22 @@ fn 读取可选端口(key: &str, default_value: u16) -> io::Result<u16> {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("环境变量 {key} 不是合法端口: {raw}"),
+        )
+    })
+}
+
+fn 读取可选整数(key: &str, default_value: i64) -> io::Result<i64> {
+    let Some(raw) = env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(default_value);
+    };
+    raw.parse::<i64>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("环境变量 {key} 不是合法整数: {raw}"),
         )
     })
 }

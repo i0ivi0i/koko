@@ -16,8 +16,11 @@ describe("媒体定位器", () => {
         web_seed_until: "1775942400",
         torrent_url: "http://media.local/torrent-att-1",
         torrent_info_hash: "torrent-info-hash-att-1",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-att-1",
         join_ticket: null,
         ticket_expires_at: null,
+        availability: "available" as const,
       },
     }));
     const 定位器 = 创建媒体定位器({
@@ -50,8 +53,11 @@ describe("媒体定位器", () => {
           web_seed_until: "1775942400",
           torrent_url: "http://media.local/torrent-stale",
           torrent_info_hash: "torrent-info-hash-stale",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-stale",
           join_ticket: null,
           ticket_expires_at: null,
+          availability: "available" as const,
         },
       })
       .mockResolvedValueOnce({
@@ -67,8 +73,11 @@ describe("媒体定位器", () => {
           web_seed_until: "1776028800",
           torrent_url: "http://media.local/torrent-refresh",
           torrent_info_hash: "torrent-info-hash-refresh",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-refresh",
           join_ticket: null,
           ticket_expires_at: null,
+          availability: "available" as const,
         },
       });
     const 定位器 = 创建媒体定位器({

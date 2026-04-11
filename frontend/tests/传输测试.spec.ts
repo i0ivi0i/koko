@@ -312,8 +312,12 @@ describe("传输", () => {
             web_seed_until: "1775942400",
             torrent_url: "/api/media/att-locator-1/torrent?session_id=s-1",
             torrent_info_hash: "torrent-info-hash-1",
+            announce_urls: ["/api/swarm/announce"],
+            web_seed_url:
+              "/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
             join_ticket: null,
             ticket_expires_at: null,
+            availability: "available" as const,
           },
         }),
         {
@@ -341,8 +345,12 @@ describe("传输", () => {
         web_seed_until: "1775942400",
         torrent_url: "http://localhost:3000/api/media/att-locator-1/torrent?session_id=s-1",
         torrent_info_hash: "torrent-info-hash-1",
+        announce_urls: ["http://localhost:3000/api/swarm/announce"],
+        web_seed_url:
+          "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
         join_ticket: null,
         ticket_expires_at: null,
+        availability: "available" as const,
       },
     });
   });
