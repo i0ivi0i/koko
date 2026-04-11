@@ -1077,7 +1077,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 12
+      "community": 13
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1085,7 +1085,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L308",
       "id": "buildattachmentcontenturl",
-      "community": 12
+      "community": 13
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1187,8 +1187,16 @@
       "label": "\u6784\u9020\u5a92\u4f53\u4e0a\u4f20Meta()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L207",
+      "source_location": "L214",
       "id": "meta",
+      "community": 0
+    },
+    {
+      "label": "\u6784\u9020\u7edf\u4e00\u5a92\u4f53\u6587\u4ef6Accept()",
+      "file_type": "code",
+      "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\\u9644\u4ef6\u80fd\u529b\u6ce8\u518c.ts",
+      "source_location": "L48",
+      "id": "accept",
       "community": 0
     },
     {
@@ -1285,7 +1293,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L246",
       "id": "html",
-      "community": 11
+      "community": 10
     },
     {
       "label": "load_frontend_index()",
@@ -1293,7 +1301,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L255",
       "id": "load_frontend_index",
-      "community": 11
+      "community": 10
     },
     {
       "label": "realtime\u4e3b\u94fe\u95ed\u73af()",
@@ -1349,7 +1357,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L439",
       "id": "err_resp",
-      "community": 11
+      "community": 10
     },
     {
       "label": "RealtimeConnectAuth",
@@ -1533,7 +1541,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L167",
       "id": "parse_history_query",
-      "community": 13
+      "community": 12
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1541,7 +1549,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L220",
       "id": "parse_attachment_content_query",
-      "community": 10
+      "community": 11
     },
     {
       "label": "\u8bfb\u53d6exif\u65b9\u5411()",
@@ -1621,7 +1629,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1286",
       "id": "load_room_history",
-      "community": 13
+      "community": 12
     },
     {
       "label": "prepare_media_upload()",
@@ -1677,7 +1685,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2113",
       "id": "load_media_locator",
-      "community": 10
+      "community": 11
     },
     {
       "label": "load_attachment_content()",
@@ -1685,7 +1693,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2166",
       "id": "load_attachment_content",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Pg\u4ed3\u50a8",
@@ -2893,12 +2901,24 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L207",
+      "source_location": "L214",
       "weight": 1.0,
       "_src": "",
       "_tgt": "meta",
       "source": "",
       "target": "meta",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\\u9644\u4ef6\u80fd\u529b\u6ce8\u518c.ts",
+      "source_location": "L73",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "accept",
+      "source": "",
+      "target": "accept",
       "confidence_score": 1.0
     },
     {
@@ -4909,7 +4929,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u9644\u4ef6\u80fd\u529b\u6ce8\u518c\u6d4b\u8bd5.spec.ts",
-      "source_location": "L8",
+      "source_location": "L7",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec",

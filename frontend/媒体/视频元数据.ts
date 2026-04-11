@@ -16,7 +16,12 @@ type 视频元数据依赖 = {
   createObjectUrl?: (file: Blob) => string;
   revokeObjectUrl?: (url: string) => void;
   createProbeElement?: () => HTMLVideoElement;
+  setTimeout?: typeof globalThis.setTimeout;
+  clearTimeout?: typeof globalThis.clearTimeout;
+  timeoutMs?: number;
 };
+
+const 默认视频元数据探测超时毫秒 = 10_000;
 
 export function 解析视频元数据失败代码(error: unknown): string {
   const normalizedMessage =
@@ -43,18 +48,42 @@ export async function 读取视频文件元数据(
   const revokeObjectUrl = deps.revokeObjectUrl ?? URL.revokeObjectURL;
   const createProbeElement =
     deps.createProbeElement ?? (() => document.createElement("video") as HTMLVideoElement);
+  const scheduleTimeout = deps.setTimeout ?? globalThis.setTimeout.bind(globalThis);
+  const cancelTimeout = deps.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
+  const timeoutMs = deps.timeoutMs ?? 默认视频元数据探测超时毫秒;
   const objectUrl = createObjectUrl(file);
   const probe = createProbeElement();
   probe.preload = "metadata";
 
   return await new Promise<视频文件元数据>((resolve, reject) => {
+    let settled = false;
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
     const cleanup = (): void => {
+      if (timeoutHandle) {
+        cancelTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
       probe.onloadedmetadata = null;
       probe.onerror = null;
+      probe.src = "";
       revokeObjectUrl(objectUrl);
     };
 
+    const finishWithError = (error: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
     probe.onloadedmetadata = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       const result = {
         width: probe.videoWidth,
         height: probe.videoHeight,
@@ -65,9 +94,11 @@ export async function 读取视频文件元数据(
     };
     probe.onerror = () => {
       const code = 解析视频元数据失败代码(new Error("NotSupportedError"));
-      cleanup();
-      reject(new Error(code));
+      finishWithError(new Error(code));
     };
+    timeoutHandle = scheduleTimeout(() => {
+      finishWithError(new Error("attachment_upload_failed"));
+    }, timeoutMs);
     probe.src = objectUrl;
     probe.load?.();
   });

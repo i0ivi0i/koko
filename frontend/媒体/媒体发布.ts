@@ -91,6 +91,7 @@ type 媒体发布器依赖 = {
   createUploader?(tusEndpoint: string): 媒体上传器;
   readVideoMetadata?(file: File): Promise<{ width: number; height: number }>;
   createPreviewUrl?(file: Blob | null): string;
+  yieldToMainThread?(): Promise<void>;
 };
 
 function 读取媒体Tus请求头(meta: 媒体上传Meta): Record<string, string> {
@@ -204,6 +205,12 @@ function 创建默认媒体上传器(tusEndpoint: string): 媒体上传器 {
   }) as unknown as 媒体上传器;
 }
 
+async function 默认让出主线程(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
 function 构造媒体上传Meta(input: {
   sessionId: string;
   kind: 媒体种类;
@@ -249,6 +256,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const createUploader = deps.createUploader ?? 创建默认媒体上传器;
   const readVideoMetadata = deps.readVideoMetadata ?? 读取视频文件元数据;
   const createPreviewUrl = deps.createPreviewUrl ?? 创建本地媒体预览地址;
+  const yieldToMainThread = deps.yieldToMainThread ?? 默认让出主线程;
   const 上传失活计时器 = new Map<string, ReturnType<typeof setTimeout>>();
   let uploader: 媒体上传器 | null = null;
   let 当前TusEndpoint = "";
@@ -578,7 +586,15 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       if (selectedFiles.length === 0) {
         return;
       }
-      for (const sourceFile of selectedFiles) {
+      for (const [index, sourceFile] of selectedFiles.entries()) {
+        /**
+         * 某些移动浏览器在连续处理多张图/多个视频时，系统 picker 返回后马上进入一串重任务，
+         * 容易让页面长时间失去响应。这里在批量文件之间主动让出一次主线程，
+         * 让浏览器有机会先完成一轮绘制和交互回收。
+         */
+        if (index > 0) {
+          await yieldToMainThread();
+        }
         const kind = 识别待上传媒体种类(sourceFile);
         if (!kind) {
           记录不支持媒体文件(sourceFile);

@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建操作台附件入口编排 } from "../操作台/附件入口/index.js";
 
 describe("操作台附件入口编排", () => {
-  it("当前只有媒体能力时，执行默认附件能力会直接触发统一媒体 input", () => {
+  it("当前环境支持 showPicker 时，执行默认附件能力会优先触发系统 picker", () => {
     const click = vi.fn();
+    const showPicker = vi.fn();
     const 编排 = 创建操作台附件入口编排({
       auxSlot: {
         visible: true,
@@ -12,12 +13,38 @@ describe("操作台附件入口编排", () => {
       获取统一媒体文件输入: () =>
         ({
           click,
+          showPicker,
         }) as unknown as HTMLInputElement,
       处理选择媒体文件: vi.fn(),
     });
 
     编排.执行默认附件能力();
 
+    expect(showPicker).toHaveBeenCalledTimes(1);
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it("showPicker 不可用或调用失败时，会回退到 input.click()", () => {
+    const click = vi.fn();
+    const showPicker = vi.fn(() => {
+      throw new DOMException("not allowed", "NotAllowedError");
+    });
+    const 编排 = 创建操作台附件入口编排({
+      auxSlot: {
+        visible: true,
+        disabled: false,
+      },
+      获取统一媒体文件输入: () =>
+        ({
+          click,
+          showPicker,
+        }) as unknown as HTMLInputElement,
+      处理选择媒体文件: vi.fn(),
+    });
+
+    编排.执行默认附件能力();
+
+    expect(showPicker).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
   });
 

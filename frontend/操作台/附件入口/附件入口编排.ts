@@ -22,6 +22,10 @@ export interface 附件入口编排结果 {
   处理统一媒体文件变更(event: Event): Promise<void>;
 }
 
+type 可触发文件选择的输入 = HTMLInputElement & {
+  showPicker?: () => void;
+};
+
 /**
  * 附件入口编排只做壳层动作编排，不做媒体事实判断：
  * 1. 哪些能力存在，来自注册表；
@@ -41,6 +45,26 @@ export function 创建操作台附件入口编排(
 
   const 附件入口可执行 = (): boolean => deps.auxSlot.visible && !deps.auxSlot.disabled;
 
+  const 触发统一媒体文件选择 = (): void => {
+    const input = deps.获取统一媒体文件输入() as 可触发文件选择的输入 | null;
+    if (!input) {
+      return;
+    }
+    /**
+     * `showPicker()` 会让浏览器走当前平台更标准的原生 picker 打开路径；
+     * 但它仍然要求处在用户手势里，且并非所有环境都可用，所以这里必须保留 `click()` 回退。
+     */
+    try {
+      if (typeof input.showPicker === "function") {
+        input.showPicker();
+        return;
+      }
+    } catch {
+      // 某些浏览器在用户激活丢失或实现不完整时会直接抛错，继续回退到 click。
+    }
+    input.click();
+  };
+
   return {
     能力列表: 注册表.能力列表,
     统一媒体文件选择配置: 注册表.统一媒体文件选择配置,
@@ -52,7 +76,7 @@ export function 创建操作台附件入口编排(
       if (默认能力?.triggerStrategy !== "direct") {
         return;
       }
-      deps.获取统一媒体文件输入()?.click();
+      触发统一媒体文件选择();
     },
 
     async 处理统一媒体文件变更(event: Event): Promise<void> {

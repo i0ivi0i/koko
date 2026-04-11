@@ -447,12 +447,11 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("统一媒体文件输入会同时放行图片和视频，并显式带上 HEIC/HEIF 兜底", async () => {
+  it("统一媒体文件输入会同时放行图片和视频，并在桌面环境保留多选", async () => {
     const el = await 创建已入房聊天壳();
 
     const input = 读取统一媒体文件输入(el);
-    expect(input.accept).toContain(".heic");
-    expect(input.accept).toContain(".heif");
+    expect(input.accept).toContain("image/*");
     expect(input.accept).toContain("video/*");
     expect(input.multiple).toBe(true);
 

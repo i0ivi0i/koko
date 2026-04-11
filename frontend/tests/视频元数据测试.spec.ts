@@ -58,6 +58,42 @@ describe("视频元数据", () => {
     expect(errorCode).toBe("attachment_type_not_allowed");
   });
 
+  it("探针长时间没有返回时会超时清理并归一成稳定失败", async () => {
+    vi.useFakeTimers();
+    const revokeObjectUrl = vi.fn();
+    const file = new File([new Uint8Array([1, 2, 3])], "slow.mp4", {
+      type: "video/mp4",
+    });
+    const pendingProbe: 假视频探针 = {
+      preload: "",
+      src: "",
+      videoWidth: 0,
+      videoHeight: 0,
+      duration: 0,
+      onloadedmetadata: null,
+      onerror: null,
+      load() {
+        // 故意不回调，模拟某些浏览器/相册代理文件长时间挂住。
+      },
+    };
+    try {
+      const promise = 读取视频文件元数据(file, {
+        createObjectUrl: () => "blob:slow.mp4",
+        revokeObjectUrl,
+        createProbeElement: () => pendingProbe as unknown as HTMLVideoElement,
+        timeoutMs: 25,
+      });
+      const 失败断言 = expect(promise).rejects.toThrow("attachment_upload_failed");
+
+      await vi.advanceTimersByTimeAsync(26);
+
+      await 失败断言;
+      expect(revokeObjectUrl).toHaveBeenCalledWith("blob:slow.mp4");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("导出的视频 accept 类型保持稳定", () => {
     expect(可选择视频文件类型).toEqual(["video/*"]);
   });

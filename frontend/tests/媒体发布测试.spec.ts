@@ -153,6 +153,7 @@ function 创建场景() {
   const uploader = new 假媒体上传器();
   const drafts = 创建草稿仓库();
   const uploaderEndpoints: string[] = [];
+  const yieldToMainThread = vi.fn(async () => {});
   const prepareMediaUpload = vi.fn(async (_kind: "image" | "video", _sessionId: string, file: File) => ({
     attachment_id: `att-${file.name}`,
     upload_method: "tus" as const,
@@ -190,6 +191,7 @@ function 创建场景() {
     },
     readVideoMetadata: async () => ({ width: 1280, height: 720 }),
     createPreviewUrl: (file) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
+    yieldToMainThread,
   });
   return {
     发布器,
@@ -198,6 +200,7 @@ function 创建场景() {
     prepareMediaUpload,
     completeMediaUpload,
     uploaderEndpoints,
+    yieldToMainThread,
   };
 }
 
@@ -271,6 +274,20 @@ describe("媒体发布器", () => {
         status: "uploading",
       }),
     ]);
+  });
+
+  it("统一媒体入口批量处理多文件时会主动让出主线程，避免连续重任务长时间卡住页面", async () => {
+    const 场景 = 创建场景();
+    const firstFile = new File([new Uint8Array([1, 2, 3])], "first.jpg", {
+      type: "image/jpeg",
+    });
+    const secondFile = new File([new Uint8Array([4, 5, 6])], "second.mp4", {
+      type: "video/mp4",
+    });
+
+    await 场景.发布器.处理选择媒体文件([firstFile, secondFile]);
+
+    expect(场景.yieldToMainThread).toHaveBeenCalledTimes(1);
   });
 
   it("统一媒体入口遇到不支持文件时不会误进 prepare/upload 主链", async () => {
