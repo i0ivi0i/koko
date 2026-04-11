@@ -28,6 +28,8 @@
 - 轮子与基础设施选择
   - [纯-rust群聊轮子候选风险盘点.md](./纯-rust群聊轮子候选风险盘点.md)
     盘点纯 Rust 轮子候选，以及哪些有篡位风险。
+  - [群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md](./群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md)
+    把群聊媒体上传当前配置、官方建议和生产前缺口收成一张清单。
   - [socketioxide-多节点部署与门禁笔记.md](./socketioxide-多节点部署与门禁笔记.md)
     看 `socketioxide` 从单节点走向多节点时的部署与门禁问题。
   - [socketioxide-多房间群聊落地笔记.md](./socketioxide-多房间群聊落地笔记.md)
