@@ -310,6 +310,10 @@ describe("传输", () => {
             content_hash: "hash-att-locator-1",
             swarm_id: "swarm-hash-att-locator-1",
             web_seed_until: "1775942400",
+            torrent_url: "/api/media/att-locator-1/torrent?session_id=s-1",
+            torrent_info_hash: "torrent-info-hash-1",
+            join_ticket: null,
+            ticket_expires_at: null,
           },
         }),
         {
@@ -335,6 +339,10 @@ describe("传输", () => {
         content_hash: "hash-att-locator-1",
         swarm_id: "swarm-hash-att-locator-1",
         web_seed_until: "1775942400",
+        torrent_url: "http://localhost:3000/api/media/att-locator-1/torrent?session_id=s-1",
+        torrent_info_hash: "torrent-info-hash-1",
+        join_ticket: null,
+        ticket_expires_at: null,
       },
     });
   });

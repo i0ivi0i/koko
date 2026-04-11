@@ -2110,10 +2110,31 @@ pub(super) async fn complete_media_upload(
                 original_bytes.as_ref(),
                 ready_epoch秒,
             );
+            let torrent = match media_distribution::生成附件torrent元信息(
+                distribution_request.content_hash.as_str(),
+                original_bytes.as_ref(),
+            ) {
+                Ok(torrent) => torrent,
+                Err(message) => {
+                    return err_resp(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message,
+                    );
+                }
+            };
+            let torrent_request = usecase::协作分发torrent元信息写入请求 {
+                附件标识: attachment_id.clone(),
+                torrent_bytes: torrent.torrent_bytes,
+                torrent_info_hash: torrent.torrent_info_hash,
+                piece_length字节: torrent.piece_length_bytes,
+            };
             let state_for_distribution = state.clone();
             let distribution_result = task::spawn_blocking(move || {
                 let mut repo = 构建共享仓储(&state_for_distribution);
                 usecase::写入协作分发元数据(&mut repo, &distribution_request)
+                    .map_err(map_domain_err_tuple)?;
+                usecase::写入协作分发torrent元信息(&mut repo, &torrent_request)
                     .map_err(map_domain_err_tuple)
             })
             .await;
@@ -2192,8 +2213,61 @@ pub(super) async fn load_media_locator(
             "distribution": locator
                 .协作分发
                 .as_ref()
-                .map(media_distribution::协作分发快照转响应值),
+                .map(|snapshot| {
+                    media_distribution::协作分发快照转响应值(
+                        snapshot,
+                        attachment_id.as_str(),
+                        query.session_id.as_str(),
+                    )
+                }),
         })),
+    )
+        .into_response()
+}
+
+/// 冷路径：受控读取附件对应的 torrent metainfo。
+/// 它先复用 locator 的成员资格与 ready 校验，再返回稳定 metainfo 字节。
+pub(super) async fn load_media_torrent(
+    State(state): State<应用状态>,
+    Path(attachment_id): Path<String>,
+    Query(raw_query): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let query = match parse_attachment_content_query(raw_query) {
+        Ok(query) => query,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = query.session_id.clone();
+    let torrent_result = match task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_usecase);
+        usecase::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
+            .map_err(map_domain_err_tuple)?;
+        usecase::读取协作分发torrent元信息(&repo, &attachment_id_for_usecase)
+            .map_err(map_domain_err_tuple)
+    })
+    .await
+    {
+        Ok(Ok(torrent)) => torrent,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("torrent 任务执行失败: {err}"),
+            )
+        }
+    };
+    let Some(torrent) = torrent_result else {
+        return err_resp(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "附件已就绪但缺少 torrent 元信息",
+        );
+    };
+    (
+        [(header::CONTENT_TYPE, "application/x-bittorrent")],
+        torrent.torrent_bytes,
     )
         .into_response()
 }

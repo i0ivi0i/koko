@@ -2139,6 +2139,168 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
 
 #[tokio::test]
 #[serial]
+async fn torrent接口会返回稳定metainfo并与locator对齐() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("torrent-route-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id").to_string();
+    let room_code = format!("TR{:010}", uniq % 10_000_000_000);
+    let database_url = cfg.database_url.clone();
+    let room_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &session_id, &room_code).expect("应能进房");
+        match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        }
+    })
+    .await
+    .expect("阻塞建房任务应完成");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": bootstrap["session_id"].as_str().expect("session_id"),
+            "file_name": "torrent-route.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 最小mp4字节().len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let temp_file = 写入rustus测试文件(
+        &state.rustus_data_dir,
+        &attachment_id,
+        "torrent-route.mp4",
+        &最小mp4字节(),
+    )
+    .expect("应能写入 rustus 临时视频文件");
+    let upload_id = format!("upload-torrent-route-{attachment_id}");
+
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "torrent-route.mp4",
+            "video/mp4",
+            最小mp4字节().len() as i64,
+            最小mp4字节().len() as i64,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+
+    let (complete_status, complete_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": bootstrap["session_id"].as_str().expect("session_id")
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+
+    let session_id_for_message = bootstrap["session_id"]
+        .as_str()
+        .expect("session_id")
+        .to_string();
+    let attachment_id_for_message = attachment_id.clone();
+    let database_url = cfg.database_url.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &session_id_for_message,
+            &format!("torrent-message-{uniq}"),
+            "",
+            &[attachment_id_for_message],
+        )
+        .expect("应能创建带视频附件的消息");
+    })
+    .await
+    .expect("阻塞写消息任务应完成");
+
+    let (_, locator_body) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!(
+            "/api/media/{attachment_id}/locator?session_id={}",
+            bootstrap["session_id"].as_str().expect("session_id")
+        ),
+        None,
+        &[],
+    )
+    .await;
+
+    let torrent_url = locator_body["distribution"]["torrent_url"]
+        .as_str()
+        .expect("locator 必须返回受控 torrent_url");
+    let (status, headers, body) = send_bytes(
+        app,
+        Method::GET,
+        torrent_url,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("application/x-bittorrent")
+    );
+
+    let metainfo =
+        bip_metainfo::Metainfo::from_bytes(body.as_slice()).expect("torrent bytes 必须可解析");
+    let info_hash_hex = hex::encode(metainfo.info().info_hash().as_ref());
+    assert_eq!(
+        locator_body["distribution"]["torrent_info_hash"].as_str(),
+        Some(info_hash_hex.as_str())
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let state =
@@ -4185,6 +4347,33 @@ async fn send_json(
         let json = serde_json::from_slice::<Value>(&bytes).expect("json body");
         (status, json)
     }
+}
+
+/// 二进制响应测试助手：
+/// - 用来覆盖 torrent、图片原图、后续 Range 读取等二进制出口；
+/// - 把状态码、响应头和原始字节一起带回测试，避免每个用例重复写样板。
+async fn send_bytes(
+    app: axum::Router,
+    method: Method,
+    uri: &str,
+    headers: &[(&str, &str)],
+) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let mut req = Request::builder().method(method).uri(uri);
+    for (k, v) in headers {
+        req = req.header(*k, *v);
+    }
+
+    let response = app
+        .oneshot(req.body(Body::empty()).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let headers = response.headers().clone();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read body")
+        .to_vec();
+    (status, headers, bytes)
 }
 
 /// prepare 返回的 Tus headers 当前只要求一条稳定 Authorization。

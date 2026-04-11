@@ -178,6 +178,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
             get(房间外壳::load_media_locator),
         )
         .route(
+            "/api/media/{attachment_id}/torrent",
+            get(房间外壳::load_media_torrent),
+        )
+        .route(
             "/api/attachments/{attachment_id}/content",
             get(房间外壳::load_attachment_content),
         )

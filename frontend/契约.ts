@@ -155,6 +155,10 @@ export interface 媒体协作分发定位片段 {
    * 3. 前端缓存 / 多壳读取都更稳定。
    */
   web_seed_until: string;
+  torrent_url: string | null;
+  torrent_info_hash: string | null;
+  join_ticket: string | null;
+  ticket_expires_at: string | null;
 }
 
 export interface 媒体定位结果 {

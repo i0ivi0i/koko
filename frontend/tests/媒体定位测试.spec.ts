@@ -14,6 +14,10 @@ describe("媒体定位器", () => {
         content_hash: "hash-att-1",
         swarm_id: "swarm-hash-att-1",
         web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-att-1",
+        torrent_info_hash: "torrent-info-hash-att-1",
+        join_ticket: null,
+        ticket_expires_at: null,
       },
     }));
     const 定位器 = 创建媒体定位器({
@@ -44,6 +48,10 @@ describe("媒体定位器", () => {
           content_hash: "hash-stale",
           swarm_id: "swarm-hash-stale",
           web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-stale",
+          torrent_info_hash: "torrent-info-hash-stale",
+          join_ticket: null,
+          ticket_expires_at: null,
         },
       })
       .mockResolvedValueOnce({
@@ -57,6 +65,10 @@ describe("媒体定位器", () => {
           content_hash: "hash-refresh",
           swarm_id: "swarm-hash-refresh",
           web_seed_until: "1776028800",
+          torrent_url: "http://media.local/torrent-refresh",
+          torrent_info_hash: "torrent-info-hash-refresh",
+          join_ticket: null,
+          ticket_expires_at: null,
         },
       });
     const 定位器 = 创建媒体定位器({

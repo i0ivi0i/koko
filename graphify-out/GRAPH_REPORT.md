@@ -1,25 +1,25 @@
 # Graph Report - .  (2026-04-11)
 
 ## Corpus Check
-- 81 files · ~3,977,935 words
+- 81 files · ~3,981,146 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 254 nodes · 347 edges · 28 communities detected
+- 259 nodes · 358 edges · 28 communities detected
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
-1. `send_json()` - 28 edges
+1. `send_json()` - 29 edges
 2. `HttpRealtime传输` - 22 edges
-3. `构造rustus_hook请求体()` - 10 edges
-4. `写入rustus测试文件()` - 9 edges
+3. `构造rustus_hook请求体()` - 11 edges
+4. `写入rustus测试文件()` - 10 edges
 5. `单连接发送到已关闭socket时降级为正常断开()` - 6 edges
 6. `ready附件会落协作分发元数据()` - 6 edges
 7. `complete图片上传会把prepared附件升级成ready并写入缩略图()` - 6 edges
-8. `updateChat()` - 5 edges
-9. `exitCurrentRoomView()` - 5 edges
-10. `假Socket` - 5 edges
+8. `torrent接口会返回稳定metainfo并与locator对齐()` - 6 edges
+9. `updateChat()` - 5 edges
+10. `exitCurrentRoomView()` - 5 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `写入rustus测试文件()` --calls--> `包装url主机()`  [EXTRACTED]
@@ -35,11 +35,11 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.02
-Nodes (17): AdminLoginBody, AdminLoginResp, ApiError, BootstrapBody, CompleteMediaUploadBody, JoinBody, ParsedAttachmentContentQuery, ParsedEventsQuery (+9 more)
+Nodes (18): AdminLoginBody, AdminLoginResp, ApiError, BootstrapBody, CompleteMediaUploadBody, JoinBody, ParsedAttachmentContentQuery, ParsedEventsQuery (+10 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.08
-Nodes (36): 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), bootstrap接口会返回稳定花名快照(), 没有上传回执时complete媒体上传会返回attachment_not_ready(), complete图片上传遇到非图片原图会返回attachment_type_not_allowed(), complete图片上传会把prepared附件升级成ready并写入缩略图(), 非成员不能通过events接口拉取房间增量(), 成员通过events接口只会拿到from之后的事件() (+28 more)
+Nodes (38): 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), bootstrap接口会返回稳定花名快照(), 没有上传回执时complete媒体上传会返回attachment_not_ready(), complete图片上传遇到非图片原图会返回attachment_type_not_allowed(), complete图片上传会把prepared附件升级成ready并写入缩略图(), 非成员不能通过events接口拉取房间增量(), 成员通过events接口只会拿到from之后的事件() (+30 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.08
@@ -70,12 +70,12 @@ Cohesion: 0.4
 Nodes (5): loadOverview(), loadRooms(), login(), submitLoginForm(), submitRoomSearchForm()
 
 ### Community 9 - "Community 9"
-Cohesion: 0.67
-Nodes (4): handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus_hook_pre_create(), 读取rustus_metadata字段()
+Cohesion: 0.5
+Nodes (4): load_attachment_content(), load_media_locator(), load_media_torrent(), parse_attachment_content_query()
 
 ### Community 10 - "Community 10"
 Cohesion: 0.67
-Nodes (3): load_attachment_content(), load_media_locator(), parse_attachment_content_query()
+Nodes (4): handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus_hook_pre_create(), 读取rustus_metadata字段()
 
 ### Community 11 - "Community 11"
 Cohesion: 0.67
@@ -83,19 +83,19 @@ Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
@@ -106,7 +106,7 @@ Cohesion: 1.0
 Nodes (0): 
 
 ### Community 18 - "Community 18"
-Cohesion: 1.0
+Cohesion: 2.0
 Nodes (1): Pg仓储
 
 ### Community 19 - "Community 19"
@@ -146,21 +146,21 @@ Cohesion: 1.0
 Nodes (0): 
 
 ## Knowledge Gaps
-- **24 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+19 more)
+- **25 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+20 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 12`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 12`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
+- **Thin community `Community 13`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 14`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 15`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 16`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 17`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (1 nodes): `Pg仓储`
+- **Thin community `Community 18`** (2 nodes): `Pg仓储`, `.写入协作分发torrent元信息_异步()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 19`** (1 nodes): `up.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -185,11 +185,11 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 3` to `Community 0`?**
-  _High betweenness centrality (0.124) - this node is a cross-community bridge._
+  _High betweenness centrality (0.122) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 7` to `Community 0`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.033) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts` to the rest of the system?**
-  _24 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _25 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**

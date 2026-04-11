@@ -116,6 +116,25 @@ pub struct 协作分发元数据写入请求 {
     pub web_seed_until秒: i64,
 }
 
+/// torrent 元信息属于协作分发的可派生持久化物。
+/// 它和附件真相分开存放，但仍以 attachment_id 为锚点，避免演化成第二条主链。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 协作分发torrent元信息写入请求 {
+    pub 附件标识: String,
+    pub torrent_bytes: Vec<u8>,
+    pub torrent_info_hash: String,
+    pub piece_length字节: i32,
+}
+
+/// 受控 torrent 出口读取需要完整 metainfo 字节。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 协作分发torrent元信息快照 {
+    pub 附件标识: String,
+    pub torrent_bytes: Vec<u8>,
+    pub torrent_info_hash: String,
+    pub piece_length字节: i32,
+}
+
 /// locator 带出的协作分发快照只暴露“稳定可缓存的分发片段”。
 /// 这不是运行态，也不等于 tracker 准入凭证。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +144,7 @@ pub struct 协作分发元数据快照 {
     pub content_hash: String,
     pub swarm_id: String,
     pub web_seed_until秒: i64,
+    pub torrent_info_hash: Option<String>,
 }
 
 /// locator 只回答“当前怎么受控取媒体”，不暴露存储键、权限投影或 swarm 运行态。
@@ -303,6 +323,24 @@ pub trait 仓储端口 {
     ) -> Result<Option<协作分发元数据快照>, contract::错误码> {
         let _ = 附件标识;
         Ok(None)
+    }
+
+    /// metainfo 字节读取单独收口，避免 locator 查询每次都拖大字段。
+    fn 查询协作分发torrent元信息(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<协作分发torrent元信息快照>, contract::错误码> {
+        let _ = 附件标识;
+        Ok(None)
+    }
+
+    /// ready 后生成出来的 metainfo 仍由应用层统一写入，不让 handler 越层直插 SQL。
+    fn 写入协作分发torrent元信息(
+        &mut self,
+        请求: &协作分发torrent元信息写入请求,
+    ) -> Result<协作分发torrent元信息快照, contract::错误码> {
+        let _ = 请求;
+        Err(contract::错误码::系统错误)
     }
 
     /// 创建 prepared 附件占位，供浏览器后续直传对象内容。
@@ -842,6 +880,30 @@ pub fn 写入协作分发元数据(
         return Err(contract::错误码::参数非法);
     }
     仓储.写入协作分发元数据(请求)
+}
+
+pub fn 写入协作分发torrent元信息(
+    仓储: &mut dyn 仓储端口,
+    请求: &协作分发torrent元信息写入请求,
+) -> Result<协作分发torrent元信息快照, contract::错误码> {
+    if 请求.附件标识.trim().is_empty()
+        || 请求.torrent_info_hash.trim().is_empty()
+        || 请求.torrent_bytes.is_empty()
+        || 请求.piece_length字节 <= 0
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.写入协作分发torrent元信息(请求)
+}
+
+pub fn 读取协作分发torrent元信息(
+    仓储: &dyn 仓储端口,
+    附件标识: &str,
+) -> Result<Option<协作分发torrent元信息快照>, contract::错误码> {
+    if 附件标识.trim().is_empty() {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.查询协作分发torrent元信息(附件标识)
 }
 
 /// 读取附件内容：

@@ -431,6 +431,36 @@ impl Pg仓储 {
             content_hash: 请求.content_hash.clone(),
             swarm_id: 请求.swarm_id.clone(),
             web_seed_until秒: 请求.web_seed_until秒,
+            torrent_info_hash: None,
+        })
+    }
+
+    /// metainfo 字节和稳定分发元数据虽然在同一张表，但写入口必须分离：
+    /// 这样 Phase 1 和 Phase 2 的边界才不会互相污染。
+    async fn 写入协作分发torrent元信息_异步(
+        pool: &PgPool,
+        请求: &usecase::协作分发torrent元信息写入请求,
+    ) -> Result<usecase::协作分发torrent元信息快照, contract::错误码> {
+        sqlx::query(
+            "UPDATE attachment_distribution_metadata \
+             SET torrent_bytes = $2, \
+                 torrent_info_hash = $3, \
+                 piece_length_bytes = $4 \
+             WHERE attachment_id = $1",
+        )
+        .bind(&请求.附件标识)
+        .bind(&请求.torrent_bytes)
+        .bind(&请求.torrent_info_hash)
+        .bind(请求.piece_length字节)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(usecase::协作分发torrent元信息快照 {
+            附件标识: 请求.附件标识.clone(),
+            torrent_bytes: 请求.torrent_bytes.clone(),
+            torrent_info_hash: 请求.torrent_info_hash.clone(),
+            piece_length字节: 请求.piece_length字节,
         })
     }
 
@@ -440,7 +470,7 @@ impl Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
         let row = sqlx::query(
-            "SELECT attachment_id, content_id, content_hash, swarm_id, \
+            "SELECT attachment_id, content_id, content_hash, swarm_id, torrent_info_hash, \
                     EXTRACT(EPOCH FROM web_seed_until)::BIGINT AS web_seed_until_epoch \
              FROM attachment_distribution_metadata \
              WHERE attachment_id = $1",
@@ -456,6 +486,32 @@ impl Pg仓储 {
             content_hash: row.get("content_hash"),
             swarm_id: row.get("swarm_id"),
             web_seed_until秒: row.get("web_seed_until_epoch"),
+            torrent_info_hash: row.get("torrent_info_hash"),
+        }))
+    }
+
+    async fn 查询协作分发torrent元信息_异步(
+        pool: &PgPool,
+        附件标识: &str,
+    ) -> Result<Option<usecase::协作分发torrent元信息快照>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT attachment_id, torrent_bytes, torrent_info_hash, piece_length_bytes \
+             FROM attachment_distribution_metadata \
+             WHERE attachment_id = $1 \
+               AND torrent_bytes IS NOT NULL \
+               AND torrent_info_hash IS NOT NULL \
+               AND piece_length_bytes IS NOT NULL",
+        )
+        .bind(附件标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(row.map(|row| usecase::协作分发torrent元信息快照 {
+            附件标识: row.get("attachment_id"),
+            torrent_bytes: row.get("torrent_bytes"),
+            torrent_info_hash: row.get("torrent_info_hash"),
+            piece_length字节: row.get("piece_length_bytes"),
         }))
     }
 
@@ -1573,6 +1629,20 @@ impl 仓储端口 for Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
         self.在运行时执行(Self::查询协作分发元数据_异步(&self.pool, 附件标识))
+    }
+
+    fn 查询协作分发torrent元信息(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<usecase::协作分发torrent元信息快照>, contract::错误码> {
+        self.在运行时执行(Self::查询协作分发torrent元信息_异步(&self.pool, 附件标识))
+    }
+
+    fn 写入协作分发torrent元信息(
+        &mut self,
+        请求: &usecase::协作分发torrent元信息写入请求,
+    ) -> Result<usecase::协作分发torrent元信息快照, contract::错误码> {
+        self.在运行时执行(Self::写入协作分发torrent元信息_异步(&self.pool, 请求))
     }
 
     /// 附件内容读取仍然走成员可见性，不单独再长一套 ACL。

@@ -14,6 +14,10 @@ describe("媒体播放器", () => {
         content_hash: "hash-video-1",
         swarm_id: "swarm-hash-video-1",
         web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-1",
+        torrent_info_hash: "torrent-info-hash-video-1",
+        join_ticket: null,
+        ticket_expires_at: null,
       },
     }));
     const 播放器 = 创建媒体播放器({

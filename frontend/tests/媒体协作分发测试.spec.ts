@@ -14,6 +14,10 @@ describe("媒体协作分发", () => {
         content_hash: "hash-1",
         swarm_id: "swarm-hash-1",
         web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-1",
+        torrent_info_hash: "torrent-info-hash-1",
+        join_ticket: null,
+        ticket_expires_at: null,
       },
     });
 
@@ -22,6 +26,10 @@ describe("媒体协作分发", () => {
       content_hash: "hash-1",
       swarm_id: "swarm-hash-1",
       web_seed_until: "1775942400",
+      torrent_url: "http://media.local/torrent-1",
+      torrent_info_hash: "torrent-info-hash-1",
+      join_ticket: null,
+      ticket_expires_at: null,
     });
   });
 

@@ -1,4 +1,5 @@
 use crate::usecase;
+use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
 use sha2::{Digest, Sha256};
 
 /// 第一版保底窗口固定 24 小时。
@@ -32,17 +33,55 @@ pub(crate) fn 构造协作分发元数据写入请求(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct 附件torrent元信息 {
+    pub torrent_bytes: Vec<u8>,
+    pub torrent_info_hash: String,
+    pub piece_length_bytes: i32,
+}
+
+/// metainfo 必须只由权威字节派生，不依赖临时文件路径。
+/// 这里把 torrent 内文件名固定到 content_hash 上，确保同内容附件能共享同一 info hash。
+pub(crate) fn 生成附件torrent元信息(
+    content_hash: &str,
+    原始字节: &[u8],
+) -> Result<附件torrent元信息, String> {
+    let file_name = format!("content-{content_hash}.bin");
+    let accessor = DirectAccessor::new(file_name.as_str(), 原始字节);
+    let torrent_bytes = MetainfoBuilder::new()
+        .set_private_flag(Some(true))
+        .set_piece_length(PieceLength::OptBalanced)
+        .build(1, accessor, |_| ())
+        .map_err(|err| format!("生成 metainfo 失败: {err}"))?;
+    let metainfo = Metainfo::from_bytes(torrent_bytes.as_slice())
+        .map_err(|err| format!("解析 metainfo 失败: {err}"))?;
+    Ok(附件torrent元信息 {
+        torrent_info_hash: hex::encode(metainfo.info().info_hash().as_ref()),
+        piece_length_bytes: metainfo.info().piece_length() as i32,
+        torrent_bytes,
+    })
+}
+
 /// locator 对外只下发稳定分发片段：
 /// - 不下发存储键；
 /// - 不下发 tracker/runtime 私货；
 /// - `web_seed_until` 保持字符串秒值，和现有 expires_at 心智一致。
 pub(crate) fn 协作分发快照转响应值(
     snapshot: &usecase::协作分发元数据快照,
+    attachment_id: &str,
+    session_id: &str,
 ) -> serde_json::Value {
     serde_json::json!({
         "content_id": snapshot.content_id,
         "content_hash": snapshot.content_hash,
         "swarm_id": snapshot.swarm_id,
         "web_seed_until": snapshot.web_seed_until秒.to_string(),
+        "torrent_url": snapshot
+            .torrent_info_hash
+            .as_ref()
+            .map(|_| format!("/api/media/{attachment_id}/torrent?session_id={session_id}")),
+        "torrent_info_hash": snapshot.torrent_info_hash,
+        "join_ticket": serde_json::Value::Null,
+        "ticket_expires_at": serde_json::Value::Null,
     })
 }
