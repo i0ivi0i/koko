@@ -18,7 +18,10 @@ use socketioxide::{
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{fs, sync::Arc};
-use tower_http::{services::ServeDir, set_header::response::SetResponseHeaderLayer};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    set_header::response::SetResponseHeaderLayer,
+};
 
 use crate::{adapter::Pg仓储, contract};
 
@@ -232,6 +235,16 @@ fn 构建前端静态资源路由() -> Router<应用状态> {
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache"),
         ));
+    let media_service_worker_router = Router::<应用状态>::new()
+        .route_service("/media-sw.js", ServeFile::new("frontend/dist/media-sw.js"))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::HeaderName::from_static("service-worker-allowed"),
+            HeaderValue::from_static("/"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ));
     let assets_router = Router::<应用状态>::new()
         // 带 hash 的静态资源 URL 已经自带内容指纹。
         // 因此这里改成长期强缓存，避免继续让移动端在每个子资源上反复回源。
@@ -240,7 +253,7 @@ fn 构建前端静态资源路由() -> Router<应用状态> {
             header::CACHE_CONTROL,
             HeaderValue::from_static("public, max-age=31536000, immutable"),
         ));
-    html_router.merge(assets_router)
+    html_router.merge(media_service_worker_router).merge(assets_router)
 }
 
 #[derive(Deserialize)]

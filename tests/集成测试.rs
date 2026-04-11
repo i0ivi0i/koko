@@ -2708,6 +2708,46 @@ async fn 静态壳入口会no_cache且hashed静态资源会长缓存() {
 
 #[tokio::test]
 #[serial]
+async fn media_service_worker会同源暴露且显式声明根scope() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/media-sw.js")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK, "/media-sw.js 应可读取");
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-cache"),
+        "service worker 脚本必须始终回源确认最新版本"
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("service-worker-allowed")
+            .and_then(|value| value.to_str().ok()),
+        Some("/"),
+        "service worker 必须显式声明根 scope，后续 WebTorrent stream server 才能共用同源 worker"
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn 非成员不能读取房间消息里的图片内容() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

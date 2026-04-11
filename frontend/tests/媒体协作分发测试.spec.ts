@@ -1,7 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { 读取协作分发定位片段 } from "../媒体/媒体协作分发";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  获取或创建协作分发浏览器运行时,
+  读取协作分发定位片段,
+  重置协作分发浏览器运行时,
+} from "../媒体/媒体协作分发";
 
 describe("媒体协作分发", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    重置协作分发浏览器运行时();
+  });
+
   it("会从 locator 中读出稳定的协作分发片段", () => {
     const distribution = 读取协作分发定位片段({
       attachment_id: "att-1",
@@ -50,5 +60,45 @@ describe("媒体协作分发", () => {
     });
 
     expect(distribution).toBeNull();
+  });
+
+  it("浏览器协作分发运行时会复用同一个 WebTorrent client，并把已激活的 service worker registration 传给 createServer", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    } as ServiceWorkerRegistration;
+    Object.defineProperty(globalThis, "navigator", {
+      value: {
+        serviceWorker: {
+          ready: Promise.resolve(registration),
+        },
+      },
+      configurable: true,
+    });
+    const createServer = vi.fn().mockReturnValue({ close: vi.fn() });
+    const ctorSpy = vi.fn();
+    class FakeWebTorrent {
+      constructor() {
+        ctorSpy();
+      }
+
+      createServer = createServer;
+    }
+
+    const first = await 获取或创建协作分发浏览器运行时(
+      async () => FakeWebTorrent as unknown as new () => {
+        createServer(options: { controller?: unknown }): unknown;
+      }
+    );
+    const second = await 获取或创建协作分发浏览器运行时(
+      async () => FakeWebTorrent as unknown as new () => {
+        createServer(options: { controller?: unknown }): unknown;
+      }
+    );
+
+    expect(ctorSpy).toHaveBeenCalledTimes(1);
+    expect(createServer).toHaveBeenCalledWith({ controller: registration });
+    expect(first).toBe(second);
   });
 });

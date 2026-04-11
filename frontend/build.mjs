@@ -5,6 +5,10 @@ import path from 'node:path'
 const frontendRoot = process.cwd()
 const distDir = path.join(frontendRoot, 'dist')
 const manifestPath = path.join(distDir, 'asset-manifest.json')
+const mediaServiceWorkerOutputFiles = [
+  path.join(distDir, 'media-sw.js'),
+  path.join(distDir, 'media-sw.js.map'),
+]
 const watchMode = process.argv.some((arg) => arg === '--watch' || arg.startsWith('--watch='))
 
 function 规范输出路径(filePath) {
@@ -44,12 +48,15 @@ function 生成静态资源清单插件() {
         mkdirSync(distDir, { recursive: true })
         const manifest = 收集入口产物(result.metafile)
         writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+        // media-sw.js 是固定文件名，watch 模式下 app 重建时也必须保留，
+        // 否则只改页面代码就会把 service worker 构建产物误删掉。
         清理旧构建产物(new Set([
           path.join(frontendRoot, manifest.app_js.slice(1)),
           path.join(frontendRoot, `${manifest.app_js.slice(1)}.map`),
           path.join(frontendRoot, manifest.app_css.slice(1)),
           path.join(frontendRoot, `${manifest.app_css.slice(1)}.map`),
           manifestPath,
+          ...mediaServiceWorkerOutputFiles,
         ]))
         console.log(
           `[koko-build] manifest updated: js=${manifest.app_js} css=${manifest.app_css}`
@@ -75,7 +82,7 @@ function 清理旧构建产物(保留文件) {
   }
 }
 
-const sharedOptions = {
+const appBuildOptions = {
   entryPoints: ['入口.ts'],
   bundle: true,
   outdir: 'dist',
@@ -90,11 +97,24 @@ const sharedOptions = {
   plugins: [生成静态资源清单插件()],
 }
 
+const mediaServiceWorkerBuildOptions = {
+  entryPoints: ['media-sw.ts'],
+  bundle: true,
+  outfile: 'dist/media-sw.js',
+  format: 'esm',
+  platform: 'browser',
+  target: 'es2022',
+  sourcemap: true,
+}
+
 if (watchMode) {
-  const ctx = await esbuild.context(sharedOptions)
-  await ctx.watch()
+  const appContext = await esbuild.context(appBuildOptions)
+  const mediaSwContext = await esbuild.context(mediaServiceWorkerBuildOptions)
+  await appContext.watch()
+  await mediaSwContext.watch()
   console.log('[koko-build] watch mode started')
 } else {
-  await esbuild.build(sharedOptions)
+  await esbuild.build(appBuildOptions)
+  await esbuild.build(mediaServiceWorkerBuildOptions)
   console.log('[koko-build] build completed')
 }
