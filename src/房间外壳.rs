@@ -2,7 +2,7 @@ use super::{
     err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储,
 };
 use crate::{
-    adapter::媒体上传运输授权写入请求,
+    adapter::{媒体上传运输授权写入请求, 媒体上传运输记录},
     contract,
     usecase::{self, 仓储端口},
 };
@@ -28,6 +28,8 @@ use uuid::Uuid;
 
 const 媒体上传运输方式_TUS: &str = "tus";
 const 媒体上传授权有效期秒数: u64 = 15 * 60;
+const 完成媒体上传等待回执最大轮询次数: usize = 20;
+const 完成媒体上传等待回执轮询间隔: Duration = Duration::from_millis(50);
 
 /// 匿名身份引导请求体。
 ///
@@ -1736,6 +1738,54 @@ async fn handle_rustus_hook_post_finish(
     }
 }
 
+fn 媒体上传运输回执已就绪(transport: &媒体上传运输记录) -> bool {
+    transport.完成时间戳秒.is_some()
+        && transport
+            .storage_locator
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+}
+
+async fn 等待complete所需运输回执(
+    state: 应用状态,
+    attachment_id: &str,
+    mut transport: Option<媒体上传运输记录>,
+) -> Result<Option<媒体上传运输记录>, (StatusCode, &'static str, String)> {
+    if transport.as_ref().is_some_and(媒体上传运输回执已就绪) {
+        return Ok(transport);
+    }
+    // `upload-success` 只代表客户端拿到了最终 PATCH 响应；
+    // 但主服务真正依赖的是 `post-finish` 已经把 finished 回执落库。
+    // 这里做一个短暂、受控的等待窗口，吸收 sidecar hook 晚于浏览器成功回调的正常竞态，
+    // 避免把基础设施时序细节直接泄漏给前端壳。
+    for _ in 0..完成媒体上传等待回执最大轮询次数 {
+        tokio::time::sleep(完成媒体上传等待回执轮询间隔).await;
+        let state_for_usecase = state.clone();
+        let attachment_id_for_usecase = attachment_id.to_string();
+        transport = match task::spawn_blocking(move || {
+            let repo = 构建共享仓储(&state_for_usecase);
+            repo.查询媒体上传运输记录(&attachment_id_for_usecase)
+                .map_err(map_domain_err_tuple)
+        })
+        .await
+        {
+            Ok(result) => result?,
+            Err(err) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("等待 transport 回执任务执行失败: {err}"),
+                ))
+            }
+        };
+        if transport.as_ref().is_some_and(媒体上传运输回执已就绪) {
+            return Ok(transport);
+        }
+    }
+    Ok(transport)
+}
+
 /// 冷路径：完成媒体附件上传。
 /// 这里消费 Rustus finished 回执指向的 shared file，写回 canonical store 后，再把 prepared 升级成 ready。
 pub(super) async fn complete_media_upload(
@@ -1776,11 +1826,25 @@ pub(super) async fn complete_media_upload(
         }
     };
     let (prepared, transport) = prepared_and_transport;
+    let transport = match 等待complete所需运输回执(state.clone(), &attachment_id, transport).await {
+        Ok(transport) => transport,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
     // transport finished 是 complete 的前置 gate：
     // - prepare 成功不等于上传完成；
     // - sidecar 还没给出 finished 回执时，不能偷跑 ready 升级；
     // - 这一层先只做 gate，后续再把 shared file 消费完全切过来。
     let Some(transport) = transport else {
+        tracing::warn!(
+            usecase = "完成媒体上传",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "媒体上传 complete",
+            session_id = session_id.as_str(),
+            attachment_id = attachment_id.as_str(),
+            error_code = "attachment_not_ready",
+            "等待 transport finished 回执超时"
+        );
         return err_resp(
             StatusCode::CONFLICT,
             "attachment_not_ready",
@@ -1788,6 +1852,16 @@ pub(super) async fn complete_media_upload(
         );
     };
     if transport.完成时间戳秒.is_none() {
+        tracing::warn!(
+            usecase = "完成媒体上传",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "媒体上传 complete",
+            session_id = session_id.as_str(),
+            attachment_id = attachment_id.as_str(),
+            error_code = "attachment_not_ready",
+            "等待 transport finished 回执后仍未拿到 finished_at"
+        );
         return err_resp(
             StatusCode::CONFLICT,
             "attachment_not_ready",
@@ -1801,6 +1875,16 @@ pub(super) async fn complete_media_upload(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
+        tracing::warn!(
+            usecase = "完成媒体上传",
+            adapter = "http",
+            outcome = "rejected",
+            request_kind = "媒体上传 complete",
+            session_id = session_id.as_str(),
+            attachment_id = attachment_id.as_str(),
+            error_code = "attachment_not_ready",
+            "等待 transport finished 回执后仍缺少 storage_locator"
+        );
         return err_resp(
             StatusCode::CONFLICT,
             "attachment_not_ready",

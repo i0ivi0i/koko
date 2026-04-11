@@ -856,6 +856,113 @@ async fn 没有上传回执时complete媒体上传会返回attachment_not_ready(
 
 #[tokio::test]
 #[serial]
+async fn post_finish稍后到达时complete媒体上传会等待回执并成功() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("complete-race-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id").to_string();
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "complete-race.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let temp_file = 写入rustus测试文件(
+        &state.rustus_data_dir,
+        &attachment_id,
+        "complete-race.png",
+        &最小png字节(),
+    )
+    .expect("应能写入 rustus 临时图片文件");
+    let upload_id = format!("upload-complete-race-{attachment_id}");
+
+    // 真实浏览器里，Uppy 会在最终 PATCH 204 后立刻触发 upload-success，
+    // 但 Rustus 的 post-finish 回执可能稍后才打到主服务。
+    // 这里故意让 complete 先发起，再延迟 50ms 才送 post-finish，锁住这条竞态。
+    let app_for_hook = app.clone();
+    let attachment_id_for_hook = attachment_id.clone();
+    let authorization_for_hook = authorization.clone();
+    let upload_id_for_hook = upload_id.clone();
+    let temp_file_for_hook = temp_file.clone();
+    let hook_task = tokio::spawn(async move {
+        sleep(Duration::from_millis(50)).await;
+        send_json(
+            app_for_hook,
+            Method::POST,
+            "/internal/rustus/hooks",
+            Some(构造rustus_hook请求体(
+                &upload_id_for_hook,
+                &attachment_id_for_hook,
+                "complete-race.png",
+                "image/png",
+                68,
+                68,
+                Some(temp_file_for_hook.as_str()),
+            )),
+            &[
+                ("Hook-Name", "post-finish"),
+                ("Authorization", authorization_for_hook.as_str()),
+            ],
+        )
+        .await
+    });
+
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+    let (hook_status, hook_body) = hook_task.await.expect("hook task 应该完成");
+
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    assert_eq!(
+        complete_status,
+        StatusCode::OK,
+        "post-finish 晚到时 complete 不该把内部竞态暴露成 attachment_not_ready: {complete_body:?}"
+    );
+    assert_eq!(complete_body["status"].as_str(), Some("ready"));
+}
+
+#[tokio::test]
+#[serial]
 async fn rustus_pre_create非法token会被拒绝() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

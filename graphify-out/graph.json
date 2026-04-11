@@ -119,9 +119,9 @@
       "label": "http\u51b7\u8def\u5f84\u95ed\u73af()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2171",
+      "source_location": "L2278",
       "id": "http",
-      "community": 2
+      "community": 1
     },
     {
       "label": ".constructor()",
@@ -129,7 +129,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L28",
       "id": "http_constructor",
-      "community": 2
+      "community": 1
     },
     {
       "label": "HttpRealtime\u4f20\u8f93",
@@ -737,7 +737,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\\u9875\u9762\u9aa8\u67b6\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "spec",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".bootstrapAnonymousIdentity()",
@@ -745,7 +745,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L104",
       "id": "spec_bootstrapanonymousidentity",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".joinOrCreateRoom()",
@@ -753,7 +753,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L111",
       "id": "spec_joinorcreateroom",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".loadRoomSnapshot()",
@@ -761,7 +761,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L114",
       "id": "spec_loadroomsnapshot",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".prepareMediaUpload()",
@@ -769,7 +769,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L132",
       "id": "spec_preparemediaupload",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".completeMediaUpload()",
@@ -777,7 +777,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L153",
       "id": "spec_completemediaupload",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".loadMediaLocator()",
@@ -785,7 +785,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L167",
       "id": "spec_loadmedialocator",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".buildAttachmentContentUrl()",
@@ -793,7 +793,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L201",
       "id": "spec_buildattachmentcontenturl",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".updateRoomReadAnchor()",
@@ -801,7 +801,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L176",
       "id": "spec_updateroomreadanchor",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".loadRoomEvents()",
@@ -809,7 +809,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L177",
       "id": "spec_loadroomevents",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".loadRoomHistory()",
@@ -817,7 +817,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L208",
       "id": "spec_loadroomhistory",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".loadAdminOverview()",
@@ -825,7 +825,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L211",
       "id": "spec_loadadminoverview",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".adminLogin()",
@@ -833,7 +833,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L214",
       "id": "spec_adminlogin",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".adminRooms()",
@@ -841,7 +841,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L217",
       "id": "spec_adminrooms",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".adminRoomDetail()",
@@ -849,7 +849,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L220",
       "id": "spec_adminroomdetail",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".createSocket()",
@@ -857,7 +857,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L223",
       "id": "spec_createsocket",
-      "community": 1
+      "community": 2
     },
     {
       "label": "getResponseHeader()",
@@ -865,7 +865,7 @@
       "source_file": "frontend\\tests\\\u56fe\u7247\u4e0a\u4f20\u8bca\u65ad\u6d4b\u8bd5.spec.ts",
       "source_location": "L94",
       "id": "spec_getresponseheader",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".on()",
@@ -873,7 +873,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L36",
       "id": "spec_on",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".addFile()",
@@ -881,7 +881,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L42",
       "id": "spec_addfile",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".getFile()",
@@ -889,7 +889,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L62",
       "id": "spec_getfile",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".removeFile()",
@@ -897,7 +897,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L66",
       "id": "spec_removefile",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".retryUpload()",
@@ -905,7 +905,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L75",
       "id": "spec_retryupload",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".cancelAll()",
@@ -913,7 +913,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L82",
       "id": "spec_cancelall",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".destroy()",
@@ -921,7 +921,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L86",
       "id": "spec_destroy",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".emit()",
@@ -929,7 +929,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L118",
       "id": "spec_emit",
-      "community": 1
+      "community": 2
     },
     {
       "label": "\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5",
@@ -949,7 +949,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L35",
       "id": "spec_socket",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".on()",
@@ -957,7 +957,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L38",
       "id": "spec_socket_on",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".emit()",
@@ -965,7 +965,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L45",
       "id": "spec_socket_emit",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".disconnect()",
@@ -973,7 +973,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L76",
       "id": "spec_socket_disconnect",
-      "community": 1
+      "community": 2
     },
     {
       "label": ".fire()",
@@ -981,7 +981,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L78",
       "id": "spec_socket_fire",
-      "community": 1
+      "community": 2
     },
     {
       "label": "get()",
@@ -989,7 +989,7 @@
       "source_file": "E:\\koko\\frontend\\tests\\\u804a\u5929\u58f3\u6062\u590d\u4e0e\u5206\u9875\u6d4b\u8bd5.spec.ts",
       "source_location": "L358",
       "id": "spec_get",
-      "community": 1
+      "community": 2
     },
     {
       "label": "createFakeStorage()",
@@ -1301,7 +1301,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L242",
       "id": "html",
-      "community": 11
+      "community": 10
     },
     {
       "label": "load_frontend_index()",
@@ -1309,13 +1309,13 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L251",
       "id": "load_frontend_index",
-      "community": 11
+      "community": 10
     },
     {
       "label": "realtime\u4e3b\u94fe\u95ed\u73af()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1803",
+      "source_location": "L1910",
       "id": "realtime",
       "community": 0
     },
@@ -1365,7 +1365,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L435",
       "id": "err_resp",
-      "community": 11
+      "community": 10
     },
     {
       "label": "RealtimeConnectAuth",
@@ -1427,9 +1427,9 @@
       "label": "\u5199\u5165rustus\u6d4b\u8bd5\u6587\u4ef6()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3640",
+      "source_location": "L3747",
       "id": "rustus",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u5b89\u88c5panic\u65e5\u5fd7\u94a9\u5b50()",
@@ -1451,7 +1451,7 @@
       "label": "BootstrapBody",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L36",
+      "source_location": "L38",
       "id": "bootstrapbody",
       "community": 0
     },
@@ -1459,7 +1459,7 @@
       "label": "JoinBody",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L44",
+      "source_location": "L46",
       "id": "joinbody",
       "community": 0
     },
@@ -1467,7 +1467,7 @@
       "label": "PrepareMediaUploadBody",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L53",
+      "source_location": "L55",
       "id": "preparemediauploadbody",
       "community": 0
     },
@@ -1475,7 +1475,7 @@
       "label": "CompleteMediaUploadBody",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L62",
+      "source_location": "L64",
       "id": "completemediauploadbody",
       "community": 0
     },
@@ -1483,7 +1483,7 @@
       "label": "RustusHookBody",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L69",
+      "source_location": "L71",
       "id": "rustushookbody",
       "community": 0
     },
@@ -1491,7 +1491,7 @@
       "label": "RustusUploadBody",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L75",
+      "source_location": "L77",
       "id": "rustusuploadbody",
       "community": 0
     },
@@ -1499,7 +1499,7 @@
       "label": "UpdateReadAnchorBody",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L85",
+      "source_location": "L87",
       "id": "updatereadanchorbody",
       "community": 0
     },
@@ -1507,7 +1507,7 @@
       "label": "SnapshotQuery",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L96",
+      "source_location": "L98",
       "id": "snapshotquery",
       "community": 0
     },
@@ -1515,7 +1515,7 @@
       "label": "ParsedEventsQuery",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L104",
+      "source_location": "L106",
       "id": "parsedeventsquery",
       "community": 0
     },
@@ -1523,7 +1523,7 @@
       "label": "ParsedHistoryQuery",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L112",
+      "source_location": "L114",
       "id": "parsedhistoryquery",
       "community": 0
     },
@@ -1531,7 +1531,7 @@
       "label": "ParsedAttachmentContentQuery",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L122",
+      "source_location": "L124",
       "id": "parsedattachmentcontentquery",
       "community": 0
     },
@@ -1539,31 +1539,31 @@
       "label": "parse_events_query()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L130",
+      "source_location": "L132",
       "id": "parse_events_query",
-      "community": 14
+      "community": 13
     },
     {
       "label": "parse_history_query()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L165",
+      "source_location": "L167",
       "id": "parse_history_query",
-      "community": 13
+      "community": 14
     },
     {
       "label": "parse_attachment_content_query()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L218",
+      "source_location": "L220",
       "id": "parse_attachment_content_query",
-      "community": 10
+      "community": 11
     },
     {
       "label": "\u8bfb\u53d6exif\u65b9\u5411()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L316",
+      "source_location": "L318",
       "id": "exif",
       "community": 0
     },
@@ -1571,15 +1571,15 @@
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3658",
+      "source_location": "L3765",
       "id": "rustus_hook",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u8bfb\u53d6rustus_metadata\u5b57\u6bb5()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L510",
+      "source_location": "L512",
       "id": "rustus_metadata",
       "community": 9
     },
@@ -1587,7 +1587,7 @@
       "label": "bootstrap_session()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L629",
+      "source_location": "L631",
       "id": "bootstrap_session",
       "community": 0
     },
@@ -1595,7 +1595,7 @@
       "label": "join_or_create_room()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L715",
+      "source_location": "L717",
       "id": "join_or_create_room",
       "community": 0
     },
@@ -1603,7 +1603,7 @@
       "label": "load_room_snapshot()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L821",
+      "source_location": "L823",
       "id": "load_room_snapshot",
       "community": 0
     },
@@ -1611,7 +1611,7 @@
       "label": "update_room_read_anchor()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L932",
+      "source_location": "L934",
       "id": "update_room_read_anchor",
       "community": 0
     },
@@ -1619,23 +1619,23 @@
       "label": "load_room_events()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1072",
+      "source_location": "L1074",
       "id": "load_room_events",
-      "community": 14
+      "community": 13
     },
     {
       "label": "load_room_history()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1200",
+      "source_location": "L1202",
       "id": "load_room_history",
-      "community": 13
+      "community": 14
     },
     {
       "label": "prepare_media_upload()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1331",
+      "source_location": "L1333",
       "id": "prepare_media_upload",
       "community": 0
     },
@@ -1643,7 +1643,7 @@
       "label": "handle_rustus_hook()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1502",
+      "source_location": "L1504",
       "id": "handle_rustus_hook",
       "community": 9
     },
@@ -1651,7 +1651,7 @@
       "label": "handle_rustus_hook_pre_create()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1523",
+      "source_location": "L1525",
       "id": "handle_rustus_hook_pre_create",
       "community": 9
     },
@@ -1659,33 +1659,41 @@
       "label": "handle_rustus_hook_post_finish()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1627",
+      "source_location": "L1629",
       "id": "handle_rustus_hook_post_finish",
       "community": 9
+    },
+    {
+      "label": "\u7b49\u5f85complete\u6240\u9700\u8fd0\u8f93\u56de\u6267()",
+      "file_type": "code",
+      "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
+      "source_location": "L1750",
+      "id": "complete",
+      "community": 1
     },
     {
       "label": "complete_media_upload()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1741",
+      "source_location": "L1791",
       "id": "complete_media_upload",
-      "community": 2
+      "community": 1
     },
     {
       "label": "load_media_locator()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1943",
+      "source_location": "L2027",
       "id": "load_media_locator",
-      "community": 10
+      "community": 11
     },
     {
       "label": "load_attachment_content()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1996",
+      "source_location": "L2080",
       "id": "load_attachment_content",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Pg\u4ed3\u50a8",
@@ -1739,7 +1747,7 @@
       "label": "make_writer()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3886",
+      "source_location": "L3993",
       "id": "make_writer",
       "community": 0
     },
@@ -1747,15 +1755,15 @@
       "label": "write()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3894",
+      "source_location": "L4001",
       "id": "write",
-      "community": 2
+      "community": 1
     },
     {
       "label": "flush()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3899",
+      "source_location": "L4006",
       "id": "flush",
       "community": 0
     },
@@ -1763,17 +1771,17 @@
       "label": "bootstrap\u63a5\u53e3\u4f1a\u8fd4\u56de\u7a33\u5b9a\u82b1\u540d\u5feb\u7167()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3379",
+      "source_location": "L3486",
       "id": "bootstrap",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u63d2\u5165ready\u56fe\u7247\u9644\u4ef6\u8bb0\u5f55()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3795",
+      "source_location": "L3902",
       "id": "ready",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u9644\u4ef6owner\u4e0d\u5339\u914d\u65f6\u62d2\u7edd\u521b\u5efa\u6d88\u606f()",
@@ -1797,7 +1805,7 @@
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L533",
       "id": "prepare_tus",
-      "community": 2
+      "community": 1
     },
     {
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u4f1a\u628aprepared\u9644\u4ef6\u5347\u7ea7\u6210ready\u5e76\u5199\u5165\u7f29\u7565\u56fe()",
@@ -1805,7 +1813,7 @@
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L612",
       "id": "complete_prepared_ready",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u6ca1\u6709\u4e0a\u4f20\u56de\u6267\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deattachment_not_ready()",
@@ -1813,53 +1821,61 @@
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
       "source_location": "L794",
       "id": "complete_attachment_not_ready",
-      "community": 2
+      "community": 1
+    },
+    {
+      "label": "post_finish\u7a0d\u540e\u5230\u8fbe\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u7b49\u5f85\u56de\u6267\u5e76\u6210\u529f()",
+      "file_type": "code",
+      "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
+      "source_location": "L859",
+      "id": "post_finish_complete",
+      "community": 1
     },
     {
       "label": "rustus_pre_create\u975e\u6cd5token\u4f1a\u88ab\u62d2\u7edd()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L859",
+      "source_location": "L966",
       "id": "rustus_pre_create_token",
-      "community": 2
+      "community": 1
     },
     {
       "label": "rustus_pre_create\u5141\u8bb8offset\u4e3a0\u4e14length\u7b49\u4e8emetadata_byte_size()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L896",
+      "source_location": "L1003",
       "id": "rustus_pre_create_offset_0_length_metadata_byte_size",
-      "community": 2
+      "community": 1
     },
     {
       "label": "rustus_pre_create\u7f3a\u5c11byte_size\u5143\u6570\u636e\u65f6\u4ecd\u6309prepare\u6743\u5a01\u957f\u5ea6\u653e\u884c()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L967",
+      "source_location": "L1074",
       "id": "rustus_pre_create_byte_size_prepare",
-      "community": 2
+      "community": 1
     },
     {
       "label": "rustus_post_finish\u4f1a\u767b\u8bb0\u4e0a\u4f20\u56de\u6267()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1046",
+      "source_location": "L1153",
       "id": "rustus_post_finish",
-      "community": 2
+      "community": 1
     },
     {
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u9047\u5230\u975e\u56fe\u7247\u539f\u56fe\u4f1a\u8fd4\u56deattachment_type_not_allowed()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1272",
+      "source_location": "L1379",
       "id": "complete_attachment_type_not_allowed",
-      "community": 2
+      "community": 1
     },
     {
       "label": "prepared\u9644\u4ef6\u5728complete\u4e4b\u524d\u4e0d\u80fd\u8fdb\u5165\u6d88\u606f\u53d1\u9001\u4e3b\u94fe()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1370",
+      "source_location": "L1477",
       "id": "prepared_complete",
       "community": 0
     },
@@ -1867,7 +1883,7 @@
       "label": "ready\u89c6\u9891\u9644\u4ef6\u53ef\u4ee5\u8fdb\u5165create_message\u4e3b\u94fe()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1434",
+      "source_location": "L1541",
       "id": "ready_create_message",
       "community": 0
     },
@@ -1875,15 +1891,15 @@
       "label": "locator\u53ea\u66b4\u9732\u53d7\u63a7transport\u4fe1\u606f\u800c\u4e0d\u66b4\u9732\u4e1a\u52a1\u6743\u9650\u79c1\u8d27()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1490",
+      "source_location": "L1597",
       "id": "locator_transport",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u9759\u6001\u58f3\u5165\u53e3\u4f1ano_cache\u4e14hashed\u9759\u6001\u8d44\u6e90\u4f1a\u957f\u7f13\u5b58()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1581",
+      "source_location": "L1688",
       "id": "no_cache_hashed",
       "community": 0
     },
@@ -1891,7 +1907,7 @@
       "label": "\u8ba2\u9605\u9700\u8981\u91cd\u62c9\u5feb\u7167\u65f6\u63a7\u5236\u9762kind\u4fdd\u6301need_snapshot_reload()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1861",
+      "source_location": "L1968",
       "id": "kind_need_snapshot_reload",
       "community": 0
     },
@@ -1899,95 +1915,95 @@
       "label": "\u623f\u95f4\u589e\u91cf\u4e8b\u4ef6\u67e5\u8be2\u7f3a\u5c11session_id\u4f1a\u88ab\u62d2\u7edd()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2362",
+      "source_location": "L2469",
       "id": "session_id",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u975e\u6210\u5458\u4e0d\u80fd\u901a\u8fc7events\u63a5\u53e3\u62c9\u53d6\u623f\u95f4\u589e\u91cf()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2385",
+      "source_location": "L2492",
       "id": "events",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u6210\u5458\u901a\u8fc7events\u63a5\u53e3\u53ea\u4f1a\u62ff\u5230from\u4e4b\u540e\u7684\u4e8b\u4ef6()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2443",
+      "source_location": "L2550",
       "id": "events_from",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u4e0d\u5b58\u5728\u7684\u623f\u95f4\u901a\u8fc7events\u63a5\u53e3\u4f1a\u8fd4\u56deroom_not_found()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2496",
+      "source_location": "L2603",
       "id": "events_room_not_found",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u9605\u8bfb\u63a8\u8fdb\u7f3a\u5c11last_read_event_position\u4f1a\u8fd4\u56deinvalid_argument()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2966",
+      "source_location": "L3073",
       "id": "last_read_event_position_invalid_argument",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u623f\u95f4\u5386\u53f2\u5206\u9875\u4f1a\u8fd4\u56debefore_event_position\u4e4b\u524d\u7684\u6d88\u606f()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3098",
+      "source_location": "L3205",
       "id": "before_event_position",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u623f\u95f4\u5386\u53f2\u5206\u9875\u7f3a\u5c11before_event_position\u4f1a\u8fd4\u56deinvalid_argument()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3159",
+      "source_location": "L3266",
       "id": "before_event_position_invalid_argument",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u975e\u6210\u5458\u4e0d\u80fd\u901a\u8fc7history\u63a5\u53e3\u8bfb\u53d6\u66f4\u65e9\u6d88\u606f()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3319",
+      "source_location": "L3426",
       "id": "history",
-      "community": 2
+      "community": 1
     },
     {
       "label": "http\u51b7\u8def\u5f84\u6210\u529f\u4f1a\u8f93\u51faaccepted\u4e0esucceeded\u65e5\u5fd7()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3429",
+      "source_location": "L3536",
       "id": "http_accepted_succeeded",
-      "community": 2
+      "community": 1
     },
     {
       "label": "http\u51b7\u8def\u5f84\u62d2\u7edd\u4f1a\u8f93\u51farejected\u65e5\u5fd7\u4e0eerror_code()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3475",
+      "source_location": "L3582",
       "id": "http_rejected_error_code",
-      "community": 2
+      "community": 1
     },
     {
       "label": "send_json()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3595",
+      "source_location": "L3702",
       "id": "send_json",
-      "community": 2
+      "community": 1
     },
     {
       "label": "send_multipart_response()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3753",
+      "source_location": "L3860",
       "id": "send_multipart_response",
       "community": 0
     },
@@ -1995,17 +2011,17 @@
       "label": "\u6700\u5c0fpng\u5b57\u8282()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3848",
+      "source_location": "L3955",
       "id": "png",
-      "community": 2
+      "community": 1
     },
     {
       "label": "\u6700\u5c0fmp4\u5b57\u8282()",
       "file_type": "code",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3860",
+      "source_location": "L3967",
       "id": "mp4",
-      "community": 2
+      "community": 1
     }
   ],
   "links": [
@@ -2157,7 +2173,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2171",
+      "source_location": "L2278",
       "weight": 1.0,
       "_src": "",
       "_tgt": "http",
@@ -2865,7 +2881,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3686",
+      "source_location": "L3793",
       "weight": 1.0,
       "_src": "",
       "_tgt": "tus",
@@ -3009,7 +3025,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1803",
+      "source_location": "L1910",
       "weight": 1.0,
       "_src": "",
       "_tgt": "realtime",
@@ -3177,7 +3193,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1729",
+      "source_location": "L1836",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustus",
@@ -3213,7 +3229,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L36",
+      "source_location": "L38",
       "weight": 1.0,
       "_src": "",
       "_tgt": "bootstrapbody",
@@ -3225,7 +3241,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L44",
+      "source_location": "L46",
       "weight": 1.0,
       "_src": "",
       "_tgt": "joinbody",
@@ -3237,7 +3253,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L53",
+      "source_location": "L55",
       "weight": 1.0,
       "_src": "",
       "_tgt": "preparemediauploadbody",
@@ -3249,7 +3265,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L62",
+      "source_location": "L64",
       "weight": 1.0,
       "_src": "",
       "_tgt": "completemediauploadbody",
@@ -3261,7 +3277,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L69",
+      "source_location": "L71",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustushookbody",
@@ -3273,7 +3289,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L75",
+      "source_location": "L77",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustusuploadbody",
@@ -3285,7 +3301,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L85",
+      "source_location": "L87",
       "weight": 1.0,
       "_src": "",
       "_tgt": "updatereadanchorbody",
@@ -3297,7 +3313,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L96",
+      "source_location": "L98",
       "weight": 1.0,
       "_src": "",
       "_tgt": "snapshotquery",
@@ -3309,7 +3325,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L104",
+      "source_location": "L106",
       "weight": 1.0,
       "_src": "",
       "_tgt": "parsedeventsquery",
@@ -3321,7 +3337,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L112",
+      "source_location": "L114",
       "weight": 1.0,
       "_src": "",
       "_tgt": "parsedhistoryquery",
@@ -3333,7 +3349,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L122",
+      "source_location": "L124",
       "weight": 1.0,
       "_src": "",
       "_tgt": "parsedattachmentcontentquery",
@@ -3345,7 +3361,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L130",
+      "source_location": "L132",
       "weight": 1.0,
       "_src": "",
       "_tgt": "parse_events_query",
@@ -3357,7 +3373,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L165",
+      "source_location": "L167",
       "weight": 1.0,
       "_src": "",
       "_tgt": "parse_history_query",
@@ -3369,7 +3385,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L218",
+      "source_location": "L220",
       "weight": 1.0,
       "_src": "",
       "_tgt": "parse_attachment_content_query",
@@ -3381,7 +3397,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L385",
+      "source_location": "L387",
       "weight": 1.0,
       "_src": "",
       "_tgt": "exif",
@@ -3393,7 +3409,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1735",
+      "source_location": "L1842",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustus_hook",
@@ -3405,7 +3421,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L510",
+      "source_location": "L512",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustus_metadata",
@@ -3417,7 +3433,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L629",
+      "source_location": "L631",
       "weight": 1.0,
       "_src": "",
       "_tgt": "bootstrap_session",
@@ -3429,7 +3445,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L715",
+      "source_location": "L717",
       "weight": 1.0,
       "_src": "",
       "_tgt": "join_or_create_room",
@@ -3441,7 +3457,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L821",
+      "source_location": "L823",
       "weight": 1.0,
       "_src": "",
       "_tgt": "load_room_snapshot",
@@ -3453,7 +3469,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L932",
+      "source_location": "L934",
       "weight": 1.0,
       "_src": "",
       "_tgt": "update_room_read_anchor",
@@ -3465,7 +3481,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1072",
+      "source_location": "L1074",
       "weight": 1.0,
       "_src": "",
       "_tgt": "load_room_events",
@@ -3477,7 +3493,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1200",
+      "source_location": "L1202",
       "weight": 1.0,
       "_src": "",
       "_tgt": "load_room_history",
@@ -3489,7 +3505,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1331",
+      "source_location": "L1333",
       "weight": 1.0,
       "_src": "",
       "_tgt": "prepare_media_upload",
@@ -3501,7 +3517,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1502",
+      "source_location": "L1504",
       "weight": 1.0,
       "_src": "",
       "_tgt": "handle_rustus_hook",
@@ -3513,7 +3529,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1523",
+      "source_location": "L1525",
       "weight": 1.0,
       "_src": "",
       "_tgt": "handle_rustus_hook_pre_create",
@@ -3525,7 +3541,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1627",
+      "source_location": "L1629",
       "weight": 1.0,
       "_src": "",
       "_tgt": "handle_rustus_hook_post_finish",
@@ -3537,7 +3553,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1741",
+      "source_location": "L1750",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "complete",
+      "source": "",
+      "target": "complete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
+      "source_location": "L1791",
       "weight": 1.0,
       "_src": "",
       "_tgt": "complete_media_upload",
@@ -3549,7 +3577,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1943",
+      "source_location": "L2027",
       "weight": 1.0,
       "_src": "",
       "_tgt": "load_media_locator",
@@ -3561,7 +3589,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1996",
+      "source_location": "L2080",
       "weight": 1.0,
       "_src": "",
       "_tgt": "load_attachment_content",
@@ -3645,7 +3673,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3886",
+      "source_location": "L3993",
       "weight": 1.0,
       "_src": "",
       "_tgt": "make_writer",
@@ -3657,7 +3685,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3894",
+      "source_location": "L4001",
       "weight": 1.0,
       "_src": "",
       "_tgt": "write",
@@ -3669,7 +3697,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3899",
+      "source_location": "L4006",
       "weight": 1.0,
       "_src": "",
       "_tgt": "flush",
@@ -3681,7 +3709,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3379",
+      "source_location": "L3486",
       "weight": 1.0,
       "_src": "",
       "_tgt": "bootstrap",
@@ -3741,7 +3769,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1140",
+      "source_location": "L1247",
       "weight": 1.0,
       "_src": "",
       "_tgt": "complete_prepared_ready",
@@ -3768,6 +3796,18 @@
       "source_location": "L859",
       "weight": 1.0,
       "_src": "",
+      "_tgt": "post_finish_complete",
+      "source": "",
+      "target": "post_finish_complete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
+      "source_location": "L966",
+      "weight": 1.0,
+      "_src": "",
       "_tgt": "rustus_pre_create_token",
       "source": "",
       "target": "rustus_pre_create_token",
@@ -3777,7 +3817,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L896",
+      "source_location": "L1003",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustus_pre_create_offset_0_length_metadata_byte_size",
@@ -3789,7 +3829,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L967",
+      "source_location": "L1074",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustus_pre_create_byte_size_prepare",
@@ -3801,7 +3841,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1046",
+      "source_location": "L1153",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rustus_post_finish",
@@ -3813,7 +3853,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1272",
+      "source_location": "L1379",
       "weight": 1.0,
       "_src": "",
       "_tgt": "complete_attachment_type_not_allowed",
@@ -3825,7 +3865,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1370",
+      "source_location": "L1477",
       "weight": 1.0,
       "_src": "",
       "_tgt": "prepared_complete",
@@ -3837,7 +3877,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1434",
+      "source_location": "L1541",
       "weight": 1.0,
       "_src": "",
       "_tgt": "ready_create_message",
@@ -3849,7 +3889,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1490",
+      "source_location": "L1597",
       "weight": 1.0,
       "_src": "",
       "_tgt": "locator_transport",
@@ -3861,7 +3901,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1581",
+      "source_location": "L1688",
       "weight": 1.0,
       "_src": "",
       "_tgt": "no_cache_hashed",
@@ -3873,7 +3913,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1861",
+      "source_location": "L1968",
       "weight": 1.0,
       "_src": "",
       "_tgt": "kind_need_snapshot_reload",
@@ -3885,7 +3925,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2362",
+      "source_location": "L2469",
       "weight": 1.0,
       "_src": "",
       "_tgt": "session_id",
@@ -3897,7 +3937,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2385",
+      "source_location": "L2492",
       "weight": 1.0,
       "_src": "",
       "_tgt": "events",
@@ -3909,7 +3949,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2443",
+      "source_location": "L2550",
       "weight": 1.0,
       "_src": "",
       "_tgt": "events_from",
@@ -3921,7 +3961,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2496",
+      "source_location": "L2603",
       "weight": 1.0,
       "_src": "",
       "_tgt": "events_room_not_found",
@@ -3933,7 +3973,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2966",
+      "source_location": "L3073",
       "weight": 1.0,
       "_src": "",
       "_tgt": "last_read_event_position_invalid_argument",
@@ -3945,7 +3985,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3098",
+      "source_location": "L3205",
       "weight": 1.0,
       "_src": "",
       "_tgt": "before_event_position",
@@ -3957,7 +3997,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3159",
+      "source_location": "L3266",
       "weight": 1.0,
       "_src": "",
       "_tgt": "before_event_position_invalid_argument",
@@ -3969,7 +4009,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3319",
+      "source_location": "L3426",
       "weight": 1.0,
       "_src": "",
       "_tgt": "history",
@@ -3981,7 +4021,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3429",
+      "source_location": "L3536",
       "weight": 1.0,
       "_src": "",
       "_tgt": "http_accepted_succeeded",
@@ -3993,7 +4033,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3475",
+      "source_location": "L3582",
       "weight": 1.0,
       "_src": "",
       "_tgt": "http_rejected_error_code",
@@ -4041,7 +4081,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3860",
+      "source_location": "L3967",
       "weight": 1.0,
       "_src": "",
       "_tgt": "mp4",
@@ -4065,7 +4105,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2185",
+      "source_location": "L2292",
       "weight": 1.0,
       "_src": "http",
       "_tgt": "send_json",
@@ -5361,7 +5401,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1711",
+      "source_location": "L1713",
       "weight": 1.0,
       "_src": "handle_rustus_hook_post_finish",
       "_tgt": "rustus",
@@ -5373,7 +5413,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1810",
+      "source_location": "L1894",
       "weight": 1.0,
       "_src": "complete_media_upload",
       "_tgt": "rustus",
@@ -5397,7 +5437,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1091",
+      "source_location": "L903",
+      "weight": 1.0,
+      "_src": "post_finish_complete",
+      "_tgt": "rustus",
+      "source": "rustus",
+      "target": "post_finish_complete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
+      "source_location": "L1198",
       "weight": 1.0,
       "_src": "rustus_post_finish",
       "_tgt": "rustus",
@@ -5409,7 +5461,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1321",
+      "source_location": "L1428",
       "weight": 1.0,
       "_src": "complete_attachment_type_not_allowed",
       "_tgt": "rustus",
@@ -5421,7 +5473,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3650",
+      "source_location": "L3757",
       "weight": 1.0,
       "_src": "rustus",
       "_tgt": "write",
@@ -5433,7 +5485,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1077",
+      "source_location": "L1079",
       "weight": 1.0,
       "_src": "load_room_events",
       "_tgt": "parse_events_query",
@@ -5445,7 +5497,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1205",
+      "source_location": "L1207",
       "weight": 1.0,
       "_src": "load_room_history",
       "_tgt": "parse_history_query",
@@ -5457,7 +5509,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1948",
+      "source_location": "L2032",
       "weight": 1.0,
       "_src": "load_media_locator",
       "_tgt": "parse_attachment_content_query",
@@ -5469,7 +5521,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L2001",
+      "source_location": "L2085",
       "weight": 1.0,
       "_src": "load_attachment_content",
       "_tgt": "parse_attachment_content_query",
@@ -5481,7 +5533,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1507",
+      "source_location": "L1509",
       "weight": 1.0,
       "_src": "handle_rustus_hook",
       "_tgt": "rustus_hook",
@@ -5505,7 +5557,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L874",
+      "source_location": "L926",
+      "weight": 1.0,
+      "_src": "post_finish_complete",
+      "_tgt": "rustus_hook",
+      "source": "rustus_hook",
+      "target": "post_finish_complete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
+      "source_location": "L981",
       "weight": 1.0,
       "_src": "rustus_pre_create_token",
       "_tgt": "rustus_hook",
@@ -5517,7 +5581,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L946",
+      "source_location": "L1053",
       "weight": 1.0,
       "_src": "rustus_pre_create_offset_0_length_metadata_byte_size",
       "_tgt": "rustus_hook",
@@ -5529,7 +5593,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1012",
+      "source_location": "L1119",
       "weight": 1.0,
       "_src": "rustus_pre_create_byte_size_prepare",
       "_tgt": "rustus_hook",
@@ -5541,7 +5605,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1098",
+      "source_location": "L1205",
       "weight": 1.0,
       "_src": "rustus_post_finish",
       "_tgt": "rustus_hook",
@@ -5553,7 +5617,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1332",
+      "source_location": "L1439",
       "weight": 1.0,
       "_src": "complete_attachment_type_not_allowed",
       "_tgt": "rustus_hook",
@@ -5565,7 +5629,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1532",
+      "source_location": "L1534",
       "weight": 1.0,
       "_src": "handle_rustus_hook_pre_create",
       "_tgt": "rustus_metadata",
@@ -5577,7 +5641,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1636",
+      "source_location": "L1638",
       "weight": 1.0,
       "_src": "handle_rustus_hook_post_finish",
       "_tgt": "rustus_metadata",
@@ -5589,7 +5653,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1512",
+      "source_location": "L1514",
       "weight": 1.0,
       "_src": "handle_rustus_hook",
       "_tgt": "handle_rustus_hook_pre_create",
@@ -5601,12 +5665,24 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
-      "source_location": "L1513",
+      "source_location": "L1515",
       "weight": 1.0,
       "_src": "handle_rustus_hook",
       "_tgt": "handle_rustus_hook_post_finish",
       "source": "handle_rustus_hook",
       "target": "handle_rustus_hook_post_finish",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
+      "source_location": "L1829",
+      "weight": 1.0,
+      "_src": "complete_media_upload",
+      "_tgt": "complete",
+      "source": "complete",
+      "target": "complete_media_upload",
       "confidence_score": 1.0
     },
     {
@@ -5625,7 +5701,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3390",
+      "source_location": "L3497",
       "weight": 1.0,
       "_src": "bootstrap",
       "_tgt": "send_json",
@@ -5637,7 +5713,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3841",
+      "source_location": "L3948",
       "weight": 1.0,
       "_src": "ready",
       "_tgt": "mp4",
@@ -5697,7 +5773,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1165",
+      "source_location": "L1272",
       "weight": 1.0,
       "_src": "complete_prepared_ready",
       "_tgt": "mp4",
@@ -5721,7 +5797,31 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L870",
+      "source_location": "L874",
+      "weight": 1.0,
+      "_src": "post_finish_complete",
+      "_tgt": "send_json",
+      "source": "post_finish_complete",
+      "target": "send_json",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
+      "source_location": "L907",
+      "weight": 1.0,
+      "_src": "post_finish_complete",
+      "_tgt": "png",
+      "source": "post_finish_complete",
+      "target": "png",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
+      "source_location": "L977",
       "weight": 1.0,
       "_src": "rustus_pre_create_token",
       "_tgt": "send_json",
@@ -5733,7 +5833,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L911",
+      "source_location": "L1018",
       "weight": 1.0,
       "_src": "rustus_pre_create_offset_0_length_metadata_byte_size",
       "_tgt": "send_json",
@@ -5745,7 +5845,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L982",
+      "source_location": "L1089",
       "weight": 1.0,
       "_src": "rustus_pre_create_byte_size_prepare",
       "_tgt": "send_json",
@@ -5757,7 +5857,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1061",
+      "source_location": "L1168",
       "weight": 1.0,
       "_src": "rustus_post_finish",
       "_tgt": "send_json",
@@ -5769,7 +5869,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1091",
+      "source_location": "L1198",
       "weight": 1.0,
       "_src": "rustus_post_finish",
       "_tgt": "png",
@@ -5781,7 +5881,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1287",
+      "source_location": "L1394",
       "weight": 1.0,
       "_src": "complete_attachment_type_not_allowed",
       "_tgt": "send_json",
@@ -5793,7 +5893,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L1552",
+      "source_location": "L1659",
       "weight": 1.0,
       "_src": "locator_transport",
       "_tgt": "send_json",
@@ -5805,7 +5905,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2370",
+      "source_location": "L2477",
       "weight": 1.0,
       "_src": "session_id",
       "_tgt": "send_json",
@@ -5817,7 +5917,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2398",
+      "source_location": "L2505",
       "weight": 1.0,
       "_src": "events",
       "_tgt": "send_json",
@@ -5829,7 +5929,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2478",
+      "source_location": "L2585",
       "weight": 1.0,
       "_src": "events_from",
       "_tgt": "send_json",
@@ -5841,7 +5941,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2504",
+      "source_location": "L2611",
       "weight": 1.0,
       "_src": "events_room_not_found",
       "_tgt": "send_json",
@@ -5853,7 +5953,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L2979",
+      "source_location": "L3086",
       "weight": 1.0,
       "_src": "last_read_event_position_invalid_argument",
       "_tgt": "send_json",
@@ -5865,7 +5965,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3139",
+      "source_location": "L3246",
       "weight": 1.0,
       "_src": "before_event_position",
       "_tgt": "send_json",
@@ -5877,7 +5977,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3171",
+      "source_location": "L3278",
       "weight": 1.0,
       "_src": "before_event_position_invalid_argument",
       "_tgt": "send_json",
@@ -5889,7 +5989,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3332",
+      "source_location": "L3439",
       "weight": 1.0,
       "_src": "history",
       "_tgt": "send_json",
@@ -5901,7 +6001,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3444",
+      "source_location": "L3551",
       "weight": 1.0,
       "_src": "http_accepted_succeeded",
       "_tgt": "send_json",
@@ -5913,7 +6013,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u96c6\u6210\u6d4b\u8bd5.rs",
-      "source_location": "L3485",
+      "source_location": "L3592",
       "weight": 1.0,
       "_src": "http_rejected_error_code",
       "_tgt": "send_json",
