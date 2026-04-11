@@ -40,7 +40,101 @@ describe("媒体播放器", () => {
       kind: "video",
       src: "http://media.local/original-video-1",
       thumbnailUrl: null,
+      hint: "正在补块",
     });
+  });
+
+  it("协作分发可用时会返回 swarm 播放结果和运行态提示", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-3",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-3",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-3",
+        content_hash: "hash-video-3",
+        swarm_id: "swarm-hash-video-3",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-3",
+        torrent_info_hash: "torrent-info-hash-video-3",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-3",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+      },
+    }));
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource: async () => ({
+        src: "blob:http://media.local/swarm-video-3",
+        hint: "正在协作分发" as const,
+      }),
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-3",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "swarm",
+      attachmentId: "att-video-3",
+      kind: "video",
+      src: "blob:http://media.local/swarm-video-3",
+      thumbnailUrl: null,
+      hint: "正在协作分发",
+    });
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("后端裁决 expired 时会直接返回内容已过期", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-expired",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-expired",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-expired",
+        content_hash: "hash-video-expired",
+        swarm_id: "swarm-hash-video-expired",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-expired",
+        torrent_info_hash: "torrent-info-hash-video-expired",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-expired",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "expired" as const,
+      },
+    }));
+    const resolveSwarmSource = vi.fn();
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-expired",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "expired",
+      attachmentId: "att-video-expired",
+      kind: "video",
+      src: "",
+      thumbnailUrl: null,
+      hint: "内容已过期",
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
   });
 
   it("locator 过期时会强制重签后再回退锚点", async () => {
@@ -85,6 +179,7 @@ describe("媒体播放器", () => {
       kind: "image",
       src: "http://media.local/original-refresh",
       thumbnailUrl: "http://media.local/thumb-refresh",
+      hint: null,
     });
   });
 
@@ -117,6 +212,7 @@ describe("媒体播放器", () => {
       src: "",
       thumbnailUrl: null,
       reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
   });
 });

@@ -3,6 +3,7 @@ import {
   获取或创建协作分发浏览器运行时,
   读取协作分发定位片段,
   重置协作分发浏览器运行时,
+  type WebTorrent浏览器客户端,
 } from "../媒体/媒体协作分发";
 
 describe("媒体协作分发", () => {
@@ -84,17 +85,18 @@ describe("媒体协作分发", () => {
       }
 
       createServer = createServer;
+
+      add = (() => {
+        throw new Error("test should not call add");
+      }) as WebTorrent浏览器客户端["add"];
     }
+    const fakeCtor = FakeWebTorrent as unknown as new () => WebTorrent浏览器客户端;
 
     const first = await 获取或创建协作分发浏览器运行时(
-      async () => FakeWebTorrent as unknown as new () => {
-        createServer(options: { controller?: unknown }): unknown;
-      }
+      async () => fakeCtor
     );
     const second = await 获取或创建协作分发浏览器运行时(
-      async () => FakeWebTorrent as unknown as new () => {
-        createServer(options: { controller?: unknown }): unknown;
-      }
+      async () => fakeCtor
     );
 
     expect(ctorSpy).toHaveBeenCalledTimes(1);

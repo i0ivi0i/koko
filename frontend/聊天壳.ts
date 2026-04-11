@@ -17,8 +17,12 @@ import {
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
+  创建媒体定位器,
+  创建媒体播放器,
   创建媒体发布器,
+  解析协作分发源,
   type 媒体附件草稿,
+  type 媒体播放结果,
   type 媒体草稿状态补丁,
 } from "./媒体/index.js";
 import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
@@ -686,6 +690,14 @@ export class 聊天壳 extends LitElement {
   private chatState: 聊天状态 = { ...初始聊天状态 };
 
   private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
+  private readonly 媒体定位器 = 创建媒体定位器({
+    getSessionId: () => this.chatState.sessionId,
+    loadMediaLocator: (sessionId, attachmentId) =>
+      this.transport.loadMediaLocator(sessionId, attachmentId),
+  });
+  private 媒体播放器 = this.创建页面级媒体播放器();
+  private 媒体播放结果表: Record<string, 媒体播放结果> = {};
+  private readonly 正在解析媒体播放 = new Map<string, Promise<void>>();
   private readonly 媒体发布器 = 创建媒体发布器({
     getSessionId: () => this.chatState.sessionId,
     prepareMediaUpload: (kind, sessionId, file) =>
@@ -840,6 +852,23 @@ export class 聊天壳 extends LitElement {
     报告首屏稳定完成: (mode) => this.阅读推进编排端口.接收首屏稳定完成(mode),
   });
 
+  private 创建页面级媒体播放器(): {
+    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+  } {
+    return 创建媒体播放器({
+      locate: (attachmentId, options) => this.媒体定位器.获取定位(attachmentId, options),
+      resolveSwarmSource: 解析协作分发源,
+    });
+  }
+
+  setMediaPlayerForTest(player: {
+    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+  }): void {
+    this.清空媒体播放状态();
+    this.媒体播放器 = player;
+    this.requestUpdate();
+  }
+
   setTransportForTest(transport: 前端传输端口): void {
     this._实时编排端口?.disconnect();
     this._实时编排端口 = null;
@@ -847,6 +876,9 @@ export class 聊天壳 extends LitElement {
     this._阅读推进编排端口 = null;
     this.媒体发布器.销毁();
     this.transport = transport;
+    this.媒体定位器.清空();
+    this.清空媒体播放状态();
+    this.媒体播放器 = this.创建页面级媒体播放器();
     this._恢复编排端口 = null;
   }
 
@@ -940,6 +972,73 @@ export class 聊天壳 extends LitElement {
     this.媒体发布器.清空();
   }
 
+  private 清空媒体播放状态(): void {
+    this.媒体播放结果表 = {};
+    this.正在解析媒体播放.clear();
+    this.媒体定位器.清空();
+  }
+
+  private 读取当前房间媒体附件(): Array<{ attachmentId: string; kind: "image" | "video" }> {
+    const seen = new Set<string>();
+    const attachments: Array<{ attachmentId: string; kind: "image" | "video" }> = [];
+    for (const message of this.chatState.messages) {
+      for (const attachment of message.attachments ?? []) {
+        if (seen.has(attachment.attachment_id)) {
+          continue;
+        }
+        seen.add(attachment.attachment_id);
+        attachments.push({
+          attachmentId: attachment.attachment_id,
+          kind: attachment.kind,
+        });
+      }
+    }
+    return attachments;
+  }
+
+  private 同步房间媒体播放结果(): void {
+    const attachments = this.读取当前房间媒体附件();
+    const activeAttachmentIds = new Set(attachments.map((item) => item.attachmentId));
+    let hasRemovedPlaybackState = false;
+    for (const attachmentId of Object.keys(this.媒体播放结果表)) {
+      if (activeAttachmentIds.has(attachmentId)) {
+        continue;
+      }
+      const nextResults = { ...this.媒体播放结果表 };
+      delete nextResults[attachmentId];
+      this.媒体播放结果表 = nextResults;
+      hasRemovedPlaybackState = true;
+    }
+    if (hasRemovedPlaybackState) {
+      this.requestUpdate();
+    }
+    for (const attachment of attachments) {
+      if (
+        this.媒体播放结果表[attachment.attachmentId] ||
+        this.正在解析媒体播放.has(attachment.attachmentId)
+      ) {
+        continue;
+      }
+      const task = (async () => {
+        const result = await this.媒体播放器.解析播放结果({
+          attachmentId: attachment.attachmentId,
+          kind: attachment.kind,
+        });
+        if (!this.读取当前房间媒体附件().some((item) => item.attachmentId === attachment.attachmentId)) {
+          return;
+        }
+        this.媒体播放结果表 = {
+          ...this.媒体播放结果表,
+          [attachment.attachmentId]: result,
+        };
+        this.requestUpdate();
+      })().finally(() => {
+        this.正在解析媒体播放.delete(attachment.attachmentId);
+      });
+      this.正在解析媒体播放.set(attachment.attachmentId, task);
+    }
+  }
+
   private removeComposerDraft(localId: string): void {
     this.媒体发布器.移除草稿(localId);
   }
@@ -961,6 +1060,10 @@ export class 聊天壳 extends LitElement {
     void this.恢复编排端口.bootstrap();
   }
 
+  override updated(): void {
+    this.同步房间媒体播放结果();
+  }
+
   override disconnectedCallback(): void {
     globalThis.removeEventListener("resize", this.handleViewportResize);
     this._实时编排端口?.disconnect();
@@ -968,6 +1071,7 @@ export class 聊天壳 extends LitElement {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体发布器.销毁();
+    this.清空媒体播放状态();
     super.disconnectedCallback();
   }
 
@@ -1013,6 +1117,7 @@ export class 聊天壳 extends LitElement {
   ): void {
     this._实时编排端口?.disconnect();
     this.clearMediaPublisherState();
+    this.清空媒体播放状态();
     this.storage.清除当前房间标识();
     if (!opts.keepRoomCodeCache) {
       this.storage.清除当前房间短码();
@@ -1500,6 +1605,7 @@ export class 聊天壳 extends LitElement {
                   variant
                 )
             )}
+            .mediaPlaybackByAttachmentId=${this.媒体播放结果表}
             .historyHint=${historyHint}
             .jumpToLatestLabel=${jumpToLatestLabel}
             @room-scroll-intent=${() => this.roomScroller.标记用户滚动意图()}

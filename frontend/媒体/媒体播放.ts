@@ -13,6 +13,15 @@ type 媒体播放结果 =
       kind: 媒体种类;
       src: string;
       thumbnailUrl: string | null;
+      hint: "正在协作分发" | "正在补块" | null;
+    }
+  | {
+      mode: "expired";
+      attachmentId: string;
+      kind: 媒体种类;
+      src: "";
+      thumbnailUrl: string | null;
+      hint: "内容已过期";
     }
   | {
       mode: "degraded";
@@ -21,6 +30,7 @@ type 媒体播放结果 =
       src: "";
       thumbnailUrl: string | null;
       reason: "locator_unavailable" | "attachment_not_ready" | "anchor_unavailable";
+      hint: "附件当前不可获取";
     };
 
 type 媒体播放器依赖 = {
@@ -29,7 +39,7 @@ type 媒体播放器依赖 = {
     attachmentId: string;
     kind: 媒体种类;
     locator: 媒体定位结果;
-  }): Promise<string | null>;
+  }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
   probeAnchor?(url: string): Promise<void>;
 };
 
@@ -66,12 +76,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     src: "",
     thumbnailUrl: locator?.thumbnail_url ?? null,
     reason,
+    hint: "附件当前不可获取",
   });
 
   const 尝试锚点 = async (
     input: 媒体播放输入,
     locator: 媒体定位结果,
-    allowRefresh: boolean
+    allowRefresh: boolean,
+    hint: "正在补块" | null
   ): Promise<媒体播放结果> => {
     try {
       await probeAnchor(locator.original_url);
@@ -81,6 +93,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         kind: input.kind,
         src: locator.original_url,
         thumbnailUrl: locator.thumbnail_url,
+        hint,
       };
     } catch {
       if (!allowRefresh) {
@@ -98,6 +111,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           kind: input.kind,
           src: refreshedLocator.original_url,
           thumbnailUrl: refreshedLocator.thumbnail_url,
+          hint,
         };
       } catch {
         return 创建降级结果(input, refreshedLocator, "anchor_unavailable");
@@ -116,8 +130,18 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return 创建降级结果(input, locator, "attachment_not_ready");
     }
     const distribution = 读取协作分发定位片段(locator);
+    if (distribution?.availability === "expired") {
+      return {
+        mode: "expired",
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        src: "",
+        thumbnailUrl: locator.thumbnail_url,
+        hint: "内容已过期",
+      };
+    }
     if (!distribution) {
-      return 尝试锚点(input, locator, true);
+      return 尝试锚点(input, locator, true, null);
     }
     try {
       const swarmSource = await resolveSwarmSource({
@@ -130,14 +154,15 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           mode: "swarm",
           attachmentId: input.attachmentId,
           kind: input.kind,
-          src: swarmSource,
+          src: swarmSource.src,
           thumbnailUrl: locator.thumbnail_url,
+          hint: swarmSource.hint,
         };
       }
     } catch {
       // swarm 只是热分发层；失败后必须回到锚点，不允许把热路径波动升级成业务失败。
     }
-    return 尝试锚点(input, locator, true);
+    return 尝试锚点(input, locator, true, "正在补块");
   };
 
   return {

@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-11)
 
 ## Corpus Check
-- 84 files · ~3,987,224 words
+- 84 files · ~3,988,348 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 269 nodes · 376 edges · 31 communities detected
+- 271 nodes · 378 edges · 31 communities detected
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
@@ -83,19 +83,19 @@ Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (2): prepare_media_upload(), 数据库真相模型包含媒体Tus运输记录表()
+Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): prepare_media_upload(), 数据库真相模型包含媒体Tus运输记录表()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
@@ -160,13 +160,13 @@ Nodes (0):
 ## Knowledge Gaps
 - **25 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+20 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 12`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 12`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
+- **Thin community `Community 13`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `prepare_media_upload()`, `数据库真相模型包含媒体Tus运输记录表()`
+- **Thin community `Community 14`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 15`** (2 nodes): `prepare_media_upload()`, `数据库真相模型包含媒体Tus运输记录表()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 16`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -203,7 +203,7 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 3` to `Community 0`?**
-  _High betweenness centrality (0.117) - this node is a cross-community bridge._
+  _High betweenness centrality (0.116) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 7` to `Community 0`?**
   _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts` to the rest of the system?**

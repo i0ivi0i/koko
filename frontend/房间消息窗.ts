@@ -1,5 +1,6 @@
 import { html, LitElement } from "lit";
 import { repeat } from "lit/directives/repeat.js";
+import type { 媒体播放结果 } from "./媒体/媒体播放.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 
 /**
@@ -17,17 +18,20 @@ export class 房间消息窗 extends LitElement {
     items: { attribute: false },
     historyHint: { type: String },
     jumpToLatestLabel: { type: String },
+    mediaPlaybackByAttachmentId: { attribute: false },
   };
 
   declare items: 聊天列表展示项[];
   declare historyHint: string;
   declare jumpToLatestLabel: string;
+  declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
 
   constructor() {
     super();
     this.items = [];
     this.historyHint = "";
     this.jumpToLatestLabel = "";
+    this.mediaPlaybackByAttachmentId = {};
   }
 
   /**
@@ -88,46 +92,87 @@ export class 房间消息窗 extends LitElement {
     if (item.attachments.length === 0) {
       return null;
     }
+
+    const 读取附件播放结果 = (attachmentId: string): 媒体播放结果 | null =>
+      this.mediaPlaybackByAttachmentId[attachmentId] ?? null;
+
+    const 渲染媒体提示 = (attachmentId: string, playback: 媒体播放结果 | null) => {
+      if (!playback?.hint) {
+        return null;
+      }
+      return html`
+        <div class="message-media-hint" data-media-hint=${attachmentId}>${playback.hint}</div>
+      `;
+    };
+
+    const 渲染不可用附件 = (attachmentId: string, playback: 媒体播放结果) =>
+      html`
+        <div class="message-media-unavailable" data-attachment-id=${attachmentId}>
+          ${渲染媒体提示(attachmentId, playback)}
+        </div>
+      `;
+
     return html`
       <div
         class="message-attachment-grid"
         data-attachment-count=${item.attachments.length}
       >
-        ${item.attachments.map(
-          (attachment) =>
-            attachment.kind === "video"
-              ? html`
-                  <video
-                    class="message-video"
-                    data-attachment-id=${attachment.attachmentId}
-                    src=${attachment.originalSrc}
-                    width=${attachment.displayWidth}
-                    height=${attachment.displayHeight}
-                    controls
-                    playsinline
-                    preload="metadata"
-                    poster=${attachment.posterSrc ?? ""}
-                  ></video>
-                `
-              : html`
+        ${item.attachments.map((attachment) => {
+          const playback = 读取附件播放结果(attachment.attachmentId);
+          if (playback?.mode === "expired" || playback?.mode === "degraded") {
+            return 渲染不可用附件(attachment.attachmentId, playback);
+          }
+          const playbackSrc =
+            playback?.mode === "swarm" || playback?.mode === "anchor" ? playback.src : null;
+          if (attachment.kind === "video") {
+            return html`
+              <div class="message-video-card">
+                <video
+                  class="message-video"
+                  data-attachment-id=${attachment.attachmentId}
+                  src=${playbackSrc ?? attachment.originalSrc}
+                  width=${attachment.displayWidth}
+                  height=${attachment.displayHeight}
+                  controls
+                  playsinline
+                  preload="metadata"
+                  poster=${attachment.posterSrc ?? ""}
+                ></video>
+                ${渲染媒体提示(attachment.attachmentId, playback)}
+              </div>
+            `;
+          }
+          return html`
+            <div class="message-image-card">
+              ${(() => {
+                const imagePlaybackSrc =
+                  playback?.mode === "swarm" ||
+                  (playback?.mode === "anchor" && playback.hint !== null)
+                    ? playback.src
+                    : null;
+                return html`
                   <a
                     class="message-image-link"
-                    href=${attachment.originalSrc}
+                    href=${imagePlaybackSrc ?? attachment.originalSrc}
                     target="_blank"
                     rel="noreferrer"
                   >
                     <img
                       class="message-image"
                       data-attachment-id=${attachment.attachmentId}
-                      src=${attachment.thumbnailSrc}
+                      src=${imagePlaybackSrc ?? attachment.thumbnailSrc}
                       alt="图片附件"
                       width=${attachment.displayWidth}
                       height=${attachment.displayHeight}
                       loading="lazy"
                     />
                   </a>
-                `
-        )}
+                `;
+              })()}
+              ${渲染媒体提示(attachment.attachmentId, playback)}
+            </div>
+          `;
+        })}
       </div>
     `;
   }

@@ -283,6 +283,64 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("带视频附件的权威消息会显示协作分发提示，而不是只把裸 originalSrc 塞给 video", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-swarm-1",
+            client_message_id: "c-video-swarm-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "看协作分发视频",
+            body: "看协作分发视频",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-swarm-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    el.setMediaPlayerForTest({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "swarm",
+        attachmentId: "att-video-swarm-1",
+        kind: "video",
+        src: "blob:http://localhost/swarm-video-1",
+        thumbnailUrl: null,
+        hint: "正在协作分发",
+      }),
+    });
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const video = el.shadowRoot!.querySelector(
+      'video[data-attachment-id="att-video-swarm-1"]'
+    ) as HTMLVideoElement | null;
+    const hint = el.shadowRoot!.querySelector(
+      '[data-media-hint="att-video-swarm-1"]'
+    ) as HTMLElement | null;
+    expect(video?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1");
+    expect(hint?.textContent).toContain("正在协作分发");
+    el.remove();
+  });
+
   it("进入房间后发送区会显示统一附件入口和统一媒体文件输入", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;
