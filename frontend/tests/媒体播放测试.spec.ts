@@ -40,7 +40,7 @@ describe("媒体播放器", () => {
       kind: "video",
       src: "http://media.local/original-video-1",
       thumbnailUrl: null,
-      hint: "正在补块",
+      hint: null,
     });
   });
 
@@ -91,7 +91,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("协作分发仍在后台补齐整附件时，会把正在补块提示继续透给视图层", async () => {
+  it("协作分发仍在后台补齐整附件时，不把内部补块状态透给视图层", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-4",
       kind: "video" as const,
@@ -132,7 +132,7 @@ describe("媒体播放器", () => {
       kind: "video",
       src: "blob:http://media.local/swarm-video-4",
       thumbnailUrl: null,
-      hint: "正在补块",
+      hint: null,
     });
   });
 

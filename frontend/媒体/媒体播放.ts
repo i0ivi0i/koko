@@ -13,7 +13,7 @@ type 媒体播放结果 =
       kind: 媒体种类;
       src: string;
       thumbnailUrl: string | null;
-      hint: "正在协作分发" | "正在补块" | null;
+      hint: "正在协作分发" | null;
     }
   | {
       mode: "expired";
@@ -41,6 +41,13 @@ type 媒体播放器依赖 = {
     locator: 媒体定位结果;
   }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
   probeAnchor?(url: string): Promise<void>;
+};
+
+const 过滤可播放媒体提示 = (
+  hint: "正在协作分发" | "正在补块" | null
+): "正在协作分发" | null => {
+  // “正在补块”只说明协作分发还在后台补齐文件块；只要已有可播放 src，就不是用户可见故障。
+  return hint === "正在补块" ? null : hint;
 };
 
 /**
@@ -82,8 +89,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 尝试锚点 = async (
     input: 媒体播放输入,
     locator: 媒体定位结果,
-    allowRefresh: boolean,
-    hint: "正在补块" | null
+    allowRefresh: boolean
   ): Promise<媒体播放结果> => {
     try {
       await probeAnchor(locator.original_url);
@@ -93,7 +99,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         kind: input.kind,
         src: locator.original_url,
         thumbnailUrl: locator.thumbnail_url,
-        hint,
+        hint: null,
       };
     } catch {
       if (!allowRefresh) {
@@ -111,7 +117,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           kind: input.kind,
           src: refreshedLocator.original_url,
           thumbnailUrl: refreshedLocator.thumbnail_url,
-          hint,
+          hint: null,
         };
       } catch {
         return 创建降级结果(input, refreshedLocator, "anchor_unavailable");
@@ -141,7 +147,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       };
     }
     if (!distribution) {
-      return 尝试锚点(input, locator, true, null);
+      return 尝试锚点(input, locator, true);
     }
     try {
       const swarmSource = await resolveSwarmSource({
@@ -156,13 +162,13 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           kind: input.kind,
           src: swarmSource.src,
           thumbnailUrl: locator.thumbnail_url,
-          hint: swarmSource.hint,
+          hint: 过滤可播放媒体提示(swarmSource.hint),
         };
       }
     } catch {
       // swarm 只是热分发层；失败后必须回到锚点，不允许把热路径波动升级成业务失败。
     }
-    return 尝试锚点(input, locator, true, "正在补块");
+    return 尝试锚点(input, locator, true);
   };
 
   return {
