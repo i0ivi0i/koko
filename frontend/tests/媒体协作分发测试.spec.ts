@@ -1,14 +1,111 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   获取或创建协作分发浏览器运行时,
+  解析协作分发源,
   读取协作分发定位片段,
+  读取协作分发会话状态,
   重置协作分发浏览器运行时,
   type WebTorrent浏览器客户端,
+  type WebTorrent种子,
 } from "../媒体/媒体协作分发";
+
+function 准备好的定位结果(attachmentId: string) {
+  return {
+    attachment_id: attachmentId,
+    kind: "video" as const,
+    status: "ready" as const,
+    original_url: `http://media.local/original-${attachmentId}`,
+    thumbnail_url: null,
+    distribution: {
+      content_id: `content_${attachmentId}`,
+      content_hash: `hash-${attachmentId}`,
+      swarm_id: `swarm-${attachmentId}`,
+      web_seed_until: "1775942400",
+      torrent_url: `http://media.local/torrent-${attachmentId}`,
+      torrent_info_hash: `torrent-info-hash-${attachmentId}`,
+      announce_urls: ["ws://127.0.0.1:7072"],
+      web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+      join_ticket: null,
+      ticket_expires_at: null,
+      availability: "available" as const,
+    },
+  };
+}
+
+function 安装假媒体浏览器环境() {
+  const registration = {
+    active: {
+      state: "activated",
+    },
+  } as ServiceWorkerRegistration;
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      serviceWorker: {
+        ready: Promise.resolve(registration),
+      },
+    },
+    configurable: true,
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }))
+  );
+  return registration;
+}
+
+function 创建可观测假Torrent(streamURL: string) {
+  const handlers: Record<string, Array<(...args: unknown[]) => void>> = {
+    error: [],
+    wire: [],
+    noPeers: [],
+    done: [],
+  };
+  const select = vi.fn();
+  const torrent = {
+    files: [
+      {
+        streamURL,
+        select,
+      },
+    ],
+    on(event: string, handler: (...args: unknown[]) => void) {
+      handlers[event] ??= [];
+      handlers[event].push(handler);
+    },
+  } as unknown as WebTorrent种子;
+
+  return {
+    torrent,
+    select,
+    emit(event: "error" | "wire" | "noPeers" | "done", ...args: unknown[]) {
+      const eventHandlers = handlers[event] ?? [];
+      for (const handler of eventHandlers) {
+        handler(...args);
+      }
+    },
+  };
+}
+
+function 创建假WebTorrent构造器(add: WebTorrent浏览器客户端["add"]) {
+  const createServer = vi.fn().mockReturnValue({ close: vi.fn() });
+  class FakeWebTorrent {
+    createServer = createServer;
+
+    add = add;
+  }
+  return {
+    ctor: FakeWebTorrent as unknown as new () => WebTorrent浏览器客户端,
+    createServer,
+  };
+}
 
 describe("媒体协作分发", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     vi.resetModules();
     重置协作分发浏览器运行时();
   });
@@ -102,5 +199,72 @@ describe("媒体协作分发", () => {
     expect(ctorSpy).toHaveBeenCalledTimes(1);
     expect(createServer).toHaveBeenCalledWith({ controller: registration });
     expect(first).toBe(second);
+  });
+
+  it("同一 attachment 在同一页面被再次打开时会复用同一个 torrent 会话", async () => {
+    安装假媒体浏览器环境();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-1");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor);
+
+    const locator = 准备好的定位结果("att-1");
+    const first = await 解析协作分发源({
+      attachmentId: "att-1",
+      kind: "video",
+      locator,
+    });
+    const second = await 解析协作分发源({
+      attachmentId: "att-1",
+      kind: "video",
+      locator,
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(first).toEqual(second);
+  });
+
+  it("开始查看后会继续补齐整个附件，并用官方事件更新运行态提示", async () => {
+    安装假媒体浏览器环境();
+    const { torrent, select, emit } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-2"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-2",
+      kind: "video",
+      locator: 准备好的定位结果("att-2"),
+    });
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-2",
+      hint: "正在补块",
+    });
+    expect(select).toHaveBeenCalledWith(1);
+    expect(读取协作分发会话状态("swarm-att-2")).toMatchObject({
+      eagerCompleting: true,
+      hint: "正在补块",
+    });
+
+    emit("wire", { type: "peer" });
+    expect(读取协作分发会话状态("swarm-att-2")?.hint).toBe("正在协作分发");
+
+    emit("noPeers");
+    expect(读取协作分发会话状态("swarm-att-2")?.hint).toBe("正在补块");
+
+    emit("done");
+    expect(读取协作分发会话状态("swarm-att-2")).toMatchObject({
+      eagerCompleting: false,
+      hint: "正在协作分发",
+    });
   });
 });

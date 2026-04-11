@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-11)
 
 ## Corpus Check
-- 84 files · ~3,988,624 words
+- 84 files · ~3,989,319 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 271 nodes · 378 edges · 31 communities detected
+- 273 nodes · 380 edges · 31 communities detected
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
@@ -91,11 +91,11 @@ Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): prepare_media_upload(), 数据库真相模型包含媒体Tus运输记录表()
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (2): prepare_media_upload(), 数据库真相模型包含媒体Tus运输记录表()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
@@ -164,9 +164,9 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 13`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 14`** (2 nodes): `prepare_media_upload()`, `数据库真相模型包含媒体Tus运输记录表()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `prepare_media_upload()`, `数据库真相模型包含媒体Tus运输记录表()`
+- **Thin community `Community 15`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 16`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

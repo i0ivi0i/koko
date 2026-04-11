@@ -91,6 +91,51 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
+  it("协作分发仍在后台补齐整附件时，会把正在补块提示继续透给视图层", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-4",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-4",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-4",
+        content_hash: "hash-video-4",
+        swarm_id: "swarm-hash-video-4",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-4",
+        torrent_info_hash: "torrent-info-hash-video-4",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-4",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+      },
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource: async () => ({
+        src: "blob:http://media.local/swarm-video-4",
+        hint: "正在补块" as const,
+      }),
+      probeAnchor: async () => undefined,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-4",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "swarm",
+      attachmentId: "att-video-4",
+      kind: "video",
+      src: "blob:http://media.local/swarm-video-4",
+      thumbnailUrl: null,
+      hint: "正在补块",
+    });
+  });
+
   it("后端裁决 expired 时会直接返回内容已过期", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-expired",

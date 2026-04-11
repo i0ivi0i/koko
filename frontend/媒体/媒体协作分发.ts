@@ -5,9 +5,16 @@ export interface WebTorrent文件 {
   select(priority?: number): void;
 }
 
+export interface WebTorrent连接 {
+  readonly type?: string;
+}
+
 export interface WebTorrent种子 {
   files: WebTorrent文件[];
   on(event: "error", handler: (error: unknown) => void): void;
+  on(event: "wire", handler: (wire: WebTorrent连接) => void): void;
+  on(event: "noPeers", handler: () => void): void;
+  on(event: "done", handler: () => void): void;
 }
 
 export interface WebTorrent浏览器客户端 {
@@ -35,11 +42,18 @@ export interface 协作分发浏览器运行时 {
 
 export interface 协作分发媒体源 {
   src: string;
-  hint: "正在协作分发";
+  hint: "正在协作分发" | "正在补块";
 }
 
+type 协作分发会话 = {
+  sourcePromise: Promise<{ src: string } | null>;
+  refs: number;
+  eagerCompleting: boolean;
+  hint: 协作分发媒体源["hint"] | null;
+};
+
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
-const 协作分发媒体源Promise表 = new Map<string, Promise<协作分发媒体源 | null>>();
+const 协作分发会话表 = new Map<string, 协作分发会话>();
 
 async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏览器构造器> {
   const mod = await import("webtorrent/dist/webtorrent.min.js");
@@ -139,6 +153,77 @@ function 读取首个可播放文件(
   return file;
 }
 
+function 推导协作分发提示(session: 协作分发会话): 协作分发媒体源["hint"] {
+  if (session.hint) {
+    return session.hint;
+  }
+  return session.eagerCompleting ? "正在补块" : "正在协作分发";
+}
+
+function 绑定协作分发会话事件(session: 协作分发会话, torrent: WebTorrent种子) {
+  // 运行态提示严格站在官方 torrent 事件上：
+  // 1. 有 peer/wire 说明开始进入群友接力；
+  // 2. noPeers 或只剩 web seed 时，提示回到“正在补块”；
+  // 3. done 代表整附件已经补齐，本地后续就能完整参与协作分发。
+  torrent.on("wire", (wire) => {
+    session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
+  });
+  torrent.on("noPeers", () => {
+    session.hint = "正在补块";
+  });
+  torrent.on("done", () => {
+    session.eagerCompleting = false;
+    session.hint = "正在协作分发";
+  });
+}
+
+async function 确保协作分发会话(input: {
+  attachmentId: string;
+  kind: 媒体种类;
+  distribution: 媒体协作分发定位片段;
+}): Promise<协作分发会话> {
+  let session = 协作分发会话表.get(input.distribution.swarm_id);
+  if (session) {
+    session.refs += 1;
+    return session;
+  }
+
+  session = {
+    sourcePromise: Promise.resolve(null),
+    refs: 1,
+    eagerCompleting: true,
+    hint: input.distribution.web_seed_url ? "正在补块" : null,
+  };
+  协作分发会话表.set(input.distribution.swarm_id, session);
+
+  session.sourcePromise = (async () => {
+    const runtime = await 获取或创建协作分发浏览器运行时();
+    const torrent = await 接入协作分发种子(runtime, input.distribution);
+    绑定协作分发会话事件(session, torrent);
+    const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
+    return {
+      src: file.streamURL,
+    };
+  })().catch((error) => {
+    协作分发会话表.delete(input.distribution.swarm_id);
+    throw error;
+  });
+
+  return session;
+}
+
+export function 读取协作分发会话状态(swarmId: string) {
+  const session = 协作分发会话表.get(swarmId);
+  if (!session) {
+    return null;
+  }
+  return {
+    refs: session.refs,
+    eagerCompleting: session.eagerCompleting,
+    hint: 推导协作分发提示(session),
+  };
+}
+
 export async function 解析协作分发源(input: {
   attachmentId: string;
   kind: 媒体种类;
@@ -148,23 +233,19 @@ export async function 解析协作分发源(input: {
   if (!distribution) {
     return null;
   }
-  let sourcePromise = 协作分发媒体源Promise表.get(distribution.swarm_id);
-  if (!sourcePromise) {
-    sourcePromise = (async () => {
-      const runtime = await 获取或创建协作分发浏览器运行时();
-      const torrent = await 接入协作分发种子(runtime, distribution);
-      const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
-      return {
-        src: file.streamURL,
-        hint: "正在协作分发" as const,
-      };
-    })().catch((error) => {
-      协作分发媒体源Promise表.delete(distribution.swarm_id);
-      throw error;
-    });
-    协作分发媒体源Promise表.set(distribution.swarm_id, sourcePromise);
+  const session = await 确保协作分发会话({
+    attachmentId: input.attachmentId,
+    kind: input.kind,
+    distribution,
+  });
+  const source = await session.sourcePromise;
+  if (!source) {
+    return null;
   }
-  return sourcePromise;
+  return {
+    src: source.src,
+    hint: 推导协作分发提示(session),
+  };
 }
 
 export async function 获取或创建协作分发浏览器运行时(
@@ -186,5 +267,5 @@ export async function 获取或创建协作分发浏览器运行时(
 
 export function 重置协作分发浏览器运行时() {
   协作分发浏览器运行时Promise = null;
-  协作分发媒体源Promise表.clear();
+  协作分发会话表.clear();
 }
