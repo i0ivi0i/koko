@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-11)
 
 ## Corpus Check
-- 78 files · ~3,030,095 words
+- 78 files · ~3,163,597 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -75,15 +75,15 @@ Nodes (4): handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus
 
 ### Community 10 - "Community 10"
 Cohesion: 0.67
-Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
+Nodes (3): load_attachment_content(), load_media_locator(), parse_attachment_content_query()
 
 ### Community 11 - "Community 11"
 Cohesion: 0.67
-Nodes (3): load_attachment_content(), load_media_locator(), parse_attachment_content_query()
+Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
@@ -91,11 +91,11 @@ Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
@@ -148,13 +148,13 @@ Nodes (0):
 ## Knowledge Gaps
 - **24 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+19 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 12`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 12`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 13`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 14`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 15`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 16`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
