@@ -791,6 +791,59 @@ async fn prepare图片和视频都会返回统一Tus契约() {
 
 #[tokio::test]
 #[serial]
+#[allow(non_snake_case)]
+async fn prepare媒体上传在未显式配置public_endpoint时会按请求Host推导LAN可访问Tus地址() {
+    let backup = 备份并清空环境变量(&["RUSTUS_PUBLIC_ENDPOINT", "RUSTUS_SERVER_PORT", "RUSTUS_URL"]);
+    env::set_var("RUSTUS_SERVER_PORT", "2081");
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("prepare-media-lan-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "lan.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[("host", "192.168.50.9:8080")],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["tus_endpoint"].as_str(),
+        Some("http://192.168.50.9:2081/files"),
+        "未显式配置 public endpoint 时，prepare 至少应回到当前请求 Host 可达的 Rustus 地址"
+    );
+    恢复环境变量(backup);
+}
+
+#[tokio::test]
+#[serial]
 async fn 没有上传回执时complete媒体上传会返回attachment_not_ready() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

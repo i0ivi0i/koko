@@ -46,8 +46,9 @@ pub struct 媒体存储配置 {
 /// 它不回答业务问题，也不拥有附件/消息真相。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rustus配置 {
-    pub public_endpoint: String,
+    pub public_endpoint: Option<String>,
     pub server_port: u16,
+    pub url: String,
     pub data_dir: String,
     pub info_dir: String,
 }
@@ -245,14 +246,21 @@ pub fn 读取附件存储目录() -> String {
         .unwrap_or_else(|| "data/attachments".to_string())
 }
 
-/// Rustus 运输配置默认保持“本机 + 本地目录”：
-/// 1. 浏览器默认连 `127.0.0.1:1081/files`；
+/// Rustus 运输配置默认保持“本机可跑 + 对外地址可推导”：
+/// 1. 未显式配置 `RUSTUS_PUBLIC_ENDPOINT` 时，不抢先把 `127.0.0.1` 写死进 prepare 契约；
 /// 2. 上传字节和 `.info` 元数据分别落到两个稳定目录；
-/// 3. 这些值都允许环境变量覆盖，方便后续 Linux 同机部署。
+/// 3. `server_port/url` 继续保留，给 prepare 在 LAN / 调试场景下按当前请求 Host 推导可达地址。
 pub fn 读取rustus配置() -> io::Result<Rustus配置> {
     let server_port = 读取可选端口("RUSTUS_SERVER_PORT", 1081)?;
     let public_endpoint = 读取可选环境变量("RUSTUS_PUBLIC_ENDPOINT")
-        .unwrap_or_else(|| format!("http://127.0.0.1:{server_port}/files"));
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let raw_url = 读取可选环境变量("RUSTUS_URL").unwrap_or_else(|| "/files".to_string());
+    let url = if raw_url.starts_with('/') {
+        raw_url
+    } else {
+        format!("/{raw_url}")
+    };
     let data_dir =
         读取可选环境变量("RUSTUS_DATA_DIR").unwrap_or_else(|| "data/rustus".to_string());
     let info_dir = 读取可选环境变量("RUSTUS_INFO_DIR")
@@ -261,6 +269,7 @@ pub fn 读取rustus配置() -> io::Result<Rustus配置> {
     Ok(Rustus配置 {
         public_endpoint,
         server_port,
+        url,
         data_dir,
         info_dir,
     })
@@ -394,18 +403,21 @@ mod tests {
     fn 读取rustus配置会给出本地默认值() {
         let old_public_endpoint = 读并清空环境变量("RUSTUS_PUBLIC_ENDPOINT");
         let old_server_port = 读并清空环境变量("RUSTUS_SERVER_PORT");
+        let old_url = 读并清空环境变量("RUSTUS_URL");
         let old_data_dir = 读并清空环境变量("RUSTUS_DATA_DIR");
         let old_info_dir = 读并清空环境变量("RUSTUS_INFO_DIR");
 
         let config = 读取rustus配置().expect("默认 rustus 配置应可读");
 
-        assert_eq!(config.public_endpoint, "http://127.0.0.1:1081/files");
+        assert_eq!(config.public_endpoint, None);
         assert_eq!(config.server_port, 1081);
+        assert_eq!(config.url, "/files");
         assert_eq!(config.data_dir, "data/rustus");
         assert_eq!(config.info_dir, "data/rustus-info");
 
         恢复环境变量("RUSTUS_PUBLIC_ENDPOINT", old_public_endpoint);
         恢复环境变量("RUSTUS_SERVER_PORT", old_server_port);
+        恢复环境变量("RUSTUS_URL", old_url);
         恢复环境变量("RUSTUS_DATA_DIR", old_data_dir);
         恢复环境变量("RUSTUS_INFO_DIR", old_info_dir);
     }
@@ -415,23 +427,30 @@ mod tests {
     fn 读取rustus配置会尊重显式环境变量() {
         let old_public_endpoint = env::var("RUSTUS_PUBLIC_ENDPOINT").ok();
         let old_server_port = env::var("RUSTUS_SERVER_PORT").ok();
+        let old_url = env::var("RUSTUS_URL").ok();
         let old_data_dir = env::var("RUSTUS_DATA_DIR").ok();
         let old_info_dir = env::var("RUSTUS_INFO_DIR").ok();
 
         env::set_var("RUSTUS_PUBLIC_ENDPOINT", "https://im.example.com/files");
         env::set_var("RUSTUS_SERVER_PORT", "2081");
+        env::set_var("RUSTUS_URL", "uploads");
         env::set_var("RUSTUS_DATA_DIR", "E:/tmp/rustus-data");
         env::set_var("RUSTUS_INFO_DIR", "E:/tmp/rustus-info");
 
         let config = 读取rustus配置().expect("显式 rustus 配置应可读");
 
-        assert_eq!(config.public_endpoint, "https://im.example.com/files");
+        assert_eq!(
+            config.public_endpoint,
+            Some("https://im.example.com/files".to_string())
+        );
         assert_eq!(config.server_port, 2081);
+        assert_eq!(config.url, "/uploads");
         assert_eq!(config.data_dir, "E:/tmp/rustus-data");
         assert_eq!(config.info_dir, "E:/tmp/rustus-info");
 
         恢复环境变量("RUSTUS_PUBLIC_ENDPOINT", old_public_endpoint);
         恢复环境变量("RUSTUS_SERVER_PORT", old_server_port);
+        恢复环境变量("RUSTUS_URL", old_url);
         恢复环境变量("RUSTUS_DATA_DIR", old_data_dir);
         恢复环境变量("RUSTUS_INFO_DIR", old_info_dir);
     }

@@ -8,7 +8,7 @@ use crate::{
 };
 use axum::{
     extract::{Path, Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{header, uri::Authority, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -522,6 +522,64 @@ fn 读取rustus_metadata字段(
             "invalid_argument",
             format!("缺少 metadata.{key}"),
         ))
+}
+
+fn 读取首个非空请求头(headers: &HeaderMap, name: &'static str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .find(|part| !part.is_empty())
+                .map(|part| part.to_string())
+        })
+}
+
+fn 包装url主机(host: &str) -> String {
+    if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
+/// `RUSTUS_PUBLIC_ENDPOINT` 没显式配置时，这里按当前 HTTP 请求 Host 推导一个 LAN 可达的地址。
+///
+/// 边界约束：
+/// 1. 显式配置永远优先，生产反向代理场景仍应直接给出权威 public endpoint；
+/// 2. 这里只作为本机/局域网开发兜底，避免 prepare 默认把 `127.0.0.1` 塞给异机浏览器；
+/// 3. 推导结果仍然只描述“Tus sidecar 暴露在哪”，不改变业务真相归属。
+fn 推导rustus对外入口(
+    headers: &HeaderMap,
+    rustus_server_port: u16,
+    rustus_url: &str,
+) -> Option<String> {
+    let raw_host = 读取首个非空请求头(headers, "x-forwarded-host")
+        .or_else(|| 读取首个非空请求头(headers, "host"))?;
+    let authority = raw_host.parse::<Authority>().ok()?;
+    let scheme = 读取首个非空请求头(headers, "x-forwarded-proto")
+        .or_else(|| 读取首个非空请求头(headers, "x-forwarded-scheme"))
+        .unwrap_or_else(|| "http".to_string());
+    let hostname = authority.host();
+    let host_for_url = 包装url主机(hostname);
+    let should_omit_port =
+        (scheme == "http" && rustus_server_port == 80) || (scheme == "https" && rustus_server_port == 443);
+    let authority_for_url = if should_omit_port {
+        host_for_url
+    } else {
+        format!("{host_for_url}:{rustus_server_port}")
+    };
+    Some(format!("{scheme}://{authority_for_url}{rustus_url}"))
+}
+
+fn 读取媒体_tus对外地址(state: &应用状态, headers: &HeaderMap) -> String {
+    state
+        .rustus_public_endpoint
+        .clone()
+        .or_else(|| 推导rustus对外入口(headers, state.rustus_server_port, &state.rustus_url))
+        .unwrap_or_else(|| format!("http://127.0.0.1:{}{}", state.rustus_server_port, state.rustus_url))
 }
 
 /// storage locator 来自 sidecar，不可被客户端随意扩展成任意磁盘路径。
@@ -1333,6 +1391,7 @@ pub(super) async fn load_room_history(
 pub(super) async fn prepare_media_upload(
     Path(raw_kind): Path<String>,
     State(state): State<应用状态>,
+    headers: HeaderMap,
     Json(body): Json<PrepareMediaUploadBody>,
 ) -> impl IntoResponse {
     let media_kind = match 解析媒体类型(raw_kind.as_str()) {
@@ -1475,13 +1534,14 @@ pub(super) async fn prepare_media_upload(
     let response_kind = 媒体类型转标签(&snapshot.种类);
     let response_mime_type = snapshot.mime_type.clone();
     let response_byte_size = snapshot.字节大小;
+    let rustus_public_endpoint = 读取媒体_tus对外地址(&state, &headers);
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "attachment_id": response_attachment_id,
             "kind": response_kind,
             "upload_method": 媒体上传运输方式_TUS,
-            "tus_endpoint": state.rustus_public_endpoint,
+            "tus_endpoint": rustus_public_endpoint,
             "tus_headers": {
                 "Authorization": format!("Bearer {upload_token}"),
             },

@@ -308,6 +308,10 @@ try {
     if ([string]::IsNullOrWhiteSpace($rustusPort)) {
         $rustusPort = "1081"
     }
+    $rustusHost = [Environment]::GetEnvironmentVariable("RUSTUS_SERVER_HOST")
+    if ([string]::IsNullOrWhiteSpace($rustusHost)) {
+        $rustusHost = "0.0.0.0"
+    }
     $rustusDataDir = [Environment]::GetEnvironmentVariable("RUSTUS_DATA_DIR")
     if ([string]::IsNullOrWhiteSpace($rustusDataDir)) {
         $rustusDataDir = "data/rustus"
@@ -334,7 +338,7 @@ try {
     New-Item -ItemType Directory -Path $resolvedRustusDataDir -Force | Out-Null
     New-Item -ItemType Directory -Path $resolvedRustusInfoDir -Force | Out-Null
     Write-Host "访问入口: http://127.0.0.1:$appPort/"
-    Write-Host "Rustus 入口: http://127.0.0.1:$rustusPort$rustusUrl"
+    Write-Host "Rustus 监听: http://$rustusHost:$rustusPort$rustusUrl"
     Write-Host "子进程日志目录: $logDirectory"
     # 启动器使用独立 target 目录：
     # 1. 不再和开发者手动执行的 `cargo run` 争抢默认 target\\debug\\koko.exe；
@@ -356,12 +360,12 @@ try {
     #    Uppy/Tus 默认会直接把整块文件作为 PATCH 发送，若沿用 Rustus 256 KiB 默认值，
     #    正常图片也会在 transport 层被 413 拦死，业务层根本看不到。
     # 5. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
-    Write-Host "启动 Rustus: rustus --port $rustusPort --url $rustusUrl --max-body-size $rustusMaxBodySize"
+    Write-Host "启动 Rustus: rustus --host $rustusHost --port $rustusPort --url $rustusUrl --max-body-size $rustusMaxBodySize"
     $rustusProcess = New-ManagedProcess `
         -Name "rustus" `
         -FilePath $rustusPath `
         -ArgumentList @(
-            "--host", "127.0.0.1",
+            "--host", $rustusHost,
             "--port", $rustusPort,
             "--url", $rustusUrl,
             "--max-body-size", $rustusMaxBodySize,

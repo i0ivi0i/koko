@@ -39,7 +39,9 @@ pub struct 应用状态 {
     pub admin_password: String,
     pub attachment_storage_dir: String,
     pub attachment_store: Arc<dyn ObjectStore>,
-    pub rustus_public_endpoint: String,
+    pub rustus_public_endpoint: Option<String>,
+    pub rustus_server_port: u16,
+    pub rustus_url: String,
     pub rustus_data_dir: String,
 }
 
@@ -72,6 +74,8 @@ pub async fn 构建应用状态(
         attachment_storage_dir,
         attachment_store,
         rustus_public_endpoint: rustus.public_endpoint,
+        rustus_server_port: rustus.server_port,
+        rustus_url: rustus.url,
         rustus_data_dir: rustus.data_dir,
     })
 }
