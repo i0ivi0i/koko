@@ -1,7 +1,24 @@
 import { html, LitElement } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { 媒体播放结果 } from "./媒体/媒体播放.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
+
+type 图片预览状态 = {
+  attachmentId: string;
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+} | null;
+
+const 构建视频首帧预览源 = (src: string, posterSrc: string | null): string => {
+  // 没有服务端 poster 时，用媒体片段让浏览器预取首帧，避免群聊里出现一片黑的视频卡片。
+  if (posterSrc || src.includes("#")) {
+    return src;
+  }
+  return `${src}#t=0.1`;
+};
 
 /**
  * 房间消息窗只承接消息视口内部的表达与交互转发：
@@ -19,12 +36,14 @@ export class 房间消息窗 extends LitElement {
     historyHint: { type: String },
     jumpToLatestLabel: { type: String },
     mediaPlaybackByAttachmentId: { attribute: false },
+    图片预览: { attribute: false, state: true },
   };
 
   declare items: 聊天列表展示项[];
   declare historyHint: string;
   declare jumpToLatestLabel: string;
   declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+  declare 图片预览: 图片预览状态;
 
   constructor() {
     super();
@@ -32,6 +51,7 @@ export class 房间消息窗 extends LitElement {
     this.historyHint = "";
     this.jumpToLatestLabel = "";
     this.mediaPlaybackByAttachmentId = {};
+    this.图片预览 = null;
   }
 
   /**
@@ -69,6 +89,27 @@ export class 房间消息窗 extends LitElement {
         composed: true,
       })
     );
+  }
+
+  private 打开图片预览(event: Event, preview: NonNullable<图片预览状态>): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.图片预览 = preview;
+    void this.updateComplete.then(() => {
+      this.querySelector<HTMLElement>(".message-image-preview-backdrop")?.focus();
+    });
+  }
+
+  private 关闭图片预览(): void {
+    this.图片预览 = null;
+  }
+
+  private 处理图片预览键盘(event: KeyboardEvent): void {
+    if (event.key !== "Escape") {
+      return;
+    }
+    event.stopPropagation();
+    this.关闭图片预览();
   }
 
   private renderMessageBody(item: 消息展示项) {
@@ -125,18 +166,19 @@ export class 房间消息窗 extends LitElement {
           const playbackSrc =
             playback?.mode === "swarm" || playback?.mode === "anchor" ? playback.src : null;
           if (attachment.kind === "video") {
+            const videoSrc = playbackSrc ?? attachment.originalSrc;
             return html`
               <div class="message-video-card">
                 <video
                   class="message-video"
                   data-attachment-id=${attachment.attachmentId}
-                  src=${playbackSrc ?? attachment.originalSrc}
+                  src=${构建视频首帧预览源(videoSrc, attachment.posterSrc)}
                   width=${attachment.displayWidth}
                   height=${attachment.displayHeight}
                   controls
                   playsinline
                   preload="metadata"
-                  poster=${attachment.posterSrc ?? ""}
+                  poster=${ifDefined(attachment.posterSrc ?? undefined)}
                 ></video>
                 ${渲染媒体提示(attachment.attachmentId, playback)}
               </div>
@@ -145,34 +187,81 @@ export class 房间消息窗 extends LitElement {
           return html`
             <div class="message-image-card">
               ${(() => {
-                const imagePlaybackSrc =
-                  playback?.mode === "swarm" ||
-                  (playback?.mode === "anchor" && playback.hint !== null)
+                const imagePreviewSrc =
+                  playback?.mode === "swarm" || playback?.mode === "anchor"
                     ? playback.src
-                    : null;
+                    : attachment.originalSrc;
                 return html`
-                  <a
-                    class="message-image-link"
-                    href=${imagePlaybackSrc ?? attachment.originalSrc}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    class="message-image-preview-trigger"
+                    type="button"
+                    data-attachment-id=${attachment.attachmentId}
+                    aria-label="查看图片原图"
+                    @click=${(event: Event) =>
+                      this.打开图片预览(event, {
+                        attachmentId: attachment.attachmentId,
+                        src: imagePreviewSrc,
+                        alt: "图片附件原图",
+                        width: attachment.width,
+                        height: attachment.height,
+                      })}
                   >
                     <img
                       class="message-image"
                       data-attachment-id=${attachment.attachmentId}
-                      src=${imagePlaybackSrc ?? attachment.thumbnailSrc}
+                      src=${attachment.thumbnailSrc}
                       alt="图片附件"
                       width=${attachment.displayWidth}
                       height=${attachment.displayHeight}
                       loading="lazy"
                     />
-                  </a>
+                  </button>
                 `;
               })()}
               ${渲染媒体提示(attachment.attachmentId, playback)}
             </div>
           `;
         })}
+      </div>
+    `;
+  }
+
+  private renderImagePreview() {
+    const preview = this.图片预览;
+    if (!preview) {
+      return null;
+    }
+    return html`
+      <div
+        class="message-image-preview-backdrop"
+        data-image-preview=${preview.attachmentId}
+        role="dialog"
+        aria-modal="true"
+        aria-label="图片原图预览"
+        tabindex="0"
+        @click=${() => this.关闭图片预览()}
+        @keydown=${(event: KeyboardEvent) => this.处理图片预览键盘(event)}
+      >
+        <figure
+          class="message-image-preview"
+          @click=${(event: Event) => event.stopPropagation()}
+        >
+          <button
+            class="message-image-preview-close"
+            type="button"
+            aria-label="关闭图片预览"
+            @click=${() => this.关闭图片预览()}
+          >
+            关闭
+          </button>
+          <img
+            class="message-image-preview-original"
+            src=${preview.src}
+            alt=${preview.alt}
+            width=${preview.width}
+            height=${preview.height}
+          />
+        </figure>
       </div>
     `;
   }
@@ -236,6 +325,7 @@ export class 房间消息窗 extends LitElement {
             </button>
           `
         : null}
+      ${this.renderImagePreview()}
     `;
   }
 }

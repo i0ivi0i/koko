@@ -58,6 +58,16 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("overflow-anchor: none");
   });
 
+  it("视频媒体卡片会被消息滚动容器隔离裁切，避免原生视频层盖住控制台", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain("isolation: isolate");
+    expect(styles).toContain("contain: paint");
+    expect(styles).toContain(".message-video-card");
+    expect(styles).toContain(".message-video");
+    expect(styles).toContain("z-index: 0");
+  });
+
   it("消息窗口宿主会在壳层里接住房间 1fr 行的布局契约，保证内部滚动容器还能缩放", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
@@ -229,10 +239,29 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const image = el.shadowRoot!.querySelector(
       'img[data-attachment-id="att-1"]'
     ) as HTMLImageElement | null;
+    const previewTrigger = el.shadowRoot!.querySelector(
+      'button.message-image-preview-trigger[data-attachment-id="att-1"]'
+    ) as HTMLButtonElement | null;
     expect(image).not.toBeNull();
     expect(image?.src).toContain(
       "/api/attachments/att-1/content?session_id=s-test&variant=thumbnail"
     );
+    expect(el.shadowRoot!.querySelector(".message-image-link")).toBeNull();
+    expect(previewTrigger).not.toBeNull();
+
+    previewTrigger!.click();
+    await 等待组件稳定(el);
+
+    const previewImage = el.shadowRoot!.querySelector(
+      '[data-image-preview="att-1"] .message-image-preview-original'
+    ) as HTMLImageElement | null;
+    expect(previewImage?.src).toContain(
+      "/api/attachments/att-1/content?session_id=s-test&variant=original"
+    );
+
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".message-image-preview-close")?.click();
+    await 等待组件稳定(el);
+    expect(el.shadowRoot!.querySelector('[data-image-preview="att-1"]')).toBeNull();
     el.remove();
   });
 
@@ -277,9 +306,10 @@ describe("聊天壳集成 / 首页与控制台", () => {
       'video[data-attachment-id="att-video-1"]'
     ) as HTMLVideoElement | null;
     expect(video).not.toBeNull();
-    expect(video?.src).toContain(
-      "/api/attachments/att-video-1/content?session_id=s-test&variant=original"
+    expect(video?.getAttribute("src")).toContain(
+      "/api/attachments/att-video-1/content?session_id=s-test&variant=original#t=0.1"
     );
+    expect(video?.hasAttribute("poster")).toBe(false);
     el.remove();
   });
 
@@ -336,7 +366,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const hint = el.shadowRoot!.querySelector(
       '[data-media-hint="att-video-swarm-1"]'
     ) as HTMLElement | null;
-    expect(video?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1");
+    expect(video?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1#t=0.1");
     expect(hint?.textContent).toContain("正在协作分发");
     el.remove();
   });

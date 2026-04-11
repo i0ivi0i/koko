@@ -385,6 +385,10 @@ export class 聊天壳 extends LitElement {
 
     /* 输入区单独放在底部壳层栏位里，避免消息很多时把输入框重新挤回顶部。 */
     .message-scroll {
+      position: relative;
+      z-index: 0;
+      isolation: isolate;
+      contain: paint;
       min-height: 0;
       height: 100%;
       overflow-y: auto;
@@ -471,11 +475,53 @@ export class 聊天壳 extends LitElement {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .message-image-link {
+    .message-image-card,
+    .message-video-card {
+      min-width: 0;
+    }
+
+    .message-video-card {
+      position: relative;
+      z-index: 0;
+      overflow: hidden;
+      border-radius: 16px;
+      isolation: isolate;
+      contain: paint;
+      background:
+        radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.16), transparent 34%),
+        linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
+    }
+
+    .message-video {
+      position: relative;
+      z-index: 0;
       display: block;
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      border-radius: inherit;
+      object-fit: cover;
+      background:
+        radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.16), transparent 28%),
+        linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
+    }
+
+    .message-image-preview-trigger {
+      display: block;
+      width: 100%;
+      padding: 0;
       line-height: 0;
       border-radius: 16px;
       overflow: hidden;
+      background: transparent;
+      color: inherit;
+      text-align: inherit;
+      cursor: zoom-in;
+    }
+
+    .message-image-preview-trigger:focus-visible {
+      outline: 2px solid var(--accent-hover);
+      outline-offset: 3px;
     }
 
     .message-image {
@@ -485,6 +531,50 @@ export class 聊天壳 extends LitElement {
       border-radius: 16px;
       object-fit: cover;
       background: rgba(255, 255, 255, 0.04);
+    }
+
+    .message-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      border-radius: 28px;
+      background: rgba(5, 8, 12, 0.78);
+      backdrop-filter: blur(14px);
+      cursor: zoom-out;
+    }
+
+    .message-image-preview {
+      position: relative;
+      max-width: min(100%, 860px);
+      max-height: 100%;
+      margin: 0;
+      cursor: default;
+    }
+
+    .message-image-preview-original {
+      display: block;
+      width: auto;
+      max-width: 100%;
+      height: auto;
+      max-height: 100%;
+      border-radius: 22px;
+      object-fit: contain;
+      background: rgba(255, 255, 255, 0.04);
+      box-shadow: var(--shadow-warm);
+    }
+
+    .message-image-preview-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(9, 13, 18, 0.76);
+      color: var(--text-primary);
+      box-shadow: 0 0 0 1px var(--line-soft);
     }
 
     /* 新消息提示属于房间壳层浮动入口：用户正在补旧未读时提示可见，但不抢走当前视角。 */
