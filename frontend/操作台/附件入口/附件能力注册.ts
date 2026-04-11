@@ -22,29 +22,6 @@ export interface 附件能力注册表 {
   统一媒体文件选择配置: 统一媒体文件选择配置;
 }
 
-type 附件入口运行环境 = {
-  userAgent?: string;
-  maxTouchPoints?: number;
-};
-
-function 读取当前附件入口运行环境(): 附件入口运行环境 {
-  const navigatorRef = globalThis.navigator;
-  return {
-    userAgent: navigatorRef?.userAgent ?? "",
-    maxTouchPoints: navigatorRef?.maxTouchPoints ?? 0,
-  };
-}
-
-function 是可能兼容性较弱的移动媒体选择环境(env: 附件入口运行环境): boolean {
-  const userAgent = (env.userAgent ?? "").trim().toLowerCase();
-  const maxTouchPoints = Number.isFinite(env.maxTouchPoints) ? Number(env.maxTouchPoints) : 0;
-  const 是苹果移动端 =
-    /(iphone|ipad|ipod)/u.test(userAgent) ||
-    (userAgent.includes("macintosh") && maxTouchPoints > 1);
-  const 是其他移动端 = /(android|mobile|harmony)/u.test(userAgent);
-  return 是苹果移动端 || 是其他移动端;
-}
-
 function 构造统一媒体文件Accept(): string {
   /**
    * 移动端系统 picker 对长 `accept` 列表的兼容性并不稳定，
@@ -62,16 +39,14 @@ function 构造统一媒体文件Accept(): string {
  * 但文件选择配置必须一开始就按统一媒体入口建模：
  * 1. 图片和视频共用一个 input；
  * 2. `accept` 收口成宽类型媒体提示，避免长过滤列表反向伤害系统 picker；
- * 3. 多选能力按运行环境降级，移动端优先稳定单选，桌面端继续保留多选。
+ * 3. `multiple=true` 默认保留，让系统 picker 自己暴露平台差异，而不是壳层提前阉割能力。
  */
-function 构造统一媒体文件选择配置(
-  env: 附件入口运行环境
-): 统一媒体文件选择配置 {
+function 构造统一媒体文件选择配置(): 统一媒体文件选择配置 {
   return {
     buttonId: "composerMediaPickerBtn",
     inputId: "composerMediaFileInput",
     accept: 构造统一媒体文件Accept(),
-    multiple: !是可能兼容性较弱的移动媒体选择环境(env),
+    multiple: true,
   };
 }
 
@@ -82,9 +57,7 @@ export const 默认统一媒体文件选择配置: 统一媒体文件选择配�
   multiple: true,
 };
 
-export function 创建附件能力注册表(
-  env: 附件入口运行环境 = 读取当前附件入口运行环境()
-): 附件能力注册表 {
+export function 创建附件能力注册表(): 附件能力注册表 {
   return {
     默认能力标识: "media",
     能力列表: [
@@ -95,6 +68,6 @@ export function 创建附件能力注册表(
         triggerStrategy: "direct",
       },
     ],
-    统一媒体文件选择配置: 构造统一媒体文件选择配置(env),
+    统一媒体文件选择配置: 构造统一媒体文件选择配置(),
   };
 }

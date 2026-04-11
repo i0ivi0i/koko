@@ -41,19 +41,15 @@ describe("附件能力注册表", () => {
     expect(文件类型集合).toEqual(["image/*", "video/*"]);
   });
 
-  it("移动环境下统一媒体文件选择配置会回退为单选，优先稳住系统 picker 兼容性", () => {
-    const 注册表 = 创建附件能力注册表({
-      userAgent:
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Mobile/15E148 Safari/604.1",
-      maxTouchPoints: 5,
-    });
+  it("统一媒体文件选择配置不再承载运行环境降级策略，默认始终保留多选", () => {
+    const 注册表 = 创建附件能力注册表();
 
     expect(注册表.统一媒体文件选择配置).toEqual(
       expect.objectContaining({
         buttonId: "composerMediaPickerBtn",
         inputId: "composerMediaFileInput",
         accept: "image/*,video/*",
-        multiple: false,
+        multiple: true,
       })
     );
   });
