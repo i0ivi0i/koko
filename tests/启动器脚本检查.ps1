@@ -20,6 +20,15 @@ Assert-True (Test-Path -LiteralPath $upScriptPath) "缺少 up.ps1；应该提供
 
 $runScript = Get-Content -LiteralPath $runScriptPath -Raw
 $upScript = Get-Content -LiteralPath $upScriptPath -Raw
+$runScriptTokens = $null
+$runScriptParseErrors = $null
+[System.Management.Automation.Language.Parser]::ParseFile(
+    $runScriptPath,
+    [ref]$runScriptTokens,
+    [ref]$runScriptParseErrors
+) | Out-Null
+
+Assert-True ($runScriptParseErrors.Count -eq 0) "run.ps1 必须先通过 PowerShell 语法解析，不能连启动前都在脚本插值阶段炸掉。"
 
 Assert-True ($runScript -match '\[switch\]\$UpgradeDependencies') "run.ps1 应该显式接受 UpgradeDependencies 开关。"
 Assert-True ($runScript -match 'if \(\$UpgradeDependencies\)') "run.ps1 应该只在显式升级模式下刷新依赖。"

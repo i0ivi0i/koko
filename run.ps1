@@ -338,7 +338,7 @@ try {
     New-Item -ItemType Directory -Path $resolvedRustusDataDir -Force | Out-Null
     New-Item -ItemType Directory -Path $resolvedRustusInfoDir -Force | Out-Null
     Write-Host "访问入口: http://127.0.0.1:$appPort/"
-    Write-Host "Rustus 监听: http://$rustusHost:$rustusPort$rustusUrl"
+    Write-Host "Rustus 监听: http://${rustusHost}:$rustusPort$rustusUrl"
     Write-Host "子进程日志目录: $logDirectory"
     # 启动器使用独立 target 目录：
     # 1. 不再和开发者手动执行的 `cargo run` 争抢默认 target\\debug\\koko.exe；

@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-11)
 
 ## Corpus Check
-- 72 files · ~1,690,870 words
+- 72 files · ~1,692,501 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -83,7 +83,7 @@ Nodes (3): load_attachment_content(), load_media_locator(), parse_attachment_con
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
@@ -91,7 +91,7 @@ Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
@@ -148,11 +148,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **24 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+19 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 12`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 12`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 13`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 14`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 15`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
