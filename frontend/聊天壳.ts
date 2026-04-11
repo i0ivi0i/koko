@@ -464,6 +464,14 @@ export class 聊天壳 extends LitElement {
       word-break: break-word;
     }
 
+    /* 纯媒体消息像 IM 里常见的图片/视频消息：媒体本身就是气泡，不再额外套一层底板。 */
+    .message-bubble.media-only {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
     .message-attachment-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));

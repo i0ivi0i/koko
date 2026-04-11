@@ -209,7 +209,7 @@ export class 房间消息窗 extends LitElement {
                     <img
                       class="message-image"
                       data-attachment-id=${attachment.attachmentId}
-                      src=${attachment.thumbnailSrc}
+                      src=${imagePreviewSrc}
                       alt="图片附件"
                       width=${attachment.displayWidth}
                       height=${attachment.displayHeight}
@@ -288,13 +288,17 @@ export class 房间消息窗 extends LitElement {
                   </li>
                 `;
               }
+              const mediaOnly = !item.hasText && item.attachments.length > 0;
               return html`
                 <li
                   class="message-row ${item.owner}"
                   data-owner=${item.owner}
                   data-event-position=${item.eventPosition}
                 >
-                  <article class="message-bubble" style=${`width: ${item.bubbleWidth}px;`}>
+                  <article
+                    class="message-bubble ${mediaOnly ? "media-only" : ""}"
+                    style=${`width: ${item.bubbleWidth}px;`}
+                  >
                     ${item.showAlias
                       ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
                       : null}

@@ -200,7 +200,12 @@ export function 派生消息展示项(
         })
       : 多行紧凑候选;
   const 文本气泡宽度 = hasText ? 计算消息气泡宽度(layout, layoutEnv) : 0;
-  const 媒体气泡宽度 = attachments.length > 0 ? 计算媒体附件气泡宽度(attachments, layoutEnv) : 0;
+  const 媒体气泡宽度 =
+    attachments.length > 0
+      ? hasText
+        ? 计算媒体附件气泡宽度(attachments, layoutEnv)
+        : 计算媒体附件内容宽度(attachments, layoutEnv)
+      : 0;
 
   /**
    * 宽度裁决顺序在这里收口：
@@ -280,16 +285,25 @@ function 计算媒体附件气泡宽度(
   attachments: 媒体附件展示项[],
   layoutEnv: 消息文本布局环境
 ): number {
+  return (
+    计算媒体附件内容宽度(attachments, layoutEnv) +
+    layoutEnv.bubbleHorizontalPadding +
+    layoutEnv.bubbleHorizontalBorderWidth
+  );
+}
+
+function 计算媒体附件内容宽度(
+  attachments: 媒体附件展示项[],
+  layoutEnv: 消息文本布局环境
+): number {
   const 宫格间距 = 8;
   const 列数 = attachments.length >= 2 ? 2 : 1;
-  const 正文宽度 =
-    列数 === 1
-      ? attachments[0]?.displayWidth ?? 0
-      : Math.min(
-          layoutEnv.maxContentWidth,
-          (attachments[0]?.displayWidth ?? 0) * 2 + 宫格间距
-        );
-  return 正文宽度 + layoutEnv.bubbleHorizontalPadding + layoutEnv.bubbleHorizontalBorderWidth;
+  return 列数 === 1
+    ? attachments[0]?.displayWidth ?? 0
+    : Math.min(
+        layoutEnv.maxContentWidth,
+        (attachments[0]?.displayWidth ?? 0) * 2 + 宫格间距
+      );
 }
 
 function 计算消息气泡宽度(

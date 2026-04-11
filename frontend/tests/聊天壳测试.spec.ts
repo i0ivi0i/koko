@@ -63,6 +63,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
     expect(styles).toContain("isolation: isolate");
     expect(styles).toContain("contain: paint");
+    expect(styles).toContain(".message-bubble.media-only");
+    expect(styles).toContain("background: transparent");
+    expect(styles).toContain("box-shadow: none");
     expect(styles).toContain(".message-video-card");
     expect(styles).toContain(".message-video");
     expect(styles).toContain("z-index: 0");
@@ -199,7 +202,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("带图片附件的权威消息会在消息窗口里渲染缩略图", async () => {
+  it("纯图片权威消息会像 IM 一样直接展示原图媒体，不再套气泡底板", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
@@ -211,8 +214,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
             client_message_id: "c-img-1",
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
-            text: "看图",
-            body: "看图",
+            text: "",
+            body: "",
             attachments: [
               {
                 kind: "image",
@@ -242,10 +245,14 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const previewTrigger = el.shadowRoot!.querySelector(
       'button.message-image-preview-trigger[data-attachment-id="att-1"]'
     ) as HTMLButtonElement | null;
+    const bubble = el.shadowRoot!.querySelector(".message-bubble.media-only") as HTMLElement | null;
     expect(image).not.toBeNull();
     expect(image?.src).toContain(
-      "/api/attachments/att-1/content?session_id=s-test&variant=thumbnail"
+      "/api/attachments/att-1/content?session_id=s-test&variant=original"
     );
+    expect(el.shadowRoot!.querySelector(".message-body")).toBeNull();
+    expect(bubble).not.toBeNull();
+    expect(bubble?.getAttribute("style")).toContain("width: 320px");
     expect(el.shadowRoot!.querySelector(".message-image-link")).toBeNull();
     expect(previewTrigger).not.toBeNull();
 

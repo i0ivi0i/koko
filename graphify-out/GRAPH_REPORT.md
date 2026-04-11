@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-12)
 
 ## Corpus Check
-- 101 files · ~4,477,384 words
+- 101 files · ~4,477,449 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -101,19 +101,19 @@ Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
@@ -172,13 +172,13 @@ Nodes (0):
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 15`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 16`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 17`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 18`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
+- **Thin community `Community 19`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 20`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
