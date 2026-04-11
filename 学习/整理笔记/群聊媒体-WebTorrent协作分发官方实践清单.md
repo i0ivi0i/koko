@@ -222,6 +222,72 @@ MDN 的 `StorageManager.persist()` 明确说明：
 
 - <https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist>
 
+### 2.11 `service worker` 的 scope 不是想写多大就多大
+
+MDN 对 `navigator.serviceWorker.register()` 写得很明确：
+
+- 默认 `scope` 是 `service worker` 脚本所在目录。
+- 如果你想让 scope 超出脚本所在目录，服务端必须回 `Service-Worker-Allowed` 响应头。
+- `register()` 可以重复调用；如果 scope 和脚本没变，浏览器会把它当更新检查，而不是重复装一份新的注册。
+
+这三句对 `koko` 的现实意义非常大：
+
+1. 如果 `sw.js` 只放在 `/dist/sw.js`，默认 scope 就只是 `/dist/`，管不到首页和房间页。
+2. 所以 `Phase 2` 要么把 `sw.js` 暴露在站点根路径，比如 `/sw.js`；要么继续放在 `/dist`，但必须给这个脚本加 `Service-Worker-Allowed: /`。
+3. `register()` 可以放在壳层启动时执行，但如果担心每次都多打一趟请求，可以先用 `getRegistration()` 再决定是否显式更新。
+
+来源：
+
+- <https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerContainer/register>
+- <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Service-Worker-Allowed>
+
+### 2.12 `WebTorrent` 官方对浏览器打包的口径比“直接 npm import 一切都行”更克制
+
+`WebTorrent` README 公开写了几种浏览器侧路径：
+
+- 直接用预构建脚本
+- 用 `browserify`
+- 用 `webpack`，但要额外配置
+- 或者直接 `import WebTorrent from 'webtorrent/dist/webtorrent.min.js'`，跳过 bundler 配置
+
+这对 `koko` 的真正提醒是：
+
+1. 当前前端是 `esbuild`，不是官方文档重点覆盖的那几条 bundler 路。
+2. 所以 `Phase 2` 最稳的做法，不是先去手搓一轮 `Node builtin polyfill` 和 bundler 黑魔法。
+3. 更像样的第一选择，是优先评估官方预构建入口 `webtorrent/dist/webtorrent.min.js` 能不能直接接进现有前端构建。
+
+这里不是说 `esbuild` 一定不行，  
+而是说：**在没有证据前，不要为了“更工程化”先去发明一套打包兼容层。**
+
+来源：
+
+- <https://github.com/webtorrent/webtorrent>
+
+### 2.13 Rust 侧 metainfo 生成也要先站成熟轮子，不要手搓
+
+我额外查了几个 Rust 侧候选，结论很现实：
+
+- `lava_torrent` 文档明确写了：**目前不建议用于 critical system**
+- `cratetorrent` 文档明确写了：当前状态更像 **toy program**
+- `librqbit` 文档则明确把自己描述成：**fully featured, easy to use torrent downloading library**，并公开暴露了 `create_torrent`
+- `librqbit` 本地 crate 源码也能直接看到：`src/lib.rs` re-export 了 `create_torrent` 和 `CreateTorrentOptions`，`create_torrent_file.rs` 的结果对象还能直接拿 `info_hash()` 和 `as_bytes()`
+- `bip_metainfo` 至少明确支持从目录或内存数据构建 metainfo，但公开文档更偏基础 builder，不像 `librqbit` 那样还在持续作为完整客户端骨架使用
+- `bip_metainfo` 本地 examples / lib 也能直接看到：`MetainfoBuilder::new().build(...)` 可以产出 metainfo bytes，`DirectAccessor::new(...)` 能从内存字节构建，之后用 `Metainfo::from_bytes(...).info().info_hash()` 取 `info_hash`
+
+这对 `koko` 的意义很直接：
+
+1. `Phase 2` 如果真要在 Rust 后端稳定产出 metainfo，先看 `librqbit::create_torrent` 这一类还在真实客户端里活着的轮子。
+2. `librqbit` 的优势是“更接近完整客户端骨架，API 也更直接”；`bip_metainfo` 的优势是“builder 更薄、更聚焦 metainfo 本身”。
+3. `lava_torrent` 和 `cratetorrent` 这些带明显 caveat 的轮子，不该在没有充分理由时直接进主链。
+4. 退一步，就算最终没选 `librqbit`，也应该先做“成熟轮子比较 + 最小验证”，而不是自己手搓 `.torrent` 和 `info_hash`。
+
+来源：
+
+- <https://docs.rs/lava_torrent/latest/lava_torrent/>
+- <https://docs.rs/cratetorrent/latest/cratetorrent/>
+- <https://docs.rs/librqbit/latest/librqbit/>
+- <https://docs.rs/bip_metainfo/latest/bip_metainfo/>
+
 ## 3. 给 `koko` 的直接实现判断
 
 ### 3.1 私有 swarm 的最小官方组合
@@ -291,6 +357,92 @@ MDN 的 `StorageManager.persist()` 明确说明：
 足够先把“现在到底在吃 peer 还是在吃保底源”这类关键观测做起来。  
 第一版没必要再发明一套私有 swarm 诊断协议。
 
+### 3.6 `Phase 2` 的 service worker 落位必须写进计划，不然一定返工
+
+结合当前 `koko` 源码现状：
+
+- Rust 壳层现在只把 hashed 静态资源挂在 `/dist`
+- 前端入口 HTML 走 `/`
+- 还没有专门的 `sw.js` 出口
+
+所以 `Phase 2` 计划里必须明确二选一：
+
+1. 新增站点根路径 `sw.js` 出口
+2. 继续走 `/dist/sw.js`，但后端显式给这个脚本回 `Service-Worker-Allowed: /`
+
+不先把这条写进计划，最后多半会出现：
+
+- `createServer()` 接上了
+- `streamURL` 也写了
+- 但房间页根本不在 service worker 控制范围里
+
+那就会变成“代码看起来都有了，实际上媒体 URL 还是跑不起来”的假完成。
+
+### 3.7 `Phase 2` 更适合先站在官方预构建入口，而不是先折腾 bundler 兼容层
+
+结合当前 `koko` 前端：
+
+- 构建器是 `esbuild`
+- 只有 `入口.ts` 一个主入口
+- 目前没有额外的 Node polyfill 层
+
+因此 `Phase 2` 更像样的计划顺序应该是：
+
+1. 先验证 `webtorrent/dist/webtorrent.min.js` 能否稳定接进现有构建
+2. 能接通就先走这条最薄路径
+3. 只有这条路被真实证据卡住，再评估更重的 bundler 适配
+
+这样更符合“不重复造轮子”和“先让真系统跑起来”的原则。
+
+### 3.8 `Phase 2` 的 metainfo 轮子也要先做一轮成熟度裁决
+
+结合上面的资料，`Phase 2` 计划不该把“Rust 生成 torrent 元信息”写成一句空气话。  
+更诚实的顺序应当是：
+
+1. 先比较 `librqbit::create_torrent` 和 `bip_metainfo`
+2. 记录为什么不用带明显 caveat 的 `lava_torrent / cratetorrent`
+3. 选一个进入最小验证
+4. 验证过后再正式接到主链
+
+这样才能既不手搓，也不把一个文档里自己都写了“toy / not recommended critical”的轮子硬塞进生产设计。
+
+对 `koko` 当前代码再往下想一层，实际结论还会更具体：
+
+1. `complete_media_upload()` 在附件升 `ready` 前，已经直接把 `original_bytes` 读进来了。
+2. 这意味着 `Phase 2` 如果要继续保持“对象存储驱动可替换、本地/S3 都能走”的边界，`bip_metainfo::DirectAccessor::new(file_name, bytes)` 这类“直接从权威字节产 metainfo”的路径，会比 `librqbit::create_torrent(path)` 更贴现有主链。
+3. 反过来说，如果后面真选 `librqbit`，那就必须先回答清楚：对象存储驱动不是本地文件路径时，元信息到底从哪里稳定产出。
+
+所以当前更像样的工程判断是：
+
+- `Phase 2` 先把 `bip_metainfo` 作为主链首选；
+- `librqbit` 保留为备选和比较项，而不是无脑先进主链。
+
+### 3.9 当前 `koko` 的附件内容出口还缺标准 Range，不能直接假装自己已经是合格 Web Seed
+
+结合现有源码，`load_attachment_content()` 现在是：
+
+1. 校验权限；
+2. 从对象存储把整个对象读出来；
+3. 直接回 `200 + body`。
+
+它还没有：
+
+- `Accept-Ranges: bytes`
+- `Content-Range`
+- `206 Partial Content`
+
+这对 `Phase 2` 的直接含义是：
+
+1. 不能把现有 `/api/attachments/{id}/content` 直接吹成“已经是合格 Web Seed”。
+2. 但这也不意味着要手搓私有 chunk 协议。
+3. 更正确的路线是：继续复用这个受控内容出口，只给它补 **标准 HTTP Range 语义**。
+
+也就是说，真正该补的是：
+
+- 标准 Range
+- 受控 `web_seed_url`
+- 不额外发明第二套“媒体补块 API”
+
 ## 4. 对 implementation plan 的直接影响
 
 写 implementation plan 时，应该直接按下面这些硬约束落：
@@ -301,6 +453,11 @@ MDN 的 `StorageManager.persist()` 明确说明：
 4. `bittorrent-tracker` 的票据门禁先留接口和中文注释，别一开始就手搓私有握手层。
 5. 视频 path 需要把 service worker / `createServer()` / `streamURL` 作为正式方案纳入计划，而不是事后补丁。
 6. 第一版浏览器目标写死成“在就传，刷新尽量续，关页就停”。
+7. `Phase 2` 必须明确 `sw.js` 的实际出线路径与 scope/header 方案，不能留成“实现时再看”。
+8. `Phase 2` 优先验证官方预构建 `webtorrent` 浏览器入口，不先手搓 bundler 兼容层。
+9. `Phase 2` 必须先完成 Rust 侧 metainfo 轮子裁决与最小验证，不允许把 `.torrent / info_hash` 生成写成私有实现。
+10. 如果最终选 `librqbit`，计划里要明确落 `create_torrent / info_hash / as_bytes` 这条现成 API；如果最终选 `bip_metainfo`，计划里要明确落 `MetainfoBuilder / DirectAccessor / Metainfo::from_bytes(...).info().info_hash()` 这条现成 API。
+11. `Phase 2` 的 Web Seed 不能只靠现有 `200 + full body` 内容接口冒充完成，必须补标准 HTTP Range 语义。
 
 ## 5. 原始来源（官方优先）
 
