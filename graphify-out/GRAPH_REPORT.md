@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-12)
 
 ## Corpus Check
-- 101 files · ~4,477,449 words
+- 101 files · ~4,477,735 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -22,7 +22,7 @@
 10. `render()` - 4 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `render()` --calls--> `renderImagePreview()`  [EXTRACTED]
+- `render()` --calls--> `renderMediaPreview()`  [EXTRACTED]
   frontend\聊天壳.ts → frontend\房间消息窗.ts
 - `prepare_media_upload()` --calls--> `断言媒体准备结果是Tus契约()`  [EXTRACTED]
   src\房间外壳.rs → tests\测试支撑\媒体.rs
@@ -49,7 +49,7 @@ Nodes (1): HttpRealtime传输
 
 ### Community 3 - "Community 3"
 Cohesion: 0.15
-Nodes (14): buildRoomViewResetPatch(), clearMediaPublisherState(), exitCurrentRoomView(), handleShellConsolePrimaryInput(), joinHistoryRoom(), leaveCurrentRoomView(), render(), renderImagePreview() (+6 more)
+Nodes (14): buildRoomViewResetPatch(), clearMediaPublisherState(), exitCurrentRoomView(), handleShellConsolePrimaryInput(), joinHistoryRoom(), leaveCurrentRoomView(), render(), renderMediaPreview() (+6 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.22
@@ -97,23 +97,23 @@ Nodes (1): Pg仓储
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
@@ -170,15 +170,15 @@ Nodes (0):
 ## Knowledge Gaps
 - **25 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+20 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 15`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
+- **Thin community `Community 15`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 16`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
+- **Thin community `Community 17`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 18`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 19`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 20`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

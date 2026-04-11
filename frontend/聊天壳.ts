@@ -500,7 +500,26 @@ export class 聊天壳 extends LitElement {
         linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
     }
 
-    .message-video {
+    .message-video-preview-trigger {
+      position: relative;
+      display: block;
+      width: 100%;
+      padding: 0;
+      line-height: 0;
+      border-radius: inherit;
+      overflow: hidden;
+      background: transparent;
+      color: inherit;
+      text-align: inherit;
+      cursor: pointer;
+    }
+
+    .message-video-preview-trigger:focus-visible {
+      outline: 2px solid var(--accent-hover);
+      outline-offset: 3px;
+    }
+
+    .message-video-preview {
       position: relative;
       z-index: 0;
       display: block;
@@ -509,9 +528,23 @@ export class 聊天壳 extends LitElement {
       height: auto;
       border-radius: inherit;
       object-fit: cover;
+      pointer-events: none;
       background:
         radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.16), transparent 28%),
         linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
+    }
+
+    .message-video-play-indicator {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 34px;
+      line-height: 1;
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
     }
 
     .message-image-preview-trigger {
@@ -541,7 +574,7 @@ export class 聊天壳 extends LitElement {
       background: rgba(255, 255, 255, 0.04);
     }
 
-    .message-image-preview-backdrop {
+    .message-media-preview-backdrop {
       position: absolute;
       inset: 0;
       z-index: 3;
@@ -554,12 +587,18 @@ export class 聊天壳 extends LitElement {
       cursor: zoom-out;
     }
 
-    .message-image-preview {
+    .message-media-preview {
       position: relative;
       max-width: min(100%, 860px);
       max-height: 100%;
       margin: 0;
       cursor: default;
+    }
+
+    .message-video-preview-frame {
+      display: grid;
+      width: min(100%, 860px);
+      place-items: center;
     }
 
     .message-image-preview-original {
@@ -574,10 +613,23 @@ export class 聊天壳 extends LitElement {
       box-shadow: var(--shadow-warm);
     }
 
-    .message-image-preview-close {
+    .message-media-preview-video {
+      display: block;
+      width: auto;
+      max-width: 100%;
+      height: auto;
+      max-height: 100%;
+      border-radius: 22px;
+      object-fit: contain;
+      background: rgba(0, 0, 0, 0.72);
+      box-shadow: var(--shadow-warm);
+    }
+
+    .message-media-preview-close {
       position: absolute;
       top: 12px;
       right: 12px;
+      z-index: 2;
       padding: 8px 12px;
       border-radius: 999px;
       background: rgba(9, 13, 18, 0.76);

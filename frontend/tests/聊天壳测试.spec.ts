@@ -58,7 +58,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("overflow-anchor: none");
   });
 
-  it("视频媒体卡片会被消息滚动容器隔离裁切，避免原生视频层盖住控制台", () => {
+  it("视频媒体卡片只在消息流里承载预览入口，真正播放交给媒体查看器", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain("isolation: isolate");
@@ -67,7 +67,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("background: transparent");
     expect(styles).toContain("box-shadow: none");
     expect(styles).toContain(".message-video-card");
-    expect(styles).toContain(".message-video");
+    expect(styles).toContain(".message-video-preview-trigger");
+    expect(styles).toContain(".message-media-preview-video");
     expect(styles).toContain("z-index: 0");
   });
 
@@ -272,7 +273,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("带视频附件的权威消息会在消息窗口里渲染原生视频预览", async () => {
+  it("带视频附件的权威消息会在消息流里只渲染预览入口，点开后才播放", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
@@ -309,14 +310,35 @@ describe("聊天壳集成 / 首页与控制台", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    const video = el.shadowRoot!.querySelector(
-      'video[data-attachment-id="att-video-1"]'
+    const previewTrigger = el.shadowRoot!.querySelector(
+      'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+    ) as HTMLButtonElement | null;
+    const previewVideo = el.shadowRoot!.querySelector(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
     ) as HTMLVideoElement | null;
-    expect(video).not.toBeNull();
-    expect(video?.getAttribute("src")).toContain(
+    expect(previewTrigger).not.toBeNull();
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.getAttribute("src")).toContain(
       "/api/attachments/att-video-1/content?session_id=s-test&variant=original#t=0.1"
     );
-    expect(video?.hasAttribute("poster")).toBe(false);
+    expect(previewVideo?.hasAttribute("controls")).toBe(false);
+    expect(previewVideo?.hasAttribute("poster")).toBe(false);
+
+    previewTrigger!.click();
+    await 等待组件稳定(el);
+
+    const viewerVideo = el.shadowRoot!.querySelector(
+      '[data-video-preview="att-video-1"] .message-media-preview-video'
+    ) as HTMLVideoElement | null;
+    expect(viewerVideo).not.toBeNull();
+    expect(viewerVideo?.hasAttribute("controls")).toBe(true);
+    expect(viewerVideo?.getAttribute("src")).toContain(
+      "/api/attachments/att-video-1/content?session_id=s-test&variant=original#t=0.1"
+    );
+
+    el.shadowRoot!.querySelector<HTMLButtonElement>(".message-media-preview-close")?.click();
+    await 等待组件稳定(el);
+    expect(el.shadowRoot!.querySelector('[data-video-preview="att-video-1"]')).toBeNull();
     el.remove();
   });
 
@@ -367,14 +389,28 @@ describe("聊天壳集成 / 首页与控制台", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    const video = el.shadowRoot!.querySelector(
-      'video[data-attachment-id="att-video-swarm-1"]'
+    const previewTrigger = el.shadowRoot!.querySelector(
+      'button.message-video-preview-trigger[data-attachment-id="att-video-swarm-1"]'
+    ) as HTMLButtonElement | null;
+    const previewVideo = el.shadowRoot!.querySelector(
+      'video.message-video-preview[data-attachment-id="att-video-swarm-1"]'
     ) as HTMLVideoElement | null;
     const hint = el.shadowRoot!.querySelector(
       '[data-media-hint="att-video-swarm-1"]'
     ) as HTMLElement | null;
-    expect(video?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1#t=0.1");
+    expect(previewTrigger).not.toBeNull();
+    expect(previewVideo?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1#t=0.1");
+    expect(previewVideo?.hasAttribute("controls")).toBe(false);
     expect(hint?.textContent).toContain("正在协作分发");
+
+    previewTrigger!.click();
+    await 等待组件稳定(el);
+
+    const viewerVideo = el.shadowRoot!.querySelector(
+      '[data-video-preview="att-video-swarm-1"] .message-media-preview-video'
+    ) as HTMLVideoElement | null;
+    expect(viewerVideo?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1#t=0.1");
+    expect(viewerVideo?.hasAttribute("controls")).toBe(true);
     el.remove();
   });
 
