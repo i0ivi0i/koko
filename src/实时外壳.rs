@@ -1,12 +1,11 @@
-use super::{event_to_json, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储};
+use super::{
+    event_to_json, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储
+};
 use crate::{contract, usecase};
 use serde::Deserialize;
 use socketioxide::{
-    extract::SocketRef,
-    socket::DisconnectReason,
-    BroadcastError, SendError, SocketError,
+    extract::SocketRef, socket::DisconnectReason, BroadcastError, SendError, SocketError,
 };
-use tokio::task;
 
 /// 连接握手携带的最小认证数据。
 #[derive(Deserialize, Clone)]
@@ -152,16 +151,9 @@ pub(super) async fn 认证realtime连接(
         session_id = session_id,
         "realtime 连接认证已受理"
     );
-    let state = state.clone();
-    let session_id_for_check = session_id.clone();
-    let result = task::spawn_blocking(move || {
-        let repo = 构建共享仓储(&state);
-        usecase::校验实时连接会话(&repo, &session_id_for_check)
-    })
-    .await;
-
-    match result {
-        Ok(Ok(())) => {
+    let repo = 构建共享仓储(&state);
+    match usecase::校验实时连接会话_异步(&repo, &session_id).await {
+        Ok(()) => {
             tracing::info!(
                 usecase = "实时连接认证",
                 adapter = "socketioxide",
@@ -172,7 +164,7 @@ pub(super) async fn 认证realtime连接(
             socket.extensions.insert(已认证会话 { session_id });
             Ok(())
         }
-        Ok(Err(contract::错误码::会话无效)) => {
+        Err(contract::错误码::会话无效) => {
             tracing::info!(
                 usecase = "实时连接认证",
                 adapter = "socketioxide",
@@ -183,7 +175,7 @@ pub(super) async fn 认证realtime连接(
             );
             Err("invalid_session".to_string())
         }
-        Ok(Err(_)) => {
+        Err(_) => {
             tracing::error!(
                 usecase = "实时连接认证",
                 adapter = "socketioxide",
@@ -191,18 +183,6 @@ pub(super) async fn 认证realtime连接(
                 session_id = session_id,
                 error_code = "system_error",
                 "realtime 连接认证失败"
-            );
-            Err("system_error".to_string())
-        }
-        Err(err) => {
-            tracing::error!(
-                usecase = "实时连接认证",
-                adapter = "socketioxide",
-                outcome = "failed",
-                session_id = session_id,
-                error_code = "system_error",
-                error = %err,
-                "realtime 连接认证任务执行失败"
             );
             Err("system_error".to_string())
         }
@@ -232,20 +212,16 @@ pub(super) async fn handle_realtime_subscribe(
     let room_id = payload.room_id.clone();
     let from = payload.from;
     let session_id = auth.session_id.clone();
-    let state = state.clone();
-    let result = task::spawn_blocking(move || {
-        let repo = 构建共享仓储(&state);
-        usecase::加载房间增量事件(&repo, &room_id, &session_id, from)
-            .map_err(map_domain_err_tuple)
-    })
-    .await;
-
-    match result {
-        Ok(Ok(contract::快照::房间增量事件 {
+    let repo = 构建共享仓储(&state);
+    match usecase::加载房间增量事件_异步(&repo, &room_id, &session_id, from)
+        .await
+        .map_err(map_domain_err_tuple)
+    {
+        Ok(contract::快照::房间增量事件 {
             房间标识,
             事件,
             最新事件位置,
-        })) => {
+        }) => {
             if from > 最新事件位置 {
                 tracing::info!(
                     usecase = "订阅房间事件流",
@@ -324,7 +300,9 @@ pub(super) async fn handle_realtime_subscribe(
                         error = %err,
                         "订阅控制消息序列化失败"
                     ),
-                    实时发送失败级别::适配器 => unreachable!("单连接发送不应出现 adapter 级错误"),
+                    实时发送失败级别::适配器 => {
+                        unreachable!("单连接发送不应出现 adapter 级错误")
+                    }
                 }
                 return;
             }
@@ -363,7 +341,9 @@ pub(super) async fn handle_realtime_subscribe(
                         error = %err,
                         "订阅增量事件序列化失败"
                     ),
-                    实时发送失败级别::适配器 => unreachable!("单连接发送不应出现 adapter 级错误"),
+                    实时发送失败级别::适配器 => {
+                        unreachable!("单连接发送不应出现 adapter 级错误")
+                    }
                 }
                 return;
             }
@@ -378,7 +358,7 @@ pub(super) async fn handle_realtime_subscribe(
                 "订阅房间事件流成功"
             );
         }
-        Ok(Ok(_)) => {
+        Ok(_) => {
             tracing::error!(
                 usecase = "订阅房间事件流",
                 adapter = "socketioxide",
@@ -389,11 +369,10 @@ pub(super) async fn handle_realtime_subscribe(
                 error_code = "system_error",
                 "订阅返回了错误的快照类型"
             );
-            let payload =
-                serde_json::json!({"kind":"error","code":"system_error","message":"快照类型不匹配"});
+            let payload = serde_json::json!({"kind":"error","code":"system_error","message":"快照类型不匹配"});
             let _ = socket.emit("control_result", &payload);
         }
-        Ok(Err((_, code, message))) => {
+        Err((_, code, message)) => {
             tracing::info!(
                 usecase = "订阅房间事件流",
                 adapter = "socketioxide",
@@ -405,25 +384,6 @@ pub(super) async fn handle_realtime_subscribe(
                 "订阅房间事件流被拒绝"
             );
             let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
-            let _ = socket.emit("control_result", &payload);
-        }
-        Err(err) => {
-            tracing::error!(
-                usecase = "订阅房间事件流",
-                adapter = "socketioxide",
-                outcome = "failed",
-                room_id = payload.room_id,
-                session_id = auth.session_id,
-                from = from,
-                error_code = "system_error",
-                error = %err,
-                "订阅房间事件流任务执行失败"
-            );
-            let payload = serde_json::json!({
-                "kind":"error",
-                "code":"system_error",
-                "message": format!("任务执行失败: {err}")
-            });
             let _ = socket.emit("control_result", &payload);
         }
     }
@@ -449,26 +409,22 @@ pub(super) async fn handle_realtime_create_message(
         client_message_id = payload.client_message_id.as_str(),
         "realtime 创建消息请求已受理"
     );
-    let state = state.clone();
     let session_id = auth.session_id.clone();
     let room_id_for_log = payload.room_id.clone();
     let client_message_id_for_log = payload.client_message_id.clone();
-    let result = task::spawn_blocking(move || {
-        let mut repo = 构建共享仓储(&state);
-        usecase::创建消息(
-            &mut repo,
-            &payload.room_id,
-            &session_id,
-            &payload.client_message_id,
-            &payload.text,
-            &payload.attachment_ids,
-        )
-        .map_err(map_domain_err_tuple)
-    })
-    .await;
-
-    match result {
-        Ok(Ok(event)) => {
+    let mut repo = 构建共享仓储(&state);
+    match usecase::创建消息_异步(
+        &mut repo,
+        &payload.room_id,
+        &session_id,
+        &payload.client_message_id,
+        &payload.text,
+        &payload.attachment_ids,
+    )
+    .await
+    .map_err(map_domain_err_tuple)
+    {
+        Ok(event) => {
             let (room_id, client_message_id, event_position) = match &event {
                 contract::领域事件::消息已创建 {
                     房间标识,
@@ -478,7 +434,11 @@ pub(super) async fn handle_realtime_create_message(
                 } => (房间标识.clone(), 客户端消息标识.clone(), *事件位置),
             };
             let payload = event_to_json(event);
-            if let Err(err) = socket.within(room_id.clone()).emit("room_event", &payload).await {
+            if let Err(err) = socket
+                .within(room_id.clone())
+                .emit("room_event", &payload)
+                .await
+            {
                 match 分类广播发送失败(&err) {
                     实时发送失败级别::正常断开 => tracing::info!(
                         usecase = "创建消息",
@@ -538,7 +498,7 @@ pub(super) async fn handle_realtime_create_message(
                 );
             }
         }
-        Ok(Err((_, code, message))) => {
+        Err((_, code, message)) => {
             tracing::info!(
                 usecase = "创建消息",
                 adapter = "socketioxide",
@@ -552,31 +512,14 @@ pub(super) async fn handle_realtime_create_message(
             let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
             let _ = socket.emit("control_result", &payload);
         }
-        Err(err) => {
-            tracing::error!(
-                usecase = "创建消息",
-                adapter = "socketioxide",
-                outcome = "failed",
-                room_id = room_id_for_log,
-                session_id = auth.session_id,
-                client_message_id = client_message_id_for_log,
-                error_code = "system_error",
-                error = %err,
-                "创建消息任务执行失败"
-            );
-            let payload = serde_json::json!({
-                "kind":"error",
-                "code":"system_error",
-                "message": format!("任务执行失败: {err}")
-            });
-            let _ = socket.emit("control_result", &payload);
-        }
     }
 }
 
 #[cfg(test)]
 mod 实时外壳测试 {
-    use super::{分类单连接发送失败, 分类广播发送失败, 分类断开原因, 实时发送失败级别};
+    use super::{
+        分类单连接发送失败, 分类广播发送失败, 分类断开原因, 实时发送失败级别
+    };
     use crate::contract;
     use socketioxide::{socket::DisconnectReason, BroadcastError, SendError, SocketError};
 
@@ -656,6 +599,9 @@ mod 实时外壳测试 {
 
         assert_eq!(payload["type"], "message_created");
         assert_eq!(payload["room_id"], "room-1");
-        assert!(payload.get("kind").is_none(), "权威消息事件不应冒充 control_result");
+        assert!(
+            payload.get("kind").is_none(),
+            "权威消息事件不应冒充 control_result"
+        );
     }
 }

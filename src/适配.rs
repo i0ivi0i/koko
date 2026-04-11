@@ -580,6 +580,52 @@ impl Pg仓储 {
         .map_err(|_| contract::错误码::系统错误)
     }
 
+    async fn 检查会话存在_异步(
+        pool: &PgPool,
+        会话标识: &str,
+    ) -> Result<bool, contract::错误码> {
+        let exists =
+            sqlx::query_scalar::<_, i32>("SELECT 1 FROM sessions WHERE session_id = $1 LIMIT 1")
+                .bind(会话标识)
+                .fetch_optional(pool)
+                .await
+                .map_err(|_| contract::错误码::系统错误)?;
+        Ok(exists.is_some())
+    }
+
+    async fn 检查房间存在_异步(
+        pool: &PgPool,
+        房间标识: &str,
+    ) -> Result<bool, contract::错误码> {
+        let exists = sqlx::query_scalar::<_, i32>("SELECT 1 FROM rooms WHERE room_id = $1 LIMIT 1")
+            .bind(房间标识)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+        Ok(exists.is_some())
+    }
+
+    async fn 检查成员资格_异步(
+        pool: &PgPool,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<bool, contract::错误码> {
+        let exists = sqlx::query_scalar::<_, i32>(
+            "SELECT 1 \
+             FROM room_members rm \
+             JOIN rooms r ON r.id = rm.room_id \
+             JOIN sessions s ON s.id = rm.session_id \
+             WHERE r.room_id = $1 AND s.session_id = $2 AND rm.left_at IS NULL \
+             LIMIT 1",
+        )
+        .bind(房间标识)
+        .bind(会话标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+        Ok(exists.is_some())
+    }
+
     /// 查询房间消息页。
     ///
     /// 关键约束：
@@ -945,7 +991,9 @@ impl Pg仓储 {
         &mut self,
         授权: &媒体上传运输授权写入请求,
     ) -> Result<(), contract::错误码> {
-        self.在运行时执行(Self::写入媒体上传运输授权_异步(&self.pool, 授权))
+        self.在运行时执行(Self::写入媒体上传运输授权_异步(
+            &self.pool, 授权,
+        ))
     }
 
     /// shell 用它判断 transport 是否已经真正 finished，避免把 prepare 成功误判成 ready。
@@ -953,7 +1001,10 @@ impl Pg仓储 {
         &self,
         附件标识: &str,
     ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-        self.在运行时执行(Self::查询媒体上传运输记录_异步(&self.pool, 附件标识))
+        self.在运行时执行(Self::查询媒体上传运输记录_异步(
+            &self.pool,
+            附件标识,
+        ))
     }
 
     /// hook 只靠上传令牌做 sidecar 鉴权，不把会话/成员判断塞进 transport 层。
@@ -961,10 +1012,7 @@ impl Pg仓储 {
         &self,
         上传令牌: &str,
     ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-        self.在运行时执行(Self::根据上传令牌查询媒体上传运输记录_异步(
-            &self.pool,
-            上传令牌,
-        ))
+        self.在运行时执行(Self::根据上传令牌查询媒体上传运输记录_异步(&self.pool, 上传令牌))
     }
 
     /// transport finished 只登记回执；prepared -> ready 仍由 complete 主链完成。
@@ -1064,48 +1112,58 @@ impl Pg仓储 {
     /// 约束：
     /// - 返回顺序必须按 event_position 升序，便于前端做幂等合并。
     /// - 这里只做数据拼装，不在这里判断成员资格或权限。
-    pub fn 拉取房间增量事件(
-        &self,
+    async fn 拉取房间增量事件_异步(
+        pool: &PgPool,
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<contract::快照, contract::错误码> {
         if 从位置开始 < 0 {
             return Err(contract::错误码::参数非法);
         }
-        self.在运行时执行(async {
-            let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
-                .bind(房间标识)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|_| contract::错误码::系统错误)?;
-            let Some(room_row) = room else {
-                return Err(contract::错误码::房间不存在);
-            };
-            let room_db_id: i64 = room_row.get("id");
-            let latest_event_position: i64 = room_row.get("latest_event_position");
-
-            let rows = sqlx::query(
-                "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
-                 FROM room_events re \
-                 LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
-                 LEFT JOIN sessions s ON s.id = m.sender_session_id \
-                 WHERE re.room_id = $1 AND re.event_position > $2 \
-                 ORDER BY re.event_position ASC",
-            )
-            .bind(room_db_id)
-            .bind(从位置开始)
-            .fetch_all(&self.pool)
+        let room = sqlx::query("SELECT id, latest_event_position FROM rooms WHERE room_id = $1")
+            .bind(房间标识)
+            .fetch_optional(pool)
             .await
             .map_err(|_| contract::错误码::系统错误)?;
+        let Some(room_row) = room else {
+            return Err(contract::错误码::房间不存在);
+        };
+        let room_db_id: i64 = room_row.get("id");
+        let latest_event_position: i64 = room_row.get("latest_event_position");
 
-            let events = Self::组装消息事件列表_异步(&self.pool, 房间标识, rows).await?;
+        let rows = sqlx::query(
+            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+             FROM room_events re \
+             LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
+             LEFT JOIN sessions s ON s.id = m.sender_session_id \
+             WHERE re.room_id = $1 AND re.event_position > $2 \
+             ORDER BY re.event_position ASC",
+        )
+        .bind(room_db_id)
+        .bind(从位置开始)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
 
-            Ok(contract::快照::房间增量事件 {
-                房间标识: 房间标识.to_string(),
-                事件: events,
-                最新事件位置: latest_event_position,
-            })
+        let events = Self::组装消息事件列表_异步(pool, 房间标识, rows).await?;
+
+        Ok(contract::快照::房间增量事件 {
+            房间标识: 房间标识.to_string(),
+            事件: events,
+            最新事件位置: latest_event_position,
         })
+    }
+
+    pub fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        self.在运行时执行(Self::拉取房间增量事件_异步(
+            &self.pool,
+            房间标识,
+            从位置开始,
+        ))
     }
 
     /// 后台概览查询（只读）。
@@ -1347,16 +1405,7 @@ impl 仓储端口 for Pg仓储 {
     /// 成员资格检查是“只读事实查询”，不是业务规则裁决。
     /// 规则本身在用例层决定“何时调用、失败如何映射”。
     fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
-        self.在运行时执行(async {
-            let exists = sqlx::query_scalar::<_, i32>(
-                "SELECT 1 FROM sessions WHERE session_id = $1 LIMIT 1",
-            )
-            .bind(会话标识)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-            Ok(exists.is_some())
-        })
+        self.在运行时执行(Self::检查会话存在_异步(&self.pool, 会话标识))
     }
 
     /// 会话 -> 匿名内部身份的解析留在 adapter 查询，不把数据库主键暴露给应用层。
@@ -1373,15 +1422,7 @@ impl 仓储端口 for Pg仓储 {
     /// 房间存在性检查只回答“有没有这个 room_id”。
     /// 这样应用层可以先区分 `room_not_found`，再决定成员资格分支。
     fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
-        self.在运行时执行(async {
-            let exists =
-                sqlx::query_scalar::<_, i32>("SELECT 1 FROM rooms WHERE room_id = $1 LIMIT 1")
-                    .bind(房间标识)
-                    .fetch_optional(&self.pool)
-                    .await
-                    .map_err(|_| contract::错误码::系统错误)?;
-            Ok(exists.is_some())
-        })
+        self.在运行时执行(Self::检查房间存在_异步(&self.pool, 房间标识))
     }
 
     /// 房间最新事件位置是顺序真相的一部分。
@@ -1406,22 +1447,11 @@ impl 仓储端口 for Pg仓储 {
         房间标识: &str,
         会话标识: &str,
     ) -> Result<bool, contract::错误码> {
-        self.在运行时执行(async {
-            let exists = sqlx::query_scalar::<_, i32>(
-                "SELECT 1 \
-                 FROM room_members rm \
-                 JOIN rooms r ON r.id = rm.room_id \
-                 JOIN sessions s ON s.id = rm.session_id \
-                 WHERE r.room_id = $1 AND s.session_id = $2 AND rm.left_at IS NULL \
-                 LIMIT 1",
-            )
-            .bind(房间标识)
-            .bind(会话标识)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-            Ok(exists.is_some())
-        })
+        self.在运行时执行(Self::检查成员资格_异步(
+            &self.pool,
+            房间标识,
+            会话标识,
+        ))
     }
 
     /// 统一消息用例通过这个只读端口拿附件事实，不直连数据库字段名。
@@ -1674,5 +1704,82 @@ impl 仓储端口 for Pg仓储 {
                 .map_err(|_| contract::错误码::系统错误)?;
             Ok(())
         })
+    }
+}
+
+impl usecase::Realtime仓储端口 for Pg仓储 {
+    async fn 检查会话存在(&self, 会话标识: &str) -> Result<bool, contract::错误码> {
+        Self::检查会话存在_异步(&self.pool, 会话标识).await
+    }
+
+    async fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, contract::错误码> {
+        Self::查询会话所属匿名身份_异步(&self.pool, 会话标识).await
+    }
+
+    async fn 检查房间存在(&self, 房间标识: &str) -> Result<bool, contract::错误码> {
+        Self::检查房间存在_异步(&self.pool, 房间标识).await
+    }
+
+    async fn 检查成员资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<bool, contract::错误码> {
+        Self::检查成员资格_异步(&self.pool, 房间标识, 会话标识).await
+    }
+
+    async fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<contract::快照, contract::错误码> {
+        Self::拉取房间增量事件_异步(&self.pool, 房间标识, 从位置开始).await
+    }
+
+    async fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
+        Self::查询附件快照_异步(&self.pool, 附件标识).await
+    }
+
+    async fn 创建消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+    ) -> Result<contract::领域事件, contract::错误码> {
+        Self::提交统一消息事件_异步(
+            &self.pool,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+            &[],
+        )
+        .await
+    }
+
+    async fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[domain::message::已校验附件引用],
+    ) -> Result<contract::领域事件, contract::错误码> {
+        Self::提交统一消息事件_异步(
+            &self.pool,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+            附件,
+        )
+        .await
     }
 }

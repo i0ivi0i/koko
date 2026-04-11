@@ -190,10 +190,8 @@ impl koko::usecase::仓储端口 for 假仓储 {
             展示花名: format!("暴躁的企鹅-{}", self.匿名身份计数),
             会话标识: format!("s-{}", self.会话计数),
         };
-        self.会话到匿名身份.insert(
-            snapshot.会话标识.clone(),
-            snapshot.匿名身份标识.clone(),
-        );
+        self.会话到匿名身份
+            .insert(snapshot.会话标识.clone(), snapshot.匿名身份标识.clone());
         self.设备匿名身份
             .insert(设备匿名凭证.to_string(), snapshot.clone());
         Ok(snapshot)
@@ -357,8 +355,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
             .ok_or(koko::contract::错误码::会话无效)?;
         let key = (identity, 房间标识.to_string());
         let current = self.房间阅读位置.get(&key).copied().unwrap_or(0);
-        self.房间阅读位置
-            .insert(key, current.max(已读到事件位置));
+        self.房间阅读位置.insert(key, current.max(已读到事件位置));
         Ok(())
     }
 
@@ -388,6 +385,84 @@ impl koko::usecase::仓储端口 for 假仓储 {
         附件标识: &str,
     ) -> Result<Option<koko::usecase::附件读取结果>, koko::contract::错误码> {
         Ok(self.附件.get(附件标识).cloned())
+    }
+}
+
+impl koko::usecase::Realtime仓储端口 for 假仓储 {
+    async fn 检查会话存在(
+        &self, 会话标识: &str
+    ) -> Result<bool, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::检查会话存在(self, 会话标识)
+    }
+
+    async fn 检查房间存在(
+        &self, 房间标识: &str
+    ) -> Result<bool, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::检查房间存在(self, 房间标识)
+    }
+
+    async fn 检查成员资格(
+        &self,
+        房间标识: &str,
+        会话标识: &str,
+    ) -> Result<bool, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::检查成员资格(self, 房间标识, 会话标识)
+    }
+
+    async fn 拉取房间增量事件(
+        &self,
+        房间标识: &str,
+        从位置开始: i64,
+    ) -> Result<koko::contract::快照, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::拉取房间增量事件(self, 房间标识, 从位置开始)
+    }
+
+    async fn 查询会话所属匿名身份(
+        &self,
+        会话标识: &str,
+    ) -> Result<Option<String>, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::查询会话所属匿名身份(self, 会话标识)
+    }
+
+    async fn 查询附件快照(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<koko::usecase::附件读取结果>, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::查询附件快照(self, 附件标识)
+    }
+
+    async fn 创建消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+    ) -> Result<koko::contract::领域事件, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::创建消息事件(
+            self,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+        )
+    }
+
+    async fn 创建统一消息事件(
+        &mut self,
+        房间标识: &str,
+        客户端消息标识: &str,
+        会话标识: &str,
+        文本: &str,
+        附件: &[koko::domain::message::已校验附件引用],
+    ) -> Result<koko::contract::领域事件, koko::contract::错误码> {
+        <Self as koko::usecase::仓储端口>::创建统一消息事件(
+            self,
+            房间标识,
+            客户端消息标识,
+            会话标识,
+            文本,
+            附件,
+        )
     }
 }
 
@@ -547,12 +622,10 @@ fn 发送文本消息返回权威事件() {
 #[test]
 fn 非ready附件不能创建消息() {
     let mut repo = 假仓储::default();
-    let identity =
-        koko::usecase::引导匿名身份(&mut repo, "device-attachment-processing")
-            .expect("应能引导匿名身份");
+    let identity = koko::usecase::引导匿名身份(&mut repo, "device-attachment-processing")
+        .expect("应能引导匿名身份");
     let room =
-        koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, "ROOM0010")
-            .expect("应成功");
+        koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, "ROOM0010").expect("应成功");
     let room_id = match room {
         koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
@@ -579,12 +652,10 @@ fn 非ready附件不能创建消息() {
 #[test]
 fn 附件owner不匹配时拒绝创建消息() {
     let mut repo = 假仓储::default();
-    let sender =
-        koko::usecase::引导匿名身份(&mut repo, "device-attachment-owner")
-            .expect("应能引导匿名身份");
+    let sender = koko::usecase::引导匿名身份(&mut repo, "device-attachment-owner")
+        .expect("应能引导匿名身份");
     let room =
-        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOM0011")
-            .expect("应成功");
+        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOM0011").expect("应成功");
     let room_id = match room {
         koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
@@ -609,4 +680,60 @@ fn 附件owner不匹配时拒绝创建消息() {
         result,
         Err(koko::contract::错误码::附件不属于当前发送者)
     ));
+}
+
+#[tokio::test]
+async fn realtime连接认证异步用例会放行有效会话() {
+    let repo = 假仓储::default();
+
+    let result = koko::usecase::校验实时连接会话_异步(&repo, "s-async-ok").await;
+
+    assert_eq!(result, Ok(()));
+}
+
+#[tokio::test]
+async fn 房间增量事件异步用例会拒绝非成员() {
+    let mut repo = 假仓储::default();
+    let room = koko::usecase::按短码进房或建房(&mut repo, "s-member", "ROOMA001").expect("应成功");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+
+    let result = koko::usecase::加载房间增量事件_异步(&repo, &room_id, "s-stranger", 0).await;
+
+    assert_eq!(result, Err(koko::contract::错误码::成员资格不足));
+}
+
+#[tokio::test]
+async fn 统一消息异步用例仍返回权威消息事件() {
+    let mut repo = 假仓储::default();
+    let sender = koko::usecase::引导匿名身份(&mut repo, "device-async-msg").expect("应成功");
+    let room =
+        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOMA002").expect("应成功");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+
+    let event = koko::usecase::创建消息_异步(
+        &mut repo,
+        &room_id,
+        &sender.会话标识,
+        "client-async-1",
+        "hello async",
+        &[],
+    )
+    .await
+    .expect("应成功");
+
+    match event {
+        koko::contract::领域事件::消息已创建 {
+            房间标识, 文本,
+        ..
+        } => {
+            assert_eq!(房间标识, room_id);
+            assert_eq!(文本, "hello async");
+        }
+    }
 }
