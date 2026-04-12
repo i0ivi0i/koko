@@ -1,2 +1,17 @@
 graphify-out/
 data/
+target/
+target-spec-review/
+dist/
+frontend/dist/
+frontend/node_modules/
+frontend/.tsbuildinfo
+.serena/
+.codex/
+.vscode/
+coverage/
+.next/
+.vite/
+tmp/
+temp/
+*.map
