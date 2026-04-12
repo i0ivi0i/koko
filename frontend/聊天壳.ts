@@ -1,6 +1,6 @@
 import { css, html, LitElement } from "lit";
 import { 创建应用运行时, type 应用运行时端口 } from "./应用运行时.js";
-import { 创建聊天应用内核, type 聊天应用快照 } from "./聊天应用内核.js";
+import { 创建聊天应用内核 } from "./聊天应用内核.js";
 import "./房间消息窗.js";
 import {
   创建操作台附件入口编排,
@@ -795,46 +795,16 @@ export class 聊天壳 extends LitElement {
   });
 
   /**
-   * 兼容现有测试与 presenter：当前阶段仍保留 `chatState` 这个读口，
-   * 但真实状态已经改由内核持有。
-   * 这样旧测试在逐步迁移前还能工作，同时壳层代码已经不再自己持有真相。
+   * 壳层只读内核快照，不再缓存第二份 `chatState` 镜像。
+   * 这样测试和业务代码都会被迫走同一份真相，不再通过 setter 黑箱篡改状态。
    */
-  private get chatState(): 聊天应用快照 {
+  private 读取聊天快照() {
     return this.kernel.snapshot();
   }
 
-  private set chatState(next: 聊天应用快照) {
-    this.kernel.replaceSnapshot(next);
-  }
-
-  /**
-   * 下面这几个读口只为了现有集成测试和渐进迁移保留。
-   * 真正的 owner 已经下沉进 ChatAppKernel；壳层业务代码不再直接依赖这些对象。
-   */
-  get roomScroller() {
-    return this.kernel.roomScrollerPort();
-  }
-
-  get 恢复编排端口() {
-    return this.kernel.recoveryPort();
-  }
-
-  get 阅读推进编排端口() {
-    return this.kernel.readPort();
-  }
-
-  get shouldPrimeReadAnchorAfterInitialSettle(): boolean {
-    return this.kernel.readRecoveryPrimeFlag();
-  }
-
-  set shouldPrimeReadAnchorAfterInitialSettle(value: boolean) {
-    this.kernel.writeRecoveryPrimeFlag(value);
-  }
-
   private readonly 媒体定位器 = 创建媒体定位器({
-    getSessionId: () => this.chatState.sessionId,
-    loadMediaLocator: (sessionId, attachmentId) =>
-      this.kernel.transportPort().loadMediaLocator(sessionId, attachmentId),
+    getSessionId: () => this.读取聊天快照().sessionId,
+    loadMediaLocator: (_sessionId, attachmentId) => this.kernel.加载媒体定位(attachmentId),
   });
   private 媒体播放器 = this.创建页面级媒体播放器();
   private 媒体查看器 = 创建媒体查看器({
@@ -845,12 +815,10 @@ export class 聊天壳 extends LitElement {
   private 媒体播放结果表: Record<string, 媒体播放结果> = {};
   private readonly 正在解析媒体播放 = new Map<string, Promise<void>>();
   private readonly 媒体发布器 = 创建媒体发布器({
-    getSessionId: () => this.chatState.sessionId,
-    prepareMediaUpload: (kind, sessionId, file) =>
-      this.kernel.transportPort().prepareMediaUpload(kind, sessionId, file),
-    completeMediaUpload: (sessionId, attachmentId) =>
-      this.kernel.transportPort().completeMediaUpload(sessionId, attachmentId),
-    readDrafts: () => this.chatState.composerMediaDrafts,
+    getSessionId: () => this.读取聊天快照().sessionId,
+    prepareMediaUpload: (kind, _sessionId, file) => this.kernel.准备媒体上传(kind, file),
+    completeMediaUpload: (_sessionId, attachmentId) => this.kernel.完成媒体上传(attachmentId),
+    readDrafts: () => this.读取聊天快照().composerMediaDrafts,
     writeDraft: (draft) => {
       this.回收媒体草稿预览地址(this.kernel.写入媒体草稿(draft));
     },
@@ -940,7 +908,7 @@ export class 聊天壳 extends LitElement {
   private 读取当前房间媒体附件(): Array<{ attachmentId: string; kind: "image" | "video" }> {
     const seen = new Set<string>();
     const attachments: Array<{ attachmentId: string; kind: "image" | "video" }> = [];
-    for (const message of this.chatState.messages) {
+    for (const message of this.读取聊天快照().messages) {
       for (const attachment of message.attachments ?? []) {
         if (seen.has(attachment.attachment_id)) {
           continue;
@@ -1041,8 +1009,8 @@ export class 聊天壳 extends LitElement {
   private submitShellConsole(event: SubmitEvent): void {
     event.preventDefault();
     const consoleMode = 派生控制台模式({
-      bootstrapState: this.chatState.bootstrapState,
-      roomId: this.chatState.roomId,
+      bootstrapState: this.读取聊天快照().bootstrapState,
+      roomId: this.读取聊天快照().roomId,
     });
     if (this.操作台主动作已禁用(consoleMode)) {
       return;
@@ -1103,11 +1071,11 @@ export class 聊天壳 extends LitElement {
   private 操作台主动作已禁用(consoleMode: "hidden" | "join" | "message"): boolean {
     return 派生壳级操作台状态({
       consoleMode,
-      roomCodeInput: this.chatState.roomCodeInput,
-      messageInput: this.chatState.messageInput,
-      pending: this.chatState.pending,
+      roomCodeInput: this.读取聊天快照().roomCodeInput,
+      messageInput: this.读取聊天快照().messageInput,
+      pending: this.读取聊天快照().pending,
       statusText: "",
-      composerMediaDrafts: this.chatState.composerMediaDrafts,
+      composerMediaDrafts: this.读取聊天快照().composerMediaDrafts,
     }).primaryAction.disabled;
   }
 
@@ -1119,7 +1087,7 @@ export class 聊天壳 extends LitElement {
     const inputGroup =
       (this.shadowRoot?.querySelector("#shellConsoleInputGroup") as HTMLElement | null) ?? null;
     const inputGroupWidth = inputGroup?.clientWidth || Math.min(globalThis.innerWidth || 390, 560);
-    const 附件入口宽度 = this.chatState.roomId ? 84 : 0;
+    const 附件入口宽度 = this.读取聊天快照().roomId ? 84 : 0;
     const 输入框总宽度 = Math.max(180, inputGroupWidth - 附件入口宽度);
     const 输入框内容宽度 = Math.max(120, 输入框总宽度 - 34);
     const layout = 默认文本布局器.布局纯文本({
@@ -1154,12 +1122,12 @@ export class 聊天壳 extends LitElement {
   }) {
     const consoleState = 派生壳级操作台状态({
       consoleMode: input.mode,
-      roomCodeInput: this.chatState.roomCodeInput,
-      messageInput: this.chatState.messageInput,
-      pending: this.chatState.pending,
+      roomCodeInput: this.读取聊天快照().roomCodeInput,
+      messageInput: this.读取聊天快照().messageInput,
+      pending: this.读取聊天快照().pending,
       statusText: input.statusText,
       statusAttention: input.statusAttention,
-      composerMediaDrafts: this.chatState.composerMediaDrafts,
+      composerMediaDrafts: this.读取聊天快照().composerMediaDrafts,
     });
     const isMessageMode = consoleState.mode === "message";
     const isHiddenMode = consoleState.mode === "hidden";
@@ -1167,7 +1135,7 @@ export class 聊天壳 extends LitElement {
       isMessageMode,
       consoleState.primaryInput.value
     );
-    const composerDrafts = isMessageMode ? this.chatState.composerMediaDrafts : [];
+    const composerDrafts = isMessageMode ? this.读取聊天快照().composerMediaDrafts : [];
     const 附件入口编排 = 创建操作台附件入口编排({
       auxSlot: consoleState.auxSlot,
       获取统一媒体文件输入: () =>
@@ -1364,28 +1332,28 @@ export class 聊天壳 extends LitElement {
 
   override render() {
     const { recoveryHint, subtitle: roomSubtitle } = 派生房间壳提示文案({
-      recoveryState: this.chatState.recoveryState,
-      roomId: this.chatState.roomId,
-      displayAlias: this.chatState.displayAlias,
+      recoveryState: this.读取聊天快照().recoveryState,
+      roomId: this.读取聊天快照().roomId,
+      displayAlias: this.读取聊天快照().displayAlias,
     });
     const { historyHint } = 派生消息窗口提示文案({
-      historyLoading: this.chatState.historyLoading,
-      historyErrorCode: this.chatState.historyErrorCode,
+      historyLoading: this.读取聊天快照().historyLoading,
+      historyErrorCode: this.读取聊天快照().historyErrorCode,
     });
     const jumpToLatestLabel = 派生跳到最新入口文案({
-      viewportMode: this.chatState.viewportMode,
-      hasUnreadNewerMessages: this.chatState.hasUnreadNewerMessages,
+      viewportMode: this.读取聊天快照().viewportMode,
+      hasUnreadNewerMessages: this.读取聊天快照().hasUnreadNewerMessages,
     });
     const shellView = 派生壳主舞台模式({
-      bootstrapState: this.chatState.bootstrapState,
-      roomId: this.chatState.roomId,
+      bootstrapState: this.读取聊天快照().bootstrapState,
+      roomId: this.读取聊天快照().roomId,
     });
     const consoleMode = 派生控制台模式({
-      bootstrapState: this.chatState.bootstrapState,
-      roomId: this.chatState.roomId,
+      bootstrapState: this.读取聊天快照().bootstrapState,
+      roomId: this.读取聊天快照().roomId,
     });
     const 消息文本布局环境 = this.读取消息文本布局环境();
-    const homeSessionViewItems = 派生首页会话展示项(this.chatState.homeSessionItems);
+    const homeSessionViewItems = 派生首页会话展示项(this.读取聊天快照().homeSessionItems);
     const shellConsole = this.renderShellConsole({
       mode: consoleMode,
       statusText:
@@ -1417,7 +1385,7 @@ export class 聊天壳 extends LitElement {
             <div class="home-card">
               <h1 class="join-title">空态首页占位</h1>
               <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
-              <div id="alias" class="join-meta">alias: ${this.chatState.displayAlias || "-"}</div>
+              <div id="alias" class="join-meta">alias: ${this.读取聊天快照().displayAlias || "-"}</div>
             ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
             ${homeSessionViewItems.length > 0
               ? html`
@@ -1463,24 +1431,19 @@ export class 聊天壳 extends LitElement {
             </button>
             <div class="room-heading">
               <div id="roomTitle" class="room-title">
-                ${this.chatState.roomDisplayTitle || "群聊房间"}
+                ${this.读取聊天快照().roomDisplayTitle || "群聊房间"}
               </div>
               <div id="roomSubtitle" class="room-subtitle">${roomSubtitle}</div>
             </div>
           </header>
           <koko-room-message-pane
-            .items=${派生聊天列表展示项(
-              this.chatState.messages,
-              this.chatState.sessionId,
-              this.chatState.firstUnreadEventPosition,
+              .items=${派生聊天列表展示项(
+              this.读取聊天快照().messages,
+              this.读取聊天快照().sessionId,
+              this.读取聊天快照().firstUnreadEventPosition,
               消息文本布局环境,
-              (attachmentId, variant) =>
-                this.kernel.transportPort().buildAttachmentContentUrl(
-                  attachmentId,
-                  this.chatState.sessionId,
-                  variant
-                )
-            )}
+              (attachmentId, variant) => this.kernel.构建附件内容地址(attachmentId, variant)
+             )}
             .mediaPlaybackByAttachmentId=${this.媒体播放结果表}
             .historyHint=${historyHint}
             .jumpToLatestLabel=${jumpToLatestLabel}

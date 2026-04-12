@@ -74,13 +74,6 @@ export interface 聊天应用内核依赖 {
 export interface 聊天应用内核端口 {
   snapshot(): 聊天应用快照;
   dispatch(command: 聊天应用命令): Promise<void | 聊天应用命令结果>;
-  transportPort(): 前端传输端口;
-  roomScrollerPort(): 房间滚动器;
-  recoveryPort(): 房间恢复编排端口;
-  readPort(): 阅读推进编排端口;
-  readRecoveryPrimeFlag(): boolean;
-  writeRecoveryPrimeFlag(value: boolean): void;
-  replaceSnapshot(next: 聊天应用快照): void;
   setTransportForTest(transport: 前端传输端口): void;
   dispose(): void;
   标记用户滚动意图(): void;
@@ -92,6 +85,19 @@ export interface 聊天应用内核端口 {
   更新媒体草稿状态(localId: string, patch: 媒体草稿状态补丁): string[];
   移除媒体草稿(localId: string): string[];
   清空媒体草稿(): string[];
+  加载媒体定位(attachmentId: string): ReturnType<前端传输端口["loadMediaLocator"]>;
+  准备媒体上传(
+    kind: "image" | "video",
+    file: File
+  ): ReturnType<前端传输端口["prepareMediaUpload"]>;
+  完成媒体上传(attachmentId: string): ReturnType<前端传输端口["completeMediaUpload"]>;
+  构建附件内容地址(attachmentId: string, variant?: "original" | "thumbnail"): string;
+  注入快照补丁供测试(patch: Partial<聊天应用快照>): void;
+  读取房间滚动器供测试(): 房间滚动器;
+  读取恢复编排端口供测试(): 房间恢复编排端口;
+  读取阅读推进编排端口供测试(): 阅读推进编排端口;
+  读取恢复补锚标记供测试(): boolean;
+  写入恢复补锚标记供测试(value: boolean): void;
 }
 
 class 聊天应用内核 implements 聊天应用内核端口 {
@@ -163,35 +169,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   snapshot(): 聊天应用快照 {
     return this.chatState;
-  }
-
-  replaceSnapshot(next: 聊天应用快照): void {
-    this.chatState = next;
-    this.deps.host.requestUpdate();
-  }
-
-  transportPort(): 前端传输端口 {
-    return this.transport;
-  }
-
-  roomScrollerPort(): 房间滚动器 {
-    return this.roomScroller;
-  }
-
-  recoveryPort(): 房间恢复编排端口 {
-    return this.恢复编排端口;
-  }
-
-  readPort(): 阅读推进编排端口 {
-    return this.阅读推进编排端口;
-  }
-
-  readRecoveryPrimeFlag(): boolean {
-    return this.shouldPrimeReadAnchorAfterInitialSettle;
-  }
-
-  writeRecoveryPrimeFlag(value: boolean): void {
-    this.shouldPrimeReadAnchorAfterInitialSettle = value;
   }
 
   async dispatch(command: 聊天应用命令): Promise<void | 聊天应用命令结果> {
@@ -300,6 +277,62 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     const previewUrls = this.chatState.composerMediaDrafts.map((draft) => draft.previewUrl);
     this.更新快照({ composerMediaDrafts: [] });
     return previewUrls;
+  }
+
+  /**
+   * 媒体定位和上传仍暂时由聊天内核代壳层转发。
+   * 这一层的目的只有一个：不再把整条 transport 旁路暴露给壳层。
+   * 后续 Task 10 会继续把这些调用并进真正的 MediaOwner。
+   */
+  加载媒体定位(attachmentId: string): ReturnType<前端传输端口["loadMediaLocator"]> {
+    return this.transport.loadMediaLocator(this.chatState.sessionId, attachmentId);
+  }
+
+  准备媒体上传(
+    kind: "image" | "video",
+    file: File
+  ): ReturnType<前端传输端口["prepareMediaUpload"]> {
+    return this.transport.prepareMediaUpload(kind, this.chatState.sessionId, file);
+  }
+
+  完成媒体上传(attachmentId: string): ReturnType<前端传输端口["completeMediaUpload"]> {
+    return this.transport.completeMediaUpload(this.chatState.sessionId, attachmentId);
+  }
+
+  构建附件内容地址(
+    attachmentId: string,
+    variant: "original" | "thumbnail" = "original"
+  ): string {
+    return this.transport.buildAttachmentContentUrl(attachmentId, this.chatState.sessionId, variant);
+  }
+
+  /**
+   * 下面这些测试缝只服务现有集成测试迁移：
+   * - 它们显式带上“供测试”标记，避免重新伪装成正式业务入口；
+   * - 只允许补丁式注入和只读观察，不再保留 `replaceSnapshot()` 那种整包覆盖真相的旁路。
+   */
+  注入快照补丁供测试(patch: Partial<聊天应用快照>): void {
+    this.更新快照(patch);
+  }
+
+  读取房间滚动器供测试(): 房间滚动器 {
+    return this.roomScroller;
+  }
+
+  读取恢复编排端口供测试(): 房间恢复编排端口 {
+    return this.恢复编排端口;
+  }
+
+  读取阅读推进编排端口供测试(): 阅读推进编排端口 {
+    return this.阅读推进编排端口;
+  }
+
+  读取恢复补锚标记供测试(): boolean {
+    return this.shouldPrimeReadAnchorAfterInitialSettle;
+  }
+
+  写入恢复补锚标记供测试(value: boolean): void {
+    this.shouldPrimeReadAnchorAfterInitialSettle = value;
   }
 
   private get 恢复编排端口(): 房间恢复编排端口 {

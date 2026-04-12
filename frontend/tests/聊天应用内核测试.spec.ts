@@ -15,6 +15,26 @@ const 创建内核宿主 = () => ({
 });
 
 describe("聊天应用内核", () => {
+  it("不再暴露 transportPort / replaceSnapshot 这类兼容旧壳层的旁路入口", () => {
+    const kernel = 创建聊天应用内核({
+      host: 创建内核宿主(),
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+
+    expect(typeof kernel.snapshot).toBe("function");
+    expect(typeof kernel.dispatch).toBe("function");
+    expect(typeof kernel.dispose).toBe("function");
+    expect("transportPort" in kernel).toBe(false);
+    expect("roomScrollerPort" in kernel).toBe(false);
+    expect("recoveryPort" in kernel).toBe(false);
+    expect("readPort" in kernel).toBe(false);
+    expect("replaceSnapshot" in kernel).toBe(false);
+    expect("readRecoveryPrimeFlag" in kernel).toBe(false);
+    expect("writeRecoveryPrimeFlag" in kernel).toBe(false);
+  });
+
   it("只通过 dispatch / snapshot 暴露聊天业务入口，壳层不再自己拼 join/send/leave 过程", async () => {
     const transport = new 假传输();
     const kernel = 创建聊天应用内核({

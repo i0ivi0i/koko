@@ -420,34 +420,27 @@ export async function 创建已入房聊天壳(
   return el;
 }
 
+type 聊天壳测试内核 = {
+  注入快照补丁供测试(patch: Partial<聊天状态>): void;
+};
+
+function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
+  return (el as unknown as { kernel: 聊天壳测试内核 }).kernel;
+}
+
 /**
  * 媒体草稿属于前端本地体验态，测试里不需要真的走上传器。
  * 这里直接注入草稿，只为了锁住 presenter 和渲染结果，
  * 不把测试耦合到 Uppy 的内部事件细节。
  */
 export function 注入媒体草稿(el: 聊天壳, draft: 图片附件草稿): void {
-  (
-    el as unknown as {
-      chatState: 聊天状态 & {
-        composerMediaDrafts?: 图片附件草稿[];
-      };
-    }
-  ).chatState = {
-    ...(el as unknown as { chatState: 聊天状态 }).chatState,
-    composerMediaDrafts: [
-      ...(
-        (el as unknown as {
-          chatState: 聊天状态 & {
-            composerMediaDrafts?: 图片附件草稿[];
-          };
-        }).chatState.composerMediaDrafts ?? []
-      ).filter(
-        (item) => item.localId !== draft.localId
-      ),
-      draft,
-    ],
-  };
-  el.requestUpdate();
+  const 当前草稿 =
+    (读取聊天壳测试内核(el) as unknown as {
+      snapshot(): 聊天状态 & { composerMediaDrafts?: 图片附件草稿[] };
+    }).snapshot?.().composerMediaDrafts ?? [];
+  读取聊天壳测试内核(el).注入快照补丁供测试({
+    composerMediaDrafts: [...当前草稿.filter((item) => item.localId !== draft.localId), draft],
+  });
 }
 
 export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): void {
@@ -511,28 +504,11 @@ export function 设置测试滚动阶段(
   patch: {
     initialUnreadSettled?: boolean;
     firstUnreadEventPosition?: number | null;
-    scrollPhase?: string;
+    scrollPhase?: 聊天状态["scrollPhase"];
     hasUserScrollIntent?: boolean;
   }
 ): void {
-  (el as unknown as {
-    chatState: {
-      initialUnreadSettled: boolean;
-      firstUnreadEventPosition: number | null;
-      scrollPhase?: string;
-      hasUserScrollIntent?: boolean;
-    };
-  }).chatState = {
-    ...(el as unknown as {
-      chatState: {
-        initialUnreadSettled: boolean;
-        firstUnreadEventPosition: number | null;
-        scrollPhase?: string;
-        hasUserScrollIntent?: boolean;
-      };
-    }).chatState,
-    ...patch,
-  };
+  读取聊天壳测试内核(el).注入快照补丁供测试(patch);
 }
 
 export function 模拟用户滚动意图(scroll: HTMLElement): void {

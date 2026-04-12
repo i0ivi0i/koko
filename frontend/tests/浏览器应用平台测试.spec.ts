@@ -23,6 +23,18 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("private joinHistoryRoom(");
     expect(source).not.toContain("private leaveCurrentRoomView(");
     expect(source).not.toContain("private sendCurrentMessage(");
+    expect(source).not.toContain("private get chatState()");
+    expect(source).not.toContain("private set chatState(");
+    expect(source).not.toContain("get roomScroller()");
+    expect(source).not.toContain("get 恢复编排端口()");
+    expect(source).not.toContain("get 阅读推进编排端口()");
+    expect(source).not.toContain("get shouldPrimeReadAnchorAfterInitialSettle()");
+    expect(source).not.toContain("set shouldPrimeReadAnchorAfterInitialSettle(");
+    expect(source).not.toContain("this.kernel.transportPort()");
+    expect(source).not.toContain("this.kernel.roomScrollerPort()");
+    expect(source).not.toContain("this.kernel.recoveryPort()");
+    expect(source).not.toContain("this.kernel.readPort()");
+    expect(source).not.toContain("this.kernel.replaceSnapshot(");
   });
 
   it("聊天壳当前已把滚动和媒体信号先交给应用运行时，而不是在模板里直接裁决", () => {
