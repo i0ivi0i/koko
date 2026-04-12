@@ -5,7 +5,8 @@ import "vidstack/styles/community-skin/video.css";
 import "./聊天壳.js";
 
 if ("serviceWorker" in navigator) {
-  void navigator.serviceWorker.register("/media-sw.js", { scope: "/" });
+  void navigator.serviceWorker.register("/app-sw.js", { scope: "/" }).catch(() => undefined);
+  void navigator.serviceWorker.register("/media-sw.js", { scope: "/" }).catch(() => undefined);
 }
 
 if ("storage" in navigator && "persist" in navigator.storage) {

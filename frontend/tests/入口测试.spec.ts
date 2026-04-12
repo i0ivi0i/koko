@@ -11,7 +11,7 @@ describe("前端入口", () => {
     vi.restoreAllMocks();
   });
 
-  it("入口会注册 media-sw 并 best-effort 申请持久化存储", async () => {
+  it("入口会注册 app shell 和 media 两个 worker，并 best-effort 申请持久化存储", async () => {
     const register = vi.fn().mockResolvedValue({});
     const persist = vi.fn().mockResolvedValue(true);
     Object.defineProperty(globalThis.navigator, "serviceWorker", {
@@ -25,6 +25,7 @@ describe("前端入口", () => {
 
     await import("../入口");
 
+    expect(register).toHaveBeenCalledWith("/app-sw.js", { scope: "/" });
     expect(register).toHaveBeenCalledWith("/media-sw.js", { scope: "/" });
     expect(persist).toHaveBeenCalledTimes(1);
   });

@@ -1,13 +1,18 @@
 import * as esbuild from 'esbuild'
 import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import workboxBuild from 'workbox-build'
 
 const frontendRoot = process.cwd()
 const distDir = path.join(frontendRoot, 'dist')
 const manifestPath = path.join(distDir, 'asset-manifest.json')
+const { injectManifest } = workboxBuild
 const mediaServiceWorkerOutputFiles = [
   path.join(distDir, 'media-sw.js'),
   path.join(distDir, 'media-sw.js.map'),
+]
+const appShellServiceWorkerOutputFiles = [
+  path.join(distDir, 'app-sw.js'),
 ]
 const watchMode = process.argv.some((arg) => arg === '--watch' || arg.startsWith('--watch='))
 
@@ -57,10 +62,59 @@ function 生成静态资源清单插件() {
           path.join(frontendRoot, `${manifest.app_css.slice(1)}.map`),
           manifestPath,
           ...mediaServiceWorkerOutputFiles,
+          ...appShellServiceWorkerOutputFiles,
         ]))
         console.log(
           `[koko-build] manifest updated: js=${manifest.app_js} css=${manifest.app_css}`
         )
+      })
+    },
+  }
+}
+
+function 创建应用壳预缓存注入配置() {
+  return {
+    swSrc: path.join('dist', 'app-sw.raw.js'),
+    swDest: path.join('dist', 'app-sw.js'),
+    globDirectory: 'dist',
+    globPatterns: [
+      '**/*.{js,css,png,jpg,jpeg,webp,gif,svg,woff,woff2}',
+    ],
+    globIgnores: [
+      '**/*.map',
+      '**/app-sw.js',
+      '**/app-sw.raw.js',
+      '**/media-sw.js',
+      '**/media-sw.js.map',
+      '**/asset-manifest.json',
+      '**/api/**',
+      '**/socket.io/**',
+      '**/media/**',
+      '**/attachments/**',
+    ],
+    maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+  }
+}
+
+async function 注入应用壳预缓存清单() {
+  const result = await injectManifest(创建应用壳预缓存注入配置())
+  for (const warning of result.warnings ?? []) {
+    console.warn(`[koko-build] workbox warning: ${warning}`)
+  }
+  rmSync(path.join(distDir, 'app-sw.raw.js'), { force: true })
+  console.log(`[koko-build] app shell precache injected: files=${result.count}`)
+}
+
+function 生成应用壳预缓存插件() {
+  return {
+    name: 'koko-app-shell-workbox',
+    setup(build) {
+      build.onEnd(async (result) => {
+        if (result.errors.length > 0) {
+          return
+        }
+        // app-sw 只拿 dist 中已经构建好的静态壳资源做 precache，不接触运行时聊天数据。
+        await 注入应用壳预缓存清单()
       })
     },
   }
@@ -107,14 +161,28 @@ const mediaServiceWorkerBuildOptions = {
   sourcemap: true,
 }
 
+const appShellServiceWorkerBuildOptions = {
+  entryPoints: ['app-sw.ts'],
+  bundle: true,
+  outfile: 'dist/app-sw.raw.js',
+  format: 'esm',
+  platform: 'browser',
+  target: 'es2022',
+  sourcemap: false,
+  plugins: [生成应用壳预缓存插件()],
+}
+
 if (watchMode) {
   const appContext = await esbuild.context(appBuildOptions)
   const mediaSwContext = await esbuild.context(mediaServiceWorkerBuildOptions)
+  const appShellSwContext = await esbuild.context(appShellServiceWorkerBuildOptions)
   await appContext.watch()
   await mediaSwContext.watch()
+  await appShellSwContext.watch()
   console.log('[koko-build] watch mode started')
 } else {
   await esbuild.build(appBuildOptions)
   await esbuild.build(mediaServiceWorkerBuildOptions)
+  await esbuild.build(appShellServiceWorkerBuildOptions)
   console.log('[koko-build] build completed')
 }
