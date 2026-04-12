@@ -1,11 +1,11 @@
-# Graph Report - .  (2026-04-12)
+# Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 121 files · ~4,536,212 words
+- 123 files · ~4,536,801 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 288 nodes · 348 edges · 30 communities detected
+- 294 nodes · 346 edges · 30 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -44,14 +44,14 @@
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 22 edges
 2. `单连接发送到已关闭socket时降级为正常断开()` - 7 edges
-3. `updateChat()` - 6 edges
-4. `构造rustus_hook请求体()` - 6 edges
-5. `exitCurrentRoomView()` - 5 edges
-6. `假Socket` - 5 edges
-7. `parse_attachment_content_query()` - 5 edges
-8. `Pg仓储` - 5 edges
-9. `login()` - 4 edges
-10. `render()` - 4 edges
+3. `构造rustus_hook请求体()` - 6 edges
+4. `假Socket` - 5 edges
+5. `parse_attachment_content_query()` - 5 edges
+6. `Pg仓储` - 5 edges
+7. `login()` - 4 edges
+8. `handle_rustus_hook()` - 4 edges
+9. `loadRooms()` - 3 edges
+10. `render()` - 3 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `prepare_media_upload()` --calls--> `断言媒体准备结果是Tus契约()`  [EXTRACTED]
@@ -70,8 +70,8 @@ Cohesion: 0.02
 Nodes (18): AdminLoginBody, AdminLoginResp, ApiError, BootstrapBody, CompleteMediaUploadBody, JoinBody, ParsedAttachmentContentQuery, ParsedEventsQuery (+10 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.09
-Nodes (19): buildRoomViewResetPatch(), clearMediaPublisherState(), exitCurrentRoomView(), handleShellConsolePrimaryInput(), joinHistoryRoom(), leaveCurrentRoomView(), loadOverview(), loadRooms() (+11 more)
+Cohesion: 0.06
+Nodes (14): constructor(), dispatch(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), loadOverview(), loadRooms(), login() (+6 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.07
@@ -223,16 +223,16 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 4` to `Community 0`?**
-  _High betweenness centrality (0.112) - this node is a cross-community bridge._
+  _High betweenness centrality (0.110) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 3` to `Community 0`?**
-  _High betweenness centrality (0.031) - this node is a cross-community bridge._
+  _High betweenness centrality (0.030) - this node is a cross-community bridge._
 - **Why does `构造rustus_hook请求体()` connect `Community 7` to `Community 0`?**
-  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局` to the rest of the system?**
   _22 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.09 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.07 - nodes in this community are weakly interconnected._
