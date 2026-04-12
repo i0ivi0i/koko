@@ -47,6 +47,11 @@
 - 没有 `python3` shim 时，git hook 会自动回退到 `python`
 - 两个解释器都没有 `graphify` 时，直接安静退出，不再把 git 流程炸掉
 
+但在我们这台机器上，`command -v graphify` 命中的是 `graphify.exe` 二进制启动器，不是带 shebang 的脚本。
+
+- 官方 hook 直接 `head -1 graphify.exe` 时，会先吐一条 `ignored null byte in input` 警告
+- koko 这里的本地 `.git/hooks` 额外跳过了 `.exe` shebang 探测，直接走后面的 `python3/python` 回退
+
 这不是实时监控，也不是文档全自动更新。它的长处是：
 
 - 不用常驻后台进程
