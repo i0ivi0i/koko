@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import "../聊天壳";
 import "../后台壳";
 import { 聊天壳 } from "../聊天壳";
 import { 后台壳 } from "../后台壳";
-import { 安装测试文本测量画布 } from "./common/聊天测试支架";
+import { 安装测试文本测量画布, createFakeStorage } from "./common/聊天测试支架";
 import type { 前端传输端口 } from "../传输";
 import type {
   匿名身份引导结果,
@@ -31,6 +31,25 @@ import type { Socket } from "socket.io-client";
  * 2. 独立 e2e spec 却因为缺测量上下文直接炸掉。
  */
 安装测试文本测量画布();
+
+beforeEach(() => {
+  /**
+   * 端到端冒烟同样会触发聊天壳的恢复链。
+   * 这里必须显式接管 `window.localStorage`，避免 happy-dom 在 Node 里回退到
+   * 自带 Web Storage 并打印 `--localstorage-file` 警告。
+   */
+  Object.defineProperty(window, "localStorage", {
+    value: createFakeStorage(),
+    configurable: true,
+  });
+});
+
+describe("端到端测试环境", () => {
+  it("会先接管浏览器 localStorage，而不是落回 Node 默认 Web Storage", () => {
+    window.localStorage.setItem("smoke", "ok");
+    expect(window.localStorage.getItem("smoke")).toBe("ok");
+  });
+});
 
 class 假Socket {
   private handlers = new Map<string, Array<(payload: unknown) => void>>();
