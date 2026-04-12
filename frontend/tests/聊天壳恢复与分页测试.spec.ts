@@ -1165,5 +1165,85 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     el.remove();
   });
 
+  it("点开媒体查看器后的紧邻程序性 scroll 不会误触发历史分页", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 3, {
+        has_more_before: true,
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-2",
+            client_message_id: "c-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            body: "历史消息-2",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-image-1",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 2,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-3",
+            client_message_id: "c-3",
+            sender_session_id: "s-test",
+            sender_display_alias: "暴躁的企鹅",
+            body: "历史消息-3",
+            event_position: 3,
+          },
+        ],
+      }),
+    ];
+    const viewer = {
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    (
+      el as unknown as {
+        setMediaViewerForTest(nextViewer: typeof viewer): void;
+      }
+    ).setMediaViewerForTest(viewer);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    设置测试滚动阶段(el, {
+      initialUnreadSettled: true,
+      scrollPhase: "idle",
+      hasUserScrollIntent: true,
+    });
+
+    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
+      scrollTop: number;
+    };
+    const previewTrigger = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button.message-image-preview-trigger[data-attachment-id="att-image-1"]'
+    );
+    expect(previewTrigger).not.toBeNull();
+
+    previewTrigger!.click();
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event("scroll"));
+    await 等待组件稳定(el);
+
+    expect(viewer.打开).toHaveBeenCalled();
+    expect(transport.loadRoomHistoryCalls).toBe(0);
+    el.remove();
+  });
+
 });
 

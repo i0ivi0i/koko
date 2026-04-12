@@ -418,8 +418,8 @@
     {
       "label": "constructor()",
       "file_type": "code",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L39",
+      "source_file": "frontend\\\u623f\u95f4\u6eda\u52a8\u5668.ts",
+      "source_location": "L62",
       "id": "constructor",
       "community": 0
     },
@@ -437,7 +437,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L56",
       "id": "dispatchpointerscrollintent",
-      "community": 18
+      "community": 20
     },
     {
       "label": "dispatchScrollIntent()",
@@ -445,7 +445,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L63",
       "id": "dispatchscrollintent",
-      "community": 18
+      "community": 20
     },
     {
       "label": "dispatchScroll()",
@@ -480,16 +480,12 @@
       "community": 0
     },
     {
-      "label": "frontend/\u623f\u95f4\u6eda\u52a8\u5668.ts",
+      "label": "hostDisconnected()",
       "file_type": "code",
-      "source_file": "frontend/\u623f\u95f4\u6eda\u52a8\u5668.ts",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "id": "frontend_room_scroller_ts",
-      "community": 30
+      "source_file": "frontend\\\u623f\u95f4\u6eda\u52a8\u5668.ts",
+      "source_location": "L69",
+      "id": "hostdisconnected",
+      "community": 0
     },
     {
       "label": "\u6587\u672c\u5e03\u5c40",
@@ -681,7 +677,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_read_progress_orchestrator_ts",
-      "community": 31
+      "community": 30
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -1058,7 +1054,7 @@
     {
       "label": "get()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\tests\\\u804a\u5929\u58f3\u6062\u590d\u4e0e\u5206\u9875\u6d4b\u8bd5.spec.ts",
+      "source_file": "frontend\\tests\\\u804a\u5929\u58f3\u6062\u590d\u4e0e\u5206\u9875\u6d4b\u8bd5.spec.ts",
       "source_location": "L358",
       "id": "spec_get",
       "community": 1
@@ -1165,7 +1161,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 20
+      "community": 15
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1173,7 +1169,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 20
+      "community": 15
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1245,7 +1241,7 @@
       "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
       "source_location": "L1",
       "id": "index",
-      "community": 32
+      "community": 31
     },
     {
       "label": "\u63a8\u5bfc\u56fe\u7247Mime\u7c7b\u578b()",
@@ -1333,7 +1329,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 33
+      "community": 32
     },
     {
       "label": "main.rs",
@@ -1661,7 +1657,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L144",
       "id": "parse_events_query",
-      "community": 19
+      "community": 16
     },
     {
       "label": "parse_history_query()",
@@ -1669,7 +1665,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 17
+      "community": 19
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1701,7 +1697,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
@@ -1765,7 +1761,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1296",
       "id": "load_room_events",
-      "community": 19
+      "community": 16
     },
     {
       "label": "load_room_history()",
@@ -1773,7 +1769,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1424",
       "id": "load_room_history",
-      "community": 17
+      "community": 19
     },
     {
       "label": "prepare_media_upload()",
@@ -1813,7 +1809,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1974",
       "id": "complete",
-      "community": 15
+      "community": 18
     },
     {
       "label": "complete_media_upload()",
@@ -1821,7 +1817,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2015",
       "id": "complete_media_upload",
-      "community": 15
+      "community": 18
     },
     {
       "label": "load_media_locator()",
@@ -1893,7 +1889,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
@@ -2580,8 +2576,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L39",
+      "source_file": "frontend\\\u623f\u95f4\u6eda\u52a8\u5668.ts",
+      "source_location": "L62",
       "weight": 1.0,
       "_src": "",
       "_tgt": "constructor",
@@ -2671,6 +2667,18 @@
       "_tgt": "rendermessageattachments",
       "source": "",
       "target": "rendermessageattachments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6eda\u52a8\u5668.ts",
+      "source_location": "L69",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "hostdisconnected",
+      "source": "",
+      "target": "hostdisconnected",
       "confidence_score": 1.0
     },
     {
@@ -5724,7 +5732,7 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\tests\\\u804a\u5929\u58f3\u6062\u590d\u4e0e\u5206\u9875\u6d4b\u8bd5.spec.ts",
+      "source_file": "frontend\\tests\\\u804a\u5929\u58f3\u6062\u590d\u4e0e\u5206\u9875\u6d4b\u8bd5.spec.ts",
       "source_location": "L358",
       "weight": 1.0,
       "_src": "spec",

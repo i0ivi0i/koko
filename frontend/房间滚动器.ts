@@ -57,6 +57,7 @@ export interface 房间滚动器依赖 {
  */
 export class 房间滚动器 implements ReactiveController {
   private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+  private 待忽略交互后程序滚动截止时间戳 = 0;
 
   constructor(
     private readonly host: 房间滚动器宿主,
@@ -83,8 +84,19 @@ export class 房间滚动器 implements ReactiveController {
   }
 
   处理滚动事件(scrollContainer: HTMLElement): void {
+    if (this.消耗交互后程序滚动豁免()) {
+      return;
+    }
     this.按需加载更早历史(scrollContainer);
     this.按需采样阅读锚点(scrollContainer);
+  }
+
+  /**
+   * 点开媒体查看器这类“非滚动交互”后，浏览器/第三方查看器可能会立刻抛一次程序性 scroll。
+   * 这不是用户在翻历史，不能让它误触发顶部补页或已读推进。
+   */
+  豁免下一次交互后的程序滚动(): void {
+    this.待忽略交互后程序滚动截止时间戳 = Date.now() + 400;
   }
 
   /**
@@ -166,6 +178,18 @@ export class 房间滚动器 implements ReactiveController {
     }
     clearTimeout(this.scrollPhaseReleaseTimer);
     this.scrollPhaseReleaseTimer = null;
+  }
+
+  private 消耗交互后程序滚动豁免(): boolean {
+    if (this.待忽略交互后程序滚动截止时间戳 === 0) {
+      return false;
+    }
+    if (Date.now() > this.待忽略交互后程序滚动截止时间戳) {
+      this.待忽略交互后程序滚动截止时间戳 = 0;
+      return false;
+    }
+    this.待忽略交互后程序滚动截止时间戳 = 0;
+    return true;
   }
 
   private async 落实首屏定位(): Promise<void> {

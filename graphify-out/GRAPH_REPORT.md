@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-12)
 
 ## Corpus Check
-- 104 files · ~4,519,926 words
+- 104 files · ~4,520,132 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 282 nodes · 331 edges · 34 communities detected
+- 282 nodes · 332 edges · 33 communities detected
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
@@ -95,27 +95,27 @@ Nodes (1): Pg仓储
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
+Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
@@ -139,7 +139,7 @@ Nodes (0):
 
 ### Community 26 - "Community 26"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 27 - "Community 27"
 Cohesion: 1.0
@@ -155,34 +155,30 @@ Nodes (1): frontend/房间恢复编排.ts
 
 ### Community 30 - "Community 30"
 Cohesion: 1.0
-Nodes (1): frontend/房间滚动器.ts
+Nodes (1): frontend/阅读推进编排.ts
 
 ### Community 31 - "Community 31"
 Cohesion: 1.0
-Nodes (1): frontend/阅读推进编排.ts
+Nodes (0): 
 
 ### Community 32 - "Community 32"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 33 - "Community 33"
-Cohesion: 1.0
-Nodes (0):
-
 ## Knowledge Gaps
-- **25 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `frontend/房间滚动器.ts`, `文本布局` (+20 more)
+- **24 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts`, `文本布局`, `frontend/阅读推进编排.ts` (+19 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 15`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 15`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
+- **Thin community `Community 16`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 17`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
+- **Thin community `Community 18`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 19`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
+- **Thin community `Community 20`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 21`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -202,13 +198,11 @@ Nodes (0):
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 29`** (1 nodes): `frontend/房间恢复编排.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 30`** (1 nodes): `frontend/房间滚动器.ts`
+- **Thin community `Community 30`** (1 nodes): `frontend/阅读推进编排.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 31`** (1 nodes): `frontend/阅读推进编排.ts`
+- **Thin community `Community 31`** (1 nodes): `index.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 32`** (1 nodes): `index.ts`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 33`** (1 nodes): `lib.rs`
+- **Thin community `Community 32`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
@@ -221,7 +215,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `构造rustus_hook请求体()` connect `Community 6` to `Community 0`?**
   _High betweenness centrality (0.025) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `frontend/房间恢复编排.ts` to the rest of the system?**
-  _25 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _24 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**

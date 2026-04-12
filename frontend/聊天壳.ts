@@ -1738,6 +1738,7 @@ export class 聊天壳 extends LitElement {
               void this.阅读推进编排端口.请求跳到最新();
             }}
             @room-open-media-viewer=${(event: CustomEvent<媒体查看器打开请求>) => {
+              this.roomScroller.豁免下一次交互后的程序滚动();
               this.媒体查看器.打开(event.detail);
             }}
           ></koko-room-message-pane>
