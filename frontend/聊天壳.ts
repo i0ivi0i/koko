@@ -803,11 +803,7 @@ export class 聊天壳 extends LitElement {
   private get 应用运行时(): 应用运行时端口 {
     if (!this._应用运行时) {
       this._应用运行时 = 创建应用运行时({
-        标记用户滚动意图: () => this.kernel.标记用户滚动意图(),
-        处理聊天视口滚动: (scrollContainer) => this.kernel.处理聊天视口滚动(scrollContainer),
-        请求跳到最新: () => this.kernel.请求跳到最新(),
-        登记程序滚动来源: (source) => this.kernel.登记程序滚动来源(source),
-        打开媒体: (request) => this.kernel.打开媒体查看器(request),
+        dispatch: (command) => this.kernel.dispatch(command),
       });
     }
     return this._应用运行时;
@@ -856,7 +852,7 @@ export class 聊天壳 extends LitElement {
   }
 
   private removeComposerDraft(localId: string): void {
-    this.kernel.移除媒体草稿(localId);
+    void this.kernel.dispatch({ type: "MEDIA_DRAFT_REMOVE_REQUESTED", localId });
   }
 
   /**
@@ -867,7 +863,7 @@ export class 聊天壳 extends LitElement {
    *   继续保证草稿带里只保留一条真上传项，不长幽灵副本。
    */
   private async retryComposerDraft(localId: string): Promise<void> {
-    await this.kernel.重试媒体草稿(localId);
+    await this.kernel.dispatch({ type: "MEDIA_DRAFT_RETRY_REQUESTED", localId });
   }
 
   override connectedCallback(): void {
@@ -1021,7 +1017,7 @@ export class 聊天壳 extends LitElement {
           `#${默认统一媒体文件选择配置.inputId}`
         ) ?? null,
       处理选择媒体文件: async (files) => {
-        await this.kernel.处理选择媒体文件(files);
+        await this.kernel.dispatch({ type: "MEDIA_FILES_SELECTED", files });
       },
     });
     const 统一媒体文件选择配置 = 附件入口编排.统一媒体文件选择配置;

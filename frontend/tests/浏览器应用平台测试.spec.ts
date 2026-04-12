@@ -44,6 +44,20 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_SCROLL_OBSERVED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_JUMP_TO_LATEST_REQUESTED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_OPEN_REQUESTED"/);
+    expect(source).not.toContain("this.kernel.处理选择媒体文件(");
+    expect(source).not.toContain("this.kernel.移除媒体草稿(");
+    expect(source).not.toContain("this.kernel.重试媒体草稿(");
+  });
+
+  it("应用运行时只负责把浏览器事件翻成内核 command，不再知道具体 owner 动词", () => {
+    const source = 读取前端源码("应用运行时.ts");
+
+    expect(source).toContain("dispatch(command)");
+    expect(source).not.toContain("标记用户滚动意图(): void");
+    expect(source).not.toContain("处理聊天视口滚动(scrollContainer: HTMLElement): void");
+    expect(source).not.toContain("请求跳到最新(): Promise<void>");
+    expect(source).not.toContain("登记程序滚动来源(source:");
+    expect(source).not.toContain("打开媒体(request:");
   });
 
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {

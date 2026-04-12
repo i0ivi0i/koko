@@ -56,7 +56,14 @@ export type 聊天应用命令 =
   | { type: "JOIN_ROOM_REQUESTED"; roomCode?: string }
   | { type: "JOIN_HISTORY_ROOM_REQUESTED"; roomCode: string }
   | { type: "LEAVE_ROOM_VIEW_REQUESTED" }
-  | { type: "SEND_MESSAGE_REQUESTED" };
+  | { type: "SEND_MESSAGE_REQUESTED" }
+  | { type: "ROOM_SCROLL_INTENT" }
+  | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
+  | { type: "ROOM_JUMP_TO_LATEST_REQUESTED" }
+  | { type: "MEDIA_OPEN_REQUESTED"; request: 媒体查看器打开请求 }
+  | { type: "MEDIA_FILES_SELECTED"; files: Iterable<File> }
+  | { type: "MEDIA_DRAFT_REMOVE_REQUESTED"; localId: string }
+  | { type: "MEDIA_DRAFT_RETRY_REQUESTED"; localId: string };
 
 export interface 聊天应用内核宿主 {
   addController(controller: object): void;
@@ -80,15 +87,6 @@ export interface 聊天应用内核端口 {
   dispatch(command: 聊天应用命令): Promise<void>;
   setTransportForTest(transport: 前端传输端口): void;
   dispose(): void;
-  标记用户滚动意图(): void;
-  处理聊天视口滚动(scrollContainer: HTMLElement): void;
-  请求跳到最新(): Promise<void>;
-  登记程序滚动来源(source: 程序滚动来源): void;
-  清除程序滚动来源(source: 程序滚动来源): void;
-  处理选择媒体文件(files: Iterable<File>): Promise<void>;
-  移除媒体草稿(localId: string): void;
-  重试媒体草稿(localId: string): Promise<void>;
-  打开媒体查看器(request: 媒体查看器打开请求): void;
   构建附件内容地址(attachmentId: string, variant?: "original" | "thumbnail"): string;
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
@@ -247,6 +245,28 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         }
         return;
       }
+      case "ROOM_SCROLL_INTENT":
+        this.标记用户滚动意图();
+        return;
+      case "ROOM_SCROLL_OBSERVED":
+        this.处理聊天视口滚动(command.scrollContainer);
+        return;
+      case "ROOM_JUMP_TO_LATEST_REQUESTED":
+        await this.请求跳到最新();
+        return;
+      case "MEDIA_OPEN_REQUESTED":
+        this.登记程序滚动来源("media_viewer_open");
+        this.打开媒体查看器(command.request);
+        return;
+      case "MEDIA_FILES_SELECTED":
+        await this.处理选择媒体文件(command.files);
+        return;
+      case "MEDIA_DRAFT_REMOVE_REQUESTED":
+        this.移除媒体草稿(command.localId);
+        return;
+      case "MEDIA_DRAFT_RETRY_REQUESTED":
+        await this.重试媒体草稿(command.localId);
+        return;
     }
   }
 
@@ -268,42 +288,42 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.媒体编排.销毁();
   }
 
-  标记用户滚动意图(): void {
+  private 标记用户滚动意图(): void {
     this.roomScroller.标记用户滚动意图();
   }
 
-  处理聊天视口滚动(scrollContainer: HTMLElement): void {
+  private 处理聊天视口滚动(scrollContainer: HTMLElement): void {
     const 应继续观察视口 = this.roomScroller.处理滚动事件(scrollContainer);
     if (应继续观察视口) {
       this.阅读推进编排端口.接收视口滚动();
     }
   }
 
-  请求跳到最新(): Promise<void> {
+  private 请求跳到最新(): Promise<void> {
     return this.阅读推进编排端口.请求跳到最新();
   }
 
-  登记程序滚动来源(source: 程序滚动来源): void {
+  private 登记程序滚动来源(source: 程序滚动来源): void {
     this.roomScroller.登记程序滚动来源(source);
   }
 
-  清除程序滚动来源(source: 程序滚动来源): void {
+  private 清除程序滚动来源(source: 程序滚动来源): void {
     this.roomScroller.清除程序滚动来源(source);
   }
 
-  async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
+  private async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
     await this.媒体编排.处理选择媒体文件(files);
   }
 
-  移除媒体草稿(localId: string): void {
+  private 移除媒体草稿(localId: string): void {
     this.媒体编排.移除媒体草稿(localId);
   }
 
-  async 重试媒体草稿(localId: string): Promise<void> {
+  private async 重试媒体草稿(localId: string): Promise<void> {
     await this.媒体编排.重试媒体草稿(localId);
   }
 
-  打开媒体查看器(request: 媒体查看器打开请求): void {
+  private 打开媒体查看器(request: 媒体查看器打开请求): void {
     this.媒体编排.打开查看器(request);
   }
 
