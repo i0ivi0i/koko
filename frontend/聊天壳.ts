@@ -1,37 +1,21 @@
 import { css, html, LitElement } from "lit";
-import { 创建房间内核, 派生房间壳外观 } from "./房间内核.js";
-import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
-import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
-import { 创建阅读推进编排, type 阅读推进编排端口 } from "./阅读推进编排.js";
-import { 房间滚动器 } from "./房间滚动器.js";
 import { 创建应用运行时, type 应用运行时端口 } from "./应用运行时.js";
+import { 创建聊天应用内核, type 聊天应用快照 } from "./聊天应用内核.js";
 import "./房间消息窗.js";
 import {
   创建操作台附件入口编排,
   默认统一媒体文件选择配置,
 } from "./操作台/index.js";
 import {
-  创建浏览器存储,
-  type 前端存储端口,
-} from "./存储.js";
-import {
-  写入媒体草稿 as 写入媒体草稿状态,
-  更新媒体草稿状态 as 更新媒体草稿状态值,
-  移除媒体草稿 as 移除媒体草稿状态,
   创建媒体定位器,
   创建媒体播放器,
   创建媒体发布器,
   创建媒体查看器,
   解析协作分发源,
-  type 媒体附件草稿,
   type 媒体查看器打开请求,
   type 媒体播放结果,
-  type 媒体草稿状态补丁,
 } from "./媒体/index.js";
-import { 推进房间时间线, type 时间线输入 } from "./房间时间线.js";
-import { 获取默认浏览器应用平台 } from "./平台/index.js";
 import type { 前端传输端口 } from "./传输.js";
-import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
 import {
   默认消息文本布局环境,
@@ -78,14 +62,6 @@ export class 聊天壳 extends LitElement {
   private readonly handleViewportResize = (): void => {
     this.requestUpdate();
   };
-
-  /**
-   * 媒体草稿是发送区唯一的本地体验态真相。
-   * 统一从这里读取，避免 success/error/watchdog 各自再扫一遍数组。
-   */
-  private 读取媒体草稿(localId: string): 媒体附件草稿 | undefined {
-    return this.chatState.composerMediaDrafts.find((item) => item.localId === localId);
-  }
 
   static override styles = css`
     :host {
@@ -798,23 +774,72 @@ export class 聊天壳 extends LitElement {
     }
   `;
 
-  private chatState: 聊天状态 = { ...初始聊天状态 };
+  /**
+   * ChatAppKernel 是聊天壳唯一的业务入口。
+   * 壳层之后只允许：
+   * - 读 `snapshot()`；
+   * - 发 `dispatch(command)`；
+   * - 转接少量浏览器副作用清理回调。
+   */
+  private readonly kernel = 创建聊天应用内核({
+    host: this,
+    查询滚动容器: () =>
+      (this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null) ?? null,
+    查询消息节点: () =>
+      Array.from(this.shadowRoot?.querySelectorAll("[data-event-position]") ?? []) as HTMLElement[],
+    清理房间视图本地状态: ({ previewUrls }) => {
+      this.回收媒体草稿预览地址(previewUrls);
+      this.媒体发布器.清空();
+      this.清空媒体播放状态();
+    },
+  });
 
   /**
-   * transport 实例现在由浏览器应用平台统一拥有。
-   * 聊天壳只消费这个端口，不再各自 new 一份 HTTP / realtime 入口，
-   * 这样后面接生命周期、离线或多标签能力时，入口还能保持单一。
+   * 兼容现有测试与 presenter：当前阶段仍保留 `chatState` 这个读口，
+   * 但真实状态已经改由内核持有。
+   * 这样旧测试在逐步迁移前还能工作，同时壳层代码已经不再自己持有真相。
    */
-  private transport: 前端传输端口 = 获取默认浏览器应用平台().transport.transport();
+  private get chatState(): 聊天应用快照 {
+    return this.kernel.snapshot();
+  }
+
+  private set chatState(next: 聊天应用快照) {
+    this.kernel.replaceSnapshot(next);
+  }
+
+  /**
+   * 下面这几个读口只为了现有集成测试和渐进迁移保留。
+   * 真正的 owner 已经下沉进 ChatAppKernel；壳层业务代码不再直接依赖这些对象。
+   */
+  get roomScroller() {
+    return this.kernel.roomScrollerPort();
+  }
+
+  get 恢复编排端口() {
+    return this.kernel.recoveryPort();
+  }
+
+  get 阅读推进编排端口() {
+    return this.kernel.readPort();
+  }
+
+  get shouldPrimeReadAnchorAfterInitialSettle(): boolean {
+    return this.kernel.readRecoveryPrimeFlag();
+  }
+
+  set shouldPrimeReadAnchorAfterInitialSettle(value: boolean) {
+    this.kernel.writeRecoveryPrimeFlag(value);
+  }
+
   private readonly 媒体定位器 = 创建媒体定位器({
     getSessionId: () => this.chatState.sessionId,
     loadMediaLocator: (sessionId, attachmentId) =>
-      this.transport.loadMediaLocator(sessionId, attachmentId),
+      this.kernel.transportPort().loadMediaLocator(sessionId, attachmentId),
   });
   private 媒体播放器 = this.创建页面级媒体播放器();
   private 媒体查看器 = 创建媒体查看器({
     onViewportCaptureEnd: () => {
-      this.roomScroller.清除程序滚动来源("media_viewer_open");
+      this.kernel.清除程序滚动来源("media_viewer_open");
     },
   });
   private 媒体播放结果表: Record<string, 媒体播放结果> = {};
@@ -822,163 +847,41 @@ export class 聊天壳 extends LitElement {
   private readonly 媒体发布器 = 创建媒体发布器({
     getSessionId: () => this.chatState.sessionId,
     prepareMediaUpload: (kind, sessionId, file) =>
-      this.transport.prepareMediaUpload(kind, sessionId, file),
+      this.kernel.transportPort().prepareMediaUpload(kind, sessionId, file),
     completeMediaUpload: (sessionId, attachmentId) =>
-      this.transport.completeMediaUpload(sessionId, attachmentId),
+      this.kernel.transportPort().completeMediaUpload(sessionId, attachmentId),
     readDrafts: () => this.chatState.composerMediaDrafts,
-    writeDraft: (draft) => this.写入媒体草稿(draft),
-    updateDraft: (localId, patch) => this.更新媒体草稿状态(localId, patch),
-    removeDraft: (localId) => this.移除媒体草稿(localId),
-    clearDrafts: () => this.清空媒体草稿(),
+    writeDraft: (draft) => {
+      this.回收媒体草稿预览地址(this.kernel.写入媒体草稿(draft));
+    },
+    updateDraft: (localId, patch) => {
+      this.回收媒体草稿预览地址(this.kernel.更新媒体草稿状态(localId, patch));
+    },
+    removeDraft: (localId) => {
+      this.回收媒体草稿预览地址(this.kernel.移除媒体草稿(localId));
+    },
+    clearDrafts: () => {
+      this.回收媒体草稿预览地址(this.kernel.清空媒体草稿());
+    },
   });
-
-  /**
-   * 房间阶段编排由状态机承载，聊天壳只消费它派生出的外观。
-   * 这样 UI 改版时，就不必再顺手碰 bootstrap / 恢复 / 重连 的阶段逻辑。
-   */
-  private roomKernel = 创建房间内核();
-
-  /**
-   * 本地存储是壳层能力，不是领域能力。
-   * 这里统一接一个端口，避免房间组件继续散落具体键名和浏览器 API 细节。
-   */
-  private storage: 前端存储端口 = 创建浏览器存储();
-
-  /**
-   * 只在“刷新恢复 / 快照重拉”这类恢复链路里，才允许首屏程序性补一次阅读锚点。
-   * 首次手动进房仍然保持原语义，避免把恢复专用逻辑扩散到所有入口。
-   */
-  private shouldPrimeReadAnchorAfterInitialSettle = false;
-
-  private _恢复编排端口: 房间恢复编排端口 | null = null;
-  private _实时编排端口: 房间实时编排端口 | null = null;
-  private _阅读推进编排端口: 阅读推进编排端口 | null = null;
   private _应用运行时: 应用运行时端口 | null = null;
 
   /**
-   * 恢复编排器通过惰性创建拿到完整依赖：
-   * - 避免字段初始化顺序把 `roomScroller / realtime` 相关依赖提前读成半成品；
-   * - 也避免为了迁模块再造第二套构造流程。
-   */
-  private get 恢复编排端口(): 房间恢复编排端口 {
-    if (!this._恢复编排端口) {
-      this._恢复编排端口 = 创建房间恢复编排({
-        读取状态: () => this.chatState,
-        更新状态: (patch) => this.updateChat(patch),
-        推进时间线: (input) => this.推进时间线(input),
-        transport: this.transport,
-        storage: this.storage,
-        roomKernel: this.roomKernel,
-        roomShellPatch: () => this.roomShellPatch(),
-        roomScroller: this.roomScroller,
-        ensureRealtimeSocket: (sessionId) => this.实时编排端口.ensureRealtimeSocket(sessionId),
-        subscribeRoom: (from) => this.实时编排端口.subscribeRoom(from),
-        cancelPendingReadAnchorFlush: () => this.阅读推进编排端口.dispose(),
-        cancelPendingFollowLatestReadSample: () => this.阅读推进编排端口.dispose(),
-        exitCurrentRoomView: (opts) => this.exitCurrentRoomView(opts),
-        disconnectRealtime: () => this.实时编排端口.disconnect(),
-        写入恢复补锚标记: (value) => {
-          this.shouldPrimeReadAnchorAfterInitialSettle = value;
-        },
-        等待壳渲染完成: async () => {
-          await this.updateComplete;
-        },
-      });
-    }
-    return this._恢复编排端口;
-  }
-
-  /**
-   * realtime 编排器同样走惰性创建，避免和恢复编排在字段初始化阶段形成半成品循环。
-   */
-  private get 实时编排端口(): 房间实时编排端口 {
-    if (!this._实时编排端口) {
-      this._实时编排端口 = 创建房间实时编排({
-        读取状态: () => this.chatState,
-        更新状态: (patch) => this.updateChat(patch),
-        推进时间线: (input) => this.推进时间线(input),
-        transport: this.transport,
-        roomKernel: this.roomKernel,
-        roomShellPatch: () => this.roomShellPatch(),
-        上报Transport异常: async (error) => {
-          await this.恢复编排端口.接收Transport异常(error);
-        },
-        处理恢复失败: (error, keepRoomVisible) => {
-          this.恢复编排端口.处理恢复失败(error, keepRoomVisible);
-        },
-        跟随最新消息追加后刷新视口: async () => {
-          await this.阅读推进编排端口.接收Realtime追加后跟随();
-        },
-      });
-    }
-    return this._实时编排端口;
-  }
-
-  /**
-   * 阅读推进编排也走惰性创建：
-   * - 一方面避免和滚动器、恢复编排、realtime 编排互相抢初始化顺序；
-   * - 另一方面让壳层只保留必要的 DOM 转接，不再自己持有阅读推进规则。
-   */
-  private get 阅读推进编排端口(): 阅读推进编排端口 {
-    if (!this._阅读推进编排端口) {
-      this._阅读推进编排端口 = 创建阅读推进编排({
-        读取状态: () => this.chatState,
-        更新状态: (patch) => this.updateChat(patch),
-        推进时间线: (input) => this.推进时间线(input),
-        transport: this.transport,
-        roomKernel: this.roomKernel,
-        roomShellPatch: () => this.roomShellPatch(),
-        roomScroller: this.roomScroller,
-        withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
-          this.恢复编排端口.withSessionRefreshOnInvalid(operation),
-        等待壳渲染完成: async () => {
-          await this.updateComplete;
-        },
-        滚到最新位置: () => this.roomScroller.滚到最新位置(),
-      });
-    }
-    return this._阅读推进编排端口;
-  }
-
-  /**
    * 应用运行时是壳层里唯一的应用事件入口。
-   * 它只组合现有 owner，不把滚动、媒体或阅读推进规则复制到聊天壳里。
+   * 它现在只认内核命令，不再把 roomScroller / 阅读推进端口这些 owner 暴露给壳层。
    */
   private get 应用运行时(): 应用运行时端口 {
     if (!this._应用运行时) {
       this._应用运行时 = 创建应用运行时({
-        roomScroller: this.roomScroller,
-        阅读推进编排端口: this.阅读推进编排端口,
-        mediaViewer: this.媒体查看器,
+        标记用户滚动意图: () => this.kernel.标记用户滚动意图(),
+        处理聊天视口滚动: (scrollContainer) => this.kernel.处理聊天视口滚动(scrollContainer),
+        请求跳到最新: () => this.kernel.请求跳到最新(),
+        登记程序滚动来源: (source) => this.kernel.登记程序滚动来源(source),
+        打开媒体: (request) => this.媒体查看器.打开(request),
       });
     }
     return this._应用运行时;
   }
-
-  /**
-   * 滚动器只处理 DOM 滚动副作用：
-   * - 首屏定位
-   * - 历史补偿
-   * - 程序滚动隔离
-   * - 已读采样
-   */
-  private roomScroller = new 房间滚动器(this, {
-    读取状态: () => this.chatState,
-    更新状态: (patch) => this.updateChat(patch),
-    查询滚动容器: () =>
-      (this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null) ?? null,
-    查询消息节点: () =>
-      Array.from(this.shadowRoot?.querySelectorAll("[data-event-position]") ?? []) as HTMLElement[],
-    请求更早历史: () => {
-      void this.阅读推进编排端口.请求加载更早历史();
-    },
-    采样阅读锚点: (position) => this.阅读推进编排端口.接收候选已读位置(position),
-    读取是否需要恢复补锚: () => this.shouldPrimeReadAnchorAfterInitialSettle,
-    消耗恢复补锚标记: () => {
-      this.shouldPrimeReadAnchorAfterInitialSettle = false;
-    },
-    报告首屏稳定完成: (mode) => this.阅读推进编排端口.接收首屏稳定完成(mode),
-  });
 
   private 创建页面级媒体播放器(): {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
@@ -1000,57 +903,15 @@ export class 聊天壳 extends LitElement {
   setMediaViewerForTest(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void {
     this.媒体查看器.销毁();
     this.媒体查看器 = viewer;
-    this._应用运行时 = null;
   }
 
   setTransportForTest(transport: 前端传输端口): void {
-    this._实时编排端口?.disconnect();
-    this._实时编排端口 = null;
-    this._阅读推进编排端口?.dispose();
-    this._阅读推进编排端口 = null;
     this._应用运行时 = null;
     this.媒体发布器.销毁();
-    this.transport = transport;
+    this.kernel.setTransportForTest(transport);
     this.媒体定位器.清空();
     this.清空媒体播放状态();
     this.媒体播放器 = this.创建页面级媒体播放器();
-    this._恢复编排端口 = null;
-  }
-
-  private roomShellState() {
-    return 派生房间壳外观(this.roomKernel.getSnapshot());
-  }
-
-  /**
-   * `聊天状态` 里仍然保留消息流、滚动与输入态；
-   * 但房间外观字段统一从状态机快照回填，避免壳层继续手拼会话阶段。
-   */
-  private roomShellPatch(): Pick<
-    聊天状态,
-    | "sessionId"
-    | "displayAlias"
-    | "roomId"
-    | "roomDisplayTitle"
-    | "latestEventPosition"
-    | "viewportMode"
-    | "candidateReadAnchorPosition"
-    | "hasUnreadNewerMessages"
-    | "recoveryState"
-    | "lastRecoveryErrorCode"
-  > {
-    const roomShell = this.roomShellState();
-    return {
-      sessionId: roomShell.sessionId,
-      displayAlias: roomShell.displayAlias,
-      roomId: roomShell.roomId,
-      roomDisplayTitle: roomShell.roomDisplayTitle,
-      latestEventPosition: roomShell.latestEventPosition,
-      viewportMode: roomShell.viewportMode,
-      candidateReadAnchorPosition: roomShell.candidateReadAnchorPosition,
-      hasUnreadNewerMessages: roomShell.hasUnreadNewerMessages,
-      recoveryState: roomShell.recoveryState,
-      lastRecoveryErrorCode: roomShell.lastRecoveryErrorCode,
-    };
   }
 
   private revokeDraftPreviewUrl(previewUrl: string): void {
@@ -1068,43 +929,6 @@ export class 聊天壳 extends LitElement {
     for (const previewUrl of previewUrls) {
       this.revokeDraftPreviewUrl(previewUrl);
     }
-  }
-
-  private 写入媒体草稿(draft: 媒体附件草稿): void {
-    const result = 写入媒体草稿状态(this.chatState.composerMediaDrafts, draft);
-    this.回收媒体草稿预览地址(result.需要回收的预览地址);
-    this.updateChat({
-      composerMediaDrafts: result.草稿列表,
-    });
-  }
-
-  private 更新媒体草稿状态(localId: string, patch: 媒体草稿状态补丁): void {
-    const result = 更新媒体草稿状态值(this.chatState.composerMediaDrafts, localId, patch);
-    this.回收媒体草稿预览地址(result.需要回收的预览地址);
-    this.updateChat({
-      composerMediaDrafts: result.草稿列表,
-    });
-  }
-
-  private 移除媒体草稿(localId: string): void {
-    const result = 移除媒体草稿状态(this.chatState.composerMediaDrafts, localId);
-    this.回收媒体草稿预览地址(result.需要回收的预览地址);
-    this.updateChat({
-      composerMediaDrafts: result.草稿列表,
-    });
-  }
-
-  private 清空媒体草稿(): void {
-    for (const draft of this.chatState.composerMediaDrafts) {
-      this.revokeDraftPreviewUrl(draft.previewUrl);
-    }
-    this.updateChat({
-      composerMediaDrafts: [],
-    });
-  }
-
-  private clearMediaPublisherState(): void {
-    this.媒体发布器.清空();
   }
 
   private 清空媒体播放状态(): void {
@@ -1192,7 +1016,7 @@ export class 聊天壳 extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     globalThis.addEventListener("resize", this.handleViewportResize);
-    void this.恢复编排端口.bootstrap();
+    void this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
   }
 
   override updated(): void {
@@ -1202,154 +1026,47 @@ export class 聊天壳 extends LitElement {
   override disconnectedCallback(): void {
     globalThis.removeEventListener("resize", this.handleViewportResize);
     this.媒体查看器.销毁();
-    this._实时编排端口?.disconnect();
-    this._阅读推进编排端口?.dispose();
+    this.kernel.dispose();
     this._应用运行时 = null;
-    this.roomScroller.取消挂起滚动副作用();
-    this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体发布器.销毁();
     this.清空媒体播放状态();
     super.disconnectedCallback();
   }
 
-  private updateChat(patch: Partial<聊天状态>): void {
-    this.chatState = { ...this.chatState, ...patch };
-    this.requestUpdate();
-  }
-
-  /**
-   * 时间线真相先统一收口到这一条桥接入口：
-   * - 恢复编排、实时编排、历史分页只上报事实；
-   * - 真正的 messages 合流规则全部留在 `房间时间线.ts`；
-   * - `updateChat({ messages: ... })` 不再允许散落到多个 owner 里各写一份。
-   *
-   * 下一阶段再把这层桥彻底下沉进聊天应用内核；当前阶段先消灭 shared patch 总线里的
-   * “谁都能直接拼消息数组”。
-   */
-  private 推进时间线(input: 时间线输入): void {
-    this.updateChat({
-      messages: 推进房间时间线(this.chatState.messages, input),
-    });
-  }
-
-  /**
-   * 房间页相关的壳层状态必须统一从这里清空，避免返回、硬失败、控制面拒绝各自散一份字面量。
-   * 这里故意不碰身份和会话，只清“当前正在看的房间”这层视图事实。
-   */
-  private buildRoomViewResetPatch(): Partial<聊天状态> {
-    return {
-      messageInput: "",
-      composerMediaDrafts: [],
-      lastReadEventPosition: null,
-      firstUnreadEventPosition: null,
-      hasMoreBefore: false,
-      initialUnreadSettled: true,
-      scrollPhase: "idle",
-      hasUserScrollIntent: false,
-      pendingReadAnchorPosition: null,
-      viewportMode: "离底浏览",
-      candidateReadAnchorPosition: null,
-      hasUnreadNewerMessages: false,
-      historyLoadThrottleUntil: 0,
-      messages: [],
-      pending: false,
-      historyLoading: false,
-      historyErrorCode: "",
-    };
-  }
-
-  /**
-   * 退出当前房间视图时，必须同时收掉本地锚点和当前 socket。
-   * 否则 UI 回到空态首页了，旧房间事件还在往壳层里灌，会制造“人已经离开房间但消息还在进来”的假状态。
-   */
-  private exitCurrentRoomView(
-    opts: { keepRoomCodeCache: boolean } = {
-      keepRoomCodeCache: true,
-    }
-  ): void {
-    this._实时编排端口?.disconnect();
-    this.clearMediaPublisherState();
-    this.清空媒体播放状态();
-    this.storage.清除当前房间标识();
-    if (!opts.keepRoomCodeCache) {
-      this.storage.清除当前房间短码();
-    }
-    this._阅读推进编排端口?.dispose();
-    this.roomScroller.取消挂起滚动副作用();
-    this.shouldPrimeReadAnchorAfterInitialSettle = false;
-    this.updateChat({
-      ...this.buildRoomViewResetPatch(),
-    });
-  }
-
-  /**
-   * 返回空态首页是软离房，不是退群：
-   * - 当前房间视图退出；
-   * - 当前房间实时连接断开；
-   * - 身份、会话和短码展示缓存保留。
-   */
-  private leaveCurrentRoomView(): void {
-    this.roomKernel.send({ type: "SOFT_LEAVE_REQUESTED" });
-    this.exitCurrentRoomView({ keepRoomCodeCache: true });
-    this.updateChat(this.roomShellPatch());
-  }
-
-  /**
-   * 首页历史房间只是另一种“填入短码并进房”的入口，
-   * 不能自己再旁路出第二套 join 逻辑。
-   */
-  private joinHistoryRoom(roomCode: string): void {
-    const trimmedRoomCode = roomCode.trim();
-    if (!trimmedRoomCode) {
-      return;
-    }
-    this.updateChat({ roomCodeInput: trimmedRoomCode });
-    void this.恢复编排端口.joinRoom();
-  }
-
   /**
    * 唯一操作台现在只有一条 submit 主链：
-   * - `join` 态派发到恢复编排的 `joinRoom()`；
-   * - `message` 态派发到 realtime 编排的 `sendMessage()`；
+   * - `join` / `message` 都先转成聊天内核 command；
    * - `hidden` 态只阻止默认提交，不允许 boot 骨架误触发业务动作。
    */
   private submitShellConsole(event: SubmitEvent): void {
     event.preventDefault();
-    const roomShell = this.roomShellState();
     const consoleMode = 派生控制台模式({
-      bootstrapState: roomShell.bootstrapState,
+      bootstrapState: this.chatState.bootstrapState,
       roomId: this.chatState.roomId,
     });
     if (this.操作台主动作已禁用(consoleMode)) {
       return;
     }
     if (consoleMode === "join") {
-      void this.恢复编排端口.joinRoom();
+      void this.kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
       return;
     }
     if (consoleMode === "message") {
-      void this.sendCurrentMessage();
+      void this.kernel.dispatch({ type: "SEND_MESSAGE_REQUESTED" }).then((result) => {
+        if (result?.shouldClearMediaPublisher) {
+          this.媒体发布器.清空();
+        }
+      });
     }
-  }
-
-  private async sendCurrentMessage(): Promise<void> {
-    const currentDrafts = this.chatState.composerMediaDrafts;
-    const hasReadyDraft = currentDrafts.some((draft) => draft.status === "ready");
-    const hasBlockingDraft = currentDrafts.some((draft) => draft.status !== "ready");
-    await this.实时编排端口.sendMessage();
-    if (!hasReadyDraft || hasBlockingDraft) {
-      return;
-    }
-    this.媒体发布器.清空();
   }
 
   private handleShellConsolePrimaryInput(event: Event, isMessageMode: boolean): void {
     const target = event.target as HTMLTextAreaElement;
     if (isMessageMode) {
-      this.updateChat({ messageInput: target.value });
+      void this.kernel.dispatch({ type: "MESSAGE_INPUT_CHANGED", value: target.value });
       return;
     }
-    this.updateChat({ roomCodeInput: target.value });
+    void this.kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: target.value });
   }
 
   private handleShellConsolePrimaryKeydown(
@@ -1659,13 +1376,12 @@ export class 聊天壳 extends LitElement {
       viewportMode: this.chatState.viewportMode,
       hasUnreadNewerMessages: this.chatState.hasUnreadNewerMessages,
     });
-    const roomShell = this.roomShellState();
     const shellView = 派生壳主舞台模式({
-      bootstrapState: roomShell.bootstrapState,
+      bootstrapState: this.chatState.bootstrapState,
       roomId: this.chatState.roomId,
     });
     const consoleMode = 派生控制台模式({
-      bootstrapState: roomShell.bootstrapState,
+      bootstrapState: this.chatState.bootstrapState,
       roomId: this.chatState.roomId,
     });
     const 消息文本布局环境 = this.读取消息文本布局环境();
@@ -1713,7 +1429,11 @@ export class 聊天壳 extends LitElement {
                             type="button"
                             class="home-room-item"
                             data-room-id=${item.roomId}
-                            @click=${() => this.joinHistoryRoom(item.roomCode)}
+                            @click=${() =>
+                              void this.kernel.dispatch({
+                                type: "JOIN_HISTORY_ROOM_REQUESTED",
+                                roomCode: item.roomCode,
+                              })}
                           >
                             <div class="home-room-code">${item.title}</div>
                             <div class="home-room-meta">${item.meta}</div>
@@ -1734,7 +1454,11 @@ export class 聊天壳 extends LitElement {
       <section class="shell-screen">
         <section id="roomView" class="room-screen">
           <header id="roomHeader" class="room-header">
-            <button id="backBtn" class="back-button" @click=${() => this.leaveCurrentRoomView()}>
+            <button
+              id="backBtn"
+              class="back-button"
+              @click=${() => void this.kernel.dispatch({ type: "LEAVE_ROOM_VIEW_REQUESTED" })}
+            >
               返回
             </button>
             <div class="room-heading">
@@ -1751,7 +1475,7 @@ export class 聊天壳 extends LitElement {
               this.chatState.firstUnreadEventPosition,
               消息文本布局环境,
               (attachmentId, variant) =>
-                this.transport.buildAttachmentContentUrl(
+                this.kernel.transportPort().buildAttachmentContentUrl(
                   attachmentId,
                   this.chatState.sessionId,
                   variant

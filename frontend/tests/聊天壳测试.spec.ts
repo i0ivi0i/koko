@@ -1436,7 +1436,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
   });
 
   it("存在阻塞图片草稿时，主 form submit 不会再偷偷进入发送主链", async () => {
-    const el = await 创建已入房聊天壳();
+    const transport = new 假传输();
+    const el = await 创建已入房聊天壳(transport);
     输入消息到操作台(el, "hello");
     注入图片草稿(el, {
       localId: "draft-uploading-submit",
@@ -1451,11 +1452,10 @@ describe("聊天壳集成 / 首页与控制台", () => {
     });
     await 等待组件稳定(el);
 
-    const sendSpy = vi.spyOn(el as unknown as { sendCurrentMessage(): Promise<void> }, "sendCurrentMessage");
     读取操作台表单(el).dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
     await 等待组件稳定(el);
 
-    expect(sendSpy).not.toHaveBeenCalled();
+    expect(transport.socket.sentEvents.some(({ event }) => event === "create_message")).toBe(false);
     expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在上传");
     el.remove();
   });
@@ -1510,7 +1510,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
   });
 
   it("存在阻塞图片草稿时，按 Enter 不会再绕过禁用态偷偷触发发送", async () => {
-    const el = await 创建已入房聊天壳();
+    const transport = new 假传输();
+    const el = await 创建已入房聊天壳(transport);
     输入消息到操作台(el, "hello");
     注入图片草稿(el, {
       localId: "draft-uploading-enter",
@@ -1525,11 +1526,10 @@ describe("聊天壳集成 / 首页与控制台", () => {
     });
     await 等待组件稳定(el);
 
-    const sendSpy = vi.spyOn(el as unknown as { sendCurrentMessage(): Promise<void> }, "sendCurrentMessage");
     读取操作台主输入(el).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await 等待组件稳定(el);
 
-    expect(sendSpy).not.toHaveBeenCalled();
+    expect(transport.socket.sentEvents.some(({ event }) => event === "create_message")).toBe(false);
     expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在上传");
     el.remove();
   });
@@ -1560,4 +1560,3 @@ describe("聊天壳集成 / 首页与控制台", () => {
   });
 
 });
-

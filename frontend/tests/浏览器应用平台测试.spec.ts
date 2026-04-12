@@ -6,17 +6,21 @@ const 读取前端源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
 
 describe("浏览器端应用平台化基线", () => {
-  it("聊天壳当前仍保留 shared patch 总线和房间壳投影入口，后续内核化必须显式消灭它们", () => {
+  it("聊天壳会把业务入口收进 ChatAppKernel，自身只保留 view + bridge", () => {
     const source = 读取前端源码("聊天壳.ts");
 
-    // 这里故意把当前高风险中心点锁成 characterization：
-    // 后续如果它们被删除，说明平台化已经开始真正压缩旧复杂度，此时应同步更新这组基线测试。
-    expect(source).toContain("private updateChat(patch: Partial<聊天状态>): void");
-    expect(source).toContain("this.chatState = { ...this.chatState, ...patch };");
-    expect(source).toContain("private roomShellState()");
-    expect(source).toContain("return 派生房间壳外观(this.roomKernel.getSnapshot());");
-    expect(source).toContain("private exitCurrentRoomView(");
-    expect(source).toContain("this.updateChat({");
+    expect(source).toContain('from "./聊天应用内核.js"');
+    expect(source).toContain("private readonly kernel = 创建聊天应用内核(");
+    expect(source).not.toContain("private transport:");
+    expect(source).not.toContain("private storage:");
+    expect(source).not.toContain("private roomKernel =");
+    expect(source).not.toContain("private _恢复编排端口");
+    expect(source).not.toContain("private _实时编排端口");
+    expect(source).not.toContain("private _阅读推进编排端口");
+    expect(source).not.toContain("private roomShellState()");
+    expect(source).not.toContain("private joinHistoryRoom(");
+    expect(source).not.toContain("private leaveCurrentRoomView(");
+    expect(source).not.toContain("private sendCurrentMessage(");
   });
 
   it("聊天壳当前已把滚动和媒体信号先交给应用运行时，而不是在模板里直接裁决", () => {
@@ -30,11 +34,12 @@ describe("浏览器端应用平台化基线", () => {
 
   it("聊天壳和后台壳都会从平台拿 transport，而不是各自 new HttpRealtime传输", () => {
     const chatSource = 读取前端源码("聊天壳.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
     const adminSource = 读取前端源码("后台壳.ts");
 
-    expect(chatSource).toContain('from "./平台/index.js"');
-    expect(chatSource).toContain("获取默认浏览器应用平台().transport.transport()");
     expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
+    expect(kernelSource).toContain('from "./平台/index.js"');
+    expect(kernelSource).toContain("获取默认浏览器应用平台().transport.transport()");
 
     expect(adminSource).toContain('from "./平台/index.js"');
     expect(adminSource).toContain("获取默认浏览器应用平台().transport.transport()");

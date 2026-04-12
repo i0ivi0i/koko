@@ -9,18 +9,15 @@ export type 应用事件 =
   | { type: "MEDIA_OPEN_REQUESTED"; request: 媒体查看器打开请求 };
 
 export interface 应用运行时依赖 {
-  roomScroller: {
-    标记用户滚动意图(): void;
-    处理滚动事件(scrollContainer: HTMLElement): boolean;
-    登记程序滚动来源(source: 程序滚动来源): void;
-  };
-  阅读推进编排端口: {
-    接收视口滚动(): void;
-    请求跳到最新(): Promise<void>;
-  };
-  mediaViewer: {
-    打开(input: 媒体查看器打开请求): void;
-  };
+  /**
+   * runtime 不再知道聊天内核里有哪些 owner。
+   * 它只认几个明确的应用入口，把浏览器事件翻成应用命令后交出去。
+   */
+  标记用户滚动意图(): void;
+  处理聊天视口滚动(scrollContainer: HTMLElement): void;
+  请求跳到最新(): Promise<void>;
+  登记程序滚动来源(source: 程序滚动来源): void;
+  打开媒体(request: 媒体查看器打开请求): void;
 }
 
 export interface 应用运行时端口 {
@@ -28,32 +25,27 @@ export interface 应用运行时端口 {
 }
 
 /**
- * AppRuntime 是浏览器壳层进入应用行为的薄入口。
- * 它只做事件分派和 owner 协调：浏览器事件已经在壳层被翻译成应用事件，
- * 真正的滚动、阅读推进和媒体查看裁决仍然留在各自已有 owner 里。
+ * AppRuntime 现在只负责浏览器信号桥接：
+ * - 浏览器事件先被翻成应用事件；
+ * - runtime 只负责把事件转交给内核/壳层已有入口；
+ * - 它不再知道 roomScroller / 阅读推进端口这些具体 owner 名字。
  */
 export function 创建应用运行时(deps: 应用运行时依赖): 应用运行时端口 {
   return {
     dispatch(event): void {
       switch (event.type) {
         case "ROOM_SCROLL_INTENT":
-          deps.roomScroller.标记用户滚动意图();
+          deps.标记用户滚动意图();
           return;
-        case "ROOM_SCROLL_OBSERVED": {
-          // 历史补偿、程序性滚动尾波和顶部分页都由视口 owner 裁决；
-          // runtime 只在它确认“这次滚动仍可观察”后，才通知阅读推进编排。
-          const 应继续观察视口 = deps.roomScroller.处理滚动事件(event.scrollContainer);
-          if (应继续观察视口) {
-            deps.阅读推进编排端口.接收视口滚动();
-          }
+        case "ROOM_SCROLL_OBSERVED":
+          deps.处理聊天视口滚动(event.scrollContainer);
           return;
-        }
         case "ROOM_JUMP_TO_LATEST_REQUESTED":
-          void deps.阅读推进编排端口.请求跳到最新();
+          void deps.请求跳到最新();
           return;
         case "MEDIA_OPEN_REQUESTED":
-          deps.roomScroller.登记程序滚动来源("media_viewer_open");
-          deps.mediaViewer.打开(event.request);
+          deps.登记程序滚动来源("media_viewer_open");
+          deps.打开媒体(event.request);
           return;
       }
     },
