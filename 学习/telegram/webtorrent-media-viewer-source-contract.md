@@ -35,7 +35,7 @@ BitTorrent 的底层设计是分片下载；Web Seed 的设计是让 HTTP/FTP �
 - `WebTorrent` 负责 torrent、web seed、peer、service worker、stream URL、补块和会话复用。
 - `GLightbox` 负责打开/关闭、左右切换、图片缩放、触摸/键盘、viewer 生命周期。
 - `Plyr` 只负责当前视频 slide 里的播放体验。
-- 移动触屏端点视频时，优先让原生 `<video>` 直接进入全屏；这条路径仍然消费 WebTorrent / anchor 解析出的同一个 `src`。
+- 移动触屏端点视频时，优先建立原生全屏观看会话；这条路径仍然消费 WebTorrent / anchor 解析出的同一个 `src`。
 
 正确数据流：
 
@@ -48,7 +48,7 @@ flowchart LR
   D -->|没有| F["回退受控 HTTP original_url"]
   E --> G{"移动触屏端且当前是视频?"}
   F --> G
-  G -->|是| H["原生 video 直接全屏播放"]
+  G -->|是| H["原生全屏会话：方向锁 + 返回键退出"]
   G -->|否| I["GLightbox 打开 viewer"]
   I --> J{"当前 slide 是视频?"}
   J -->|是| K["Plyr / video 元素消费 src"]
@@ -57,12 +57,15 @@ flowchart LR
 
 ## 移动端视频观看结论
 
-移动端视频不应该先进入桌面 lightbox 再让用户点第二次全屏。正确交互更接近微信：用户在聊天流里触摸视频，就是“我要看视频”，优先进入系统原生全屏播放器。这样竖屏视频也能按真实比例交给系统视频层处理，不会被一个固定 `16:9` 容器硬塞出上下黑条。
+移动端视频不应该先进入桌面 lightbox 再让用户点第二次全屏。正确交互更接近微信 / Telegram：用户在聊天流里触摸视频，就是“我要看视频”，优先进入系统全屏观看会话；不想看时，系统返回键或全屏退出流程应该回到聊天界面，而不是跳走页面或留下假浮层。Telegram 的公开规格也把照片/视频放在媒体查看器里观看，而不是让聊天列表承担播放器职责。
 
 实现约束：
 
 - 原生全屏调用必须发生在点击事件同步链路里，不能等动态导入播放器库后再调用，否则浏览器可能丢失用户激活。
-- iOS 类浏览器优先走 `video.webkitEnterFullscreen()`；其他支持 Fullscreen API 的浏览器走 `video.requestFullscreen()`。
+- 标准 Fullscreen API 可用时，优先让全屏容器进入 fullscreen，并让内部 `<video>` 播放；这样才能同时控制竖屏比例、方向锁和返回键清理。
+- 竖屏视频按 `height > width` 锁 `portrait`，横屏视频按 `width > height` 锁 `landscape`；浏览器不支持方向锁时要安静降级，不能伪装成功。
+- 为手机返回键建立一次性媒体会话历史状态；`popstate` 只退出当前媒体全屏、暂停视频、释放方向锁并清理 DOM，不能把用户直接带离聊天页。
+- 只有标准 Fullscreen API 不可用或失败时，才回退 `video.webkitEnterFullscreen()`。
 - 被请求全屏的 `video` 元素必须是真实可见的全屏元素，不能先藏成 `1px` 或 `opacity: 0`，否则回退路径会变成黑屏/假全屏。
 - 如果原生全屏不可用，再回退 GLightbox；回退时 Plyr 的 `ratio` 也必须来自当前视频真实 `width:height`，不能固定 `16:9`。
 
@@ -70,6 +73,8 @@ flowchart LR
 
 - https://web.dev/articles/media-mobile-web-video-playback
 - https://developer.apple.com/documentation/webkitjs/htmlvideoelement/1633500-webkitenterfullscreen
+- https://fullscreen.spec.whatwg.org/
+- https://core.telegram.org/blackberry/chat-media-view
 
 ## 不允许做的事
 
@@ -78,6 +83,7 @@ flowchart LR
 - 不允许把“正在补块”当成用户可见故障；只要已有可播放 `src`，补块就是后台协作分发状态。
 - 不允许为了播放器能力把消息列表里的 video 重新变成可播放控件；消息列表只保留入口。
 - 不允许移动端视频点击后仍被固定比例的 lightbox 卡住；原生全屏是移动触屏端的优先路径。
+- 不允许移动端全屏会话没有退出状态机；手机返回键、全屏退出、视频结束都必须收敛到同一个清理路径。
 - 不允许把 Shaka / libmedia 这类重型视频内核当成 lightbox 使用。
 
 ## 轮子选择如何落到 source contract

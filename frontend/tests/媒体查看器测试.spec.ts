@@ -3,10 +3,60 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { 创建媒体查看器 } from "../媒体/媒体查看器";
 
+const 安装方向模拟 = () => {
+  const lock = vi.fn(() => Promise.resolve());
+  const unlock = vi.fn();
+  Object.defineProperty(globalThis.screen, "orientation", {
+    configurable: true,
+    value: { lock, unlock, type: "portrait-primary" },
+  });
+  return { lock, unlock };
+};
+
+const 安装全屏DOM模拟 = () => {
+  let fullscreenElement: Element | null = null;
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    fullscreenElement = this;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  const exitFullscreen = vi.fn(() => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  const play = vi.fn(() => Promise.resolve());
+  const pause = vi.fn();
+  const createElement = document.createElement.bind(document);
+  vi.spyOn(document, "createElement").mockImplementation(
+    ((tagName: string, options?: ElementCreationOptions) => {
+      const element = createElement(tagName, options);
+      Object.assign(element, { requestFullscreen });
+      if (tagName.toLowerCase() === "video") {
+        Object.assign(element, { play, pause });
+      }
+      return element;
+    }) as typeof document.createElement
+  );
+  return { requestFullscreen, exitFullscreen, play, pause };
+};
+
 describe("媒体查看器适配器", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.replaceChildren();
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      value: null,
+    });
   });
 
   it("会把已解析的媒体 source 映射给 GLightbox，并从指定附件打开", () => {
@@ -115,18 +165,7 @@ describe("媒体查看器适配器", () => {
       openAt,
       destroy,
     }));
-    const requestFullscreen = vi.fn(() => Promise.resolve());
-    const play = vi.fn(() => Promise.resolve());
-    const createElement = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string, options?: ElementCreationOptions) => {
-        const element = createElement(tagName, options);
-        if (tagName.toLowerCase() === "video") {
-          Object.assign(element, { requestFullscreen, play });
-        }
-        return element;
-      }) as typeof document.createElement
-    );
+    const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({
       createLightbox,
       isMobileViewport: () => true,
@@ -153,6 +192,83 @@ describe("媒体查看器适配器", () => {
     expect(video?.style.opacity).not.toBe("0");
     expect(video?.style.objectFit).toBe("contain");
     expect(requestFullscreen).toHaveBeenCalled();
+    expect(createLightbox).not.toHaveBeenCalled();
+  });
+
+  it("竖屏视频进入移动端全屏时锁定 portrait，不再沿用浏览器默认横屏策略", async () => {
+    const createLightbox = vi.fn(() => ({
+      openAt: vi.fn(),
+      destroy: vi.fn(),
+    }));
+    const { requestFullscreen } = 安装全屏DOM模拟();
+    const { lock } = 安装方向模拟();
+    const viewer = 创建媒体查看器({
+      createLightbox,
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-portrait-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-portrait-1",
+          src: "blob:http://media.local/portrait-video-1",
+          posterSrc: null,
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await Promise.resolve();
+
+    expect(requestFullscreen).toHaveBeenCalled();
+    expect(lock).toHaveBeenCalledWith("portrait");
+    expect(document.body.querySelector("[data-video-orientation='portrait']")).not.toBeNull();
+    expect(createLightbox).not.toHaveBeenCalled();
+  });
+
+  it("手机返回键触发 popstate 时只退出媒体全屏会话，并清理方向锁回到聊天界面", async () => {
+    const createLightbox = vi.fn(() => ({
+      openAt: vi.fn(),
+      destroy: vi.fn(),
+    }));
+    const pushState = vi.spyOn(history, "pushState");
+    const { exitFullscreen, pause } = 安装全屏DOM模拟();
+    const { unlock } = 安装方向模拟();
+    const viewer = 创建媒体查看器({
+      createLightbox,
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-back-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-back-1",
+          src: "blob:http://media.local/back-video-1",
+          posterSrc: null,
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await Promise.resolve();
+    expect(document.body.querySelector("video")).not.toBeNull();
+
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    await Promise.resolve();
+
+    expect(pushState).toHaveBeenCalledWith(
+      expect.objectContaining({ __kokoMediaFullscreenSession: expect.any(String) }),
+      "",
+      expect.any(String)
+    );
+    expect(exitFullscreen).toHaveBeenCalled();
+    expect(unlock).toHaveBeenCalled();
+    expect(pause).toHaveBeenCalled();
+    expect(document.body.querySelector("video")).toBeNull();
     expect(createLightbox).not.toHaveBeenCalled();
   });
 
