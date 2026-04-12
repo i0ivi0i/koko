@@ -107,7 +107,13 @@ describe("浏览器端应用平台化基线", () => {
           appShellRegistered: true,
           mediaWorkerRegistered: true,
           persistentStorageRequested: true,
+          controllerAttached: true,
+          appShellWaiting: false,
+          mediaWorkerWaiting: false,
+          lastMessageType: null,
+          lastMessage: null,
         }),
+        发送消息: () => true,
       },
       transport: {
         transport: () => {
@@ -176,6 +182,12 @@ describe("浏览器端应用平台化基线", () => {
     expect(setBadge).toHaveBeenCalledWith(3);
     expect(clearBadge).toHaveBeenCalledTimes(1);
     expect(platform.snapshot()).toMatchObject({
+      serviceWorker: {
+        controllerAttached: true,
+        appShellWaiting: false,
+        mediaWorkerWaiting: false,
+        lastMessageType: null,
+      },
       multiContext: {
         contextId: "tab-a",
         isPrimaryContext: true,
@@ -216,7 +228,13 @@ describe("浏览器端应用平台化基线", () => {
           appShellRegistered: false,
           mediaWorkerRegistered: false,
           persistentStorageRequested: false,
+          controllerAttached: false,
+          appShellWaiting: false,
+          mediaWorkerWaiting: false,
+          lastMessageType: null,
+          lastMessage: null,
         }),
+        发送消息: () => false,
       },
       transport: {
         transport: () => {
@@ -298,7 +316,13 @@ describe("浏览器端应用平台化基线", () => {
           appShellRegistered: false,
           mediaWorkerRegistered: false,
           persistentStorageRequested: false,
+          controllerAttached: false,
+          appShellWaiting: false,
+          mediaWorkerWaiting: false,
+          lastMessageType: null,
+          lastMessage: null,
         }),
+        发送消息: () => false,
       },
       transport: {
         transport: () => {
@@ -355,5 +379,80 @@ describe("浏览器端应用平台化基线", () => {
 
     expect(showNotification).toHaveBeenCalledTimes(2);
     expect(markShown).toHaveBeenCalledTimes(1);
+  });
+
+  it("平台快照会继续暴露 service worker runtime 的 controller / waiting / message 状态", () => {
+    const platform = 创建浏览器应用平台({
+      lifecycle: {
+        snapshot: () => ({ visibility: "hidden" as const, phase: "background" as const }),
+        订阅: () => () => {},
+      },
+      storage: {
+        壳层记忆: () => {
+          throw new Error("not used");
+        },
+      },
+      serviceWorker: {
+        启动: async () => {},
+        发送消息: () => true,
+        snapshot: () => ({
+          appShellRegistered: true,
+          mediaWorkerRegistered: true,
+          persistentStorageRequested: true,
+          controllerAttached: true,
+          appShellWaiting: true,
+          mediaWorkerWaiting: false,
+          lastMessageType: "SW_UPDATED",
+          lastMessage: { type: "SW_UPDATED", scope: "app" },
+        }),
+      },
+      transport: {
+        transport: () => {
+          throw new Error("not used");
+        },
+        接收生命周期变化: () => {},
+        snapshot: () => ({ lastLifecycle: null }),
+      },
+      multiContext: {
+        snapshot: () => ({
+          contextId: "tab-c",
+          isPrimaryContext: true,
+          lastPrimaryContextId: "tab-c",
+          deliveredNotificationIds: [],
+        }),
+        声明主上下文: () => {},
+        通知已展示: () => false,
+        登记通知已展示: () => true,
+      },
+      notification: {
+        snapshot: () => ({
+          permission: "default" as const,
+          lastClickedNotificationId: null,
+          badgeCount: 0,
+        }),
+        请求权限: async () => "default" as const,
+        显示通知: async () => false,
+        设置角标: async () => {},
+        清除角标: async () => {},
+      },
+      offline: {
+        就绪: async () => {},
+        snapshot: () => ({
+          online: true,
+          backgroundSyncSupported: false,
+        }),
+      },
+    });
+
+    expect(platform.snapshot().serviceWorker).toEqual({
+      appShellRegistered: true,
+      mediaWorkerRegistered: true,
+      persistentStorageRequested: true,
+      controllerAttached: true,
+      appShellWaiting: true,
+      mediaWorkerWaiting: false,
+      lastMessageType: "SW_UPDATED",
+      lastMessage: { type: "SW_UPDATED", scope: "app" },
+    });
   });
 });

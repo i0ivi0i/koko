@@ -11,6 +11,11 @@ import {
   读取操作台主输入,
   读取操作台主动作,
   读取操作台表单,
+  读取房间滚动器供测试,
+  读取聊天快照供测试,
+  读取阅读推进编排端口供测试,
+  写入恢复补锚标记供测试,
+  注入聊天快照补丁供测试,
   输入房间短码到操作台,
   输入消息到操作台,
   设置测试滚动阶段,
@@ -198,9 +203,7 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
       scrollPhase: "idle",
     });
 
-    (
-      el as unknown as { roomScroller: { 安排首屏定位: () => void } }
-    ).roomScroller.安排首屏定位();
+    读取房间滚动器供测试<{ 安排首屏定位: () => void }>(el).安排首屏定位();
     await Promise.resolve();
     await 等待组件稳定(el);
 
@@ -235,11 +238,6 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
 
     vi.useFakeTimers();
     try {
-      (
-        el as unknown as {
-          readAnchorFlushTimer: ReturnType<typeof setTimeout> | null;
-        }
-      ).readAnchorFlushTimer = null;
       const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
         scrollTop: number;
         clientHeight: number;
@@ -263,20 +261,10 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
         scrollPhase: "restoring_unread",
         hasUserScrollIntent: false,
       });
-      (
-        el as unknown as {
-          chatState: { pendingReadAnchorPosition: number | null };
-        }
-      ).chatState.pendingReadAnchorPosition = null;
-      (
-        el as unknown as {
-          shouldPrimeReadAnchorAfterInitialSettle: boolean;
-        }
-      ).shouldPrimeReadAnchorAfterInitialSettle = true;
+      注入聊天快照补丁供测试(el, { pendingReadAnchorPosition: null });
+      写入恢复补锚标记供测试(el, true);
 
-      (
-        el as unknown as { roomScroller: { 安排首屏定位: () => void } }
-      ).roomScroller.安排首屏定位();
+      读取房间滚动器供测试<{ 安排首屏定位: () => void }>(el).安排首屏定位();
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(450);
 
@@ -338,28 +326,12 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
       hasUserScrollIntent: false,
     });
 
-    (
-      el as unknown as {
-        阅读推进编排端口: {
-          接收候选已读位置: (position: number) => void;
-        };
-      }
-    ).阅读推进编排端口.接收候选已读位置(7);
+    读取阅读推进编排端口供测试<{
+      接收候选已读位置: (position: number) => void;
+    }>(el).接收候选已读位置(7);
 
-    expect(
-      (
-        el as unknown as {
-          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
-        }
-      ).chatState.pendingReadAnchorPosition
-    ).toBeNull();
-    expect(
-      (
-        el as unknown as {
-          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
-        }
-      ).chatState.candidateReadAnchorPosition
-    ).toBe(7);
+    expect(读取聊天快照供测试(el).pendingReadAnchorPosition).toBeNull();
+    expect(读取聊天快照供测试(el).candidateReadAnchorPosition).toBe(7);
 
     el.remove();
   });
@@ -389,38 +361,16 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    (
-      el as unknown as {
-        阅读推进编排端口: {
-          接收候选已读位置: (position: number) => void;
-          接收首屏稳定完成: (mode: "围绕未读阅读" | "贴底跟随") => void;
-        };
-      }
-    ).阅读推进编排端口.接收候选已读位置(7);
+    const 阅读推进编排端口 = 读取阅读推进编排端口供测试<{
+      接收候选已读位置: (position: number) => void;
+      接收首屏稳定完成: (mode: "围绕未读阅读" | "贴底跟随") => void;
+    }>(el);
 
-    (
-      el as unknown as {
-        阅读推进编排端口: {
-          接收候选已读位置: (position: number) => void;
-          接收首屏稳定完成: (mode: "围绕未读阅读" | "贴底跟随") => void;
-        };
-      }
-    ).阅读推进编排端口.接收首屏稳定完成("围绕未读阅读");
+    阅读推进编排端口.接收候选已读位置(7);
+    阅读推进编排端口.接收首屏稳定完成("围绕未读阅读");
 
-    expect(
-      (
-        el as unknown as {
-          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
-        }
-      ).chatState.candidateReadAnchorPosition
-    ).toBe(7);
-    expect(
-      (
-        el as unknown as {
-          chatState: { pendingReadAnchorPosition: number | null; candidateReadAnchorPosition: number | null };
-        }
-      ).chatState.pendingReadAnchorPosition
-    ).toBe(7);
+    expect(读取聊天快照供测试(el).candidateReadAnchorPosition).toBe(7);
+    expect(读取聊天快照供测试(el).pendingReadAnchorPosition).toBe(7);
 
     el.remove();
   });
@@ -452,13 +402,7 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
     await 等待组件稳定(el);
 
     expect(scrollIntoView).toHaveBeenCalled();
-    expect(
-      (
-        el as unknown as {
-          chatState: { viewportMode?: string };
-        }
-      ).chatState.viewportMode
-    ).toBe("围绕未读阅读");
+    expect(读取聊天快照供测试(el).viewportMode).toBe("围绕未读阅读");
 
     el.remove();
   });
@@ -530,13 +474,7 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
     await 等待组件稳定(el);
 
     expect(scroll.scrollTop).toBe(beforeScrollTop);
-    expect(
-      (
-        el as unknown as {
-          chatState: { hasUnreadNewerMessages?: boolean };
-        }
-      ).chatState.hasUnreadNewerMessages
-    ).toBe(true);
+    expect(读取聊天快照供测试(el).hasUnreadNewerMessages).toBe(true);
 
     el.remove();
   });
@@ -688,26 +626,8 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
     await 等待组件稳定(el);
 
     expect(scroll.scrollTop).toBe(720);
-    expect(
-      (
-        el as unknown as {
-          chatState: {
-            viewportMode?: string;
-            hasUnreadNewerMessages?: boolean;
-          };
-        }
-      ).chatState.viewportMode
-    ).toBe("贴底跟随");
-    expect(
-      (
-        el as unknown as {
-          chatState: {
-            viewportMode?: string;
-            hasUnreadNewerMessages?: boolean;
-          };
-        }
-      ).chatState.hasUnreadNewerMessages
-    ).toBe(false);
+    expect(读取聊天快照供测试(el).viewportMode).toBe("贴底跟随");
+    expect(读取聊天快照供测试(el).hasUnreadNewerMessages).toBe(false);
     expect(el.shadowRoot!.querySelector("#jumpToLatestBtn")).toBeNull();
 
     el.remove();
@@ -758,11 +678,7 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
       hasUserScrollIntent: true,
       scrollPhase: "idle",
     });
-    (
-      el as unknown as {
-        chatState: { viewportMode?: string };
-      }
-    ).chatState.viewportMode = "贴底跟随";
+    注入聊天快照补丁供测试(el, { viewportMode: "贴底跟随" });
     scroll.scrollTop = 400;
 
     scrollHeight = 700;
@@ -830,16 +746,10 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
         hasUserScrollIntent: false,
         scrollPhase: "idle",
       });
-      (
-        el as unknown as {
-          chatState: { viewportMode?: string; lastReadEventPosition: number | null };
-        }
-      ).chatState.viewportMode = "贴底跟随";
-      (
-        el as unknown as {
-          chatState: { viewportMode?: string; lastReadEventPosition: number | null };
-        }
-      ).chatState.lastReadEventPosition = 3;
+    注入聊天快照补丁供测试(el, {
+      viewportMode: "贴底跟随",
+      lastReadEventPosition: 3,
+    });
       scroll.scrollTop = 80;
 
       scrollHeight = 380;

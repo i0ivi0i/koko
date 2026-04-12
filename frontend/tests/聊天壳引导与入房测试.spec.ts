@@ -13,6 +13,8 @@ import {
   读取操作台表单,
   输入房间短码到操作台,
   输入消息到操作台,
+  注入聊天快照补丁供测试,
+  读取恢复编排端口供测试,
   设置测试滚动阶段,
   模拟用户滚动意图,
   模拟消息滚动视口,
@@ -178,7 +180,7 @@ describe("聊天壳集成 / 引导与入房", () => {
     读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
-    (el as unknown as { chatState: { latestEventPosition: number } }).chatState.latestEventPosition = 99;
+    注入聊天快照补丁供测试(el, { latestEventPosition: 99 });
     transport.socket.trigger("connect", undefined);
     await 等待组件稳定(el);
     await 等待组件稳定(el);
@@ -213,23 +215,18 @@ describe("聊天壳集成 / 引导与入房", () => {
     读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
-    const 恢复编排端口 = (
-      el as unknown as {
-        恢复编排端口?: {
-          接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
-        };
-      }
-    ).恢复编排端口;
-    expect(恢复编排端口).toBeDefined();
+    const 恢复编排端口 = 读取恢复编排端口供测试<{
+      接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
+    }>(el);
 
     const 收到的异常: Array<{ kind: string; roomId?: string }> = [];
-    const 原始方法 = 恢复编排端口!.接收Transport异常.bind(恢复编排端口);
-    vi.spyOn(恢复编排端口!, "接收Transport异常").mockImplementation(async (error) => {
+    const 原始方法 = 恢复编排端口.接收Transport异常.bind(恢复编排端口);
+    vi.spyOn(恢复编排端口, "接收Transport异常").mockImplementation(async (error) => {
       收到的异常.push(error);
       await 原始方法(error);
     });
 
-    (el as unknown as { chatState: { latestEventPosition: number } }).chatState.latestEventPosition = 99;
+    注入聊天快照补丁供测试(el, { latestEventPosition: 99 });
     transport.socket.trigger("connect", undefined);
     await 等待组件稳定(el);
     await 等待组件稳定(el);

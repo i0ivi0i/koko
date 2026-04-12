@@ -88,6 +88,11 @@ describe("聊天应用内核", () => {
         appShellRegistered: true,
         mediaWorkerRegistered: true,
         persistentStorageRequested: true,
+        controllerAttached: false,
+        appShellWaiting: false,
+        mediaWorkerWaiting: false,
+        lastMessageType: null,
+        lastMessage: null,
       },
       transport: {
         lastLifecycle: { visibility: "hidden", phase: "background" },
@@ -172,6 +177,11 @@ describe("聊天应用内核", () => {
         appShellRegistered: true,
         mediaWorkerRegistered: true,
         persistentStorageRequested: true,
+        controllerAttached: false,
+        appShellWaiting: false,
+        mediaWorkerWaiting: false,
+        lastMessageType: null,
+        lastMessage: null,
       },
       transport: {
         lastLifecycle: { visibility: "visible", phase: "active" },

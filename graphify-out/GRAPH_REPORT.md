@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 134 files · ~4,542,045 words
+- 134 files · ~4,542,594 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -99,11 +99,11 @@ Nodes (5): handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus
 
 ### Community 8 - "Community 8"
 Cohesion: 0.33
-Nodes (6): 构造content_range值(), load_attachment_content(), load_media_locator(), load_media_torrent(), parse_attachment_content_query(), update_media_distribution_presence()
+Nodes (1): 假Socket
 
 ### Community 9 - "Community 9"
-Cohesion: 0.4
-Nodes (1): 假Socket
+Cohesion: 0.33
+Nodes (6): 构造content_range值(), load_attachment_content(), load_media_locator(), load_media_torrent(), parse_attachment_content_query(), update_media_distribution_presence()
 
 ### Community 10 - "Community 10"
 Cohesion: 0.5

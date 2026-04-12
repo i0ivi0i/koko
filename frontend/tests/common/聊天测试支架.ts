@@ -421,11 +421,52 @@ export async function 创建已入房聊天壳(
 }
 
 type 聊天壳测试内核 = {
+  snapshot(): 聊天状态;
   注入快照补丁供测试(patch: Partial<聊天状态>): void;
+  读取房间滚动器供测试(): unknown;
+  读取恢复编排端口供测试(): unknown;
+  读取阅读推进编排端口供测试(): unknown;
+  读取恢复补锚标记供测试(): boolean;
+  写入恢复补锚标记供测试(value: boolean): void;
 };
 
 function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
   return (el as unknown as { kernel: 聊天壳测试内核 }).kernel;
+}
+
+/**
+ * 集成测试以后统一从内核快照读状态，不再偷摸壳层私有字段。
+ * 这样测试也跟真实分层保持一致：壳层只渲染，真相在内核。
+ */
+export function 读取聊天快照供测试(el: 聊天壳): 聊天状态 {
+  return 读取聊天壳测试内核(el).snapshot();
+}
+
+export function 注入聊天快照补丁供测试(
+  el: 聊天壳,
+  patch: Partial<聊天状态>
+): void {
+  读取聊天壳测试内核(el).注入快照补丁供测试(patch);
+}
+
+export function 读取恢复编排端口供测试<T = unknown>(el: 聊天壳): T {
+  return 读取聊天壳测试内核(el).读取恢复编排端口供测试() as T;
+}
+
+export function 读取阅读推进编排端口供测试<T = unknown>(el: 聊天壳): T {
+  return 读取聊天壳测试内核(el).读取阅读推进编排端口供测试() as T;
+}
+
+export function 读取房间滚动器供测试<T = unknown>(el: 聊天壳): T {
+  return 读取聊天壳测试内核(el).读取房间滚动器供测试() as T;
+}
+
+export function 读取恢复补锚标记供测试(el: 聊天壳): boolean {
+  return 读取聊天壳测试内核(el).读取恢复补锚标记供测试();
+}
+
+export function 写入恢复补锚标记供测试(el: 聊天壳, value: boolean): void {
+  读取聊天壳测试内核(el).写入恢复补锚标记供测试(value);
 }
 
 /**
@@ -508,7 +549,7 @@ export function 设置测试滚动阶段(
     hasUserScrollIntent?: boolean;
   }
 ): void {
-  读取聊天壳测试内核(el).注入快照补丁供测试(patch);
+  注入聊天快照补丁供测试(el, patch);
 }
 
 export function 模拟用户滚动意图(scroll: HTMLElement): void {

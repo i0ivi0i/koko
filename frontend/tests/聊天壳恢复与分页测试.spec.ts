@@ -11,6 +11,10 @@ import {
   读取操作台主输入,
   读取操作台主动作,
   读取操作台表单,
+  读取恢复编排端口供测试,
+  读取房间滚动器供测试,
+  读取聊天快照供测试,
+  读取阅读推进编排端口供测试,
   输入房间短码到操作台,
   输入消息到操作台,
   设置测试滚动阶段,
@@ -174,18 +178,13 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    const 恢复编排端口 = (
-      el as unknown as {
-        恢复编排端口?: {
-          接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
-        };
-      }
-    ).恢复编排端口;
-    expect(恢复编排端口).toBeDefined();
+    const 恢复编排端口 = 读取恢复编排端口供测试<{
+      接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
+    }>(el);
 
     const 收到的异常: Array<{ kind: string; roomId?: string }> = [];
-    const 原始方法 = 恢复编排端口!.接收Transport异常.bind(恢复编排端口);
-    vi.spyOn(恢复编排端口!, "接收Transport异常").mockImplementation(async (error) => {
+    const 原始方法 = 恢复编排端口.接收Transport异常.bind(恢复编排端口);
+    vi.spyOn(恢复编排端口, "接收Transport异常").mockImplementation(async (error) => {
       收到的异常.push(error);
       await 原始方法(error);
     });
@@ -498,9 +497,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     await 等待组件稳定(el);
 
     expect(el.shadowRoot!.querySelector("#messageList")!.textContent).toContain("保留消息");
-    expect((el as unknown as { chatState: { historyErrorCode: string } }).chatState.historyErrorCode).toBe(
-      "system_error"
-    );
+    expect(读取聊天快照供测试(el).historyErrorCode).toBe("system_error");
     el.remove();
   });
 
@@ -546,9 +543,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     await 等待组件稳定(el);
 
     expect(transport.loadRoomHistoryCalls).toBe(1);
-    expect(
-      (el as unknown as { chatState: { hasMoreBefore: boolean } }).chatState.hasMoreBefore
-    ).toBe(false);
+    expect(读取聊天快照供测试(el).hasMoreBefore).toBe(false);
     el.remove();
   });
 
@@ -845,13 +840,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
       await vi.advanceTimersByTimeAsync(450);
 
       expect(transport.readAnchorUpdates).toEqual([]);
-      expect(
-        (
-          el as unknown as {
-            chatState: { firstUnreadEventPosition: number | null };
-          }
-        ).chatState.firstUnreadEventPosition
-      ).toBe(2);
+      expect(读取聊天快照供测试(el).firstUnreadEventPosition).toBe(2);
       expect(el.shadowRoot!.querySelector("#unreadDivider")?.textContent).toContain("未读消息");
     } finally {
       vi.useRealTimers();
@@ -1084,13 +1073,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
       await vi.advanceTimersByTimeAsync(450);
 
       expect(transport.readAnchorUpdates).toEqual([]);
-      expect(
-        (
-          el as unknown as {
-            chatState: { firstUnreadEventPosition: number | null };
-          }
-        ).chatState.firstUnreadEventPosition
-      ).toBe(2);
+      expect(读取聊天快照供测试(el).firstUnreadEventPosition).toBe(2);
     } finally {
       vi.useRealTimers();
       el.remove();
@@ -1221,13 +1204,9 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    const 阅读推进编排端口 = (
-      el as unknown as {
-        阅读推进编排端口: {
-          接收视口滚动: () => void;
-        };
-      }
-    ).阅读推进编排端口;
+    const 阅读推进编排端口 = 读取阅读推进编排端口供测试<{
+      接收视口滚动: () => void;
+    }>(el);
     const 视口滚动观察 = vi.spyOn(阅读推进编排端口, "接收视口滚动");
 
     设置测试滚动阶段(el, {
@@ -1308,14 +1287,10 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
       hasUserScrollIntent: true,
     });
 
-    const roomScroller = (
-      el as unknown as {
-        roomScroller: {
-          登记程序滚动来源(source: "media_viewer_open"): void;
-          清除程序滚动来源(source: "media_viewer_open"): void;
-        };
-      }
-    ).roomScroller;
+    const roomScroller = 读取房间滚动器供测试<{
+      登记程序滚动来源(source: "media_viewer_open"): void;
+      清除程序滚动来源(source: "media_viewer_open"): void;
+    }>(el);
     const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
       scrollTop: number;
     };
