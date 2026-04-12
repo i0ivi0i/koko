@@ -153,6 +153,10 @@ describe("媒体查看器适配器", () => {
         src: "blob:http://media.local/webtorrent-vertical-video-1",
         width: 720,
         height: 1280,
+      }),
+      expect.objectContaining({
+        开始视口占用: expect.any(Function),
+        结束视口占用: expect.any(Function),
       })
     );
     expect(createLightbox).not.toHaveBeenCalled();

@@ -59,6 +59,7 @@ type GLightbox选项 = {
 type GLightbox实例 = {
   openAt(index?: number): void;
   destroy(): void;
+  on?(eventName: "open" | "close", callback: () => void, once?: boolean): void;
 };
 
 type GLightbox工厂结果 = GLightbox实例 | Promise<GLightbox实例>;
@@ -67,7 +68,17 @@ type GLightbox工厂 = (options: GLightbox选项) => GLightbox工厂结果;
 export type 媒体查看器依赖 = {
   createLightbox?: GLightbox工厂;
   isMobileViewport?: () => boolean;
-  openNativeVideoFullscreen?: (item: 媒体查看器视频项目) => boolean;
+  openNativeVideoFullscreen?: (
+    item: 媒体查看器视频项目,
+    lifecycle: 媒体查看器视口占用生命周期
+  ) => boolean;
+  onViewportCaptureStart?: () => void;
+  onViewportCaptureEnd?: () => void;
+};
+
+type 媒体查看器视口占用生命周期 = {
+  开始视口占用(): void;
+  结束视口占用(): void;
 };
 
 const 映射GLightbox元素 = (item: 媒体查看器项目): GLightbox元素 => {
@@ -143,7 +154,10 @@ const 读取视频元素方向锁 = (video: HTMLVideoElement): 媒体方向锁 |
 const 读取屏幕方向 = (): 可锁定屏幕方向 | null =>
   (globalThis.screen?.orientation as 可锁定屏幕方向 | undefined) ?? null;
 
-const 打开原生视频全屏 = (item: 媒体查看器视频项目): boolean => {
+const 打开原生视频全屏 = (
+  item: 媒体查看器视频项目,
+  lifecycle: 媒体查看器视口占用生命周期
+): boolean => {
   if (typeof document === "undefined" || !document.body) {
     return false;
   }
@@ -243,6 +257,7 @@ const 打开原生视频全屏 = (item: 媒体查看器视频项目): boolean =>
       return;
     }
     removePopStateListener();
+    lifecycle.结束视口占用();
   };
   const startPlayback = (): void => {
     void video.play().catch(() => undefined);
@@ -287,6 +302,7 @@ const 打开原生视频全屏 = (item: 媒体查看器视频项目): boolean =>
   container.append(video);
   document.body.append(container);
   pushMediaHistoryEntry();
+  lifecycle.开始视口占用();
 
   if (typeof container.requestFullscreen === "function") {
     startPlayback();
@@ -327,6 +343,24 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   const openNativeVideoFullscreen = deps.openNativeVideoFullscreen ?? 打开原生视频全屏;
   let current: GLightbox实例 | null = null;
   let openGeneration = 0;
+  let 正在占用聊天视口 = false;
+
+  const 视口占用生命周期: 媒体查看器视口占用生命周期 = {
+    开始视口占用: () => {
+      if (正在占用聊天视口) {
+        return;
+      }
+      正在占用聊天视口 = true;
+      deps.onViewportCaptureStart?.();
+    },
+    结束视口占用: () => {
+      if (!正在占用聊天视口) {
+        return;
+      }
+      正在占用聊天视口 = false;
+      deps.onViewportCaptureEnd?.();
+    },
+  };
 
   const 打开 = (request: 媒体查看器打开请求): void => {
     const startAt = request.items.findIndex(
@@ -339,12 +373,17 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     if (!startItem) {
       return;
     }
-    if (startItem?.kind === "video" && isMobileViewport() && openNativeVideoFullscreen(startItem)) {
+    if (
+      startItem?.kind === "video" &&
+      isMobileViewport() &&
+      openNativeVideoFullscreen(startItem, 视口占用生命周期)
+    ) {
       return;
     }
     const generation = ++openGeneration;
     current?.destroy();
     current = null;
+    视口占用生命周期.开始视口占用();
     void (async () => {
       const next = createLightbox({
         selector: null,
@@ -370,12 +409,17 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
       });
       const lightbox = 是异步Lightbox结果(next) ? await next : next;
       if (generation !== openGeneration) {
+        视口占用生命周期.结束视口占用();
         lightbox.destroy();
         return;
       }
+      lightbox.on?.("close", () => {
+        视口占用生命周期.结束视口占用();
+      });
       current = lightbox;
       current.openAt(startAt);
     })().catch((error: unknown) => {
+      视口占用生命周期.结束视口占用();
       console.error("打开媒体查看器失败", error);
     });
   };
@@ -384,6 +428,7 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     openGeneration += 1;
     current?.destroy();
     current = null;
+    视口占用生命周期.结束视口占用();
   };
 
   return {

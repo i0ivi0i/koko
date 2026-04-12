@@ -804,7 +804,11 @@ export class 聊天壳 extends LitElement {
       this.transport.loadMediaLocator(sessionId, attachmentId),
   });
   private 媒体播放器 = this.创建页面级媒体播放器();
-  private 媒体查看器 = 创建媒体查看器();
+  private 媒体查看器 = 创建媒体查看器({
+    onViewportCaptureEnd: () => {
+      this.roomScroller.清除程序滚动来源("media_viewer_open");
+    },
+  });
   private 媒体播放结果表: Record<string, 媒体播放结果> = {};
   private readonly 正在解析媒体播放 = new Map<string, Promise<void>>();
   private readonly 媒体发布器 = 创建媒体发布器({
@@ -1731,14 +1735,17 @@ export class 聊天壳 extends LitElement {
               // 历史补偿上下文依赖“本次滚动触发前的旧高度 + 旧锚点相对位置”。
               // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
               // 否则后续观测过早读到新布局，会把这次补偿上下文读脏。
-              this.roomScroller.处理滚动事件(target);
+              const 应继续观察视口 = this.roomScroller.处理滚动事件(target);
+              if (!应继续观察视口) {
+                return;
+              }
               this.阅读推进编排端口.接收视口滚动();
             }}
             @jump-to-latest=${() => {
               void this.阅读推进编排端口.请求跳到最新();
             }}
             @room-open-media-viewer=${(event: CustomEvent<媒体查看器打开请求>) => {
-              this.roomScroller.豁免下一次交互后的程序滚动();
+              this.roomScroller.登记程序滚动来源("media_viewer_open");
               this.媒体查看器.打开(event.detail);
             }}
           ></koko-room-message-pane>

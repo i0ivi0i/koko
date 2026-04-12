@@ -35,6 +35,8 @@ interface 消息可见片段 {
   行高: number;
 }
 
+type 程序滚动来源 = "media_viewer_open";
+
 export interface 房间滚动器依赖 {
   读取状态(): 房间滚动观察态;
   更新状态(patch: Partial<聊天状态>): void;
@@ -57,7 +59,7 @@ export interface 房间滚动器依赖 {
  */
 export class 房间滚动器 implements ReactiveController {
   private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
-  private 待忽略交互后程序滚动截止时间戳 = 0;
+  private readonly 活跃程序滚动来源 = new Set<程序滚动来源>();
 
   constructor(
     private readonly host: 房间滚动器宿主,
@@ -83,20 +85,25 @@ export class 房间滚动器 implements ReactiveController {
     this.deps.更新状态({ hasUserScrollIntent: true });
   }
 
-  处理滚动事件(scrollContainer: HTMLElement): void {
-    if (this.消耗交互后程序滚动豁免()) {
-      return;
+  处理滚动事件(scrollContainer: HTMLElement): boolean {
+    if (!this.本次滚动属于聊天视口()) {
+      return false;
     }
     this.按需加载更早历史(scrollContainer);
     this.按需采样阅读锚点(scrollContainer);
+    return true;
   }
 
   /**
-   * 点开媒体查看器这类“非滚动交互”后，浏览器/第三方查看器可能会立刻抛一次程序性 scroll。
-   * 这不是用户在翻历史，不能让它误触发顶部补页或已读推进。
+   * 点开媒体查看器后，接下来一段时间聊天视口会被外部查看器占用。
+   * 这期间即便浏览器抛出了 scroll，也不能再把它解释成聊天窗口里的用户阅读。
    */
-  豁免下一次交互后的程序滚动(): void {
-    this.待忽略交互后程序滚动截止时间戳 = Date.now() + 400;
+  登记程序滚动来源(source: 程序滚动来源): void {
+    this.活跃程序滚动来源.add(source);
+  }
+
+  清除程序滚动来源(source: 程序滚动来源): void {
+    this.活跃程序滚动来源.delete(source);
   }
 
   /**
@@ -180,16 +187,15 @@ export class 房间滚动器 implements ReactiveController {
     this.scrollPhaseReleaseTimer = null;
   }
 
-  private 消耗交互后程序滚动豁免(): boolean {
-    if (this.待忽略交互后程序滚动截止时间戳 === 0) {
+  private 本次滚动属于聊天视口(): boolean {
+    const 状态 = this.deps.读取状态();
+    if (状态.scrollPhase !== "idle") {
       return false;
     }
-    if (Date.now() > this.待忽略交互后程序滚动截止时间戳) {
-      this.待忽略交互后程序滚动截止时间戳 = 0;
+    if (this.活跃程序滚动来源.size > 0) {
       return false;
     }
-    this.待忽略交互后程序滚动截止时间戳 = 0;
-    return true;
+    return 状态.hasUserScrollIntent;
   }
 
   private async 落实首屏定位(): Promise<void> {

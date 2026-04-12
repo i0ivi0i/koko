@@ -1221,6 +1221,15 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
+    const 阅读推进编排端口 = (
+      el as unknown as {
+        阅读推进编排端口: {
+          接收视口滚动: () => void;
+        };
+      }
+    ).阅读推进编排端口;
+    const 视口滚动观察 = vi.spyOn(阅读推进编排端口, "接收视口滚动");
+
     设置测试滚动阶段(el, {
       initialUnreadSettled: true,
       scrollPhase: "idle",
@@ -1242,6 +1251,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
 
     expect(viewer.打开).toHaveBeenCalled();
     expect(transport.loadRoomHistoryCalls).toBe(0);
+    expect(视口滚动观察).not.toHaveBeenCalled();
     el.remove();
   });
 
