@@ -97,7 +97,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 31
+      "community": 29
     },
     {
       "label": "app-sw.ts",
@@ -105,7 +105,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "app_sw",
-      "community": 24
+      "community": 23
     },
     {
       "label": "css.d.ts",
@@ -113,7 +113,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 25
+      "community": 24
     },
     {
       "label": "media-sw.ts",
@@ -121,7 +121,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L1",
       "id": "media_sw",
-      "community": 30
+      "community": 28
     },
     {
       "label": "webtorrent.d.ts",
@@ -129,7 +129,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 32
+      "community": 30
     },
     {
       "label": "\u73af\u5883.rs",
@@ -161,7 +161,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L73",
       "id": "httprealtime",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".constructor()",
@@ -169,7 +169,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L74",
       "id": "httprealtime_constructor",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".bootstrapAnonymousIdentity()",
@@ -177,7 +177,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L85",
       "id": "httprealtime_bootstrapanonymousidentity",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".joinOrCreateRoom()",
@@ -185,7 +185,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L91",
       "id": "httprealtime_joinorcreateroom",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".loadRoomSnapshot()",
@@ -193,7 +193,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L98",
       "id": "httprealtime_loadroomsnapshot",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".prepareMediaUpload()",
@@ -201,7 +201,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L106",
       "id": "httprealtime_preparemediaupload",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".completeMediaUpload()",
@@ -209,7 +209,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L127",
       "id": "httprealtime_completemediaupload",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".loadMediaLocator()",
@@ -217,7 +217,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L136",
       "id": "httprealtime_loadmedialocator",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".buildAttachmentContentUrl()",
@@ -225,7 +225,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L166",
       "id": "httprealtime_buildattachmentcontenturl",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".updateRoomReadAnchor()",
@@ -233,7 +233,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L178",
       "id": "httprealtime_updateroomreadanchor",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".loadRoomEvents()",
@@ -241,7 +241,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L192",
       "id": "httprealtime_loadroomevents",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".loadRoomHistory()",
@@ -249,7 +249,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L200",
       "id": "httprealtime_loadroomhistory",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".loadAdminOverview()",
@@ -257,7 +257,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L211",
       "id": "httprealtime_loadadminoverview",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".adminLogin()",
@@ -265,7 +265,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L215",
       "id": "httprealtime_adminlogin",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".adminRooms()",
@@ -273,7 +273,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L219",
       "id": "httprealtime_adminrooms",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".adminRoomDetail()",
@@ -281,7 +281,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L223",
       "id": "httprealtime_adminroomdetail",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".createSocket()",
@@ -289,7 +289,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L227",
       "id": "httprealtime_createsocket",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".get()",
@@ -297,7 +297,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L245",
       "id": "httprealtime_get",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".post()",
@@ -305,7 +305,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L253",
       "id": "httprealtime_post",
-      "community": 2
+      "community": 3
     },
     {
       "label": ".buildHttpError()",
@@ -313,79 +313,87 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L265",
       "id": "httprealtime_buildhttperror",
+      "community": 3
+    },
+    {
+      "label": "\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6.ts",
+      "file_type": "code",
+      "source_file": "frontend\\\u5e73\u53f0\\\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6.ts",
+      "source_location": "L1",
+      "id": "frontend_ts",
       "community": 2
     },
     {
       "label": "setTransportForTest()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L996",
+      "source_location": "L1002",
       "id": "settransportfortest",
-      "community": 0
+      "community": 2
     },
     {
       "label": "login()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L26",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L31",
       "id": "login",
-      "community": 10
+      "community": 2
     },
     {
       "label": "loadOverview()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L34",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L39",
       "id": "loadoverview",
-      "community": 10
+      "community": 2
     },
     {
       "label": "loadRooms()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L40",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L45",
       "id": "loadrooms",
-      "community": 10
+      "community": 2
     },
     {
       "label": "loadRoomDetail()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L46",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L51",
       "id": "loadroomdetail",
-      "community": 0
+      "community": 2
     },
     {
       "label": "filteredRooms()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L53",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L58",
       "id": "filteredrooms",
-      "community": 0
+      "community": 2
     },
     {
       "label": "submitLoginForm()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L58",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L63",
       "id": "submitloginform",
-      "community": 10
+      "community": 2
     },
     {
       "label": "submitRoomSearchForm()",
       "file_type": "code",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L63",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L68",
       "id": "submitroomsearchform",
-      "community": 10
+      "community": 2
     },
     {
       "label": "render()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1623",
+      "source_location": "L1629",
       "id": "render",
-      "community": 3
+      "community": 2
     },
     {
       "label": "frontend/\u5b58\u50a8.ts",
@@ -397,7 +405,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_storage_ts",
-      "community": 27
+      "community": 26
     },
     {
       "label": "frontend/\u623f\u95f4\u5185\u6838.ts",
@@ -409,7 +417,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_kernel_ts",
-      "community": 26
+      "community": 25
     },
     {
       "label": "constructor()",
@@ -433,7 +441,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L80",
       "id": "dispatchpointerscrollintent",
-      "community": 18
+      "community": 17
     },
     {
       "label": "dispatchScrollIntent()",
@@ -441,7 +449,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L87",
       "id": "dispatchscrollintent",
-      "community": 18
+      "community": 17
     },
     {
       "label": "dispatchScroll()",
@@ -465,7 +473,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L263",
       "id": "rendermessagebody",
-      "community": 15
+      "community": 14
     },
     {
       "label": "renderMessageAttachments()",
@@ -473,7 +481,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L280",
       "id": "rendermessageattachments",
-      "community": 15
+      "community": 14
     },
     {
       "label": "renderVirtualMessageItem()",
@@ -481,7 +489,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L383",
       "id": "rendervirtualmessageitem",
-      "community": 15
+      "community": 14
     },
     {
       "label": "hostDisconnected()",
@@ -501,175 +509,175 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 23
+      "community": 22
     },
     {
       "label": "setMediaPlayerForTest()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L982",
+      "source_location": "L988",
       "id": "setmediaplayerfortest",
-      "community": 0
+      "community": 2
     },
     {
       "label": "setMediaViewerForTest()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L990",
+      "source_location": "L996",
       "id": "setmediaviewerfortest",
-      "community": 0
+      "community": 2
     },
     {
       "label": "roomShellState()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1010",
+      "source_location": "L1016",
       "id": "roomshellstate",
-      "community": 3
+      "community": 2
     },
     {
       "label": "roomShellPatch()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1018",
+      "source_location": "L1024",
       "id": "roomshellpatch",
-      "community": 3
+      "community": 2
     },
     {
       "label": "revokeDraftPreviewUrl()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1046",
+      "source_location": "L1052",
       "id": "revokedraftpreviewurl",
-      "community": 0
+      "community": 2
     },
     {
       "label": "clearMediaPublisherState()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1096",
+      "source_location": "L1102",
       "id": "clearmediapublisherstate",
-      "community": 3
+      "community": 2
     },
     {
       "label": "removeComposerDraft()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1167",
+      "source_location": "L1173",
       "id": "removecomposerdraft",
-      "community": 0
+      "community": 2
     },
     {
       "label": "retryComposerDraft()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1178",
+      "source_location": "L1184",
       "id": "retrycomposerdraft",
-      "community": 0
+      "community": 2
     },
     {
       "label": "connectedCallback()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1182",
+      "source_location": "L1188",
       "id": "connectedcallback",
-      "community": 0
+      "community": 2
     },
     {
       "label": "updated()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1188",
+      "source_location": "L1194",
       "id": "updated",
-      "community": 0
+      "community": 2
     },
     {
       "label": "disconnectedCallback()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1192",
+      "source_location": "L1198",
       "id": "disconnectedcallback",
-      "community": 0
+      "community": 2
     },
     {
       "label": "updateChat()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1205",
+      "source_location": "L1211",
       "id": "updatechat",
-      "community": 3
+      "community": 2
     },
     {
       "label": "buildRoomViewResetPatch()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1214",
+      "source_location": "L1220",
       "id": "buildroomviewresetpatch",
-      "community": 3
+      "community": 2
     },
     {
       "label": "exitCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1240",
+      "source_location": "L1246",
       "id": "exitcurrentroomview",
-      "community": 3
+      "community": 2
     },
     {
       "label": "leaveCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1266",
+      "source_location": "L1272",
       "id": "leavecurrentroomview",
-      "community": 3
+      "community": 2
     },
     {
       "label": "joinHistoryRoom()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1276",
+      "source_location": "L1282",
       "id": "joinhistoryroom",
-      "community": 3
+      "community": 2
     },
     {
       "label": "submitShellConsole()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1291",
+      "source_location": "L1297",
       "id": "submitshellconsole",
-      "community": 3
+      "community": 2
     },
     {
       "label": "sendCurrentMessage()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1310",
+      "source_location": "L1316",
       "id": "sendcurrentmessage",
-      "community": 3
+      "community": 2
     },
     {
       "label": "handleShellConsolePrimaryInput()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1321",
+      "source_location": "L1327",
       "id": "handleshellconsoleprimaryinput",
-      "community": 3
+      "community": 2
     },
     {
       "label": "handleShellConsolePrimaryKeydown()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1330",
+      "source_location": "L1336",
       "id": "handleshellconsoleprimarykeydown",
-      "community": 0
+      "community": 2
     },
     {
       "label": "renderShellConsole()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1408",
+      "source_location": "L1414",
       "id": "rendershellconsole",
-      "community": 3
+      "community": 2
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -757,6 +765,14 @@
       "source_file": "E:\\koko\\frontend\\tests\\\u9875\u9762\u9aa8\u67b6\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "spec",
+      "community": 1
+    },
+    {
+      "label": "\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
+      "source_location": "L1",
+      "id": "frontend_tests_spec_ts",
       "community": 1
     },
     {
@@ -1001,7 +1017,15 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 23
+      "community": 22
+    },
+    {
+      "label": ".addEventListener()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
+      "source_location": "L9",
+      "id": "spec_addeventlistener",
+      "community": 1
     },
     {
       "label": "\u5047Socket",
@@ -1009,7 +1033,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L35",
       "id": "spec_socket",
-      "community": 11
+      "community": 10
     },
     {
       "label": ".on()",
@@ -1017,7 +1041,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L38",
       "id": "spec_socket_on",
-      "community": 11
+      "community": 10
     },
     {
       "label": ".emit()",
@@ -1025,7 +1049,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L45",
       "id": "spec_socket_emit",
-      "community": 11
+      "community": 10
     },
     {
       "label": ".disconnect()",
@@ -1033,7 +1057,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L76",
       "id": "spec_socket_disconnect",
-      "community": 11
+      "community": 10
     },
     {
       "label": ".fire()",
@@ -1041,7 +1065,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L78",
       "id": "spec_socket_fire",
-      "community": 11
+      "community": 10
     },
     {
       "label": "get()",
@@ -1153,7 +1177,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 16
+      "community": 15
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1161,7 +1185,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 16
+      "community": 15
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1233,7 +1257,7 @@
       "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
       "source_location": "L1",
       "id": "index",
-      "community": 28
+      "community": 2
     },
     {
       "label": "\u63a8\u5bfc\u56fe\u7247Mime\u7c7b\u578b()",
@@ -1281,7 +1305,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L63",
       "id": "tus",
-      "community": 12
+      "community": 11
     },
     {
       "label": "\u6784\u9020\u5a92\u4f53\u4e0a\u4f20Meta()",
@@ -1316,6 +1340,14 @@
       "community": 0
     },
     {
+      "label": "index.ts",
+      "file_type": "code",
+      "source_file": "frontend\\\u5e73\u53f0\\index.ts",
+      "source_location": "L1",
+      "id": "frontend_index_ts",
+      "community": 2
+    },
+    {
       "label": "\u6784\u9020\u7edf\u4e00\u5a92\u4f53\u6587\u4ef6Accept()",
       "file_type": "code",
       "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\\u9644\u4ef6\u80fd\u529b\u6ce8\u518c.ts",
@@ -1329,7 +1361,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 29
+      "community": 27
     },
     {
       "label": "main.rs",
@@ -1337,7 +1369,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 21
+      "community": 20
     },
     {
       "label": "main()",
@@ -1345,7 +1377,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 21
+      "community": 20
     },
     {
       "label": "AdminLoginBody",
@@ -1417,7 +1449,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L276",
       "id": "html",
-      "community": 13
+      "community": 12
     },
     {
       "label": "load_frontend_index()",
@@ -1425,7 +1457,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L285",
       "id": "load_frontend_index",
-      "community": 13
+      "community": 12
     },
     {
       "label": "realtime\u8fde\u63a5\u8ba4\u8bc1\u5f02\u6b65\u7528\u4f8b\u4f1a\u653e\u884c\u6709\u6548\u4f1a\u8bdd()",
@@ -1481,7 +1513,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L473",
       "id": "err_resp",
-      "community": 13
+      "community": 12
     },
     {
       "label": "RealtimeConnectAuth",
@@ -1545,7 +1577,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L17",
       "id": "rustus",
-      "community": 12
+      "community": 11
     },
     {
       "label": "\u5b89\u88c5panic\u65e5\u5fd7\u94a9\u5b50()",
@@ -1657,7 +1689,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L144",
       "id": "parse_events_query",
-      "community": 19
+      "community": 18
     },
     {
       "label": "parse_history_query()",
@@ -1665,7 +1697,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 20
+      "community": 19
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1697,7 +1729,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 22
+      "community": 21
     },
     {
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
@@ -1721,7 +1753,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L678",
       "id": "url",
-      "community": 12
+      "community": 11
     },
     {
       "label": "bootstrap_session()",
@@ -1761,7 +1793,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1296",
       "id": "load_room_events",
-      "community": 19
+      "community": 18
     },
     {
       "label": "load_room_history()",
@@ -1769,7 +1801,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1424",
       "id": "load_room_history",
-      "community": 20
+      "community": 19
     },
     {
       "label": "prepare_media_upload()",
@@ -1777,7 +1809,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1555",
       "id": "prepare_media_upload",
-      "community": 12
+      "community": 11
     },
     {
       "label": "handle_rustus_hook()",
@@ -1809,7 +1841,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1974",
       "id": "complete",
-      "community": 17
+      "community": 16
     },
     {
       "label": "complete_media_upload()",
@@ -1817,7 +1849,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2015",
       "id": "complete_media_upload",
-      "community": 17
+      "community": 16
     },
     {
       "label": "load_media_locator()",
@@ -1857,7 +1889,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L17",
       "id": "pg",
-      "community": 14
+      "community": 13
     },
     {
       "label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f_\u5f02\u6b65()",
@@ -1865,7 +1897,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L441",
       "id": "pg_torrent",
-      "community": 14
+      "community": 13
     },
     {
       "label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1\u6700\u8fd1peer\u5b58\u6d3b\u65f6\u95f4_\u5f02\u6b65()",
@@ -1873,7 +1905,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L496",
       "id": "pg_peer",
-      "community": 14
+      "community": 13
     },
     {
       "label": "mod.rs",
@@ -1889,7 +1921,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 22
+      "community": 21
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
@@ -2456,6 +2488,18 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5e73\u53f0\\\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "",
+      "source": "",
+      "target": "frontend_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u73af\u5883.rs",
       "source_location": "L48",
       "weight": 1.0,
@@ -2463,114 +2507,6 @@
       "_tgt": "",
       "source": "",
       "target": "",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L996",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "settransportfortest",
-      "source": "",
-      "target": "settransportfortest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L26",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "login",
-      "source": "",
-      "target": "login",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L34",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "loadoverview",
-      "source": "",
-      "target": "loadoverview",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L40",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "loadrooms",
-      "source": "",
-      "target": "loadrooms",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L46",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "loadroomdetail",
-      "source": "",
-      "target": "loadroomdetail",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L53",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "filteredrooms",
-      "source": "",
-      "target": "filteredrooms",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L58",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "submitloginform",
-      "source": "",
-      "target": "submitloginform",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L63",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "submitroomsearchform",
-      "source": "",
-      "target": "submitroomsearchform",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1623",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "render",
-      "source": "",
-      "target": "render",
       "confidence_score": 1.0
     },
     {
@@ -2684,6 +2620,18 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L437",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "render",
+      "source": "",
+      "target": "render",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6eda\u52a8\u5668.ts",
       "source_location": "L72",
       "weight": 1.0,
@@ -2694,58 +2642,10 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L982",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "setmediaplayerfortest",
-      "source": "",
-      "target": "setmediaplayerfortest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L990",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "setmediaviewerfortest",
-      "source": "",
-      "target": "setmediaviewerfortest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1010",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "roomshellstate",
-      "source": "",
-      "target": "roomshellstate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1018",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "roomshellpatch",
-      "source": "",
-      "target": "roomshellpatch",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1059",
+      "source_location": "L1065",
       "weight": 1.0,
       "_src": "",
       "_tgt": "revokedraftpreviewurl",
@@ -2754,195 +2654,15 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1096",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "clearmediapublisherstate",
-      "source": "",
-      "target": "clearmediapublisherstate",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1167",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "removecomposerdraft",
-      "source": "",
-      "target": "removecomposerdraft",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1178",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "retrycomposerdraft",
-      "source": "",
-      "target": "retrycomposerdraft",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1182",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "connectedcallback",
-      "source": "",
-      "target": "connectedcallback",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1188",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "updated",
-      "source": "",
-      "target": "updated",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1192",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "disconnectedcallback",
-      "source": "",
-      "target": "disconnectedcallback",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1066",
+      "source_location": "L1072",
       "weight": 1.0,
       "_src": "",
       "_tgt": "updatechat",
       "source": "",
       "target": "updatechat",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1214",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "buildroomviewresetpatch",
-      "source": "",
-      "target": "buildroomviewresetpatch",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1240",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "exitcurrentroomview",
-      "source": "",
-      "target": "exitcurrentroomview",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1266",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "leavecurrentroomview",
-      "source": "",
-      "target": "leavecurrentroomview",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1276",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "joinhistoryroom",
-      "source": "",
-      "target": "joinhistoryroom",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1291",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "submitshellconsole",
-      "source": "",
-      "target": "submitshellconsole",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1310",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "sendcurrentmessage",
-      "source": "",
-      "target": "sendcurrentmessage",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1321",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "handleshellconsoleprimaryinput",
-      "source": "",
-      "target": "handleshellconsoleprimaryinput",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1330",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "handleshellconsoleprimarykeydown",
-      "source": "",
-      "target": "handleshellconsoleprimarykeydown",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1408",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "rendershellconsole",
-      "source": "",
-      "target": "rendershellconsole",
       "confidence_score": 1.0
     },
     {
@@ -5046,58 +4766,442 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5e73\u53f0\\index.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "frontend_index_ts",
+      "_tgt": "frontend_ts",
+      "source": "frontend_ts",
+      "target": "frontend_index_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5e73\u53f0\\\u6d4f\u89c8\u5668\u5e94\u7528\u5e73\u53f0.ts",
+      "source_location": "L13",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "frontend_ts",
+      "source": "frontend_ts",
+      "target": "frontend_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1002",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "settransportfortest",
+      "source": "frontend_ts",
+      "target": "settransportfortest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L31",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "login",
+      "source": "frontend_ts",
+      "target": "login",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L39",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "loadoverview",
+      "source": "frontend_ts",
+      "target": "loadoverview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L45",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "loadrooms",
+      "source": "frontend_ts",
+      "target": "loadrooms",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "loadroomdetail",
+      "source": "frontend_ts",
+      "target": "loadroomdetail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "filteredrooms",
+      "source": "frontend_ts",
+      "target": "filteredrooms",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L63",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "submitloginform",
+      "source": "frontend_ts",
+      "target": "submitloginform",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L68",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "submitroomsearchform",
+      "source": "frontend_ts",
+      "target": "submitroomsearchform",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1629",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "render",
+      "source": "frontend_ts",
+      "target": "render",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L988",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "setmediaplayerfortest",
+      "source": "frontend_ts",
+      "target": "setmediaplayerfortest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L996",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "setmediaviewerfortest",
+      "source": "frontend_ts",
+      "target": "setmediaviewerfortest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1016",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "roomshellstate",
+      "source": "frontend_ts",
+      "target": "roomshellstate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1024",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "roomshellpatch",
+      "source": "frontend_ts",
+      "target": "roomshellpatch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1052",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "revokedraftpreviewurl",
+      "source": "frontend_ts",
+      "target": "revokedraftpreviewurl",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1102",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "clearmediapublisherstate",
+      "source": "frontend_ts",
+      "target": "clearmediapublisherstate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1173",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "removecomposerdraft",
+      "source": "frontend_ts",
+      "target": "removecomposerdraft",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1184",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "retrycomposerdraft",
+      "source": "frontend_ts",
+      "target": "retrycomposerdraft",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1188",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "connectedcallback",
+      "source": "frontend_ts",
+      "target": "connectedcallback",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1194",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "updated",
+      "source": "frontend_ts",
+      "target": "updated",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1198",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "disconnectedcallback",
+      "source": "frontend_ts",
+      "target": "disconnectedcallback",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1211",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "updatechat",
+      "source": "frontend_ts",
+      "target": "updatechat",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1220",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "buildroomviewresetpatch",
+      "source": "frontend_ts",
+      "target": "buildroomviewresetpatch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1246",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "exitcurrentroomview",
+      "source": "frontend_ts",
+      "target": "exitcurrentroomview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1272",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "leavecurrentroomview",
+      "source": "frontend_ts",
+      "target": "leavecurrentroomview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1282",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "joinhistoryroom",
+      "source": "frontend_ts",
+      "target": "joinhistoryroom",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1297",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "submitshellconsole",
+      "source": "frontend_ts",
+      "target": "submitshellconsole",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1316",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "sendcurrentmessage",
+      "source": "frontend_ts",
+      "target": "sendcurrentmessage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1327",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "handleshellconsoleprimaryinput",
+      "source": "frontend_ts",
+      "target": "handleshellconsoleprimaryinput",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1336",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "handleshellconsoleprimarykeydown",
+      "source": "frontend_ts",
+      "target": "handleshellconsoleprimarykeydown",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1414",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "rendershellconsole",
+      "source": "frontend_ts",
+      "target": "rendershellconsole",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
-      "confidence": "INFERRED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L29",
-      "weight": 0.8,
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L34",
+      "weight": 1.0,
       "_src": "login",
       "_tgt": "loadoverview",
       "source": "login",
       "target": "loadoverview",
-      "confidence_score": 0.5
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
-      "confidence": "INFERRED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L30",
-      "weight": 0.8,
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L35",
+      "weight": 1.0,
       "_src": "login",
       "_tgt": "loadrooms",
       "source": "login",
       "target": "loadrooms",
-      "confidence_score": 0.5
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
-      "confidence": "INFERRED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L60",
-      "weight": 0.8,
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L65",
+      "weight": 1.0,
       "_src": "submitloginform",
       "_tgt": "login",
       "source": "login",
       "target": "submitloginform",
-      "confidence_score": 0.5
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
-      "confidence": "INFERRED",
-      "source_file": "E:\\koko\\frontend\\\u540e\u53f0\u58f3.ts",
-      "source_location": "L65",
-      "weight": 0.8,
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
+      "source_location": "L70",
+      "weight": 1.0,
       "_src": "submitroomsearchform",
       "_tgt": "loadrooms",
       "source": "loadrooms",
       "target": "submitroomsearchform",
-      "confidence_score": 0.5
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1637",
+      "source_location": "L1643",
       "weight": 1.0,
       "_src": "render",
       "_tgt": "roomshellstate",
@@ -5109,7 +5213,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1648",
+      "source_location": "L1654",
       "weight": 1.0,
       "_src": "render",
       "_tgt": "rendershellconsole",
@@ -5169,7 +5273,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1031",
+      "source_location": "L1037",
       "weight": 1.0,
       "_src": "roomshellpatch",
       "_tgt": "roomshellstate",
@@ -5181,7 +5285,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1293",
+      "source_location": "L1299",
       "weight": 1.0,
       "_src": "submitshellconsole",
       "_tgt": "roomshellstate",
@@ -5193,7 +5297,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1269",
+      "source_location": "L1275",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "roomshellpatch",
@@ -5205,7 +5309,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1246",
+      "source_location": "L1252",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "clearmediapublisherstate",
@@ -5217,7 +5321,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1255",
+      "source_location": "L1261",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "updatechat",
@@ -5229,7 +5333,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1269",
+      "source_location": "L1275",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "updatechat",
@@ -5241,7 +5345,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1281",
+      "source_location": "L1287",
       "weight": 1.0,
       "_src": "joinhistoryroom",
       "_tgt": "updatechat",
@@ -5253,7 +5357,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1324",
+      "source_location": "L1330",
       "weight": 1.0,
       "_src": "handleshellconsoleprimaryinput",
       "_tgt": "updatechat",
@@ -5265,7 +5369,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1256",
+      "source_location": "L1262",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "buildroomviewresetpatch",
@@ -5277,7 +5381,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1268",
+      "source_location": "L1274",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "exitcurrentroomview",
@@ -5289,7 +5393,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
-      "source_location": "L1306",
+      "source_location": "L1312",
       "weight": 1.0,
       "_src": "submitshellconsole",
       "_tgt": "sendcurrentmessage",
@@ -5768,6 +5872,30 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "_src": "frontend_tests_spec_ts",
+      "_tgt": "spec",
+      "source": "spec",
+      "target": "frontend_tests_spec_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u751f\u547d\u5468\u671f\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
+      "source_location": "L9",
+      "weight": 1.0,
+      "_src": "spec",
+      "_tgt": "spec_addeventlistener",
+      "source": "spec",
+      "target": "spec_addeventlistener",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L35",
       "weight": 1.0,
@@ -5991,6 +6119,18 @@
       "_tgt": "buildattachmentcontenturl",
       "source": "loadmedialocator",
       "target": "buildattachmentcontenturl",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5e73\u53f0\\index.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_src": "frontend_index_ts",
+      "_tgt": "index",
+      "source": "index",
+      "target": "frontend_index_ts",
       "confidence_score": 1.0
     },
     {

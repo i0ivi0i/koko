@@ -31,3 +31,9 @@ export {
   type 服务工作线程快照,
   type 服务工作线程运行时,
 } from "./服务工作线程运行时.js";
+export {
+  创建传输运行时,
+  type 传输运行时快照,
+  type 传输运行时依赖,
+  type 传输运行时,
+} from "./传输运行时.js";

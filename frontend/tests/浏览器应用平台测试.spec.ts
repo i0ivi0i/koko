@@ -28,16 +28,17 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_OPEN_REQUESTED"/);
   });
 
-  it("后台壳当前仍是网页式直连 transport，这条旧路要在后台应用内核阶段被替换", () => {
-    const source = 读取前端源码("后台壳.ts");
+  it("聊天壳和后台壳都会从平台拿 transport，而不是各自 new HttpRealtime传输", () => {
+    const chatSource = 读取前端源码("聊天壳.ts");
+    const adminSource = 读取前端源码("后台壳.ts");
 
-    expect(source).toContain(
-      'private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);'
-    );
-    expect(source).toContain("const out = await this.transport.adminLogin(this.username, this.password);");
-    expect(source).toContain("const overview = await this.transport.loadAdminOverview(this.token);");
-    expect(source).toContain("const rooms = await this.transport.adminRooms(this.token);");
-    expect(source).toContain("const detail = await this.transport.adminRoomDetail(this.token, roomId);");
+    expect(chatSource).toContain('from "./平台/index.js"');
+    expect(chatSource).toContain("获取默认浏览器应用平台().transport.transport()");
+    expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
+
+    expect(adminSource).toContain('from "./平台/index.js"');
+    expect(adminSource).toContain("获取默认浏览器应用平台().transport.transport()");
+    expect(adminSource).not.toContain("new HttpRealtime传输(window.location.origin)");
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {

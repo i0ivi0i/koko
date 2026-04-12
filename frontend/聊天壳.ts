@@ -28,7 +28,8 @@ import {
   type 媒体播放结果,
   type 媒体草稿状态补丁,
 } from "./媒体/index.js";
-import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
+import { 获取默认浏览器应用平台 } from "./平台/index.js";
+import type { 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import { 默认文本布局器 } from "./文本布局.js";
 import {
@@ -798,7 +799,12 @@ export class 聊天壳 extends LitElement {
 
   private chatState: 聊天状态 = { ...初始聊天状态 };
 
-  private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
+  /**
+   * transport 实例现在由浏览器应用平台统一拥有。
+   * 聊天壳只消费这个端口，不再各自 new 一份 HTTP / realtime 入口，
+   * 这样后面接生命周期、离线或多标签能力时，入口还能保持单一。
+   */
+  private transport: 前端传输端口 = 获取默认浏览器应用平台().transport.transport();
   private readonly 媒体定位器 = 创建媒体定位器({
     getSessionId: () => this.chatState.sessionId,
     loadMediaLocator: (sessionId, attachmentId) =>

@@ -1,5 +1,6 @@
 import { css, html, LitElement } from "lit";
-import { HttpRealtime传输, type 前端传输端口 } from "./传输.js";
+import { 获取默认浏览器应用平台 } from "./平台/index.js";
+import type { 前端传输端口 } from "./传输.js";
 import { 格式化后台概览 } from "./视图.js";
 
 export class 后台壳 extends LitElement {
@@ -10,7 +11,11 @@ export class 后台壳 extends LitElement {
     button { padding: 8px 12px; }
   `;
 
-  private transport: 前端传输端口 = new HttpRealtime传输(window.location.origin);
+  /**
+   * 后台壳与聊天壳共用平台层 transport 入口。
+   * 这里收的是浏览器端实例归属，不是把后台业务语义挪进平台层。
+   */
+  private transport: 前端传输端口 = 获取默认浏览器应用平台().transport.transport();
   private username = "admin";
   private password = "admin";
   private token = "";
