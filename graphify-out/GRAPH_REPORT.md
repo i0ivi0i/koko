@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 123 files · ~4,536,801 words
+- 129 files · ~4,539,869 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 294 nodes · 346 edges · 30 communities detected
+- 294 nodes · 348 edges · 30 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -71,7 +71,7 @@ Nodes (18): AdminLoginBody, AdminLoginResp, ApiError, BootstrapBody, CompleteMed
 
 ### Community 1 - "Community 1"
 Cohesion: 0.06
-Nodes (14): constructor(), dispatch(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), loadOverview(), loadRooms(), login() (+6 more)
+Nodes (15): constructor(), dispatch(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), loadOverview(), loadRooms(), login() (+7 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.07
