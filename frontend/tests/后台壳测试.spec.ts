@@ -17,6 +17,7 @@ import type {
   房间历史页,
 } from "../契约";
 import { 后台壳 } from "../后台壳";
+import type { 后台应用内核端口 } from "../后台应用内核";
 import type { Socket } from "socket.io-client";
 
 const 空Socket = {
@@ -178,6 +179,47 @@ describe("后台壳", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
 
+    expect(el.shadowRoot!.querySelector("#overview")!.textContent).toContain("房间 2");
+    el.remove();
+  });
+
+  it("后台壳只转发命令并消费内核快照", async () => {
+    const commands: Array<Record<string, unknown>> = [];
+    let snapshot = {
+      username: "admin",
+      password: "admin",
+      token: "",
+      overviewText: "-",
+      roomIds: [] as string[],
+      detailText: "-",
+      roomFilter: "",
+    };
+    const 假内核: 后台应用内核端口 = {
+      snapshot: () => snapshot,
+      async dispatch(command) {
+        commands.push(command as Record<string, unknown>);
+        if (command.type === "LOGIN_REQUESTED") {
+          snapshot = {
+            ...snapshot,
+            token: "admin-token",
+            overviewText: "房间 2 / 消息 5",
+            roomIds: ["room-A"],
+          };
+        }
+      },
+      setTransportForTest() {},
+    };
+
+    const el = document.createElement("koko-admin-shell") as 后台壳;
+    el.setKernelForTest(假内核);
+    document.body.appendChild(el);
+    await el.updateComplete;
+
+    (el.shadowRoot!.querySelector("#adminLoginBtn") as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+
+    expect(commands).toContainEqual({ type: "LOGIN_REQUESTED" });
     expect(el.shadowRoot!.querySelector("#overview")!.textContent).toContain("房间 2");
     el.remove();
   });

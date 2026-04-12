@@ -1,7 +1,9 @@
 import { css, html, LitElement } from "lit";
-import { 获取默认浏览器应用平台 } from "./平台/index.js";
+import {
+  创建后台应用内核,
+  type 后台应用内核端口,
+} from "./后台应用内核.js";
 import type { 前端传输端口 } from "./传输.js";
-import { 格式化后台概览 } from "./视图.js";
 
 export class 后台壳 extends LitElement {
   static override styles = css`
@@ -12,106 +14,116 @@ export class 后台壳 extends LitElement {
   `;
 
   /**
-   * 后台壳与聊天壳共用平台层 transport 入口。
-   * 这里收的是浏览器端实例归属，不是把后台业务语义挪进平台层。
+   * 后台壳现在只持有后台应用内核门面：
+   * 1. 壳层把输入翻成命令；
+   * 2. 所有展示文本都从快照读取；
+   * 3. transport 已经退回到内核内部，不再由壳层直接 await。
    */
-  private transport: 前端传输端口 = 获取默认浏览器应用平台().transport.transport();
-  private username = "admin";
-  private password = "admin";
-  private token = "";
-  private roomFilter = "";
-  private roomIds: string[] = [];
-  private overviewText = "-";
-  private detailText = "-";
+  private kernel: 后台应用内核端口 = 创建后台应用内核({
+    onSnapshotChanged: () => {
+      this.requestUpdate();
+    },
+  });
 
   setTransportForTest(transport: 前端传输端口): void {
-    this.transport = transport;
+    this.kernel.setTransportForTest(transport);
   }
 
-  private async login(): Promise<void> {
-    const out = await this.transport.adminLogin(this.username, this.password);
-    this.token = out.token;
-    await this.loadOverview();
-    await this.loadRooms();
+  setKernelForTest(kernel: 后台应用内核端口): void {
+    this.kernel = kernel;
     this.requestUpdate();
   }
 
-  private async loadOverview(): Promise<void> {
-    if (!this.token) return;
-    const overview = await this.transport.loadAdminOverview(this.token);
-    this.overviewText = 格式化后台概览(overview.room_count, overview.message_count);
+  private 读取快照() {
+    return this.kernel.snapshot();
   }
 
-  private async loadRooms(): Promise<void> {
-    if (!this.token) return;
-    const rooms = await this.transport.adminRooms(this.token);
-    this.roomIds = rooms.rooms;
-  }
-
-  private async loadRoomDetail(roomId: string): Promise<void> {
-    if (!this.token) return;
-    const detail = await this.transport.adminRoomDetail(this.token, roomId);
-    this.detailText = `房间 ${detail.room_id}，位置 ${detail.latest_event_position}，消息 ${detail.message_count}`;
-    this.requestUpdate();
-  }
-
-  private get filteredRooms(): string[] {
-    if (!this.roomFilter.trim()) return this.roomIds;
-    return this.roomIds.filter((id) => id.includes(this.roomFilter.trim()));
+  /**
+   * 壳层发命令后主动请求一次刷新：
+   * 1. 真实内核会通过 onSnapshotChanged 再次触发更新；
+   * 2. 测试替身内核如果没有回调，这里也能把最新快照刷回模板。
+   */
+  private 派发命令(command: Parameters<后台应用内核端口["dispatch"]>[0]): void {
+    void Promise.resolve(this.kernel.dispatch(command)).finally(() => {
+      this.requestUpdate();
+    });
   }
 
   private submitLoginForm(event: SubmitEvent): void {
     event.preventDefault();
-    void this.login();
+    this.派发命令({ type: "LOGIN_REQUESTED" });
   }
 
   private submitRoomSearchForm(event: SubmitEvent): void {
     event.preventDefault();
-    void this.loadRooms();
+    this.派发命令({ type: "RELOAD_ROOMS_REQUESTED" });
   }
 
   override render() {
+    const snapshot = this.读取快照();
     return html`
       <section id="adminShell">
         <form id="adminLoginForm" class="row" @submit=${this.submitLoginForm}>
           <input
             id="adminUser"
             enterkeyhint="go"
-            .value=${this.username}
+            .value=${snapshot.username}
             @input=${(e: Event) => {
-              this.username = (e.target as HTMLInputElement).value;
+              this.派发命令({
+                type: "USERNAME_CHANGED",
+                value: (e.target as HTMLInputElement).value,
+              });
             }}
           />
           <input
             id="adminPass"
             enterkeyhint="go"
-            .value=${this.password}
+            .value=${snapshot.password}
             @input=${(e: Event) => {
-              this.password = (e.target as HTMLInputElement).value;
+              this.派发命令({
+                type: "PASSWORD_CHANGED",
+                value: (e.target as HTMLInputElement).value,
+              });
             }}
           />
           <button id="adminLoginBtn" type="submit">登录</button>
         </form>
-        <div id="overview">${this.overviewText}</div>
+        <div id="overview">${snapshot.overviewText}</div>
         <form id="roomSearchForm" class="row" @submit=${this.submitRoomSearchForm}>
           <input
             id="roomSearch"
             placeholder="搜索房间"
             enterkeyhint="search"
-            .value=${this.roomFilter}
+            .value=${snapshot.roomFilter}
             @input=${(e: Event) => {
-              this.roomFilter = (e.target as HTMLInputElement).value;
-              this.requestUpdate();
+              this.派发命令({
+                type: "ROOM_FILTER_CHANGED",
+                value: (e.target as HTMLInputElement).value,
+              });
             }}
           />
           <button id="reloadRooms" type="submit">刷新房间</button>
         </form>
         <ul id="roomList">
-          ${this.filteredRooms.map(
-            (id) => html`<li>${id} <button class="roomDetailBtn" @click=${() => this.loadRoomDetail(id)}>详情</button></li>`
+          ${snapshot.roomIds.map(
+            (id) =>
+              html`<li>
+                ${id}
+                <button
+                  class="roomDetailBtn"
+                  @click=${() => {
+                    this.派发命令({
+                      type: "ROOM_DETAIL_REQUESTED",
+                      roomId: id,
+                    });
+                  }}
+                >
+                  详情
+                </button>
+              </li>`
           )}
         </ul>
-        <div id="roomDetail">${this.detailText}</div>
+        <div id="roomDetail">${snapshot.detailText}</div>
       </section>
     `;
   }

@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 129 files · ~4,539,869 words
+- 133 files · ~4,540,934 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 294 nodes · 348 edges · 30 communities detected
+- 290 nodes · 341 edges · 30 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -48,10 +48,10 @@
 4. `假Socket` - 5 edges
 5. `parse_attachment_content_query()` - 5 edges
 6. `Pg仓储` - 5 edges
-7. `login()` - 4 edges
+7. `dispatch()` - 4 edges
 8. `handle_rustus_hook()` - 4 edges
-9. `loadRooms()` - 3 edges
-10. `render()` - 3 edges
+9. `render()` - 3 edges
+10. `snapshot()` - 3 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `prepare_media_upload()` --calls--> `断言媒体准备结果是Tus契约()`  [EXTRACTED]
@@ -70,8 +70,8 @@ Cohesion: 0.02
 Nodes (18): AdminLoginBody, AdminLoginResp, ApiError, BootstrapBody, CompleteMediaUploadBody, JoinBody, ParsedAttachmentContentQuery, ParsedEventsQuery (+10 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.06
-Nodes (15): constructor(), dispatch(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), loadOverview(), loadRooms(), login() (+7 more)
+Cohesion: 0.07
+Nodes (10): constructor(), dispatch(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), render(), renderShellConsole(), revokeDraftPreviewUrl() (+2 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.07
@@ -223,7 +223,7 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 4` to `Community 0`?**
-  _High betweenness centrality (0.110) - this node is a cross-community bridge._
+  _High betweenness centrality (0.112) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 3` to `Community 0`?**
   _High betweenness centrality (0.030) - this node is a cross-community bridge._
 - **Why does `构造rustus_hook请求体()` connect `Community 7` to `Community 0`?**
@@ -233,6 +233,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.02 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.07 - nodes in this community are weakly interconnected._
