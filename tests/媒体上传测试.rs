@@ -603,13 +603,15 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
     );
     assert_eq!(complete_body["status"].as_str(), Some("ready"));
     assert_eq!(complete_body["kind"].as_str(), Some("video"));
-    assert!(
-        complete_body["width"].as_i64().unwrap_or_default() > 0,
-        "视频 complete 后必须写入真实宽度"
+    assert_eq!(
+        complete_body["width"].as_i64(),
+        Some(1080),
+        "竖拍 MP4 complete 后必须写入展示宽度，而不是编码宽度"
     );
-    assert!(
-        complete_body["height"].as_i64().unwrap_or_default() > 0,
-        "视频 complete 后必须写入真实高度"
+    assert_eq!(
+        complete_body["height"].as_i64(),
+        Some(1920),
+        "竖拍 MP4 complete 后必须写入展示高度，而不是编码高度"
     );
 
     let row = sqlx::query(
@@ -626,8 +628,8 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
     let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
     assert_eq!(kind_in_db, "video");
     assert_eq!(status_in_db, "ready");
-    assert!(width_in_db.unwrap_or_default() > 0);
-    assert!(height_in_db.unwrap_or_default() > 0);
+    assert_eq!(width_in_db, Some(1080));
+    assert_eq!(height_in_db, Some(1920));
     assert!(
         thumbnail_storage_key.is_none(),
         "当前视频主链不应伪造图片缩略图存储键"

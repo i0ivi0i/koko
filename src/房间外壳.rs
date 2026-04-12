@@ -537,6 +537,7 @@ fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结果, 媒体�
         .ok_or(媒体内容解析错误::类型不允许(
             "视频缺少高度元数据",
         ))?;
+    let (宽, 高) = 应用mp4展示方向到视频宽高(bytes, 宽, 高);
     Ok(视频内容解析结果 {
         mime_type: kind.mime_type().to_string(),
         宽: 宽 as i32,
@@ -550,6 +551,35 @@ fn 解析视频轨道整数(value: &nom_exif::EntryValue) -> Option<u64> {
         .or_else(|| value.as_u32().map(u64::from))
         .or_else(|| value.as_u16().map(u64::from))
         .or_else(|| value.as_str().and_then(|raw| raw.parse::<u64>().ok()))
+}
+
+fn 应用mp4展示方向到视频宽高(bytes: &[u8], 宽: u64, 高: u64) -> (u64, u64) {
+    if !mp4视频轨道矩阵需要交换宽高(bytes) {
+        return (宽, 高);
+    }
+    (高, 宽)
+}
+
+/// 手机竖拍 MP4 常把编码宽高写成横屏，再用 tkhd 矩阵声明展示方向。
+/// `nom-exif` 负责主元数据解析，这里只补齐它尚未暴露的展示矩阵，不另造视频解析核心。
+fn mp4视频轨道矩阵需要交换宽高(bytes: &[u8]) -> bool {
+    let mut reader = Cursor::new(bytes);
+    let Ok(mp4) = mp4::Mp4Reader::read_header(&mut reader, bytes.len() as u64) else {
+        return false;
+    };
+    mp4.tracks().values().any(|track| {
+        matches!(track.track_type(), Ok(mp4::TrackType::Video)) && {
+            let matrix = &track.trak.tkhd.matrix;
+            mp4矩阵表示直角竖屏旋转(matrix.a, matrix.b, matrix.c, matrix.d)
+        }
+    })
+}
+
+fn mp4矩阵表示直角竖屏旋转(a: i32, b: i32, c: i32, d: i32) -> bool {
+    const MP4矩阵_一: i32 = 0x0001_0000;
+    a == 0
+        && d == 0
+        && ((b == MP4矩阵_一 && c == -MP4矩阵_一) || (b == -MP4矩阵_一 && c == MP4矩阵_一))
 }
 
 fn 解析媒体内容(

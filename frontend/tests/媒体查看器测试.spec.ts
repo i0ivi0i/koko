@@ -228,6 +228,45 @@ describe("媒体查看器适配器", () => {
     expect(createLightbox).not.toHaveBeenCalled();
   });
 
+  it("移动端视频会用浏览器元数据纠正后端旧横屏宽高，避免竖拍视频继续锁横屏", async () => {
+    const createLightbox = vi.fn(() => ({
+      openAt: vi.fn(),
+      destroy: vi.fn(),
+    }));
+    安装全屏DOM模拟();
+    const { lock } = 安装方向模拟();
+    const viewer = 创建媒体查看器({
+      createLightbox,
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-legacy-rotated-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-legacy-rotated-1",
+          src: "blob:http://media.local/legacy-rotated-video-1",
+          posterSrc: null,
+          width: 1920,
+          height: 1080,
+        },
+      ],
+    });
+    await Promise.resolve();
+
+    const video = document.body.querySelector("video");
+    expect(video).toBeInstanceOf(HTMLVideoElement);
+    Object.defineProperty(video, "videoWidth", { configurable: true, value: 1080 });
+    Object.defineProperty(video, "videoHeight", { configurable: true, value: 1920 });
+    video?.dispatchEvent(new Event("loadedmetadata"));
+    await Promise.resolve();
+
+    expect(lock).toHaveBeenLastCalledWith("portrait");
+    expect(document.body.querySelector("[data-video-orientation='portrait']")).not.toBeNull();
+    expect(createLightbox).not.toHaveBeenCalled();
+  });
+
   it("手机返回键触发 popstate 时只退出媒体全屏会话，并清理方向锁回到聊天界面", async () => {
     const createLightbox = vi.fn(() => ({
       openAt: vi.fn(),

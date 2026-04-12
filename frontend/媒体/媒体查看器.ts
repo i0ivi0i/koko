@@ -120,14 +120,24 @@ const 是移动触屏视口 = (): boolean => {
   return hasCoarsePointer || touchPoints > 0;
 };
 
-const 读取视频方向锁 = (item: 媒体查看器视频项目): 媒体方向锁 | null => {
-  if (item.height > item.width) {
+const 读取宽高方向锁 = (width: number, height: number): 媒体方向锁 | null => {
+  if (height > width) {
     return "portrait";
   }
-  if (item.width > item.height) {
+  if (width > height) {
     return "landscape";
   }
   return null;
+};
+
+const 读取视频方向锁 = (item: 媒体查看器视频项目): 媒体方向锁 | null =>
+  读取宽高方向锁(item.width, item.height);
+
+const 读取视频元素方向锁 = (video: HTMLVideoElement): 媒体方向锁 | null => {
+  if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+    return null;
+  }
+  return 读取宽高方向锁(video.videoWidth, video.videoHeight);
 };
 
 const 读取屏幕方向 = (): 可锁定屏幕方向 | null =>
@@ -138,7 +148,7 @@ const 打开原生视频全屏 = (item: 媒体查看器视频项目): boolean =>
     return false;
   }
   const sessionId = `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const videoOrientation = 读取视频方向锁(item);
+  let videoOrientation = 读取视频方向锁(item);
   const container = document.createElement("div") as 可原生全屏容器元素;
   const video = document.createElement("video") as 可原生全屏视频元素;
   container.dataset.videoOrientation = videoOrientation ?? "natural";
@@ -216,6 +226,7 @@ const 打开原生视频全屏 = (item: 媒体查看器视频项目): boolean =>
       historyCleanupTimer = null;
     }
     document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    video.removeEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
     unlockScreenOrientation();
     video.pause();
     container.remove();
@@ -235,6 +246,16 @@ const 打开原生视频全屏 = (item: 媒体查看器视频项目): boolean =>
   };
   const startPlayback = (): void => {
     void video.play().catch(() => undefined);
+  };
+  const syncOrientationFromVideoMetadata = (): void => {
+    const metadataOrientation = 读取视频元素方向锁(video);
+    if (!metadataOrientation || metadataOrientation === videoOrientation) {
+      return;
+    }
+    // 已发出的旧附件可能只保存了编码宽高；播放元数据读到展示宽高后，以展示方向为准。
+    videoOrientation = metadataOrientation;
+    container.dataset.videoOrientation = metadataOrientation;
+    lockScreenOrientation();
   };
   const pushMediaHistoryEntry = (): void => {
     if (
@@ -261,6 +282,7 @@ const 打开原生视频全屏 = (item: 媒体查看器视频项目): boolean =>
 
   video.addEventListener("ended", cleanup, { once: true });
   video.addEventListener("webkitendfullscreen", cleanup, { once: true });
+  video.addEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
   document.addEventListener("fullscreenchange", handleFullscreenChange);
   container.append(video);
   document.body.append(container);

@@ -76,6 +76,22 @@ flowchart LR
 - https://fullscreen.spec.whatwg.org/
 - https://core.telegram.org/blackberry/chat-media-view
 
+### 2026-04-12 补充：竖拍视频的“编码宽高”和“展示方向”不能混
+
+本项目现有 `tests/fixtures/minimal.mp4` 已经能复现真实手机竖拍视频的坑：轨道编码宽高是 `1920x1080`，但 MP4 `tkhd` 矩阵声明了 90 度旋转，用户实际看到的展示尺寸应该是 `1080x1920`。
+
+结论：
+
+- 后端 canonical 附件宽高必须写“展示宽高”，不能只保存编码宽高，否则移动端全屏会把竖拍视频错误锁成横屏。
+- `nom-exif` 仍然适合做统一媒体元数据解析；但它当前公开视频标签主要是 `ImageWidth / ImageHeight / DurationMs` 等，不暴露 `tkhd` 矩阵。
+- 只为 MP4 展示方向补一个成熟 `mp4` crate 的 `tkhd.matrix` 读取是合理的薄适配，不是第二套视频解析核心；WebM 和通用元数据继续交给 `nom-exif`。
+- 前端原生全屏会话还要保留一层兜底：旧消息如果已经存错宽高，`loadedmetadata` 读到 `<video>` 的展示宽高后，应重新按真实方向锁屏。
+
+参考来源：
+
+- https://docs.rs/nom-exif
+- https://docs.rs/crate/mp4/latest
+
 ## 不允许做的事
 
 - 不允许 viewer 直接绕过 `解析播放结果()` 去拼 `original_url`。
