@@ -282,7 +282,11 @@ export class 房间消息窗 extends LitElement {
                   </li>
                 `;
               }
-              const mediaOnly = !item.hasText && item.attachments.length > 0;
+              const hasAttachments = item.attachments.length > 0;
+              const mediaOnly = !item.hasText && hasAttachments;
+              const surfaceClass = hasAttachments
+                ? `message-surface media-message ${mediaOnly ? "media-only" : ""}`
+                : "message-surface message-bubble";
               return html`
                 <li
                   class="message-row ${item.owner}"
@@ -290,7 +294,7 @@ export class 房间消息窗 extends LitElement {
                   data-event-position=${item.eventPosition}
                 >
                   <article
-                    class="message-bubble ${mediaOnly ? "media-only" : ""}"
+                    class=${surfaceClass}
                     style=${`width: ${item.bubbleWidth}px;`}
                   >
                     ${item.showAlias

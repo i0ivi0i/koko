@@ -457,19 +457,26 @@ export class 聊天壳 extends LitElement {
       background: var(--status-divider);
     }
 
+    .message-surface {
+      word-break: break-word;
+    }
+
     .message-bubble {
       padding: 12px 14px;
       border-radius: 20px;
       border: 1px solid var(--line-on-bubble);
       background: linear-gradient(180deg, var(--bubble-other-top), var(--bubble-other-bottom));
       box-shadow: var(--shadow-warm);
-      word-break: break-word;
     }
 
-    /* 纯媒体消息像 IM 里常见的图片/视频消息：媒体本身就是气泡，不再额外套一层底板。 */
-    .message-bubble.media-only {
+    /*
+     * 媒体消息不是“透明气泡”，而是另一种消息容器。
+     * 这样带 caption 的图片/视频也不会退回普通气泡底板。
+     */
+    .message-surface.media-message {
       padding: 0;
       border: 0;
+      border-radius: 16px;
       background: transparent;
       box-shadow: none;
     }
@@ -479,6 +486,18 @@ export class 聊天壳 extends LitElement {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-top: 10px;
+    }
+
+    .message-surface.media-message .message-attachment-grid {
+      margin-top: 0;
+    }
+
+    .message-surface.media-message .message-body + .message-attachment-grid {
+      margin-top: 8px;
+    }
+
+    .message-surface.media-message .message-body {
+      padding: 0 2px;
     }
 
     .message-attachment-grid[data-attachment-count="1"] {

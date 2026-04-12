@@ -63,7 +63,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
     expect(styles).toContain("isolation: isolate");
     expect(styles).toContain("contain: paint");
-    expect(styles).toContain(".message-bubble.media-only");
+    expect(styles).toContain(".message-surface.media-message");
     expect(styles).toContain("background: transparent");
     expect(styles).toContain("box-shadow: none");
     expect(styles).toContain(".message-video-card");
@@ -252,14 +252,15 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const previewTrigger = el.shadowRoot!.querySelector(
       'button.message-image-preview-trigger[data-attachment-id="att-1"]'
     ) as HTMLButtonElement | null;
-    const bubble = el.shadowRoot!.querySelector(".message-bubble.media-only") as HTMLElement | null;
+    const mediaSurface = el.shadowRoot!.querySelector(".message-surface.media-message") as HTMLElement | null;
     expect(image).not.toBeNull();
     expect(image?.src).toContain(
       "/api/attachments/att-1/content?session_id=s-test&variant=original"
     );
     expect(el.shadowRoot!.querySelector(".message-body")).toBeNull();
-    expect(bubble).not.toBeNull();
-    expect(bubble?.getAttribute("style")).toContain("width: 320px");
+    expect(mediaSurface).not.toBeNull();
+    expect(mediaSurface?.classList.contains("message-bubble")).toBe(false);
+    expect(mediaSurface?.getAttribute("style")).toContain("width: 320px");
     expect(el.shadowRoot!.querySelector(".message-image-link")).toBeNull();
     expect(previewTrigger).not.toBeNull();
 
@@ -282,6 +283,51 @@ describe("聊天壳集成 / 首页与控制台", () => {
     );
 
     expect(el.shadowRoot!.querySelector('[data-image-preview="att-1"]')).toBeNull();
+    el.remove();
+  });
+
+  it("带文字的媒体消息也使用媒体容器，不能因为有 caption 就退回气泡底板", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-img-caption-1",
+            client_message_id: "c-img-caption-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "这是一张图片说明",
+            body: "这是一张图片说明",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-caption-image-1",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const mediaSurface = el.shadowRoot!.querySelector(".message-surface.media-message") as HTMLElement | null;
+    expect(mediaSurface).not.toBeNull();
+    expect(mediaSurface?.classList.contains("message-bubble")).toBe(false);
+    expect(mediaSurface?.querySelector(".message-body")?.textContent).toContain("这是一张图片说明");
+    expect(el.shadowRoot!.querySelector(".message-bubble .message-image-card")).toBeNull();
     el.remove();
   });
 
