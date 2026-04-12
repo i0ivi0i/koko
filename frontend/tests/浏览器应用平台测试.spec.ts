@@ -37,6 +37,30 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("this.kernel.replaceSnapshot(");
   });
 
+  it("聊天主链编排不再共写一个 shared chatState，而是只消费各自显式 state slice", () => {
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const recoverySource = 读取前端源码("房间恢复编排.ts");
+    const realtimeSource = 读取前端源码("房间实时编排.ts");
+    const readSource = 读取前端源码("阅读推进编排.ts");
+    const scrollerSource = 读取前端源码("房间滚动器.ts");
+
+    expect(kernelSource).not.toContain("private chatState:");
+
+    expect(recoverySource).not.toContain("读取状态(): 聊天状态");
+    expect(recoverySource).not.toContain("更新状态(patch: Partial<聊天状态>)");
+    expect(recoverySource).not.toContain("roomShellPatch(): Partial<聊天状态>");
+
+    expect(realtimeSource).not.toContain("读取状态(): 聊天状态");
+    expect(realtimeSource).not.toContain("更新状态(patch: Partial<聊天状态>)");
+    expect(realtimeSource).not.toContain("roomShellPatch(): Partial<聊天状态>");
+
+    expect(readSource).not.toContain("读取状态(): 聊天状态");
+    expect(readSource).not.toContain("更新状态(patch: Partial<聊天状态>)");
+    expect(readSource).not.toContain("roomShellPatch(): Partial<聊天状态>");
+
+    expect(scrollerSource).not.toContain("更新状态(patch: Partial<聊天状态>)");
+  });
+
   it("聊天壳当前已把滚动和媒体信号先交给应用运行时，而不是在模板里直接裁决", () => {
     const source = 读取前端源码("聊天壳.ts");
 

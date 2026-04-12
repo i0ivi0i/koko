@@ -39,7 +39,7 @@ type 程序滚动来源 = "media_viewer_open" | "jump_to_latest";
 
 export interface 房间滚动器依赖 {
   读取状态(): 房间滚动观察态;
-  更新状态(patch: Partial<聊天状态>): void;
+  更新状态(patch: Partial<房间滚动观察态>): void;
   查询滚动容器(): HTMLElement | null;
   查询消息节点(): HTMLElement[];
   请求更早历史(): void;
@@ -446,8 +446,8 @@ export class 房间滚动器 implements ReactiveController {
    * 被错误解释成“用户正在阅读/翻页”。
    */
   private 安排程序滚动释放(
-    expectedPhase: 聊天状态["scrollPhase"],
-    patch: Partial<聊天状态> = {},
+    expectedPhase: 房间滚动观察态["scrollPhase"],
+    patch: Partial<房间滚动观察态> = {},
     onReleased?: () => void
   ): void {
     this.取消挂起滚动副作用();

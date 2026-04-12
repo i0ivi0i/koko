@@ -632,6 +632,20 @@ function 创建房间壳补丁(roomKernel: ReturnType<typeof 创建房间内核>
   };
 }
 
+function 创建会同步房间壳补丁的房间内核端口(
+  roomKernel: ReturnType<typeof 创建房间内核>,
+  同步房间壳补丁: () => void
+): {
+  send(event: Parameters<ReturnType<typeof 创建房间内核>["send"]>[0]): void;
+} {
+  return {
+    send(event) {
+      roomKernel.send(event);
+      同步房间壳补丁();
+    },
+  };
+}
+
 function 创建房间视图重置补丁(): Partial<聊天状态> {
   return {
     messageInput: "",
@@ -708,6 +722,10 @@ export function 创建恢复编排测试场景(input: {
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
   };
+  const 同步房间壳补丁 = (): void => {
+    updateState(创建房间壳补丁(roomKernel));
+  };
+  const roomKernelPort = 创建会同步房间壳补丁的房间内核端口(roomKernel, 同步房间壳补丁);
   const 推进时间线 = (input: 时间线输入): void => {
     state = {
       ...state,
@@ -716,13 +734,12 @@ export function 创建恢复编排测试场景(input: {
   };
 
   const deps = {
-    读取状态: () => state,
-    更新状态: updateState,
+    读取恢复状态: () => state,
+    写入恢复状态: updateState,
     推进时间线,
     transport,
     storage,
-    roomKernel,
-    roomShellPatch: () => 创建房间壳补丁(roomKernel),
+    roomKernel: roomKernelPort,
     roomScroller,
     ensureRealtimeSocket: (sessionId: string) => {
       ensureRealtimeSocketCalls.push(sessionId);
@@ -830,6 +847,10 @@ export function 创建实时编排测试场景(input: {
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
   };
+  const 同步房间壳补丁 = (): void => {
+    updateState(创建房间壳补丁(roomKernel));
+  };
+  const roomKernelPort = 创建会同步房间壳补丁的房间内核端口(roomKernel, 同步房间壳补丁);
   const 推进时间线 = (input: 时间线输入): void => {
     state = {
       ...state,
@@ -838,12 +859,11 @@ export function 创建实时编排测试场景(input: {
   };
 
   const deps = {
-    读取状态: () => state,
-    更新状态: updateState,
+    读取实时状态: () => state,
+    写入实时状态: updateState,
     推进时间线,
     transport,
-    roomKernel,
-    roomShellPatch: () => 创建房间壳补丁(roomKernel),
+    roomKernel: roomKernelPort,
     上报Transport异常: async (error: Record<string, unknown>) => {
       transportErrors.push(error);
     },
@@ -961,6 +981,10 @@ export function 创建阅读推进测试场景(input: {
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
   };
+  const 同步房间壳补丁 = (): void => {
+    updateState(创建房间壳补丁(roomKernel));
+  };
+  const roomKernelPort = 创建会同步房间壳补丁的房间内核端口(roomKernel, 同步房间壳补丁);
   const 推进时间线 = (input: 时间线输入): void => {
     state = {
       ...state,
@@ -969,12 +993,11 @@ export function 创建阅读推进测试场景(input: {
   };
 
   const deps = {
-    读取状态: () => state,
-    更新状态: updateState,
+    读取阅读状态: () => state,
+    写入阅读状态: updateState,
     推进时间线,
     transport,
-    roomKernel,
-    roomShellPatch: () => 创建房间壳补丁(roomKernel),
+    roomKernel: roomKernelPort,
     roomScroller,
     withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
       operation(state.sessionId),

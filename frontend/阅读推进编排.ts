@@ -18,12 +18,11 @@ type 房间滚动器端口 = {
 };
 
 export interface 阅读推进编排依赖 {
-  读取状态(): 聊天状态;
-  更新状态(patch: Partial<聊天状态>): void;
+  读取阅读状态(): 阅读推进状态;
+  写入阅读状态(patch: Partial<阅读推进状态>): void;
   推进时间线(input: 时间线输入): void;
   transport: 前端传输端口;
   roomKernel: 房间内核端口;
-  roomShellPatch(): Partial<聊天状态>;
   roomScroller: 房间滚动器端口;
   withSessionRefreshOnInvalid<T>(operation: (sessionId: string) => Promise<T>): Promise<T>;
   等待壳渲染完成(): Promise<void>;
@@ -49,16 +48,34 @@ export interface 阅读推进编排端口 {
  * 它不直接做 DOM 查询，也不自己掌握房间恢复语义；
  * DOM 可见性和补偿都通过滚动器读取/执行，恢复链则通过依赖注入复用。
  */
+type 阅读推进状态 = Pick<
+  聊天状态,
+  | "roomId"
+  | "sessionId"
+  | "latestEventPosition"
+  | "viewportMode"
+  | "candidateReadAnchorPosition"
+  | "messages"
+  | "hasMoreBefore"
+  | "historyLoading"
+  | "historyErrorCode"
+  | "lastReadEventPosition"
+  | "firstUnreadEventPosition"
+  | "initialUnreadSettled"
+  | "scrollPhase"
+  | "pendingReadAnchorPosition"
+>;
+
 export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读推进编排端口 {
   let readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let followLatestReadSampleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function 读取状态(): 聊天状态 {
-    return deps.读取状态();
+  function 读取阅读状态(): 阅读推进状态 {
+    return deps.读取阅读状态();
   }
 
-  function 更新状态(patch: Partial<聊天状态>): void {
-    deps.更新状态(patch);
+  function 写入阅读状态(patch: Partial<阅读推进状态>): void {
+    deps.写入阅读状态(patch);
   }
 
   function 推进时间线(input: 时间线输入): void {
@@ -87,7 +104,6 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       candidateReadAnchorPosition: nextPosition,
       isNearBottom: deps.roomScroller.读取当前是否接近底部(),
     });
-    更新状态(deps.roomShellPatch());
     promoteCandidateReadAnchorToPending();
   }
 
@@ -97,7 +113,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
    * - 只有当前房间已经处于稳定阅读阶段，才允许它进入真正的提交队列。
    */
   function promoteCandidateReadAnchorToPending(): void {
-    const state = 读取状态();
+    const state = 读取阅读状态();
     if (!state.roomId || !state.initialUnreadSettled) {
       return;
     }
@@ -114,7 +130,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     if (candidatePosition <= floor) {
       return;
     }
-    更新状态({
+    写入阅读状态({
       pendingReadAnchorPosition: candidatePosition,
     });
     if (readAnchorFlushTimer !== null) {
@@ -127,18 +143,18 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   }
 
   async function flushReadAnchorUpdate(): Promise<void> {
-    const state = 读取状态();
+    const state = 读取阅读状态();
     const nextPosition = state.pendingReadAnchorPosition;
     if (!state.roomId || nextPosition === null) {
       return;
     }
     if (nextPosition <= (state.lastReadEventPosition ?? 0)) {
-      更新状态({ pendingReadAnchorPosition: null });
+      写入阅读状态({ pendingReadAnchorPosition: null });
       return;
     }
     try {
       await deps.transport.updateRoomReadAnchor(state.roomId, state.sessionId, nextPosition);
-      更新状态({
+      写入阅读状态({
         lastReadEventPosition: nextPosition,
         pendingReadAnchorPosition: null,
         firstUnreadEventPosition:
@@ -148,7 +164,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       });
     } catch {
       // 阅读推进失败不应破坏当前房间内容；丢掉这次 pending，等待后续滚动再重试即可。
-      更新状态({ pendingReadAnchorPosition: null });
+      写入阅读状态({ pendingReadAnchorPosition: null });
     }
   }
 
@@ -158,15 +174,14 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
    * “当前房间已经从恢复阶段进入了可解释阅读语义的稳定状态。”
    */
   function 接收首屏稳定完成(mode: 聊天状态["viewportMode"]): void {
-    if (读取状态().initialUnreadSettled) {
+    if (读取阅读状态().initialUnreadSettled) {
       return;
     }
     deps.roomKernel.send({
       type: "INITIAL_SETTLE_COMPLETED",
       mode,
     });
-    更新状态({
-      ...deps.roomShellPatch(),
+    写入阅读状态({
       initialUnreadSettled: true,
       scrollPhase: "idle",
     });
@@ -179,7 +194,6 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       candidateReadAnchorPosition: null,
       isNearBottom: deps.roomScroller.读取当前是否接近底部(),
     });
-    更新状态(deps.roomShellPatch());
   }
 
   /**
@@ -189,7 +203,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
    * - 与 snapshot / realtime 共用同一套合流逻辑，避免重复和乱序。
    */
   async function 请求加载更早历史(): Promise<void> {
-    const state = 读取状态();
+    const state = 读取阅读状态();
     if (!state.roomId || state.historyLoading || !state.hasMoreBefore) {
       return;
     }
@@ -200,7 +214,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     }
     const 补偿上下文 = deps.roomScroller.读取历史补偿上下文();
 
-    更新状态({
+    写入阅读状态({
       historyLoading: true,
       historyErrorCode: "",
     });
@@ -213,13 +227,13 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
         type: "HISTORY",
         messages: page.messages,
       });
-      更新状态({
+      写入阅读状态({
         historyLoading: false,
         // 历史分页接口当前还只返回这一页消息本身：
         // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。
         hasMoreBefore: page.messages.length > 0,
         historyErrorCode: "",
-        scrollPhase: page.messages.length > 0 ? "compensating_history" : 读取状态().scrollPhase,
+        scrollPhase: page.messages.length > 0 ? "compensating_history" : 读取阅读状态().scrollPhase,
       });
       // 历史页是往列表顶部前插的，但守视口不能再只靠 scrollHeight 差值。
       // 新策略优先围绕旧锚点恢复；只有锚点彻底找不回时，才退回高度差值兜底。
@@ -229,11 +243,13 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
         typeof (error as { code?: unknown })?.code === "string"
           ? ((error as { code: string }).code || "system_error")
           : "system_error";
-      更新状态({
+      写入阅读状态({
         historyLoading: false,
         historyErrorCode: code,
         scrollPhase:
-          读取状态().scrollPhase === "compensating_history" ? "idle" : 读取状态().scrollPhase,
+          读取阅读状态().scrollPhase === "compensating_history"
+            ? "idle"
+            : 读取阅读状态().scrollPhase,
       });
     }
   }
@@ -242,7 +258,6 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     await deps.等待壳渲染完成();
     await deps.滚到最新位置();
     deps.roomKernel.send({ type: "USER_JUMPED_TO_LATEST" });
-    更新状态(deps.roomShellPatch());
     schedulePassiveReadAnchorAfterFollowLatest();
   }
 

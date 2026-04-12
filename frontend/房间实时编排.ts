@@ -26,13 +26,25 @@ type 房间内核端口 = {
   send(event: 房间内核事件): void;
 };
 
+type 实时编排状态 = Pick<
+  聊天状态,
+  | "displayAlias"
+  | "sessionId"
+  | "roomId"
+  | "latestEventPosition"
+  | "viewportMode"
+  | "messageInput"
+  | "composerMediaDrafts"
+  | "messages"
+  | "pending"
+>;
+
 export interface 房间实时编排依赖 {
-  读取状态(): 聊天状态;
-  更新状态(patch: Partial<聊天状态>): void;
+  读取实时状态(): 实时编排状态;
+  写入实时状态(patch: Partial<实时编排状态>): void;
   推进时间线(input: 时间线输入): void;
   transport: 前端传输端口;
   roomKernel: 房间内核端口;
-  roomShellPatch(): Partial<聊天状态>;
   上报Transport异常(error: Transport异常): Promise<void>;
   处理恢复失败(error: unknown, keepRoomVisible: boolean): void;
   跟随最新消息追加后刷新视口(): Promise<void>;
@@ -58,12 +70,12 @@ export interface 房间实时编排端口 {
 export function 创建房间实时编排(deps: 房间实时编排依赖): 房间实时编排端口 {
   let realtimeSocket: Socket | null = null;
 
-  function 读取状态(): 聊天状态 {
-    return deps.读取状态();
+  function 读取实时状态(): 实时编排状态 {
+    return deps.读取实时状态();
   }
 
-  function 更新状态(patch: Partial<聊天状态>): void {
-    deps.更新状态(patch);
+  function 写入实时状态(patch: Partial<实时编排状态>): void {
+    deps.写入实时状态(patch);
   }
 
   function 推进时间线(input: 时间线输入): void {
@@ -93,7 +105,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   }
 
   function applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
-    const shouldFollowLatest = 读取状态().viewportMode === "贴底跟随";
+    const shouldFollowLatest = 读取实时状态().viewportMode === "贴底跟随";
     deps.roomKernel.send({
       type: "AUTHORITATIVE_EVENTS_ARRIVED",
       latestEventPosition,
@@ -102,8 +114,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       type: "REALTIME",
       events,
     });
-    更新状态({
-      ...deps.roomShellPatch(),
+    写入实时状态({
       pending: false,
     });
     deps.接收权威事件后副作用?.(events);
@@ -127,7 +138,6 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
         type: "SUBSCRIPTION_ESTABLISHED",
         latestEventPosition: control.latest_event_position,
       });
-      更新状态(deps.roomShellPatch());
       return;
     }
 
@@ -143,15 +153,15 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       return;
     }
 
-    if (!读取状态().roomId) {
-      更新状态({ pending: false });
+    if (!读取实时状态().roomId) {
+      写入实时状态({ pending: false });
       return;
     }
 
     if (control.code === "invalid_session") {
       await deps.上报Transport异常({
         kind: "invalid_session",
-        roomId: 读取状态().roomId,
+        roomId: 读取实时状态().roomId,
         keepRoomVisible: true,
       });
       return;
@@ -166,8 +176,8 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     }
     const socket = deps.transport.createSocket(sessionId);
     socket.on("connect", () => {
-      if (读取状态().roomId) {
-        subscribeRoom(读取状态().latestEventPosition);
+      if (读取实时状态().roomId) {
+        subscribeRoom(读取实时状态().latestEventPosition);
       }
     });
     socket.on("connect_error", (error: unknown) => {
@@ -191,18 +201,18 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   }
 
   function subscribeRoom(from: number): void {
-    if (!读取状态().roomId || !realtimeSocket) {
+    if (!读取实时状态().roomId || !realtimeSocket) {
       return;
     }
     deps.roomKernel.send({ type: "SUBSCRIPTION_STARTED" });
     realtimeSocket.emit("subscribe_room_stream", {
-      room_id: 读取状态().roomId,
+      room_id: 读取实时状态().roomId,
       from,
     });
   }
 
   async function sendMessage(): Promise<void> {
-    const state = 读取状态();
+    const state = 读取实时状态();
     if (!state.roomId || !realtimeSocket) {
       return;
     }
@@ -231,7 +241,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
         }),
       });
     }
-    更新状态({
+    写入实时状态({
       messageInput: "",
       composerMediaDrafts: [],
       pending: true,

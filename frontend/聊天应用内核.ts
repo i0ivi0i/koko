@@ -1,8 +1,25 @@
-import { 创建房间内核, 派生房间壳外观, type 房间壳外观 } from "./房间内核.js";
-import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房间恢复编排.js";
-import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
-import { 创建阅读推进编排, type 阅读推进编排端口 } from "./阅读推进编排.js";
-import { 房间滚动器 } from "./房间滚动器.js";
+import {
+  创建房间内核,
+  派生房间壳外观,
+  type 房间内核事件,
+  type 房间壳外观,
+} from "./房间内核.js";
+import {
+  创建房间恢复编排,
+  type 房间恢复编排依赖,
+  type 房间恢复编排端口,
+} from "./房间恢复编排.js";
+import {
+  创建房间实时编排,
+  type 房间实时编排依赖,
+  type 房间实时编排端口,
+} from "./房间实时编排.js";
+import {
+  创建阅读推进编排,
+  type 阅读推进编排依赖,
+  type 阅读推进编排端口,
+} from "./阅读推进编排.js";
+import { 房间滚动器, type 房间滚动器依赖 } from "./房间滚动器.js";
 import { 推进房间时间线, type 时间线输入 } from "./房间时间线.js";
 import {
   获取默认浏览器应用平台,
@@ -11,7 +28,19 @@ import {
 import type { 消息事件 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
 import type { 前端存储端口 } from "./存储.js";
-import { 初始聊天状态, type 聊天状态 } from "./状态.js";
+import {
+  初始聊天会话状态,
+  初始聊天时间线状态,
+  初始聊天流程状态,
+  初始聊天视口状态,
+  初始聊天输入状态,
+  type 聊天会话状态,
+  type 聊天时间线状态,
+  type 聊天流程状态,
+  type 聊天状态,
+  type 聊天视口状态,
+  type 聊天输入状态,
+} from "./状态.js";
 import {
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
@@ -47,6 +76,10 @@ type 房间壳补丁 = Pick<
   | "hasUnreadNewerMessages"
   | "recoveryState"
   | "lastRecoveryErrorCode"
+>;
+
+type 聊天本地状态补丁 = Partial<
+  聊天会话状态 & 聊天输入状态 & 聊天时间线状态 & 聊天视口状态 & 聊天流程状态
 >;
 
 export type 聊天应用命令 =
@@ -118,11 +151,21 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private readonly roomKernel = 创建房间内核();
 
   /**
-   * 这里继续只保存聊天主链自己的业务快照。
-   * 媒体播放结果不再混进同一个对象里，而是由媒体 owner 单独持有；
-   * `snapshot()` 再把两者投影成壳层可读的组合快照。
+   * 聊天主链本地状态现在按职责拆成五个 slice：
+   * - 会话：浏览器端恢复锚点；
+   * - 输入：草稿与输入框；
+   * - 时间线：消息数组与历史分页；
+   * - 视口：已读与滚动协作；
+   * - 流程：短生命周期忙闲位。
+   *
+   * room/session/viewportMode 这类房间壳外观继续只从 room kernel 派生，
+   * 不再复制进一个共享 `chatState` 里让多个 owner 共写。
    */
-  private chatState: Omit<聊天应用快照, "media">;
+  private 会话状态: 聊天会话状态;
+  private 输入状态: 聊天输入状态;
+  private 时间线状态: 聊天时间线状态;
+  private 视口状态: 聊天视口状态;
+  private 流程状态: 聊天流程状态;
 
   /**
    * transport / storage 现在都属于聊天内核依赖。
@@ -153,13 +196,14 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.platform = deps.platform ?? 获取默认浏览器应用平台();
     this.transport = deps.transport ?? this.platform.transport.transport();
     this.storage = deps.storage ?? this.platform.storage.壳层记忆();
-    this.chatState = {
-      ...初始聊天状态,
-      ...this.回填房间壳补丁(),
-    };
+    this.会话状态 = { ...初始聊天会话状态 };
+    this.输入状态 = { ...初始聊天输入状态 };
+    this.时间线状态 = { ...初始聊天时间线状态 };
+    this.视口状态 = { ...初始聊天视口状态 };
+    this.流程状态 = { ...初始聊天流程状态 };
     this.roomScroller = new 房间滚动器(deps.host, {
-      读取状态: () => this.chatState,
-      更新状态: (patch) => this.更新快照(patch),
+      读取状态: () => this.读取滚动观察状态(),
+      更新状态: (patch) => this.写入滚动观察状态(patch),
       查询滚动容器: () => deps.查询滚动容器(),
       查询消息节点: () => deps.查询消息节点(),
       请求更早历史: () => {
@@ -174,11 +218,11 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     });
     this.媒体编排 = 创建聊天媒体编排({
       transport: () => this.transport,
-      读取会话编号: () => this.chatState.sessionId,
-      读取消息: () => this.chatState.messages,
-      读取草稿: () => this.chatState.composerMediaDrafts,
+      读取会话编号: () => this.回填房间壳补丁().sessionId,
+      读取消息: () => this.时间线状态.messages,
+      读取草稿: () => this.输入状态.composerMediaDrafts,
       写入草稿列表: (nextDrafts) => {
-        this.更新快照({ composerMediaDrafts: nextDrafts });
+        this.应用本地状态补丁({ composerMediaDrafts: nextDrafts });
       },
       请求重渲染: () => {
         this.deps.host.requestUpdate();
@@ -197,7 +241,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   snapshot(): 聊天应用快照 {
     return {
-      ...this.chatState,
+      ...this.读取聊天基础快照(),
       media: this.媒体编排.snapshot(),
     };
   }
@@ -208,10 +252,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         await this.恢复编排端口.bootstrap();
         return;
       case "ROOM_CODE_INPUT_CHANGED":
-        this.更新快照({ roomCodeInput: command.value });
+        this.应用本地状态补丁({ roomCodeInput: command.value });
         return;
       case "MESSAGE_INPUT_CHANGED":
-        this.更新快照({ messageInput: command.value });
+        this.应用本地状态补丁({ messageInput: command.value });
         return;
       case "JOIN_ROOM_REQUESTED":
         if (typeof command.roomCode === "string") {
@@ -219,7 +263,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           if (!trimmedRoomCode) {
             return;
           }
-          this.更新快照({ roomCodeInput: trimmedRoomCode });
+          this.应用本地状态补丁({ roomCodeInput: trimmedRoomCode });
         }
         await this.恢复编排端口.joinRoom();
         return;
@@ -228,7 +272,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         if (!trimmedRoomCode) {
           return;
         }
-        this.更新快照({ roomCodeInput: trimmedRoomCode });
+        this.应用本地状态补丁({ roomCodeInput: trimmedRoomCode });
         await this.恢复编排端口.joinRoom();
         return;
       }
@@ -236,7 +280,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.leaveCurrentRoomView();
         return;
       case "SEND_MESSAGE_REQUESTED": {
-        const currentDrafts = this.chatState.composerMediaDrafts;
+        const currentDrafts = this.输入状态.composerMediaDrafts;
         const hasReadyDraft = currentDrafts.some((draft) => draft.status === "ready");
         const hasBlockingDraft = currentDrafts.some((draft) => draft.status !== "ready");
         await this.实时编排端口.sendMessage();
@@ -364,7 +408,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    */
   注入快照补丁供测试(patch: Partial<聊天应用快照>): void {
     const { media: _忽略媒体快照, ...statePatch } = patch;
-    this.更新快照(statePatch);
+    this.应用房间壳测试补丁(statePatch);
+    this.应用本地状态补丁(statePatch);
   }
 
   读取房间滚动器供测试(): 房间滚动器 {
@@ -390,13 +435,14 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private get 恢复编排端口(): 房间恢复编排端口 {
     if (!this._恢复编排端口) {
       this._恢复编排端口 = 创建房间恢复编排({
-        读取状态: () => this.chatState,
-        更新状态: (patch) => this.更新快照(patch),
+        读取恢复状态: () => this.读取恢复编排状态(),
+        写入恢复状态: (patch) => this.写入恢复编排状态(patch),
         推进时间线: (input) => this.推进时间线(input),
         transport: this.transport,
         storage: this.storage,
-        roomKernel: this.roomKernel,
-        roomShellPatch: () => this.回填房间壳补丁(),
+        roomKernel: {
+          send: (event) => this.发送房间事件(event),
+        },
         roomScroller: this.roomScroller,
         ensureRealtimeSocket: (sessionId) => this.实时编排端口.ensureRealtimeSocket(sessionId),
         subscribeRoom: (from) => this.实时编排端口.subscribeRoom(from),
@@ -418,12 +464,13 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private get 实时编排端口(): 房间实时编排端口 {
     if (!this._实时编排端口) {
       this._实时编排端口 = 创建房间实时编排({
-        读取状态: () => this.chatState,
-        更新状态: (patch) => this.更新快照(patch),
+        读取实时状态: () => this.读取实时编排状态(),
+        写入实时状态: (patch) => this.写入实时编排状态(patch),
         推进时间线: (input) => this.推进时间线(input),
         transport: this.transport,
-        roomKernel: this.roomKernel,
-        roomShellPatch: () => this.回填房间壳补丁(),
+        roomKernel: {
+          send: (event) => this.发送房间事件(event),
+        },
         上报Transport异常: async (error) => {
           await this.恢复编排端口.接收Transport异常(error);
         },
@@ -444,12 +491,13 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private get 阅读推进编排端口(): 阅读推进编排端口 {
     if (!this._阅读推进编排端口) {
       this._阅读推进编排端口 = 创建阅读推进编排({
-        读取状态: () => this.chatState,
-        更新状态: (patch) => this.更新快照(patch),
+        读取阅读状态: () => this.读取阅读推进状态(),
+        写入阅读状态: (patch) => this.写入阅读状态(patch),
         推进时间线: (input) => this.推进时间线(input),
         transport: this.transport,
-        roomKernel: this.roomKernel,
-        roomShellPatch: () => this.回填房间壳补丁(),
+        roomKernel: {
+          send: (event) => this.发送房间事件(event),
+        },
         roomScroller: this.roomScroller,
         withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
           this.恢复编排端口.withSessionRefreshOnInvalid(operation),
@@ -467,21 +515,246 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 恢复 / realtime / 历史分页只能上报事实，不能各自在外面拼 messages 数组。
    */
   private 推进时间线(input: 时间线输入): void {
-    this.更新快照({
-      messages: 推进房间时间线(this.chatState.messages, input),
+    this.应用本地状态补丁({
+      messages: 推进房间时间线(this.时间线状态.messages, input),
     });
   }
 
-  private 更新快照(patch: Partial<Omit<聊天应用快照, "media">>): void {
-    this.chatState = { ...this.chatState, ...patch };
+  /**
+   * 本地 slice 写入口只负责聊天内核自己拥有的状态。
+   * room kernel 派生字段不会在这里落地，避免重新长回“共享大状态 + 多处 patch”。
+   */
+  private 应用本地状态补丁(patch: 聊天本地状态补丁): boolean {
+    let 写入了本地补丁 = false;
+    let 消息列表发生变化 = false;
+    const 会话补丁: Partial<聊天会话状态> = {};
+    const 输入补丁: Partial<聊天输入状态> = {};
+    const 时间线补丁: Partial<聊天时间线状态> = {};
+    const 视口补丁: Partial<聊天视口状态> = {};
+    const 流程补丁: Partial<聊天流程状态> = {};
+
+    if (Object.hasOwn(patch, "deviceAnonymousToken")) {
+      会话补丁.deviceAnonymousToken = patch.deviceAnonymousToken ?? "";
+    }
+    if (Object.hasOwn(patch, "anonymousIdentityId")) {
+      会话补丁.anonymousIdentityId = patch.anonymousIdentityId ?? "";
+    }
+    if (Object.hasOwn(patch, "homeSessionItems")) {
+      会话补丁.homeSessionItems = patch.homeSessionItems ?? [];
+    }
+    if (Object.hasOwn(patch, "roomCodeInput")) {
+      输入补丁.roomCodeInput = patch.roomCodeInput ?? "";
+    }
+    if (Object.hasOwn(patch, "messageInput")) {
+      输入补丁.messageInput = patch.messageInput ?? "";
+    }
+    if (Object.hasOwn(patch, "composerMediaDrafts")) {
+      输入补丁.composerMediaDrafts = patch.composerMediaDrafts ?? [];
+    }
     if (Object.hasOwn(patch, "messages")) {
+      时间线补丁.messages = patch.messages ?? [];
+      消息列表发生变化 = true;
+    }
+    if (Object.hasOwn(patch, "hasMoreBefore")) {
+      时间线补丁.hasMoreBefore = patch.hasMoreBefore ?? false;
+    }
+    if (Object.hasOwn(patch, "historyLoading")) {
+      时间线补丁.historyLoading = patch.historyLoading ?? false;
+    }
+    if (Object.hasOwn(patch, "historyErrorCode")) {
+      时间线补丁.historyErrorCode = patch.historyErrorCode ?? "";
+    }
+    if (Object.hasOwn(patch, "lastReadEventPosition")) {
+      视口补丁.lastReadEventPosition = patch.lastReadEventPosition ?? null;
+    }
+    if (Object.hasOwn(patch, "firstUnreadEventPosition")) {
+      视口补丁.firstUnreadEventPosition = patch.firstUnreadEventPosition ?? null;
+    }
+    if (Object.hasOwn(patch, "initialUnreadSettled")) {
+      视口补丁.initialUnreadSettled = patch.initialUnreadSettled ?? false;
+    }
+    if (Object.hasOwn(patch, "scrollPhase")) {
+      视口补丁.scrollPhase = patch.scrollPhase ?? "idle";
+    }
+    if (Object.hasOwn(patch, "hasUserScrollIntent")) {
+      视口补丁.hasUserScrollIntent = patch.hasUserScrollIntent ?? false;
+    }
+    if (Object.hasOwn(patch, "pendingReadAnchorPosition")) {
+      视口补丁.pendingReadAnchorPosition = patch.pendingReadAnchorPosition ?? null;
+    }
+    if (Object.hasOwn(patch, "historyLoadThrottleUntil")) {
+      视口补丁.historyLoadThrottleUntil = patch.historyLoadThrottleUntil ?? 0;
+    }
+    if (Object.hasOwn(patch, "pending")) {
+      流程补丁.pending = patch.pending ?? false;
+    }
+
+    if (Object.keys(会话补丁).length > 0) {
+      this.会话状态 = { ...this.会话状态, ...会话补丁 };
+      写入了本地补丁 = true;
+    }
+    if (Object.keys(输入补丁).length > 0) {
+      this.输入状态 = { ...this.输入状态, ...输入补丁 };
+      写入了本地补丁 = true;
+    }
+    if (Object.keys(时间线补丁).length > 0) {
+      this.时间线状态 = { ...this.时间线状态, ...时间线补丁 };
+      写入了本地补丁 = true;
+    }
+    if (Object.keys(视口补丁).length > 0) {
+      this.视口状态 = { ...this.视口状态, ...视口补丁 };
+      写入了本地补丁 = true;
+    }
+    if (Object.keys(流程补丁).length > 0) {
+      this.流程状态 = { ...this.流程状态, ...流程补丁 };
+      写入了本地补丁 = true;
+    }
+
+    if (!写入了本地补丁) {
+      return false;
+    }
+    if (消息列表发生变化) {
       this.媒体编排.同步消息附件播放结果();
     }
     this.deps.host.requestUpdate();
+    return true;
+  }
+
+  private 读取聊天基础快照(): Omit<聊天应用快照, "media"> {
+    return {
+      ...this.会话状态,
+      ...this.输入状态,
+      ...this.时间线状态,
+      ...this.视口状态,
+      ...this.流程状态,
+      ...this.回填房间壳补丁(),
+    };
+  }
+
+  private 读取滚动观察状态(): ReturnType<房间滚动器依赖["读取状态"]> {
+    const 房间壳 = this.回填房间壳补丁();
+    return {
+      roomId: 房间壳.roomId,
+      firstUnreadEventPosition: this.视口状态.firstUnreadEventPosition,
+      initialUnreadSettled: this.视口状态.initialUnreadSettled,
+      scrollPhase: this.视口状态.scrollPhase,
+      historyLoading: this.时间线状态.historyLoading,
+      hasMoreBefore: this.时间线状态.hasMoreBefore,
+      hasUserScrollIntent: this.视口状态.hasUserScrollIntent,
+      historyLoadThrottleUntil: this.视口状态.historyLoadThrottleUntil,
+    };
+  }
+
+  private 写入滚动观察状态(patch: Parameters<房间滚动器依赖["更新状态"]>[0]): void {
+    this.应用本地状态补丁(patch);
+  }
+
+  private 读取恢复编排状态(): ReturnType<房间恢复编排依赖["读取恢复状态"]> {
+    const 房间壳 = this.回填房间壳补丁();
+    return {
+      deviceAnonymousToken: this.会话状态.deviceAnonymousToken,
+      anonymousIdentityId: this.会话状态.anonymousIdentityId,
+      displayAlias: 房间壳.displayAlias,
+      sessionId: 房间壳.sessionId,
+      roomId: 房间壳.roomId,
+      roomCodeInput: this.输入状态.roomCodeInput,
+      lastReadEventPosition: this.视口状态.lastReadEventPosition,
+      firstUnreadEventPosition: this.视口状态.firstUnreadEventPosition,
+      hasMoreBefore: this.时间线状态.hasMoreBefore,
+      initialUnreadSettled: this.视口状态.initialUnreadSettled,
+      scrollPhase: this.视口状态.scrollPhase,
+      hasUserScrollIntent: this.视口状态.hasUserScrollIntent,
+      pendingReadAnchorPosition: this.视口状态.pendingReadAnchorPosition,
+      historyLoadThrottleUntil: this.视口状态.historyLoadThrottleUntil,
+      pending: this.流程状态.pending,
+      historyLoading: this.时间线状态.historyLoading,
+      historyErrorCode: this.时间线状态.historyErrorCode,
+      homeSessionItems: this.会话状态.homeSessionItems,
+    };
+  }
+
+  private 写入恢复编排状态(
+    patch: Parameters<房间恢复编排依赖["写入恢复状态"]>[0]
+  ): void {
+    this.应用本地状态补丁(patch);
+  }
+
+  private 读取实时编排状态(): ReturnType<房间实时编排依赖["读取实时状态"]> {
+    const 房间壳 = this.回填房间壳补丁();
+    return {
+      displayAlias: 房间壳.displayAlias,
+      sessionId: 房间壳.sessionId,
+      roomId: 房间壳.roomId,
+      latestEventPosition: 房间壳.latestEventPosition,
+      viewportMode: 房间壳.viewportMode,
+      messageInput: this.输入状态.messageInput,
+      composerMediaDrafts: this.输入状态.composerMediaDrafts,
+      messages: this.时间线状态.messages,
+      pending: this.流程状态.pending,
+    };
+  }
+
+  private 写入实时编排状态(
+    patch: Parameters<房间实时编排依赖["写入实时状态"]>[0]
+  ): void {
+    this.应用本地状态补丁(patch);
+  }
+
+  private 读取阅读推进状态(): ReturnType<阅读推进编排依赖["读取阅读状态"]> {
+    const 房间壳 = this.回填房间壳补丁();
+    return {
+      roomId: 房间壳.roomId,
+      sessionId: 房间壳.sessionId,
+      latestEventPosition: 房间壳.latestEventPosition,
+      viewportMode: 房间壳.viewportMode,
+      candidateReadAnchorPosition: 房间壳.candidateReadAnchorPosition,
+      messages: this.时间线状态.messages,
+      hasMoreBefore: this.时间线状态.hasMoreBefore,
+      historyLoading: this.时间线状态.historyLoading,
+      historyErrorCode: this.时间线状态.historyErrorCode,
+      lastReadEventPosition: this.视口状态.lastReadEventPosition,
+      firstUnreadEventPosition: this.视口状态.firstUnreadEventPosition,
+      initialUnreadSettled: this.视口状态.initialUnreadSettled,
+      scrollPhase: this.视口状态.scrollPhase,
+      pendingReadAnchorPosition: this.视口状态.pendingReadAnchorPosition,
+    };
+  }
+
+  private 写入阅读状态(patch: Parameters<阅读推进编排依赖["写入阅读状态"]>[0]): void {
+    this.应用本地状态补丁(patch);
+  }
+
+  /**
+   * 现存集成测试里还需要少量“把房间壳状态拨到指定位置”的能力。
+   * 这里不再整包覆盖快照，而是尽量翻译成 room kernel 能理解的真实输入。
+   */
+  private 应用房间壳测试补丁(patch: Partial<Omit<聊天应用快照, "media">>): boolean {
+    let 写入了房间壳测试补丁 = false;
+    if (typeof patch.latestEventPosition === "number") {
+      this.发送房间事件({
+        type: "LATEST_EVENT_ADVANCED",
+        latestEventPosition: patch.latestEventPosition,
+      });
+      写入了房间壳测试补丁 = true;
+    }
+    if (patch.viewportMode === "贴底跟随") {
+      this.发送房间事件({ type: "USER_JUMPED_TO_LATEST" });
+      写入了房间壳测试补丁 = true;
+    }
+    return 写入了房间壳测试补丁;
   }
 
   private 读取房间壳外观(): 房间壳外观 {
     return 派生房间壳外观(this.roomKernel.getSnapshot());
+  }
+
+  /**
+   * 房间壳派生字段全部来自 room kernel。
+   * 因此只要发了房间事件，就必须顺手请求一次壳层重渲染，不能再指望别的本地 patch 帮它“顺带刷新”。
+   */
+  private 发送房间事件(event: 房间内核事件): void {
+    this.roomKernel.send(event);
+    this.deps.host.requestUpdate();
   }
 
   private 回填房间壳补丁(): 房间壳补丁 {
@@ -519,7 +792,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.清空();
-    this.更新快照({
+    this.应用本地状态补丁({
       messageInput: "",
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,
@@ -528,9 +801,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       scrollPhase: "idle",
       hasUserScrollIntent: false,
       pendingReadAnchorPosition: null,
-      viewportMode: "离底浏览",
-      candidateReadAnchorPosition: null,
-      hasUnreadNewerMessages: false,
       historyLoadThrottleUntil: 0,
       messages: [],
       pending: false,
@@ -540,9 +810,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   private leaveCurrentRoomView(): void {
-    this.roomKernel.send({ type: "SOFT_LEAVE_REQUESTED" });
+    this.发送房间事件({ type: "SOFT_LEAVE_REQUESTED" });
     this.exitCurrentRoomView({ keepRoomCodeCache: true });
-    this.更新快照(this.回填房间壳补丁());
   }
 
   /**
@@ -552,7 +821,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * - 真正执行浏览器 Notification / Badge 的细节继续留在平台层。
    */
   private 处理权威新消息平台副作用(events: 消息事件[]): void {
-    const otherMessages = events.filter((event) => event.sender_session_id !== this.chatState.sessionId);
+    const 房间壳 = this.回填房间壳补丁();
+    const otherMessages = events.filter((event) => event.sender_session_id !== 房间壳.sessionId);
     if (otherMessages.length === 0) {
       return;
     }
