@@ -60,6 +60,7 @@ export interface 房间滚动器依赖 {
 export class 房间滚动器 implements ReactiveController {
   private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly 活跃程序滚动来源 = new Set<程序滚动来源>();
+  private readonly 待吸收程序滚动尾波来源 = new Set<程序滚动来源>();
 
   constructor(
     private readonly host: 房间滚动器宿主,
@@ -70,6 +71,8 @@ export class 房间滚动器 implements ReactiveController {
 
   hostDisconnected(): void {
     this.取消挂起滚动副作用();
+    this.活跃程序滚动来源.clear();
+    this.待吸收程序滚动尾波来源.clear();
   }
 
   安排首屏定位(): void {
@@ -79,6 +82,8 @@ export class 房间滚动器 implements ReactiveController {
   }
 
   标记用户滚动意图(): void {
+    // 媒体查看器这类覆盖层关闭后，浏览器可能补发恢复滚动事件；只有新的用户滚动意图才能结束这段尾波。
+    this.待吸收程序滚动尾波来源.clear();
     if (this.deps.读取状态().hasUserScrollIntent) {
       return;
     }
@@ -99,11 +104,14 @@ export class 房间滚动器 implements ReactiveController {
    * 这期间即便浏览器抛出了 scroll，也不能再把它解释成聊天窗口里的用户阅读。
    */
   登记程序滚动来源(source: 程序滚动来源): void {
+    this.待吸收程序滚动尾波来源.delete(source);
     this.活跃程序滚动来源.add(source);
   }
 
   清除程序滚动来源(source: 程序滚动来源): void {
-    this.活跃程序滚动来源.delete(source);
+    if (this.活跃程序滚动来源.delete(source)) {
+      this.待吸收程序滚动尾波来源.add(source);
+    }
   }
 
   /**
@@ -193,6 +201,9 @@ export class 房间滚动器 implements ReactiveController {
       return false;
     }
     if (this.活跃程序滚动来源.size > 0) {
+      return false;
+    }
+    if (this.待吸收程序滚动尾波来源.size > 0) {
       return false;
     }
     return 状态.hasUserScrollIntent;
