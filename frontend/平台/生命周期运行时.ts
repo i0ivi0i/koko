@@ -23,6 +23,7 @@ export interface 生命周期运行时依赖 {
 
 export interface 生命周期运行时 {
   snapshot(): 生命周期快照;
+  订阅(listener: (snapshot: 生命周期快照) => void): () => void;
 }
 
 const 从文档派生可见性 = (documentTarget: 可监听文档 | undefined): 生命周期可见性 =>
@@ -44,9 +45,18 @@ export function 创建生命周期运行时(
     visibility: 从文档派生可见性(documentTarget),
     phase: 从文档派生可见性(documentTarget) === "hidden" ? "background" : "active",
   };
+  const listeners = new Set<(snapshot: 生命周期快照) => void>();
+
+  const 发布快照 = (): void => {
+    const snapshot = { ...current };
+    for (const listener of listeners) {
+      listener(snapshot);
+    }
+  };
 
   const 更新快照 = (patch: Partial<生命周期快照>): void => {
     current = { ...current, ...patch };
+    发布快照();
   };
 
   documentTarget?.addEventListener("visibilitychange", () => {
@@ -88,6 +98,13 @@ export function 创建生命周期运行时(
   return {
     snapshot(): 生命周期快照 {
       return { ...current };
+    },
+
+    订阅(listener: (snapshot: 生命周期快照) => void): () => void {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }

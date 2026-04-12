@@ -4,9 +4,13 @@ import { 创建房间实时编排, type 房间实时编排端口 } from "./房�
 import { 创建阅读推进编排, type 阅读推进编排端口 } from "./阅读推进编排.js";
 import { 房间滚动器 } from "./房间滚动器.js";
 import { 推进房间时间线, type 时间线输入 } from "./房间时间线.js";
-import { 获取默认浏览器应用平台 } from "./平台/index.js";
+import {
+  获取默认浏览器应用平台,
+  type 浏览器应用平台,
+} from "./平台/index.js";
+import type { 消息事件 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
-import { 创建浏览器存储, type 前端存储端口 } from "./存储.js";
+import type { 前端存储端口 } from "./存储.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
 import {
   写入媒体草稿 as 写入媒体草稿状态,
@@ -59,6 +63,7 @@ export interface 聊天应用内核宿主 {
 
 export interface 聊天应用内核依赖 {
   host: 聊天应用内核宿主;
+  platform?: 浏览器应用平台;
   transport?: 前端传输端口;
   storage?: 前端存储端口;
   查询滚动容器(): HTMLElement | null;
@@ -91,6 +96,7 @@ export interface 聊天应用内核端口 {
 
 class 聊天应用内核 implements 聊天应用内核端口 {
   private readonly deps: 聊天应用内核依赖;
+  private readonly platform: 浏览器应用平台;
 
   /**
    * 房间阶段机仍然是聊天内核里唯一的房间编排真相。
@@ -131,8 +137,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   constructor(deps: 聊天应用内核依赖) {
     this.deps = deps;
-    this.transport = deps.transport ?? 获取默认浏览器应用平台().transport.transport();
-    this.storage = deps.storage ?? 创建浏览器存储();
+    this.platform = deps.platform ?? 获取默认浏览器应用平台();
+    this.transport = deps.transport ?? this.platform.transport.transport();
+    this.storage = deps.storage ?? this.platform.storage.壳层记忆();
     this.chatState = {
       ...初始聊天状态,
       ...this.回填房间壳补丁(),
@@ -341,6 +348,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         跟随最新消息追加后刷新视口: async () => {
           await this.阅读推进编排端口.接收Realtime追加后跟随();
         },
+        接收权威事件后副作用: (events) => {
+          this.处理权威新消息平台副作用(events);
+        },
       });
     }
     return this._实时编排端口;
@@ -448,6 +458,41 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomKernel.send({ type: "SOFT_LEAVE_REQUESTED" });
     this.exitCurrentRoomView({ keepRoomCodeCache: true });
     this.更新快照(this.回填房间壳补丁());
+  }
+
+  /**
+   * 系统通知和 badge 仍然先由聊天内核裁决“要不要提醒”：
+   * - 只有别人的权威新消息才可能触发；
+   * - 当前上下文已经是前台主窗口时，不重复弹系统提醒；
+   * - 真正执行浏览器 Notification / Badge 的细节继续留在平台层。
+   */
+  private 处理权威新消息平台副作用(events: 消息事件[]): void {
+    const otherMessages = events.filter((event) => event.sender_session_id !== this.chatState.sessionId);
+    if (otherMessages.length === 0) {
+      return;
+    }
+
+    const platformSnapshot = this.platform.snapshot();
+    const 当前就在前台主窗口 =
+      platformSnapshot.lifecycle.phase === "active" &&
+      platformSnapshot.lifecycle.visibility === "visible" &&
+      platformSnapshot.multiContext.isPrimaryContext;
+    if (当前就在前台主窗口) {
+      return;
+    }
+
+    const 最新一条他人消息 = otherMessages.at(-1)!;
+    void this.platform.dispatch({
+      type: "SET_BADGE",
+      count: platformSnapshot.notification.badgeCount + otherMessages.length,
+    });
+    void this.platform.dispatch({
+      type: "SHOW_NOTIFICATION",
+      id: 最新一条他人消息.message_id,
+      title: 最新一条他人消息.sender_display_alias,
+      body: 最新一条他人消息.text || 最新一条他人消息.body,
+      tag: 最新一条他人消息.room_id,
+    });
   }
 }
 

@@ -16,7 +16,12 @@ export function 获取默认浏览器应用平台(): 浏览器应用平台 {
   return 默认浏览器应用平台;
 }
 
-export { 创建浏览器应用平台 } from "./浏览器应用平台.js";
+export {
+  创建浏览器应用平台,
+  type 浏览器应用平台命令,
+  type 浏览器应用平台快照,
+  type 浏览器应用平台,
+} from "./浏览器应用平台.js";
 export {
   创建生命周期运行时,
   type 生命周期快照,
@@ -37,3 +42,22 @@ export {
   type 传输运行时依赖,
   type 传输运行时,
 } from "./传输运行时.js";
+export {
+  创建多上下文运行时,
+  type 多上下文运行时快照,
+  type 多上下文运行时依赖,
+  type 多上下文运行时,
+} from "./多上下文运行时.js";
+export {
+  创建通知运行时,
+  type 通知运行时快照,
+  type 通知运行时依赖,
+  type 通知运行时,
+  type 显示通知输入,
+} from "./通知运行时.js";
+export {
+  创建离线运行时,
+  type 离线运行时快照,
+  type 离线运行时依赖,
+  type 离线运行时,
+} from "./离线运行时.js";

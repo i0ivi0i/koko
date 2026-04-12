@@ -1,5 +1,6 @@
 import {
   创建生命周期运行时,
+  type 生命周期快照,
   type 生命周期运行时,
 } from "./生命周期运行时.js";
 import {
@@ -13,21 +14,62 @@ import {
 import {
   创建传输运行时,
   type 传输运行时,
+  type 传输运行时快照,
 } from "./传输运行时.js";
+import {
+  创建多上下文运行时,
+  type 多上下文运行时,
+  type 多上下文运行时快照,
+} from "./多上下文运行时.js";
+import {
+  创建通知运行时,
+  type 显示通知输入,
+  type 通知运行时,
+  type 通知运行时快照,
+} from "./通知运行时.js";
+import {
+  创建离线运行时,
+  type 离线运行时,
+  type 离线运行时快照,
+} from "./离线运行时.js";
+import type { 服务工作线程快照 } from "./服务工作线程运行时.js";
 
 export interface 浏览器应用平台依赖 {
   lifecycle?: 生命周期运行时;
   storage?: 存储运行时;
   serviceWorker?: 服务工作线程运行时;
   transport?: 传输运行时;
+  multiContext?: 多上下文运行时;
+  notification?: 通知运行时;
+  offline?: 离线运行时;
 }
+
+export interface 浏览器应用平台快照 {
+  lifecycle: 生命周期快照;
+  serviceWorker: 服务工作线程快照;
+  transport: 传输运行时快照;
+  multiContext: 多上下文运行时快照;
+  notification: 通知运行时快照;
+  offline: 离线运行时快照;
+}
+
+export type 浏览器应用平台命令 =
+  | { type: "CLAIM_PRIMARY_CONTEXT" }
+  | ({ type: "SHOW_NOTIFICATION" } & 显示通知输入)
+  | { type: "SET_BADGE"; count: number }
+  | { type: "CLEAR_BADGE" };
 
 export interface 浏览器应用平台 {
   lifecycle: 生命周期运行时;
   storage: 存储运行时;
   serviceWorker: 服务工作线程运行时;
   transport: 传输运行时;
+  multiContext: 多上下文运行时;
+  notification: 通知运行时;
+  offline: 离线运行时;
   启动(): Promise<void>;
+  snapshot(): 浏览器应用平台快照;
+  dispatch(command: 浏览器应用平台命令): Promise<boolean | void>;
 }
 
 /**
@@ -47,15 +89,81 @@ export function 创建浏览器应用平台(
   const storage = deps.storage ?? 创建存储运行时();
   const serviceWorker = deps.serviceWorker ?? 创建服务工作线程运行时();
   const transport = deps.transport ?? 创建传输运行时();
+  const multiContext = deps.multiContext ?? 创建多上下文运行时();
+  const notification = deps.notification ?? 创建通知运行时();
+  const offline = deps.offline ?? 创建离线运行时();
+
+  /**
+   * 平台层自己只消费浏览器运行时事实：
+   * - 生命周期变化继续同步给 transport；
+   * - 当前标签重新回到 active 时，平台负责声明主上下文并清理 badge；
+   * - 这些都不解释聊天消息是否已读、是否已成立。
+   */
+  lifecycle.订阅((snapshot) => {
+    transport.接收生命周期变化(snapshot);
+    if (snapshot.phase === "active") {
+      multiContext.声明主上下文();
+      void notification.清除角标();
+    }
+  });
+
+  const 读取平台快照 = (): 浏览器应用平台快照 => ({
+    lifecycle: lifecycle.snapshot(),
+    serviceWorker: serviceWorker.snapshot(),
+    transport: transport.snapshot(),
+    multiContext: multiContext.snapshot(),
+    notification: notification.snapshot(),
+    offline: offline.snapshot(),
+  });
 
   return {
     lifecycle,
     storage,
     serviceWorker,
     transport,
+    multiContext,
+    notification,
+    offline,
     async 启动(): Promise<void> {
       transport.接收生命周期变化(lifecycle.snapshot());
+      multiContext.声明主上下文();
+      await offline.就绪();
       await serviceWorker.启动();
+    },
+
+    snapshot(): 浏览器应用平台快照 {
+      return 读取平台快照();
+    },
+
+    async dispatch(command: 浏览器应用平台命令): Promise<boolean | void> {
+      switch (command.type) {
+        case "CLAIM_PRIMARY_CONTEXT":
+          multiContext.声明主上下文();
+          return;
+        case "SHOW_NOTIFICATION":
+          if (multiContext.通知已展示(command.id)) {
+            return false;
+          }
+          {
+            const shown = await notification.显示通知({
+            id: command.id,
+            title: command.title,
+            ...(typeof command.body === "string" ? { body: command.body } : {}),
+            ...(typeof command.tag === "string" ? { tag: command.tag } : {}),
+          });
+            if (!shown) {
+              return false;
+            }
+            multiContext.登记通知已展示(command.id);
+            return true;
+          }
+        case "SET_BADGE":
+          await notification.设置角标(command.count);
+          return true;
+        case "CLEAR_BADGE":
+          await notification.清除角标();
+          return true;
+      }
     },
   };
 }

@@ -36,6 +36,7 @@ export interface 房间实时编排依赖 {
   上报Transport异常(error: Transport异常): Promise<void>;
   处理恢复失败(error: unknown, keepRoomVisible: boolean): void;
   跟随最新消息追加后刷新视口(): Promise<void>;
+  接收权威事件后副作用?(events: 消息事件[]): void;
 }
 
 export interface 房间实时编排端口 {
@@ -105,6 +106,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       ...deps.roomShellPatch(),
       pending: false,
     });
+    deps.接收权威事件后副作用?.(events);
     if (shouldFollowLatest) {
       void deps.跟随最新消息追加后刷新视口();
     }

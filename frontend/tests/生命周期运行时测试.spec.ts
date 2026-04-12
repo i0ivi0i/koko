@@ -49,4 +49,36 @@ describe("生命周期运行时", () => {
       phase: "page_hidden",
     });
   });
+
+  it("会把后续生命周期变化推送给订阅者，让平台层可以只消费浏览器运行时事实", () => {
+    const windowSource = new 假事件源();
+    const documentSource = Object.assign(new 假事件源(), {
+      visibilityState: "visible" as DocumentVisibilityState,
+    });
+
+    const runtime = 创建生命周期运行时({
+      window: windowSource as unknown as Window,
+      document: documentSource as unknown as Document,
+    });
+    const snapshots: Array<{ visibility: string; phase: string }> = [];
+
+    runtime.订阅((snapshot) => {
+      snapshots.push(snapshot);
+    });
+
+    documentSource.visibilityState = "hidden";
+    documentSource.触发("visibilitychange");
+    windowSource.触发("resume");
+
+    expect(snapshots).toEqual([
+      {
+        visibility: "hidden",
+        phase: "background",
+      },
+      {
+        visibility: "hidden",
+        phase: "resumed",
+      },
+    ]);
+  });
 });
