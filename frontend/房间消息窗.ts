@@ -53,6 +53,13 @@ export class 房间消息窗 extends LitElement {
     return this;
   }
 
+  private dispatchPointerScrollIntent(event: Event): void {
+    if (this.事件来自交互控件(event)) {
+      return;
+    }
+    this.dispatchScrollIntent();
+  }
+
   private dispatchScrollIntent(): void {
     this.dispatchEvent(
       new CustomEvent("room-scroll-intent", {
@@ -60,6 +67,18 @@ export class 房间消息窗 extends LitElement {
         composed: true,
       })
     );
+  }
+
+  private 事件来自交互控件(event: Event): boolean {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    // 点图片/视频/按钮是在表达“打开内容”，不是表达“我要翻历史”。
+    const interactiveTarget = target.closest(
+      "button,a,input,textarea,select,summary,[role='button']"
+    );
+    return interactiveTarget !== null && interactiveTarget !== event.currentTarget;
   }
 
   private dispatchScroll(event: Event): void {
@@ -265,8 +284,8 @@ export class 房间消息窗 extends LitElement {
       <div
         id="messageScroll"
         class="message-scroll"
-        @pointerdown=${() => this.dispatchScrollIntent()}
-        @touchstart=${() => this.dispatchScrollIntent()}
+        @pointerdown=${(event: Event) => this.dispatchPointerScrollIntent(event)}
+        @touchstart=${(event: Event) => this.dispatchPointerScrollIntent(event)}
         @wheel=${() => this.dispatchScrollIntent()}
         @scroll=${(event: Event) => this.dispatchScroll(event)}
       >

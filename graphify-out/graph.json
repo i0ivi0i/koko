@@ -97,7 +97,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 22
+      "community": 23
     },
     {
       "label": "css.d.ts",
@@ -105,7 +105,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 23
+      "community": 24
     },
     {
       "label": "media-sw.ts",
@@ -113,7 +113,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L1",
       "id": "media_sw",
-      "community": 24
+      "community": 25
     },
     {
       "label": "webtorrent.d.ts",
@@ -121,7 +121,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 25
+      "community": 26
     },
     {
       "label": "\u73af\u5883.rs",
@@ -389,7 +389,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_storage_ts",
-      "community": 26
+      "community": 27
     },
     {
       "label": "frontend/\u623f\u95f4\u5185\u6838.ts",
@@ -401,7 +401,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_kernel_ts",
-      "community": 27
+      "community": 28
     },
     {
       "label": "frontend/\u623f\u95f4\u6062\u590d\u7f16\u6392.ts",
@@ -413,7 +413,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_recovery_orchestrator_ts",
-      "community": 28
+      "community": 29
     },
     {
       "label": "constructor()",
@@ -432,18 +432,26 @@
       "community": 0
     },
     {
-      "label": "dispatchScrollIntent()",
+      "label": "dispatchPointerScrollIntent()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L56",
+      "id": "dispatchpointerscrollintent",
+      "community": 18
+    },
+    {
+      "label": "dispatchScrollIntent()",
+      "file_type": "code",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L63",
       "id": "dispatchscrollintent",
-      "community": 0
+      "community": 18
     },
     {
       "label": "dispatchScroll()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L65",
+      "source_location": "L84",
       "id": "dispatchscroll",
       "community": 0
     },
@@ -451,7 +459,7 @@
       "label": "dispatchJumpToLatest()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L75",
+      "source_location": "L94",
       "id": "dispatchjumptolatest",
       "community": 0
     },
@@ -459,7 +467,7 @@
       "label": "renderMessageBody()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L143",
+      "source_location": "L162",
       "id": "rendermessagebody",
       "community": 0
     },
@@ -467,7 +475,7 @@
       "label": "renderMessageAttachments()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L160",
+      "source_location": "L179",
       "id": "rendermessageattachments",
       "community": 0
     },
@@ -481,7 +489,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_scroller_ts",
-      "community": 29
+      "community": 30
     },
     {
       "label": "\u6587\u672c\u5e03\u5c40",
@@ -493,7 +501,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 20
+      "community": 21
     },
     {
       "label": "setMediaPlayerForTest()",
@@ -673,7 +681,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_read_progress_orchestrator_ts",
-      "community": 30
+      "community": 31
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -1005,7 +1013,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 20
+      "community": 21
     },
     {
       "label": "\u5047Socket",
@@ -1157,7 +1165,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 16
+      "community": 20
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1165,7 +1173,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 16
+      "community": 20
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1237,7 +1245,7 @@
       "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
       "source_location": "L1",
       "id": "index",
-      "community": 31
+      "community": 32
     },
     {
       "label": "\u63a8\u5bfc\u56fe\u7247Mime\u7c7b\u578b()",
@@ -1325,7 +1333,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 32
+      "community": 33
     },
     {
       "label": "main.rs",
@@ -1333,7 +1341,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 21
+      "community": 22
     },
     {
       "label": "main()",
@@ -1341,7 +1349,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 21
+      "community": 22
     },
     {
       "label": "AdminLoginBody",
@@ -1653,7 +1661,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L144",
       "id": "parse_events_query",
-      "community": 17
+      "community": 19
     },
     {
       "label": "parse_history_query()",
@@ -1661,7 +1669,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 19
+      "community": 17
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1693,7 +1701,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
@@ -1757,7 +1765,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1296",
       "id": "load_room_events",
-      "community": 17
+      "community": 19
     },
     {
       "label": "load_room_history()",
@@ -1765,7 +1773,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1424",
       "id": "load_room_history",
-      "community": 19
+      "community": 17
     },
     {
       "label": "prepare_media_upload()",
@@ -1805,7 +1813,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1974",
       "id": "complete",
-      "community": 18
+      "community": 15
     },
     {
       "label": "complete_media_upload()",
@@ -1813,7 +1821,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2015",
       "id": "complete_media_upload",
-      "community": 18
+      "community": 15
     },
     {
       "label": "load_media_locator()",
@@ -1885,7 +1893,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
@@ -2600,6 +2608,18 @@
       "source_location": "L56",
       "weight": 1.0,
       "_src": "",
+      "_tgt": "dispatchpointerscrollintent",
+      "source": "",
+      "target": "dispatchpointerscrollintent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L63",
+      "weight": 1.0,
+      "_src": "",
       "_tgt": "dispatchscrollintent",
       "source": "",
       "target": "dispatchscrollintent",
@@ -2609,7 +2629,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L65",
+      "source_location": "L84",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatchscroll",
@@ -2621,7 +2641,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L75",
+      "source_location": "L94",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatchjumptolatest",
@@ -2633,7 +2653,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L143",
+      "source_location": "L162",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rendermessagebody",
@@ -2645,7 +2665,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L160",
+      "source_location": "L179",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rendermessageattachments",
@@ -5063,6 +5083,18 @@
       "_tgt": "rendershellconsole",
       "source": "render",
       "target": "rendershellconsole",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L60",
+      "weight": 1.0,
+      "_src": "dispatchpointerscrollintent",
+      "_tgt": "dispatchscrollintent",
+      "source": "dispatchpointerscrollintent",
+      "target": "dispatchscrollintent",
       "confidence_score": 1.0
     },
     {
