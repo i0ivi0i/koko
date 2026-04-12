@@ -49,6 +49,20 @@ const 安装全屏DOM模拟 = () => {
   return { requestFullscreen, exitFullscreen, play, pause };
 };
 
+const 等待查询元素 = async <T extends Element>(
+  selector: string,
+  maxAttempts = 30
+): Promise<T | null> => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const element = document.body.querySelector<T>(selector);
+    if (element) {
+      return element;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return document.body.querySelector<T>(selector);
+};
+
 describe("媒体查看器适配器", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -59,17 +73,23 @@ describe("媒体查看器适配器", () => {
     });
   });
 
-  it("会把已解析的媒体 source 映射给 GLightbox，并从指定附件打开", () => {
-    const openAt = vi.fn();
+  it("会把图片附件映射给 PhotoSwipe 数据源，并从指定图片打开", () => {
+    const init = vi.fn();
+    const loadAndOpen = vi.fn();
     const destroy = vi.fn();
-    const createLightbox = vi.fn(() => ({
-      openAt,
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init,
+      loadAndOpen,
       destroy,
     }));
-    const viewer = 创建媒体查看器({ createLightbox });
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
+    });
 
     viewer.打开({
-      startAttachmentId: "att-video-1",
+      startAttachmentId: "att-image-2",
       items: [
         {
           kind: "image",
@@ -87,47 +107,89 @@ describe("媒体查看器适配器", () => {
           width: 1280,
           height: 720,
         },
+        {
+          kind: "image",
+          attachmentId: "att-image-2",
+          src: "http://media.local/original-image-2",
+          alt: "第二张图片附件原图",
+          width: 900,
+          height: 1200,
+        },
       ],
     });
 
-    expect(createLightbox).toHaveBeenCalledWith(
+    expect(createPhotoSwipeLightbox).toHaveBeenCalledWith(
       expect.objectContaining({
-        selector: null,
-        touchNavigation: true,
-        keyboardNavigation: true,
-        autoplayVideos: true,
-        loop: false,
-        elements: [
+        dataSource: [
           {
-            href: "http://media.local/original-image-1",
-            type: "image",
+            src: "http://media.local/original-image-1",
             alt: "图片附件原图",
-            width: "1200px",
-            height: "800px",
+            width: 1200,
+            height: 800,
           },
           {
-            href: "blob:http://media.local/webtorrent-video-1",
-            type: "video",
-            source: "local",
-            width: "1280px",
-            height: "720px",
-            poster: "http://media.local/poster-video-1",
+            src: "http://media.local/original-image-2",
+            alt: "第二张图片附件原图",
+            width: 900,
+            height: 1200,
           },
         ],
       })
     );
-    expect(openAt).toHaveBeenCalledWith(1);
+    expect(init).toHaveBeenCalled();
+    expect(loadAndOpen).toHaveBeenCalledWith(1);
     expect(destroy).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
-  it("移动触屏端点击视频会优先进入原生全屏播放，不再打开 lightbox", () => {
-    const createLightbox = vi.fn(() => ({
-      openAt: vi.fn(),
+  it("图片查看器创建失败时会释放聊天视口占用，不让滚动 owner 卡死", async () => {
+    const error = new Error("photoswipe 创建失败");
+    const onViewportCaptureStart = vi.fn();
+    const onViewportCaptureEnd = vi.fn();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox: () => {
+        throw error;
+      },
+      createVidstackVideoOverlay: vi.fn(() => ({ destroy: vi.fn() })),
+      onViewportCaptureStart,
+      onViewportCaptureEnd,
+    });
+
+    expect(() =>
+      viewer.打开({
+        startAttachmentId: "att-image-error-1",
+        items: [
+          {
+            kind: "image",
+            attachmentId: "att-image-error-1",
+            src: "http://media.local/error-image-1",
+            alt: "失败图片附件",
+            width: 1200,
+            height: 800,
+          },
+        ],
+      })
+    ).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onViewportCaptureStart).toHaveBeenCalledTimes(1);
+    expect(onViewportCaptureEnd).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith("打开媒体查看器失败", error);
+  });
+
+  it("移动触屏端点击视频会优先进入原生全屏播放，不再打开桌面查看器", () => {
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     const openNativeVideoFullscreen = vi.fn(() => true);
     const viewer = 创建媒体查看器({
-      createLightbox,
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
       isMobileViewport: () => true,
       openNativeVideoFullscreen,
     });
@@ -159,19 +221,21 @@ describe("媒体查看器适配器", () => {
         结束视口占用: expect.any(Function),
       })
     );
-    expect(createLightbox).not.toHaveBeenCalled();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
   it("默认原生全屏路径创建可见的全屏视频元素，不能把真正播放层藏成 1px", () => {
-    const openAt = vi.fn();
-    const destroy = vi.fn();
-    const createLightbox = vi.fn(() => ({
-      openAt,
-      destroy,
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
+      destroy: vi.fn(),
     }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({
-      createLightbox,
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
       isMobileViewport: () => true,
     });
 
@@ -196,18 +260,22 @@ describe("媒体查看器适配器", () => {
     expect(video?.style.opacity).not.toBe("0");
     expect(video?.style.objectFit).toBe("contain");
     expect(requestFullscreen).toHaveBeenCalled();
-    expect(createLightbox).not.toHaveBeenCalled();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
   it("竖屏视频进入移动端全屏时锁定 portrait，不再沿用浏览器默认横屏策略", async () => {
-    const createLightbox = vi.fn(() => ({
-      openAt: vi.fn(),
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     const { requestFullscreen } = 安装全屏DOM模拟();
     const { lock } = 安装方向模拟();
     const viewer = 创建媒体查看器({
-      createLightbox,
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
       isMobileViewport: () => true,
     });
 
@@ -229,18 +297,22 @@ describe("媒体查看器适配器", () => {
     expect(requestFullscreen).toHaveBeenCalled();
     expect(lock).toHaveBeenCalledWith("portrait");
     expect(document.body.querySelector("[data-video-orientation='portrait']")).not.toBeNull();
-    expect(createLightbox).not.toHaveBeenCalled();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
   it("移动端视频会用浏览器元数据纠正后端旧横屏宽高，避免竖拍视频继续锁横屏", async () => {
-    const createLightbox = vi.fn(() => ({
-      openAt: vi.fn(),
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     安装全屏DOM模拟();
     const { lock } = 安装方向模拟();
     const viewer = 创建媒体查看器({
-      createLightbox,
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
       isMobileViewport: () => true,
     });
 
@@ -268,19 +340,23 @@ describe("媒体查看器适配器", () => {
 
     expect(lock).toHaveBeenLastCalledWith("portrait");
     expect(document.body.querySelector("[data-video-orientation='portrait']")).not.toBeNull();
-    expect(createLightbox).not.toHaveBeenCalled();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
   it("手机返回键触发 popstate 时只退出媒体全屏会话，并清理方向锁回到聊天界面", async () => {
-    const createLightbox = vi.fn(() => ({
-      openAt: vi.fn(),
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     const pushState = vi.spyOn(history, "pushState");
     const { exitFullscreen, pause } = 安装全屏DOM模拟();
     const { unlock } = 安装方向模拟();
     const viewer = 创建媒体查看器({
-      createLightbox,
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
       isMobileViewport: () => true,
     });
 
@@ -312,16 +388,21 @@ describe("媒体查看器适配器", () => {
     expect(unlock).toHaveBeenCalled();
     expect(pause).toHaveBeenCalled();
     expect(document.body.querySelector("video")).toBeNull();
-    expect(createLightbox).not.toHaveBeenCalled();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
-  it("竖屏视频在 lightbox 回退路径里也使用真实视频比例，不再固定 16:9", () => {
-    const createLightbox = vi.fn(() => ({
-      openAt: vi.fn(),
+  it("桌面端视频交给 Vidstack 播放层，并保留真实宽高给播放器布局", () => {
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
+    const vidstackDestroy = vi.fn();
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vidstackDestroy }));
     const viewer = 创建媒体查看器({
-      createLightbox,
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
       isMobileViewport: () => false,
     });
 
@@ -339,14 +420,65 @@ describe("媒体查看器适配器", () => {
       ],
     });
 
-    expect(createLightbox).toHaveBeenCalledWith(
+    expect(createVidstackVideoOverlay).toHaveBeenCalledWith(
       expect.objectContaining({
-        plyr: {
-          config: expect.objectContaining({
-            ratio: "720:1280",
-          }),
-        },
+        attachmentId: "att-video-vertical-1",
+        kind: "video",
+        src: "blob:http://media.local/webtorrent-vertical-video-1",
+        width: 720,
+        height: 1280,
+      }),
+      expect.objectContaining({
+        开始视口占用: expect.any(Function),
+        结束视口占用: expect.any(Function),
       })
     );
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(vidstackDestroy).not.toHaveBeenCalled();
+  });
+
+  it("默认桌面视频路径会创建 Vidstack 播放元素，并在销毁时释放覆盖层", async () => {
+    const onViewportCaptureStart = vi.fn();
+    const onViewportCaptureEnd = vi.fn();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+      onViewportCaptureStart,
+      onViewportCaptureEnd,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-default-vidstack-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-default-vidstack-1",
+          src: "blob:http://media.local/default-vidstack-video-1",
+          posterSrc: "http://media.local/default-vidstack-poster-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    const player = await 等待查询元素<HTMLElement>(
+      "media-player[data-media-viewer-player='video']"
+    );
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(player).not.toBeNull();
+    expect(player?.getAttribute("src")).toBe(
+      "blob:http://media.local/default-vidstack-video-1"
+    );
+    expect(player?.getAttribute("poster")).toBe(
+      "http://media.local/default-vidstack-poster-1"
+    );
+    expect(player?.getAttribute("aspect-ratio")).toBe("720/1280");
+    expect(onViewportCaptureStart).toHaveBeenCalledTimes(1);
+
+    viewer.销毁();
+
+    expect(
+      document.body.querySelector("media-player[data-media-viewer-player='video']")
+    ).toBeNull();
+    expect(onViewportCaptureEnd).toHaveBeenCalledTimes(1);
   });
 });

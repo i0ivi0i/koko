@@ -22,10 +22,11 @@
     "@tanstack/lit-virtual": "^3.13.24",
     "@uppy/core": "^5.2.0",
     "@uppy/tus": "^5.1.1",
-    "glightbox": "3.3.1",
     "heic2any": "^0.0.4",
     "lit": "^3.3.2",
+    "photoswipe": "^5.4.4",
     "socket.io-client": "^4.8.3",
+    "vidstack": "^0.6.15",
     "webtorrent": "^2.8.5",
     "xstate": "^5.30.0"
   },

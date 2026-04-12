@@ -1,5 +1,7 @@
 import "@uppy/core/css/style.min.css";
-import "glightbox/dist/css/glightbox.css";
+import "photoswipe/style.css";
+import "vidstack/styles/defaults.css";
+import "vidstack/styles/community-skin/video.css";
 import "./聊天壳.js";
 
 if ("serviceWorker" in navigator) {

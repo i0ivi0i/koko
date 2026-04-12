@@ -22,51 +22,42 @@ export type 媒体查看器打开请求 = {
 };
 
 type 媒体查看器视频项目 = Extract<媒体查看器项目, { kind: "video" }>;
+type 媒体查看器图片项目 = Extract<媒体查看器项目, { kind: "image" }>;
 
-type GLightbox元素 = {
-  href: string;
-  type: "image" | "video";
-  alt?: string;
-  source?: "local";
-  width: string;
-  height: string;
-  poster?: string;
+type PhotoSwipe数据源项目 = {
+  src: string;
+  width: number;
+  height: number;
+  alt: string;
 };
 
-type GLightbox选项 = {
-  selector: null;
-  elements: GLightbox元素[];
-  touchNavigation: boolean;
-  keyboardNavigation: boolean;
-  closeOnOutsideClick: boolean;
-  autoplayVideos: boolean;
-  autofocusVideos: boolean;
+type PhotoSwipe查看器选项 = {
+  dataSource: PhotoSwipe数据源项目[];
+  pswpModule?: () => Promise<unknown>;
+  bgOpacity: number;
   loop: boolean;
-  zoomable: boolean;
-  draggable: boolean;
-  videosWidth: string;
-  plyr: {
-    config: {
-      ratio: string;
-      fullscreen: {
-        enabled: boolean;
-        iosNative: boolean;
-      };
-    };
-  };
+  wheelToZoom: boolean;
+  closeOnVerticalDrag: boolean;
+  showHideAnimationType: "zoom" | "fade" | "none";
 };
 
-type GLightbox实例 = {
-  openAt(index?: number): void;
+type 媒体查看器实例 = {
+  init?(): void;
+  loadAndOpen?(index: number): boolean | void;
   destroy(): void;
-  on?(eventName: "open" | "close", callback: () => void, once?: boolean): void;
+  on?(eventName: "close" | "destroy", callback: () => void): void;
 };
 
-type GLightbox工厂结果 = GLightbox实例 | Promise<GLightbox实例>;
-type GLightbox工厂 = (options: GLightbox选项) => GLightbox工厂结果;
+type 媒体查看器工厂结果 = 媒体查看器实例 | Promise<媒体查看器实例>;
+type PhotoSwipe查看器工厂 = (options: PhotoSwipe查看器选项) => 媒体查看器工厂结果;
+type Vidstack视频覆盖层工厂 = (
+  item: 媒体查看器视频项目,
+  lifecycle: 媒体查看器视口占用生命周期
+) => 媒体查看器工厂结果;
 
 export type 媒体查看器依赖 = {
-  createLightbox?: GLightbox工厂;
+  createPhotoSwipeLightbox?: PhotoSwipe查看器工厂;
+  createVidstackVideoOverlay?: Vidstack视频覆盖层工厂;
   isMobileViewport?: () => boolean;
   openNativeVideoFullscreen?: (
     item: 媒体查看器视频项目,
@@ -81,35 +72,27 @@ type 媒体查看器视口占用生命周期 = {
   结束视口占用(): void;
 };
 
-const 映射GLightbox元素 = (item: 媒体查看器项目): GLightbox元素 => {
-  const base = {
-    href: item.src,
-    width: `${item.width}px`,
-    height: `${item.height}px`,
-  };
-  if (item.kind === "image") {
-    return {
-      ...base,
-      type: "image",
-      alt: item.alt,
-    };
-  }
-  return {
-    ...base,
-    type: "video",
-    source: "local",
-    ...(item.posterSrc ? { poster: item.posterSrc } : {}),
-  };
+type PhotoSwipeLightbox构造器 = new (
+  options: PhotoSwipe查看器选项
+) => 媒体查看器实例;
+
+const 映射PhotoSwipe图片 = (item: 媒体查看器图片项目): PhotoSwipe数据源项目 => ({
+  src: item.src,
+  width: Math.max(1, item.width),
+  height: Math.max(1, item.height),
+  alt: item.alt,
+});
+
+const 创建默认PhotoSwipeLightbox: PhotoSwipe查看器工厂 = async (options) => {
+  const module = await import("photoswipe/lightbox");
+  const Lightbox = module.default as unknown as PhotoSwipeLightbox构造器;
+  return new Lightbox(options);
 };
 
-const 创建默认Lightbox: GLightbox工厂 = async (options) => {
-  const module = await import("glightbox");
-  const factory = ((module as { default?: unknown }).default ?? module) as GLightbox工厂;
-  return factory(options);
-};
-
-const 是异步Lightbox结果 = (result: GLightbox工厂结果): result is Promise<GLightbox实例> =>
-  typeof (result as Promise<GLightbox实例>).then === "function";
+const 是异步媒体查看器结果 = (
+  result: 媒体查看器工厂结果
+): result is Promise<媒体查看器实例> =>
+  typeof (result as Promise<媒体查看器实例>).then === "function";
 
 type 可原生全屏视频元素 = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
@@ -334,14 +317,95 @@ const 打开原生视频全屏 = (
   return false;
 };
 
-const 读取起始视频比例 = (item: 媒体查看器项目): string =>
-  item.kind === "video" ? `${Math.max(1, item.width)}:${Math.max(1, item.height)}` : "16:9";
+const 读取Vidstack纵横比 = (item: 媒体查看器视频项目): string =>
+  `${Math.max(1, item.width)}/${Math.max(1, item.height)}`;
+
+const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async (
+  item,
+  lifecycle
+) => {
+  const { defineCustomElements } = await import("vidstack/elements");
+  await defineCustomElements();
+  if (typeof document === "undefined" || !document.body) {
+    throw new Error("当前环境没有可用的浏览器文档，无法打开 Vidstack 媒体层");
+  }
+
+  const overlay = document.createElement("div");
+  const player = document.createElement("media-player");
+  const outlet = document.createElement("media-outlet");
+  const skin = document.createElement("media-community-skin");
+  const closeButton = document.createElement("button");
+  let cleaned = false;
+
+  overlay.dataset.mediaViewerMode = "video";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "视频查看器");
+  overlay.style.cssText =
+    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+
+  player.setAttribute("src", item.src);
+  player.setAttribute("load", "eager");
+  player.setAttribute("autoplay", "");
+  player.setAttribute("aspect-ratio", 读取Vidstack纵横比(item));
+  player.setAttribute("data-media-viewer-player", "video");
+  player.style.cssText =
+    "width:min(100%,1120px);max-height:calc(100vh - 40px);--media-max-height:calc(100vh - 40px);";
+  if (item.posterSrc) {
+    player.setAttribute("poster", item.posterSrc);
+  }
+
+  closeButton.type = "button";
+  closeButton.textContent = "关闭";
+  closeButton.setAttribute("aria-label", "关闭视频查看器");
+  closeButton.style.cssText =
+    "position:fixed;top:16px;right:16px;z-index:1;border:1px solid rgb(255 255 255 / 0.35);border-radius:8px;background:rgb(0 0 0 / 0.7);color:white;padding:8px 12px;font:inherit;";
+
+  // Vidstack 只负责桌面视频播放能力；关闭、Esc 和外层点击仍然由应用壳层掌握，
+  // 避免播放器组件反向拥有聊天视口的滚动真相。
+  const cleanup = (): void => {
+    if (cleaned) {
+      return;
+    }
+    cleaned = true;
+    closeButton.removeEventListener("click", cleanup);
+    overlay.removeEventListener("click", closeWhenClickingBackdrop);
+    document.removeEventListener("keydown", closeWhenPressingEscape);
+    overlay.remove();
+    lifecycle.结束视口占用();
+  };
+  const closeWhenClickingBackdrop = (event: MouseEvent): void => {
+    if (event.target === overlay) {
+      cleanup();
+    }
+  };
+  const closeWhenPressingEscape = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") {
+      cleanup();
+    }
+  };
+
+  player.append(outlet, skin);
+  overlay.append(player, closeButton);
+  closeButton.addEventListener("click", cleanup);
+  overlay.addEventListener("click", closeWhenClickingBackdrop);
+  document.addEventListener("keydown", closeWhenPressingEscape);
+  document.body.append(overlay);
+  closeButton.focus();
+
+  return {
+    destroy: cleanup,
+  };
+};
 
 export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
-  const createLightbox = deps.createLightbox ?? 创建默认Lightbox;
+  const createPhotoSwipeLightbox =
+    deps.createPhotoSwipeLightbox ?? 创建默认PhotoSwipeLightbox;
+  const createVidstackVideoOverlay =
+    deps.createVidstackVideoOverlay ?? 创建默认Vidstack视频覆盖层;
   const isMobileViewport = deps.isMobileViewport ?? 是移动触屏视口;
   const openNativeVideoFullscreen = deps.openNativeVideoFullscreen ?? 打开原生视频全屏;
-  let current: GLightbox实例 | null = null;
+  let current: 媒体查看器实例 | null = null;
   let openGeneration = 0;
   let 正在占用聊天视口 = false;
 
@@ -360,6 +424,24 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
       正在占用聊天视口 = false;
       deps.onViewportCaptureEnd?.();
     },
+  };
+
+  const 接管当前查看器 = (
+    generation: number,
+    result: 媒体查看器工厂结果
+  ): void => {
+    void (async () => {
+      const next = 是异步媒体查看器结果(result) ? await result : result;
+      if (generation !== openGeneration) {
+        next.destroy();
+        视口占用生命周期.结束视口占用();
+        return;
+      }
+      current = next;
+    })().catch((error: unknown) => {
+      视口占用生命周期.结束视口占用();
+      console.error("打开媒体查看器失败", error);
+    });
   };
 
   const 打开 = (request: 媒体查看器打开请求): void => {
@@ -384,44 +466,66 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     current?.destroy();
     current = null;
     视口占用生命周期.开始视口占用();
-    void (async () => {
-      const next = createLightbox({
-        selector: null,
-        elements: request.items.map(映射GLightbox元素),
-        touchNavigation: true,
-        keyboardNavigation: true,
-        closeOnOutsideClick: true,
-        autoplayVideos: true,
-        autofocusVideos: false,
-        loop: false,
-        zoomable: true,
-        draggable: true,
-        videosWidth: "min(100vw, 960px)",
-        plyr: {
-          config: {
-            ratio: 读取起始视频比例(startItem),
-            fullscreen: {
-              enabled: true,
-              iosNative: true,
-            },
-          },
-        },
-      });
-      const lightbox = 是异步Lightbox结果(next) ? await next : next;
-      if (generation !== openGeneration) {
+
+    if (startItem.kind === "image") {
+      const imageEntries = request.items
+        .filter((item): item is 媒体查看器图片项目 => item.kind === "image")
+        .map((item) => ({
+          attachmentId: item.attachmentId,
+          data: 映射PhotoSwipe图片(item),
+        }));
+      const imageStartAt = imageEntries.findIndex(
+        (entry) => entry.attachmentId === startItem.attachmentId
+      );
+      if (imageStartAt < 0) {
         视口占用生命周期.结束视口占用();
-        lightbox.destroy();
         return;
       }
-      lightbox.on?.("close", () => {
-        视口占用生命周期.结束视口占用();
-      });
-      current = lightbox;
-      current.openAt(startAt);
-    })().catch((error: unknown) => {
-      视口占用生命周期.结束视口占用();
-      console.error("打开媒体查看器失败", error);
-    });
+      接管当前查看器(
+        generation,
+        (async () => {
+          const photoSwipe = createPhotoSwipeLightbox({
+            dataSource: imageEntries.map((entry) => entry.data),
+            pswpModule: () => import("photoswipe"),
+            bgOpacity: 0.92,
+            loop: false,
+            wheelToZoom: true,
+            closeOnVerticalDrag: true,
+            showHideAnimationType: "zoom",
+          });
+          const lightbox = 是异步媒体查看器结果(photoSwipe)
+            ? await photoSwipe
+            : photoSwipe;
+          const releaseViewport = (): void => {
+            视口占用生命周期.结束视口占用();
+          };
+          lightbox.on?.("close", releaseViewport);
+          lightbox.on?.("destroy", releaseViewport);
+          lightbox.init?.();
+          if (lightbox.loadAndOpen?.(imageStartAt) === false) {
+            lightbox.destroy();
+            releaseViewport();
+          }
+          return lightbox;
+        })()
+      );
+      return;
+    }
+
+    接管当前查看器(
+      generation,
+      (async () => {
+        const overlay = createVidstackVideoOverlay(startItem, 视口占用生命周期);
+        const videoOverlay = 是异步媒体查看器结果(overlay) ? await overlay : overlay;
+        videoOverlay.on?.("close", () => {
+          视口占用生命周期.结束视口占用();
+        });
+        videoOverlay.on?.("destroy", () => {
+          视口占用生命周期.结束视口占用();
+        });
+        return videoOverlay;
+      })()
+    );
   };
 
   const 销毁 = (): void => {

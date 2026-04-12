@@ -437,7 +437,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L80",
       "id": "dispatchpointerscrollintent",
-      "community": 19
+      "community": 20
     },
     {
       "label": "dispatchScrollIntent()",
@@ -445,7 +445,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L87",
       "id": "dispatchscrollintent",
-      "community": 19
+      "community": 20
     },
     {
       "label": "dispatchScroll()",
@@ -1169,7 +1169,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 17
+      "community": 21
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1177,7 +1177,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 17
+      "community": 21
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1308,19 +1308,27 @@
       "community": 0
     },
     {
-      "label": "\u6620\u5c04GLightbox\u5143\u7d20()",
+      "label": "\u6620\u5c04PhotoSwipe\u56fe\u7247()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L84",
-      "id": "glightbox",
+      "source_location": "L79",
+      "id": "photoswipe",
       "community": 0
     },
     {
-      "label": "\u521b\u5efa\u9ed8\u8ba4Lightbox()",
+      "label": "\u521b\u5efa\u9ed8\u8ba4PhotoSwipeLightbox()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L105",
-      "id": "lightbox",
+      "source_location": "L86",
+      "id": "photoswipelightbox",
+      "community": 0
+    },
+    {
+      "label": "\u8bfb\u53d6Vidstack\u7eb5\u6a2a\u6bd4()",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
+      "source_location": "L320",
+      "id": "vidstack",
       "community": 0
     },
     {
@@ -1665,7 +1673,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L144",
       "id": "parse_events_query",
-      "community": 21
+      "community": 18
     },
     {
       "label": "parse_history_query()",
@@ -1673,7 +1681,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 16
+      "community": 17
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1705,7 +1713,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 18
+      "community": 16
     },
     {
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
@@ -1769,7 +1777,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1296",
       "id": "load_room_events",
-      "community": 21
+      "community": 18
     },
     {
       "label": "load_room_history()",
@@ -1777,7 +1785,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1424",
       "id": "load_room_history",
-      "community": 16
+      "community": 17
     },
     {
       "label": "prepare_media_upload()",
@@ -1817,7 +1825,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1974",
       "id": "complete",
-      "community": 20
+      "community": 19
     },
     {
       "label": "complete_media_upload()",
@@ -1825,7 +1833,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2015",
       "id": "complete_media_upload",
-      "community": 20
+      "community": 19
     },
     {
       "label": "load_media_locator()",
@@ -1897,7 +1905,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 18
+      "community": 16
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
@@ -3257,24 +3265,36 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L84",
+      "source_location": "L79",
       "weight": 1.0,
       "_src": "",
-      "_tgt": "glightbox",
+      "_tgt": "photoswipe",
       "source": "",
-      "target": "glightbox",
+      "target": "photoswipe",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L111",
+      "source_location": "L86",
       "weight": 1.0,
       "_src": "",
-      "_tgt": "lightbox",
+      "_tgt": "photoswipelightbox",
       "source": "",
-      "target": "lightbox",
+      "target": "photoswipelightbox",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
+      "source_location": "L323",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "vidstack",
+      "source": "",
+      "target": "vidstack",
       "confidence_score": 1.0
     },
     {
