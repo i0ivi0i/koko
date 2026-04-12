@@ -97,7 +97,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 23
+      "community": 24
     },
     {
       "label": "css.d.ts",
@@ -105,7 +105,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 24
+      "community": 25
     },
     {
       "label": "media-sw.ts",
@@ -113,7 +113,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L1",
       "id": "media_sw",
-      "community": 25
+      "community": 26
     },
     {
       "label": "webtorrent.d.ts",
@@ -121,7 +121,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 26
+      "community": 27
     },
     {
       "label": "\u73af\u5883.rs",
@@ -389,7 +389,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_storage_ts",
-      "community": 27
+      "community": 28
     },
     {
       "label": "frontend/\u623f\u95f4\u5185\u6838.ts",
@@ -401,7 +401,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_kernel_ts",
-      "community": 28
+      "community": 29
     },
     {
       "label": "frontend/\u623f\u95f4\u6062\u590d\u7f16\u6392.ts",
@@ -413,7 +413,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_recovery_orchestrator_ts",
-      "community": 29
+      "community": 30
     },
     {
       "label": "constructor()",
@@ -427,7 +427,7 @@
       "label": "createRenderRoot()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L52",
+      "source_location": "L76",
       "id": "createrenderroot",
       "community": 0
     },
@@ -435,23 +435,23 @@
       "label": "dispatchPointerScrollIntent()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L56",
+      "source_location": "L80",
       "id": "dispatchpointerscrollintent",
-      "community": 16
+      "community": 19
     },
     {
       "label": "dispatchScrollIntent()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L63",
+      "source_location": "L87",
       "id": "dispatchscrollintent",
-      "community": 16
+      "community": 19
     },
     {
       "label": "dispatchScroll()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L84",
+      "source_location": "L108",
       "id": "dispatchscroll",
       "community": 0
     },
@@ -459,7 +459,7 @@
       "label": "dispatchJumpToLatest()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L94",
+      "source_location": "L118",
       "id": "dispatchjumptolatest",
       "community": 0
     },
@@ -467,17 +467,25 @@
       "label": "renderMessageBody()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L162",
+      "source_location": "L263",
       "id": "rendermessagebody",
-      "community": 0
+      "community": 13
     },
     {
       "label": "renderMessageAttachments()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L179",
+      "source_location": "L280",
       "id": "rendermessageattachments",
-      "community": 0
+      "community": 13
+    },
+    {
+      "label": "renderVirtualMessageItem()",
+      "file_type": "code",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L383",
+      "id": "rendervirtualmessageitem",
+      "community": 13
     },
     {
       "label": "hostDisconnected()",
@@ -497,7 +505,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 21
+      "community": 22
     },
     {
       "label": "setMediaPlayerForTest()",
@@ -677,7 +685,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_read_progress_orchestrator_ts",
-      "community": 30
+      "community": 31
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -1009,7 +1017,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 21
+      "community": 22
     },
     {
       "label": "\u5047Socket",
@@ -1161,7 +1169,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 15
+      "community": 17
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1169,7 +1177,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 15
+      "community": 17
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1241,7 +1249,7 @@
       "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
       "source_location": "L1",
       "id": "index",
-      "community": 31
+      "community": 32
     },
     {
       "label": "\u63a8\u5bfc\u56fe\u7247Mime\u7c7b\u578b()",
@@ -1329,7 +1337,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 32
+      "community": 33
     },
     {
       "label": "main.rs",
@@ -1337,7 +1345,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 22
+      "community": 23
     },
     {
       "label": "main()",
@@ -1345,7 +1353,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 22
+      "community": 23
     },
     {
       "label": "AdminLoginBody",
@@ -1417,7 +1425,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L276",
       "id": "html",
-      "community": 13
+      "community": 14
     },
     {
       "label": "load_frontend_index()",
@@ -1425,7 +1433,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L285",
       "id": "load_frontend_index",
-      "community": 13
+      "community": 14
     },
     {
       "label": "realtime\u8fde\u63a5\u8ba4\u8bc1\u5f02\u6b65\u7528\u4f8b\u4f1a\u653e\u884c\u6709\u6548\u4f1a\u8bdd()",
@@ -1481,7 +1489,7 @@
       "source_file": "src\\\u5916\u58f3.rs",
       "source_location": "L473",
       "id": "err_resp",
-      "community": 13
+      "community": 14
     },
     {
       "label": "RealtimeConnectAuth",
@@ -1657,7 +1665,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L144",
       "id": "parse_events_query",
-      "community": 18
+      "community": 21
     },
     {
       "label": "parse_history_query()",
@@ -1665,7 +1673,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 17
+      "community": 16
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1697,7 +1705,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 20
+      "community": 18
     },
     {
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
@@ -1761,7 +1769,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1296",
       "id": "load_room_events",
-      "community": 18
+      "community": 21
     },
     {
       "label": "load_room_history()",
@@ -1769,7 +1777,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1424",
       "id": "load_room_history",
-      "community": 17
+      "community": 16
     },
     {
       "label": "prepare_media_upload()",
@@ -1809,7 +1817,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1974",
       "id": "complete",
-      "community": 19
+      "community": 20
     },
     {
       "label": "complete_media_upload()",
@@ -1817,7 +1825,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2015",
       "id": "complete_media_upload",
-      "community": 19
+      "community": 20
     },
     {
       "label": "load_media_locator()",
@@ -1857,7 +1865,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L17",
       "id": "pg",
-      "community": 14
+      "community": 15
     },
     {
       "label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f_\u5f02\u6b65()",
@@ -1865,7 +1873,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L441",
       "id": "pg_torrent",
-      "community": 14
+      "community": 15
     },
     {
       "label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1\u6700\u8fd1peer\u5b58\u6d3b\u65f6\u95f4_\u5f02\u6b65()",
@@ -1873,7 +1881,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L496",
       "id": "pg_peer",
-      "community": 14
+      "community": 15
     },
     {
       "label": "mod.rs",
@@ -1889,7 +1897,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 20
+      "community": 18
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
@@ -2589,7 +2597,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L52",
+      "source_location": "L76",
       "weight": 1.0,
       "_src": "",
       "_tgt": "createrenderroot",
@@ -2601,7 +2609,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L56",
+      "source_location": "L80",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatchpointerscrollintent",
@@ -2613,7 +2621,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L63",
+      "source_location": "L87",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatchscrollintent",
@@ -2625,7 +2633,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L84",
+      "source_location": "L108",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatchscroll",
@@ -2637,7 +2645,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L94",
+      "source_location": "L118",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatchjumptolatest",
@@ -2649,7 +2657,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L162",
+      "source_location": "L263",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rendermessagebody",
@@ -2661,12 +2669,24 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L179",
+      "source_location": "L280",
       "weight": 1.0,
       "_src": "",
       "_tgt": "rendermessageattachments",
       "source": "",
       "target": "rendermessageattachments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L383",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "rendervirtualmessageitem",
+      "source": "",
+      "target": "rendervirtualmessageitem",
       "confidence_score": 1.0
     },
     {
@@ -5097,12 +5117,36 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L60",
+      "source_location": "L84",
       "weight": 1.0,
       "_src": "dispatchpointerscrollintent",
       "_tgt": "dispatchscrollintent",
       "source": "dispatchpointerscrollintent",
       "target": "dispatchscrollintent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L430",
+      "weight": 1.0,
+      "_src": "rendervirtualmessageitem",
+      "_tgt": "rendermessagebody",
+      "source": "rendermessagebody",
+      "target": "rendervirtualmessageitem",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L431",
+      "weight": 1.0,
+      "_src": "rendervirtualmessageitem",
+      "_tgt": "rendermessageattachments",
+      "source": "rendermessageattachments",
+      "target": "rendervirtualmessageitem",
       "confidence_score": 1.0
     },
     {

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@chenglou/pretext": "0.0.5",
+    "@tanstack/lit-virtual": "^3.13.24",
     "@uppy/core": "^5.2.0",
     "@uppy/tus": "^5.1.1",
     "glightbox": "3.3.1",

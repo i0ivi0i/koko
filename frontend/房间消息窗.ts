@@ -1,9 +1,17 @@
 import { html, LitElement } from "lit";
+import { VirtualizerController } from "@tanstack/lit-virtual";
 import { ifDefined } from "lit/directives/if-defined.js";
+import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { 媒体播放结果 } from "./媒体/媒体播放.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
+
+type 消息虚拟项 = {
+  key: unknown;
+  index: number;
+  start: number;
+};
 
 const 构建视频首帧预览源 = (src: string, posterSrc: string | null): string => {
   // 没有服务端 poster 时，用媒体片段让浏览器预取首帧，避免群聊里出现一片黑的视频卡片。
@@ -21,7 +29,8 @@ const 构建视频首帧预览源 = (src: string, posterSrc: string | null): str
  *
  * 本期故意使用 light DOM：
  * - 现有滚动器、测试和查询入口都依赖 `#messageScroll` / `#messageList` / `[data-event-position]`；
- * - 先保住这些稳定入口，再逐步把消息窗口边界立起来。
+ * - 虚拟列表只决定“哪些行进入 DOM”，消息顺序和 event_position 真相仍来自 Presenter 输入；
+ * - 未读分隔线附近的行会被固定保留，避免恢复定位找不到首条未读节点。
  */
 export class 房间消息窗 extends LitElement {
   static override properties = {
@@ -35,6 +44,21 @@ export class 房间消息窗 extends LitElement {
   declare historyHint: string;
   declare jumpToLatestLabel: string;
   declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+
+  private readonly messageScrollRef: Ref<HTMLElement> = createRef();
+  private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
+    this,
+    {
+      getScrollElement: () => this.messageScrollRef.value ?? null,
+      count: 0,
+      getItemKey: (index) => this.items[index]?.id ?? index,
+      estimateSize: (index) => this.估算消息行高度(index),
+      overscan: 30,
+      gap: 10,
+      initialRect: { width: 360, height: 720 },
+      rangeExtractor: (range) => this.提取消息虚拟范围(range),
+    }
+  );
 
   constructor() {
     super();
@@ -98,6 +122,83 @@ export class 房间消息窗 extends LitElement {
         composed: true,
       })
     );
+  }
+
+  private 读取消息虚拟器() {
+    const virtualizer = this.messageVirtualizer.getVirtualizer();
+    virtualizer.setOptions({
+      ...virtualizer.options,
+      count: this.items.length,
+      getItemKey: (index) => this.items[index]?.id ?? index,
+      estimateSize: (index) => this.估算消息行高度(index),
+      rangeExtractor: (range) => this.提取消息虚拟范围(range),
+    });
+    return virtualizer;
+  }
+
+  private 估算消息行高度(index: number): number {
+    const item = this.items[index];
+    if (!item) {
+      return 72;
+    }
+    if (item.kind === "unread-divider") {
+      return 28;
+    }
+    const mediaHeight =
+      item.attachments.length > 0
+        ? Math.max(...item.attachments.map((attachment) => attachment.displayHeight), 0)
+        : 0;
+    return Math.max(48, item.layout.height + mediaHeight + 32);
+  }
+
+  private 提取消息虚拟范围(range: {
+    startIndex: number;
+    endIndex: number;
+    overscan: number;
+    count: number;
+  }): number[] {
+    const indexes = new Set<number>();
+    const start = Math.max(range.startIndex - range.overscan, 0);
+    const end = Math.min(range.endIndex + range.overscan, range.count - 1);
+    for (let index = start; index <= end; index += 1) {
+      indexes.add(index);
+    }
+    // 恢复到首条未读仍沿用现有滚动器的 DOM 查询入口；
+    // 固定保留分隔线和后一条消息，避免大房间初始 range 不包含目标节点。
+    const unreadDividerIndex = this.items.findIndex((item) => item.kind === "unread-divider");
+    if (unreadDividerIndex >= 0) {
+      indexes.add(unreadDividerIndex);
+      if (unreadDividerIndex + 1 < this.items.length) {
+        indexes.add(unreadDividerIndex + 1);
+      }
+    }
+    return Array.from(indexes).sort((left, right) => left - right);
+  }
+
+  private 补齐首帧消息虚拟项(virtualItems: 消息虚拟项[]): 消息虚拟项[] {
+    if (virtualItems.length > 0 || this.items.length === 0) {
+      return virtualItems;
+    }
+
+    // Lit 父壳用属性把消息交给子组件时，首帧可能早于 controller 完成 range 计算。
+    // 这里兜一层固定首窗，防止小房间首帧空白；TanStack virtualizer 就绪后会接管后续 range。
+    const indexes = this.提取消息虚拟范围({
+      startIndex: 0,
+      endIndex: Math.min(this.items.length - 1, 30),
+      overscan: 30,
+      count: this.items.length,
+    });
+    const starts: number[] = [];
+    let offset = 0;
+    for (let index = 0; index < this.items.length; index += 1) {
+      starts[index] = offset;
+      offset += this.估算消息行高度(index) + 10;
+    }
+    return indexes.map((index) => ({
+      key: this.items[index]?.id ?? index,
+      index,
+      start: starts[index] ?? 0,
+    }));
   }
 
   private 读取附件播放源(attachmentId: string, originalSrc: string): string {
@@ -279,51 +380,92 @@ export class 房间消息窗 extends LitElement {
     `;
   }
 
+  private renderVirtualMessageItem(
+    item: 聊天列表展示项,
+    index: number,
+    start: number,
+    measureElement: (element: HTMLElement) => void
+  ) {
+    const rowStyle = `position: absolute; top: 0; left: 0; width: 100%; transform: translateY(${start}px);`;
+    const measureRow = (element?: Element): void => {
+      if (element instanceof HTMLElement) {
+        measureElement(element);
+      }
+    };
+    if (item.kind === "unread-divider") {
+      return html`
+        <li
+          id="unreadDivider"
+          class="unread-divider"
+          data-kind="unread-divider"
+          data-index=${index}
+          style=${rowStyle}
+          ${ref(measureRow)}
+        >
+          ${item.label}
+        </li>
+      `;
+    }
+    const hasAttachments = item.attachments.length > 0;
+    const mediaOnly = !item.hasText && hasAttachments;
+    const surfaceClass = hasAttachments
+      ? `message-surface media-message ${mediaOnly ? "media-only" : ""}`
+      : "message-surface message-bubble";
+    return html`
+      <li
+        class="message-row ${item.owner}"
+        data-owner=${item.owner}
+        data-event-position=${item.eventPosition}
+        data-index=${index}
+        style=${rowStyle}
+        ${ref(measureRow)}
+      >
+        <article
+          class=${surfaceClass}
+          style=${`width: ${item.bubbleWidth}px;`}
+        >
+          ${item.showAlias
+            ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
+            : null}
+          ${item.hasText ? this.renderMessageBody(item) : null}
+          ${this.renderMessageAttachments(item)}
+        </article>
+      </li>
+    `;
+  }
+
   override render() {
+    const virtualizer = this.读取消息虚拟器();
+    const virtualItems = this.补齐首帧消息虚拟项(virtualizer.getVirtualItems());
     return html`
       <div
         id="messageScroll"
         class="message-scroll"
+        ${ref(this.messageScrollRef)}
         @pointerdown=${(event: Event) => this.dispatchPointerScrollIntent(event)}
         @touchstart=${(event: Event) => this.dispatchPointerScrollIntent(event)}
         @wheel=${() => this.dispatchScrollIntent()}
         @scroll=${(event: Event) => this.dispatchScroll(event)}
       >
-        <ul id="messageList" class="message-list">
+        <ul
+          id="messageList"
+          class="message-list"
+          style=${`height: ${virtualizer.getTotalSize()}px; position: relative;`}
+        >
           ${repeat(
-            this.items,
-            (item) => item.id,
-            (item) => {
-              if (item.kind === "unread-divider") {
-                return html`
-                  <li id="unreadDivider" class="unread-divider" data-kind="unread-divider">
-                    ${item.label}
-                  </li>
-                `;
+            virtualItems,
+            (virtualItem) => virtualItem.key,
+            (virtualItem) => {
+              const item = this.items[virtualItem.index];
+              if (!item) {
+                return null;
               }
-              const hasAttachments = item.attachments.length > 0;
-              const mediaOnly = !item.hasText && hasAttachments;
-              const surfaceClass = hasAttachments
-                ? `message-surface media-message ${mediaOnly ? "media-only" : ""}`
-                : "message-surface message-bubble";
-              return html`
-                <li
-                  class="message-row ${item.owner}"
-                  data-owner=${item.owner}
-                  data-event-position=${item.eventPosition}
-                >
-                  <article
-                    class=${surfaceClass}
-                    style=${`width: ${item.bubbleWidth}px;`}
-                  >
-                    ${item.showAlias
-                      ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
-                      : null}
-                    ${item.hasText ? this.renderMessageBody(item) : null}
-                    ${this.renderMessageAttachments(item)}
-                  </article>
-                </li>
-              `;
+              return this.renderVirtualMessageItem(
+                item,
+                virtualItem.index,
+                virtualItem.start,
+                (element) => virtualizer.measureElement(element)
+              );
             }
           )}
         </ul>

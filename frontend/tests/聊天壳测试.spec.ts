@@ -27,7 +27,9 @@ import {
   派生控制台模式,
   派生壳级操作台状态,
   派生首页会话展示项,
+  type 聊天列表展示项,
 } from "../视图";
+import type { 房间消息窗 } from "../房间消息窗";
 import type { 匿名身份引导结果 } from "../契约";
 import { 聊天壳 } from "../聊天壳";
 describe("聊天壳集成 / 首页与控制台", () => {
@@ -46,6 +48,37 @@ describe("聊天壳集成 / 首页与控制台", () => {
     清空: vi.fn(),
     销毁: vi.fn(),
   });
+
+  const 创建大量消息展示项 = (count: number): 聊天列表展示项[] => {
+    // 这里直接构造 Presenter 输出，避免一万条文本布局计算掩盖“DOM 是否全量渲染”的判断。
+    const layout = {
+      height: 20,
+      lineCount: 1,
+      naturalWidth: 80,
+      maxLineWidth: 80,
+      lines: [
+        {
+          index: 0,
+          width: 80,
+          text: "消息",
+          segments: [{ kind: "text" as const, text: "消息" }],
+        },
+      ],
+    };
+    return Array.from({ length: count }, (_, index) => ({
+      kind: "message" as const,
+      id: `m-${index + 1}`,
+      owner: index % 2 === 0 ? ("mine" as const) : ("other" as const),
+      body: `消息-${index + 1}`,
+      hasText: true,
+      attachments: [],
+      layout,
+      bubbleWidth: 120,
+      senderDisplayAlias: index % 2 === 0 ? "暴躁的企鹅" : "冷静的水獭",
+      showAlias: index % 2 !== 0,
+      eventPosition: index + 1,
+    }));
+  };
   it("聊天滚动容器会显式收口浏览器边界回弹与滚动链", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
@@ -202,6 +235,39 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(el.shadowRoot!.querySelector(".message-body [data-line-index='0']")).not.toBeNull();
     expect(el.shadowRoot!.querySelector(".message-bubble")?.getAttribute("style")).toContain("width:");
     el.remove();
+  });
+
+  it("万人消息窗口只渲染当前虚拟窗口内的消息 DOM，但仍保留 event_position 定位入口", async () => {
+    const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
+    pane.items = 创建大量消息展示项(10_000);
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const renderedRows = pane.querySelectorAll("#messageList [data-event-position]");
+
+    expect(renderedRows.length).toBeLessThanOrEqual(120);
+    expect(renderedRows[0]?.getAttribute("data-event-position")).toBe("1");
+    pane.remove();
+  });
+
+  it("万人消息恢复到靠后的未读位置时，虚拟窗口仍保留未读定位节点", async () => {
+    const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
+    const items = 创建大量消息展示项(10_000);
+    items.splice(8_999, 0, {
+      kind: "unread-divider",
+      id: "unread-divider",
+      label: "未读消息",
+    });
+    pane.items = items;
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const renderedRows = pane.querySelectorAll("#messageList [data-event-position]");
+
+    expect(renderedRows.length).toBeLessThanOrEqual(122);
+    expect(pane.querySelector("#unreadDivider")).not.toBeNull();
+    expect(pane.querySelector('[data-event-position="9000"]')).not.toBeNull();
+    pane.remove();
   });
 
   it("纯图片权威消息会像 IM 一样直接展示原图媒体，不再套气泡底板", async () => {

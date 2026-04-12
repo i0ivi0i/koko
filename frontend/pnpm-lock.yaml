@@ -11,6 +11,9 @@ importers:
       '@chenglou/pretext':
         specifier: 0.0.5
         version: 0.0.5
+      '@tanstack/lit-virtual':
+        specifier: ^3.13.24
+        version: 3.13.24(lit@3.3.2)
       '@uppy/core':
         specifier: ^5.2.0
         version: 5.2.0
@@ -588,6 +591,14 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@tanstack/lit-virtual@3.13.24':
+    resolution: {integrity: sha512-RkL+6g4kENdIw3eJz3ZwrneW+ct7IMo5BwB5zesnTUnf/8ntcF8wDyehDoWC0Jo1S8DYB6NjsLN9b1Jy4a9Q/Q==}
+    peerDependencies:
+      lit: ^3.1.0
+
+  '@tanstack/virtual-core@3.13.23':
+    resolution: {integrity: sha512-zSz2Z2HNyLjCplANTDyl3BcdQJc2k1+yyFoKhNRmCr7V7dY8o8q5m8uFTI1/Pg1kL+Hgrz6u3Xo6eFUB7l66cg==}
 
   '@thaunknown/simple-peer@10.1.0':
     resolution: {integrity: sha512-xNM49v0rBbjIKrS9XNwXW3FFuGvsPGadFRWbBdLAY87pEJeo7V0dxyX6GBHP8UVlefffRedCLsjYXb6i8W9Ofg==}
@@ -2108,6 +2119,13 @@ snapshots:
   '@socket.io/component-emitter@3.1.2': {}
 
   '@standard-schema/spec@1.1.0': {}
+
+  '@tanstack/lit-virtual@3.13.24(lit@3.3.2)':
+    dependencies:
+      '@tanstack/virtual-core': 3.13.23
+      lit: 3.3.2
+
+  '@tanstack/virtual-core@3.13.23': {}
 
   '@thaunknown/simple-peer@10.1.0':
     dependencies:
