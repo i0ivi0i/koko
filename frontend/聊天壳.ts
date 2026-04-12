@@ -862,7 +862,6 @@ export class 聊天壳 extends LitElement {
         storage: this.storage,
         roomKernel: this.roomKernel,
         roomShellPatch: () => this.roomShellPatch(),
-        reconcileMessages: (messages) => this.实时编排端口.reconcileMessages(messages),
         roomScroller: this.roomScroller,
         ensureRealtimeSocket: (sessionId) => this.实时编排端口.ensureRealtimeSocket(sessionId),
         subscribeRoom: (from) => this.实时编排端口.subscribeRoom(from),
@@ -922,7 +921,6 @@ export class 聊天壳 extends LitElement {
         roomScroller: this.roomScroller,
         withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
           this.恢复编排端口.withSessionRefreshOnInvalid(operation),
-        reconcileMessages: (messages) => this.实时编排端口.reconcileMessages(messages),
         等待壳渲染完成: async () => {
           await this.updateComplete;
         },

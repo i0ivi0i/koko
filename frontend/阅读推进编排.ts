@@ -1,5 +1,5 @@
-import type { 消息事件 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
+import { 合并房间时间线消息 } from "./房间时间线.js";
 import type { 历史补偿上下文 } from "./房间滚动器.js";
 import type { 聊天状态 } from "./状态.js";
 import type { 前端传输端口 } from "./传输.js";
@@ -25,7 +25,6 @@ export interface 阅读推进编排依赖 {
   roomShellPatch(): Partial<聊天状态>;
   roomScroller: 房间滚动器端口;
   withSessionRefreshOnInvalid<T>(operation: (sessionId: string) => Promise<T>): Promise<T>;
-  reconcileMessages(messages: 消息事件[]): 消息事件[];
   等待壳渲染完成(): Promise<void>;
   滚到最新位置(): Promise<void>;
 }
@@ -206,7 +205,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
         deps.transport.loadRoomHistory(state.roomId, sessionId, oldestMessage.event_position, 55)
       );
       更新状态({
-        messages: deps.reconcileMessages([...page.messages, ...读取状态().messages]),
+        messages: 合并房间时间线消息([...page.messages, ...读取状态().messages]),
         historyLoading: false,
         // 历史分页接口当前还只返回这一页消息本身：
         // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。

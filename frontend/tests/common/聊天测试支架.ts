@@ -695,8 +695,6 @@ export function 创建恢复编排测试场景(input: {
     storage,
     roomKernel,
     roomShellPatch: () => 创建房间壳补丁(roomKernel),
-    reconcileMessages: (messages: 消息事件[]) =>
-      [...messages].sort((left, right) => left.event_position - right.event_position),
     roomScroller,
     ensureRealtimeSocket: (sessionId: string) => {
       ensureRealtimeSocketCalls.push(sessionId);
@@ -938,13 +936,6 @@ export function 创建阅读推进测试场景(input: {
     roomScroller,
     withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
       operation(state.sessionId),
-    reconcileMessages: (messages: 消息事件[]) =>
-      [...messages]
-        .sort((left, right) => left.event_position - right.event_position)
-        .filter(
-          (message, index, array) =>
-            array.findIndex((item) => item.message_id === message.message_id) === index
-        ),
     等待壳渲染完成: async () => {},
     滚到最新位置: async () => {
       滚到最新调用.push(Date.now());
