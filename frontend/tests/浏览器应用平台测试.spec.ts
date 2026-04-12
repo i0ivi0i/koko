@@ -40,11 +40,13 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("const detail = await this.transport.adminRoomDetail(this.token, roomId);");
   });
 
-  it("入口当前仍直接注册两个 service worker 并申请持久化存储，这条浏览器 API 直连会在平台骨架阶段退场", () => {
+  it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {
     const source = 读取前端源码("入口.ts");
 
-    expect(source).toContain('navigator.serviceWorker.register("/app-sw.js", { scope: "/" })');
-    expect(source).toContain('navigator.serviceWorker.register("/media-sw.js", { scope: "/" })');
-    expect(source).toContain("navigator.storage.persist()");
+    expect(source).toContain('from "./平台/index.js"');
+    expect(source).toContain("获取默认浏览器应用平台");
+    expect(source).toContain("void 平台.启动()");
+    expect(source).not.toContain("navigator.serviceWorker.register");
+    expect(source).not.toContain("navigator.storage.persist()");
   });
 });
