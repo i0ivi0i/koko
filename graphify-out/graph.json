@@ -433,7 +433,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L80",
       "id": "dispatchpointerscrollintent",
-      "community": 20
+      "community": 16
     },
     {
       "label": "dispatchScrollIntent()",
@@ -441,7 +441,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L87",
       "id": "dispatchscrollintent",
-      "community": 20
+      "community": 16
     },
     {
       "label": "dispatchScroll()",
@@ -1153,7 +1153,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L297",
       "id": "loadmedialocator",
-      "community": 16
+      "community": 17
     },
     {
       "label": "buildAttachmentContentUrl()",
@@ -1161,7 +1161,7 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L309",
       "id": "buildattachmentcontenturl",
-      "community": 16
+      "community": 17
     },
     {
       "label": "updateRoomReadAnchor()",
@@ -1665,7 +1665,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 21
+      "community": 19
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1697,7 +1697,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 17
+      "community": 20
     },
     {
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
@@ -1769,7 +1769,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1424",
       "id": "load_room_history",
-      "community": 21
+      "community": 19
     },
     {
       "label": "prepare_media_upload()",
@@ -1809,7 +1809,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1974",
       "id": "complete",
-      "community": 19
+      "community": 21
     },
     {
       "label": "complete_media_upload()",
@@ -1817,7 +1817,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L2015",
       "id": "complete_media_upload",
-      "community": 19
+      "community": 21
     },
     {
       "label": "load_media_locator()",
@@ -1889,7 +1889,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 17
+      "community": 20
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
