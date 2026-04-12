@@ -35,7 +35,7 @@ interface 消息可见片段 {
   行高: number;
 }
 
-type 程序滚动来源 = "media_viewer_open";
+type 程序滚动来源 = "media_viewer_open" | "jump_to_latest";
 
 export interface 房间滚动器依赖 {
   读取状态(): 房间滚动观察态;
@@ -142,6 +142,25 @@ export class 房间滚动器 implements ReactiveController {
       scrollContainer.scrollHeight - scrollContainer.clientHeight - scrollContainer.scrollTop <=
       贴底跟随阈值像素
     );
+  }
+
+  async 滚到最新位置(): Promise<void> {
+    await this.host.updateComplete;
+    const scrollContainer = this.deps.查询滚动容器();
+    if (!scrollContainer) {
+      return;
+    }
+    // “跳到最新”是用户命令，但真正写 scrollTop 的仍是程序性滚动；
+    // 这里登记尾波，避免浏览器随后补发的 scroll 被误解成一次新的手动阅读。
+    this.登记程序滚动来源("jump_to_latest");
+    try {
+      scrollContainer.scrollTop = Math.max(
+        0,
+        scrollContainer.scrollHeight - scrollContainer.clientHeight
+      );
+    } finally {
+      this.清除程序滚动来源("jump_to_latest");
+    }
   }
 
   /**

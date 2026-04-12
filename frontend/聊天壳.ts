@@ -926,17 +926,7 @@ export class 聊天壳 extends LitElement {
         等待壳渲染完成: async () => {
           await this.updateComplete;
         },
-        滚到最新位置: async () => {
-          await this.updateComplete;
-          const scrollContainer = this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null;
-          if (!scrollContainer) {
-            return;
-          }
-          scrollContainer.scrollTop = Math.max(
-            0,
-            scrollContainer.scrollHeight - scrollContainer.clientHeight
-          );
-        },
+        滚到最新位置: () => this.roomScroller.滚到最新位置(),
       });
     }
     return this._阅读推进编排端口;

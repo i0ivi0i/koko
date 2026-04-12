@@ -281,6 +281,63 @@ describe("房间滚动器", () => {
     expect(首屏完成).toHaveBeenCalledWith("贴底跟随");
   });
 
+  it("跳到最新由视口 owner 落到底部，并吸收随后的程序性滚动尾波", async () => {
+    const { 房间滚动器 } = await import("../房间滚动器");
+
+    const 状态: Pick<
+      聊天状态,
+      | "roomId"
+      | "firstUnreadEventPosition"
+      | "initialUnreadSettled"
+      | "scrollPhase"
+      | "historyLoading"
+      | "hasMoreBefore"
+      | "hasUserScrollIntent"
+      | "historyLoadThrottleUntil"
+    > = {
+      roomId: "r-test",
+      firstUnreadEventPosition: null,
+      initialUnreadSettled: true,
+      scrollPhase: "idle",
+      historyLoading: false,
+      hasMoreBefore: true,
+      hasUserScrollIntent: true,
+      historyLoadThrottleUntil: 0,
+    };
+    const 容器 = 创建滚动容器();
+    容器.scrollTop = 24;
+    const 请求更早历史 = vi.fn();
+    const 已读采样 = vi.fn();
+    const 主机 = {
+      addController() {},
+      removeController() {},
+      requestUpdate() {},
+      updateComplete: Promise.resolve(true),
+    };
+
+    const 滚动器 = new 房间滚动器(主机, {
+      读取状态: () => 状态,
+      更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
+      查询滚动容器: () => 容器,
+      查询消息节点: () => [创建消息节点(8, 180, 230)],
+      请求更早历史,
+      采样阅读锚点: 已读采样,
+      读取是否需要恢复补锚: () => false,
+      消耗恢复补锚标记: () => {},
+      报告首屏稳定完成: vi.fn(),
+    } as ConstructorParameters<typeof 房间滚动器>[1]);
+
+    await (滚动器 as unknown as { 滚到最新位置(): Promise<void> }).滚到最新位置();
+
+    expect(容器.scrollTop).toBe(400);
+    expect(滚动器.处理滚动事件(容器)).toBe(false);
+    expect(请求更早历史).not.toHaveBeenCalled();
+    expect(已读采样).not.toHaveBeenCalled();
+
+    滚动器.标记用户滚动意图();
+    expect(滚动器.处理滚动事件(容器)).toBe(true);
+  });
+
   it("长消息达到稳定可读阈值时，也会被采样成候选已读锚点", async () => {
     const { 房间滚动器 } = await import("../房间滚动器");
 
