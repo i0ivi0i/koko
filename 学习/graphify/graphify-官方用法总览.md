@@ -48,7 +48,7 @@ detect -> extract -> build -> cluster -> analyze -> report -> export
 当前最容易混淆的一点是：
 
 - 全量建图、`--update`、`--watch`、`--mode deep` 这类“跑整条图谱管线”的写法，官方主要写在 skill 模板里
-- 当前 `graphify --help` 顶层真正列出来的，是 `query`、`save-result`、`benchmark`、`hook`、`codex install` 这类 CLI 子命令
+- 当前 `graphify --help` 顶层真正列出来的，是 `install`、`query`、`save-result`、`benchmark`、`hook`、`codex install` 这类 CLI 子命令
 
 所以对你最有用的官方命令，应该按两层记：
 
@@ -65,23 +65,27 @@ detect -> extract -> build -> cluster -> analyze -> report -> export
 
 ### 在终端里用的 CLI 命令
 
+- 装 Codex skill：`graphify install --platform codex`
 - 问图：`graphify query "问题"`
 - 保存问答回图：`graphify save-result`
 - 看压缩收益：`graphify benchmark graphify-out/graph.json`
 - 装 git hooks：`graphify hook install`
 - 装 Codex 常驻规则：`graphify codex install`
+  这一步写的是项目里的 `AGENTS.md` 和 `.codex/hooks.json`，不是全局 skill
 
-## 小白最够用的 4 个动作
+## 小白最够用的 5 个动作
 
-如果你不想记太多，先只记这 4 个：
+如果你不想记太多，先只记这 5 个：
 
-1. `$graphify .`
+1. `graphify install --platform codex`
+   先把 Codex 的全局 skill 装上。
+2. `$graphify .`
    第一次给一个目录建图。
-2. `$graphify . --update`
+3. `$graphify . --update`
    一轮改动之后手动补更新。
-3. `graphify query "你的问题"`
+4. `graphify query "你的问题"`
    直接拿现成图回答问题。
-4. `graphify codex install`
+5. `graphify codex install`
    让项目进入常驻图谱工作流。
 
 ## 它支持什么文件

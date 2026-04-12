@@ -4,8 +4,8 @@
 
 这次学习不是只看 README，我实际对的是：
 
-- 官方仓库 `v3`
-- 当前本机包版本 `graphifyy 0.3.20`
+- 官方仓库 `v4`
+- 当前本机包版本 `graphifyy 0.4.3`
 - `README.md`
 - `README.zh-CN.md`
 - `CHANGELOG.md`
@@ -21,48 +21,48 @@
 
 ## 近几版最该记住的变化
 
+### `0.4.3`
+
+- 发布时间是 `2026-04-12`
+- JS/TS 的相对导入（`./foo`）现在会正确解析成完整节点 ID，大型 TypeScript 仓库里之前悄悄丢掉的 `imports_from` 边被补回来了
+- `graphify watch` 现在会把新的 AST 节点和上一次全量建图留下的语义节点一起合并，不再出现“改一次代码就把文档/论文语义层擦掉”的问题
+- Windows 下的 git hook 现在会在没有 `python3` 时自动回退到 `python`，两者都没有时安静退出，不再硬炸
+- `.vue` 和 `.svelte` 现在会被当成代码文件参与提取
+
+这一版对 koko 最关键，因为它同时打中：
+
+- Windows 原生开发环境
+- TypeScript 前端导入关系
+- 代码图和语义图共存的长期项目
+
+### `0.3.27`
+
+- `graphify install --platform gemini` 会把 skill 真正复制到 Gemini 的技能目录，补上之前“命令装了但触发词没生效”的坑
+
+这版跟 koko 关系不大，但能看出官方最近一直在收口“安装成功不等于真能用”的问题。
+
+### `0.3.25`
+
+- `.graphifyignore` 现在会像 `.gitignore` 一样沿父目录往上找，子目录扫描也会继承根规则
+- MCP 路径校验和异常返回做了修补
+- 新增 `--directed`
+- Markdown frontmatter 改动不再无意义打爆缓存
+
+### `0.3.24`
+
+- `graphify codex install` / `opencode install` 的幂等性修过了
+- 已有 `AGENTS.md` 但缺 `.codex/hooks.json` 时，重跑安装能自动补齐
+
+这版很重要，因为它决定了“重跑官方安装命令到底是修复，还是只会早退”。
+
 ### `0.3.20`
 
-- 发布时间是 `2026-04-09`
-- 交互式 HTML 图把节点标签、文件类型、社区名、源文件和边关系都做了 HTML escaping，顺手堵上了一类 XSS 风险
-- `graphify opencode install` 现在会写 `tool.execute.before` plugin，不再只改 `AGENTS.md`
-- AST 调用边现在标成 `EXTRACTED / 1.0`，不再继续伪装成 `INFERRED / 0.8`
-- `tree-sitter` 现在显式要求 `>= 0.23.0`，并加了版本守卫，旧环境会给更清楚的报错
+- 交互式 HTML 图把节点标签、文件类型、社区名、源文件和边关系都做了 escaping
+- `graphify opencode install` 开始写 `tool.execute.before` plugin
+- AST 调用边统一标成 `EXTRACTED / 1.0`
+- `tree-sitter` 开始显式要求 `>= 0.23.0`
 
-这一版的方向很明确：
-
-- 一部分是在修安全和标注准确性
-- 一部分是在补 OpenCode 集成
-- 另一部分是在收紧 `tree-sitter` 环境边界
-
-### `0.3.19`
-
-- 安装步骤先尝试普通 `pip install`，再回退到 `--break-system-packages`
-- 对托管 Python 环境更稳，少一点把环境装坏的风险
-
-### `0.3.18`
-
-- `--watch` 终于会尊重 `.graphifyignore`
-- Codex 的 `PreToolUse` hook 改成 `systemMessage`
-- 官方新增 `graphify save-result`
-- skill 模板不再靠一大段内联 Python 保存问答
-
-这是非常关键的一版，因为它直接影响我们这种长期项目的日常使用感。
-
-### `0.3.17`
-
-- 语义提取 chunk 会按目录分组
-- 大项目 AST 提取会打印进度
-- `tree-sitter` 依赖约束更严
-
-这版解决的是“看起来卡死”和“抽取结果不稳定”的问题。
-
-### `0.3.14`
-
-- `graphify codex install` 会写 `.codex/hooks.json`
-- `--update` 会清掉已删除文件留下的 ghost nodes
-
-这版之后，Codex 集成才真正比较像样。
+这版更多是在补安全、标注准确性和依赖边界。
 
 ## 目前最容易踩的坑
 
@@ -100,16 +100,20 @@
 
 所以整理 `学习/` 这类文档工作，最后还是要手动 `$graphify . --update`。
 
-### 坑 3：以为 `codex install` 只是加一段说明
+### 坑 3：把 `install --platform codex` 和 `codex install` 当成一回事
 
 不是。
 
-它会改项目里的：
+官方现在至少有两步：
 
-- `AGENTS.md`
-- `.codex/hooks.json`
+- `graphify install --platform codex`
+  这是装全局 skill。我们这次实测落点是 `C:\Users\home\.agents\skills\graphify\SKILL.md`
+- `graphify codex install`
+  这是写项目规则，会改项目里的：
+  - `AGENTS.md`
+  - `.codex/hooks.json`
 
-这是项目级长期规则，不是一次性命令提示。
+少任何一步，都会出现“好像装了，但少一半能力”的假成功。
 
 但这里还要再补半句，不然又会误会：
 
@@ -152,33 +156,33 @@
 
 如果目录大到离谱，先切子目录，不要机械全仓猛跑。
 
-### 坑 7：`watch.py` 里的代码重建现在仍然有结构性 bug
+### 坑 7：把 `0.3.20` 的 `watch.py` 旧 bug 当成今天的现实
 
-我这次把本机从 `0.3.19` 升到 `0.3.20` 后，重新跑：
+这个坑在我们旧笔记里是真坑，但它已经不是 `0.4.3` 的现实了。
 
-- `py -3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"`
+我这次把本机升到 `0.4.3` 后，重新跑：
 
-结果依然是：
+- `python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"`
 
-- `[graphify watch] Rebuild failed: <FileType.CODE: 'code'>`
+这次实际结果是：
 
-根因不是 koko 仓库私有逻辑，而是当前官方包里的：
+- `AST extraction: 110/110 files (100%)`
+- `[graphify watch] Rebuilt: 283 nodes, 336 edges, 33 communities`
+- `[graphify watch] graph.json and GRAPH_REPORT.md updated in graphify-out`
 
-- `detect()` 返回的是 `{"files": {"code": [...]}}`
-- 但 `watch.py::_rebuild_code()` 还在读 `detected[FileType.CODE]`
+也就是说：
 
-也就是：
-
-- 检测结果已经改成“字符串 key 包一层 `files`”
-- watcher 这边却还按旧结构直接拿 `Enum key`
-
-所以在当前 `0.3.20`，`_rebuild_code()` / hook 这条链对我们来说还不能当成可靠自动化。
+- `0.3.20` 那条 `_rebuild_code()` 结构性崩溃链，今天已经不能继续当结论复读
+- 当前 `0.4.3` 下，koko 这套代码侧重建链已经能跑通
+- 但它仍然只是代码图自动更新，不等于文档/PDF/图片也会自动重提取
 
 ## 对 koko 当前最实用的结论
 
-- 我们现在已经升到 `0.3.20`
-- `watch`、`hook`、`codex install` 三套机制在概念上能配合
-- 但当前官方包里的 `watch.py` 仍有结构性 bug，`_rebuild_code()` 这条链在我们这里还是会炸
+- 我们现在已经升到 `0.4.3`
+- `graphify install --platform codex` 和 `graphify codex install` 要分开理解：前者装全局 skill，后者写项目常驻规则
+- `watch`、git hook、`codex install` 三套机制现在在概念和实测上都能配合
+- 当前 `0.4.3` 下，`_rebuild_code()` 在 koko 里已经能跑通
+- `graphify hook install` 在我们这台 Windows 原生环境也已经装上了 `post-commit` / `post-checkout`，而且新版本会在没有 `python3` 时回退到 `python`
 - 但 `codex install` 写进去的 PreToolUse hook，在当前 Windows native 环境下不能默认当成已生效
 - 但文档类更新依旧不要幻想成全自动
 - 长期最好保留 `.graphifyignore`

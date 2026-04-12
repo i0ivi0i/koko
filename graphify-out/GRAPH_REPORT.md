@@ -1,13 +1,48 @@
 # Graph Report - .  (2026-04-12)
 
 ## Corpus Check
-- 110 files · ~4,546,507 words
+- 110 files · ~4,532,576 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
 - 283 nodes · 336 edges · 33 communities detected
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
+
+## Community Hubs (Navigation)
+- [[_COMMUNITY_Community 0|Community 0]]
+- [[_COMMUNITY_Community 1|Community 1]]
+- [[_COMMUNITY_Community 2|Community 2]]
+- [[_COMMUNITY_Community 3|Community 3]]
+- [[_COMMUNITY_Community 4|Community 4]]
+- [[_COMMUNITY_Community 5|Community 5]]
+- [[_COMMUNITY_Community 6|Community 6]]
+- [[_COMMUNITY_Community 7|Community 7]]
+- [[_COMMUNITY_Community 8|Community 8]]
+- [[_COMMUNITY_Community 9|Community 9]]
+- [[_COMMUNITY_Community 10|Community 10]]
+- [[_COMMUNITY_Community 11|Community 11]]
+- [[_COMMUNITY_Community 12|Community 12]]
+- [[_COMMUNITY_Community 13|Community 13]]
+- [[_COMMUNITY_Community 14|Community 14]]
+- [[_COMMUNITY_Community 15|Community 15]]
+- [[_COMMUNITY_Community 16|Community 16]]
+- [[_COMMUNITY_Community 17|Community 17]]
+- [[_COMMUNITY_Community 18|Community 18]]
+- [[_COMMUNITY_Community 19|Community 19]]
+- [[_COMMUNITY_Community 20|Community 20]]
+- [[_COMMUNITY_Community 21|Community 21]]
+- [[_COMMUNITY_Community 22|Community 22]]
+- [[_COMMUNITY_Community 23|Community 23]]
+- [[_COMMUNITY_Community 24|Community 24]]
+- [[_COMMUNITY_Community 25|Community 25]]
+- [[_COMMUNITY_Community 26|Community 26]]
+- [[_COMMUNITY_Community 27|Community 27]]
+- [[_COMMUNITY_Community 28|Community 28]]
+- [[_COMMUNITY_Community 29|Community 29]]
+- [[_COMMUNITY_Community 30|Community 30]]
+- [[_COMMUNITY_Community 31|Community 31]]
+- [[_COMMUNITY_Community 32|Community 32]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 22 edges
@@ -99,7 +134,7 @@ Nodes (1): Pg仓储
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
@@ -107,7 +142,7 @@ Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
@@ -115,7 +150,7 @@ Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
@@ -168,15 +203,15 @@ Nodes (0):
 ## Knowledge Gaps
 - **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `协作分发torrent元信息写入请求` (+17 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 16`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
+- **Thin community `Community 16`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 17`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 18`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 19`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 20`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 21`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

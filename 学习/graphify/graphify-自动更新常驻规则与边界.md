@@ -42,6 +42,11 @@
 - commit 之后，会根据改动文件判断是否重建代码图
 - 切分支之后，也会触发代码侧重建
 
+另外，`0.4.3` 还顺手补了一刀很实际的 Windows 体验：
+
+- 没有 `python3` shim 时，git hook 会自动回退到 `python`
+- 两个解释器都没有 `graphify` 时，直接安静退出，不再把 git 流程炸掉
+
 这不是实时监控，也不是文档全自动更新。它的长处是：
 
 - 不用常驻后台进程
@@ -76,13 +81,14 @@
 - 要在 `config.toml` 里显式打开 `features.codex_hooks = true`
 - `PreToolUse` 现在只拦 `Bash`
 - 它不拦 MCP、Write、WebSearch 这类非 shell 工具
-- 更关键的是：**hooks 目前在 Windows 上整体禁用**
+- 更关键的是：**这里说的是 Codex 的 lifecycle hooks；按官方文档，它们目前在 Windows 上整体禁用**
 
 这意味着：
 
 - `graphify codex install` 写 `.codex/hooks.json` 这步没错
 - 但在 Windows 原生 Codex app 里，不能默认认为这个 hook 已经实际生效
 - 对你现在这台 Win11 上的 Codex app，长期真正稳定的仍然是 `AGENTS.md`
+- 但这不等于 `graphify hook install` 那套 git hooks 也失效；那是另一条链，当前 `0.4.3` 已经专门补了 Windows 下的 Python 回退
 
 ## 对 Codex 还要补两个前提
 
@@ -115,7 +121,7 @@
 - 我刚改的是代码：`--watch` 或 git hook 可能已经帮上忙了
 - 我刚改的是 `学习/`、文档、笔记：手动 `$graphify . --update`
 - 我想让 Codex 长期记住先看图：先靠 `graphify codex install` 写进 `AGENTS.md`
-- 如果未来切到 WSL/Linux，再把 `.codex/hooks.json` 当成额外加成
+- 如果未来切到 WSL/Linux，再把 `.codex/hooks.json` 当成额外加成；在当前 Windows 原生环境里，不要把它当唯一真相 owner
 
 别把这三件事混成一个“自动同步总开关”。
 
