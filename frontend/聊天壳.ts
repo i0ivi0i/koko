@@ -4,6 +4,7 @@ import { 创建房间恢复编排, type 房间恢复编排端口 } from "./房�
 import { 创建房间实时编排, type 房间实时编排端口 } from "./房间实时编排.js";
 import { 创建阅读推进编排, type 阅读推进编排端口 } from "./阅读推进编排.js";
 import { 房间滚动器 } from "./房间滚动器.js";
+import { 创建应用运行时, type 应用运行时端口 } from "./应用运行时.js";
 import "./房间消息窗.js";
 import {
   创建操作台附件入口编排,
@@ -845,6 +846,7 @@ export class 聊天壳 extends LitElement {
   private _恢复编排端口: 房间恢复编排端口 | null = null;
   private _实时编排端口: 房间实时编排端口 | null = null;
   private _阅读推进编排端口: 阅读推进编排端口 | null = null;
+  private _应用运行时: 应用运行时端口 | null = null;
 
   /**
    * 恢复编排器通过惰性创建拿到完整依赖：
@@ -941,6 +943,21 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
+   * 应用运行时是壳层里唯一的应用事件入口。
+   * 它只组合现有 owner，不把滚动、媒体或阅读推进规则复制到聊天壳里。
+   */
+  private get 应用运行时(): 应用运行时端口 {
+    if (!this._应用运行时) {
+      this._应用运行时 = 创建应用运行时({
+        roomScroller: this.roomScroller,
+        阅读推进编排端口: this.阅读推进编排端口,
+        mediaViewer: this.媒体查看器,
+      });
+    }
+    return this._应用运行时;
+  }
+
+  /**
    * 滚动器只处理 DOM 滚动副作用：
    * - 首屏定位
    * - 历史补偿
@@ -985,6 +1002,7 @@ export class 聊天壳 extends LitElement {
   setMediaViewerForTest(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void {
     this.媒体查看器.销毁();
     this.媒体查看器 = viewer;
+    this._应用运行时 = null;
   }
 
   setTransportForTest(transport: 前端传输端口): void {
@@ -992,6 +1010,7 @@ export class 聊天壳 extends LitElement {
     this._实时编排端口 = null;
     this._阅读推进编排端口?.dispose();
     this._阅读推进编排端口 = null;
+    this._应用运行时 = null;
     this.媒体发布器.销毁();
     this.transport = transport;
     this.媒体定位器.清空();
@@ -1187,6 +1206,7 @@ export class 聊天壳 extends LitElement {
     this.媒体查看器.销毁();
     this._实时编排端口?.disconnect();
     this._阅读推进编排端口?.dispose();
+    this._应用运行时 = null;
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体发布器.销毁();
@@ -1727,26 +1747,24 @@ export class 聊天壳 extends LitElement {
             .mediaPlaybackByAttachmentId=${this.媒体播放结果表}
             .historyHint=${historyHint}
             .jumpToLatestLabel=${jumpToLatestLabel}
-            @room-scroll-intent=${() => this.roomScroller.标记用户滚动意图()}
+            @room-scroll-intent=${() =>
+              this.应用运行时.dispatch({ type: "ROOM_SCROLL_INTENT" })}
             @room-scroll=${(event: Event) => {
               const target = (
                 event as CustomEvent<{ scrollContainer: HTMLElement }>
               ).detail.scrollContainer;
-              // 历史补偿上下文依赖“本次滚动触发前的旧高度 + 旧锚点相对位置”。
-              // 因此必须先让滚动器处理补历史/采样，再做贴底观测，
-              // 否则后续观测过早读到新布局，会把这次补偿上下文读脏。
-              const 应继续观察视口 = this.roomScroller.处理滚动事件(target);
-              if (!应继续观察视口) {
-                return;
-              }
-              this.阅读推进编排端口.接收视口滚动();
+              this.应用运行时.dispatch({
+                type: "ROOM_SCROLL_OBSERVED",
+                scrollContainer: target,
+              });
             }}
-            @jump-to-latest=${() => {
-              void this.阅读推进编排端口.请求跳到最新();
-            }}
+            @jump-to-latest=${() =>
+              this.应用运行时.dispatch({ type: "ROOM_JUMP_TO_LATEST_REQUESTED" })}
             @room-open-media-viewer=${(event: CustomEvent<媒体查看器打开请求>) => {
-              this.roomScroller.登记程序滚动来源("media_viewer_open");
-              this.媒体查看器.打开(event.detail);
+              this.应用运行时.dispatch({
+                type: "MEDIA_OPEN_REQUESTED",
+                request: event.detail,
+              });
             }}
           ></koko-room-message-pane>
         </section>
