@@ -7,11 +7,6 @@ import {
   默认统一媒体文件选择配置,
 } from "./操作台/index.js";
 import {
-  创建媒体定位器,
-  创建媒体播放器,
-  创建媒体发布器,
-  创建媒体查看器,
-  解析协作分发源,
   type 媒体查看器打开请求,
   type 媒体播放结果,
 } from "./媒体/index.js";
@@ -789,8 +784,6 @@ export class 聊天壳 extends LitElement {
       Array.from(this.shadowRoot?.querySelectorAll("[data-event-position]") ?? []) as HTMLElement[],
     清理房间视图本地状态: ({ previewUrls }) => {
       this.回收媒体草稿预览地址(previewUrls);
-      this.媒体发布器.清空();
-      this.清空媒体播放状态();
     },
   });
 
@@ -801,37 +794,6 @@ export class 聊天壳 extends LitElement {
   private 读取聊天快照() {
     return this.kernel.snapshot();
   }
-
-  private readonly 媒体定位器 = 创建媒体定位器({
-    getSessionId: () => this.读取聊天快照().sessionId,
-    loadMediaLocator: (_sessionId, attachmentId) => this.kernel.加载媒体定位(attachmentId),
-  });
-  private 媒体播放器 = this.创建页面级媒体播放器();
-  private 媒体查看器 = 创建媒体查看器({
-    onViewportCaptureEnd: () => {
-      this.kernel.清除程序滚动来源("media_viewer_open");
-    },
-  });
-  private 媒体播放结果表: Record<string, 媒体播放结果> = {};
-  private readonly 正在解析媒体播放 = new Map<string, Promise<void>>();
-  private readonly 媒体发布器 = 创建媒体发布器({
-    getSessionId: () => this.读取聊天快照().sessionId,
-    prepareMediaUpload: (kind, _sessionId, file) => this.kernel.准备媒体上传(kind, file),
-    completeMediaUpload: (_sessionId, attachmentId) => this.kernel.完成媒体上传(attachmentId),
-    readDrafts: () => this.读取聊天快照().composerMediaDrafts,
-    writeDraft: (draft) => {
-      this.回收媒体草稿预览地址(this.kernel.写入媒体草稿(draft));
-    },
-    updateDraft: (localId, patch) => {
-      this.回收媒体草稿预览地址(this.kernel.更新媒体草稿状态(localId, patch));
-    },
-    removeDraft: (localId) => {
-      this.回收媒体草稿预览地址(this.kernel.移除媒体草稿(localId));
-    },
-    clearDrafts: () => {
-      this.回收媒体草稿预览地址(this.kernel.清空媒体草稿());
-    },
-  });
   private _应用运行时: 应用运行时端口 | null = null;
 
   /**
@@ -845,41 +807,35 @@ export class 聊天壳 extends LitElement {
         处理聊天视口滚动: (scrollContainer) => this.kernel.处理聊天视口滚动(scrollContainer),
         请求跳到最新: () => this.kernel.请求跳到最新(),
         登记程序滚动来源: (source) => this.kernel.登记程序滚动来源(source),
-        打开媒体: (request) => this.媒体查看器.打开(request),
+        打开媒体: (request) => this.kernel.打开媒体查看器(request),
       });
     }
     return this._应用运行时;
   }
 
-  private 创建页面级媒体播放器(): {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
-  } {
-    return 创建媒体播放器({
-      locate: (attachmentId, options) => this.媒体定位器.获取定位(attachmentId, options),
-      resolveSwarmSource: 解析协作分发源,
-    });
-  }
-
   setMediaPlayerForTest(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
   }): void {
-    this.清空媒体播放状态();
-    this.媒体播放器 = player;
-    this.requestUpdate();
+    this.kernel.设置媒体播放器供测试(player);
   }
 
   setMediaViewerForTest(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void {
-    this.媒体查看器.销毁();
-    this.媒体查看器 = viewer;
+    this.kernel.设置媒体查看器供测试(viewer);
+  }
+
+  setMediaPublisherForTest(publisher: {
+    处理选择媒体文件(files: Iterable<File>): Promise<void>;
+    移除草稿(localId: string): void;
+    重试草稿(localId: string): Promise<void>;
+    清空(): void;
+    销毁(): void;
+  }): void {
+    this.kernel.设置媒体发布器供测试(publisher);
   }
 
   setTransportForTest(transport: 前端传输端口): void {
     this._应用运行时 = null;
-    this.媒体发布器.销毁();
     this.kernel.setTransportForTest(transport);
-    this.媒体定位器.清空();
-    this.清空媒体播放状态();
-    this.媒体播放器 = this.创建页面级媒体播放器();
   }
 
   private revokeDraftPreviewUrl(previewUrl: string): void {
@@ -899,75 +855,8 @@ export class 聊天壳 extends LitElement {
     }
   }
 
-  private 清空媒体播放状态(): void {
-    this.媒体播放结果表 = {};
-    this.正在解析媒体播放.clear();
-    this.媒体定位器.清空();
-  }
-
-  private 读取当前房间媒体附件(): Array<{ attachmentId: string; kind: "image" | "video" }> {
-    const seen = new Set<string>();
-    const attachments: Array<{ attachmentId: string; kind: "image" | "video" }> = [];
-    for (const message of this.读取聊天快照().messages) {
-      for (const attachment of message.attachments ?? []) {
-        if (seen.has(attachment.attachment_id)) {
-          continue;
-        }
-        seen.add(attachment.attachment_id);
-        attachments.push({
-          attachmentId: attachment.attachment_id,
-          kind: attachment.kind,
-        });
-      }
-    }
-    return attachments;
-  }
-
-  private 同步房间媒体播放结果(): void {
-    const attachments = this.读取当前房间媒体附件();
-    const activeAttachmentIds = new Set(attachments.map((item) => item.attachmentId));
-    let hasRemovedPlaybackState = false;
-    for (const attachmentId of Object.keys(this.媒体播放结果表)) {
-      if (activeAttachmentIds.has(attachmentId)) {
-        continue;
-      }
-      const nextResults = { ...this.媒体播放结果表 };
-      delete nextResults[attachmentId];
-      this.媒体播放结果表 = nextResults;
-      hasRemovedPlaybackState = true;
-    }
-    if (hasRemovedPlaybackState) {
-      this.requestUpdate();
-    }
-    for (const attachment of attachments) {
-      if (
-        this.媒体播放结果表[attachment.attachmentId] ||
-        this.正在解析媒体播放.has(attachment.attachmentId)
-      ) {
-        continue;
-      }
-      const task = (async () => {
-        const result = await this.媒体播放器.解析播放结果({
-          attachmentId: attachment.attachmentId,
-          kind: attachment.kind,
-        });
-        if (!this.读取当前房间媒体附件().some((item) => item.attachmentId === attachment.attachmentId)) {
-          return;
-        }
-        this.媒体播放结果表 = {
-          ...this.媒体播放结果表,
-          [attachment.attachmentId]: result,
-        };
-        this.requestUpdate();
-      })().finally(() => {
-        this.正在解析媒体播放.delete(attachment.attachmentId);
-      });
-      this.正在解析媒体播放.set(attachment.attachmentId, task);
-    }
-  }
-
   private removeComposerDraft(localId: string): void {
-    this.媒体发布器.移除草稿(localId);
+    this.kernel.移除媒体草稿(localId);
   }
 
   /**
@@ -978,7 +867,7 @@ export class 聊天壳 extends LitElement {
    *   继续保证草稿带里只保留一条真上传项，不长幽灵副本。
    */
   private async retryComposerDraft(localId: string): Promise<void> {
-    await this.媒体发布器.重试草稿(localId);
+    await this.kernel.重试媒体草稿(localId);
   }
 
   override connectedCallback(): void {
@@ -987,17 +876,10 @@ export class 聊天壳 extends LitElement {
     void this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
   }
 
-  override updated(): void {
-    this.同步房间媒体播放结果();
-  }
-
   override disconnectedCallback(): void {
     globalThis.removeEventListener("resize", this.handleViewportResize);
-    this.媒体查看器.销毁();
     this.kernel.dispose();
     this._应用运行时 = null;
-    this.媒体发布器.销毁();
-    this.清空媒体播放状态();
     super.disconnectedCallback();
   }
 
@@ -1020,11 +902,7 @@ export class 聊天壳 extends LitElement {
       return;
     }
     if (consoleMode === "message") {
-      void this.kernel.dispatch({ type: "SEND_MESSAGE_REQUESTED" }).then((result) => {
-        if (result?.shouldClearMediaPublisher) {
-          this.媒体发布器.清空();
-        }
-      });
+      void this.kernel.dispatch({ type: "SEND_MESSAGE_REQUESTED" });
     }
   }
 
@@ -1143,7 +1021,7 @@ export class 聊天壳 extends LitElement {
           `#${默认统一媒体文件选择配置.inputId}`
         ) ?? null,
       处理选择媒体文件: async (files) => {
-        await this.媒体发布器.处理选择媒体文件(files);
+        await this.kernel.处理选择媒体文件(files);
       },
     });
     const 统一媒体文件选择配置 = 附件入口编排.统一媒体文件选择配置;
@@ -1444,7 +1322,7 @@ export class 聊天壳 extends LitElement {
               消息文本布局环境,
               (attachmentId, variant) => this.kernel.构建附件内容地址(attachmentId, variant)
              )}
-            .mediaPlaybackByAttachmentId=${this.媒体播放结果表}
+            .mediaPlaybackByAttachmentId=${this.读取聊天快照().media.playbackByAttachmentId}
             .historyHint=${historyHint}
             .jumpToLatestLabel=${jumpToLatestLabel}
             @room-scroll-intent=${() =>

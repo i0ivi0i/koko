@@ -18,12 +18,20 @@ import {
   移除媒体草稿 as 移除媒体草稿状态,
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
+  type 媒体查看器打开请求,
+  type 媒体播放结果,
 } from "./媒体/index.js";
+import {
+  创建聊天媒体编排,
+  type 聊天媒体快照,
+  type 聊天媒体编排端口,
+} from "./聊天媒体编排.js";
 
 type 程序滚动来源 = "media_viewer_open";
 
 export type 聊天应用快照 = 聊天状态 & {
   bootstrapState: 房间壳外观["bootstrapState"];
+  media: 聊天媒体快照;
 };
 
 type 房间壳补丁 = Pick<
@@ -50,10 +58,6 @@ export type 聊天应用命令 =
   | { type: "LEAVE_ROOM_VIEW_REQUESTED" }
   | { type: "SEND_MESSAGE_REQUESTED" };
 
-export type 聊天应用命令结果 = {
-  shouldClearMediaPublisher?: boolean;
-};
-
 export interface 聊天应用内核宿主 {
   addController(controller: object): void;
   removeController(controller: object): void;
@@ -73,7 +77,7 @@ export interface 聊天应用内核依赖 {
 
 export interface 聊天应用内核端口 {
   snapshot(): 聊天应用快照;
-  dispatch(command: 聊天应用命令): Promise<void | 聊天应用命令结果>;
+  dispatch(command: 聊天应用命令): Promise<void>;
   setTransportForTest(transport: 前端传输端口): void;
   dispose(): void;
   标记用户滚动意图(): void;
@@ -81,17 +85,22 @@ export interface 聊天应用内核端口 {
   请求跳到最新(): Promise<void>;
   登记程序滚动来源(source: 程序滚动来源): void;
   清除程序滚动来源(source: 程序滚动来源): void;
-  写入媒体草稿(draft: 媒体附件草稿): string[];
-  更新媒体草稿状态(localId: string, patch: 媒体草稿状态补丁): string[];
-  移除媒体草稿(localId: string): string[];
-  清空媒体草稿(): string[];
-  加载媒体定位(attachmentId: string): ReturnType<前端传输端口["loadMediaLocator"]>;
-  准备媒体上传(
-    kind: "image" | "video",
-    file: File
-  ): ReturnType<前端传输端口["prepareMediaUpload"]>;
-  完成媒体上传(attachmentId: string): ReturnType<前端传输端口["completeMediaUpload"]>;
+  处理选择媒体文件(files: Iterable<File>): Promise<void>;
+  移除媒体草稿(localId: string): void;
+  重试媒体草稿(localId: string): Promise<void>;
+  打开媒体查看器(request: 媒体查看器打开请求): void;
   构建附件内容地址(attachmentId: string, variant?: "original" | "thumbnail"): string;
+  设置媒体播放器供测试(player: {
+    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+  }): void;
+  设置媒体查看器供测试(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void;
+  设置媒体发布器供测试(publisher: {
+    处理选择媒体文件(files: Iterable<File>): Promise<void>;
+    移除草稿(localId: string): void;
+    重试草稿(localId: string): Promise<void>;
+    清空(): void;
+    销毁(): void;
+  }): void;
   注入快照补丁供测试(patch: Partial<聊天应用快照>): void;
   读取房间滚动器供测试(): 房间滚动器;
   读取恢复编排端口供测试(): 房间恢复编排端口;
@@ -111,12 +120,11 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private readonly roomKernel = 创建房间内核();
 
   /**
-   * 浏览器端稳定快照统一收口在这里：
-   * - 业务编排 owner 只写这一份快照；
-   * - 壳层和测试都只读这一份快照；
-   * - `bootstrapState` 也一起并进来，避免壳层再去旁读 roomKernel。
+   * 这里继续只保存聊天主链自己的业务快照。
+   * 媒体播放结果不再混进同一个对象里，而是由媒体 owner 单独持有；
+   * `snapshot()` 再把两者投影成壳层可读的组合快照。
    */
-  private chatState: 聊天应用快照;
+  private chatState: Omit<聊天应用快照, "media">;
 
   /**
    * transport / storage 现在都属于聊天内核依赖。
@@ -124,6 +132,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    */
   private transport: 前端传输端口;
   private storage: 前端存储端口;
+  private readonly 媒体编排: 聊天媒体编排端口;
 
   /**
    * 恢复专用补锚标记仍只属于阅读/滚动协作链路。
@@ -165,13 +174,37 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       },
       报告首屏稳定完成: (mode) => this.阅读推进编排端口.接收首屏稳定完成(mode),
     });
+    this.媒体编排 = 创建聊天媒体编排({
+      transport: () => this.transport,
+      读取会话编号: () => this.chatState.sessionId,
+      读取消息: () => this.chatState.messages,
+      读取草稿: () => this.chatState.composerMediaDrafts,
+      写入草稿列表: (nextDrafts) => {
+        this.更新快照({ composerMediaDrafts: nextDrafts });
+      },
+      请求重渲染: () => {
+        this.deps.host.requestUpdate();
+      },
+      回收媒体草稿预览地址: (previewUrls) => {
+        this.deps.清理房间视图本地状态?.({ previewUrls });
+      },
+      登记程序滚动来源: (source) => {
+        this.登记程序滚动来源(source);
+      },
+      清除程序滚动来源: (source) => {
+        this.清除程序滚动来源(source);
+      },
+    });
   }
 
   snapshot(): 聊天应用快照 {
-    return this.chatState;
+    return {
+      ...this.chatState,
+      media: this.媒体编排.snapshot(),
+    };
   }
 
-  async dispatch(command: 聊天应用命令): Promise<void | 聊天应用命令结果> {
+  async dispatch(command: 聊天应用命令): Promise<void> {
     switch (command.type) {
       case "BOOTSTRAP_REQUESTED":
         await this.恢复编排端口.bootstrap();
@@ -209,9 +242,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         const hasReadyDraft = currentDrafts.some((draft) => draft.status === "ready");
         const hasBlockingDraft = currentDrafts.some((draft) => draft.status !== "ready");
         await this.实时编排端口.sendMessage();
-        return {
-          shouldClearMediaPublisher: hasReadyDraft && !hasBlockingDraft,
-        };
+        if (hasReadyDraft && !hasBlockingDraft) {
+          this.媒体编排.清空草稿();
+        }
+        return;
       }
     }
   }
@@ -223,6 +257,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this._阅读推进编排端口 = null;
     this._恢复编排端口 = null;
     this.transport = transport;
+    this.媒体编排.清空();
   }
 
   dispose(): void {
@@ -230,6 +265,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
+    this.媒体编排.销毁();
   }
 
   标记用户滚动意图(): void {
@@ -255,55 +291,50 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.清除程序滚动来源(source);
   }
 
-  写入媒体草稿(draft: 媒体附件草稿): string[] {
-    const result = 写入媒体草稿状态(this.chatState.composerMediaDrafts, draft);
-    this.更新快照({ composerMediaDrafts: result.草稿列表 });
-    return result.需要回收的预览地址;
+  async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
+    await this.媒体编排.处理选择媒体文件(files);
   }
 
-  更新媒体草稿状态(localId: string, patch: 媒体草稿状态补丁): string[] {
-    const result = 更新媒体草稿状态值(this.chatState.composerMediaDrafts, localId, patch);
-    this.更新快照({ composerMediaDrafts: result.草稿列表 });
-    return result.需要回收的预览地址;
+  移除媒体草稿(localId: string): void {
+    this.媒体编排.移除媒体草稿(localId);
   }
 
-  移除媒体草稿(localId: string): string[] {
-    const result = 移除媒体草稿状态(this.chatState.composerMediaDrafts, localId);
-    this.更新快照({ composerMediaDrafts: result.草稿列表 });
-    return result.需要回收的预览地址;
+  async 重试媒体草稿(localId: string): Promise<void> {
+    await this.媒体编排.重试媒体草稿(localId);
   }
 
-  清空媒体草稿(): string[] {
-    const previewUrls = this.chatState.composerMediaDrafts.map((draft) => draft.previewUrl);
-    this.更新快照({ composerMediaDrafts: [] });
-    return previewUrls;
-  }
-
-  /**
-   * 媒体定位和上传仍暂时由聊天内核代壳层转发。
-   * 这一层的目的只有一个：不再把整条 transport 旁路暴露给壳层。
-   * 后续 Task 10 会继续把这些调用并进真正的 MediaOwner。
-   */
-  加载媒体定位(attachmentId: string): ReturnType<前端传输端口["loadMediaLocator"]> {
-    return this.transport.loadMediaLocator(this.chatState.sessionId, attachmentId);
-  }
-
-  准备媒体上传(
-    kind: "image" | "video",
-    file: File
-  ): ReturnType<前端传输端口["prepareMediaUpload"]> {
-    return this.transport.prepareMediaUpload(kind, this.chatState.sessionId, file);
-  }
-
-  完成媒体上传(attachmentId: string): ReturnType<前端传输端口["completeMediaUpload"]> {
-    return this.transport.completeMediaUpload(this.chatState.sessionId, attachmentId);
+  打开媒体查看器(request: 媒体查看器打开请求): void {
+    this.媒体编排.打开查看器(request);
   }
 
   构建附件内容地址(
     attachmentId: string,
     variant: "original" | "thumbnail" = "original"
   ): string {
-    return this.transport.buildAttachmentContentUrl(attachmentId, this.chatState.sessionId, variant);
+    return this.媒体编排.构建附件内容地址(attachmentId, variant);
+  }
+
+  设置媒体播放器供测试(player: {
+    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+  }): void {
+    this.媒体编排.设置媒体播放器供测试(player);
+  }
+
+  设置媒体查看器供测试(viewer: {
+    打开(input: 媒体查看器打开请求): void;
+    销毁(): void;
+  }): void {
+    this.媒体编排.设置媒体查看器供测试(viewer);
+  }
+
+  设置媒体发布器供测试(publisher: {
+    处理选择媒体文件(files: Iterable<File>): Promise<void>;
+    移除草稿(localId: string): void;
+    重试草稿(localId: string): Promise<void>;
+    清空(): void;
+    销毁(): void;
+  }): void {
+    this.媒体编排.设置媒体发布器供测试(publisher);
   }
 
   /**
@@ -312,7 +343,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * - 只允许补丁式注入和只读观察，不再保留 `replaceSnapshot()` 那种整包覆盖真相的旁路。
    */
   注入快照补丁供测试(patch: Partial<聊天应用快照>): void {
-    this.更新快照(patch);
+    const { media: _忽略媒体快照, ...statePatch } = patch;
+    this.更新快照(statePatch);
   }
 
   读取房间滚动器供测试(): 房间滚动器 {
@@ -420,8 +452,11 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     });
   }
 
-  private 更新快照(patch: Partial<聊天应用快照>): void {
+  private 更新快照(patch: Partial<Omit<聊天应用快照, "media">>): void {
     this.chatState = { ...this.chatState, ...patch };
+    if (Object.hasOwn(patch, "messages")) {
+      this.媒体编排.同步消息附件播放结果();
+    }
     this.deps.host.requestUpdate();
   }
 
@@ -456,9 +491,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     }
   ): void {
     this.实时编排端口.disconnect();
-    this.deps.清理房间视图本地状态?.({
-      previewUrls: this.chatState.composerMediaDrafts.map((draft) => draft.previewUrl),
-    });
     this.storage.清除当前房间标识();
     if (!opts.keepRoomCodeCache) {
       this.storage.清除当前房间短码();
@@ -466,9 +498,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.阅读推进编排端口.dispose();
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
+    this.媒体编排.清空();
     this.更新快照({
       messageInput: "",
-      composerMediaDrafts: [],
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,
       hasMoreBefore: false,

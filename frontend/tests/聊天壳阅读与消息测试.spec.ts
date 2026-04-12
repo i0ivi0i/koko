@@ -115,6 +115,13 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
     expect(items[0].bubbleWidth).toBeGreaterThan(0);
   });
 
+  it("聊天壳实例不再把媒体查看器和播放结果表挂在壳层对象上", () => {
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+
+    expect("媒体查看器" in (el as object)).toBe(false);
+    expect("媒体播放结果表" in (el as object)).toBe(false);
+  });
+
   it("消息气泡宽度会按紧凑 shrinkwrap 结果收窄，而不是继续等于自然单行宽度", () => {
     const 气泡外框附加宽度 =
       默认消息文本布局环境.bubbleHorizontalPadding +

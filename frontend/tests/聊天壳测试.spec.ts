@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../存储";
 import {
@@ -32,6 +35,11 @@ import {
 import type { 房间消息窗 } from "../房间消息窗";
 import type { 匿名身份引导结果 } from "../契约";
 import { 聊天壳 } from "../聊天壳";
+
+const 当前测试文件目录 = dirname(fileURLToPath(import.meta.url));
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(resolve(当前测试文件目录, "..", relativePath), "utf8");
+
 describe("聊天壳集成 / 首页与控制台", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -83,6 +91,25 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain("overscroll-behavior-y: contain");
+  });
+
+  it("媒体编排已经下沉到聊天内核，聊天壳不再自己持有媒体 runtime 真相", async () => {
+    const source = 读取前端源码("聊天壳.ts");
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+
+    expect(source).not.toContain("private readonly 媒体定位器");
+    expect(source).not.toContain("private 媒体播放器");
+    expect(source).not.toContain("private 媒体查看器");
+    expect(source).not.toContain("private 媒体播放结果表");
+    expect(source).not.toContain("private readonly 正在解析媒体播放");
+    expect(source).not.toContain("private readonly 媒体发布器");
+    expect(source).not.toContain("private 同步房间媒体播放结果()");
+    expect("媒体定位器" in (el as object)).toBe(false);
+    expect("媒体播放器" in (el as object)).toBe(false);
+    expect("媒体查看器" in (el as object)).toBe(false);
+    expect("媒体播放结果表" in (el as object)).toBe(false);
+    expect("正在解析媒体播放" in (el as object)).toBe(false);
+    expect("媒体发布器" in (el as object)).toBe(false);
   });
 
   it("聊天滚动容器会显式关闭浏览器默认滚动锚点，避免和手动历史补偿打架", () => {
@@ -721,11 +748,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("点击加号会直接触发原生文件输入，而不是打开 Dashboard", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (
-      el as unknown as {
-        媒体发布器: typeof fake媒体发布器;
-      }
-    ).媒体发布器 = fake媒体发布器;
+    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
+      fake媒体发布器
+    );
 
     const input = 读取统一媒体文件输入(el);
     const clickSpy = vi.spyOn(input, "click");
@@ -868,11 +893,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("失败图片点击重试时会把 localId 转交给媒体发布器", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (
-      el as unknown as {
-        媒体发布器: typeof fake媒体发布器;
-      }
-    ).媒体发布器 = fake媒体发布器;
+    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
+      fake媒体发布器
+    );
     注入图片草稿(el, {
       localId: "draft-retry",
       kind: "image",
@@ -900,11 +923,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("统一媒体文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (
-      el as unknown as {
-        媒体发布器: typeof fake媒体发布器;
-      }
-    ).媒体发布器 = fake媒体发布器;
+    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
+      fake媒体发布器
+    );
     const imageFile = new File([new Uint8Array([1, 2, 3])], "selected.jpg", {
       type: "image/jpeg",
     });
@@ -933,11 +954,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("组件销毁时会销毁媒体发布器，避免旧上传器泄漏到下一次挂载", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (
-      el as unknown as {
-        媒体发布器: typeof fake媒体发布器;
-      }
-    ).媒体发布器 = fake媒体发布器;
+    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
+      fake媒体发布器
+    );
 
     el.remove();
 

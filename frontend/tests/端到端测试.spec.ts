@@ -247,6 +247,8 @@ describe("前后台壳端到端冒烟", () => {
     const transport = new 端到端假传输();
 
     const chat = document.createElement("koko-chat-shell") as 聊天壳;
+    expect("媒体发布器" in (chat as object)).toBe(false);
+    expect("媒体定位器" in (chat as object)).toBe(false);
     chat.setTransportForTest(transport);
     document.body.appendChild(chat);
     await new Promise((resolve) => setTimeout(resolve, 0));
