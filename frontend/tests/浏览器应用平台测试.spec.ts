@@ -34,19 +34,24 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_OPEN_REQUESTED"/);
   });
 
-  it("聊天壳和后台壳都会从平台拿 transport，而不是各自 new HttpRealtime传输", () => {
+  it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {
     const chatSource = 读取前端源码("聊天壳.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
     const adminSource = 读取前端源码("后台壳.ts");
+    const adminKernelSource = 读取前端源码("后台应用内核.ts");
 
     expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
     expect(kernelSource).toContain('from "./平台/index.js"');
     expect(kernelSource).toContain("deps.platform ?? 获取默认浏览器应用平台()");
     expect(kernelSource).toContain("this.platform.transport.transport()");
 
-    expect(adminSource).toContain('from "./平台/index.js"');
-    expect(adminSource).toContain("获取默认浏览器应用平台().transport.transport()");
+    expect(adminSource).toContain('from "./后台应用内核.js"');
+    expect(adminSource).not.toContain('from "./平台/index.js"');
+    expect(adminSource).not.toContain("private transport:");
     expect(adminSource).not.toContain("new HttpRealtime传输(window.location.origin)");
+    expect(adminKernelSource).toContain('from "./平台/index.js"');
+    expect(adminKernelSource).toContain("deps.platform ?? 获取默认浏览器应用平台()");
+    expect(adminKernelSource).toContain("this.platform.transport.transport()");
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {
