@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-12)
 
 ## Corpus Check
-- 110 files · ~4,527,148 words
+- 110 files · ~4,546,507 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -71,7 +71,7 @@ Nodes (6): 构造content_range值(), load_attachment_content(), load_media_locat
 
 ### Community 9 - "Community 9"
 Cohesion: 0.5
-Nodes (0):
+Nodes (0): 
 
 ### Community 10 - "Community 10"
 Cohesion: 0.4
@@ -99,7 +99,7 @@ Nodes (1): Pg仓储
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
@@ -107,19 +107,19 @@ Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (2): load_room_events(), parse_events_query()
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (2): load_room_history(), parse_history_query()
+Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
+Nodes (2): load_room_history(), parse_history_query()
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): load_room_events(), parse_events_query()
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
@@ -127,27 +127,27 @@ Nodes (2): 文本布局, 文本布局测试
 
 ### Community 23 - "Community 23"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 25 - "Community 25"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 26 - "Community 26"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 27 - "Community 27"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 28 - "Community 28"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 29 - "Community 29"
 Cohesion: 1.0
@@ -159,26 +159,26 @@ Nodes (1): frontend/房间内核.ts
 
 ### Community 31 - "Community 31"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 32 - "Community 32"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ## Knowledge Gaps
 - **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `协作分发torrent元信息写入请求` (+17 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 16`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
+- **Thin community `Community 16`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 17`** (2 nodes): `buildAttachmentContentUrl()`, `loadMediaLocator()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (2 nodes): `load_room_events()`, `parse_events_query()`
+- **Thin community `Community 18`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (2 nodes): `load_room_history()`, `parse_history_query()`
+- **Thin community `Community 19`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
+- **Thin community `Community 20`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 21`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 21`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 22`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
