@@ -1,5 +1,5 @@
 import type { 房间内核事件 } from "./房间内核.js";
-import { 合并房间时间线消息 } from "./房间时间线.js";
+import type { 时间线输入 } from "./房间时间线.js";
 import type { 历史补偿上下文 } from "./房间滚动器.js";
 import type { 聊天状态 } from "./状态.js";
 import type { 前端传输端口 } from "./传输.js";
@@ -20,6 +20,7 @@ type 房间滚动器端口 = {
 export interface 阅读推进编排依赖 {
   读取状态(): 聊天状态;
   更新状态(patch: Partial<聊天状态>): void;
+  推进时间线(input: 时间线输入): void;
   transport: 前端传输端口;
   roomKernel: 房间内核端口;
   roomShellPatch(): Partial<聊天状态>;
@@ -58,6 +59,10 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
 
   function 更新状态(patch: Partial<聊天状态>): void {
     deps.更新状态(patch);
+  }
+
+  function 推进时间线(input: 时间线输入): void {
+    deps.推进时间线(input);
   }
 
   function cancelPendingReadAnchorFlush(): void {
@@ -204,8 +209,11 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       const page = await deps.withSessionRefreshOnInvalid((sessionId) =>
         deps.transport.loadRoomHistory(state.roomId, sessionId, oldestMessage.event_position, 55)
       );
+      推进时间线({
+        type: "HISTORY",
+        messages: page.messages,
+      });
       更新状态({
-        messages: 合并房间时间线消息([...page.messages, ...读取状态().messages]),
         historyLoading: false,
         // 历史分页接口当前还只返回这一页消息本身：
         // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。

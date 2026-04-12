@@ -1,6 +1,6 @@
 import type { 房间快照 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
-import { 合并房间时间线消息 } from "./房间时间线.js";
+import type { 时间线输入 } from "./房间时间线.js";
 import type { 前端存储端口, 首页房间历史条目 } from "./存储.js";
 import { Http接口错误, type 前端传输端口 } from "./传输.js";
 import type { 聊天状态 } from "./状态.js";
@@ -33,6 +33,7 @@ type 房间滚动器端口 = {
 export interface 房间恢复编排依赖 {
   读取状态(): 聊天状态;
   更新状态(patch: Partial<聊天状态>): void;
+  推进时间线(input: 时间线输入): void;
   transport: 前端传输端口;
   storage: 前端存储端口;
   roomKernel: 房间内核端口;
@@ -75,6 +76,10 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
 
   function 更新状态(patch: Partial<聊天状态>): void {
     deps.更新状态(patch);
+  }
+
+  function 推进时间线(input: 时间线输入): void {
+    deps.推进时间线(input);
   }
 
   function 回填房间外观(): void {
@@ -256,13 +261,16 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
         snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
       hasUserScrollIntent: false,
       pendingReadAnchorPosition: null,
-      // snapshot_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
-      // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
-      messages: 合并房间时间线消息(snapshot.snapshot_messages),
       pending: false,
       historyLoading: false,
       historyLoadThrottleUntil: 0,
       historyErrorCode: "",
+    });
+    // snapshot_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
+    // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
+    推进时间线({
+      type: "SNAPSHOT",
+      messages: snapshot.snapshot_messages,
     });
     deps.roomScroller.安排首屏定位();
   }
@@ -346,13 +354,20 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
           snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
         hasUserScrollIntent: false,
         pendingReadAnchorPosition: null,
-        // 重拉快照时，必须先回到快照自带的权威首屏，再叠加其后的增量。
-        // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
-        messages: 合并房间时间线消息([...snapshot.snapshot_messages, ...delta.events]),
         pending: false,
         historyLoading: false,
         historyLoadThrottleUntil: 0,
         historyErrorCode: "",
+      });
+      // 重拉快照时，必须先回到快照自带的权威首屏，再叠加其后的增量。
+      // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
+      推进时间线({
+        type: "SNAPSHOT",
+        messages: snapshot.snapshot_messages,
+      });
+      推进时间线({
+        type: "REALTIME",
+        events: delta.events,
       });
       deps.roomScroller.安排首屏定位();
       deps.subscribeRoom(latestEventPosition);

@@ -24,13 +24,19 @@ const 选择更可信消息 = (current: 消息事件, candidate: 消息事件): 
   return candidate;
 };
 
+export type 时间线输入 =
+  | { type: "SNAPSHOT"; messages: 消息事件[] }
+  | { type: "HISTORY"; messages: 消息事件[] }
+  | { type: "REALTIME"; events: 消息事件[] }
+  | { type: "OPTIMISTIC"; message: 消息事件 };
+
 /**
  * 房间时间线是消息合流唯一 owner：
  * - snapshot / history / realtime / reconnect 都只给它消息事实；
  * - 它只按 client_message_id、message_id 和 event_position 收敛；
  * - 它不认识 socket、DOM、虚拟列表或房间恢复流程。
  */
-export function 合并房间时间线消息(messages: 消息事件[]): 消息事件[] {
+function 合并房间时间线消息(messages: 消息事件[]): 消息事件[] {
   const sorted = [...messages].sort((left, right) => left.event_position - right.event_position);
   const byClientMessageId = new Map<string, 消息事件>();
   const authoritativeByMessageId = new Map<string, 消息事件>();
@@ -71,6 +77,31 @@ export function 合并房间时间线消息(messages: 消息事件[]): 消息事
   }
 
   return out.sort((left, right) => left.event_position - right.event_position);
+}
+
+/**
+ * 时间线 owner 对外只接收“事实输入”：
+ * - SNAPSHOT：权威首屏基线，重建当前时间线
+ * - HISTORY：更早历史页，向前补齐
+ * - REALTIME：权威实时事件，向后合流
+ * - OPTIMISTIC：本地待确认消息，占位但不伪造权威事实
+ *
+ * 外层模块不再直接拼 `state.messages`，这样恢复、实时、历史分页都只负责上报事实。
+ */
+export function 推进房间时间线(
+  current: 消息事件[],
+  input: 时间线输入
+): 消息事件[] {
+  switch (input.type) {
+    case "SNAPSHOT":
+      return 合并房间时间线消息(input.messages);
+    case "HISTORY":
+      return 合并房间时间线消息([...input.messages, ...current]);
+    case "REALTIME":
+      return 合并房间时间线消息([...current, ...input.events]);
+    case "OPTIMISTIC":
+      return 合并房间时间线消息([...current, input.message]);
+  }
 }
 
 export function 创建乐观房间消息(input: 创建乐观房间消息输入): 消息事件 {

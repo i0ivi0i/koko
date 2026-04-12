@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { 创建乐观房间消息, 合并房间时间线消息 } from "../房间时间线";
+import { 创建乐观房间消息, 推进房间时间线 } from "../房间时间线";
 import type { 消息事件 } from "../契约";
 
 const 消息 = (patch: Partial<消息事件> & Pick<消息事件, "message_id" | "event_position">): 消息事件 => ({
@@ -15,34 +17,49 @@ const 消息 = (patch: Partial<消息事件> & Pick<消息事件, "message_id" |
   event_position: patch.event_position,
 });
 
+const 读取前端源码 = (relativePath: string): string =>
+  readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
+
 describe("房间时间线", () => {
   it("snapshot 与 realtime 送入同一条权威 message_id 时只保留一条", () => {
-    const merged = 合并房间时间线消息([
-      消息({ message_id: "m-1", client_message_id: "c-snapshot", event_position: 1 }),
-      消息({ message_id: "m-1", client_message_id: "c-realtime", event_position: 1 }),
-      消息({ message_id: "m-2", client_message_id: "c-2", event_position: 2 }),
-    ]);
+    const snapshot = 推进房间时间线([], {
+      type: "SNAPSHOT",
+      messages: [消息({ message_id: "m-1", client_message_id: "c-snapshot", event_position: 1 })],
+    });
+    const merged = 推进房间时间线(snapshot, {
+      type: "REALTIME",
+      events: [
+        消息({ message_id: "m-1", client_message_id: "c-realtime", event_position: 1 }),
+        消息({ message_id: "m-2", client_message_id: "c-2", event_position: 2 }),
+      ],
+    });
 
     expect(merged.map((message) => message.message_id)).toEqual(["m-1", "m-2"]);
   });
 
   it("本地乐观消息会被同 client_message_id 的权威消息替换", () => {
-    const merged = 合并房间时间线消息([
-      消息({
+    const optimistic = 推进房间时间线([], {
+      type: "OPTIMISTIC",
+      message: 消息({
         message_id: "local-c-1",
         client_message_id: "c-1",
         sender_session_id: "s-test",
         event_position: 11,
         body: "本地乐观态",
       }),
-      消息({
-        message_id: "m-11",
-        client_message_id: "c-1",
-        sender_session_id: "s-test",
-        event_position: 12,
-        body: "权威消息",
-      }),
-    ]);
+    });
+    const merged = 推进房间时间线(optimistic, {
+      type: "REALTIME",
+      events: [
+        消息({
+          message_id: "m-11",
+          client_message_id: "c-1",
+          sender_session_id: "s-test",
+          event_position: 12,
+          body: "权威消息",
+        }),
+      ],
+    });
 
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({
@@ -54,26 +71,40 @@ describe("房间时间线", () => {
   });
 
   it("历史前插、快照与实时追加按 event_position 输出同一条时间线", () => {
-    const merged = 合并房间时间线消息([
-      消息({ message_id: "m-3", event_position: 3 }),
-      消息({ message_id: "m-1", event_position: 1 }),
-      消息({ message_id: "m-4", event_position: 4 }),
-      消息({ message_id: "m-2", event_position: 2 }),
-    ]);
+    const snapshot = 推进房间时间线([], {
+      type: "SNAPSHOT",
+      messages: [消息({ message_id: "m-3", event_position: 3 })],
+    });
+    const withHistory = 推进房间时间线(snapshot, {
+      type: "HISTORY",
+      messages: [
+        消息({ message_id: "m-1", event_position: 1 }),
+        消息({ message_id: "m-2", event_position: 2 }),
+      ],
+    });
+    const merged = 推进房间时间线(withHistory, {
+      type: "REALTIME",
+      events: [消息({ message_id: "m-4", event_position: 4 })],
+    });
 
     expect(merged.map((message) => message.event_position)).toEqual([1, 2, 3, 4]);
   });
 
   it("重连补事件重复进入时保持幂等", () => {
-    const firstPass = 合并房间时间线消息([
-      消息({ message_id: "m-1", client_message_id: "c-1", event_position: 1 }),
-      消息({ message_id: "m-2", client_message_id: "c-2", event_position: 2 }),
-    ]);
-    const secondPass = 合并房间时间线消息([
-      ...firstPass,
-      消息({ message_id: "m-1", client_message_id: "c-1", event_position: 1 }),
-      消息({ message_id: "m-2", client_message_id: "c-2", event_position: 2 }),
-    ]);
+    const firstPass = 推进房间时间线([], {
+      type: "REALTIME",
+      events: [
+        消息({ message_id: "m-1", client_message_id: "c-1", event_position: 1 }),
+        消息({ message_id: "m-2", client_message_id: "c-2", event_position: 2 }),
+      ],
+    });
+    const secondPass = 推进房间时间线(firstPass, {
+      type: "REALTIME",
+      events: [
+        消息({ message_id: "m-1", client_message_id: "c-1", event_position: 1 }),
+        消息({ message_id: "m-2", client_message_id: "c-2", event_position: 2 }),
+      ],
+    });
 
     expect(secondPass).toEqual(firstPass);
   });
@@ -100,5 +131,21 @@ describe("房间时间线", () => {
       attachments: [],
       event_position: 10,
     });
+  });
+
+  it("恢复、实时、历史分页都只能把事实交给时间线 owner，不再各自手拼 messages 数组", () => {
+    const recoverySource = 读取前端源码("房间恢复编排.ts");
+    const realtimeSource = 读取前端源码("房间实时编排.ts");
+    const readingSource = 读取前端源码("阅读推进编排.ts");
+
+    expect(recoverySource).toContain("推进时间线({");
+    expect(recoverySource).not.toContain("messages: 合并房间时间线消息(");
+
+    expect(realtimeSource).toContain('type: "REALTIME"');
+    expect(realtimeSource).toContain('type: "OPTIMISTIC"');
+    expect(realtimeSource).not.toContain("const merged = 合并房间时间线消息(");
+
+    expect(readingSource).toContain('type: "HISTORY"');
+    expect(readingSource).not.toContain("messages: 合并房间时间线消息(");
   });
 });

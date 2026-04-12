@@ -1,7 +1,10 @@
 import type { Socket } from "socket.io-client";
 import type { 消息事件 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
-import { 创建乐观房间消息, 合并房间时间线消息 } from "./房间时间线.js";
+import {
+  创建乐观房间消息,
+  type 时间线输入,
+} from "./房间时间线.js";
 import { 提取可发送媒体附件标识 } from "./媒体/媒体草稿.js";
 import type { 聊天状态 } from "./状态.js";
 import { Http接口错误, type 前端传输端口 } from "./传输.js";
@@ -26,6 +29,7 @@ type 房间内核端口 = {
 export interface 房间实时编排依赖 {
   读取状态(): 聊天状态;
   更新状态(patch: Partial<聊天状态>): void;
+  推进时间线(input: 时间线输入): void;
   transport: 前端传输端口;
   roomKernel: 房间内核端口;
   roomShellPatch(): Partial<聊天状态>;
@@ -61,6 +65,10 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     deps.更新状态(patch);
   }
 
+  function 推进时间线(input: 时间线输入): void {
+    deps.推进时间线(input);
+  }
+
   function asRecoveryFailure(error: unknown): 恢复失败 {
     if (error instanceof Http接口错误) {
       return error;
@@ -84,15 +92,17 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   }
 
   function applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
-    const merged = 合并房间时间线消息([...读取状态().messages, ...events]);
     const shouldFollowLatest = 读取状态().viewportMode === "贴底跟随";
     deps.roomKernel.send({
       type: "AUTHORITATIVE_EVENTS_ARRIVED",
       latestEventPosition,
     });
+    推进时间线({
+      type: "REALTIME",
+      events,
+    });
     更新状态({
       ...deps.roomShellPatch(),
-      messages: merged,
       pending: false,
     });
     if (shouldFollowLatest) {
@@ -206,22 +216,20 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : `local-${Date.now()}`;
-    const nextMessages =
-      attachmentIds.length === 0
-        ? 合并房间时间线消息([
-            ...state.messages,
-            创建乐观房间消息({
-              roomId: state.roomId,
-              sessionId: state.sessionId,
-              displayAlias: state.displayAlias,
-              clientMessageId,
-              text,
-              latestEventPosition: state.latestEventPosition,
-            }),
-          ])
-        : state.messages;
+    if (attachmentIds.length === 0) {
+      推进时间线({
+        type: "OPTIMISTIC",
+        message: 创建乐观房间消息({
+          roomId: state.roomId,
+          sessionId: state.sessionId,
+          displayAlias: state.displayAlias,
+          clientMessageId,
+          text,
+          latestEventPosition: state.latestEventPosition,
+        }),
+      });
+    }
     更新状态({
-      messages: nextMessages,
       messageInput: "",
       composerMediaDrafts: [],
       pending: true,

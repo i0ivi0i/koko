@@ -4,6 +4,10 @@ import { 创建浏览器存储 } from "../../存储";
 import type { 前端传输端口 } from "../../传输";
 import type { 媒体附件草稿 as 图片附件草稿 } from "../../媒体/媒体草稿";
 import { 创建房间内核, 派生房间壳外观 } from "../../房间内核";
+import {
+  推进房间时间线,
+  type 时间线输入,
+} from "../../房间时间线";
 import { 初始聊天状态, type 聊天状态 } from "../../状态";
 import type {
   匿名身份引导结果,
@@ -687,10 +691,17 @@ export function 创建恢复编排测试场景(input: {
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
   };
+  const 推进时间线 = (input: 时间线输入): void => {
+    state = {
+      ...state,
+      messages: 推进房间时间线(state.messages, input),
+    };
+  };
 
   const deps = {
     读取状态: () => state,
     更新状态: updateState,
+    推进时间线,
     transport,
     storage,
     roomKernel,
@@ -802,10 +813,17 @@ export function 创建实时编排测试场景(input: {
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
   };
+  const 推进时间线 = (input: 时间线输入): void => {
+    state = {
+      ...state,
+      messages: 推进房间时间线(state.messages, input),
+    };
+  };
 
   const deps = {
     读取状态: () => state,
     更新状态: updateState,
+    推进时间线,
     transport,
     roomKernel,
     roomShellPatch: () => 创建房间壳补丁(roomKernel),
@@ -926,10 +944,17 @@ export function 创建阅读推进测试场景(input: {
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
   };
+  const 推进时间线 = (input: 时间线输入): void => {
+    state = {
+      ...state,
+      messages: 推进房间时间线(state.messages, input),
+    };
+  };
 
   const deps = {
     读取状态: () => state,
     更新状态: updateState,
+    推进时间线,
     transport,
     roomKernel,
     roomShellPatch: () => 创建房间壳补丁(roomKernel),

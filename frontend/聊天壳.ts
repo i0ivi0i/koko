@@ -28,6 +28,7 @@ import {
   type 媒体播放结果,
   type 媒体草稿状态补丁,
 } from "./媒体/index.js";
+import { 推进房间时间线, type 时间线输入 } from "./房间时间线.js";
 import { 获取默认浏览器应用平台 } from "./平台/index.js";
 import type { 前端传输端口 } from "./传输.js";
 import { 初始聊天状态, type 聊天状态 } from "./状态.js";
@@ -864,6 +865,7 @@ export class 聊天壳 extends LitElement {
       this._恢复编排端口 = 创建房间恢复编排({
         读取状态: () => this.chatState,
         更新状态: (patch) => this.updateChat(patch),
+        推进时间线: (input) => this.推进时间线(input),
         transport: this.transport,
         storage: this.storage,
         roomKernel: this.roomKernel,
@@ -894,6 +896,7 @@ export class 聊天壳 extends LitElement {
       this._实时编排端口 = 创建房间实时编排({
         读取状态: () => this.chatState,
         更新状态: (patch) => this.updateChat(patch),
+        推进时间线: (input) => this.推进时间线(input),
         transport: this.transport,
         roomKernel: this.roomKernel,
         roomShellPatch: () => this.roomShellPatch(),
@@ -921,6 +924,7 @@ export class 聊天壳 extends LitElement {
       this._阅读推进编排端口 = 创建阅读推进编排({
         读取状态: () => this.chatState,
         更新状态: (patch) => this.updateChat(patch),
+        推进时间线: (input) => this.推进时间线(input),
         transport: this.transport,
         roomKernel: this.roomKernel,
         roomShellPatch: () => this.roomShellPatch(),
@@ -1211,6 +1215,21 @@ export class 聊天壳 extends LitElement {
   private updateChat(patch: Partial<聊天状态>): void {
     this.chatState = { ...this.chatState, ...patch };
     this.requestUpdate();
+  }
+
+  /**
+   * 时间线真相先统一收口到这一条桥接入口：
+   * - 恢复编排、实时编排、历史分页只上报事实；
+   * - 真正的 messages 合流规则全部留在 `房间时间线.ts`；
+   * - `updateChat({ messages: ... })` 不再允许散落到多个 owner 里各写一份。
+   *
+   * 下一阶段再把这层桥彻底下沉进聊天应用内核；当前阶段先消灭 shared patch 总线里的
+   * “谁都能直接拼消息数组”。
+   */
+  private 推进时间线(input: 时间线输入): void {
+    this.updateChat({
+      messages: 推进房间时间线(this.chatState.messages, input),
+    });
   }
 
   /**
