@@ -195,23 +195,73 @@ pub struct 媒体定位结果 {
     pub 宽: Option<i32>,
     pub 高: Option<i32>,
     pub 允许缩略图: bool,
+    pub 原始冷源到期时间戳秒: Option<i64>,
+    pub 原始冷源删除时间戳秒: Option<i64>,
     pub 协作分发: Option<协作分发元数据快照>,
     pub 流媒体清单: Option<流媒体清单快照>,
+}
+
+/// 后台清理循环只需要知道“哪条附件的原始冷源该删了”。
+/// 这里故意不把图片 full/original 资产键混进来，避免清理任务越权碰长期资产主链。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 待清理媒体冷源 {
+    pub 附件标识: String,
+    pub 原始内容存储键: String,
 }
 
 /// 原始冷源只保留 24 小时窗口。
 /// 这里先把窗口值收成应用层常量，避免后续在外壳、handler、测试里继续散落“86400”。
 pub const 媒体原始冷源保留秒数: i64 = 24 * 60 * 60;
 
+/// 冷源可用性只看三件事：
+/// 1. 还有没有冷源地址；
+/// 2. 是否已经超过 TTL；
+/// 3. 是否已经被后台物理删除并留下权威删除时间。
+fn 冷源生命周期当前可用(
+    到期时间戳秒: Option<i64>,
+    删除时间戳秒: Option<i64>,
+    当前时间戳秒: i64,
+) -> bool {
+    if 删除时间戳秒.is_some() {
+        return false;
+    }
+    match 到期时间戳秒 {
+        Some(到期时间戳秒) => 当前时间戳秒 <= 到期时间戳秒,
+        None => false,
+    }
+}
+
+pub fn 冷源当前可用(
+    原始地址: Option<&str>,
+    到期时间戳秒: Option<i64>,
+    删除时间戳秒: Option<i64>,
+    当前时间戳秒: i64,
+) -> bool {
+    let Some(原始地址) = 原始地址 else {
+        return false;
+    };
+    if 原始地址.trim().is_empty() {
+        return false;
+    }
+    冷源生命周期当前可用(到期时间戳秒, 删除时间戳秒, 当前时间戳秒)
+}
+
 /// 构造共享 contract 里的冷源描述。
 /// 这个函数当前只回答“冷源现在还能不能用”，不夹带页面流程、fallback 顺序或播放器策略。
 pub fn 构造媒体冷源描述(
     原始地址: Option<String>,
-    到期时间戳秒: i64,
+    到期时间戳秒: Option<i64>,
+    删除时间戳秒: Option<i64>,
     当前时间戳秒: i64,
 ) -> contract::媒体冷源描述 {
+    let 到期时间戳秒 = 到期时间戳秒.unwrap_or(当前时间戳秒);
     contract::媒体冷源描述 {
-        是否可用: 原始地址.is_some() && 当前时间戳秒 <= 到期时间戳秒,
+        是否可用: 冷源当前可用(
+            原始地址.as_deref(),
+            Some(到期时间戳秒),
+            删除时间戳秒,
+            当前时间戳秒,
+        ),
         原始地址,
         到期时间戳秒,
         角色: contract::媒体冷源角色::冷备引导,
@@ -462,6 +512,26 @@ pub trait 仓储端口 {
     ) -> Result<Option<附件内容读取结果>, contract::错误码> {
         let _ = (附件标识, 会话标识, 变体);
         Ok(None)
+    }
+
+    /// 列出已经超过冷源保留窗口、且尚未留下删除时间的附件原始对象。
+    fn 列出待清理媒体冷源(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<待清理媒体冷源>, contract::错误码> {
+        let _ = (当前时间戳秒, 限制条数);
+        Ok(vec![])
+    }
+
+    /// 原始对象删掉后，要把 `origin_deleted_at` 写回附件真相，避免 locator 和内容读取继续各判各的。
+    fn 标记媒体冷源已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let _ = (附件标识, 删除时间戳秒);
+        Err(contract::错误码::系统错误)
     }
 
     /// 推进当前身份在某个房间里的阅读锚点。
@@ -987,10 +1057,7 @@ pub fn 写入协作分发存活(
     if locator.协作分发.is_none() {
         return Err(contract::错误码::附件未就绪);
     }
-    仓储.写入协作分发最近peer存活时间(
-        &请求.附件标识,
-        请求.最近peer存活时间戳秒,
-    )
+    仓储.写入协作分发最近peer存活时间(&请求.附件标识, 请求.最近peer存活时间戳秒)
 }
 
 pub fn 写入协作分发torrent元信息(
@@ -1050,6 +1117,19 @@ pub fn 读取附件内容(
     if snapshot.状态 != 附件状态读取结果::就绪 {
         return Err(contract::错误码::附件未就绪);
     }
+    if matches!(变体, 附件内容变体::原图) {
+        let 当前时间戳秒 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs() as i64)
+            .unwrap_or_default();
+        if !冷源生命周期当前可用(
+            snapshot.原始冷源到期时间戳秒,
+            snapshot.原始冷源删除时间戳秒,
+            当前时间戳秒,
+        ) {
+            return Err(contract::错误码::附件不存在);
+        }
+    }
     仓储
         .查询附件可读内容(附件标识, 会话标识, 变体)?
         .ok_or(contract::错误码::成员资格不足)
@@ -1094,9 +1174,37 @@ pub fn 查询媒体定位(
         宽: snapshot.宽,
         高: snapshot.高,
         允许缩略图: matches!(kind, 媒体附件类型::图片),
+        原始冷源到期时间戳秒: snapshot.原始冷源到期时间戳秒,
+        原始冷源删除时间戳秒: snapshot.原始冷源删除时间戳秒,
         协作分发: distribution,
         流媒体清单: streaming_manifest,
     })
+}
+
+/// 背景清理循环只做“把该删除的冷源挑出来”这一层过滤。
+/// 真正的对象删除仍由 shell/adapter 执行，避免应用层直接依赖对象存储实现。
+pub fn 列出待清理媒体冷源(
+    仓储: &dyn 仓储端口,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<待清理媒体冷源>, contract::错误码> {
+    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.列出待清理媒体冷源(当前时间戳秒, 限制条数)
+}
+
+/// 原始对象一旦删掉，就必须把删除时间回写到附件真相。
+/// 这样 locator、legacy original 路由和分发 runtime 才能共享同一条冷源退场事实。
+pub fn 标记媒体冷源已删除(
+    仓储: &mut dyn 仓储端口,
+    附件标识: &str,
+    删除时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    if 附件标识.trim().is_empty() || 删除时间戳秒 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.标记媒体冷源已删除(附件标识, 删除时间戳秒)
 }
 
 /// 领域错误 -> 契约错误码映射。

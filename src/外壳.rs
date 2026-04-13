@@ -8,7 +8,8 @@ use axum::{
 use object_store::{
     aws::{AmazonS3, AmazonS3Builder},
     local::LocalFileSystem,
-    ObjectStore,
+    path::Path as ObjectPath,
+    ObjectStore, ObjectStoreExt,
 };
 use serde::{Deserialize, Serialize};
 use socketioxide::{
@@ -17,7 +18,11 @@ use socketioxide::{
     SocketIo,
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::{fs, sync::Arc};
+use std::{
+    fs, io,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tower_http::{
     services::{ServeDir, ServeFile},
     set_header::response::SetResponseHeaderLayer,
@@ -97,6 +102,58 @@ pub async fn 构建应用状态(
         rustus_url: rustus.url,
         rustus_data_dir: rustus.data_dir,
     })
+}
+
+/// 执行一次媒体原始冷源清理：
+/// 1. 应用层先给出“哪些原始对象该删了”；
+/// 2. 壳层真正删除对象存储里的 raw original；
+/// 3. 删除成功后再把 `origin_deleted_at` 回写到附件真相。
+///
+/// 这样 24 小时规则就不再只是一个时间戳约定，而会真的落成“对象退场 + 真相留痕”的闭环。
+pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<()> {
+    let 当前时间戳秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
+    let state_for_query = state.clone();
+    let 待清理冷源 = tokio::task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_query);
+        crate::usecase::列出待清理媒体冷源(&repo, 当前时间戳秒, 128)
+            .map_err(|err| io::Error::other(format!("查询待清理媒体冷源失败: {err:?}")))
+    })
+    .await
+    .map_err(|err| io::Error::other(format!("冷源清理查询任务失败: {err}")))??;
+
+    for 冷源 in 待清理冷源 {
+        let object_path = ObjectPath::from(冷源.原始内容存储键.as_str());
+        match state.attachment_store.delete(&object_path).await {
+            Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
+            Err(err) => {
+                tracing::error!(
+                    usecase = "媒体冷源清理",
+                    adapter = "shell",
+                    outcome = "failed",
+                    attachment_id = 冷源.附件标识.as_str(),
+                    storage_key = 冷源.原始内容存储键.as_str(),
+                    error = %err,
+                    "删除原始冷源对象失败"
+                );
+                continue;
+            }
+        }
+
+        let state_for_mark = state.clone();
+        let attachment_id = 冷源.附件标识.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut repo = 构建共享仓储(&state_for_mark);
+            crate::usecase::标记媒体冷源已删除(&mut repo, &attachment_id, 当前时间戳秒)
+                .map_err(|err| io::Error::other(format!("标记媒体冷源已删除失败: {err:?}")))
+        })
+        .await
+        .map_err(|err| io::Error::other(format!("冷源清理写回任务失败: {err}")))??;
+    }
+
+    Ok(())
 }
 
 /// 统一装配附件对象存储：
@@ -272,7 +329,9 @@ fn 构建前端静态资源路由() -> Router<应用状态> {
             header::CACHE_CONTROL,
             HeaderValue::from_static("public, max-age=31536000, immutable"),
         ));
-    html_router.merge(media_service_worker_router).merge(assets_router)
+    html_router
+        .merge(media_service_worker_router)
+        .merge(assets_router)
 }
 
 #[derive(Deserialize)]

@@ -1,10 +1,7 @@
-use super::{
-    err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储,
-};
+use super::{err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储};
 use crate::{
     adapter::{媒体上传运输授权写入请求, 媒体上传运输记录},
-    contract,
-    media_distribution,
+    contract, media_distribution,
     usecase::{self, 仓储端口},
 };
 use axum::{
@@ -758,8 +755,8 @@ fn 推导rustus对外入口(
     let authority = raw_host.parse::<Authority>().ok()?;
     let forwarded_proto = 读取首个非空请求头(headers, "x-forwarded-proto")
         .or_else(|| 读取首个非空请求头(headers, "x-forwarded-scheme"));
-    let forwarded_port = 读取首个非空请求头(headers, "x-forwarded-port")
-        .and_then(|value| value.parse::<u16>().ok());
+    let forwarded_port =
+        读取首个非空请求头(headers, "x-forwarded-port").and_then(|value| value.parse::<u16>().ok());
     let scheme = forwarded_proto
         .clone()
         .unwrap_or_else(|| "http".to_string());
@@ -782,7 +779,11 @@ fn 推导rustus对外入口(
         None
     };
     let public_port = forwarded_port
-        .or_else(|| should_trust_authority_port.then(|| authority.port_u16()).flatten())
+        .or_else(|| {
+            should_trust_authority_port
+                .then(|| authority.port_u16())
+                .flatten()
+        })
         .or(inferred_proxy_default_port)
         .unwrap_or(rustus_server_port);
     let should_omit_port =
@@ -800,7 +801,12 @@ fn 读取媒体_tus对外地址(state: &应用状态, headers: &HeaderMap) -> St
         .rustus_public_endpoint
         .clone()
         .or_else(|| 推导rustus对外入口(headers, state.rustus_server_port, &state.rustus_url))
-        .unwrap_or_else(|| format!("http://127.0.0.1:{}{}", state.rustus_server_port, state.rustus_url))
+        .unwrap_or_else(|| {
+            format!(
+                "http://127.0.0.1:{}{}",
+                state.rustus_server_port, state.rustus_url
+            )
+        })
 }
 
 /// storage locator 来自 sidecar，不可被客户端随意扩展成任意磁盘路径。
@@ -955,7 +961,9 @@ fn 从运行态协作分发响应提取共享分发表面(
     }
 }
 
-fn 媒体分发描述转响应体(distribution: &contract::媒体分发描述) -> serde_json::Value {
+fn 媒体分发描述转响应体(
+    distribution: &contract::媒体分发描述
+) -> serde_json::Value {
     serde_json::json!({
         "swarm_id": distribution.swarm_id,
         "announce_urls": distribution.announce_urls,
@@ -1001,7 +1009,9 @@ fn 流媒体资产描述转响应体(asset: &contract::流媒体资产描述) ->
     })
 }
 
-fn blob媒体资产描述转响应体(asset: &contract::Blob媒体资产描述) -> serde_json::Value {
+fn blob媒体资产描述转响应体(
+    asset: &contract::Blob媒体资产描述
+) -> serde_json::Value {
     serde_json::json!({
         "asset_id": asset.资产标识,
         "content_hash": asset.内容哈希,
@@ -1020,6 +1030,8 @@ fn 构造流媒体资产响应体(
     distribution_snapshot: &usecase::协作分发元数据快照,
     streaming_manifest: Option<&usecase::流媒体清单快照>,
     original_url: String,
+    原始冷源到期时间戳秒: Option<i64>,
+    原始冷源删除时间戳秒: Option<i64>,
     session_id: &str,
     now_epoch秒: i64,
 ) -> serde_json::Value {
@@ -1057,7 +1069,8 @@ fn 构造流媒体资产响应体(
         ),
         冷源: usecase::构造媒体冷源描述(
             Some(original_url),
-            distribution_snapshot.web_seed_until秒,
+            原始冷源到期时间戳秒,
+            原始冷源删除时间戳秒,
             now_epoch秒,
         ),
     };
@@ -1074,12 +1087,12 @@ fn 构造blob媒体资产响应体(
     mime_type: &str,
     width: Option<i32>,
     height: Option<i32>,
+    原始冷源到期时间戳秒: Option<i64>,
+    原始冷源删除时间戳秒: Option<i64>,
     now_epoch秒: i64,
 ) -> serde_json::Value {
-    let origin_expiry = distribution_snapshot
-        .map(|snapshot| snapshot.web_seed_until秒)
-        .unwrap_or(now_epoch秒);
-    let preview_url = preview_available.then(|| 构造blob受控地址(attachment_id, session_id, "preview"));
+    let preview_url =
+        preview_available.then(|| 构造blob受控地址(attachment_id, session_id, "preview"));
     let full_url = 构造blob受控地址(attachment_id, session_id, "full");
     let original_url = 构造blob受控地址(attachment_id, session_id, "original");
     let asset = contract::Blob媒体资产描述 {
@@ -1116,7 +1129,12 @@ fn 构造blob媒体资产响应体(
                 从运行态协作分发响应提取共享分发表面(snapshot, runtime)
             })
         }),
-        冷源: usecase::构造媒体冷源描述(Some(legacy_original_url), origin_expiry, now_epoch秒),
+        冷源: usecase::构造媒体冷源描述(
+            Some(legacy_original_url),
+            原始冷源到期时间戳秒,
+            原始冷源删除时间戳秒,
+            now_epoch秒,
+        ),
     };
     blob媒体资产描述转响应体(&asset)
 }
@@ -1128,6 +1146,8 @@ fn 构造媒体资产响应体(
     streaming_manifest: Option<&usecase::流媒体清单快照>,
     original_url: String,
     thumbnail_url: Option<String>,
+    原始冷源到期时间戳秒: Option<i64>,
+    原始冷源删除时间戳秒: Option<i64>,
     session_id: &str,
     now_epoch秒: i64,
 ) -> Option<serde_json::Value> {
@@ -1138,6 +1158,8 @@ fn 构造媒体资产响应体(
             distribution_snapshot?,
             streaming_manifest,
             original_url,
+            原始冷源到期时间戳秒,
+            原始冷源删除时间戳秒,
             session_id,
             now_epoch秒,
         )),
@@ -1151,6 +1173,8 @@ fn 构造媒体资产响应体(
             snapshot.mime_type.as_str(),
             Some(snapshot.宽),
             Some(snapshot.高),
+            原始冷源到期时间戳秒,
+            原始冷源删除时间戳秒,
             now_epoch秒,
         )),
     }
@@ -1172,6 +1196,8 @@ fn 构造定位媒体资产响应体(
                 locator.协作分发.as_ref()?,
                 locator.流媒体清单.as_ref(),
                 original_url,
+                locator.原始冷源到期时间戳秒,
+                locator.原始冷源删除时间戳秒,
                 session_id,
                 now_epoch秒,
             ),
@@ -1188,6 +1214,8 @@ fn 构造定位媒体资产响应体(
                 locator.mime_type.as_str(),
                 locator.宽,
                 locator.高,
+                locator.原始冷源到期时间戳秒,
+                locator.原始冷源删除时间戳秒,
                 now_epoch秒,
             ),
         )),
@@ -1231,7 +1259,10 @@ fn 推导流媒体内容类型(asset_path: &str) -> &'static str {
     }
 }
 
-fn 执行外部命令(command: &mut Command, step: &str) -> Result<(), (StatusCode, &'static str, String)> {
+fn 执行外部命令(
+    command: &mut Command,
+    step: &str,
+) -> Result<(), (StatusCode, &'static str, String)> {
     let output = command.output().map_err(|err| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1337,7 +1368,8 @@ fn 生成流媒体打包产物(
     attachment_id: &str,
     输入文件: &StdPath,
 ) -> Result<流媒体打包结果, (StatusCode, &'static str, String)> {
-    let workdir = std::env::temp_dir().join(format!("koko-stream-{attachment_id}-{}", Uuid::new_v4()));
+    let workdir =
+        std::env::temp_dir().join(format!("koko-stream-{attachment_id}-{}", Uuid::new_v4()));
     std::fs::create_dir_all(workdir.as_path()).map_err(|err| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1365,10 +1397,7 @@ fn 生成流媒体打包产物(
 
     let 视频轨道文件 = workdir.join("video.mp4");
     let mut 转码视频 = Command::new(ffmpeg_bin);
-    转码视频.args([
-        "-y",
-        "-i",
-    ]);
+    转码视频.args(["-y", "-i"]);
     转码视频.arg(输入文件);
     转码视频.args([
         "-map",
@@ -1403,15 +1432,7 @@ fn 生成流媒体打包产物(
         let mut 转码音频 = Command::new(ffmpeg_bin);
         转码音频.args(["-y", "-i"]);
         转码音频.arg(输入文件);
-        转码音频.args([
-            "-map",
-            "0:a:0",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-vn",
-        ]);
+        转码音频.args(["-map", "0:a:0", "-c:a", "aac", "-b:a", "128k", "-vn"]);
         转码音频.arg(音频轨道文件.as_os_str());
         执行外部命令(&mut 转码音频, "FFmpeg 音频转码")?;
     }
@@ -1594,13 +1615,7 @@ fn 重写_dash清单内容(
         session_id,
         asset_path,
     );
-    重写_xml属性路径(
-        rewritten,
-        "media",
-        attachment_id,
-        session_id,
-        asset_path,
-    )
+    重写_xml属性路径(rewritten, "media", attachment_id, session_id, asset_path)
 }
 
 /// 冷路径：引导匿名身份。
@@ -2806,7 +2821,8 @@ pub(super) async fn complete_media_upload(
         }
     };
     let (prepared, transport) = prepared_and_transport;
-    let transport = match 等待complete所需运输回执(state.clone(), &attachment_id, transport).await {
+    let transport = match 等待complete所需运输回执(state.clone(), &attachment_id, transport).await
+    {
         Ok(transport) => transport,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
@@ -2871,10 +2887,11 @@ pub(super) async fn complete_media_upload(
             "原图尚未上传完成",
         );
     };
-    let temp_file_path = match 解析rustus临时文件路径(&state.rustus_data_dir, storage_locator) {
-        Ok(path) => path,
-        Err((status, code, message)) => return err_resp(status, code, message),
-    };
+    let temp_file_path =
+        match 解析rustus临时文件路径(&state.rustus_data_dir, storage_locator) {
+            Ok(path) => path,
+            Err((status, code, message)) => return err_resp(status, code, message),
+        };
     let original_bytes = match fs::read(&temp_file_path).await {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -3097,11 +3114,7 @@ pub(super) async fn complete_media_upload(
     ) {
         Ok(torrent) => torrent,
         Err(message) => {
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                message,
-            );
+            return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message);
         }
     };
     let torrent_request = usecase::协作分发torrent元信息写入请求 {
@@ -3117,8 +3130,9 @@ pub(super) async fn complete_media_upload(
     let streaming_manifest_request_for_write = streaming_manifest_request.clone();
     let complete_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        let snapshot = usecase::完成媒体附件上传(&mut repo, &session_id_for_usecase, &ready_request)
-            .map_err(map_domain_err_tuple)?;
+        let snapshot =
+            usecase::完成媒体附件上传(&mut repo, &session_id_for_usecase, &ready_request)
+                .map_err(map_domain_err_tuple)?;
         usecase::写入协作分发元数据(&mut repo, &distribution_request_for_write)
             .map_err(map_domain_err_tuple)?;
         usecase::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
@@ -3154,21 +3168,30 @@ pub(super) async fn complete_media_upload(
                 )),
                 usecase::媒体附件类型::视频 => None,
             };
+            let 冷源仍可用 = usecase::冷源当前可用(
+                Some(original_url.as_str()),
+                Some(原始冷源到期时间戳秒),
+                None,
+                now_epoch秒,
+            );
             let runtime_distribution = media_distribution::协作分发快照转响应值(
                 &distribution_snapshot,
                 attachment_id.as_str(),
                 session_id.as_str(),
                 state.swarm_tracker_public_url.as_str(),
                 state.swarm_web_seed_public_endpoint.as_deref(),
+                冷源仍可用,
                 now_epoch秒,
                 state.swarm_peer_presence_stale_seconds,
             );
             let streaming_manifest_snapshot =
-                streaming_manifest_request.as_ref().map(|request| usecase::流媒体清单快照 {
-                    附件标识: request.附件标识.clone(),
-                    hls主清单存储键: request.hls主清单存储键.clone(),
-                    dash主清单存储键: request.dash主清单存储键.clone(),
-                });
+                streaming_manifest_request
+                    .as_ref()
+                    .map(|request| usecase::流媒体清单快照 {
+                        附件标识: request.附件标识.clone(),
+                        hls主清单存储键: request.hls主清单存储键.clone(),
+                        dash主清单存储键: request.dash主清单存储键.clone(),
+                    });
             let media_asset = 构造媒体资产响应体(
                 &snapshot,
                 Some(&runtime_distribution),
@@ -3176,10 +3199,16 @@ pub(super) async fn complete_media_upload(
                 streaming_manifest_snapshot.as_ref(),
                 original_url,
                 thumbnail_url,
+                Some(原始冷源到期时间戳秒),
+                None,
                 session_id.as_str(),
                 now_epoch秒,
             );
-            (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot, media_asset))).into_response()
+            (
+                StatusCode::OK,
+                Json(媒体附件快照转响应体(&snapshot, media_asset)),
+            )
+                .into_response()
         }
         Ok(Err((status, code, message))) => err_resp(status, code, message),
         Err(err) => err_resp(
@@ -3222,14 +3251,28 @@ pub(super) async fn load_media_locator(
             )
         }
     };
-    let original_url = 构造附件受控地址(attachment_id.as_str(), query.session_id.as_str(), "original");
+    let original_url = 构造附件受控地址(
+        attachment_id.as_str(),
+        query.session_id.as_str(),
+        "original",
+    );
     let thumbnail_url = locator.允许缩略图.then(|| {
-        构造附件受控地址(attachment_id.as_str(), query.session_id.as_str(), "thumbnail")
+        构造附件受控地址(
+            attachment_id.as_str(),
+            query.session_id.as_str(),
+            "thumbnail",
+        )
     });
     let now_epoch秒 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or_default();
+    let 冷源仍可用 = usecase::冷源当前可用(
+        Some(original_url.as_str()),
+        locator.原始冷源到期时间戳秒,
+        locator.原始冷源删除时间戳秒,
+        now_epoch秒,
+    );
     let runtime_distribution = locator.协作分发.as_ref().map(|snapshot| {
         media_distribution::协作分发快照转响应值(
             snapshot,
@@ -3237,6 +3280,7 @@ pub(super) async fn load_media_locator(
             query.session_id.as_str(),
             state.swarm_tracker_public_url.as_str(),
             state.swarm_web_seed_public_endpoint.as_deref(),
+            冷源仍可用,
             now_epoch秒,
             state.swarm_peer_presence_stale_seconds,
         )
@@ -3297,8 +3341,8 @@ pub(super) async fn load_blob_asset_content(
         attachment_variant,
         headers,
     )
-        .await
-        .into_response()
+    .await
+    .into_response()
 }
 
 async fn 读取受控附件内容响应(
@@ -3505,7 +3549,9 @@ pub(super) async fn load_streaming_asset_content(
     };
     let asset_path = asset_path.trim().trim_start_matches('/').to_string();
     if asset_path.is_empty()
-        || asset_path.split('/').any(|part| part.is_empty() || part == "." || part == "..")
+        || asset_path
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
         || !(asset_path.starts_with("hls/") || asset_path.starts_with("dash/"))
     {
         return err_resp(
@@ -3670,7 +3716,10 @@ pub(super) async fn load_streaming_asset_content(
                     推导流媒体内容类型(asset_path.as_str()).to_string(),
                 ),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
-                (header::CONTENT_RANGE, 构造content_range值(&range, object_size)),
+                (
+                    header::CONTENT_RANGE,
+                    构造content_range值(&range, object_size),
+                ),
             ],
             body,
         )
@@ -3804,5 +3853,12 @@ pub(super) async fn load_attachment_content(
             return err_resp(status, code, message);
         }
     };
-    读取受控附件内容响应(state, attachment_id, query.session_id, query.variant, headers).await
+    读取受控附件内容响应(
+        state,
+        attachment_id,
+        query.session_id,
+        query.variant,
+        headers,
+    )
+    .await
 }

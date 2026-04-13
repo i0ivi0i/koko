@@ -70,16 +70,16 @@ fn 拼接公开地址(public_endpoint: Option<&str>, path: &str) -> String {
 
 pub(crate) fn 裁决协作分发可用性(
     snapshot: &usecase::协作分发元数据快照,
+    冷源仍可用: bool,
     now_epoch秒: i64,
     stale_seconds: i64,
 ) -> &'static str {
-    let web_seed仍在保底窗口内 = snapshot.web_seed_until秒 > now_epoch秒;
     let 最近peer仍算活跃 = snapshot
         .最近peer存活时间戳秒
         .map(|ts| now_epoch秒 - ts <= stale_seconds)
         .unwrap_or(false);
 
-    if web_seed仍在保底窗口内 || 最近peer仍算活跃 {
+    if 冷源仍可用 || 最近peer仍算活跃 {
         "available"
     } else {
         "expired"
@@ -96,13 +96,17 @@ pub(crate) fn 协作分发快照转响应值(
     session_id: &str,
     tracker_public_url: &str,
     web_seed_public_endpoint: Option<&str>,
+    冷源仍可用: bool,
     now_epoch秒: i64,
     stale_seconds: i64,
 ) -> serde_json::Value {
-    let web_seed_relative_path =
-        format!("/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original");
-    let presence_relative_path = format!("/api/media/{attachment_id}/presence?session_id={session_id}");
-    let availability = 裁决协作分发可用性(snapshot, now_epoch秒, stale_seconds);
+    let web_seed_relative_path = format!(
+        "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+    );
+    let presence_relative_path =
+        format!("/api/media/{attachment_id}/presence?session_id={session_id}");
+    let availability =
+        裁决协作分发可用性(snapshot, 冷源仍可用, now_epoch秒, stale_seconds);
     serde_json::json!({
         "content_id": snapshot.content_id,
         "content_hash": snapshot.content_hash,
@@ -114,7 +118,8 @@ pub(crate) fn 协作分发快照转响应值(
             .map(|_| format!("/api/media/{attachment_id}/torrent?session_id={session_id}")),
         "torrent_info_hash": snapshot.torrent_info_hash,
         "announce_urls": [tracker_public_url],
-        "web_seed_url": 拼接公开地址(web_seed_public_endpoint, web_seed_relative_path.as_str()),
+        "web_seed_url": 冷源仍可用
+            .then(|| 拼接公开地址(web_seed_public_endpoint, web_seed_relative_path.as_str())),
         "presence_url": presence_relative_path,
         "join_ticket": serde_json::Value::Null,
         "ticket_expires_at": serde_json::Value::Null,

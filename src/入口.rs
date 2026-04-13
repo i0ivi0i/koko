@@ -52,7 +52,7 @@ where
         config.admin_password.clone(),
     )
     .await?;
-    let app = crate::shell::构建路由(state);
+    let app = crate::shell::构建路由(state.clone());
     let addr = format!("0.0.0.0:{}", config.app_port);
 
     // 端口绑定失败通常是“端口占用/权限问题”，归类为基础设施错误。
@@ -71,6 +71,27 @@ where
         app_port = config.app_port,
         "HTTP 冷路径服务已启动"
     );
+    let cleanup_state = state.clone();
+    let cleanup_interval_seconds = config.协作分发.media_origin_cleanup_interval_seconds;
+    let cleanup_handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+            cleanup_interval_seconds as u64,
+        ));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            if let Err(err) = crate::shell::执行一次媒体冷源清理(cleanup_state.clone()).await
+            {
+                tracing::error!(
+                    usecase = "媒体冷源清理",
+                    adapter = "entry",
+                    outcome = "failed",
+                    error = %err,
+                    "后台媒体冷源清理失败"
+                );
+            }
+        }
+    });
     let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             shutdown_signal.await;
@@ -82,6 +103,7 @@ where
             );
         })
         .await;
+    cleanup_handle.abort();
     if let Err(err) = serve_result {
         记录命令失败("服务启动", "entry", "serve_failed", &err.to_string());
         return Err(io::Error::other(format!("服务运行失败: {err}")));

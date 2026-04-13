@@ -832,6 +832,64 @@ impl Pg仓储 {
         }))
     }
 
+    /// 只挑出“原始冷源到了 TTL 且还没留下删除时间”的附件。
+    /// 这里不碰对象存储，也不猜 UI 语义，只把需要清理的权威候选集交给外壳层执行。
+    async fn 列出待清理媒体冷源_异步(
+        pool: &PgPool,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<usecase::待清理媒体冷源>, contract::错误码> {
+        let rows = sqlx::query(
+            "SELECT attachment_id, storage_key
+             FROM attachments
+             WHERE status = 'ready'
+               AND storage_key IS NOT NULL
+               AND origin_expires_at IS NOT NULL
+               AND origin_expires_at <= TO_TIMESTAMP($1)
+               AND origin_deleted_at IS NULL
+             ORDER BY origin_expires_at ASC
+             LIMIT $2",
+        )
+        .bind(当前时间戳秒)
+        .bind(限制条数)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| usecase::待清理媒体冷源 {
+                附件标识: row.get("attachment_id"),
+                原始内容存储键: row.get("storage_key"),
+            })
+            .collect())
+    }
+
+    /// 物理对象删除成功后，把删除时间回写到附件真相。
+    /// 这样 locator / legacy original / runtime 都能共享同一条冷源退场事实。
+    async fn 标记媒体冷源已删除_异步(
+        pool: &PgPool,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let result = sqlx::query(
+            "UPDATE attachments
+             SET origin_deleted_at = TO_TIMESTAMP($2)
+             WHERE attachment_id = $1
+               AND origin_deleted_at IS NULL",
+        )
+        .bind(附件标识)
+        .bind(删除时间戳秒)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        if result.rows_affected() == 0 {
+            return Err(contract::错误码::附件不存在);
+        }
+        Ok(())
+    }
+
     /// 读取当前会话对应的稳定匿名内部身份标识。
     async fn 查询会话所属匿名身份_异步(
         pool: &PgPool,
@@ -1780,7 +1838,10 @@ impl 仓储端口 for Pg仓储 {
         &self,
         附件标识: &str,
     ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
-        self.在运行时执行(Self::查询协作分发元数据_异步(&self.pool, 附件标识))
+        self.在运行时执行(Self::查询协作分发元数据_异步(
+            &self.pool,
+            附件标识,
+        ))
     }
 
     fn 写入协作分发最近peer存活时间(
@@ -1799,28 +1860,38 @@ impl 仓储端口 for Pg仓储 {
         &self,
         附件标识: &str,
     ) -> Result<Option<usecase::协作分发torrent元信息快照>, contract::错误码> {
-        self.在运行时执行(Self::查询协作分发torrent元信息_异步(&self.pool, 附件标识))
+        self.在运行时执行(Self::查询协作分发torrent元信息_异步(
+            &self.pool,
+            附件标识,
+        ))
     }
 
     fn 写入协作分发torrent元信息(
         &mut self,
         请求: &usecase::协作分发torrent元信息写入请求,
     ) -> Result<usecase::协作分发torrent元信息快照, contract::错误码> {
-        self.在运行时执行(Self::写入协作分发torrent元信息_异步(&self.pool, 请求))
+        self.在运行时执行(Self::写入协作分发torrent元信息_异步(
+            &self.pool, 请求,
+        ))
     }
 
     fn 写入流媒体清单元数据(
         &mut self,
         请求: &usecase::流媒体清单写入请求,
     ) -> Result<usecase::流媒体清单快照, contract::错误码> {
-        self.在运行时执行(Self::写入流媒体清单元数据_异步(&self.pool, 请求))
+        self.在运行时执行(Self::写入流媒体清单元数据_异步(
+            &self.pool, 请求,
+        ))
     }
 
     fn 查询流媒体清单元数据(
         &self,
         附件标识: &str,
     ) -> Result<Option<usecase::流媒体清单快照>, contract::错误码> {
-        self.在运行时执行(Self::查询流媒体清单元数据_异步(&self.pool, 附件标识))
+        self.在运行时执行(Self::查询流媒体清单元数据_异步(
+            &self.pool,
+            附件标识,
+        ))
     }
 
     /// 附件内容读取仍然走成员可见性，不单独再长一套 ACL。
@@ -1835,6 +1906,30 @@ impl 仓储端口 for Pg仓储 {
             附件标识,
             会话标识,
             变体,
+        ))
+    }
+
+    fn 列出待清理媒体冷源(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<usecase::待清理媒体冷源>, contract::错误码> {
+        self.在运行时执行(Self::列出待清理媒体冷源_异步(
+            &self.pool,
+            当前时间戳秒,
+            限制条数,
+        ))
+    }
+
+    fn 标记媒体冷源已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        self.在运行时执行(Self::标记媒体冷源已删除_异步(
+            &self.pool,
+            附件标识,
+            删除时间戳秒,
         ))
     }
 

@@ -1,4 +1,5 @@
 use axum::http::{header, Method, StatusCode};
+use object_store::{path::Path as ObjectPath, ObjectStoreExt};
 use serial_test::serial;
 use sqlx::{postgres::PgPoolOptions, Row};
 use std::env;
@@ -8,6 +9,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod test_support;
 
 use test_support::{env_support::*, http::*, media::*};
+
+/// 直接往对象存储写入测试资产字节，确保“数据库真相”和“物理对象”同时成立。
+/// 这样冷源清理测试才能分清楚：到底是清理逻辑删掉了对象，还是一开始就没把对象写进去。
+async fn 写入测试对象(state: &koko::shell::应用状态, 存储键: &str, 字节: Vec<u8>) {
+    state
+        .attachment_store
+        .put(&ObjectPath::from(存储键), 字节.into())
+        .await
+        .expect("应能写入测试对象");
+}
 
 /// 协作分发测试：
 /// 1. 这里只守 locator / torrent / presence / web seed 可用性裁决。
@@ -317,20 +328,16 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
     assert_eq!(
         body["streaming_asset"]["manifest"]["hls_master_url"].as_str(),
         Some(
-            format!(
-                "/api/media/{attachment_id}/stream/hls/master.m3u8?session_id={session_id}"
-            )
-            .as_str()
+            format!("/api/media/{attachment_id}/stream/hls/master.m3u8?session_id={session_id}")
+                .as_str()
         ),
         "视频 locator 应返回正式 HLS 主清单入口，而不是继续留空"
     );
     assert_eq!(
         body["streaming_asset"]["manifest"]["dash_mpd_url"].as_str(),
         Some(
-            format!(
-                "/api/media/{attachment_id}/stream/dash/stream.mpd?session_id={session_id}"
-            )
-            .as_str()
+            format!("/api/media/{attachment_id}/stream/dash/stream.mpd?session_id={session_id}")
+                .as_str()
         ),
         "视频 locator 也应返回正式 DASH 主清单入口"
     );
@@ -460,9 +467,15 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
         body["blob_asset"]["asset_id"].as_str(),
         Some(attachment_id.as_str())
     );
-    assert_eq!(body["blob_asset"]["preview"]["id"].as_str(), Some("preview"));
+    assert_eq!(
+        body["blob_asset"]["preview"]["id"].as_str(),
+        Some("preview")
+    );
     assert_eq!(body["blob_asset"]["full"]["id"].as_str(), Some("full"));
-    assert_eq!(body["blob_asset"]["original"]["id"].as_str(), Some("original"));
+    assert_eq!(
+        body["blob_asset"]["original"]["id"].as_str(),
+        Some("original")
+    );
     assert_eq!(
         body["blob_asset"]["preview"]["url"].as_str(),
         Some(format!("/api/media/{attachment_id}/blob/preview?session_id={session_id}").as_str())
@@ -1159,6 +1172,234 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
     assert_eq!(
         body["distribution"]["availability"].as_str(),
         Some("expired")
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 原始冷源超过24小时后会被后台清理并写入删除时间() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let attachment_id = format!("att-origin-cleanup-{uniq}");
+    let device_token = format!("origin-cleanup-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let session_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库插入附件");
+    插入ready图片附件记录(&pool, &session_id, &attachment_id).await;
+    sqlx::query(
+        "UPDATE attachments
+         SET origin_expires_at = NOW() - INTERVAL '25 hours',
+             origin_deleted_at = NULL
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .execute(&pool)
+    .await
+    .expect("应能把原始冷源挪到 24 小时外");
+    pool.close().await;
+
+    let origin_storage_key = format!("original/{attachment_id_for_worker}.png");
+    写入测试对象(&state, &origin_storage_key, 最小png字节()).await;
+
+    koko::shell::执行一次媒体冷源清理(state.clone())
+        .await
+        .expect("应能执行一次冷源清理");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库校验清理结果");
+    let row = sqlx::query(
+        "SELECT EXTRACT(EPOCH FROM origin_deleted_at)::BIGINT AS origin_deleted_at_epoch
+         FROM attachments
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id_for_worker)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询冷源删除时间");
+    let origin_deleted_at_epoch: Option<i64> = row.get("origin_deleted_at_epoch");
+    assert!(
+        origin_deleted_at_epoch.is_some(),
+        "后台清理跑完后，附件真相里必须留下 origin_deleted_at，后续 locator 和内容读取才能共享同一条删除事实"
+    );
+    pool.close().await;
+
+    let head_result = state
+        .attachment_store
+        .head(&ObjectPath::from(origin_storage_key.as_str()))
+        .await;
+    assert!(
+        head_result.is_err(),
+        "原始冷源超过 24 小时后必须被物理删除，不能只在数据库里写个过期时间假装完成"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 冷源删除后locator顶层original失效但blob_original仍可读() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("OY{:010}", uniq % 10_000_000_000);
+    let device_token = format!("origin-fallback-device-{uniq}");
+    let attachment_id = format!("att-origin-fallback-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let session_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入附件");
+            插入ready图片附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            sqlx::query(
+                "UPDATE attachments
+                 SET origin_expires_at = NOW() - INTERVAL '25 hours',
+                     origin_deleted_at = NULL
+                 WHERE attachment_id = $1",
+            )
+            .bind(&attachment_id_for_worker)
+            .execute(&pool)
+            .await
+            .expect("应能把图片冷源挪到 24 小时外");
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("origin-fallback-client-{uniq}"),
+            "",
+            &[attachment_id_for_worker],
+        )
+        .expect("应能创建带图片附件的消息");
+
+        identity.会话标识
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    写入测试对象(
+        &state,
+        format!("original/{attachment_id}.png").as_str(),
+        最小png字节(),
+    )
+    .await;
+    写入测试对象(
+        &state,
+        format!("asset-original/{attachment_id}.png").as_str(),
+        最小png字节(),
+    )
+    .await;
+    写入测试对象(
+        &state,
+        format!("full/{attachment_id}.webp").as_str(),
+        最小png字节(),
+    )
+    .await;
+    let app = koko::shell::构建路由(state.clone());
+
+    koko::shell::执行一次媒体冷源清理(state.clone())
+        .await
+        .expect("应能执行一次冷源清理");
+
+    let (locator_status, locator_body) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(locator_status, StatusCode::OK);
+    assert_eq!(
+        locator_body["blob_asset"]["origin"]["available"].as_bool(),
+        Some(false),
+        "冷源物理删除后，blob_asset.origin 必须明确变成 unavailable，不能继续拿旧 original_url 冒充可用冷源"
+    );
+
+    let (legacy_origin_status, _, _) = send_bytes(
+        app.clone(),
+        Method::GET,
+        &format!(
+            "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+        ),
+        &[],
+    )
+    .await;
+    assert_eq!(
+        legacy_origin_status,
+        StatusCode::NOT_FOUND,
+        "旧 original 冷源路由在物理删除后必须失效，避免 Web 继续偷偷依赖已经退场的原始附件主链"
+    );
+
+    let (blob_origin_status, _, blob_origin_body) = send_bytes(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/blob/original?session_id={session_id}"),
+        &[],
+    )
+    .await;
+    assert_eq!(blob_origin_status, StatusCode::OK);
+    assert_eq!(
+        blob_origin_body,
+        最小png字节(),
+        "图片长期原图资产必须继续可读，证明冷源退场后查看器仍依赖资产主链而不是 legacy original"
     );
 }
 
