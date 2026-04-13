@@ -269,6 +269,83 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("视频已经切到 HLS manifest 主链且没有 poster 时，消息卡片会退到静态占位，而不是把 m3u8 塞给原生 video", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "manifest",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/stream/att-video-1/master.m3u8",
+        thumbnailUrl: null,
+        streamingDistribution: {
+          swarm_id: "swarm-hash-video-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-1",
+          join_ticket: null,
+        },
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(preview?.getAttribute("src")).toBeNull();
+    expect(preview?.getAttribute("poster")).toContain("data:image/svg+xml");
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]?.items).toEqual([
+      {
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/stream/att-video-1/master.m3u8",
+        posterSrc: null,
+        streamingDistribution: {
+          swarm_id: "swarm-hash-video-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-1",
+          join_ticket: null,
+        },
+        width: 1280,
+        height: 720,
+      },
+    ]);
+
+    pane.remove();
+  });
+
   it("图片预览加载失败时也会回抛媒体会话信号，而不是继续让旧 src 静默失效", async () => {
     const pane = 创建媒体消息窗();
     const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];

@@ -23,6 +23,29 @@ const 构建视频首帧预览源 = (src: string, posterSrc: string | null): str
 };
 
 /**
+ * HLS manifest 不是时间线原生 `<video>` 的可播放文件。
+ * 当后端暂时还没有真正的 poster 资产时，这里给一张极轻的 SVG 静态占位图：
+ * 1. 不再把 `master.m3u8` 强塞给浏览器导致黑块和转圈；
+ * 2. 又不需要为了一个时间线卡片在前端手搓第二套视频截图链；
+ * 3. 查看器仍然继续拿正式 manifest 主链，不影响真正播放。
+ */
+const 默认视频清单占位Poster =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180">
+      <defs>
+        <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="#1f2937"/>
+          <stop offset="100%" stop-color="#111827"/>
+        </linearGradient>
+      </defs>
+      <rect width="320" height="180" fill="url(#bg)"/>
+      <circle cx="160" cy="90" r="34" fill="rgba(255,255,255,0.18)"/>
+      <polygon points="150,72 150,108 182,90" fill="#f9fafb"/>
+    </svg>
+  `);
+
+/**
  * 房间消息窗只承接消息视口内部的表达与交互转发：
  * 1. 它渲染消息列表、局部历史提示和“跳到最新”入口；
  * 2. 它把滚动意图、滚动事件和跳转动作回抛给外层壳；
@@ -360,9 +383,17 @@ export class 房间消息窗 extends LitElement {
               ? playback.src
               : null;
           if (attachment.kind === "video") {
-            const previewPosterSrc = playback?.thumbnailUrl ?? attachment.posterSrc;
-            const 应使用Poster占位 =
-              playback?.mode === "manifest" && Boolean(previewPosterSrc);
+            const previewPosterSrc =
+              playback?.thumbnailUrl ??
+              attachment.posterSrc ??
+              (playback?.mode === "manifest" ? 默认视频清单占位Poster : null);
+            /**
+             * 标准流媒体主链成立后，时间线卡片只负责“静态可点预览”：
+             * - 不再让原生 `<video>` 误吃 `master.m3u8`；
+             * - 没有 poster 时也统一退到静态占位；
+             * - 真正播放交给查看器里的 HLS provider。
+             */
+            const 应使用Poster占位 = playback?.mode === "manifest";
             const videoSrc = 应使用Poster占位 ? null : playbackSrc ?? attachment.originalSrc;
             return html`
               <div class="message-video-card">

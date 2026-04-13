@@ -97,7 +97,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 23
+      "community": 24
     },
     {
       "label": "app-sw.ts",
@@ -105,7 +105,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 13
+      "community": 15
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -113,7 +113,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L31",
       "id": "app_sw",
-      "community": 13
+      "community": 15
     },
     {
       "label": "css.d.ts",
@@ -121,7 +121,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 17
+      "community": 18
     },
     {
       "label": "media-sw.ts",
@@ -153,7 +153,7 @@
       "source_file": "frontend\\vitest.config.ts",
       "source_location": "L1",
       "id": "frontend_vitest_config_ts",
-      "community": 21
+      "community": 22
     },
     {
       "label": "webtorrent.d.ts",
@@ -161,7 +161,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 24
+      "community": 25
     },
     {
       "label": "\u901a\u77e5\u8fd0\u884c\u65f6.ts",
@@ -445,7 +445,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_storage_ts",
-      "community": 19
+      "community": 20
     },
     {
       "label": "frontend/\u623f\u95f4\u5185\u6838.ts",
@@ -457,13 +457,13 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_kernel_ts",
-      "community": 18
+      "community": 19
     },
     {
       "label": "createRenderRoot()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L77",
+      "source_location": "L100",
       "id": "createrenderroot",
       "community": 2
     },
@@ -471,7 +471,7 @@
       "label": "dispatchPointerScrollIntent()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L81",
+      "source_location": "L104",
       "id": "dispatchpointerscrollintent",
       "community": 2
     },
@@ -479,7 +479,7 @@
       "label": "dispatchScrollIntent()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L88",
+      "source_location": "L111",
       "id": "dispatchscrollintent",
       "community": 2
     },
@@ -487,7 +487,7 @@
       "label": "dispatchScroll()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L109",
+      "source_location": "L132",
       "id": "dispatchscroll",
       "community": 2
     },
@@ -495,7 +495,7 @@
       "label": "dispatchJumpToLatest()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L119",
+      "source_location": "L142",
       "id": "dispatchjumptolatest",
       "community": 2
     },
@@ -503,7 +503,7 @@
       "label": "renderMessageBody()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L305",
+      "source_location": "L328",
       "id": "rendermessagebody",
       "community": 2
     },
@@ -511,7 +511,7 @@
       "label": "renderMessageAttachments()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L322",
+      "source_location": "L345",
       "id": "rendermessageattachments",
       "community": 2
     },
@@ -519,7 +519,7 @@
       "label": "renderVirtualMessageItem()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L461",
+      "source_location": "L492",
       "id": "rendervirtualmessageitem",
       "community": 2
     },
@@ -541,7 +541,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 16
+      "community": 17
     },
     {
       "label": "revokeDraftPreviewUrl()",
@@ -645,7 +645,7 @@
       "source_file": "frontend\\tests\\blob\u5a92\u4f53\u8d44\u4ea7\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_blob_spec_ts",
-      "community": 20
+      "community": 21
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -747,7 +747,7 @@
       "label": ".bootstrapAnonymousIdentity()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L123",
+      "source_location": "L133",
       "id": "spec_bootstrapanonymousidentity",
       "community": 4
     },
@@ -755,7 +755,7 @@
       "label": ".joinOrCreateRoom()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L130",
+      "source_location": "L140",
       "id": "spec_joinorcreateroom",
       "community": 4
     },
@@ -763,7 +763,7 @@
       "label": ".loadRoomSnapshot()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L133",
+      "source_location": "L143",
       "id": "spec_loadroomsnapshot",
       "community": 4
     },
@@ -771,7 +771,7 @@
       "label": ".prepareMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L151",
+      "source_location": "L146",
       "id": "spec_preparemediaupload",
       "community": 4
     },
@@ -779,7 +779,7 @@
       "label": ".completeMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L172",
+      "source_location": "L167",
       "id": "spec_completemediaupload",
       "community": 4
     },
@@ -787,7 +787,7 @@
       "label": ".loadMediaLocator()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L186",
+      "source_location": "L181",
       "id": "spec_loadmedialocator",
       "community": 4
     },
@@ -795,7 +795,7 @@
       "label": ".buildAttachmentContentUrl()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L221",
+      "source_location": "L260",
       "id": "spec_buildattachmentcontenturl",
       "community": 4
     },
@@ -803,7 +803,7 @@
       "label": ".updateRoomReadAnchor()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L196",
+      "source_location": "L235",
       "id": "spec_updateroomreadanchor",
       "community": 4
     },
@@ -811,7 +811,7 @@
       "label": ".loadRoomEvents()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L197",
+      "source_location": "L236",
       "id": "spec_loadroomevents",
       "community": 4
     },
@@ -819,7 +819,7 @@
       "label": ".loadRoomHistory()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L228",
+      "source_location": "L277",
       "id": "spec_loadroomhistory",
       "community": 4
     },
@@ -827,7 +827,7 @@
       "label": ".loadAdminOverview()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L231",
+      "source_location": "L280",
       "id": "spec_loadadminoverview",
       "community": 4
     },
@@ -835,7 +835,7 @@
       "label": ".adminLogin()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L234",
+      "source_location": "L283",
       "id": "spec_adminlogin",
       "community": 4
     },
@@ -843,7 +843,7 @@
       "label": ".adminRooms()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L237",
+      "source_location": "L286",
       "id": "spec_adminrooms",
       "community": 4
     },
@@ -851,7 +851,7 @@
       "label": ".adminRoomDetail()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L240",
+      "source_location": "L289",
       "id": "spec_adminroomdetail",
       "community": 4
     },
@@ -859,7 +859,7 @@
       "label": ".createSocket()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L243",
+      "source_location": "L292",
       "id": "spec_createsocket",
       "community": 4
     },
@@ -993,7 +993,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 16
+      "community": 17
     },
     {
       "label": ".addEventListener()",
@@ -1007,7 +1007,7 @@
       "label": "\u5047Socket",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L54",
+      "source_location": "L59",
       "id": "spec_socket",
       "community": 7
     },
@@ -1015,7 +1015,7 @@
       "label": ".on()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L57",
+      "source_location": "L62",
       "id": "spec_socket_on",
       "community": 7
     },
@@ -1023,7 +1023,7 @@
       "label": ".emit()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L64",
+      "source_location": "L69",
       "id": "spec_socket_emit",
       "community": 7
     },
@@ -1031,7 +1031,7 @@
       "label": ".disconnect()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L95",
+      "source_location": "L100",
       "id": "spec_socket_disconnect",
       "community": 7
     },
@@ -1039,9 +1039,17 @@
       "label": ".fire()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L97",
+      "source_location": "L102",
       "id": "spec_socket_fire",
       "community": 7
+    },
+    {
+      "label": ".buildStreamingAssetUrl()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": "L267",
+      "id": "spec_buildstreamingasseturl",
+      "community": 4
     },
     {
       "label": "get()",
@@ -1369,7 +1377,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 22
+      "community": 23
     },
     {
       "label": "main.rs",
@@ -1377,7 +1385,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 15
+      "community": 16
     },
     {
       "label": "main()",
@@ -1385,7 +1393,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u9002\u914d.rs",
@@ -1977,7 +1985,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L17",
       "id": "pg",
-      "community": 0
+      "community": 13
     },
     {
       "label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f_\u5f02\u6b65()",
@@ -1985,7 +1993,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L479",
       "id": "pg_torrent",
-      "community": 0
+      "community": 13
     },
     {
       "label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1\u6700\u8fd1peer\u5b58\u6d3b\u65f6\u95f4_\u5f02\u6b65()",
@@ -1993,7 +2001,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L585",
       "id": "pg_peer",
-      "community": 0
+      "community": 13
     },
     {
       "label": "mod.rs",
@@ -2039,7 +2047,7 @@
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L154",
+      "source_location": "L166",
       "id": "swarm_id",
       "community": 3
     },
@@ -2047,7 +2055,7 @@
       "label": "locator\u4f1a\u8fd4\u56de\u534f\u4f5c\u5206\u53d1\u7247\u6bb5\u4f46\u4e0d\u6cc4\u6f0f\u4ed3\u50a8\u79c1\u8d27()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L242",
+      "source_location": "L254",
       "id": "locator",
       "community": 3
     },
@@ -2055,7 +2063,7 @@
       "label": "\u56fe\u7247locator\u4f1a\u8fd4\u56deblob_asset\u800c\u4e0d\u662f\u53ea\u7ed9original_url()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L385",
+      "source_location": "L564",
       "id": "locator_blob_asset_original_url",
       "community": 3
     },
@@ -2063,7 +2071,7 @@
       "label": "torrent\u63a5\u53e3\u4f1a\u8fd4\u56de\u7a33\u5b9ametainfo\u5e76\u4e0elocator\u5bf9\u9f50()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L619",
+      "source_location": "L798",
       "id": "torrent_metainfo_locator",
       "community": 3
     },
@@ -2071,7 +2079,7 @@
       "label": "locator\u4f1a\u8fd4\u56deannounce\u4e0eweb_seed\u5e76\u4fdd\u7559ticket\u5360\u4f4d()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L779",
+      "source_location": "L958",
       "id": "locator_announce_web_seed_ticket",
       "community": 3
     },
@@ -2079,7 +2087,7 @@
       "label": "presence\u4e0a\u62a5\u4f1a\u8ba9web_seed\u8fc7\u671f\u4f46\u6700\u8fd1peer\u4ecd\u5b58\u6d3b\u7684locator\u4fdd\u6301available()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L963",
+      "source_location": "L1142",
       "id": "presence_web_seed_peer_locator_available",
       "community": 3
     },
@@ -2087,7 +2095,7 @@
       "label": "web_seed\u8fc7\u671f\u4e14\u6700\u8fd1\u6ca1\u6709peer\u5b58\u6d3b\u65f6locator\u4f1a\u88c1\u51b3expired()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L1087",
+      "source_location": "L1266",
       "id": "web_seed_peer_locator_expired",
       "community": 3
     },
@@ -2103,7 +2111,7 @@
       "label": "\u51b7\u6e90\u5220\u9664\u540elocator\u9876\u5c42original\u5931\u6548\u4f46blob_original\u4ecd\u53ef\u8bfb()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L1265",
+      "source_location": "L1444",
       "id": "locator_original_blob_original",
       "community": 3
     },
@@ -2111,7 +2119,7 @@
       "label": "\u539f\u56fe\u5185\u5bb9\u63a5\u53e3\u652f\u6301\u6807\u51c6range\u8bfb\u53d6()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L1408",
+      "source_location": "L1587",
       "id": "range",
       "community": 3
     },
@@ -2817,7 +2825,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L77",
+      "source_location": "L100",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "createrenderroot",
@@ -2829,7 +2837,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L81",
+      "source_location": "L104",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispatchpointerscrollintent",
@@ -2841,7 +2849,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L88",
+      "source_location": "L111",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispatchscrollintent",
@@ -2853,7 +2861,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L109",
+      "source_location": "L132",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispatchscroll",
@@ -2865,7 +2873,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L119",
+      "source_location": "L142",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispatchjumptolatest",
@@ -2877,7 +2885,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L305",
+      "source_location": "L328",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendermessagebody",
@@ -2889,7 +2897,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L322",
+      "source_location": "L345",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendermessageattachments",
@@ -2901,7 +2909,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L461",
+      "source_location": "L492",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendervirtualmessageitem",
@@ -4461,7 +4469,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L85",
+      "source_location": "L108",
       "weight": 1.0,
       "_src": "dispatchpointerscrollintent",
       "_tgt": "dispatchscrollintent",
@@ -4473,7 +4481,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L508",
+      "source_location": "L539",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessagebody",
@@ -4485,7 +4493,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L509",
+      "source_location": "L540",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessageattachments",
@@ -4725,7 +4733,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L54",
+      "source_location": "L59",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec_socket",
@@ -4749,7 +4757,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L123",
+      "source_location": "L133",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_bootstrapanonymousidentity",
@@ -4758,25 +4766,25 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "calls",
+      "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L131",
+      "source_location": "L140",
       "weight": 1.0,
-      "_src": "spec_joinorcreateroom",
-      "_tgt": "spec",
+      "_src": "spec",
+      "_tgt": "spec_joinorcreateroom",
       "source": "spec",
       "target": "spec_joinorcreateroom",
       "confidence_score": 1.0
     },
     {
-      "relation": "calls",
+      "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L134",
+      "source_location": "L143",
       "weight": 1.0,
-      "_src": "spec_loadroomsnapshot",
-      "_tgt": "spec",
+      "_src": "spec",
+      "_tgt": "spec_loadroomsnapshot",
       "source": "spec",
       "target": "spec_loadroomsnapshot",
       "confidence_score": 1.0
@@ -4785,7 +4793,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L151",
+      "source_location": "L146",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_preparemediaupload",
@@ -4797,7 +4805,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L172",
+      "source_location": "L167",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_completemediaupload",
@@ -4809,7 +4817,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L186",
+      "source_location": "L181",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadmedialocator",
@@ -4821,7 +4829,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L221",
+      "source_location": "L260",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_buildattachmentcontenturl",
@@ -4833,7 +4841,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L196",
+      "source_location": "L235",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_updateroomreadanchor",
@@ -4845,7 +4853,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L197",
+      "source_location": "L236",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadroomevents",
@@ -4857,7 +4865,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L228",
+      "source_location": "L277",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadroomhistory",
@@ -4869,7 +4877,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L231",
+      "source_location": "L280",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadadminoverview",
@@ -4881,7 +4889,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L234",
+      "source_location": "L283",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_adminlogin",
@@ -4893,7 +4901,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L237",
+      "source_location": "L286",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_adminrooms",
@@ -4905,7 +4913,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L240",
+      "source_location": "L289",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_adminroomdetail",
@@ -4917,7 +4925,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L243",
+      "source_location": "L292",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_createsocket",
@@ -5058,15 +5066,39 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": "L267",
+      "weight": 1.0,
+      "_src": "spec",
+      "_tgt": "spec_buildstreamingasseturl",
+      "source": "spec",
+      "target": "spec_buildstreamingasseturl",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L191",
+      "source_location": "L187",
       "weight": 1.0,
       "_src": "spec_loadmedialocator",
       "_tgt": "spec_buildattachmentcontenturl",
       "source": "spec_loadmedialocator",
       "target": "spec_buildattachmentcontenturl",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": "L207",
+      "weight": 1.0,
+      "_src": "spec_loadmedialocator",
+      "_tgt": "spec_buildstreamingasseturl",
+      "source": "spec_loadmedialocator",
+      "target": "spec_buildstreamingasseturl",
       "confidence_score": 1.0
     },
     {
@@ -5109,7 +5141,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L57",
+      "source_location": "L62",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_on",
@@ -5121,7 +5153,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L64",
+      "source_location": "L69",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_emit",
@@ -5133,7 +5165,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L95",
+      "source_location": "L100",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_disconnect",
@@ -5145,7 +5177,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L97",
+      "source_location": "L102",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_fire",
@@ -5157,7 +5189,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L66",
+      "source_location": "L71",
       "weight": 1.0,
       "_src": "spec_socket_emit",
       "_tgt": "spec_socket_fire",
@@ -6717,7 +6749,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L154",
+      "source_location": "L166",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "swarm_id",
@@ -6729,7 +6761,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L242",
+      "source_location": "L254",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "locator",
@@ -6741,7 +6773,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L385",
+      "source_location": "L564",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "locator_blob_asset_original_url",
@@ -6753,7 +6785,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L619",
+      "source_location": "L798",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "torrent_metainfo_locator",
@@ -6765,7 +6797,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L779",
+      "source_location": "L958",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "locator_announce_web_seed_ticket",
@@ -6777,7 +6809,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L963",
+      "source_location": "L1142",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "presence_web_seed_peer_locator_available",
@@ -6789,7 +6821,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L1087",
+      "source_location": "L1266",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "web_seed_peer_locator_expired",
@@ -6813,7 +6845,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L1265",
+      "source_location": "L1444",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "locator_original_blob_original",
@@ -6825,7 +6857,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
-      "source_location": "L1408",
+      "source_location": "L1587",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "range",

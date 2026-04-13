@@ -1,11 +1,16 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../聊天壳";
 import "../后台壳";
 import { 聊天壳 } from "../聊天壳";
 import { 后台壳 } from "../后台壳";
-import { 安装测试文本测量画布, createFakeStorage } from "./common/聊天测试支架";
+import {
+  安装测试文本测量画布,
+  createFakeStorage,
+  注入媒体查看器供测试,
+  等待组件稳定,
+} from "./common/聊天测试支架";
 import type { 前端传输端口 } from "../传输";
 import type {
   匿名身份引导结果,
@@ -119,6 +124,11 @@ function 创建房间快照(
 
 class 端到端假传输 implements 前端传输端口 {
   private readonly socket = new 假Socket();
+  /**
+   * e2e 冒烟要能在同一份假传输里切换“空房间 / 带媒体消息的房间”。
+   * 这里直接把 join 和 snapshot 都绑到同一份权威快照，避免测试再手搓第二套房间真相。
+   */
+  roomSnapshot: 房间快照 = 创建房间快照();
 
   async bootstrapAnonymousIdentity(): Promise<匿名身份引导结果> {
     return {
@@ -128,25 +138,10 @@ class 端到端假传输 implements 前端传输端口 {
     };
   }
   async joinOrCreateRoom(): Promise<房间快照> {
-    return 创建房间快照();
+    return this.roomSnapshot;
   }
   async loadRoomSnapshot(): Promise<房间快照> {
-    return 创建房间快照("r-e2e", 1, {
-      snapshot_messages: [
-        {
-          type: "message_created",
-          room_id: "r-e2e",
-          message_id: "m-e2e",
-          client_message_id: "c-e2e",
-          sender_session_id: "s-e2e",
-          sender_display_alias: "暴躁的企鹅",
-          text: "e2e-hello",
-          body: "e2e-hello",
-          attachments: [],
-          event_position: 1,
-        },
-      ],
-    });
+    return this.roomSnapshot;
   }
   async prepareMediaUpload(
     kind: "image" | "video",
@@ -175,15 +170,59 @@ class 端到端假传输 implements 前端传输端口 {
   ): Promise<媒体附件上传结果> {
     return {
       attachment_id: attachmentId,
-      kind: "image",
-      mime_type: "image/png",
+      kind: attachmentId.includes("video") ? "video" : "image",
+      mime_type: attachmentId.includes("video") ? "video/mp4" : "image/png",
       byte_size: 68,
-      width: 120,
-      height: 90,
+      width: attachmentId.includes("video") ? 1280 : 120,
+      height: attachmentId.includes("video") ? 720 : 90,
       status: "ready",
     };
   }
   async loadMediaLocator(_sessionId: string, attachmentId: string): Promise<媒体定位结果> {
+    if (attachmentId.includes("video")) {
+      return {
+        attachment_id: attachmentId,
+        kind: "video",
+        status: "ready",
+        original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
+        thumbnail_url: null,
+        distribution: {
+          content_id: `content_${attachmentId}`,
+          content_hash: `hash-${attachmentId}`,
+          swarm_id: `swarm-hash-${attachmentId}`,
+          web_seed_until: "1775942400",
+          torrent_url: `http://test.local/api/media/${attachmentId}/torrent?session_id=s-e2e`,
+          torrent_info_hash: `torrent-hash-${attachmentId}`,
+          announce_urls: ["wss://tracker.test.local/announce"],
+          web_seed_url: `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=s-e2e`,
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available",
+        },
+        streaming_asset: {
+          asset_id: attachmentId,
+          content_hash: `hash-${attachmentId}`,
+          kind: "streaming_video",
+          manifest: {
+            hls_master_url: this.buildStreamingAssetUrl(attachmentId, "s-e2e", "hls"),
+            dash_mpd_url: this.buildStreamingAssetUrl(attachmentId, "s-e2e", "dash"),
+          },
+          distribution: {
+            swarm_id: `swarm-hash-${attachmentId}`,
+            announce_urls: ["wss://tracker.test.local/announce"],
+            web_seed_url: `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=s-e2e`,
+            join_ticket: null,
+          },
+          origin: {
+            original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only",
+          },
+        },
+        blob_asset: null,
+      };
+    }
     return {
       attachment_id: attachmentId,
       kind: "image",
@@ -225,6 +264,16 @@ class 端到端假传输 implements 前端传输端口 {
   ): string {
     return `http://test.local/api/attachments/${attachmentId}/content?session_id=${sessionId}&variant=${variant}`;
   }
+  buildStreamingAssetUrl(
+    attachmentId: string,
+    sessionId: string,
+    variant: "hls" | "dash"
+  ): string {
+    if (variant === "hls") {
+      return `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=${sessionId}`;
+    }
+    return `http://test.local/api/media/${attachmentId}/stream/dash/stream.mpd?session_id=${sessionId}`;
+  }
   async loadRoomHistory(): Promise<房间历史页> {
     return { room_id: "r-e2e", messages: [] };
   }
@@ -264,6 +313,22 @@ function 读取聊天操作台主动作(chat: 聊天壳): HTMLButtonElement {
 describe("前后台壳端到端冒烟", () => {
   it("聊天壳和后台壳都能走完主流程", async () => {
     const transport = new 端到端假传输();
+    transport.roomSnapshot = 创建房间快照("r-e2e", 1, {
+      snapshot_messages: [
+        {
+          type: "message_created",
+          room_id: "r-e2e",
+          message_id: "m-e2e",
+          client_message_id: "c-e2e",
+          sender_session_id: "s-e2e",
+          sender_display_alias: "暴躁的企鹅",
+          text: "e2e-hello",
+          body: "e2e-hello",
+          attachments: [],
+          event_position: 1,
+        },
+      ],
+    });
 
     const chat = document.createElement("koko-chat-shell") as 聊天壳;
     expect("媒体发布器" in (chat as object)).toBe(false);
@@ -312,5 +377,79 @@ describe("前后台壳端到端冒烟", () => {
 
     chat.remove();
     admin.remove();
+  });
+
+  it("视频主链已经切到 manifest 且没有 poster 时，时间线不会再把 m3u8 塞给原生 video，查看器仍能拿到正式主链", async () => {
+    const transport = new 端到端假传输();
+    transport.roomSnapshot = 创建房间快照("r-e2e", 1, {
+      snapshot_messages: [
+        {
+          type: "message_created",
+          room_id: "r-e2e",
+          message_id: "m-video-e2e",
+          client_message_id: "c-video-e2e",
+          sender_session_id: "s-other",
+          sender_display_alias: "冷静的水獭",
+          text: "",
+          body: "",
+          attachments: [
+            {
+              kind: "video",
+              attachment_id: "att-video-e2e",
+              width: 1280,
+              height: 720,
+            },
+          ],
+          event_position: 1,
+        },
+      ],
+    });
+
+    const viewer = {
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const chat = document.createElement("koko-chat-shell") as 聊天壳;
+    chat.setTransportForTest(transport);
+    注入媒体查看器供测试(chat, viewer);
+    document.body.appendChild(chat);
+    await 等待组件稳定(chat);
+
+    const roomInput = 读取聊天操作台主输入(chat);
+    roomInput.value = "E2E01";
+    roomInput.dispatchEvent(new Event("input"));
+    读取聊天操作台主动作(chat).click();
+    await 等待组件稳定(chat);
+    await 等待组件稳定(chat);
+
+    const previewTrigger = chat.shadowRoot!.querySelector(
+      'button.message-video-preview-trigger[data-attachment-id="att-video-e2e"]'
+    ) as HTMLButtonElement | null;
+    const previewVideo = chat.shadowRoot!.querySelector(
+      'video.message-video-preview[data-attachment-id="att-video-e2e"]'
+    ) as HTMLVideoElement | null;
+    expect(previewTrigger).not.toBeNull();
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.getAttribute("src")).toBeNull();
+    expect(previewVideo?.getAttribute("poster")).toContain("data:image/svg+xml");
+
+    previewTrigger?.click();
+    await 等待组件稳定(chat);
+
+    expect(viewer.打开).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startAttachmentId: "att-video-e2e",
+        items: [
+          expect.objectContaining({
+            attachmentId: "att-video-e2e",
+            kind: "video",
+            src: "http://test.local/api/media/att-video-e2e/stream/hls/master.m3u8?session_id=s-e2e",
+            posterSrc: null,
+          }),
+        ],
+      })
+    );
+
+    chat.remove();
   });
 });

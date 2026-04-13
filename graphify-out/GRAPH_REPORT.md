@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-14)
 
 ## Corpus Check
-- 148 files · ~164,775 words
+- 148 files · ~165,669 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 307 nodes · 381 edges · 25 communities detected
+- 308 nodes · 383 edges · 26 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -35,6 +35,7 @@
 - [[_COMMUNITY_Community 22|Community 22]]
 - [[_COMMUNITY_Community 23|Community 23]]
 - [[_COMMUNITY_Community 24|Community 24]]
+- [[_COMMUNITY_Community 25|Community 25]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 24 edges
@@ -62,7 +63,7 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (44): ApiError, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容(), 尝试加载dotenv() (+36 more)
+Nodes (43): ApiError, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容(), 尝试加载dotenv() (+35 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.05
@@ -114,7 +115,7 @@ Nodes (0):
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): Pg仓储
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
@@ -126,23 +127,23 @@ Nodes (0):
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): 文本布局, 文本布局测试
+Nodes (0): 
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): 文本布局, 文本布局测试
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (1): frontend/房间内核.ts
+Nodes (0): 
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (1): frontend/存储.ts
+Nodes (1): frontend/房间内核.ts
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): frontend/存储.ts
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
@@ -160,32 +161,36 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
+### Community 25 - "Community 25"
+Cohesion: 1.0
+Nodes (0): 
+
 ## Knowledge Gaps
 - **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+17 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 13`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 14`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
+- **Thin community `Community 15`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `文本布局`, `文本布局测试`
+- **Thin community `Community 16`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (1 nodes): `css.d.ts`
+- **Thin community `Community 17`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (1 nodes): `frontend/房间内核.ts`
+- **Thin community `Community 18`** (1 nodes): `css.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (1 nodes): `frontend/存储.ts`
+- **Thin community `Community 19`** (1 nodes): `frontend/房间内核.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (1 nodes): `blob媒体资产测试.spec.ts`
+- **Thin community `Community 20`** (1 nodes): `frontend/存储.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 21`** (1 nodes): `vitest.config.ts`
+- **Thin community `Community 21`** (1 nodes): `blob媒体资产测试.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (1 nodes): `lib.rs`
+- **Thin community `Community 22`** (1 nodes): `vitest.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (1 nodes): `up.ps1`
+- **Thin community `Community 23`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (1 nodes): `webtorrent.d.ts`
+- **Thin community `Community 24`** (1 nodes): `up.ps1`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 25`** (1 nodes): `webtorrent.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions

@@ -20,6 +20,18 @@ async fn 写入测试对象(state: &koko::shell::应用状态, 存储键: &str, 
         .expect("应能写入测试对象");
 }
 
+/// locator 给不同成员返回的受控地址，允许 `session_id` 不同，但不允许主链事实本身漂移。
+/// 这里把会话参数统一折叠成占位符，专门用于比较“同一附件对不同成员看到的是不是同一条主链”。
+fn 归一化受控地址(url: &str) -> String {
+    let Some((prefix, suffix)) = url.split_once("?session_id=") else {
+        return url.to_string();
+    };
+    if let Some((_, rest)) = suffix.split_once('&') {
+        return format!("{prefix}?session_id=<session>&{rest}");
+    }
+    format!("{prefix}?session_id=<session>")
+}
+
 /// 协作分发测试：
 /// 1. 这里只守 locator / torrent / presence / web seed 可用性裁决。
 /// 2. 不负责消息成立、房间快照或 realtime 控制面。
@@ -376,6 +388,173 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
     assert!(
         body["distribution"]["announce_urls"].is_array(),
         "Phase 2 允许 locator 下发 runtime transport 线索"
+    );
+    assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
+}
+
+#[tokio::test]
+#[serial]
+async fn 同一视频对发送者与群友返回同一套流媒体主链真相() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("VP{:010}", uniq % 10_000_000_000);
+    let sender_device_token = format!("video-sender-device-{uniq}");
+    let peer_device_token = format!("video-peer-device-{uniq}");
+    let attachment_id = format!("att-video-peer-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let (sender_session_id, peer_session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let sender = koko::usecase::引导匿名身份(&mut repo, &sender_device_token)
+            .expect("应能引导发送者匿名身份");
+        let peer = koko::usecase::引导匿名身份(&mut repo, &peer_device_token)
+            .expect("应能引导群友匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, &room_code)
+                .expect("发送者应能进房");
+        koko::usecase::按短码进房或建房(&mut repo, &peer.会话标识, &room_code)
+            .expect("群友也应能进同一个房间");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入 ready 视频附件");
+            插入ready视频附件记录(&pool, &sender.会话标识, &attachment_id_for_worker).await;
+            插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &sender.会话标识,
+            &format!("sender-peer-locator-{uniq}"),
+            "",
+            &[attachment_id_for_worker.clone()],
+        )
+        .expect("应能创建带视频附件的消息");
+
+        (sender.会话标识, peer.会话标识, room_id)
+    })
+    .await
+    .expect("阻塞 sender/peer locator 任务应完成");
+
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let (sender_status, sender_body) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={sender_session_id}"),
+        None,
+        &[],
+    )
+    .await;
+    let (peer_status, peer_body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={peer_session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(sender_status, StatusCode::OK);
+    assert_eq!(peer_status, StatusCode::OK);
+    assert_eq!(
+        sender_body["streaming_asset"]["asset_id"].as_str(),
+        peer_body["streaming_asset"]["asset_id"].as_str(),
+        "同一视频对发送者和群友必须锚到同一个稳定 asset_id"
+    );
+    assert_eq!(
+        sender_body["streaming_asset"]["kind"].as_str(),
+        peer_body["streaming_asset"]["kind"].as_str(),
+        "流媒体资产种类不应随着查看成员变化"
+    );
+    assert_eq!(
+        sender_body["distribution"]["swarm_id"].as_str(),
+        peer_body["distribution"]["swarm_id"].as_str(),
+        "协作分发 swarm 真相必须对房间成员一致"
+    );
+    assert_eq!(
+        sender_body["streaming_asset"]["distribution"]["swarm_id"].as_str(),
+        peer_body["streaming_asset"]["distribution"]["swarm_id"].as_str(),
+        "新流媒体资产面和顶层 distribution 兼容面都必须对齐到同一份 swarm 真相"
+    );
+
+    let sender_hls = sender_body["streaming_asset"]["manifest"]["hls_master_url"]
+        .as_str()
+        .expect("发送者 locator 应返回 HLS 主清单入口");
+    let peer_hls = peer_body["streaming_asset"]["manifest"]["hls_master_url"]
+        .as_str()
+        .expect("群友 locator 也应返回 HLS 主清单入口");
+    let sender_dash = sender_body["streaming_asset"]["manifest"]["dash_mpd_url"]
+        .as_str()
+        .expect("发送者 locator 应返回 DASH 主清单入口");
+    let peer_dash = peer_body["streaming_asset"]["manifest"]["dash_mpd_url"]
+        .as_str()
+        .expect("群友 locator 也应返回 DASH 主清单入口");
+    let sender_origin = sender_body["streaming_asset"]["origin"]["original_url"]
+        .as_str()
+        .expect("发送者 locator 应返回冷备原图入口");
+    let peer_origin = peer_body["streaming_asset"]["origin"]["original_url"]
+        .as_str()
+        .expect("群友 locator 也应返回冷备原图入口");
+
+    assert!(
+        sender_hls.contains(sender_session_id.as_str()) && peer_hls.contains(peer_session_id.as_str()),
+        "受控 HLS 地址必须带各自会话，用来保持成员可见性裁决"
+    );
+    assert!(
+        sender_dash.contains(sender_session_id.as_str())
+            && peer_dash.contains(peer_session_id.as_str()),
+        "受控 DASH 地址同样必须带各自会话"
+    );
+    assert!(
+        sender_origin.contains(sender_session_id.as_str())
+            && peer_origin.contains(peer_session_id.as_str()),
+        "冷备原图地址也必须继续走各自会话的受控读路径"
+    );
+    assert_eq!(
+        归一化受控地址(sender_hls),
+        归一化受控地址(peer_hls),
+        "去掉 session_id 之后，发送者和群友看到的应该是同一条 HLS 主链"
+    );
+    assert_eq!(
+        归一化受控地址(sender_dash),
+        归一化受控地址(peer_dash),
+        "去掉 session_id 之后，发送者和群友看到的应该是同一条 DASH 主链"
+    );
+    assert_eq!(
+        归一化受控地址(sender_origin),
+        归一化受控地址(peer_origin),
+        "去掉 session_id 之后，发送者和群友看到的应该是同一条冷备入口"
+    );
+    assert_eq!(
+        sender_body["streaming_asset"]["origin"]["role"].as_str(),
+        peer_body["streaming_asset"]["origin"]["role"].as_str(),
+        "冷备角色语义必须对所有成员一致"
     );
     assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
 }
