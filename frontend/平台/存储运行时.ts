@@ -46,6 +46,7 @@ export function 创建存储运行时(
       /**
        * 第一切片先把“完整资产元数据”托管到平台存储里：
        * - 媒体 owner 不再散落拼 localStorage 键名；
+       * - 记录里只放 `kind / contentHash / retainedAt / lastAccessAt` 这类 owner 真相；
        * - 这里仍然只存元数据，不伪装成媒体字节缓存层。
        */
       return 创建浏览器媒体缓存仓库(读取当前存储源());

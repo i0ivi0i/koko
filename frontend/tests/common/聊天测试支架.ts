@@ -303,16 +303,68 @@ export class 假传输 implements 前端传输端口 {
     };
   }
   async loadMediaLocator(_sessionId: string, attachmentId: string): Promise<媒体定位结果> {
+    if (!attachmentId.includes("video")) {
+      const sessionId = "s-test";
+      const originalUrl = this.buildAttachmentContentUrl(attachmentId, sessionId);
+      const previewUrl = this.buildBlobAssetUrl(attachmentId, sessionId, "preview");
+      return {
+        attachment_id: attachmentId,
+        kind: "image",
+        status: "ready",
+        original_url: originalUrl,
+        thumbnail_url: this.buildAttachmentContentUrl(attachmentId, sessionId, "thumbnail"),
+        distribution: null,
+        blob_asset: {
+          asset_id: attachmentId,
+          content_hash: `hash-${attachmentId}`,
+          kind: "blob_image",
+          preview: {
+            id: "preview",
+            mime_type: "image/png",
+            url: previewUrl,
+            width: 1,
+            height: 1,
+          },
+          full: {
+            id: "full",
+            mime_type: "image/png",
+            url: this.buildBlobAssetUrl(attachmentId, sessionId, "full"),
+            width: 1,
+            height: 1,
+          },
+          original: {
+            id: "original",
+            mime_type: "image/png",
+            url: this.buildBlobAssetUrl(attachmentId, sessionId, "original"),
+            width: 1,
+            height: 1,
+          },
+          distribution: null,
+          // 测试支架也要显式保留冷备 origin，确保前端不会把它误用成正式 blob 主链。
+          origin: {
+            original_url: originalUrl,
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only",
+          },
+        },
+      };
+    }
     return {
       attachment_id: attachmentId,
-      kind: attachmentId.includes("video") ? "video" : "image",
+      kind: "video",
       status: "ready",
       original_url: this.buildAttachmentContentUrl(attachmentId, "s-test"),
-      thumbnail_url: attachmentId.includes("video")
-        ? null
-        : this.buildAttachmentContentUrl(attachmentId, "s-test", "thumbnail"),
+      thumbnail_url: null,
       distribution: null,
     };
+  }
+  buildBlobAssetUrl(
+    attachmentId: string,
+    sessionId: string,
+    variant: "preview" | "full" | "original"
+  ): string {
+    return `http://test.local/api/media/${attachmentId}/blob/${variant}?session_id=${sessionId}`;
   }
   buildAttachmentContentUrl(
     attachmentId: string,
@@ -456,6 +508,7 @@ function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
 type 聊天媒体测试端口 = {
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    释放附件播放资源?(attachmentId: string): void;
   }): void;
   设置媒体查看器供测试(viewer: {
     打开(input: 媒体查看器打开请求): void;
@@ -516,6 +569,7 @@ export function 注入媒体播放器供测试(
   el: 聊天壳,
   player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    释放附件播放资源?(attachmentId: string): void;
   }
 ): void {
   读取聊天媒体编排供测试(el).设置媒体播放器供测试(player);

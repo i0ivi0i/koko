@@ -66,12 +66,14 @@ describe("媒体播放器", () => {
       },
     }));
     const probeAnchor = vi.fn();
+    const 释放协作分发源 = vi.fn();
     const 播放器 = 创建媒体播放器({
       locate,
       resolveSwarmSource: async () => ({
         src: "blob:http://media.local/swarm-video-3",
         hint: "正在协作分发" as const,
       }),
+      releaseSwarmSource: 释放协作分发源,
       probeAnchor,
     });
 
@@ -89,6 +91,51 @@ describe("媒体播放器", () => {
       hint: "正在协作分发",
     });
     expect(probeAnchor).not.toHaveBeenCalled();
+    expect(释放协作分发源).not.toHaveBeenCalled();
+  });
+
+  it("最后裁决改走锚点时会释放旧的 swarm 协作分发占用", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-release-1",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-release-1",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-release-1",
+        content_hash: "hash-video-release-1",
+        swarm_id: "swarm-hash-video-release-1",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-release-1",
+        torrent_info_hash: "torrent-info-hash-video-release-1",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-release-1",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+      },
+    }));
+    const 释放协作分发源 = vi.fn();
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource: async () => null,
+      releaseSwarmSource: 释放协作分发源,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-release-1",
+      kind: "video",
+    });
+
+    expect(result).toMatchObject({
+      mode: "anchor",
+      src: "http://media.local/original-video-release-1",
+    });
+    expect(释放协作分发源).toHaveBeenCalledWith({
+      attachmentId: "att-video-release-1",
+    });
   });
 
   it("streaming_asset 只有冷源过渡面时，会优先读取共享资产里的 origin", async () => {

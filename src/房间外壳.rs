@@ -950,6 +950,18 @@ fn 构造流媒体受控地址(attachment_id: &str, session_id: &str, asset_path
     format!("/api/media/{attachment_id}/stream/{asset_path}?session_id={session_id}")
 }
 
+/// 旧附件内容读取路由仍要保留给兼容调用方和冷源 origin。
+/// 但它不再承担图片正式 blob 主链的地址身份。
+fn 构造附件受控地址(attachment_id: &str, session_id: &str, variant: &str) -> String {
+    format!("/api/attachments/{attachment_id}/content?session_id={session_id}&variant={variant}")
+}
+
+/// 图片 blob 主链统一收口到 `/api/media/{id}/blob/*`，
+/// 避免前端继续把旧附件内容地址误认成正式资产地址。
+fn 构造blob受控地址(attachment_id: &str, session_id: &str, variant: &str) -> String {
+    format!("/api/media/{attachment_id}/blob/{variant}?session_id={session_id}")
+}
+
 fn 推导流媒体对象前缀(attachment_id: &str) -> String {
     format!("streams/{attachment_id}/")
 }
@@ -1036,51 +1048,55 @@ fn 构造流媒体资产响应体(
 
 fn 构造blob媒体资产响应体(
     attachment_id: &str,
+    session_id: &str,
     runtime_distribution: Option<&serde_json::Value>,
     distribution_snapshot: Option<&usecase::协作分发元数据快照>,
-    original_url: String,
-    thumbnail_url: Option<String>,
+    legacy_original_url: String,
+    preview_available: bool,
     mime_type: &str,
-    width: i32,
-    height: i32,
+    width: Option<i32>,
+    height: Option<i32>,
     now_epoch秒: i64,
 ) -> serde_json::Value {
     let origin_expiry = distribution_snapshot
         .map(|snapshot| snapshot.web_seed_until秒)
         .unwrap_or(now_epoch秒);
+    let preview_url = preview_available.then(|| 构造blob受控地址(attachment_id, session_id, "preview"));
+    let full_url = 构造blob受控地址(attachment_id, session_id, "full");
+    let original_url = 构造blob受控地址(attachment_id, session_id, "original");
     let asset = contract::Blob媒体资产描述 {
         资产标识: attachment_id.to_string(),
         内容哈希: distribution_snapshot
             .map(|snapshot| snapshot.content_hash.clone())
             .unwrap_or_else(|| attachment_id.to_string()),
         种类: contract::媒体资产种类::图片Blob,
-        preview: thumbnail_url.as_ref().map(|url| contract::变体描述 {
+        preview: preview_url.map(|url| contract::变体描述 {
             标识: "preview".to_string(),
             mime_type: "image/png".to_string(),
-            地址: url.clone(),
-            宽: Some(width),
-            高: Some(height),
+            地址: url,
+            宽: width,
+            高: height,
         }),
         full: Some(contract::变体描述 {
             标识: "full".to_string(),
             mime_type: mime_type.to_string(),
-            地址: original_url.clone(),
-            宽: Some(width),
-            高: Some(height),
+            地址: full_url,
+            宽: width,
+            高: height,
         }),
         original: Some(contract::变体描述 {
             标识: "original".to_string(),
             mime_type: mime_type.to_string(),
-            地址: original_url.clone(),
-            宽: Some(width),
-            高: Some(height),
+            地址: original_url,
+            宽: width,
+            高: height,
         }),
         分发: distribution_snapshot.and_then(|snapshot| {
             runtime_distribution.map(|runtime| {
                 从运行态协作分发响应提取共享分发表面(snapshot, runtime)
             })
         }),
-        冷源: usecase::构造媒体冷源描述(Some(original_url), origin_expiry, now_epoch秒),
+        冷源: usecase::构造媒体冷源描述(Some(legacy_original_url), origin_expiry, now_epoch秒),
     };
     blob媒体资产描述转响应体(&asset)
 }
@@ -1107,13 +1123,14 @@ fn 构造媒体资产响应体(
         )),
         usecase::媒体附件类型::图片 => Some(构造blob媒体资产响应体(
             snapshot.附件标识.as_str(),
+            session_id,
             runtime_distribution,
             distribution_snapshot,
             original_url,
-            thumbnail_url,
+            thumbnail_url.is_some(),
             snapshot.mime_type.as_str(),
-            snapshot.宽,
-            snapshot.高,
+            Some(snapshot.宽),
+            Some(snapshot.高),
             now_epoch秒,
         )),
     }
@@ -1139,8 +1156,21 @@ fn 构造定位媒体资产响应体(
                 now_epoch秒,
             ),
         )),
-        // 图片完整 Blob 主链要等 Task 9 一起切，不在这里先伪造半截资产描述。
-        usecase::媒体附件类型::图片 => None,
+        usecase::媒体附件类型::图片 => Some((
+            "blob_asset",
+            构造blob媒体资产响应体(
+                locator.附件标识.as_str(),
+                session_id,
+                runtime_distribution,
+                locator.协作分发.as_ref(),
+                original_url,
+                locator.允许缩略图,
+                locator.mime_type.as_str(),
+                locator.宽,
+                locator.高,
+                now_epoch秒,
+            ),
+        )),
     }
 }
 
@@ -3032,14 +3062,13 @@ pub(super) async fn complete_media_upload(
                 .duration_since(UNIX_EPOCH)
                 .map(|duration| duration.as_secs() as i64)
                 .unwrap_or_default();
-            let original_url = format!(
-                "/api/attachments/{attachment_id}/content?session_id={}&variant=original",
-                session_id
-            );
+            let original_url =
+                构造附件受控地址(attachment_id.as_str(), session_id.as_str(), "original");
             let thumbnail_url = match &snapshot.种类 {
-                usecase::媒体附件类型::图片 => Some(format!(
-                    "/api/attachments/{attachment_id}/content?session_id={}&variant=thumbnail",
-                    session_id
+                usecase::媒体附件类型::图片 => Some(构造附件受控地址(
+                    attachment_id.as_str(),
+                    session_id.as_str(),
+                    "thumbnail",
                 )),
                 usecase::媒体附件类型::视频 => None,
             };
@@ -3111,15 +3140,9 @@ pub(super) async fn load_media_locator(
             )
         }
     };
-    let original_url = format!(
-        "/api/attachments/{attachment_id}/content?session_id={}&variant=original",
-        query.session_id
-    );
+    let original_url = 构造附件受控地址(attachment_id.as_str(), query.session_id.as_str(), "original");
     let thumbnail_url = locator.允许缩略图.then(|| {
-        format!(
-            "/api/attachments/{attachment_id}/content?session_id={}&variant=thumbnail",
-            query.session_id
-        )
+        构造附件受控地址(attachment_id.as_str(), query.session_id.as_str(), "thumbnail")
     });
     let now_epoch秒 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -3157,6 +3180,33 @@ pub(super) async fn load_media_locator(
         response[field] = asset;
     }
     (StatusCode::OK, Json(response)).into_response()
+}
+
+/// blob 图片主链只是旧附件内容读取链的受控别名：
+/// - preview 走 thumbnail 真相；
+/// - full/original 都走 canonical original 真相；
+/// - 这样能立刻把正式地址身份切到 `/api/media/.../blob/*`，同时不复制第二套读取实现。
+pub(super) async fn load_blob_asset_content(
+    State(state): State<应用状态>,
+    Path((attachment_id, blob_variant)): Path<(String, String)>,
+    Query(mut raw_query): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let attachment_variant = match blob_variant.as_str() {
+        "preview" => "thumbnail",
+        "full" | "original" => "original",
+        _ => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "blob variant 必须是 preview、full 或 original",
+            )
+        }
+    };
+    raw_query.insert("variant".to_string(), attachment_variant.to_string());
+    load_attachment_content(State(state), Path(attachment_id), Query(raw_query), headers)
+        .await
+        .into_response()
 }
 
 /// 冷路径：受控读取流媒体主链产物。

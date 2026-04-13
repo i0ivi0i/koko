@@ -20,21 +20,21 @@ describe("Blob 媒体资产", () => {
           preview: {
             id: "preview",
             mime_type: "image/webp",
-            url: "http://media.local/blob/att-image-blob-1/preview.webp",
+            url: "http://media.local/api/media/att-image-blob-1/blob/preview?session_id=s-1",
             width: 320,
             height: 213,
           },
           full: {
             id: "full",
             mime_type: "image/webp",
-            url: "http://media.local/blob/att-image-blob-1/full.webp",
+            url: "http://media.local/api/media/att-image-blob-1/blob/full?session_id=s-1",
             width: 1200,
             height: 800,
           },
           original: {
             id: "original",
             mime_type: "image/png",
-            url: "http://media.local/blob/att-image-blob-1/original.png",
+            url: "http://media.local/api/media/att-image-blob-1/blob/original?session_id=s-1",
             width: 1200,
             height: 800,
           },
@@ -65,9 +65,9 @@ describe("Blob 媒体资产", () => {
       mode: "blob",
       attachmentId: "att-image-blob-1",
       kind: "image",
-      src: "http://media.local/blob/att-image-blob-1/preview.webp",
-      viewerSrc: "http://media.local/blob/att-image-blob-1/full.webp",
-      thumbnailUrl: "http://media.local/blob/att-image-blob-1/preview.webp",
+      src: "http://media.local/api/media/att-image-blob-1/blob/preview?session_id=s-1",
+      viewerSrc: "http://media.local/api/media/att-image-blob-1/blob/full?session_id=s-1",
+      thumbnailUrl: "http://media.local/api/media/att-image-blob-1/blob/preview?session_id=s-1",
       hint: null,
     });
     expect(probeAnchor).not.toHaveBeenCalled();

@@ -12,6 +12,7 @@ import {
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
   解析协作分发源,
+  释放协作分发消费者,
   type 媒体附件草稿,
   type 媒体缓存仓库,
   type 媒体草稿状态补丁,
@@ -62,6 +63,7 @@ export interface 聊天媒体编排端口 {
   销毁(): void;
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    释放附件播放资源?(attachmentId: string): void;
   }): void;
   设置媒体查看器供测试(viewer: {
     打开(input: 媒体查看器打开请求): void;
@@ -101,6 +103,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   let 媒体播放器 = 创建媒体播放器({
     locate: (attachmentId, options) => 媒体定位器.获取定位(attachmentId, options),
     resolveSwarmSource: 解析协作分发源,
+    releaseSwarmSource: ({ attachmentId }) => 释放协作分发消费者(attachmentId),
   });
 
   let 当前查看器请求: 媒体查看器打开请求 | null = null;
@@ -273,6 +276,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
   };
 
+  const 释放附件播放资源 = (attachmentId: string): void => {
+    // 编排层只在附件会话退场时通知播放器释放底层占用；
+    // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
+    媒体播放器.释放附件播放资源?.(attachmentId);
+  };
+
   const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
     let session: 媒体会话端口;
     const 接收协作分发事件 = (
@@ -291,6 +300,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       }
       session.send({ type: "ASSET_COMPLETE" });
       void 媒体缓存.标记完整(attachment.attachmentId, {
+        kind: attachment.kind,
         contentHash: event.contentHash,
       }).then(() => {
         deps.请求重渲染();
@@ -314,7 +324,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   const 清空播放状态 = (): void => {
-    for (const session of 媒体会话表.values()) {
+    for (const [attachmentId, session] of 媒体会话表) {
+      释放附件播放资源(attachmentId);
       session.销毁();
     }
     媒体会话表.clear();
@@ -377,6 +388,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         if (activeAttachmentIds.has(attachmentId)) {
           continue;
         }
+        释放附件播放资源(attachmentId);
         session.销毁();
         媒体会话表.delete(attachmentId);
         hasSessionSetChanged = true;
@@ -429,7 +441,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     设置媒体播放器供测试(player): void {
       清空播放状态();
-      媒体播放器 = player;
+      媒体播放器 = {
+        解析播放结果: player.解析播放结果,
+        释放附件播放资源: player.释放附件播放资源 ?? (() => undefined),
+      };
       deps.请求重渲染();
     },
 

@@ -375,6 +375,137 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
 
 #[tokio::test]
 #[serial]
+async fn 图片locator会返回blob_asset而不是只给original_url() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("IL{:010}", uniq % 10_000_000_000);
+    let device_token = format!("image-locator-device-{uniq}");
+    let attachment_id = format!("att-image-locator-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入附件");
+            插入ready图片附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("image-locator-client-{uniq}"),
+            "",
+            &[attachment_id_for_worker.clone()],
+        )
+        .expect("应能先创建带图片附件的消息");
+
+        (identity.会话标识, room_id)
+    })
+    .await
+    .expect("阻塞图片 locator 任务应完成");
+
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["attachment_id"].as_str(), Some(attachment_id.as_str()));
+    assert_eq!(body["kind"].as_str(), Some("image"));
+    assert_eq!(body["status"].as_str(), Some("ready"));
+    assert_eq!(
+        body["blob_asset"]["kind"].as_str(),
+        Some("blob_image"),
+        "图片 locator 必须开始返回 blob_asset，而不是继续只给顶层 original_url"
+    );
+    assert_eq!(
+        body["blob_asset"]["asset_id"].as_str(),
+        Some(attachment_id.as_str())
+    );
+    assert_eq!(body["blob_asset"]["preview"]["id"].as_str(), Some("preview"));
+    assert_eq!(body["blob_asset"]["full"]["id"].as_str(), Some("full"));
+    assert_eq!(body["blob_asset"]["original"]["id"].as_str(), Some("original"));
+    assert_eq!(
+        body["blob_asset"]["preview"]["url"].as_str(),
+        Some(format!("/api/media/{attachment_id}/blob/preview?session_id={session_id}").as_str())
+    );
+    assert_eq!(
+        body["blob_asset"]["full"]["url"].as_str(),
+        Some(format!("/api/media/{attachment_id}/blob/full?session_id={session_id}").as_str())
+    );
+    assert_eq!(
+        body["blob_asset"]["original"]["url"].as_str(),
+        Some(format!("/api/media/{attachment_id}/blob/original?session_id={session_id}").as_str())
+    );
+    assert_eq!(
+        body["blob_asset"]["origin"]["role"].as_str(),
+        Some("cold_backup_only")
+    );
+    assert_eq!(
+        body["blob_asset"]["origin"]["original_url"].as_str(),
+        body["original_url"].as_str(),
+        "兼容期里旧 original_url 只能留在 origin 里，不能再和 blob 主链分叉成两套真相"
+    );
+    assert_eq!(
+        body["blob_asset"]["distribution"]["swarm_id"].as_str(),
+        body["distribution"]["swarm_id"].as_str(),
+        "blob_asset 和顶层 distribution 在兼容期内必须引用同一份 swarm 真相"
+    );
+    assert!(
+        body["thumbnail_url"].as_str().is_some(),
+        "过渡期 locator 仍应保留顶层 thumbnail_url 兼容旧调用方"
+    );
+    assert!(
+        body.get("storage_key").is_none()
+            && body.get("owner_anonymous_identity_id").is_none()
+            && body.get("room_id").is_none()
+            && body.get("thumbnail_storage_key").is_none(),
+        "locator 只能暴露 transport 信息，不能把仓储私货和业务真相泄漏给壳层"
+    );
+    assert!(body["distribution"]["announce_urls"].is_array());
+    assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
+}
+
+#[tokio::test]
+#[serial]
 async fn torrent接口会返回稳定metainfo并与locator对齐() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

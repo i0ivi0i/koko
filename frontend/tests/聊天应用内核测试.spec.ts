@@ -47,6 +47,7 @@ type 聊天媒体测试端口 = {
   }): void;
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    释放附件播放资源?(attachmentId: string): void;
   }): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
 };
@@ -956,5 +957,63 @@ describe("聊天应用内核", () => {
 
     expect(排空到期任务).toHaveBeenCalledTimes(1);
     kernel.dispose();
+  });
+
+  it("内核销毁时会释放仍在占用的 swarm 播放资源，而不是只销毁外层会话对象", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-release-1",
+            client_message_id: "c-video-release-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-release-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 释放附件播放资源 = vi.fn();
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "swarm",
+        attachmentId: "att-video-release-1",
+        kind: "video",
+        src: "blob:http://media.local/swarm-att-video-release-1",
+        thumbnailUrl: null,
+        hint: "正在协作分发",
+      }),
+      释放附件播放资源,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    kernel.dispose();
+
+    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-release-1");
   });
 });

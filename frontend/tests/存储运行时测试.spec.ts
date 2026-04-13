@@ -47,14 +47,19 @@ describe("存储运行时", () => {
     await repo?.保存({
       attachmentId: "att-video-1",
       complete: true,
+      kind: "video",
       contentHash: "hash-1",
-      completedAt: 1_775_942_400_000,
+      retainedAt: 1_775_942_400_000,
+      lastAccessAt: 1_775_942_500_000,
     });
 
     expect(await repo?.读取("att-video-1")).toMatchObject({
       attachmentId: "att-video-1",
       complete: true,
+      kind: "video",
       contentHash: "hash-1",
+      retainedAt: 1_775_942_400_000,
+      lastAccessAt: 1_775_942_500_000,
     });
   });
 });

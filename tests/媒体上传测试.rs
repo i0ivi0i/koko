@@ -242,6 +242,49 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     assert_eq!(complete_body["status"].as_str(), Some("ready"));
     assert_eq!(complete_body["width"].as_i64(), Some(1));
     assert_eq!(complete_body["height"].as_i64(), Some(1));
+    let media_asset = complete_body["media_asset"]
+        .as_object()
+        .expect("图片 complete 后必须返回共享 blob media_asset");
+    let preview_url = media_asset["preview"]["url"]
+        .as_str()
+        .expect("图片 complete 后必须返回 preview 主链");
+    let full_url = media_asset["full"]["url"]
+        .as_str()
+        .expect("图片 complete 后必须返回 full 主链");
+    let original_url = media_asset["original"]["url"]
+        .as_str()
+        .expect("图片 complete 后必须返回 original 主链");
+    let legacy_original_url = format!(
+        "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+    );
+    // 图片资产面一旦成立，preview/full/original 都必须切到稳定的 media asset 路由，
+    // 这样前端才能改吃 asset-first 主链，而不是继续把旧附件内容地址当正式真相。
+    assert_eq!(media_asset["kind"].as_str(), Some("blob_image"));
+    assert_eq!(
+        preview_url,
+        format!("/api/media/{attachment_id}/blob/preview?session_id={session_id}")
+    );
+    assert_eq!(
+        full_url,
+        format!("/api/media/{attachment_id}/blob/full?session_id={session_id}")
+    );
+    assert_eq!(
+        original_url,
+        format!("/api/media/{attachment_id}/blob/original?session_id={session_id}")
+    );
+    assert_ne!(
+        full_url, original_url,
+        "full 和 original 至少要有稳定可区分的资产地址，不能继续共用一条旧 original_url"
+    );
+    assert!(
+        !full_url.contains("/api/attachments/") && !original_url.contains("/api/attachments/"),
+        "图片正式资产主链不能继续暴露旧附件内容直链"
+    );
+    assert_eq!(
+        media_asset["origin"]["original_url"].as_str(),
+        Some(legacy_original_url.as_str()),
+        "旧附件内容地址只能退到冷备 origin 描述里，不能继续当 full/original 主链"
+    );
 
     let row = sqlx::query(
         "SELECT status, width, height, thumbnail_storage_key FROM attachments WHERE attachment_id = $1",

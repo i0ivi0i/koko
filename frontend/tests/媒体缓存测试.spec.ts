@@ -10,12 +10,18 @@ describe("媒体缓存", () => {
     const 仓库 = 创建内存媒体缓存仓库();
     const 缓存 = 创建媒体缓存({ repo: 仓库, now: () => 1_775_942_400_000 });
 
-    await 缓存.标记完整("att-video-1", { contentHash: "hash-1" });
+    await 缓存.标记完整("att-video-1", {
+      kind: "video",
+      contentHash: "hash-1",
+    });
 
     expect(await 仓库.读取("att-video-1")).toMatchObject<Partial<媒体缓存记录>>({
       attachmentId: "att-video-1",
       complete: true,
+      kind: "video",
       contentHash: "hash-1",
+      retainedAt: 1_775_942_400_000,
+      lastAccessAt: 1_775_942_400_000,
     });
   });
 
@@ -24,8 +30,10 @@ describe("媒体缓存", () => {
     await 仓库.保存({
       attachmentId: "att-video-1",
       complete: true,
+      kind: "video",
       contentHash: "hash-1",
-      completedAt: 1_775_942_400_000,
+      retainedAt: 1_775_942_400_000,
+      lastAccessAt: 1_775_942_500_000,
     });
     const 缓存 = 创建媒体缓存({ repo: 仓库 });
 
@@ -33,7 +41,10 @@ describe("媒体缓存", () => {
 
     expect(缓存.snapshot()["att-video-1"]).toMatchObject({
       complete: true,
+      kind: "video",
       contentHash: "hash-1",
+      retainedAt: 1_775_942_400_000,
+      lastAccessAt: 1_775_942_500_000,
     });
   });
 });

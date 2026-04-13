@@ -197,6 +197,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
             get(房间外壳::load_media_locator),
         )
         .route(
+            "/api/media/{attachment_id}/blob/{asset_variant}",
+            get(房间外壳::load_blob_asset_content),
+        )
+        .route(
             "/api/media/{attachment_id}/stream/{*asset_path}",
             get(房间外壳::load_streaming_asset_content),
         )

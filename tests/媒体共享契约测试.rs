@@ -243,12 +243,48 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
     let full = media_asset["full"]
         .as_object()
         .expect("Blob 资产必须返回 full");
+    let original = media_asset["original"]
+        .as_object()
+        .expect("Blob 资产必须返回 original");
+    let distribution = media_asset["distribution"]
+        .as_object()
+        .expect("Blob 资产必须返回共享分发表面");
     let origin = media_asset["origin"]
         .as_object()
         .expect("Blob 资产必须返回冷源描述");
 
+    // 共享 contract 既不能混入 Web presenter 私货，也不能继续把旧附件内容地址当正式 blob 主链。
+    assert_eq!(
+        preview.get("url").and_then(serde_json::Value::as_str),
+        Some(format!("/api/media/{attachment_id}/blob/preview?session_id={session_id}").as_str())
+    );
+    assert_eq!(
+        full.get("url").and_then(serde_json::Value::as_str),
+        Some(format!("/api/media/{attachment_id}/blob/full?session_id={session_id}").as_str())
+    );
+    assert_eq!(
+        original.get("url").and_then(serde_json::Value::as_str),
+        Some(format!("/api/media/{attachment_id}/blob/original?session_id={session_id}").as_str())
+    );
+    assert!(
+        full.get("url")
+            .and_then(serde_json::Value::as_str)
+            .zip(original.get("url").and_then(serde_json::Value::as_str))
+            .is_some_and(|(full_url, original_url)| {
+                full_url != original_url
+                    && !full_url.contains("/api/attachments/")
+                    && !original_url.contains("/api/attachments/")
+            }),
+        "full/original 必须是稳定可区分的 blob 主链地址，不能继续退回旧附件内容直链"
+    );
     断言对象不包含壳层私货(media_asset, "blob media_asset");
     断言对象不包含壳层私货(preview, "blob preview");
     断言对象不包含壳层私货(full, "blob full");
+    断言对象不包含壳层私货(original, "blob original");
+    断言对象不包含壳层私货(distribution, "blob distribution");
     断言对象不包含壳层私货(origin, "blob origin");
+    assert!(
+        distribution.get("presence_url").is_none(),
+        "共享分发表面不能夹带 Web 页面 presence URL"
+    );
 }

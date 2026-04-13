@@ -245,7 +245,7 @@ impl Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
         let row = sqlx::query(
-            "SELECT a.attachment_id, ai.anonymous_identity_id, a.kind, a.status, a.width, a.height \
+            "SELECT a.attachment_id, ai.anonymous_identity_id, a.kind, a.mime_type, a.status, a.width, a.height \
              FROM attachments a \
              JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
              WHERE a.attachment_id = $1",
@@ -269,6 +269,7 @@ impl Pg仓储 {
                 附件标识: row.get("attachment_id"),
                 所属匿名身份标识: row.get("anonymous_identity_id"),
                 种类: kind,
+                mime_type: row.get("mime_type"),
                 状态: status,
                 宽: row.get("width"),
                 高: row.get("height"),

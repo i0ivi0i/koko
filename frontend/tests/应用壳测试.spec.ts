@@ -28,4 +28,13 @@ describe("应用壳缓存边界", () => {
     expect(source).toContain("**/media/**");
     expect(source).toContain("**/attachments/**");
   });
+
+  it("media-sw 会给图片 blob 受控路由留出缓存命中入口，而不是只剩裸 WebTorrent worker import", () => {
+    const source = 读取前端文件("media-sw.ts");
+
+    expect(source).toContain("webtorrent/dist/sw.min.js");
+    expect(source).toContain("addEventListener(\"fetch\"");
+    expect(source).toContain("\\/blob\\/");
+    expect(source).toContain("caches.open");
+  });
 });

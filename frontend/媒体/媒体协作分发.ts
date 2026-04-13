@@ -16,10 +16,15 @@ export interface WebTorrent种子 {
   on(event: "wire", handler: (wire: WebTorrent连接) => void): void;
   on(event: "noPeers", handler: () => void): void;
   on(event: "done", handler: () => void): void;
+  destroy?(options?: { destroyStore?: boolean }): void;
 }
 
+type WebTorrent流服务 = {
+  close?(): void;
+};
+
 export interface WebTorrent浏览器客户端 {
-  createServer(options: { controller?: unknown }): unknown;
+  createServer(options: { controller?: unknown }): WebTorrent流服务;
   add(
     torrentId: Uint8Array | ArrayBuffer,
     options: {
@@ -32,13 +37,15 @@ export interface WebTorrent浏览器客户端 {
     },
     onTorrent: (torrent: WebTorrent种子) => void
   ): WebTorrent种子;
+  remove?(torrentId: string | Uint8Array | ArrayBuffer, options?: { destroyStore?: boolean }): void;
+  destroy?(): void;
 }
 
 type WebTorrent浏览器构造器 = new () => WebTorrent浏览器客户端;
 
 export interface 协作分发浏览器运行时 {
   client: WebTorrent浏览器客户端;
-  streamServer: unknown;
+  streamServer: WebTorrent流服务;
 }
 
 export interface 协作分发媒体源 {
@@ -56,16 +63,18 @@ const 协作分发存活上报间隔毫秒 = 60_000;
 type 协作分发会话 = {
   attachmentId: string;
   swarmId: string;
+  torrentInfoHash: string;
   contentHash: string;
   sourcePromise: Promise<{ src: string } | null>;
-  refs: number;
   eagerCompleting: boolean;
   hint: 协作分发媒体源["hint"] | null;
   presenceIntervalId: ReturnType<typeof setInterval> | null;
-  listeners: Set<(event: 协作分发会话事件) => void>;
+  torrent: WebTorrent种子 | null;
+  consumerListeners: Map<string, ((event: 协作分发会话事件) => void) | null>;
 };
 
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
+let 协作分发浏览器运行时实例: 协作分发浏览器运行时 | null = null;
 const 协作分发会话表 = new Map<string, 协作分发会话>();
 
 async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏览器构造器> {
@@ -191,24 +200,34 @@ function 推导协作分发提示(session: 协作分发会话): 协作分发媒�
   return session.eagerCompleting ? "正在补块" : "正在协作分发";
 }
 
+function 更新协作分发会话主附件(session: 协作分发会话): void {
+  const nextAttachmentId = session.consumerListeners.keys().next().value;
+  if (typeof nextAttachmentId === "string") {
+    session.attachmentId = nextAttachmentId;
+  }
+}
+
 function 发布协作分发会话事件(
   session: 协作分发会话,
   type: 协作分发会话事件["type"]
 ): void {
-  const event: 协作分发会话事件 =
-    type === "ASSET_COMPLETE"
-      ? {
-          type,
-          attachmentId: session.attachmentId,
-          swarmId: session.swarmId,
-          contentHash: session.contentHash,
-        }
-      : {
-          type,
-          attachmentId: session.attachmentId,
-          swarmId: session.swarmId,
-        };
-  for (const listener of session.listeners) {
+  for (const [attachmentId, listener] of session.consumerListeners) {
+    if (!listener) {
+      continue;
+    }
+    const event: 协作分发会话事件 =
+      type === "ASSET_COMPLETE"
+        ? {
+            type,
+            attachmentId,
+            swarmId: session.swarmId,
+            contentHash: session.contentHash,
+          }
+        : {
+            type,
+            attachmentId,
+            swarmId: session.swarmId,
+          };
     listener(event);
   }
 }
@@ -254,6 +273,28 @@ function 启动协作分发存活上报(
   );
 }
 
+function 停止协作分发存活上报(session: 协作分发会话): void {
+  if (session.presenceIntervalId === null) {
+    return;
+  }
+  clearInterval(session.presenceIntervalId);
+  session.presenceIntervalId = null;
+}
+
+function 清理协作分发底层会话(
+  session: 协作分发会话,
+  runtime: 协作分发浏览器运行时 | null = 协作分发浏览器运行时实例
+): void {
+  // 优先调用 client.remove，让 WebTorrent 自己负责把 torrent 从 client 生命周期里摘掉；
+  // 如果当前测试替身或运行环境没暴露 remove，再退回 torrent.destroy。
+  runtime?.client.remove?.(session.torrentInfoHash, {
+    destroyStore: false,
+  });
+  session.torrent?.destroy?.({
+    destroyStore: false,
+  });
+}
+
 async function 确保协作分发会话(input: {
   attachmentId: string;
   kind: 媒体种类;
@@ -262,10 +303,8 @@ async function 确保协作分发会话(input: {
 }): Promise<协作分发会话> {
   let session = 协作分发会话表.get(input.distribution.swarm_id);
   if (session) {
-    session.refs += 1;
-    if (input.onSessionEvent) {
-      session.listeners.add(input.onSessionEvent);
-    }
+    session.consumerListeners.set(input.attachmentId, input.onSessionEvent ?? null);
+    更新协作分发会话主附件(session);
     启动协作分发存活上报(session, input.distribution);
     return session;
   }
@@ -273,13 +312,14 @@ async function 确保协作分发会话(input: {
   session = {
     attachmentId: input.attachmentId,
     swarmId: input.distribution.swarm_id,
+    torrentInfoHash: input.distribution.torrent_info_hash!,
     contentHash: input.distribution.content_hash,
     sourcePromise: Promise.resolve(null),
-    refs: 1,
     eagerCompleting: true,
     hint: input.distribution.web_seed_url ? "正在补块" : null,
     presenceIntervalId: null,
-    listeners: new Set(input.onSessionEvent ? [input.onSessionEvent] : []),
+    torrent: null,
+    consumerListeners: new Map([[input.attachmentId, input.onSessionEvent ?? null]]),
   };
   协作分发会话表.set(input.distribution.swarm_id, session);
   启动协作分发存活上报(session, input.distribution);
@@ -287,21 +327,46 @@ async function 确保协作分发会话(input: {
   session.sourcePromise = (async () => {
     const runtime = await 获取或创建协作分发浏览器运行时();
     const torrent = await 接入协作分发种子(runtime, input.distribution);
+    session.torrent = torrent;
+    if (
+      协作分发会话表.get(session.swarmId) !== session ||
+      session.consumerListeners.size === 0
+    ) {
+      清理协作分发底层会话(session, runtime);
+      return null;
+    }
     绑定协作分发会话事件(session, torrent);
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
     return {
       src: file.streamURL,
     };
   })().catch((error) => {
-    if (session.presenceIntervalId !== null) {
-      clearInterval(session.presenceIntervalId);
-      session.presenceIntervalId = null;
+    停止协作分发存活上报(session);
+    if (协作分发会话表.get(input.distribution.swarm_id) === session) {
+      协作分发会话表.delete(input.distribution.swarm_id);
     }
-    协作分发会话表.delete(input.distribution.swarm_id);
     throw error;
   });
 
   return session;
+}
+
+export function 释放协作分发消费者(attachmentId: string): void {
+  for (const [swarmId, session] of 协作分发会话表) {
+    if (!session.consumerListeners.has(attachmentId)) {
+      continue;
+    }
+    session.consumerListeners.delete(attachmentId);
+    if (session.attachmentId === attachmentId) {
+      更新协作分发会话主附件(session);
+    }
+    if (session.consumerListeners.size > 0) {
+      continue;
+    }
+    协作分发会话表.delete(swarmId);
+    停止协作分发存活上报(session);
+    清理协作分发底层会话(session);
+  }
 }
 
 export function 读取协作分发会话状态(swarmId: string) {
@@ -312,7 +377,7 @@ export function 读取协作分发会话状态(swarmId: string) {
   return {
     attachmentId: session.attachmentId,
     swarmId: session.swarmId,
-    refs: session.refs,
+    refs: session.consumerListeners.size,
     eagerCompleting: session.eagerCompleting,
     hint: 推导协作分发提示(session),
   };
@@ -349,7 +414,7 @@ export async function 获取或创建协作分发浏览器运行时(
   读取媒体ServiceWorker注册: () => Promise<unknown> = 默认读取媒体ServiceWorker注册
 ): Promise<协作分发浏览器运行时> {
   if (!协作分发浏览器运行时Promise) {
-    协作分发浏览器运行时Promise = (async () => {
+    const nextPromise = (async () => {
       const WebTorrentCtor = await loadCtor();
       const serviceWorkerRegistration = await 读取媒体ServiceWorker注册();
       const client = new WebTorrentCtor();
@@ -357,17 +422,34 @@ export async function 获取或创建协作分发浏览器运行时(
         controller: serviceWorkerRegistration,
       });
       return { client, streamServer };
-    })();
+    })().then((runtime) => {
+      if (协作分发浏览器运行时Promise === nextPromise) {
+        协作分发浏览器运行时实例 = runtime;
+      }
+      return runtime;
+    });
+    协作分发浏览器运行时Promise = nextPromise;
   }
   return 协作分发浏览器运行时Promise;
 }
 
 export function 重置协作分发浏览器运行时() {
+  const runtimePromise = 协作分发浏览器运行时Promise;
+  const runtime = 协作分发浏览器运行时实例;
   协作分发浏览器运行时Promise = null;
+  协作分发浏览器运行时实例 = null;
   for (const session of 协作分发会话表.values()) {
-    if (session.presenceIntervalId !== null) {
-      clearInterval(session.presenceIntervalId);
-    }
+    停止协作分发存活上报(session);
   }
   协作分发会话表.clear();
+  runtime?.streamServer.close?.();
+  runtime?.client.destroy?.();
+  if (!runtime && runtimePromise) {
+    void runtimePromise
+      .then((resolvedRuntime) => {
+        resolvedRuntime.streamServer.close?.();
+        resolvedRuntime.client.destroy?.();
+      })
+      .catch(() => {});
+  }
 }

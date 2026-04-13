@@ -122,6 +122,8 @@ pub fn 断言媒体准备结果是Tus契约(
 
 /// 直接往数据库写入一条 ready 图片附件真相。
 /// 这个 helper 只服务集成测试建数，避免为了某个房间/消息场景倒逼上传 HTTP 主链参与。
+/// 说明：当前图片 blob asset 的 preview/full/original 由外壳层的受控路由表面承接，
+/// 测试建数阶段仍然只需要 canonical original + thumbnail 两个对象键，不必伪造第三份 full 字节。
 pub async fn 插入ready图片附件记录(pool: &PgPool, 会话标识: &str, 附件标识: &str) {
     let owner_identity_db_id = sqlx::query_scalar::<_, Option<i64>>(
         "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",

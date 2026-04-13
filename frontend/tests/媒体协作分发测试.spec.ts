@@ -3,6 +3,7 @@ import type { 媒体定位结果 } from "../契约.js";
 import {
   获取或创建协作分发浏览器运行时,
   解析协作分发源,
+  释放协作分发消费者,
   读取协作分发定位片段,
   读取协作分发会话状态,
   重置协作分发浏览器运行时,
@@ -83,15 +84,25 @@ function 创建可观测假Torrent(streamURL: string) {
 }
 
 function 创建假WebTorrent构造器(add: WebTorrent浏览器客户端["add"]) {
-  const createServer = vi.fn().mockReturnValue({ close: vi.fn() });
+  const closeServer = vi.fn();
+  const createServer = vi.fn().mockReturnValue({ close: closeServer });
+  const destroy = vi.fn();
+  const remove = vi.fn();
   class FakeWebTorrent {
     createServer = createServer;
 
     add = add;
+
+    destroy = destroy;
+
+    remove = remove;
   }
   return {
     ctor: FakeWebTorrent as unknown as new () => WebTorrent浏览器客户端,
     createServer,
+    closeServer,
+    destroy,
+    remove,
   };
 }
 
@@ -218,6 +229,9 @@ describe("媒体协作分发", () => {
 
     expect(add).toHaveBeenCalledTimes(1);
     expect(first).toEqual(second);
+    expect(读取协作分发会话状态("swarm-att-1")).toMatchObject({
+      refs: 1,
+    });
   });
 
   it("开始查看后会继续补齐整个附件，并用官方事件更新运行态提示", async () => {
@@ -365,5 +379,71 @@ describe("媒体协作分发", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("释放最后一个协作分发消费者后会停止 presence 上报并清掉会话", async () => {
+    vi.useFakeTimers();
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-release");
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-release")) {
+        expect(init?.method).toBe("GET");
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      }
+      expect(url).toContain("/api/media/att-release/presence");
+      expect(init?.method).toBe("POST");
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor, remove } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-release");
+    expect(locator.distribution).not.toBeNull();
+    locator.distribution!.presence_url = "/api/media/att-release/presence?session_id=s-test";
+    await 解析协作分发源({
+      attachmentId: "att-release",
+      kind: "video",
+      locator,
+    });
+
+    expect(读取协作分发会话状态("swarm-att-release")).toMatchObject({
+      refs: 1,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    释放协作分发消费者("att-release");
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(读取协作分发会话状态("swarm-att-release")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(remove).toHaveBeenCalledWith("torrent-info-hash-att-release", {
+      destroyStore: false,
+    });
+  });
+
+  it("重置协作分发运行时时会关闭 stream server 并销毁 WebTorrent client", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const add = vi.fn((() => {
+      throw new Error("test should not call add");
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor, closeServer, destroy } = 创建假WebTorrent构造器(add);
+
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+    重置协作分发浏览器运行时();
+
+    expect(closeServer).toHaveBeenCalledTimes(1);
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });

@@ -165,6 +165,7 @@ impl 假仓储 {
                 附件标识: 附件标识.to_string(),
                 所属匿名身份标识: 所属匿名身份标识.to_string(),
                 种类,
+                mime_type: "image/png".to_string(),
                 状态,
                 宽: Some(320),
                 高: Some(240),
