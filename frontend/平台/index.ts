@@ -18,6 +18,7 @@ export function 获取默认浏览器应用平台(): 浏览器应用平台 {
 
 export {
   创建浏览器应用平台,
+  type 浏览器应用平台事件,
   type 浏览器应用平台命令,
   type 浏览器应用平台快照,
   type 浏览器应用平台,
@@ -33,6 +34,7 @@ export {
 } from "./存储运行时.js";
 export {
   创建服务工作线程运行时,
+  type 服务工作线程运行时事件,
   type 服务工作线程快照,
   type 服务工作线程运行时,
 } from "./服务工作线程运行时.js";
@@ -61,3 +63,10 @@ export {
   type 离线运行时依赖,
   type 离线运行时,
 } from "./离线运行时.js";
+export {
+  创建离线任务仓库,
+  type 平台离线任务,
+  type 离线任务仓库,
+  type 离线任务仓库依赖,
+  type 离线任务存储实现,
+} from "./离线任务仓库.js";

@@ -9,7 +9,9 @@ import {
 } from "./存储运行时.js";
 import {
   创建服务工作线程运行时,
+  type 服务工作线程运行时事件,
   type 服务工作线程运行时,
+  type 服务工作线程快照,
 } from "./服务工作线程运行时.js";
 import {
   创建传输运行时,
@@ -32,7 +34,6 @@ import {
   type 离线运行时,
   type 离线运行时快照,
 } from "./离线运行时.js";
-import type { 服务工作线程快照 } from "./服务工作线程运行时.js";
 
 export interface 浏览器应用平台依赖 {
   lifecycle?: 生命周期运行时;
@@ -55,9 +56,14 @@ export interface 浏览器应用平台快照 {
 
 export type 浏览器应用平台命令 =
   | { type: "CLAIM_PRIMARY_CONTEXT" }
+  | { type: "ACCEPT_SERVICE_WORKER_UPDATE" }
   | ({ type: "SHOW_NOTIFICATION" } & 显示通知输入)
   | { type: "SET_BADGE"; count: number }
   | { type: "CLEAR_BADGE" };
+
+export type 浏览器应用平台事件 =
+  | 服务工作线程运行时事件
+  | { type: "PRIMARY_CONTEXT_FOCUSED" };
 
 export interface 浏览器应用平台 {
   lifecycle: 生命周期运行时;
@@ -69,6 +75,7 @@ export interface 浏览器应用平台 {
   offline: 离线运行时;
   启动(): Promise<void>;
   snapshot(): 浏览器应用平台快照;
+  订阅事件?(listener: (event: 浏览器应用平台事件) => void): () => void;
   dispatch(command: 浏览器应用平台命令): Promise<boolean | void>;
 }
 
@@ -92,6 +99,13 @@ export function 创建浏览器应用平台(
   const multiContext = deps.multiContext ?? 创建多上下文运行时();
   const notification = deps.notification ?? 创建通知运行时();
   const offline = deps.offline ?? 创建离线运行时();
+  const 事件监听器 = new Set<(event: 浏览器应用平台事件) => void>();
+
+  const 发布平台事件 = (event: 浏览器应用平台事件): void => {
+    for (const listener of 事件监听器) {
+      listener(event);
+    }
+  };
 
   /**
    * 平台层自己只消费浏览器运行时事实：
@@ -108,9 +122,19 @@ export function 创建浏览器应用平台(
   });
 
   notification.订阅点击(() => {
-    multiContext.请求聚焦当前上下文();
-    multiContext.声明主上下文();
-    void notification.清除角标();
+    void (async () => {
+      const 已恢复前台 =
+        (await multiContext.请求回到应用前台?.()) ?? false;
+      if (!已恢复前台) {
+        multiContext.请求聚焦当前上下文();
+      }
+      multiContext.声明主上下文();
+      await notification.清除角标();
+      发布平台事件({ type: "PRIMARY_CONTEXT_FOCUSED" });
+    })();
+  });
+  serviceWorker.订阅事件?.((event) => {
+    发布平台事件(event);
   });
 
   const 读取平台快照 = (): 浏览器应用平台快照 => ({
@@ -153,11 +177,20 @@ export function 创建浏览器应用平台(
       return 读取平台快照();
     },
 
+    订阅事件(listener: (event: 浏览器应用平台事件) => void): () => void {
+      事件监听器.add(listener);
+      return () => {
+        事件监听器.delete(listener);
+      };
+    },
+
     async dispatch(command: 浏览器应用平台命令): Promise<boolean | void> {
       switch (command.type) {
         case "CLAIM_PRIMARY_CONTEXT":
           multiContext.声明主上下文();
           return;
+        case "ACCEPT_SERVICE_WORKER_UPDATE":
+          return serviceWorker.接受更新?.() ?? false;
         case "SHOW_NOTIFICATION":
           if (multiContext.通知已展示(command.id)) {
             return false;

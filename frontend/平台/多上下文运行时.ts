@@ -26,12 +26,15 @@ export interface 多上下文运行时依赖 {
   channelName?: string;
   contextId?: string;
   createChannel?: (name: string) => 广播信道;
+  focusSelf?: () => boolean | Promise<boolean>;
+  openSelf?: () => boolean | Promise<boolean>;
 }
 
 export interface 多上下文运行时 {
   snapshot(): 多上下文运行时快照;
   声明主上下文(): void;
   请求聚焦当前上下文(): void;
+  请求回到应用前台?(): Promise<boolean>;
   通知已展示(notificationId: string): boolean;
   登记通知已展示(notificationId: string): boolean;
 }
@@ -60,6 +63,16 @@ export function 创建多上下文运行时(
   const contextId = deps.contextId ?? 生成默认上下文标识();
   const createChannel = deps.createChannel ?? 读取默认信道工厂();
   const channel = createChannel?.(deps.channelName ?? "koko-browser-app") ?? null;
+  const focusSelf =
+    deps.focusSelf ??
+    (() => {
+      if (typeof window === "undefined" || typeof window.focus !== "function") {
+        return false;
+      }
+      window.focus();
+      return true;
+    });
+  const openSelf = deps.openSelf ?? (() => false);
 
   let current: 多上下文运行时快照 = {
     contextId,
@@ -72,6 +85,19 @@ export function 创建多上下文运行时(
 
   const 更新快照 = (patch: Partial<多上下文运行时快照>): void => {
     current = { ...current, ...patch };
+  };
+
+  const 尝试恢复前台 = async (
+    action: (() => boolean | Promise<boolean>) | undefined
+  ): Promise<boolean> => {
+    if (!action) {
+      return false;
+    }
+    try {
+      return Boolean(await action());
+    } catch {
+      return false;
+    }
   };
 
   const 处理广播消息 = (message: 多上下文消息): void => {
@@ -128,6 +154,29 @@ export function 创建多上下文运行时(
       };
       处理广播消息(message);
       channel?.postMessage(message);
+    },
+
+    async 请求回到应用前台(): Promise<boolean> {
+      /**
+       * 通知点击后优先尝试真正回到当前应用：
+       * 1. 先尝试聚焦当前窗口；
+       * 2. 聚焦失败再尝试 open/self 接管；
+       * 3. 两者都失败才退化为跨上下文广播。
+       */
+      if (await 尝试恢复前台(focusSelf)) {
+        更新快照({
+          lastFocusedContextId: contextId,
+        });
+        return true;
+      }
+      if (await 尝试恢复前台(openSelf)) {
+        更新快照({
+          lastFocusedContextId: contextId,
+        });
+        return true;
+      }
+      this.请求聚焦当前上下文();
+      return false;
     },
 
     通知已展示(notificationId: string): boolean {

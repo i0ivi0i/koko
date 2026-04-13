@@ -9,6 +9,11 @@ export interface 服务工作线程快照 {
   lastMessage: unknown | null;
 }
 
+export type 服务工作线程运行时事件 =
+  | { type: "SERVICE_WORKER_UPDATE_READY"; scope: "app" | "media" }
+  | { type: "SERVICE_WORKER_CONTROLLER_READY" }
+  | { type: "BACKGROUND_DRAIN_REQUESTED" };
+
 type 可监听事件目标 = {
   addEventListener?(type: string, listener: (event?: unknown) => void): void;
 };
@@ -53,6 +58,8 @@ export interface 服务工作线程运行时依赖 {
 export interface 服务工作线程运行时 {
   启动(): Promise<void>;
   snapshot(): 服务工作线程快照;
+  订阅事件?(listener: (event: 服务工作线程运行时事件) => void): () => void;
+  接受更新?(): boolean;
   发送消息?(message: unknown): boolean;
   读取注册(kind: "app" | "media"): 服务工作线程注册结果 | null;
 }
@@ -84,6 +91,7 @@ export function 创建服务工作线程运行时(
   let started = false;
   let appRegistration: 服务工作线程注册结果 | null = null;
   let mediaRegistration: 服务工作线程注册结果 | null = null;
+  const 事件监听器 = new Set<(event: 服务工作线程运行时事件) => void>();
 
   let current: 服务工作线程快照 = {
     appShellRegistered: false,
@@ -100,6 +108,12 @@ export function 创建服务工作线程运行时(
     current = { ...current, ...patch };
   };
 
+  const 发布事件 = (event: 服务工作线程运行时事件): void => {
+    for (const listener of 事件监听器) {
+      listener(event);
+    }
+  };
+
   /**
    * 页面与 SW 的控制权会在首次激活、升级接管、标签恢复时变化。
    * 这里统一把 controller 是否存在收进平台快照，避免壳层自己猜。
@@ -114,9 +128,17 @@ export function 创建服务工作线程运行时(
     registration: unknown,
     key: "appShellWaiting" | "mediaWorkerWaiting"
   ): void => {
+    const hasWaiting = 是可注册结果(registration) ? Boolean(registration.waiting) : false;
     更新快照({
-      [key]: 是可注册结果(registration) ? Boolean(registration.waiting) : false,
+      [key]: hasWaiting,
     });
+    // 等待中的 worker 代表“更新已就绪但尚未被页面接受”，平台需要把这个事实发给上层。
+    if (hasWaiting) {
+      发布事件({
+        type: "SERVICE_WORKER_UPDATE_READY",
+        scope: key === "appShellWaiting" ? "app" : "media",
+      });
+    }
   };
 
   const 绑定更新观察 = (
@@ -141,9 +163,15 @@ export function 创建服务工作线程运行时(
         lastMessage: payload,
         lastMessageType: 读取消息类型(payload),
       });
+      if (读取消息类型(payload) === "BACKGROUND_DRAIN_REQUESTED") {
+        发布事件({ type: "BACKGROUND_DRAIN_REQUESTED" });
+      }
     });
     platformNavigator.serviceWorker.addEventListener("controllerchange", () => {
       同步Controller状态();
+      if (Boolean(platformNavigator?.serviceWorker?.controller)) {
+        发布事件({ type: "SERVICE_WORKER_CONTROLLER_READY" });
+      }
     });
   };
 
@@ -201,6 +229,26 @@ export function 创建服务工作线程运行时(
 
     snapshot(): 服务工作线程快照 {
       return { ...current };
+    },
+
+    订阅事件(listener: (event: 服务工作线程运行时事件) => void): () => void {
+      事件监听器.add(listener);
+      return () => {
+        事件监听器.delete(listener);
+      };
+    },
+
+    接受更新(): boolean {
+      let accepted = false;
+      // 允许 app/media 两个 worker 分别处于 waiting，显式触发升级请求时统一广播给等待实例。
+      for (const registration of [appRegistration, mediaRegistration]) {
+        const waiting = registration?.waiting;
+        if (waiting && typeof waiting.postMessage === "function") {
+          waiting.postMessage({ type: "SKIP_WAITING" });
+          accepted = true;
+        }
+      }
+      return accepted;
     },
 
     发送消息(message: unknown): boolean {

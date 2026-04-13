@@ -3,6 +3,7 @@ import { 创建浏览器存储 } from "../存储";
 import { createFakeStorage, 假传输 } from "./common/聊天测试支架";
 import { 创建聊天应用内核 } from "../聊天应用内核";
 import type {
+  浏览器应用平台事件,
   浏览器应用平台命令,
   浏览器应用平台快照,
 } from "../平台/浏览器应用平台";
@@ -331,5 +332,92 @@ describe("聊天应用内核", () => {
     });
 
     expect(平台命令记录).toEqual([]);
+  });
+
+  it("平台发出 BACKGROUND_DRAIN_REQUESTED 时，聊天内核会触发离线队列排空", async () => {
+    const transport = new 假传输();
+    const 排空到期任务 = vi.fn(async () => {});
+    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+      platform: {
+        lifecycle: {} as never,
+        storage: {} as never,
+        serviceWorker: {} as never,
+        transport: { transport: () => transport } as never,
+        multiContext: {} as never,
+        notification: {} as never,
+        offline: {
+          snapshot: () => ({
+            online: true,
+            backgroundSyncSupported: true,
+            queuedTaskCapability: "background-sync" as const,
+          }),
+          就绪: async () => {},
+          排空到期任务,
+        } as never,
+        启动: async () => {},
+        snapshot: () =>
+          ({
+            lifecycle: { visibility: "visible", phase: "active" },
+            serviceWorker: {
+              appShellRegistered: true,
+              mediaWorkerRegistered: true,
+              persistentStorageRequested: true,
+              controllerAttached: false,
+              appShellWaiting: false,
+              mediaWorkerWaiting: false,
+              lastMessageType: null,
+              lastMessage: null,
+            },
+            transport: {
+              lastLifecycle: { visibility: "visible", phase: "active" },
+              realtimePolicy: {
+                intent: "resume",
+                reconnection: true,
+                reason: "active",
+              },
+            },
+            multiContext: {
+              contextId: "tab-a",
+              isPrimaryContext: true,
+              lastPrimaryContextId: "tab-a",
+              lastFocusedContextId: null,
+              deliveredNotificationIds: [],
+            },
+            notification: {
+              permission: "granted",
+              lastClickedNotificationId: null,
+              badgeCount: 0,
+            },
+            offline: {
+              online: true,
+              backgroundSyncSupported: true,
+              queuedTaskCapability: "background-sync",
+            },
+          }) as 浏览器应用平台快照,
+        dispatch: async () => true,
+        订阅事件: (listener: (event: 浏览器应用平台事件) => void) => {
+          平台事件监听器 = listener;
+          return () => {
+            平台事件监听器 = null;
+          };
+        },
+      },
+    });
+
+    const 已注册事件监听器 =
+      平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null;
+    if (typeof 已注册事件监听器 === "function") {
+      已注册事件监听器({ type: "BACKGROUND_DRAIN_REQUESTED" });
+    }
+    await Promise.resolve();
+
+    expect(排空到期任务).toHaveBeenCalledTimes(1);
+    kernel.dispose();
   });
 });

@@ -90,4 +90,85 @@ describe("离线运行时", () => {
 
     vi.useRealTimers();
   });
+
+  it("会登记待补发任务、支持排空重放，并在可用时请求 Background Sync", async () => {
+    const windowSource = new 假窗口事件源();
+    const registerSync = vi.fn(async () => {});
+    const 保存 = vi.fn(async () => true);
+    const 列出到期任务 = vi.fn(async () => [
+      {
+        id: "task-1",
+        kind: "create_message",
+        payload: { roomId: "r-1", text: "hello" },
+        createdAt: 1,
+        retryAt: 1,
+        dedupeKey: "dedupe-task-1",
+      },
+    ]);
+    const 删除 = vi.fn(async () => {});
+    const 标记重试 = vi.fn(async () => {});
+    const runtime = 创建离线运行时({
+      window: windowSource as unknown as Window,
+      navigator: {
+        onLine: true,
+      } as unknown as Navigator,
+      // 这里先通过扩展依赖注入假仓库，确保 runtime 行为可以被精确验证。
+      仓库: {
+        保存,
+        列出到期任务,
+        删除,
+        标记重试,
+      },
+      now: () => 100,
+    } as unknown as Parameters<typeof 创建离线运行时>[0]);
+    const 扩展运行时 = runtime as unknown as {
+      登记待补发任务(task: {
+        id: string;
+        kind: "create_message";
+        payload: unknown;
+        createdAt: number;
+        retryAt: number;
+        dedupeKey?: string;
+      }): Promise<boolean>;
+      排空到期任务(
+        handler: (task: {
+          id: string;
+          kind: "create_message";
+          payload: unknown;
+          createdAt: number;
+          retryAt: number;
+          dedupeKey?: string;
+        }) => Promise<"done" | "retry">
+      ): Promise<void>;
+      请求后台补发同步(tag: string): Promise<boolean>;
+    };
+
+    await runtime.就绪({
+      已注册服务工作线程: [
+        {
+          sync: {
+            register: registerSync,
+          },
+        },
+      ],
+    });
+    const 入队结果 = await 扩展运行时.登记待补发任务({
+      id: "task-1",
+      kind: "create_message",
+      payload: { roomId: "r-1", text: "hello" },
+      createdAt: 1,
+      retryAt: 1,
+      dedupeKey: "dedupe-task-1",
+    });
+    await 扩展运行时.排空到期任务(async () => "done");
+    const 同步结果 = await 扩展运行时.请求后台补发同步("koko-queue-main");
+
+    expect(入队结果).toBe(true);
+    expect(保存).toHaveBeenCalledTimes(1);
+    expect(列出到期任务).toHaveBeenCalledWith(100);
+    expect(删除).toHaveBeenCalledWith("task-1");
+    expect(标记重试).not.toHaveBeenCalled();
+    expect(同步结果).toBe(true);
+    expect(registerSync).toHaveBeenCalledWith("koko-queue-main");
+  });
 });

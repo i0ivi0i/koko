@@ -1,162 +1,238 @@
-# Graph Report - frontend/  (2026-04-13)
+# Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 95 files · ~59,947 words
+- 137 files · ~145,099 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 144 nodes · 179 edges · 18 communities detected
+- 280 nodes · 333 edges · 30 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_媒体选择类型|媒体选择类型]]
-- [[_COMMUNITY_壳层组件交互|壳层组件交互]]
-- [[_COMMUNITY_HTTP实时传输|HTTP实时传输]]
-- [[_COMMUNITY_测试支架接口|测试支架接口]]
-- [[_COMMUNITY_前端测试替身|前端测试替身]]
-- [[_COMMUNITY_真实链路测试|真实链路测试]]
-- [[_COMMUNITY_媒体预处理上传|媒体预处理上传]]
-- [[_COMMUNITY_聊天应用内核|聊天应用内核]]
-- [[_COMMUNITY_Socket测试替身|Socket测试替身]]
-- [[_COMMUNITY_消息渲染|消息渲染]]
-- [[_COMMUNITY_应用Service Worker|应用Service Worker]]
-- [[_COMMUNITY_滚动意图分发|滚动意图分发]]
-- [[_COMMUNITY_浏览器应用平台|浏览器应用平台]]
-- [[_COMMUNITY_HTTP接口错误|HTTP接口错误]]
-- [[_COMMUNITY_控制台渲染|控制台渲染]]
-- [[_COMMUNITY_CSS类型声明|CSS类型声明]]
-- [[_COMMUNITY_媒体Service Worker|媒体Service Worker]]
-- [[_COMMUNITY_WebTorrent类型声明|WebTorrent类型声明]]
+- [[_COMMUNITY_Community 0|Community 0]]
+- [[_COMMUNITY_Community 1|Community 1]]
+- [[_COMMUNITY_Community 2|Community 2]]
+- [[_COMMUNITY_Community 3|Community 3]]
+- [[_COMMUNITY_Community 4|Community 4]]
+- [[_COMMUNITY_Community 5|Community 5]]
+- [[_COMMUNITY_Community 6|Community 6]]
+- [[_COMMUNITY_Community 7|Community 7]]
+- [[_COMMUNITY_Community 8|Community 8]]
+- [[_COMMUNITY_Community 9|Community 9]]
+- [[_COMMUNITY_Community 10|Community 10]]
+- [[_COMMUNITY_Community 11|Community 11]]
+- [[_COMMUNITY_Community 12|Community 12]]
+- [[_COMMUNITY_Community 13|Community 13]]
+- [[_COMMUNITY_Community 14|Community 14]]
+- [[_COMMUNITY_Community 15|Community 15]]
+- [[_COMMUNITY_Community 16|Community 16]]
+- [[_COMMUNITY_Community 17|Community 17]]
+- [[_COMMUNITY_Community 18|Community 18]]
+- [[_COMMUNITY_Community 19|Community 19]]
+- [[_COMMUNITY_Community 20|Community 20]]
+- [[_COMMUNITY_Community 21|Community 21]]
+- [[_COMMUNITY_Community 22|Community 22]]
+- [[_COMMUNITY_Community 23|Community 23]]
+- [[_COMMUNITY_Community 24|Community 24]]
+- [[_COMMUNITY_Community 25|Community 25]]
+- [[_COMMUNITY_Community 26|Community 26]]
+- [[_COMMUNITY_Community 27|Community 27]]
+- [[_COMMUNITY_Community 28|Community 28]]
+- [[_COMMUNITY_Community 29|Community 29]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `读取媒体文件选择类型集合()` - 27 edges
-2. `HttpRealtime传输` - 23 edges
-3. `构造统一媒体文件选择配置()` - 11 edges
-4. `假Socket` - 6 edges
-5. `假Socket` - 5 edges
-6. `dispatch()` - 4 edges
-7. `snapshot()` - 3 edges
-8. `renderVirtualMessageItem()` - 3 edges
-9. `dispose()` - 3 edges
-10. `exitCurrentRoomView()` - 3 edges
+1. `HttpRealtime传输` - 23 edges
+2. `单连接发送到已关闭socket时降级为正常断开()` - 7 edges
+3. `构造rustus_hook请求体()` - 6 edges
+4. `假Socket` - 5 edges
+5. `parse_attachment_content_query()` - 5 edges
+6. `Pg仓储` - 5 edges
+7. `dispatch()` - 4 edges
+8. `handle_rustus_hook()` - 4 edges
+9. `render()` - 3 edges
+10. `snapshot()` - 3 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `构造统一媒体文件选择配置()` --calls--> `revokeDraftPreviewUrl()`  [EXTRACTED]
-  frontend\操作台\附件入口\附件能力注册.ts → frontend\聊天壳.ts
-- `构造统一媒体文件选择配置()` --calls--> `snapshot()`  [EXTRACTED]
-  frontend\操作台\附件入口\附件能力注册.ts → frontend\聊天应用内核.ts
-- `构造统一媒体文件选择配置()` --calls--> `dispatch()`  [EXTRACTED]
-  frontend\操作台\附件入口\附件能力注册.ts → frontend\聊天应用内核.ts
-- `构造统一媒体文件选择配置()` --calls--> `createFakeStorage()`  [EXTRACTED]
-  frontend\操作台\附件入口\附件能力注册.ts → frontend\tests\common\聊天测试支架.ts
-- `构造统一媒体文件选择配置()` --calls--> `推导图片Mime类型()`  [EXTRACTED]
-  frontend\操作台\附件入口\附件能力注册.ts → frontend\媒体\图片预处理.ts
+- `prepare_media_upload()` --calls--> `断言媒体准备结果是Tus契约()`  [EXTRACTED]
+  src\房间外壳.rs → tests\测试支撑\媒体.rs
+- `写入rustus测试文件()` --calls--> `包装url主机()`  [EXTRACTED]
+  tests\测试支撑\媒体.rs → src\房间外壳.rs
+- `handle_rustus_hook()` --calls--> `构造rustus_hook请求体()`  [EXTRACTED]
+  src\房间外壳.rs → tests\测试支撑\媒体.rs
+- `文本布局测试` --calls--> `文本布局`  [EXTRACTED]
+  frontend/tests/文本布局测试.spec.ts → frontend/文本布局.ts
 
 ## Communities
 
-### Community 0 - "媒体选择类型"
+### Community 0 - "Community 0"
+Cohesion: 0.02
+Nodes (17): AdminLoginBody, AdminLoginResp, ApiError, BootstrapBody, CompleteMediaUploadBody, JoinBody, ParsedAttachmentContentQuery, ParsedEventsQuery (+9 more)
+
+### Community 1 - "Community 1"
 Cohesion: 0.09
-Nodes (1): 读取媒体文件选择类型集合()
+Nodes (11): constructor(), dispatch(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), render(), renderShellConsole(), revokeDraftPreviewUrl() (+3 more)
 
-### Community 1 - "壳层组件交互"
+### Community 2 - "Community 2"
+Cohesion: 0.09
+Nodes (0):
+
+### Community 3 - "Community 3"
 Cohesion: 0.1
-Nodes (0): 
+Nodes (4): buildAttachmentContentUrl(), createFakeStorage(), loadMediaLocator(), 单连接发送到已关闭socket时降级为正常断开()
 
-### Community 2 - "HTTP实时传输"
+### Community 4 - "Community 4"
 Cohesion: 0.16
 Nodes (1): HttpRealtime传输
 
-### Community 3 - "测试支架接口"
-Cohesion: 0.13
-Nodes (2): buildAttachmentContentUrl(), loadMediaLocator()
-
-### Community 4 - "前端测试替身"
-Cohesion: 0.15
+### Community 5 - "Community 5"
+Cohesion: 0.18
 Nodes (2): FakeWebTorrent, 假Socket
 
-### Community 5 - "真实链路测试"
+### Community 6 - "Community 6"
+Cohesion: 0.22
+Nodes (4): New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Write-ManagedProcessLogs()
+
+### Community 7 - "Community 7"
 Cohesion: 0.22
 Nodes (2): ensureBackendBinaryPrepared(), startBackend()
 
-### Community 6 - "媒体预处理上传"
+### Community 8 - "Community 8"
 Cohesion: 0.25
-Nodes (8): 构造统一媒体文件选择配置(), 构造统一媒体文件Accept(), createFakeStorage(), 转码手机图片为标准Jpeg(), 推导图片Mime类型(), revokeDraftPreviewUrl(), 拉取受控Torrent字节(), 从Tus原始响应归一化失败响应()
+Nodes (5): handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus_hook_pre_create(), 构造rustus_hook请求体(), 读取rustus_metadata字段()
 
-### Community 7 - "聊天应用内核"
+### Community 9 - "Community 9"
 Cohesion: 0.33
-Nodes (6): dispatch(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), setTransportForTest(), snapshot()
+Nodes (6): 构造content_range值(), load_attachment_content(), load_media_locator(), load_media_torrent(), parse_attachment_content_query(), update_media_distribution_presence()
 
-### Community 8 - "Socket测试替身"
-Cohesion: 0.47
-Nodes (1): 假Socket
+### Community 10 - "Community 10"
+Cohesion: 0.5
+Nodes (0):
 
-### Community 9 - "消息渲染"
+### Community 11 - "Community 11"
+Cohesion: 0.5
+Nodes (4): prepare_media_upload(), 写入rustus测试文件(), 断言媒体准备结果是Tus契约(), 包装url主机()
+
+### Community 12 - "Community 12"
+Cohesion: 0.67
+Nodes (3): err_resp(), 渲染前端入口_html(), load_frontend_index()
+
+### Community 13 - "Community 13"
+Cohesion: 1.0
+Nodes (1): Pg仓储
+
+### Community 14 - "Community 14"
 Cohesion: 0.67
 Nodes (3): renderMessageAttachments(), renderMessageBody(), renderVirtualMessageItem()
 
-### Community 10 - "应用Service Worker"
+### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (0):
 
-### Community 11 - "滚动意图分发"
+### Community 16 - "Community 16"
+Cohesion: 1.0
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+
+### Community 17 - "Community 17"
 Cohesion: 1.0
 Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
 
-### Community 12 - "浏览器应用平台"
+### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): load_room_events(), parse_events_query()
 
-### Community 13 - "HTTP接口错误"
+### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (1): Http接口错误
+Nodes (2): load_room_history(), parse_history_query()
 
-### Community 14 - "控制台渲染"
+### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (2): render(), renderShellConsole()
+Nodes (0):
 
-### Community 15 - "CSS类型声明"
+### Community 21 - "Community 21"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
-### Community 16 - "媒体Service Worker"
+### Community 22 - "Community 22"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): 文本布局, 文本布局测试
 
-### Community 17 - "WebTorrent类型声明"
+### Community 23 - "Community 23"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (0):
+
+### Community 24 - "Community 24"
+Cohesion: 1.0
+Nodes (1): frontend/房间内核.ts
+
+### Community 25 - "Community 25"
+Cohesion: 1.0
+Nodes (1): frontend/存储.ts
+
+### Community 26 - "Community 26"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 27 - "Community 27"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 28 - "Community 28"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 29 - "Community 29"
+Cohesion: 1.0
+Nodes (0):
 
 ## Knowledge Gaps
-- **Thin community `应用Service Worker`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **21 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+16 more)
+  These have ≤1 connection - possible missing edges or undocumented components.
+- **Thin community `Community 15`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `滚动意图分发`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
+- **Thin community `Community 16`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `浏览器应用平台`** (2 nodes): `index.ts`, `获取默认浏览器应用平台()`
+- **Thin community `Community 17`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `HTTP接口错误`** (2 nodes): `Http接口错误`, `.constructor()`
+- **Thin community `Community 18`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `控制台渲染`** (2 nodes): `render()`, `renderShellConsole()`
+- **Thin community `Community 19`** (2 nodes): `load_room_history()`, `parse_history_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `CSS类型声明`** (1 nodes): `css.d.ts`
+- **Thin community `Community 20`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `媒体Service Worker`** (1 nodes): `media-sw.ts`
+- **Thin community `Community 21`** (2 nodes): `最小mp4字节()`, `插入ready图片附件记录()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `WebTorrent类型声明`** (1 nodes): `webtorrent.d.ts`
+- **Thin community `Community 22`** (2 nodes): `文本布局`, `文本布局测试`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 23`** (1 nodes): `css.d.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 24`** (1 nodes): `frontend/房间内核.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 25`** (1 nodes): `frontend/存储.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 26`** (1 nodes): `lib.rs`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 27`** (1 nodes): `media-sw.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 28`** (1 nodes): `up.ps1`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 29`** (1 nodes): `webtorrent.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `HttpRealtime传输` connect `HTTP实时传输` to `壳层组件交互`?**
-  _High betweenness centrality (0.152) - this node is a cross-community bridge._
-- **Why does `构造统一媒体文件选择配置()` connect `媒体预处理上传` to `壳层组件交互`, `测试支架接口`, `聊天应用内核`?**
-  _High betweenness centrality (0.151) - this node is a cross-community bridge._
-- **Why does `读取媒体文件选择类型集合()` connect `媒体选择类型` to `前端测试替身`?**
-  _High betweenness centrality (0.060) - this node is a cross-community bridge._
-- **Should `媒体选择类型` be split into smaller, more focused modules?**
+- **Why does `HttpRealtime传输` connect `Community 4` to `Community 1`?**
+  _High betweenness centrality (0.120) - this node is a cross-community bridge._
+- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 3` to `Community 0`?**
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
+- **Why does `构造rustus_hook请求体()` connect `Community 8` to `Community 0`?**
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+- **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局` to the rest of the system?**
+  _21 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Community 0` be split into smaller, more focused modules?**
+  _Cohesion score 0.02 - nodes in this community are weakly interconnected._
+- **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.09 - nodes in this community are weakly interconnected._
-- **Should `壳层组件交互` be split into smaller, more focused modules?**
-  _Cohesion score 0.1 - nodes in this community are weakly interconnected._
-- **Should `测试支架接口` be split into smaller, more focused modules?**
-  _Cohesion score 0.13 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.09 - nodes in this community are weakly interconnected._

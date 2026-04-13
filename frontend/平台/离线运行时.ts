@@ -1,3 +1,9 @@
+import {
+  创建离线任务仓库,
+  type 平台离线任务,
+  type 离线任务仓库,
+} from "./离线任务仓库.js";
+
 type 可监听窗口 = Pick<Window, "addEventListener">;
 type 支持后台同步注册 = {
   sync?: {
@@ -22,18 +28,27 @@ export interface 离线运行时快照 {
 export interface 离线运行时依赖 {
   window?: 可监听窗口;
   navigator?: 可用导航器;
+  仓库?: 离线任务仓库;
+  now?: () => number;
 }
 
 export interface 离线运行时 {
   就绪(input?: {
     已注册服务工作线程?: Array<支持后台同步注册 | null | undefined>;
   }): Promise<void>;
+  登记待补发任务?(task: 平台离线任务): Promise<boolean>;
+  排空到期任务?(
+    handler: (task: 平台离线任务) => Promise<"done" | "retry">
+  ): Promise<void>;
+  请求后台补发同步?(tag: string): Promise<boolean>;
   snapshot(): 离线运行时快照;
 }
 
 /**
- * 离线运行时只回答“浏览器现在是否在线，以及是否具备 Background Sync 能力”。
- * 它不把离线直接解释成消息失败或消息成立，只给平台层提供运行时事实。
+ * 离线运行时是平台层的离线调度器：
+ * 1. 维护在线状态与 background sync 能力快照；
+ * 2. 维护待补发任务队列的登记、排空、重试；
+ * 3. 只处理时机与队列，不解释聊天业务 payload。
  */
 export function 创建离线运行时(
   deps: 离线运行时依赖 = {}
@@ -41,6 +56,10 @@ export function 创建离线运行时(
   const windowTarget = deps.window ?? (typeof window !== "undefined" ? window : undefined);
   const navigatorTarget =
     deps.navigator ?? (typeof navigator !== "undefined" ? navigator : undefined);
+  const now = deps.now ?? (() => Date.now());
+  const 仓库 = deps.仓库 ?? 创建离线任务仓库();
+  let 已注册服务工作线程: Array<支持后台同步注册 | null | undefined> = [];
+  const 默认重试间隔毫秒 = 3_000;
 
   let current: 离线运行时快照 = {
     online: navigatorTarget?.onLine !== false,
@@ -71,13 +90,50 @@ export function 创建离线运行时(
         已注册服务工作线程?: Array<支持后台同步注册 | null | undefined>;
       } = {}
     ): Promise<void> {
-      const 已注册服务工作线程 = input.已注册服务工作线程 ?? [];
+      已注册服务工作线程 = input.已注册服务工作线程 ?? [];
       const queuedTaskCapability = 读取后台任务能力(已注册服务工作线程);
       current = {
         ...current,
         backgroundSyncSupported: queuedTaskCapability === "background-sync",
         queuedTaskCapability,
       };
+    },
+
+    async 登记待补发任务(task: 平台离线任务): Promise<boolean> {
+      return 仓库.保存(task);
+    },
+
+    async 排空到期任务(
+      handler: (task: 平台离线任务) => Promise<"done" | "retry">
+    ): Promise<void> {
+      const 到期任务 = await 仓库.列出到期任务(now());
+      for (const task of 到期任务) {
+        try {
+          const out = await handler(task);
+          if (out === "done") {
+            await 仓库.删除(task.id);
+            continue;
+          }
+        } catch {
+          // 失败会回到统一重试路径，避免把错误吞到业务层再重复判定。
+        }
+        await 仓库.标记重试(task.id, now() + 默认重试间隔毫秒);
+      }
+    },
+
+    async 请求后台补发同步(tag: string): Promise<boolean> {
+      for (const registration of 已注册服务工作线程) {
+        if (typeof registration?.sync?.register !== "function") {
+          continue;
+        }
+        try {
+          await registration.sync.register(tag);
+          return true;
+        } catch {
+          // 某个 registration 注册失败时继续尝试其他 worker registration。
+        }
+      }
+      return false;
     },
 
     snapshot(): 离线运行时快照 {

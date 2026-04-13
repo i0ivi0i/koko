@@ -9,6 +9,7 @@ import { 提取可发送媒体附件标识 } from "./媒体/媒体草稿.js";
 import type { 聊天状态 } from "./状态.js";
 import { Http接口错误, type 前端传输端口 } from "./传输.js";
 import type { Transport异常 } from "./房间恢复编排.js";
+import type { 平台离线任务 } from "./平台/离线任务仓库.js";
 
 type 控制面结果 = {
   kind?: string;
@@ -49,6 +50,9 @@ export interface 房间实时编排依赖 {
   处理恢复失败(error: unknown, keepRoomVisible: boolean): void;
   跟随最新消息追加后刷新视口(): Promise<void>;
   接收权威事件后副作用?(events: 消息事件[]): void;
+  登记待补发任务?(task: 平台离线任务): Promise<boolean>;
+  请求后台补发同步?(tag: string): Promise<boolean>;
+  读取当前时间?(): number;
 }
 
 export interface 房间实时编排端口 {
@@ -56,6 +60,7 @@ export interface 房间实时编排端口 {
   disconnect(): void;
   subscribeRoom(from: number): void;
   sendMessage(): Promise<void>;
+  重放待补发任务?(task: 平台离线任务): Promise<"done" | "retry">;
 }
 
 /**
@@ -69,6 +74,8 @@ export interface 房间实时编排端口 {
  */
 export function 创建房间实时编排(deps: 房间实时编排依赖): 房间实时编排端口 {
   let realtimeSocket: Socket | null = null;
+  const 读取当前时间 = deps.读取当前时间 ?? (() => Date.now());
+  const 后台补发同步标识 = "koko-queue-main";
 
   function 读取实时状态(): 实时编排状态 {
     return deps.读取实时状态();
@@ -195,6 +202,14 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     realtimeSocket = socket;
   }
 
+  const 当前可即时发送 = (): boolean => {
+    if (!realtimeSocket) {
+      return false;
+    }
+    const 连接态 = (realtimeSocket as Socket & { connected?: boolean }).connected;
+    return 连接态 !== false;
+  };
+
   function disconnect(): void {
     if (realtimeSocket) {
       deps.transport.释放Socket?.(realtimeSocket);
@@ -217,7 +232,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
 
   async function sendMessage(): Promise<void> {
     const state = 读取实时状态();
-    if (!state.roomId || !realtimeSocket) {
+    if (!state.roomId) {
       return;
     }
     const text = state.messageInput.trim();
@@ -232,6 +247,46 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : `local-${Date.now()}`;
+    const createMessagePayload = {
+      room_id: state.roomId,
+      client_message_id: clientMessageId,
+      text,
+      attachment_ids: attachmentIds,
+    };
+
+    /**
+     * 这里把“发送时机”与“消息业务语义”解耦：
+     * - payload 是否可发送（文本/附件 ready）由聊天编排判断；
+     * - 当前是否能走实时通道由平台运行时判断；
+     * - 不可即时发送时只入离线队列，不在这里发明第二套业务协议。
+     */
+    if (!当前可即时发送()) {
+      const 入队成功 =
+        (await deps.登记待补发任务?.({
+          id: `offline-${clientMessageId}`,
+          kind: "create_message",
+          payload: {
+            roomId: state.roomId,
+            clientMessageId,
+            text,
+            attachmentIds,
+          },
+          createdAt: 读取当前时间(),
+          retryAt: 读取当前时间(),
+          dedupeKey: clientMessageId,
+        })) ?? false;
+      if (!入队成功) {
+        return;
+      }
+      写入实时状态({
+        messageInput: "",
+        composerMediaDrafts: [],
+        pending: false,
+      });
+      await deps.请求后台补发同步?.(后台补发同步标识);
+      return;
+    }
+
     if (attachmentIds.length === 0) {
       推进时间线({
         type: "OPTIMISTIC",
@@ -250,12 +305,48 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       composerMediaDrafts: [],
       pending: true,
     });
-    realtimeSocket.emit("create_message", {
-      room_id: state.roomId,
+    realtimeSocket?.emit("create_message", createMessagePayload);
+  }
+
+  async function 重放待补发任务(task: 平台离线任务): Promise<"done" | "retry"> {
+    if (task.kind !== "create_message") {
+      return "done";
+    }
+    if (!当前可即时发送()) {
+      return "retry";
+    }
+    const payload = task.payload as
+      | {
+          roomId?: unknown;
+          clientMessageId?: unknown;
+          text?: unknown;
+          attachmentIds?: unknown;
+        }
+      | null
+      | undefined;
+    if (!payload || typeof payload !== "object") {
+      return "done";
+    }
+    const roomId = typeof payload.roomId === "string" ? payload.roomId : "";
+    const clientMessageId =
+      typeof payload.clientMessageId === "string" ? payload.clientMessageId : "";
+    if (!roomId || !clientMessageId) {
+      return "done";
+    }
+    if (读取实时状态().roomId !== roomId) {
+      return "retry";
+    }
+    const text = typeof payload.text === "string" ? payload.text : "";
+    const attachmentIds = Array.isArray(payload.attachmentIds)
+      ? payload.attachmentIds.map((attachmentId) => String(attachmentId))
+      : [];
+    realtimeSocket?.emit("create_message", {
+      room_id: roomId,
       client_message_id: clientMessageId,
       text,
       attachment_ids: attachmentIds,
     });
+    return "done";
   }
 
   return {
@@ -263,5 +354,6 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     disconnect,
     subscribeRoom,
     sendMessage,
+    重放待补发任务,
   };
 }

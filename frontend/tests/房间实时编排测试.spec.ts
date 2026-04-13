@@ -126,6 +126,88 @@ describe("房间实时编排", () => {
     });
   });
 
+  it("实时通道不可用时会登记待补发任务，并请求后台补发同步", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+      messageInput: "offline draft",
+    });
+    const 待补发任务: Array<Record<string, unknown>> = [];
+    const 同步请求标识: string[] = [];
+    const 编排 = 创建房间实时编排({
+      ...场景.deps,
+      登记待补发任务: async (task: Record<string, unknown>) => {
+        待补发任务.push(task);
+        return true;
+      },
+      请求后台补发同步: async (tag: string) => {
+        同步请求标识.push(tag);
+        return true;
+      },
+      读取当前时间: () => 100,
+    }) as {
+      sendMessage(): Promise<void>;
+    };
+
+    // 不建立 realtime socket，模拟页面离线 / socket 未就绪场景。
+    await 编排.sendMessage();
+
+    expect(场景.transport.socket.sentEvents).toEqual([]);
+    expect(待补发任务).toEqual([
+      expect.objectContaining({
+        kind: "create_message",
+        createdAt: 100,
+        retryAt: 100,
+      }),
+    ]);
+    expect(同步请求标识).toEqual(["koko-queue-main"]);
+    expect(场景.读取状态().messageInput).toBe("");
+  });
+
+  it("排空离线任务时会走当前 realtime 通道重放 create_message", async () => {
+    const 创建房间实时编排 = await 读取房间实时编排工厂();
+    const 场景 = 创建实时编排测试场景({
+      roomId: "r-test",
+      latestEventPosition: 1,
+    });
+    const 编排 = 创建房间实时编排(场景.deps) as {
+      ensureRealtimeSocket(sessionId: string): void;
+      重放待补发任务(task: {
+        id: string;
+        kind: "create_message";
+        payload: unknown;
+        createdAt: number;
+        retryAt: number;
+      }): Promise<"done" | "retry">;
+    };
+
+    编排.ensureRealtimeSocket("s-test");
+    const result = await 编排.重放待补发任务({
+      id: "offline-c-1",
+      kind: "create_message",
+      payload: {
+        roomId: "r-test",
+        clientMessageId: "c-1",
+        text: "retry hello",
+        attachmentIds: [],
+      },
+      createdAt: 1,
+      retryAt: 1,
+    });
+
+    expect(result).toBe("done");
+    expect(场景.transport.socket.sentEvents.at(-1)).toMatchObject({
+      event: "create_message",
+      payload: {
+        room_id: "r-test",
+        client_message_id: "c-1",
+        text: "retry hello",
+        attachment_ids: [],
+      },
+    });
+  });
+
   it("带图片附件发送时不会插入本地伪权威消息，只会上送 create_message", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({

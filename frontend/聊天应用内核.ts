@@ -28,6 +28,7 @@ import { 推进房间时间线, type 时间线输入 } from "./房间时间线.j
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
+  type 浏览器应用平台事件,
 } from "./平台/index.js";
 import type { 消息事件 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
@@ -181,6 +182,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private _恢复编排端口: 房间恢复编排端口 | null = null;
   private _实时编排端口: 房间实时编排端口 | null = null;
   private _阅读推进编排端口: 阅读推进编排端口 | null = null;
+  private 取消平台事件订阅: (() => void) | null = null;
 
   /**
    * 视口 owner 需要 DOM 查询能力，但 owner 本身仍属于聊天应用内核。
@@ -234,6 +236,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.清除程序滚动来源(source);
       },
     });
+    this.取消平台事件订阅 = this.platform.订阅事件?.((event) => {
+      void this.处理平台事件(event);
+    }) ?? null;
   }
 
   snapshot(): 聊天应用快照 {
@@ -322,6 +327,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   dispose(): void {
+    this.取消平台事件订阅?.();
+    this.取消平台事件订阅 = null;
     this._实时编排端口?.disconnect();
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
@@ -436,9 +443,35 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         接收权威事件后副作用: (events) => {
           this.处理权威新消息平台副作用(events);
         },
+        登记待补发任务: async (task) => {
+          return (await this.platform.offline.登记待补发任务?.(task)) ?? false;
+        },
+        请求后台补发同步: async (tag) => {
+          return (await this.platform.offline.请求后台补发同步?.(tag)) ?? false;
+        },
+        读取当前时间: () => Date.now(),
       });
     }
     return this._实时编排端口;
+  }
+
+  private async 处理平台事件(event: 浏览器应用平台事件): Promise<void> {
+    if (
+      event.type === "BACKGROUND_DRAIN_REQUESTED" ||
+      event.type === "SERVICE_WORKER_CONTROLLER_READY"
+    ) {
+      await this.尝试排空待补发任务();
+    }
+  }
+
+  private async 尝试排空待补发任务(): Promise<void> {
+    const 排空函数 = this.platform.offline.排空到期任务;
+    if (typeof 排空函数 !== "function") {
+      return;
+    }
+    await 排空函数(async (task) => {
+      return (await this.实时编排端口.重放待补发任务?.(task)) ?? "retry";
+    });
   }
 
   private get 阅读推进编排端口(): 阅读推进编排端口 {

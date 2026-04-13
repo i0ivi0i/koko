@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { 创建多上下文运行时 } from "../平台/多上下文运行时";
 
 type 多上下文消息处理器 = (event: { data: unknown }) => void;
@@ -59,5 +59,38 @@ describe("多上下文运行时", () => {
     expect(runtimeB.snapshot()).toMatchObject({
       lastFocusedContextId: "tab-b",
     });
+  });
+
+  it("请求回到应用前台会先尝试 focus/open，失败时才广播接管消息", async () => {
+    const hub = new 假广播信道中枢();
+    const focusSelf = vi
+      .fn<() => boolean | Promise<boolean>>()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false);
+    const openSelf = vi
+      .fn<() => boolean | Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const runtimeA = 创建多上下文运行时({
+      contextId: "tab-a",
+      createChannel: (name) => hub.创建信道(name),
+      focusSelf,
+      openSelf,
+    });
+    const runtimeB = 创建多上下文运行时({
+      contextId: "tab-b",
+      createChannel: (name) => hub.创建信道(name),
+    });
+
+    const 第一次恢复结果 = await runtimeA.请求回到应用前台?.();
+    expect(第一次恢复结果).toBe(true);
+    expect(runtimeA.snapshot().lastFocusedContextId).toBe("tab-a");
+
+    const 第二次恢复结果 = await runtimeA.请求回到应用前台?.();
+    expect(第二次恢复结果).toBe(false);
+    // 第二次 focus/open 都失败后，运行时会退化成广播，让其它上下文收到接管信号。
+    expect(runtimeB.snapshot().lastFocusedContextId).toBe("tab-a");
+    expect(focusSelf).toHaveBeenCalledTimes(2);
+    expect(openSelf).toHaveBeenCalledTimes(2);
   });
 });

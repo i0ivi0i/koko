@@ -124,4 +124,65 @@ describe("服务工作线程运行时", () => {
       lastMessage: { type: "SW_UPDATED", scope: "app" },
     });
   });
+
+  it("等待中的 worker 更新与后台唤醒会发出平台事件，并且只在显式接受后才会 skip waiting", async () => {
+    const 容器事件 = 创建事件目标();
+    const app注册事件 = 创建事件目标();
+    const media注册事件 = 创建事件目标();
+    const 等待中的AppWorker = {
+      postMessage: vi.fn(),
+    };
+    const appRegistration = {
+      waiting: 等待中的AppWorker,
+      addEventListener: app注册事件.addEventListener,
+    };
+    const mediaRegistration = {
+      waiting: null as unknown,
+      addEventListener: media注册事件.addEventListener,
+    };
+    const serviceWorker = {
+      controller: null as { postMessage: (message: unknown) => void } | null,
+      register: vi
+        .fn()
+        .mockResolvedValueOnce(appRegistration)
+        .mockResolvedValueOnce(mediaRegistration),
+      addEventListener: 容器事件.addEventListener,
+    };
+    const runtime = 创建服务工作线程运行时({
+      navigator: {
+        serviceWorker,
+        storage: { persist: vi.fn().mockResolvedValue(true) },
+      } as unknown as Navigator,
+    });
+    const 新增能力端口 = runtime as unknown as {
+      订阅事件?(listener: (event: unknown) => void): () => void;
+      接受更新?(): boolean;
+    };
+    const 事件列表: unknown[] = [];
+    新增能力端口.订阅事件?.((event) => {
+      事件列表.push(event);
+    });
+
+    await runtime.启动();
+
+    // 这里先触发 updatefound，再手动接受更新，避免退化为“自动 skip waiting”。
+    app注册事件.dispatch("updatefound");
+    const 接受结果 = 新增能力端口.接受更新?.() ?? false;
+    // 模拟更新后的 controller 已接管页面，再触发 controllerchange。
+    serviceWorker.controller = {
+      postMessage: vi.fn(),
+    };
+    容器事件.dispatch("controllerchange");
+    容器事件.dispatch("message", { data: { type: "BACKGROUND_DRAIN_REQUESTED" } });
+
+    expect(接受结果).toBe(true);
+    expect(等待中的AppWorker.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+    expect(事件列表).toEqual(
+      expect.arrayContaining([
+        { type: "SERVICE_WORKER_UPDATE_READY", scope: "app" },
+        { type: "SERVICE_WORKER_CONTROLLER_READY" },
+        { type: "BACKGROUND_DRAIN_REQUESTED" },
+      ])
+    );
+  });
 });

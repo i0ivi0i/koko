@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器应用平台 } from "../平台/浏览器应用平台";
 import type { 生命周期快照 } from "../平台/生命周期运行时";
+import type { 服务工作线程运行时事件 } from "../平台/服务工作线程运行时";
 
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
@@ -494,7 +495,7 @@ describe("浏览器端应用平台化基线", () => {
     expect(markShown).toHaveBeenCalledTimes(1);
   });
 
-  it("通知点击后会由平台统一触发当前上下文聚焦、主上下文声明和 badge 清理", () => {
+  it("通知点击后会由平台统一触发当前上下文聚焦、主上下文声明和 badge 清理", async () => {
     const 聚焦当前上下文 = vi.fn();
     const 声明主上下文 = vi.fn();
     const 清除角标 = vi.fn(async () => {});
@@ -577,10 +578,217 @@ describe("浏览器端应用平台化基线", () => {
     if (typeof 已注册点击监听器 === "function") {
       已注册点击监听器("msg-click");
     }
+    // 点击链路里包含异步前台恢复与 badge 清理，这里等待微任务完成后再断言。
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(聚焦当前上下文).toHaveBeenCalledTimes(1);
     expect(声明主上下文).toHaveBeenCalledTimes(1);
     expect(清除角标).toHaveBeenCalledTimes(1);
+  });
+
+  it("通知点击时如果多上下文运行时提供前台恢复能力，平台会优先调用它", async () => {
+    const 请求回到应用前台 = vi.fn(async () => true);
+    const 声明主上下文 = vi.fn();
+    const 聚焦当前上下文 = vi.fn();
+    const 清除角标 = vi.fn(async () => {});
+    let 点击监听器: ((notificationId: string) => void) | null = null;
+
+    创建浏览器应用平台({
+      lifecycle: {
+        snapshot: () => ({ visibility: "hidden" as const, phase: "background" as const }),
+        订阅: () => () => {},
+      },
+      storage: {
+        壳层记忆: () => {
+          throw new Error("not used");
+        },
+      },
+      serviceWorker: {
+        启动: async () => {},
+        读取注册: () => null,
+        snapshot: () => ({
+          appShellRegistered: false,
+          mediaWorkerRegistered: false,
+          persistentStorageRequested: false,
+          controllerAttached: false,
+          appShellWaiting: false,
+          mediaWorkerWaiting: false,
+          lastMessageType: null,
+          lastMessage: null,
+        }),
+        发送消息: () => false,
+      },
+      transport: {
+        transport: () => {
+          throw new Error("not used");
+        },
+        接收生命周期变化: () => {},
+        snapshot: () => ({ lastLifecycle: null, realtimePolicy: null as never }),
+      },
+      multiContext: {
+        snapshot: () => ({
+          contextId: "tab-click",
+          isPrimaryContext: false,
+          lastPrimaryContextId: null,
+          lastFocusedContextId: null,
+          deliveredNotificationIds: [],
+        }),
+        声明主上下文,
+        请求聚焦当前上下文: 聚焦当前上下文,
+        请求回到应用前台,
+        通知已展示: () => false,
+        登记通知已展示: () => true,
+      },
+      notification: {
+        snapshot: () => ({
+          permission: "granted" as const,
+          lastClickedNotificationId: null,
+          badgeCount: 0,
+        }),
+        请求权限: async () => "granted" as const,
+        显示通知: async () => true,
+        设置角标: async () => {},
+        清除角标,
+        订阅点击: (listener) => {
+          点击监听器 = listener;
+          return () => {
+            点击监听器 = null;
+          };
+        },
+      },
+      offline: {
+        就绪: async () => {},
+        snapshot: () => ({
+          online: true,
+          backgroundSyncSupported: false,
+          queuedTaskCapability: "none" as const,
+        }),
+      },
+    });
+
+    const 已注册点击监听器 = 点击监听器 as ((notificationId: string) => void) | null;
+    if (typeof 已注册点击监听器 === "function") {
+      已注册点击监听器("msg-click");
+    }
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(请求回到应用前台).toHaveBeenCalledTimes(1);
+    expect(聚焦当前上下文).not.toHaveBeenCalled();
+    expect(声明主上下文).toHaveBeenCalledTimes(1);
+    expect(清除角标).toHaveBeenCalledTimes(1);
+  });
+
+  it("平台会透传 service worker 事件，并提供显式接受更新命令", async () => {
+    let sw事件监听器: ((event: 服务工作线程运行时事件) => void) | null = null;
+    const 接受更新 = vi.fn(() => true);
+    const serviceWorker = {
+      启动: async () => {},
+      读取注册: () => null,
+      发送消息: () => true,
+      订阅事件: (listener: (event: 服务工作线程运行时事件) => void) => {
+        sw事件监听器 = listener;
+        return () => {
+          sw事件监听器 = null;
+        };
+      },
+      接受更新,
+      snapshot: () => ({
+        appShellRegistered: true,
+        mediaWorkerRegistered: true,
+        persistentStorageRequested: true,
+        controllerAttached: true,
+        appShellWaiting: false,
+        mediaWorkerWaiting: false,
+        lastMessageType: null,
+        lastMessage: null,
+      }),
+    };
+
+    const platform = 创建浏览器应用平台({
+      lifecycle: {
+        snapshot: () => ({ visibility: "hidden" as const, phase: "background" as const }),
+        订阅: () => () => {},
+      },
+      storage: {
+        壳层记忆: () => {
+          throw new Error("not used");
+        },
+      },
+      serviceWorker,
+      transport: {
+        transport: () => {
+          throw new Error("not used");
+        },
+        接收生命周期变化: () => {},
+        snapshot: () => ({
+          lastLifecycle: null,
+          realtimePolicy: {
+            intent: "resume" as const,
+            reconnection: false,
+            reason: "background" as const,
+          },
+        }),
+      },
+      multiContext: {
+        snapshot: () => ({
+          contextId: "tab-event",
+          isPrimaryContext: true,
+          lastPrimaryContextId: "tab-event",
+          lastFocusedContextId: null,
+          deliveredNotificationIds: [],
+        }),
+        声明主上下文: () => {},
+        请求聚焦当前上下文: () => {},
+        通知已展示: () => false,
+        登记通知已展示: () => true,
+      },
+      notification: {
+        snapshot: () => ({
+          permission: "granted" as const,
+          lastClickedNotificationId: null,
+          badgeCount: 0,
+        }),
+        请求权限: async () => "granted" as const,
+        显示通知: async () => true,
+        设置角标: async () => {},
+        清除角标: async () => {},
+        订阅点击: () => () => {},
+      },
+      offline: {
+        就绪: async () => {},
+        snapshot: () => ({
+          online: true,
+          backgroundSyncSupported: false,
+          queuedTaskCapability: "none" as const,
+        }),
+      },
+    });
+
+    const 扩展平台 = platform as unknown as {
+      订阅事件?(listener: (event: unknown) => void): () => void;
+      dispatch(command: { type: "ACCEPT_SERVICE_WORKER_UPDATE" }): Promise<boolean | void>;
+    };
+    const 捕获事件: unknown[] = [];
+
+    扩展平台.订阅事件?.((event) => {
+      捕获事件.push(event);
+    });
+    const 已注册监听器 = sw事件监听器;
+    if (typeof 已注册监听器 === "function") {
+      (已注册监听器 as (event: 服务工作线程运行时事件) => void)({
+        type: "SERVICE_WORKER_UPDATE_READY",
+        scope: "app",
+      });
+    }
+    const dispatch结果 = await 扩展平台.dispatch({ type: "ACCEPT_SERVICE_WORKER_UPDATE" });
+
+    expect(dispatch结果).toBe(true);
+    expect(接受更新).toHaveBeenCalledTimes(1);
+    expect(捕获事件).toEqual(
+      expect.arrayContaining([{ type: "SERVICE_WORKER_UPDATE_READY", scope: "app" }])
+    );
   });
 
   it("平台快照会继续暴露 service worker runtime 的 controller / waiting / message 状态", () => {
