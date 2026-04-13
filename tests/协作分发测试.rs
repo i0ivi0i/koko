@@ -304,6 +304,33 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
     assert_eq!(body["attachment_id"].as_str(), Some(attachment_id.as_str()));
     assert_eq!(body["kind"].as_str(), Some("video"));
     assert_eq!(body["status"].as_str(), Some("ready"));
+    assert_eq!(
+        body["streaming_asset"]["kind"].as_str(),
+        Some("streaming_video"),
+        "视频 locator 必须开始返回流媒体资产过渡面，不能继续只给一次性原始附件地址"
+    );
+    assert_eq!(
+        body["streaming_asset"]["asset_id"].as_str(),
+        Some(attachment_id.as_str())
+    );
+    assert!(
+        body["streaming_asset"]["manifest"]["hls_master_url"].is_null(),
+        "打包链还没落地时，locator 不能伪造 HLS 清单已经存在"
+    );
+    assert_eq!(
+        body["streaming_asset"]["origin"]["role"].as_str(),
+        Some("cold_backup_only")
+    );
+    assert_eq!(
+        body["streaming_asset"]["origin"]["original_url"].as_str(),
+        body["original_url"].as_str(),
+        "旧 original_url 还在兼容期时，必须和新的冷源描述保持一致"
+    );
+    assert_eq!(
+        body["streaming_asset"]["distribution"]["swarm_id"].as_str(),
+        body["distribution"]["swarm_id"].as_str(),
+        "新旧过渡面在兼容期内必须引用同一份 swarm 真相"
+    );
     assert!(
         body["original_url"].as_str().is_some(),
         "locator 必须返回受控原始内容地址"

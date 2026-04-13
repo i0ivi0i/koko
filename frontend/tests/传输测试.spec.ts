@@ -296,12 +296,35 @@ describe("传输", () => {
       new Response(
         JSON.stringify({
           attachment_id: "att-ready-1",
-          kind: "image",
-          mime_type: "image/png",
-          byte_size: 68,
-          width: 1,
-          height: 1,
+          kind: "video",
+          mime_type: "video/mp4",
+          byte_size: 2048,
+          width: 1080,
+          height: 1920,
           status: "ready",
+          media_asset: {
+            asset_id: "att-ready-1",
+            content_hash: "hash-att-ready-1",
+            kind: "streaming_video",
+            manifest: {
+              hls_master_url: null,
+              dash_mpd_url: null,
+            },
+            distribution: {
+              swarm_id: "swarm-hash-att-ready-1",
+              announce_urls: ["/api/swarm/announce"],
+              web_seed_url:
+                "/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
+              join_ticket: null,
+            },
+            origin: {
+              original_url:
+                "/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
+              expires_at_epoch_seconds: 1775942400,
+              available: true,
+              role: "cold_backup_only",
+            },
+          },
         }),
         {
           status: 200,
@@ -311,14 +334,7 @@ describe("传输", () => {
     );
     const transport = new HttpRealtime传输("http://localhost:3000");
 
-    const result = await (
-      transport as unknown as {
-        completeMediaUpload(sessionId: string, attachmentId: string): Promise<{
-          attachment_id: string;
-          status: string;
-        }>;
-      }
-    ).completeMediaUpload("s-1", "att-ready-1");
+    const result = await transport.completeMediaUpload("s-1", "att-ready-1");
 
     expect(fetchSpy).toHaveBeenCalledWith(
       "http://localhost:3000/api/media/att-ready-1/complete",
@@ -326,6 +342,29 @@ describe("传输", () => {
     );
     expect(result.attachment_id).toBe("att-ready-1");
     expect(result.status).toBe("ready");
+    expect(result.media_asset).toEqual({
+      asset_id: "att-ready-1",
+      content_hash: "hash-att-ready-1",
+      kind: "streaming_video",
+      manifest: {
+        hls_master_url: null,
+        dash_mpd_url: null,
+      },
+      distribution: {
+        swarm_id: "swarm-hash-att-ready-1",
+        announce_urls: ["http://localhost:3000/api/swarm/announce"],
+        web_seed_url:
+          "http://localhost:3000/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
+        join_ticket: null,
+      },
+      origin: {
+        original_url:
+          "http://localhost:3000/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
+        expires_at_epoch_seconds: 1775942400,
+        available: true,
+        role: "cold_backup_only",
+      },
+    });
   });
 
   it("loadMediaLocator 会把受控相对地址收口成绝对媒体地址", async () => {
@@ -350,6 +389,29 @@ describe("传输", () => {
             join_ticket: null,
             ticket_expires_at: null,
             availability: "available" as const,
+          },
+          streaming_asset: {
+            asset_id: "att-locator-1",
+            content_hash: "hash-att-locator-1",
+            kind: "streaming_video",
+            manifest: {
+              hls_master_url: null,
+              dash_mpd_url: null,
+            },
+            distribution: {
+              swarm_id: "swarm-hash-att-locator-1",
+              announce_urls: ["/api/swarm/announce"],
+              web_seed_url:
+                "/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
+              join_ticket: null,
+            },
+            origin: {
+              original_url:
+                "/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
+              expires_at_epoch_seconds: 1775942400,
+              available: true,
+              role: "cold_backup_only",
+            },
           },
         }),
         {
@@ -384,6 +446,30 @@ describe("传输", () => {
         ticket_expires_at: null,
         availability: "available" as const,
       },
+      streaming_asset: {
+        asset_id: "att-locator-1",
+        content_hash: "hash-att-locator-1",
+        kind: "streaming_video",
+        manifest: {
+          hls_master_url: null,
+          dash_mpd_url: null,
+        },
+        distribution: {
+          swarm_id: "swarm-hash-att-locator-1",
+          announce_urls: ["http://localhost:3000/api/swarm/announce"],
+          web_seed_url:
+            "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
+          join_ticket: null,
+        },
+        origin: {
+          original_url:
+            "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only",
+        },
+      },
+      blob_asset: null,
     });
   });
 

@@ -1,7 +1,12 @@
 import { io, type Socket } from "socket.io-client";
 import type {
+  Blob媒体资产描述,
+  Blob媒体变体描述,
   匿名身份引导结果,
   增量事件快照,
+  流媒体资产描述,
+  媒体冷源描述,
+  媒体资产分发表面,
   媒体附件上传结果,
   媒体定位结果,
   媒体上传准备结果,
@@ -100,6 +105,85 @@ export class HttpRealtime传输 implements 前端传输端口 {
     return new URL(pathOrUrl, this.baseUrl).href;
   }
 
+  /**
+   * 共享资产分发表面只做地址收口，不夹带 Web 私有运行态。
+   * 这样后续 iOS/Android/CLI 接同一契约时，不会被浏览器页面字段污染。
+   */
+  private 解析媒体资产分发表面(
+    distribution: 媒体资产分发表面
+  ): 媒体资产分发表面 {
+    return {
+      ...distribution,
+      announce_urls: distribution.announce_urls.map((url) =>
+        this.解析绝对地址(url)
+      ),
+      web_seed_url: distribution.web_seed_url
+        ? this.解析绝对地址(distribution.web_seed_url)
+        : null,
+    };
+  }
+
+  private 解析媒体冷源描述(origin: 媒体冷源描述): 媒体冷源描述 {
+    return {
+      ...origin,
+      original_url: origin.original_url
+        ? this.解析绝对地址(origin.original_url)
+        : null,
+    };
+  }
+
+  private 解析Blob媒体变体(variant: Blob媒体变体描述): Blob媒体变体描述 {
+    return {
+      ...variant,
+      url: this.解析绝对地址(variant.url),
+    };
+  }
+
+  private 解析流媒体资产(asset: 流媒体资产描述): 流媒体资产描述 {
+    return {
+      ...asset,
+      manifest: {
+        hls_master_url: asset.manifest.hls_master_url
+          ? this.解析绝对地址(asset.manifest.hls_master_url)
+          : null,
+        dash_mpd_url: asset.manifest.dash_mpd_url
+          ? this.解析绝对地址(asset.manifest.dash_mpd_url)
+          : null,
+      },
+      distribution: this.解析媒体资产分发表面(asset.distribution),
+      origin: this.解析媒体冷源描述(asset.origin),
+    };
+  }
+
+  private 解析Blob媒体资产(asset: Blob媒体资产描述): Blob媒体资产描述 {
+    return {
+      ...asset,
+      preview: asset.preview ? this.解析Blob媒体变体(asset.preview) : null,
+      full: asset.full ? this.解析Blob媒体变体(asset.full) : null,
+      original: asset.original ? this.解析Blob媒体变体(asset.original) : null,
+      distribution: asset.distribution
+        ? this.解析媒体资产分发表面(asset.distribution)
+        : null,
+      origin: this.解析媒体冷源描述(asset.origin),
+    };
+  }
+
+  private 解析媒体上传结果(result: 媒体附件上传结果): 媒体附件上传结果 {
+    if (!result.media_asset) {
+      return result;
+    }
+    if (result.media_asset.kind === "blob_image") {
+      return {
+        ...result,
+        media_asset: this.解析Blob媒体资产(result.media_asset),
+      };
+    }
+    return {
+      ...result,
+      media_asset: this.解析流媒体资产(result.media_asset),
+    };
+  }
+
   async bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果> {
     return this.post("/api/session/bootstrap", {
       device_anonymous_token: deviceToken,
@@ -146,9 +230,10 @@ export class HttpRealtime传输 implements 前端传输端口 {
     sessionId: string,
     attachmentId: string
   ): Promise<媒体附件上传结果> {
-    return this.post(`/api/media/${attachmentId}/complete`, {
+    const result = await this.post<媒体附件上传结果>(`/api/media/${attachmentId}/complete`, {
       session_id: sessionId,
     });
+    return this.解析媒体上传结果(result);
   }
 
   async loadMediaLocator(
@@ -177,6 +262,12 @@ export class HttpRealtime传输 implements 前端传输端口 {
               locator.distribution.web_seed_url
             ),
           }
+        : null,
+      streaming_asset: locator.streaming_asset
+        ? this.解析流媒体资产(locator.streaming_asset)
+        : null,
+      blob_asset: locator.blob_asset
+        ? this.解析Blob媒体资产(locator.blob_asset)
         : null,
     };
   }

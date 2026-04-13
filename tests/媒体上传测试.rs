@@ -604,6 +604,35 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
     assert_eq!(complete_body["status"].as_str(), Some("ready"));
     assert_eq!(complete_body["kind"].as_str(), Some("video"));
     assert_eq!(
+        complete_body["media_asset"]["kind"].as_str(),
+        Some("streaming_video"),
+        "视频 complete 后应返回流媒体资产过渡面，而不是只剩原始附件字段"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["asset_id"].as_str(),
+        Some(attachment_id.as_str()),
+        "当前过渡阶段先以 attachment_id 作为稳定资产锚点，避免再造第二个临时主键"
+    );
+    assert!(
+        complete_body["media_asset"]["manifest"]["hls_master_url"].is_null(),
+        "真正的 HLS 打包链还没落地前，不能伪造 manifest 已经存在"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["origin"]["role"].as_str(),
+        Some("cold_backup_only"),
+        "原始附件在协议里只能退到冷备引导角色"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["origin"]["available"].as_bool(),
+        Some(true),
+        "刚完成上传的 24 小时窗口内，冷源应该仍然可用"
+    );
+    assert!(complete_body["media_asset"]["distribution"]["swarm_id"].is_string());
+    assert!(
+        complete_body["media_asset"]["distribution"]["announce_urls"].is_array(),
+        "即使真正的流媒体主链还没切完，过渡资产面也必须提前暴露稳定 swarm 线索"
+    );
+    assert_eq!(
         complete_body["width"].as_i64(),
         Some(1080),
         "竖拍 MP4 complete 后必须写入展示宽度，而不是编码宽度"

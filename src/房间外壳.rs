@@ -835,8 +835,240 @@ fn 校验媒体准备请求(
     Ok(())
 }
 
-fn 媒体附件快照转响应体(snapshot: &usecase::媒体附件快照) -> serde_json::Value {
+fn 媒体资产种类转标签(kind: &contract::媒体资产种类) -> &'static str {
+    match kind {
+        contract::媒体资产种类::图片Blob => "blob_image",
+        contract::媒体资产种类::流媒体视频 => "streaming_video",
+        contract::媒体资产种类::流媒体音频 => "streaming_audio",
+    }
+}
+
+fn 媒体冷源角色转标签(role: &contract::媒体冷源角色) -> &'static str {
+    match role {
+        // 当前协议明确把原始附件压回冷备引导角色，避免它继续假扮正式主链。
+        contract::媒体冷源角色::冷备引导 => "cold_backup_only",
+    }
+}
+
+fn 变体描述转响应体(variant: &contract::变体描述) -> serde_json::Value {
     serde_json::json!({
+        "id": variant.标识,
+        "mime_type": variant.mime_type,
+        "url": variant.地址,
+        "width": variant.宽,
+        "height": variant.高,
+    })
+}
+
+fn 媒体清单描述转响应体(manifest: &contract::媒体清单描述) -> serde_json::Value {
+    serde_json::json!({
+        "hls_master_url": manifest.hls主清单地址,
+        "dash_mpd_url": manifest.dash主清单地址,
+    })
+}
+
+fn 媒体冷源描述转响应体(origin: &contract::媒体冷源描述) -> serde_json::Value {
+    serde_json::json!({
+        "original_url": origin.原始地址,
+        "expires_at_epoch_seconds": origin.到期时间戳秒,
+        "available": origin.是否可用,
+        "role": 媒体冷源角色转标签(&origin.角色),
+    })
+}
+
+fn 从运行态协作分发响应提取共享分发表面(
+    snapshot: &usecase::协作分发元数据快照,
+    runtime_distribution: &serde_json::Value,
+) -> contract::媒体分发描述 {
+    let announce_urls = runtime_distribution["announce_urls"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::to_string))
+        .collect::<Vec<_>>();
+    contract::媒体分发描述 {
+        swarm_id: snapshot.swarm_id.clone(),
+        announce_urls,
+        web_seed_url: runtime_distribution["web_seed_url"]
+            .as_str()
+            .map(str::to_string),
+        join_ticket: runtime_distribution["join_ticket"]
+            .as_str()
+            .map(str::to_string),
+    }
+}
+
+fn 媒体分发描述转响应体(distribution: &contract::媒体分发描述) -> serde_json::Value {
+    serde_json::json!({
+        "swarm_id": distribution.swarm_id,
+        "announce_urls": distribution.announce_urls,
+        "web_seed_url": distribution.web_seed_url,
+        "join_ticket": distribution.join_ticket,
+    })
+}
+
+fn 流媒体资产描述转响应体(asset: &contract::流媒体资产描述) -> serde_json::Value {
+    serde_json::json!({
+        "asset_id": asset.资产标识,
+        "content_hash": asset.内容哈希,
+        "kind": 媒体资产种类转标签(&asset.种类),
+        "manifest": 媒体清单描述转响应体(&asset.清单),
+        "distribution": 媒体分发描述转响应体(&asset.分发),
+        "origin": 媒体冷源描述转响应体(&asset.冷源),
+    })
+}
+
+fn blob媒体资产描述转响应体(asset: &contract::Blob媒体资产描述) -> serde_json::Value {
+    serde_json::json!({
+        "asset_id": asset.资产标识,
+        "content_hash": asset.内容哈希,
+        "kind": 媒体资产种类转标签(&asset.种类),
+        "preview": asset.preview.as_ref().map(变体描述转响应体),
+        "full": asset.full.as_ref().map(变体描述转响应体),
+        "original": asset.original.as_ref().map(变体描述转响应体),
+        "distribution": asset.分发.as_ref().map(媒体分发描述转响应体),
+        "origin": 媒体冷源描述转响应体(&asset.冷源),
+    })
+}
+
+fn 构造流媒体资产响应体(
+    attachment_id: &str,
+    runtime_distribution: &serde_json::Value,
+    distribution_snapshot: &usecase::协作分发元数据快照,
+    original_url: String,
+    now_epoch秒: i64,
+) -> serde_json::Value {
+    let asset = contract::流媒体资产描述 {
+        // 真实独立 media_asset_id 还没落表前，先显式复用 attachment_id 当稳定资产锚点；
+        // 这样能把共享协议面立起来，但不会伪造第二个尚不存在的权威主键。
+        资产标识: attachment_id.to_string(),
+        内容哈希: distribution_snapshot.content_hash.clone(),
+        种类: contract::媒体资产种类::流媒体视频,
+        清单: contract::媒体清单描述 {
+            hls主清单地址: None,
+            dash主清单地址: None,
+        },
+        分发: 从运行态协作分发响应提取共享分发表面(
+            distribution_snapshot,
+            runtime_distribution,
+        ),
+        冷源: usecase::构造媒体冷源描述(
+            Some(original_url),
+            distribution_snapshot.web_seed_until秒,
+            now_epoch秒,
+        ),
+    };
+    流媒体资产描述转响应体(&asset)
+}
+
+fn 构造blob媒体资产响应体(
+    attachment_id: &str,
+    runtime_distribution: Option<&serde_json::Value>,
+    distribution_snapshot: Option<&usecase::协作分发元数据快照>,
+    original_url: String,
+    thumbnail_url: Option<String>,
+    mime_type: &str,
+    width: i32,
+    height: i32,
+    now_epoch秒: i64,
+) -> serde_json::Value {
+    let origin_expiry = distribution_snapshot
+        .map(|snapshot| snapshot.web_seed_until秒)
+        .unwrap_or(now_epoch秒);
+    let asset = contract::Blob媒体资产描述 {
+        资产标识: attachment_id.to_string(),
+        内容哈希: distribution_snapshot
+            .map(|snapshot| snapshot.content_hash.clone())
+            .unwrap_or_else(|| attachment_id.to_string()),
+        种类: contract::媒体资产种类::图片Blob,
+        preview: thumbnail_url.as_ref().map(|url| contract::变体描述 {
+            标识: "preview".to_string(),
+            mime_type: "image/png".to_string(),
+            地址: url.clone(),
+            宽: Some(width),
+            高: Some(height),
+        }),
+        full: Some(contract::变体描述 {
+            标识: "full".to_string(),
+            mime_type: mime_type.to_string(),
+            地址: original_url.clone(),
+            宽: Some(width),
+            高: Some(height),
+        }),
+        original: Some(contract::变体描述 {
+            标识: "original".to_string(),
+            mime_type: mime_type.to_string(),
+            地址: original_url.clone(),
+            宽: Some(width),
+            高: Some(height),
+        }),
+        分发: distribution_snapshot.and_then(|snapshot| {
+            runtime_distribution.map(|runtime| {
+                从运行态协作分发响应提取共享分发表面(snapshot, runtime)
+            })
+        }),
+        冷源: usecase::构造媒体冷源描述(Some(original_url), origin_expiry, now_epoch秒),
+    };
+    blob媒体资产描述转响应体(&asset)
+}
+
+fn 构造媒体资产响应体(
+    snapshot: &usecase::媒体附件快照,
+    runtime_distribution: Option<&serde_json::Value>,
+    distribution_snapshot: Option<&usecase::协作分发元数据快照>,
+    original_url: String,
+    thumbnail_url: Option<String>,
+    now_epoch秒: i64,
+) -> Option<serde_json::Value> {
+    match &snapshot.种类 {
+        usecase::媒体附件类型::视频 => Some(构造流媒体资产响应体(
+            snapshot.附件标识.as_str(),
+            runtime_distribution?,
+            distribution_snapshot?,
+            original_url,
+            now_epoch秒,
+        )),
+        usecase::媒体附件类型::图片 => Some(构造blob媒体资产响应体(
+            snapshot.附件标识.as_str(),
+            runtime_distribution,
+            distribution_snapshot,
+            original_url,
+            thumbnail_url,
+            snapshot.mime_type.as_str(),
+            snapshot.宽,
+            snapshot.高,
+            now_epoch秒,
+        )),
+    }
+}
+
+fn 构造定位媒体资产响应体(
+    locator: &usecase::媒体定位结果,
+    runtime_distribution: Option<&serde_json::Value>,
+    original_url: String,
+    now_epoch秒: i64,
+) -> Option<(&'static str, serde_json::Value)> {
+    match &locator.种类 {
+        usecase::媒体附件类型::视频 => Some((
+            "streaming_asset",
+            构造流媒体资产响应体(
+                locator.附件标识.as_str(),
+                runtime_distribution?,
+                locator.协作分发.as_ref()?,
+                original_url,
+                now_epoch秒,
+            ),
+        )),
+        // 图片完整 Blob 主链要等 Task 9 一起切，不在这里先伪造半截资产描述。
+        usecase::媒体附件类型::图片 => None,
+    }
+}
+
+fn 媒体附件快照转响应体(
+    snapshot: &usecase::媒体附件快照,
+    media_asset: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let mut response = serde_json::json!({
         "attachment_id": snapshot.附件标识,
         "kind": 媒体类型转标签(&snapshot.种类),
         "mime_type": snapshot.mime_type,
@@ -844,7 +1076,11 @@ fn 媒体附件快照转响应体(snapshot: &usecase::媒体附件快照) -> ser
         "width": snapshot.宽,
         "height": snapshot.高,
         "status": 附件状态转标签(&snapshot.状态),
-    })
+    });
+    if let Some(media_asset) = media_asset {
+        response["media_asset"] = media_asset;
+    }
+    response
 }
 
 /// 冷路径：引导匿名身份。
@@ -2266,19 +2502,63 @@ pub(super) async fn complete_media_upload(
                 torrent_info_hash: torrent.torrent_info_hash,
                 piece_length字节: torrent.piece_length_bytes,
             };
+            let distribution_request_for_write = distribution_request.clone();
+            let torrent_request_for_write = torrent_request.clone();
             let state_for_distribution = state.clone();
             let distribution_result = task::spawn_blocking(move || {
                 let mut repo = 构建共享仓储(&state_for_distribution);
-                usecase::写入协作分发元数据(&mut repo, &distribution_request)
+                usecase::写入协作分发元数据(&mut repo, &distribution_request_for_write)
                     .map_err(map_domain_err_tuple)?;
-                usecase::写入协作分发torrent元信息(&mut repo, &torrent_request)
+                usecase::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
                     .map_err(map_domain_err_tuple)
             })
             .await;
 
             match distribution_result {
                 Ok(Ok(_)) => {
-                    (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot))).into_response()
+                    let distribution_snapshot = usecase::协作分发元数据快照 {
+                        附件标识: attachment_id.clone(),
+                        content_id: distribution_request.content_id.clone(),
+                        content_hash: distribution_request.content_hash.clone(),
+                        swarm_id: distribution_request.swarm_id.clone(),
+                        web_seed_until秒: distribution_request.web_seed_until秒,
+                        最近peer存活时间戳秒: None,
+                        torrent_info_hash: Some(torrent_request.torrent_info_hash.clone()),
+                    };
+                    let now_epoch秒 = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|duration| duration.as_secs() as i64)
+                        .unwrap_or_default();
+                    let original_url = format!(
+                        "/api/attachments/{attachment_id}/content?session_id={}&variant=original",
+                        session_id
+                    );
+                    let thumbnail_url = match &snapshot.种类 {
+                        usecase::媒体附件类型::图片 => Some(format!(
+                            "/api/attachments/{attachment_id}/content?session_id={}&variant=thumbnail",
+                            session_id
+                        )),
+                        usecase::媒体附件类型::视频 => None,
+                    };
+                    let runtime_distribution = media_distribution::协作分发快照转响应值(
+                        &distribution_snapshot,
+                        attachment_id.as_str(),
+                        session_id.as_str(),
+                        state.swarm_tracker_public_url.as_str(),
+                        state.swarm_web_seed_public_endpoint.as_deref(),
+                        now_epoch秒,
+                        state.swarm_peer_presence_stale_seconds,
+                    );
+                    let media_asset = 构造媒体资产响应体(
+                        &snapshot,
+                        Some(&runtime_distribution),
+                        Some(&distribution_snapshot),
+                        original_url,
+                        thumbnail_url,
+                        now_epoch秒,
+                    );
+                    (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot, media_asset)))
+                        .into_response()
                 }
                 Ok(Err((status, code, message))) => err_resp(status, code, message),
                 Err(err) => err_resp(
@@ -2343,31 +2623,37 @@ pub(super) async fn load_media_locator(
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or_default();
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "attachment_id": locator.附件标识,
-            "kind": 媒体类型转标签(&locator.种类),
-            "status": 附件状态转标签(&locator.状态),
-            "original_url": original_url,
-            "thumbnail_url": thumbnail_url,
-            "distribution": locator
-                .协作分发
-                .as_ref()
-                .map(|snapshot| {
-                    media_distribution::协作分发快照转响应值(
-                        snapshot,
-                        attachment_id.as_str(),
-                        query.session_id.as_str(),
-                        state.swarm_tracker_public_url.as_str(),
-                        state.swarm_web_seed_public_endpoint.as_deref(),
-                        now_epoch秒,
-                        state.swarm_peer_presence_stale_seconds,
-                    )
-                }),
-        })),
-    )
-        .into_response()
+    let runtime_distribution = locator.协作分发.as_ref().map(|snapshot| {
+        media_distribution::协作分发快照转响应值(
+            snapshot,
+            attachment_id.as_str(),
+            query.session_id.as_str(),
+            state.swarm_tracker_public_url.as_str(),
+            state.swarm_web_seed_public_endpoint.as_deref(),
+            now_epoch秒,
+            state.swarm_peer_presence_stale_seconds,
+        )
+    });
+    let mut response = serde_json::json!({
+        "attachment_id": locator.附件标识,
+        "kind": 媒体类型转标签(&locator.种类),
+        "status": 附件状态转标签(&locator.状态),
+        "original_url": original_url,
+        "thumbnail_url": thumbnail_url,
+        "distribution": runtime_distribution.clone(),
+    });
+    if let Some((field, asset)) = 构造定位媒体资产响应体(
+        &locator,
+        runtime_distribution.as_ref(),
+        response["original_url"]
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_default(),
+        now_epoch秒,
+    ) {
+        response[field] = asset;
+    }
+    (StatusCode::OK, Json(response)).into_response()
 }
 
 /// 冷路径：受控读取附件对应的 torrent metainfo。

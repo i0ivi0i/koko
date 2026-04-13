@@ -91,6 +91,61 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
+  it("streaming_asset 只有冷源过渡面时，会优先读取共享资产里的 origin", async () => {
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-transition",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original",
+        thumbnail_url: null,
+        distribution: null,
+        streaming_asset: {
+          asset_id: "att-video-transition",
+          content_hash: "hash-video-transition",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: null,
+            dash_mpd_url: null,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-transition",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-transition",
+            join_ticket: null,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-transition",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource: async () => null,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-transition",
+      kind: "video",
+    });
+
+    expect(probeAnchor).toHaveBeenCalledWith(
+      "http://media.local/cold-origin-transition"
+    );
+    expect(result).toEqual({
+      mode: "anchor",
+      attachmentId: "att-video-transition",
+      kind: "video",
+      src: "http://media.local/cold-origin-transition",
+      thumbnailUrl: null,
+      hint: null,
+    });
+  });
+
   it("协作分发仍在后台补齐整附件时，不把内部补块状态透给视图层", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-4",

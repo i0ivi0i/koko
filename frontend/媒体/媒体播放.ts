@@ -77,6 +77,15 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return;
     });
 
+  /**
+   * 过渡阶段优先读共享资产里的冷源描述：
+   * 1. 它已经明确声明原始附件只是 cold_backup_only；
+   * 2. 后续顶层 original_url 退场时，这里不用再回头大改播放入口；
+   * 3. 仍保留旧字段兜底，保证第一批后端过渡面上线时不打爆旧 locator。
+   */
+  const 读取锚点地址 = (locator: 媒体定位结果): string =>
+    locator.streaming_asset?.origin.original_url ?? locator.original_url;
+
   const 创建降级结果 = (
     input: 媒体播放输入,
     locator: 媒体定位结果 | null,
@@ -96,13 +105,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator: 媒体定位结果,
     allowRefresh: boolean
   ): Promise<媒体播放结果> => {
+    const anchorUrl = 读取锚点地址(locator);
     try {
-      await probeAnchor(locator.original_url);
+      await probeAnchor(anchorUrl);
       return {
         mode: "anchor",
         attachmentId: input.attachmentId,
         kind: input.kind,
-        src: locator.original_url,
+        src: anchorUrl,
         thumbnailUrl: locator.thumbnail_url,
         hint: null,
       };
@@ -114,13 +124,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       if (refreshedLocator.status !== "ready") {
         return 创建降级结果(input, refreshedLocator, "attachment_not_ready");
       }
+      const refreshedAnchorUrl = 读取锚点地址(refreshedLocator);
       try {
-        await probeAnchor(refreshedLocator.original_url);
+        await probeAnchor(refreshedAnchorUrl);
         return {
           mode: "anchor",
           attachmentId: input.attachmentId,
           kind: input.kind,
-          src: refreshedLocator.original_url,
+          src: refreshedAnchorUrl,
           thumbnailUrl: refreshedLocator.thumbnail_url,
           hint: null,
         };
