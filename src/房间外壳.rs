@@ -495,11 +495,26 @@ fn 生成缩略图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageEr
     Ok(cursor.into_inner())
 }
 
+fn 生成完整图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageError> {
+    // full 资产仍然是完整查看主链，但不再等同于冷源原图：
+    // 它会被统一压到较适合查看器的 WebP 形态，同时把极端大图收进稳定上限，
+    // 避免“正式 full 主链”继续只是原始冷源的另一张脸。
+    let full = if image.width() > 2048 || image.height() > 2048 {
+        image.thumbnail(2048, 2048)
+    } else {
+        image.clone()
+    };
+    let mut cursor = Cursor::new(Vec::new());
+    full.write_to(&mut cursor, ImageFormat::WebP)?;
+    Ok(cursor.into_inner())
+}
+
 struct 图片内容解析结果 {
     mime_type: String,
     宽: i32,
     高: i32,
     缩略图字节: Vec<u8>,
+    完整图字节: Vec<u8>,
 }
 
 struct 视频内容解析结果 {
@@ -534,11 +549,14 @@ fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结果, 媒体�
     let normalized_image = 应用exif方向(decoded, 读取exif方向(bytes));
     let 缩略图字节 = 生成缩略图字节(&normalized_image)
         .map_err(|_| 媒体内容解析错误::系统错误("生成图片缩略图失败"))?;
+    let 完整图字节 = 生成完整图字节(&normalized_image)
+        .map_err(|_| 媒体内容解析错误::系统错误("生成图片完整图失败"))?;
     Ok(图片内容解析结果 {
         mime_type: kind.mime_type().to_string(),
         宽: normalized_image.width() as i32,
         高: normalized_image.height() as i32,
         缩略图字节,
+        完整图字节,
     })
 }
 
@@ -1079,7 +1097,9 @@ fn 构造blob媒体资产响应体(
         }),
         full: Some(contract::变体描述 {
             标识: "full".to_string(),
-            mime_type: mime_type.to_string(),
+            // full 现在是真实的查看器资产，统一压成 WebP，
+            // 不能继续把原图 MIME 冒充成 full 资产类型。
+            mime_type: "image/webp".to_string(),
             地址: full_url,
             宽: width,
             高: height,
@@ -2925,6 +2945,13 @@ pub(super) async fn complete_media_upload(
         媒体内容解析结果::图片(parsed) => {
             let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
             let thumbnail_path = ObjectPath::from(thumbnail_storage_key.clone());
+            let asset_original_storage_key = format!(
+                "images/{attachment_id}/asset-original{}",
+                推导原始内容扩展名(&prepared.种类, parsed.mime_type.as_str())
+            );
+            let asset_original_path = ObjectPath::from(asset_original_storage_key.clone());
+            let full_storage_key = format!("images/{attachment_id}/full.webp");
+            let full_path = ObjectPath::from(full_storage_key.clone());
             if let Err(err) = state
                 .attachment_store
                 .put(&thumbnail_path, parsed.缩略图字节.into())
@@ -2948,6 +2975,52 @@ pub(super) async fn complete_media_upload(
                     "写入图片缩略图对象失败",
                 );
             }
+            if let Err(err) = state
+                .attachment_store
+                .put(&asset_original_path, original_bytes.clone().into())
+                .await
+            {
+                tracing::error!(
+                    usecase = "完成媒体上传",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "媒体上传 complete",
+                    session_id = session_id.as_str(),
+                    attachment_id = attachment_id.as_str(),
+                    attachment_kind = 媒体类型转标签(&prepared.种类),
+                    error_code = "system_error",
+                    error = %err,
+                    "写入图片长期原图资产失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "写入图片长期原图资产失败",
+                );
+            }
+            if let Err(err) = state
+                .attachment_store
+                .put(&full_path, parsed.完整图字节.into())
+                .await
+            {
+                tracing::error!(
+                    usecase = "完成媒体上传",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "媒体上传 complete",
+                    session_id = session_id.as_str(),
+                    attachment_id = attachment_id.as_str(),
+                    attachment_kind = 媒体类型转标签(&prepared.种类),
+                    error_code = "system_error",
+                    error = %err,
+                    "写入图片完整图对象失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "写入图片完整图对象失败",
+                );
+            }
             usecase::媒体附件写入请求 {
                 附件标识: attachment_id.clone(),
                 种类: prepared.种类.clone(),
@@ -2957,8 +3030,8 @@ pub(super) async fn complete_media_upload(
                 高: parsed.高,
                 原始内容存储键: prepared.原始内容存储键.clone(),
                 缩略图存储键: Some(thumbnail_storage_key),
-                资产原图存储键: None,
-                完整图存储键: None,
+                资产原图存储键: Some(asset_original_storage_key),
+                完整图存储键: Some(full_storage_key),
                 原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
             }
         }
@@ -3198,12 +3271,17 @@ pub(super) async fn load_media_locator(
 pub(super) async fn load_blob_asset_content(
     State(state): State<应用状态>,
     Path((attachment_id, blob_variant)): Path<(String, String)>,
-    Query(mut raw_query): Query<HashMap<String, String>>,
+    Query(raw_query): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
+    let query = match parse_streaming_asset_query(raw_query) {
+        Ok(query) => query,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
     let attachment_variant = match blob_variant.as_str() {
-        "preview" => "thumbnail",
-        "full" | "original" => "original",
+        "preview" => usecase::附件内容变体::缩略图,
+        "full" => usecase::附件内容变体::完整图,
+        "original" => usecase::附件内容变体::资产原图,
         _ => {
             return err_resp(
                 StatusCode::BAD_REQUEST,
@@ -3212,10 +3290,205 @@ pub(super) async fn load_blob_asset_content(
             )
         }
     };
-    raw_query.insert("variant".to_string(), attachment_variant.to_string());
-    load_attachment_content(State(state), Path(attachment_id), Query(raw_query), headers)
+    读取受控附件内容响应(
+        state,
+        attachment_id,
+        query.session_id,
+        attachment_variant,
+        headers,
+    )
         .await
         .into_response()
+}
+
+async fn 读取受控附件内容响应(
+    state: 应用状态,
+    attachment_id: String,
+    session_id: String,
+    variant: usecase::附件内容变体,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    tracing::info!(
+        usecase = "读取附件内容",
+        adapter = "http",
+        outcome = "accepted",
+        request_kind = "附件内容读取",
+        attachment_id = attachment_id.as_str(),
+        session_id = session_id.as_str(),
+        "HTTP 请求已受理"
+    );
+
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = session_id.clone();
+    let result = task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_usecase);
+        usecase::读取附件内容(
+            &repo,
+            &attachment_id_for_usecase,
+            &session_id_for_usecase,
+            variant,
+        )
+        .map_err(map_domain_err_tuple)
+    })
+    .await;
+    let result = match result {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(
+                usecase = "读取附件内容",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "附件内容读取",
+                attachment_id = attachment_id.as_str(),
+                session_id = session_id.as_str(),
+                error_code = "system_error",
+                error = %err,
+                "读取附件内容任务执行失败"
+            );
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("任务执行失败: {err}"),
+            );
+        }
+    };
+
+    let target = match result {
+        Ok(target) => target,
+        Err((status, code, message)) => {
+            tracing::warn!(
+                usecase = "读取附件内容",
+                adapter = "http",
+                outcome = "rejected",
+                request_kind = "附件内容读取",
+                attachment_id = attachment_id.as_str(),
+                session_id = session_id.as_str(),
+                error_code = code,
+                "读取附件内容被拒绝"
+            );
+            return err_resp(status, code, message);
+        }
+    };
+
+    let object_path = ObjectPath::from(target.存储键.clone());
+    let range = if headers.contains_key(header::RANGE) {
+        let head_result = match state.attachment_store.head(&object_path).await {
+            Ok(meta) => meta,
+            Err(err) => {
+                tracing::error!(
+                    usecase = "读取附件内容",
+                    adapter = "http",
+                    outcome = "failed",
+                    request_kind = "附件内容读取",
+                    attachment_id = attachment_id.as_str(),
+                    session_id = session_id.as_str(),
+                    error_code = "system_error",
+                    error = %err,
+                    "对象存储读取元数据失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "附件内容读取失败",
+                );
+            }
+        };
+        match 解析标准字节范围(headers.get(header::RANGE), head_result.size) {
+            Ok(range) => range,
+            Err((status, code, message)) => return err_resp(status, code, message),
+        }
+    } else {
+        None
+    };
+    let get_result = match range.as_ref() {
+        Some(range) => {
+            state
+                .attachment_store
+                .get_opts(
+                    &object_path,
+                    GetOptions::new().with_range(Some(range.请求.clone())),
+                )
+                .await
+        }
+        None => state.attachment_store.get(&object_path).await,
+    };
+    let get_result = match get_result {
+        Ok(result) => result,
+        Err(err) => {
+            tracing::error!(
+                usecase = "读取附件内容",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "附件内容读取",
+                attachment_id = attachment_id.as_str(),
+                session_id = session_id.as_str(),
+                error_code = "system_error",
+                error = %err,
+                "对象存储读取失败"
+            );
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "附件内容读取失败",
+            );
+        }
+    };
+    let object_size = get_result.meta.size;
+    let body = match get_result.bytes().await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            tracing::error!(
+                usecase = "读取附件内容",
+                adapter = "http",
+                outcome = "failed",
+                request_kind = "附件内容读取",
+                attachment_id = attachment_id.as_str(),
+                session_id = session_id.as_str(),
+                error_code = "system_error",
+                error = %err,
+                "对象内容读取失败"
+            );
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                "附件内容读取失败",
+            );
+        }
+    };
+
+    tracing::info!(
+        usecase = "读取附件内容",
+        adapter = "http",
+        outcome = "succeeded",
+        request_kind = "附件内容读取",
+        attachment_id = attachment_id.as_str(),
+        session_id = session_id.as_str(),
+        "读取附件内容成功"
+    );
+    match range {
+        Some(range) => (
+            StatusCode::PARTIAL_CONTENT,
+            [
+                (header::CONTENT_TYPE, target.mime_type),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+                (
+                    header::CONTENT_RANGE,
+                    构造content_range值(&range, object_size),
+                ),
+            ],
+            body,
+        )
+            .into_response(),
+        None => (
+            [
+                (header::CONTENT_TYPE, target.mime_type),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+            ],
+            body,
+        )
+            .into_response(),
+    }
 }
 
 /// 冷路径：受控读取流媒体主链产物。
@@ -3531,186 +3804,5 @@ pub(super) async fn load_attachment_content(
             return err_resp(status, code, message);
         }
     };
-    tracing::info!(
-        usecase = "读取附件内容",
-        adapter = "http",
-        outcome = "accepted",
-        request_kind = "附件内容读取",
-        attachment_id = attachment_id.as_str(),
-        session_id = query.session_id.as_str(),
-        "HTTP 请求已受理"
-    );
-
-    let state_for_usecase = state.clone();
-    let attachment_id_for_usecase = attachment_id.clone();
-    let session_id_for_usecase = query.session_id.clone();
-    let variant = query.variant;
-    let result = task::spawn_blocking(move || {
-        let repo = 构建共享仓储(&state_for_usecase);
-        usecase::读取附件内容(
-            &repo,
-            &attachment_id_for_usecase,
-            &session_id_for_usecase,
-            variant,
-        )
-        .map_err(map_domain_err_tuple)
-    })
-    .await;
-    let result = match result {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::error!(
-                usecase = "读取附件内容",
-                adapter = "http",
-                outcome = "failed",
-                request_kind = "附件内容读取",
-                attachment_id = attachment_id.as_str(),
-                session_id = query.session_id.as_str(),
-                error_code = "system_error",
-                error = %err,
-                "读取附件内容任务执行失败"
-            );
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("任务执行失败: {err}"),
-            );
-        }
-    };
-
-    let target = match result {
-        Ok(target) => target,
-        Err((status, code, message)) => {
-            tracing::warn!(
-                usecase = "读取附件内容",
-                adapter = "http",
-                outcome = "rejected",
-                request_kind = "附件内容读取",
-                attachment_id = attachment_id.as_str(),
-                session_id = query.session_id.as_str(),
-                error_code = code,
-                "读取附件内容被拒绝"
-            );
-            return err_resp(status, code, message);
-        }
-    };
-
-    let object_path = ObjectPath::from(target.存储键.clone());
-    let range = if headers.contains_key(header::RANGE) {
-        let head_result = match state.attachment_store.head(&object_path).await {
-            Ok(meta) => meta,
-            Err(err) => {
-                tracing::error!(
-                    usecase = "读取附件内容",
-                    adapter = "http",
-                    outcome = "failed",
-                    request_kind = "附件内容读取",
-                    attachment_id = attachment_id.as_str(),
-                    session_id = query.session_id.as_str(),
-                    error_code = "system_error",
-                    error = %err,
-                    "对象存储读取元数据失败"
-                );
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "附件内容读取失败",
-                );
-            }
-        };
-        match 解析标准字节范围(headers.get(header::RANGE), head_result.size) {
-            Ok(range) => range,
-            Err((status, code, message)) => return err_resp(status, code, message),
-        }
-    } else {
-        None
-    };
-    let get_result = match range.as_ref() {
-        Some(range) => {
-            state
-                .attachment_store
-                .get_opts(
-                    &object_path,
-                    GetOptions::new().with_range(Some(range.请求.clone())),
-                )
-                .await
-        }
-        None => state.attachment_store.get(&object_path).await,
-    };
-    let get_result = match get_result {
-        Ok(result) => result,
-        Err(err) => {
-            tracing::error!(
-                usecase = "读取附件内容",
-                adapter = "http",
-                outcome = "failed",
-                request_kind = "附件内容读取",
-                attachment_id = attachment_id.as_str(),
-                session_id = query.session_id.as_str(),
-                error_code = "system_error",
-                error = %err,
-                "对象存储读取失败"
-            );
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                "附件内容读取失败",
-            );
-        }
-    };
-    let object_size = get_result.meta.size;
-    let body = match get_result.bytes().await {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            tracing::error!(
-                usecase = "读取附件内容",
-                adapter = "http",
-                outcome = "failed",
-                request_kind = "附件内容读取",
-                attachment_id = attachment_id.as_str(),
-                session_id = query.session_id.as_str(),
-                error_code = "system_error",
-                error = %err,
-                "对象内容读取失败"
-            );
-            return err_resp(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                "附件内容读取失败",
-            );
-        }
-    };
-
-    tracing::info!(
-        usecase = "读取附件内容",
-        adapter = "http",
-        outcome = "succeeded",
-        request_kind = "附件内容读取",
-        attachment_id = attachment_id.as_str(),
-        session_id = query.session_id.as_str(),
-        "读取附件内容成功"
-    );
-    match range {
-        Some(range) => (
-            StatusCode::PARTIAL_CONTENT,
-            [
-                (header::CONTENT_TYPE, target.mime_type),
-                (header::ACCEPT_RANGES, "bytes".to_string()),
-                (
-                    header::CONTENT_RANGE,
-                    构造content_range值(&range, object_size),
-                ),
-            ],
-            body,
-        )
-            .into_response(),
-        None => (
-            [
-                (header::CONTENT_TYPE, target.mime_type),
-                (header::ACCEPT_RANGES, "bytes".to_string()),
-            ],
-            body,
-        )
-            .into_response(),
-    }
+    读取受控附件内容响应(state, attachment_id, query.session_id, query.variant, headers).await
 }

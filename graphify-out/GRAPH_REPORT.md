@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 148 files · ~157,787 words
+- 148 files · ~159,200 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -78,7 +78,7 @@ Nodes (7): bootstrap匿名身份时设备凭证与花名不会混成同一个字
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
-Nodes (0):
+Nodes (0): 
 
 ### Community 5 - "Community 5"
 Cohesion: 0.1
@@ -106,23 +106,23 @@ Nodes (5): handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus
 
 ### Community 11 - "Community 11"
 Cohesion: 0.5
-Nodes (0):
+Nodes (0): 
 
 ### Community 12 - "Community 12"
 Cohesion: 0.67
-Nodes (0):
+Nodes (0): 
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
@@ -130,7 +130,7 @@ Nodes (2): 文本布局, 文本布局测试
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
@@ -142,23 +142,23 @@ Nodes (1): frontend/存储.ts
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 23 - "Community 23"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ## Knowledge Gaps
 - **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+17 more)

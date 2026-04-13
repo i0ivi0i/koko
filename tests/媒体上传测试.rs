@@ -1,4 +1,4 @@
-use axum::http::{Method, StatusCode};
+use axum::http::{header, Method, StatusCode};
 use serial_test::serial;
 use sqlx::{postgres::PgPoolOptions, Row};
 use std::env;
@@ -287,7 +287,15 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     );
 
     let row = sqlx::query(
-        "SELECT status, width, height, thumbnail_storage_key FROM attachments WHERE attachment_id = $1",
+        "SELECT status,
+                width,
+                height,
+                thumbnail_storage_key,
+                full_storage_key,
+                asset_original_storage_key,
+                EXTRACT(EPOCH FROM origin_expires_at)::BIGINT AS origin_expires_at_epoch
+         FROM attachments
+         WHERE attachment_id = $1",
     )
     .bind(&attachment_id)
     .fetch_one(&pool)
@@ -297,10 +305,51 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     let width_in_db: Option<i32> = row.get("width");
     let height_in_db: Option<i32> = row.get("height");
     let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
+    let full_storage_key: Option<String> = row.get("full_storage_key");
+    let asset_original_storage_key: Option<String> = row.get("asset_original_storage_key");
+    let origin_expires_at_epoch: Option<i64> = row.get("origin_expires_at_epoch");
     assert_eq!(status_in_db, "ready");
     assert_eq!(width_in_db, Some(1));
     assert_eq!(height_in_db, Some(1));
     assert!(thumbnail_storage_key.is_some());
+    assert_eq!(
+        full_storage_key.as_deref(),
+        Some(format!("images/{attachment_id}/full.webp").as_str()),
+        "图片 ready 真相必须把 full 资产键落库，不能继续只剩 thumbnail/original 两层"
+    );
+    assert_eq!(
+        asset_original_storage_key.as_deref(),
+        Some(format!("images/{attachment_id}/asset-original.png").as_str()),
+        "图片 ready 真相必须把长期保留的资产原图键落库，不能继续只拿原始冷源凑数"
+    );
+    assert!(
+        origin_expires_at_epoch.is_some(),
+        "原始冷源必须在 complete 时写入明确到期时间，后续 24 小时清理才能有权威锚点"
+    );
+
+    let (full_status, full_headers, full_body) =
+        send_bytes(app.clone(), Method::GET, full_url, &[]).await;
+    let (original_status, original_headers, original_body) =
+        send_bytes(app, Method::GET, original_url, &[]).await;
+    assert_eq!(full_status, StatusCode::OK);
+    assert_eq!(original_status, StatusCode::OK);
+    assert_eq!(
+        full_headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("image/webp"),
+        "full 资产现在应返回真实完整图 MIME，而不是继续冒充原图类型"
+    );
+    assert_eq!(
+        original_headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("image/png")
+    );
+    assert_ne!(
+        full_body, original_body,
+        "blob/full 和 blob/original 必须读取不同对象，不能继续都走同一份原始冷源字节"
+    );
 }
 
 #[tokio::test]

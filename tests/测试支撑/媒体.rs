@@ -122,8 +122,8 @@ pub fn 断言媒体准备结果是Tus契约(
 
 /// 直接往数据库写入一条 ready 图片附件真相。
 /// 这个 helper 只服务集成测试建数，避免为了某个房间/消息场景倒逼上传 HTTP 主链参与。
-/// 说明：当前图片 blob asset 的 preview/full/original 由外壳层的受控路由表面承接，
-/// 测试建数阶段仍然只需要 canonical original + thumbnail 两个对象键，不必伪造第三份 full 字节。
+/// 说明：随着图片资产协议收口，测试建数也要跟着落三层资产键和原始冷源到期时间，
+/// 避免 locator/查看器测试继续吃“只有 original + thumbnail 两列”的过期夹具。
 pub async fn 插入ready图片附件记录(pool: &PgPool, 会话标识: &str, 附件标识: &str) {
     let owner_identity_db_id = sqlx::query_scalar::<_, Option<i64>>(
         "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",
@@ -135,13 +135,31 @@ pub async fn 插入ready图片附件记录(pool: &PgPool, 会话标识: &str, �
     .expect("附件 owner 必须能落到稳定匿名身份");
 
     sqlx::query(
-        "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
-         VALUES ($1, $2, 'image', 'image/png', 68, 1, 1, $3, $4, 'ready')",
+        "INSERT INTO attachments (
+            attachment_id,
+            owner_anonymous_identity_id,
+            kind,
+            mime_type,
+            byte_size,
+            width,
+            height,
+            storage_key,
+            thumbnail_storage_key,
+            asset_original_storage_key,
+            full_storage_key,
+            origin_expires_at,
+            status
+         ) VALUES (
+            $1, $2, 'image', 'image/png', 68, 1, 1, $3, $4, $5, $6, TO_TIMESTAMP($7), 'ready'
+         )",
     )
     .bind(附件标识)
     .bind(owner_identity_db_id)
     .bind(format!("original/{附件标识}.png"))
     .bind(format!("thumbnail/{附件标识}.png"))
+    .bind(format!("asset-original/{附件标识}.png"))
+    .bind(format!("full/{附件标识}.webp"))
+    .bind(1_776_000_000_i64)
     .execute(pool)
     .await
     .expect("应能插入 ready 图片附件");

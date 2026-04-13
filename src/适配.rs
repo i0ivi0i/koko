@@ -762,18 +762,28 @@ impl Pg仓储 {
         会话标识: &str,
         变体: usecase::附件内容变体,
     ) -> Result<Option<usecase::附件内容读取结果>, contract::错误码> {
-        let wants_thumbnail = matches!(变体, usecase::附件内容变体::缩略图);
+        let 变体标签 = match 变体 {
+            // 这里把“冷源原图 / preview / full / 长期原图资产”压成稳定标签，
+            // 让同一条成员可见性 SQL 主链按标签裁决对象键，而不是 shell 再分叉第二套读取实现。
+            usecase::附件内容变体::原图 => "origin_raw",
+            usecase::附件内容变体::缩略图 => "preview",
+            usecase::附件内容变体::完整图 => "full",
+            usecase::附件内容变体::资产原图 => "asset_original",
+        };
         let owner_anonymous_identity = Self::查询会话所属匿名身份_异步(pool, 会话标识).await?;
         let row = sqlx::query(
             "SELECT storage_key, mime_type \
              FROM ( \
                 SELECT \
                     CASE \
-                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
+                        WHEN $3 = 'preview' AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
+                        WHEN $3 = 'full' AND a.full_storage_key IS NOT NULL THEN a.full_storage_key \
+                        WHEN $3 = 'asset_original' AND a.asset_original_storage_key IS NOT NULL THEN a.asset_original_storage_key \
                         ELSE a.storage_key \
                     END AS storage_key, \
                     CASE \
-                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
+                        WHEN $3 = 'preview' AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
+                        WHEN $3 = 'full' AND a.full_storage_key IS NOT NULL THEN 'image/webp' \
                         ELSE a.mime_type \
                     END AS mime_type, \
                     0 AS priority, \
@@ -786,11 +796,14 @@ impl Pg仓储 {
                 UNION ALL \
                 SELECT \
                     CASE \
-                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
+                        WHEN $3 = 'preview' AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
+                        WHEN $3 = 'full' AND a.full_storage_key IS NOT NULL THEN a.full_storage_key \
+                        WHEN $3 = 'asset_original' AND a.asset_original_storage_key IS NOT NULL THEN a.asset_original_storage_key \
                         ELSE a.storage_key \
                     END AS storage_key, \
                     CASE \
-                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
+                        WHEN $3 = 'preview' AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
+                        WHEN $3 = 'full' AND a.full_storage_key IS NOT NULL THEN 'image/webp' \
                         ELSE a.mime_type \
                     END AS mime_type, \
                     1 AS priority, \
@@ -807,7 +820,7 @@ impl Pg仓储 {
         )
         .bind(附件标识)
         .bind(owner_anonymous_identity)
-        .bind(wants_thumbnail)
+        .bind(变体标签)
         .bind(会话标识)
         .fetch_optional(pool)
         .await
