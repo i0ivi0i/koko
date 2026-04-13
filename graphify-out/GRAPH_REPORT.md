@@ -150,15 +150,15 @@ Nodes (0):
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (0):
 
 ### Community 23 - "Community 23"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (0):
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (0):
 
 ## Knowledge Gaps
 - **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+17 more)
