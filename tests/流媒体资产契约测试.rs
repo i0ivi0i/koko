@@ -37,7 +37,8 @@ fn 视频资产描述包含_manifest_swarm_origin_而不是原始附件主链() 
 fn 超过24小时的原始冷源不会再被标成正式主读取入口() {
     let 冷源 = 构造媒体冷源描述(
         Some("/api/media/asset-video-1/original".into()),
-        1_000,
+        Some(1_000),
+        None,
         1_001,
     );
     assert_eq!(冷源.角色, 媒体冷源角色::冷备引导);

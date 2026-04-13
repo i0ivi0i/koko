@@ -1,4 +1,7 @@
-use super::{err_resp, events_to_json, map_domain_err_tuple, 媒体内容解析, 应用状态, 构建共享仓储};
+use super::{
+    err_resp, events_to_json, map_domain_err_tuple, 媒体内容解析, 流媒体打包, 应用状态,
+    构建共享仓储,
+};
 use crate::{
     adapter::{媒体上传运输授权写入请求, 媒体上传运输记录},
     contract, media_distribution,
@@ -15,7 +18,6 @@ use serde::Deserialize;
 use std::{
     collections::HashMap,
     path::{Path as StdPath, PathBuf},
-    process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::fs;
@@ -136,20 +138,6 @@ struct 标准字节范围 {
     请求: GetRange,
     起始字节: u64,
     结束字节_不含: u64,
-}
-
-/// 打包阶段先把本地产物清单和最终入库键分开：
-/// - 本地产物路径只活在当前 complete 调度里；
-/// - object_store 存储键才是后续 locator/stream 路由共享的稳定真相。
-struct 流媒体打包文件 {
-    相对路径: String,
-    本地路径: PathBuf,
-}
-
-struct 流媒体打包结果 {
-    hls主清单相对路径: String,
-    dash主清单相对路径: String,
-    文件列表: Vec<流媒体打包文件>,
 }
 
 /// 先把宽松 query map 收口成稳定内部参数。
@@ -782,10 +770,6 @@ fn 媒体分发描述转响应体(
     })
 }
 
-fn 构造流媒体受控地址(attachment_id: &str, session_id: &str, asset_path: &str) -> String {
-    format!("/api/media/{attachment_id}/stream/{asset_path}?session_id={session_id}")
-}
-
 /// 旧附件内容读取路由仍要保留给兼容调用方和冷源 origin。
 /// 但它不再承担图片正式 blob 主链的地址身份。
 fn 构造附件受控地址(attachment_id: &str, session_id: &str, variant: &str) -> String {
@@ -796,16 +780,6 @@ fn 构造附件受控地址(attachment_id: &str, session_id: &str, variant: &str
 /// 避免前端继续把旧附件内容地址误认成正式资产地址。
 fn 构造blob受控地址(attachment_id: &str, session_id: &str, variant: &str) -> String {
     format!("/api/media/{attachment_id}/blob/{variant}?session_id={session_id}")
-}
-
-fn 推导流媒体对象前缀(attachment_id: &str) -> String {
-    format!("streams/{attachment_id}/")
-}
-
-fn 流媒体存储键转受控路径<'a>(attachment_id: &str, storage_key: &'a str) -> &'a str {
-    storage_key
-        .strip_prefix(推导流媒体对象前缀(attachment_id).as_str())
-        .unwrap_or(storage_key)
 }
 
 fn 流媒体资产描述转响应体(asset: &contract::流媒体资产描述) -> serde_json::Value {
@@ -853,20 +827,20 @@ fn 构造流媒体资产响应体(
         种类: contract::媒体资产种类::流媒体视频,
         清单: contract::媒体清单描述 {
             hls主清单地址: streaming_manifest.map(|manifest| {
-                构造流媒体受控地址(
+                流媒体打包::构造流媒体受控地址(
                     attachment_id,
                     session_id,
-                    流媒体存储键转受控路径(
+                    流媒体打包::流媒体存储键转受控路径(
                         attachment_id,
                         manifest.hls主清单存储键.as_str(),
                     ),
                 )
             }),
             dash主清单地址: streaming_manifest.map(|manifest| {
-                构造流媒体受控地址(
+                流媒体打包::构造流媒体受控地址(
                     attachment_id,
                     session_id,
-                    流媒体存储键转受控路径(
+                    流媒体打包::流媒体存储键转受控路径(
                         attachment_id,
                         manifest.dash主清单存储键.as_str(),
                     ),
@@ -1049,383 +1023,6 @@ fn 媒体附件快照转响应体(
         response["media_asset"] = media_asset;
     }
     response
-}
-
-fn 推导流媒体对象存储键(attachment_id: &str, asset_path: &str) -> String {
-    format!("streams/{attachment_id}/{asset_path}")
-}
-
-fn 推导流媒体内容类型(asset_path: &str) -> &'static str {
-    match StdPath::new(asset_path)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-    {
-        "m3u8" => "application/vnd.apple.mpegurl",
-        "mpd" => "application/dash+xml",
-        "m4s" => "video/iso.segment",
-        "mp4" => "video/mp4",
-        _ => "application/octet-stream",
-    }
-}
-
-fn 执行外部命令(
-    command: &mut Command,
-    step: &str,
-) -> Result<(), (StatusCode, &'static str, String)> {
-    let output = command.output().map_err(|err| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!("{step} 启动失败: {err}"),
-        )
-    })?;
-    if output.status.success() {
-        return Ok(());
-    }
-    Err((
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "system_error",
-        format!(
-            "{step} 失败: stdout={} stderr={}",
-            String::from_utf8_lossy(&output.stdout).trim(),
-            String::from_utf8_lossy(&output.stderr).trim()
-        ),
-    ))
-}
-
-fn ffprobe检测首音轨是否存在(
-    ffprobe_bin: &str,
-    输入文件: &StdPath,
-) -> Result<bool, (StatusCode, &'static str, String)> {
-    let output = Command::new(ffprobe_bin)
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "a:0",
-            "-show_entries",
-            "stream=index",
-            "-of",
-            "csv=p=0",
-        ])
-        .arg(输入文件)
-        .output()
-        .map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("ffprobe 启动失败: {err}"),
-            )
-        })?;
-    if !output.status.success() {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!(
-                "ffprobe 失败: stdout={} stderr={}",
-                String::from_utf8_lossy(&output.stdout).trim(),
-                String::from_utf8_lossy(&output.stderr).trim()
-            ),
-        ));
-    }
-    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
-}
-
-fn 收集目录文件(
-    root: &StdPath,
-    prefix: &str,
-    files: &mut Vec<流媒体打包文件>,
-) -> Result<(), (StatusCode, &'static str, String)> {
-    let entries = std::fs::read_dir(root).map_err(|err| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!("读取打包产物目录失败: {err}"),
-        )
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("遍历打包产物目录失败: {err}"),
-            )
-        })?;
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        let relative = if prefix.is_empty() {
-            name
-        } else {
-            format!("{prefix}/{name}")
-        };
-        if path.is_dir() {
-            收集目录文件(path.as_path(), relative.as_str(), files)?;
-        } else {
-            files.push(流媒体打包文件 {
-                相对路径: relative,
-                本地路径: path,
-            });
-        }
-    }
-    Ok(())
-}
-
-fn 生成流媒体打包产物(
-    ffmpeg_bin: &str,
-    ffprobe_bin: &str,
-    shaka_packager_bin: &str,
-    attachment_id: &str,
-    输入文件: &StdPath,
-) -> Result<流媒体打包结果, (StatusCode, &'static str, String)> {
-    let workdir =
-        std::env::temp_dir().join(format!("koko-stream-{attachment_id}-{}", Uuid::new_v4()));
-    std::fs::create_dir_all(workdir.as_path()).map_err(|err| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!("创建流媒体打包工作目录失败: {err}"),
-        )
-    })?;
-    let hls_video_dir = workdir.join("hls").join("video");
-    let hls_audio_dir = workdir.join("hls").join("audio");
-    let dash_dir = workdir.join("dash");
-    std::fs::create_dir_all(hls_video_dir.as_path()).map_err(|err| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!("创建 HLS 视频目录失败: {err}"),
-        )
-    })?;
-    std::fs::create_dir_all(dash_dir.as_path()).map_err(|err| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            format!("创建 DASH 目录失败: {err}"),
-        )
-    })?;
-
-    let 视频轨道文件 = workdir.join("video.mp4");
-    let mut 转码视频 = Command::new(ffmpeg_bin);
-    转码视频.args(["-y", "-i"]);
-    转码视频.arg(输入文件);
-    转码视频.args([
-        "-map",
-        "0:v:0",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-g",
-        "48",
-        "-keyint_min",
-        "48",
-        "-sc_threshold",
-        "0",
-        "-pix_fmt",
-        "yuv420p",
-        "-an",
-    ]);
-    转码视频.arg(视频轨道文件.as_os_str());
-    执行外部命令(&mut 转码视频, "FFmpeg 视频转码")?;
-
-    let 有音轨 = ffprobe检测首音轨是否存在(ffprobe_bin, 输入文件)?;
-    let 音频轨道文件 = workdir.join("audio.mp4");
-    if 有音轨 {
-        std::fs::create_dir_all(hls_audio_dir.as_path()).map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("创建 HLS 音频目录失败: {err}"),
-            )
-        })?;
-        let mut 转码音频 = Command::new(ffmpeg_bin);
-        转码音频.args(["-y", "-i"]);
-        转码音频.arg(输入文件);
-        转码音频.args(["-map", "0:a:0", "-c:a", "aac", "-b:a", "128k", "-vn"]);
-        转码音频.arg(音频轨道文件.as_os_str());
-        执行外部命令(&mut 转码音频, "FFmpeg 音频转码")?;
-    }
-
-    let mut 打包命令 = Command::new(shaka_packager_bin);
-    打包命令.arg(format!(
-        "in={},stream=video,init_segment={},segment_template={},playlist_name={}",
-        视频轨道文件.display(),
-        hls_video_dir.join("init.mp4").display(),
-        hls_video_dir.join("$Number$.m4s").display(),
-        hls_video_dir.join("main.m3u8").display()
-    ));
-    if 有音轨 {
-        打包命令.arg(format!(
-            "in={},stream=audio,init_segment={},segment_template={},playlist_name={},hls_group_id=audio,hls_name=audio",
-            音频轨道文件.display(),
-            hls_audio_dir.join("init.mp4").display(),
-            hls_audio_dir.join("$Number$.m4s").display(),
-            hls_audio_dir.join("main.m3u8").display()
-        ));
-    }
-    打包命令.arg("--mpd_output");
-    打包命令.arg(dash_dir.join("stream.mpd").as_os_str());
-    打包命令.arg("--hls_master_playlist_output");
-    打包命令.arg(workdir.join("hls").join("master.m3u8").as_os_str());
-    执行外部命令(&mut 打包命令, "Shaka Packager 打包")?;
-
-    let mut 文件列表 = Vec::new();
-    收集目录文件(workdir.join("hls").as_path(), "hls", &mut 文件列表)?;
-    收集目录文件(workdir.join("dash").as_path(), "dash", &mut 文件列表)?;
-    Ok(流媒体打包结果 {
-        hls主清单相对路径: "hls/master.m3u8".to_string(),
-        dash主清单相对路径: "dash/stream.mpd".to_string(),
-        文件列表,
-    })
-}
-
-async fn 上传流媒体打包产物(
-    state: &应用状态,
-    attachment_id: &str,
-    打包结果: 流媒体打包结果,
-) -> Result<usecase::流媒体清单写入请求, (StatusCode, &'static str, String)> {
-    for file in &打包结果.文件列表 {
-        let storage_key = 推导流媒体对象存储键(attachment_id, file.相对路径.as_str());
-        let bytes = fs::read(file.本地路径.as_path()).await.map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("读取流媒体打包产物失败: {err}"),
-            )
-        })?;
-        state
-            .attachment_store
-            .put(&ObjectPath::from(storage_key), bytes.into())
-            .await
-            .map_err(|err| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("写入流媒体打包产物失败: {err}"),
-                )
-            })?;
-    }
-
-    Ok(usecase::流媒体清单写入请求 {
-        附件标识: attachment_id.to_string(),
-        hls主清单存储键: 推导流媒体对象存储键(
-            attachment_id,
-            打包结果.hls主清单相对路径.as_str(),
-        ),
-        dash主清单存储键: 推导流媒体对象存储键(
-            attachment_id,
-            打包结果.dash主清单相对路径.as_str(),
-        ),
-    })
-}
-
-fn 解析流媒体相对路径(base_asset_path: &str, referenced_path: &str) -> String {
-    if referenced_path.starts_with("http://") || referenced_path.starts_with("https://") {
-        return referenced_path.to_string();
-    }
-    let mut parts = base_asset_path
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    if !parts.is_empty() {
-        parts.pop();
-    }
-    for part in referenced_path.split('/') {
-        match part {
-            "" | "." => {}
-            ".." => {
-                parts.pop();
-            }
-            _ => parts.push(part.to_string()),
-        }
-    }
-    parts.join("/")
-}
-
-fn 重写_hls清单内容(
-    attachment_id: &str,
-    session_id: &str,
-    asset_path: &str,
-    content: &str,
-) -> String {
-    content
-        .lines()
-        .map(|line| {
-            if let Some(prefix) = line.split("URI=\"").next() {
-                if prefix.len() != line.len() {
-                    let mut rewritten = line.to_string();
-                    if let Some(start) = line.find("URI=\"") {
-                        let value_start = start + 5;
-                        if let Some(end_rel) = line[value_start..].find('"') {
-                            let value_end = value_start + end_rel;
-                            let raw = &line[value_start..value_end];
-                            let resolved = 解析流媒体相对路径(asset_path, raw);
-                            let absolute = 构造流媒体受控地址(
-                                attachment_id,
-                                session_id,
-                                resolved.as_str(),
-                            );
-                            rewritten.replace_range(value_start..value_end, absolute.as_str());
-                            return rewritten;
-                        }
-                    }
-                }
-            }
-            if line.starts_with('#') || line.trim().is_empty() {
-                return line.to_string();
-            }
-            let resolved = 解析流媒体相对路径(asset_path, line.trim());
-            构造流媒体受控地址(attachment_id, session_id, resolved.as_str())
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n"
-}
-
-fn 重写_xml属性路径(
-    content: String,
-    attribute_name: &str,
-    attachment_id: &str,
-    session_id: &str,
-    asset_path: &str,
-) -> String {
-    let needle = format!(r#"{attribute_name}=""#);
-    let mut current = content;
-    let mut search_from = 0;
-    while let Some(start_rel) = current[search_from..].find(needle.as_str()) {
-        let start = search_from + start_rel;
-        let value_start = start + needle.len();
-        let Some(end_rel) = current[value_start..].find('"') else {
-            break;
-        };
-        let value_end = value_start + end_rel;
-        let raw = current[value_start..value_end].to_string();
-        let resolved = 解析流媒体相对路径(asset_path, raw.as_str());
-        let absolute = 构造流媒体受控地址(attachment_id, session_id, resolved.as_str());
-        current.replace_range(value_start..value_end, absolute.as_str());
-        // 必须把扫描游标推进到本次替换之后；
-        // 否则下一轮又会命中同一个属性，MPD 重写会在原地自旋。
-        search_from = value_start + absolute.len();
-    }
-    current
-}
-
-fn 重写_dash清单内容(
-    attachment_id: &str,
-    session_id: &str,
-    asset_path: &str,
-    content: &str,
-) -> String {
-    let rewritten = 重写_xml属性路径(
-        content.to_string(),
-        "initialization",
-        attachment_id,
-        session_id,
-        asset_path,
-    );
-    重写_xml属性路径(rewritten, "media", attachment_id, session_id, asset_path)
 }
 
 /// 冷路径：引导匿名身份。
@@ -2702,7 +2299,7 @@ pub(super) async fn complete_media_upload(
             Ok(path) => path,
             Err((status, code, message)) => return err_resp(status, code, message),
         };
-    let original_bytes = match fs::read(&temp_file_path).await {
+    let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
         Ok(bytes) => bytes,
         Err(err) => {
             tracing::error!(
@@ -2870,7 +2467,7 @@ pub(super) async fn complete_media_upload(
                 let attachment_id = attachment_id.clone();
                 let temp_file_path = temp_file_path.clone();
                 move || {
-                    生成流媒体打包产物(
+                    流媒体打包::生成流媒体打包产物(
                         ffmpeg_bin.as_str(),
                         ffprobe_bin.as_str(),
                         shaka_packager_bin.as_str(),
@@ -2892,7 +2489,7 @@ pub(super) async fn complete_media_upload(
                 }
             };
             streaming_manifest_request =
-                match 上传流媒体打包产物(&state, &attachment_id, 打包结果).await {
+                match 流媒体打包::上传流媒体打包产物(&state, &attachment_id, 打包结果).await {
                     Ok(request) => Some(request),
                     Err((status, code, message)) => return err_resp(status, code, message),
                 };
@@ -3406,7 +3003,7 @@ pub(super) async fn load_streaming_asset_content(
         );
     }
 
-    let object_path = ObjectPath::from(推导流媒体对象存储键(
+    let object_path = ObjectPath::from(流媒体打包::推导流媒体对象存储键(
         attachment_id.as_str(),
         asset_path.as_str(),
     ));
@@ -3442,14 +3039,14 @@ pub(super) async fn load_streaming_asset_content(
             }
         };
         let rewritten = if asset_path.ends_with(".m3u8") {
-            重写_hls清单内容(
+            流媒体打包::重写_hls清单内容(
                 attachment_id.as_str(),
                 query.session_id.as_str(),
                 asset_path.as_str(),
                 text.as_str(),
             )
         } else {
-            重写_dash清单内容(
+            流媒体打包::重写_dash清单内容(
                 attachment_id.as_str(),
                 query.session_id.as_str(),
                 asset_path.as_str(),
@@ -3459,7 +3056,7 @@ pub(super) async fn load_streaming_asset_content(
         return (
             [(
                 header::CONTENT_TYPE,
-                推导流媒体内容类型(asset_path.as_str()).to_string(),
+                流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
             )],
             rewritten,
         )
@@ -3523,7 +3120,7 @@ pub(super) async fn load_streaming_asset_content(
             [
                 (
                     header::CONTENT_TYPE,
-                    推导流媒体内容类型(asset_path.as_str()).to_string(),
+                    流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
                 ),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
                 (
@@ -3538,7 +3135,7 @@ pub(super) async fn load_streaming_asset_content(
             [
                 (
                     header::CONTENT_TYPE,
-                    推导流媒体内容类型(asset_path.as_str()).to_string(),
+                    流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
                 ),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
             ],
@@ -3706,5 +3303,31 @@ mod 媒体内容解析迁移测试 {
             .expect("最小 mp4 应该能被新模块解析");
         assert!(parsed.宽 > 0);
         assert!(parsed.高 > 0);
+    }
+}
+
+#[cfg(test)]
+mod 流媒体打包迁移测试 {
+    #[test]
+    fn 新模块会把_hls_相对路径重写成受控地址() {
+        let rewritten = super::流媒体打包::重写_hls清单内容(
+            "att-1",
+            "session-1",
+            "hls/master.m3u8",
+            "#EXTM3U\nvideo/main.m3u8\n",
+        );
+        assert!(rewritten.contains("/api/media/att-1/stream/hls/video/main.m3u8?session_id=session-1"));
+    }
+
+    #[test]
+    fn 新模块会把_dash_模板重写成受控地址() {
+        let rewritten = super::流媒体打包::重写_dash清单内容(
+            "att-1",
+            "session-1",
+            "dash/stream.mpd",
+            r#"<SegmentTemplate initialization="video/init.mp4" media="video/$Number$.m4s" />"#,
+        );
+        assert!(rewritten.contains("/api/media/att-1/stream/dash/video/init.mp4?session_id=session-1"));
+        assert!(rewritten.contains("/api/media/att-1/stream/dash/video/$Number$.m4s?session_id=session-1"));
     }
 }
