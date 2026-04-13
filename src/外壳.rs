@@ -40,8 +40,14 @@ mod 实时外壳;
 mod 媒体内容解析;
 #[path = "流媒体打包.rs"]
 mod 流媒体打包;
+#[path = "rustus_hook外壳.rs"]
+mod rustus_hook外壳;
 #[path = "房间外壳.rs"]
 mod 房间外壳;
+
+/// 当前媒体上传运输契约仍统一走 TUS sidecar。
+/// 先把常量收在 shell 父层，供上传外壳与 Rustus hook 外壳共享，避免兄弟模块重复手抄字符串。
+const 媒体上传运输方式_TUS: &str = "tus";
 
 /// 外壳层共享运行态，只存放“接线所需配置”，不承载业务事实。
 #[derive(Clone)]
@@ -252,7 +258,7 @@ pub fn 构建路由(state: 应用状态) -> Router {
             "/api/media/{attachment_id}/complete",
             post(房间外壳::complete_media_upload),
         )
-        .route("/internal/rustus/hooks", post(房间外壳::handle_rustus_hook))
+        .route("/internal/rustus/hooks", post(rustus_hook外壳::handle_rustus_hook))
         .route(
             "/api/media/{attachment_id}/locator",
             get(房间外壳::load_media_locator),
