@@ -796,6 +796,107 @@ describe("聊天应用内核", () => {
     });
   });
 
+  it("视频会话已经拿到 manifest 主链时，打开查看器会先投影当前播放真相，而不是继续带着旧 originalSrc", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-open-manifest",
+            client_message_id: "c-video-open-manifest",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-open-manifest",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "manifest",
+        attachmentId: "att-video-open-manifest",
+        kind: "video",
+        src: "http://media.local/stream/att-video-open-manifest/master.m3u8",
+        thumbnailUrl: "http://media.local/poster-att-video-open-manifest",
+        streamingDistribution: {
+          swarm_id: "swarm-hash-att-video-open-manifest",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/stream/att-video-open-manifest/master.m3u8",
+          join_ticket: null,
+        },
+        hint: null,
+      }),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-open-manifest",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-open-manifest",
+            src: "http://media.local/original-att-video-open-manifest",
+            posterSrc: null,
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+
+    expect(fake查看器.打开).toHaveBeenCalledWith({
+      startAttachmentId: "att-video-open-manifest",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-open-manifest",
+          src: "http://media.local/stream/att-video-open-manifest/master.m3u8",
+          posterSrc: "http://media.local/poster-att-video-open-manifest",
+          streamingDistribution: {
+            swarm_id: "swarm-hash-att-video-open-manifest",
+            announce_urls: ["wss://tracker.koko.local/announce"],
+            web_seed_url: "http://media.local/stream/att-video-open-manifest/master.m3u8",
+            join_ticket: null,
+          },
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+  });
+
   it("后台收到别人的权威新消息时，会由聊天内核向平台发通知和 badge 命令，而不是壳层自己猜浏览器 API", async () => {
     const transport = new 假传输();
     const 平台命令记录: 浏览器应用平台命令[] = [];

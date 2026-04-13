@@ -63,20 +63,25 @@ type 媒体查看器运行时钩子 = {
   发出媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
 };
 type PhotoSwipe查看器工厂 = (options: PhotoSwipe查看器选项) => 媒体查看器工厂结果;
+type Hls构造器 = typeof import("hls.js").default;
+type Hls视频覆盖层依赖 = {
+  loadHlsConstructor?: () => Promise<Hls构造器>;
+};
+type Hls视频覆盖层工厂 = (
+  item: 媒体查看器视频项目,
+  lifecycle: 媒体查看器视口占用生命周期,
+  hooks: 媒体查看器运行时钩子,
+  deps?: Hls视频覆盖层依赖
+) => 媒体查看器工厂结果;
 type Vidstack视频覆盖层工厂 = (
   item: 媒体查看器视频项目,
   lifecycle: 媒体查看器视口占用生命周期,
   hooks: 媒体查看器运行时钩子
 ) => 媒体查看器工厂结果;
 
-type VidstackHlsProvider详情 = {
-  type?: string;
-  library?: unknown;
-  config?: Record<string, unknown>;
-};
-
 export type 媒体查看器依赖 = {
   createPhotoSwipeLightbox?: PhotoSwipe查看器工厂;
+  createHlsVideoOverlay?: Hls视频覆盖层工厂;
   createVidstackVideoOverlay?: Vidstack视频覆盖层工厂;
   isMobileViewport?: () => boolean;
   openNativeVideoFullscreen?: (
@@ -109,22 +114,6 @@ const 创建默认PhotoSwipeLightbox: PhotoSwipe查看器工厂 = async (options
   const module = await import("photoswipe/lightbox");
   const Lightbox = module.default as unknown as PhotoSwipeLightbox构造器;
   return new Lightbox(options);
-};
-
-const 构造Vidstack流媒体P2P配置 = (
-  distribution: 媒体资产分发表面 | null | undefined
-): Record<string, unknown> | null => {
-  if (!distribution) {
-    return null;
-  }
-  return {
-    p2p: {
-      core: {
-        swarmId: distribution.swarm_id,
-        announceTrackers: distribution.announce_urls,
-      },
-    },
-  };
 };
 
 const 是异步媒体查看器结果 = (
@@ -428,6 +417,144 @@ const 读取Vidstack纵横比 = (item: 媒体查看器视频项目): string =>
 
 const 是Hls主清单地址 = (src: string): boolean => /\.m3u8(?:$|\?)/.test(src);
 
+export const 创建默认Hls视频覆盖层: Hls视频覆盖层工厂 = async (
+  item,
+  lifecycle,
+  hooks,
+  deps: Hls视频覆盖层依赖 = {}
+) => {
+  if (typeof document === "undefined" || !document.body) {
+    throw new Error("当前环境没有可用的浏览器文档，无法打开 HLS 媒体层");
+  }
+
+  const HlsFromDeps = deps.loadHlsConstructor ? await deps.loadHlsConstructor() : null;
+  const Hls: Hls构造器 = HlsFromDeps ?? (await import("hls.js").then((module) => module.default));
+  const overlay = document.createElement("div");
+  const video = document.createElement("video");
+  const closeButton = document.createElement("button");
+  const 解绑媒体运行时信号 = 绑定媒体运行时信号(video, item.attachmentId, hooks);
+  let hls实例: InstanceType<Hls构造器> | null = null;
+  let cleaned = false;
+
+  const 尝试开始播放 = (): void => {
+    void video.play().catch(() => undefined);
+  };
+  const 使用原生Hls主链 = (): void => {
+    video.src = item.src;
+    video.load();
+  };
+
+  overlay.dataset.mediaViewerMode = "video";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "视频查看器");
+  overlay.style.cssText =
+    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+
+  video.dataset.mediaViewerPlayer = "hls";
+  video.controls = true;
+  video.autoplay = true;
+  video.preload = "auto";
+  video.playsInline = true;
+  video.style.cssText =
+    "width:min(100%,1120px);max-height:calc(100vh - 40px);background:#000;object-fit:contain;";
+  if (item.posterSrc) {
+    video.poster = item.posterSrc;
+  }
+
+  closeButton.type = "button";
+  closeButton.textContent = "关闭";
+  closeButton.setAttribute("aria-label", "关闭视频查看器");
+  closeButton.style.cssText =
+    "position:fixed;top:16px;right:16px;z-index:1;border:1px solid rgb(255 255 255 / 0.35);border-radius:8px;background:rgb(0 0 0 / 0.7);color:white;padding:8px 12px;font:inherit;";
+
+  const cleanup = (): void => {
+    if (cleaned) {
+      return;
+    }
+    cleaned = true;
+    closeButton.removeEventListener("click", cleanup);
+    overlay.removeEventListener("click", closeWhenClickingBackdrop);
+    document.removeEventListener("keydown", closeWhenPressingEscape);
+    解绑媒体运行时信号();
+    if (hls实例) {
+      hls实例.destroy();
+      hls实例 = null;
+    }
+    video.removeAttribute("src");
+    video.load();
+    overlay.remove();
+    lifecycle.结束视口占用();
+  };
+  const closeWhenClickingBackdrop = (event: MouseEvent): void => {
+    if (event.target === overlay) {
+      cleanup();
+    }
+  };
+  const closeWhenPressingEscape = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") {
+      cleanup();
+    }
+  };
+
+  // 中文注释：
+  // 1. 这里的正式播放链只负责把 HLS 真正挂进最终 <video>；
+  // 2. swarm/backfill/presence 仍由聊天媒体编排与协作分发 runtime 掌握；
+  // 3. 不能再让 P2P 增强层决定“首播能不能起来”。
+  if (typeof Hls.isSupported === "function" && Hls.isSupported()) {
+    hls实例 = new Hls({
+      lowLatencyMode: false,
+      backBufferLength: 90,
+    });
+    hls实例.attachMedia(video);
+    if (typeof hls实例.on === "function" && Hls.Events?.MANIFEST_PARSED) {
+      hls实例.on(Hls.Events.MANIFEST_PARSED, 尝试开始播放);
+    }
+    if (typeof hls实例.on === "function" && Hls.Events?.ERROR) {
+      hls实例.on(Hls.Events.ERROR, (_event, data: { fatal?: boolean } | undefined) => {
+        if (data?.fatal) {
+          hooks.发出媒体会话信号(item.attachmentId, { type: "PLAYER_ERROR" });
+        }
+      });
+    }
+    hls实例.loadSource(item.src);
+  } else {
+    使用原生Hls主链();
+    video.addEventListener("loadedmetadata", 尝试开始播放, { once: true });
+  }
+
+  overlay.append(video, closeButton);
+  closeButton.addEventListener("click", cleanup);
+  overlay.addEventListener("click", closeWhenClickingBackdrop);
+  document.addEventListener("keydown", closeWhenPressingEscape);
+  document.body.append(overlay);
+  lifecycle.开始视口占用();
+  closeButton.focus();
+
+  return {
+    同步(nextItem) {
+      if (nextItem.kind !== "video") {
+        return;
+      }
+      if (nextItem.posterSrc) {
+        video.poster = nextItem.posterSrc;
+      } else {
+        video.removeAttribute("poster");
+      }
+      if (hls实例 && 是Hls主清单地址(nextItem.src)) {
+        hls实例.loadSource(nextItem.src);
+        return;
+      }
+      if (video.src !== nextItem.src) {
+        video.src = nextItem.src;
+        video.load();
+        尝试开始播放();
+      }
+    },
+    destroy: cleanup,
+  };
+};
+
 const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async (
   item,
   lifecycle,
@@ -446,46 +573,6 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
   const closeButton = document.createElement("button");
   let cleaned = false;
   const 解绑媒体运行时信号 = 绑定媒体运行时信号(player, item.attachmentId, hooks);
-  const 绑定HlsProvider到本地依赖 = (event: Event): void => {
-    const provider = (event as CustomEvent<VidstackHlsProvider详情>).detail;
-    if (provider?.type !== "hls") {
-      return;
-    }
-    const p2pConfig = 构造Vidstack流媒体P2P配置(item.streamingDistribution);
-    // Vidstack 官方建议本地集成时显式把 provider.library 指到本地 `hls.js` 依赖，
-    // 这里进一步把 Hls.js 升级成带 P2P mixin 的构造器，让主播放链直接站到成熟分片级 P2P 轮子上。
-    //
-    // 关键边界：
-    // 1. HLS 是正式播放主链，P2P 只是增强层，不能因为增强层加载失败就把整条播放链一起拖死；
-    // 2. 因此只有在 `p2p-media-loader-hlsjs` 真正加载成功时，才把 P2P 配置写给 provider；
-    // 3. 一旦 mixin 或其依赖在真实浏览器里炸掉，必须立即回退到纯 `hls.js`，优先保住可播放性。
-    provider.library = async () => {
-      const { default: Hls } = await import("hls.js");
-      if (!p2pConfig) {
-        return Hls;
-      }
-      try {
-        const p2pModule = await import("p2p-media-loader-hlsjs");
-        const { HlsJsP2PEngine } = p2pModule as unknown as {
-          HlsJsP2PEngine: { injectMixin(hls: typeof Hls): unknown };
-        };
-        provider.config = {
-          ...(provider.config ?? {}),
-          ...p2pConfig,
-        };
-        return HlsJsP2PEngine.injectMixin(Hls);
-      } catch (error) {
-        // 这里故意只降级、不抛错：
-        // 真实用户点开视频时，最不能接受的是“P2P 增强坏了，结果连普通 HLS 也一起黑屏转圈”。
-        // 记录告警是为了后续继续修 bundling / polyfill，而不是把当前播放会话直接判死。
-        console.warn(
-          "[media-viewer] p2p-media-loader-hlsjs 加载失败，回退到纯 hls.js 主链",
-          error
-        );
-        return Hls;
-      }
-    };
-  };
 
   overlay.dataset.mediaViewerMode = "video";
   overlay.setAttribute("role", "dialog");
@@ -499,7 +586,6 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
   player.setAttribute("autoplay", "");
   player.setAttribute("aspect-ratio", 读取Vidstack纵横比(item));
   player.setAttribute("data-media-viewer-player", "video");
-  player.addEventListener("provider-change", 绑定HlsProvider到本地依赖 as EventListener);
   player.style.cssText =
     "width:min(100%,1120px);max-height:calc(100vh - 40px);--media-max-height:calc(100vh - 40px);";
   if (item.posterSrc) {
@@ -522,10 +608,6 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
     closeButton.removeEventListener("click", cleanup);
     overlay.removeEventListener("click", closeWhenClickingBackdrop);
     document.removeEventListener("keydown", closeWhenPressingEscape);
-    player.removeEventListener(
-      "provider-change",
-      绑定HlsProvider到本地依赖 as EventListener
-    );
     解绑媒体运行时信号();
     overlay.remove();
     lifecycle.结束视口占用();
@@ -569,6 +651,8 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
 export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   const createPhotoSwipeLightbox =
     deps.createPhotoSwipeLightbox ?? 创建默认PhotoSwipeLightbox;
+  const createHlsVideoOverlay =
+    deps.createHlsVideoOverlay ?? 创建默认Hls视频覆盖层;
   const createVidstackVideoOverlay =
     deps.createVidstackVideoOverlay ?? 创建默认Vidstack视频覆盖层;
   const isMobileViewport = deps.isMobileViewport ?? 是移动触屏视口;
@@ -583,6 +667,32 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   let 正在占用聊天视口 = false;
   let 当前起点附件标识: string | null = null;
   let 当前查看器请求: 媒体查看器打开请求 | null = null;
+  let 当前查看器渲染类型: "image" | "native_video" | "hls_video" | "video" | null = null;
+
+  /**
+   * 查看器选哪一类 renderer，必须只由“当前起点附件的正式播放形态”决定。
+   *
+   * 这里单独抽成稳定裁决函数，是为了堵住一个真实竞态：
+   * - 用户刚点开视频时，时间线可能还只拿着旧 `originalSrc`；
+   * - 片刻后媒体会话把正式 `master.m3u8` 同步回来；
+   * - 如果我们只给旧 overlay 改 `src`，却不重建 renderer，Vidstack 实例就会继续抱着错误链路。
+   *
+   * 所以“当前应该是 HLS overlay 还是普通 video overlay”，必须成为可复用的单点裁决。
+   */
+  const 读取查看器渲染类型 = (
+    item: 媒体查看器项目
+  ): "image" | "native_video" | "hls_video" | "video" => {
+    if (item.kind === "image") {
+      return "image";
+    }
+    if (是Hls主清单地址(item.src)) {
+      return "hls_video";
+    }
+    if (isMobileViewport()) {
+      return "native_video";
+    }
+    return "video";
+  };
 
   const 视口占用生命周期: 媒体查看器视口占用生命周期 = {
     开始视口占用: () => {
@@ -628,15 +738,12 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     if (startAt < 0) {
       return;
     }
-  const startItem = request.items[startAt];
-  if (!startItem) {
-    return;
-  }
-  if (
-    startItem?.kind === "video" &&
-    isMobileViewport() &&
-    !是Hls主清单地址(startItem.src)
-  ) {
+    const startItem = request.items[startAt];
+    if (!startItem) {
+      return;
+    }
+    当前查看器渲染类型 = 读取查看器渲染类型(startItem);
+    if (当前查看器渲染类型 === "native_video" && startItem.kind === "video") {
       const nativeViewer = openNativeVideoFullscreen(
         startItem,
         视口占用生命周期,
@@ -656,7 +763,7 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     current = null;
     视口占用生命周期.开始视口占用();
 
-    if (startItem.kind === "image") {
+    if (当前查看器渲染类型 === "image" && startItem.kind === "image") {
       const imageEntries = request.items
         .filter((item): item is 媒体查看器图片项目 => item.kind === "image")
         .map((item) => ({
@@ -745,6 +852,29 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
       return;
     }
 
+    if (当前查看器渲染类型 === "hls_video" && startItem.kind === "video") {
+      接管当前查看器(
+        generation,
+        (async () => {
+          const overlay = createHlsVideoOverlay(startItem, 视口占用生命周期, 运行时钩子);
+          const hlsOverlay = 是异步媒体查看器结果(overlay) ? await overlay : overlay;
+          hlsOverlay.on?.("close", () => {
+            视口占用生命周期.结束视口占用();
+          });
+          hlsOverlay.on?.("destroy", () => {
+            视口占用生命周期.结束视口占用();
+          });
+          return hlsOverlay;
+        })()
+      );
+      return;
+    }
+
+    if (startItem.kind !== "video") {
+      视口占用生命周期.结束视口占用();
+      return;
+    }
+
     接管当前查看器(
       generation,
       (async () => {
@@ -771,6 +901,18 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     if (!activeItem) {
       return;
     }
+    const nextRenderer = 读取查看器渲染类型(activeItem);
+    if (nextRenderer !== 当前查看器渲染类型) {
+      /**
+       * 这里不能只把新 src 塞给旧 overlay。
+       *
+       * 真实场景里，视频可能先用旧 `originalSrc` 打开，随后媒体会话才把正式 `master.m3u8`
+       * 回推回来；如果 renderer 仍停留在旧实例上，HLS 主链就永远挂不到正确的 `<video>`。
+       * 因此只要渲染类型变了，就必须整实例重建。
+       */
+      打开(request);
+      return;
+    }
     current?.同步?.(activeItem);
   };
 
@@ -780,6 +922,7 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     current = null;
     当前起点附件标识 = null;
     当前查看器请求 = null;
+    当前查看器渲染类型 = null;
     视口占用生命周期.结束视口占用();
   };
 

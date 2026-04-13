@@ -105,7 +105,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 15
+      "community": 14
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -113,7 +113,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L31",
       "id": "app_sw",
-      "community": 15
+      "community": 14
     },
     {
       "label": "css.d.ts",
@@ -984,6 +984,22 @@
       "community": 7
     },
     {
+      "label": "\u5047Hls\u6784\u9020\u5668",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L567",
+      "id": "spec_hls",
+      "community": 7
+    },
+    {
+      "label": ".isSupported()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L568",
+      "id": "spec_hls_issupported",
+      "community": 7
+    },
+    {
       "label": "\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5",
       "file_type": "code",
       "source_file": "frontend/tests/\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5.spec.ts",
@@ -1319,7 +1335,7 @@
       "label": "\u6620\u5c04PhotoSwipe\u56fe\u7247()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L101",
+      "source_location": "L106",
       "id": "photoswipe",
       "community": 2
     },
@@ -1327,23 +1343,15 @@
       "label": "\u521b\u5efa\u9ed8\u8ba4PhotoSwipeLightbox()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L108",
+      "source_location": "L113",
       "id": "photoswipelightbox",
-      "community": 2
-    },
-    {
-      "label": "\u6784\u9020Vidstack\u6d41\u5a92\u4f53P2P\u914d\u7f6e()",
-      "file_type": "code",
-      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L114",
-      "id": "vidstack_p2p",
       "community": 2
     },
     {
       "label": "\u8bfb\u53d6Vidstack\u7eb5\u6a2a\u6bd4()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L426",
+      "source_location": "L415",
       "id": "vidstack",
       "community": 2
     },
@@ -1385,7 +1393,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 16
+      "community": 15
     },
     {
       "label": "main()",
@@ -1393,7 +1401,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 16
+      "community": 15
     },
     {
       "label": "\u9002\u914d.rs",
@@ -2017,7 +2025,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 14
+      "community": 16
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2025,7 +2033,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L6",
       "id": "blob_preview_full_original",
-      "community": 14
+      "community": 16
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3113,7 +3121,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L101",
+      "source_location": "L106",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "photoswipe",
@@ -3125,7 +3133,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L108",
+      "source_location": "L113",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "photoswipelightbox",
@@ -3137,19 +3145,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L114",
-      "weight": 1.0,
-      "_src": "frontend_ts",
-      "_tgt": "vidstack_p2p",
-      "source": "frontend_ts",
-      "target": "vidstack_p2p",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L431",
+      "source_location": "L558",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "vidstack",
@@ -3161,7 +3157,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L429",
+      "source_location": "L420",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "hls",
@@ -4732,6 +4728,18 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L567",
+      "weight": 1.0,
+      "_src": "frontend_tests_spec_ts",
+      "_tgt": "spec_hls",
+      "source": "frontend_tests_spec_ts",
+      "target": "spec_hls",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L59",
       "weight": 1.0,
@@ -5135,6 +5143,18 @@
       "_tgt": "spec_emit",
       "source": "spec_removefile",
       "target": "spec_emit",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L568",
+      "weight": 1.0,
+      "_src": "spec_hls",
+      "_tgt": "spec_hls_issupported",
+      "source": "spec_hls",
+      "target": "spec_hls_issupported",
       "confidence_score": 1.0
     },
     {

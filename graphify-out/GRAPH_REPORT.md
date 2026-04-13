@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-14)
 
 ## Corpus Check
-- 148 files · ~165,669 words
+- 148 files · ~167,833 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 308 nodes · 383 edges · 26 communities detected
+- 309 nodes · 384 edges · 26 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -70,7 +70,7 @@ Cohesion: 0.05
 Nodes (5): AdminLoginBody, AdminLoginResp, RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
 
 ### Community 2 - "Community 2"
-Cohesion: 0.06
+Cohesion: 0.07
 Nodes (15): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), render(), renderMessageAttachments() (+7 more)
 
 ### Community 3 - "Community 3"
@@ -90,8 +90,8 @@ Cohesion: 0.15
 Nodes (1): HttpRealtime传输
 
 ### Community 7 - "Community 7"
-Cohesion: 0.17
-Nodes (2): FakeWebTorrent, 假Socket
+Cohesion: 0.14
+Nodes (3): FakeWebTorrent, 假Hls构造器, 假Socket
 
 ### Community 8 - "Community 8"
 Cohesion: 0.22
@@ -168,11 +168,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+17 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 14`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 14`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `main.rs`, `main()`
+- **Thin community `Community 16`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 17`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -209,4 +209,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.05 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07 - nodes in this community are weakly interconnected._

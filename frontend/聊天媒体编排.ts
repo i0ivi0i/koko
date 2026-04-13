@@ -111,15 +111,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   });
 
   let 当前查看器请求: 媒体查看器打开请求 | null = null;
-  const 同步当前查看器请求 = (): void => {
-    if (!当前查看器请求) {
-      return;
-    }
+  const 投影查看器请求到当前播放真相 = (
+    request: 媒体查看器打开请求
+  ): 媒体查看器打开请求 => {
     // 查看器一旦打开，就不能继续抱着旧 request.items 里的静态 src。
     // 这里把会话 owner 当前裁决出的播放源重新投影回查看器，让 overlay 和时间线预览共用同一条恢复真相。
-    const nextRequest: 媒体查看器打开请求 = {
-      startAttachmentId: 当前查看器请求.startAttachmentId,
-      items: 当前查看器请求.items.map((item) => {
+    return {
+      startAttachmentId: request.startAttachmentId,
+      items: request.items.map((item) => {
         const playback = 媒体会话表.get(item.attachmentId)?.snapshot().playback;
         if (
           playback?.mode === "blob" ||
@@ -147,6 +146,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         return item;
       }),
     };
+  };
+  const 同步当前查看器请求 = (): void => {
+    if (!当前查看器请求) {
+      return;
+    }
+    const nextRequest = 投影查看器请求到当前播放真相(当前查看器请求);
     当前查看器请求 = nextRequest;
     媒体查看器.同步?.(nextRequest);
   };
@@ -430,10 +435,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     打开查看器(request: 媒体查看器打开请求): void {
-      当前查看器请求 = {
+      当前查看器请求 = 投影查看器请求到当前播放真相({
         startAttachmentId: request.startAttachmentId,
         items: request.items.map((item) => ({ ...item })),
-      };
+      });
       deps.登记程序滚动来源("media_viewer_open");
       媒体查看器.打开(当前查看器请求);
     },

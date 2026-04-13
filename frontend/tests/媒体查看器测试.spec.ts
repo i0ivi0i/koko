@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { 创建媒体查看器 } from "../媒体/媒体查看器";
+import { 创建媒体查看器, 创建默认Hls视频覆盖层 } from "../媒体/媒体查看器";
 
 const 安装方向模拟 = () => {
   const lock = vi.fn(() => Promise.resolve());
@@ -507,141 +507,244 @@ describe("媒体查看器适配器", () => {
     expect(vidstackDestroy).not.toHaveBeenCalled();
   });
 
-  it("桌面 HLS 视频会给 Vidstack HLS provider 注入本地 hls.js loader 和分片级 P2P 配置", async () => {
-    vi.resetModules();
-    const 注入P2P混入 = vi.fn((Hls: unknown) => Hls);
-    vi.doMock("p2p-media-loader-hlsjs", () => ({
-      HlsJsP2PEngine: {
-        injectMixin: 注入P2P混入,
-      },
-    }));
-
-    try {
-      const { 创建媒体查看器: 创建隔离媒体查看器 } = await import("../媒体/媒体查看器");
-      const viewer = 创建隔离媒体查看器({
-        isMobileViewport: () => false,
-      });
-
-      viewer.打开({
-        startAttachmentId: "att-video-hls-provider-1",
-        items: [
-          {
-            kind: "video",
-            attachmentId: "att-video-hls-provider-1",
-            src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
-            posterSrc: "http://media.local/poster-hls-provider-1",
-            streamingDistribution: {
-              swarm_id: "swarm-hash-att-video-hls-provider-1",
-              announce_urls: [
-                "wss://tracker.koko.local/announce",
-                "wss://tracker.backup.koko.local/announce",
-              ],
-              web_seed_url: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
-              join_ticket: null,
-            },
-            width: 720,
-            height: 1280,
-          },
-        ],
-      });
-      const player = await 等待查询元素<HTMLElement>(
-        "media-player[data-media-viewer-player='video']"
-      );
-      expect(player).not.toBeNull();
-
-      const provider: {
-        type: string;
-        library?: unknown;
-        config?: Record<string, unknown>;
-      } = { type: "hls" };
-      player?.dispatchEvent(new CustomEvent("provider-change", { detail: provider }));
-
-      expect(typeof provider.library).toBe("function");
-      const hlsConstructor = await (provider.library as () => Promise<unknown>)();
-      expect(hlsConstructor).toBeTruthy();
-      expect(注入P2P混入).toHaveBeenCalledTimes(1);
-      expect(provider.config).toMatchObject({
-        p2p: {
-          core: {
-            swarmId: "swarm-hash-att-video-hls-provider-1",
-            announceTrackers: [
-              "wss://tracker.koko.local/announce",
-              "wss://tracker.backup.koko.local/announce",
-            ],
-          },
-        },
-      });
-    } finally {
-      vi.doUnmock("p2p-media-loader-hlsjs");
-      vi.resetModules();
-      document.body.replaceChildren();
-    }
-  });
-
-  it("P2P mixin 加载失败时也必须回退到纯 hls.js 主链，而不是让查看器直接黑屏转圈", async () => {
-    vi.resetModules();
-    vi.doMock("p2p-media-loader-hlsjs", () => {
-      throw new Error("模拟 P2P loader 在真实浏览器里加载失败");
-    });
-
-    try {
-      const { 创建媒体查看器: 创建隔离媒体查看器 } = await import("../媒体/媒体查看器");
-      const viewer = 创建隔离媒体查看器({
-        isMobileViewport: () => false,
-      });
-
-      viewer.打开({
-        startAttachmentId: "att-video-hls-provider-fallback-1",
-        items: [
-          {
-            kind: "video",
-            attachmentId: "att-video-hls-provider-fallback-1",
-            src: "http://media.local/stream/att-video-hls-provider-fallback-1/master.m3u8",
-            posterSrc: "http://media.local/poster-hls-provider-fallback-1",
-            streamingDistribution: {
-              swarm_id: "swarm-hash-att-video-hls-provider-fallback-1",
-              announce_urls: ["wss://tracker.koko.local/announce"],
-              web_seed_url:
-                "http://media.local/stream/att-video-hls-provider-fallback-1/master.m3u8",
-              join_ticket: null,
-            },
-            width: 720,
-            height: 1280,
-          },
-        ],
-      });
-
-      const player = await 等待查询元素<HTMLElement>(
-        "media-player[data-media-viewer-player='video']"
-      );
-      expect(player).not.toBeNull();
-
-      const provider: {
-        type: string;
-        library?: unknown;
-        config?: Record<string, unknown>;
-      } = { type: "hls" };
-      player?.dispatchEvent(new CustomEvent("provider-change", { detail: provider }));
-
-      expect(typeof provider.library).toBe("function");
-      await expect((provider.library as () => Promise<unknown>)()).resolves.toBeTruthy();
-    } finally {
-      vi.doUnmock("p2p-media-loader-hlsjs");
-      vi.resetModules();
-      document.body.replaceChildren();
-    }
-  });
-
-  it("移动端遇到 HLS manifest 时不走原生全屏，而是回退到支持 hls.js 的 Vidstack 覆盖层", () => {
+  it("桌面 HLS 视频会交给独立 HLS overlay，而不是继续复用 Vidstack 主链", () => {
     const createPhotoSwipeLightbox = vi.fn(() => ({
       init: vi.fn(),
       loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
+    const createHlsVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createHlsVideoOverlay,
+      createVidstackVideoOverlay,
+      isMobileViewport: () => false,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-hls-provider-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-hls-provider-1",
+          src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
+          posterSrc: "http://media.local/poster-hls-provider-1",
+          streamingDistribution: {
+            swarm_id: "swarm-hash-att-video-hls-provider-1",
+            announce_urls: ["wss://tracker.koko.local/announce"],
+            web_seed_url: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
+            join_ticket: null,
+          },
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+
+    expect(createHlsVideoOverlay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-hls-provider-1",
+        src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
+      }),
+      expect.objectContaining({
+        开始视口占用: expect.any(Function),
+        结束视口占用: expect.any(Function),
+      }),
+      expect.objectContaining({
+        发出媒体会话信号: expect.any(Function),
+      })
+    );
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+  });
+
+  it("默认 HLS overlay 会先 attachMedia 再 loadSource，并在销毁时释放 hls 实例", async () => {
+    const attachMedia = vi.fn();
+    const loadSource = vi.fn();
+    const destroy = vi.fn();
+    const on = vi.fn();
+    class 假Hls构造器 {
+      static isSupported() {
+        return true;
+      }
+
+      static Events = {
+        MANIFEST_PARSED: "manifestParsed",
+        ERROR: "error",
+      };
+
+      attachMedia = attachMedia;
+      loadSource = loadSource;
+      destroy = destroy;
+      on = on;
+    }
+
+    const overlay = await 创建默认Hls视频覆盖层(
+      {
+        kind: "video",
+        attachmentId: "att-video-hls-overlay-1",
+        src: "http://media.local/stream/att-video-hls-overlay-1/master.m3u8",
+        posterSrc: "http://media.local/poster-hls-overlay-1",
+        width: 720,
+        height: 1280,
+      },
+      {
+        开始视口占用: vi.fn(),
+        结束视口占用: vi.fn(),
+      },
+      {
+        发出媒体会话信号: vi.fn(),
+      },
+      {
+        loadHlsConstructor: async () => 假Hls构造器 as never,
+      }
+    );
+
+    expect(attachMedia).toHaveBeenCalledTimes(1);
+    expect(loadSource).toHaveBeenCalledWith(
+      "http://media.local/stream/att-video-hls-overlay-1/master.m3u8"
+    );
+    const attachOrder = attachMedia.mock.invocationCallOrder[0];
+    const loadOrder = loadSource.mock.invocationCallOrder[0];
+    expect(attachOrder).toBeDefined();
+    expect(loadOrder).toBeDefined();
+    expect(attachOrder!).toBeLessThan(loadOrder!);
+
+    overlay.destroy();
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("HLS overlay 会把 waiting 信号回抛给媒体会话，并在同步时切到新的 manifest 主链", async () => {
+    const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+      onMediaSessionSignal: (attachmentId, signal) => {
+        信号记录.push({ attachmentId, signal });
+      },
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-hls-sync-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-hls-sync-1",
+          src: "http://media.local/stream/att-video-hls-sync-1/master.m3u8",
+          posterSrc: "http://media.local/poster-hls-sync-old",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    const video = await 等待查询元素<HTMLVideoElement>("video[data-media-viewer-player='hls']");
+    expect(video).not.toBeNull();
+
+    video?.dispatchEvent(new Event("waiting"));
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-video-hls-sync-1",
+        signal: { type: "PLAYER_WAITING" },
+      },
+    ]);
+
+    viewer.同步({
+      startAttachmentId: "att-video-hls-sync-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-hls-sync-1",
+          src: "http://media.local/stream/att-video-hls-sync-1-retry/master.m3u8",
+          posterSrc: "http://media.local/poster-hls-sync-new",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+
+    expect(video?.poster).toBe("http://media.local/poster-hls-sync-new");
+  });
+
+  it("视频查看器如果先按旧 video overlay 打开，随后切到 HLS manifest 时会重建为 HLS overlay", async () => {
+    const 旧视频查看器销毁 = vi.fn();
+    const 旧视频查看器同步 = vi.fn();
+    const 新Hls查看器销毁 = vi.fn();
+    const createVidstackVideoOverlay = vi.fn(() => ({
+      同步: 旧视频查看器同步,
+      destroy: 旧视频查看器销毁,
+    }));
+    const createHlsVideoOverlay = vi.fn(() => ({
+      destroy: 新Hls查看器销毁,
+    }));
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+      createVidstackVideoOverlay,
+      createHlsVideoOverlay,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-rebuild-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-rebuild-1",
+          src: "http://media.local/original-att-video-rebuild-1",
+          posterSrc: "http://media.local/poster-video-rebuild-1",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+
+    viewer.同步({
+      startAttachmentId: "att-video-rebuild-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-rebuild-1",
+          src: "http://media.local/stream/att-video-rebuild-1/master.m3u8",
+          posterSrc: "http://media.local/poster-video-rebuild-1",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(旧视频查看器销毁).toHaveBeenCalledTimes(1);
+    expect(旧视频查看器同步).not.toHaveBeenCalled();
+    expect(createHlsVideoOverlay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-rebuild-1",
+        src: "http://media.local/stream/att-video-rebuild-1/master.m3u8",
+      }),
+      expect.objectContaining({
+        开始视口占用: expect.any(Function),
+        结束视口占用: expect.any(Function),
+      }),
+      expect.objectContaining({
+        发出媒体会话信号: expect.any(Function),
+      })
+    );
+
+    viewer.销毁();
+    expect(新Hls查看器销毁).toHaveBeenCalledTimes(1);
+  });
+
+  it("移动端遇到 HLS manifest 时不走原生全屏，而是交给独立 HLS overlay", () => {
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
+      destroy: vi.fn(),
+    }));
+    const createHlsVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     const openNativeVideoFullscreen = vi.fn(() => true);
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
+      createHlsVideoOverlay,
       createVidstackVideoOverlay,
       isMobileViewport: () => true,
       openNativeVideoFullscreen,
@@ -662,7 +765,7 @@ describe("媒体查看器适配器", () => {
     });
 
     expect(openNativeVideoFullscreen).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).toHaveBeenCalledWith(
+    expect(createHlsVideoOverlay).toHaveBeenCalledWith(
       expect.objectContaining({
         attachmentId: "att-video-mobile-hls-1",
         src: "http://media.local/stream/att-video-mobile-hls-1/master.m3u8",
@@ -675,6 +778,7 @@ describe("媒体查看器适配器", () => {
         发出媒体会话信号: expect.any(Function),
       })
     );
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
     expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
   });
 
