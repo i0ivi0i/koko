@@ -2913,6 +2913,13 @@ pub(super) async fn complete_media_upload(
         );
     }
 
+    // ready 真相和 24 小时冷源窗口必须共用同一个完成时刻，
+    // 否则后端存储、locator 冷源描述和分发窗口会各自漂成不同时间源。
+    let ready_epoch秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs() as i64)
+        .unwrap_or(0);
+    let 原始冷源到期时间戳秒 = ready_epoch秒 + usecase::媒体原始冷源保留秒数;
     let mut streaming_manifest_request = None;
     let ready_request = match parsed {
         媒体内容解析结果::图片(parsed) => {
@@ -2950,6 +2957,9 @@ pub(super) async fn complete_media_upload(
                 高: parsed.高,
                 原始内容存储键: prepared.原始内容存储键.clone(),
                 缩略图存储键: Some(thumbnail_storage_key),
+                资产原图存储键: None,
+                完整图存储键: None,
+                原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
             }
         }
         媒体内容解析结果::视频(parsed) => {
@@ -2995,15 +3005,14 @@ pub(super) async fn complete_media_upload(
                 高: parsed.高,
                 原始内容存储键: prepared.原始内容存储键.clone(),
                 缩略图存储键: None,
+                资产原图存储键: None,
+                完整图存储键: None,
+                原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
             }
         }
     };
     // ready 真相已经成立后，马上补齐协作分发元数据。
     // 这里故意不把 hash / swarm_id 交给前端推导，避免多端各算各的。
-    let ready_epoch秒 = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|value| value.as_secs() as i64)
-        .unwrap_or(0);
     let distribution_request = media_distribution::构造协作分发元数据写入请求(
         &attachment_id,
         original_bytes.as_ref(),

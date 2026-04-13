@@ -245,7 +245,17 @@ impl Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
         let row = sqlx::query(
-            "SELECT a.attachment_id, ai.anonymous_identity_id, a.kind, a.mime_type, a.status, a.width, a.height \
+            "SELECT a.attachment_id,
+                    ai.anonymous_identity_id,
+                    a.kind,
+                    a.mime_type,
+                    a.status,
+                    a.width,
+                    a.height,
+                    a.asset_original_storage_key,
+                    a.full_storage_key,
+                    EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT AS origin_expires_at_epoch,
+                    EXTRACT(EPOCH FROM a.origin_deleted_at)::BIGINT AS origin_deleted_at_epoch \
              FROM attachments a \
              JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
              WHERE a.attachment_id = $1",
@@ -273,6 +283,10 @@ impl Pg仓储 {
                 状态: status,
                 宽: row.get("width"),
                 高: row.get("height"),
+                资产原图存储键: row.get("asset_original_storage_key"),
+                完整图存储键: row.get("full_storage_key"),
+                原始冷源到期时间戳秒: row.get("origin_expires_at_epoch"),
+                原始冷源删除时间戳秒: row.get("origin_deleted_at_epoch"),
             })
         })
         .transpose()
@@ -362,8 +376,24 @@ impl Pg仓储 {
         };
 
         sqlx::query(
-            "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ready') \
+            "INSERT INTO attachments (
+                attachment_id,
+                owner_anonymous_identity_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                storage_key,
+                thumbnail_storage_key,
+                asset_original_storage_key,
+                full_storage_key,
+                origin_expires_at,
+                origin_deleted_at,
+                status
+             ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TO_TIMESTAMP($12), NULL, 'ready'
+             ) \
              ON CONFLICT (attachment_id) DO UPDATE SET \
                  kind = EXCLUDED.kind, \
                  mime_type = EXCLUDED.mime_type, \
@@ -372,6 +402,10 @@ impl Pg仓储 {
                  height = EXCLUDED.height, \
                  storage_key = EXCLUDED.storage_key, \
                  thumbnail_storage_key = EXCLUDED.thumbnail_storage_key, \
+                 asset_original_storage_key = EXCLUDED.asset_original_storage_key, \
+                 full_storage_key = EXCLUDED.full_storage_key, \
+                 origin_expires_at = EXCLUDED.origin_expires_at, \
+                 origin_deleted_at = NULL, \
                  status = 'ready' \
              WHERE attachments.owner_anonymous_identity_id = EXCLUDED.owner_anonymous_identity_id",
         )
@@ -384,6 +418,9 @@ impl Pg仓储 {
         .bind(附件.高)
         .bind(&附件.原始内容存储键)
         .bind(&附件.缩略图存储键)
+        .bind(&附件.资产原图存储键)
+        .bind(&附件.完整图存储键)
+        .bind(附件.原始冷源到期时间戳秒)
         .execute(pool)
         .await
         .map_err(|_| contract::错误码::系统错误)?;

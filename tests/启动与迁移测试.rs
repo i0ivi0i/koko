@@ -121,6 +121,19 @@ fn 流媒体清单迁移已包含清单元数据表() {
 }
 
 #[test]
+fn 图片资产生命周期迁移已包含真实资产与冷源字段() {
+    let sql = std::fs::read_to_string("migrations/0010_图片资产与原始冷源生命周期.sql")
+        .expect("应能读到图片资产生命周期迁移文件");
+
+    // 图片 blob 资产要想真正和原始冷源拆层，数据库里必须先有真实资产键和冷源生命周期字段。
+    assert!(sql.contains("ALTER TABLE attachments"));
+    assert!(sql.contains("asset_original_storage_key"));
+    assert!(sql.contains("full_storage_key"));
+    assert!(sql.contains("origin_expires_at"));
+    assert!(sql.contains("origin_deleted_at"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),

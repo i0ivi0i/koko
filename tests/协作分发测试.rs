@@ -506,6 +506,103 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
 
 #[tokio::test]
 #[serial]
+async fn 查询附件快照会带出图片真实资产与冷源生命周期字段() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let attachment_id = format!("att-image-snapshot-{uniq}");
+    let device_token = format!("image-snapshot-device-{uniq}");
+    let session_id = {
+        let database_url = cfg.database_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut repo =
+                koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+            koko::usecase::引导匿名身份(&mut repo, &device_token)
+                .expect("应能引导匿名身份")
+                .会话标识
+        })
+        .await
+        .expect("阻塞引导任务应完成")
+    };
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库插入图片附件");
+    let owner_identity_db_id = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",
+    )
+    .bind(&session_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询会话对应的匿名身份")
+    .expect("附件 owner 必须能落到稳定匿名身份");
+    sqlx::query(
+        "INSERT INTO attachments (
+            attachment_id,
+            owner_anonymous_identity_id,
+            kind,
+            mime_type,
+            byte_size,
+            width,
+            height,
+            storage_key,
+            thumbnail_storage_key,
+            asset_original_storage_key,
+            full_storage_key,
+            origin_expires_at,
+            origin_deleted_at,
+            status
+         ) VALUES (
+            $1, $2, 'image', 'image/png', 68, 1, 1,
+            $3, $4, $5, $6, TO_TIMESTAMP($7), NULL, 'ready'
+         )",
+    )
+    .bind(&attachment_id)
+    .bind(owner_identity_db_id)
+    .bind(format!("images/{attachment_id}/origin-raw.png"))
+    .bind(format!("images/{attachment_id}/thumbnail.png"))
+    .bind(format!("images/{attachment_id}/asset-original.png"))
+    .bind(format!("images/{attachment_id}/full.webp"))
+    .bind(1_776_000_000_i64)
+    .execute(&pool)
+    .await
+    .expect("应能插入带真实图片资产字段的附件记录");
+    pool.close().await;
+
+    // 这个测试直接锁 repo -> usecase 快照边界，避免以后又把 full/original/origin 生命周期
+    // 只留在 adapter 私货或 HTTP 壳层里。
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_query = attachment_id.clone();
+    let snapshot = tokio::task::spawn_blocking(move || {
+        let repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::仓储端口::查询附件快照(&repo, &attachment_id_for_query)
+            .expect("query ok")
+            .expect("attachment exists")
+    })
+    .await
+    .expect("阻塞查询任务应完成");
+
+    assert_eq!(
+        snapshot.资产原图存储键.as_deref(),
+        Some(format!("images/{attachment_id}/asset-original.png").as_str())
+    );
+    assert_eq!(
+        snapshot.完整图存储键.as_deref(),
+        Some(format!("images/{attachment_id}/full.webp").as_str())
+    );
+    assert_eq!(snapshot.原始冷源到期时间戳秒, Some(1_776_000_000));
+    assert_eq!(snapshot.原始冷源删除时间戳秒, None);
+}
+
+#[tokio::test]
+#[serial]
 async fn torrent接口会返回稳定metainfo并与locator对齐() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

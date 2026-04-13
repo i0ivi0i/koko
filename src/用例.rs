@@ -23,7 +23,8 @@ pub enum 附件状态读取结果 {
 }
 
 /// 上传链已经形成的最小附件事实。
-/// 当前只保留创建消息真正需要的字段，不让 adapter 私货倒灌进 usecase。
+/// 这里继续保持“应用层稳定字段”，但允许把图片真实资产和冷源生命周期
+/// 这种已经进入业务协议面的事实一起带出，避免它们只留在 adapter 私货里。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 附件读取结果 {
     pub 附件标识: String,
@@ -33,6 +34,10 @@ pub struct 附件读取结果 {
     pub 状态: 附件状态读取结果,
     pub 宽: Option<i32>,
     pub 高: Option<i32>,
+    pub 资产原图存储键: Option<String>,
+    pub 完整图存储键: Option<String>,
+    pub 原始冷源到期时间戳秒: Option<i64>,
+    pub 原始冷源删除时间戳秒: Option<i64>,
 }
 
 /// 媒体上传主链当前只点亮图片和视频两种附件。
@@ -79,7 +84,8 @@ pub struct 待完成媒体附件读取结果 {
 }
 
 /// complete 阶段拿到真实字节后，进入应用层持久化所需的最小媒体字段。
-/// 这里明确把“种类 / 宽高 / 缩略图键”收口，避免壳层或 handler 自行拼真相。
+/// 这里除了基础宽高和缩略图键，还要把图片真实资产键与原始冷源生命周期收口，
+/// 避免 shell 以后又各自推导 full/original 或偷偷发明另一套 24h 规则。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 媒体附件写入请求 {
     pub 附件标识: String,
@@ -90,6 +96,9 @@ pub struct 媒体附件写入请求 {
     pub 高: i32,
     pub 原始内容存储键: String,
     pub 缩略图存储键: Option<String>,
+    pub 资产原图存储键: Option<String>,
+    pub 完整图存储键: Option<String>,
+    pub 原始冷源到期时间戳秒: Option<i64>,
 }
 
 /// 媒体上传成功后返回给壳层的最小快照。
