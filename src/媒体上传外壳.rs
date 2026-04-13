@@ -52,7 +52,7 @@ pub(super) async fn prepare_media_upload(
         Ok(kind) => kind,
         Err(err) => return err_resp(err.0, err.1, err.2),
     };
-    let session_id = match super::房间外壳::读取非空会话标识(body.session_id) {
+    let session_id = match super::读取非空会话标识(body.session_id) {
         Ok(session_id) => session_id,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
@@ -177,13 +177,13 @@ pub(super) async fn prepare_media_upload(
         request_kind = "媒体上传 prepare",
         session_id = session_id.as_str(),
         attachment_id = snapshot.附件标识.as_str(),
-        attachment_kind = super::房间外壳::媒体类型转标签(&snapshot.种类),
+        attachment_kind = super::媒体资产外壳::媒体类型转标签(&snapshot.种类),
         file_name = file_name.as_str(),
         byte_size = byte_size,
         "媒体上传占位已创建"
     );
     let response_attachment_id = snapshot.附件标识.clone();
-    let response_kind = super::房间外壳::媒体类型转标签(&snapshot.种类);
+    let response_kind = super::媒体资产外壳::媒体类型转标签(&snapshot.种类);
     let response_mime_type = snapshot.mime_type.clone();
     let response_byte_size = snapshot.字节大小;
     let rustus_public_endpoint = 读取媒体_tus对外地址(&state, &headers);
@@ -216,7 +216,7 @@ pub(super) async fn complete_media_upload(
     Path(attachment_id): Path<String>,
     Json(body): Json<CompleteMediaUploadBody>,
 ) -> impl IntoResponse {
-    let session_id = match super::房间外壳::读取非空会话标识(body.session_id) {
+    let session_id = match super::读取非空会话标识(body.session_id) {
         Ok(session_id) => session_id,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
@@ -408,7 +408,7 @@ pub(super) async fn complete_media_upload(
                     request_kind = "媒体上传 complete",
                     session_id = session_id.as_str(),
                     attachment_id = attachment_id.as_str(),
-                    attachment_kind = super::房间外壳::媒体类型转标签(&prepared.种类),
+                    attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类),
                     error_code = "system_error",
                     error = %err,
                     "写入图片缩略图对象失败"
@@ -431,7 +431,7 @@ pub(super) async fn complete_media_upload(
                     request_kind = "媒体上传 complete",
                     session_id = session_id.as_str(),
                     attachment_id = attachment_id.as_str(),
-                    attachment_kind = super::房间外壳::媒体类型转标签(&prepared.种类),
+                    attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类),
                     error_code = "system_error",
                     error = %err,
                     "写入图片长期原图资产失败"
@@ -454,7 +454,7 @@ pub(super) async fn complete_media_upload(
                     request_kind = "媒体上传 complete",
                     session_id = session_id.as_str(),
                     attachment_id = attachment_id.as_str(),
-                    attachment_kind = super::房间外壳::媒体类型转标签(&prepared.种类),
+                    attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类),
                     error_code = "system_error",
                     error = %err,
                     "写入图片完整图对象失败"
@@ -585,13 +585,13 @@ pub(super) async fn complete_media_upload(
                 .duration_since(UNIX_EPOCH)
                 .map(|duration| duration.as_secs() as i64)
                 .unwrap_or_default();
-            let original_url = super::房间外壳::构造附件受控地址(
+            let original_url = super::媒体资产外壳::构造附件受控地址(
                 attachment_id.as_str(),
                 session_id.as_str(),
                 "original",
             );
             let thumbnail_url = match &snapshot.种类 {
-                usecase::媒体附件类型::图片 => Some(super::房间外壳::构造附件受控地址(
+                usecase::媒体附件类型::图片 => Some(super::媒体资产外壳::构造附件受控地址(
                     attachment_id.as_str(),
                     session_id.as_str(),
                     "thumbnail",
@@ -606,13 +606,15 @@ pub(super) async fn complete_media_upload(
             );
             let runtime_distribution = media_distribution::协作分发快照转响应值(
                 &distribution_snapshot,
-                attachment_id.as_str(),
-                session_id.as_str(),
-                state.swarm_tracker_public_url.as_str(),
-                state.swarm_web_seed_public_endpoint.as_deref(),
-                冷源仍可用,
-                now_epoch秒,
-                state.swarm_peer_presence_stale_seconds,
+                media_distribution::协作分发响应上下文 {
+                    attachment_id: attachment_id.as_str(),
+                    session_id: session_id.as_str(),
+                    tracker_public_url: state.swarm_tracker_public_url.as_str(),
+                    web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
+                    冷源仍可用,
+                    now_epoch秒,
+                    stale_seconds: state.swarm_peer_presence_stale_seconds,
+                },
             );
             let streaming_manifest_snapshot =
                 streaming_manifest_request
@@ -622,21 +624,23 @@ pub(super) async fn complete_media_upload(
                         hls主清单存储键: request.hls主清单存储键.clone(),
                         dash主清单存储键: request.dash主清单存储键.clone(),
                     });
-            let media_asset = super::房间外壳::构造媒体资产响应体(
+            let media_asset = super::媒体资产外壳::构造媒体资产响应体(
                 &snapshot,
-                Some(&runtime_distribution),
-                Some(&distribution_snapshot),
-                streaming_manifest_snapshot.as_ref(),
-                original_url,
-                thumbnail_url,
-                Some(原始冷源到期时间戳秒),
-                None,
-                session_id.as_str(),
-                now_epoch秒,
+                super::媒体资产外壳::媒体资产响应上下文 {
+                    运行态分发: Some(&runtime_distribution),
+                    分发快照: Some(&distribution_snapshot),
+                    流媒体清单: streaming_manifest_snapshot.as_ref(),
+                    原始地址: original_url,
+                    缩略图地址: thumbnail_url,
+                    原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
+                    原始冷源删除时间戳秒: None,
+                    会话标识: session_id.as_str(),
+                    当前时间戳秒: now_epoch秒,
+                },
             );
             (
                 StatusCode::OK,
-                Json(super::房间外壳::媒体附件快照转响应体(&snapshot, media_asset)),
+                Json(super::媒体资产外壳::媒体附件快照转响应体(&snapshot, media_asset)),
             )
                 .into_response()
         }

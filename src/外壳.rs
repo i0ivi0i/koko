@@ -44,12 +44,29 @@ mod 流媒体打包;
 mod rustus_hook外壳;
 #[path = "媒体上传外壳.rs"]
 mod 媒体上传外壳;
+#[path = "媒体资产外壳.rs"]
+mod 媒体资产外壳;
 #[path = "房间外壳.rs"]
 mod 房间外壳;
 
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
 /// 先把常量收在 shell 父层，供上传外壳与 Rustus hook 外壳共享，避免兄弟模块重复手抄字符串。
 const 媒体上传运输方式_TUS: &str = "tus";
+
+/// 外壳层统一解析“必填但允许空字符串传进来的 session_id”。
+/// 这属于多个 HTTP 壳共享的协议清洗，不应该继续挂在某个具体业务壳名下。
+pub(super) fn 读取非空会话标识(
+    raw_session_id: Option<String>,
+) -> Result<String, (StatusCode, &'static str, &'static str)> {
+    raw_session_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 session_id",
+        ))
+}
 
 /// 外壳层共享运行态，只存放“接线所需配置”，不承载业务事实。
 #[derive(Clone)]
@@ -263,27 +280,27 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route("/internal/rustus/hooks", post(rustus_hook外壳::handle_rustus_hook))
         .route(
             "/api/media/{attachment_id}/locator",
-            get(房间外壳::load_media_locator),
+            get(媒体资产外壳::load_media_locator),
         )
         .route(
             "/api/media/{attachment_id}/blob/{asset_variant}",
-            get(房间外壳::load_blob_asset_content),
+            get(媒体资产外壳::load_blob_asset_content),
         )
         .route(
             "/api/media/{attachment_id}/stream/{*asset_path}",
-            get(房间外壳::load_streaming_asset_content),
+            get(媒体资产外壳::load_streaming_asset_content),
         )
         .route(
             "/api/media/{attachment_id}/torrent",
-            get(房间外壳::load_media_torrent),
+            get(媒体资产外壳::load_media_torrent),
         )
         .route(
             "/api/media/{attachment_id}/presence",
-            post(房间外壳::update_media_distribution_presence),
+            post(媒体资产外壳::update_media_distribution_presence),
         )
         .route(
             "/api/attachments/{attachment_id}/content",
-            get(房间外壳::load_attachment_content),
+            get(媒体资产外壳::load_attachment_content),
         )
         .route(
             "/api/rooms/{room_id}/snapshot",

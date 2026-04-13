@@ -105,7 +105,7 @@ async fn 图片消息会把附件引用和事件一起持久化() {
             &identity.会话标识,
             &format!("persist-client-{uniq}"),
             "带图消息",
-            &[attachment_id_for_worker.clone()],
+            std::slice::from_ref(&attachment_id_for_worker),
         )
         .expect("应能创建带图片附件的消息");
 
@@ -227,7 +227,7 @@ async fn 房间快照读回时仍能拿到图片附件列表() {
             &identity.会话标识,
             &format!("snapshot-client-{uniq}"),
             "",
-            &[attachment_id_for_worker.clone()],
+            std::slice::from_ref(&attachment_id_for_worker),
         )
         .expect("应能创建纯图片消息");
 
@@ -361,7 +361,7 @@ fn ready视频附件可以进入create_message主链() {
         &session_id,
         &format!("ready-video-message-{uniq}"),
         "",
-        &[attachment_id.clone()],
+        std::slice::from_ref(&attachment_id),
     )
     .expect("ready 视频附件应能进入统一消息主链");
 

@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-14)
 
 ## Corpus Check
-- 148 files · ~168,027 words
+- 153 files · ~165,211 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 309 nodes · 384 edges · 26 communities detected
+- 312 nodes · 387 edges · 25 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -35,27 +35,28 @@
 - [[_COMMUNITY_Community 22|Community 22]]
 - [[_COMMUNITY_Community 23|Community 23]]
 - [[_COMMUNITY_Community 24|Community 24]]
-- [[_COMMUNITY_Community 25|Community 25]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 24 edges
-2. `单连接发送到已关闭socket时降级为正常断开()` - 7 edges
-3. `构造rustus_hook请求体()` - 7 edges
+2. `构造rustus_hook请求体()` - 8 edges
+3. `单连接发送到已关闭socket时降级为正常断开()` - 7 edges
 4. `假Socket` - 5 edges
 5. `断言媒体准备结果是Tus契约()` - 5 edges
-6. `parse_attachment_content_query()` - 5 edges
-7. `load_streaming_asset_content()` - 5 edges
+6. `handle_rustus_hook_post_finish()` - 5 edges
+7. `parse_attachment_content_query()` - 5 edges
 8. `Pg仓储` - 5 edges
 9. `dispatch()` - 4 edges
-10. `写入rustus测试文件()` - 4 edges
+10. `handle_rustus_hook()` - 4 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `prepare_media_upload()` --calls--> `断言媒体准备结果是Tus契约()`  [EXTRACTED]
-  src\房间外壳.rs → tests\测试支撑\媒体.rs
+  src\媒体上传外壳.rs → tests\测试支撑\媒体.rs
+- `handle_rustus_hook_pre_create()` --calls--> `构造rustus_hook请求体()`  [EXTRACTED]
+  src\rustus_hook外壳.rs → tests\测试支撑\媒体.rs
+- `handle_rustus_hook_post_finish()` --calls--> `构造rustus_hook请求体()`  [EXTRACTED]
+  src\rustus_hook外壳.rs → tests\测试支撑\媒体.rs
 - `写入rustus测试文件()` --calls--> `包装url主机()`  [EXTRACTED]
-  tests\测试支撑\媒体.rs → src\房间外壳.rs
-- `handle_rustus_hook()` --calls--> `构造rustus_hook请求体()`  [EXTRACTED]
-  src\房间外壳.rs → tests\测试支撑\媒体.rs
+  tests\测试支撑\媒体.rs → src\媒体上传外壳.rs
 - `文本布局测试` --calls--> `文本布局`  [EXTRACTED]
   frontend/tests/文本布局测试.spec.ts → frontend/文本布局.ts
 
@@ -63,15 +64,15 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (43): ApiError, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容(), 尝试加载dotenv() (+35 more)
+Nodes (42): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+34 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.05
-Nodes (5): AdminLoginBody, AdminLoginResp, RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
+Cohesion: 0.06
+Nodes (16): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), 重写_hls清单内容(), leaveCurrentRoomView(), render() (+8 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.07
-Nodes (15): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), render(), renderMessageAttachments() (+7 more)
+Cohesion: 0.05
+Nodes (5): AdminLoginBody, AdminLoginResp, RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
 
 ### Community 3 - "Community 3"
 Cohesion: 0.06
@@ -94,16 +95,16 @@ Cohesion: 0.14
 Nodes (3): FakeWebTorrent, 假Hls构造器, 假Socket
 
 ### Community 8 - "Community 8"
-Cohesion: 0.22
-Nodes (4): New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Write-ManagedProcessLogs()
+Cohesion: 0.23
+Nodes (9): 构造rustus_hook请求体(), handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus_hook_pre_create(), 解析rustus临时文件路径(), 读取rustus_hook名称(), 读取rustus_metadata字段(), RustusHookBody (+1 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.22
-Nodes (2): ensureBackendBinaryPrepared(), startBackend()
+Nodes (4): New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Write-ManagedProcessLogs()
 
 ### Community 10 - "Community 10"
-Cohesion: 0.25
-Nodes (5): handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus_hook_pre_create(), 构造rustus_hook请求体(), 读取rustus_metadata字段()
+Cohesion: 0.22
+Nodes (2): ensureBackendBinaryPrepared(), startBackend()
 
 ### Community 11 - "Community 11"
 Cohesion: 0.5
@@ -115,7 +116,7 @@ Nodes (0):
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (1): Pg仓储
+Nodes (0): 
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
@@ -127,23 +128,23 @@ Nodes (0):
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): 文本布局, 文本布局测试
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (2): 文本布局, 文本布局测试
+Nodes (0): 
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): frontend/房间内核.ts
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (1): frontend/房间内核.ts
+Nodes (1): frontend/存储.ts
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (1): frontend/存储.ts
+Nodes (0): 
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
@@ -161,52 +162,48 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 25 - "Community 25"
-Cohesion: 1.0
-Nodes (0): 
-
 ## Knowledge Gaps
-- **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+17 more)
+- **23 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `RustusHookBody` (+18 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 14`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 13`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
+- **Thin community `Community 14`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 15`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (2 nodes): `文本布局`, `文本布局测试`
+- **Thin community `Community 16`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (1 nodes): `css.d.ts`
+- **Thin community `Community 17`** (1 nodes): `css.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (1 nodes): `frontend/房间内核.ts`
+- **Thin community `Community 18`** (1 nodes): `frontend/房间内核.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (1 nodes): `frontend/存储.ts`
+- **Thin community `Community 19`** (1 nodes): `frontend/存储.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 21`** (1 nodes): `blob媒体资产测试.spec.ts`
+- **Thin community `Community 20`** (1 nodes): `blob媒体资产测试.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (1 nodes): `vitest.config.ts`
+- **Thin community `Community 21`** (1 nodes): `vitest.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (1 nodes): `lib.rs`
+- **Thin community `Community 22`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (1 nodes): `up.ps1`
+- **Thin community `Community 23`** (1 nodes): `up.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (1 nodes): `webtorrent.d.ts`
+- **Thin community `Community 24`** (1 nodes): `webtorrent.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `HttpRealtime传输` connect `Community 6` to `Community 2`?**
-  _High betweenness centrality (0.114) - this node is a cross-community bridge._
-- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 1`?**
-  _High betweenness centrality (0.028) - this node is a cross-community bridge._
-- **Why does `构造rustus_hook请求体()` connect `Community 10` to `Community 0`, `Community 3`?**
+- **Why does `HttpRealtime传输` connect `Community 6` to `Community 1`?**
+  _High betweenness centrality (0.113) - this node is a cross-community bridge._
+- **Why does `构造rustus_hook请求体()` connect `Community 8` to `Community 3`?**
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 2`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局` to the rest of the system?**
-  _22 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _23 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.05 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.05 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05 - nodes in this community are weakly interconnected._

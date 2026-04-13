@@ -301,7 +301,7 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
             &identity.会话标识,
             &format!("locator-client-{uniq}"),
             "",
-            &[attachment_id_for_worker.clone()],
+            std::slice::from_ref(&attachment_id_for_worker),
         )
         .expect("应能先创建带视频附件的消息");
 
@@ -449,7 +449,7 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
             &sender.会话标识,
             &format!("sender-peer-locator-{uniq}"),
             "",
-            &[attachment_id_for_worker.clone()],
+            std::slice::from_ref(&attachment_id_for_worker),
         )
         .expect("应能创建带视频附件的消息");
 
@@ -610,7 +610,7 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
             &identity.会话标识,
             &format!("image-locator-client-{uniq}"),
             "",
-            &[attachment_id_for_worker.clone()],
+            std::slice::from_ref(&attachment_id_for_worker),
         )
         .expect("应能先创建带图片附件的消息");
 

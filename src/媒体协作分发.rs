@@ -86,27 +86,40 @@ pub(crate) fn 裁决协作分发可用性(
     }
 }
 
+/// 运行态协作分发表达面只依赖这一小撮 HTTP 拼装上下文。
+/// 把参数收口成结构体后，调用方更清楚“哪部分是快照真相，哪部分只是外壳投影环境”。
+pub(crate) struct 协作分发响应上下文<'a> {
+    pub attachment_id: &'a str,
+    pub session_id: &'a str,
+    pub tracker_public_url: &'a str,
+    pub web_seed_public_endpoint: Option<&'a str>,
+    pub 冷源仍可用: bool,
+    pub now_epoch秒: i64,
+    pub stale_seconds: i64,
+}
+
 /// Phase 2 的 runtime locator 仍然服从同一条边界：
 /// 1. 不下发存储键；
 /// 2. runtime 线索只包含浏览器真正要用到的 announce / web seed / presence / availability；
 /// 3. ticket 位置先留空，不提前伪造门禁真相。
 pub(crate) fn 协作分发快照转响应值(
     snapshot: &usecase::协作分发元数据快照,
-    attachment_id: &str,
-    session_id: &str,
-    tracker_public_url: &str,
-    web_seed_public_endpoint: Option<&str>,
-    冷源仍可用: bool,
-    now_epoch秒: i64,
-    stale_seconds: i64,
+    上下文: 协作分发响应上下文<'_>,
 ) -> serde_json::Value {
     let web_seed_relative_path = format!(
-        "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
+        "/api/attachments/{}/content?session_id={}&variant=original",
+        上下文.attachment_id, 上下文.session_id
     );
-    let presence_relative_path =
-        format!("/api/media/{attachment_id}/presence?session_id={session_id}");
-    let availability =
-        裁决协作分发可用性(snapshot, 冷源仍可用, now_epoch秒, stale_seconds);
+    let presence_relative_path = format!(
+        "/api/media/{}/presence?session_id={}",
+        上下文.attachment_id, 上下文.session_id
+    );
+    let availability = 裁决协作分发可用性(
+        snapshot,
+        上下文.冷源仍可用,
+        上下文.now_epoch秒,
+        上下文.stale_seconds,
+    );
     serde_json::json!({
         "content_id": snapshot.content_id,
         "content_hash": snapshot.content_hash,
@@ -115,11 +128,15 @@ pub(crate) fn 协作分发快照转响应值(
         "torrent_url": snapshot
             .torrent_info_hash
             .as_ref()
-            .map(|_| format!("/api/media/{attachment_id}/torrent?session_id={session_id}")),
+            .map(|_| format!(
+                "/api/media/{}/torrent?session_id={}",
+                上下文.attachment_id, 上下文.session_id
+            )),
         "torrent_info_hash": snapshot.torrent_info_hash,
-        "announce_urls": [tracker_public_url],
-        "web_seed_url": 冷源仍可用
-            .then(|| 拼接公开地址(web_seed_public_endpoint, web_seed_relative_path.as_str())),
+        "announce_urls": [上下文.tracker_public_url],
+        "web_seed_url": 上下文
+            .冷源仍可用
+            .then(|| 拼接公开地址(上下文.web_seed_public_endpoint, web_seed_relative_path.as_str())),
         "presence_url": presence_relative_path,
         "join_ticket": serde_json::Value::Null,
         "ticket_expires_at": serde_json::Value::Null,
