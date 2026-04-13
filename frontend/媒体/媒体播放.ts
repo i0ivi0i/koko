@@ -1,4 +1,4 @@
-import type { 媒体定位结果, 媒体种类 } from "../契约.js";
+import type { 媒体定位结果, 媒体种类, 媒体资产分发表面 } from "../契约.js";
 import {
   读取协作分发定位片段,
   type 协作分发会话事件,
@@ -12,11 +12,13 @@ type 媒体播放输入 = {
 
 type 媒体播放结果 =
   | {
-      mode: "swarm" | "anchor" | "manifest";
+      mode: "swarm" | "anchor" | "manifest" | "blob";
       attachmentId: string;
       kind: 媒体种类;
       src: string;
+      viewerSrc?: string;
       thumbnailUrl: string | null;
+      streamingDistribution?: 媒体资产分发表面 | null;
       hint: "正在协作分发" | null;
     }
   | {
@@ -96,6 +98,35 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 读取流媒体主链地址 = (locator: 媒体定位结果): string | null =>
     locator.kind === "video" ? locator.streaming_asset?.manifest.hls_master_url ?? null : null;
 
+  /**
+   * 图片资产不再默认回到原始附件直链：
+   * 1. 列表卡片优先吃 preview，降低首开成本；
+   * 2. 查看器优先吃 full/original，避免继续把 preview 放大冒充原图；
+   * 3. 只有 blob 资产根本不存在时，才退回旧冷源锚点。
+   */
+  const 读取图片Blob主链 = (locator: 媒体定位结果) => {
+    if (locator.kind !== "image" || !locator.blob_asset) {
+      return null;
+    }
+    const previewSrc =
+      locator.blob_asset.preview?.url ??
+      locator.blob_asset.full?.url ??
+      locator.blob_asset.original?.url ??
+      null;
+    const viewerSrc =
+      locator.blob_asset.full?.url ??
+      locator.blob_asset.original?.url ??
+      previewSrc;
+    if (!previewSrc || !viewerSrc) {
+      return null;
+    }
+    return {
+      src: previewSrc,
+      viewerSrc,
+      thumbnailUrl: locator.blob_asset.preview?.url ?? locator.thumbnail_url,
+    };
+  };
+
   const 创建降级结果 = (
     input: 媒体播放输入,
     locator: 媒体定位结果 | null,
@@ -161,6 +192,18 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (locator.status !== "ready") {
       return 创建降级结果(input, locator, "attachment_not_ready");
     }
+    const blobSource = 读取图片Blob主链(locator);
+    if (blobSource) {
+      return {
+        mode: "blob",
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        src: blobSource.src,
+        viewerSrc: blobSource.viewerSrc,
+        thumbnailUrl: blobSource.thumbnailUrl,
+        hint: null,
+      };
+    }
     const manifestUrl = 读取流媒体主链地址(locator);
     if (manifestUrl) {
       return {
@@ -169,6 +212,9 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         kind: input.kind,
         src: manifestUrl,
         thumbnailUrl: locator.thumbnail_url,
+        // 标准流媒体主链一旦成立，查看器/播放器适配层就应该直接消费统一分发表面，
+        // 而不是再从旧 file-level locator 里猜 swarm 线索。
+        streamingDistribution: locator.streaming_asset?.distribution ?? null,
         hint: null,
       };
     }

@@ -207,6 +207,12 @@ describe("媒体播放器", () => {
       kind: "video",
       src: "http://media.local/stream/att-video-hls/master.m3u8",
       thumbnailUrl: "http://media.local/poster-video-hls",
+      streamingDistribution: {
+        swarm_id: "swarm-hash-video-hls",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-hls",
+        join_ticket: null,
+      },
       hint: null,
     });
     expect(resolveSwarmSource).not.toHaveBeenCalled();

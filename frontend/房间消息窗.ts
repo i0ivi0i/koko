@@ -204,11 +204,17 @@ export class 房间消息窗 extends LitElement {
 
   private 读取附件播放源(attachmentId: string, originalSrc: string): string {
     const playback = this.mediaPlaybackByAttachmentId[attachmentId];
-    return playback?.mode === "swarm" ||
+    return playback?.mode === "blob" ||
+      playback?.mode === "swarm" ||
       playback?.mode === "anchor" ||
       playback?.mode === "manifest"
       ? playback.src
       : originalSrc;
+  }
+
+  private 读取图片查看器播放源(attachmentId: string, originalSrc: string): string {
+    const playback = this.mediaPlaybackByAttachmentId[attachmentId];
+    return playback?.mode === "blob" ? playback.viewerSrc ?? playback.src : this.读取附件播放源(attachmentId, originalSrc);
   }
 
   private 读取媒体查看器项目(): 媒体查看器项目[] {
@@ -226,7 +232,7 @@ export class 房间消息窗 extends LitElement {
           items.push({
             kind: "image",
             attachmentId: attachment.attachmentId,
-            src: this.读取附件播放源(attachment.attachmentId, attachment.originalSrc),
+            src: this.读取图片查看器播放源(attachment.attachmentId, attachment.originalSrc),
             alt: "图片附件原图",
             width: attachment.width,
             height: attachment.height,
@@ -238,6 +244,11 @@ export class 房间消息窗 extends LitElement {
           attachmentId: attachment.attachmentId,
           src: this.读取附件播放源(attachment.attachmentId, attachment.originalSrc),
           posterSrc: attachment.posterSrc,
+          ...(playback?.mode === "manifest" && playback.streamingDistribution
+            ? {
+                streamingDistribution: playback.streamingDistribution,
+              }
+            : {}),
           width: attachment.width,
           height: attachment.height,
         });

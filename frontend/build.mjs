@@ -143,11 +143,15 @@ const appBuildOptions = {
   format: 'esm',
   platform: 'browser',
   target: 'es2022',
+  conditions: ['p2pml:core-as-bundle'],
   sourcemap: true,
   metafile: true,
   entryNames: 'app-[hash]',
   chunkNames: 'chunks/[name]-[hash]',
   assetNames: 'assets/[name]-[hash]',
+  alias: {
+    debug: path.join(frontendRoot, '调试兼容.ts'),
+  },
   plugins: [生成静态资源清单插件()],
 }
 

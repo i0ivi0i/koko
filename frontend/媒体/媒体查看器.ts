@@ -1,3 +1,4 @@
+import type { 媒体资产分发表面 } from "../契约.js";
 import type { 媒体会话信号 } from "./媒体会话.js";
 
 export type 媒体查看器项目 =
@@ -14,6 +15,7 @@ export type 媒体查看器项目 =
       attachmentId: string;
       src: string;
       posterSrc: string | null;
+      streamingDistribution?: 媒体资产分发表面 | null;
       width: number;
       height: number;
     };
@@ -62,6 +64,12 @@ type Vidstack视频覆盖层工厂 = (
   hooks: 媒体查看器运行时钩子
 ) => 媒体查看器工厂结果;
 
+type VidstackHlsProvider详情 = {
+  type?: string;
+  library?: unknown;
+  config?: Record<string, unknown>;
+};
+
 export type 媒体查看器依赖 = {
   createPhotoSwipeLightbox?: PhotoSwipe查看器工厂;
   createVidstackVideoOverlay?: Vidstack视频覆盖层工厂;
@@ -96,6 +104,22 @@ const 创建默认PhotoSwipeLightbox: PhotoSwipe查看器工厂 = async (options
   const module = await import("photoswipe/lightbox");
   const Lightbox = module.default as unknown as PhotoSwipeLightbox构造器;
   return new Lightbox(options);
+};
+
+const 构造Vidstack流媒体P2P配置 = (
+  distribution: 媒体资产分发表面 | null | undefined
+): Record<string, unknown> | null => {
+  if (!distribution) {
+    return null;
+  }
+  return {
+    p2p: {
+      core: {
+        swarmId: distribution.swarm_id,
+        announceTrackers: distribution.announce_urls,
+      },
+    },
+  };
 };
 
 const 是异步媒体查看器结果 = (
@@ -418,13 +442,29 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
   let cleaned = false;
   const 解绑媒体运行时信号 = 绑定媒体运行时信号(player, item.attachmentId, hooks);
   const 绑定HlsProvider到本地依赖 = (event: Event): void => {
-    const provider = (event as CustomEvent<{ type?: string; library?: unknown }>).detail;
+    const provider = (event as CustomEvent<VidstackHlsProvider详情>).detail;
     if (provider?.type !== "hls") {
       return;
     }
-    // Vidstack 官方建议本地集成时显式把 provider.library 指到 `hls.js` 依赖，
-    // 否则默认会回退到 CDN 地址，真实运行会被网络策略和离线场景反噬。
-    provider.library = () => import("hls.js");
+    const p2pConfig = 构造Vidstack流媒体P2P配置(item.streamingDistribution);
+    if (p2pConfig) {
+      provider.config = {
+        ...(provider.config ?? {}),
+        ...p2pConfig,
+      };
+    }
+    // Vidstack 官方建议本地集成时显式把 provider.library 指到本地 `hls.js` 依赖，
+    // 这里进一步把 Hls.js 升级成带 P2P mixin 的构造器，让主播放链直接站到成熟分片级 P2P 轮子上。
+    provider.library = async () => {
+      const [{ default: Hls }, p2pModule] = await Promise.all([
+        import("hls.js"),
+        import("p2p-media-loader-hlsjs"),
+      ]);
+      const { HlsJsP2PEngine } = p2pModule as unknown as {
+        HlsJsP2PEngine: { injectMixin(hls: typeof Hls): unknown };
+      };
+      return p2pConfig ? HlsJsP2PEngine.injectMixin(Hls) : Hls;
+    };
   };
 
   overlay.dataset.mediaViewerMode = "video";

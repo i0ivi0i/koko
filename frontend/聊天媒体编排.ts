@@ -115,6 +115,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       items: 当前查看器请求.items.map((item) => {
         const playback = 媒体会话表.get(item.attachmentId)?.snapshot().playback;
         if (
+          playback?.mode === "blob" ||
           playback?.mode === "swarm" ||
           playback?.mode === "anchor" ||
           playback?.mode === "manifest"
@@ -124,11 +125,16 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
               ...item,
               src: playback.src,
               posterSrc: playback.thumbnailUrl ?? item.posterSrc,
+              ...(playback.mode === "manifest" && playback.streamingDistribution
+                ? {
+                    streamingDistribution: playback.streamingDistribution,
+                  }
+                : {}),
             };
           }
           return {
             ...item,
-            src: playback.src,
+            src: playback.mode === "blob" ? playback.viewerSrc ?? playback.src : playback.src,
           };
         }
         return item;

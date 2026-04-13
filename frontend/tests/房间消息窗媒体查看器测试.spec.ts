@@ -210,6 +210,12 @@ describe("房间消息窗媒体查看器", () => {
         kind: "video",
         src: "http://media.local/stream/att-video-1/master.m3u8",
         thumbnailUrl: "http://media.local/poster-video-1",
+        streamingDistribution: {
+          swarm_id: "swarm-hash-video-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-1",
+          join_ticket: null,
+        },
         hint: null,
       } satisfies 媒体播放结果,
     };
@@ -249,6 +255,12 @@ describe("房间消息窗媒体查看器", () => {
         kind: "video",
         src: "http://media.local/stream/att-video-1/master.m3u8",
         posterSrc: "http://media.local/poster-video-1",
+        streamingDistribution: {
+          swarm_id: "swarm-hash-video-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-1",
+          join_ticket: null,
+        },
         width: 1280,
         height: 720,
       },
@@ -279,6 +291,54 @@ describe("房间消息窗媒体查看器", () => {
         signal: { type: "PLAYER_ERROR" },
       },
     ]);
+
+    pane.remove();
+  });
+
+  it("图片已经切到 Blob 资产主链时，卡片继续吃 preview，查看器会拿 full 主链", async () => {
+    const pane = 创建媒体消息窗();
+    pane.mediaPlaybackByAttachmentId = {
+      "att-image-1": {
+        mode: "blob",
+        attachmentId: "att-image-1",
+        kind: "image",
+        src: "http://media.local/blob/att-image-1/preview.webp",
+        viewerSrc: "http://media.local/blob/att-image-1/full.webp",
+        thumbnailUrl: "http://media.local/blob/att-image-1/preview.webp",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLImageElement>(
+      'img.message-image[data-attachment-id="att-image-1"]'
+    );
+    expect(preview?.getAttribute("src")).toBe(
+      "http://media.local/blob/att-image-1/preview.webp"
+    );
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-image-preview-trigger[data-attachment-id="att-image-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]?.items[0]).toEqual({
+      attachmentId: "att-image-1",
+      kind: "image",
+      src: "http://media.local/blob/att-image-1/full.webp",
+      alt: "图片附件原图",
+      width: 1200,
+      height: 800,
+    });
 
     pane.remove();
   });

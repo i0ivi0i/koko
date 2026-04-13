@@ -443,7 +443,7 @@ describe("媒体查看器适配器", () => {
     expect(vidstackDestroy).not.toHaveBeenCalled();
   });
 
-  it("桌面 HLS 视频会给 Vidstack HLS provider 注入本地 hls.js loader，而不是偷偷依赖 CDN", async () => {
+  it("桌面 HLS 视频会给 Vidstack HLS provider 注入本地 hls.js loader 和分片级 P2P 配置", async () => {
     const viewer = 创建媒体查看器({
       isMobileViewport: () => false,
     });
@@ -456,6 +456,15 @@ describe("媒体查看器适配器", () => {
           attachmentId: "att-video-hls-provider-1",
           src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
           posterSrc: "http://media.local/poster-hls-provider-1",
+          streamingDistribution: {
+            swarm_id: "swarm-hash-att-video-hls-provider-1",
+            announce_urls: [
+              "wss://tracker.koko.local/announce",
+              "wss://tracker.backup.koko.local/announce",
+            ],
+            web_seed_url: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
+            join_ticket: null,
+          },
           width: 720,
           height: 1280,
         },
@@ -466,10 +475,25 @@ describe("媒体查看器适配器", () => {
     );
     expect(player).not.toBeNull();
 
-    const provider: { type: string; library?: unknown } = { type: "hls" };
+    const provider: {
+      type: string;
+      library?: unknown;
+      config?: Record<string, unknown>;
+    } = { type: "hls" };
     player?.dispatchEvent(new CustomEvent("provider-change", { detail: provider }));
 
     expect(typeof provider.library).toBe("function");
+    expect(provider.config).toMatchObject({
+      p2p: {
+        core: {
+          swarmId: "swarm-hash-att-video-hls-provider-1",
+          announceTrackers: [
+            "wss://tracker.koko.local/announce",
+            "wss://tracker.backup.koko.local/announce",
+          ],
+        },
+      },
+    });
   });
 
   it("移动端遇到 HLS manifest 时不走原生全屏，而是回退到支持 hls.js 的 Vidstack 覆盖层", () => {
