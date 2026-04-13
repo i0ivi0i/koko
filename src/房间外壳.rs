@@ -1,4 +1,4 @@
-use super::{err_resp, events_to_json, map_domain_err_tuple, 应用状态, 构建共享仓储};
+use super::{err_resp, events_to_json, map_domain_err_tuple, 媒体内容解析, 应用状态, 构建共享仓储};
 use crate::{
     adapter::{媒体上传运输授权写入请求, 媒体上传运输记录},
     contract, media_distribution,
@@ -10,13 +10,10 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use image::{DynamicImage, ImageFormat};
-use nom_exif::{MediaParser, MediaSource, TrackInfo, TrackInfoTag};
 use object_store::{path::Path as ObjectPath, GetOptions, GetRange, ObjectStoreExt};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
-    io::Cursor,
     path::{Path as StdPath, PathBuf},
     process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -456,193 +453,6 @@ fn 推导原始内容扩展名(
             "video/3gpp" => ".3gp",
             _ => ".bin",
         },
-    }
-}
-
-fn 读取exif方向(bytes: &[u8]) -> u32 {
-    let mut cursor = Cursor::new(bytes);
-    exif::Reader::new()
-        .read_from_container(&mut cursor)
-        .ok()
-        .and_then(|reader| {
-            reader
-                .get_field(exif::Tag::Orientation, exif::In::PRIMARY)
-                .and_then(|field| field.value.get_uint(0))
-        })
-        .unwrap_or(1)
-}
-
-fn 应用exif方向(image: DynamicImage, orientation: u32) -> DynamicImage {
-    match orientation {
-        2 => image.fliph(),
-        3 => image.rotate180(),
-        4 => image.flipv(),
-        5 => image.rotate90().fliph(),
-        6 => image.rotate90(),
-        7 => image.rotate270().fliph(),
-        8 => image.rotate270(),
-        _ => image,
-    }
-}
-
-fn 生成缩略图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageError> {
-    let thumbnail = image.thumbnail(512, 512);
-    let mut cursor = Cursor::new(Vec::new());
-    thumbnail.write_to(&mut cursor, ImageFormat::Png)?;
-    Ok(cursor.into_inner())
-}
-
-fn 生成完整图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageError> {
-    // full 资产仍然是完整查看主链，但不再等同于冷源原图：
-    // 它会被统一压到较适合查看器的 WebP 形态，同时把极端大图收进稳定上限，
-    // 避免“正式 full 主链”继续只是原始冷源的另一张脸。
-    let full = if image.width() > 2048 || image.height() > 2048 {
-        image.thumbnail(2048, 2048)
-    } else {
-        image.clone()
-    };
-    let mut cursor = Cursor::new(Vec::new());
-    full.write_to(&mut cursor, ImageFormat::WebP)?;
-    Ok(cursor.into_inner())
-}
-
-struct 图片内容解析结果 {
-    mime_type: String,
-    宽: i32,
-    高: i32,
-    缩略图字节: Vec<u8>,
-    完整图字节: Vec<u8>,
-}
-
-struct 视频内容解析结果 {
-    mime_type: String,
-    宽: i32,
-    高: i32,
-}
-
-enum 媒体内容解析结果 {
-    图片(图片内容解析结果),
-    视频(视频内容解析结果),
-}
-
-enum 媒体内容解析错误 {
-    类型不允许(&'static str),
-    系统错误(&'static str),
-}
-
-/// 旧直传和新 complete 都必须走同一条图片解析链：
-/// - 真 MIME 以后端探测为准；
-/// - 宽高和缩略图以后端解码结果为准；
-/// - 不把“文件后缀/前端 mime”冒充成权威事实。
-fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结果, 媒体内容解析错误> {
-    let Some(kind) = infer::get(bytes) else {
-        return Err(媒体内容解析错误::类型不允许("只允许上传图片"));
-    };
-    if !kind.mime_type().starts_with("image/") {
-        return Err(媒体内容解析错误::类型不允许("只允许上传图片"));
-    }
-    let decoded = image::load_from_memory(bytes)
-        .map_err(|_| 媒体内容解析错误::类型不允许("图片内容非法"))?;
-    let normalized_image = 应用exif方向(decoded, 读取exif方向(bytes));
-    let 缩略图字节 = 生成缩略图字节(&normalized_image)
-        .map_err(|_| 媒体内容解析错误::系统错误("生成图片缩略图失败"))?;
-    let 完整图字节 = 生成完整图字节(&normalized_image)
-        .map_err(|_| 媒体内容解析错误::系统错误("生成图片完整图失败"))?;
-    Ok(图片内容解析结果 {
-        mime_type: kind.mime_type().to_string(),
-        宽: normalized_image.width() as i32,
-        高: normalized_image.height() as i32,
-        缩略图字节,
-        完整图字节,
-    })
-}
-
-/// 视频元数据探测继续复用成熟纯 Rust 轮子：
-/// - 真 MIME 仍以后端探测为准；
-/// - 宽高从容器元数据读取，不靠前端 file.type 或文件后缀冒充；
-/// - 当前只收口 ready 所需的最小事实，不在后端手搓转码或截图链。
-fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结果, 媒体内容解析错误> {
-    let Some(kind) = infer::get(bytes) else {
-        return Err(媒体内容解析错误::类型不允许("只允许上传视频"));
-    };
-    if !kind.mime_type().starts_with("video/") {
-        return Err(媒体内容解析错误::类型不允许("只允许上传视频"));
-    }
-    let mut parser = MediaParser::new();
-    let media_source = MediaSource::seekable(Cursor::new(bytes))
-        .map_err(|_| 媒体内容解析错误::系统错误("构建视频元数据数据源失败"))?;
-    if !media_source.has_track() {
-        return Err(媒体内容解析错误::类型不允许("视频内容非法"));
-    }
-    let info: TrackInfo = parser
-        .parse(media_source)
-        .map_err(|_| 媒体内容解析错误::类型不允许("视频内容非法"))?;
-    let 宽 = info
-        .get(TrackInfoTag::ImageWidth)
-        .and_then(解析视频轨道整数)
-        .filter(|value| *value > 0)
-        .ok_or(媒体内容解析错误::类型不允许(
-            "视频缺少宽度元数据",
-        ))?;
-    let 高 = info
-        .get(TrackInfoTag::ImageHeight)
-        .and_then(解析视频轨道整数)
-        .filter(|value| *value > 0)
-        .ok_or(媒体内容解析错误::类型不允许(
-            "视频缺少高度元数据",
-        ))?;
-    let (宽, 高) = 应用mp4展示方向到视频宽高(bytes, 宽, 高);
-    Ok(视频内容解析结果 {
-        mime_type: kind.mime_type().to_string(),
-        宽: 宽 as i32,
-        高: 高 as i32,
-    })
-}
-
-fn 解析视频轨道整数(value: &nom_exif::EntryValue) -> Option<u64> {
-    value
-        .as_u64()
-        .or_else(|| value.as_u32().map(u64::from))
-        .or_else(|| value.as_u16().map(u64::from))
-        .or_else(|| value.as_str().and_then(|raw| raw.parse::<u64>().ok()))
-}
-
-fn 应用mp4展示方向到视频宽高(bytes: &[u8], 宽: u64, 高: u64) -> (u64, u64) {
-    if !mp4视频轨道矩阵需要交换宽高(bytes) {
-        return (宽, 高);
-    }
-    (高, 宽)
-}
-
-/// 手机竖拍 MP4 常把编码宽高写成横屏，再用 tkhd 矩阵声明展示方向。
-/// `nom-exif` 负责主元数据解析，这里只补齐它尚未暴露的展示矩阵，不另造视频解析核心。
-fn mp4视频轨道矩阵需要交换宽高(bytes: &[u8]) -> bool {
-    let mut reader = Cursor::new(bytes);
-    let Ok(mp4) = mp4::Mp4Reader::read_header(&mut reader, bytes.len() as u64) else {
-        return false;
-    };
-    mp4.tracks().values().any(|track| {
-        matches!(track.track_type(), Ok(mp4::TrackType::Video)) && {
-            let matrix = &track.trak.tkhd.matrix;
-            mp4矩阵表示直角竖屏旋转(matrix.a, matrix.b, matrix.c, matrix.d)
-        }
-    })
-}
-
-fn mp4矩阵表示直角竖屏旋转(a: i32, b: i32, c: i32, d: i32) -> bool {
-    const MP4矩阵_一: i32 = 0x0001_0000;
-    a == 0
-        && d == 0
-        && ((b == MP4矩阵_一 && c == -MP4矩阵_一) || (b == -MP4矩阵_一 && c == MP4矩阵_一))
-}
-
-fn 解析媒体内容(
-    kind: &usecase::媒体附件类型,
-    bytes: &[u8],
-) -> Result<媒体内容解析结果, 媒体内容解析错误> {
-    match kind {
-        usecase::媒体附件类型::图片 => 解析图片内容(bytes).map(媒体内容解析结果::图片),
-        usecase::媒体附件类型::视频 => 解析视频内容(bytes).map(媒体内容解析结果::视频),
     }
 }
 
@@ -2913,16 +2723,16 @@ pub(super) async fn complete_media_upload(
             );
         }
     };
-    let parsed = match 解析媒体内容(&prepared.种类, original_bytes.as_ref()) {
+    let parsed = match 媒体内容解析::解析媒体内容(&prepared.种类, original_bytes.as_ref()) {
         Ok(parsed) => parsed,
-        Err(媒体内容解析错误::类型不允许(message)) => {
+        Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
             return err_resp(
                 StatusCode::BAD_REQUEST,
                 "attachment_type_not_allowed",
                 message,
             )
         }
-        Err(媒体内容解析错误::系统错误(message)) => {
+        Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
             return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message)
         }
     };
@@ -2959,7 +2769,7 @@ pub(super) async fn complete_media_upload(
     let 原始冷源到期时间戳秒 = ready_epoch秒 + usecase::媒体原始冷源保留秒数;
     let mut streaming_manifest_request = None;
     let ready_request = match parsed {
-        媒体内容解析结果::图片(parsed) => {
+        媒体内容解析::媒体内容解析结果::图片(parsed) => {
             let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
             let thumbnail_path = ObjectPath::from(thumbnail_storage_key.clone());
             let asset_original_storage_key = format!(
@@ -3052,7 +2862,7 @@ pub(super) async fn complete_media_upload(
                 原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
             }
         }
-        媒体内容解析结果::视频(parsed) => {
+        媒体内容解析::媒体内容解析结果::视频(parsed) => {
             let 打包结果 = match task::spawn_blocking({
                 let ffmpeg_bin = state.ffmpeg_bin.clone();
                 let ffprobe_bin = state.ffprobe_bin.clone();
@@ -3861,4 +3671,40 @@ pub(super) async fn load_attachment_content(
         headers,
     )
     .await
+}
+
+#[cfg(test)]
+mod 媒体内容解析迁移测试 {
+    use image::{DynamicImage, ImageFormat};
+    use std::io::Cursor;
+
+    #[test]
+    fn 新模块会拒绝非图片字节() {
+        let err = super::媒体内容解析::解析图片内容(b"not an image")
+            .expect_err("非图片字节必须被拒绝");
+        assert!(
+            matches!(err, super::媒体内容解析::媒体内容解析错误::类型不允许(_)),
+            "错误类型必须继续表达成类型不允许，而不是被吞成系统错误"
+        );
+    }
+
+    #[test]
+    fn 新模块会从图片字节里读出稳定宽高() {
+        let mut cursor = Cursor::new(Vec::new());
+        DynamicImage::new_rgba8(1, 1)
+            .write_to(&mut cursor, ImageFormat::Png)
+            .expect("应能编码 1x1 png");
+        let parsed = super::媒体内容解析::解析图片内容(cursor.get_ref())
+            .expect("最小 png 应该能被新模块解析");
+        assert_eq!(parsed.宽, 1);
+        assert_eq!(parsed.高, 1);
+    }
+
+    #[test]
+    fn 新模块会给最小_mp4_返回展示尺寸() {
+        let parsed = super::媒体内容解析::解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4"))
+            .expect("最小 mp4 应该能被新模块解析");
+        assert!(parsed.宽 > 0);
+        assert!(parsed.高 > 0);
+    }
 }

@@ -36,6 +36,8 @@ use crate::{adapter::Pg仓储, contract};
 mod 后台外壳;
 #[path = "实时外壳.rs"]
 mod 实时外壳;
+#[path = "媒体内容解析.rs"]
+mod 媒体内容解析;
 #[path = "房间外壳.rs"]
 mod 房间外壳;
 
