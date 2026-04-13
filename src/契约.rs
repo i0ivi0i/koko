@@ -170,6 +170,92 @@ pub enum 附件快照 {
     视频(视频附件快照),
 }
 
+/// 统一媒体资产种类：
+/// 1. 图片走 blob 资产主链；
+/// 2. 视频/音频走流媒体资产主链；
+/// 3. 这里只描述稳定共享语义，不携带某个壳专属的播放器状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum 媒体资产种类 {
+    图片Blob,
+    流媒体视频,
+    流媒体音频,
+}
+
+/// 变体描述是 blob 资产的稳定读取面。
+/// 它只回答“这个变体是什么、从哪里读”，不回答缓存策略和壳层展示逻辑。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 变体描述 {
+    pub 标识: String,
+    pub mime_type: String,
+    pub 地址: String,
+    pub 宽: Option<i32>,
+    pub 高: Option<i32>,
+}
+
+/// 流媒体清单描述只表达标准主入口。
+/// HLS/DASH 哪一条被某个端优先消费，是 adapter/runtime 的职责，不是共享 contract 的职责。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体清单描述 {
+    pub hls主清单地址: Option<String>,
+    pub dash主清单地址: Option<String>,
+}
+
+/// 分发表面只暴露跨端共享所需的 swarm 线索。
+/// 这里不塞本地存储键、页面 session 或某个端专属 ticket 语义。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体分发描述 {
+    pub swarm_id: String,
+    pub announce_urls: Vec<String>,
+    pub web_seed_url: Option<String>,
+    pub join_ticket: Option<String>,
+}
+
+/// 冷源角色是领域语义，不是页面流程。
+/// 目前只点亮“冷备引导”这一条，显式表达原始文件不会长期担任正式主链。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum 媒体冷源角色 {
+    冷备引导,
+}
+
+/// 冷源描述只回答：
+/// 1. 原始冷源地址是什么；
+/// 2. 到什么时候过期；
+/// 3. 当前还能不能用；
+/// 4. 它在协议里扮演什么角色。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体冷源描述 {
+    pub 原始地址: Option<String>,
+    pub 到期时间戳秒: i64,
+    pub 是否可用: bool,
+    pub 角色: 媒体冷源角色,
+}
+
+/// 流媒体资产描述是视频/音频主链的共享入口。
+/// 它把 manifest、分发和平滑退化所需的冷源窗口一次收口，避免后续继续回到“单个 src 真相”。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 流媒体资产描述 {
+    pub 资产标识: String,
+    pub 内容哈希: String,
+    pub 种类: 媒体资产种类,
+    pub 清单: 媒体清单描述,
+    pub 分发: 媒体分发描述,
+    pub 冷源: 媒体冷源描述,
+}
+
+/// Blob 资产描述是图片/GIF/静态大图的统一表面。
+/// preview/full/original 是稳定资产层级，不是壳层自己拼出来的三个 URL。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Blob媒体资产描述 {
+    pub 资产标识: String,
+    pub 内容哈希: String,
+    pub 种类: 媒体资产种类,
+    pub preview: Option<变体描述>,
+    pub full: Option<变体描述>,
+    pub original: Option<变体描述>,
+    pub 分发: Option<媒体分发描述>,
+    pub 冷源: 媒体冷源描述,
+}
+
 /// 领域事件只代表“已成立的业务事实”。
 /// 注意：ack/订阅成功/补洞指令都不是领域事件。
 #[derive(Debug, Clone, PartialEq, Eq)]
