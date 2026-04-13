@@ -61,6 +61,30 @@ describe("离线运行时", () => {
     });
   });
 
+  it("在线状态变化会通过订阅面向上游发布，而不是要求平台轮询 snapshot", async () => {
+    const windowSource = new 假窗口事件源();
+    const navigatorSource = {
+      onLine: true,
+    };
+    const runtime = 创建离线运行时({
+      window: windowSource as unknown as Window,
+      navigator: navigatorSource as unknown as Navigator,
+    });
+    const 快照记录: Array<{ online: boolean }> = [];
+
+    runtime.订阅?.((snapshot) => {
+      快照记录.push({ online: snapshot.online });
+    });
+    await runtime.就绪();
+
+    navigatorSource.onLine = false;
+    windowSource.触发("offline");
+    navigatorSource.onLine = true;
+    windowSource.触发("online");
+
+    expect(快照记录).toEqual([{ online: false }, { online: true }]);
+  });
+
   it("就绪不会卡死在 pending 的 serviceWorker.ready 上，而是先给出当前已知运行时事实", async () => {
     vi.useFakeTimers();
     const windowSource = new 假窗口事件源();

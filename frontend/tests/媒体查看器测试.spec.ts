@@ -219,6 +219,9 @@ describe("媒体查看器适配器", () => {
       expect.objectContaining({
         开始视口占用: expect.any(Function),
         结束视口占用: expect.any(Function),
+      }),
+      expect.objectContaining({
+        发出媒体会话信号: expect.any(Function),
       })
     );
     expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
@@ -431,6 +434,9 @@ describe("媒体查看器适配器", () => {
       expect.objectContaining({
         开始视口占用: expect.any(Function),
         结束视口占用: expect.any(Function),
+      }),
+      expect.objectContaining({
+        发出媒体会话信号: expect.any(Function),
       })
     );
     expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
@@ -480,5 +486,112 @@ describe("媒体查看器适配器", () => {
       document.body.querySelector("media-player[data-media-viewer-player='video']")
     ).toBeNull();
     expect(onViewportCaptureEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("桌面视频覆盖层会把 waiting 信号回抛给媒体会话，并允许后续同步新的播放源", async () => {
+    const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+      onMediaSessionSignal: (attachmentId, signal) => {
+        信号记录.push({ attachmentId, signal });
+      },
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-sync-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-sync-1",
+          src: "blob:http://media.local/video-sync-old",
+          posterSrc: "http://media.local/poster-sync-old",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    const player = await 等待查询元素<HTMLElement>(
+      "media-player[data-media-viewer-player='video']"
+    );
+    expect(player).not.toBeNull();
+
+    player?.dispatchEvent(new Event("waiting"));
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-video-sync-1",
+        signal: { type: "PLAYER_WAITING" },
+      },
+    ]);
+
+    viewer.同步({
+      startAttachmentId: "att-video-sync-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-sync-1",
+          src: "blob:http://media.local/video-sync-new",
+          posterSrc: "http://media.local/poster-sync-new",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+
+    expect(player?.getAttribute("src")).toBe("blob:http://media.local/video-sync-new");
+    expect(player?.getAttribute("poster")).toBe("http://media.local/poster-sync-new");
+  });
+
+  it("移动端原生全屏视频也会把播放器信号回抛，并在同步时切到新的播放源", async () => {
+    const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
+    安装全屏DOM模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+      onMediaSessionSignal: (attachmentId, signal) => {
+        信号记录.push({ attachmentId, signal });
+      },
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-sync-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-sync-1",
+          src: "blob:http://media.local/mobile-sync-old",
+          posterSrc: "http://media.local/mobile-poster-old",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await Promise.resolve();
+
+    const video = document.body.querySelector<HTMLVideoElement>("video");
+    expect(video).not.toBeNull();
+
+    video?.dispatchEvent(new Event("stalled"));
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-video-mobile-sync-1",
+        signal: { type: "PLAYER_STALLED" },
+      },
+    ]);
+
+    viewer.同步({
+      startAttachmentId: "att-video-mobile-sync-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-sync-1",
+          src: "blob:http://media.local/mobile-sync-new",
+          posterSrc: "http://media.local/mobile-poster-new",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+
+    expect(video?.src).toBe("blob:http://media.local/mobile-sync-new");
+    expect(video?.poster).toBe("http://media.local/mobile-poster-new");
   });
 });

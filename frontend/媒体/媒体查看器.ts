@@ -1,3 +1,5 @@
+import type { 媒体会话信号 } from "./媒体会话.js";
+
 export type 媒体查看器项目 =
   | {
       kind: "image";
@@ -44,15 +46,20 @@ type PhotoSwipe查看器选项 = {
 type 媒体查看器实例 = {
   init?(): void;
   loadAndOpen?(index: number): boolean | void;
+  同步?(item: 媒体查看器项目): void;
   destroy(): void;
   on?(eventName: "close" | "destroy", callback: () => void): void;
 };
 
 type 媒体查看器工厂结果 = 媒体查看器实例 | Promise<媒体查看器实例>;
+type 媒体查看器运行时钩子 = {
+  发出媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
+};
 type PhotoSwipe查看器工厂 = (options: PhotoSwipe查看器选项) => 媒体查看器工厂结果;
 type Vidstack视频覆盖层工厂 = (
   item: 媒体查看器视频项目,
-  lifecycle: 媒体查看器视口占用生命周期
+  lifecycle: 媒体查看器视口占用生命周期,
+  hooks: 媒体查看器运行时钩子
 ) => 媒体查看器工厂结果;
 
 export type 媒体查看器依赖 = {
@@ -61,8 +68,10 @@ export type 媒体查看器依赖 = {
   isMobileViewport?: () => boolean;
   openNativeVideoFullscreen?: (
     item: 媒体查看器视频项目,
-    lifecycle: 媒体查看器视口占用生命周期
-  ) => boolean;
+    lifecycle: 媒体查看器视口占用生命周期,
+    hooks: 媒体查看器运行时钩子
+  ) => boolean | 媒体查看器实例;
+  onMediaSessionSignal?: (attachmentId: string, signal: 媒体会话信号) => void;
   onViewportCaptureStart?: () => void;
   onViewportCaptureEnd?: () => void;
 };
@@ -137,10 +146,52 @@ const 读取视频元素方向锁 = (video: HTMLVideoElement): 媒体方向锁 |
 const 读取屏幕方向 = (): 可锁定屏幕方向 | null =>
   (globalThis.screen?.orientation as 可锁定屏幕方向 | undefined) ?? null;
 
+const 绑定媒体运行时信号 = (
+  target: EventTarget,
+  attachmentId: string,
+  hooks: 媒体查看器运行时钩子
+): (() => void) => {
+  const listeners: Array<[string, EventListener]> = [
+    [
+      "playing",
+      () => {
+        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_PLAYING" });
+      },
+    ],
+    [
+      "waiting",
+      () => {
+        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_WAITING" });
+      },
+    ],
+    [
+      "stalled",
+      () => {
+        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_STALLED" });
+      },
+    ],
+    [
+      "error",
+      () => {
+        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_ERROR" });
+      },
+    ],
+  ];
+  for (const [eventName, listener] of listeners) {
+    target.addEventListener(eventName, listener);
+  }
+  return () => {
+    for (const [eventName, listener] of listeners) {
+      target.removeEventListener(eventName, listener);
+    }
+  };
+};
+
 const 打开原生视频全屏 = (
   item: 媒体查看器视频项目,
-  lifecycle: 媒体查看器视口占用生命周期
-): boolean => {
+  lifecycle: 媒体查看器视口占用生命周期,
+  hooks: 媒体查看器运行时钩子
+): boolean | 媒体查看器实例 => {
   if (typeof document === "undefined" || !document.body) {
     return false;
   }
@@ -168,6 +219,7 @@ const 打开原生视频全屏 = (
   let historyConsumedByUser = false;
   let historyCleanupInProgress = false;
   let historyCleanupTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  const 解绑媒体运行时信号 = 绑定媒体运行时信号(video, item.attachmentId, hooks);
 
   const lockScreenOrientation = (): void => {
     if (!videoOrientation) {
@@ -224,6 +276,7 @@ const 打开原生视频全屏 = (
     }
     document.removeEventListener("fullscreenchange", handleFullscreenChange);
     video.removeEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
+    解绑媒体运行时信号();
     unlockScreenOrientation();
     video.pause();
     container.remove();
@@ -304,13 +357,37 @@ const 打开原生视频全屏 = (
         }
         cleanup();
       });
-    return true;
+    return {
+      destroy: cleanup,
+      同步(nextItem) {
+        if (nextItem.kind !== "video") {
+          return;
+        }
+        if (video.src !== nextItem.src) {
+          video.src = nextItem.src;
+          startPlayback();
+        }
+        video.poster = nextItem.posterSrc ?? "";
+      },
+    };
   }
   if (typeof video.webkitEnterFullscreen === "function") {
     lockScreenOrientation();
     startPlayback();
     video.webkitEnterFullscreen();
-    return true;
+    return {
+      destroy: cleanup,
+      同步(nextItem) {
+        if (nextItem.kind !== "video") {
+          return;
+        }
+        if (video.src !== nextItem.src) {
+          video.src = nextItem.src;
+          startPlayback();
+        }
+        video.poster = nextItem.posterSrc ?? "";
+      },
+    };
   }
 
   cleanup();
@@ -322,7 +399,8 @@ const 读取Vidstack纵横比 = (item: 媒体查看器视频项目): string =>
 
 const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async (
   item,
-  lifecycle
+  lifecycle,
+  hooks
 ) => {
   const { defineCustomElements } = await import("vidstack/elements");
   await defineCustomElements();
@@ -336,6 +414,7 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
   const skin = document.createElement("media-community-skin");
   const closeButton = document.createElement("button");
   let cleaned = false;
+  const 解绑媒体运行时信号 = 绑定媒体运行时信号(player, item.attachmentId, hooks);
 
   overlay.dataset.mediaViewerMode = "video";
   overlay.setAttribute("role", "dialog");
@@ -371,6 +450,7 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
     closeButton.removeEventListener("click", cleanup);
     overlay.removeEventListener("click", closeWhenClickingBackdrop);
     document.removeEventListener("keydown", closeWhenPressingEscape);
+    解绑媒体运行时信号();
     overlay.remove();
     lifecycle.结束视口占用();
   };
@@ -394,6 +474,18 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
   closeButton.focus();
 
   return {
+    同步(nextItem) {
+      if (nextItem.kind !== "video") {
+        return;
+      }
+      player.setAttribute("src", nextItem.src);
+      player.setAttribute("aspect-ratio", 读取Vidstack纵横比(nextItem));
+      if (nextItem.posterSrc) {
+        player.setAttribute("poster", nextItem.posterSrc);
+      } else {
+        player.removeAttribute("poster");
+      }
+    },
     destroy: cleanup,
   };
 };
@@ -405,9 +497,16 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     deps.createVidstackVideoOverlay ?? 创建默认Vidstack视频覆盖层;
   const isMobileViewport = deps.isMobileViewport ?? 是移动触屏视口;
   const openNativeVideoFullscreen = deps.openNativeVideoFullscreen ?? 打开原生视频全屏;
+  const 运行时钩子: 媒体查看器运行时钩子 = {
+    发出媒体会话信号: (attachmentId, signal) => {
+      deps.onMediaSessionSignal?.(attachmentId, signal);
+    },
+  };
   let current: 媒体查看器实例 | null = null;
   let openGeneration = 0;
   let 正在占用聊天视口 = false;
+  let 当前起点附件标识: string | null = null;
+  let 当前查看器请求: 媒体查看器打开请求 | null = null;
 
   const 视口占用生命周期: 媒体查看器视口占用生命周期 = {
     开始视口占用: () => {
@@ -445,6 +544,8 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   };
 
   const 打开 = (request: 媒体查看器打开请求): void => {
+    当前查看器请求 = request;
+    当前起点附件标识 = request.startAttachmentId;
     const startAt = request.items.findIndex(
       (item) => item.attachmentId === request.startAttachmentId
     );
@@ -455,12 +556,20 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     if (!startItem) {
       return;
     }
-    if (
-      startItem?.kind === "video" &&
-      isMobileViewport() &&
-      openNativeVideoFullscreen(startItem, 视口占用生命周期)
-    ) {
-      return;
+    if (startItem?.kind === "video" && isMobileViewport()) {
+      const nativeViewer = openNativeVideoFullscreen(
+        startItem,
+        视口占用生命周期,
+        运行时钩子
+      );
+      if (!nativeViewer) {
+        // 移动端全屏路径不可用时，才回退到桌面 overlay；不能先占用一次再重复创建。
+      } else {
+        if (typeof nativeViewer === "object" && "destroy" in nativeViewer) {
+          current = nativeViewer;
+        }
+        return;
+      }
     }
     const generation = ++openGeneration;
     current?.destroy();
@@ -515,7 +624,7 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     接管当前查看器(
       generation,
       (async () => {
-        const overlay = createVidstackVideoOverlay(startItem, 视口占用生命周期);
+        const overlay = createVidstackVideoOverlay(startItem, 视口占用生命周期, 运行时钩子);
         const videoOverlay = 是异步媒体查看器结果(overlay) ? await overlay : overlay;
         videoOverlay.on?.("close", () => {
           视口占用生命周期.结束视口占用();
@@ -528,15 +637,31 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     );
   };
 
+  const 同步 = (request: 媒体查看器打开请求): void => {
+    当前查看器请求 = request;
+    const currentAttachmentId = 当前起点附件标识;
+    if (!currentAttachmentId) {
+      return;
+    }
+    const activeItem = request.items.find((item) => item.attachmentId === currentAttachmentId);
+    if (!activeItem) {
+      return;
+    }
+    current?.同步?.(activeItem);
+  };
+
   const 销毁 = (): void => {
     openGeneration += 1;
     current?.destroy();
     current = null;
+    当前起点附件标识 = null;
+    当前查看器请求 = null;
     视口占用生命周期.结束视口占用();
   };
 
   return {
     打开,
+    同步,
     销毁,
   };
 }

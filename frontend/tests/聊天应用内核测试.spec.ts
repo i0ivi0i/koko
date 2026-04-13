@@ -40,7 +40,11 @@ type 聊天媒体测试端口 = {
     清空(): void;
     销毁(): void;
   }): void;
-  设置媒体查看器供测试(viewer: { 打开(input: { startAttachmentId: string; items: unknown[] }): void; 销毁(): void }): void;
+  设置媒体查看器供测试(viewer: {
+    打开(input: { startAttachmentId: string; items: unknown[] }): void;
+    同步?(input: { startAttachmentId: string; items: unknown[] }): void;
+    销毁(): void;
+  }): void;
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
   }): void;
@@ -235,6 +239,196 @@ describe("聊天应用内核", () => {
     });
   });
 
+  it("图片预览源加载失败后也会触发会话恢复，并切到新的播放源", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-image-1",
+            client_message_id: "c-image-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-image-1",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi
+        .fn()
+        .mockResolvedValueOnce({
+          mode: "anchor",
+          attachmentId: "att-image-1",
+          kind: "image",
+          src: "http://media.local/original-att-image-1",
+          thumbnailUrl: "http://media.local/thumb-att-image-1",
+          hint: null,
+        })
+        .mockResolvedValueOnce({
+          mode: "swarm",
+          attachmentId: "att-image-1",
+          kind: "image",
+          src: "blob:http://media.local/swarm-att-image-1",
+          thumbnailUrl: "http://media.local/thumb-att-image-1",
+          hint: "正在协作分发",
+        }),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(kernel.snapshot().media.playbackByAttachmentId["att-image-1"]).toMatchObject({
+      src: "http://media.local/original-att-image-1",
+      mode: "anchor",
+    });
+
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-image-1",
+      signal: {
+        type: "PLAYER_ERROR",
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(kernel.snapshot().media.playbackByAttachmentId["att-image-1"]).toMatchObject({
+      src: "blob:http://media.local/swarm-att-image-1",
+      mode: "swarm",
+    });
+  });
+
+  it("打开中的媒体查看器会跟随会话恢复结果同步新播放源，而不是继续抱着旧 src", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-1",
+            client_message_id: "c-video-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi
+        .fn()
+        .mockResolvedValueOnce({
+          mode: "anchor",
+          attachmentId: "att-video-1",
+          kind: "video",
+          src: "http://media.local/original-att-video-1",
+          thumbnailUrl: null,
+          hint: null,
+        })
+        .mockResolvedValueOnce({
+          mode: "swarm",
+          attachmentId: "att-video-1",
+          kind: "video",
+          src: "blob:http://media.local/swarm-att-video-1",
+          thumbnailUrl: null,
+          hint: "正在协作分发",
+        }),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            src: "http://media.local/original-att-video-1",
+            posterSrc: null,
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-1",
+      signal: {
+        type: "PLAYER_WAITING",
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fake查看器.同步).toHaveBeenCalledWith({
+      startAttachmentId: "att-video-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-1",
+          src: "blob:http://media.local/swarm-att-video-1",
+          posterSrc: null,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+  });
+
   it("后台收到别人的权威新消息时，会由聊天内核向平台发通知和 badge 命令，而不是壳层自己猜浏览器 API", async () => {
     const transport = new 假传输();
     const 平台命令记录: 浏览器应用平台命令[] = [];
@@ -413,6 +607,160 @@ describe("聊天应用内核", () => {
     });
 
     expect(平台命令记录).toEqual([]);
+  });
+
+  it("平台发出 online 恢复事件后，等待中的媒体会话会自动重新解析播放源", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-1",
+            client_message_id: "c-video-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+      platform: {
+        lifecycle: {} as never,
+        storage: {} as never,
+        serviceWorker: {} as never,
+        transport: { transport: () => transport } as never,
+        multiContext: {} as never,
+        notification: {} as never,
+        offline: {
+          snapshot: () => ({
+            online: false,
+            backgroundSyncSupported: false,
+            queuedTaskCapability: "none" as const,
+          }),
+          就绪: async () => {},
+        } as never,
+        启动: async () => {},
+        snapshot: () =>
+          ({
+            lifecycle: { visibility: "visible", phase: "active" },
+            serviceWorker: {
+              appShellRegistered: true,
+              mediaWorkerRegistered: true,
+              persistentStorageRequested: true,
+              controllerAttached: false,
+              appShellWaiting: false,
+              mediaWorkerWaiting: false,
+              lastMessageType: null,
+              lastMessage: null,
+            },
+            transport: {
+              lastLifecycle: { visibility: "visible", phase: "active" },
+              realtimePolicy: {
+                intent: "resume",
+                reconnection: true,
+                reason: "active",
+              },
+            },
+            multiContext: {
+              contextId: "tab-a",
+              isPrimaryContext: true,
+              lastPrimaryContextId: "tab-a",
+              lastFocusedContextId: null,
+              deliveredNotificationIds: [],
+            },
+            notification: {
+              permission: "granted",
+              lastClickedNotificationId: null,
+              badgeCount: 0,
+            },
+            offline: {
+              online: false,
+              backgroundSyncSupported: false,
+              queuedTaskCapability: "none",
+            },
+          }) as 浏览器应用平台快照,
+        dispatch: async () => true,
+        订阅事件: (listener: (event: 浏览器应用平台事件) => void) => {
+          平台事件监听器 = listener;
+          return () => {
+            平台事件监听器 = null;
+          };
+        },
+      },
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi
+        .fn()
+        .mockResolvedValueOnce({
+          mode: "anchor",
+          attachmentId: "att-video-1",
+          kind: "video",
+          src: "http://media.local/original-att-video-1",
+          thumbnailUrl: null,
+          hint: null,
+        })
+        .mockResolvedValueOnce({
+          mode: "swarm",
+          attachmentId: "att-video-1",
+          kind: "video",
+          src: "blob:http://media.local/recovered-att-video-1",
+          thumbnailUrl: null,
+          hint: "正在协作分发",
+        }),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-1",
+      signal: { type: "SWARM_NO_PEERS" },
+    });
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-1",
+      signal: { type: "ORIGIN_UNAVAILABLE" },
+    });
+
+    expect(kernel.snapshot().media.sessionByAttachmentId["att-video-1"]).toMatchObject({
+      status: "waiting_for_peer_or_network",
+    });
+
+    const 触发平台事件 =
+      平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null;
+    if (typeof 触发平台事件 === "function") {
+      触发平台事件({ type: "OFFLINE_STATUS_CHANGED", online: true });
+    }
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(kernel.snapshot().media.playbackByAttachmentId["att-video-1"]).toMatchObject({
+      src: "blob:http://media.local/recovered-att-video-1",
+      mode: "swarm",
+    });
   });
 
   it("平台发出 BACKGROUND_DRAIN_REQUESTED 时，聊天内核会触发离线队列排空", async () => {

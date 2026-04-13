@@ -49,13 +49,14 @@ export interface 协作分发媒体源 {
 export type 协作分发会话事件 =
   | { type: "SWARM_ACTIVE"; attachmentId: string; swarmId: string }
   | { type: "SWARM_NO_PEERS"; attachmentId: string; swarmId: string }
-  | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string };
+  | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string };
 
 const 协作分发存活上报间隔毫秒 = 60_000;
 
 type 协作分发会话 = {
   attachmentId: string;
   swarmId: string;
+  contentHash: string;
   sourcePromise: Promise<{ src: string } | null>;
   refs: number;
   eagerCompleting: boolean;
@@ -194,11 +195,19 @@ function 发布协作分发会话事件(
   session: 协作分发会话,
   type: 协作分发会话事件["type"]
 ): void {
-  const event: 协作分发会话事件 = {
-    type,
-    attachmentId: session.attachmentId,
-    swarmId: session.swarmId,
-  };
+  const event: 协作分发会话事件 =
+    type === "ASSET_COMPLETE"
+      ? {
+          type,
+          attachmentId: session.attachmentId,
+          swarmId: session.swarmId,
+          contentHash: session.contentHash,
+        }
+      : {
+          type,
+          attachmentId: session.attachmentId,
+          swarmId: session.swarmId,
+        };
   for (const listener of session.listeners) {
     listener(event);
   }
@@ -264,6 +273,7 @@ async function 确保协作分发会话(input: {
   session = {
     attachmentId: input.attachmentId,
     swarmId: input.distribution.swarm_id,
+    contentHash: input.distribution.content_hash,
     sourcePromise: Promise.resolve(null),
     refs: 1,
     eagerCompleting: true,

@@ -63,7 +63,8 @@ export type 浏览器应用平台命令 =
 
 export type 浏览器应用平台事件 =
   | 服务工作线程运行时事件
-  | { type: "PRIMARY_CONTEXT_FOCUSED" };
+  | { type: "PRIMARY_CONTEXT_FOCUSED" }
+  | { type: "OFFLINE_STATUS_CHANGED"; online: boolean };
 
 export interface 浏览器应用平台 {
   lifecycle: 生命周期运行时;
@@ -119,6 +120,11 @@ export function 创建浏览器应用平台(
       multiContext.声明主上下文();
       void notification.清除角标();
     }
+  });
+  offline.订阅?.((snapshot) => {
+    // 平台层只把“网络是否恢复”翻成稳定浏览器事件；
+    // 具体哪些媒体会话该恢复，仍然交给上层应用 owner 裁决。
+    发布平台事件({ type: "OFFLINE_STATUS_CHANGED", online: snapshot.online });
   });
 
   notification.订阅点击(() => {

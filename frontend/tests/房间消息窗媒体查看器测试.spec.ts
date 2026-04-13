@@ -200,4 +200,30 @@ describe("房间消息窗媒体查看器", () => {
 
     pane.remove();
   });
+
+  it("图片预览加载失败时也会回抛媒体会话信号，而不是继续让旧 src 静默失效", async () => {
+    const pane = 创建媒体消息窗();
+    const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];
+    pane.addEventListener("room-media-session-signal", (event) => {
+      信号记录.push(
+        (event as CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>).detail
+      );
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLImageElement>(
+      'img.message-image[data-attachment-id="att-image-1"]'
+    );
+    preview?.dispatchEvent(new Event("error"));
+
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-image-1",
+        signal: { type: "PLAYER_ERROR" },
+      },
+    ]);
+
+    pane.remove();
+  });
 });

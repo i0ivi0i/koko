@@ -469,6 +469,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       event.type === "SERVICE_WORKER_CONTROLLER_READY"
     ) {
       await this.尝试排空待补发任务();
+      return;
+    }
+    if (event.type === "OFFLINE_STATUS_CHANGED") {
+      this.媒体编排.处理平台在线状态变化(event.online);
     }
   }
 

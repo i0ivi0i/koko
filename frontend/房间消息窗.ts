@@ -385,9 +385,11 @@ export class 房间消息窗 extends LitElement {
             <div class="message-image-card">
               ${(() => {
                 const imagePreviewSrc =
-                  playback?.mode === "swarm" || playback?.mode === "anchor"
+                  playback?.thumbnailUrl ??
+                  attachment.thumbnailSrc ??
+                  (playback?.mode === "swarm" || playback?.mode === "anchor"
                     ? playback.src
-                    : attachment.originalSrc;
+                    : attachment.originalSrc);
                 return html`
                   <button
                     class="message-image-preview-trigger"
@@ -405,6 +407,13 @@ export class 房间消息窗 extends LitElement {
                       width=${attachment.displayWidth}
                       height=${attachment.displayHeight}
                       loading="lazy"
+                      @error=${() =>
+                        this.广播媒体会话信号(attachment.attachmentId, {
+                          // 图片虽然没有 video 的 waiting/stalled，但“当前渲染源已经失效”这件事是同一种恢复信号。
+                          // 这里统一回抛到媒体会话 owner，由 owner 决定是否重取 swarm/anchor，
+                          // 避免壳层再长一套图片专属恢复分支。
+                          type: "PLAYER_ERROR",
+                        })}
                     />
                   </button>
                 `;

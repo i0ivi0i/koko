@@ -36,6 +36,7 @@ export interface 离线运行时 {
   就绪(input?: {
     已注册服务工作线程?: Array<支持后台同步注册 | null | undefined>;
   }): Promise<void>;
+  订阅?(listener: (snapshot: 离线运行时快照) => void): () => void;
   登记待补发任务?(task: 平台离线任务): Promise<boolean>;
   排空到期任务?(
     handler: (task: 平台离线任务) => Promise<"done" | "retry">
@@ -66,12 +67,25 @@ export function 创建离线运行时(
     backgroundSyncSupported: false,
     queuedTaskCapability: "none",
   };
+  const 监听器 = new Set<(snapshot: 离线运行时快照) => void>();
+
+  const 发布快照 = (): void => {
+    const snapshot = { ...current };
+    for (const listener of 监听器) {
+      listener(snapshot);
+    }
+  };
 
   const 更新在线状态 = (): void => {
+    const nextOnline = navigatorTarget?.onLine !== false;
+    if (current.online === nextOnline) {
+      return;
+    }
     current = {
       ...current,
-      online: navigatorTarget?.onLine !== false,
+      online: nextOnline,
     };
+    发布快照();
   };
 
   const 读取后台任务能力 = (
@@ -96,6 +110,13 @@ export function 创建离线运行时(
         ...current,
         backgroundSyncSupported: queuedTaskCapability === "background-sync",
         queuedTaskCapability,
+      };
+    },
+
+    订阅(listener: (snapshot: 离线运行时快照) => void): () => void {
+      监听器.add(listener);
+      return () => {
+        监听器.delete(listener);
       };
     },
 

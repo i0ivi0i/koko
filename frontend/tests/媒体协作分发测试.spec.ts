@@ -264,7 +264,12 @@ describe("媒体协作分发", () => {
   it("torrent done 后会发出完整资产事件，而不只是改 hint", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-4");
-    const 事件记录: Array<{ type: string; attachmentId: string; swarmId: string }> = [];
+    const 事件记录: Array<{
+      type: string;
+      attachmentId: string;
+      swarmId: string;
+      contentHash?: string;
+    }> = [];
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
       onTorrent(torrent);
       return torrent;
@@ -287,6 +292,7 @@ describe("媒体协作分发", () => {
       type: "ASSET_COMPLETE",
       attachmentId: "att-4",
       swarmId: "swarm-att-4",
+      contentHash: "hash-att-4",
     });
   });
 

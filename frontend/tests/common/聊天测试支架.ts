@@ -457,7 +457,11 @@ type 聊天媒体测试端口 = {
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
   }): void;
-  设置媒体查看器供测试(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void;
+  设置媒体查看器供测试(viewer: {
+    打开(input: 媒体查看器打开请求): void;
+    同步?(input: 媒体查看器打开请求): void;
+    销毁(): void;
+  }): void;
   设置媒体发布器供测试(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
@@ -519,7 +523,11 @@ export function 注入媒体播放器供测试(
 
 export function 注入媒体查看器供测试(
   el: 聊天壳,
-  viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }
+  viewer: {
+    打开(input: 媒体查看器打开请求): void;
+    同步?(input: 媒体查看器打开请求): void;
+    销毁(): void;
+  }
 ): void {
   读取聊天媒体编排供测试(el).设置媒体查看器供测试(viewer);
 }

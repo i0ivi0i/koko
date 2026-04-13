@@ -293,6 +293,105 @@ describe("浏览器端应用平台化基线", () => {
     });
   });
 
+  it("离线运行时在线状态变化会被平台转成稳定事件，而不是要求业务层自己轮询平台快照", async () => {
+    let 离线快照监听器: ((snapshot: { online: boolean }) => void) | null = null;
+    const 事件记录: Array<{ type: string; online?: boolean }> = [];
+
+    const platform = 创建浏览器应用平台({
+      lifecycle: {
+        snapshot: () => ({ visibility: "visible" as const, phase: "active" as const }),
+        订阅: () => () => {},
+      },
+      storage: {
+        壳层记忆: () => {
+          throw new Error("not used");
+        },
+      },
+      serviceWorker: {
+        启动: async () => {},
+        读取注册: () => null,
+        snapshot: () => ({
+          appShellRegistered: false,
+          mediaWorkerRegistered: false,
+          persistentStorageRequested: false,
+          controllerAttached: false,
+          appShellWaiting: false,
+          mediaWorkerWaiting: false,
+          lastMessageType: null,
+          lastMessage: null,
+        }),
+        发送消息: () => false,
+      },
+      transport: {
+        transport: () => {
+          throw new Error("not used");
+        },
+        接收生命周期变化: () => {},
+        snapshot: () => ({
+          lastLifecycle: { visibility: "visible" as const, phase: "active" as const },
+          realtimePolicy: {
+            intent: "resume" as const,
+            reconnection: true,
+            reason: "active" as const,
+          },
+        }),
+      },
+      multiContext: {
+        snapshot: () => ({
+          contextId: "tab-a",
+          isPrimaryContext: true,
+          lastPrimaryContextId: "tab-a",
+          lastFocusedContextId: null,
+          deliveredNotificationIds: [],
+        }),
+        声明主上下文: () => {},
+        请求聚焦当前上下文: () => {},
+        通知已展示: () => false,
+        登记通知已展示: () => true,
+      },
+      notification: {
+        snapshot: () => ({
+          permission: "granted" as const,
+          lastClickedNotificationId: null,
+          badgeCount: 0,
+        }),
+        请求权限: async () => "granted" as const,
+        显示通知: async () => true,
+        设置角标: async () => {},
+        清除角标: async () => {},
+        订阅点击: () => () => {},
+      },
+      offline: {
+        就绪: async () => {},
+        snapshot: () => ({
+          online: true,
+          backgroundSyncSupported: false,
+          queuedTaskCapability: "none" as const,
+        }),
+        订阅: (listener: (snapshot: { online: boolean }) => void) => {
+          离线快照监听器 = listener;
+          return () => {
+            离线快照监听器 = null;
+          };
+        },
+      } as never,
+    });
+    platform.订阅事件?.((event) => {
+      事件记录.push(event as { type: string; online?: boolean });
+    });
+
+    const 触发离线快照 = 离线快照监听器 as ((snapshot: { online: boolean }) => void) | null;
+    if (typeof 触发离线快照 === "function") {
+      触发离线快照({ online: false });
+      触发离线快照({ online: true });
+    }
+
+    expect(事件记录).toEqual([
+      { type: "OFFLINE_STATUS_CHANGED", online: false },
+      { type: "OFFLINE_STATUS_CHANGED", online: true },
+    ]);
+  });
+
   it("平台显示通知前会先走多上下文去重，同一条通知不会跨标签重复弹两次", async () => {
     const showNotification = vi.fn(async () => true);
     const hasShownNotification = vi

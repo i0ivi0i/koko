@@ -57,12 +57,17 @@ export interface 聊天媒体编排端口 {
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
+  处理平台在线状态变化(online: boolean): void;
   清空(): void;
   销毁(): void;
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
   }): void;
-  设置媒体查看器供测试(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void;
+  设置媒体查看器供测试(viewer: {
+    打开(input: 媒体查看器打开请求): void;
+    同步?(input: 媒体查看器打开请求): void;
+    销毁(): void;
+  }): void;
   设置媒体发布器供测试(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
@@ -98,10 +103,45 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     resolveSwarmSource: 解析协作分发源,
   });
 
+  let 当前查看器请求: 媒体查看器打开请求 | null = null;
+  const 同步当前查看器请求 = (): void => {
+    if (!当前查看器请求) {
+      return;
+    }
+    // 查看器一旦打开，就不能继续抱着旧 request.items 里的静态 src。
+    // 这里把会话 owner 当前裁决出的播放源重新投影回查看器，让 overlay 和时间线预览共用同一条恢复真相。
+    const nextRequest: 媒体查看器打开请求 = {
+      startAttachmentId: 当前查看器请求.startAttachmentId,
+      items: 当前查看器请求.items.map((item) => {
+        const playback = 媒体会话表.get(item.attachmentId)?.snapshot().playback;
+        if (playback?.mode === "swarm" || playback?.mode === "anchor") {
+          if (item.kind === "video") {
+            return {
+              ...item,
+              src: playback.src,
+              posterSrc: playback.thumbnailUrl ?? item.posterSrc,
+            };
+          }
+          return {
+            ...item,
+            src: playback.src,
+          };
+        }
+        return item;
+      }),
+    };
+    当前查看器请求 = nextRequest;
+    媒体查看器.同步?.(nextRequest);
+  };
+  const 转发媒体查看器会话信号 = (attachmentId: string, signal: 媒体会话信号): void => {
+    媒体会话表.get(attachmentId)?.send(signal);
+  };
   let 媒体查看器 = 创建媒体查看器({
     onViewportCaptureEnd: () => {
+      当前查看器请求 = null;
       deps.清除程序滚动来源("media_viewer_open");
     },
+    onMediaSessionSignal: 转发媒体查看器会话信号,
   });
 
   const 媒体会话表 = new Map<string, 媒体会话端口>();
@@ -226,7 +266,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
     let session: 媒体会话端口;
     const 接收协作分发事件 = (
-      event: { type: "SWARM_ACTIVE" | "SWARM_NO_PEERS" | "ASSET_COMPLETE" }
+      event:
+        | { type: "SWARM_ACTIVE" }
+        | { type: "SWARM_NO_PEERS" }
+        | { type: "ASSET_COMPLETE"; contentHash: string }
     ): void => {
       if (event.type === "SWARM_ACTIVE") {
         session.send({ type: "SWARM_ACTIVE" });
@@ -237,7 +280,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         return;
       }
       session.send({ type: "ASSET_COMPLETE" });
-      void 媒体缓存.标记完整(attachment.attachmentId).then(() => {
+      void 媒体缓存.标记完整(attachment.attachmentId, {
+        contentHash: event.contentHash,
+      }).then(() => {
         deps.请求重渲染();
       });
     };
@@ -251,6 +296,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         }),
       onSnapshotChange: () => {
         deps.请求重渲染();
+        同步当前查看器请求();
       },
     });
     应用缓存完整度到会话(attachment.attachmentId);
@@ -298,8 +344,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     打开查看器(request: 媒体查看器打开请求): void {
+      当前查看器请求 = {
+        startAttachmentId: request.startAttachmentId,
+        items: request.items.map((item) => ({ ...item })),
+      };
       deps.登记程序滚动来源("media_viewer_open");
-      媒体查看器.打开(request);
+      媒体查看器.打开(当前查看器请求);
     },
 
     /**
@@ -342,10 +392,17 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {
-      媒体会话表.get(attachmentId)?.send(signal);
+      转发媒体查看器会话信号(attachmentId, signal);
+    },
+
+    处理平台在线状态变化(online: boolean): void {
+      for (const session of 媒体会话表.values()) {
+        session.send({ type: online ? "ORIGIN_AVAILABLE" : "ORIGIN_UNAVAILABLE" });
+      }
     },
 
     清空(): void {
+      当前查看器请求 = null;
       媒体查看器.销毁();
       媒体发布器.清空();
       清空播放状态();
@@ -353,6 +410,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     销毁(): void {
+      当前查看器请求 = null;
       媒体查看器.销毁();
       媒体发布器.销毁();
       清空播放状态();
@@ -367,7 +425,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     设置媒体查看器供测试(viewer): void {
       媒体查看器.销毁();
-      媒体查看器 = viewer;
+      // 测试替身允许只关心“打开/销毁”两件事；
+      // 这里把它适配成正式查看器契约，避免生产代码为了测试而放宽 owner 边界。
+      媒体查看器 = {
+        打开: viewer.打开,
+        同步: viewer.同步 ?? (() => undefined),
+        销毁: viewer.销毁,
+      };
     },
 
     设置媒体发布器供测试(publisher): void {
