@@ -77,6 +77,7 @@ describe("浏览器端应用平台化基线", () => {
     const shellSource = 读取前端源码("聊天壳.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");
     const swarmSource = 读取前端源码("媒体/媒体协作分发.ts");
+    const testHarnessSource = 读取前端源码("tests/common/聊天测试支架.ts");
 
     expect(shellSource).not.toContain("this.kernel.构建附件内容地址(");
     expect(shellSource).not.toContain("setMediaPlayerForTest(");
@@ -91,6 +92,8 @@ describe("浏览器端应用平台化基线", () => {
     expect(kernelSource).not.toContain("export interface 聊天应用内核宿主");
     expect(kernelSource).not.toContain("deps.host.updateComplete");
     expect(kernelSource).not.toContain("deps.host.requestUpdate()");
+    expect(kernelSource).not.toContain("注入快照补丁供测试(");
+    expect(testHarnessSource).not.toContain("注入聊天快照补丁供测试(");
     expect(swarmSource).not.toContain("navigator.serviceWorker.ready");
   });
 
@@ -123,6 +126,8 @@ describe("浏览器端应用平台化基线", () => {
     expect(adminKernelSource).toContain('from "./平台/index.js"');
     expect(adminKernelSource).toContain("deps.platform ?? 获取默认浏览器应用平台()");
     expect(adminKernelSource).toContain("this.platform.transport.transport()");
+    expect(adminKernelSource).not.toContain("overviewText:");
+    expect(adminKernelSource).not.toContain("detailText:");
   });
 
   it("入口会把浏览器 API 启动职责交给平台骨架，不再自己直连 service worker 和持久化存储", () => {

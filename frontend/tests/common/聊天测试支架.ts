@@ -431,12 +431,22 @@ export async function 创建已入房聊天壳(
 
 type 聊天壳测试内核 = {
   snapshot(): 聊天状态;
-  注入快照补丁供测试(patch: Partial<聊天状态>): void;
+  写入视口调试状态供测试(
+    patch: Partial<
+      Pick<
+        聊天状态,
+        | "lastReadEventPosition"
+        | "firstUnreadEventPosition"
+        | "initialUnreadSettled"
+        | "scrollPhase"
+        | "hasUserScrollIntent"
+        | "pendingReadAnchorPosition"
+        | "historyLoadThrottleUntil"
+        | "viewportMode"
+      >
+    >
+  ): void;
   读取房间滚动器供测试(): unknown;
-  读取恢复编排端口供测试(): unknown;
-  读取阅读推进编排端口供测试(): unknown;
-  读取恢复补锚标记供测试(): boolean;
-  写入恢复补锚标记供测试(value: boolean): void;
 };
 
 function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
@@ -455,6 +465,7 @@ type 聊天媒体测试端口 = {
     清空(): void;
     销毁(): void;
   }): void;
+  写入媒体草稿列表供测试(drafts: 图片附件草稿[]): void;
 };
 
 /**
@@ -473,31 +484,8 @@ export function 读取聊天快照供测试(el: 聊天壳): 聊天状态 {
   return 读取聊天壳测试内核(el).snapshot();
 }
 
-export function 注入聊天快照补丁供测试(
-  el: 聊天壳,
-  patch: Partial<聊天状态>
-): void {
-  读取聊天壳测试内核(el).注入快照补丁供测试(patch);
-}
-
-export function 读取恢复编排端口供测试<T = unknown>(el: 聊天壳): T {
-  return 读取聊天壳测试内核(el).读取恢复编排端口供测试() as T;
-}
-
-export function 读取阅读推进编排端口供测试<T = unknown>(el: 聊天壳): T {
-  return 读取聊天壳测试内核(el).读取阅读推进编排端口供测试() as T;
-}
-
 export function 读取房间滚动器供测试<T = unknown>(el: 聊天壳): T {
   return 读取聊天壳测试内核(el).读取房间滚动器供测试() as T;
-}
-
-export function 读取恢复补锚标记供测试(el: 聊天壳): boolean {
-  return 读取聊天壳测试内核(el).读取恢复补锚标记供测试();
-}
-
-export function 写入恢复补锚标记供测试(el: 聊天壳, value: boolean): void {
-  读取聊天壳测试内核(el).写入恢复补锚标记供测试(value);
 }
 
 /**
@@ -510,9 +498,10 @@ export function 注入媒体草稿(el: 聊天壳, draft: 图片附件草稿): vo
     (读取聊天壳测试内核(el) as unknown as {
       snapshot(): 聊天状态 & { composerMediaDrafts?: 图片附件草稿[] };
     }).snapshot?.().composerMediaDrafts ?? [];
-  读取聊天壳测试内核(el).注入快照补丁供测试({
-    composerMediaDrafts: [...当前草稿.filter((item) => item.localId !== draft.localId), draft],
-  });
+  读取聊天媒体编排供测试(el).写入媒体草稿列表供测试([
+    ...当前草稿.filter((item) => item.localId !== draft.localId),
+    draft,
+  ]);
 }
 
 export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): void {
@@ -603,13 +592,17 @@ export function 输入消息到操作台(el: 聊天壳, message: string): void {
 export function 设置测试滚动阶段(
   el: 聊天壳,
   patch: {
+    lastReadEventPosition?: number | null;
     initialUnreadSettled?: boolean;
     firstUnreadEventPosition?: number | null;
     scrollPhase?: 聊天状态["scrollPhase"];
     hasUserScrollIntent?: boolean;
+    pendingReadAnchorPosition?: number | null;
+    historyLoadThrottleUntil?: number;
+    viewportMode?: 聊天状态["viewportMode"];
   }
 ): void {
-  注入聊天快照补丁供测试(el, patch);
+  读取聊天壳测试内核(el).写入视口调试状态供测试(patch);
 }
 
 export function 模拟用户滚动意图(scroll: HTMLElement): void {

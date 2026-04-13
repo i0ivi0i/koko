@@ -12,10 +12,8 @@ import {
   读取操作台主输入,
   读取操作台主动作,
   读取操作台表单,
-  读取恢复编排端口供测试,
   读取房间滚动器供测试,
   读取聊天快照供测试,
-  读取阅读推进编排端口供测试,
   输入房间短码到操作台,
   输入消息到操作台,
   设置测试滚动阶段,
@@ -154,7 +152,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     el.remove();
   });
 
-  it("connect_error invalid_session 会先转成恢复编排输入，再由恢复链执行刷新", async () => {
+  it("connect_error invalid_session 会重新 bootstrap 并通过恢复链刷新当前房间", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
     transport.bootstrapQueue = [
@@ -179,23 +177,11 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    const 恢复编排端口 = 读取恢复编排端口供测试<{
-      接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
-    }>(el);
-
-    const 收到的异常: Array<{ kind: string; roomId?: string }> = [];
-    const 原始方法 = 恢复编排端口.接收Transport异常.bind(恢复编排端口);
-    vi.spyOn(恢复编排端口, "接收Transport异常").mockImplementation(async (error) => {
-      收到的异常.push(error);
-      await 原始方法(error);
-    });
-
     transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
     await 等待组件稳定(el);
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    expect(收到的异常).toEqual([{ kind: "invalid_session" }]);
     expect(transport.bootstrapTokens).toHaveLength(2);
     expect(transport.loadRoomSnapshotArgs).toEqual([
       { roomId: "r-restore", sessionId: "s-stale" },
@@ -1201,11 +1187,6 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    const 阅读推进编排端口 = 读取阅读推进编排端口供测试<{
-      接收视口滚动: () => void;
-    }>(el);
-    const 视口滚动观察 = vi.spyOn(阅读推进编排端口, "接收视口滚动");
-
     设置测试滚动阶段(el, {
       initialUnreadSettled: true,
       scrollPhase: "idle",
@@ -1227,7 +1208,6 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
 
     expect(viewer.打开).toHaveBeenCalled();
     expect(transport.loadRoomHistoryCalls).toBe(0);
-    expect(视口滚动观察).not.toHaveBeenCalled();
     el.remove();
   });
 

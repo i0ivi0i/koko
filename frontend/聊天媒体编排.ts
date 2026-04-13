@@ -60,6 +60,7 @@ export interface 聊天媒体编排端口 {
     清空(): void;
     销毁(): void;
   }): void;
+  写入媒体草稿列表供测试(drafts: 媒体附件草稿[]): void;
 }
 
 type 媒体附件条目 = {
@@ -293,6 +294,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     设置媒体发布器供测试(publisher): void {
       媒体发布器.销毁();
       媒体发布器 = publisher;
+    },
+
+    写入媒体草稿列表供测试(drafts): void {
+      const 旧草稿预览地址 = deps.读取草稿().map((draft) => draft.previewUrl);
+      const 保留中的预览地址 = new Set(drafts.map((draft) => draft.previewUrl));
+      const 需要回收的预览地址 = 旧草稿预览地址.filter(
+        (previewUrl) => !保留中的预览地址.has(previewUrl)
+      );
+      写入草稿列表([...drafts], 需要回收的预览地址);
     },
   };
 }

@@ -13,9 +13,6 @@ import {
   读取操作台表单,
   读取房间滚动器供测试,
   读取聊天快照供测试,
-  读取阅读推进编排端口供测试,
-  写入恢复补锚标记供测试,
-  注入聊天快照补丁供测试,
   输入房间短码到操作台,
   输入消息到操作台,
   设置测试滚动阶段,
@@ -208,170 +205,6 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
     await 等待组件稳定(el);
 
     expect(scroll.scrollTop).toBe(480);
-    el.remove();
-  });
-
-  it("恢复首屏已经把较新的消息放进视口时，会主动推进阅读锚点而不是等用户再手动滚动", async () => {
-    window.localStorage.setItem("koko_current_room_id", "r-restore");
-    const transport = new 假传输();
-    transport.snapshotQueue = [
-      创建房间快照("r-restore", 19, {
-        last_read_event_position: 1,
-        first_unread_event_position: 2,
-        snapshot_messages: Array.from({ length: 19 }, (_, index) => ({
-          type: "message_created" as const,
-          room_id: "r-restore",
-          message_id: `m-${index + 1}`,
-          client_message_id: `c-${index + 1}`,
-          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
-          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
-          body: `恢复消息-${index + 1}`,
-          event_position: index + 1,
-        })),
-      }),
-    ];
-    const el = document.createElement("koko-chat-shell") as 聊天壳;
-    el.setTransportForTest(transport);
-    document.body.appendChild(el);
-    await 等待组件稳定(el);
-    await 等待组件稳定(el);
-
-    vi.useFakeTimers();
-    try {
-      const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
-        scrollTop: number;
-        clientHeight: number;
-        scrollHeight: number;
-      };
-      Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
-      Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 960 });
-      模拟消息滚动视口(el, scroll, [
-        { eventPosition: 1, top: -60, bottom: -20 },
-        { eventPosition: 2, top: 0, bottom: 40 },
-        { eventPosition: 3, top: 50, bottom: 90 },
-        { eventPosition: 4, top: 100, bottom: 140 },
-        { eventPosition: 5, top: 150, bottom: 190 },
-        { eventPosition: 6, top: 200, bottom: 240 },
-        { eventPosition: 7, top: 250, bottom: 290 },
-        { eventPosition: 8, top: 295, bottom: 335 },
-      ]);
-      设置测试滚动阶段(el, {
-        initialUnreadSettled: false,
-        firstUnreadEventPosition: 2,
-        scrollPhase: "restoring_unread",
-        hasUserScrollIntent: false,
-      });
-      注入聊天快照补丁供测试(el, { pendingReadAnchorPosition: null });
-      写入恢复补锚标记供测试(el, true);
-
-      读取房间滚动器供测试<{ 安排首屏定位: () => void }>(el).安排首屏定位();
-      await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(450);
-
-      expect(transport.readAnchorUpdates).toEqual([
-        { roomId: "r-restore", sessionId: "s-test", lastReadEventPosition: 7 },
-      ]);
-    } finally {
-      vi.useRealTimers();
-      el.remove();
-    }
-  });
-
-  it("首屏恢复阶段采样到候选已读后，不会在完成前立刻进入待提交队列", async () => {
-    window.localStorage.setItem("koko_current_room_id", "r-restore");
-    const transport = new 假传输();
-    transport.snapshotQueue = [
-      创建房间快照("r-restore", 19, {
-        last_read_event_position: 1,
-        first_unread_event_position: 2,
-        snapshot_messages: Array.from({ length: 19 }, (_, index) => ({
-          type: "message_created" as const,
-          room_id: "r-restore",
-          message_id: `m-${index + 1}`,
-          client_message_id: `c-${index + 1}`,
-          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
-          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
-          body: `恢复消息-${index + 1}`,
-          event_position: index + 1,
-        })),
-      }),
-    ];
-    const el = document.createElement("koko-chat-shell") as 聊天壳;
-    el.setTransportForTest(transport);
-    document.body.appendChild(el);
-    await 等待组件稳定(el);
-    await 等待组件稳定(el);
-
-    const scroll = el.shadowRoot!.querySelector("#messageScroll") as HTMLElement & {
-      scrollTop: number;
-      clientHeight: number;
-      scrollHeight: number;
-    };
-    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
-    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 960 });
-    模拟消息滚动视口(el, scroll, [
-      { eventPosition: 1, top: -60, bottom: -20 },
-      { eventPosition: 2, top: 0, bottom: 40 },
-      { eventPosition: 3, top: 50, bottom: 90 },
-      { eventPosition: 4, top: 100, bottom: 140 },
-      { eventPosition: 5, top: 150, bottom: 190 },
-      { eventPosition: 6, top: 200, bottom: 240 },
-      { eventPosition: 7, top: 250, bottom: 290 },
-      { eventPosition: 8, top: 295, bottom: 335 },
-    ]);
-    设置测试滚动阶段(el, {
-      initialUnreadSettled: false,
-      firstUnreadEventPosition: 2,
-      scrollPhase: "restoring_unread",
-      hasUserScrollIntent: false,
-    });
-
-    读取阅读推进编排端口供测试<{
-      接收候选已读位置: (position: number) => void;
-    }>(el).接收候选已读位置(7);
-
-    expect(读取聊天快照供测试(el).pendingReadAnchorPosition).toBeNull();
-    expect(读取聊天快照供测试(el).candidateReadAnchorPosition).toBe(7);
-
-    el.remove();
-  });
-
-  it("首屏稳定完成后，已有候选已读才会进入正式待提交队列", async () => {
-    window.localStorage.setItem("koko_current_room_id", "r-restore");
-    const transport = new 假传输();
-    transport.snapshotQueue = [
-      创建房间快照("r-restore", 19, {
-        last_read_event_position: 1,
-        first_unread_event_position: 2,
-        snapshot_messages: Array.from({ length: 19 }, (_, index) => ({
-          type: "message_created" as const,
-          room_id: "r-restore",
-          message_id: `m-${index + 1}`,
-          client_message_id: `c-${index + 1}`,
-          sender_session_id: index % 2 === 0 ? "s-other" : "s-test",
-          sender_display_alias: index % 2 === 0 ? "冷静的水獭" : "暴躁的企鹅",
-          body: `恢复消息-${index + 1}`,
-          event_position: index + 1,
-        })),
-      }),
-    ];
-    const el = document.createElement("koko-chat-shell") as 聊天壳;
-    el.setTransportForTest(transport);
-    document.body.appendChild(el);
-    await 等待组件稳定(el);
-    await 等待组件稳定(el);
-
-    const 阅读推进编排端口 = 读取阅读推进编排端口供测试<{
-      接收候选已读位置: (position: number) => void;
-      接收首屏稳定完成: (mode: "围绕未读阅读" | "贴底跟随") => void;
-    }>(el);
-
-    阅读推进编排端口.接收候选已读位置(7);
-    阅读推进编排端口.接收首屏稳定完成("围绕未读阅读");
-
-    expect(读取聊天快照供测试(el).candidateReadAnchorPosition).toBe(7);
-    expect(读取聊天快照供测试(el).pendingReadAnchorPosition).toBe(7);
-
     el.remove();
   });
 
@@ -677,8 +510,8 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
       firstUnreadEventPosition: null,
       hasUserScrollIntent: true,
       scrollPhase: "idle",
+      viewportMode: "贴底跟随",
     });
-    注入聊天快照补丁供测试(el, { viewportMode: "贴底跟随" });
     scroll.scrollTop = 400;
 
     scrollHeight = 700;
@@ -745,11 +578,9 @@ describe("聊天壳集成 / 未读恢复与跟随", () => {
         firstUnreadEventPosition: null,
         hasUserScrollIntent: false,
         scrollPhase: "idle",
+        viewportMode: "贴底跟随",
+        lastReadEventPosition: 3,
       });
-    注入聊天快照补丁供测试(el, {
-      viewportMode: "贴底跟随",
-      lastReadEventPosition: 3,
-    });
       scroll.scrollTop = 80;
 
       scrollHeight = 380;

@@ -13,11 +13,6 @@ import {
   读取操作台表单,
   输入房间短码到操作台,
   输入消息到操作台,
-  注入聊天快照补丁供测试,
-  读取恢复编排端口供测试,
-  设置测试滚动阶段,
-  模拟用户滚动意图,
-  模拟消息滚动视口,
 } from "./common/聊天测试支架";
 import {
   派生壳主舞台模式,
@@ -180,7 +175,17 @@ describe("聊天壳集成 / 引导与入房", () => {
     读取操作台主动作(el).click();
     await 等待组件稳定(el);
 
-    注入聊天快照补丁供测试(el, { latestEventPosition: 99 });
+    transport.socket.trigger("room_event", {
+      type: "message_created",
+      room_id: "r-test",
+      message_id: "m-99",
+      client_message_id: "c-99",
+      sender_session_id: "s-other",
+      sender_display_alias: "冷静的水獭",
+      body: "需要回退快照的最新消息",
+      event_position: 99,
+    });
+    await 等待组件稳定(el);
     transport.socket.trigger("connect", undefined);
     await 等待组件稳定(el);
     await 等待组件稳定(el);
@@ -200,40 +205,6 @@ describe("聊天壳集成 / 引导与入房", () => {
     expect(
       transport.loadRoomEventsArgs.some(({ from }) => from === 2)
     ).toBe(false);
-
-    el.remove();
-  });
-
-  it("need_snapshot_reload 会先转成恢复编排输入，再由恢复链执行快照重拉", async () => {
-    const transport = new 假传输();
-    const el = document.createElement("koko-chat-shell") as 聊天壳;
-    el.setTransportForTest(transport);
-    document.body.appendChild(el);
-    await 等待组件稳定(el);
-
-    输入房间短码到操作台(el, "ROOM01");
-    读取操作台主动作(el).click();
-    await 等待组件稳定(el);
-
-    const 恢复编排端口 = 读取恢复编排端口供测试<{
-      接收Transport异常: (error: { kind: string; roomId?: string }) => Promise<void>;
-    }>(el);
-
-    const 收到的异常: Array<{ kind: string; roomId?: string }> = [];
-    const 原始方法 = 恢复编排端口.接收Transport异常.bind(恢复编排端口);
-    vi.spyOn(恢复编排端口, "接收Transport异常").mockImplementation(async (error) => {
-      收到的异常.push(error);
-      await 原始方法(error);
-    });
-
-    注入聊天快照补丁供测试(el, { latestEventPosition: 99 });
-    transport.socket.trigger("connect", undefined);
-    await 等待组件稳定(el);
-    await 等待组件稳定(el);
-
-    expect(收到的异常).toEqual([{ kind: "need_snapshot_reload", roomId: "r-test" }]);
-    expect(transport.loadRoomSnapshotCalls).toBe(1);
-    expect(transport.loadRoomEventsCalls).toBe(1);
 
     el.remove();
   });

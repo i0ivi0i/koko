@@ -123,13 +123,19 @@ export interface 聊天应用内核端口 {
   dispatch(command: 聊天应用命令): Promise<void>;
   setTransportForTest(transport: 前端传输端口): void;
   dispose(): void;
-  注入快照补丁供测试(patch: Partial<聊天应用快照>): void;
-  读取房间滚动器供测试(): 房间滚动器;
-  读取恢复编排端口供测试(): 房间恢复编排端口;
-  读取阅读推进编排端口供测试(): 阅读推进编排端口;
-  读取恢复补锚标记供测试(): boolean;
-  写入恢复补锚标记供测试(value: boolean): void;
 }
+
+type 聊天视口调试状态 = Pick<
+  聊天应用快照,
+  | "lastReadEventPosition"
+  | "firstUnreadEventPosition"
+  | "initialUnreadSettled"
+  | "scrollPhase"
+  | "hasUserScrollIntent"
+  | "pendingReadAnchorPosition"
+  | "historyLoadThrottleUntil"
+  | "viewportMode"
+>;
 
 class 聊天应用内核 implements 聊天应用内核端口 {
   private readonly deps: 聊天应用内核依赖;
@@ -362,35 +368,21 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.媒体编排.打开查看器(request);
   }
 
-  /**
-   * 下面这些测试缝只服务现有集成测试迁移：
-   * - 它们显式带上“供测试”标记，避免重新伪装成正式业务入口；
-   * - 只允许补丁式注入和只读观察，不再保留 `replaceSnapshot()` 那种整包覆盖真相的旁路。
-   */
-  注入快照补丁供测试(patch: Partial<聊天应用快照>): void {
-    const { media: _忽略媒体快照, ...statePatch } = patch;
-    this.应用房间壳测试补丁(statePatch);
-    this.应用本地状态补丁(statePatch);
-  }
-
   读取房间滚动器供测试(): 房间滚动器 {
     return this.roomScroller;
   }
 
-  读取恢复编排端口供测试(): 房间恢复编排端口 {
-    return this.恢复编排端口;
-  }
-
-  读取阅读推进编排端口供测试(): 阅读推进编排端口 {
-    return this.阅读推进编排端口;
-  }
-
-  读取恢复补锚标记供测试(): boolean {
-    return this.shouldPrimeReadAnchorAfterInitialSettle;
-  }
-
-  写入恢复补锚标记供测试(value: boolean): void {
-    this.shouldPrimeReadAnchorAfterInitialSettle = value;
+  /**
+   * Task 6 之后只保留“视口局部调试态”这一条窄测试缝：
+   * - 不再允许整包快照补丁；
+   * - 只允许搭建滚动/未读恢复这类难以纯 DOM 构造的极端视口场景；
+   * - 房间壳派生状态仍然要翻成真实 room event，而不是直接改房间真相。
+   */
+  写入视口调试状态供测试(patch: Partial<聊天视口调试状态>): void {
+    if (patch.viewportMode === "贴底跟随") {
+      this.发送房间事件({ type: "USER_JUMPED_TO_LATEST" });
+    }
+    this.应用本地状态补丁(patch);
   }
 
   private get 恢复编排端口(): 房间恢复编排端口 {
@@ -683,26 +675,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private 写入阅读状态(patch: Parameters<阅读推进编排依赖["写入阅读状态"]>[0]): void {
     this.应用本地状态补丁(patch);
-  }
-
-  /**
-   * 现存集成测试里还需要少量“把房间壳状态拨到指定位置”的能力。
-   * 这里不再整包覆盖快照，而是尽量翻译成 room kernel 能理解的真实输入。
-   */
-  private 应用房间壳测试补丁(patch: Partial<Omit<聊天应用快照, "media">>): boolean {
-    let 写入了房间壳测试补丁 = false;
-    if (typeof patch.latestEventPosition === "number") {
-      this.发送房间事件({
-        type: "LATEST_EVENT_ADVANCED",
-        latestEventPosition: patch.latestEventPosition,
-      });
-      写入了房间壳测试补丁 = true;
-    }
-    if (patch.viewportMode === "贴底跟随") {
-      this.发送房间事件({ type: "USER_JUMPED_TO_LATEST" });
-      写入了房间壳测试补丁 = true;
-    }
-    return 写入了房间壳测试补丁;
   }
 
   private 读取房间壳外观(): 房间壳外观 {
