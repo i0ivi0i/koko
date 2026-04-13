@@ -42,6 +42,8 @@ mod 媒体内容解析;
 mod 流媒体打包;
 #[path = "rustus_hook外壳.rs"]
 mod rustus_hook外壳;
+#[path = "媒体上传外壳.rs"]
+mod 媒体上传外壳;
 #[path = "房间外壳.rs"]
 mod 房间外壳;
 
@@ -252,11 +254,11 @@ pub fn 构建路由(state: 应用状态) -> Router {
         )
         .route(
             "/api/media/{attachment_kind}/prepare",
-            post(房间外壳::prepare_media_upload),
+            post(媒体上传外壳::prepare_media_upload),
         )
         .route(
             "/api/media/{attachment_id}/complete",
-            post(房间外壳::complete_media_upload),
+            post(媒体上传外壳::complete_media_upload),
         )
         .route("/internal/rustus/hooks", post(rustus_hook外壳::handle_rustus_hook))
         .route(
