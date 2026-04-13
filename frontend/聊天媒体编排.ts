@@ -114,7 +114,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       startAttachmentId: 当前查看器请求.startAttachmentId,
       items: 当前查看器请求.items.map((item) => {
         const playback = 媒体会话表.get(item.attachmentId)?.snapshot().playback;
-        if (playback?.mode === "swarm" || playback?.mode === "anchor") {
+        if (
+          playback?.mode === "swarm" ||
+          playback?.mode === "anchor" ||
+          playback?.mode === "manifest"
+        ) {
           if (item.kind === "video") {
             return {
               ...item,

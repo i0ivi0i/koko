@@ -397,6 +397,8 @@ const 打开原生视频全屏 = (
 const 读取Vidstack纵横比 = (item: 媒体查看器视频项目): string =>
   `${Math.max(1, item.width)}/${Math.max(1, item.height)}`;
 
+const 是Hls主清单地址 = (src: string): boolean => /\.m3u8(?:$|\?)/.test(src);
+
 const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async (
   item,
   lifecycle,
@@ -415,6 +417,15 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
   const closeButton = document.createElement("button");
   let cleaned = false;
   const 解绑媒体运行时信号 = 绑定媒体运行时信号(player, item.attachmentId, hooks);
+  const 绑定HlsProvider到本地依赖 = (event: Event): void => {
+    const provider = (event as CustomEvent<{ type?: string; library?: unknown }>).detail;
+    if (provider?.type !== "hls") {
+      return;
+    }
+    // Vidstack 官方建议本地集成时显式把 provider.library 指到 `hls.js` 依赖，
+    // 否则默认会回退到 CDN 地址，真实运行会被网络策略和离线场景反噬。
+    provider.library = () => import("hls.js");
+  };
 
   overlay.dataset.mediaViewerMode = "video";
   overlay.setAttribute("role", "dialog");
@@ -428,6 +439,7 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
   player.setAttribute("autoplay", "");
   player.setAttribute("aspect-ratio", 读取Vidstack纵横比(item));
   player.setAttribute("data-media-viewer-player", "video");
+  player.addEventListener("provider-change", 绑定HlsProvider到本地依赖 as EventListener);
   player.style.cssText =
     "width:min(100%,1120px);max-height:calc(100vh - 40px);--media-max-height:calc(100vh - 40px);";
   if (item.posterSrc) {
@@ -450,6 +462,10 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
     closeButton.removeEventListener("click", cleanup);
     overlay.removeEventListener("click", closeWhenClickingBackdrop);
     document.removeEventListener("keydown", closeWhenPressingEscape);
+    player.removeEventListener(
+      "provider-change",
+      绑定HlsProvider到本地依赖 as EventListener
+    );
     解绑媒体运行时信号();
     overlay.remove();
     lifecycle.结束视口占用();
@@ -552,11 +568,15 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     if (startAt < 0) {
       return;
     }
-    const startItem = request.items[startAt];
-    if (!startItem) {
-      return;
-    }
-    if (startItem?.kind === "video" && isMobileViewport()) {
+  const startItem = request.items[startAt];
+  if (!startItem) {
+    return;
+  }
+  if (
+    startItem?.kind === "video" &&
+    isMobileViewport() &&
+    !是Hls主清单地址(startItem.src)
+  ) {
       const nativeViewer = openNativeVideoFullscreen(
         startItem,
         视口占用生命周期,

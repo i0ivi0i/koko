@@ -201,6 +201,62 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("视频已经切到 HLS manifest 主链时，消息卡片继续用 poster 占位，但查看器要拿到 manifest 地址", async () => {
+    const pane = 创建媒体消息窗();
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "manifest",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/stream/att-video-1/master.m3u8",
+        thumbnailUrl: "http://media.local/poster-video-1",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(preview?.getAttribute("src")).toBeNull();
+    expect(preview?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]?.items).toEqual([
+      {
+        attachmentId: "att-image-1",
+        kind: "image",
+        src: "http://media.local/original-image-1",
+        alt: "图片附件原图",
+        width: 1200,
+        height: 800,
+      },
+      {
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/stream/att-video-1/master.m3u8",
+        posterSrc: "http://media.local/poster-video-1",
+        width: 1280,
+        height: 720,
+      },
+    ]);
+
+    pane.remove();
+  });
+
   it("图片预览加载失败时也会回抛媒体会话信号，而不是继续让旧 src 静默失效", async () => {
     const pane = 创建媒体消息窗();
     const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];

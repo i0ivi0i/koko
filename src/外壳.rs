@@ -42,6 +42,9 @@ pub struct 应用状态 {
     pub admin_password: String,
     pub attachment_storage_dir: String,
     pub attachment_store: Arc<dyn ObjectStore>,
+    pub ffmpeg_bin: String,
+    pub ffprobe_bin: String,
+    pub shaka_packager_bin: String,
     pub swarm_tracker_public_url: String,
     pub swarm_tracker_port: u16,
     pub swarm_web_seed_public_endpoint: Option<String>,
@@ -63,6 +66,7 @@ pub async fn 构建应用状态(
     admin_password: String,
 ) -> std::io::Result<应用状态> {
     let media_storage = crate::assembly::读取媒体存储配置()?;
+    let media_packaging = crate::assembly::读取媒体打包配置();
     let swarm = crate::assembly::读取协作分发配置()?;
     let rustus = crate::assembly::读取rustus配置()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
@@ -81,6 +85,9 @@ pub async fn 构建应用状态(
         admin_password,
         attachment_storage_dir,
         attachment_store,
+        ffmpeg_bin: media_packaging.ffmpeg_bin,
+        ffprobe_bin: media_packaging.ffprobe_bin,
+        shaka_packager_bin: media_packaging.shaka_packager_bin,
         swarm_tracker_public_url: swarm.tracker_public_url,
         swarm_tracker_port: swarm.tracker_port,
         swarm_web_seed_public_endpoint: swarm.web_seed_public_endpoint,
@@ -188,6 +195,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route(
             "/api/media/{attachment_id}/locator",
             get(房间外壳::load_media_locator),
+        )
+        .route(
+            "/api/media/{attachment_id}/stream/{*asset_path}",
+            get(房间外壳::load_streaming_asset_content),
         )
         .route(
             "/api/media/{attachment_id}/torrent",

@@ -157,6 +157,24 @@ pub struct 协作分发元数据快照 {
     pub torrent_info_hash: Option<String>,
 }
 
+/// 流媒体清单元数据是真正把“视频主链已经切到标准 manifest”落成权威事实的持久化表面。
+/// 这里只保存稳定清单存储键，不把段列表、播放器状态或本地缓存态混进仓储真相。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 流媒体清单写入请求 {
+    pub 附件标识: String,
+    pub hls主清单存储键: String,
+    pub dash主清单存储键: String,
+}
+
+/// locator/complete 只需要知道“这条视频有没有正式清单入口”。
+/// 段文件继续通过稳定前缀派生，不把大量文件明细塞回数据库。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 流媒体清单快照 {
+    pub 附件标识: String,
+    pub hls主清单存储键: String,
+    pub dash主清单存储键: String,
+}
+
 /// locator 只回答“当前怎么受控取媒体”，不暴露存储键、权限投影或 swarm 运行态。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 媒体定位结果 {
@@ -165,6 +183,7 @@ pub struct 媒体定位结果 {
     pub 状态: 附件状态读取结果,
     pub 允许缩略图: bool,
     pub 协作分发: Option<协作分发元数据快照>,
+    pub 流媒体清单: Option<流媒体清单快照>,
 }
 
 /// 原始冷源只保留 24 小时窗口。
@@ -380,6 +399,24 @@ pub trait 仓储端口 {
     ) -> Result<协作分发torrent元信息快照, contract::错误码> {
         let _ = 请求;
         Err(contract::错误码::系统错误)
+    }
+
+    /// 流媒体清单是视频主链切换后的稳定主入口。
+    /// 这里的真相只回答“manifest 存在哪里”，不回答具体端侧该优先消费 HLS 还是 DASH。
+    fn 写入流媒体清单元数据(
+        &mut self,
+        请求: &流媒体清单写入请求,
+    ) -> Result<流媒体清单快照, contract::错误码> {
+        let _ = 请求;
+        Err(contract::错误码::系统错误)
+    }
+
+    fn 查询流媒体清单元数据(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<流媒体清单快照>, contract::错误码> {
+        let _ = 附件标识;
+        Ok(None)
     }
 
     /// 创建 prepared 附件占位，供浏览器后续直传对象内容。
@@ -955,6 +992,19 @@ pub fn 写入协作分发torrent元信息(
     仓储.写入协作分发torrent元信息(请求)
 }
 
+pub fn 写入流媒体清单元数据(
+    仓储: &mut dyn 仓储端口,
+    请求: &流媒体清单写入请求,
+) -> Result<流媒体清单快照, contract::错误码> {
+    if 请求.附件标识.trim().is_empty()
+        || 请求.hls主清单存储键.trim().is_empty()
+        || 请求.dash主清单存储键.trim().is_empty()
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.写入流媒体清单元数据(请求)
+}
+
 pub fn 读取协作分发torrent元信息(
     仓储: &dyn 仓储端口,
     附件标识: &str,
@@ -1011,11 +1061,15 @@ pub fn 查询媒体定位(
     仓储
         .查询附件可读内容(附件标识, 会话标识, 附件内容变体::原图)?
         .ok_or(contract::错误码::成员资格不足)?;
-    let distribution = 仓储.查询协作分发元数据(附件标识)?;
     let kind = match snapshot.种类 {
         附件种类读取结果::图片 => 媒体附件类型::图片,
         附件种类读取结果::视频 => 媒体附件类型::视频,
         _ => return Err(contract::错误码::附件类型不支持),
+    };
+    let distribution = 仓储.查询协作分发元数据(附件标识)?;
+    let streaming_manifest = match kind {
+        媒体附件类型::视频 => 仓储.查询流媒体清单元数据(附件标识)?,
+        媒体附件类型::图片 => None,
     };
     Ok(媒体定位结果 {
         附件标识: snapshot.附件标识,
@@ -1023,6 +1077,7 @@ pub fn 查询媒体定位(
         状态: snapshot.状态,
         允许缩略图: matches!(kind, 媒体附件类型::图片),
         协作分发: distribution,
+        流媒体清单: streaming_manifest,
     })
 }
 

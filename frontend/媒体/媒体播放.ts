@@ -12,7 +12,7 @@ type 媒体播放输入 = {
 
 type 媒体播放结果 =
   | {
-      mode: "swarm" | "anchor";
+      mode: "swarm" | "anchor" | "manifest";
       attachmentId: string;
       kind: 媒体种类;
       src: string;
@@ -86,6 +86,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 读取锚点地址 = (locator: 媒体定位结果): string =>
     locator.streaming_asset?.origin.original_url ?? locator.original_url;
 
+  /**
+   * 视频一旦拿到正式 HLS manifest，就不应该继续把原始附件冷源当主播放链。
+   * 当前阶段先统一优先消费 HLS：
+   * 1. 它已经是标准流媒体入口，后续接播放器/provider 不用再倒回 file URL；
+   * 2. DASH 先保留作契约冗余与后续多端适配，不在浏览器主链里同时搞双入口；
+   * 3. 没有 manifest 时才继续走旧的 swarm/file 过渡路径。
+   */
+  const 读取流媒体主链地址 = (locator: 媒体定位结果): string | null =>
+    locator.kind === "video" ? locator.streaming_asset?.manifest.hls_master_url ?? null : null;
+
   const 创建降级结果 = (
     input: 媒体播放输入,
     locator: 媒体定位结果 | null,
@@ -150,6 +160,17 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     if (locator.status !== "ready") {
       return 创建降级结果(input, locator, "attachment_not_ready");
+    }
+    const manifestUrl = 读取流媒体主链地址(locator);
+    if (manifestUrl) {
+      return {
+        mode: "manifest",
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        src: manifestUrl,
+        thumbnailUrl: locator.thumbnail_url,
+        hint: null,
+      };
     }
     const distribution = 读取协作分发定位片段(locator);
     if (distribution?.availability === "expired") {

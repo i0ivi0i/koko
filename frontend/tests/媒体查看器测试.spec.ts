@@ -443,6 +443,81 @@ describe("媒体查看器适配器", () => {
     expect(vidstackDestroy).not.toHaveBeenCalled();
   });
 
+  it("桌面 HLS 视频会给 Vidstack HLS provider 注入本地 hls.js loader，而不是偷偷依赖 CDN", async () => {
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-hls-provider-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-hls-provider-1",
+          src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
+          posterSrc: "http://media.local/poster-hls-provider-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    const player = await 等待查询元素<HTMLElement>(
+      "media-player[data-media-viewer-player='video']"
+    );
+    expect(player).not.toBeNull();
+
+    const provider: { type: string; library?: unknown } = { type: "hls" };
+    player?.dispatchEvent(new CustomEvent("provider-change", { detail: provider }));
+
+    expect(typeof provider.library).toBe("function");
+  });
+
+  it("移动端遇到 HLS manifest 时不走原生全屏，而是回退到支持 hls.js 的 Vidstack 覆盖层", () => {
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
+      destroy: vi.fn(),
+    }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
+    const openNativeVideoFullscreen = vi.fn(() => true);
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
+      isMobileViewport: () => true,
+      openNativeVideoFullscreen,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-hls-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-hls-1",
+          src: "http://media.local/stream/att-video-mobile-hls-1/master.m3u8",
+          posterSrc: "http://media.local/poster-mobile-hls-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+
+    expect(openNativeVideoFullscreen).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-mobile-hls-1",
+        src: "http://media.local/stream/att-video-mobile-hls-1/master.m3u8",
+      }),
+      expect.objectContaining({
+        开始视口占用: expect.any(Function),
+        结束视口占用: expect.any(Function),
+      }),
+      expect.objectContaining({
+        发出媒体会话信号: expect.any(Function),
+      })
+    );
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+  });
+
   it("默认桌面视频路径会创建 Vidstack 播放元素，并在销毁时释放覆盖层", async () => {
     const onViewportCaptureStart = vi.fn();
     const onViewportCaptureEnd = vi.fn();

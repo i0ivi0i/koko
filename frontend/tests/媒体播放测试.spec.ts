@@ -146,6 +146,73 @@ describe("媒体播放器", () => {
     });
   });
 
+  it("视频存在 HLS manifest 时，会优先返回标准流媒体主链而不是继续抱着原始附件冷源", async () => {
+    const resolveSwarmSource = vi.fn();
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-hls",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-video-hls",
+        thumbnail_url: "http://media.local/poster-video-hls",
+        distribution: {
+          content_id: "content_att-video-hls",
+          content_hash: "hash-video-hls",
+          swarm_id: "swarm-hash-video-hls",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-hls",
+          torrent_info_hash: "torrent-info-hash-video-hls",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-hls",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-hls",
+          content_hash: "hash-video-hls",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-hls/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-hls/stream.mpd",
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-hls",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-video-hls",
+            join_ticket: null,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-video-hls",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-hls",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "manifest",
+      attachmentId: "att-video-hls",
+      kind: "video",
+      src: "http://media.local/stream/att-video-hls/master.m3u8",
+      thumbnailUrl: "http://media.local/poster-video-hls",
+      hint: null,
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
   it("协作分发仍在后台补齐整附件时，不把内部补块状态透给视图层", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-4",

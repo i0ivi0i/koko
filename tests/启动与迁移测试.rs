@@ -108,6 +108,19 @@ fn 协作分发迁移已包含元数据表() {
 }
 
 #[test]
+fn 流媒体清单迁移已包含清单元数据表() {
+    let sql = std::fs::read_to_string("migrations/0009_附件流媒体清单元数据.sql")
+        .expect("应能读到流媒体清单迁移文件");
+
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachment_streaming_manifests"));
+    assert!(sql.contains(
+        "attachment_id TEXT PRIMARY KEY REFERENCES attachments(attachment_id) ON DELETE CASCADE"
+    ));
+    assert!(sql.contains("hls_master_storage_key TEXT NOT NULL"));
+    assert!(sql.contains("dash_mpd_storage_key TEXT NOT NULL"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),

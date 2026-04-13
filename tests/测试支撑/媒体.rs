@@ -191,6 +191,22 @@ pub async fn 插入附件协作分发元数据记录(pool: &PgPool, 附件标识
     .expect("应能插入协作分发元数据");
 }
 
+/// 过渡完成后，ready 视频测试建数也要补齐正式 manifest 真相。
+/// 这里先只插最小清单元数据，不替代真实打包链；真正的产物字节仍应由 complete 上传链回归测试覆盖。
+pub async fn 插入流媒体清单元数据记录(pool: &PgPool, 附件标识: &str) {
+    sqlx::query(
+        "INSERT INTO attachment_streaming_manifests \
+            (attachment_id, hls_master_storage_key, dash_mpd_storage_key) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(附件标识)
+    .bind(format!("streams/{附件标识}/hls/master.m3u8"))
+    .bind(format!("streams/{附件标识}/dash/stream.mpd"))
+    .execute(pool)
+    .await
+    .expect("应能插入流媒体清单元数据");
+}
+
 /// 最小 PNG fixture 继续内嵌在代码里，避免为了 1x1 图片样本再多维护一个独立文件。
 pub fn 最小png字节() -> Vec<u8> {
     vec![

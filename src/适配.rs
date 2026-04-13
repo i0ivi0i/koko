@@ -465,6 +465,57 @@ impl Pg仓储 {
         })
     }
 
+    /// 流媒体清单元数据单独分表：
+    /// - attachment 继续回答 ready 真相；
+    /// - manifest 表只回答标准主链入口；
+    /// - 这样旧原始附件冷源退场时，不会再被 storage_key 绑死。
+    async fn 写入流媒体清单元数据_异步(
+        pool: &PgPool,
+        请求: &usecase::流媒体清单写入请求,
+    ) -> Result<usecase::流媒体清单快照, contract::错误码> {
+        sqlx::query(
+            "INSERT INTO attachment_streaming_manifests \
+                (attachment_id, hls_master_storage_key, dash_mpd_storage_key) \
+             VALUES ($1, $2, $3) \
+             ON CONFLICT (attachment_id) DO UPDATE SET \
+                hls_master_storage_key = EXCLUDED.hls_master_storage_key, \
+                dash_mpd_storage_key = EXCLUDED.dash_mpd_storage_key",
+        )
+        .bind(&请求.附件标识)
+        .bind(&请求.hls主清单存储键)
+        .bind(&请求.dash主清单存储键)
+        .execute(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(usecase::流媒体清单快照 {
+            附件标识: 请求.附件标识.clone(),
+            hls主清单存储键: 请求.hls主清单存储键.clone(),
+            dash主清单存储键: 请求.dash主清单存储键.clone(),
+        })
+    }
+
+    async fn 查询流媒体清单元数据_异步(
+        pool: &PgPool,
+        附件标识: &str,
+    ) -> Result<Option<usecase::流媒体清单快照>, contract::错误码> {
+        let row = sqlx::query(
+            "SELECT attachment_id, hls_master_storage_key, dash_mpd_storage_key \
+             FROM attachment_streaming_manifests \
+             WHERE attachment_id = $1",
+        )
+        .bind(附件标识)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
+
+        Ok(row.map(|row| usecase::流媒体清单快照 {
+            附件标识: row.get("attachment_id"),
+            hls主清单存储键: row.get("hls_master_storage_key"),
+            dash主清单存储键: row.get("dash_mpd_storage_key"),
+        }))
+    }
+
     /// locator 只读这份稳定分发片段，不掺入 tracker/runtime 状态。
     async fn 查询协作分发元数据_异步(
         pool: &PgPool,
@@ -664,8 +715,9 @@ impl Pg仓储 {
         Ok(())
     }
 
-    /// 按消息可见性反查附件内容目标。
-    /// 只要当前会话仍然是某个引用该附件消息所在房间的成员，就允许读取。
+    /// 按附件可见性反查内容目标。
+    /// 已提交附件继续走“消息所在房间成员可见”语义；
+    /// 未提交附件允许上传者本人预览，避免 complete 已返回受控地址但真正读取仍被 403 挡掉。
     async fn 查询附件可读内容_异步(
         pool: &PgPool,
         附件标识: &str,
@@ -673,28 +725,52 @@ impl Pg仓储 {
         变体: usecase::附件内容变体,
     ) -> Result<Option<usecase::附件内容读取结果>, contract::错误码> {
         let wants_thumbnail = matches!(变体, usecase::附件内容变体::缩略图);
+        let owner_anonymous_identity = Self::查询会话所属匿名身份_异步(pool, 会话标识).await?;
         let row = sqlx::query(
-            "SELECT \
-                CASE \
-                    WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
-                    ELSE a.storage_key \
-                END AS storage_key, \
-                CASE \
-                    WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
-                    ELSE a.mime_type \
-                END AS mime_type \
-             FROM attachments a \
-             JOIN message_attachment_refs mar ON mar.attachment_id = a.id \
-             JOIN messages m ON m.message_id = mar.message_id \
-             JOIN room_members rm ON rm.room_id = m.room_id AND rm.left_at IS NULL \
-             JOIN sessions s ON s.id = rm.session_id \
-             WHERE a.attachment_id = $1 AND s.session_id = $2 \
-             ORDER BY m.created_at DESC \
+            "SELECT storage_key, mime_type \
+             FROM ( \
+                SELECT \
+                    CASE \
+                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
+                        ELSE a.storage_key \
+                    END AS storage_key, \
+                    CASE \
+                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
+                        ELSE a.mime_type \
+                    END AS mime_type, \
+                    0 AS priority, \
+                    NULL::TIMESTAMPTZ AS created_at \
+                FROM attachments a \
+                JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
+                WHERE a.attachment_id = $1 \
+                  AND a.committed_at IS NULL \
+                  AND ai.anonymous_identity_id = $2 \
+                UNION ALL \
+                SELECT \
+                    CASE \
+                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN a.thumbnail_storage_key \
+                        ELSE a.storage_key \
+                    END AS storage_key, \
+                    CASE \
+                        WHEN $3 AND a.thumbnail_storage_key IS NOT NULL THEN 'image/png' \
+                        ELSE a.mime_type \
+                    END AS mime_type, \
+                    1 AS priority, \
+                    m.created_at AS created_at \
+                FROM attachments a \
+                JOIN message_attachment_refs mar ON mar.attachment_id = a.id \
+                JOIN messages m ON m.message_id = mar.message_id \
+                JOIN room_members rm ON rm.room_id = m.room_id AND rm.left_at IS NULL \
+                JOIN sessions s ON s.id = rm.session_id \
+                WHERE a.attachment_id = $1 AND s.session_id = $4 \
+             ) readable \
+             ORDER BY priority ASC, created_at DESC NULLS LAST \
              LIMIT 1",
         )
         .bind(附件标识)
-        .bind(会话标识)
+        .bind(owner_anonymous_identity)
         .bind(wants_thumbnail)
+        .bind(会话标识)
         .fetch_optional(pool)
         .await
         .map_err(|_| contract::错误码::系统错误)?;
@@ -1680,6 +1756,20 @@ impl 仓储端口 for Pg仓储 {
         请求: &usecase::协作分发torrent元信息写入请求,
     ) -> Result<usecase::协作分发torrent元信息快照, contract::错误码> {
         self.在运行时执行(Self::写入协作分发torrent元信息_异步(&self.pool, 请求))
+    }
+
+    fn 写入流媒体清单元数据(
+        &mut self,
+        请求: &usecase::流媒体清单写入请求,
+    ) -> Result<usecase::流媒体清单快照, contract::错误码> {
+        self.在运行时执行(Self::写入流媒体清单元数据_异步(&self.pool, 请求))
+    }
+
+    fn 查询流媒体清单元数据(
+        &self,
+        附件标识: &str,
+    ) -> Result<Option<usecase::流媒体清单快照>, contract::错误码> {
+        self.在运行时执行(Self::查询流媒体清单元数据_异步(&self.pool, 附件标识))
     }
 
     /// 附件内容读取仍然走成员可见性，不单独再长一套 ACL。

@@ -21,6 +21,7 @@ use std::{
     collections::HashMap,
     io::Cursor,
     path::{Path as StdPath, PathBuf},
+    process::Command,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::fs;
@@ -127,6 +128,11 @@ pub(super) struct ParsedAttachmentContentQuery {
     variant: usecase::附件内容变体,
 }
 
+/// 流媒体资产读取不需要 variant，但仍需要稳定会话锚点做可见性校验。
+pub(super) struct ParsedStreamingAssetQuery {
+    session_id: String,
+}
+
 /// 标准单段 bytes range。
 /// 这里仍然只服务 HTTP adapter：
 /// - 业务层不关心传输切片；
@@ -136,6 +142,20 @@ struct 标准字节范围 {
     请求: GetRange,
     起始字节: u64,
     结束字节_不含: u64,
+}
+
+/// 打包阶段先把本地产物清单和最终入库键分开：
+/// - 本地产物路径只活在当前 complete 调度里；
+/// - object_store 存储键才是后续 locator/stream 路由共享的稳定真相。
+struct 流媒体打包文件 {
+    相对路径: String,
+    本地路径: PathBuf,
+}
+
+struct 流媒体打包结果 {
+    hls主清单相对路径: String,
+    dash主清单相对路径: String,
+    文件列表: Vec<流媒体打包文件>,
 }
 
 /// 先把宽松 query map 收口成稳定内部参数。
@@ -261,6 +281,25 @@ pub(super) fn parse_attachment_content_query(
     Ok(ParsedAttachmentContentQuery {
         session_id: session_id.to_string(),
         variant,
+    })
+}
+
+pub(super) fn parse_streaming_asset_query(
+    raw_query: HashMap<String, String>,
+) -> Result<ParsedStreamingAssetQuery, (StatusCode, &'static str, &'static str)> {
+    let Some(session_id) = raw_query
+        .get("session_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 session_id",
+        ));
+    };
+    Ok(ParsedStreamingAssetQuery {
+        session_id: session_id.to_string(),
     })
 }
 
@@ -907,6 +946,20 @@ fn 媒体分发描述转响应体(distribution: &contract::媒体分发描述) -
     })
 }
 
+fn 构造流媒体受控地址(attachment_id: &str, session_id: &str, asset_path: &str) -> String {
+    format!("/api/media/{attachment_id}/stream/{asset_path}?session_id={session_id}")
+}
+
+fn 推导流媒体对象前缀(attachment_id: &str) -> String {
+    format!("streams/{attachment_id}/")
+}
+
+fn 流媒体存储键转受控路径<'a>(attachment_id: &str, storage_key: &'a str) -> &'a str {
+    storage_key
+        .strip_prefix(推导流媒体对象前缀(attachment_id).as_str())
+        .unwrap_or(storage_key)
+}
+
 fn 流媒体资产描述转响应体(asset: &contract::流媒体资产描述) -> serde_json::Value {
     serde_json::json!({
         "asset_id": asset.资产标识,
@@ -935,7 +988,9 @@ fn 构造流媒体资产响应体(
     attachment_id: &str,
     runtime_distribution: &serde_json::Value,
     distribution_snapshot: &usecase::协作分发元数据快照,
+    streaming_manifest: Option<&usecase::流媒体清单快照>,
     original_url: String,
+    session_id: &str,
     now_epoch秒: i64,
 ) -> serde_json::Value {
     let asset = contract::流媒体资产描述 {
@@ -945,8 +1000,26 @@ fn 构造流媒体资产响应体(
         内容哈希: distribution_snapshot.content_hash.clone(),
         种类: contract::媒体资产种类::流媒体视频,
         清单: contract::媒体清单描述 {
-            hls主清单地址: None,
-            dash主清单地址: None,
+            hls主清单地址: streaming_manifest.map(|manifest| {
+                构造流媒体受控地址(
+                    attachment_id,
+                    session_id,
+                    流媒体存储键转受控路径(
+                        attachment_id,
+                        manifest.hls主清单存储键.as_str(),
+                    ),
+                )
+            }),
+            dash主清单地址: streaming_manifest.map(|manifest| {
+                构造流媒体受控地址(
+                    attachment_id,
+                    session_id,
+                    流媒体存储键转受控路径(
+                        attachment_id,
+                        manifest.dash主清单存储键.as_str(),
+                    ),
+                )
+            }),
         },
         分发: 从运行态协作分发响应提取共享分发表面(
             distribution_snapshot,
@@ -1016,8 +1089,10 @@ fn 构造媒体资产响应体(
     snapshot: &usecase::媒体附件快照,
     runtime_distribution: Option<&serde_json::Value>,
     distribution_snapshot: Option<&usecase::协作分发元数据快照>,
+    streaming_manifest: Option<&usecase::流媒体清单快照>,
     original_url: String,
     thumbnail_url: Option<String>,
+    session_id: &str,
     now_epoch秒: i64,
 ) -> Option<serde_json::Value> {
     match &snapshot.种类 {
@@ -1025,7 +1100,9 @@ fn 构造媒体资产响应体(
             snapshot.附件标识.as_str(),
             runtime_distribution?,
             distribution_snapshot?,
+            streaming_manifest,
             original_url,
+            session_id,
             now_epoch秒,
         )),
         usecase::媒体附件类型::图片 => Some(构造blob媒体资产响应体(
@@ -1046,6 +1123,7 @@ fn 构造定位媒体资产响应体(
     locator: &usecase::媒体定位结果,
     runtime_distribution: Option<&serde_json::Value>,
     original_url: String,
+    session_id: &str,
     now_epoch秒: i64,
 ) -> Option<(&'static str, serde_json::Value)> {
     match &locator.种类 {
@@ -1055,7 +1133,9 @@ fn 构造定位媒体资产响应体(
                 locator.附件标识.as_str(),
                 runtime_distribution?,
                 locator.协作分发.as_ref()?,
+                locator.流媒体清单.as_ref(),
                 original_url,
+                session_id,
                 now_epoch秒,
             ),
         )),
@@ -1081,6 +1161,396 @@ fn 媒体附件快照转响应体(
         response["media_asset"] = media_asset;
     }
     response
+}
+
+fn 推导流媒体对象存储键(attachment_id: &str, asset_path: &str) -> String {
+    format!("streams/{attachment_id}/{asset_path}")
+}
+
+fn 推导流媒体内容类型(asset_path: &str) -> &'static str {
+    match StdPath::new(asset_path)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+    {
+        "m3u8" => "application/vnd.apple.mpegurl",
+        "mpd" => "application/dash+xml",
+        "m4s" => "video/iso.segment",
+        "mp4" => "video/mp4",
+        _ => "application/octet-stream",
+    }
+}
+
+fn 执行外部命令(command: &mut Command, step: &str) -> Result<(), (StatusCode, &'static str, String)> {
+    let output = command.output().map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("{step} 启动失败: {err}"),
+        )
+    })?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "system_error",
+        format!(
+            "{step} 失败: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout).trim(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+    ))
+}
+
+fn ffprobe检测首音轨是否存在(
+    ffprobe_bin: &str,
+    输入文件: &StdPath,
+) -> Result<bool, (StatusCode, &'static str, String)> {
+    let output = Command::new(ffprobe_bin)
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(输入文件)
+        .output()
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("ffprobe 启动失败: {err}"),
+            )
+        })?;
+    if !output.status.success() {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!(
+                "ffprobe 失败: stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout).trim(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        ));
+    }
+    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
+fn 收集目录文件(
+    root: &StdPath,
+    prefix: &str,
+    files: &mut Vec<流媒体打包文件>,
+) -> Result<(), (StatusCode, &'static str, String)> {
+    let entries = std::fs::read_dir(root).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("读取打包产物目录失败: {err}"),
+        )
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("遍历打包产物目录失败: {err}"),
+            )
+        })?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let relative = if prefix.is_empty() {
+            name
+        } else {
+            format!("{prefix}/{name}")
+        };
+        if path.is_dir() {
+            收集目录文件(path.as_path(), relative.as_str(), files)?;
+        } else {
+            files.push(流媒体打包文件 {
+                相对路径: relative,
+                本地路径: path,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn 生成流媒体打包产物(
+    ffmpeg_bin: &str,
+    ffprobe_bin: &str,
+    shaka_packager_bin: &str,
+    attachment_id: &str,
+    输入文件: &StdPath,
+) -> Result<流媒体打包结果, (StatusCode, &'static str, String)> {
+    let workdir = std::env::temp_dir().join(format!("koko-stream-{attachment_id}-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(workdir.as_path()).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("创建流媒体打包工作目录失败: {err}"),
+        )
+    })?;
+    let hls_video_dir = workdir.join("hls").join("video");
+    let hls_audio_dir = workdir.join("hls").join("audio");
+    let dash_dir = workdir.join("dash");
+    std::fs::create_dir_all(hls_video_dir.as_path()).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("创建 HLS 视频目录失败: {err}"),
+        )
+    })?;
+    std::fs::create_dir_all(dash_dir.as_path()).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("创建 DASH 目录失败: {err}"),
+        )
+    })?;
+
+    let 视频轨道文件 = workdir.join("video.mp4");
+    let mut 转码视频 = Command::new(ffmpeg_bin);
+    转码视频.args([
+        "-y",
+        "-i",
+    ]);
+    转码视频.arg(输入文件);
+    转码视频.args([
+        "-map",
+        "0:v:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-g",
+        "48",
+        "-keyint_min",
+        "48",
+        "-sc_threshold",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+        "-an",
+    ]);
+    转码视频.arg(视频轨道文件.as_os_str());
+    执行外部命令(&mut 转码视频, "FFmpeg 视频转码")?;
+
+    let 有音轨 = ffprobe检测首音轨是否存在(ffprobe_bin, 输入文件)?;
+    let 音频轨道文件 = workdir.join("audio.mp4");
+    if 有音轨 {
+        std::fs::create_dir_all(hls_audio_dir.as_path()).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("创建 HLS 音频目录失败: {err}"),
+            )
+        })?;
+        let mut 转码音频 = Command::new(ffmpeg_bin);
+        转码音频.args(["-y", "-i"]);
+        转码音频.arg(输入文件);
+        转码音频.args([
+            "-map",
+            "0:a:0",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-vn",
+        ]);
+        转码音频.arg(音频轨道文件.as_os_str());
+        执行外部命令(&mut 转码音频, "FFmpeg 音频转码")?;
+    }
+
+    let mut 打包命令 = Command::new(shaka_packager_bin);
+    打包命令.arg(format!(
+        "in={},stream=video,init_segment={},segment_template={},playlist_name={}",
+        视频轨道文件.display(),
+        hls_video_dir.join("init.mp4").display(),
+        hls_video_dir.join("$Number$.m4s").display(),
+        hls_video_dir.join("main.m3u8").display()
+    ));
+    if 有音轨 {
+        打包命令.arg(format!(
+            "in={},stream=audio,init_segment={},segment_template={},playlist_name={},hls_group_id=audio,hls_name=audio",
+            音频轨道文件.display(),
+            hls_audio_dir.join("init.mp4").display(),
+            hls_audio_dir.join("$Number$.m4s").display(),
+            hls_audio_dir.join("main.m3u8").display()
+        ));
+    }
+    打包命令.arg("--mpd_output");
+    打包命令.arg(dash_dir.join("stream.mpd").as_os_str());
+    打包命令.arg("--hls_master_playlist_output");
+    打包命令.arg(workdir.join("hls").join("master.m3u8").as_os_str());
+    执行外部命令(&mut 打包命令, "Shaka Packager 打包")?;
+
+    let mut 文件列表 = Vec::new();
+    收集目录文件(workdir.join("hls").as_path(), "hls", &mut 文件列表)?;
+    收集目录文件(workdir.join("dash").as_path(), "dash", &mut 文件列表)?;
+    Ok(流媒体打包结果 {
+        hls主清单相对路径: "hls/master.m3u8".to_string(),
+        dash主清单相对路径: "dash/stream.mpd".to_string(),
+        文件列表,
+    })
+}
+
+async fn 上传流媒体打包产物(
+    state: &应用状态,
+    attachment_id: &str,
+    打包结果: 流媒体打包结果,
+) -> Result<usecase::流媒体清单写入请求, (StatusCode, &'static str, String)> {
+    for file in &打包结果.文件列表 {
+        let storage_key = 推导流媒体对象存储键(attachment_id, file.相对路径.as_str());
+        let bytes = fs::read(file.本地路径.as_path()).await.map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("读取流媒体打包产物失败: {err}"),
+            )
+        })?;
+        state
+            .attachment_store
+            .put(&ObjectPath::from(storage_key), bytes.into())
+            .await
+            .map_err(|err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("写入流媒体打包产物失败: {err}"),
+                )
+            })?;
+    }
+
+    Ok(usecase::流媒体清单写入请求 {
+        附件标识: attachment_id.to_string(),
+        hls主清单存储键: 推导流媒体对象存储键(
+            attachment_id,
+            打包结果.hls主清单相对路径.as_str(),
+        ),
+        dash主清单存储键: 推导流媒体对象存储键(
+            attachment_id,
+            打包结果.dash主清单相对路径.as_str(),
+        ),
+    })
+}
+
+fn 解析流媒体相对路径(base_asset_path: &str, referenced_path: &str) -> String {
+    if referenced_path.starts_with("http://") || referenced_path.starts_with("https://") {
+        return referenced_path.to_string();
+    }
+    let mut parts = base_asset_path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if !parts.is_empty() {
+        parts.pop();
+    }
+    for part in referenced_path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            _ => parts.push(part.to_string()),
+        }
+    }
+    parts.join("/")
+}
+
+fn 重写_hls清单内容(
+    attachment_id: &str,
+    session_id: &str,
+    asset_path: &str,
+    content: &str,
+) -> String {
+    content
+        .lines()
+        .map(|line| {
+            if let Some(prefix) = line.split("URI=\"").next() {
+                if prefix.len() != line.len() {
+                    let mut rewritten = line.to_string();
+                    if let Some(start) = line.find("URI=\"") {
+                        let value_start = start + 5;
+                        if let Some(end_rel) = line[value_start..].find('"') {
+                            let value_end = value_start + end_rel;
+                            let raw = &line[value_start..value_end];
+                            let resolved = 解析流媒体相对路径(asset_path, raw);
+                            let absolute = 构造流媒体受控地址(
+                                attachment_id,
+                                session_id,
+                                resolved.as_str(),
+                            );
+                            rewritten.replace_range(value_start..value_end, absolute.as_str());
+                            return rewritten;
+                        }
+                    }
+                }
+            }
+            if line.starts_with('#') || line.trim().is_empty() {
+                return line.to_string();
+            }
+            let resolved = 解析流媒体相对路径(asset_path, line.trim());
+            构造流媒体受控地址(attachment_id, session_id, resolved.as_str())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
+fn 重写_xml属性路径(
+    content: String,
+    attribute_name: &str,
+    attachment_id: &str,
+    session_id: &str,
+    asset_path: &str,
+) -> String {
+    let needle = format!(r#"{attribute_name}=""#);
+    let mut current = content;
+    let mut search_from = 0;
+    while let Some(start_rel) = current[search_from..].find(needle.as_str()) {
+        let start = search_from + start_rel;
+        let value_start = start + needle.len();
+        let Some(end_rel) = current[value_start..].find('"') else {
+            break;
+        };
+        let value_end = value_start + end_rel;
+        let raw = current[value_start..value_end].to_string();
+        let resolved = 解析流媒体相对路径(asset_path, raw.as_str());
+        let absolute = 构造流媒体受控地址(attachment_id, session_id, resolved.as_str());
+        current.replace_range(value_start..value_end, absolute.as_str());
+        // 必须把扫描游标推进到本次替换之后；
+        // 否则下一轮又会命中同一个属性，MPD 重写会在原地自旋。
+        search_from = value_start + absolute.len();
+    }
+    current
+}
+
+fn 重写_dash清单内容(
+    attachment_id: &str,
+    session_id: &str,
+    asset_path: &str,
+    content: &str,
+) -> String {
+    let rewritten = 重写_xml属性路径(
+        content.to_string(),
+        "initialization",
+        attachment_id,
+        session_id,
+        asset_path,
+    );
+    重写_xml属性路径(
+        rewritten,
+        "media",
+        attachment_id,
+        session_id,
+        asset_path,
+    )
 }
 
 /// 冷路径：引导匿名身份。
@@ -2413,6 +2883,7 @@ pub(super) async fn complete_media_upload(
         );
     }
 
+    let mut streaming_manifest_request = None;
     let ready_request = match parsed {
         媒体内容解析结果::图片(parsed) => {
             let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
@@ -2451,122 +2922,153 @@ pub(super) async fn complete_media_upload(
                 缩略图存储键: Some(thumbnail_storage_key),
             }
         }
-        媒体内容解析结果::视频(parsed) => usecase::媒体附件写入请求 {
-            附件标识: attachment_id.clone(),
-            种类: prepared.种类.clone(),
-            mime_type: parsed.mime_type,
-            字节大小: original_bytes.len() as i64,
-            宽: parsed.宽,
-            高: parsed.高,
-            原始内容存储键: prepared.原始内容存储键.clone(),
-            缩略图存储键: None,
-        },
+        媒体内容解析结果::视频(parsed) => {
+            let 打包结果 = match task::spawn_blocking({
+                let ffmpeg_bin = state.ffmpeg_bin.clone();
+                let ffprobe_bin = state.ffprobe_bin.clone();
+                let shaka_packager_bin = state.shaka_packager_bin.clone();
+                let attachment_id = attachment_id.clone();
+                let temp_file_path = temp_file_path.clone();
+                move || {
+                    生成流媒体打包产物(
+                        ffmpeg_bin.as_str(),
+                        ffprobe_bin.as_str(),
+                        shaka_packager_bin.as_str(),
+                        attachment_id.as_str(),
+                        temp_file_path.as_path(),
+                    )
+                }
+            })
+            .await
+            {
+                Ok(Ok(result)) => result,
+                Ok(Err((status, code, message))) => return err_resp(status, code, message),
+                Err(err) => {
+                    return err_resp(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        format!("流媒体打包任务执行失败: {err}"),
+                    )
+                }
+            };
+            streaming_manifest_request =
+                match 上传流媒体打包产物(&state, &attachment_id, 打包结果).await {
+                    Ok(request) => Some(request),
+                    Err((status, code, message)) => return err_resp(status, code, message),
+                };
+            usecase::媒体附件写入请求 {
+                附件标识: attachment_id.clone(),
+                种类: prepared.种类.clone(),
+                mime_type: parsed.mime_type,
+                字节大小: original_bytes.len() as i64,
+                宽: parsed.宽,
+                高: parsed.高,
+                原始内容存储键: prepared.原始内容存储键.clone(),
+                缩略图存储键: None,
+            }
+        }
+    };
+    // ready 真相已经成立后，马上补齐协作分发元数据。
+    // 这里故意不把 hash / swarm_id 交给前端推导，避免多端各算各的。
+    let ready_epoch秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs() as i64)
+        .unwrap_or(0);
+    let distribution_request = media_distribution::构造协作分发元数据写入请求(
+        &attachment_id,
+        original_bytes.as_ref(),
+        ready_epoch秒,
+    );
+    let torrent = match media_distribution::生成附件torrent元信息(
+        distribution_request.content_hash.as_str(),
+        original_bytes.as_ref(),
+    ) {
+        Ok(torrent) => torrent,
+        Err(message) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                message,
+            );
+        }
+    };
+    let torrent_request = usecase::协作分发torrent元信息写入请求 {
+        附件标识: attachment_id.clone(),
+        torrent_bytes: torrent.torrent_bytes,
+        torrent_info_hash: torrent.torrent_info_hash,
+        piece_length字节: torrent.piece_length_bytes,
     };
     let state_for_usecase = state.clone();
     let session_id_for_usecase = session_id.clone();
+    let distribution_request_for_write = distribution_request.clone();
+    let torrent_request_for_write = torrent_request.clone();
+    let streaming_manifest_request_for_write = streaming_manifest_request.clone();
     let complete_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        usecase::完成媒体附件上传(&mut repo, &session_id_for_usecase, &ready_request)
-            .map_err(map_domain_err_tuple)
+        let snapshot = usecase::完成媒体附件上传(&mut repo, &session_id_for_usecase, &ready_request)
+            .map_err(map_domain_err_tuple)?;
+        usecase::写入协作分发元数据(&mut repo, &distribution_request_for_write)
+            .map_err(map_domain_err_tuple)?;
+        usecase::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
+            .map_err(map_domain_err_tuple)?;
+        if let Some(request) = streaming_manifest_request_for_write.as_ref() {
+            usecase::写入流媒体清单元数据(&mut repo, request).map_err(map_domain_err_tuple)?;
+        }
+        Ok::<_, (StatusCode, &'static str, String)>(snapshot)
     })
     .await;
     match complete_result {
         Ok(Ok(snapshot)) => {
-            // ready 真相已经成立后，马上补齐协作分发元数据。
-            // 这里故意不把 hash / swarm_id 交给前端推导，避免多端各算各的。
-            let ready_epoch秒 = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|value| value.as_secs() as i64)
-                .unwrap_or(0);
-            let distribution_request = media_distribution::构造协作分发元数据写入请求(
-                &attachment_id,
-                original_bytes.as_ref(),
-                ready_epoch秒,
-            );
-            let torrent = match media_distribution::生成附件torrent元信息(
-                distribution_request.content_hash.as_str(),
-                original_bytes.as_ref(),
-            ) {
-                Ok(torrent) => torrent,
-                Err(message) => {
-                    return err_resp(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message,
-                    );
-                }
-            };
-            let torrent_request = usecase::协作分发torrent元信息写入请求 {
+            let distribution_snapshot = usecase::协作分发元数据快照 {
                 附件标识: attachment_id.clone(),
-                torrent_bytes: torrent.torrent_bytes,
-                torrent_info_hash: torrent.torrent_info_hash,
-                piece_length字节: torrent.piece_length_bytes,
+                content_id: distribution_request.content_id.clone(),
+                content_hash: distribution_request.content_hash.clone(),
+                swarm_id: distribution_request.swarm_id.clone(),
+                web_seed_until秒: distribution_request.web_seed_until秒,
+                最近peer存活时间戳秒: None,
+                torrent_info_hash: Some(torrent_request.torrent_info_hash.clone()),
             };
-            let distribution_request_for_write = distribution_request.clone();
-            let torrent_request_for_write = torrent_request.clone();
-            let state_for_distribution = state.clone();
-            let distribution_result = task::spawn_blocking(move || {
-                let mut repo = 构建共享仓储(&state_for_distribution);
-                usecase::写入协作分发元数据(&mut repo, &distribution_request_for_write)
-                    .map_err(map_domain_err_tuple)?;
-                usecase::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
-                    .map_err(map_domain_err_tuple)
-            })
-            .await;
-
-            match distribution_result {
-                Ok(Ok(_)) => {
-                    let distribution_snapshot = usecase::协作分发元数据快照 {
-                        附件标识: attachment_id.clone(),
-                        content_id: distribution_request.content_id.clone(),
-                        content_hash: distribution_request.content_hash.clone(),
-                        swarm_id: distribution_request.swarm_id.clone(),
-                        web_seed_until秒: distribution_request.web_seed_until秒,
-                        最近peer存活时间戳秒: None,
-                        torrent_info_hash: Some(torrent_request.torrent_info_hash.clone()),
-                    };
-                    let now_epoch秒 = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .map(|duration| duration.as_secs() as i64)
-                        .unwrap_or_default();
-                    let original_url = format!(
-                        "/api/attachments/{attachment_id}/content?session_id={}&variant=original",
-                        session_id
-                    );
-                    let thumbnail_url = match &snapshot.种类 {
-                        usecase::媒体附件类型::图片 => Some(format!(
-                            "/api/attachments/{attachment_id}/content?session_id={}&variant=thumbnail",
-                            session_id
-                        )),
-                        usecase::媒体附件类型::视频 => None,
-                    };
-                    let runtime_distribution = media_distribution::协作分发快照转响应值(
-                        &distribution_snapshot,
-                        attachment_id.as_str(),
-                        session_id.as_str(),
-                        state.swarm_tracker_public_url.as_str(),
-                        state.swarm_web_seed_public_endpoint.as_deref(),
-                        now_epoch秒,
-                        state.swarm_peer_presence_stale_seconds,
-                    );
-                    let media_asset = 构造媒体资产响应体(
-                        &snapshot,
-                        Some(&runtime_distribution),
-                        Some(&distribution_snapshot),
-                        original_url,
-                        thumbnail_url,
-                        now_epoch秒,
-                    );
-                    (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot, media_asset)))
-                        .into_response()
-                }
-                Ok(Err((status, code, message))) => err_resp(status, code, message),
-                Err(err) => err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("分发元数据任务执行失败: {err}"),
-                ),
-            }
+            let now_epoch秒 = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_secs() as i64)
+                .unwrap_or_default();
+            let original_url = format!(
+                "/api/attachments/{attachment_id}/content?session_id={}&variant=original",
+                session_id
+            );
+            let thumbnail_url = match &snapshot.种类 {
+                usecase::媒体附件类型::图片 => Some(format!(
+                    "/api/attachments/{attachment_id}/content?session_id={}&variant=thumbnail",
+                    session_id
+                )),
+                usecase::媒体附件类型::视频 => None,
+            };
+            let runtime_distribution = media_distribution::协作分发快照转响应值(
+                &distribution_snapshot,
+                attachment_id.as_str(),
+                session_id.as_str(),
+                state.swarm_tracker_public_url.as_str(),
+                state.swarm_web_seed_public_endpoint.as_deref(),
+                now_epoch秒,
+                state.swarm_peer_presence_stale_seconds,
+            );
+            let streaming_manifest_snapshot =
+                streaming_manifest_request.as_ref().map(|request| usecase::流媒体清单快照 {
+                    附件标识: request.附件标识.clone(),
+                    hls主清单存储键: request.hls主清单存储键.clone(),
+                    dash主清单存储键: request.dash主清单存储键.clone(),
+                });
+            let media_asset = 构造媒体资产响应体(
+                &snapshot,
+                Some(&runtime_distribution),
+                Some(&distribution_snapshot),
+                streaming_manifest_snapshot.as_ref(),
+                original_url,
+                thumbnail_url,
+                session_id.as_str(),
+                now_epoch秒,
+            );
+            (StatusCode::OK, Json(媒体附件快照转响应体(&snapshot, media_asset))).into_response()
         }
         Ok(Err((status, code, message))) => err_resp(status, code, message),
         Err(err) => err_resp(
@@ -2649,11 +3151,210 @@ pub(super) async fn load_media_locator(
             .as_str()
             .map(str::to_string)
             .unwrap_or_default(),
+        query.session_id.as_str(),
         now_epoch秒,
     ) {
         response[field] = asset;
     }
     (StatusCode::OK, Json(response)).into_response()
+}
+
+/// 冷路径：受控读取流媒体主链产物。
+/// manifest 会被动态重写成带 session_id 的受控 URL，避免浏览器顺着相对路径绕过成员校验。
+pub(super) async fn load_streaming_asset_content(
+    State(state): State<应用状态>,
+    Path((attachment_id, asset_path)): Path<(String, String)>,
+    Query(raw_query): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let query = match parse_streaming_asset_query(raw_query) {
+        Ok(query) => query,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let asset_path = asset_path.trim().trim_start_matches('/').to_string();
+    if asset_path.is_empty()
+        || asset_path.split('/').any(|part| part.is_empty() || part == "." || part == "..")
+        || !(asset_path.starts_with("hls/") || asset_path.starts_with("dash/"))
+    {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "流媒体资源路径非法",
+        );
+    }
+
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = query.session_id.clone();
+    let locator = match task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_usecase);
+        usecase::查询媒体定位(&repo, &attachment_id_for_usecase, &session_id_for_usecase)
+            .map_err(map_domain_err_tuple)
+    })
+    .await
+    {
+        Ok(Ok(locator)) => locator,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("流媒体资产读取任务执行失败: {err}"),
+            )
+        }
+    };
+    if !matches!(locator.种类, usecase::媒体附件类型::视频) {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "attachment_type_not_supported",
+            "当前附件不是流媒体视频",
+        );
+    }
+    if locator.流媒体清单.is_none() {
+        return err_resp(
+            StatusCode::CONFLICT,
+            "attachment_not_ready",
+            "流媒体清单尚未准备完成",
+        );
+    }
+
+    let object_path = ObjectPath::from(推导流媒体对象存储键(
+        attachment_id.as_str(),
+        asset_path.as_str(),
+    ));
+    if asset_path.ends_with(".m3u8") || asset_path.ends_with(".mpd") {
+        let get_result = match state.attachment_store.get(&object_path).await {
+            Ok(result) => result,
+            Err(err) => {
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("读取流媒体清单失败: {err}"),
+                )
+            }
+        };
+        let body = match get_result.bytes().await {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("读取流媒体清单内容失败: {err}"),
+                )
+            }
+        };
+        let text = match String::from_utf8(body.to_vec()) {
+            Ok(text) => text,
+            Err(_) => {
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "流媒体清单不是合法 UTF-8",
+                )
+            }
+        };
+        let rewritten = if asset_path.ends_with(".m3u8") {
+            重写_hls清单内容(
+                attachment_id.as_str(),
+                query.session_id.as_str(),
+                asset_path.as_str(),
+                text.as_str(),
+            )
+        } else {
+            重写_dash清单内容(
+                attachment_id.as_str(),
+                query.session_id.as_str(),
+                asset_path.as_str(),
+                text.as_str(),
+            )
+        };
+        return (
+            [(
+                header::CONTENT_TYPE,
+                推导流媒体内容类型(asset_path.as_str()).to_string(),
+            )],
+            rewritten,
+        )
+            .into_response();
+    }
+
+    let range = if headers.contains_key(header::RANGE) {
+        let head_result = match state.attachment_store.head(&object_path).await {
+            Ok(meta) => meta,
+            Err(err) => {
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("读取流媒体对象元数据失败: {err}"),
+                )
+            }
+        };
+        match 解析标准字节范围(headers.get(header::RANGE), head_result.size) {
+            Ok(range) => range,
+            Err((status, code, message)) => return err_resp(status, code, message),
+        }
+    } else {
+        None
+    };
+    let get_result = match range.as_ref() {
+        Some(range) => {
+            state
+                .attachment_store
+                .get_opts(
+                    &object_path,
+                    GetOptions::new().with_range(Some(range.请求.clone())),
+                )
+                .await
+        }
+        None => state.attachment_store.get(&object_path).await,
+    };
+    let get_result = match get_result {
+        Ok(result) => result,
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("读取流媒体对象失败: {err}"),
+            )
+        }
+    };
+    let object_size = get_result.meta.size;
+    let body = match get_result.bytes().await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("读取流媒体对象内容失败: {err}"),
+            )
+        }
+    };
+    match range {
+        Some(range) => (
+            StatusCode::PARTIAL_CONTENT,
+            [
+                (
+                    header::CONTENT_TYPE,
+                    推导流媒体内容类型(asset_path.as_str()).to_string(),
+                ),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+                (header::CONTENT_RANGE, 构造content_range值(&range, object_size)),
+            ],
+            body,
+        )
+            .into_response(),
+        None => (
+            [
+                (
+                    header::CONTENT_TYPE,
+                    推导流媒体内容类型(asset_path.as_str()).to_string(),
+                ),
+                (header::ACCEPT_RANGES, "bytes".to_string()),
+            ],
+            body,
+        )
+            .into_response(),
+    }
 }
 
 /// 冷路径：受控读取附件对应的 torrent metainfo。

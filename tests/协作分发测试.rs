@@ -268,6 +268,7 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             pool.close().await;
         });
 
@@ -313,9 +314,25 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
         body["streaming_asset"]["asset_id"].as_str(),
         Some(attachment_id.as_str())
     );
-    assert!(
-        body["streaming_asset"]["manifest"]["hls_master_url"].is_null(),
-        "打包链还没落地时，locator 不能伪造 HLS 清单已经存在"
+    assert_eq!(
+        body["streaming_asset"]["manifest"]["hls_master_url"].as_str(),
+        Some(
+            format!(
+                "/api/media/{attachment_id}/stream/hls/master.m3u8?session_id={session_id}"
+            )
+            .as_str()
+        ),
+        "视频 locator 应返回正式 HLS 主清单入口，而不是继续留空"
+    );
+    assert_eq!(
+        body["streaming_asset"]["manifest"]["dash_mpd_url"].as_str(),
+        Some(
+            format!(
+                "/api/media/{attachment_id}/stream/dash/stream.mpd?session_id={session_id}"
+            )
+            .as_str()
+        ),
+        "视频 locator 也应返回正式 DASH 主清单入口"
     );
     assert_eq!(
         body["streaming_asset"]["origin"]["role"].as_str(),
@@ -742,6 +759,7 @@ async fn presence上报会让web_seed过期但最近peer仍存活的locator保�
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '5 minutes', \
@@ -865,6 +883,7 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
                 .expect("应能直连数据库插入附件");
             插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata \
                  SET web_seed_until = NOW() - INTERVAL '5 minutes', \

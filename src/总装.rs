@@ -16,6 +16,7 @@ pub struct 配置 {
     pub rust_log: String,
     pub attachment_storage_dir: String,
     pub media_storage: 媒体存储配置,
+    pub media_packaging: 媒体打包配置,
     pub rustus: Rustus配置,
     pub 协作分发: 协作分发配置,
 }
@@ -41,6 +42,15 @@ pub struct 媒体存储配置 {
     pub access_key_id: Option<String>,
     pub secret_access_key: Option<String>,
     pub path_style: bool,
+}
+
+/// 媒体打包配置只回答“外壳该调用哪几个成熟工具”。
+/// 这里故意不扩展成私有打包框架配置对象，避免基础设施真相再次膨胀。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体打包配置 {
+    pub ffmpeg_bin: String,
+    pub ffprobe_bin: String,
+    pub shaka_packager_bin: String,
 }
 
 /// Rustus 配置只描述“Tus sidecar 如何暴露与落盘”。
@@ -76,6 +86,7 @@ pub fn 读取配置() -> io::Result<配置> {
     let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     let attachment_storage_dir = 读取附件存储目录();
     let media_storage = 读取媒体存储配置()?;
+    let media_packaging = 读取媒体打包配置();
     let rustus = 读取rustus配置()?;
     let 协作分发 = 读取协作分发配置()?;
 
@@ -86,6 +97,7 @@ pub fn 读取配置() -> io::Result<配置> {
         rust_log,
         attachment_storage_dir,
         media_storage,
+        media_packaging,
         rustus,
         协作分发,
     })
@@ -262,6 +274,39 @@ pub fn 读取附件存储目录() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "data/attachments".to_string())
+}
+
+/// 打包工具默认优先走显式环境变量，其次才回到约定命令名。
+/// Windows 上 `winget` 的 `packager.exe` 可能是错误别名，因此优先尝试我们约定的 `shaka-packager.exe`。
+pub fn 读取媒体打包配置() -> 媒体打包配置 {
+    媒体打包配置 {
+        ffmpeg_bin: 读取可选命令路径("MEDIA_FFMPEG_BIN", "ffmpeg"),
+        ffprobe_bin: 读取可选命令路径("MEDIA_FFPROBE_BIN", "ffprobe"),
+        shaka_packager_bin: env::var("MEDIA_SHAKA_PACKAGER_BIN")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(推导默认shaka_packager命令),
+    }
+}
+
+fn 读取可选命令路径(key: &str, default_value: &str) -> String {
+    env::var(key)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default_value.to_string())
+}
+
+fn 推导默认shaka_packager命令() -> String {
+    if cfg!(windows) {
+        if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+            let candidate = format!(r"{local_app_data}\koko-tools\shaka-packager.exe");
+            if std::path::Path::new(candidate.as_str()).exists() {
+                return candidate;
+            }
+        }
+        return "shaka-packager".to_string();
+    }
+    "packager".to_string()
 }
 
 /// Rustus 运输配置默认保持“本机可跑 + 对外地址可推导”：

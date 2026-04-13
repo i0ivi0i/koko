@@ -204,7 +204,11 @@ export class 房间消息窗 extends LitElement {
 
   private 读取附件播放源(attachmentId: string, originalSrc: string): string {
     const playback = this.mediaPlaybackByAttachmentId[attachmentId];
-    return playback?.mode === "swarm" || playback?.mode === "anchor" ? playback.src : originalSrc;
+    return playback?.mode === "swarm" ||
+      playback?.mode === "anchor" ||
+      playback?.mode === "manifest"
+      ? playback.src
+      : originalSrc;
   }
 
   private 读取媒体查看器项目(): 媒体查看器项目[] {
@@ -333,9 +337,16 @@ export class 房间消息窗 extends LitElement {
             return 渲染不可用附件(attachment.attachmentId, playback);
           }
           const playbackSrc =
-            playback?.mode === "swarm" || playback?.mode === "anchor" ? playback.src : null;
+            playback?.mode === "swarm" ||
+            playback?.mode === "anchor" ||
+            playback?.mode === "manifest"
+              ? playback.src
+              : null;
           if (attachment.kind === "video") {
-            const videoSrc = playbackSrc ?? attachment.originalSrc;
+            const previewPosterSrc = playback?.thumbnailUrl ?? attachment.posterSrc;
+            const 应使用Poster占位 =
+              playback?.mode === "manifest" && Boolean(previewPosterSrc);
+            const videoSrc = 应使用Poster占位 ? null : playbackSrc ?? attachment.originalSrc;
             return html`
               <div class="message-video-card">
                 <button
@@ -349,7 +360,11 @@ export class 房间消息窗 extends LitElement {
                   <video
                     class="message-video-preview"
                     data-attachment-id=${attachment.attachmentId}
-                    src=${构建视频首帧预览源(videoSrc, attachment.posterSrc)}
+                    src=${ifDefined(
+                      videoSrc
+                        ? 构建视频首帧预览源(videoSrc, previewPosterSrc)
+                        : undefined
+                    )}
                     width=${attachment.displayWidth}
                     height=${attachment.displayHeight}
                     muted
@@ -357,7 +372,7 @@ export class 房间消息窗 extends LitElement {
                     preload="metadata"
                     tabindex="-1"
                     aria-hidden="true"
-                    poster=${ifDefined(attachment.posterSrc ?? undefined)}
+                    poster=${ifDefined(previewPosterSrc ?? undefined)}
                     @playing=${() =>
                       this.广播媒体会话信号(attachment.attachmentId, {
                         type: "PLAYER_PLAYING",

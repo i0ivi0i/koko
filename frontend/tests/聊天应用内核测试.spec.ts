@@ -429,6 +429,114 @@ describe("聊天应用内核", () => {
     });
   });
 
+  it("打开中的视频查看器在会话重裁决到 HLS manifest 后，也会同步到标准流媒体主链", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-hls",
+            client_message_id: "c-video-hls",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-hls",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi
+        .fn()
+        .mockResolvedValueOnce({
+          mode: "anchor",
+          attachmentId: "att-video-hls",
+          kind: "video",
+          src: "http://media.local/original-att-video-hls",
+          thumbnailUrl: "http://media.local/poster-att-video-hls",
+          hint: null,
+        })
+        .mockResolvedValueOnce({
+          mode: "manifest",
+          attachmentId: "att-video-hls",
+          kind: "video",
+          src: "http://media.local/stream/att-video-hls/master.m3u8",
+          thumbnailUrl: "http://media.local/poster-att-video-hls",
+          hint: null,
+        }),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-hls",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-hls",
+            src: "http://media.local/original-att-video-hls",
+            posterSrc: "http://media.local/poster-att-video-hls",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-hls",
+      signal: {
+        type: "PLAYER_WAITING",
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fake查看器.同步).toHaveBeenCalledWith({
+      startAttachmentId: "att-video-hls",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-hls",
+          src: "http://media.local/stream/att-video-hls/master.m3u8",
+          posterSrc: "http://media.local/poster-att-video-hls",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+  });
+
   it("后台收到别人的权威新消息时，会由聊天内核向平台发通知和 badge 命令，而不是壳层自己猜浏览器 API", async () => {
     const transport = new 假传输();
     const 平台命令记录: 浏览器应用平台命令[] = [];

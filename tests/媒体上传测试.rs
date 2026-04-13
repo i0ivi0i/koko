@@ -224,7 +224,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
 
     let (complete_status, complete_body) = send_json(
-        app,
+        app.clone(),
         Method::POST,
         &format!("/api/media/{attachment_id}/complete"),
         Some(serde_json::json!({
@@ -376,7 +376,7 @@ async fn 没有上传回执时complete媒体上传会返回attachment_not_ready(
     // complete 不允许把“prepare 成功”误读成“上传完成”；
     // 没有运输层回执时，prepared 附件必须继续被拒绝。
     let (complete_status, complete_body) = send_json(
-        app,
+        app.clone(),
         Method::POST,
         &format!("/api/media/{attachment_id}/complete"),
         Some(serde_json::json!({
@@ -481,7 +481,7 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
     });
 
     let (complete_status, complete_body) = send_json(
-        app,
+        app.clone(),
         Method::POST,
         &format!("/api/media/{attachment_id}/complete"),
         Some(serde_json::json!({
@@ -586,7 +586,7 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
 
     let (complete_status, complete_body) = send_json(
-        app,
+        app.clone(),
         Method::POST,
         &format!("/api/media/{attachment_id}/complete"),
         Some(serde_json::json!({
@@ -613,9 +613,19 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
         Some(attachment_id.as_str()),
         "当前过渡阶段先以 attachment_id 作为稳定资产锚点，避免再造第二个临时主键"
     );
+    let hls_master_url = complete_body["media_asset"]["manifest"]["hls_master_url"]
+        .as_str()
+        .expect("视频 complete 后必须返回 HLS 主清单入口");
+    let dash_mpd_url = complete_body["media_asset"]["manifest"]["dash_mpd_url"]
+        .as_str()
+        .expect("视频 complete 后必须返回 DASH 主清单入口");
     assert!(
-        complete_body["media_asset"]["manifest"]["hls_master_url"].is_null(),
-        "真正的 HLS 打包链还没落地前，不能伪造 manifest 已经存在"
+        hls_master_url.contains("/api/media/") && hls_master_url.contains("session_id="),
+        "HLS 主清单必须走受控媒体路由，而不是裸对象地址"
+    );
+    assert!(
+        dash_mpd_url.contains("/api/media/") && dash_mpd_url.contains("session_id="),
+        "DASH 主清单也必须走受控媒体路由"
     );
     assert_eq!(
         complete_body["media_asset"]["origin"]["role"].as_str(),
@@ -641,6 +651,73 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
         complete_body["height"].as_i64(),
         Some(1920),
         "竖拍 MP4 complete 后必须写入展示高度，而不是编码高度"
+    );
+
+    let (master_status, master_headers, master_bytes) =
+        send_bytes(app.clone(), Method::GET, hls_master_url, &[]).await;
+    assert_eq!(master_status, StatusCode::OK);
+    assert_eq!(
+        master_headers
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some("application/vnd.apple.mpegurl")
+    );
+    let master_text = String::from_utf8(master_bytes).expect("HLS master 应是 UTF-8 文本");
+    assert!(
+        master_text.contains("/api/media/")
+            && master_text.contains("session_id=")
+            && master_text.contains("video/main.m3u8"),
+        "master playlist 必须把子播放列表重写成受控 URL"
+    );
+    // master playlist 里可能同时出现 `#EXT-X-MEDIA:...URI="..."` 和真正的子播放列表 URL。
+    // 这里必须只抓非注释行，否则会把整条标签行误当成请求地址，掩盖真正的清单重写问题。
+    let child_url = master_text
+        .lines()
+        .find(|line| !line.trim_start().starts_with('#') && line.contains("/api/media/"))
+        .expect("master playlist 应包含受控子播放列表 URL")
+        .trim()
+        .to_string();
+
+    let (child_status, _, child_bytes) =
+        send_bytes(app.clone(), Method::GET, child_url.as_str(), &[]).await;
+    assert_eq!(child_status, StatusCode::OK);
+    let child_text = String::from_utf8(child_bytes).expect("HLS media playlist 应是 UTF-8 文本");
+    assert!(
+        child_text.contains("init.mp4?session_id=") && child_text.contains(".m4s?session_id="),
+        "媒体子清单必须把 init 段和 media 段都重写成带 session_id 的受控 URL"
+    );
+    let segment_url = child_text
+        .lines()
+        .find(|line| line.contains(".m4s?session_id="))
+        .expect("子清单应至少包含一条受控 media segment URL")
+        .trim()
+        .to_string();
+    let (segment_status, segment_headers, segment_bytes) =
+        send_bytes(app.clone(), Method::GET, segment_url.as_str(), &[]).await;
+    assert_eq!(segment_status, StatusCode::OK);
+    assert_eq!(
+        segment_headers
+            .get("accept-ranges")
+            .and_then(|value| value.to_str().ok()),
+        Some("bytes")
+    );
+    assert!(
+        !segment_bytes.is_empty(),
+        "媒体 segment 必须能通过受控流媒体路由读取到真实字节"
+    );
+    let (dash_status, dash_headers, dash_bytes) =
+        send_bytes(app.clone(), Method::GET, dash_mpd_url, &[]).await;
+    assert_eq!(dash_status, StatusCode::OK);
+    assert_eq!(
+        dash_headers
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some("application/dash+xml")
+    );
+    let dash_text = String::from_utf8(dash_bytes).expect("MPD 应是 UTF-8 文本");
+    assert!(
+        dash_text.contains("/api/media/") && dash_text.contains("session_id="),
+        "MPD 里的 initialization/media 模板也必须被重写成受控 URL"
     );
 
     let row = sqlx::query(
