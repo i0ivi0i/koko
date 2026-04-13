@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 146 files · ~163,820 words
+- 148 files · ~164,954 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 299 nodes · 367 edges · 25 communities detected
+- 301 nodes · 369 edges · 25 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -73,12 +73,12 @@ Cohesion: 0.06
 Nodes (15): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), render(), renderMessageAttachments() (+7 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.09
-Nodes (0): 
+Cohesion: 0.08
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
-Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
+Nodes (0): 
 
 ### Community 5 - "Community 5"
 Cohesion: 0.1
@@ -163,11 +163,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **22 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+17 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 12`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 12`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (2 nodes): `main.rs`, `main()`
+- **Thin community `Community 13`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 14`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 15`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -194,10 +194,10 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 6` to `Community 2`?**
-  _High betweenness centrality (0.118) - this node is a cross-community bridge._
+  _High betweenness centrality (0.117) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 1`?**
   _High betweenness centrality (0.029) - this node is a cross-community bridge._
-- **Why does `构造rustus_hook请求体()` connect `Community 10` to `Community 0`, `Community 4`?**
+- **Why does `构造rustus_hook请求体()` connect `Community 10` to `Community 0`, `Community 3`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局` to the rest of the system?**
   _22 weakly-connected nodes found - possible documentation gaps or missing edges._
