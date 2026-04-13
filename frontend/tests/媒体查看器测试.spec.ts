@@ -508,56 +508,128 @@ describe("媒体查看器适配器", () => {
   });
 
   it("桌面 HLS 视频会给 Vidstack HLS provider 注入本地 hls.js loader 和分片级 P2P 配置", async () => {
-    const viewer = 创建媒体查看器({
-      isMobileViewport: () => false,
-    });
+    vi.resetModules();
+    const 注入P2P混入 = vi.fn((Hls: unknown) => Hls);
+    vi.doMock("p2p-media-loader-hlsjs", () => ({
+      HlsJsP2PEngine: {
+        injectMixin: 注入P2P混入,
+      },
+    }));
 
-    viewer.打开({
-      startAttachmentId: "att-video-hls-provider-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-hls-provider-1",
-          src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
-          posterSrc: "http://media.local/poster-hls-provider-1",
-          streamingDistribution: {
-            swarm_id: "swarm-hash-att-video-hls-provider-1",
-            announce_urls: [
+    try {
+      const { 创建媒体查看器: 创建隔离媒体查看器 } = await import("../媒体/媒体查看器");
+      const viewer = 创建隔离媒体查看器({
+        isMobileViewport: () => false,
+      });
+
+      viewer.打开({
+        startAttachmentId: "att-video-hls-provider-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-hls-provider-1",
+            src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
+            posterSrc: "http://media.local/poster-hls-provider-1",
+            streamingDistribution: {
+              swarm_id: "swarm-hash-att-video-hls-provider-1",
+              announce_urls: [
+                "wss://tracker.koko.local/announce",
+                "wss://tracker.backup.koko.local/announce",
+              ],
+              web_seed_url: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
+              join_ticket: null,
+            },
+            width: 720,
+            height: 1280,
+          },
+        ],
+      });
+      const player = await 等待查询元素<HTMLElement>(
+        "media-player[data-media-viewer-player='video']"
+      );
+      expect(player).not.toBeNull();
+
+      const provider: {
+        type: string;
+        library?: unknown;
+        config?: Record<string, unknown>;
+      } = { type: "hls" };
+      player?.dispatchEvent(new CustomEvent("provider-change", { detail: provider }));
+
+      expect(typeof provider.library).toBe("function");
+      const hlsConstructor = await (provider.library as () => Promise<unknown>)();
+      expect(hlsConstructor).toBeTruthy();
+      expect(注入P2P混入).toHaveBeenCalledTimes(1);
+      expect(provider.config).toMatchObject({
+        p2p: {
+          core: {
+            swarmId: "swarm-hash-att-video-hls-provider-1",
+            announceTrackers: [
               "wss://tracker.koko.local/announce",
               "wss://tracker.backup.koko.local/announce",
             ],
-            web_seed_url: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
-            join_ticket: null,
           },
-          width: 720,
-          height: 1280,
         },
-      ],
-    });
-    const player = await 等待查询元素<HTMLElement>(
-      "media-player[data-media-viewer-player='video']"
-    );
-    expect(player).not.toBeNull();
+      });
+    } finally {
+      vi.doUnmock("p2p-media-loader-hlsjs");
+      vi.resetModules();
+      document.body.replaceChildren();
+    }
+  });
 
-    const provider: {
-      type: string;
-      library?: unknown;
-      config?: Record<string, unknown>;
-    } = { type: "hls" };
-    player?.dispatchEvent(new CustomEvent("provider-change", { detail: provider }));
-
-    expect(typeof provider.library).toBe("function");
-    expect(provider.config).toMatchObject({
-      p2p: {
-        core: {
-          swarmId: "swarm-hash-att-video-hls-provider-1",
-          announceTrackers: [
-            "wss://tracker.koko.local/announce",
-            "wss://tracker.backup.koko.local/announce",
-          ],
-        },
-      },
+  it("P2P mixin 加载失败时也必须回退到纯 hls.js 主链，而不是让查看器直接黑屏转圈", async () => {
+    vi.resetModules();
+    vi.doMock("p2p-media-loader-hlsjs", () => {
+      throw new Error("模拟 P2P loader 在真实浏览器里加载失败");
     });
+
+    try {
+      const { 创建媒体查看器: 创建隔离媒体查看器 } = await import("../媒体/媒体查看器");
+      const viewer = 创建隔离媒体查看器({
+        isMobileViewport: () => false,
+      });
+
+      viewer.打开({
+        startAttachmentId: "att-video-hls-provider-fallback-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-hls-provider-fallback-1",
+            src: "http://media.local/stream/att-video-hls-provider-fallback-1/master.m3u8",
+            posterSrc: "http://media.local/poster-hls-provider-fallback-1",
+            streamingDistribution: {
+              swarm_id: "swarm-hash-att-video-hls-provider-fallback-1",
+              announce_urls: ["wss://tracker.koko.local/announce"],
+              web_seed_url:
+                "http://media.local/stream/att-video-hls-provider-fallback-1/master.m3u8",
+              join_ticket: null,
+            },
+            width: 720,
+            height: 1280,
+          },
+        ],
+      });
+
+      const player = await 等待查询元素<HTMLElement>(
+        "media-player[data-media-viewer-player='video']"
+      );
+      expect(player).not.toBeNull();
+
+      const provider: {
+        type: string;
+        library?: unknown;
+        config?: Record<string, unknown>;
+      } = { type: "hls" };
+      player?.dispatchEvent(new CustomEvent("provider-change", { detail: provider }));
+
+      expect(typeof provider.library).toBe("function");
+      await expect((provider.library as () => Promise<unknown>)()).resolves.toBeTruthy();
+    } finally {
+      vi.doUnmock("p2p-media-loader-hlsjs");
+      vi.resetModules();
+      document.body.replaceChildren();
+    }
   });
 
   it("移动端遇到 HLS manifest 时不走原生全屏，而是回退到支持 hls.js 的 Vidstack 覆盖层", () => {

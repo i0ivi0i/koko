@@ -452,23 +452,38 @@ const 创建默认Vidstack视频覆盖层: Vidstack视频覆盖层工厂 = async
       return;
     }
     const p2pConfig = 构造Vidstack流媒体P2P配置(item.streamingDistribution);
-    if (p2pConfig) {
-      provider.config = {
-        ...(provider.config ?? {}),
-        ...p2pConfig,
-      };
-    }
     // Vidstack 官方建议本地集成时显式把 provider.library 指到本地 `hls.js` 依赖，
     // 这里进一步把 Hls.js 升级成带 P2P mixin 的构造器，让主播放链直接站到成熟分片级 P2P 轮子上。
+    //
+    // 关键边界：
+    // 1. HLS 是正式播放主链，P2P 只是增强层，不能因为增强层加载失败就把整条播放链一起拖死；
+    // 2. 因此只有在 `p2p-media-loader-hlsjs` 真正加载成功时，才把 P2P 配置写给 provider；
+    // 3. 一旦 mixin 或其依赖在真实浏览器里炸掉，必须立即回退到纯 `hls.js`，优先保住可播放性。
     provider.library = async () => {
-      const [{ default: Hls }, p2pModule] = await Promise.all([
-        import("hls.js"),
-        import("p2p-media-loader-hlsjs"),
-      ]);
-      const { HlsJsP2PEngine } = p2pModule as unknown as {
-        HlsJsP2PEngine: { injectMixin(hls: typeof Hls): unknown };
-      };
-      return p2pConfig ? HlsJsP2PEngine.injectMixin(Hls) : Hls;
+      const { default: Hls } = await import("hls.js");
+      if (!p2pConfig) {
+        return Hls;
+      }
+      try {
+        const p2pModule = await import("p2p-media-loader-hlsjs");
+        const { HlsJsP2PEngine } = p2pModule as unknown as {
+          HlsJsP2PEngine: { injectMixin(hls: typeof Hls): unknown };
+        };
+        provider.config = {
+          ...(provider.config ?? {}),
+          ...p2pConfig,
+        };
+        return HlsJsP2PEngine.injectMixin(Hls);
+      } catch (error) {
+        // 这里故意只降级、不抛错：
+        // 真实用户点开视频时，最不能接受的是“P2P 增强坏了，结果连普通 HLS 也一起黑屏转圈”。
+        // 记录告警是为了后续继续修 bundling / polyfill，而不是把当前播放会话直接判死。
+        console.warn(
+          "[media-viewer] p2p-media-loader-hlsjs 加载失败，回退到纯 hls.js 主链",
+          error
+        );
+        return Hls;
+      }
     };
   };
 
