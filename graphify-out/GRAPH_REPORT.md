@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-13)
 
 ## Corpus Check
-- 137 files · ~145,099 words
+- 137 files · ~145,085 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -127,15 +127,15 @@ Nodes (3): renderMessageAttachments(), renderMessageBody(), renderVirtualMessage
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (0):
+Nodes (2): 等待complete所需运输回执(), complete_media_upload()
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): 等待complete所需运输回执(), complete_media_upload()
+Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (2): dispatchPointerScrollIntent(), dispatchScrollIntent()
+Nodes (0):
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
@@ -188,11 +188,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **21 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `AdminLoginBody` (+16 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 15`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 15`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `等待complete所需运输回执()`, `complete_media_upload()`
+- **Thin community `Community 16`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (2 nodes): `dispatchPointerScrollIntent()`, `dispatchScrollIntent()`
+- **Thin community `Community 17`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 18`** (2 nodes): `load_room_events()`, `parse_events_query()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
