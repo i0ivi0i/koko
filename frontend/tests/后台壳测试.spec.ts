@@ -189,9 +189,10 @@ describe("后台壳", () => {
       username: "admin",
       password: "admin",
       token: "",
-      overviewText: "-",
+      overview: null as { room_count: number; message_count: number } | null,
       roomIds: [] as string[],
-      detailText: "-",
+      selectedRoomId: "",
+      detail: null as { room_id: string; latest_event_position: number; message_count: number } | null,
       roomFilter: "",
     };
     const 假内核: 后台应用内核端口 = {
@@ -202,7 +203,7 @@ describe("后台壳", () => {
           snapshot = {
             ...snapshot,
             token: "admin-token",
-            overviewText: "房间 2 / 消息 5",
+            overview: { room_count: 2, message_count: 5 },
             roomIds: ["room-A"],
           };
         }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { 创建后台应用内核 } from "../后台应用内核";
+import { 创建后台查询编排 } from "../后台查询编排";
 import type {
   匿名身份引导结果,
   增量事件快照,
@@ -95,11 +96,14 @@ describe("后台应用内核", () => {
 
     expect(kernel.snapshot()).toMatchObject({
       token: "admin-token",
-      overviewText: "房间 2 / 消息 9",
+      overview: { room_count: 2, message_count: 9 },
       roomIds: ["room-A", "room-B", "ops-C"],
       roomFilter: "",
-      detailText: "-",
+      selectedRoomId: "",
+      detail: null,
     });
+    expect(kernel.snapshot()).not.toHaveProperty("overviewText");
+    expect(kernel.snapshot()).not.toHaveProperty("detailText");
     expect(transport.调用记录).toEqual([
       "login:ops-admin:super-secret",
       "overview:admin-token",
@@ -118,8 +122,35 @@ describe("后台应用内核", () => {
     expect(kernel.snapshot()).toMatchObject({
       roomFilter: "ops",
       roomIds: ["ops-C"],
-      detailText: "房间 ops-C，位置 12，消息 34",
+      selectedRoomId: "ops-C",
+      detail: {
+        room_id: "ops-C",
+        latest_event_position: 12,
+        message_count: 34,
+      },
     });
     expect(transport.调用记录).toContain("detail:admin-token:ops-C");
+  });
+
+  it("后台查询编排快照不再承载壳层筛选词和选中项", () => {
+    const 查询编排 = 创建后台查询编排({
+      overview: { room_count: 2, message_count: 9 },
+      roomIds: ["room-A", "ops-C"],
+      detail: {
+        room_id: "ops-C",
+        latest_event_position: 12,
+        message_count: 34,
+      },
+    });
+
+    expect(查询编排.snapshot()).toEqual({
+      overview: { room_count: 2, message_count: 9 },
+      roomIds: ["room-A", "ops-C"],
+      detail: {
+        room_id: "ops-C",
+        latest_event_position: 12,
+        message_count: 34,
+      },
+    });
   });
 });

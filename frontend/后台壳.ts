@@ -4,6 +4,7 @@ import {
   type 后台应用内核端口,
 } from "./后台应用内核.js";
 import type { 前端传输端口 } from "./传输.js";
+import { 格式化后台房间详情, 格式化后台概览 } from "./视图.js";
 
 export class 后台壳 extends LitElement {
   static override styles = css`
@@ -61,6 +62,13 @@ export class 后台壳 extends LitElement {
 
   override render() {
     const snapshot = this.读取快照();
+    const overviewText = snapshot.overview
+      ? 格式化后台概览(
+          snapshot.overview.room_count,
+          snapshot.overview.message_count
+        )
+      : "-";
+    const detailText = 格式化后台房间详情(snapshot.detail);
     return html`
       <section id="adminShell">
         <form id="adminLoginForm" class="row" @submit=${this.submitLoginForm}>
@@ -88,7 +96,7 @@ export class 后台壳 extends LitElement {
           />
           <button id="adminLoginBtn" type="submit">登录</button>
         </form>
-        <div id="overview">${snapshot.overviewText}</div>
+        <div id="overview">${overviewText}</div>
         <form id="roomSearchForm" class="row" @submit=${this.submitRoomSearchForm}>
           <input
             id="roomSearch"
@@ -123,7 +131,7 @@ export class 后台壳 extends LitElement {
               </li>`
           )}
         </ul>
-        <div id="roomDetail">${snapshot.detailText}</div>
+        <div id="roomDetail">${detailText}</div>
       </section>
     `;
   }

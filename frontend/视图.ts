@@ -355,6 +355,21 @@ export function 格式化后台概览(roomCount: number, messageCount: number): 
   return `房间 ${roomCount} / 消息 ${messageCount}`;
 }
 
+export function 格式化后台房间详情(
+  detail:
+    | {
+        room_id: string;
+        latest_event_position: number;
+        message_count: number;
+      }
+    | null
+): string {
+  if (!detail) {
+    return "-";
+  }
+  return `房间 ${detail.room_id}，位置 ${detail.latest_event_position}，消息 ${detail.message_count}`;
+}
+
 /**
  * 主舞台模式只由恢复阶段和当前房间锚点派生。
  * 它是壳层的只读语义，不允许回写成第二份真状态。
