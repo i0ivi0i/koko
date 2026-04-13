@@ -435,12 +435,13 @@ export const 创建默认Hls视频覆盖层: Hls视频覆盖层工厂 = async (
   const 解绑媒体运行时信号 = 绑定媒体运行时信号(video, item.attachmentId, hooks);
   let hls实例: InstanceType<Hls构造器> | null = null;
   let cleaned = false;
+  let 当前播放源 = item.src;
 
   const 尝试开始播放 = (): void => {
     void video.play().catch(() => undefined);
   };
   const 使用原生Hls主链 = (): void => {
-    video.src = item.src;
+    video.src = 当前播放源;
     video.load();
   };
 
@@ -517,7 +518,7 @@ export const 创建默认Hls视频覆盖层: Hls视频覆盖层工厂 = async (
         }
       });
     }
-    hls实例.loadSource(item.src);
+    hls实例.loadSource(当前播放源);
   } else {
     使用原生Hls主链();
     video.addEventListener("loadedmetadata", 尝试开始播放, { once: true });
@@ -536,16 +537,33 @@ export const 创建默认Hls视频覆盖层: Hls视频覆盖层工厂 = async (
       if (nextItem.kind !== "video") {
         return;
       }
+      const 播放源发生变化 = 当前播放源 !== nextItem.src;
+      当前播放源 = nextItem.src;
       if (nextItem.posterSrc) {
         video.poster = nextItem.posterSrc;
       } else {
         video.removeAttribute("poster");
       }
       if (hls实例 && 是Hls主清单地址(nextItem.src)) {
+        /**
+         * HLS overlay 的同步会被聊天媒体编排频繁调用。
+         *
+         * 如果这里不先比较 src，而是每次都重新 `loadSource`，
+         * 浏览器里的真实表现就是：
+         * - 当前 `<video>` 刚进入 `playing`
+         * - 立刻又被 `emptied -> loadstart -> waiting`
+         * - 最终用户看到的就是黑屏转圈，像永远播不起来
+         *
+         * 所以只有“正式播放主链真的变了”时，才允许重载 HLS 源；
+         * 单纯的会话快照同步、poster 更新、backfill 状态推进，都不能打断首播。
+         */
+        if (!播放源发生变化) {
+          return;
+        }
         hls实例.loadSource(nextItem.src);
         return;
       }
-      if (video.src !== nextItem.src) {
+      if (播放源发生变化 && video.src !== nextItem.src) {
         video.src = nextItem.src;
         video.load();
         尝试开始播放();

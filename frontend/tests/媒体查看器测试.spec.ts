@@ -616,6 +616,80 @@ describe("媒体查看器适配器", () => {
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 
+  it("默认 HLS overlay 在同步相同 manifest 时不会重复 loadSource，只有主链变化时才重载", async () => {
+    const attachMedia = vi.fn();
+    const loadSource = vi.fn();
+    const destroy = vi.fn();
+    const on = vi.fn();
+    class 假Hls构造器 {
+      static isSupported() {
+        return true;
+      }
+
+      static Events = {
+        MANIFEST_PARSED: "manifestParsed",
+        ERROR: "error",
+      };
+
+      attachMedia = attachMedia;
+      loadSource = loadSource;
+      destroy = destroy;
+      on = on;
+    }
+
+    const overlay = await 创建默认Hls视频覆盖层(
+      {
+        kind: "video",
+        attachmentId: "att-video-hls-overlay-stable-1",
+        src: "http://media.local/stream/att-video-hls-overlay-stable-1/master.m3u8",
+        posterSrc: "http://media.local/poster-hls-overlay-stable-old",
+        width: 720,
+        height: 1280,
+      },
+      {
+        开始视口占用: vi.fn(),
+        结束视口占用: vi.fn(),
+      },
+      {
+        发出媒体会话信号: vi.fn(),
+      },
+      {
+        loadHlsConstructor: async () => 假Hls构造器 as never,
+      }
+    );
+
+    expect(loadSource).toHaveBeenCalledTimes(1);
+
+    overlay.同步?.({
+      kind: "video",
+      attachmentId: "att-video-hls-overlay-stable-1",
+      src: "http://media.local/stream/att-video-hls-overlay-stable-1/master.m3u8",
+      posterSrc: "http://media.local/poster-hls-overlay-stable-new",
+      width: 720,
+      height: 1280,
+    });
+
+    expect(loadSource).toHaveBeenCalledTimes(1);
+
+    overlay.同步?.({
+      kind: "video",
+      attachmentId: "att-video-hls-overlay-stable-1",
+      src: "http://media.local/stream/att-video-hls-overlay-stable-1-retry/master.m3u8",
+      posterSrc: "http://media.local/poster-hls-overlay-stable-new",
+      width: 720,
+      height: 1280,
+    });
+
+    expect(loadSource).toHaveBeenCalledTimes(2);
+    expect(loadSource).toHaveBeenNthCalledWith(
+      2,
+      "http://media.local/stream/att-video-hls-overlay-stable-1-retry/master.m3u8"
+    );
+
+    overlay.destroy();
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
   it("HLS overlay 会把 waiting 信号回抛给媒体会话，并在同步时切到新的 manifest 主链", async () => {
     const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
     const viewer = 创建媒体查看器({
