@@ -18,7 +18,7 @@ type 房间滚动观察态 = Pick<
   | "historyLoadThrottleUntil"
 >;
 
-interface 房间滚动器宿主 extends ReactiveControllerHost {
+export interface 房间滚动器宿主 extends ReactiveControllerHost {
   readonly updateComplete: Promise<boolean>;
 }
 

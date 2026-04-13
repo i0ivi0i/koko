@@ -196,7 +196,11 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   }
 
   function disconnect(): void {
-    realtimeSocket?.disconnect();
+    if (realtimeSocket) {
+      deps.transport.释放Socket?.(realtimeSocket);
+      realtimeSocket = null;
+      return;
+    }
     realtimeSocket = null;
   }
 

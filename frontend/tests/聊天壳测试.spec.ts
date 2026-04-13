@@ -12,6 +12,9 @@ import {
   创建房间快照,
   创建传输错误,
   注入媒体草稿,
+  注入媒体播放器供测试,
+  注入媒体发布器供测试,
+  注入媒体查看器供测试,
   注入图片草稿,
   等待组件稳定,
   读取附件入口按钮,
@@ -330,7 +333,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       销毁: vi.fn(),
     };
     el.setTransportForTest(transport);
-    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
+    注入媒体查看器供测试(el, viewer);
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
@@ -457,7 +460,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       销毁: vi.fn(),
     };
     el.setTransportForTest(transport);
-    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
+    注入媒体查看器供测试(el, viewer);
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
@@ -535,8 +538,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
       销毁: vi.fn(),
     };
     el.setTransportForTest(transport);
-    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
-    el.setMediaPlayerForTest({
+    注入媒体查看器供测试(el, viewer);
+    注入媒体播放器供测试(el, {
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "swarm",
         attachmentId: "att-video-swarm-1",
@@ -619,8 +622,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
     };
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
-    (el as unknown as { setMediaViewerForTest(nextViewer: typeof viewer): void }).setMediaViewerForTest(viewer);
-    el.setMediaPlayerForTest({
+    注入媒体查看器供测试(el, viewer);
+    注入媒体播放器供测试(el, {
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "swarm",
         attachmentId: "att-video-viewer-1",
@@ -688,7 +691,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     ];
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
-    el.setMediaPlayerForTest({
+    注入媒体播放器供测试(el, {
       解析播放结果: vi.fn().mockResolvedValue({
         mode: "expired",
         attachmentId: "att-video-expired-1",
@@ -748,9 +751,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("点击加号会直接触发原生文件输入，而不是打开 Dashboard", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
-      fake媒体发布器
-    );
+    注入媒体发布器供测试(el, fake媒体发布器);
 
     const input = 读取统一媒体文件输入(el);
     const clickSpy = vi.spyOn(input, "click");
@@ -893,9 +894,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("失败图片点击重试时会把 localId 转交给媒体发布器", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
-      fake媒体发布器
-    );
+    注入媒体发布器供测试(el, fake媒体发布器);
     注入图片草稿(el, {
       localId: "draft-retry",
       kind: "image",
@@ -923,9 +922,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("统一媒体文件输入 change 时会把选中的文件转交给媒体发布器并清空 input 值", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
-      fake媒体发布器
-    );
+    注入媒体发布器供测试(el, fake媒体发布器);
     const imageFile = new File([new Uint8Array([1, 2, 3])], "selected.jpg", {
       type: "image/jpeg",
     });
@@ -954,9 +951,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
   it("组件销毁时会销毁媒体发布器，避免旧上传器泄漏到下一次挂载", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
-    (el as unknown as { setMediaPublisherForTest(nextPublisher: typeof fake媒体发布器): void }).setMediaPublisherForTest(
-      fake媒体发布器
-    );
+    注入媒体发布器供测试(el, fake媒体发布器);
 
     el.remove();
 

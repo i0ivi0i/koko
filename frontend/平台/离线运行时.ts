@@ -5,22 +5,18 @@ type 支持后台同步注册 = {
   };
 };
 
-type 可用ServiceWorker =
-  | {
-      ready?: Promise<ServiceWorkerRegistration & 支持后台同步注册>;
-    }
-  | undefined;
-
 type 可用导航器 =
   | (Navigator & {
       onLine?: boolean;
-      serviceWorker?: 可用ServiceWorker;
     })
   | undefined;
+
+export type 离线排队任务能力 = "background-sync" | "none";
 
 export interface 离线运行时快照 {
   online: boolean;
   backgroundSyncSupported: boolean;
+  queuedTaskCapability: 离线排队任务能力;
 }
 
 export interface 离线运行时依赖 {
@@ -29,7 +25,9 @@ export interface 离线运行时依赖 {
 }
 
 export interface 离线运行时 {
-  就绪(): Promise<void>;
+  就绪(input?: {
+    已注册服务工作线程?: Array<支持后台同步注册 | null | undefined>;
+  }): Promise<void>;
   snapshot(): 离线运行时快照;
 }
 
@@ -47,6 +45,7 @@ export function 创建离线运行时(
   let current: 离线运行时快照 = {
     online: navigatorTarget?.onLine !== false,
     backgroundSyncSupported: false,
+    queuedTaskCapability: "none",
   };
 
   const 更新在线状态 = (): void => {
@@ -56,17 +55,28 @@ export function 创建离线运行时(
     };
   };
 
+  const 读取后台任务能力 = (
+    已注册服务工作线程: Array<支持后台同步注册 | null | undefined>
+  ): 离线排队任务能力 =>
+    已注册服务工作线程.some((registration) => Boolean(registration?.sync))
+      ? "background-sync"
+      : "none";
+
   windowTarget?.addEventListener("online", 更新在线状态);
   windowTarget?.addEventListener("offline", 更新在线状态);
 
   return {
-    async 就绪(): Promise<void> {
-      const registration = (await navigatorTarget?.serviceWorker?.ready) as
-        | (ServiceWorkerRegistration & 支持后台同步注册)
-        | undefined;
+    async 就绪(
+      input: {
+        已注册服务工作线程?: Array<支持后台同步注册 | null | undefined>;
+      } = {}
+    ): Promise<void> {
+      const 已注册服务工作线程 = input.已注册服务工作线程 ?? [];
+      const queuedTaskCapability = 读取后台任务能力(已注册服务工作线程);
       current = {
         ...current,
-        backgroundSyncSupported: Boolean(registration?.sync),
+        backgroundSyncSupported: queuedTaskCapability === "background-sync",
+        queuedTaskCapability,
       };
     },
 

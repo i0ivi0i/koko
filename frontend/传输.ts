@@ -67,10 +67,28 @@ export interface 前端传输端口 {
   adminLogin(username: string, password: string): Promise<后台登录结果>;
   adminRooms(token: string): Promise<后台房间列表>;
   adminRoomDetail(token: string, roomId: string): Promise<后台房间详情>;
+  接收运行时策略?(policy: 实时连接运行时策略): void;
+  读取运行时策略?(): 实时连接运行时策略;
+  释放Socket?(socket: Socket): void;
   createSocket(sessionId: string): Socket;
 }
 
+export interface 实时连接运行时策略 {
+  intent: "resume" | "suspend";
+  reconnection: boolean;
+  reason: "active" | "background" | "page_hidden";
+}
+
+const 默认实时连接运行时策略: 实时连接运行时策略 = {
+  intent: "resume",
+  reconnection: true,
+  reason: "active",
+};
+
 export class HttpRealtime传输 implements 前端传输端口 {
+  private 当前运行时策略: 实时连接运行时策略 = 默认实时连接运行时策略;
+  private readonly 活跃Socket表 = new Map<Socket, { 由运行时挂起: boolean }>();
+
   constructor(private readonly baseUrl: string) {}
 
   /**
@@ -235,11 +253,40 @@ export class HttpRealtime传输 implements 前端传输端口 {
     // 我们当前的 create_message / subscribe_room_stream 还没有 ack 协议，
     // 可靠性仍然由 latest_event_position + snapshot + 增量补洞保证，
     // 不能为了“看起来更可靠”而把同一条命令重放多次。
-    return io(this.baseUrl, {
+    const socket = io(this.baseUrl, {
       transports: ["websocket"],
-      reconnection: true,
+      reconnection: this.当前运行时策略.reconnection,
+      autoConnect: this.当前运行时策略.intent !== "suspend",
       auth: { session_id: sessionId },
     });
+    this.活跃Socket表.set(socket, { 由运行时挂起: false });
+    return socket;
+  }
+
+  接收运行时策略(policy: 实时连接运行时策略): void {
+    this.当前运行时策略 = { ...policy };
+    for (const [socket, state] of this.活跃Socket表.entries()) {
+      if (policy.intent === "suspend") {
+        if (!state.由运行时挂起) {
+          state.由运行时挂起 = true;
+          socket.disconnect();
+        }
+        continue;
+      }
+      if (state.由运行时挂起 && typeof socket.connect === "function") {
+        state.由运行时挂起 = false;
+        socket.connect();
+      }
+    }
+  }
+
+  读取运行时策略(): 实时连接运行时策略 {
+    return { ...this.当前运行时策略 };
+  }
+
+  释放Socket(socket: Socket): void {
+    this.活跃Socket表.delete(socket);
+    socket.disconnect();
   }
 
   private async get<T>(path: string, headers: Record<string, string> = {}): Promise<T> {

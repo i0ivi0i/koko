@@ -10,6 +10,10 @@ import {
 } from "../../房间时间线";
 import { 初始聊天状态, type 聊天状态 } from "../../状态";
 import type {
+  媒体查看器打开请求,
+  媒体播放结果,
+} from "../../媒体/index.js";
+import type {
   匿名身份引导结果,
   增量事件快照,
   后台概览,
@@ -386,6 +390,11 @@ export class 假传输 implements 前端传输端口 {
     this.socketSessionIds.push(_sessionId);
     return this.socket as unknown as Socket;
   }
+
+  释放Socket(socket: Socket): void {
+    // 测试桩也要走和正式传输端口一致的释放协议，避免房间退出场景退化成“只清引用不真正断链”。
+    socket.disconnect();
+  }
 }
 
 export function 创建传输错误(status: number, code: string, message = code): Error {
@@ -432,6 +441,28 @@ type 聊天壳测试内核 = {
 
 function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
   return (el as unknown as { kernel: 聊天壳测试内核 }).kernel;
+}
+
+type 聊天媒体测试端口 = {
+  设置媒体播放器供测试(player: {
+    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+  }): void;
+  设置媒体查看器供测试(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void;
+  设置媒体发布器供测试(publisher: {
+    处理选择媒体文件(files: Iterable<File>): Promise<void>;
+    移除草稿(localId: string): void;
+    重试草稿(localId: string): Promise<void>;
+    清空(): void;
+    销毁(): void;
+  }): void;
+};
+
+/**
+ * 这里故意只把测试替身注入到“媒体编排”这一层。
+ * 正式壳层和内核表面不再暴露这些 setter，避免测试缝重新长回生产入口。
+ */
+function 读取聊天媒体编排供测试(el: 聊天壳): 聊天媒体测试端口 {
+  return (读取聊天壳测试内核(el) as unknown as { 媒体编排: 聊天媒体测试端口 }).媒体编排;
 }
 
 /**
@@ -486,6 +517,35 @@ export function 注入媒体草稿(el: 聊天壳, draft: 图片附件草稿): vo
 
 export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): void {
   注入媒体草稿(el, draft);
+}
+
+export function 注入媒体播放器供测试(
+  el: 聊天壳,
+  player: {
+    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+  }
+): void {
+  读取聊天媒体编排供测试(el).设置媒体播放器供测试(player);
+}
+
+export function 注入媒体查看器供测试(
+  el: 聊天壳,
+  viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }
+): void {
+  读取聊天媒体编排供测试(el).设置媒体查看器供测试(viewer);
+}
+
+export function 注入媒体发布器供测试(
+  el: 聊天壳,
+  publisher: {
+    处理选择媒体文件(files: Iterable<File>): Promise<void>;
+    移除草稿(localId: string): void;
+    重试草稿(localId: string): Promise<void>;
+    清空(): void;
+    销毁(): void;
+  }
+): void {
+  读取聊天媒体编排供测试(el).设置媒体发布器供测试(publisher);
 }
 
 export function 读取操作台主输入(

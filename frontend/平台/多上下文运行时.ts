@@ -11,12 +11,14 @@ type 广播信道 =
 
 type 多上下文消息 =
   | { type: "primary-context"; contextId: string }
+  | { type: "focus-context"; contextId: string }
   | { type: "notification-shown"; notificationId: string };
 
 export interface 多上下文运行时快照 {
   contextId: string;
   isPrimaryContext: boolean;
   lastPrimaryContextId: string | null;
+  lastFocusedContextId: string | null;
   deliveredNotificationIds: string[];
 }
 
@@ -29,6 +31,7 @@ export interface 多上下文运行时依赖 {
 export interface 多上下文运行时 {
   snapshot(): 多上下文运行时快照;
   声明主上下文(): void;
+  请求聚焦当前上下文(): void;
   通知已展示(notificationId: string): boolean;
   登记通知已展示(notificationId: string): boolean;
 }
@@ -62,6 +65,7 @@ export function 创建多上下文运行时(
     contextId,
     isPrimaryContext: false,
     lastPrimaryContextId: null,
+    lastFocusedContextId: null,
     deliveredNotificationIds: [],
   };
   const deliveredNotifications = new Set<string>();
@@ -75,6 +79,12 @@ export function 创建多上下文运行时(
       更新快照({
         isPrimaryContext: message.contextId === contextId,
         lastPrimaryContextId: message.contextId,
+      });
+      return;
+    }
+    if (message.type === "focus-context") {
+      更新快照({
+        lastFocusedContextId: message.contextId,
       });
       return;
     }
@@ -105,6 +115,15 @@ export function 创建多上下文运行时(
     声明主上下文(): void {
       const message: 多上下文消息 = {
         type: "primary-context",
+        contextId,
+      };
+      处理广播消息(message);
+      channel?.postMessage(message);
+    },
+
+    请求聚焦当前上下文(): void {
+      const message: 多上下文消息 = {
+        type: "focus-context",
         contextId,
       };
       处理广播消息(message);

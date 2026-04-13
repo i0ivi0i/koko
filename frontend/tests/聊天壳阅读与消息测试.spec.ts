@@ -95,8 +95,12 @@ describe("聊天壳集成 / 阅读推进与消息并流", () => {
       "s-test",
       null,
       默认消息文本布局环境,
-      (attachmentId, variant) =>
-        `/api/attachments/${attachmentId}/${variant === "thumbnail" ? "thumb" : "origin"}`
+      {
+        "att-1": {
+          thumbnailSrc: "/api/attachments/att-1/thumb",
+          originalSrc: "/api/attachments/att-1/origin",
+        },
+      }
     );
 
     expect(items).toHaveLength(1);

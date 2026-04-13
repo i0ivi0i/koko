@@ -65,6 +65,13 @@ export interface 视频附件展示项 {
 }
 
 export type 媒体附件展示项 = 图片附件展示项 | 视频附件展示项;
+export type 附件内容地址表 = Record<
+  string,
+  {
+    originalSrc: string;
+    thumbnailSrc: string;
+  }
+>;
 
 export interface 未读分隔展示项 {
   kind: "unread-divider";
@@ -122,10 +129,7 @@ export function 派生聊天列表展示项(
   currentSessionId: string,
   firstUnreadEventPosition: number | null,
   layoutEnv: 消息文本布局环境 = 默认消息文本布局环境,
-  构建附件内容地址: (
-    attachmentId: string,
-    variant: "original" | "thumbnail"
-  ) => string = (attachmentId, variant) => `/api/attachments/${attachmentId}/${variant}`
+  附件内容地址表: 附件内容地址表 = {}
 ): 聊天列表展示项[] {
   const items: 聊天列表展示项[] = [];
   let unreadDividerInserted = false;
@@ -143,7 +147,7 @@ export function 派生聊天列表展示项(
       });
       unreadDividerInserted = true;
     }
-    items.push(派生消息展示项(message, currentSessionId, layoutEnv, 构建附件内容地址));
+    items.push(派生消息展示项(message, currentSessionId, layoutEnv, 附件内容地址表));
   }
 
   return items;
@@ -158,10 +162,7 @@ export function 派生消息展示项(
   event: 消息事件,
   currentSessionId: string,
   layoutEnv: 消息文本布局环境 = 默认消息文本布局环境,
-  构建附件内容地址: (
-    attachmentId: string,
-    variant: "original" | "thumbnail"
-  ) => string = (attachmentId, variant) => `/api/attachments/${attachmentId}/${variant}`
+  附件内容地址表: 附件内容地址表 = {}
 ): 消息展示项 {
   const isMine = event.sender_session_id === currentSessionId;
   const body = 读取消息文本(event);
@@ -169,7 +170,7 @@ export function 派生消息展示项(
   const attachments = 派生媒体附件展示项列表(
     event.attachments ?? [],
     layoutEnv,
-    构建附件内容地址
+    附件内容地址表
   );
   const 多行紧凑候选 = 默认文本布局器.布局纯文本({
     text: hasText ? body : " ",
@@ -238,10 +239,7 @@ function 读取消息文本(event: 消息事件): string {
 function 派生媒体附件展示项列表(
   attachments: 附件快照[],
   layoutEnv: 消息文本布局环境,
-  构建附件内容地址: (
-    attachmentId: string,
-    variant: "original" | "thumbnail"
-  ) => string
+  附件内容地址表: 附件内容地址表
 ): 媒体附件展示项[] {
   if (attachments.length === 0) {
     return [];
@@ -264,7 +262,7 @@ function 派生媒体附件展示项列表(
           height: attachment.height,
           displayWidth,
           displayHeight,
-          originalSrc: 构建附件内容地址(attachment.attachment_id, "original"),
+          originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
           posterSrc: null,
         };
       }
@@ -275,10 +273,26 @@ function 派生媒体附件展示项列表(
         height: attachment.height,
         displayWidth,
         displayHeight,
-        thumbnailSrc: 构建附件内容地址(attachment.attachment_id, "thumbnail"),
-        originalSrc: 构建附件内容地址(attachment.attachment_id, "original"),
+        thumbnailSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "thumbnail"),
+        originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
       };
     });
+}
+
+/**
+ * 展示层只读附件地址表，不直接知道 transport/session。
+ * 如果某条测试只关心 presenter 几何而没显式提供 URL，就退回稳定默认值，避免把测试绑死到网络端口。
+ */
+function 读取附件内容地址(
+  附件内容地址表: 附件内容地址表,
+  attachmentId: string,
+  variant: "original" | "thumbnail"
+): string {
+  const entry = 附件内容地址表[attachmentId];
+  if (entry) {
+    return variant === "thumbnail" ? entry.thumbnailSrc : entry.originalSrc;
+  }
+  return `/api/attachments/${attachmentId}/${variant}`;
 }
 
 function 计算媒体附件气泡宽度(

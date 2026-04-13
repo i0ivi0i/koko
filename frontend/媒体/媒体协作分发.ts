@@ -1,4 +1,5 @@
 import type { 媒体协作分发定位片段, 媒体定位结果, 媒体种类 } from "../契约.js";
+import { 获取默认浏览器应用平台 } from "../平台/index.js";
 
 export interface WebTorrent文件 {
   readonly streamURL: string;
@@ -64,14 +65,18 @@ async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏
 }
 
 /**
- * WebTorrent 浏览器侧 stream server 要拿的是已经激活的 registration。
- * 如果只把当前页面 controller 塞进去，首次激活和真实 streamURL 会直接失真。
+ * 协作分发只消费平台层已经托管好的 media service worker registration：
+ * 1. 页面侧不再自己等待浏览器原生的 SW ready promise；
+ * 2. 真正的注册、激活和更新握手都归 BrowserAppPlatform；
+ * 3. 这里只有“我要一个已经可用的 media worker”这一个需求。
  */
-async function 获取已激活媒体ServiceWorker注册(): Promise<ServiceWorkerRegistration> {
-  if (!navigator.serviceWorker?.ready) {
-    throw new Error("当前环境不支持 media service worker");
+async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
+  const platform = 获取默认浏览器应用平台();
+  await platform.启动();
+  const registration = platform.serviceWorker.读取注册("media");
+  if (!registration) {
+    throw new Error("media service worker 尚未注册");
   }
-  const registration = await navigator.serviceWorker.ready;
   if (registration.active?.state !== "activated") {
     throw new Error("media service worker 尚未激活");
   }
@@ -294,12 +299,13 @@ export async function 解析协作分发源(input: {
 }
 
 export async function 获取或创建协作分发浏览器运行时(
-  loadCtor: () => Promise<WebTorrent浏览器构造器> = 默认加载WebTorrent浏览器构造器
+  loadCtor: () => Promise<WebTorrent浏览器构造器> = 默认加载WebTorrent浏览器构造器,
+  读取媒体ServiceWorker注册: () => Promise<unknown> = 默认读取媒体ServiceWorker注册
 ): Promise<协作分发浏览器运行时> {
   if (!协作分发浏览器运行时Promise) {
     协作分发浏览器运行时Promise = (async () => {
       const WebTorrentCtor = await loadCtor();
-      const serviceWorkerRegistration = await 获取已激活媒体ServiceWorker注册();
+      const serviceWorkerRegistration = await 读取媒体ServiceWorker注册();
       const client = new WebTorrentCtor();
       const streamServer = client.createServer({
         controller: serviceWorkerRegistration,

@@ -5,6 +5,7 @@ describe("通知运行时", () => {
   it("只执行权限申请、badge 设置和通知点击回流，不判断业务上该提醒谁", async () => {
     const setAppBadge = vi.fn().mockResolvedValue(undefined);
     const clearAppBadge = vi.fn().mockResolvedValue(undefined);
+    const 收到点击 = vi.fn();
     const createdNotifications: Array<{ onclick: null | (() => void) }> = [];
     const runtime = 创建通知运行时({
       notification: {
@@ -21,6 +22,7 @@ describe("通知运行时", () => {
         clearAppBadge,
       } as unknown as Navigator,
     });
+    runtime.订阅点击(收到点击);
 
     await runtime.请求权限();
     await runtime.显示通知({
@@ -39,6 +41,7 @@ describe("通知运行时", () => {
       lastClickedNotificationId: "msg-1",
       badgeCount: 0,
     });
+    expect(收到点击).toHaveBeenCalledWith("msg-1");
     expect(setAppBadge).toHaveBeenCalledWith(3);
     expect(clearAppBadge).toHaveBeenCalledTimes(1);
   });

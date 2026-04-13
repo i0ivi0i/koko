@@ -24,10 +24,14 @@ describe("传输运行时", () => {
     expect(first).toBe(second);
   });
 
-  it("接收生命周期变化时只记录浏览器运行时状态，不越权解释聊天业务语义", () => {
+  it("接收生命周期变化时会把浏览器可见性翻成传输策略，并统一交给 transport 适配器", () => {
+    const 接收运行时策略 = vi.fn();
     const runtime = 创建传输运行时({
       baseUrl: "http://platform.local",
-      createTransport: () => ({}) as 前端传输端口,
+      createTransport: () =>
+        ({
+          接收运行时策略,
+        }) as unknown as 前端传输端口,
     });
     const hiddenSnapshot: 生命周期快照 = {
       visibility: "hidden",
@@ -38,6 +42,16 @@ describe("传输运行时", () => {
 
     expect(runtime.snapshot()).toEqual({
       lastLifecycle: hiddenSnapshot,
+      realtimePolicy: {
+        intent: "suspend",
+        reconnection: false,
+        reason: "page_hidden",
+      },
+    });
+    expect(接收运行时策略).toHaveBeenCalledWith({
+      intent: "suspend",
+      reconnection: false,
+      reason: "page_hidden",
     });
   });
 });

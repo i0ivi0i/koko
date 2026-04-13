@@ -107,6 +107,12 @@ export function 创建浏览器应用平台(
     }
   });
 
+  notification.订阅点击(() => {
+    multiContext.请求聚焦当前上下文();
+    multiContext.声明主上下文();
+    void notification.清除角标();
+  });
+
   const 读取平台快照 = (): 浏览器应用平台快照 => ({
     lifecycle: lifecycle.snapshot(),
     serviceWorker: serviceWorker.snapshot(),
@@ -115,6 +121,8 @@ export function 创建浏览器应用平台(
     notification: notification.snapshot(),
     offline: offline.snapshot(),
   });
+
+  let 启动中: Promise<void> | null = null;
 
   return {
     lifecycle,
@@ -125,10 +133,20 @@ export function 创建浏览器应用平台(
     notification,
     offline,
     async 启动(): Promise<void> {
-      transport.接收生命周期变化(lifecycle.snapshot());
-      multiContext.声明主上下文();
-      await offline.就绪();
-      await serviceWorker.启动();
+      if (!启动中) {
+        启动中 = (async () => {
+          transport.接收生命周期变化(lifecycle.snapshot());
+          multiContext.声明主上下文();
+          await serviceWorker.启动();
+          await offline.就绪({
+            已注册服务工作线程: [
+              serviceWorker.读取注册("app"),
+              serviceWorker.读取注册("media"),
+            ],
+          });
+        })();
+      }
+      await 启动中;
     },
 
     snapshot(): 浏览器应用平台快照 {

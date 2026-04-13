@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { 创建离线运行时 } from "../平台/离线运行时";
 
 type 假事件处理器 = () => void;
@@ -37,10 +37,19 @@ describe("离线运行时", () => {
       navigator: navigatorSource as unknown as Navigator,
     });
 
-    await runtime.就绪();
+    await runtime.就绪({
+      已注册服务工作线程: [
+        {
+          sync: {
+            register: async () => {},
+          },
+        },
+      ],
+    });
     expect(runtime.snapshot()).toEqual({
       online: true,
       backgroundSyncSupported: true,
+      queuedTaskCapability: "background-sync",
     });
 
     navigatorSource.onLine = false;
@@ -48,6 +57,37 @@ describe("离线运行时", () => {
     expect(runtime.snapshot()).toEqual({
       online: false,
       backgroundSyncSupported: true,
+      queuedTaskCapability: "background-sync",
     });
+  });
+
+  it("就绪不会卡死在 pending 的 serviceWorker.ready 上，而是先给出当前已知运行时事实", async () => {
+    vi.useFakeTimers();
+    const windowSource = new 假窗口事件源();
+    const runtime = 创建离线运行时({
+      window: windowSource as unknown as Window,
+      navigator: {
+        onLine: true,
+        serviceWorker: {
+          ready: new Promise(() => {}),
+        },
+      } as unknown as Navigator,
+    });
+
+    const 就绪结果 = Promise.race([
+      runtime.就绪().then(() => "ready"),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 1)),
+    ]);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await 就绪结果).toBe("ready");
+    expect(runtime.snapshot()).toEqual({
+      online: true,
+      backgroundSyncSupported: false,
+      queuedTaskCapability: "none",
+    });
+
+    vi.useRealTimers();
   });
 });

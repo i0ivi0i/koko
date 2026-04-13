@@ -1,8 +1,13 @@
-import { HttpRealtime传输, type 前端传输端口 } from "../传输.js";
+import {
+  HttpRealtime传输,
+  type 前端传输端口,
+  type 实时连接运行时策略,
+} from "../传输.js";
 import type { 生命周期快照 } from "./生命周期运行时.js";
 
 export interface 传输运行时快照 {
   lastLifecycle: 生命周期快照 | null;
+  realtimePolicy: 实时连接运行时策略;
 }
 
 export interface 传输运行时依赖 {
@@ -31,6 +36,37 @@ export interface 传输运行时 {
 const 读取默认基地址 = (): string =>
   typeof window !== "undefined" ? window.location.origin : "http://localhost";
 
+const 推导实时连接运行时策略 = (
+  snapshot: 生命周期快照 | null
+): 实时连接运行时策略 => {
+  if (!snapshot) {
+    return {
+      intent: "resume",
+      reconnection: true,
+      reason: "active",
+    };
+  }
+  if (snapshot.phase === "page_hidden" || snapshot.phase === "frozen") {
+    return {
+      intent: "suspend",
+      reconnection: false,
+      reason: "page_hidden",
+    };
+  }
+  if (snapshot.visibility === "hidden" || snapshot.phase === "background") {
+    return {
+      intent: "resume",
+      reconnection: false,
+      reason: "background",
+    };
+  }
+  return {
+    intent: "resume",
+    reconnection: true,
+    reason: "active",
+  };
+};
+
 export function 创建传输运行时(
   deps: 传输运行时依赖 = {}
 ): 传输运行时 {
@@ -40,6 +76,7 @@ export function 创建传输运行时(
 
   let current: 传输运行时快照 = {
     lastLifecycle: null,
+    realtimePolicy: 推导实时连接运行时策略(null),
   };
   let transportPort: 前端传输端口 | null = null;
 
@@ -52,14 +89,18 @@ export function 创建传输运行时(
     },
 
     接收生命周期变化(snapshot: 生命周期快照): void {
+      const realtimePolicy = 推导实时连接运行时策略(snapshot);
       current = {
         lastLifecycle: { ...snapshot },
+        realtimePolicy,
       };
+      this.transport().接收运行时策略?.(realtimePolicy);
     },
 
     snapshot(): 传输运行时快照 {
       return {
         lastLifecycle: current.lastLifecycle ? { ...current.lastLifecycle } : null,
+        realtimePolicy: { ...current.realtimePolicy },
       };
     },
   };

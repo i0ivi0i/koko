@@ -42,6 +42,12 @@ describe("服务工作线程运行时", () => {
     expect(register).toHaveBeenCalledWith("/app-sw.js", { scope: "/" });
     expect(register).toHaveBeenCalledWith("/media-sw.js", { scope: "/" });
     expect(persist).toHaveBeenCalledTimes(1);
+    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("app")).toEqual(
+      {}
+    );
+    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("media")).toEqual(
+      {}
+    );
     expect(runtime.snapshot()).toEqual({
       appShellRegistered: true,
       mediaWorkerRegistered: true,
@@ -100,6 +106,16 @@ describe("服务工作线程运行时", () => {
 
     expect(runtime.发送消息?.({ type: "PING" }) ?? false).toBe(true);
     expect(controller.postMessage).toHaveBeenCalledWith({ type: "PING" });
+    expect(
+      (runtime as unknown as {
+        读取注册(kind: "app" | "media"): unknown;
+      }).读取注册("app")
+    ).toBe(appRegistration);
+    expect(
+      (runtime as unknown as {
+        读取注册(kind: "app" | "media"): unknown;
+      }).读取注册("media")
+    ).toBe(mediaRegistration);
     expect(runtime.snapshot()).toMatchObject({
       controllerAttached: true,
       appShellWaiting: true,

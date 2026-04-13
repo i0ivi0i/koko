@@ -19,7 +19,11 @@ import {
   type 阅读推进编排依赖,
   type 阅读推进编排端口,
 } from "./阅读推进编排.js";
-import { 房间滚动器, type 房间滚动器依赖 } from "./房间滚动器.js";
+import {
+  房间滚动器,
+  type 房间滚动器依赖,
+  type 房间滚动器宿主,
+} from "./房间滚动器.js";
 import { 推进房间时间线, type 时间线输入 } from "./房间时间线.js";
 import {
   获取默认浏览器应用平台,
@@ -42,13 +46,9 @@ import {
   type 聊天输入状态,
 } from "./状态.js";
 import {
-  写入媒体草稿 as 写入媒体草稿状态,
-  更新媒体草稿状态 as 更新媒体草稿状态值,
-  移除媒体草稿 as 移除媒体草稿状态,
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
   type 媒体查看器打开请求,
-  type 媒体播放结果,
 } from "./媒体/index.js";
 import {
   创建聊天媒体编排,
@@ -98,15 +98,18 @@ export type 聊天应用命令 =
   | { type: "MEDIA_DRAFT_REMOVE_REQUESTED"; localId: string }
   | { type: "MEDIA_DRAFT_RETRY_REQUESTED"; localId: string };
 
-export interface 聊天应用内核宿主 {
-  addController(controller: object): void;
-  removeController(controller: object): void;
-  requestUpdate(): void;
-  updateComplete: Promise<boolean>;
+interface 聊天应用渲染桥 {
+  /**
+   * 内核只能表达“需要刷新”与“等待刷新完成”这两个渲染事实。
+   * 它不再直接持有 Lit host，避免把壳层实例整包倒灌进业务编排。
+   */
+  请求重渲染(): void;
+  等待壳渲染完成(): Promise<void>;
 }
 
 export interface 聊天应用内核依赖 {
-  host: 聊天应用内核宿主;
+  渲染桥: 聊天应用渲染桥;
+  滚动宿主: 房间滚动器宿主;
   platform?: 浏览器应用平台;
   transport?: 前端传输端口;
   storage?: 前端存储端口;
@@ -120,18 +123,6 @@ export interface 聊天应用内核端口 {
   dispatch(command: 聊天应用命令): Promise<void>;
   setTransportForTest(transport: 前端传输端口): void;
   dispose(): void;
-  构建附件内容地址(attachmentId: string, variant?: "original" | "thumbnail"): string;
-  设置媒体播放器供测试(player: {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
-  }): void;
-  设置媒体查看器供测试(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void;
-  设置媒体发布器供测试(publisher: {
-    处理选择媒体文件(files: Iterable<File>): Promise<void>;
-    移除草稿(localId: string): void;
-    重试草稿(localId: string): Promise<void>;
-    清空(): void;
-    销毁(): void;
-  }): void;
   注入快照补丁供测试(patch: Partial<聊天应用快照>): void;
   读取房间滚动器供测试(): 房间滚动器;
   读取恢复编排端口供测试(): 房间恢复编排端口;
@@ -201,7 +192,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.时间线状态 = { ...初始聊天时间线状态 };
     this.视口状态 = { ...初始聊天视口状态 };
     this.流程状态 = { ...初始聊天流程状态 };
-    this.roomScroller = new 房间滚动器(deps.host, {
+    this.roomScroller = new 房间滚动器(deps.滚动宿主, {
       读取状态: () => this.读取滚动观察状态(),
       更新状态: (patch) => this.写入滚动观察状态(patch),
       查询滚动容器: () => deps.查询滚动容器(),
@@ -225,7 +216,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.应用本地状态补丁({ composerMediaDrafts: nextDrafts });
       },
       请求重渲染: () => {
-        this.deps.host.requestUpdate();
+        this.deps.渲染桥.请求重渲染();
       },
       回收媒体草稿预览地址: (previewUrls) => {
         this.deps.清理房间视图本地状态?.({ previewUrls });
@@ -371,36 +362,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.媒体编排.打开查看器(request);
   }
 
-  构建附件内容地址(
-    attachmentId: string,
-    variant: "original" | "thumbnail" = "original"
-  ): string {
-    return this.媒体编排.构建附件内容地址(attachmentId, variant);
-  }
-
-  设置媒体播放器供测试(player: {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
-  }): void {
-    this.媒体编排.设置媒体播放器供测试(player);
-  }
-
-  设置媒体查看器供测试(viewer: {
-    打开(input: 媒体查看器打开请求): void;
-    销毁(): void;
-  }): void {
-    this.媒体编排.设置媒体查看器供测试(viewer);
-  }
-
-  设置媒体发布器供测试(publisher: {
-    处理选择媒体文件(files: Iterable<File>): Promise<void>;
-    移除草稿(localId: string): void;
-    重试草稿(localId: string): Promise<void>;
-    清空(): void;
-    销毁(): void;
-  }): void {
-    this.媒体编排.设置媒体发布器供测试(publisher);
-  }
-
   /**
    * 下面这些测试缝只服务现有集成测试迁移：
    * - 它们显式带上“供测试”标记，避免重新伪装成正式业务入口；
@@ -454,7 +415,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           this.shouldPrimeReadAnchorAfterInitialSettle = value;
         },
         等待壳渲染完成: async () => {
-          await this.deps.host.updateComplete;
+          await this.deps.渲染桥.等待壳渲染完成();
         },
       });
     }
@@ -502,7 +463,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
           this.恢复编排端口.withSessionRefreshOnInvalid(operation),
         等待壳渲染完成: async () => {
-          await this.deps.host.updateComplete;
+          await this.deps.渲染桥.等待壳渲染完成();
         },
         滚到最新位置: () => this.roomScroller.滚到最新位置(),
       });
@@ -616,7 +577,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     if (消息列表发生变化) {
       this.媒体编排.同步消息附件播放结果();
     }
-    this.deps.host.requestUpdate();
+    this.deps.渲染桥.请求重渲染();
     return true;
   }
 
@@ -754,7 +715,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    */
   private 发送房间事件(event: 房间内核事件): void {
     this.roomKernel.send(event);
-    this.deps.host.requestUpdate();
+    this.deps.渲染桥.请求重渲染();
   }
 
   private 回填房间壳补丁(): 房间壳补丁 {

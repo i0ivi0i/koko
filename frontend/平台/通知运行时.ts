@@ -42,6 +42,7 @@ export interface 显示通知输入 {
 
 export interface 通知运行时 {
   snapshot(): 通知运行时快照;
+  订阅点击(listener: (notificationId: string) => void): () => void;
   请求权限(): Promise<通知权限状态>;
   显示通知(input: 显示通知输入): Promise<boolean>;
   设置角标(count: number): Promise<void>;
@@ -83,10 +84,18 @@ export function 创建通知运行时(
     lastClickedNotificationId: null,
     badgeCount: 0,
   };
+  const 点击监听器 = new Set<(notificationId: string) => void>();
 
   return {
     snapshot(): 通知运行时快照 {
       return { ...current };
+    },
+
+    订阅点击(listener: (notificationId: string) => void): () => void {
+      点击监听器.add(listener);
+      return () => {
+        点击监听器.delete(listener);
+      };
     },
 
     async 请求权限(): Promise<通知权限状态> {
@@ -120,6 +129,9 @@ export function 创建通知运行时(
           ...current,
           lastClickedNotificationId: input.id,
         };
+        for (const listener of 点击监听器) {
+          listener(input.id);
+        }
       };
       return true;
     },

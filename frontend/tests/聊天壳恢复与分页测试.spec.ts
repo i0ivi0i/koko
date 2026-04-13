@@ -7,6 +7,7 @@ import {
   假传输,
   创建房间快照,
   创建传输错误,
+  注入媒体查看器供测试,
   等待组件稳定,
   读取操作台主输入,
   读取操作台主动作,
@@ -1191,11 +1192,7 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     };
     const el = document.createElement("koko-chat-shell") as 聊天壳;
     el.setTransportForTest(transport);
-    (
-      el as unknown as {
-        setMediaViewerForTest(nextViewer: typeof viewer): void;
-      }
-    ).setMediaViewerForTest(viewer);
+    注入媒体查看器供测试(el, viewer);
     document.body.appendChild(el);
     await 等待组件稳定(el);
 

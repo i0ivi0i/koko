@@ -14,10 +14,39 @@ const 创建内核宿主 = () => ({
   updateComplete: Promise.resolve(true),
 });
 
+const 创建内核依赖 = () => {
+  const 滚动宿主 = 创建内核宿主();
+  return {
+    滚动宿主,
+    渲染桥: {
+      请求重渲染: () => {
+        滚动宿主.requestUpdate();
+      },
+      等待壳渲染完成: async () => {
+        await 滚动宿主.updateComplete;
+      },
+    },
+  };
+};
+
+type 聊天媒体测试端口 = {
+  设置媒体发布器供测试(publisher: {
+    处理选择媒体文件(files: Iterable<File>): Promise<void>;
+    移除草稿(localId: string): void;
+    重试草稿(localId: string): Promise<void>;
+    清空(): void;
+    销毁(): void;
+  }): void;
+  设置媒体查看器供测试(viewer: { 打开(input: { startAttachmentId: string; items: unknown[] }): void; 销毁(): void }): void;
+};
+
+const 读取媒体编排供测试 = (kernel: unknown): 聊天媒体测试端口 =>
+  (kernel as { 媒体编排: 聊天媒体测试端口 }).媒体编排;
+
 describe("聊天应用内核", () => {
   it("不再暴露 transportPort / replaceSnapshot 这类兼容旧壳层的旁路入口", () => {
     const kernel = 创建聊天应用内核({
-      host: 创建内核宿主(),
+      ...创建内核依赖(),
       storage: 创建浏览器存储(createFakeStorage()),
       查询滚动容器: () => null,
       查询消息节点: () => [],
@@ -38,7 +67,7 @@ describe("聊天应用内核", () => {
   it("只通过 dispatch / snapshot 暴露聊天业务入口，壳层不再自己拼 join/send/leave 过程", async () => {
     const transport = new 假传输();
     const kernel = 创建聊天应用内核({
-      host: 创建内核宿主(),
+      ...创建内核依赖(),
       transport,
       storage: 创建浏览器存储(createFakeStorage()),
       查询滚动容器: () => null,
@@ -59,7 +88,7 @@ describe("聊天应用内核", () => {
   it("发送命令也通过内核 dispatch 统一进入，而不是壳层自己保留 sendCurrentMessage 业务入口", async () => {
     const transport = new 假传输();
     const kernel = 创建聊天应用内核({
-      host: 创建内核宿主(),
+      ...创建内核依赖(),
       transport,
       storage: 创建浏览器存储(createFakeStorage()),
       查询滚动容器: () => null,
@@ -81,7 +110,7 @@ describe("聊天应用内核", () => {
 
   it("壳层媒体动作也只通过 dispatch 进入内核，不再直接摸媒体编排对象", async () => {
     const kernel = 创建聊天应用内核({
-      host: 创建内核宿主(),
+      ...创建内核依赖(),
       storage: 创建浏览器存储(createFakeStorage()),
       查询滚动容器: () => null,
       查询消息节点: () => [],
@@ -101,8 +130,8 @@ describe("聊天应用内核", () => {
       销毁: vi.fn(),
     };
 
-    kernel.设置媒体发布器供测试(fake媒体发布器);
-    kernel.设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(kernel).设置媒体发布器供测试(fake媒体发布器);
+    读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
 
     await kernel.dispatch({ type: "MEDIA_FILES_SELECTED", files: [imageFile] });
     await kernel.dispatch({ type: "MEDIA_DRAFT_RETRY_REQUESTED", localId: "draft-1" });
@@ -141,11 +170,17 @@ describe("聊天应用内核", () => {
       },
       transport: {
         lastLifecycle: { visibility: "hidden", phase: "background" },
+        realtimePolicy: {
+          intent: "resume",
+          reconnection: false,
+          reason: "background",
+        },
       },
       multiContext: {
         contextId: "tab-b",
         isPrimaryContext: false,
         lastPrimaryContextId: "tab-a",
+        lastFocusedContextId: null,
         deliveredNotificationIds: [],
       },
       notification: {
@@ -156,10 +191,11 @@ describe("聊天应用内核", () => {
       offline: {
         online: true,
         backgroundSyncSupported: true,
+        queuedTaskCapability: "background-sync",
       },
     };
     const kernel = 创建聊天应用内核({
-      host: 创建内核宿主(),
+      ...创建内核依赖(),
       transport,
       storage: 创建浏览器存储(createFakeStorage()),
       查询滚动容器: () => null,
@@ -230,11 +266,17 @@ describe("聊天应用内核", () => {
       },
       transport: {
         lastLifecycle: { visibility: "visible", phase: "active" },
+        realtimePolicy: {
+          intent: "resume",
+          reconnection: true,
+          reason: "active",
+        },
       },
       multiContext: {
         contextId: "tab-a",
         isPrimaryContext: true,
         lastPrimaryContextId: "tab-a",
+        lastFocusedContextId: null,
         deliveredNotificationIds: [],
       },
       notification: {
@@ -245,10 +287,11 @@ describe("聊天应用内核", () => {
       offline: {
         online: true,
         backgroundSyncSupported: true,
+        queuedTaskCapability: "background-sync",
       },
     };
     const kernel = 创建聊天应用内核({
-      host: 创建内核宿主(),
+      ...创建内核依赖(),
       transport,
       storage: 创建浏览器存储(createFakeStorage()),
       查询滚动容器: () => null,

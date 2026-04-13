@@ -17,8 +17,14 @@ import {
 
 type 程序滚动来源 = "media_viewer_open";
 
+export type 附件内容地址快照 = {
+  originalSrc: string;
+  thumbnailSrc: string;
+};
+
 export type 聊天媒体快照 = {
   playbackByAttachmentId: Record<string, 媒体播放结果>;
+  contentUrlByAttachmentId: Record<string, 附件内容地址快照>;
 };
 
 type 聊天媒体编排依赖 = {
@@ -35,7 +41,6 @@ type 聊天媒体编排依赖 = {
 
 export interface 聊天媒体编排端口 {
   snapshot(): 聊天媒体快照;
-  构建附件内容地址(attachmentId: string, variant?: "original" | "thumbnail"): string;
   处理选择媒体文件(files: Iterable<File>): Promise<void>;
   移除媒体草稿(localId: string): void;
   重试媒体草稿(localId: string): Promise<void>;
@@ -150,6 +155,32 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return attachments;
   };
 
+  /**
+   * 附件内容地址属于“当前会话下可访问的媒体资源定位结果”。
+   * 这里按当前时间线里的附件集合现算现给，目的有两个：
+   * 1. 壳层 presenter 只消费 snapshot 里的纯数据，不再回调内核 helper；
+   * 2. URL 仍然只从 transport 能力构建，避免视图层自己猜 session 参数。
+   */
+  const 读取附件内容地址表 = (): Record<string, 附件内容地址快照> => {
+    const sessionId = deps.读取会话编号();
+    const urlsByAttachmentId: Record<string, 附件内容地址快照> = {};
+    for (const attachment of 读取当前房间媒体附件()) {
+      urlsByAttachmentId[attachment.attachmentId] = {
+        originalSrc: deps.transport().buildAttachmentContentUrl(
+          attachment.attachmentId,
+          sessionId,
+          "original"
+        ),
+        thumbnailSrc: deps.transport().buildAttachmentContentUrl(
+          attachment.attachmentId,
+          sessionId,
+          "thumbnail"
+        ),
+      };
+    }
+    return urlsByAttachmentId;
+  };
+
   const 清空播放状态 = (): void => {
     媒体播放结果表 = {};
     正在解析媒体播放.clear();
@@ -160,14 +191,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     snapshot(): 聊天媒体快照 {
       return {
         playbackByAttachmentId: 媒体播放结果表,
+        contentUrlByAttachmentId: 读取附件内容地址表(),
       };
-    },
-
-    构建附件内容地址(
-      attachmentId: string,
-      variant: "original" | "thumbnail" = "original"
-    ): string {
-      return deps.transport().buildAttachmentContentUrl(attachmentId, deps.读取会话编号(), variant);
     },
 
     async 处理选择媒体文件(files: Iterable<File>): Promise<void> {

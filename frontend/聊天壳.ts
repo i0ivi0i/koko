@@ -6,10 +6,7 @@ import {
   创建操作台附件入口编排,
   默认统一媒体文件选择配置,
 } from "./操作台/index.js";
-import {
-  type 媒体查看器打开请求,
-  type 媒体播放结果,
-} from "./媒体/index.js";
+import { type 媒体查看器打开请求 } from "./媒体/index.js";
 import type { 前端传输端口 } from "./传输.js";
 import { 默认文本布局器 } from "./文本布局.js";
 import {
@@ -777,7 +774,15 @@ export class 聊天壳 extends LitElement {
    * - 转接少量浏览器副作用清理回调。
    */
   private readonly kernel = 创建聊天应用内核({
-    host: this,
+    渲染桥: {
+      请求重渲染: () => {
+        this.requestUpdate();
+      },
+      等待壳渲染完成: async () => {
+        await this.updateComplete;
+      },
+    },
+    滚动宿主: this,
     查询滚动容器: () =>
       (this.shadowRoot?.querySelector("#messageScroll") as HTMLElement | null) ?? null,
     查询消息节点: () =>
@@ -807,26 +812,6 @@ export class 聊天壳 extends LitElement {
       });
     }
     return this._应用运行时;
-  }
-
-  setMediaPlayerForTest(player: {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
-  }): void {
-    this.kernel.设置媒体播放器供测试(player);
-  }
-
-  setMediaViewerForTest(viewer: { 打开(input: 媒体查看器打开请求): void; 销毁(): void }): void {
-    this.kernel.设置媒体查看器供测试(viewer);
-  }
-
-  setMediaPublisherForTest(publisher: {
-    处理选择媒体文件(files: Iterable<File>): Promise<void>;
-    移除草稿(localId: string): void;
-    重试草稿(localId: string): Promise<void>;
-    清空(): void;
-    销毁(): void;
-  }): void {
-    this.kernel.设置媒体发布器供测试(publisher);
   }
 
   setTransportForTest(transport: 前端传输端口): void {
@@ -1205,29 +1190,30 @@ export class 聊天壳 extends LitElement {
   }
 
   override render() {
+    const 聊天快照 = this.读取聊天快照();
     const { recoveryHint, subtitle: roomSubtitle } = 派生房间壳提示文案({
-      recoveryState: this.读取聊天快照().recoveryState,
-      roomId: this.读取聊天快照().roomId,
-      displayAlias: this.读取聊天快照().displayAlias,
+      recoveryState: 聊天快照.recoveryState,
+      roomId: 聊天快照.roomId,
+      displayAlias: 聊天快照.displayAlias,
     });
     const { historyHint } = 派生消息窗口提示文案({
-      historyLoading: this.读取聊天快照().historyLoading,
-      historyErrorCode: this.读取聊天快照().historyErrorCode,
+      historyLoading: 聊天快照.historyLoading,
+      historyErrorCode: 聊天快照.historyErrorCode,
     });
     const jumpToLatestLabel = 派生跳到最新入口文案({
-      viewportMode: this.读取聊天快照().viewportMode,
-      hasUnreadNewerMessages: this.读取聊天快照().hasUnreadNewerMessages,
+      viewportMode: 聊天快照.viewportMode,
+      hasUnreadNewerMessages: 聊天快照.hasUnreadNewerMessages,
     });
     const shellView = 派生壳主舞台模式({
-      bootstrapState: this.读取聊天快照().bootstrapState,
-      roomId: this.读取聊天快照().roomId,
+      bootstrapState: 聊天快照.bootstrapState,
+      roomId: 聊天快照.roomId,
     });
     const consoleMode = 派生控制台模式({
-      bootstrapState: this.读取聊天快照().bootstrapState,
-      roomId: this.读取聊天快照().roomId,
+      bootstrapState: 聊天快照.bootstrapState,
+      roomId: 聊天快照.roomId,
     });
     const 消息文本布局环境 = this.读取消息文本布局环境();
-    const homeSessionViewItems = 派生首页会话展示项(this.读取聊天快照().homeSessionItems);
+    const homeSessionViewItems = 派生首页会话展示项(聊天快照.homeSessionItems);
     const shellConsole = this.renderShellConsole({
       mode: consoleMode,
       statusText:
@@ -1259,7 +1245,7 @@ export class 聊天壳 extends LitElement {
             <div class="home-card">
               <h1 class="join-title">空态首页占位</h1>
               <p class="join-subtitle">输入房间短码后进入当前聊天空间，身份和会话会继续沿用。</p>
-              <div id="alias" class="join-meta">alias: ${this.读取聊天快照().displayAlias || "-"}</div>
+              <div id="alias" class="join-meta">alias: ${聊天快照.displayAlias || "-"}</div>
             ${recoveryHint ? html`<div id="recoveryHint" class="hint">${recoveryHint}</div>` : null}
             ${homeSessionViewItems.length > 0
               ? html`
@@ -1305,20 +1291,20 @@ export class 聊天壳 extends LitElement {
             </button>
             <div class="room-heading">
               <div id="roomTitle" class="room-title">
-                ${this.读取聊天快照().roomDisplayTitle || "群聊房间"}
+                ${聊天快照.roomDisplayTitle || "群聊房间"}
               </div>
               <div id="roomSubtitle" class="room-subtitle">${roomSubtitle}</div>
             </div>
           </header>
           <koko-room-message-pane
               .items=${派生聊天列表展示项(
-              this.读取聊天快照().messages,
-              this.读取聊天快照().sessionId,
-              this.读取聊天快照().firstUnreadEventPosition,
+              聊天快照.messages,
+              聊天快照.sessionId,
+              聊天快照.firstUnreadEventPosition,
               消息文本布局环境,
-              (attachmentId, variant) => this.kernel.构建附件内容地址(attachmentId, variant)
+              聊天快照.media.contentUrlByAttachmentId
              )}
-            .mediaPlaybackByAttachmentId=${this.读取聊天快照().media.playbackByAttachmentId}
+            .mediaPlaybackByAttachmentId=${聊天快照.media.playbackByAttachmentId}
             .historyHint=${historyHint}
             .jumpToLatestLabel=${jumpToLatestLabel}
             @room-scroll-intent=${() =>

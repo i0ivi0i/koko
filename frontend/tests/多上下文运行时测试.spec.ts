@@ -50,5 +50,14 @@ describe("多上下文运行时", () => {
     expect(runtimeA.登记通知已展示("message-1")).toBe(true);
     expect(runtimeA.通知已展示("message-1")).toBe(true);
     expect(runtimeB.登记通知已展示("message-1")).toBe(false);
+
+    runtimeB.请求聚焦当前上下文();
+
+    expect(runtimeA.snapshot()).toMatchObject({
+      lastFocusedContextId: "tab-b",
+    });
+    expect(runtimeB.snapshot()).toMatchObject({
+      lastFocusedContextId: "tab-b",
+    });
   });
 });

@@ -33,20 +33,12 @@ function 准备好的定位结果(attachmentId: string): 媒体定位结果 {
   };
 }
 
-function 安装假媒体浏览器环境() {
+function 准备已激活媒体ServiceWorker注册() {
   const registration = {
     active: {
       state: "activated",
     },
-  } as ServiceWorkerRegistration;
-  Object.defineProperty(globalThis, "navigator", {
-    value: {
-      serviceWorker: {
-        ready: Promise.resolve(registration),
-      },
-    },
-    configurable: true,
-  });
+  };
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
@@ -172,15 +164,7 @@ describe("媒体协作分发", () => {
       active: {
         state: "activated",
       },
-    } as ServiceWorkerRegistration;
-    Object.defineProperty(globalThis, "navigator", {
-      value: {
-        serviceWorker: {
-          ready: Promise.resolve(registration),
-        },
-      },
-      configurable: true,
-    });
+    };
     const createServer = vi.fn().mockReturnValue({ close: vi.fn() });
     const ctorSpy = vi.fn();
     class FakeWebTorrent {
@@ -197,10 +181,12 @@ describe("媒体协作分发", () => {
     const fakeCtor = FakeWebTorrent as unknown as new () => WebTorrent浏览器客户端;
 
     const first = await 获取或创建协作分发浏览器运行时(
-      async () => fakeCtor
+      async () => fakeCtor,
+      async () => registration
     );
     const second = await 获取或创建协作分发浏览器运行时(
-      async () => fakeCtor
+      async () => fakeCtor,
+      async () => registration
     );
 
     expect(ctorSpy).toHaveBeenCalledTimes(1);
@@ -209,14 +195,14 @@ describe("媒体协作分发", () => {
   });
 
   it("同一 attachment 在同一页面被再次打开时会复用同一个 torrent 会话", async () => {
-    安装假媒体浏览器环境();
+    const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-1");
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
       onTorrent(torrent);
       return torrent;
     }) as WebTorrent浏览器客户端["add"]);
     const { ctor } = 创建假WebTorrent构造器(add);
-    await 获取或创建协作分发浏览器运行时(async () => ctor);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
 
     const locator = 准备好的定位结果("att-1");
     const first = await 解析协作分发源({
@@ -235,7 +221,7 @@ describe("媒体协作分发", () => {
   });
 
   it("开始查看后会继续补齐整个附件，并用官方事件更新运行态提示", async () => {
-    安装假媒体浏览器环境();
+    const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, select, emit } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-2"
     );
@@ -244,7 +230,7 @@ describe("媒体协作分发", () => {
       return torrent;
     }) as WebTorrent浏览器客户端["add"]);
     const { ctor } = 创建假WebTorrent构造器(add);
-    await 获取或创建协作分发浏览器运行时(async () => ctor);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
 
     const source = await 解析协作分发源({
       attachmentId: "att-2",
@@ -277,7 +263,7 @@ describe("媒体协作分发", () => {
 
   it("开始协作分发后会按 presence_url 周期上报存活，而不是前端自己裁决 expired", async () => {
     vi.useFakeTimers();
-    安装假媒体浏览器环境();
+    const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-3");
     const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = String(input);
@@ -301,7 +287,7 @@ describe("媒体协作分发", () => {
       return torrent;
     }) as WebTorrent浏览器客户端["add"]);
     const { ctor } = 创建假WebTorrent构造器(add);
-    await 获取或创建协作分发浏览器运行时(async () => ctor);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
 
     const locator = 准备好的定位结果("att-3");
     expect(locator.distribution).not.toBeNull();

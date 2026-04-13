@@ -25,7 +25,39 @@ describe("传输", () => {
     expect(ioSpy).toHaveBeenCalledWith("http://localhost:3000", {
       transports: ["websocket"],
       reconnection: true,
+      autoConnect: true,
       auth: { session_id: "s-auth" },
+    });
+  });
+
+  it("运行时策略切到挂起时会暂停现有 socket，恢复后再继续连接", () => {
+    const connect = vi.fn();
+    const disconnect = vi.fn();
+    ioSpy.mockReturnValue({
+      connect,
+      disconnect,
+    } as never);
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const socket = transport.createSocket("s-auth");
+    transport.接收运行时策略({
+      intent: "suspend",
+      reconnection: false,
+      reason: "page_hidden",
+    });
+    transport.接收运行时策略({
+      intent: "resume",
+      reconnection: true,
+      reason: "active",
+    });
+    transport.释放Socket(socket);
+
+    expect(disconnect).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(transport.读取运行时策略()).toEqual({
+      intent: "resume",
+      reconnection: true,
+      reason: "active",
     });
   });
 

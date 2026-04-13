@@ -17,8 +17,14 @@ type 可投递消息服务工作线程 = {
   postMessage?(message: unknown): void;
 };
 
-type 可服务工作线程注册结果 = 可监听事件目标 & {
+export type 服务工作线程注册结果 = 可监听事件目标 & {
+  active?: {
+    state?: string;
+  } | null;
   waiting?: 可投递消息服务工作线程 | null;
+  sync?: {
+    register(tag: string): Promise<unknown>;
+  };
 };
 
 type 可注册服务工作线程 = {
@@ -26,7 +32,7 @@ type 可注册服务工作线程 = {
   register(
     url: string,
     options: { scope: string }
-  ): Promise<可服务工作线程注册结果 | unknown>;
+  ): Promise<服务工作线程注册结果 | unknown>;
 } & 可监听事件目标;
 
 type 可持久化存储 = {
@@ -48,6 +54,7 @@ export interface 服务工作线程运行时 {
   启动(): Promise<void>;
   snapshot(): 服务工作线程快照;
   发送消息?(message: unknown): boolean;
+  读取注册(kind: "app" | "media"): 服务工作线程注册结果 | null;
 }
 
 const 读取消息类型 = (message: unknown): string | null => {
@@ -58,7 +65,7 @@ const 读取消息类型 = (message: unknown): string | null => {
   return typeof value === "string" ? value : null;
 };
 
-const 是可注册结果 = (value: unknown): value is 可服务工作线程注册结果 =>
+const 是可注册结果 = (value: unknown): value is 服务工作线程注册结果 =>
   typeof value === "object" && value !== null;
 
 /**
@@ -75,6 +82,8 @@ export function 创建服务工作线程运行时(
   const platformNavigator =
     deps.navigator ?? (typeof navigator !== "undefined" ? navigator : undefined);
   let started = false;
+  let appRegistration: 服务工作线程注册结果 | null = null;
+  let mediaRegistration: 服务工作线程注册结果 | null = null;
 
   let current: 服务工作线程快照 = {
     appShellRegistered: false,
@@ -153,23 +162,25 @@ export function 创建服务工作线程运行时(
         typeof platformNavigator.serviceWorker.register === "function"
       ) {
         try {
-          const appRegistration = await platformNavigator.serviceWorker.register("/app-sw.js", {
+          const nextAppRegistration = await platformNavigator.serviceWorker.register("/app-sw.js", {
             scope: "/",
           });
           更新快照({ appShellRegistered: true });
-          同步等待状态(appRegistration, "appShellWaiting");
-          绑定更新观察(appRegistration, "appShellWaiting");
+          appRegistration = 是可注册结果(nextAppRegistration) ? nextAppRegistration : null;
+          同步等待状态(nextAppRegistration, "appShellWaiting");
+          绑定更新观察(nextAppRegistration, "appShellWaiting");
         } catch {
           // best-effort：这里不把浏览器平台失败升级成聊天业务失败。
         }
 
         try {
-          const mediaRegistration = await platformNavigator.serviceWorker.register("/media-sw.js", {
+          const nextMediaRegistration = await platformNavigator.serviceWorker.register("/media-sw.js", {
             scope: "/",
           });
           更新快照({ mediaWorkerRegistered: true });
-          同步等待状态(mediaRegistration, "mediaWorkerWaiting");
-          绑定更新观察(mediaRegistration, "mediaWorkerWaiting");
+          mediaRegistration = 是可注册结果(nextMediaRegistration) ? nextMediaRegistration : null;
+          同步等待状态(nextMediaRegistration, "mediaWorkerWaiting");
+          绑定更新观察(nextMediaRegistration, "mediaWorkerWaiting");
         } catch {
           // media worker 失败同样只留在平台层快照里，不污染业务语义。
         }
@@ -200,6 +211,10 @@ export function 创建服务工作线程运行时(
       }
       controller.postMessage(message);
       return true;
+    },
+
+    读取注册(kind: "app" | "media"): 服务工作线程注册结果 | null {
+      return kind === "app" ? appRegistration : mediaRegistration;
     },
   };
 }

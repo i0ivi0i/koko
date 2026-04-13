@@ -73,6 +73,27 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("this.kernel.重试媒体草稿(");
   });
 
+  it("聊天壳渲染路径只读快照，不再在模板里直接摸内核 helper 或转发媒体测试 setter", () => {
+    const shellSource = 读取前端源码("聊天壳.ts");
+    const kernelSource = 读取前端源码("聊天应用内核.ts");
+    const swarmSource = 读取前端源码("媒体/媒体协作分发.ts");
+
+    expect(shellSource).not.toContain("this.kernel.构建附件内容地址(");
+    expect(shellSource).not.toContain("setMediaPlayerForTest(");
+    expect(shellSource).not.toContain("setMediaViewerForTest(");
+    expect(shellSource).not.toContain("setMediaPublisherForTest(");
+    expect(shellSource).not.toContain("host: this,");
+
+    expect(kernelSource).not.toContain("构建附件内容地址(attachmentId: string");
+    expect(kernelSource).not.toContain("设置媒体播放器供测试(");
+    expect(kernelSource).not.toContain("设置媒体查看器供测试(");
+    expect(kernelSource).not.toContain("设置媒体发布器供测试(");
+    expect(kernelSource).not.toContain("export interface 聊天应用内核宿主");
+    expect(kernelSource).not.toContain("deps.host.updateComplete");
+    expect(kernelSource).not.toContain("deps.host.requestUpdate()");
+    expect(swarmSource).not.toContain("navigator.serviceWorker.ready");
+  });
+
   it("应用运行时只负责把浏览器事件翻成内核 command，不再知道具体 owner 动词", () => {
     const source = 读取前端源码("应用运行时.ts");
 
@@ -117,11 +138,22 @@ describe("浏览器端应用平台化基线", () => {
   it("平台会把多上下文、通知、离线能力收进统一快照与命令入口，而不是让壳层自己直连浏览器 API", async () => {
     const lifecycleListeners: Array<(snapshot: 生命周期快照) => void> = [];
     const transportLifecycleCalls: 生命周期快照[] = [];
+    const startupSteps: string[] = [];
     const showNotification = vi.fn(async () => true);
     const setBadge = vi.fn(async () => {});
     const clearBadge = vi.fn(async () => {});
-    const offlineReady = vi.fn(async () => {});
-    const startServiceWorker = vi.fn(async () => {});
+    const appRegistration = {
+      sync: {
+        register: async () => {},
+      },
+    };
+    const mediaRegistration = {};
+    const offlineReady = vi.fn(async (input?: { 已注册服务工作线程?: Array<unknown> }) => {
+      startupSteps.push(`offline:${Boolean((input?.已注册服务工作线程 ?? []).at(0))}`);
+    });
+    const startServiceWorker = vi.fn(async () => {
+      startupSteps.push("serviceWorker");
+    });
     const declarePrimary = vi.fn(() => {});
     const dedupeNotification = vi.fn(() => true);
     const hasShownNotification = vi.fn(() => false);
@@ -141,6 +173,8 @@ describe("浏览器端应用平台化基线", () => {
       },
       serviceWorker: {
         启动: startServiceWorker,
+        读取注册: (kind: "app" | "media") =>
+          kind === "app" ? appRegistration : mediaRegistration,
         snapshot: () => ({
           appShellRegistered: true,
           mediaWorkerRegistered: true,
@@ -160,16 +194,25 @@ describe("浏览器端应用平台化基线", () => {
         接收生命周期变化: (snapshot) => {
           transportLifecycleCalls.push(snapshot);
         },
-        snapshot: () => ({ lastLifecycle: { visibility: "visible" as const, phase: "active" as const } }),
+        snapshot: () => ({
+          lastLifecycle: { visibility: "visible" as const, phase: "active" as const },
+          realtimePolicy: {
+            intent: "resume" as const,
+            reconnection: true,
+            reason: "active" as const,
+          },
+        }),
       },
       multiContext: {
         snapshot: () => ({
           contextId: "tab-a",
           isPrimaryContext: true,
           lastPrimaryContextId: "tab-a",
+          lastFocusedContextId: null,
           deliveredNotificationIds: [],
         }),
         声明主上下文: declarePrimary,
+        请求聚焦当前上下文: () => {},
         通知已展示: hasShownNotification,
         登记通知已展示: dedupeNotification,
       },
@@ -183,12 +226,14 @@ describe("浏览器端应用平台化基线", () => {
         显示通知: showNotification,
         设置角标: setBadge,
         清除角标: clearBadge,
+        订阅点击: () => () => {},
       },
       offline: {
         就绪: offlineReady,
         snapshot: () => ({
           online: true,
           backgroundSyncSupported: true,
+          queuedTaskCapability: "background-sync" as const,
         }),
       },
     });
@@ -207,6 +252,7 @@ describe("浏览器端应用平台化基线", () => {
     expect(declarePrimary).toHaveBeenCalledTimes(2);
     expect(offlineReady).toHaveBeenCalledTimes(1);
     expect(startServiceWorker).toHaveBeenCalledTimes(1);
+    expect(startupSteps).toEqual(["serviceWorker", "offline:true"]);
     expect(transportLifecycleCalls).toEqual([
       { visibility: "visible", phase: "active" },
       { visibility: "visible", phase: "active" },
@@ -262,6 +308,7 @@ describe("浏览器端应用平台化基线", () => {
       },
       serviceWorker: {
         启动: async () => {},
+        读取注册: () => null,
         snapshot: () => ({
           appShellRegistered: false,
           mediaWorkerRegistered: false,
@@ -279,16 +326,25 @@ describe("浏览器端应用平台化基线", () => {
           throw new Error("not used");
         },
         接收生命周期变化: () => {},
-        snapshot: () => ({ lastLifecycle: null }),
+        snapshot: () => ({
+          lastLifecycle: null,
+          realtimePolicy: {
+            intent: "resume" as const,
+            reconnection: false,
+            reason: "background" as const,
+          },
+        }),
       },
       multiContext: {
         snapshot: () => ({
           contextId: "tab-b",
           isPrimaryContext: false,
           lastPrimaryContextId: "tab-a",
+          lastFocusedContextId: null,
           deliveredNotificationIds: [],
         }),
         声明主上下文: () => {},
+        请求聚焦当前上下文: () => {},
         通知已展示: hasShownNotification,
         登记通知已展示: dedupeNotification,
       },
@@ -302,12 +358,14 @@ describe("浏览器端应用平台化基线", () => {
         显示通知: showNotification,
         设置角标: async () => {},
         清除角标: async () => {},
+        订阅点击: () => () => {},
       },
       offline: {
         就绪: async () => {},
         snapshot: () => ({
           online: true,
           backgroundSyncSupported: false,
+          queuedTaskCapability: "none" as const,
         }),
       },
     });
@@ -350,6 +408,7 @@ describe("浏览器端应用平台化基线", () => {
       },
       serviceWorker: {
         启动: async () => {},
+        读取注册: () => null,
         snapshot: () => ({
           appShellRegistered: false,
           mediaWorkerRegistered: false,
@@ -367,16 +426,25 @@ describe("浏览器端应用平台化基线", () => {
           throw new Error("not used");
         },
         接收生命周期变化: () => {},
-        snapshot: () => ({ lastLifecycle: null }),
+        snapshot: () => ({
+          lastLifecycle: null,
+          realtimePolicy: {
+            intent: "resume" as const,
+            reconnection: false,
+            reason: "background" as const,
+          },
+        }),
       },
       multiContext: {
         snapshot: () => ({
           contextId: "tab-b",
           isPrimaryContext: false,
           lastPrimaryContextId: "tab-a",
+          lastFocusedContextId: null,
           deliveredNotificationIds: [],
         }),
         声明主上下文: () => {},
+        请求聚焦当前上下文: () => {},
         通知已展示: hasShown,
         登记通知已展示: markShown,
       },
@@ -390,12 +458,14 @@ describe("浏览器端应用平台化基线", () => {
         显示通知: showNotification,
         设置角标: async () => {},
         清除角标: async () => {},
+        订阅点击: () => () => {},
       },
       offline: {
         就绪: async () => {},
         snapshot: () => ({
           online: true,
           backgroundSyncSupported: false,
+          queuedTaskCapability: "none" as const,
         }),
       },
     });
@@ -419,6 +489,95 @@ describe("浏览器端应用平台化基线", () => {
     expect(markShown).toHaveBeenCalledTimes(1);
   });
 
+  it("通知点击后会由平台统一触发当前上下文聚焦、主上下文声明和 badge 清理", () => {
+    const 聚焦当前上下文 = vi.fn();
+    const 声明主上下文 = vi.fn();
+    const 清除角标 = vi.fn(async () => {});
+    let 点击监听器: ((notificationId: string) => void) | null = null;
+
+    创建浏览器应用平台({
+      lifecycle: {
+        snapshot: () => ({ visibility: "hidden" as const, phase: "background" as const }),
+        订阅: () => () => {},
+      },
+      storage: {
+        壳层记忆: () => {
+          throw new Error("not used");
+        },
+      },
+      serviceWorker: {
+        启动: async () => {},
+        读取注册: () => null,
+        snapshot: () => ({
+          appShellRegistered: false,
+          mediaWorkerRegistered: false,
+          persistentStorageRequested: false,
+          controllerAttached: false,
+          appShellWaiting: false,
+          mediaWorkerWaiting: false,
+          lastMessageType: null,
+          lastMessage: null,
+        }),
+        发送消息: () => false,
+      },
+      transport: {
+        transport: () => {
+          throw new Error("not used");
+        },
+        接收生命周期变化: () => {},
+        snapshot: () => ({ lastLifecycle: null, realtimePolicy: null as never }),
+      },
+      multiContext: {
+        snapshot: () => ({
+          contextId: "tab-click",
+          isPrimaryContext: false,
+          lastPrimaryContextId: null,
+          lastFocusedContextId: null,
+          deliveredNotificationIds: [],
+        }),
+        声明主上下文,
+        请求聚焦当前上下文: 聚焦当前上下文,
+        通知已展示: () => false,
+        登记通知已展示: () => true,
+      },
+      notification: {
+        snapshot: () => ({
+          permission: "granted" as const,
+          lastClickedNotificationId: null,
+          badgeCount: 3,
+        }),
+        请求权限: async () => "granted" as const,
+        显示通知: async () => true,
+        设置角标: async () => {},
+        清除角标,
+        订阅点击: (listener) => {
+          点击监听器 = listener;
+          return () => {
+            点击监听器 = null;
+          };
+        },
+      },
+      offline: {
+        就绪: async () => {},
+        snapshot: () => ({
+          online: true,
+          backgroundSyncSupported: false,
+          queuedTaskCapability: "none" as const,
+        }),
+      },
+    });
+
+    // TypeScript 不会追踪闭包里对可空变量的赋值，这里先拷贝到局部常量再做函数类型收窄。
+    const 已注册点击监听器 = 点击监听器 as ((notificationId: string) => void) | null;
+    if (typeof 已注册点击监听器 === "function") {
+      已注册点击监听器("msg-click");
+    }
+
+    expect(聚焦当前上下文).toHaveBeenCalledTimes(1);
+    expect(声明主上下文).toHaveBeenCalledTimes(1);
+    expect(清除角标).toHaveBeenCalledTimes(1);
+  });
+
   it("平台快照会继续暴露 service worker runtime 的 controller / waiting / message 状态", () => {
     const platform = 创建浏览器应用平台({
       lifecycle: {
@@ -432,6 +591,7 @@ describe("浏览器端应用平台化基线", () => {
       },
       serviceWorker: {
         启动: async () => {},
+        读取注册: () => null,
         发送消息: () => true,
         snapshot: () => ({
           appShellRegistered: true,
@@ -449,16 +609,25 @@ describe("浏览器端应用平台化基线", () => {
           throw new Error("not used");
         },
         接收生命周期变化: () => {},
-        snapshot: () => ({ lastLifecycle: null }),
+        snapshot: () => ({
+          lastLifecycle: null,
+          realtimePolicy: {
+            intent: "resume" as const,
+            reconnection: false,
+            reason: "background" as const,
+          },
+        }),
       },
       multiContext: {
         snapshot: () => ({
           contextId: "tab-c",
           isPrimaryContext: true,
           lastPrimaryContextId: "tab-c",
+          lastFocusedContextId: null,
           deliveredNotificationIds: [],
         }),
         声明主上下文: () => {},
+        请求聚焦当前上下文: () => {},
         通知已展示: () => false,
         登记通知已展示: () => true,
       },
@@ -472,12 +641,14 @@ describe("浏览器端应用平台化基线", () => {
         显示通知: async () => false,
         设置角标: async () => {},
         清除角标: async () => {},
+        订阅点击: () => () => {},
       },
       offline: {
         就绪: async () => {},
         snapshot: () => ({
           online: true,
           backgroundSyncSupported: false,
+          queuedTaskCapability: "none" as const,
         }),
       },
     });
