@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../存储";
 import { createFakeStorage, 假传输, 创建房间快照 } from "./common/聊天测试支架";
 import { 创建聊天应用内核 } from "../聊天应用内核";
+import { 创建浏览器应用平台 } from "../平台/浏览器应用平台";
+import { 创建存储运行时 } from "../平台/存储运行时";
 import type {
   浏览器应用平台事件,
   浏览器应用平台命令,
@@ -32,6 +34,17 @@ const 创建内核依赖 = () => {
   };
 };
 
+type 图片协作补齐激活请求 = {
+  attachmentId: string;
+  kind: "image" | "video";
+  onSessionEvent?: (signal: {
+    type: "SWARM_ACTIVE" | "SWARM_NO_PEERS" | "ASSET_COMPLETE";
+    attachmentId: string;
+    swarmId: string;
+    contentHash?: string;
+  }) => void;
+};
+
 type 聊天媒体测试端口 = {
   设置媒体发布器供测试(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
@@ -47,6 +60,7 @@ type 聊天媒体测试端口 = {
   }): void;
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    激活协作补齐?(input: 图片协作补齐激活请求): Promise<void>;
     释放附件播放资源?(attachmentId: string): void;
   }): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
@@ -319,6 +333,250 @@ describe("聊天应用内核", () => {
     expect(kernel.snapshot().media.playbackByAttachmentId["att-image-1"]).toMatchObject({
       src: "blob:http://media.local/swarm-att-image-1",
       mode: "swarm",
+    });
+  });
+
+  it("图片查看器上报 ASSET_COMPLETE 后，会把 contentHash 写入缓存并在重开后恢复 locally_complete", async () => {
+    const 创建图片消息传输 = () => {
+      const transport = new 假传输();
+      transport.joinQueue = [
+        创建房间快照("r-test", 1, {
+          snapshot_messages: [
+            {
+              type: "message_created",
+              room_id: "r-test",
+              message_id: "m-image-cache-1",
+              client_message_id: "c-image-cache-1",
+              sender_session_id: "s-other",
+              sender_display_alias: "冷静的水獭",
+              text: "",
+              body: "",
+              attachments: [
+                {
+                  kind: "image",
+                  attachment_id: "att-image-cache-1",
+                  width: 1200,
+                  height: 800,
+                },
+              ],
+              event_position: 1,
+            },
+          ],
+        }),
+      ];
+      return transport;
+    };
+    const storageSource = createFakeStorage();
+    const 创建共享平台 = () =>
+      创建浏览器应用平台({
+        storage: 创建存储运行时({ storage: storageSource }),
+      });
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const blob播放结果 = {
+      mode: "blob" as const,
+      attachmentId: "att-image-cache-1",
+      kind: "image" as const,
+      src: "http://media.local/blob/att-image-cache-1/preview.webp",
+      viewerSrc: "http://media.local/blob/att-image-cache-1/full.webp",
+      thumbnailUrl: "http://media.local/blob/att-image-cache-1/preview.webp",
+      contentHash: "hash-image-cache-1",
+      distribution: {
+        swarm_id: "swarm-image-cache-1",
+        announce_urls: ["wss://tracker.koko.local/announce"],
+        web_seed_url: "http://media.local/blob/att-image-cache-1/original.png",
+        join_ticket: null,
+      },
+      hint: null,
+    };
+
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport: 创建图片消息传输(),
+      platform: 创建共享平台(),
+      storage: 创建浏览器存储(storageSource),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue(blob播放结果),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-image-cache-1",
+        items: [
+          {
+            kind: "image",
+            attachmentId: "att-image-cache-1",
+            src: "http://media.local/blob/att-image-cache-1/full.webp",
+            contentHash: "hash-image-cache-1",
+            distribution: {
+              swarm_id: "swarm-image-cache-1",
+              announce_urls: ["wss://tracker.koko.local/announce"],
+              web_seed_url: "http://media.local/blob/att-image-cache-1/original.png",
+              join_ticket: null,
+            },
+            alt: "图片附件原图",
+            width: 1200,
+            height: 800,
+          },
+        ],
+      },
+    });
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-image-cache-1",
+      signal: {
+        type: "ASSET_COMPLETE",
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(
+      kernel.snapshot().media.sessionByAttachmentId["att-image-cache-1"]
+    ).toMatchObject({
+      status: "locally_complete",
+      locallyComplete: true,
+    });
+
+    const reopenedKernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport: 创建图片消息传输(),
+      platform: 创建共享平台(),
+      storage: 创建浏览器存储(storageSource),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(reopenedKernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue(blob播放结果),
+    });
+
+    await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await reopenedKernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await reopenedKernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const session =
+        reopenedKernel.snapshot().media.sessionByAttachmentId["att-image-cache-1"];
+      if (session?.locallyComplete) {
+        break;
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(
+      reopenedKernel.snapshot().media.sessionByAttachmentId["att-image-cache-1"]
+    ).toMatchObject({
+      status: "locally_complete",
+      locallyComplete: true,
+    });
+  });
+
+  it("图片查看器上报 ASSET_BACKFILLING 后，会让播放器激活协作补齐而不是让壳层自己拼 swarm", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-image-backfill-1",
+            client_message_id: "c-image-backfill-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-image-backfill-1",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    let 最近一次激活请求: 图片协作补齐激活请求 | null = null;
+    const 激活协作补齐 = vi.fn(
+      async (input: 图片协作补齐激活请求) => {
+        最近一次激活请求 = input;
+      }
+    );
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "blob",
+        attachmentId: "att-image-backfill-1",
+        kind: "image",
+        src: "http://media.local/blob/att-image-backfill-1/preview.webp",
+        viewerSrc: "http://media.local/blob/att-image-backfill-1/full.webp",
+        thumbnailUrl: "http://media.local/blob/att-image-backfill-1/preview.webp",
+        contentHash: "hash-image-backfill-1",
+        distribution: {
+          swarm_id: "swarm-image-backfill-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/blob/att-image-backfill-1/original.png",
+          join_ticket: null,
+        },
+        hint: null,
+      }),
+      激活协作补齐,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-image-backfill-1",
+      signal: {
+        type: "ASSET_BACKFILLING",
+      },
+    });
+
+    expect(激活协作补齐).toHaveBeenCalledWith({
+      attachmentId: "att-image-backfill-1",
+      kind: "image",
+      onSessionEvent: expect.any(Function),
+    });
+    expect(最近一次激活请求).not.toBeNull();
+    const 激活请求 = 最近一次激活请求 as unknown as 图片协作补齐激活请求;
+    激活请求.onSessionEvent?.({
+      type: "SWARM_NO_PEERS",
+      attachmentId: "att-image-backfill-1",
+      swarmId: "swarm-image-backfill-1",
+    });
+
+    expect(
+      kernel.snapshot().media.sessionByAttachmentId["att-image-backfill-1"]
+    ).toMatchObject({
+      status: "backfilling",
+      lastSignal: "SWARM_NO_PEERS",
     });
   });
 

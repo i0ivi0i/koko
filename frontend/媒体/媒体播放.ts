@@ -18,6 +18,8 @@ type 媒体播放结果 =
       src: string;
       viewerSrc?: string;
       thumbnailUrl: string | null;
+      contentHash?: string | null;
+      distribution?: 媒体资产分发表面 | null;
       streamingDistribution?: 媒体资产分发表面 | null;
       hint: "正在协作分发" | null;
     }
@@ -195,6 +197,45 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
   };
 
+  /**
+   * 图片查看器一旦进入 backfilling，就要把 blob 资产绑定的协作分发平面真正激活起来：
+   * 1. 是否值得进入 swarm，仍然先看 blob_asset 这个共享资产真相；
+   * 2. 真正启动 WebTorrent 仍复用现有 resolveSwarmSource/runtime，不新造图片专用实现；
+   * 3. 失败保持静默，因为这里是“后台尽快补齐”的增强路径，不是首屏主链。
+   *
+   * 当前 Web 阶段里，blob_asset.distribution 负责宣告“这张图应该进入分发平面”，
+   * 顶层 distribution 继续承载 torrent_url / info_hash / presence_url 这类浏览器运行时所需字段。
+   * 等后端把两层契约进一步收口后，这里只需要缩短兼容读取，不用反向污染调用方。
+   */
+  const 激活协作补齐 = async (input: 媒体播放输入): Promise<void> => {
+    let locator: 媒体定位结果;
+    try {
+      locator = await deps.locate(input.attachmentId);
+    } catch {
+      return;
+    }
+    if (locator.status !== "ready") {
+      return;
+    }
+    if (!读取图片Blob主链(locator) || !locator.blob_asset?.distribution) {
+      return;
+    }
+    const distribution = 读取协作分发定位片段(locator);
+    if (!distribution || distribution.availability === "expired") {
+      return;
+    }
+    try {
+      await resolveSwarmSource({
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        locator,
+        ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+      });
+    } catch {
+      return;
+    }
+  };
+
   const 解析播放结果 = async (input: 媒体播放输入): Promise<媒体播放结果> => {
     let locator: 媒体定位结果;
     try {
@@ -217,6 +258,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         src: blobSource.src,
         viewerSrc: blobSource.viewerSrc,
         thumbnailUrl: blobSource.thumbnailUrl,
+        // 图片查看器后续要靠 contentHash 把“真的拿到完整资产”落进 MediaCacheOwner，
+        // 这里必须把共享资产真相一路带下去，不能再让壳层去猜。
+        contentHash: locator.blob_asset?.content_hash ?? null,
+        distribution: locator.blob_asset?.distribution ?? null,
         hint: null,
       };
     }
@@ -275,6 +320,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
 
   return {
     解析播放结果,
+    激活协作补齐,
     释放附件播放资源: 释放协作分发占用,
   };
 }

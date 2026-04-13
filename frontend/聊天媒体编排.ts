@@ -63,6 +63,10 @@ export interface 聊天媒体编排端口 {
   销毁(): void;
   设置媒体播放器供测试(player: {
     解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    激活协作补齐?(input: {
+      attachmentId: string;
+      kind: "image" | "video";
+    }): Promise<void>;
     释放附件播放资源?(attachmentId: string): void;
   }): void;
   设置媒体查看器供测试(viewer: {
@@ -270,10 +274,93 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return playbackByAttachmentId;
   };
 
-  const 应用缓存完整度到会话 = (attachmentId: string): void => {
+  const 应用缓存完整度到会话 = (
+    attachmentId: string,
+    sessionOverride?: 媒体会话端口
+  ): void => {
     if (媒体缓存.snapshot()[attachmentId]?.complete) {
-      媒体会话表.get(attachmentId)?.send({ type: "ASSET_COMPLETE" });
+      // 新建会话时，条目可能还没挂进 Map；
+      // 这里允许直接命中刚创建出的会话实例，避免“缓存里明明是完整资产，但重开后第一拍仍丢失 locally_complete”。
+      (sessionOverride ?? 媒体会话表.get(attachmentId))?.send({
+        type: "ASSET_COMPLETE",
+      });
     }
+  };
+
+  const 读取附件缓存元数据 = (
+    attachmentId: string
+  ): { kind?: 媒体种类 | null; contentHash?: string | null } => {
+    const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
+    if (playback?.mode === "blob") {
+      return {
+        kind: playback.kind,
+        contentHash: playback.contentHash ?? null,
+      };
+    }
+    const currentViewerItem = 当前查看器请求?.items.find(
+      (item) => item.attachmentId === attachmentId && item.kind === "image"
+    );
+    if (currentViewerItem?.kind === "image") {
+      return {
+        kind: "image",
+        contentHash: currentViewerItem.contentHash ?? null,
+      };
+    }
+    return {
+      kind:
+        读取当前房间媒体附件().find((item) => item.attachmentId === attachmentId)?.kind ??
+        null,
+      contentHash: null,
+    };
+  };
+
+  const 标记附件完整并持久化 = (
+    attachmentId: string,
+    input: { kind?: 媒体种类 | null; contentHash?: string | null }
+  ): void => {
+    媒体会话表.get(attachmentId)?.send({ type: "ASSET_COMPLETE" });
+    void 媒体缓存.标记完整(attachmentId, input).then(() => {
+      deps.请求重渲染();
+    });
+  };
+
+  const 处理协作分发事件 = (
+    attachment: { attachmentId: string; kind: 媒体种类 },
+    event:
+      | { type: "SWARM_ACTIVE"; attachmentId: string; swarmId: string }
+      | { type: "SWARM_NO_PEERS"; attachmentId: string; swarmId: string }
+      | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string }
+  ): void => {
+    if (event.type === "SWARM_ACTIVE") {
+      媒体会话表.get(attachment.attachmentId)?.send({ type: "SWARM_ACTIVE" });
+      return;
+    }
+    if (event.type === "SWARM_NO_PEERS") {
+      媒体会话表.get(attachment.attachmentId)?.send({ type: "SWARM_NO_PEERS" });
+      return;
+    }
+    标记附件完整并持久化(attachment.attachmentId, {
+      kind: attachment.kind,
+      contentHash: event.contentHash,
+    });
+  };
+
+  const 激活附件协作补齐 = (attachmentId: string): void => {
+    const metadata = 读取附件缓存元数据(attachmentId);
+    if (!metadata.kind) {
+      return;
+    }
+    // 编排层只负责把“当前这张图值得后台补齐”的业务信号转交给播放器；
+    // 真正 locate、读取 locator 兼容字段、接入 WebTorrent runtime 的细节仍留在播放器 owner。
+    void 媒体播放器.激活协作补齐?.({
+      attachmentId,
+      kind: metadata.kind,
+      onSessionEvent: (event) =>
+        处理协作分发事件(
+          { attachmentId, kind: metadata.kind! },
+          event
+        ),
+    }).catch(() => undefined);
   };
 
   const 释放附件播放资源 = (attachmentId: string): void => {
@@ -284,42 +371,20 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
     let session: 媒体会话端口;
-    const 接收协作分发事件 = (
-      event:
-        | { type: "SWARM_ACTIVE" }
-        | { type: "SWARM_NO_PEERS" }
-        | { type: "ASSET_COMPLETE"; contentHash: string }
-    ): void => {
-      if (event.type === "SWARM_ACTIVE") {
-        session.send({ type: "SWARM_ACTIVE" });
-        return;
-      }
-      if (event.type === "SWARM_NO_PEERS") {
-        session.send({ type: "SWARM_NO_PEERS" });
-        return;
-      }
-      session.send({ type: "ASSET_COMPLETE" });
-      void 媒体缓存.标记完整(attachment.attachmentId, {
-        kind: attachment.kind,
-        contentHash: event.contentHash,
-      }).then(() => {
-        deps.请求重渲染();
-      });
-    };
     session = 创建媒体会话({
       attachmentId: attachment.attachmentId,
       kind: attachment.kind,
       解析播放结果: (input) =>
         媒体播放器.解析播放结果({
           ...input,
-          onSessionEvent: 接收协作分发事件,
+          onSessionEvent: (event) => 处理协作分发事件(attachment, event),
         }),
       onSnapshotChange: () => {
         deps.请求重渲染();
         同步当前查看器请求();
       },
     });
-    应用缓存完整度到会话(attachment.attachmentId);
+    应用缓存完整度到会话(attachment.attachmentId, session);
     return session;
   };
 
@@ -414,6 +479,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {
+      if (signal.type === "ASSET_COMPLETE") {
+        // 图片查看器只负责把“完整图已经拿到”回抛成会话信号；
+        // 真正落盘到 MediaCacheOwner 的动作仍然只能由编排层统一收口。
+        标记附件完整并持久化(attachmentId, 读取附件缓存元数据(attachmentId));
+        return;
+      }
+      if (signal.type === "ASSET_BACKFILLING") {
+        激活附件协作补齐(attachmentId);
+      }
       转发媒体查看器会话信号(attachmentId, signal);
     },
 
@@ -443,6 +517,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       清空播放状态();
       媒体播放器 = {
         解析播放结果: player.解析播放结果,
+        激活协作补齐: player.激活协作补齐 ?? (async () => undefined),
         释放附件播放资源: player.释放附件播放资源 ?? (() => undefined),
       };
       deps.请求重渲染();

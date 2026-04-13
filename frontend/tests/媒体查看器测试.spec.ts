@@ -142,6 +142,70 @@ describe("媒体查看器适配器", () => {
     expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
+  it("图片查看器打开完整图片时会先进入 backfilling，加载完成后再标记 complete", () => {
+    const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
+    const 事件监听器 = new Map<string, (payload?: unknown) => void>();
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(() => true),
+      destroy: vi.fn(),
+      on: vi.fn((eventName: string, callback: (payload?: unknown) => void) => {
+        事件监听器.set(eventName, callback);
+      }),
+    }));
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay: vi.fn(() => ({ destroy: vi.fn() })),
+      onMediaSessionSignal: (attachmentId, signal) => {
+        信号记录.push({ attachmentId, signal });
+      },
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-image-complete-1",
+      items: [
+        {
+          kind: "image",
+          attachmentId: "att-image-complete-1",
+          src: "http://media.local/blob/att-image-complete-1/full.webp",
+          contentHash: "hash-image-complete-1",
+          distribution: {
+            swarm_id: "swarm-image-complete-1",
+            announce_urls: ["wss://tracker.koko.local/announce"],
+            web_seed_url: "http://media.local/blob/att-image-complete-1/original.png",
+            join_ticket: null,
+          },
+          alt: "图片附件原图",
+          width: 1600,
+          height: 900,
+        },
+      ],
+    });
+
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-image-complete-1",
+        signal: { type: "ASSET_BACKFILLING" },
+      },
+    ]);
+
+    事件监听器.get("loadComplete")?.({
+      slide: { index: 0 },
+      content: {},
+    });
+
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-image-complete-1",
+        signal: { type: "ASSET_BACKFILLING" },
+      },
+      {
+        attachmentId: "att-image-complete-1",
+        signal: { type: "ASSET_COMPLETE" },
+      },
+    ]);
+  });
+
   it("图片查看器创建失败时会释放聊天视口占用，不让滚动 owner 卡死", async () => {
     const error = new Error("photoswipe 创建失败");
     const onViewportCaptureStart = vi.fn();

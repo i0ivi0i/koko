@@ -11,10 +11,13 @@ import {
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
 
-function 准备好的定位结果(attachmentId: string): 媒体定位结果 {
+function 准备好的定位结果(
+  attachmentId: string,
+  kind: 媒体定位结果["kind"] = "video"
+): 媒体定位结果 {
   return {
     attachment_id: attachmentId,
-    kind: "video" as const,
+    kind,
     status: "ready" as const,
     original_url: `http://media.local/original-${attachmentId}`,
     thumbnail_url: null,
@@ -231,6 +234,37 @@ describe("媒体协作分发", () => {
     expect(first).toEqual(second);
     expect(读取协作分发会话状态("swarm-att-1")).toMatchObject({
       refs: 1,
+    });
+  });
+
+  it("图片也会复用同一套协作分发 runtime，而不是分叉第二套实现", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, select } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-image-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-image-1",
+      kind: "image",
+      locator: 准备好的定位结果("att-image-1", "image"),
+    });
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-image-1",
+      hint: "正在补块",
+    });
+    expect(select).toHaveBeenCalledWith(1);
+    expect(读取协作分发会话状态("swarm-att-image-1")).toMatchObject({
+      attachmentId: "att-image-1",
+      refs: 1,
+      eagerCompleting: true,
+      hint: "正在补块",
     });
   });
 

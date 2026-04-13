@@ -305,6 +305,13 @@ describe("房间消息窗媒体查看器", () => {
         src: "http://media.local/blob/att-image-1/preview.webp",
         viewerSrc: "http://media.local/blob/att-image-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-1/preview.webp",
+        contentHash: "hash-image-1",
+        distribution: {
+          swarm_id: "swarm-image-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/blob/att-image-1/original.png",
+          join_ticket: null,
+        },
         hint: null,
       } satisfies 媒体播放结果,
     };
@@ -335,6 +342,13 @@ describe("房间消息窗媒体查看器", () => {
       attachmentId: "att-image-1",
       kind: "image",
       src: "http://media.local/blob/att-image-1/full.webp",
+      contentHash: "hash-image-1",
+      distribution: {
+        swarm_id: "swarm-image-1",
+        announce_urls: ["wss://tracker.koko.local/announce"],
+        web_seed_url: "http://media.local/blob/att-image-1/original.png",
+        join_ticket: null,
+      },
       alt: "图片附件原图",
       width: 1200,
       height: 800,

@@ -102,7 +102,9 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
         ? "degraded"
         : playback.mode === "swarm"
           ? "backfilling"
-          : "bootstrapping";
+          : current.locallyComplete
+            ? "locally_complete"
+            : "bootstrapping";
     写入快照({
       playback,
       status: 下一状态,

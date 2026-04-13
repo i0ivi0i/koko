@@ -233,6 +233,12 @@ export class 房间消息窗 extends LitElement {
             kind: "image",
             attachmentId: attachment.attachmentId,
             src: this.读取图片查看器播放源(attachment.attachmentId, attachment.originalSrc),
+            ...(playback?.mode === "blob"
+              ? {
+                  contentHash: playback.contentHash ?? null,
+                  distribution: playback.distribution ?? null,
+                }
+              : {}),
             alt: "图片附件原图",
             width: attachment.width,
             height: attachment.height,

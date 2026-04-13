@@ -6,6 +6,8 @@ export type 媒体查看器项目 =
       kind: "image";
       attachmentId: string;
       src: string;
+      contentHash?: string | null;
+      distribution?: 媒体资产分发表面 | null;
       alt: string;
       width: number;
       height: number;
@@ -50,7 +52,10 @@ type 媒体查看器实例 = {
   loadAndOpen?(index: number): boolean | void;
   同步?(item: 媒体查看器项目): void;
   destroy(): void;
-  on?(eventName: "close" | "destroy", callback: () => void): void;
+  on?(
+    eventName: "close" | "destroy" | "change" | "loadComplete",
+    callback: (payload?: { slide?: { index?: number }; isError?: boolean }) => void
+  ): void;
 };
 
 type 媒体查看器工厂结果 = 媒体查看器实例 | Promise<媒体查看器实例>;
@@ -641,6 +646,8 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
         .filter((item): item is 媒体查看器图片项目 => item.kind === "image")
         .map((item) => ({
           attachmentId: item.attachmentId,
+          contentHash: item.contentHash ?? null,
+          distribution: item.distribution ?? null,
           data: 映射PhotoSwipe图片(item),
         }));
       const imageStartAt = imageEntries.findIndex(
@@ -668,13 +675,55 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
           const releaseViewport = (): void => {
             视口占用生命周期.结束视口占用();
           };
+          const 已通知补齐中 = new Set<string>();
+          const 已通知补齐完成 = new Set<string>();
+          const 通知图片补齐中 = (index: number): void => {
+            const entry = imageEntries[index];
+            if (!entry || 已通知补齐中.has(entry.attachmentId)) {
+              return;
+            }
+            已通知补齐中.add(entry.attachmentId);
+            // 图片 full/original 的加载信号只能来自查看器 adapter；
+            // 这里先把“正在补齐完整资产”的事实回流给媒体会话 owner。
+            运行时钩子.发出媒体会话信号(entry.attachmentId, {
+              type: "ASSET_BACKFILLING",
+            });
+          };
+          const 通知图片补齐完成 = (index: number): void => {
+            const entry = imageEntries[index];
+            if (!entry || 已通知补齐完成.has(entry.attachmentId)) {
+              return;
+            }
+            已通知补齐完成.add(entry.attachmentId);
+            运行时钩子.发出媒体会话信号(entry.attachmentId, {
+              type: "ASSET_COMPLETE",
+            });
+          };
           lightbox.on?.("close", releaseViewport);
           lightbox.on?.("destroy", releaseViewport);
+          lightbox.on?.("change", (payload) => {
+            const activeIndex = payload?.slide?.index;
+            if (typeof activeIndex === "number") {
+              通知图片补齐中(activeIndex);
+            }
+          });
+          lightbox.on?.("loadComplete", (payload) => {
+            const loadedIndex = payload?.slide?.index;
+            if (typeof loadedIndex !== "number" || payload?.isError) {
+              return;
+            }
+            // PhotoSwipe 可能为邻近图片提前 preload；只要完整图已经成功加载，
+            // 就可以把它视为“当前浏览器端已完整持有”的候选事实。
+            通知图片补齐中(loadedIndex);
+            通知图片补齐完成(loadedIndex);
+          });
           lightbox.init?.();
           if (lightbox.loadAndOpen?.(imageStartAt) === false) {
             lightbox.destroy();
             releaseViewport();
+            return lightbox;
           }
+          通知图片补齐中(imageStartAt);
           return lightbox;
         })()
       );
