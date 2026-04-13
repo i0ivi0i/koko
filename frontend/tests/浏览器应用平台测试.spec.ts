@@ -69,6 +69,7 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_SCROLL_OBSERVED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_JUMP_TO_LATEST_REQUESTED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_OPEN_REQUESTED"/);
+    expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_SESSION_SIGNALLED"/);
     expect(source).not.toContain("this.kernel.处理选择媒体文件(");
     expect(source).not.toContain("this.kernel.移除媒体草稿(");
     expect(source).not.toContain("this.kernel.重试媒体草稿(");

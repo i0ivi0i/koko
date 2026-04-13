@@ -97,7 +97,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 28
+      "community": 26
     },
     {
       "label": "app-sw.ts",
@@ -105,7 +105,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 17
+      "community": 14
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -113,7 +113,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L31",
       "id": "app_sw",
-      "community": 17
+      "community": 14
     },
     {
       "label": "css.d.ts",
@@ -121,7 +121,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 23
+      "community": 21
     },
     {
       "label": "media-sw.ts",
@@ -129,7 +129,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L1",
       "id": "media_sw",
-      "community": 27
+      "community": 25
     },
     {
       "label": "webtorrent.d.ts",
@@ -137,7 +137,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 29
+      "community": 27
     },
     {
       "label": "\u901a\u77e5\u8fd0\u884c\u65f6.ts",
@@ -343,7 +343,7 @@
       "label": "setTransportForTest()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L319",
+      "source_location": "L327",
       "id": "settransportfortest",
       "community": 1
     },
@@ -383,7 +383,7 @@
       "label": "constructor()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L193",
+      "source_location": "L195",
       "id": "constructor",
       "community": 1
     },
@@ -391,7 +391,7 @@
       "label": "snapshot()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L244",
+      "source_location": "L249",
       "id": "snapshot",
       "community": 1
     },
@@ -399,7 +399,7 @@
       "label": "dispatch()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L251",
+      "source_location": "L256",
       "id": "dispatch",
       "community": 1
     },
@@ -413,7 +413,7 @@
       "author": null,
       "contributor": null,
       "id": "frontend_storage_ts",
-      "community": 25
+      "community": 23
     },
     {
       "label": "frontend/\u623f\u95f4\u5185\u6838.ts",
@@ -425,71 +425,71 @@
       "author": null,
       "contributor": null,
       "id": "frontend_room_kernel_ts",
-      "community": 24
+      "community": 22
     },
     {
       "label": "createRenderRoot()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L76",
+      "source_location": "L77",
       "id": "createrenderroot",
-      "community": 0
+      "community": 1
     },
     {
       "label": "dispatchPointerScrollIntent()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L80",
+      "source_location": "L81",
       "id": "dispatchpointerscrollintent",
-      "community": 16
+      "community": 1
     },
     {
       "label": "dispatchScrollIntent()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L87",
+      "source_location": "L88",
       "id": "dispatchscrollintent",
-      "community": 16
+      "community": 1
     },
     {
       "label": "dispatchScroll()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L108",
+      "source_location": "L109",
       "id": "dispatchscroll",
-      "community": 0
+      "community": 1
     },
     {
       "label": "dispatchJumpToLatest()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L118",
+      "source_location": "L119",
       "id": "dispatchjumptolatest",
-      "community": 0
+      "community": 1
     },
     {
       "label": "renderMessageBody()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L263",
+      "source_location": "L284",
       "id": "rendermessagebody",
-      "community": 14
+      "community": 1
     },
     {
       "label": "renderMessageAttachments()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L280",
+      "source_location": "L301",
       "id": "rendermessageattachments",
-      "community": 14
+      "community": 1
     },
     {
       "label": "renderVirtualMessageItem()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L383",
+      "source_location": "L420",
       "id": "rendervirtualmessageitem",
-      "community": 14
+      "community": 1
     },
     {
       "label": "hostDisconnected()",
@@ -509,7 +509,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 22
+      "community": 20
     },
     {
       "label": "revokeDraftPreviewUrl()",
@@ -587,7 +587,7 @@
       "label": "dispose()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L329",
+      "source_location": "L337",
       "id": "dispose",
       "community": 1
     },
@@ -595,7 +595,7 @@
       "label": "exitCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L747",
+      "source_location": "L755",
       "id": "exitcurrentroomview",
       "community": 1
     },
@@ -603,7 +603,7 @@
       "label": "leaveCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L778",
+      "source_location": "L786",
       "id": "leavecurrentroomview",
       "community": 1
     },
@@ -953,7 +953,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 22
+      "community": 20
     },
     {
       "label": ".addEventListener()",
@@ -1198,9 +1198,9 @@
     {
       "label": "index.ts",
       "file_type": "code",
-      "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
+      "source_file": "frontend\\\u5e73\u53f0\\index.ts",
       "source_location": "L1",
-      "id": "index",
+      "id": "frontend_index_ts",
       "community": 1
     },
     {
@@ -1223,7 +1223,7 @@
       "label": "\u9ed8\u8ba4\u52a0\u8f7dWebTorrent\u6d4f\u89c8\u5668\u6784\u9020\u5668()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L62",
+      "source_location": "L70",
       "id": "webtorrent",
       "community": 1
     },
@@ -1231,7 +1231,7 @@
       "label": "\u9ed8\u8ba4\u8bfb\u53d6\u5a92\u4f53ServiceWorker\u6ce8\u518c()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L73",
+      "source_location": "L81",
       "id": "serviceworker",
       "community": 1
     },
@@ -1286,9 +1286,9 @@
     {
       "label": "index.ts",
       "file_type": "code",
-      "source_file": "frontend\\\u5e73\u53f0\\index.ts",
+      "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
       "source_location": "L1",
-      "id": "frontend_index_ts",
+      "id": "index",
       "community": 1
     },
     {
@@ -1305,7 +1305,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "lib",
-      "community": 26
+      "community": 24
     },
     {
       "label": "main.rs",
@@ -1313,7 +1313,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 20
+      "community": 18
     },
     {
       "label": "main()",
@@ -1321,7 +1321,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 20
+      "community": 18
     },
     {
       "label": "AdminLoginBody",
@@ -1633,7 +1633,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L144",
       "id": "parse_events_query",
-      "community": 18
+      "community": 16
     },
     {
       "label": "parse_history_query()",
@@ -1641,7 +1641,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L179",
       "id": "parse_history_query",
-      "community": 19
+      "community": 17
     },
     {
       "label": "parse_attachment_content_query()",
@@ -1673,7 +1673,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L207",
       "id": "mp4",
-      "community": 21
+      "community": 19
     },
     {
       "label": "\u6784\u9020rustus_hook\u8bf7\u6c42\u4f53()",
@@ -1737,7 +1737,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1296",
       "id": "load_room_events",
-      "community": 18
+      "community": 16
     },
     {
       "label": "load_room_history()",
@@ -1745,7 +1745,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L1424",
       "id": "load_room_history",
-      "community": 19
+      "community": 17
     },
     {
       "label": "prepare_media_upload()",
@@ -1865,7 +1865,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L125",
       "id": "ready",
-      "community": 21
+      "community": 19
     },
     {
       "label": "\u76f8\u540c\u5185\u5bb9\u7684\u4e0d\u540c\u9644\u4ef6\u53ef\u4ee5\u5171\u4eab\u540c\u4e00swarm_id()",
@@ -2481,7 +2481,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L319",
+      "source_location": "L327",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "settransportfortest",
@@ -2541,7 +2541,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L193",
+      "source_location": "L195",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "constructor",
@@ -2553,7 +2553,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L244",
+      "source_location": "L249",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "snapshot",
@@ -2565,12 +2565,108 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L251",
+      "source_location": "L256",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispatch",
       "source": "frontend_ts",
       "target": "dispatch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L77",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "createrenderroot",
+      "source": "frontend_ts",
+      "target": "createrenderroot",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L81",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "dispatchpointerscrollintent",
+      "source": "frontend_ts",
+      "target": "dispatchpointerscrollintent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L88",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "dispatchscrollintent",
+      "source": "frontend_ts",
+      "target": "dispatchscrollintent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L109",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "dispatchscroll",
+      "source": "frontend_ts",
+      "target": "dispatchscroll",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L119",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "dispatchjumptolatest",
+      "source": "frontend_ts",
+      "target": "dispatchjumptolatest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L284",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "rendermessagebody",
+      "source": "frontend_ts",
+      "target": "rendermessagebody",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L301",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "rendermessageattachments",
+      "source": "frontend_ts",
+      "target": "rendermessageattachments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
+      "source_location": "L420",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "rendervirtualmessageitem",
+      "source": "frontend_ts",
+      "target": "rendervirtualmessageitem",
       "confidence_score": 1.0
     },
     {
@@ -2697,7 +2793,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L329",
+      "source_location": "L337",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispose",
@@ -2709,7 +2805,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L747",
+      "source_location": "L755",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "exitcurrentroomview",
@@ -2721,7 +2817,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L778",
+      "source_location": "L786",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "leavecurrentroomview",
@@ -2733,7 +2829,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L62",
+      "source_location": "L70",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "webtorrent",
@@ -2745,7 +2841,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L73",
+      "source_location": "L81",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "serviceworker",
@@ -2757,7 +2853,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L116",
+      "source_location": "L124",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "torrent",
@@ -3246,138 +3342,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u73af\u5883.rs",
-      "source_location": "L48",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "",
-      "source": "",
-      "target": "",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L63",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "constructor",
-      "source": "",
-      "target": "constructor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L76",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "createrenderroot",
-      "source": "",
-      "target": "createrenderroot",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L80",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "dispatchpointerscrollintent",
-      "source": "",
-      "target": "dispatchpointerscrollintent",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L87",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "dispatchscrollintent",
-      "source": "",
-      "target": "dispatchscrollintent",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L108",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "dispatchscroll",
-      "source": "",
-      "target": "dispatchscroll",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L118",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "dispatchjumptolatest",
-      "source": "",
-      "target": "dispatchjumptolatest",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L263",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "rendermessagebody",
-      "source": "",
-      "target": "rendermessagebody",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L280",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "rendermessageattachments",
-      "source": "",
-      "target": "rendermessageattachments",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L383",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "rendervirtualmessageitem",
-      "source": "",
-      "target": "rendervirtualmessageitem",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L437",
-      "weight": 1.0,
-      "_src": "",
-      "_tgt": "render",
-      "source": "",
-      "target": "render",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
@@ -3393,7 +3357,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L796",
+      "source_location": "L804",
       "weight": 1.0,
       "_src": "",
       "_tgt": "snapshot",
@@ -3405,7 +3369,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L806",
+      "source_location": "L814",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatch",
@@ -3447,6 +3411,18 @@
       "_tgt": "createfakestorage",
       "source": "",
       "target": "createfakestorage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u73af\u5883.rs",
+      "source_location": "L48",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "",
+      "source": "",
+      "target": "",
       "confidence_score": 1.0
     },
     {
@@ -4869,7 +4845,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L322",
+      "source_location": "L330",
       "weight": 1.0,
       "_src": "settransportfortest",
       "_tgt": "dispose",
@@ -4905,7 +4881,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L282",
+      "source_location": "L287",
       "weight": 1.0,
       "_src": "dispatch",
       "_tgt": "leavecurrentroomview",
@@ -4917,7 +4893,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L84",
+      "source_location": "L85",
       "weight": 1.0,
       "_src": "dispatchpointerscrollintent",
       "_tgt": "dispatchscrollintent",
@@ -4929,7 +4905,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L430",
+      "source_location": "L467",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessagebody",
@@ -4941,7 +4917,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L431",
+      "source_location": "L468",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessageattachments",
@@ -4965,7 +4941,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L757",
+      "source_location": "L765",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "dispose",
@@ -4977,7 +4953,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L780",
+      "source_location": "L788",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "exitcurrentroomview",
@@ -5109,7 +5085,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u804a\u5929\u5e94\u7528\u5185\u6838\u6d4b\u8bd5.spec.ts",
-      "source_location": "L44",
+      "source_location": "L50",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec",
@@ -5929,8 +5905,8 @@
       "weight": 1.0,
       "_src": "frontend_index_ts",
       "_tgt": "index",
-      "source": "index",
-      "target": "frontend_index_ts",
+      "source": "frontend_index_ts",
+      "target": "index",
       "confidence_score": 1.0
     },
     {

@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建应用运行时 } from "../应用运行时";
 import type { 媒体查看器打开请求 } from "../媒体";
+import type { 媒体会话信号 } from "../媒体/媒体会话";
 
 const 创建媒体打开请求 = (): 媒体查看器打开请求 => ({
   startAttachmentId: "att-1",
@@ -66,6 +67,24 @@ describe("应用运行时", () => {
     });
     expect(deps.dispatch).toHaveBeenNthCalledWith(2, {
       type: "ROOM_JUMP_TO_LATEST_REQUESTED",
+    });
+  });
+
+  it("媒体会话运行时信号也必须先进入应用运行时，再翻成内核 command", () => {
+    const deps = 创建运行时依赖();
+    const runtime = 创建应用运行时(deps);
+    const signal: 媒体会话信号 = { type: "PLAYER_WAITING" };
+
+    runtime.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-1",
+      signal,
+    });
+
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-1",
+      signal,
     });
   });
 });

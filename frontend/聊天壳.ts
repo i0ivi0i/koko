@@ -6,7 +6,7 @@ import {
   创建操作台附件入口编排,
   默认统一媒体文件选择配置,
 } from "./操作台/index.js";
-import { type 媒体查看器打开请求 } from "./媒体/index.js";
+import { type 媒体会话信号, type 媒体查看器打开请求 } from "./媒体/index.js";
 import type { 前端传输端口 } from "./传输.js";
 import { 默认文本布局器 } from "./文本布局.js";
 import {
@@ -1324,6 +1324,15 @@ export class 聊天壳 extends LitElement {
               this.应用运行时.dispatch({
                 type: "MEDIA_OPEN_REQUESTED",
                 request: event.detail,
+              });
+            }}
+            @room-media-session-signal=${(
+              event: CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>
+            ) => {
+              this.应用运行时.dispatch({
+                type: "MEDIA_SESSION_SIGNALLED",
+                attachmentId: event.detail.attachmentId,
+                signal: event.detail.signal,
               });
             }}
           ></koko-room-message-pane>

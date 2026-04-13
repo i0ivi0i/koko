@@ -46,14 +46,22 @@ export interface 协作分发媒体源 {
   hint: "正在协作分发" | "正在补块";
 }
 
+export type 协作分发会话事件 =
+  | { type: "SWARM_ACTIVE"; attachmentId: string; swarmId: string }
+  | { type: "SWARM_NO_PEERS"; attachmentId: string; swarmId: string }
+  | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string };
+
 const 协作分发存活上报间隔毫秒 = 60_000;
 
 type 协作分发会话 = {
+  attachmentId: string;
+  swarmId: string;
   sourcePromise: Promise<{ src: string } | null>;
   refs: number;
   eagerCompleting: boolean;
   hint: 协作分发媒体源["hint"] | null;
   presenceIntervalId: ReturnType<typeof setInterval> | null;
+  listeners: Set<(event: 协作分发会话事件) => void>;
 };
 
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
@@ -182,6 +190,20 @@ function 推导协作分发提示(session: 协作分发会话): 协作分发媒�
   return session.eagerCompleting ? "正在补块" : "正在协作分发";
 }
 
+function 发布协作分发会话事件(
+  session: 协作分发会话,
+  type: 协作分发会话事件["type"]
+): void {
+  const event: 协作分发会话事件 = {
+    type,
+    attachmentId: session.attachmentId,
+    swarmId: session.swarmId,
+  };
+  for (const listener of session.listeners) {
+    listener(event);
+  }
+}
+
 function 绑定协作分发会话事件(session: 协作分发会话, torrent: WebTorrent种子) {
   // 运行态提示严格站在官方 torrent 事件上：
   // 1. 有 peer/wire 说明开始进入群友接力；
@@ -189,13 +211,16 @@ function 绑定协作分发会话事件(session: 协作分发会话, torrent: We
   // 3. done 代表整附件已经补齐，本地后续就能完整参与协作分发。
   torrent.on("wire", (wire) => {
     session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
+    发布协作分发会话事件(session, "SWARM_ACTIVE");
   });
   torrent.on("noPeers", () => {
     session.hint = "正在补块";
+    发布协作分发会话事件(session, "SWARM_NO_PEERS");
   });
   torrent.on("done", () => {
     session.eagerCompleting = false;
     session.hint = "正在协作分发";
+    发布协作分发会话事件(session, "ASSET_COMPLETE");
   });
 }
 
@@ -224,20 +249,27 @@ async function 确保协作分发会话(input: {
   attachmentId: string;
   kind: 媒体种类;
   distribution: 媒体协作分发定位片段;
+  onSessionEvent?: (event: 协作分发会话事件) => void;
 }): Promise<协作分发会话> {
   let session = 协作分发会话表.get(input.distribution.swarm_id);
   if (session) {
     session.refs += 1;
+    if (input.onSessionEvent) {
+      session.listeners.add(input.onSessionEvent);
+    }
     启动协作分发存活上报(session, input.distribution);
     return session;
   }
 
   session = {
+    attachmentId: input.attachmentId,
+    swarmId: input.distribution.swarm_id,
     sourcePromise: Promise.resolve(null),
     refs: 1,
     eagerCompleting: true,
     hint: input.distribution.web_seed_url ? "正在补块" : null,
     presenceIntervalId: null,
+    listeners: new Set(input.onSessionEvent ? [input.onSessionEvent] : []),
   };
   协作分发会话表.set(input.distribution.swarm_id, session);
   启动协作分发存活上报(session, input.distribution);
@@ -268,6 +300,8 @@ export function 读取协作分发会话状态(swarmId: string) {
     return null;
   }
   return {
+    attachmentId: session.attachmentId,
+    swarmId: session.swarmId,
     refs: session.refs,
     eagerCompleting: session.eagerCompleting,
     hint: 推导协作分发提示(session),
@@ -278,6 +312,7 @@ export async function 解析协作分发源(input: {
   attachmentId: string;
   kind: 媒体种类;
   locator: 媒体定位结果;
+  onSessionEvent?: (event: 协作分发会话事件) => void;
 }): Promise<协作分发媒体源 | null> {
   const distribution = 读取可用协作分发片段(input.locator);
   if (!distribution) {
@@ -287,6 +322,7 @@ export async function 解析协作分发源(input: {
     attachmentId: input.attachmentId,
     kind: input.kind,
     distribution,
+    ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
   });
   const source = await session.sourcePromise;
   if (!source) {

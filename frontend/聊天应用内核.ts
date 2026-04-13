@@ -49,6 +49,7 @@ import {
 import {
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
+  type 媒体会话信号,
   type 媒体查看器打开请求,
 } from "./媒体/index.js";
 import {
@@ -95,6 +96,7 @@ export type 聊天应用命令 =
   | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
   | { type: "ROOM_JUMP_TO_LATEST_REQUESTED" }
   | { type: "MEDIA_OPEN_REQUESTED"; request: 媒体查看器打开请求 }
+  | { type: "MEDIA_SESSION_SIGNALLED"; attachmentId: string; signal: 媒体会话信号 }
   | { type: "MEDIA_FILES_SELECTED"; files: Iterable<File> }
   | { type: "MEDIA_DRAFT_REMOVE_REQUESTED"; localId: string }
   | { type: "MEDIA_DRAFT_RETRY_REQUESTED"; localId: string };
@@ -220,6 +222,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       读取会话编号: () => this.回填房间壳补丁().sessionId,
       读取消息: () => this.时间线状态.messages,
       读取草稿: () => this.输入状态.composerMediaDrafts,
+      ...(this.platform.storage.媒体资产仓库
+        ? { 媒体缓存仓库: this.platform.storage.媒体资产仓库() }
+        : {}),
       写入草稿列表: (nextDrafts) => {
         this.应用本地状态补丁({ composerMediaDrafts: nextDrafts });
       },
@@ -303,6 +308,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       case "MEDIA_OPEN_REQUESTED":
         this.登记程序滚动来源("media_viewer_open");
         this.打开媒体查看器(command.request);
+        return;
+      case "MEDIA_SESSION_SIGNALLED":
+        this.媒体编排.处理媒体会话信号(command.attachmentId, command.signal);
         return;
       case "MEDIA_FILES_SELECTED":
         await this.处理选择媒体文件(command.files);

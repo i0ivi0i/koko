@@ -4,6 +4,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { 媒体播放结果 } from "./媒体/媒体播放.js";
+import type { 媒体会话信号 } from "./媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 
@@ -260,6 +261,26 @@ export class 房间消息窗 extends LitElement {
     );
   }
 
+  /**
+   * `video` 元素抛出来的只是浏览器层运行时信号。
+   * 这里统一翻译后回抛给外层应用运行时，真正的恢复/等待/降级仍由媒体会话 owner 裁决。
+   */
+  private 广播媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {
+    this.dispatchEvent(
+      new CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>(
+        "room-media-session-signal",
+        {
+          detail: {
+            attachmentId,
+            signal,
+          },
+          bubbles: true,
+          composed: true,
+        }
+      )
+    );
+  }
+
   private renderMessageBody(item: 消息展示项) {
     /**
      * 从这里开始，消息正文不再把裸字符串直接交给浏览器自然换行。
@@ -337,6 +358,22 @@ export class 房间消息窗 extends LitElement {
                     tabindex="-1"
                     aria-hidden="true"
                     poster=${ifDefined(attachment.posterSrc ?? undefined)}
+                    @playing=${() =>
+                      this.广播媒体会话信号(attachment.attachmentId, {
+                        type: "PLAYER_PLAYING",
+                      })}
+                    @waiting=${() =>
+                      this.广播媒体会话信号(attachment.attachmentId, {
+                        type: "PLAYER_WAITING",
+                      })}
+                    @stalled=${() =>
+                      this.广播媒体会话信号(attachment.attachmentId, {
+                        type: "PLAYER_STALLED",
+                      })}
+                    @error=${() =>
+                      this.广播媒体会话信号(attachment.attachmentId, {
+                        type: "PLAYER_ERROR",
+                      })}
                   ></video>
                   <span class="message-video-play-indicator" aria-hidden="true">▶</span>
                 </button>

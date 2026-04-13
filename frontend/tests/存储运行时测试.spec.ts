@@ -38,4 +38,23 @@ describe("存储运行时", () => {
     expect(firstStorage.getItem("koko_current_room_id")).toBe("r-first");
     expect(secondStorage.getItem("koko_current_room_id")).toBe("r-second");
   });
+
+  it("媒体资产仓库也通过平台存储运行时统一暴露，不让媒体 owner 自己散落 localStorage 键名", async () => {
+    const storage = createFakeStorage();
+    const runtime = 创建存储运行时({ storage });
+    const repo = runtime.媒体资产仓库?.();
+
+    await repo?.保存({
+      attachmentId: "att-video-1",
+      complete: true,
+      contentHash: "hash-1",
+      completedAt: 1_775_942_400_000,
+    });
+
+    expect(await repo?.读取("att-video-1")).toMatchObject({
+      attachmentId: "att-video-1",
+      complete: true,
+      contentHash: "hash-1",
+    });
+  });
 });

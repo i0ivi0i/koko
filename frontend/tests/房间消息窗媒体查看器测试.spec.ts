@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { 媒体播放结果 } from "../媒体/媒体播放";
 import type { 媒体查看器打开请求 } from "../媒体/媒体查看器";
+import type { 媒体会话信号 } from "../媒体/媒体会话";
 import type { 房间消息窗 } from "../房间消息窗";
 import type { 消息展示项 } from "../视图";
 import "../房间消息窗";
@@ -155,6 +156,47 @@ describe("房间消息窗媒体查看器", () => {
       ?.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
 
     expect(scrollIntentEvents).toHaveLength(1);
+
+    pane.remove();
+  });
+
+  it("视频预览运行时信号会抛给应用层，而不是继续困在 DOM/video 元素里", async () => {
+    const pane = 创建媒体消息窗();
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: "http://media.local/poster-video-1",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];
+    pane.addEventListener("room-media-session-signal", (event) => {
+      信号记录.push(
+        (event as CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>).detail
+      );
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    preview?.dispatchEvent(new Event("playing"));
+    preview?.dispatchEvent(new Event("waiting"));
+
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-video-1",
+        signal: { type: "PLAYER_PLAYING" },
+      },
+      {
+        attachmentId: "att-video-1",
+        signal: { type: "PLAYER_WAITING" },
+      },
+    ]);
 
     pane.remove();
   });

@@ -1,9 +1,13 @@
 import type { 媒体定位结果, 媒体种类 } from "../契约.js";
-import { 读取协作分发定位片段 } from "./媒体协作分发.js";
+import {
+  读取协作分发定位片段,
+  type 协作分发会话事件,
+} from "./媒体协作分发.js";
 
 type 媒体播放输入 = {
   attachmentId: string;
   kind: 媒体种类;
+  onSessionEvent?: (event: 协作分发会话事件) => void;
 };
 
 type 媒体播放结果 =
@@ -39,6 +43,7 @@ type 媒体播放器依赖 = {
     attachmentId: string;
     kind: 媒体种类;
     locator: 媒体定位结果;
+    onSessionEvent?: (event: 协作分发会话事件) => void;
   }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
   probeAnchor?(url: string): Promise<void>;
 };
@@ -154,6 +159,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         attachmentId: input.attachmentId,
         kind: input.kind,
         locator,
+        ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
       });
       if (swarmSource) {
         return {

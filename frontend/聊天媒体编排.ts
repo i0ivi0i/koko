@@ -2,16 +2,23 @@ import type { 消息事件, 媒体种类 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
 import {
   创建媒体定位器,
+  创建媒体缓存,
+  创建内存媒体缓存仓库,
   创建媒体播放器,
   创建媒体发布器,
+  创建媒体会话,
   创建媒体查看器,
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
   解析协作分发源,
   type 媒体附件草稿,
+  type 媒体缓存仓库,
   type 媒体草稿状态补丁,
   type 媒体查看器打开请求,
+  type 媒体会话信号,
+  type 媒体会话快照,
+  type 媒体会话端口,
   type 媒体播放结果,
 } from "./媒体/index.js";
 
@@ -24,6 +31,7 @@ export type 附件内容地址快照 = {
 
 export type 聊天媒体快照 = {
   playbackByAttachmentId: Record<string, 媒体播放结果>;
+  sessionByAttachmentId: Record<string, 媒体会话快照>;
   contentUrlByAttachmentId: Record<string, 附件内容地址快照>;
 };
 
@@ -32,6 +40,7 @@ type 聊天媒体编排依赖 = {
   读取会话编号(): string;
   读取消息(): 消息事件[];
   读取草稿(): 媒体附件草稿[];
+  媒体缓存仓库?: 媒体缓存仓库;
   写入草稿列表(next: 媒体附件草稿[]): void;
   请求重渲染(): void;
   回收媒体草稿预览地址(previewUrls: string[]): void;
@@ -47,6 +56,7 @@ export interface 聊天媒体编排端口 {
   清空草稿(): void;
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
+  处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
   清空(): void;
   销毁(): void;
   设置媒体播放器供测试(player: {
@@ -94,8 +104,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
   });
 
-  let 媒体播放结果表: Record<string, 媒体播放结果> = {};
-  const 正在解析媒体播放 = new Map<string, Promise<void>>();
+  const 媒体会话表 = new Map<string, 媒体会话端口>();
+  const 媒体缓存 = 创建媒体缓存({
+    repo: deps.媒体缓存仓库 ?? 创建内存媒体缓存仓库(),
+  });
 
   const 写入草稿列表 = (
     nextDrafts: 媒体附件草稿[],
@@ -182,16 +194,89 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return urlsByAttachmentId;
   };
 
+  /**
+   * 播放结果表不再自己持久保存一份可变真相，而是从媒体会话快照现算现给。
+   * 这样“播放源”“恢复态”“本地完整度”都收口在单个 owner，不会继续回到一张大 Map 到处 patch。
+   */
+  const 读取媒体会话快照表 = (): Record<string, 媒体会话快照> => {
+    const snapshots: Record<string, 媒体会话快照> = {};
+    for (const [attachmentId, session] of 媒体会话表) {
+      snapshots[attachmentId] = session.snapshot();
+    }
+    return snapshots;
+  };
+
+  const 读取媒体播放结果表 = (): Record<string, 媒体播放结果> => {
+    const playbackByAttachmentId: Record<string, 媒体播放结果> = {};
+    for (const [attachmentId, session] of 媒体会话表) {
+      const playback = session.snapshot().playback;
+      if (playback) {
+        playbackByAttachmentId[attachmentId] = playback;
+      }
+    }
+    return playbackByAttachmentId;
+  };
+
+  const 应用缓存完整度到会话 = (attachmentId: string): void => {
+    if (媒体缓存.snapshot()[attachmentId]?.complete) {
+      媒体会话表.get(attachmentId)?.send({ type: "ASSET_COMPLETE" });
+    }
+  };
+
+  const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
+    let session: 媒体会话端口;
+    const 接收协作分发事件 = (
+      event: { type: "SWARM_ACTIVE" | "SWARM_NO_PEERS" | "ASSET_COMPLETE" }
+    ): void => {
+      if (event.type === "SWARM_ACTIVE") {
+        session.send({ type: "SWARM_ACTIVE" });
+        return;
+      }
+      if (event.type === "SWARM_NO_PEERS") {
+        session.send({ type: "SWARM_NO_PEERS" });
+        return;
+      }
+      session.send({ type: "ASSET_COMPLETE" });
+      void 媒体缓存.标记完整(attachment.attachmentId).then(() => {
+        deps.请求重渲染();
+      });
+    };
+    session = 创建媒体会话({
+      attachmentId: attachment.attachmentId,
+      kind: attachment.kind,
+      解析播放结果: (input) =>
+        媒体播放器.解析播放结果({
+          ...input,
+          onSessionEvent: 接收协作分发事件,
+        }),
+      onSnapshotChange: () => {
+        deps.请求重渲染();
+      },
+    });
+    应用缓存完整度到会话(attachment.attachmentId);
+    return session;
+  };
+
   const 清空播放状态 = (): void => {
-    媒体播放结果表 = {};
-    正在解析媒体播放.clear();
+    for (const session of 媒体会话表.values()) {
+      session.销毁();
+    }
+    媒体会话表.clear();
     媒体定位器.清空();
   };
+
+  void 媒体缓存.启动().then(() => {
+    for (const attachmentId of 媒体会话表.keys()) {
+      应用缓存完整度到会话(attachmentId);
+    }
+    deps.请求重渲染();
+  });
 
   return {
     snapshot(): 聊天媒体快照 {
       return {
-        playbackByAttachmentId: 媒体播放结果表,
+        playbackByAttachmentId: 读取媒体播放结果表(),
+        sessionByAttachmentId: 读取媒体会话快照表(),
         contentUrlByAttachmentId: 读取附件内容地址表(),
       };
     },
@@ -226,44 +311,38 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     同步消息附件播放结果(): void {
       const attachments = 读取当前房间媒体附件();
       const activeAttachmentIds = new Set(attachments.map((item) => item.attachmentId));
-      let hasRemovedPlaybackState = false;
+      let hasSessionSetChanged = false;
 
-      for (const attachmentId of Object.keys(媒体播放结果表)) {
+      for (const [attachmentId, session] of 媒体会话表) {
         if (activeAttachmentIds.has(attachmentId)) {
           continue;
         }
-        const nextResults = { ...媒体播放结果表 };
-        delete nextResults[attachmentId];
-        媒体播放结果表 = nextResults;
-        hasRemovedPlaybackState = true;
+        session.销毁();
+        媒体会话表.delete(attachmentId);
+        hasSessionSetChanged = true;
       }
 
-      if (hasRemovedPlaybackState) {
+      if (hasSessionSetChanged) {
         deps.请求重渲染();
       }
 
       for (const attachment of attachments) {
-        if (媒体播放结果表[attachment.attachmentId] || 正在解析媒体播放.has(attachment.attachmentId)) {
+        if (媒体会话表.has(attachment.attachmentId)) {
           continue;
         }
-        const task = (async () => {
-          const result = await 媒体播放器.解析播放结果({
-            attachmentId: attachment.attachmentId,
-            kind: attachment.kind,
-          });
-          if (!读取当前房间媒体附件().some((item) => item.attachmentId === attachment.attachmentId)) {
-            return;
-          }
-          媒体播放结果表 = {
-            ...媒体播放结果表,
-            [attachment.attachmentId]: result,
-          };
-          deps.请求重渲染();
-        })().finally(() => {
-          正在解析媒体播放.delete(attachment.attachmentId);
-        });
-        正在解析媒体播放.set(attachment.attachmentId, task);
+        hasSessionSetChanged = true;
+        const session = 创建媒体会话条目(attachment);
+        媒体会话表.set(attachment.attachmentId, session);
+        void session.启动();
       }
+
+      if (hasSessionSetChanged) {
+        deps.请求重渲染();
+      }
+    },
+
+    处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {
+      媒体会话表.get(attachmentId)?.send(signal);
     },
 
     清空(): void {

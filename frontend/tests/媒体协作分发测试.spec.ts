@@ -261,6 +261,64 @@ describe("媒体协作分发", () => {
     });
   });
 
+  it("torrent done 后会发出完整资产事件，而不只是改 hint", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-4");
+    const 事件记录: Array<{ type: string; attachmentId: string; swarmId: string }> = [];
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-4",
+      kind: "video",
+      locator: 准备好的定位结果("att-4"),
+      onSessionEvent: (event) => {
+        事件记录.push(event);
+      },
+    });
+
+    emit("done");
+
+    expect(事件记录).toContainEqual({
+      type: "ASSET_COMPLETE",
+      attachmentId: "att-4",
+      swarmId: "swarm-att-4",
+    });
+  });
+
+  it("noPeers 后不会直接宣布失败，而是发出等待恢复信号", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-5");
+    const 事件记录: Array<{ type: string; attachmentId: string; swarmId: string }> = [];
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-5",
+      kind: "video",
+      locator: 准备好的定位结果("att-5"),
+      onSessionEvent: (event) => {
+        事件记录.push(event);
+      },
+    });
+
+    emit("noPeers");
+
+    expect(事件记录).toContainEqual({
+      type: "SWARM_NO_PEERS",
+      attachmentId: "att-5",
+      swarmId: "swarm-att-5",
+    });
+  });
+
   it("开始协作分发后会按 presence_url 周期上报存活，而不是前端自己裁决 expired", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
