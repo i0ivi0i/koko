@@ -12,8 +12,6 @@ export type 房间视口模式 = "围绕未读阅读" | "贴底跟随" | "离底
 export interface 聊天会话状态 {
   /** Web 壳本地持久化的设备入口凭证。它不是最终身份真相。 */
   deviceAnonymousToken: string;
-  /** 后端权威维护的匿名内部身份。未来注册只允许链接到它。 */
-  anonymousIdentityId: string;
   /** 首页只保留本地恢复出来的历史房间锚点，不冒充任何后端会话真相。 */
   homeSessionItems: 首页房间历史条目[];
 }
@@ -115,7 +113,6 @@ export interface 聊天状态
 
 export const 初始聊天会话状态: 聊天会话状态 = {
   deviceAnonymousToken: "",
-  anonymousIdentityId: "",
   homeSessionItems: [],
 };
 

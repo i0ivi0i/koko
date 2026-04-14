@@ -7,7 +7,6 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 
 type 匿名身份引导响应 = {
   session_id: string;
-  anonymous_identity_id?: string;
   display_alias?: string;
 };
 
@@ -57,7 +56,7 @@ beforeAll(() => {
 
 describe("realtime真实链路", () => {
   it(
-    "同一设备 token 会恢复同一个匿名身份与花名，并可进入不同房间",
+    "同一设备 token 会恢复同一个会话锚点与花名，并可进入不同房间",
     async () => {
       const port = await allocatePort();
       const baseUrl = `http://127.0.0.1:${port}`;
@@ -72,11 +71,10 @@ describe("realtime真实链路", () => {
         device_anonymous_token: "device-stable-001",
       });
 
-      expect(first.anonymous_identity_id).toBeTruthy();
-      expect(first.anonymous_identity_id).toBe(second.anonymous_identity_id);
       expect(first.display_alias).toBeTruthy();
       expect(first.display_alias).toBe(second.display_alias);
       expect(first.session_id).toBe(second.session_id);
+      expect("anonymous_identity_id" in first).toBe(false);
 
       const room1 = await postJson<房间响应>(`${baseUrl}/api/rooms/join-or-create`, {
         session_id: first.session_id,

@@ -44,7 +44,6 @@ function 创建房间快照(roomId = "r-x", latestEventPosition = 0): 房间快�
 class 假后台传输 implements 前端传输端口 {
   async bootstrapAnonymousIdentity(): Promise<匿名身份引导结果> {
     return {
-      anonymous_identity_id: "a-x",
       display_alias: "暴躁的企鹅",
       session_id: "s-x",
     };

@@ -232,14 +232,12 @@ pub(super) async fn bootstrap_session(
                 adapter = "http",
                 outcome = "succeeded",
                 request_kind = "匿名身份引导",
-                anonymous_identity_id = out.匿名身份标识,
                 session_id = out.会话标识,
                 "引导匿名身份成功"
             );
             (
                 StatusCode::OK,
                 Json(serde_json::json!({
-                    "anonymous_identity_id": out.匿名身份标识,
                     "display_alias": out.展示花名,
                     "session_id": out.会话标识,
                 })),

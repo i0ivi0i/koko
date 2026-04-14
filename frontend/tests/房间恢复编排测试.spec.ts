@@ -17,7 +17,6 @@ describe("房间恢复编排", () => {
     });
     场景.transport.bootstrapQueue = [
       {
-        anonymous_identity_id: "a-new",
         display_alias: "冷静的水獭",
         session_id: "s-refresh",
       },

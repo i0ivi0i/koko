@@ -134,6 +134,21 @@ fn 图片资产生命周期迁移已包含真实资产与冷源字段() {
 }
 
 #[test]
+fn 匿名内部身份迁移已包含uuid与主题投影字段() {
+    let sql = std::fs::read_to_string("migrations/0011_匿名内部身份uuid与主题投影.sql")
+        .expect("应能读到匿名内部身份迁移文件");
+
+    // 这条迁移要同时锁住三件事：
+    // 1. 内部真实身份升级为 UUID；
+    // 2. 当前资料投影有 theme_key 可承载项目级主题；
+    // 3. 旧 anonymous_identity_id 仍保留为兼容缝，避免粗暴断链。
+    assert!(sql.contains("identity_uuid UUID"));
+    assert!(sql.contains("theme_key TEXT"));
+    assert!(sql.contains("CREATE UNIQUE INDEX"));
+    assert!(sql.contains("anonymous_identity_id TEXT"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),

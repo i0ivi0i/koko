@@ -411,10 +411,11 @@ pub(super) async fn 拉取房间增量事件_异步(
     let latest_event_position: i64 = room_row.get("latest_event_position");
 
     let rows = sqlx::query(
-        "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+        "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
          FROM room_events re \
          LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
          LEFT JOIN sessions s ON s.id = m.sender_session_id \
+         LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
          WHERE re.room_id = $1 AND re.event_position > $2 \
          ORDER BY re.event_position ASC",
     )

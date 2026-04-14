@@ -61,22 +61,19 @@ describe("传输", () => {
     });
   });
 
-  it("bootstrap_anonymous_identity returns internal identity and display alias separately", () => {
+  it("bootstrap_anonymous_identity returns only the public alias snapshot", () => {
     const snapshot: 匿名身份快照 = {
-      anonymous_identity_id: "a-1",
       display_alias: "暴躁的企鹅",
     };
 
-    expect(snapshot.anonymous_identity_id).toBe("a-1");
     expect(snapshot.display_alias).toBe("暴躁的企鹅");
-    expect(snapshot.anonymous_identity_id).not.toBe(snapshot.display_alias);
+    expect("anonymous_identity_id" in snapshot).toBe(false);
   });
 
   it("以 device_anonymous_token 调用 bootstrap_anonymous_identity", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
-          anonymous_identity_id: "a-1",
           display_alias: "暴躁的企鹅",
           session_id: "s-1",
         }),
@@ -95,9 +92,9 @@ describe("传输", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ device_anonymous_token: "device-token-1" }),
     });
-    expect(result.anonymous_identity_id).toBe("a-1");
     expect(result.display_alias).toBe("暴躁的企鹅");
     expect(result.session_id).toBe("s-1");
+    expect("anonymous_identity_id" in result).toBe(false);
   });
 
   it("loadRoomEvents 会把 session_id 和 from 一起编码进 query string", async () => {

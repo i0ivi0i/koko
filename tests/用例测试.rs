@@ -144,9 +144,14 @@ struct 假仓储 {
     房间短码到标识: HashMap<String, String>,
     房间成员: HashMap<String, HashSet<String>>,
     会话到匿名身份: HashMap<String, String>,
-    设备匿名身份: HashMap<String, koko::contract::匿名身份引导结果>,
+    设备匿名身份: HashMap<String, 测试匿名身份记录>,
     房间阅读位置: HashMap<(String, String), i64>,
     附件: HashMap<String, koko::usecase::附件读取结果>,
+}
+
+#[derive(Clone)]
+struct 测试匿名身份记录 {
+    引导结果: koko::contract::匿名身份引导结果,
 }
 
 impl 假仓储 {
@@ -185,20 +190,24 @@ impl koko::usecase::仓储端口 for 假仓储 {
         设备匿名凭证: &str,
     ) -> Result<koko::contract::匿名身份引导结果, koko::contract::错误码> {
         if let Some(existing) = self.设备匿名身份.get(设备匿名凭证) {
-            return Ok(existing.clone());
+            return Ok(existing.引导结果.clone());
         }
 
         self.匿名身份计数 += 1;
         self.会话计数 += 1;
+        let 匿名身份标识 = format!("a-{}", self.匿名身份计数);
         let snapshot = koko::contract::匿名身份引导结果 {
-            匿名身份标识: format!("a-{}", self.匿名身份计数),
             展示花名: format!("暴躁的企鹅-{}", self.匿名身份计数),
             会话标识: format!("s-{}", self.会话计数),
         };
         self.会话到匿名身份
-            .insert(snapshot.会话标识.clone(), snapshot.匿名身份标识.clone());
-        self.设备匿名身份
-            .insert(设备匿名凭证.to_string(), snapshot.clone());
+            .insert(snapshot.会话标识.clone(), 匿名身份标识.clone());
+        self.设备匿名身份.insert(
+            设备匿名凭证.to_string(),
+            测试匿名身份记录 {
+                引导结果: snapshot.clone(),
+            },
+        );
         Ok(snapshot)
     }
 
@@ -533,16 +542,17 @@ fn 同一设备匿名凭证重复bootstrap会恢复同一个内部身份与花�
         koko::usecase::引导匿名身份(&mut repo, "device-token-1").expect("重复 bootstrap 应成功");
 
     assert_eq!(
-        first.匿名身份标识, second.匿名身份标识,
-        "同一设备匿名凭证必须恢复同一个内部身份"
-    );
-    assert_eq!(
         first.展示花名, second.展示花名,
         "同一设备匿名凭证必须恢复同一个展示花名"
     );
     assert_eq!(
         first.会话标识, second.会话标识,
         "当前 MVP 下同一设备应恢复同一个稳定会话锚点"
+    );
+    assert_eq!(
+        repo.会话到匿名身份.get(&first.会话标识),
+        repo.会话到匿名身份.get(&second.会话标识),
+        "同一设备匿名凭证必须恢复同一个内部身份"
     );
 }
 
@@ -555,8 +565,12 @@ fn 不同设备匿名凭证会拿到不同内部身份() {
     let second = koko::usecase::引导匿名身份(&mut repo, "device-token-b")
         .expect("第二个设备 bootstrap 应成功");
 
-    assert_ne!(first.匿名身份标识, second.匿名身份标识);
     assert_ne!(first.会话标识, second.会话标识);
+    assert_ne!(
+        repo.会话到匿名身份.get(&first.会话标识),
+        repo.会话到匿名身份.get(&second.会话标识),
+        "不同设备不应共享同一个内部身份"
+    );
 }
 
 #[test]
@@ -635,9 +649,14 @@ fn 非ready附件不能创建消息() {
         koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
         _ => panic!("应返回房间快照"),
     };
+    let sender_identity = repo
+        .会话到匿名身份
+        .get(&identity.会话标识)
+        .expect("引导匿名身份后应能通过会话查到内部身份")
+        .clone();
     repo.放入附件(
         "att-1",
-        &identity.匿名身份标识,
+        &sender_identity,
         koko::usecase::附件种类读取结果::图片,
         koko::usecase::附件状态读取结果::处理中,
     );

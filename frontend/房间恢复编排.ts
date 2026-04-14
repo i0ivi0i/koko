@@ -33,7 +33,6 @@ type 房间滚动器端口 = {
 type 恢复编排状态 = Pick<
   聊天状态,
   | "deviceAnonymousToken"
-  | "anonymousIdentityId"
   | "displayAlias"
   | "sessionId"
   | "roomId"
@@ -116,14 +115,12 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
   function 应用引导身份(
     deviceAnonymousToken: string,
     identity: {
-      anonymous_identity_id: string;
       display_alias: string;
       session_id: string;
     }
   ): void {
     写入恢复状态({
       deviceAnonymousToken,
-      anonymousIdentityId: identity.anonymous_identity_id,
     });
   }
 

@@ -534,9 +534,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     if (Object.hasOwn(patch, "deviceAnonymousToken")) {
       会话补丁.deviceAnonymousToken = patch.deviceAnonymousToken ?? "";
     }
-    if (Object.hasOwn(patch, "anonymousIdentityId")) {
-      会话补丁.anonymousIdentityId = patch.anonymousIdentityId ?? "";
-    }
     if (Object.hasOwn(patch, "homeSessionItems")) {
       会话补丁.homeSessionItems = patch.homeSessionItems ?? [];
     }
@@ -651,7 +648,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     const 房间壳 = this.回填房间壳补丁();
     return {
       deviceAnonymousToken: this.会话状态.deviceAnonymousToken,
-      anonymousIdentityId: this.会话状态.anonymousIdentityId,
       displayAlias: 房间壳.displayAlias,
       sessionId: 房间壳.sessionId,
       roomId: 房间壳.roomId,

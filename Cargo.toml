@@ -18,7 +18,12 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migra
 axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1", "multipart"] }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = "1"
-uuid = { version = "1", default-features = false, features = ["v4", "std"] }
+# 外部可见的公开句柄暂不设计，但内部身份已经需要时间有序 UUID 作为真锚点；
+# 这里同时保留 v4，给仍然走兼容短标识的路径做过渡。
+uuid = { version = "1", default-features = false, features = ["v4", "v7", "std"] }
+# 主题化花名继续站在成熟名字生成轮子肩膀上；
+# 项目自己只维护主题词库，不再手搓第二套组合器。
+names = { version = "0.14", default-features = false }
 socketioxide = { version = "0.18.2", features = ["extensions"] }
 tower-http = { version = "0.6", features = ["fs", "set-header"] }
 # 对象存储现在同时承担两类职责：

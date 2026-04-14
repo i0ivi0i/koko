@@ -132,7 +132,6 @@ class 端到端假传输 implements 前端传输端口 {
 
   async bootstrapAnonymousIdentity(): Promise<匿名身份引导结果> {
     return {
-      anonymous_identity_id: "a-e2e",
       display_alias: "暴躁的企鹅",
       session_id: "s-e2e",
     };

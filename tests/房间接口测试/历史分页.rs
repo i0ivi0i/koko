@@ -19,12 +19,13 @@ async fn 房间历史分页会返回before_event_position之前的消息() {
     let code = format!("H{:011}", (uniq + 1) % 100_000_000_000);
     let device_token = format!("history-device-{uniq}");
     let database_url = cfg.database_url.clone();
-    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+    let (session_id, room_id, initial_alias) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
-            .expect("应能引导匿名身份")
-            .会话标识;
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let session_id = identity.会话标识;
+        let initial_alias = identity.展示花名;
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
@@ -41,7 +42,7 @@ async fn 房间历史分页会返回before_event_position之前的消息() {
             )
             .expect("应能连续发送消息");
         }
-        (session_id, room_id)
+        (session_id, room_id, initial_alias)
     })
     .await
     .expect("阻塞建数任务应完成");
@@ -62,6 +63,49 @@ async fn 房间历史分页会返回before_event_position之前的消息() {
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0]["body"].as_str(), Some("history-2"));
     assert_eq!(messages[1]["body"].as_str(), Some("history-3"));
+    assert_eq!(
+        messages[0]["sender_display_alias"].as_str(),
+        Some(initial_alias.as_str()),
+        "首次历史读取应先拿到当前展示花名"
+    );
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库修改当前花名投影");
+    sqlx::query(
+        "UPDATE anonymous_identities \
+         SET display_alias = $1 \
+         WHERE id = (SELECT anonymous_identity_id FROM sessions WHERE session_id = $2)",
+    )
+    .bind("失眠的海豹")
+    .bind(&session_id)
+    .execute(&pool)
+    .await
+    .expect("应能直接改掉匿名身份当前花名");
+
+    let (status_after, body_after) = send_json(
+        koko::shell::构建路由(state),
+        Method::GET,
+        &format!(
+            "/api/rooms/{room_id}/history?session_id={session_id}&before_event_position=5&limit=2"
+        ),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(status_after, StatusCode::OK);
+    let messages_after = body_after["messages"]
+        .as_array()
+        .expect("messages 应为数组");
+    assert_eq!(
+        messages_after[0]["sender_display_alias"].as_str(),
+        Some("失眠的海豹"),
+        "修改 anonymous_identities.display_alias 后，旧消息也必须显示新花名"
+    );
+
+    pool.close().await;
 }
 
 #[tokio::test]

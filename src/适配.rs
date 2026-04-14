@@ -4,7 +4,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
-    contract, domain,
+    contract, domain, user_identity,
     usecase::{self, 仓储端口},
 };
 
@@ -54,8 +54,10 @@ pub(crate) struct 媒体上传运输记录 {
     pub 完成时间戳秒: Option<i64>,
 }
 
-/// 生成稳定格式的匿名内部身份标识。
-/// 约束：这里只负责标识格式，不把展示语义塞进主键。
+/// 生成迁移窗口内仍需保留的兼容匿名身份短标识。
+/// 约束：
+/// 1. 它只是旧链路兼容缝，不再冒充内部真实主键；
+/// 2. 真正的内部身份已经升级到 `anonymous_identities.identity_uuid`。
 fn 生成匿名身份标识() -> String {
     let raw = Uuid::new_v4().simple().to_string();
     format!("a-{}", &raw[..12])
@@ -68,31 +70,74 @@ fn 生成会话标识() -> String {
     format!("s-{}", &raw[..12])
 }
 
-/// 当前 MVP 的花名生成器。
-/// 设计取舍：
-/// 1. 这不是通用基础设施，而是产品展示语义，放在这里足够薄；
-/// 2. 花名首次创建后会持久化，因此这里无需做复杂可重放算法；
-/// 3. 花名只是展示面，未来允许独立修改。
-fn 生成展示花名() -> String {
-    const 前缀: [&str; 8] = [
-        "暴躁的",
-        "爱玩枪的",
-        "火锅味",
-        "潜水的",
-        "早起的",
-        "叛逆的",
-        "失眠的",
-        "开黑的",
-    ];
-    const 后缀: [&str; 8] = [
-        "企鹅", "小鸡", "海豹", "柴犬", "狸猫", "河马", "海鸥", "松鼠",
-    ];
+/// bootstrap 的共享契约现在只允许带回最小表面：
+/// - 展示花名
+/// - 会话锚点
+///
+/// 内部身份、主题键和迁移缝字段都留在持久化层，不再直接进入公共返回值。
+async fn 查询引导结果_异步(
+    pool: &PgPool,
+    设备匿名凭证: &str,
+) -> Result<Option<contract::匿名身份引导结果>, contract::错误码> {
+    let existing = sqlx::query(
+        "SELECT ai.id, ai.display_alias, s.session_id, ai.identity_uuid::text AS identity_uuid_text, ai.theme_key \
+         FROM sessions s \
+         JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+         WHERE s.device_anonymous_token = $1",
+    )
+    .bind(设备匿名凭证)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
 
-    let seed = Uuid::new_v4();
-    let bytes = seed.as_bytes();
-    let left = 前缀[(bytes[0] as usize) % 前缀.len()];
-    let right = 后缀[(bytes[1] as usize) % 后缀.len()];
-    format!("{left}{right}")
+    let Some(row) = existing else {
+        return Ok(None);
+    };
+
+    let identity_db_id: i64 = row.get("id");
+    let identity_uuid_text: Option<String> = row.get("identity_uuid_text");
+    let theme_key: Option<String> = row.get("theme_key");
+    if identity_uuid_text.is_none() || theme_key.is_none() {
+        回填匿名身份影子字段_异步(pool, identity_db_id).await?;
+    }
+
+    Ok(Some(contract::匿名身份引导结果 {
+        展示花名: row.get("display_alias"),
+        会话标识: row.get("session_id"),
+    }))
+}
+
+/// 存量匿名身份在迁移窗口里可能还缺 `identity_uuid/theme_key`；
+/// 这里用幂等 UPDATE 把缺口补上，保证后续链路只有一处真实身份 owner。
+async fn 回填匿名身份影子字段_异步(
+    pool: &PgPool,
+    identity_db_id: i64,
+) -> Result<(), contract::错误码> {
+    sqlx::query(
+        "UPDATE anonymous_identities \
+         SET identity_uuid = COALESCE(identity_uuid, $1::uuid), \
+             theme_key = COALESCE(theme_key, 'legacy') \
+         WHERE id = $2",
+    )
+    .bind(user_identity::生成内部身份().to_string())
+    .bind(identity_db_id)
+    .execute(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+    Ok(())
+}
+
+/// 只把 `device_anonymous_token` 唯一约束冲突视为 bootstrap 幂等竞态。
+/// 发生这类冲突时必须回查既有记录，而不是再造第二条匿名身份。
+fn 是设备匿名凭证幂等冲突(err: &sqlx::Error) -> bool {
+    matches!(
+        err,
+        sqlx::Error::Database(db_err)
+            if db_err.code().as_deref() == Some("23505")
+                && db_err
+                    .constraint()
+                    .is_some_and(|name| name.contains("device_anonymous_token"))
+    )
 }
 
 impl Pg仓储 {
@@ -274,23 +319,8 @@ impl 仓储端口 for Pg仓储 {
         设备匿名凭证: &str,
     ) -> Result<contract::匿名身份引导结果, contract::错误码> {
         self.在运行时执行(async {
-            let existing = sqlx::query(
-                "SELECT ai.anonymous_identity_id, ai.display_alias, s.session_id \
-                 FROM sessions s \
-                 JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
-                 WHERE s.device_anonymous_token = $1",
-            )
-            .bind(设备匿名凭证)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
-
-            if let Some(row) = existing {
-                return Ok(contract::匿名身份引导结果 {
-                    匿名身份标识: row.get("anonymous_identity_id"),
-                    展示花名: row.get("display_alias"),
-                    会话标识: row.get("session_id"),
-                });
+            if let Some(existing) = 查询引导结果_异步(&self.pool, 设备匿名凭证).await? {
+                return Ok(existing);
             }
 
             let mut tx = self
@@ -300,41 +330,53 @@ impl 仓储端口 for Pg仓储 {
                 .map_err(|_| contract::错误码::系统错误)?;
 
             let anonymous_identity_id = 生成匿名身份标识();
-            let display_alias = 生成展示花名();
+            let internal_identity = user_identity::生成内部身份();
+            let projection = user_identity::随机分配资料投影();
             let session_id = 生成会话标识();
 
             let identity_row = sqlx::query(
-                "INSERT INTO anonymous_identities (anonymous_identity_id, display_alias) \
-                 VALUES ($1, $2) \
+                "INSERT INTO anonymous_identities (anonymous_identity_id, identity_uuid, theme_key, display_alias) \
+                 VALUES ($1, $2::uuid, $3, $4) \
                  RETURNING id",
             )
             .bind(&anonymous_identity_id)
-            .bind(&display_alias)
+            .bind(internal_identity.to_string())
+            .bind(projection.theme_key)
+            .bind(&projection.display_alias)
             .fetch_one(&mut *tx)
             .await
             .map_err(|_| contract::错误码::系统错误)?;
             let identity_db_id: i64 = identity_row.get("id");
 
-            sqlx::query(
+            let session_insert = sqlx::query(
                 // `sessions.display_name` 是历史表字段名；当前语义上它承载的是展示花名投影。
                 "INSERT INTO sessions (session_id, display_name, anonymous_identity_id, device_anonymous_token) \
                  VALUES ($1, $2, $3, $4)",
             )
             .bind(&session_id)
-            .bind(&display_alias)
+            .bind(&projection.display_alias)
             .bind(identity_db_id)
             .bind(设备匿名凭证)
             .execute(&mut *tx)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?;
+            .await;
+            if let Err(err) = session_insert {
+                if 是设备匿名凭证幂等冲突(&err) {
+                    tx.rollback()
+                        .await
+                        .map_err(|_| contract::错误码::系统错误)?;
+                    return 查询引导结果_异步(&self.pool, 设备匿名凭证)
+                        .await?
+                        .ok_or(contract::错误码::系统错误);
+                }
+                return Err(contract::错误码::系统错误);
+            }
 
             tx.commit()
                 .await
                 .map_err(|_| contract::错误码::系统错误)?;
 
             Ok(contract::匿名身份引导结果 {
-                匿名身份标识: anonymous_identity_id,
-                展示花名: display_alias,
+                展示花名: projection.display_alias,
                 会话标识: session_id,
             })
         })

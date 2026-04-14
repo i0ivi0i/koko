@@ -20,3 +20,5 @@ pub mod shell;
 pub mod media_distribution;
 #[path = "用例.rs"]
 pub mod usecase;
+#[path = "用户身份.rs"]
+pub(crate) mod user_identity;

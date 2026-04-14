@@ -100,12 +100,13 @@ async fn 成员通过events接口只会拿到from之后的事件() {
     let code = format!("F{:011}", uniq % 100_000_000_000);
     let device_token = format!("events-device-{uniq}");
     let database_url = cfg.database_url.clone();
-    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+    let (session_id, room_id, initial_alias) = tokio::task::spawn_blocking(move || {
         let mut repo =
             koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
-        let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
-            .expect("应能引导匿名身份")
-            .会话标识;
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let session_id = identity.会话标识;
+        let initial_alias = identity.展示花名;
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
         let room_id = match room {
@@ -116,15 +117,31 @@ async fn 成员通过events接口只会拿到from之后的事件() {
             .expect("应能发送第一条消息");
         koko::usecase::发送文本消息(&mut repo, &room_id, &session_id, "c-2", "second")
             .expect("应能发送第二条消息");
-        (session_id, room_id)
+        (session_id, room_id, initial_alias)
     })
     .await
     .expect("阻塞建数任务应完成");
 
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库修改当前花名投影");
+    sqlx::query(
+        "UPDATE anonymous_identities \
+         SET display_alias = $1 \
+         WHERE id = (SELECT anonymous_identity_id FROM sessions WHERE session_id = $2)",
+    )
+    .bind("冷静的水獭")
+    .bind(&session_id)
+    .execute(&pool)
+    .await
+    .expect("应能直接改掉匿名身份当前花名");
+
     let (status, body) = send_json(
         app,
         Method::GET,
-        &format!("/api/rooms/{room_id}/events?session_id={session_id}&from=1"),
+        &format!("/api/rooms/{room_id}/events?session_id={session_id}&from=0"),
         None,
         &[],
     )
@@ -132,9 +149,22 @@ async fn 成员通过events接口只会拿到from之后的事件() {
 
     assert_eq!(status, StatusCode::OK);
     let events = body["events"].as_array().expect("events 应为数组");
-    assert_eq!(events.len(), 1, "只应返回 event_position > from 的事件");
-    assert_eq!(events[0]["event_position"].as_i64(), Some(2));
+    assert_eq!(events.len(), 2, "from=0 时应拿到所有已成立事件");
+    assert_eq!(events[0]["event_position"].as_i64(), Some(1));
+    assert_eq!(events[1]["event_position"].as_i64(), Some(2));
+    assert_eq!(
+        events[0]["sender_display_alias"].as_str(),
+        Some("冷静的水獭"),
+        "修改 anonymous_identities.display_alias 后，增量事件也必须读取当前花名投影"
+    );
+    assert_ne!(
+        events[0]["sender_display_alias"].as_str(),
+        Some(initial_alias.as_str()),
+        "测试前提错误：更新后的花名必须和原始花名不同"
+    );
     assert_eq!(body["latest_event_position"].as_i64(), Some(2));
+
+    pool.close().await;
 }
 
 #[tokio::test]

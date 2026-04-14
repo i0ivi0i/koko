@@ -145,10 +145,11 @@ pub(super) async fn 查询消息页(
 ) -> Result<Vec<contract::领域事件>, contract::错误码> {
     let rows = if let Some(before) = 截止位置之前 {
         sqlx::query(
-            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
              FROM room_events re \
              LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
              LEFT JOIN sessions s ON s.id = m.sender_session_id \
+             LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
              WHERE re.room_id = $1 AND re.event_position < $2 \
              ORDER BY re.event_position DESC \
              LIMIT $3",
@@ -161,10 +162,11 @@ pub(super) async fn 查询消息页(
         .map_err(|_| contract::错误码::系统错误)?
     } else {
         sqlx::query(
-            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+            "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
              FROM room_events re \
              LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
              LEFT JOIN sessions s ON s.id = m.sender_session_id \
+             LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
              WHERE re.room_id = $1 \
              ORDER BY re.event_position DESC \
              LIMIT $2",
@@ -191,10 +193,11 @@ pub(super) async fn 查询从位置开始的消息页(
     limit: i64,
 ) -> Result<Vec<contract::领域事件>, contract::错误码> {
     let rows = sqlx::query(
-        "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+        "SELECT re.event_position, re.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
          FROM room_events re \
          LEFT JOIN messages m ON m.room_id = re.room_id AND m.event_position = re.event_position \
          LEFT JOIN sessions s ON s.id = m.sender_session_id \
+         LEFT JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
          WHERE re.room_id = $1 AND re.event_position >= $2 \
          ORDER BY re.event_position ASC \
          LIMIT $3",
@@ -213,13 +216,17 @@ async fn 查询发送者投影_异步(
     pool: &PgPool,
     会话标识: &str,
 ) -> Result<(i64, String), contract::错误码> {
-    let row =
-        sqlx::query("SELECT id, display_name AS display_alias FROM sessions WHERE session_id = $1")
-            .bind(会话标识)
-            .fetch_optional(pool)
-            .await
-            .map_err(|_| contract::错误码::系统错误)?
-            .ok_or(contract::错误码::会话无效)?;
+    let row = sqlx::query(
+        "SELECT s.id, ai.display_alias \
+         FROM sessions s \
+         JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+         WHERE s.session_id = $1",
+    )
+    .bind(会话标识)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?
+    .ok_or(contract::错误码::会话无效)?;
     Ok((row.get("id"), row.get("display_alias")))
 }
 
@@ -230,10 +237,11 @@ async fn 查询既有消息事件_异步(
     客户端消息标识: &str,
 ) -> Result<Option<contract::领域事件>, contract::错误码> {
     let row = sqlx::query(
-        "SELECT m.event_position, m.message_id, m.client_message_id, s.session_id, s.display_name AS display_alias, m.body \
+        "SELECT m.event_position, m.message_id, m.client_message_id, s.session_id, ai.display_alias, m.body \
          FROM messages m \
          JOIN rooms r ON r.id = m.room_id \
          JOIN sessions s ON s.id = m.sender_session_id \
+         JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
          WHERE r.room_id = $1 AND s.session_id = $2 AND m.client_message_id = $3",
     )
     .bind(房间标识)

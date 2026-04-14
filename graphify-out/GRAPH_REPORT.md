@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-14)
 
 ## Corpus Check
-- 156 files · ~167,538 words
+- 157 files · ~170,787 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 313 nodes · 388 edges · 25 communities detected
+- 314 nodes · 389 edges · 25 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -64,19 +64,19 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (42): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+34 more)
+Nodes (41): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+33 more)
 
 ### Community 1 - "Community 1"
+Cohesion: 0.05
+Nodes (6): flush(), make_writer(), 最小mp4字节(), 插入ready图片附件记录(), 匿名内部身份迁移已包含uuid与主题投影字段(), write()
+
+### Community 2 - "Community 2"
 Cohesion: 0.06
 Nodes (16): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), 重写_hls清单内容(), leaveCurrentRoomView(), render() (+8 more)
 
-### Community 2 - "Community 2"
-Cohesion: 0.05
-Nodes (5): AdminLoginBody, AdminLoginResp, RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
-
 ### Community 3 - "Community 3"
 Cohesion: 0.06
-Nodes (7): bootstrap匿名身份时设备凭证与花名不会混成同一个字段(), flush(), make_writer(), 最小mp4字节(), 插入ready图片附件记录(), realtime连接认证异步用例会放行有效会话(), write()
+Nodes (7): AdminLoginBody, AdminLoginResp, 读取exif方向(), ffprobe检测首音轨是否存在(), RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
@@ -165,9 +165,9 @@ Nodes (0):
 ## Knowledge Gaps
 - **23 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `RustusHookBody` (+18 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 13`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 13`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 14`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -193,17 +193,17 @@ Nodes (0):
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `HttpRealtime传输` connect `Community 6` to `Community 1`?**
+- **Why does `HttpRealtime传输` connect `Community 6` to `Community 2`?**
   _High betweenness centrality (0.112) - this node is a cross-community bridge._
-- **Why does `构造rustus_hook请求体()` connect `Community 8` to `Community 3`?**
+- **Why does `构造rustus_hook请求体()` connect `Community 8` to `Community 1`?**
   _High betweenness centrality (0.070) - this node is a cross-community bridge._
-- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 2`?**
+- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 3`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局` to the rest of the system?**
   _23 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.05 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
-- **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.05 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
