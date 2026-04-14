@@ -343,7 +343,7 @@ impl 仓储端口 for Pg仓储 {
             )
             .bind(&anonymous_identity_id)
             .bind(internal_identity.to_string())
-            .bind(projection.theme_key)
+            .bind(&projection.theme_key)
             .bind(&projection.display_alias)
             .fetch_one(&mut *tx)
             .await
