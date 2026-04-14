@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-14)
 
 ## Corpus Check
-- 157 files · ~170,949 words
+- 157 files · ~173,260 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 314 nodes · 389 edges · 25 communities detected
+- 315 nodes · 390 edges · 25 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -64,7 +64,7 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (41): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+33 more)
+Nodes (40): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+32 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.05
@@ -76,7 +76,7 @@ Nodes (16): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), d
 
 ### Community 3 - "Community 3"
 Cohesion: 0.06
-Nodes (7): AdminLoginBody, AdminLoginResp, 读取exif方向(), ffprobe检测首音轨是否存在(), RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
+Nodes (8): AdminLoginBody, AdminLoginResp, 尝试加载dotenv(), 读取exif方向(), 安装panic日志钩子(), RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
@@ -165,9 +165,9 @@ Nodes (0):
 ## Knowledge Gaps
 - **23 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `RustusHookBody` (+18 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 13`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 13`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 14`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

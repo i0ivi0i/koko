@@ -105,7 +105,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 14
+      "community": 13
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -113,7 +113,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L31",
       "id": "app_sw",
-      "community": 14
+      "community": 13
     },
     {
       "label": "css.d.ts",
@@ -1865,7 +1865,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L157",
       "id": "panic",
-      "community": 0
+      "community": 3
     },
     {
       "label": "\u5c1d\u8bd5\u52a0\u8f7ddotenv()",
@@ -1873,7 +1873,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L170",
       "id": "dotenv",
-      "community": 0
+      "community": 3
     },
     {
       "label": "\u63a8\u5bfc\u9ed8\u8ba4shaka_packager\u547d\u4ee4()",
@@ -2009,7 +2009,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L92",
       "id": "ffprobe",
-      "community": 3
+      "community": 0
     },
     {
       "label": "\u91cd\u5199_xml\u5c5e\u6027\u8def\u5f84()",
@@ -2017,6 +2017,14 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L382",
       "id": "xml",
+      "community": 0
+    },
+    {
+      "label": "\u7ec4\u5408\u82b1\u540d\u7ee7\u7eed\u901a\u8fc7_names_\u8f6e\u5b50\u751f\u6210()",
+      "file_type": "code",
+      "source_file": "src\\\u7528\u6237\u8eab\u4efd.rs",
+      "source_location": "L223",
+      "id": "names",
       "community": 0
     },
     {
@@ -2057,7 +2065,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 13
+      "community": 14
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2065,7 +2073,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L6",
       "id": "blob_preview_full_original",
-      "community": 13
+      "community": 14
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -6455,6 +6463,18 @@
       "_tgt": "xml",
       "source": "src_rs",
       "target": "xml",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u6237\u8eab\u4efd.rs",
+      "source_location": "L223",
+      "weight": 1.0,
+      "_src": "src_rs",
+      "_tgt": "names",
+      "source": "src_rs",
+      "target": "names",
       "confidence_score": 1.0
     },
     {
