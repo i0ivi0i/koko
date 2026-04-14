@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 const 花名词库_JSON: &str = include_str!("../assets/anonymous_alias_themes.json");
 const 组合花名权重: u8 = 85;
-const 最小花名空间: usize = 10_000;
-const 最小组合主题数: usize = 12;
+const 最小花名空间: usize = 20_000;
+const 最小组合主题数: usize = 23;
 const 最小单主题词条数: usize = 30;
 const 最小完整梗句数: usize = 200;
 
@@ -32,6 +32,8 @@ struct 花名词库文件 {
 #[derive(Debug, Deserialize)]
 struct 组合主题词典 {
     key: String,
+    /// 字段名保留为 `names` crate 的 API 语义；业务上这里允许放“前半句/后半句”。
+    /// 这样能继续复用成熟组合轮子，同时把关系错位、台词残片等中文梗语法榨进主组合空间。
     adjectives: Vec<String>,
     nouns: Vec<String>,
 }
@@ -99,7 +101,7 @@ fn 校验花名词库(catalog: &花名词库文件) -> Result<(), String> {
         return Err("组合主题数量不足".to_string());
     }
     if 计算花名空间(catalog) < 最小花名空间 {
-        return Err("花名空间不足一万".to_string());
+        return Err("花名空间不足两万".to_string());
     }
 
     let phrase_count = catalog
@@ -155,7 +157,9 @@ fn 校验词条列表(
     Ok(())
 }
 
-fn 按组合主题生成资料投影(catalog: &花名词库文件, entropy: usize) -> 当前资料投影 {
+fn 按组合主题生成资料投影(
+    catalog: &花名词库文件, entropy: usize
+) -> 当前资料投影 {
     let theme = &catalog.combo_themes[entropy % catalog.combo_themes.len()];
     当前资料投影 {
         theme_key: theme.key.clone(),
@@ -164,7 +168,11 @@ fn 按组合主题生成资料投影(catalog: &花名词库文件, entropy: usiz
 }
 
 fn 按组合主题生成花名(theme: &组合主题词典) -> String {
-    let adjectives = theme.adjectives.iter().map(String::as_str).collect::<Vec<_>>();
+    let adjectives = theme
+        .adjectives
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let nouns = theme.nouns.iter().map(String::as_str).collect::<Vec<_>>();
     let mut generator = Generator::new(&adjectives, &nouns, Name::Plain);
 
@@ -203,12 +211,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn 花名词库组合空间至少一万() {
+    fn 花名词库组合空间至少两万() {
         let catalog = 花名词库();
+        let combo_total = catalog
+            .combo_themes
+            .iter()
+            .map(|theme| theme.adjectives.len() * theme.nouns.len())
+            .sum::<usize>();
 
         assert!(
-            计算花名空间(catalog) >= 10_000,
-            "花名空间不能再退回当前 64 级别"
+            catalog.combo_themes.len() >= 23,
+            "names 主组合主题数量不足，不能靠完整梗句池凑两万空间"
+        );
+        assert!(
+            combo_total >= 20_000,
+            "names 主组合空间不能再退回当前 64 级别，也不能停在刚过一万的下限"
+        );
+        assert!(
+            计算花名空间(catalog) >= combo_total,
+            "总花名空间不能小于 names 主组合空间"
         );
     }
 
@@ -239,6 +260,40 @@ mod tests {
                 || combo.nouns.iter().any(|word| alias.contains(word)),
             "生成结果应该来自主题数据，而不是硬编码兜底"
         );
+    }
+
+    #[test]
+    fn 文学脱口秀语法必须进入_names_主组合主题() {
+        let catalog = 花名词库();
+        let required_keys = [
+            "relationship_absurd",
+            "profession_absurd",
+            "pseudo_academic",
+            "line_fragment",
+            "subject_object_inversion",
+            "gentle_absurd",
+            "bureaucracy_myth",
+            "infrastructure_poetry",
+            "emotion_personification",
+            "marketplace_timewarp",
+            "micro_drama_logic",
+        ];
+
+        for key in required_keys {
+            let combo = catalog
+                .combo_themes
+                .iter()
+                .find(|theme| theme.key == key)
+                .unwrap_or_else(|| panic!("应存在 names 主组合主题: {key}"));
+
+            let alias = 按组合主题生成花名(combo);
+
+            assert!(!alias.trim().is_empty());
+            assert!(
+                !alias.contains('-'),
+                "中文主组合花名不应该暴露 names crate 的连字符"
+            );
+        }
     }
 
     #[test]
