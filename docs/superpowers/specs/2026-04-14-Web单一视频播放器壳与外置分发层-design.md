@@ -69,6 +69,15 @@
 - 它已经提供了我们需要的“单一播放器壳 + 可组合 UI + 外挂播放引擎”架构方向；
 - 同时它也提醒我们必须做风险隔离，不能把 Beta API 直接散落到聊天壳和业务内核里。
 
+这里还必须把官方 Beta 警告一起写进设计判断：
+
+1. 官方博客明确说：现在还不是做 `major migration` 的时点；
+2. 当前更适合新项目试用、简单项目试用和 API 反馈；
+3. 如果生产项目因为额外约束必须提前上，就必须主动做风险隔离，不能假装它已经等同 GA。
+
+`koko` 当前正属于第三种情况。
+所以这里不是“官方已经建议全面迁移”，而是在“必须使用最新 `Video.js v10`”这个新约束下，选择一条改动面最克制的接法：**只让 v10 负责播放器壳，不顺手吞掉 HLS 正式主链和壳外分发层。**
+
 ### 2.3 对 `koko` 来说，应当选择 `@videojs/html` 路线，而不是 `@videojs/react`
 
 Video.js v10 官方同时提供 `@videojs/html` 和 `@videojs/react` 两条入口。
@@ -78,7 +87,37 @@ Video.js v10 官方同时提供 `@videojs/html` 和 `@videojs/react` 两条入�
 2. 不允许为了接入 `Video.js v10` 而把 React 再引进当前播放器主链；
 3. 后续若要接 React，也必须是另一个独立架构决策，不能偷渡进这次播放器壳收口。
 
-### 2.4 `Video.js v10` 的 SPF 很新，但当前不应该抢走正式 HLS 主链
+官方 HTML 路线的心智也必须一起吸收：
+
+1. `<video-player>` 是 provider 表面；
+2. `<video-skin>` 是打包好的皮肤壳；
+3. `<media-container>` 是交互与 fullscreen 边界；
+4. `<hls-video>` / `<video>` / `<audio>` 是 media/provider 入口。
+
+这意味着对 `koko` 来说，正确接法不是“把 v10 当旧版 `videojs(videoElement, options)` 再包一层”，而是：
+
+1. 把它当统一播放器壳；
+2. 让 media 元素承担 `HLS / file / blob` 差异；
+3. 让我们自己的 `Player Shell Adapter` 只翻译稳定 player signals。
+
+### 2.4 官方对 `media-container` / fullscreen / attach 的边界，正好能拿来压当前旧复杂度
+
+官方 HTML 文档把 `media-container` 的职责讲得很硬：
+
+1. fullscreen 进入的是 container，不是底层 `<video>`；
+2. media attach 是 provider 负责，不应在业务层重复 attach；
+3. packaged skin 内部已经包含 container；
+4. 自定义 media 元素例如 `<hls-video>` 会通过上下文注册，不该再长第二套 overlay attach 流程。
+
+这和 `koko` 当前最痛的历史问题是正对上的：
+
+- overlay 与全屏边界混乱；
+- HLS 与普通视频两套 attach 思路并存；
+- 移动端原生全屏容易演化成独立播放器实现。
+
+所以这次 spec 必须把这条边界写进设计，而不是等施工时边写边猜。
+
+### 2.5 `Video.js v10` 的 SPF 很新，但当前不应该抢走正式 HLS 主链
 
 Video.js 官方在 v10 Beta 里同时推出了 `SPF (Streaming Processor Framework)`。
 从官方博客看，它的方向很先进，目标是把简单 ABR 场景的体积压得很小。
@@ -94,7 +133,23 @@ Video.js 官方在 v10 Beta 里同时推出了 `SPF (Streaming Processor Framewo
 
 **当前阶段选择 `Video.js v10` 做播放器壳，但 `HLS` 正式主链仍继续由 `hls.js` 承担。**
 
-### 2.5 `P2P Media Loader` 是增强层，不是 UI 播放器
+### 2.6 安装文档里的 CSP 要求，必须提前进入设计约束
+
+Video.js v10 官方安装文档当前直接把 CSP 相关要求写了出来，这不是部署尾活，而是选型边界：
+
+1. `connect-src` 要允许 manifest、playlist、caption、segment 请求；
+2. MSE / HLS 变体要允许 `media-src blob:`；
+3. `hls.js` 变体需要 `worker-src blob:`；
+4. poster / thumbnail 要进 `img-src`；
+5. 当前部分 UI / HTML player styling 仍需要 `style-src 'unsafe-inline'`。
+
+后续 plan 里如果不把 CSP 一起列出来，执行就会出现一种高概率漂移：
+
+- 本地 demo 播得起来；
+- 接到真实环境后，请求、blob、worker、样式被 CSP 打断；
+- 最后问题被误诊成播放器壳迁移失败。
+
+### 2.7 `P2P Media Loader` 是增强层，不是 UI 播放器
 
 `p2p-media-loader` 官方文档的重点是：
 
@@ -104,7 +159,7 @@ Video.js 官方在 v10 Beta 里同时推出了 `SPF (Streaming Processor Framewo
 
 所以它在 `koko` 里应该挂接到 `HLS engine` 这一层，而不是变成新的播放器 UI 入口，更不应该成为“首播能不能起来”的唯一关键路径。
 
-### 2.6 `WebTorrent` 是分发平面，不是完整 HLS 播放器
+### 2.8 `WebTorrent` 是分发平面，不是完整 HLS 播放器
 
 WebTorrent 官方文档重点是：
 
@@ -124,7 +179,7 @@ WebTorrent 官方文档重点是：
 
 而不是新的播放器实现。
 
-### 2.7 `Vidstack` 和 `Shaka` 仍然是优秀轮子，但这次不再作为最终路线
+### 2.9 `Vidstack` 和 `Shaka` 仍然是优秀轮子，但这次不再作为最终路线
 
 这里必须把“为什么前版是 `Vidstack`，而这版改成 `Video.js v10`”说清楚：
 
@@ -184,7 +239,9 @@ WebTorrent 官方文档重点是：
 5. 移动端全屏是行为策略，不再算一套独立播放器实现；
 6. 不再允许“自定义 HLS overlay”和“Vidstack overlay”长期双活；
 7. 不允许把 `Video.js v10` 的 Beta API 直接扩散到聊天壳、业务 owner、分发 runtime 各处，必须有薄适配层隔离；
-8. 当前阶段不以 `SPF` 替换 `hls.js` 正式主链。
+8. 当前阶段不以 `SPF` 替换 `hls.js` 正式主链；
+9. 不把 `beta.16 / beta.17` 的手势、快捷键、默认皮肤行为写成项目核心强依赖；
+10. fullscreen 语义统一以 player container 为准，不再让不同路径各自定义全屏真相。
 
 ## 5. 为什么推荐 `Video.js v10 壳 + hls.js 引擎 + 外置分发层`
 
@@ -198,13 +255,15 @@ WebTorrent 官方文档重点是：
 2. 贴近官方 v10 的模块化方向，方便未来围绕一套壳继续改造；
 3. 可以保留现有 `hls.js` 资产链和媒体会话信号；
 4. 未来倍速、快捷键、字幕、错误提示、埋点、全屏等能力可以统一收口；
-5. 壳迁移和分发层保留可以拆开做，不必用“减功能换稳定”。
+5. 壳迁移和分发层保留可以拆开做，不必用“减功能换稳定”；
+6. 可以直接采用官方 HTML/custom elements 路线，不需要为了播放器壳再引 React。
 
 缺点：
 
 1. `Video.js v10` 当前仍是 Beta，API 变化风险真实存在；
 2. 需要增加一层薄适配，不能让项目直接硬耦合到 v10 的内部细节；
-3. 需要补一轮 TDD，防止收口过程中功能掉落。
+3. 需要补一轮 TDD，防止收口过程中功能掉落；
+4. 必须把 CSP、blob、worker、fullscreen 这些非“播放器 UI”问题一并纳入验证。
 
 ### 方案 B：继续以 `Vidstack` 作为最终壳
 
@@ -369,7 +428,9 @@ SwarmRuntime / WebTorrent / Backfill
 2. 当前 HLS 主链只走 `hls.js`；
 3. 当前不把 `SPF` 作为正式生产主链；
 4. `Video.js v10` 只能通过薄适配层进入项目；
-5. `WebTorrent / P2P / SwarmRuntime` 永远不拥有播放器壳。
+5. `WebTorrent / P2P / SwarmRuntime` 永远不拥有播放器壳；
+6. 手势、快捷键优先作为可替换增强项接入，不作为第一阶段成败判定；
+7. 默认皮肤可用，但不得把皮肤内部结构当作业务层长期契约。
 
 ### 8.3 允许的正确演进方式
 
@@ -380,7 +441,8 @@ SwarmRuntime / WebTorrent / Backfill
 3. 再把 `HLS` provider 正确接回壳里；
 4. 再把 swarm 运行时作为旁路增强挂上去；
 5. 再把移动端原生全屏降级成“同一壳上的展示/平台策略”；
-6. 最后让旧 `Vidstack overlay` 和旧自定义 `HLS overlay` 明确退场。
+6. 再把 fullscreen 统一收口到 container 语义；
+7. 最后让旧 `Vidstack overlay` 和旧自定义 `HLS overlay` 明确退场。
 
 ## 9. TDD 施工要求
 
@@ -391,7 +453,8 @@ SwarmRuntime / WebTorrent / Backfill
 1. `manifest` 视频进入统一播放器壳；
 2. `blob/file` 视频也进入统一播放器壳；
 3. 移动端只改变展示策略，不改变“单一播放器壳”事实；
-4. 不再存在“一个视频走 `Video.js v10`，另一个视频走旧壳”的长期双活。
+4. 不再存在“一个视频走 `Video.js v10`，另一个视频走旧壳”的长期双活；
+5. fullscreen 语义统一落在 player container，而不是底层 `<video>` 或旧 overlay 自己裁决。
 
 ### 9.2 正式播放链
 
@@ -399,7 +462,8 @@ SwarmRuntime / WebTorrent / Backfill
 2. 同一 `manifest` 的重复同步不会反复 `loadSource` 把自己打断；
 3. provider 切换不再制造第二套 overlay；
 4. `blob/file` 路径与 `manifest` 路径共用同一套控制表面；
-5. 倍速、关闭、全屏、错误态、控制条、快捷键以后只需要改一套播放器表面。
+5. 倍速、关闭、全屏、错误态、控制条、快捷键以后只需要改一套播放器表面；
+6. fullscreen 进入的是统一 player container，不再由不同路径各自决定。
 
 ### 9.3 分发层不掉
 
@@ -407,7 +471,8 @@ SwarmRuntime / WebTorrent / Backfill
 2. `ASSET_COMPLETE` 仍能推进 `MediaCacheOwner`；
 3. 关闭查看器仍会 release；
 4. `noPeers / waiting / recovering` 仍由 `MediaSessionOwner` 裁决；
-5. sender 和其他成员打开同一个视频都能稳定播放，不允许通过删除 seeding / release 伪装成功。
+5. sender 和其他成员打开同一个视频都能稳定播放，不允许通过删除 seeding / release 伪装成功；
+6. CSP、blob URL、worker 相关约束满足后，首播和恢复链路仍稳定。
 
 ### 9.4 退场验证
 
@@ -415,7 +480,8 @@ SwarmRuntime / WebTorrent / Backfill
 2. 旧 `Vidstack overlay` 退场后，不再有代码直接依赖它；
 3. 不再存在“普通视频走一套、HLS 走另一套 overlay”的双活结构；
 4. `p2p-media-loader-hlsjs` 若恢复接入，也只能作为增强层，不得再卡在首播必经路径；
-5. 项目里不因为这次迁移额外引入 React 播放器主链。
+5. 项目里不因为这次迁移额外引入 React 播放器主链；
+6. 不把 beta 手势、快捷键和默认皮肤 DOM 结构扩散成业务层隐式依赖。
 
 ## 10. 当前阶段完成定义
 
@@ -429,7 +495,8 @@ SwarmRuntime / WebTorrent / Backfill
 6. 旧自定义 HLS overlay 已经退场；
 7. 旧 `Vidstack overlay` 已经退场；
 8. 没有通过删掉 backfill / release / seeding 来换取可播；
-9. `Video.js v10` 的具体实现细节没有扩散成新的系统级耦合点。
+9. `Video.js v10` 的具体实现细节没有扩散成新的系统级耦合点；
+10. fullscreen / CSP / blob / worker 这些运行时边界已在设计和验证里被明确处理。
 
 ## 11. 非目标
 
@@ -440,7 +507,8 @@ SwarmRuntime / WebTorrent / Backfill
 3. `iOS / Android / Desktop / CLI` 的播放器实现；
 4. 当前阶段立即把 `SPF` 替换为正式 HLS 主链；
 5. 为了 `Video.js v10` 接入而把 React 一起引入当前播放器主链；
-6. 新造一套私有播放器框架。
+6. 新造一套私有播放器框架；
+7. 把 `beta.16 / beta.17` 的手势、快捷键、默认皮肤结构直接视为长期稳定契约。
 
 ## 12. 一句话结论
 
@@ -453,6 +521,9 @@ SwarmRuntime / WebTorrent / Backfill
 
 - [Video.js v10 Beta: Hello, World (again)](https://videojs.org/blog/videojs-v10-beta-hello-world-again)
 - [Video.js v10 Roadmap](https://videojs.org/docs/framework/react/concepts/v10-roadmap)
+- [Video.js v10 Installation](https://videojs.org/docs/framework/react/how-to/installation)
+- [Video.js v10 Overview](https://videojs.org/docs/framework/react/concepts/overview)
+- [Video.js HTML Player Container](https://videojs.org/docs/framework/html/reference/player-container)
 - [videojs/v10 CHANGELOG.md](https://github.com/videojs/v10/blob/main/CHANGELOG.md)
 - [hls.js 官方仓库](https://github.com/video-dev/hls.js/)
 - [P2P Media Loader 官方文档](https://novage.github.io/p2p-media-loader/docs/v2.2/)
