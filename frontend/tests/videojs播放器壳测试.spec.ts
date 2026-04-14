@@ -34,6 +34,7 @@ describe("Video.js 播放器壳", () => {
     const loadHlsConstructor = vi.fn(async () => {
       throw new Error("file 首播阶段不该提前加载 hls.js");
     });
+    const 挂接P2PHls增强层 = vi.fn();
 
     const shell = await 创建VideoJs播放器壳(
       {
@@ -47,10 +48,12 @@ describe("Video.js 播放器壳", () => {
         createPlayer: () => 创建假播放器根(),
         registerVideoJsElements: async () => undefined,
         loadHlsConstructor,
+        挂接P2PHls增强层,
       }
     );
 
     expect(loadHlsConstructor).not.toHaveBeenCalled();
+    expect(挂接P2PHls增强层).not.toHaveBeenCalled();
 
     shell.destroy();
   });
@@ -105,6 +108,111 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
 
     expect(destroyHls).toHaveBeenCalledTimes(1);
+  });
+
+  it("p2p-media-loader-hlsjs 只能作为壳外增强挂到 HLS provider，不进入 file/blob 首播必经路径", async () => {
+    const attachMedia = vi.fn();
+    const loadSource = vi.fn();
+    const 挂接P2PHls增强层 = vi.fn();
+
+    class 假Hls构造器 {
+      static isSupported() {
+        return true;
+      }
+
+      attachMedia = attachMedia;
+      loadSource = loadSource;
+      destroy = vi.fn();
+    }
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-p2p-file-1",
+        posterSrc: "http://media.local/poster-p2p-file-1.jpg",
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => 创建假播放器根(),
+        registerVideoJsElements: async () => undefined,
+        loadHlsConstructor: async () => 假Hls构造器 as never,
+        挂接P2PHls增强层,
+      }
+    );
+
+    expect(挂接P2PHls增强层).not.toHaveBeenCalled();
+
+    shell.同步({
+      kind: "hls",
+      src: "http://media.local/stream/videojs-p2p-1/master.m3u8",
+      posterSrc: "http://media.local/poster-p2p-1.jpg",
+      width: 1280,
+      height: 720,
+    });
+    await Promise.resolve();
+
+    expect(attachMedia).toHaveBeenCalledTimes(1);
+    expect(loadSource).toHaveBeenCalledWith("http://media.local/stream/videojs-p2p-1/master.m3u8");
+    expect(挂接P2PHls增强层).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
+
+    shell.destroy();
+  });
+
+  it("壳外 P2P HLS 增强挂接失败时，HLS 首播仍然要继续，不允许把增强层变成必经主链", async () => {
+    const attachMedia = vi.fn();
+    const loadSource = vi.fn();
+    const 挂接P2PHls增强层 = vi.fn(async () => {
+      throw new Error("p2p enhancer should not block startup");
+    });
+
+    class 假Hls构造器 {
+      static isSupported() {
+        return true;
+      }
+
+      attachMedia = attachMedia;
+      loadSource = loadSource;
+      destroy = vi.fn();
+    }
+
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "hls",
+        src: "http://media.local/stream/videojs-p2p-startup-1/master.m3u8",
+        posterSrc: null,
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => 创建假播放器根(),
+        registerVideoJsElements: async () => undefined,
+        loadHlsConstructor: async () => 假Hls构造器 as never,
+        挂接P2PHls增强层,
+      }
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(attachMedia).toHaveBeenCalledTimes(1);
+    expect(loadSource).toHaveBeenCalledWith(
+      "http://media.local/stream/videojs-p2p-startup-1/master.m3u8"
+    );
+    expect(挂接P2PHls增强层).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "[koko:videojs-shell:p2p-enhancer]",
+      expect.objectContaining({
+        src: "http://media.local/stream/videojs-p2p-startup-1/master.m3u8",
+      }),
+      expect.any(Error)
+    );
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
+
+    shell.destroy();
   });
 
   it("native fullscreen 只是同一壳实例的展示策略，不创建第二个 video 元素", async () => {

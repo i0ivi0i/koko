@@ -1,4 +1,5 @@
 type Hls构造器 = typeof import("hls.js").default;
+type Hls播放器源描述 = Extract<VideoJs播放器源描述, { kind: "hls" }>;
 
 export type VideoJs播放器源描述 =
   | {
@@ -53,6 +54,18 @@ export type VideoJs播放器壳依赖 = {
    */
   createPlayer?: (source: VideoJs播放器源描述) => VideoJs播放器根节点;
   loadHlsConstructor?: () => Promise<Hls构造器>;
+  /**
+   * `p2p-media-loader-hlsjs` 这类增强层只能从壳外挂进来。
+   * 壳层只给出可选挂点，不在这里直接 import 具体增强库，
+   * 这样才能持续保证“增强层不是正式首播必经路径”。
+   */
+  挂接P2PHls增强层?: (input: {
+    hls: InstanceType<Hls构造器>;
+    video: 可原生全屏视频元素;
+    provider: HTMLElement;
+    container: 可请求全屏容器;
+    source: Hls播放器源描述;
+  }) => void | Promise<void>;
   mountTarget?: HTMLElement;
 };
 
@@ -134,6 +147,7 @@ export async function 创建VideoJs播放器壳(
   let 已销毁 = false;
   let hls构造器Promise: Promise<Hls构造器> | null = null;
   let hls实例: InstanceType<Hls构造器> | null = null;
+  let 已挂接P2PHls增强层 = false;
 
   const 销毁Hls实例 = (): void => {
     if (!hls实例) {
@@ -154,13 +168,37 @@ export async function 创建VideoJs播放器壳(
 
   const 应用文件源 = (source: VideoJs播放器源描述): void => {
     销毁Hls实例();
+    已挂接P2PHls增强层 = false;
     if (root.video.src !== source.src) {
       root.video.src = source.src;
     }
   };
 
+  const 尝试挂接壳外P2PHls增强层 = (source: Hls播放器源描述): void => {
+    if (!hls实例 || 已挂接P2PHls增强层 || !deps.挂接P2PHls增强层) {
+      return;
+    }
+    已挂接P2PHls增强层 = true;
+    /**
+     * 这里绝不 await。
+     * 正式主链先 attach/loadSource；增强层后挂且可失败。
+     * 如果增强挂接失败，只允许降级成“没有 P2P 增强”，不能把首播一起拖死。
+     */
+    void Promise.resolve(
+      deps.挂接P2PHls增强层({
+        hls: hls实例,
+        video: root.video,
+        provider: root.provider,
+        container: root.container,
+        source,
+      })
+    ).catch((error: unknown) => {
+      console.warn("[koko:videojs-shell:p2p-enhancer]", { src: source.src }, error);
+    });
+  };
+
   const 应用Hls源 = async (
-    source: VideoJs播放器源描述,
+    source: Hls播放器源描述,
     previousSource: VideoJs播放器源描述 | null
   ): Promise<void> => {
     const Hls = await 读取Hls构造器();
@@ -169,6 +207,7 @@ export async function 创建VideoJs播放器壳(
         hls实例 = new Hls();
         hls实例.attachMedia(root.video);
       }
+      尝试挂接壳外P2PHls增强层(source);
       /**
        * HLS 主链同步必须只在正式源变化时重载。
        * 否则媒体会话每次投影快照，都会把同一条 manifest 重新 loadSource 一遍，
