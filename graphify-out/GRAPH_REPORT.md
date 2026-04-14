@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-14)
 
 ## Corpus Check
-- 157 files · ~165,292 words
+- 159 files · ~168,035 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 315 nodes · 390 edges · 25 communities detected
+- 320 nodes · 394 edges · 27 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -35,6 +35,8 @@
 - [[_COMMUNITY_Community 22|Community 22]]
 - [[_COMMUNITY_Community 23|Community 23]]
 - [[_COMMUNITY_Community 24|Community 24]]
+- [[_COMMUNITY_Community 25|Community 25]]
+- [[_COMMUNITY_Community 26|Community 26]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 24 edges
@@ -64,19 +66,19 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (40): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+32 more)
+Nodes (39): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+31 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.05
-Nodes (6): flush(), make_writer(), 最小mp4字节(), 插入ready图片附件记录(), 会话所属匿名身份返回内部uuid而不是兼容旧串(), write()
+Nodes (6): flush(), make_writer(), 最小mp4字节(), 插入ready图片附件记录(), realtime连接认证异步用例会放行有效会话(), write()
 
 ### Community 2 - "Community 2"
 Cohesion: 0.06
-Nodes (16): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), 重写_hls清单内容(), leaveCurrentRoomView(), render() (+8 more)
+Nodes (16): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), render(), renderMessageAttachments() (+8 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.06
-Nodes (8): AdminLoginBody, AdminLoginResp, 尝试加载dotenv(), 读取exif方向(), 安装panic日志钩子(), RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody
+Nodes (8): AdminLoginBody, AdminLoginResp, 尝试加载dotenv(), 读取exif方向(), RealtimeConnectAuth, RealtimeCreateMessageBody, RealtimeSubscribeBody, 构建_s3客户端()
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
@@ -91,8 +93,8 @@ Cohesion: 0.15
 Nodes (1): HttpRealtime传输
 
 ### Community 7 - "Community 7"
-Cohesion: 0.14
-Nodes (3): FakeWebTorrent, 假Hls构造器, 假Socket
+Cohesion: 0.15
+Nodes (2): FakeWebTorrent, 假Socket
 
 ### Community 8 - "Community 8"
 Cohesion: 0.23
@@ -111,16 +113,16 @@ Cohesion: 0.5
 Nodes (0): 
 
 ### Community 12 - "Community 12"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): 假Hls构造器
 
 ### Community 13 - "Community 13"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): Pg仓储
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
@@ -128,7 +130,7 @@ Nodes (0):
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (2): 文本布局, 文本布局测试
+Nodes (0): 
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
@@ -136,19 +138,19 @@ Nodes (0):
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
-Nodes (1): frontend/房间内核.ts
+Nodes (2): 文本布局, 文本布局测试
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (1): frontend/存储.ts
+Nodes (0): 
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): frontend/房间内核.ts
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): frontend/存储.ts
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
@@ -162,42 +164,50 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
+### Community 25 - "Community 25"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 26 - "Community 26"
+Cohesion: 1.0
+Nodes (0): 
+
 ## Knowledge Gaps
 - **23 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `RustusHookBody` (+18 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 13`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 15`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 16`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
+- **Thin community `Community 17`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `文本布局`, `文本布局测试`
+- **Thin community `Community 18`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (1 nodes): `css.d.ts`
+- **Thin community `Community 19`** (1 nodes): `css.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (1 nodes): `frontend/房间内核.ts`
+- **Thin community `Community 20`** (1 nodes): `frontend/房间内核.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (1 nodes): `frontend/存储.ts`
+- **Thin community `Community 21`** (1 nodes): `frontend/存储.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (1 nodes): `blob媒体资产测试.spec.ts`
+- **Thin community `Community 22`** (1 nodes): `blob媒体资产测试.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 21`** (1 nodes): `vitest.config.ts`
+- **Thin community `Community 23`** (1 nodes): `vitest.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (1 nodes): `lib.rs`
+- **Thin community `Community 24`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (1 nodes): `up.ps1`
+- **Thin community `Community 25`** (1 nodes): `up.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (1 nodes): `webtorrent.d.ts`
+- **Thin community `Community 26`** (1 nodes): `webtorrent.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 6` to `Community 2`?**
-  _High betweenness centrality (0.112) - this node is a cross-community bridge._
+  _High betweenness centrality (0.109) - this node is a cross-community bridge._
 - **Why does `构造rustus_hook请求体()` connect `Community 8` to `Community 1`?**
-  _High betweenness centrality (0.070) - this node is a cross-community bridge._
-- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 3`?**
+  _High betweenness centrality (0.068) - this node is a cross-community bridge._
+- **Why does `协作分发torrent元信息写入请求` connect `Community 2` to `Community 0`, `Community 3`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局` to the rest of the system?**
   _23 weakly-connected nodes found - possible documentation gaps or missing edges._

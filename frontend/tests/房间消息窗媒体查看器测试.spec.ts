@@ -128,7 +128,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("点击媒体入口后，消息窗内部仍然不会偷偷创建正式播放器节点", async () => {
+  it("点击媒体入口后，消息窗内部仍然不会偷偷创建正式播放器壳", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
@@ -158,8 +158,7 @@ describe("房间消息窗媒体查看器", () => {
     await pane.updateComplete;
 
     // 消息窗只负责预览与查看器意图，不允许自己长成第二套正式播放器实现。
-    expect(pane.querySelector("media-player[data-media-viewer-player='video']")).toBeNull();
-    expect(pane.querySelector("video[data-media-viewer-player='hls']")).toBeNull();
+    expect(pane.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
 
     pane.remove();
   });

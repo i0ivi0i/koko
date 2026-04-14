@@ -253,7 +253,7 @@ describe("媒体查看器适配器", () => {
     expect(consoleError).toHaveBeenCalledWith("打开媒体查看器失败", error);
   });
 
-  it("公开依赖只剩 createVideoJsPlayerShell，不再接受 HLS/Vidstack/native 三套工厂", async () => {
+  it("公开主链只剩单一 Video.js 壳，视频打开不会再分叉成第二套正式实现", async () => {
     const createPhotoSwipeLightbox = vi.fn(() => ({
       init: vi.fn(),
       loadAndOpen: vi.fn(),
@@ -263,17 +263,11 @@ describe("媒体查看器适配器", () => {
       destroy: vi.fn(),
       同步: vi.fn(),
     }));
-    const createHlsVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const openNativeVideoFullscreen = vi.fn(() => ({ destroy: vi.fn() }));
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
       createVideoJsPlayerShell,
-      createHlsVideoOverlay,
-      createVidstackVideoOverlay,
-      openNativeVideoFullscreen,
       isMobileViewport: () => false,
-    } as never);
+    });
 
     viewer.打开({
       startAttachmentId: "att-video-single-shell-1",
@@ -292,13 +286,10 @@ describe("媒体查看器适配器", () => {
     await Promise.resolve();
 
     expect(createVideoJsPlayerShell).toHaveBeenCalledTimes(1);
-    expect(createHlsVideoOverlay).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
-    expect(openNativeVideoFullscreen).not.toHaveBeenCalled();
     expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
   });
 
-  it("桌面端视频会进入同一个 Video.js 壳，而不是再分成 HLS/Vidstack 两条正式实现", async () => {
+  it("桌面端视频会进入同一个 Video.js 壳，而不是再分成多条正式实现", async () => {
     const viewer = 创建媒体查看器({
       isMobileViewport: () => false,
     });
@@ -321,12 +312,10 @@ describe("媒体查看器适配器", () => {
 
     expect(provider).not.toBeNull();
     expect(video).toBeInstanceOf(HTMLVideoElement);
-    expect(
-      document.body.querySelector("media-player[data-media-viewer-player='video']")
-    ).toBeNull();
-    expect(
-      document.body.querySelector("video[data-media-viewer-player='hls']")
-    ).toBeNull();
+    expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
+      1
+    );
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
   it("manifest 视频也会进入同一个 Video.js 壳，不再单独拉起 HLS overlay", async () => {
@@ -445,12 +434,9 @@ describe("媒体查看器适配器", () => {
     expect(video).toBeInstanceOf(HTMLVideoElement);
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
-    expect(
-      document.body.querySelector("media-player[data-media-viewer-player='video']")
-    ).toBeNull();
-    expect(
-      document.body.querySelector("video[data-media-viewer-player='hls']")
-    ).toBeNull();
+    expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
+      1
+    );
   });
 
   it("竖屏视频进入移动端全屏时锁定 portrait，并在元数据更可信时纠正方向", async () => {
