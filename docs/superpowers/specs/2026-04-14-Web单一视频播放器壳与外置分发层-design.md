@@ -8,7 +8,7 @@
 
 - `docs/superpowers/specs/2026-04-13-群聊媒体实时收发全链路TDD疏通-design.md`
 - `docs/superpowers/specs/2026-04-13-跨端志愿者媒体资产与P2P分发协议-design.md`
-- `docs/superpowers/plans/2026-04-14-群聊视频查看器黑屏转圈修复计划.md`
+- `docs/superpowers/plans/2026-04-14-Web单一视频播放器壳迁移与双壳退场实施计划.md`
 - `学习/整理笔记/Video.js-v10-beta-播放器候选笔记.md`
 
 ## 1. 为什么要单独写这份 spec
