@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { 创建媒体查看器, 创建默认Hls视频覆盖层 } from "../媒体/媒体查看器";
+import { 创建媒体查看器 } from "../媒体/媒体查看器";
 
 const 安装方向模拟 = () => {
   const lock = vi.fn(() => Promise.resolve());
@@ -82,10 +82,10 @@ describe("媒体查看器适配器", () => {
       loadAndOpen,
       destroy,
     }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
+    const createVideoJsPlayerShell = vi.fn(() => ({ destroy: vi.fn(), 同步: vi.fn() }));
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
-      createVidstackVideoOverlay,
+      createVideoJsPlayerShell,
     });
 
     viewer.打开({
@@ -102,7 +102,7 @@ describe("媒体查看器适配器", () => {
         {
           kind: "video",
           attachmentId: "att-video-1",
-          src: "blob:http://media.local/webtorrent-video-1",
+          src: "blob:http://media.local/video-1",
           posterSrc: "http://media.local/poster-video-1",
           width: 1280,
           height: 720,
@@ -138,8 +138,8 @@ describe("媒体查看器适配器", () => {
     );
     expect(init).toHaveBeenCalled();
     expect(loadAndOpen).toHaveBeenCalledWith(1);
+    expect(createVideoJsPlayerShell).not.toHaveBeenCalled();
     expect(destroy).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
   it("图片查看器打开完整图片时会先进入 backfilling，加载完成后再标记 complete", () => {
@@ -155,7 +155,7 @@ describe("媒体查看器适配器", () => {
     }));
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
-      createVidstackVideoOverlay: vi.fn(() => ({ destroy: vi.fn() })),
+      createVideoJsPlayerShell: vi.fn(() => ({ destroy: vi.fn(), 同步: vi.fn() })),
       onMediaSessionSignal: (attachmentId, signal) => {
         信号记录.push({ attachmentId, signal });
       },
@@ -215,7 +215,7 @@ describe("媒体查看器适配器", () => {
       createPhotoSwipeLightbox: () => {
         throw error;
       },
-      createVidstackVideoOverlay: vi.fn(() => ({ destroy: vi.fn() })),
+      createVideoJsPlayerShell: vi.fn(() => ({ destroy: vi.fn(), 同步: vi.fn() })),
       onViewportCaptureStart,
       onViewportCaptureEnd,
     });
@@ -243,595 +243,110 @@ describe("媒体查看器适配器", () => {
     expect(consoleError).toHaveBeenCalledWith("打开媒体查看器失败", error);
   });
 
-  it("移动触屏端点击视频会优先进入原生全屏播放，不再打开桌面查看器", () => {
+  it("公开依赖只剩 createVideoJsPlayerShell，不再接受 HLS/Vidstack/native 三套工厂", async () => {
     const createPhotoSwipeLightbox = vi.fn(() => ({
       init: vi.fn(),
       loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
+    const createVideoJsPlayerShell = vi.fn(() => ({
+      destroy: vi.fn(),
+      同步: vi.fn(),
+    }));
+    const createHlsVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
     const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const openNativeVideoFullscreen = vi.fn(() => true);
+    const openNativeVideoFullscreen = vi.fn(() => ({ destroy: vi.fn() }));
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
+      createVideoJsPlayerShell,
+      createHlsVideoOverlay,
       createVidstackVideoOverlay,
-      isMobileViewport: () => true,
       openNativeVideoFullscreen,
-    });
+      isMobileViewport: () => false,
+    } as never);
 
     viewer.打开({
-      startAttachmentId: "att-video-vertical-1",
+      startAttachmentId: "att-video-single-shell-1",
       items: [
         {
           kind: "video",
-          attachmentId: "att-video-vertical-1",
-          src: "blob:http://media.local/webtorrent-vertical-video-1",
-          posterSrc: null,
-          width: 720,
-          height: 1280,
+          attachmentId: "att-video-single-shell-1",
+          src: "http://media.local/stream/att-video-single-shell-1/master.m3u8",
+          posterSrc: "http://media.local/poster-single-shell-1",
+          width: 1280,
+          height: 720,
         },
       ],
     });
+    await Promise.resolve();
+    await Promise.resolve();
 
-    expect(openNativeVideoFullscreen).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-vertical-1",
-        kind: "video",
-        src: "blob:http://media.local/webtorrent-vertical-video-1",
-        width: 720,
-        height: 1280,
-      }),
-      expect.objectContaining({
-        开始视口占用: expect.any(Function),
-        结束视口占用: expect.any(Function),
-      }),
-      expect.objectContaining({
-        发出媒体会话信号: expect.any(Function),
-      })
-    );
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(createVideoJsPlayerShell).toHaveBeenCalledTimes(1);
+    expect(createHlsVideoOverlay).not.toHaveBeenCalled();
     expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
+    expect(openNativeVideoFullscreen).not.toHaveBeenCalled();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
   });
 
-  it("默认原生全屏路径创建可见的全屏视频元素，不能把真正播放层藏成 1px", () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
-      destroy: vi.fn(),
-    }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const { requestFullscreen } = 安装全屏DOM模拟();
+  it("桌面端视频会进入同一个 Video.js 壳，而不是再分成 HLS/Vidstack 两条正式实现", async () => {
     const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createVidstackVideoOverlay,
-      isMobileViewport: () => true,
+      isMobileViewport: () => false,
     });
 
     viewer.打开({
-      startAttachmentId: "att-video-mobile-visible-1",
+      startAttachmentId: "att-video-desktop-1",
       items: [
         {
           kind: "video",
-          attachmentId: "att-video-mobile-visible-1",
-          src: "blob:http://media.local/mobile-visible-video-1",
-          posterSrc: "http://media.local/poster-mobile-visible-1",
-          width: 720,
-          height: 1280,
+          attachmentId: "att-video-desktop-1",
+          src: "blob:http://media.local/video-desktop-1",
+          posterSrc: "http://media.local/poster-desktop-1",
+          width: 1280,
+          height: 720,
         },
       ],
     });
-
+    const provider = await 等待查询元素<HTMLElement>("video-player[data-player-shell='videojs']");
     const video = document.body.querySelector("video");
+
+    expect(provider).not.toBeNull();
     expect(video).toBeInstanceOf(HTMLVideoElement);
-    expect(video?.style.width).toBe("100vw");
-    expect(video?.style.height).toBe("100vh");
-    expect(video?.style.opacity).not.toBe("0");
-    expect(video?.style.objectFit).toBe("contain");
-    expect(requestFullscreen).toHaveBeenCalled();
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
-  });
-
-  it("竖屏视频进入移动端全屏时锁定 portrait，不再沿用浏览器默认横屏策略", async () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
-      destroy: vi.fn(),
-    }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const { requestFullscreen } = 安装全屏DOM模拟();
-    const { lock } = 安装方向模拟();
-    const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createVidstackVideoOverlay,
-      isMobileViewport: () => true,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-portrait-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-portrait-1",
-          src: "blob:http://media.local/portrait-video-1",
-          posterSrc: null,
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-    await Promise.resolve();
-
-    expect(requestFullscreen).toHaveBeenCalled();
-    expect(lock).toHaveBeenCalledWith("portrait");
-    expect(document.body.querySelector("[data-video-orientation='portrait']")).not.toBeNull();
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
-  });
-
-  it("移动端视频会用浏览器元数据纠正后端旧横屏宽高，避免竖拍视频继续锁横屏", async () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
-      destroy: vi.fn(),
-    }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    安装全屏DOM模拟();
-    const { lock } = 安装方向模拟();
-    const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createVidstackVideoOverlay,
-      isMobileViewport: () => true,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-legacy-rotated-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-legacy-rotated-1",
-          src: "blob:http://media.local/legacy-rotated-video-1",
-          posterSrc: null,
-          width: 1920,
-          height: 1080,
-        },
-      ],
-    });
-    await Promise.resolve();
-
-    const video = document.body.querySelector("video");
-    expect(video).toBeInstanceOf(HTMLVideoElement);
-    Object.defineProperty(video, "videoWidth", { configurable: true, value: 1080 });
-    Object.defineProperty(video, "videoHeight", { configurable: true, value: 1920 });
-    video?.dispatchEvent(new Event("loadedmetadata"));
-    await Promise.resolve();
-
-    expect(lock).toHaveBeenLastCalledWith("portrait");
-    expect(document.body.querySelector("[data-video-orientation='portrait']")).not.toBeNull();
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
-  });
-
-  it("移动端原生全屏路径不会顺手创建桌面播放器覆盖层节点", async () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
-      destroy: vi.fn(),
-    }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    安装全屏DOM模拟();
-    const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createVidstackVideoOverlay,
-      isMobileViewport: () => true,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-mobile-no-desktop-overlay-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-mobile-no-desktop-overlay-1",
-          src: "blob:http://media.local/mobile-no-desktop-overlay-1",
-          posterSrc: "http://media.local/poster-mobile-no-desktop-overlay-1",
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-    await Promise.resolve();
-
     expect(
       document.body.querySelector("media-player[data-media-viewer-player='video']")
     ).toBeNull();
     expect(
       document.body.querySelector("video[data-media-viewer-player='hls']")
     ).toBeNull();
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
-  it("手机返回键触发 popstate 时只退出媒体全屏会话，并清理方向锁回到聊天界面", async () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
+  it("manifest 视频也会进入同一个 Video.js 壳，不再单独拉起 HLS overlay", async () => {
+    const createVideoJsPlayerShell = vi.fn(() => ({
       destroy: vi.fn(),
+      同步: vi.fn(),
     }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const pushState = vi.spyOn(history, "pushState");
-    const { exitFullscreen, pause } = 安装全屏DOM模拟();
-    const { unlock } = 安装方向模拟();
     const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createVidstackVideoOverlay,
-      isMobileViewport: () => true,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-back-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-back-1",
-          src: "blob:http://media.local/back-video-1",
-          posterSrc: null,
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-    await Promise.resolve();
-    expect(document.body.querySelector("video")).not.toBeNull();
-
-    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
-    await Promise.resolve();
-
-    expect(pushState).toHaveBeenCalledWith(
-      expect.objectContaining({ __kokoMediaFullscreenSession: expect.any(String) }),
-      "",
-      expect.any(String)
-    );
-    expect(exitFullscreen).toHaveBeenCalled();
-    expect(unlock).toHaveBeenCalled();
-    expect(pause).toHaveBeenCalled();
-    expect(document.body.querySelector("video")).toBeNull();
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
-  });
-
-  it("桌面端视频交给 Vidstack 播放层，并保留真实宽高给播放器布局", () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
-      destroy: vi.fn(),
-    }));
-    const vidstackDestroy = vi.fn();
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vidstackDestroy }));
-    const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createVidstackVideoOverlay,
+      createVideoJsPlayerShell,
       isMobileViewport: () => false,
     });
 
     viewer.打开({
-      startAttachmentId: "att-video-vertical-1",
+      startAttachmentId: "att-video-manifest-1",
       items: [
         {
           kind: "video",
-          attachmentId: "att-video-vertical-1",
-          src: "blob:http://media.local/webtorrent-vertical-video-1",
-          posterSrc: null,
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-
-    expect(createVidstackVideoOverlay).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-vertical-1",
-        kind: "video",
-        src: "blob:http://media.local/webtorrent-vertical-video-1",
-        width: 720,
-        height: 1280,
-      }),
-      expect.objectContaining({
-        开始视口占用: expect.any(Function),
-        结束视口占用: expect.any(Function),
-      }),
-      expect.objectContaining({
-        发出媒体会话信号: expect.any(Function),
-      })
-    );
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-    expect(vidstackDestroy).not.toHaveBeenCalled();
-  });
-
-  it("桌面 HLS 视频会交给独立 HLS overlay，而不是继续复用 Vidstack 主链", () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
-      destroy: vi.fn(),
-    }));
-    const createHlsVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createHlsVideoOverlay,
-      createVidstackVideoOverlay,
-      isMobileViewport: () => false,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-hls-provider-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-hls-provider-1",
-          src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
-          posterSrc: "http://media.local/poster-hls-provider-1",
-          streamingDistribution: {
-            swarm_id: "swarm-hash-att-video-hls-provider-1",
-            announce_urls: ["wss://tracker.koko.local/announce"],
-            web_seed_url: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
-            join_ticket: null,
-          },
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-
-    expect(createHlsVideoOverlay).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-hls-provider-1",
-        src: "http://media.local/stream/att-video-hls-provider-1/master.m3u8",
-      }),
-      expect.objectContaining({
-        开始视口占用: expect.any(Function),
-        结束视口占用: expect.any(Function),
-      }),
-      expect.objectContaining({
-        发出媒体会话信号: expect.any(Function),
-      })
-    );
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-  });
-
-  it("默认 HLS overlay 会先 attachMedia 再 loadSource，并在销毁时释放 hls 实例", async () => {
-    const attachMedia = vi.fn();
-    const loadSource = vi.fn();
-    const destroy = vi.fn();
-    const on = vi.fn();
-    class 假Hls构造器 {
-      static isSupported() {
-        return true;
-      }
-
-      static Events = {
-        MANIFEST_PARSED: "manifestParsed",
-        ERROR: "error",
-      };
-
-      attachMedia = attachMedia;
-      loadSource = loadSource;
-      destroy = destroy;
-      on = on;
-    }
-
-    const overlay = await 创建默认Hls视频覆盖层(
-      {
-        kind: "video",
-        attachmentId: "att-video-hls-overlay-1",
-        src: "http://media.local/stream/att-video-hls-overlay-1/master.m3u8",
-        posterSrc: "http://media.local/poster-hls-overlay-1",
-        width: 720,
-        height: 1280,
-      },
-      {
-        开始视口占用: vi.fn(),
-        结束视口占用: vi.fn(),
-      },
-      {
-        发出媒体会话信号: vi.fn(),
-      },
-      {
-        loadHlsConstructor: async () => 假Hls构造器 as never,
-      }
-    );
-
-    expect(attachMedia).toHaveBeenCalledTimes(1);
-    expect(loadSource).toHaveBeenCalledWith(
-      "http://media.local/stream/att-video-hls-overlay-1/master.m3u8"
-    );
-    const attachOrder = attachMedia.mock.invocationCallOrder[0];
-    const loadOrder = loadSource.mock.invocationCallOrder[0];
-    expect(attachOrder).toBeDefined();
-    expect(loadOrder).toBeDefined();
-    expect(attachOrder!).toBeLessThan(loadOrder!);
-
-    overlay.destroy();
-
-    expect(destroy).toHaveBeenCalledTimes(1);
-  });
-
-  it("默认 HLS overlay 在同步相同 manifest 时不会重复 loadSource，只有主链变化时才重载", async () => {
-    const attachMedia = vi.fn();
-    const loadSource = vi.fn();
-    const destroy = vi.fn();
-    const on = vi.fn();
-    class 假Hls构造器 {
-      static isSupported() {
-        return true;
-      }
-
-      static Events = {
-        MANIFEST_PARSED: "manifestParsed",
-        ERROR: "error",
-      };
-
-      attachMedia = attachMedia;
-      loadSource = loadSource;
-      destroy = destroy;
-      on = on;
-    }
-
-    const overlay = await 创建默认Hls视频覆盖层(
-      {
-        kind: "video",
-        attachmentId: "att-video-hls-overlay-stable-1",
-        src: "http://media.local/stream/att-video-hls-overlay-stable-1/master.m3u8",
-        posterSrc: "http://media.local/poster-hls-overlay-stable-old",
-        width: 720,
-        height: 1280,
-      },
-      {
-        开始视口占用: vi.fn(),
-        结束视口占用: vi.fn(),
-      },
-      {
-        发出媒体会话信号: vi.fn(),
-      },
-      {
-        loadHlsConstructor: async () => 假Hls构造器 as never,
-      }
-    );
-
-    expect(loadSource).toHaveBeenCalledTimes(1);
-
-    overlay.同步?.({
-      kind: "video",
-      attachmentId: "att-video-hls-overlay-stable-1",
-      src: "http://media.local/stream/att-video-hls-overlay-stable-1/master.m3u8",
-      posterSrc: "http://media.local/poster-hls-overlay-stable-new",
-      width: 720,
-      height: 1280,
-    });
-
-    expect(loadSource).toHaveBeenCalledTimes(1);
-
-    overlay.同步?.({
-      kind: "video",
-      attachmentId: "att-video-hls-overlay-stable-1",
-      src: "http://media.local/stream/att-video-hls-overlay-stable-1-retry/master.m3u8",
-      posterSrc: "http://media.local/poster-hls-overlay-stable-new",
-      width: 720,
-      height: 1280,
-    });
-
-    expect(loadSource).toHaveBeenCalledTimes(2);
-    expect(loadSource).toHaveBeenNthCalledWith(
-      2,
-      "http://media.local/stream/att-video-hls-overlay-stable-1-retry/master.m3u8"
-    );
-
-    overlay.destroy();
-    expect(destroy).toHaveBeenCalledTimes(1);
-  });
-
-  it("HLS overlay 会把 waiting 信号回抛给媒体会话，并在同步时切到新的 manifest 主链", async () => {
-    const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
-    const viewer = 创建媒体查看器({
-      isMobileViewport: () => false,
-      onMediaSessionSignal: (attachmentId, signal) => {
-        信号记录.push({ attachmentId, signal });
-      },
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-hls-sync-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-hls-sync-1",
-          src: "http://media.local/stream/att-video-hls-sync-1/master.m3u8",
-          posterSrc: "http://media.local/poster-hls-sync-old",
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-    const video = await 等待查询元素<HTMLVideoElement>("video[data-media-viewer-player='hls']");
-    expect(video).not.toBeNull();
-
-    video?.dispatchEvent(new Event("waiting"));
-    expect(信号记录).toEqual([
-      {
-        attachmentId: "att-video-hls-sync-1",
-        signal: { type: "PLAYER_WAITING" },
-      },
-    ]);
-
-    viewer.同步({
-      startAttachmentId: "att-video-hls-sync-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-hls-sync-1",
-          src: "http://media.local/stream/att-video-hls-sync-1-retry/master.m3u8",
-          posterSrc: "http://media.local/poster-hls-sync-new",
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-
-    expect(video?.poster).toBe("http://media.local/poster-hls-sync-new");
-  });
-
-  it("视频查看器如果先按旧 video overlay 打开，随后切到 HLS manifest 时会重建为 HLS overlay", async () => {
-    const 旧视频查看器销毁 = vi.fn();
-    const 旧视频查看器同步 = vi.fn();
-    const 新Hls查看器销毁 = vi.fn();
-    const createVidstackVideoOverlay = vi.fn(() => ({
-      同步: 旧视频查看器同步,
-      destroy: 旧视频查看器销毁,
-    }));
-    const createHlsVideoOverlay = vi.fn(() => ({
-      destroy: 新Hls查看器销毁,
-    }));
-    const viewer = 创建媒体查看器({
-      isMobileViewport: () => false,
-      createVidstackVideoOverlay,
-      createHlsVideoOverlay,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-rebuild-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-rebuild-1",
-          src: "http://media.local/original-att-video-rebuild-1",
-          posterSrc: "http://media.local/poster-video-rebuild-1",
+          attachmentId: "att-video-manifest-1",
+          src: "http://media.local/stream/att-video-manifest-1/master.m3u8",
+          posterSrc: "http://media.local/poster-manifest-1",
           width: 1280,
           height: 720,
         },
       ],
     });
 
-    viewer.同步({
-      startAttachmentId: "att-video-rebuild-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-rebuild-1",
-          src: "http://media.local/stream/att-video-rebuild-1/master.m3u8",
-          posterSrc: "http://media.local/poster-video-rebuild-1",
-          width: 1280,
-          height: 720,
-        },
-      ],
-    });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(旧视频查看器销毁).toHaveBeenCalledTimes(1);
-    expect(旧视频查看器同步).not.toHaveBeenCalled();
-    expect(createHlsVideoOverlay).toHaveBeenCalledWith(
+    expect(createVideoJsPlayerShell).toHaveBeenCalledWith(
       expect.objectContaining({
-        attachmentId: "att-video-rebuild-1",
-        src: "http://media.local/stream/att-video-rebuild-1/master.m3u8",
+        attachmentId: "att-video-manifest-1",
+        src: "http://media.local/stream/att-video-manifest-1/master.m3u8",
       }),
       expect.objectContaining({
         开始视口占用: expect.any(Function),
@@ -841,106 +356,9 @@ describe("媒体查看器适配器", () => {
         发出媒体会话信号: expect.any(Function),
       })
     );
-
-    viewer.销毁();
-    expect(新Hls查看器销毁).toHaveBeenCalledTimes(1);
   });
 
-  it("移动端遇到 HLS manifest 时不走原生全屏，而是交给独立 HLS overlay", () => {
-    const createPhotoSwipeLightbox = vi.fn(() => ({
-      init: vi.fn(),
-      loadAndOpen: vi.fn(),
-      destroy: vi.fn(),
-    }));
-    const createHlsVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
-    const openNativeVideoFullscreen = vi.fn(() => true);
-    const viewer = 创建媒体查看器({
-      createPhotoSwipeLightbox,
-      createHlsVideoOverlay,
-      createVidstackVideoOverlay,
-      isMobileViewport: () => true,
-      openNativeVideoFullscreen,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-mobile-hls-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-mobile-hls-1",
-          src: "http://media.local/stream/att-video-mobile-hls-1/master.m3u8",
-          posterSrc: "http://media.local/poster-mobile-hls-1",
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-
-    expect(openNativeVideoFullscreen).not.toHaveBeenCalled();
-    expect(createHlsVideoOverlay).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-video-mobile-hls-1",
-        src: "http://media.local/stream/att-video-mobile-hls-1/master.m3u8",
-      }),
-      expect.objectContaining({
-        开始视口占用: expect.any(Function),
-        结束视口占用: expect.any(Function),
-      }),
-      expect.objectContaining({
-        发出媒体会话信号: expect.any(Function),
-      })
-    );
-    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
-    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
-  });
-
-  it("默认桌面视频路径会创建 Vidstack 播放元素，并在销毁时释放覆盖层", async () => {
-    const onViewportCaptureStart = vi.fn();
-    const onViewportCaptureEnd = vi.fn();
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const viewer = 创建媒体查看器({
-      isMobileViewport: () => false,
-      onViewportCaptureStart,
-      onViewportCaptureEnd,
-    });
-
-    viewer.打开({
-      startAttachmentId: "att-video-default-vidstack-1",
-      items: [
-        {
-          kind: "video",
-          attachmentId: "att-video-default-vidstack-1",
-          src: "blob:http://media.local/default-vidstack-video-1",
-          posterSrc: "http://media.local/default-vidstack-poster-1",
-          width: 720,
-          height: 1280,
-        },
-      ],
-    });
-    const player = await 等待查询元素<HTMLElement>(
-      "media-player[data-media-viewer-player='video']"
-    );
-    expect(consoleError).not.toHaveBeenCalled();
-    expect(player).not.toBeNull();
-    expect(player?.getAttribute("src")).toBe(
-      "blob:http://media.local/default-vidstack-video-1"
-    );
-    expect(player?.getAttribute("poster")).toBe(
-      "http://media.local/default-vidstack-poster-1"
-    );
-    expect(player?.getAttribute("aspect-ratio")).toBe("720/1280");
-    expect(onViewportCaptureStart).toHaveBeenCalledTimes(1);
-
-    viewer.销毁();
-
-    expect(
-      document.body.querySelector("media-player[data-media-viewer-player='video']")
-    ).toBeNull();
-    expect(onViewportCaptureEnd).toHaveBeenCalledTimes(1);
-  });
-
-  it("桌面视频覆盖层会把 waiting 信号回抛给媒体会话，并允许后续同步新的播放源", async () => {
+  it("视频壳会把 waiting 信号回抛给媒体会话，并允许后续同步新的播放源", async () => {
     const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
     const viewer = 创建媒体查看器({
       isMobileViewport: () => false,
@@ -962,12 +380,10 @@ describe("媒体查看器适配器", () => {
         },
       ],
     });
-    const player = await 等待查询元素<HTMLElement>(
-      "media-player[data-media-viewer-player='video']"
-    );
-    expect(player).not.toBeNull();
+    const video = await 等待查询元素<HTMLVideoElement>("video");
+    expect(video).not.toBeNull();
 
-    player?.dispatchEvent(new Event("waiting"));
+    video?.dispatchEvent(new Event("waiting"));
     expect(信号记录).toEqual([
       {
         attachmentId: "att-video-sync-1",
@@ -989,61 +405,116 @@ describe("媒体查看器适配器", () => {
       ],
     });
 
-    expect(player?.getAttribute("src")).toBe("blob:http://media.local/video-sync-new");
-    expect(player?.getAttribute("poster")).toBe("http://media.local/poster-sync-new");
+    expect(video?.src).toBe("blob:http://media.local/video-sync-new");
+    expect(video?.poster).toBe("http://media.local/poster-sync-new");
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
-  it("移动端原生全屏视频也会把播放器信号回抛，并在同步时切到新的播放源", async () => {
-    const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
-    安装全屏DOM模拟();
+  it("移动端全屏策略仍复用同一个播放器会话，不会额外创建第二颗 video", async () => {
+    const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({
       isMobileViewport: () => true,
-      onMediaSessionSignal: (attachmentId, signal) => {
-        信号记录.push({ attachmentId, signal });
-      },
     });
 
     viewer.打开({
-      startAttachmentId: "att-video-mobile-sync-1",
+      startAttachmentId: "att-video-mobile-visible-1",
       items: [
         {
           kind: "video",
-          attachmentId: "att-video-mobile-sync-1",
-          src: "blob:http://media.local/mobile-sync-old",
-          posterSrc: "http://media.local/mobile-poster-old",
+          attachmentId: "att-video-mobile-visible-1",
+          src: "blob:http://media.local/mobile-visible-video-1",
+          posterSrc: "http://media.local/poster-mobile-visible-1",
           width: 720,
           height: 1280,
         },
       ],
     });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+
+    const video = document.body.querySelector("video");
+    expect(video).toBeInstanceOf(HTMLVideoElement);
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
+    expect(
+      document.body.querySelector("media-player[data-media-viewer-player='video']")
+    ).toBeNull();
+    expect(
+      document.body.querySelector("video[data-media-viewer-player='hls']")
+    ).toBeNull();
+  });
+
+  it("竖屏视频进入移动端全屏时锁定 portrait，并在元数据更可信时纠正方向", async () => {
+    安装全屏DOM模拟();
+    const { lock } = 安装方向模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-portrait-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-portrait-1",
+          src: "blob:http://media.local/portrait-video-1",
+          posterSrc: null,
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+
+    const container = document.body.querySelector("[data-video-orientation='portrait']");
+    expect(container).not.toBeNull();
+    expect(lock).toHaveBeenCalledWith("portrait");
+
+    const video = document.body.querySelector("video");
+    expect(video).toBeInstanceOf(HTMLVideoElement);
+    Object.defineProperty(video, "videoWidth", { configurable: true, value: 1080 });
+    Object.defineProperty(video, "videoHeight", { configurable: true, value: 1920 });
+    video?.dispatchEvent(new Event("loadedmetadata"));
     await Promise.resolve();
 
-    const video = document.body.querySelector<HTMLVideoElement>("video");
-    expect(video).not.toBeNull();
+    expect(lock).toHaveBeenLastCalledWith("portrait");
+  });
 
-    video?.dispatchEvent(new Event("stalled"));
-    expect(信号记录).toEqual([
-      {
-        attachmentId: "att-video-mobile-sync-1",
-        signal: { type: "PLAYER_STALLED" },
-      },
-    ]);
+  it("手机返回键触发 popstate 时只退出同一播放器会话，并清理方向锁回到聊天界面", async () => {
+    const pushState = vi.spyOn(history, "pushState");
+    const { exitFullscreen, pause } = 安装全屏DOM模拟();
+    const { unlock } = 安装方向模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
 
-    viewer.同步({
-      startAttachmentId: "att-video-mobile-sync-1",
+    viewer.打开({
+      startAttachmentId: "att-video-back-1",
       items: [
         {
           kind: "video",
-          attachmentId: "att-video-mobile-sync-1",
-          src: "blob:http://media.local/mobile-sync-new",
-          posterSrc: "http://media.local/mobile-poster-new",
+          attachmentId: "att-video-back-1",
+          src: "blob:http://media.local/back-video-1",
+          posterSrc: null,
           width: 720,
           height: 1280,
         },
       ],
     });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+    await Promise.resolve();
+    expect(document.body.querySelector("video")).not.toBeNull();
 
-    expect(video?.src).toBe("blob:http://media.local/mobile-sync-new");
-    expect(video?.poster).toBe("http://media.local/mobile-poster-new");
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    await Promise.resolve();
+
+    expect(pushState).toHaveBeenCalledWith(
+      expect.objectContaining({ __kokoMediaFullscreenSession: expect.any(String) }),
+      "",
+      expect.any(String)
+    );
+    expect(exitFullscreen).toHaveBeenCalled();
+    expect(unlock).toHaveBeenCalled();
+    expect(pause).toHaveBeenCalled();
+    expect(document.body.querySelector("video")).toBeNull();
   });
 });

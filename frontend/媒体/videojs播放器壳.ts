@@ -34,6 +34,8 @@ type VideoJs播放器根节点 = {
 export interface VideoJs播放器壳实例 {
   同步(source: VideoJs播放器源描述): void;
   进入全屏(): Promise<void>;
+  读取容器元素(): 可请求全屏容器;
+  读取视频元素(): 可原生全屏视频元素;
   destroy(): void;
 }
 
@@ -51,12 +53,16 @@ export type VideoJs播放器壳依赖 = {
    */
   createPlayer?: (source: VideoJs播放器源描述) => VideoJs播放器根节点;
   loadHlsConstructor?: () => Promise<Hls构造器>;
+  mountTarget?: HTMLElement;
 };
 
 const 读取纵横比 = (source: VideoJs播放器源描述): string =>
   `${Math.max(1, source.width)}/${Math.max(1, source.height)}`;
 
-const 创建默认播放器根 = (source: VideoJs播放器源描述): VideoJs播放器根节点 => {
+const 创建默认播放器根 = (
+  source: VideoJs播放器源描述,
+  mountTarget?: HTMLElement
+): VideoJs播放器根节点 => {
   if (typeof document === "undefined" || !document.body) {
     throw new Error("当前环境没有可用的浏览器文档，无法创建 Video.js 播放器壳");
   }
@@ -67,10 +73,9 @@ const 创建默认播放器根 = (source: VideoJs播放器源描述): VideoJs播
   const video = document.createElement("video") as 可原生全屏视频元素;
 
   provider.dataset.playerShell = "videojs";
-  provider.style.cssText =
-    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+  provider.style.cssText = "display:block;width:min(100%,1120px);max-width:100%;";
   container.style.cssText =
-    `width:min(100%,1120px);max-height:calc(100vh - 40px);aspect-ratio:${读取纵横比(source)};`;
+    `width:100%;max-height:calc(100vh - 40px);aspect-ratio:${读取纵横比(source)};`;
   video.controls = true;
   video.autoplay = true;
   video.preload = "metadata";
@@ -81,7 +86,7 @@ const 创建默认播放器根 = (source: VideoJs播放器源描述): VideoJs播
   provider.append(skin);
   skin.append(container);
   container.append(video);
-  document.body.append(provider);
+  (mountTarget ?? document.body).append(provider);
 
   return {
     provider,
@@ -108,7 +113,9 @@ export async function 创建VideoJs播放器壳(
 ): Promise<VideoJs播放器壳实例> {
   await deps.registerVideoJsElements?.();
 
-  const root = (deps.createPlayer ?? 创建默认播放器根)(initialSource);
+  const root =
+    deps.createPlayer?.(initialSource) ??
+    创建默认播放器根(initialSource, deps.mountTarget);
   const Hls =
     deps.loadHlsConstructor != null
       ? await deps.loadHlsConstructor()
@@ -190,6 +197,12 @@ export async function 创建VideoJs播放器壳(
         return;
       }
       root.video.webkitEnterFullscreen?.();
+    },
+    读取容器元素() {
+      return root.container;
+    },
+    读取视频元素() {
+      return root.video;
     },
     destroy() {
       if (已销毁) {
