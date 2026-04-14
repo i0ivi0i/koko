@@ -128,6 +128,42 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("点击媒体入口后，消息窗内部仍然不会偷偷创建正式播放器节点", async () => {
+    const pane = 创建媒体消息窗();
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "manifest",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/stream/att-video-1/master.m3u8",
+        thumbnailUrl: "http://media.local/poster-video-1",
+        streamingDistribution: {
+          swarm_id: "swarm-hash-video-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-1",
+          join_ticket: null,
+        },
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    // 消息窗只负责预览与查看器意图，不允许自己长成第二套正式播放器实现。
+    expect(pane.querySelector("media-player[data-media-viewer-player='video']")).toBeNull();
+    expect(pane.querySelector("video[data-media-viewer-player='hls']")).toBeNull();
+
+    pane.remove();
+  });
+
   it("点按媒体入口不应被误判成滚动意图，避免触发顶部补历史", async () => {
     const pane = 创建媒体消息窗();
 

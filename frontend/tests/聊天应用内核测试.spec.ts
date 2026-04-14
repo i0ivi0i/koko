@@ -485,6 +485,89 @@ describe("聊天应用内核", () => {
     });
   });
 
+  it("媒体会话在 locally_complete 后收到 SEEDING_STARTED 会进入 seeding，而不丢失完整度真相", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-image-seeding-1",
+            client_message_id: "c-image-seeding-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-image-seeding-1",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "blob",
+        attachmentId: "att-image-seeding-1",
+        kind: "image",
+        src: "http://media.local/blob/att-image-seeding-1/preview.webp",
+        viewerSrc: "http://media.local/blob/att-image-seeding-1/full.webp",
+        thumbnailUrl: "http://media.local/blob/att-image-seeding-1/preview.webp",
+        contentHash: "hash-image-seeding-1",
+        distribution: {
+          swarm_id: "swarm-image-seeding-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/blob/att-image-seeding-1/original.png",
+          join_ticket: null,
+        },
+        hint: null,
+      }),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-image-seeding-1",
+      signal: {
+        type: "ASSET_COMPLETE",
+      },
+    });
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-image-seeding-1",
+      signal: {
+        type: "SEEDING_STARTED",
+      },
+    });
+
+    expect(
+      kernel.snapshot().media.sessionByAttachmentId["att-image-seeding-1"]
+    ).toMatchObject({
+      status: "seeding",
+      locallyComplete: true,
+      lastSignal: "SEEDING_STARTED",
+    });
+  });
+
   it("图片查看器上报 ASSET_BACKFILLING 后，会让播放器激活协作补齐而不是让壳层自己拼 swarm", async () => {
     const transport = new 假传输();
     transport.joinQueue = [

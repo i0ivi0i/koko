@@ -411,6 +411,45 @@ describe("媒体查看器适配器", () => {
     expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
   });
 
+  it("移动端原生全屏路径不会顺手创建桌面播放器覆盖层节点", async () => {
+    const createPhotoSwipeLightbox = vi.fn(() => ({
+      init: vi.fn(),
+      loadAndOpen: vi.fn(),
+      destroy: vi.fn(),
+    }));
+    const createVidstackVideoOverlay = vi.fn(() => ({ destroy: vi.fn() }));
+    安装全屏DOM模拟();
+    const viewer = 创建媒体查看器({
+      createPhotoSwipeLightbox,
+      createVidstackVideoOverlay,
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-no-desktop-overlay-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-no-desktop-overlay-1",
+          src: "blob:http://media.local/mobile-no-desktop-overlay-1",
+          posterSrc: "http://media.local/poster-mobile-no-desktop-overlay-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await Promise.resolve();
+
+    expect(
+      document.body.querySelector("media-player[data-media-viewer-player='video']")
+    ).toBeNull();
+    expect(
+      document.body.querySelector("video[data-media-viewer-player='hls']")
+    ).toBeNull();
+    expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
+    expect(createVidstackVideoOverlay).not.toHaveBeenCalled();
+  });
+
   it("手机返回键触发 popstate 时只退出媒体全屏会话，并清理方向锁回到聊天界面", async () => {
     const createPhotoSwipeLightbox = vi.fn(() => ({
       init: vi.fn(),
