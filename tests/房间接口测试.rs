@@ -53,10 +53,13 @@ async fn bootstrap接口会返回稳定花名快照() {
     .await;
     assert_eq!(second_status, StatusCode::OK);
 
-    assert_eq!(
-        first["anonymous_identity_id"].as_str(),
-        second["anonymous_identity_id"].as_str(),
-        "同一设备 token 应恢复同一个匿名内部身份"
+    assert!(
+        first.get("anonymous_identity_id").is_none(),
+        "bootstrap 结果不该再暴露匿名内部身份"
+    );
+    assert!(
+        second.get("anonymous_identity_id").is_none(),
+        "重复 bootstrap 结果不该再暴露匿名内部身份"
     );
     assert_eq!(
         first["display_alias"].as_str(),

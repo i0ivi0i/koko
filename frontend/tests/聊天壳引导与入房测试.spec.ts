@@ -456,7 +456,6 @@ describe("聊天壳集成 / 引导与入房", () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
     transport.bootstrapResult = {
-      anonymous_identity_id: "a-new",
       display_alias: "冷静的水獭",
       session_id: "s-fresh",
     };

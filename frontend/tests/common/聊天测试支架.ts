@@ -213,7 +213,6 @@ export class 假传输 implements 前端传输端口 {
   prepareMediaCalls: Array<{ kind: "image" | "video"; sessionId: string; fileName: string }> = [];
   completeMediaCalls: Array<{ sessionId: string; attachmentId: string }> = [];
   bootstrapResult: 匿名身份引导结果 = {
-    anonymous_identity_id: "a-test",
     display_alias: "暴躁的企鹅",
     session_id: "s-test",
   };

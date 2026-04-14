@@ -82,12 +82,10 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     const transport = new 假传输();
     transport.bootstrapQueue = [
       {
-        anonymous_identity_id: "a-old",
         display_alias: "暴躁的企鹅",
         session_id: "s-stale",
       },
       {
-        anonymous_identity_id: "a-new",
         display_alias: "冷静的水獭",
         session_id: "s-refresh",
       },
@@ -117,12 +115,10 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     const transport = new 假传输();
     transport.bootstrapQueue = [
       {
-        anonymous_identity_id: "a-old",
         display_alias: "暴躁的企鹅",
         session_id: "s-stale",
       },
       {
-        anonymous_identity_id: "a-new",
         display_alias: "冷静的水獭",
         session_id: "s-refresh",
       },
@@ -157,12 +153,10 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     const transport = new 假传输();
     transport.bootstrapQueue = [
       {
-        anonymous_identity_id: "a-old",
         display_alias: "暴躁的企鹅",
         session_id: "s-stale",
       },
       {
-        anonymous_identity_id: "a-new",
         display_alias: "冷静的水獭",
         session_id: "s-refresh",
       },
