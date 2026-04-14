@@ -147,7 +147,9 @@ impl Pg仓储 {
         会话标识: &str,
     ) -> Result<Option<String>, contract::错误码> {
         sqlx::query_scalar(
-            "SELECT ai.anonymous_identity_id \
+            // 应用层从这一刻开始只消费内部 identity_uuid；
+            // 旧 anonymous_identity_id 留在库里只是迁移缝，不能继续冒充身份真相。
+            "SELECT COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) \
              FROM sessions s \
              JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
              WHERE s.session_id = $1",

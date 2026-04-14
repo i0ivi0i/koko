@@ -41,14 +41,17 @@ fn 行转媒体上传运输记录(row: PgRow) -> 媒体上传运输记录 {
     }
 }
 
-/// 媒体 owner 在写 prepared/ready 附件时，需要先把匿名业务标识反查成数据库主键。
+/// 媒体 owner 在写 prepared/ready 附件时，需要先把应用层持有的内部身份反查成数据库主键。
+/// 迁移窗口里优先吃 `identity_uuid`，只在存量还没补齐时回落兼容旧串。
 /// 这个反查只服务媒体链路，因此直接跟着媒体 owner 走，不把“查 owner id”升级成共享垃圾 helper。
 async fn 查询匿名身份数据库主键_异步(
     pool: &PgPool,
     所属匿名身份标识: &str,
 ) -> Result<i64, contract::错误码> {
     sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM anonymous_identities WHERE anonymous_identity_id = $1",
+        "SELECT id \
+         FROM anonymous_identities \
+         WHERE COALESCE(identity_uuid::text, anonymous_identity_id) = $1",
     )
     .bind(所属匿名身份标识)
     .fetch_optional(pool)
@@ -65,7 +68,7 @@ pub(super) async fn 查询附件快照_异步(
 ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
     let row = sqlx::query(
         "SELECT a.attachment_id,
-                ai.anonymous_identity_id,
+                COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) AS owner_identity_text,
                 a.kind,
                 a.mime_type,
                 a.status,
@@ -96,7 +99,7 @@ pub(super) async fn 查询附件快照_异步(
         let status = 解析附件状态(row.get::<String, _>("status").as_str())?;
         Ok(usecase::附件读取结果 {
             附件标识: row.get("attachment_id"),
-            所属匿名身份标识: row.get("anonymous_identity_id"),
+            所属匿名身份标识: row.get("owner_identity_text"),
             种类: kind,
             mime_type: row.get("mime_type"),
             状态: status,
@@ -125,7 +128,13 @@ async fn 查询待完成媒体附件_异步(
     附件标识: &str,
 ) -> Result<Option<usecase::待完成媒体附件读取结果>, contract::错误码> {
     let row = sqlx::query(
-        "SELECT a.attachment_id, ai.anonymous_identity_id, a.kind, a.mime_type, a.byte_size, a.storage_key, a.status \
+        "SELECT a.attachment_id,
+                COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) AS owner_identity_text,
+                a.kind,
+                a.mime_type,
+                a.byte_size,
+                a.storage_key,
+                a.status \
          FROM attachments a \
          JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
          WHERE a.attachment_id = $1",
@@ -143,7 +152,7 @@ async fn 查询待完成媒体附件_异步(
         };
         Ok(usecase::待完成媒体附件读取结果 {
             附件标识: row.get("attachment_id"),
-            所属匿名身份标识: row.get("anonymous_identity_id"),
+            所属匿名身份标识: row.get("owner_identity_text"),
             种类: kind,
             mime_type: row.get("mime_type"),
             字节大小: row.get("byte_size"),
@@ -550,7 +559,7 @@ async fn 查询附件可读内容_异步(
         usecase::附件内容变体::完整图 => "full",
         usecase::附件内容变体::资产原图 => "asset_original",
     };
-    let owner_anonymous_identity = Pg仓储::查询会话所属匿名身份_异步(pool, 会话标识).await?;
+    let owner_identity = Pg仓储::查询会话所属匿名身份_异步(pool, 会话标识).await?;
     let row = sqlx::query(
         "SELECT storage_key, mime_type \
          FROM ( \
@@ -572,7 +581,7 @@ async fn 查询附件可读内容_异步(
             JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
             WHERE a.attachment_id = $1 \
               AND a.committed_at IS NULL \
-              AND ai.anonymous_identity_id = $2 \
+              AND COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) = $2 \
             UNION ALL \
             SELECT \
                 CASE \
@@ -599,7 +608,7 @@ async fn 查询附件可读内容_异步(
          LIMIT 1",
     )
     .bind(附件标识)
-    .bind(owner_anonymous_identity)
+    .bind(owner_identity)
     .bind(变体标签)
     .bind(会话标识)
     .fetch_optional(pool)

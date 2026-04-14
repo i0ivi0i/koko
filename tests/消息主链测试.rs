@@ -13,6 +13,56 @@ use test_support::media::*;
 /// 3. 不负责上传运输过程、协作分发运行态、房间阅读恢复或 realtime 控制面。
 #[test]
 #[serial]
+fn 会话所属匿名身份返回内部uuid而不是兼容旧串() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let device_token = format!("identity-uuid-device-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
+
+    let runtime = tokio::runtime::Runtime::new().expect("应能创建测试 runtime");
+    let pool = runtime.block_on(async {
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&cfg.database_url)
+            .await
+            .expect("应能连接数据库")
+    });
+    let row = runtime.block_on(async {
+        sqlx::query(
+            "SELECT ai.identity_uuid::text AS identity_uuid_text, ai.anonymous_identity_id \
+             FROM sessions s \
+             JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
+             WHERE s.session_id = $1",
+        )
+        .bind(&session_id)
+        .fetch_one(&pool)
+        .await
+        .expect("应能读取匿名内部身份行")
+    });
+    let expected_identity_uuid: String = row.get("identity_uuid_text");
+    let legacy_identity: String = row.get("anonymous_identity_id");
+    assert_ne!(
+        expected_identity_uuid, legacy_identity,
+        "内部 identity_uuid 和兼容旧串必须分开，测试前置条件才成立"
+    );
+
+    let resolved_identity = koko::usecase::仓储端口::查询会话所属匿名身份(&repo, &session_id)
+        .expect("查询会话所属匿名身份不应报错")
+        .expect("应能解析出内部身份");
+    assert_eq!(
+        resolved_identity, expected_identity_uuid,
+        "应用层以后只能消费内部 identity_uuid，不能继续把兼容旧串当身份真相"
+    );
+}
+
+#[test]
+#[serial]
 fn 发送消息事务性顺序成立() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");

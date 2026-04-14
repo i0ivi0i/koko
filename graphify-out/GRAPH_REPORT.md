@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-14)
 
 ## Corpus Check
-- 157 files · ~170,787 words
+- 157 files · ~170,949 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -68,7 +68,7 @@ Nodes (41): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complet
 
 ### Community 1 - "Community 1"
 Cohesion: 0.05
-Nodes (6): flush(), make_writer(), 最小mp4字节(), 插入ready图片附件记录(), 匿名内部身份迁移已包含uuid与主题投影字段(), write()
+Nodes (6): flush(), make_writer(), 最小mp4字节(), 插入ready图片附件记录(), 会话所属匿名身份返回内部uuid而不是兼容旧串(), write()
 
 ### Community 2 - "Community 2"
 Cohesion: 0.06
@@ -165,9 +165,9 @@ Nodes (0):
 ## Knowledge Gaps
 - **23 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `RustusHookBody` (+18 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 13`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 13`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 14`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 15`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

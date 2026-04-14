@@ -49,7 +49,8 @@ async fn 阅读锚点会写入当前匿名身份与房间的唯一记录() {
         .await
         .expect("应能直连数据库校验阅读锚点");
     let row = sqlx::query(
-        "SELECT ai.anonymous_identity_id, rra.last_read_event_position \
+        "SELECT COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) AS owner_identity_text,
+                rra.last_read_event_position \
          FROM room_read_anchors rra \
          JOIN anonymous_identities ai ON ai.id = rra.anonymous_identity_id \
          JOIN rooms r ON r.id = rra.room_id \
@@ -60,7 +61,7 @@ async fn 阅读锚点会写入当前匿名身份与房间的唯一记录() {
     .await
     .expect("应存在阅读锚点记录");
 
-    let stored_identity: String = row.get("anonymous_identity_id");
+    let stored_identity: String = row.get("owner_identity_text");
     let stored_position: i64 = row.get("last_read_event_position");
     assert_eq!(stored_identity, identity_id);
     assert_eq!(stored_position, 0);

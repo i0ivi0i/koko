@@ -28,6 +28,7 @@ pub enum 附件状态读取结果 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 附件读取结果 {
     pub 附件标识: String,
+    /// 这里只允许承载内部身份真相：优先 `identity_uuid`，不再把兼容旧串往应用层带。
     pub 所属匿名身份标识: String,
     pub 种类: 附件种类读取结果,
     pub mime_type: String,
@@ -75,6 +76,7 @@ pub struct 媒体附件准备快照 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 待完成媒体附件读取结果 {
     pub 附件标识: String,
+    /// prepare/complete owner 校验只认内部身份，不再认旧 `anonymous_identity_id` 文本串。
     pub 所属匿名身份标识: String,
     pub 种类: 媒体附件类型,
     pub mime_type: String,
@@ -869,6 +871,7 @@ pub fn 创建消息(
             let snapshot = 仓储
                 .查询附件快照(attachment_id)?
                 .ok_or(contract::错误码::附件不存在)?;
+            // 附件 owner 比对只认内部身份真相，这样兼容旧串就不会再渗回消息主链。
             if snapshot.所属匿名身份标识 != 发送者身份 {
                 return Err(contract::错误码::附件不属于当前发送者);
             }
@@ -931,6 +934,7 @@ pub async fn 创建消息_异步<R: Realtime仓储端口 + ?Sized>(
                 .查询附件快照(attachment_id)
                 .await?
                 .ok_or(contract::错误码::附件不存在)?;
+            // realtime 入口和同步入口必须共用同一条内部身份 owner 规则，避免两条主链各判各的。
             if snapshot.所属匿名身份标识 != 发送者身份 {
                 return Err(contract::错误码::附件不属于当前发送者);
             }
@@ -1004,6 +1008,7 @@ pub fn 读取待完成媒体附件(
     let prepared = 仓储
         .查询待完成媒体附件(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;
+    // complete 链路不能再吃兼容旧串，否则一旦会话解析切到 identity_uuid，owner 判定就会撕裂。
     if prepared.所属匿名身份标识 != 所属匿名身份标识 {
         return Err(contract::错误码::附件不属于当前发送者);
     }
