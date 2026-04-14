@@ -40,6 +40,8 @@
     把 WebTorrent、tracker、Web Seed 和浏览器真实边界收成实现可直接复用的一张清单。
   - [群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md](./群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md)
     把群聊媒体上传当前配置、官方建议和生产前缺口收成一张清单。
+  - [Video.js-v10-beta-播放器候选笔记.md](./Video.js-v10-beta-播放器候选笔记.md)
+    跟进 Video.js v10 beta 的可组合播放器、SPF、React/HTML 表面与当前项目暂不迁移判断。
   - [socketioxide-多节点部署与门禁笔记.md](./socketioxide-多节点部署与门禁笔记.md)
     看 `socketioxide` 从单节点走向多节点时的部署与门禁问题。
   - [socketioxide-多房间群聊落地笔记.md](./socketioxide-多房间群聊落地笔记.md)
