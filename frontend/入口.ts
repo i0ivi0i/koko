@@ -1,7 +1,6 @@
 import "@uppy/core/css/style.min.css";
 import "photoswipe/style.css";
-import "vidstack/styles/defaults.css";
-import "vidstack/styles/community-skin/video.css";
+import "@videojs/html/video/skin.css";
 import { 获取默认浏览器应用平台 } from "./平台/index.js";
 import "./聊天壳.js";
 

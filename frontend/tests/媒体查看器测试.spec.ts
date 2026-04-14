@@ -33,13 +33,16 @@ const 安装全屏DOM模拟 = () => {
     configurable: true,
     value: exitFullscreen,
   });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
   const play = vi.fn(() => Promise.resolve());
   const pause = vi.fn();
   const createElement = document.createElement.bind(document);
   vi.spyOn(document, "createElement").mockImplementation(
     ((tagName: string, options?: ElementCreationOptions) => {
       const element = createElement(tagName, options);
-      Object.assign(element, { requestFullscreen });
       if (tagName.toLowerCase() === "video") {
         Object.assign(element, { play, pause });
       }
@@ -47,6 +50,11 @@ const 安装全屏DOM模拟 = () => {
     }) as typeof document.createElement
   );
   return { requestFullscreen, exitFullscreen, play, pause };
+};
+
+const 读取VideoJs媒体容器 = (): HTMLElement | null => {
+  const skin = document.body.querySelector("video-skin");
+  return skin?.shadowRoot?.querySelector("media-container") ?? null;
 };
 
 const 等待查询元素 = async <T extends Element>(
@@ -67,6 +75,8 @@ describe("媒体查看器适配器", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.replaceChildren();
+    Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
+    Reflect.deleteProperty(document, "exitFullscreen");
     Object.defineProperty(document, "fullscreenElement", {
       configurable: true,
       value: null,
@@ -465,8 +475,9 @@ describe("媒体查看器适配器", () => {
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
 
-    const container = document.body.querySelector("[data-video-orientation='portrait']");
+    const container = 读取VideoJs媒体容器();
     expect(container).not.toBeNull();
+    expect(container?.dataset.videoOrientation).toBe("portrait");
     expect(lock).toHaveBeenCalledWith("portrait");
 
     const video = document.body.querySelector("video");

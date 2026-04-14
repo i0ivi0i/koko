@@ -30,6 +30,31 @@ describe("Video.js 播放器壳", () => {
     document.body.replaceChildren();
   });
 
+  it("file/blob 首播不会提前初始化 hls.js，只有切到 HLS 主链时才会加载 provider", async () => {
+    const loadHlsConstructor = vi.fn(async () => {
+      throw new Error("file 首播阶段不该提前加载 hls.js");
+    });
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-file-lazy-1",
+        posterSrc: "http://media.local/poster-file-lazy-1.jpg",
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => 创建假播放器根(),
+        registerVideoJsElements: async () => undefined,
+        loadHlsConstructor,
+      }
+    );
+
+    expect(loadHlsConstructor).not.toHaveBeenCalled();
+
+    shell.destroy();
+  });
+
   it("同一个壳实例会按 source descriptor 在 file 与 HLS 之间同步，而不是重建第二套 overlay", async () => {
     const attachMedia = vi.fn();
     const loadSource = vi.fn();
@@ -68,6 +93,7 @@ describe("Video.js 播放器壳", () => {
       width: 1280,
       height: 720,
     });
+    await Promise.resolve();
 
     expect(attachMedia).toHaveBeenCalledTimes(1);
     expect(loadSource).toHaveBeenCalledWith(

@@ -396,8 +396,8 @@ const 创建默认VideoJs播放器层 = async (
 
   let 当前视频项目 = item;
   let cleaned = false;
-  let 解绑媒体运行时信号 = () => undefined;
-  let 清理全屏策略 = () => undefined;
+  let 解绑媒体运行时信号: () => void = () => undefined;
+  let 清理全屏策略: () => void = () => undefined;
 
   try {
     const shell = await 创建VideoJs播放器壳(映射VideoJs播放源(item), {
