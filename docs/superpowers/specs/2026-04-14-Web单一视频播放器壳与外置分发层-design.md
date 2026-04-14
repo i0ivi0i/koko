@@ -241,7 +241,8 @@ WebTorrent 官方文档重点是：
 7. 不允许把 `Video.js v10` 的 Beta API 直接扩散到聊天壳、业务 owner、分发 runtime 各处，必须有薄适配层隔离；
 8. 当前阶段不以 `SPF` 替换 `hls.js` 正式主链；
 9. 不把 `beta.16 / beta.17` 的手势、快捷键、默认皮肤行为写成项目核心强依赖；
-10. fullscreen 语义统一以 player container 为准，不再让不同路径各自定义全屏真相。
+10. fullscreen 语义统一以 player container 为准，不再让不同路径各自定义全屏真相；
+11. `HLS / file / blob / native fullscreen` 只能是**同一播放器壳下面的 provider 或展示策略差异**，绝不允许再长成第二套播放器实现。
 
 ## 5. 为什么推荐 `Video.js v10 壳 + hls.js 引擎 + 外置分发层`
 
@@ -331,6 +332,7 @@ WebTorrent 官方文档重点是：
 
 它不负责：
 
+- 决定最终播放源该选 `manifest / blob / file / 哪个增强流`；
 - 决定谁加入 swarm；
 - 决定什么时候 complete；
 - 决定是否 seeding；
@@ -349,6 +351,7 @@ WebTorrent 官方文档重点是：
 
 不负责：
 
+- 决定最终应当播放哪个 source descriptor；
 - UI 壳层；
 - 聊天应用状态；
 - swarm/presence。
@@ -367,6 +370,7 @@ WebTorrent 官方文档重点是：
 
 - 首播一定能不能起来；
 - 最终 `<video>` 如何挂源；
+- 直接决定从 `manifest` 切到 `blob/file` 或反过来切回去；
 - 控制条和查看器交互；
 - 直接生成第二套播放器入口。
 
@@ -376,7 +380,16 @@ WebTorrent 官方文档重点是：
 
 - 运行态真相；
 - `playing / waiting / stalled / recovering / locally_complete`；
-- 接收播放器事件和 runtime 事件，再统一裁决。
+- 接收播放器事件和 runtime 事件，再统一裁决；
+- 拥有最终播放源裁决权：`manifest / blob / file / 是否启用增强流` 这些都只能由它收敛成单一 source descriptor；
+- 决定什么时候允许 source 切换、什么时候禁止 provider 重建、什么时候只允许在同一播放器壳内做展示策略切换；
+- 规定移动端 native fullscreen 只能是**同一播放器会话**上的平台展示策略，而不是第二套播放器实现。
+
+这里必须写死：
+
+**最终播放源真相 owner 只有一个，就是 `MediaSessionOwner`。**
+
+任何层如果“顺手决定一下该挂 manifest 还是 blob、该不该切回原生播放、该不该临时起另一套播放器”，都算分层失败。
 
 ## 7. 目标架构
 
@@ -402,7 +415,8 @@ SwarmRuntime / WebTorrent / Backfill
 2. 事件表面只剩一个；
 3. HLS 与普通视频只剩 provider 差异；
 4. 分发与补齐不再混入播放器内核；
-5. `Video.js v10` 的具体 Beta API 被局部隔离，不再到处泄漏。
+5. `Video.js v10` 的具体 Beta API 被局部隔离，不再到处泄漏；
+6. 最终 source descriptor 只有一个 truth owner，不再由 adapter/runtime/provider 分头决定。
 
 ## 8. 迁移原则
 
@@ -415,7 +429,9 @@ SwarmRuntime / WebTorrent / Backfill
 3. 为了少改，继续保留两套播放器长期双活；
 4. 用“移动端特殊判断”再长一条旁路；
 5. 为了迁移 `Video.js v10`，顺手把 `hls.js` 主链也一并换掉；
-6. 为了接 `Video.js v10`，把 React 一起引进当前播放器主链。
+6. 为了接 `Video.js v10`，把 React 一起引进当前播放器主链；
+7. 把“平台 fullscreen 特例”写成另一套播放器逻辑；
+8. 允许 `Player Shell Adapter`、`Playback Engine`、`SwarmRuntime` 任何一层拥有第二份 source 裁决逻辑。
 
 ### 8.2 不允许通过“最新技术”制造第二次漂移
 
@@ -430,7 +446,9 @@ SwarmRuntime / WebTorrent / Backfill
 4. `Video.js v10` 只能通过薄适配层进入项目；
 5. `WebTorrent / P2P / SwarmRuntime` 永远不拥有播放器壳；
 6. 手势、快捷键优先作为可替换增强项接入，不作为第一阶段成败判定；
-7. 默认皮肤可用，但不得把皮肤内部结构当作业务层长期契约。
+7. 默认皮肤可用，但不得把皮肤内部结构当作业务层长期契约；
+8. `MediaSessionOwner` 是唯一 source owner；
+9. native fullscreen 只能是同一播放器壳上的展示策略，不得成为运行时第二实现。
 
 ### 8.3 允许的正确演进方式
 
@@ -444,6 +462,56 @@ SwarmRuntime / WebTorrent / Backfill
 6. 再把 fullscreen 统一收口到 container 语义；
 7. 最后让旧 `Vidstack overlay` 和旧自定义 `HLS overlay` 明确退场。
 
+### 8.4 绝不允许第二套播放器实现
+
+这里必须把“什么叫第二套播放器实现”说死，不留文字空子：
+
+下面这些都算第二套播放器实现，明确禁止：
+
+1. `HLS` 继续走自定义 overlay，而 `file/blob` 走 `Video.js v10`；
+2. 移动端为了 native fullscreen 再造一条独立播放器初始化路径；
+3. 保留一个“旧壳 fallback”在真实用户运行时里可命中；
+4. 让 `SwarmRuntime / WebTorrent / P2P` 直接驱动另一套 `<video>` 或另一套 overlay；
+5. 用“临时迁移过渡”名义长期保留新旧两套桌面播放器壳。
+
+下面这些**不算**第二套播放器实现，但前提是 owner 和事件表面仍然唯一：
+
+1. 同一播放器壳下的 `HLS` provider 与 `file/blob` provider 差异；
+2. 同一播放器会话下，平台要求的 native fullscreen 展示切换；
+3. 同一壳下的增强层接入，例如 `P2P Media Loader` 作为 HLS 增强。
+
+判断标准只有一个：
+
+**用户命中的正式播放路径里，只允许存在一个播放器壳、一个 source owner、一套播放器事件表面。**
+
+### 8.5 Beta 壳迁移的 cutover / rollback / abort 条件
+
+因为 `Video.js v10` 还是 Beta，这里不能只写“最后退场”，必须写清切换和止损边界。
+
+#### 允许切入主链的前提
+
+1. `manifest / blob / file` 已经都能进入同一个播放器壳；
+2. `MediaSessionOwner` 已经成为唯一 source owner；
+3. 旧壳路径有明确退场点，而不是模糊共存；
+4. CSP、blob、worker、fullscreen 约束已被验证；
+5. characterization tests 已经先把满血行为钉死。
+
+#### 必须暂停切换的信号
+
+1. sender / 其他成员 任一侧出现可复现播放回归；
+2. `backfill / release / seeding / recovering` 任一链路掉血；
+3. 同一 `manifest` 重复同步引发 provider 反复重建；
+4. 移动端 fullscreen / 返回键 / 方向锁语义退化；
+5. 需要通过重新开放旧壳用户路径才能“恢复功能”。
+
+#### rollback / forward-fix 规则
+
+1. 允许有**短暂代码级 seam**，用于迁移验证；
+2. 但不允许存在**用户可命中的第二套正式播放器实现**；
+3. 一旦触发暂停信号，优先在新壳路径上 forward-fix；
+4. 如果必须回退，也只能回退到单一旧壳，不允许新旧两套继续对外双活；
+5. 每一个 seam 都必须写明删除触发条件和最晚退场点。
+
 ## 9. TDD 施工要求
 
 这份 spec 后续的实现必须按 TDD 进行，并且至少补齐这些测试：
@@ -454,7 +522,8 @@ SwarmRuntime / WebTorrent / Backfill
 2. `blob/file` 视频也进入统一播放器壳；
 3. 移动端只改变展示策略，不改变“单一播放器壳”事实；
 4. 不再存在“一个视频走 `Video.js v10`，另一个视频走旧壳”的长期双活；
-5. fullscreen 语义统一落在 player container，而不是底层 `<video>` 或旧 overlay 自己裁决。
+5. fullscreen 语义统一落在 player container，而不是底层 `<video>` 或旧 overlay 自己裁决；
+6. `MediaSessionOwner` 是唯一 source owner，没有第二份 source 裁决逻辑藏在 adapter/runtime/provider。
 
 ### 9.2 正式播放链
 
@@ -463,7 +532,8 @@ SwarmRuntime / WebTorrent / Backfill
 3. provider 切换不再制造第二套 overlay；
 4. `blob/file` 路径与 `manifest` 路径共用同一套控制表面；
 5. 倍速、关闭、全屏、错误态、控制条、快捷键以后只需要改一套播放器表面；
-6. fullscreen 进入的是统一 player container，不再由不同路径各自决定。
+6. fullscreen 进入的是统一 player container，不再由不同路径各自决定；
+7. provider 只消费 source descriptor，不再自行决定切源策略。
 
 ### 9.3 分发层不掉
 
@@ -472,7 +542,8 @@ SwarmRuntime / WebTorrent / Backfill
 3. 关闭查看器仍会 release；
 4. `noPeers / waiting / recovering` 仍由 `MediaSessionOwner` 裁决；
 5. sender 和其他成员打开同一个视频都能稳定播放，不允许通过删除 seeding / release 伪装成功；
-6. CSP、blob URL、worker 相关约束满足后，首播和恢复链路仍稳定。
+6. CSP、blob URL、worker 相关约束满足后，首播和恢复链路仍稳定；
+7. `SwarmRuntime / P2P / WebTorrent` 不会直接制造第二套播放器路径或第二个 `<video>` 主链。
 
 ### 9.4 退场验证
 
@@ -481,7 +552,8 @@ SwarmRuntime / WebTorrent / Backfill
 3. 不再存在“普通视频走一套、HLS 走另一套 overlay”的双活结构；
 4. `p2p-media-loader-hlsjs` 若恢复接入，也只能作为增强层，不得再卡在首播必经路径；
 5. 项目里不因为这次迁移额外引入 React 播放器主链；
-6. 不把 beta 手势、快捷键和默认皮肤 DOM 结构扩散成业务层隐式依赖。
+6. 不把 beta 手势、快捷键和默认皮肤 DOM 结构扩散成业务层隐式依赖；
+7. 不存在用户可命中的第二套正式播放器实现。
 
 ## 10. 当前阶段完成定义
 
@@ -496,7 +568,8 @@ SwarmRuntime / WebTorrent / Backfill
 7. 旧 `Vidstack overlay` 已经退场；
 8. 没有通过删掉 backfill / release / seeding 来换取可播；
 9. `Video.js v10` 的具体实现细节没有扩散成新的系统级耦合点；
-10. fullscreen / CSP / blob / worker 这些运行时边界已在设计和验证里被明确处理。
+10. fullscreen / CSP / blob / worker 这些运行时边界已在设计和验证里被明确处理；
+11. 运行时不存在第二套正式播放器实现，source owner 也没有发生分裂。
 
 ## 11. 非目标
 
