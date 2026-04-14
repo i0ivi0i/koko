@@ -4,16 +4,17 @@ use crate::{contract, usecase};
 
 use super::{Pg仓储, 媒体上传运输授权写入请求, 媒体上传运输记录};
 
-/// 媒体附件适配 owner 只负责回答三类问题：
-/// 1. 附件真相当前是什么状态；
-/// 2. 上传 sidecar 的运输事实写到了哪里；
-/// 3. ready 之后的协作分发与冷源退场元数据如何读写。
-///
-/// 它不承载成员真相、消息成立真相，也不替 shell 做展示裁决。
+// 媒体附件适配 owner 只负责回答三类问题：
+// 1. 附件真相当前是什么状态；
+// 2. 上传 sidecar 的运输事实写到了哪里；
+// 3. ready 之后的协作分发与冷源退场元数据如何读写。
+// 它不承载成员真相、消息成立真相，也不替 shell 做展示裁决。
 
 /// 把数据库中的附件状态字符串压成用例可理解的稳定枚举。
 /// 这里只有数据库状态翻译，不在 adapter 层追加“自动修正”之类的业务判断。
-fn 解析附件状态(raw_status: &str) -> Result<usecase::附件状态读取结果, contract::错误码> {
+fn 解析附件状态(
+    raw_status: &str,
+) -> Result<usecase::附件状态读取结果, contract::错误码> {
     match raw_status {
         "prepared" => Ok(usecase::附件状态读取结果::已准备),
         "uploading" => Ok(usecase::附件状态读取结果::上传中),
@@ -468,7 +469,10 @@ pub(super) fn 查询协作分发torrent元信息(
     repo: &Pg仓储,
     附件标识: &str,
 ) -> Result<Option<usecase::协作分发torrent元信息快照>, contract::错误码> {
-    repo.在运行时执行(查询协作分发torrent元信息_异步(&repo.pool, 附件标识))
+    repo.在运行时执行(查询协作分发torrent元信息_异步(
+        &repo.pool,
+        附件标识,
+    ))
 }
 
 async fn 写入流媒体清单元数据_异步(

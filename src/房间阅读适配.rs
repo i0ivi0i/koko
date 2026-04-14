@@ -4,12 +4,11 @@ use crate::contract;
 
 use super::Pg仓储;
 
-/// 房间阅读适配 owner 统一收口：
-/// 1. 会话/房间/成员资格这类只读事实查询；
-/// 2. 房间恢复快照、历史页、增量页、阅读锚点推进；
-/// 3. 后台房间冷读接口。
-///
-/// 这层只做 PostgreSQL 事实翻译，不替用例层做成员裁决，也不自己定义消息语义。
+// 房间阅读适配 owner 统一收口：
+// 1. 会话/房间/成员资格这类只读事实查询；
+// 2. 房间恢复快照、历史页、增量页、阅读锚点推进；
+// 3. 后台房间冷读接口。
+// 这层只做 PostgreSQL 事实翻译，不替用例层做成员裁决，也不自己定义消息语义。
 
 pub(super) async fn 查询会话所属匿名身份_异步(
     pool: &PgPool,
@@ -31,11 +30,12 @@ pub(super) async fn 检查会话存在_异步(
     pool: &PgPool,
     会话标识: &str,
 ) -> Result<bool, contract::错误码> {
-    let exists = sqlx::query_scalar::<_, i32>("SELECT 1 FROM sessions WHERE session_id = $1 LIMIT 1")
-        .bind(会话标识)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?;
+    let exists =
+        sqlx::query_scalar::<_, i32>("SELECT 1 FROM sessions WHERE session_id = $1 LIMIT 1")
+            .bind(会话标识)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
     Ok(exists.is_some())
 }
 
@@ -123,50 +123,49 @@ async fn 构建房间恢复快照(
     上次已读事件位置: Option<i64>,
     首条未读事件位置: Option<i64>,
 ) -> Result<contract::快照, contract::错误码> {
-    let (snapshot_messages, has_more_before) =
-        if let Some(first_unread_event_position) = 首条未读事件位置 {
-            let before_messages =
-                super::消息事件适配::查询消息页(
-                    pool,
-                    房间数据库标识,
-                    房间标识,
-                    Some(first_unread_event_position),
-                    8,
+    let (snapshot_messages, has_more_before) = if let Some(first_unread_event_position) =
+        首条未读事件位置
+    {
+        let before_messages = super::消息事件适配::查询消息页(
+            pool,
+            房间数据库标识,
+            房间标识,
+            Some(first_unread_event_position),
+            8,
+        )
+        .await?;
+        let unread_messages = super::消息事件适配::查询从位置开始的消息页(
+            pool,
+            房间数据库标识,
+            房间标识,
+            first_unread_event_position,
+            47,
+        )
+        .await?;
+        let has_more_before = before_messages
+            .first()
+            .map(|message| {
+                matches!(
+                    message,
+                    contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
                 )
-                .await?;
-            let unread_messages = super::消息事件适配::查询从位置开始的消息页(
-                pool,
-                房间数据库标识,
-                房间标识,
-                first_unread_event_position,
-                47,
-            )
-            .await?;
-            let has_more_before = before_messages
-                .first()
-                .map(|message| {
-                    matches!(
-                        message,
-                        contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
-                    )
-                })
-                .unwrap_or(false);
-            ([before_messages, unread_messages].concat(), has_more_before)
-        } else {
-            let snapshot_messages =
-                super::消息事件适配::查询消息页(pool, 房间数据库标识, 房间标识, None, 55)
-                    .await?;
-            let has_more_before = snapshot_messages
-                .first()
-                .map(|message| {
-                    matches!(
-                        message,
-                        contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
-                    )
-                })
-                .unwrap_or(false);
-            (snapshot_messages, has_more_before)
-        };
+            })
+            .unwrap_or(false);
+        ([before_messages, unread_messages].concat(), has_more_before)
+    } else {
+        let snapshot_messages =
+            super::消息事件适配::查询消息页(pool, 房间数据库标识, 房间标识, None, 55).await?;
+        let has_more_before = snapshot_messages
+            .first()
+            .map(|message| {
+                matches!(
+                    message,
+                    contract::领域事件::消息已创建 { 事件位置, .. } if *事件位置 > 1
+                )
+            })
+            .unwrap_or(false);
+        (snapshot_messages, has_more_before)
+    };
 
     Ok(contract::快照::房间 {
         房间标识: 房间标识.to_string(),
@@ -205,7 +204,11 @@ pub(super) fn 查询房间阅读位置(
     房间标识: &str,
     会话标识: &str,
 ) -> Result<Option<i64>, contract::错误码> {
-    repo.在运行时执行(查询房间阅读位置_异步(&repo.pool, 房间标识, 会话标识))
+    repo.在运行时执行(查询房间阅读位置_异步(
+        &repo.pool,
+        房间标识,
+        会话标识,
+    ))
 }
 
 async fn 按短码进房或建房_异步(
@@ -222,37 +225,38 @@ async fn 按短码进房或建房_异步(
         .map_err(|_| contract::错误码::系统错误)?
         .ok_or(contract::错误码::会话无效)?;
 
-    let room_row = sqlx::query("SELECT id, room_id, latest_event_position FROM rooms WHERE room_code = $1")
-        .bind(房间短码)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?;
+    let room_row =
+        sqlx::query("SELECT id, room_id, latest_event_position FROM rooms WHERE room_code = $1")
+            .bind(房间短码)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
 
-    let (room_db_id, room_id, latest_event_position): (i64, String, i64) = if let Some(row) = room_row
-    {
-        (
-            row.get("id"),
-            row.get("room_id"),
-            row.get("latest_event_position"),
-        )
-    } else {
-        let created = sqlx::query(
-            "INSERT INTO rooms (room_id, room_code, title, created_by_session_id) \
+    let (room_db_id, room_id, latest_event_position): (i64, String, i64) =
+        if let Some(row) = room_row {
+            (
+                row.get("id"),
+                row.get("room_id"),
+                row.get("latest_event_position"),
+            )
+        } else {
+            let created = sqlx::query(
+                "INSERT INTO rooms (room_id, room_code, title, created_by_session_id) \
              VALUES (concat('r-', substring(md5(random()::text) from 1 for 12)), $1, $2, $3) \
              RETURNING id, room_id, latest_event_position",
-        )
-        .bind(房间短码)
-        .bind(format!("房间-{房间短码}"))
-        .bind(session_db_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?;
-        (
-            created.get("id"),
-            created.get("room_id"),
-            created.get("latest_event_position"),
-        )
-    };
+            )
+            .bind(房间短码)
+            .bind(format!("房间-{房间短码}"))
+            .bind(session_db_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+            (
+                created.get("id"),
+                created.get("room_id"),
+                created.get("latest_event_position"),
+            )
+        };
 
     sqlx::query(
         "INSERT INTO room_members (room_id, session_id, left_at) \
@@ -290,7 +294,11 @@ pub(super) fn 按短码进房或建房(
     会话标识: &str,
     房间短码: &str,
 ) -> Result<contract::快照, contract::错误码> {
-    repo.在运行时执行(按短码进房或建房_异步(&repo.pool, 会话标识, 房间短码))
+    repo.在运行时执行(按短码进房或建房_异步(
+        &repo.pool,
+        会话标识,
+        房间短码,
+    ))
 }
 
 async fn 拉取房间快照_异步(
@@ -430,7 +438,11 @@ pub(super) fn 拉取房间增量事件(
     房间标识: &str,
     从位置开始: i64,
 ) -> Result<contract::快照, contract::错误码> {
-    repo.在运行时执行(拉取房间增量事件_异步(&repo.pool, 房间标识, 从位置开始))
+    repo.在运行时执行(拉取房间增量事件_异步(
+        &repo.pool,
+        房间标识,
+        从位置开始,
+    ))
 }
 
 async fn 推进房间阅读位置_异步(

@@ -6,13 +6,12 @@ use crate::{contract, domain};
 
 use super::Pg仓储;
 
-/// 消息事件适配 owner 统一持有：
-/// 1. 消息行到共享事件的翻译；
-/// 2. 消息页与附件引用批量组装；
-/// 3. 幂等回查与统一消息事务提交。
-///
-/// 房间 owner 现在只借用这里的“消息页/增量事件组装 seam”，
-/// 下一轮如果还需要继续瘦身，就只在这一个 owner 上演进消息事实。
+// 消息事件适配 owner 统一持有：
+// 1. 消息行到共享事件的翻译；
+// 2. 消息页与附件引用批量组装；
+// 3. 幂等回查与统一消息事务提交。
+// 房间 owner 现在只借用这里的“消息页/增量事件组装 seam”，
+// 下一轮如果还需要继续瘦身，就只在这一个 owner 上演进消息事实。
 
 /// 把数据库消息行翻成跨入口稳定共享的领域事件。
 /// 这里不做业务校验，只负责把已经成立的事实完整表达出来。
@@ -39,7 +38,9 @@ fn 行转消息事件(
 }
 
 /// 领域层已经校验通过的附件引用，在共享契约里只保留渲染所需的稳定事实。
-fn 已校验附件转契约快照(附件: &domain::message::已校验附件引用) -> contract::附件快照 {
+fn 已校验附件转契约快照(
+    附件: &domain::message::已校验附件引用,
+) -> contract::附件快照 {
     match 附件 {
         domain::message::已校验附件引用::图片 {
             附件标识, 宽, 高
@@ -212,12 +213,13 @@ async fn 查询发送者投影_异步(
     pool: &PgPool,
     会话标识: &str,
 ) -> Result<(i64, String), contract::错误码> {
-    let row = sqlx::query("SELECT id, display_name AS display_alias FROM sessions WHERE session_id = $1")
-        .bind(会话标识)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| contract::错误码::系统错误)?
-        .ok_or(contract::错误码::会话无效)?;
+    let row =
+        sqlx::query("SELECT id, display_name AS display_alias FROM sessions WHERE session_id = $1")
+            .bind(会话标识)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?
+            .ok_or(contract::错误码::会话无效)?;
     Ok((row.get("id"), row.get("display_alias")))
 }
 
