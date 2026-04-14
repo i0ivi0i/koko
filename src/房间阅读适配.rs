@@ -126,9 +126,15 @@ async fn 构建房间恢复快照(
     let (snapshot_messages, has_more_before) =
         if let Some(first_unread_event_position) = 首条未读事件位置 {
             let before_messages =
-                Pg仓储::查询消息页(pool, 房间数据库标识, 房间标识, Some(first_unread_event_position), 8)
-                    .await?;
-            let unread_messages = Pg仓储::查询从位置开始的消息页(
+                super::消息事件适配::查询消息页(
+                    pool,
+                    房间数据库标识,
+                    房间标识,
+                    Some(first_unread_event_position),
+                    8,
+                )
+                .await?;
+            let unread_messages = super::消息事件适配::查询从位置开始的消息页(
                 pool,
                 房间数据库标识,
                 房间标识,
@@ -148,7 +154,8 @@ async fn 构建房间恢复快照(
             ([before_messages, unread_messages].concat(), has_more_before)
         } else {
             let snapshot_messages =
-                Pg仓储::查询消息页(pool, 房间数据库标识, 房间标识, None, 55).await?;
+                super::消息事件适配::查询消息页(pool, 房间数据库标识, 房间标识, None, 55)
+                    .await?;
             let has_more_before = snapshot_messages
                 .first()
                 .map(|message| {
@@ -346,8 +353,14 @@ async fn 拉取房间历史页_异步(
         return Err(contract::错误码::房间不存在);
     };
     let room_db_id: i64 = row.get("id");
-    let messages =
-        Pg仓储::查询消息页(pool, room_db_id, 房间标识, Some(截止位置之前), 限制条数).await?;
+    let messages = super::消息事件适配::查询消息页(
+        pool,
+        room_db_id,
+        房间标识,
+        Some(截止位置之前),
+        限制条数,
+    )
+    .await?;
     Ok(contract::快照::房间历史页 {
         房间标识: 房间标识.to_string(),
         消息: messages,
@@ -403,7 +416,7 @@ pub(super) async fn 拉取房间增量事件_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    let events = Pg仓储::组装消息事件列表_异步(pool, 房间标识, rows).await?;
+    let events = super::消息事件适配::组装消息事件列表_异步(pool, 房间标识, rows).await?;
 
     Ok(contract::快照::房间增量事件 {
         房间标识: 房间标识.to_string(),
