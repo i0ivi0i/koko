@@ -59,6 +59,9 @@ Assert-True (
 ) "run.ps1 默认的 rustus 整文件上限应该覆盖当前群聊视频 200 MiB 的业务上限。"
 Assert-True ($runScript -match 'RUSTUS_SERVER_WORKERS') "run.ps1 应允许显式覆写 rustus workers。"
 Assert-True ($runScript -match '--workers') "run.ps1 应显式把 workers 传给 rustus。"
+Assert-True (
+    $runScript -match 'if \(\[string\]::IsNullOrWhiteSpace\(\$rustusServerWorkers\)\)\s*\{\s*\$rustusServerWorkers = "4"'
+) "run.ps1 默认应给 rustus 4 个 workers，避免开发态继续吃官方保守默认。"
 Assert-True ($runScript -match 'RUSTUS_TUS_EXTENSIONS') "run.ps1 应允许显式覆写 tus extensions。"
 Assert-True ($runScript -match '--tus-extensions') "run.ps1 应显式把 tus extensions 传给 rustus。"
 Assert-True ($runScript -match 'RUSTUS_BEHIND_PROXY') "run.ps1 应允许显式声明 behind-proxy。"

@@ -231,9 +231,9 @@ describe("媒体发布器", () => {
   });
 
   it("默认 Tus 参数保持显式并发与重试策略", () => {
-    expect(媒体Tus文件并发上限).toBe(6);
-    expect(媒体Tus大视频并行分片数).toBe(4);
-    expect(大视频高吞吐阈值字节数).toBe(64 * 1024 * 1024);
+    expect(媒体Tus文件并发上限).toBe(8);
+    expect(媒体Tus大视频并行分片数).toBe(6);
+    expect(大视频高吞吐阈值字节数).toBe(32 * 1024 * 1024);
     expect(媒体Tus重试延迟毫秒数组).toEqual([0, 1000, 3000, 5000]);
   });
 

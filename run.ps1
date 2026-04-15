@@ -357,6 +357,9 @@ try {
         $rustusMaxFileSize = (200 * 1024 * 1024).ToString()
     }
     $rustusServerWorkers = [Environment]::GetEnvironmentVariable("RUSTUS_SERVER_WORKERS")
+    if ([string]::IsNullOrWhiteSpace($rustusServerWorkers)) {
+        $rustusServerWorkers = "4"
+    }
     $rustusTusExtensions = [Environment]::GetEnvironmentVariable("RUSTUS_TUS_EXTENSIONS")
     $rustusBehindProxy = [Environment]::GetEnvironmentVariable("RUSTUS_BEHIND_PROXY")
     $rustusHooksHttpProxyHeaders = [Environment]::GetEnvironmentVariable("RUSTUS_HOOKS_HTTP_PROXY_HEADERS")
@@ -401,7 +404,8 @@ try {
     #    正常图片也会在 transport 层被 413 拦死，业务层根本看不到。
     # 5. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
     # 6. 额外吞吐参数只做“显式接线，不篡改默认”：
-    #    - workers / tus-extensions 只有在环境变量给值时才覆盖官方默认；
+    #    - workers 默认直接提到 4，避免开发态继续吃官方保守默认；
+    #    - tus-extensions 只有在环境变量给值时才覆盖官方默认；
     #    - behind-proxy 仍然保留 flag 语义，不把布尔配置伪装成字符串参数；
     #    - `Authorization,X-Request-ID` 是默认例外，因为 hook 诊断链必须拿到这两个头才能串起浏览器与主服务日志。
     $rustusArgumentList = @(
