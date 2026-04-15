@@ -237,6 +237,48 @@ describe("媒体协作分发", () => {
     });
   });
 
+  it("同一附件的时间线会话和 inline_autoplay 会共享同一个 torrent 会话，但互不误释放", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-multi-1");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-multi-1");
+    const sessionSource = await 解析协作分发源({
+      attachmentId: "att-multi-1",
+      kind: "video",
+      locator,
+      consumerId: "session:att-multi-1",
+    });
+    const autoplaySource = await 解析协作分发源({
+      attachmentId: "att-multi-1",
+      kind: "video",
+      locator,
+      consumerId: "inline_autoplay:att-multi-1",
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(sessionSource).toEqual(autoplaySource);
+    expect(读取协作分发会话状态("swarm-att-multi-1")).toMatchObject({
+      refs: 2,
+      consumers: ["session:att-multi-1", "inline_autoplay:att-multi-1"],
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-multi-1",
+      consumerId: "inline_autoplay:att-multi-1",
+    });
+
+    expect(读取协作分发会话状态("swarm-att-multi-1")).toMatchObject({
+      refs: 1,
+      consumers: ["session:att-multi-1"],
+    });
+  });
+
   it("图片也会复用同一套协作分发 runtime，而不是分叉第二套实现", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, select } = 创建可观测假Torrent(
@@ -465,6 +507,49 @@ describe("媒体协作分发", () => {
     expect(remove).toHaveBeenCalledWith("torrent-info-hash-att-release", {
       destroyStore: false,
     });
+  });
+
+  it("只释放其中一个消费者时，不会提前 destroy torrent/runtime", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-partial-release");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor, remove } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-partial-release");
+    await 解析协作分发源({
+      attachmentId: "att-partial-release",
+      kind: "video",
+      locator,
+      consumerId: "session:att-partial-release",
+    });
+    await 解析协作分发源({
+      attachmentId: "att-partial-release",
+      kind: "video",
+      locator,
+      consumerId: "inline_autoplay:att-partial-release",
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-partial-release",
+      consumerId: "inline_autoplay:att-partial-release",
+    });
+
+    expect(remove).not.toHaveBeenCalled();
+    expect(读取协作分发会话状态("swarm-att-partial-release")).toMatchObject({
+      refs: 1,
+      consumers: ["session:att-partial-release"],
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-partial-release",
+      consumerId: "session:att-partial-release",
+    });
+
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it("重置协作分发运行时时会关闭 stream server 并销毁 WebTorrent client", async () => {

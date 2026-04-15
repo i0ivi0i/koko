@@ -70,7 +70,13 @@ type 协作分发会话 = {
   hint: 协作分发媒体源["hint"] | null;
   presenceIntervalId: ReturnType<typeof setInterval> | null;
   torrent: WebTorrent种子 | null;
-  consumerListeners: Map<string, ((event: 协作分发会话事件) => void) | null>;
+  consumerBindings: Map<
+    string,
+    {
+      attachmentId: string;
+      onSessionEvent: ((event: 协作分发会话事件) => void) | null;
+    }
+  >;
 };
 
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
@@ -200,10 +206,22 @@ function 推导协作分发提示(session: 协作分发会话): 协作分发媒�
   return session.eagerCompleting ? "正在补块" : "正在协作分发";
 }
 
+function 归一化协作分发消费者(input: {
+  attachmentId: string;
+  consumerId?: string;
+  onSessionEvent?: (event: 协作分发会话事件) => void;
+}) {
+  return {
+    consumerId: input.consumerId ?? input.attachmentId,
+    attachmentId: input.attachmentId,
+    onSessionEvent: input.onSessionEvent ?? null,
+  };
+}
+
 function 更新协作分发会话主附件(session: 协作分发会话): void {
-  const nextAttachmentId = session.consumerListeners.keys().next().value;
-  if (typeof nextAttachmentId === "string") {
-    session.attachmentId = nextAttachmentId;
+  const nextBinding = session.consumerBindings.values().next().value;
+  if (nextBinding && typeof nextBinding.attachmentId === "string") {
+    session.attachmentId = nextBinding.attachmentId;
   }
 }
 
@@ -211,24 +229,24 @@ function 发布协作分发会话事件(
   session: 协作分发会话,
   type: 协作分发会话事件["type"]
 ): void {
-  for (const [attachmentId, listener] of session.consumerListeners) {
-    if (!listener) {
+  for (const binding of session.consumerBindings.values()) {
+    if (!binding.onSessionEvent) {
       continue;
     }
     const event: 协作分发会话事件 =
       type === "ASSET_COMPLETE"
         ? {
             type,
-            attachmentId,
+            attachmentId: binding.attachmentId,
             swarmId: session.swarmId,
             contentHash: session.contentHash,
           }
         : {
             type,
-            attachmentId,
+            attachmentId: binding.attachmentId,
             swarmId: session.swarmId,
           };
-    listener(event);
+    binding.onSessionEvent(event);
   }
 }
 
@@ -299,11 +317,23 @@ async function 确保协作分发会话(input: {
   attachmentId: string;
   kind: 媒体种类;
   distribution: 媒体协作分发定位片段;
+  consumerId?: string;
   onSessionEvent?: (event: 协作分发会话事件) => void;
 }): Promise<协作分发会话> {
+  const consumerBinding = 归一化协作分发消费者(input);
   let session = 协作分发会话表.get(input.distribution.swarm_id);
   if (session) {
-    session.consumerListeners.set(input.attachmentId, input.onSessionEvent ?? null);
+    /**
+     * 一个 swarm 会话可以被多个浏览器内消费者同时复用：
+     * - 时间线媒体会话
+     * - 消息流 inline_autoplay
+     * - 后续可能存在的其它只读消费者
+     * 这里按 consumerId 建绑定，避免“一个附件的自动播释放掉正式链路”。
+     */
+    session.consumerBindings.set(consumerBinding.consumerId, {
+      attachmentId: consumerBinding.attachmentId,
+      onSessionEvent: consumerBinding.onSessionEvent,
+    });
     更新协作分发会话主附件(session);
     启动协作分发存活上报(session, input.distribution);
     return session;
@@ -319,7 +349,15 @@ async function 确保协作分发会话(input: {
     hint: input.distribution.web_seed_url ? "正在补块" : null,
     presenceIntervalId: null,
     torrent: null,
-    consumerListeners: new Map([[input.attachmentId, input.onSessionEvent ?? null]]),
+    consumerBindings: new Map([
+      [
+        consumerBinding.consumerId,
+        {
+          attachmentId: consumerBinding.attachmentId,
+          onSessionEvent: consumerBinding.onSessionEvent,
+        },
+      ],
+    ]),
   };
   协作分发会话表.set(input.distribution.swarm_id, session);
   启动协作分发存活上报(session, input.distribution);
@@ -330,7 +368,7 @@ async function 确保协作分发会话(input: {
     session.torrent = torrent;
     if (
       协作分发会话表.get(session.swarmId) !== session ||
-      session.consumerListeners.size === 0
+      session.consumerBindings.size === 0
     ) {
       清理协作分发底层会话(session, runtime);
       return null;
@@ -351,16 +389,23 @@ async function 确保协作分发会话(input: {
   return session;
 }
 
-export function 释放协作分发消费者(attachmentId: string): void {
+export function 释放协作分发消费者(
+  input: string | { attachmentId: string; consumerId?: string }
+): void {
+  const consumerBinding =
+    typeof input === "string"
+      ? 归一化协作分发消费者({ attachmentId: input })
+      : 归一化协作分发消费者(input);
   for (const [swarmId, session] of 协作分发会话表) {
-    if (!session.consumerListeners.has(attachmentId)) {
+    const binding = session.consumerBindings.get(consumerBinding.consumerId);
+    if (!binding || binding.attachmentId !== consumerBinding.attachmentId) {
       continue;
     }
-    session.consumerListeners.delete(attachmentId);
-    if (session.attachmentId === attachmentId) {
+    session.consumerBindings.delete(consumerBinding.consumerId);
+    if (session.attachmentId === binding.attachmentId) {
       更新协作分发会话主附件(session);
     }
-    if (session.consumerListeners.size > 0) {
+    if (session.consumerBindings.size > 0) {
       continue;
     }
     协作分发会话表.delete(swarmId);
@@ -377,7 +422,8 @@ export function 读取协作分发会话状态(swarmId: string) {
   return {
     attachmentId: session.attachmentId,
     swarmId: session.swarmId,
-    refs: session.consumerListeners.size,
+    refs: session.consumerBindings.size,
+    consumers: Array.from(session.consumerBindings.keys()),
     eagerCompleting: session.eagerCompleting,
     hint: 推导协作分发提示(session),
   };
@@ -387,6 +433,7 @@ export async function 解析协作分发源(input: {
   attachmentId: string;
   kind: 媒体种类;
   locator: 媒体定位结果;
+  consumerId?: string;
   onSessionEvent?: (event: 协作分发会话事件) => void;
 }): Promise<协作分发媒体源 | null> {
   const distribution = 读取可用协作分发片段(input.locator);
@@ -397,6 +444,7 @@ export async function 解析协作分发源(input: {
     attachmentId: input.attachmentId,
     kind: input.kind,
     distribution,
+    ...(input.consumerId ? { consumerId: input.consumerId } : {}),
     ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
   });
   const source = await session.sourcePromise;
