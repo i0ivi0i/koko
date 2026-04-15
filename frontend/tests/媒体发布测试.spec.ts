@@ -10,7 +10,9 @@ import {
 } from "../媒体/媒体草稿";
 import {
   创建媒体发布器,
-  媒体Tus并发上限,
+  大视频高吞吐阈值字节数,
+  媒体Tus大视频并行分片数,
+  媒体Tus文件并发上限,
   媒体Tus重试延迟毫秒数组,
   type 媒体上传器,
   type 媒体上传文件,
@@ -131,6 +133,15 @@ class 假媒体上传器 implements 媒体上传器 {
   }
 }
 
+function 创建指定大小文件(name: string, type: string, size: number): File {
+  const file = new File([new Uint8Array([1, 2, 3])], name, { type });
+  Object.defineProperty(file, "size", {
+    configurable: true,
+    value: size,
+  });
+  return file;
+}
+
 function 创建草稿仓库() {
   let drafts: 媒体附件草稿[] = [];
   return {
@@ -151,9 +162,13 @@ function 创建草稿仓库() {
 }
 
 function 创建场景() {
-  const uploader = new 假媒体上传器();
+  const 默认上传器 = new 假媒体上传器();
+  const 大视频上传器 = new 假媒体上传器();
   const drafts = 创建草稿仓库();
-  const uploaderEndpoints: string[] = [];
+  const createUploaderCalls: Array<{
+    tusEndpoint?: string;
+    profile?: string;
+  }> = [];
   const yieldToMainThread = vi.fn(async () => {});
   const prepareMediaUpload = vi.fn(async (_kind: "image" | "video", _sessionId: string, file: File) => ({
     attachment_id: `att-${file.name}`,
@@ -186,9 +201,13 @@ function 创建场景() {
     updateDraft: drafts.updateDraft,
     removeDraft: drafts.removeDraft,
     clearDrafts: drafts.clearDrafts,
-    createUploader: (endpoint) => {
-      uploaderEndpoints.push(endpoint);
-      return uploader;
+    createUploader: (input: unknown) => {
+      const normalized =
+        typeof input === "string"
+          ? { tusEndpoint: input, profile: "legacy-single-uploader" }
+          : ((input ?? {}) as { tusEndpoint?: string; profile?: string });
+      createUploaderCalls.push(normalized);
+      return normalized.profile === "large-video" ? 大视频上传器 : 默认上传器;
     },
     readVideoMetadata: async () => ({ width: 1280, height: 720 }),
     createPreviewUrl: (file) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
@@ -196,11 +215,12 @@ function 创建场景() {
   });
   return {
     发布器,
-    uploader,
+    默认上传器,
+    大视频上传器,
     drafts,
     prepareMediaUpload,
     completeMediaUpload,
-    uploaderEndpoints,
+    createUploaderCalls,
     yieldToMainThread,
   };
 }
@@ -211,7 +231,9 @@ describe("媒体发布器", () => {
   });
 
   it("默认 Tus 参数保持显式并发与重试策略", () => {
-    expect(媒体Tus并发上限).toBe(3);
+    expect(媒体Tus文件并发上限).toBe(6);
+    expect(媒体Tus大视频并行分片数).toBe(4);
+    expect(大视频高吞吐阈值字节数).toBe(64 * 1024 * 1024);
     expect(媒体Tus重试延迟毫秒数组).toEqual([0, 1000, 3000, 5000]);
   });
 
@@ -272,12 +294,12 @@ describe("媒体发布器", () => {
       expect.objectContaining({
         localId: "att-mixed.jpg",
         kind: "image",
-        status: "uploading",
+        status: "transporting",
       }),
       expect.objectContaining({
         localId: "att-mixed.mp4",
         kind: "video",
-        status: "uploading",
+        status: "transporting",
       }),
     ]);
   });
@@ -305,11 +327,11 @@ describe("媒体发布器", () => {
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
-    expect(场景.uploader.addFileCalls).toEqual([]);
+    expect(场景.默认上传器.addFileCalls).toEqual([]);
     expect(场景.drafts.readDrafts()).toEqual([]);
   });
 
-  it("选图后会先 prepare 再写入 uploading 草稿", async () => {
+  it("选图后会先 prepare 再写入 transporting 草稿", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "picked.jpg", {
       type: "image/jpeg",
@@ -318,7 +340,7 @@ describe("媒体发布器", () => {
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     expect(场景.prepareMediaUpload).toHaveBeenCalledWith("image", "s-test", sourceFile);
-    expect(场景.uploader.addFileCalls).toEqual([
+    expect(场景.默认上传器.addFileCalls).toEqual([
       expect.objectContaining({
         id: "att-picked.jpg",
         name: "picked.jpg",
@@ -333,25 +355,57 @@ describe("媒体发布器", () => {
         }),
       }),
     ]);
-    expect(场景.uploaderEndpoints).toEqual(["http://storage.local/files"]);
+    expect(场景.createUploaderCalls).toEqual([
+      {
+        tusEndpoint: "http://storage.local/files",
+        profile: "default",
+      },
+    ]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-picked.jpg",
         kind: "image",
         attachmentId: "att-picked.jpg",
-        status: "uploading",
+        status: "transporting",
       }),
     ]);
   });
 
-  it("upload-success 后必须 complete 成功，草稿才会变成 ready", async () => {
+  it("upload-success 后草稿会先进入 processing，再等 complete 成功后才会 ready", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "complete-ok.jpg", {
       type: "image/jpeg",
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
+    let 完成上传!: (value: Awaited<ReturnType<typeof 场景.completeMediaUpload>>) => void;
+    场景.completeMediaUpload.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          完成上传 = resolve;
+        })
+    );
 
-    await 场景.uploader.触发上传成功("att-complete-ok.jpg");
+    const 上传成功任务 = 场景.默认上传器.触发上传成功("att-complete-ok.jpg");
+
+    await vi.waitFor(() => {
+      expect(场景.drafts.readDrafts()).toEqual([
+        expect.objectContaining({
+          localId: "att-complete-ok.jpg",
+          status: "processing",
+        }),
+      ]);
+    });
+
+    完成上传({
+      attachment_id: "att-complete-ok.jpg",
+      kind: "image",
+      mime_type: "image/jpeg",
+      byte_size: 3,
+      width: 120,
+      height: 90,
+      status: "ready",
+    });
+    await 上传成功任务;
 
     expect(场景.completeMediaUpload).toHaveBeenCalledWith("s-test", "att-complete-ok.jpg");
     expect(场景.drafts.readDrafts()).toEqual([
@@ -376,7 +430,7 @@ describe("媒体发布器", () => {
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
-    await 场景.uploader.触发上传成功("att-complete-failed.jpg");
+    await 场景.默认上传器.触发上传成功("att-complete-failed.jpg");
 
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
@@ -387,14 +441,14 @@ describe("媒体发布器", () => {
     ]);
   });
 
-  it("upload-error 会把 uploading 草稿收口成 failed", async () => {
+  it("upload-error 会把 transporting / processing 草稿收口成 failed", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "xhr-error.jpg", {
       type: "image/jpeg",
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
-    await 场景.uploader.触发上传错误(
+    await 场景.默认上传器.触发上传错误(
       "att-xhr-error.jpg",
       { message: "Upload error" },
       {
@@ -418,7 +472,7 @@ describe("媒体发布器", () => {
     ]);
   });
 
-  it("选视频后会先走媒体 prepare 再写入 uploading 视频草稿", async () => {
+  it("选视频后会先走媒体 prepare 再写入 transporting 视频草稿", async () => {
     const 场景 = 创建场景();
     const sourceFile = new File([new Uint8Array([1, 2, 3])], "picked.mp4", {
       type: "video/mp4",
@@ -432,10 +486,45 @@ describe("媒体发布器", () => {
         localId: "att-picked.mp4",
         kind: "video",
         attachmentId: "att-picked.mp4",
-        status: "uploading",
+        status: "transporting",
         width: 1280,
         height: 720,
       }),
+    ]);
+  });
+
+  it("大视频会走高吞吐 uploader profile，小文件继续走默认 profile", async () => {
+    const 场景 = 创建场景();
+    const imageFile = new File([new Uint8Array([1, 2, 3])], "small.jpg", {
+      type: "image/jpeg",
+    });
+    const smallVideo = new File([new Uint8Array([1, 2, 3])], "small.mp4", {
+      type: "video/mp4",
+    });
+    const largeVideo = 创建指定大小文件(
+      "large.mp4",
+      "video/mp4",
+      大视频高吞吐阈值字节数
+    );
+
+    await 场景.发布器.处理选择媒体文件([imageFile, smallVideo, largeVideo]);
+
+    expect(场景.createUploaderCalls).toEqual([
+      {
+        tusEndpoint: "http://storage.local/files",
+        profile: "default",
+      },
+      {
+        tusEndpoint: "http://storage.local/files",
+        profile: "large-video",
+      },
+    ]);
+    expect(场景.默认上传器.addFileCalls.map((item) => item.id)).toEqual([
+      "att-small.jpg",
+      "att-small.mp4",
+    ]);
+    expect(场景.大视频上传器.addFileCalls.map((item) => item.id)).toEqual([
+      "att-large.mp4",
     ]);
   });
 
@@ -446,7 +535,7 @@ describe("媒体发布器", () => {
     });
 
     await 场景.发布器.处理选择媒体文件([sourceFile]);
-    await 场景.uploader.触发上传成功("att-clip.mp4");
+    await 场景.默认上传器.触发上传成功("att-clip.mp4");
 
     expect(场景.completeMediaUpload).toHaveBeenCalledWith("s-test", "att-clip.mp4");
     expect(场景.drafts.readDrafts()).toEqual([
@@ -468,9 +557,9 @@ describe("媒体发布器", () => {
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
-    await 场景.uploader.触发上传停滞("att-stalled.jpg");
+    await 场景.默认上传器.触发上传停滞("att-stalled.jpg");
 
-    expect(场景.uploader.removeFileCalls).toEqual(["att-stalled.jpg"]);
+    expect(场景.默认上传器.removeFileCalls).toEqual(["att-stalled.jpg"]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-stalled.jpg",
@@ -493,10 +582,10 @@ describe("媒体发布器", () => {
       expect(场景.drafts.readDrafts()).toEqual([
         expect.objectContaining({
           localId: "att-slow.mp4",
-          status: "uploading",
+          status: "transporting",
         }),
       ]);
-      expect(场景.uploader.removeFileCalls).toEqual([]);
+      expect(场景.默认上传器.removeFileCalls).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -512,7 +601,7 @@ describe("媒体发布器", () => {
       status: "failed",
       errorCode: "attachment_upload_failed",
     });
-    场景.uploader.静默丢弃文件("att-retry.jpg");
+    场景.默认上传器.静默丢弃文件("att-retry.jpg");
     场景.prepareMediaUpload.mockResolvedValueOnce({
       attachment_id: "att-retry-second",
       upload_method: "tus" as const,
@@ -526,7 +615,7 @@ describe("媒体发布器", () => {
       },
       expires_at: "2026-04-10T12:00:00Z",
     });
-    场景.uploader.nextAddFileReturnedId = "uppy-retry-second-local-id";
+    场景.默认上传器.nextAddFileReturnedId = "uppy-retry-second-local-id";
 
     await 场景.发布器.重试草稿("att-retry.jpg");
 
@@ -534,7 +623,7 @@ describe("媒体发布器", () => {
       expect.objectContaining({
         localId: "uppy-retry-second-local-id",
         attachmentId: "att-retry-second",
-        status: "uploading",
+        status: "transporting",
         errorCode: "",
       }),
     ]);

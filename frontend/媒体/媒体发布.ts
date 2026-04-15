@@ -74,16 +74,34 @@ export interface 媒体上传器 {
 }
 
 /**
- * 浏览器端同时把很多大文件都推给 Tus，只会把单标签页、sidecar 和 complete 热点一起打爆。
- * 这里显式钉住 transport 并发上限，保证上传壳只做资源整形，不自己发明第二套调度真相。
+ * 文件级并发针对“同时有多少个文件在传”。
+ * 第二轮专项把它从保护值提升到吞吐优先基线，但仍保留边界，不允许一次把 9 个文件全放飞。
  */
-export const 媒体Tus并发上限 = 3;
+export const 媒体Tus文件并发上限 = 6;
+
+/**
+ * 只对大视频启用受控的单文件并行分片。
+ * 这个值属于 transport 资源策略，不是业务真相；收益必须靠实测证明，后续可独立下调。
+ */
+export const 媒体Tus大视频并行分片数 = 4;
+
+/**
+ * 小视频默认继续走单流上传，避免为了“看起来更并行”把浏览器连接数和 sidecar 压力无谓抬高。
+ */
+export const 大视频高吞吐阈值字节数 = 64 * 1024 * 1024;
 
 /**
  * 重试节奏也显式导出，避免未来升级 Uppy/Tus 后默默吃到默认值漂移。
  * `0` 表示第一次失败立即重试一次，后续退避保持克制，既给慢网恢复机会，也不把失败放大成请求风暴。
  */
 export const 媒体Tus重试延迟毫秒数组 = [0, 1000, 3000, 5000] as const;
+
+type 媒体Tus上传档位 = "default" | "large-video";
+
+type 媒体上传器创建参数 = {
+  tusEndpoint: string;
+  profile: 媒体Tus上传档位;
+};
 
 type 媒体发布器依赖 = {
   getSessionId(): string;
@@ -98,7 +116,7 @@ type 媒体发布器依赖 = {
   updateDraft(localId: string, patch: 媒体草稿状态补丁): void;
   removeDraft(localId: string): void;
   clearDrafts(): void;
-  createUploader?(tusEndpoint: string): 媒体上传器;
+  createUploader?(input: 媒体上传器创建参数): 媒体上传器;
   readVideoMetadata?(file: File): Promise<{ width: number; height: number }>;
   createPreviewUrl?(file: Blob | null): string;
   yieldToMainThread?(): Promise<void>;
@@ -169,6 +187,16 @@ function 默认文件名(kind: 媒体种类): string {
   return kind === "video" ? "未命名视频" : "未命名图片";
 }
 
+function 读取媒体上传档位(kind: 媒体种类, file: File): 媒体Tus上传档位 {
+  return kind === "video" && file.size >= 大视频高吞吐阈值字节数
+    ? "large-video"
+    : "default";
+}
+
+function 构造媒体上传器键(input: 媒体上传器创建参数): string {
+  return `${input.profile}@${input.tusEndpoint}`;
+}
+
 function 创建失败草稿标识(kind: 媒体种类, prefix: string, file: File): string {
   return `${prefix}-${kind}-${file.name}-${file.size}-${file.lastModified}`;
 }
@@ -195,7 +223,17 @@ function 记录不支持媒体文件(sourceFile: File): void {
  * 这里的职责只有“把媒体文件稳定送进 prepare -> tus -> complete 主链”，
  * 不再额外长第二套私有上传器。
  */
-function 创建默认媒体上传器(tusEndpoint: string): 媒体上传器 {
+function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体上传器 {
+  const tusOptions = {
+    endpoint: input.tusEndpoint,
+    limit: 媒体Tus文件并发上限,
+    retryDelays: [...媒体Tus重试延迟毫秒数组],
+    uploadDataDuringCreation: true,
+    addRequestId: true,
+    ...(input.profile === "large-video"
+      ? { parallelUploads: 媒体Tus大视频并行分片数 }
+      : {}),
+  };
   return new Uppy<媒体上传Meta, 媒体上传响应体>({
     autoProceed: true,
     allowMultipleUploadBatches: true,
@@ -205,9 +243,7 @@ function 创建默认媒体上传器(tusEndpoint: string): 媒体上传器 {
       maxFileSize: 视频附件上传上限字节数,
     },
   }).use(Tus, {
-    endpoint: tusEndpoint,
-    limit: 媒体Tus并发上限,
-    retryDelays: [...媒体Tus重试延迟毫秒数组],
+    ...tusOptions,
     /**
      * Rustus sidecar 只需要业务最小元数据，不应该把 session_id、预览尺寸这类壳层字段也透传进去。
      * 这里显式收口 allowedMetaFields，避免 transport sidecar 反向长成业务真相持有者。
@@ -269,20 +305,29 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const readVideoMetadata = deps.readVideoMetadata ?? 读取视频文件元数据;
   const createPreviewUrl = deps.createPreviewUrl ?? 创建本地媒体预览地址;
   const yieldToMainThread = deps.yieldToMainThread ?? 默认让出主线程;
-  let uploader: 媒体上传器 | null = null;
-  let 当前TusEndpoint = "";
+  const 上传器表 = new Map<string, 媒体上传器>();
+  const 草稿上传器键表 = new Map<string, string>();
 
   const 读取媒体草稿 = (localId: string): 媒体附件草稿 | undefined =>
     deps.readDrafts().find((item) => item.localId === localId);
 
+  const 读取草稿所属上传器 = (localId: string): 媒体上传器 | null => {
+    const uploaderKey = 草稿上传器键表.get(localId);
+    if (!uploaderKey) {
+      return null;
+    }
+    return 上传器表.get(uploaderKey) ?? null;
+  };
+
   /**
-   * file-added 是 UI 草稿真正进入“上传中”的唯一时刻。
+   * file-added 是 UI 草稿真正进入“transporting”的唯一时刻。
    * kind / attachment_id / 本地预览都从同一份上传 meta 读取，避免壳层再猜第二遍。
    */
-  const handleMediaUploadAdded = (file: 媒体上传文件): void => {
+  const handleMediaUploadAdded = (uploaderKey: string, file: 媒体上传文件): void => {
     const sourceFile = file.data instanceof File ? file.data : null;
     const kind = 读取媒体种类(file);
     const previewSize = 读取预览宽高(file);
+    草稿上传器键表.set(file.id, uploaderKey);
     deps.writeDraft({
       localId: file.id,
       kind,
@@ -290,7 +335,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       previewUrl: file.data instanceof Blob ? createPreviewUrl(file.data) : "",
       width: previewSize.width,
       height: previewSize.height,
-      status: "uploading",
+      status: "transporting",
       fileName: file.name ?? 默认文件名(kind),
       errorCode: "",
       sourceFile,
@@ -298,12 +343,14 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   };
 
   const handleMediaUploadSuccess = async (
+    uploaderKey: string,
     file: 媒体上传文件 | undefined,
     _response: { body?: 媒体上传响应体 } | undefined
   ): Promise<void> => {
     if (!file) {
       return;
     }
+    草稿上传器键表.set(file.id, uploaderKey);
     const attachmentId = 提取媒体附件标识(file) || 读取媒体草稿(file.id)?.attachmentId || "";
     if (!attachmentId) {
       deps.updateDraft(file.id, {
@@ -312,10 +359,22 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       });
       return;
     }
+    const currentDraft = 读取媒体草稿(file.id);
+    if (!currentDraft || currentDraft.status !== "transporting") {
+      return;
+    }
+    /**
+     * transport success 不是业务 ready。
+     * 这里先把壳层状态切到 processing，明确告诉用户“字节已上传完，正在等后端 complete”。
+     */
+    deps.updateDraft(file.id, {
+      status: "processing",
+      errorCode: "",
+    });
     try {
       const ready = await deps.completeMediaUpload(deps.getSessionId(), attachmentId);
-      const currentDraft = 读取媒体草稿(file.id);
-      if (!currentDraft || currentDraft.status !== "uploading") {
+      const processedDraft = 读取媒体草稿(file.id);
+      if (!processedDraft || processedDraft.status !== "processing") {
         return;
       }
       deps.updateDraft(file.id, {
@@ -327,8 +386,11 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
         errorCode: "",
       });
     } catch (error: unknown) {
-      const currentDraft = 读取媒体草稿(file.id);
-      if (!currentDraft || currentDraft.status !== "uploading") {
+      const processedDraft = 读取媒体草稿(file.id);
+      if (
+        !processedDraft ||
+        (processedDraft.status !== "transporting" && processedDraft.status !== "processing")
+      ) {
         return;
       }
       deps.updateDraft(file.id, {
@@ -364,6 +426,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   };
 
   const handleMediaUploadRemoved = (file: 媒体上传文件): void => {
+    草稿上传器键表.delete(file.id);
     deps.removeDraft(file.id);
   };
 
@@ -375,9 +438,11 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
    * 3. 不让“上传中”无限挂住，也不让草稿凭空消失。
    */
   const handleMediaUploadStalled = (
+    uploaderKey: string,
     _error: { message: string },
     files: 媒体上传文件[]
   ): void => {
+    const uploader = 上传器表.get(uploaderKey);
     if (!uploader) {
       return;
     }
@@ -386,6 +451,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       const sourceFile = file.data instanceof File ? file.data : existingDraft?.sourceFile ?? null;
       const kind = existingDraft?.kind ?? 读取媒体种类(file);
       uploader.removeFile(file.id);
+      草稿上传器键表.delete(file.id);
       deps.writeDraft({
         localId: file.id,
         kind,
@@ -401,27 +467,24 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     }
   };
 
-  const ensureUploader = (tusEndpoint: string): 媒体上传器 => {
-    if (uploader && 当前TusEndpoint === tusEndpoint) {
-      return uploader;
+  const ensureUploader = (input: 媒体上传器创建参数): { key: string; uploader: 媒体上传器 } => {
+    const key = 构造媒体上传器键(input);
+    const existingUploader = 上传器表.get(key);
+    if (existingUploader) {
+      return { key, uploader: existingUploader };
     }
-    if (uploader && 当前TusEndpoint !== tusEndpoint) {
-      /**
-       * 当前实现下整个会话只应有一个权威 Tus endpoint。
-       * 这里保留显式切换能力，是为了防止未来环境差异把旧 endpoint 悄悄复用到新附件上。
-       */
-      uploader.destroy();
-      uploader = null;
-    }
-    const nextUploader = createUploader(tusEndpoint);
-    nextUploader.on("file-added", handleMediaUploadAdded);
-    nextUploader.on("upload-success", handleMediaUploadSuccess);
+    const nextUploader = createUploader(input);
+    nextUploader.on("file-added", (file) => handleMediaUploadAdded(key, file));
+    nextUploader.on("upload-success", (file, response) =>
+      handleMediaUploadSuccess(key, file, response)
+    );
     nextUploader.on("upload-error", handleMediaUploadError);
-    nextUploader.on("upload-stalled", handleMediaUploadStalled);
+    nextUploader.on("upload-stalled", (error, files) =>
+      handleMediaUploadStalled(key, error, files)
+    );
     nextUploader.on("file-removed", handleMediaUploadRemoved);
-    uploader = nextUploader;
-    当前TusEndpoint = tusEndpoint;
-    return nextUploader;
+    上传器表.set(key, nextUploader);
+    return { key, uploader: nextUploader };
   };
 
   /**
@@ -488,8 +551,12 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           continue;
         }
         const prepared = await deps.prepareMediaUpload(kind, deps.getSessionId(), preparedFile.file);
-        const currentUploader = ensureUploader(prepared.tus_endpoint);
-        currentUploader.addFile({
+        const uploaderInput: 媒体上传器创建参数 = {
+          tusEndpoint: prepared.tus_endpoint,
+          profile: 读取媒体上传档位(kind, preparedFile.file),
+        };
+        const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
+        const nextLocalId = currentUploader.addFile({
           // 让 prepared 生成的 attachment_id 直接成为上传文件主键，
           // 可以保证 prepare / tus / complete / 草稿日志 全部围绕一条真相关联。
           id: prepared.attachment_id,
@@ -504,6 +571,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             previewHeight: preparedFile.height,
           }),
         });
+        草稿上传器键表.set(nextLocalId, uploaderKey);
       } catch (error: unknown) {
         deps.writeDraft({
           localId: 创建失败草稿标识(kind, "rejected", sourceFile),
@@ -546,8 +614,10 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     },
 
     移除草稿(localId: string): void {
+      const uploader = 读取草稿所属上传器(localId);
       uploader?.removeFile(localId);
       if (!uploader?.getFile(localId)) {
+        草稿上传器键表.delete(localId);
         deps.removeDraft(localId);
       }
     },
@@ -557,10 +627,10 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       if (!draft) {
         return;
       }
-      const currentUploader = uploader;
+      const currentUploader = 读取草稿所属上传器(localId);
       deps.updateDraft(localId, {
         attachmentId: "",
-        status: "uploading",
+        status: "transporting",
         errorCode: "",
       });
       if (!currentUploader || !currentUploader.getFile(localId)) {
@@ -577,7 +647,11 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             deps.getSessionId(),
             draft.sourceFile
           );
-          const currentUploader = ensureUploader(prepared.tus_endpoint);
+          const uploaderInput: 媒体上传器创建参数 = {
+            tusEndpoint: prepared.tus_endpoint,
+            profile: 读取媒体上传档位(draft.kind, draft.sourceFile),
+          };
+          const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
           const nextLocalId = currentUploader.addFile({
             id: localId,
             name: draft.fileName,
@@ -591,12 +665,14 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
               previewHeight: draft.height,
             }),
           });
+          草稿上传器键表.set(nextLocalId, uploaderKey);
           /**
            * 真正的 Uppy 本地文件 id 由它自己根据文件属性和 meta.relativePath 生成，
            * 不保证等于我们传给 addFile 的 `id`。如果这里还把旧草稿留着，就会让失败重试
            * 长出“旧 localId + 新 localId”两条草稿，形成幽灵副本。
            */
           if (nextLocalId !== localId) {
+            草稿上传器键表.delete(localId);
             deps.removeDraft(localId);
           }
         } catch (error: unknown) {
@@ -616,15 +692,19 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     },
 
     清空(): void {
-      uploader?.cancelAll();
+      for (const uploader of 上传器表.values()) {
+        uploader.cancelAll();
+      }
+      草稿上传器键表.clear();
       deps.clearDrafts();
     },
 
     销毁(): void {
       this.清空();
-      uploader?.destroy();
-      uploader = null;
-      当前TusEndpoint = "";
+      for (const uploader of 上传器表.values()) {
+        uploader.destroy();
+      }
+      上传器表.clear();
     },
   };
 }
