@@ -10,8 +10,8 @@ import {
 } from "../媒体/媒体草稿";
 import {
   创建媒体发布器,
+  构造媒体Tus传输选项,
   大视频高吞吐阈值字节数,
-  媒体Tus大视频并行分片数,
   媒体Tus文件并发上限,
   媒体Tus重试延迟毫秒数组,
   type 媒体上传器,
@@ -235,9 +235,19 @@ describe("媒体发布器", () => {
 
   it("默认 Tus 参数保持显式并发与重试策略", () => {
     expect(媒体Tus文件并发上限).toBe(8);
-    expect(媒体Tus大视频并行分片数).toBe(6);
     expect(大视频高吞吐阈值字节数).toBe(32 * 1024 * 1024);
     expect(媒体Tus重试延迟毫秒数组).toEqual([0, 1000, 3000, 5000]);
+  });
+
+  it("large-video 档位当前不会开启单文件并行分片", () => {
+    const transportOptions = 构造媒体Tus传输选项({
+      tusEndpoint: "http://storage.local/files",
+      profile: "large-video",
+    });
+
+    expect("parallelUploads" in transportOptions).toBe(false);
+    expect(transportOptions.uploadDataDuringCreation).toBe(true);
+    expect(transportOptions.addRequestId).toBe(true);
   });
 
   it("Uppy 本地文件会忽略传入 id，只有 relativePath 变化才会改变内部 file.id", () => {

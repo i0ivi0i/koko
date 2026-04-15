@@ -80,15 +80,11 @@ export interface 媒体上传器 {
 export const 媒体Tus文件并发上限 = 8;
 
 /**
- * 只对大视频启用受控的单文件并行分片。
- * 这个值属于 transport 资源策略，不是业务真相；这轮把它再推高一档，
- * 让真正的大视频更积极地吃带宽，同时仍然给后续实测留出独立下调空间。
- */
-export const 媒体Tus大视频并行分片数 = 6;
-
-/**
- * 32 MiB 以下的视频继续走默认档；从这个阈值往上，就认为它已经值得切到更激进的吞吐 profile。
- * 这样做的目的，是让“中等偏大视频”不必等到 64 MiB 才吃到并行收益。
+ * 32 MiB 以下的视频继续走默认档；从这个阈值往上，就切到独立的 large-video uploader profile。
+ * 当前 profile 的价值主要是：
+ * 1. 把大视频和图片/小视频拆到不同上传器队列里，避免它们共用同一个本地并发池；
+ * 2. 给未来真正支持 Tus partial upload / concatenation 时保留稳定切入点；
+ * 3. 在后端 hook 仍以“单附件 = 单运输回执”为真相时，不再伪装成已经支持单文件并行分片。
  */
 export const 大视频高吞吐阈值字节数 = 32 * 1024 * 1024;
 
@@ -200,6 +196,27 @@ function 构造媒体上传器键(input: 媒体上传器创建参数): string {
   return `${input.profile}@${input.tusEndpoint}`;
 }
 
+/**
+ * 当前主链里，Tus transport 只承诺“单附件对应一条运输回执”。
+ * 因此这里必须显式禁止 large-video 再偷偷开启 `parallelUploads`：
+ * 1. `tus-js-client` 的 partial upload 不会自动复用普通 metadata；
+ * 2. Rustus hook 仍要求 `pre-create/post-finish` 围绕同一 attachment_id 与整文件长度工作；
+ * 3. 在后端还没正式建模 concatenation 之前，前端不能假装单文件并行分片已经成立。
+ */
+export function 构造媒体Tus传输选项(input: 媒体上传器创建参数) {
+  const transportOptions = {
+    endpoint: input.tusEndpoint,
+    limit: 媒体Tus文件并发上限,
+    retryDelays: [...媒体Tus重试延迟毫秒数组],
+    uploadDataDuringCreation: true,
+    addRequestId: true,
+  };
+  if (input.profile === "large-video") {
+    return transportOptions;
+  }
+  return transportOptions;
+}
+
 function 创建失败草稿标识(kind: 媒体种类, prefix: string, file: File): string {
   return `${prefix}-${kind}-${file.name}-${file.size}-${file.lastModified}`;
 }
@@ -227,16 +244,7 @@ function 记录不支持媒体文件(sourceFile: File): void {
  * 不再额外长第二套私有上传器。
  */
 function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体上传器 {
-  const tusOptions = {
-    endpoint: input.tusEndpoint,
-    limit: 媒体Tus文件并发上限,
-    retryDelays: [...媒体Tus重试延迟毫秒数组],
-    uploadDataDuringCreation: true,
-    addRequestId: true,
-    ...(input.profile === "large-video"
-      ? { parallelUploads: 媒体Tus大视频并行分片数 }
-      : {}),
-  };
+  const tusOptions = 构造媒体Tus传输选项(input);
   return new Uppy<媒体上传Meta, 媒体上传响应体>({
     autoProceed: true,
     allowMultipleUploadBatches: true,
