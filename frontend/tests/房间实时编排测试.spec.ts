@@ -319,7 +319,7 @@ describe("房间实时编排", () => {
     });
   });
 
-  it("存在 uploading 图片草稿时不会上送 create_message", async () => {
+  it("存在 transporting 图片草稿时不会上送 create_message", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({
       roomId: "r-test",
@@ -334,7 +334,7 @@ describe("房间实时编排", () => {
         previewUrl: "blob:http://test.local/draft-uploading",
         width: 120,
         height: 90,
-        status: "uploading",
+        status: "transporting",
         fileName: "uploading.png",
         errorCode: "",
       },
@@ -350,7 +350,7 @@ describe("房间实时编排", () => {
     expect(场景.transport.socket.sentEvents).toEqual([]);
   });
 
-  it("存在 uploading 视频草稿时不会上送 create_message", async () => {
+  it("存在 transporting 视频草稿时不会上送 create_message", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({
       roomId: "r-test",
@@ -379,7 +379,7 @@ describe("房间实时编排", () => {
         previewUrl: "blob:http://test.local/draft-video-uploading",
         width: 1280,
         height: 720,
-        status: "uploading",
+        status: "transporting",
         fileName: "uploading.mp4",
         errorCode: "",
       },
