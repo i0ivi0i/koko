@@ -48,9 +48,15 @@ Assert-True ($runScript -match 'pre-create,post-finish') "run.ps1 应该只启�
 Assert-True ($runScript -match 'RUSTUS_MAX_BODY_SIZE') "run.ps1 应该允许显式覆写 rustus 的 body size 上限，避免默认 256KiB 把正常图片直接打成 413。"
 Assert-True ($runScript -match '--max-body-size') "run.ps1 应该显式传入 rustus 的 max-body-size，不能让 sidecar 默认 body limit 反向打坏媒体上传。"
 Assert-True (
-    $runScript -match '50\s*\*\s*1024\s*\*\s*1024' -or
-    $runScript -match '52428800'
-) "run.ps1 默认的 rustus body size 至少应该覆盖当前群聊视频 50 MiB 的业务上限。"
+    $runScript -match '200\s*\*\s*1024\s*\*\s*1024' -or
+    $runScript -match '209715200'
+) "run.ps1 默认的 rustus body size 至少应该覆盖当前群聊视频 200 MiB 的业务上限。"
+Assert-True ($runScript -match 'RUSTUS_MAX_FILE_SIZE') "run.ps1 应该允许显式覆写 rustus 的整文件上限。"
+Assert-True ($runScript -match '--max-file-size') "run.ps1 应该显式传入 rustus 的 max-file-size。"
+Assert-True (
+    $runScript -match '200\s*\*\s*1024\s*\*\s*1024' -or
+    $runScript -match '209715200'
+) "run.ps1 默认的 rustus 整文件上限应该覆盖当前群聊视频 200 MiB 的业务上限。"
 Assert-True ($runScript -match 'RUSTUS_SERVER_HOST') "run.ps1 应该允许显式覆写 rustus 的监听 host，避免 LAN / 公网模拟设备只能打到本机回环地址。"
 Assert-True ($runScript -match '"0\.0\.0\.0"') "run.ps1 默认的 rustus 监听 host 应该允许局域网设备访问，不能继续硬编码成本机回环。"
 Assert-True ($runScript -match '--url') "run.ps1 应该显式固定 rustus 的 Tus base url。"

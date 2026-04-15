@@ -425,6 +425,32 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
     })
 }
 
+/// 上传完成阶段的重活默认只允许少量并发进入：
+/// 1. 这不是业务规则，而是保护 complete 热点的资源闸门；
+/// 2. 默认值保持保守，避免大视频同时 complete 时把内存和 CPU 一起顶满；
+/// 3. 显式环境变量仍可覆盖，方便公网部署按机器规格调优。
+pub fn 读取媒体上传完成并发上限() -> io::Result<usize> {
+    let raw = 读取可选环境变量("MEDIA_COMPLETE_MAX_CONCURRENCY");
+    match raw.as_deref() {
+        None => Ok(2),
+        Some(value) => value.parse::<usize>().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("环境变量 MEDIA_COMPLETE_MAX_CONCURRENCY 不是合法整数: {value}"),
+            )
+        }).and_then(|value| {
+            if value == 0 {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "MEDIA_COMPLETE_MAX_CONCURRENCY 不能为 0",
+                ))
+            } else {
+                Ok(value)
+            }
+        }),
+    }
+}
+
 fn 读取可选环境变量(key: &str) -> Option<String> {
     env::var(key)
         .ok()
@@ -556,6 +582,19 @@ mod tests {
         恢复环境变量("RUSTUS_URL", old_url);
         恢复环境变量("RUSTUS_DATA_DIR", old_data_dir);
         恢复环境变量("RUSTUS_INFO_DIR", old_info_dir);
+    }
+
+    #[test]
+    #[serial]
+    fn 读取媒体上传完成并发上限会给出默认值并尊重显式环境变量() {
+        let old = env::var("MEDIA_COMPLETE_MAX_CONCURRENCY").ok();
+        env::remove_var("MEDIA_COMPLETE_MAX_CONCURRENCY");
+        assert_eq!(读取媒体上传完成并发上限().expect("默认值应可读"), 2);
+
+        env::set_var("MEDIA_COMPLETE_MAX_CONCURRENCY", "4");
+        assert_eq!(读取媒体上传完成并发上限().expect("显式值应可读"), 4);
+
+        恢复环境变量("MEDIA_COMPLETE_MAX_CONCURRENCY", old);
     }
 
     #[test]

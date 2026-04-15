@@ -91,6 +91,8 @@ pub struct 应用状态 {
     pub rustus_server_port: u16,
     pub rustus_url: String,
     pub rustus_data_dir: String,
+    pub media_complete_max_concurrency: usize,
+    pub media_complete_gate: Arc<tokio::sync::Semaphore>,
 }
 
 /// 组装 HTTP 冷路径 + Realtime 热路径路由。
@@ -107,6 +109,7 @@ pub async fn 构建应用状态(
     let media_packaging = crate::assembly::读取媒体打包配置();
     let swarm = crate::assembly::读取协作分发配置()?;
     let rustus = crate::assembly::读取rustus配置()?;
+    let media_complete_max_concurrency = crate::assembly::读取媒体上传完成并发上限()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
     fs::create_dir_all(&rustus.data_dir)
         .map_err(|err| std::io::Error::other(format!("创建 Rustus data dir 失败: {err}")))?;
@@ -134,6 +137,8 @@ pub async fn 构建应用状态(
         rustus_server_port: rustus.server_port,
         rustus_url: rustus.url,
         rustus_data_dir: rustus.data_dir,
+        media_complete_max_concurrency,
+        media_complete_gate: Arc::new(tokio::sync::Semaphore::new(media_complete_max_concurrency)),
     })
 }
 
