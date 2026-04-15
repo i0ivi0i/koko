@@ -506,8 +506,13 @@ function 读取聊天壳测试内核(el: 聊天壳): 聊天壳测试内核 {
 
 type 聊天媒体测试端口 = {
   设置媒体播放器供测试(player: {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
-    释放附件播放资源?(attachmentId: string): void;
+    解析播放结果(input: {
+      attachmentId: string;
+      kind: "image" | "video";
+      surface?: "viewer" | "inline_autoplay";
+      consumerId?: string;
+    }): Promise<媒体播放结果>;
+    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
   }): void;
   设置媒体查看器供测试(viewer: {
     打开(input: 媒体查看器打开请求): void;
@@ -567,8 +572,13 @@ export function 注入图片草稿(el: 聊天壳, draft: 图片附件草稿): vo
 export function 注入媒体播放器供测试(
   el: 聊天壳,
   player: {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
-    释放附件播放资源?(attachmentId: string): void;
+    解析播放结果(input: {
+      attachmentId: string;
+      kind: "image" | "video";
+      surface?: "viewer" | "inline_autoplay";
+      consumerId?: string;
+    }): Promise<媒体播放结果>;
+    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
   }
 ): void {
   读取聊天媒体编排供测试(el).设置媒体播放器供测试(player);

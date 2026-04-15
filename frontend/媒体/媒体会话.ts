@@ -64,6 +64,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
   let 正在恢复 = false;
   let 缺少群友 = false;
   let 冷源不可用 = false;
+  const 会话ConsumerId = `session:${deps.attachmentId}`;
 
   let current: 媒体会话快照 = {
     attachmentId: deps.attachmentId,
@@ -123,6 +124,13 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       const playback = await deps.解析播放结果({
         attachmentId: deps.attachmentId,
         kind: deps.kind,
+        /**
+         * 时间线媒体会话必须稳定占住自己的 consumer 身份：
+         * - 恢复解析、后台补齐、正式查看器投影都围绕这一条会话真相运转；
+         * - 不能和 inline_autoplay 共用一个“只有 attachmentId 的粗粒度占用”；
+         * - 这样后面释放自动播时，才不会误伤时间线正在用的 swarm。
+         */
+        consumerId: 会话ConsumerId,
       });
       if (已销毁 || 当前代次 !== 恢复代次) {
         return;
@@ -154,6 +162,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       const playback = await deps.解析播放结果({
         attachmentId: deps.attachmentId,
         kind: deps.kind,
+        consumerId: 会话ConsumerId,
       });
       if (已销毁) {
         return;

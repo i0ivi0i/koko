@@ -37,6 +37,7 @@ const 创建内核依赖 = () => {
 type 图片协作补齐激活请求 = {
   attachmentId: string;
   kind: "image" | "video";
+  consumerId?: string;
   onSessionEvent?: (signal: {
     type: "SWARM_ACTIVE" | "SWARM_NO_PEERS" | "ASSET_COMPLETE";
     attachmentId: string;
@@ -59,9 +60,14 @@ type 聊天媒体测试端口 = {
     销毁(): void;
   }): void;
   设置媒体播放器供测试(player: {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    解析播放结果(input: {
+      attachmentId: string;
+      kind: "image" | "video";
+      surface?: "viewer" | "inline_autoplay";
+      consumerId?: string;
+    }): Promise<媒体播放结果>;
     激活协作补齐?(input: 图片协作补齐激活请求): Promise<void>;
-    释放附件播放资源?(attachmentId: string): void;
+    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
   }): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
 };
@@ -644,6 +650,7 @@ describe("聊天应用内核", () => {
 
     expect(激活协作补齐).toHaveBeenCalledWith({
       attachmentId: "att-image-backfill-1",
+      consumerId: "session:att-image-backfill-1",
       kind: "image",
       onSessionEvent: expect.any(Function),
     });
@@ -1456,7 +1463,10 @@ describe("聊天应用内核", () => {
 
     kernel.dispose();
 
-    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-release-1");
+    expect(释放附件播放资源).toHaveBeenCalledWith({
+      attachmentId: "att-video-release-1",
+      consumerId: "session:att-video-release-1",
+    });
   });
 
   it("打开正式查看器前会先释放当前自动播 owner，并通过 inline_autoplay surface 解析轻量播放源", async () => {
@@ -1536,6 +1546,7 @@ describe("聊天应用内核", () => {
     expect(解析播放结果).toHaveBeenCalledWith({
       attachmentId: "att-video-inline-1",
       kind: "video",
+      consumerId: "inline_autoplay:att-video-inline-1",
       surface: "inline_autoplay",
     });
     expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe("att-video-inline-1");
@@ -1557,7 +1568,10 @@ describe("聊天应用内核", () => {
       },
     });
 
-    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-inline-1");
+    expect(释放附件播放资源).toHaveBeenCalledWith({
+      attachmentId: "att-video-inline-1",
+      consumerId: "inline_autoplay:att-video-inline-1",
+    });
     expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
     expect(打开查看器).toHaveBeenCalledTimes(1);
   });
@@ -1701,7 +1715,14 @@ describe("聊天应用内核", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-inline-1");
+    expect(释放附件播放资源).toHaveBeenCalledWith({
+      attachmentId: "att-video-inline-1",
+      consumerId: "inline_autoplay:att-video-inline-1",
+    });
+    expect(释放附件播放资源).not.toHaveBeenCalledWith({
+      attachmentId: "att-video-inline-1",
+      consumerId: "session:att-video-inline-1",
+    });
     expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
   });
 
@@ -1775,7 +1796,10 @@ describe("聊天应用内核", () => {
 
     await kernel.dispatch({ type: "LEAVE_ROOM_VIEW_REQUESTED" });
 
-    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-inline-1");
+    expect(释放附件播放资源).toHaveBeenCalledWith({
+      attachmentId: "att-video-inline-1",
+      consumerId: "inline_autoplay:att-video-inline-1",
+    });
     expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
   });
 });

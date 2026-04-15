@@ -94,6 +94,50 @@ describe("媒体播放器", () => {
     expect(释放协作分发源).not.toHaveBeenCalled();
   });
 
+  it("协作分发主链成立时，会把 consumerId 透传给 swarm resolver", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-consumer-1",
+      hint: "正在协作分发" as const,
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-consumer-1",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/original-video-consumer-1",
+        thumbnail_url: null,
+        distribution: {
+          content_id: "content_att-video-consumer-1",
+          content_hash: "hash-video-consumer-1",
+          swarm_id: "swarm-hash-video-consumer-1",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-consumer-1",
+          torrent_info_hash: "torrent-info-hash-video-consumer-1",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-consumer-1",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+        },
+      }),
+      resolveSwarmSource,
+      probeAnchor: async () => undefined,
+    });
+
+    await 播放器.解析播放结果({
+      attachmentId: "att-video-consumer-1",
+      kind: "video",
+      consumerId: "session:att-video-consumer-1",
+    });
+
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-consumer-1",
+        consumerId: "session:att-video-consumer-1",
+      })
+    );
+  });
+
   it("最后裁决改走锚点时会释放旧的 swarm 协作分发占用", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-release-1",
@@ -127,6 +171,7 @@ describe("媒体播放器", () => {
     const result = await 播放器.解析播放结果({
       attachmentId: "att-video-release-1",
       kind: "video",
+      consumerId: "session:att-video-release-1",
     });
 
     expect(result).toMatchObject({
@@ -135,6 +180,7 @@ describe("媒体播放器", () => {
     });
     expect(释放协作分发源).toHaveBeenCalledWith({
       attachmentId: "att-video-release-1",
+      consumerId: "session:att-video-release-1",
     });
   });
 

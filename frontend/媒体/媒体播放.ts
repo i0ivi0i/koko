@@ -10,6 +10,7 @@ type 媒体播放输入 = {
   attachmentId: string;
   kind: 媒体种类;
   surface?: 播放表面;
+  consumerId?: string;
   onSessionEvent?: (event: 协作分发会话事件) => void;
 };
 
@@ -50,9 +51,10 @@ type 媒体播放器依赖 = {
     attachmentId: string;
     kind: 媒体种类;
     locator: 媒体定位结果;
+    consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
   }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
-  releaseSwarmSource?(input: { attachmentId: string }): void;
+  releaseSwarmSource?(input: { attachmentId: string; consumerId?: string }): void;
   probeAnchor?(url: string): Promise<void>;
 };
 
@@ -90,10 +92,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return;
     });
 
-  const 释放协作分发占用 = (attachmentId: string): void => {
+  const 释放协作分发占用 = (input: {
+    attachmentId: string;
+    consumerId?: string;
+  }): void => {
     // 播放器 owner 只在“当前已经不再选择 swarm 主链”时释放 consumer lease，
     // 不把 release 判断散落回壳层或媒体会话里重复裁一次。
-    releaseSwarmSource({ attachmentId });
+    releaseSwarmSource({
+      attachmentId: input.attachmentId,
+      ...(input.consumerId ? { consumerId: input.consumerId } : {}),
+    });
   };
 
   /**
@@ -166,7 +174,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator: 媒体定位结果,
     allowRefresh: boolean
   ): Promise<媒体播放结果> => {
-    释放协作分发占用(input.attachmentId);
+    释放协作分发占用(input);
     const anchorUrl = 读取锚点地址(locator);
     try {
       await probeAnchor(anchorUrl);
@@ -235,6 +243,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         attachmentId: input.attachmentId,
         kind: input.kind,
         locator,
+        ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
       });
     } catch {
@@ -248,16 +257,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     try {
       locator = await deps.locate(input.attachmentId);
     } catch {
-      释放协作分发占用(input.attachmentId);
+      释放协作分发占用(input);
       return 创建降级结果(input, null, "locator_unavailable");
     }
     if (locator.status !== "ready") {
-      释放协作分发占用(input.attachmentId);
+      释放协作分发占用(input);
       return 创建降级结果(input, locator, "attachment_not_ready");
     }
     const blobSource = 读取图片Blob主链(locator);
     if (blobSource) {
-      释放协作分发占用(input.attachmentId);
+      释放协作分发占用(input);
       return {
         mode: "blob",
         attachmentId: input.attachmentId,
@@ -274,7 +283,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     const manifestUrl = 读取流媒体主链地址(locator);
     if (surface === "viewer" && manifestUrl) {
-      释放协作分发占用(input.attachmentId);
+      释放协作分发占用(input);
       return {
         mode: "manifest",
         attachmentId: input.attachmentId,
@@ -298,7 +307,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     const distribution = 读取协作分发定位片段(locator);
     if (distribution?.availability === "expired") {
-      释放协作分发占用(input.attachmentId);
+      释放协作分发占用(input);
       return {
         mode: "expired",
         attachmentId: input.attachmentId,
@@ -316,6 +325,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         attachmentId: input.attachmentId,
         kind: input.kind,
         locator,
+        ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
       });
       if (swarmSource) {

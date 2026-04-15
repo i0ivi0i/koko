@@ -72,12 +72,14 @@ export interface 聊天媒体编排端口 {
       attachmentId: string;
       kind: "image" | "video";
       surface?: "viewer" | "inline_autoplay";
+      consumerId?: string;
     }): Promise<媒体播放结果>;
     激活协作补齐?(input: {
       attachmentId: string;
       kind: "image" | "video";
+      consumerId?: string;
     }): Promise<void>;
-    释放附件播放资源?(attachmentId: string): void;
+    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
   }): void;
   设置媒体查看器供测试(viewer: {
     打开(input: 媒体查看器打开请求): void;
@@ -99,6 +101,9 @@ type 媒体附件条目 = {
   kind: 媒体种类;
 };
 
+const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
+const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
+
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：
  * - 上传草稿属于本地体验态；
@@ -117,7 +122,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   let 媒体播放器 = 创建媒体播放器({
     locate: (attachmentId, options) => 媒体定位器.获取定位(attachmentId, options),
     resolveSwarmSource: 解析协作分发源,
-    releaseSwarmSource: ({ attachmentId }) => 释放协作分发消费者(attachmentId),
+    releaseSwarmSource: (input) => 释放协作分发消费者(input),
   });
 
   let 当前查看器请求: 媒体查看器打开请求 | null = null;
@@ -376,6 +381,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     void 媒体播放器.激活协作补齐?.({
       attachmentId,
       kind: metadata.kind,
+      consumerId: 构造媒体会话ConsumerId(attachmentId),
       onSessionEvent: (event) =>
         处理协作分发事件(
           { attachmentId, kind: metadata.kind! },
@@ -384,10 +390,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }).catch(() => undefined);
   };
 
-  const 释放附件播放资源 = (attachmentId: string): void => {
+  const 释放附件播放资源 = (input: {
+    attachmentId: string;
+    consumerId?: string;
+  }): void => {
     // 编排层只在附件会话退场时通知播放器释放底层占用；
     // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
-    媒体播放器.释放附件播放资源?.(attachmentId);
+    媒体播放器.释放附件播放资源?.(input);
   };
 
   const 清空自动播播放结果 = (): void => {
@@ -409,7 +418,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       清空自动播播放结果();
       return;
     }
-    释放附件播放资源(当前Owner);
+    释放附件播放资源({
+      attachmentId: 当前Owner,
+      consumerId: 构造自动播ConsumerId(当前Owner),
+    });
     清空自动播播放结果();
   };
 
@@ -428,6 +440,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         attachmentId,
         kind: attachment.kind,
         surface: "inline_autoplay",
+        consumerId: 构造自动播ConsumerId(attachmentId),
       })
       .then((playback) => {
         if (
@@ -482,7 +495,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   const 清空播放状态 = (): void => {
     for (const [attachmentId, session] of 媒体会话表) {
-      释放附件播放资源(attachmentId);
+      释放附件播放资源({
+        attachmentId,
+        consumerId: 构造媒体会话ConsumerId(attachmentId),
+      });
       session.销毁();
     }
     媒体会话表.clear();
@@ -547,7 +563,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         return;
       }
       if (inlineAutoplayOwnerAttachmentId) {
-        释放附件播放资源(inlineAutoplayOwnerAttachmentId);
+        释放附件播放资源({
+          attachmentId: inlineAutoplayOwnerAttachmentId,
+          consumerId: 构造自动播ConsumerId(inlineAutoplayOwnerAttachmentId),
+        });
       }
       解析自动播播放结果(nextOwnerAttachmentId);
     },
@@ -576,7 +595,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         if (activeAttachmentIds.has(attachmentId)) {
           continue;
         }
-        释放附件播放资源(attachmentId);
+        释放附件播放资源({
+          attachmentId,
+          consumerId: 构造媒体会话ConsumerId(attachmentId),
+        });
         session.销毁();
         媒体会话表.delete(attachmentId);
         hasSessionSetChanged = true;
