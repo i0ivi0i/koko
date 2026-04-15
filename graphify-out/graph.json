@@ -193,7 +193,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -201,7 +201,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L31",
       "id": "app_sw",
-      "community": 15
+      "community": 16
     },
     {
       "label": "css.d.ts",
@@ -1467,7 +1467,7 @@
       "label": "\u6784\u9020\u5a92\u4f53\u4e0a\u4f20Meta()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L262",
+      "source_location": "L264",
       "id": "meta",
       "community": 1
     },
@@ -1525,7 +1525,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 16
+      "community": 17
     },
     {
       "label": "main()",
@@ -1533,7 +1533,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 16
+      "community": 17
     },
     {
       "label": "rustus_hook\u5916\u58f3.rs",
@@ -2213,7 +2213,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 17
+      "community": 15
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2221,7 +2221,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L6",
       "id": "blob_preview_full_original",
-      "community": 17
+      "community": 15
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3529,7 +3529,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L262",
+      "source_location": "L264",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "meta",
