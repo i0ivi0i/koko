@@ -10,7 +10,8 @@ import {
 } from "../媒体/媒体草稿";
 import {
   创建媒体发布器,
-  媒体上传失活超时毫秒,
+  媒体Tus并发上限,
+  媒体Tus重试延迟毫秒数组,
   type 媒体上传器,
   type 媒体上传文件,
   type 媒体上传Meta,
@@ -207,6 +208,11 @@ function 创建场景() {
 describe("媒体发布器", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("默认 Tus 参数保持显式并发与重试策略", () => {
+    expect(媒体Tus并发上限).toBe(3);
+    expect(媒体Tus重试延迟毫秒数组).toEqual([0, 1000, 3000, 5000]);
   });
 
   it("Uppy 本地文件会忽略传入 id，只有 relativePath 变化才会改变内部 file.id", () => {
@@ -474,33 +480,23 @@ describe("媒体发布器", () => {
     ]);
   });
 
-  it("看门狗超时后会把草稿收口成 failed，且不会静默丢草稿", async () => {
-    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("没有 upload-progress 时不会再被本地 watchdog 误杀", async () => {
     const 场景 = 创建场景();
-    const sourceFile = new File([new Uint8Array([1, 2, 3])], "watchdog.jpg", {
-      type: "image/jpeg",
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "slow.mp4", {
+      type: "video/mp4",
     });
     vi.useFakeTimers();
     try {
       await 场景.发布器.处理选择媒体文件([sourceFile]);
-      await vi.advanceTimersByTimeAsync(媒体上传失活超时毫秒 + 1000);
+      await vi.advanceTimersByTimeAsync(16_000);
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        "[koko:media-upload:watchdog]",
-        expect.objectContaining({
-          localId: "att-watchdog.jpg",
-          kind: "image",
-          fileName: "watchdog.jpg",
-        })
-      );
-      expect(场景.uploader.removeFileCalls).toEqual(["att-watchdog.jpg"]);
       expect(场景.drafts.readDrafts()).toEqual([
         expect.objectContaining({
-          localId: "att-watchdog.jpg",
-          status: "failed",
-          errorCode: "attachment_upload_stalled",
+          localId: "att-slow.mp4",
+          status: "uploading",
         }),
       ]);
+      expect(场景.uploader.removeFileCalls).toEqual([]);
     } finally {
       vi.useRealTimers();
     }

@@ -73,7 +73,17 @@ export interface 媒体上传器 {
   on(event: string, handler: (...args: Array<any>) => void | Promise<void>): void;
 }
 
-export const 媒体上传失活超时毫秒 = 15_000;
+/**
+ * 浏览器端同时把很多大文件都推给 Tus，只会把单标签页、sidecar 和 complete 热点一起打爆。
+ * 这里显式钉住 transport 并发上限，保证上传壳只做资源整形，不自己发明第二套调度真相。
+ */
+export const 媒体Tus并发上限 = 3;
+
+/**
+ * 重试节奏也显式导出，避免未来升级 Uppy/Tus 后默默吃到默认值漂移。
+ * `0` 表示第一次失败立即重试一次，后续退避保持克制，既给慢网恢复机会，也不把失败放大成请求风暴。
+ */
+export const 媒体Tus重试延迟毫秒数组 = [0, 1000, 3000, 5000] as const;
 
 type 媒体发布器依赖 = {
   getSessionId(): string;
@@ -196,6 +206,8 @@ function 创建默认媒体上传器(tusEndpoint: string): 媒体上传器 {
     },
   }).use(Tus, {
     endpoint: tusEndpoint,
+    limit: 媒体Tus并发上限,
+    retryDelays: [...媒体Tus重试延迟毫秒数组],
     /**
      * Rustus sidecar 只需要业务最小元数据，不应该把 session_id、预览尺寸这类壳层字段也透传进去。
      * 这里显式收口 allowedMetaFields，避免 transport sidecar 反向长成业务真相持有者。
@@ -257,66 +269,11 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const readVideoMetadata = deps.readVideoMetadata ?? 读取视频文件元数据;
   const createPreviewUrl = deps.createPreviewUrl ?? 创建本地媒体预览地址;
   const yieldToMainThread = deps.yieldToMainThread ?? 默认让出主线程;
-  const 上传失活计时器 = new Map<string, ReturnType<typeof setTimeout>>();
   let uploader: 媒体上传器 | null = null;
   let 当前TusEndpoint = "";
 
   const 读取媒体草稿 = (localId: string): 媒体附件草稿 | undefined =>
     deps.readDrafts().find((item) => item.localId === localId);
-
-  const 清理媒体上传失活计时 = (localId: string): void => {
-    const timer = 上传失活计时器.get(localId);
-    if (timer) {
-      clearTimeout(timer);
-      上传失活计时器.delete(localId);
-    }
-  };
-
-  const 处理媒体上传失活 = (localId: string): void => {
-    上传失活计时器.delete(localId);
-    const draft = 读取媒体草稿(localId);
-    if (!draft || draft.status !== "uploading") {
-      return;
-    }
-    const sourceFile = draft.sourceFile ?? null;
-    uploader?.removeFile(localId);
-    console.warn("[koko:media-upload:watchdog]", {
-      localId,
-      kind: draft.kind,
-      fileName: draft.fileName,
-      userAgent: globalThis.navigator?.userAgent ?? "",
-      reason: "no_terminal_upload_event",
-    });
-    deps.writeDraft({
-      localId,
-      kind: draft.kind,
-      attachmentId: "",
-      previewUrl: createPreviewUrl(sourceFile),
-      width: draft.width,
-      height: draft.height,
-      status: "failed",
-      fileName: draft.fileName,
-      errorCode: "attachment_upload_stalled",
-      sourceFile,
-    });
-  };
-
-  const 重置媒体上传失活计时 = (localId: string): void => {
-    清理媒体上传失活计时(localId);
-    上传失活计时器.set(
-      localId,
-      setTimeout(() => {
-        处理媒体上传失活(localId);
-      }, 媒体上传失活超时毫秒)
-    );
-  };
-
-  const 清理全部媒体上传失活计时 = (): void => {
-    for (const timer of 上传失活计时器.values()) {
-      clearTimeout(timer);
-    }
-    上传失活计时器.clear();
-  };
 
   /**
    * file-added 是 UI 草稿真正进入“上传中”的唯一时刻。
@@ -338,7 +295,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       errorCode: "",
       sourceFile,
     });
-    重置媒体上传失活计时(file.id);
   };
 
   const handleMediaUploadSuccess = async (
@@ -350,21 +306,18 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     }
     const attachmentId = 提取媒体附件标识(file) || 读取媒体草稿(file.id)?.attachmentId || "";
     if (!attachmentId) {
-      清理媒体上传失活计时(file.id);
       deps.updateDraft(file.id, {
         status: "failed",
         errorCode: "attachment_upload_failed",
       });
       return;
     }
-    重置媒体上传失活计时(file.id);
     try {
       const ready = await deps.completeMediaUpload(deps.getSessionId(), attachmentId);
       const currentDraft = 读取媒体草稿(file.id);
       if (!currentDraft || currentDraft.status !== "uploading") {
         return;
       }
-      清理媒体上传失活计时(file.id);
       deps.updateDraft(file.id, {
         kind: ready.kind,
         attachmentId: ready.attachment_id,
@@ -378,7 +331,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       if (!currentDraft || currentDraft.status !== "uploading") {
         return;
       }
-      清理媒体上传失活计时(file.id);
       deps.updateDraft(file.id, {
         status: "failed",
         errorCode: 解析传输错误代码(error, "system_error"),
@@ -394,7 +346,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     if (!file) {
       return;
     }
-    清理媒体上传失活计时(file.id);
     const kind = 读取媒体种类(file);
     const attachmentId = 提取媒体附件标识(file) || 读取媒体草稿(file.id)?.attachmentId || "";
     const errorCode = 解析媒体上传失败代码(error, response);
@@ -413,15 +364,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   };
 
   const handleMediaUploadRemoved = (file: 媒体上传文件): void => {
-    清理媒体上传失活计时(file.id);
     deps.removeDraft(file.id);
-  };
-
-  const handleMediaUploadProgress = (file: 媒体上传文件 | undefined): void => {
-    if (!file) {
-      return;
-    }
-    重置媒体上传失活计时(file.id);
   };
 
   /**
@@ -439,7 +382,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       return;
     }
     for (const file of files) {
-      清理媒体上传失活计时(file.id);
       const existingDraft = 读取媒体草稿(file.id);
       const sourceFile = file.data instanceof File ? file.data : existingDraft?.sourceFile ?? null;
       const kind = existingDraft?.kind ?? 读取媒体种类(file);
@@ -473,7 +415,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     }
     const nextUploader = createUploader(tusEndpoint);
     nextUploader.on("file-added", handleMediaUploadAdded);
-    nextUploader.on("upload-progress", handleMediaUploadProgress);
     nextUploader.on("upload-success", handleMediaUploadSuccess);
     nextUploader.on("upload-error", handleMediaUploadError);
     nextUploader.on("upload-stalled", handleMediaUploadStalled);
@@ -656,7 +597,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
            * 长出“旧 localId + 新 localId”两条草稿，形成幽灵副本。
            */
           if (nextLocalId !== localId) {
-            清理媒体上传失活计时(localId);
             deps.removeDraft(localId);
           }
         } catch (error: unknown) {
@@ -677,7 +617,6 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
 
     清空(): void {
       uploader?.cancelAll();
-      清理全部媒体上传失活计时();
       deps.clearDrafts();
     },
 
