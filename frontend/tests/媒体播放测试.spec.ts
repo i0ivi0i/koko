@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建媒体播放器 } from "../媒体/媒体播放";
+import { 创建媒体播放器, 媒体是否默认循环播放 } from "../媒体/媒体播放";
 
 describe("媒体播放器", () => {
+  it("视频默认启用循环播放，而图片不会被纳入这条策略", () => {
+    expect(媒体是否默认循环播放("video")).toBe(true);
+    expect(媒体是否默认循环播放("image")).toBe(false);
+  });
+
   it("图片首开仍优先 preview/full blob 主链，不会因为多消费者改造而强行切到 WebTorrent", async () => {
     const resolveSwarmSource = vi.fn();
     const probeAnchor = vi.fn();
