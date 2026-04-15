@@ -9,12 +9,15 @@ use crate::{
 use axum::{
     extract::{Path, State},
     http::{uri::Authority, HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     Json,
 };
 use object_store::{path::Path as ObjectPath, ObjectStoreExt};
 use serde::Deserialize;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 use tokio::{fs, task};
 use uuid::Uuid;
 
@@ -319,38 +322,84 @@ pub(super) async fn complete_media_upload(
             Ok(path) => path,
             Err((status, code, message)) => return err_resp(status, code, message),
         };
+    let attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类);
+    let attachment_byte_size = prepared.字节大小;
+    let _complete_heavy_work_permit =
+        match 获取媒体上传完成重活许可(state.media_complete_gate.clone()).await {
+            Ok(permit) => permit,
+            Err(err) => {
+                tracing::error!(
+                    usecase = "完成媒体上传",
+                    phase = "complete_heavy_work_failed",
+                    attachment_id = attachment_id.as_str(),
+                    kind = attachment_kind,
+                    byte_size = attachment_byte_size,
+                    duration_ms = 0_u64,
+                    failure_reason = "permit_acquire_failed",
+                    error_code = "system_error",
+                    detail = %err,
+                    "媒体上传 complete 重活失败"
+                );
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("获取媒体上传完成闸门许可失败: {err}"),
+                );
+            }
+        };
+    let complete_heavy_work_started_at = Instant::now();
+    tracing::info!(
+        usecase = "完成媒体上传",
+        phase = "complete_heavy_work_enter",
+        attachment_id = attachment_id.as_str(),
+        kind = attachment_kind,
+        byte_size = attachment_byte_size,
+        media_complete_max_concurrency = state.media_complete_max_concurrency,
+        "媒体上传 complete 重活开始"
+    );
     let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
         Ok(bytes) => bytes,
         Err(err) => {
-            tracing::error!(
-                usecase = "完成媒体上传",
-                adapter = "http",
-                outcome = "failed",
-                request_kind = "媒体上传 complete",
-                session_id = session_id.as_str(),
-                attachment_id = attachment_id.as_str(),
-                error_code = "system_error",
-                error = %err,
-                "读取 Rustus 临时原图文件失败"
-            );
-            return err_resp(
+            return 记录并返回complete重活失败(
+                attachment_id.as_str(),
+                attachment_kind,
+                attachment_byte_size,
+                complete_heavy_work_started_at,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 "读取原图临时文件失败",
+                "read_temp_file_failed",
+                format!("读取 Rustus 临时原图文件失败: {err}"),
             );
         }
     };
     let parsed = match 媒体内容解析::解析媒体内容(&prepared.种类, original_bytes.as_ref()) {
         Ok(parsed) => parsed,
         Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
-            return err_resp(
+            return 记录并返回complete重活失败(
+                attachment_id.as_str(),
+                attachment_kind,
+                attachment_byte_size,
+                complete_heavy_work_started_at,
                 StatusCode::BAD_REQUEST,
                 "attachment_type_not_allowed",
+                message,
+                "parse_media_kind_not_allowed",
                 message,
             )
         }
         Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
-            return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message)
+            return 记录并返回complete重活失败(
+                attachment_id.as_str(),
+                attachment_kind,
+                attachment_byte_size,
+                complete_heavy_work_started_at,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                message,
+                "parse_media_system_error",
+                message,
+            )
         }
     };
     let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
@@ -359,21 +408,16 @@ pub(super) async fn complete_media_upload(
         .put(&original_path, original_bytes.clone().into())
         .await
     {
-        tracing::error!(
-            usecase = "完成媒体上传",
-            adapter = "http",
-            outcome = "failed",
-            request_kind = "媒体上传 complete",
-            session_id = session_id.as_str(),
-            attachment_id = attachment_id.as_str(),
-            error_code = "system_error",
-            error = %err,
-            "写入 canonical 原图对象失败"
-        );
-        return err_resp(
+        return 记录并返回complete重活失败(
+            attachment_id.as_str(),
+            attachment_kind,
+            attachment_byte_size,
+            complete_heavy_work_started_at,
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
             "写入原图对象失败",
+            "put_original_object_failed",
+            format!("写入 canonical 原图对象失败: {err}"),
         );
     }
 
@@ -401,22 +445,16 @@ pub(super) async fn complete_media_upload(
                 .put(&thumbnail_path, parsed.缩略图字节.into())
                 .await
             {
-                tracing::error!(
-                    usecase = "完成媒体上传",
-                    adapter = "http",
-                    outcome = "failed",
-                    request_kind = "媒体上传 complete",
-                    session_id = session_id.as_str(),
-                    attachment_id = attachment_id.as_str(),
-                    attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类),
-                    error_code = "system_error",
-                    error = %err,
-                    "写入图片缩略图对象失败"
-                );
-                return err_resp(
+                return 记录并返回complete重活失败(
+                    attachment_id.as_str(),
+                    attachment_kind,
+                    attachment_byte_size,
+                    complete_heavy_work_started_at,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
                     "写入图片缩略图对象失败",
+                    "put_image_thumbnail_failed",
+                    format!("写入图片缩略图对象失败: {err}"),
                 );
             }
             if let Err(err) = state
@@ -424,22 +462,16 @@ pub(super) async fn complete_media_upload(
                 .put(&asset_original_path, original_bytes.clone().into())
                 .await
             {
-                tracing::error!(
-                    usecase = "完成媒体上传",
-                    adapter = "http",
-                    outcome = "failed",
-                    request_kind = "媒体上传 complete",
-                    session_id = session_id.as_str(),
-                    attachment_id = attachment_id.as_str(),
-                    attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类),
-                    error_code = "system_error",
-                    error = %err,
-                    "写入图片长期原图资产失败"
-                );
-                return err_resp(
+                return 记录并返回complete重活失败(
+                    attachment_id.as_str(),
+                    attachment_kind,
+                    attachment_byte_size,
+                    complete_heavy_work_started_at,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
                     "写入图片长期原图资产失败",
+                    "put_image_asset_original_failed",
+                    format!("写入图片长期原图资产失败: {err}"),
                 );
             }
             if let Err(err) = state
@@ -447,22 +479,16 @@ pub(super) async fn complete_media_upload(
                 .put(&full_path, parsed.完整图字节.into())
                 .await
             {
-                tracing::error!(
-                    usecase = "完成媒体上传",
-                    adapter = "http",
-                    outcome = "failed",
-                    request_kind = "媒体上传 complete",
-                    session_id = session_id.as_str(),
-                    attachment_id = attachment_id.as_str(),
-                    attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类),
-                    error_code = "system_error",
-                    error = %err,
-                    "写入图片完整图对象失败"
-                );
-                return err_resp(
+                return 记录并返回complete重活失败(
+                    attachment_id.as_str(),
+                    attachment_kind,
+                    attachment_byte_size,
+                    complete_heavy_work_started_at,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
                     "写入图片完整图对象失败",
+                    "put_image_full_failed",
+                    format!("写入图片完整图对象失败: {err}"),
                 );
             }
             usecase::媒体附件写入请求 {
@@ -499,11 +525,29 @@ pub(super) async fn complete_media_upload(
             .await
             {
                 Ok(Ok(result)) => result,
-                Ok(Err((status, code, message))) => return err_resp(status, code, message),
+                Ok(Err((status, code, message))) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        status,
+                        code,
+                        message.clone(),
+                        "stream_packaging_failed",
+                        message,
+                    )
+                }
                 Err(err) => {
-                    return err_resp(
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
+                        format!("流媒体打包任务执行失败: {err}"),
+                        "stream_packaging_task_failed",
                         format!("流媒体打包任务执行失败: {err}"),
                     )
                 }
@@ -512,7 +556,19 @@ pub(super) async fn complete_media_upload(
                 .await
             {
                 Ok(uploaded) => uploaded,
-                Err((status, code, message)) => return err_resp(status, code, message),
+                Err((status, code, message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        status,
+                        code,
+                        message.clone(),
+                        "upload_streaming_assets_failed",
+                        message,
+                    )
+                }
             };
             streaming_manifest_request = Some(uploaded.清单写入请求);
             usecase::媒体附件写入请求 {
@@ -543,7 +599,17 @@ pub(super) async fn complete_media_upload(
     ) {
         Ok(torrent) => torrent,
         Err(message) => {
-            return err_resp(StatusCode::INTERNAL_SERVER_ERROR, "system_error", message);
+            return 记录并返回complete重活失败(
+                attachment_id.as_str(),
+                attachment_kind,
+                attachment_byte_size,
+                complete_heavy_work_started_at,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                message.clone(),
+                "generate_torrent_failed",
+                message,
+            );
         }
     };
     let torrent_request = usecase::协作分发torrent元信息写入请求 {
@@ -636,6 +702,15 @@ pub(super) async fn complete_media_upload(
                 Some(session_id.as_str()),
                 snapshot.允许缩略图,
             );
+            tracing::info!(
+                usecase = "完成媒体上传",
+                phase = "complete_heavy_work_exit",
+                attachment_id = attachment_id.as_str(),
+                kind = attachment_kind,
+                byte_size = attachment_byte_size,
+                duration_ms = complete_heavy_work_started_at.elapsed().as_millis() as u64,
+                "媒体上传 complete 重活完成"
+            );
             (
                 StatusCode::OK,
                 Json(super::媒体资产外壳::媒体附件快照转响应体(
@@ -646,10 +721,26 @@ pub(super) async fn complete_media_upload(
             )
                 .into_response()
         }
-        Ok(Err((status, code, message))) => err_resp(status, code, message),
-        Err(err) => err_resp(
+        Ok(Err((status, code, message))) => 记录并返回complete重活失败(
+            attachment_id.as_str(),
+            attachment_kind,
+            attachment_byte_size,
+            complete_heavy_work_started_at,
+            status,
+            code,
+            message.clone(),
+            "write_ready_snapshot_failed",
+            message,
+        ),
+        Err(err) => 记录并返回complete重活失败(
+            attachment_id.as_str(),
+            attachment_kind,
+            attachment_byte_size,
+            complete_heavy_work_started_at,
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
+            format!("complete 任务执行失败: {err}"),
+            "complete_write_task_failed",
             format!("complete 任务执行失败: {err}"),
         ),
     }
@@ -880,4 +971,93 @@ pub(super) async fn 等待complete所需运输回执(
         }
     }
     Ok(transport)
+}
+
+async fn 获取媒体上传完成重活许可(
+    gate: Arc<tokio::sync::Semaphore>,
+) -> Result<tokio::sync::OwnedSemaphorePermit, tokio::sync::AcquireError> {
+    gate.acquire_owned().await
+}
+
+fn 记录并返回complete重活失败(
+    attachment_id: &str,
+    attachment_kind: &str,
+    byte_size: i64,
+    started_at: Instant,
+    status: StatusCode,
+    code: &'static str,
+    response_message: impl Into<String>,
+    failure_reason: &'static str,
+    log_detail: impl Into<String>,
+) -> Response {
+    let response_message = response_message.into();
+    let log_detail = log_detail.into();
+    let duration_ms = started_at.elapsed().as_millis() as u64;
+    if status.is_server_error() {
+        tracing::error!(
+            usecase = "完成媒体上传",
+            phase = "complete_heavy_work_failed",
+            attachment_id,
+            kind = attachment_kind,
+            byte_size,
+            duration_ms,
+            failure_reason,
+            error_code = code,
+            detail = %log_detail,
+            "媒体上传 complete 重活失败"
+        );
+    } else {
+        tracing::warn!(
+            usecase = "完成媒体上传",
+            phase = "complete_heavy_work_failed",
+            attachment_id,
+            kind = attachment_kind,
+            byte_size,
+            duration_ms,
+            failure_reason,
+            error_code = code,
+            detail = %log_detail,
+            "媒体上传 complete 重活失败"
+        );
+    }
+    err_resp(status, code, response_message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn 完成阶段并发闸门会阻止超过额度的重活同时进入() {
+        let gate = Arc::new(tokio::sync::Semaphore::new(1));
+        let first_permit = 获取媒体上传完成重活许可(gate.clone())
+            .await
+            .expect("第一份 permit 应可获取");
+
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let released = Arc::new(tokio::sync::Notify::new());
+
+        let gate_for_waiter = gate.clone();
+        let entered_for_waiter = entered.clone();
+        let released_for_waiter = released.clone();
+        let waiter = tokio::spawn(async move {
+            let _second_permit = 获取媒体上传完成重活许可(gate_for_waiter)
+                .await
+                .expect("第二份 permit 最终应可获取");
+            entered_for_waiter.notify_one();
+            released_for_waiter.notified().await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !waiter.is_finished(),
+            "额度已满时，第二个 complete 重活不应该直接闯进来"
+        );
+
+        drop(first_permit);
+        entered.notified().await;
+        released.notify_one();
+        waiter.await.expect("waiter 应能正常结束");
+    }
 }
