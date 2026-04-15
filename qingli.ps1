@@ -1,5 +1,5 @@
 param(
-    [switch]$Apply,
+    [switch]$Preview,
     [switch]$Force,
     [switch]$SkipDatabase,
     [switch]$SkipFiles,
@@ -288,12 +288,13 @@ Write-Host "- IndexedDB: koko-offline-tasks"
 Write-Host "- Cache Storage: koko-image-blob-assets"
 Write-Host "- Chrome DevTools -> Application -> Clear storage -> http://127.0.0.1:$AppPort/"
 
-if (-not $Apply) {
+if ($Preview) {
     Write-Host ""
-    Write-Host "当前是预览模式；确认后请执行："
-    Write-Host ".\\qingli.ps1 -Apply"
+    Write-Host "当前是预览模式；默认直接执行清理。"
+    Write-Host "真正执行："
+    Write-Host ".\\qingli.ps1"
     Write-Host "如需跳过确认："
-    Write-Host ".\\qingli.ps1 -Apply -Force"
+    Write-Host ".\\qingli.ps1 -Force"
     return
 }
 
