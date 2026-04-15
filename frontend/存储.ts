@@ -52,24 +52,30 @@ function 删除字符串(storage: Partial<Storage> | undefined, key: string): vo
   }
 }
 
+/**
+ * 首页历史是用户会话列表，不是数据库房间实例列表：
+ * 1. 当前群聊阶段，用户真正能感知的唯一身份是 roomCode；
+ * 2. roomId 仍保留给恢复/进房使用，但不能再拿它当首页唯一键；
+ * 3. 旧脏 localStorage 也必须在这里自动收口，不能把修复散落到 UI。
+ */
 function 规范化首页房间历史(items: 首页房间历史条目[]): 首页房间历史条目[] {
-  const byRoomId = new Map<string, 首页房间历史条目>();
+  const byRoomCode = new Map<string, 首页房间历史条目>();
   for (const item of items) {
     const roomId = item.roomId.trim();
     const roomCode = item.roomCode.trim();
     if (!roomId || !roomCode || !Number.isFinite(item.lastEnteredAt)) {
       continue;
     }
-    const current = byRoomId.get(roomId);
+    const current = byRoomCode.get(roomCode);
     if (!current || item.lastEnteredAt >= current.lastEnteredAt) {
-      byRoomId.set(roomId, {
+      byRoomCode.set(roomCode, {
         roomId,
         roomCode,
         lastEnteredAt: item.lastEnteredAt,
       });
     }
   }
-  return Array.from(byRoomId.values()).sort(
+  return Array.from(byRoomCode.values()).sort(
     (left, right) => right.lastEnteredAt - left.lastEnteredAt
   );
 }
@@ -86,13 +92,19 @@ function 读取首页房间历史条目(
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return 规范化首页房间历史(
+    const normalized = 规范化首页房间历史(
       parsed.map((item) => ({
         roomId: typeof item?.roomId === "string" ? item.roomId : "",
         roomCode: typeof item?.roomCode === "string" ? item.roomCode : "",
         lastEnteredAt: Number(item?.lastEnteredAt),
       }))
     );
+    const normalizedRaw = JSON.stringify(normalized);
+    if (normalizedRaw !== raw) {
+      // 读取时顺手把旧脏值矫正回唯一真相，避免首页下一次又看到重复房间号。
+      写入字符串(storage, 首页房间历史存储键, normalizedRaw);
+    }
+    return normalized;
   } catch {
     return [];
   }

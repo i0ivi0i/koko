@@ -1126,7 +1126,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("浏览器存储会按 roomId 去重、按 lastEnteredAt 倒序读取首页房间历史", () => {
+  it("浏览器存储会按 roomCode 去重、按 lastEnteredAt 倒序读取首页房间历史", () => {
     const rawStorage = createFakeStorage();
     const browserStorage = 创建浏览器存储(rawStorage) as unknown as {
       读取首页房间历史(): Array<{
@@ -1142,24 +1142,24 @@ describe("聊天壳集成 / 首页与控制台", () => {
     };
 
     browserStorage.写入或更新首页房间历史条目({
-      roomId: "r-1",
-      roomCode: "ROOM-OLD",
+      roomId: "r-old",
+      roomCode: "ROOM01",
       lastEnteredAt: 100,
     });
     browserStorage.写入或更新首页房间历史条目({
       roomId: "r-2",
-      roomCode: "ROOM-MID",
+      roomCode: "ROOM02",
       lastEnteredAt: 200,
     });
     browserStorage.写入或更新首页房间历史条目({
-      roomId: "r-1",
-      roomCode: "ROOM-NEW",
+      roomId: "r-new",
+      roomCode: "ROOM01",
       lastEnteredAt: 300,
     });
 
     expect(browserStorage.读取首页房间历史()).toEqual([
-      { roomId: "r-1", roomCode: "ROOM-NEW", lastEnteredAt: 300 },
-      { roomId: "r-2", roomCode: "ROOM-MID", lastEnteredAt: 200 },
+      { roomId: "r-new", roomCode: "ROOM01", lastEnteredAt: 300 },
+      { roomId: "r-2", roomCode: "ROOM02", lastEnteredAt: 200 },
     ]);
   });
 
@@ -1212,6 +1212,34 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(browserStorage.读取首页房间历史()).toEqual([]);
   });
 
+  it("浏览器存储读取旧脏首页历史时，会把同 roomCode 的重复项自动合并并回写", () => {
+    const rawStorage = createFakeStorage();
+    rawStorage.setItem(
+      "koko_home_sessions",
+      JSON.stringify([
+        { roomId: "r-old", roomCode: "ROOM01", lastEnteredAt: 100 },
+        { roomId: "r-2", roomCode: "ROOM02", lastEnteredAt: 200 },
+        { roomId: "r-new", roomCode: "ROOM01", lastEnteredAt: 300 },
+      ])
+    );
+
+    const browserStorage = 创建浏览器存储(rawStorage) as unknown as {
+      读取首页房间历史(): Array<{
+        roomId: string;
+        roomCode: string;
+        lastEnteredAt: number;
+      }>;
+    };
+
+    const normalized = [
+      { roomId: "r-new", roomCode: "ROOM01", lastEnteredAt: 300 },
+      { roomId: "r-2", roomCode: "ROOM02", lastEnteredAt: 200 },
+    ];
+
+    expect(browserStorage.读取首页房间历史()).toEqual(normalized);
+    expect(JSON.parse(rawStorage.getItem("koko_home_sessions") ?? "null")).toEqual(normalized);
+  });
+
   it("有当前房间恢复锚点时会优先恢复房间而不是退回首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-restore");
     const transport = new 假传输();
@@ -1251,6 +1279,35 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(list?.textContent).toContain("ROOM02");
     expect(list?.querySelectorAll("[data-room-id]").length).toBe(2);
     expect(list?.querySelectorAll("[data-room-id]")[0]?.textContent).toContain("ROOM01");
+    el.remove();
+  });
+
+  it("启动时若本地历史里有重复 roomCode，也只会渲染最新那一条首页会话", async () => {
+    window.localStorage.setItem(
+      "koko_home_sessions",
+      JSON.stringify([
+        { roomId: "r-old", roomCode: "ROOM01", lastEnteredAt: 100 },
+        { roomId: "r-2", roomCode: "ROOM02", lastEnteredAt: 200 },
+        { roomId: "r-new", roomCode: "ROOM01", lastEnteredAt: 300 },
+      ])
+    );
+    const transport = new 假传输();
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const list = el.shadowRoot!.querySelector("#homeRoomList");
+    expect(list).not.toBeNull();
+    expect(list?.querySelectorAll("[data-room-id]").length).toBe(2);
+    expect(list?.querySelector('[data-room-id="r-new"]')?.textContent).toContain("ROOM01");
+    expect(list?.querySelector('[data-room-id="r-old"]')).toBeNull();
+    expect(
+      Array.from(list?.querySelectorAll("[data-room-id]") ?? []).filter((item) =>
+        item.textContent?.includes("ROOM01")
+      )
+    ).toHaveLength(1);
     el.remove();
   });
 
