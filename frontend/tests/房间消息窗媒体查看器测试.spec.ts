@@ -270,7 +270,7 @@ describe("房间消息窗媒体查看器", () => {
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    const inlineVideos = pane.querySelectorAll("video.message-video-preview");
+    const inlineVideos = pane.querySelectorAll<HTMLVideoElement>("video.message-video-preview");
     expect(inlineVideos).toHaveLength(1);
     expect(inlineVideos[0]?.getAttribute("data-attachment-id")).toBe("att-video-2");
     expect(inlineVideos[0]?.loop).toBe(true);

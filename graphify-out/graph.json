@@ -185,7 +185,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 16
+      "community": 15
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -193,7 +193,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L31",
       "id": "app_sw",
-      "community": 16
+      "community": 15
     },
     {
       "label": "css.d.ts",
@@ -595,7 +595,7 @@
       "label": "renderVirtualMessageItem()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L552",
+      "source_location": "L554",
       "id": "rendervirtualmessageitem",
       "community": 1
     },
@@ -1403,7 +1403,7 @@
       "label": "\u6ce8\u518c\u9ed8\u8ba4VideoJs\u5143\u7d20()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L75",
+      "source_location": "L77",
       "id": "videojs_videojs",
       "community": 1
     },
@@ -2197,7 +2197,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2205,7 +2205,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L6",
       "id": "blob_preview_full_original",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3245,7 +3245,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L552",
+      "source_location": "L554",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendervirtualmessageitem",
@@ -3422,6 +3422,18 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "frontend_videojs_ts",
+      "source": "frontend_ts",
+      "target": "frontend_videojs_ts",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
@@ -3455,18 +3467,6 @@
       "_tgt": "torrent",
       "source": "frontend_ts",
       "target": "torrent",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "_src": "frontend_ts",
-      "_tgt": "frontend_videojs_ts",
-      "source": "frontend_ts",
-      "target": "frontend_videojs_ts",
       "confidence_score": 1.0
     },
     {
@@ -4577,7 +4577,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L599",
+      "source_location": "L601",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessagebody",
@@ -4589,7 +4589,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L600",
+      "source_location": "L602",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessageattachments",
@@ -4769,7 +4769,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
-      "source_location": "L170",
+      "source_location": "L233",
       "weight": 1.0,
       "_src": "frontend_tests_videojs_spec_ts",
       "_tgt": "videojs_spec_hls",
@@ -4781,7 +4781,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
-      "source_location": "L171",
+      "source_location": "L234",
       "weight": 1.0,
       "_src": "videojs_spec_hls",
       "_tgt": "videojs_spec_hls_issupported",
@@ -5693,7 +5693,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L132",
+      "source_location": "L139",
       "weight": 1.0,
       "_src": "frontend_videojs_ts",
       "_tgt": "videojs",
@@ -5705,7 +5705,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L141",
+      "source_location": "L150",
       "weight": 1.0,
       "_src": "frontend_videojs_ts",
       "_tgt": "videojs_videojs",
