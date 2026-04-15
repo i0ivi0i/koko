@@ -312,8 +312,11 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("inline_autoplay surface 会复用同一个 resolver，但 manifest 视频优先走浏览器原生可播锚点", async () => {
-    const resolveSwarmSource = vi.fn();
+  it("inline_autoplay surface 在 distribution 可用时，会先尝试 swarm/web seed，而不是先 probe anchor", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-inline-hls",
+      hint: "正在协作分发" as const,
+    }));
     const probeAnchor = vi.fn();
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -366,18 +369,95 @@ describe("媒体播放器", () => {
       attachmentId: "att-video-inline-hls",
       kind: "video",
       surface: "inline_autoplay",
+      consumerId: "inline_autoplay:att-video-inline-hls",
     });
 
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "swarm",
       attachmentId: "att-video-inline-hls",
       kind: "video",
-      src: "http://media.local/cold-origin-video-inline-hls",
+      src: "blob:http://media.local/swarm-video-inline-hls",
       thumbnailUrl: "http://media.local/poster-video-inline-hls",
-      hint: null,
+      hint: "正在协作分发",
     });
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
-    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-video-inline-hls");
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-inline-hls",
+        consumerId: "inline_autoplay:att-video-inline-hls",
+      })
+    );
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("inline_autoplay 在 swarm 不可用时，才会回退到锚点冷源", async () => {
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-inline-fallback",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-inline-fallback",
+        thumbnail_url: "http://media.local/poster-inline-fallback",
+        distribution: {
+          content_id: "content_att-video-inline-fallback",
+          content_hash: "hash-video-inline-fallback",
+          swarm_id: "swarm-hash-video-inline-fallback",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-inline-fallback",
+          torrent_info_hash: "torrent-info-hash-inline-fallback",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-inline-fallback",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-inline-fallback",
+          content_hash: "hash-video-inline-fallback",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-inline-fallback/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-inline-fallback/stream.mpd",
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-inline-fallback",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-inline-fallback",
+            join_ticket: null,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-inline-fallback",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-inline-fallback",
+      kind: "video",
+      surface: "inline_autoplay",
+      consumerId: "inline_autoplay:att-video-inline-fallback",
+    });
+
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-inline-fallback",
+        consumerId: "inline_autoplay:att-video-inline-fallback",
+      })
+    );
+    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-inline-fallback");
+    expect(result).toMatchObject({
+      mode: "anchor",
+      src: "http://media.local/cold-origin-inline-fallback",
+      thumbnailUrl: "http://media.local/poster-inline-fallback",
+    });
   });
 
   it("协作分发仍在后台补齐整附件时，不把内部补块状态透给视图层", async () => {

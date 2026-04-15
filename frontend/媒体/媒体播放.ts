@@ -211,6 +211,56 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
   };
 
+  const 尝试协作分发主链 = async (
+    input: 媒体播放输入,
+    locator: 媒体定位结果
+  ): Promise<媒体播放结果 | null> => {
+    const distribution = 读取协作分发定位片段(locator);
+    if (distribution?.availability === "expired") {
+      释放协作分发占用(input);
+      return {
+        mode: "expired",
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        src: "",
+        thumbnailUrl: 读取预览缩略图地址(locator),
+        hint: "内容已过期",
+      };
+    }
+    if (!distribution) {
+      return null;
+    }
+    try {
+      const swarmSource = await resolveSwarmSource({
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        locator,
+        ...(input.consumerId ? { consumerId: input.consumerId } : {}),
+        ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+      });
+      if (!swarmSource) {
+        return null;
+      }
+      /**
+       * swarm/web seed 是正式分发平面的同一份事实：
+       * 1. viewer 和 inline_autoplay 都应该复用同一个 resolver；
+       * 2. surface 只决定“什么时候尝试”，不决定“另造一套来源”；
+       * 3. hint 继续在这里统一过滤，避免壳层各自理解“正在补块”。
+       */
+      return {
+        mode: "swarm",
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        src: swarmSource.src,
+        thumbnailUrl: 读取预览缩略图地址(locator),
+        hint: 过滤可播放媒体提示(swarmSource.hint),
+      };
+    } catch {
+      // swarm 只是热分发层；失败后必须回到锚点，不允许把热路径波动升级成业务失败。
+      return null;
+    }
+  };
+
   /**
    * 图片查看器一旦进入 backfilling，就要把 blob 资产绑定的协作分发平面真正激活起来：
    * 1. 是否值得进入 swarm，仍然先看 blob_asset 这个共享资产真相；
@@ -298,48 +348,20 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     if (surface === "inline_autoplay") {
       /**
-       * 消息流自动播复用同一个 resolver，但只拿浏览器原生最稳的直链：
-       * 1. 不让列表里的轻量 `<video>` 去直接吞 HLS manifest；
-       * 2. 也不为了自动播去抢第二套 swarm 正式主链占用；
-       * 3. 当前没有可播锚点时，就退回静态封面。
+       * 消息流自动播现在回到 P2P/WebTorrent 优先：
+       * 1. 仍然禁止列表里的轻量 `<video>` 直接吞 HLS manifest；
+       * 2. 但会先复用同一个 swarm/web seed resolver，吃正式分发平面的真相；
+       * 3. 只有 swarm 不足时，才回退到浏览器原生冷源锚点。
        */
-      return 尝试锚点(input, locator, true);
-    }
-    const distribution = 读取协作分发定位片段(locator);
-    if (distribution?.availability === "expired") {
-      释放协作分发占用(input);
-      return {
-        mode: "expired",
-        attachmentId: input.attachmentId,
-        kind: input.kind,
-        src: "",
-        thumbnailUrl: 读取预览缩略图地址(locator),
-        hint: "内容已过期",
-      };
-    }
-    if (!distribution) {
-      return 尝试锚点(input, locator, true);
-    }
-    try {
-      const swarmSource = await resolveSwarmSource({
-        attachmentId: input.attachmentId,
-        kind: input.kind,
-        locator,
-        ...(input.consumerId ? { consumerId: input.consumerId } : {}),
-        ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
-      });
-      if (swarmSource) {
-        return {
-          mode: "swarm",
-          attachmentId: input.attachmentId,
-          kind: input.kind,
-          src: swarmSource.src,
-          thumbnailUrl: 读取预览缩略图地址(locator),
-          hint: 过滤可播放媒体提示(swarmSource.hint),
-        };
+      const swarmPlayback = await 尝试协作分发主链(input, locator);
+      if (swarmPlayback) {
+        return swarmPlayback;
       }
-    } catch {
-      // swarm 只是热分发层；失败后必须回到锚点，不允许把热路径波动升级成业务失败。
+      return 尝试锚点(input, locator, true);
+    }
+    const swarmPlayback = await 尝试协作分发主链(input, locator);
+    if (swarmPlayback) {
+      return swarmPlayback;
     }
     return 尝试锚点(input, locator, true);
   };
