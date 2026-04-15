@@ -1,3 +1,5 @@
+import { 媒体是否默认循环播放 } from "./媒体播放.js";
+
 type Hls构造器 = typeof import("hls.js").default;
 type Hls播放器源描述 = Extract<VideoJs播放器源描述, { kind: "hls" }>;
 
@@ -108,6 +110,11 @@ const 创建默认播放器根 = (
   video.slot = "media";
   video.setAttribute("preload", "metadata");
   video.autoplay = true;
+  /**
+   * 默认循环语义不属于某个来源分支，而属于统一播放策略。
+   * 这里直接投影到唯一真实 video，避免消息流、查看器、HLS/file 再各补一套 loop 规则。
+   */
+  video.loop = 媒体是否默认循环播放("video");
   video.playsInline = true;
   video.style.cssText = "display:block;width:100%;height:100%;background:#000;";
 
@@ -131,6 +138,8 @@ const 创建默认播放器根 = (
 
 const 应用展示源 = (root: VideoJs播放器根节点, source: VideoJs播放器源描述): void => {
   root.container.style.aspectRatio = 读取纵横比(source);
+  // 切源时再次同步统一循环策略，避免后续投影或 provider 切换把 loop 语义冲掉。
+  root.video.loop = 媒体是否默认循环播放("video");
   if (source.posterSrc) {
     root.video.poster = source.posterSrc;
   } else {

@@ -110,6 +110,69 @@ describe("Video.js 播放器壳", () => {
     expect(destroyHls).toHaveBeenCalledTimes(1);
   });
 
+  it("唯一 Video.js 壳里的真实 video 默认启用循环播放", async () => {
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-loop-1",
+        posterSrc: "http://media.local/poster-loop-1.jpg",
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => 创建假播放器根(),
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+
+    expect(shell.读取视频元素().loop).toBe(true);
+
+    shell.destroy();
+  });
+
+  it("同一壳实例 file 与 hls 之间同步时不会丢循环语义", async () => {
+    const attachMedia = vi.fn();
+    const loadSource = vi.fn();
+
+    class 假Hls构造器 {
+      static isSupported() {
+        return true;
+      }
+
+      attachMedia = attachMedia;
+      loadSource = loadSource;
+      destroy = vi.fn();
+    }
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-loop-sync-1",
+        posterSrc: "http://media.local/poster-loop-sync-1.jpg",
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => 创建假播放器根(),
+        registerVideoJsElements: async () => undefined,
+        loadHlsConstructor: async () => 假Hls构造器 as never,
+      }
+    );
+
+    shell.同步({
+      kind: "hls",
+      src: "http://media.local/stream/videojs-loop-sync-1/master.m3u8",
+      posterSrc: "http://media.local/poster-loop-sync-hls-1.jpg",
+      width: 1280,
+      height: 720,
+    });
+    await Promise.resolve();
+
+    expect(shell.读取视频元素().loop).toBe(true);
+
+    shell.destroy();
+  });
+
   it("p2p-media-loader-hlsjs 只能作为壳外增强挂到 HLS provider，不进入 file/blob 首播必经路径", async () => {
     const attachMedia = vi.fn();
     const loadSource = vi.fn();
