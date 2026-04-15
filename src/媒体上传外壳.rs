@@ -12,9 +12,12 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use memmap2::{Mmap, MmapOptions};
 use object_store::{path::Path as ObjectPath, ObjectStoreExt};
 use serde::Deserialize;
 use std::{
+    fs::File as StdFile,
+    path::Path as StdPath,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -357,70 +360,6 @@ pub(super) async fn complete_media_upload(
         media_complete_max_concurrency = state.media_complete_max_concurrency,
         "媒体上传 complete 重活开始"
     );
-    let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            return 记录并返回complete重活失败(
-                attachment_id.as_str(),
-                attachment_kind,
-                attachment_byte_size,
-                complete_heavy_work_started_at,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                "读取原图临时文件失败",
-                "read_temp_file_failed",
-                format!("读取 Rustus 临时原图文件失败: {err}"),
-            );
-        }
-    };
-    let parsed = match 媒体内容解析::解析媒体内容(&prepared.种类, original_bytes.as_ref()) {
-        Ok(parsed) => parsed,
-        Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
-            return 记录并返回complete重活失败(
-                attachment_id.as_str(),
-                attachment_kind,
-                attachment_byte_size,
-                complete_heavy_work_started_at,
-                StatusCode::BAD_REQUEST,
-                "attachment_type_not_allowed",
-                message,
-                "parse_media_kind_not_allowed",
-                message,
-            )
-        }
-        Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
-            return 记录并返回complete重活失败(
-                attachment_id.as_str(),
-                attachment_kind,
-                attachment_byte_size,
-                complete_heavy_work_started_at,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                message,
-                "parse_media_system_error",
-                message,
-            )
-        }
-    };
-    let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
-    if let Err(err) = state
-        .attachment_store
-        .put(&original_path, original_bytes.clone().into())
-        .await
-    {
-        return 记录并返回complete重活失败(
-            attachment_id.as_str(),
-            attachment_kind,
-            attachment_byte_size,
-            complete_heavy_work_started_at,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "system_error",
-            "写入原图对象失败",
-            "put_original_object_failed",
-            format!("写入 canonical 原图对象失败: {err}"),
-        );
-    }
-
     // ready 真相和 24 小时冷源窗口必须共用同一个完成时刻，
     // 否则后端存储、locator 冷源描述和分发窗口会各自漂成不同时间源。
     let ready_epoch秒 = SystemTime::now()
@@ -429,8 +368,71 @@ pub(super) async fn complete_media_upload(
         .unwrap_or(0);
     let 原始冷源到期时间戳秒 = ready_epoch秒 + usecase::媒体原始冷源保留秒数;
     let mut streaming_manifest_request = None;
-    let ready_request = match parsed {
-        媒体内容解析::媒体内容解析结果::图片(parsed) => {
+    let (ready_request, distribution_request, torrent_request) = match &prepared.种类 {
+        usecase::媒体附件类型::图片 => {
+            let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        "读取原图临时文件失败",
+                        "read_temp_file_failed",
+                        format!("读取 Rustus 临时原图文件失败: {err}"),
+                    );
+                }
+            };
+            let parsed = match 媒体内容解析::解析图片内容(original_bytes.as_ref()) {
+                Ok(parsed) => parsed,
+                Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::BAD_REQUEST,
+                        "attachment_type_not_allowed",
+                        message,
+                        "parse_image_kind_not_allowed",
+                        message,
+                    )
+                }
+                Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message,
+                        "parse_image_system_error",
+                        message,
+                    )
+                }
+            };
+            let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
+            if let Err(err) = state
+                .attachment_store
+                .put(&original_path, original_bytes.clone().into())
+                .await
+            {
+                return 记录并返回complete重活失败(
+                    attachment_id.as_str(),
+                    attachment_kind,
+                    attachment_byte_size,
+                    complete_heavy_work_started_at,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "写入原图对象失败",
+                    "put_original_object_failed",
+                    format!("写入 canonical 原图对象失败: {err}"),
+                );
+            }
             let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
             let thumbnail_path = ObjectPath::from(thumbnail_storage_key.clone());
             let asset_original_storage_key = format!(
@@ -491,7 +493,31 @@ pub(super) async fn complete_media_upload(
                     format!("写入图片完整图对象失败: {err}"),
                 );
             }
-            usecase::媒体附件写入请求 {
+            let distribution_request = media_distribution::构造协作分发元数据写入请求(
+                &attachment_id,
+                original_bytes.as_ref(),
+                ready_epoch秒,
+            );
+            let torrent = match media_distribution::生成附件torrent元信息(
+                distribution_request.content_hash.as_str(),
+                original_bytes.as_ref(),
+            ) {
+                Ok(torrent) => torrent,
+                Err(message) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message.clone(),
+                        "generate_torrent_failed",
+                        message,
+                    );
+                }
+            };
+            let ready_request = usecase::媒体附件写入请求 {
                 附件标识: attachment_id.clone(),
                 种类: prepared.种类.clone(),
                 mime_type: parsed.mime_type,
@@ -503,9 +529,106 @@ pub(super) async fn complete_media_upload(
                 资产原图存储键: Some(asset_original_storage_key),
                 完整图存储键: Some(full_storage_key),
                 原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
-            }
+            };
+            let torrent_request = usecase::协作分发torrent元信息写入请求 {
+                附件标识: attachment_id.clone(),
+                torrent_bytes: torrent.torrent_bytes,
+                torrent_info_hash: torrent.torrent_info_hash,
+                piece_length字节: torrent.piece_length_bytes,
+            };
+            (ready_request, distribution_request, torrent_request)
         }
-        媒体内容解析::媒体内容解析结果::视频(parsed) => {
+        usecase::媒体附件类型::视频 => {
+            let parsed = match 媒体内容解析::解析视频文件内容(temp_file_path.as_path()) {
+                Ok(parsed) => parsed,
+                Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::BAD_REQUEST,
+                        "attachment_type_not_allowed",
+                        message,
+                        "parse_video_kind_not_allowed",
+                        message,
+                    )
+                }
+                Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message,
+                        "parse_video_system_error",
+                        message,
+                    )
+                }
+            };
+            let original_video_map = match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
+                Ok(mapped) => mapped,
+                Err(err) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        "映射原视频临时文件失败",
+                        "map_original_video_failed",
+                        format!("映射 Rustus 临时原视频失败: {err}"),
+                    );
+                }
+            };
+            let distribution_request = media_distribution::构造协作分发元数据写入请求(
+                &attachment_id,
+                original_video_map.as_ref(),
+                ready_epoch秒,
+            );
+            let torrent = match media_distribution::生成附件torrent元信息(
+                distribution_request.content_hash.as_str(),
+                original_video_map.as_ref(),
+            ) {
+                Ok(torrent) => torrent,
+                Err(message) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message.clone(),
+                        "generate_torrent_failed",
+                        message,
+                    );
+                }
+            };
+            drop(original_video_map);
+            if let Err((status, code, message)) = 流媒体打包::上传本地文件到附件对象存储(
+                state.attachment_store.clone(),
+                temp_file_path.as_path(),
+                prepared.原始内容存储键.as_str(),
+                "原视频对象",
+            )
+            .await
+            {
+                return 记录并返回complete重活失败(
+                    attachment_id.as_str(),
+                    attachment_kind,
+                    attachment_byte_size,
+                    complete_heavy_work_started_at,
+                    status,
+                    code,
+                    message.clone(),
+                    "put_original_video_object_failed",
+                    message,
+                );
+            }
             let 打包结果 = match task::spawn_blocking({
                 let ffmpeg_bin = state.ffmpeg_bin.clone();
                 let ffprobe_bin = state.ffprobe_bin.clone();
@@ -571,11 +694,11 @@ pub(super) async fn complete_media_upload(
                 }
             };
             streaming_manifest_request = Some(uploaded.清单写入请求);
-            usecase::媒体附件写入请求 {
+            let ready_request = usecase::媒体附件写入请求 {
                 附件标识: attachment_id.clone(),
                 种类: prepared.种类.clone(),
                 mime_type: parsed.mime_type,
-                字节大小: original_bytes.len() as i64,
+                字节大小: attachment_byte_size,
                 宽: parsed.宽,
                 高: parsed.高,
                 原始内容存储键: prepared.原始内容存储键.clone(),
@@ -583,40 +706,15 @@ pub(super) async fn complete_media_upload(
                 资产原图存储键: None,
                 完整图存储键: None,
                 原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
-            }
+            };
+            let torrent_request = usecase::协作分发torrent元信息写入请求 {
+                附件标识: attachment_id.clone(),
+                torrent_bytes: torrent.torrent_bytes,
+                torrent_info_hash: torrent.torrent_info_hash,
+                piece_length字节: torrent.piece_length_bytes,
+            };
+            (ready_request, distribution_request, torrent_request)
         }
-    };
-    // ready 真相已经成立后，马上补齐协作分发元数据。
-    // 这里故意不把 hash / swarm_id 交给前端推导，避免多端各算各的。
-    let distribution_request = media_distribution::构造协作分发元数据写入请求(
-        &attachment_id,
-        original_bytes.as_ref(),
-        ready_epoch秒,
-    );
-    let torrent = match media_distribution::生成附件torrent元信息(
-        distribution_request.content_hash.as_str(),
-        original_bytes.as_ref(),
-    ) {
-        Ok(torrent) => torrent,
-        Err(message) => {
-            return 记录并返回complete重活失败(
-                attachment_id.as_str(),
-                attachment_kind,
-                attachment_byte_size,
-                complete_heavy_work_started_at,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                message.clone(),
-                "generate_torrent_failed",
-                message,
-            );
-        }
-    };
-    let torrent_request = usecase::协作分发torrent元信息写入请求 {
-        附件标识: attachment_id.clone(),
-        torrent_bytes: torrent.torrent_bytes,
-        torrent_info_hash: torrent.torrent_info_hash,
-        piece_length字节: torrent.piece_length_bytes,
     };
     let state_for_usecase = state.clone();
     let session_id_for_usecase = session_id.clone();
@@ -971,6 +1069,13 @@ pub(super) async fn 等待complete所需运输回执(
         }
     }
     Ok(transport)
+}
+
+fn 映射只读完成媒体临时文件(path: &StdPath) -> Result<Mmap, std::io::Error> {
+    let file = StdFile::open(path)?;
+    // 安全性：Rustus `post-finish` 回执后的临时文件在 complete 阶段只做只读消费；
+    // 这里既不写回文件，也不泄漏可变别名，因此只读映射满足 memmap 的前提。
+    unsafe { MmapOptions::new().map(&file) }
 }
 
 async fn 获取媒体上传完成重活许可(

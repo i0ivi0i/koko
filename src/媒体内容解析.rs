@@ -1,7 +1,7 @@
-use crate::usecase;
 use image::{DynamicImage, ImageFormat};
+use memmap2::{Mmap, MmapOptions};
 use nom_exif::{MediaParser, MediaSource, TrackInfo, TrackInfoTag};
-use std::io::Cursor;
+use std::{fs::File as StdFile, io::Cursor, path::Path};
 
 /// 图片字节被权威解析后的稳定结果。
 ///
@@ -27,13 +27,6 @@ pub(super) struct 视频内容解析结果 {
     pub(super) mime_type: String,
     pub(super) 宽: i32,
     pub(super) 高: i32,
-}
-
-/// shell 内部共享的媒体解析结果统一表面。
-#[derive(Debug)]
-pub(super) enum 媒体内容解析结果 {
-    图片(图片内容解析结果),
-    视频(视频内容解析结果),
 }
 
 /// 解析失败只区分“调用方应改输入”还是“系统实现失败”。
@@ -154,6 +147,22 @@ pub(super) fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结�
     })
 }
 
+fn 映射只读视频文件(path: &Path) -> Result<Mmap, 媒体内容解析错误> {
+    let file =
+        StdFile::open(path).map_err(|_| 媒体内容解析错误::系统错误("打开视频临时文件失败"))?;
+    // 安全性：complete 阶段拿到的 Rustus 临时文件已经封口，只做只读消费；
+    // 这里既不修改文件，也不暴露可变别名，因此把它映射成只读字节视图是安全的。
+    unsafe { MmapOptions::new().map(&file) }
+        .map_err(|_| 媒体内容解析错误::系统错误("映射视频临时文件失败"))
+}
+
+/// 大视频 complete 热路径优先复用操作系统只读映射，
+/// 避免先 `fs::read` 整块进内存再交给同一套解析器重复消费。
+pub(super) fn 解析视频文件内容(path: &Path) -> Result<视频内容解析结果, 媒体内容解析错误> {
+    let mapped = 映射只读视频文件(path)?;
+    解析视频内容(mapped.as_ref())
+}
+
 fn 解析视频轨道整数(value: &nom_exif::EntryValue) -> Option<u64> {
     value
         .as_u64()
@@ -191,13 +200,23 @@ fn mp4矩阵表示直角竖屏旋转(a: i32, b: i32, c: i32, d: i32) -> bool {
         && ((b == MP4矩阵_一 && c == -MP4矩阵_一) || (b == -MP4矩阵_一 && c == MP4矩阵_一))
 }
 
-/// complete 链路只认这里输出的稳定解析结果，不再直接摸图片/视频细节。
-pub(super) fn 解析媒体内容(
-    kind: &usecase::媒体附件类型,
-    bytes: &[u8],
-) -> Result<媒体内容解析结果, 媒体内容解析错误> {
-    match kind {
-        usecase::媒体附件类型::图片 => 解析图片内容(bytes).map(媒体内容解析结果::图片),
-        usecase::媒体附件类型::视频 => 解析视频内容(bytes).map(媒体内容解析结果::视频),
+#[cfg(test)]
+mod tests {
+    use super::{解析视频内容, 解析视频文件内容};
+    use std::path::Path;
+
+    #[test]
+    fn 文件级视频解析会保持与字节级解析相同的展示尺寸() {
+        let 字节级结果 =
+            解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4")).expect("最小 mp4 应该能被字节级解析");
+        let 文件级结果 = 解析视频文件内容(Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/minimal.mp4"
+        )))
+        .expect("最小 mp4 应该能被文件级解析");
+
+        assert_eq!(文件级结果.mime_type, 字节级结果.mime_type);
+        assert_eq!(文件级结果.宽, 字节级结果.宽);
+        assert_eq!(文件级结果.高, 字节级结果.高);
     }
 }

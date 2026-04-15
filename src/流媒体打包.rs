@@ -1,13 +1,25 @@
 use super::应用状态;
 use crate::usecase;
 use axum::http::StatusCode;
-use object_store::{path::Path as ObjectPath, ObjectStoreExt};
+use object_store::{buffered::BufWriter, path::Path as ObjectPath, ObjectStore};
 use std::{
     path::{Path as StdPath, PathBuf},
     process::Command,
+    sync::Arc,
 };
-use tokio::fs;
+use tokio::{
+    fs,
+    io::{AsyncWriteExt, BufReader},
+};
 use uuid::Uuid;
+
+/// `BufWriter` 小于这个阈值会退回单次 put，大于它会自动走 multipart。
+/// 这里故意选 8MiB，让 10MB+ 的视频主链和打包产物都尽早进入流式上传，而不是继续整块驻留内存。
+const 附件对象流式写入缓冲字节数: usize = 8 * 1024 * 1024;
+/// object_store 自带 writer 已经内建 part 并发；这里显式钉住上限，避免吞吐策略继续藏在上游默认值里。
+const 附件对象流式写入最大并发: usize = 8;
+/// 本地磁盘读取也走一层小缓冲，减少大文件 copy 时的 syscall 抖动。
+const 附件对象流式读取缓冲字节数: usize = 1024 * 1024;
 
 /// 打包阶段先把本地产物清单和最终入库键分开：
 /// 1. 本地产物路径只活在当前 complete 调度里；
@@ -71,6 +83,47 @@ pub(super) fn 推导流媒体内容类型(asset_path: &str) -> &'static str {
         "mp4" => "video/mp4",
         _ => "application/octet-stream",
     }
+}
+
+/// Shell 层统一负责“本地文件 -> 附件对象存储”的 IO 搬运，
+/// 这样 complete 原视频和流媒体打包产物都能复用同一套高吞吐写入策略。
+pub(super) async fn 上传本地文件到附件对象存储(
+    store: Arc<dyn ObjectStore>,
+    local_path: &StdPath,
+    storage_key: &str,
+    资产标签: &'static str,
+) -> Result<(), (StatusCode, &'static str, String)> {
+    let local_file = fs::File::open(local_path).await.map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("读取{资产标签}失败: {err}"),
+        )
+    })?;
+    let mut reader = BufReader::with_capacity(附件对象流式读取缓冲字节数, local_file);
+    let mut writer = BufWriter::with_capacity(
+        store,
+        ObjectPath::from(storage_key),
+        附件对象流式写入缓冲字节数,
+    )
+    .with_max_concurrency(附件对象流式写入最大并发);
+    tokio::io::copy(&mut reader, &mut writer)
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("流式写入{资产标签}失败: {err}"),
+            )
+        })?;
+    writer.shutdown().await.map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("提交{资产标签}失败: {err}"),
+        )
+    })?;
+    Ok(())
 }
 
 fn 执行外部命令(
@@ -308,47 +361,23 @@ pub(super) async fn 上传流媒体打包产物(
 ) -> Result<流媒体打包上传结果, (StatusCode, &'static str, String)> {
     for file in &打包结果.文件列表 {
         let storage_key = 推导流媒体对象存储键(attachment_id, file.相对路径.as_str());
-        let bytes = fs::read(file.本地路径.as_path()).await.map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("读取流媒体打包产物失败: {err}"),
-            )
-        })?;
-        state
-            .attachment_store
-            .put(&ObjectPath::from(storage_key), bytes.into())
-            .await
-            .map_err(|err| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("写入流媒体打包产物失败: {err}"),
-                )
-            })?;
+        上传本地文件到附件对象存储(
+            state.attachment_store.clone(),
+            file.本地路径.as_path(),
+            storage_key.as_str(),
+            "流媒体打包产物",
+        )
+        .await?;
     }
 
     let 静态封面存储键 = format!("videos/{attachment_id}/thumbnail.png");
-    let 静态封面字节 = fs::read(打包结果.静态封面本地路径.as_path())
-        .await
-        .map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("读取视频静态封面失败: {err}"),
-            )
-        })?;
-    state
-        .attachment_store
-        .put(&ObjectPath::from(静态封面存储键.as_str()), 静态封面字节.into())
-        .await
-        .map_err(|err| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "system_error",
-                format!("写入视频静态封面失败: {err}"),
-            )
-        })?;
+    上传本地文件到附件对象存储(
+        state.attachment_store.clone(),
+        打包结果.静态封面本地路径.as_path(),
+        静态封面存储键.as_str(),
+        "视频静态封面",
+    )
+    .await?;
 
     Ok(流媒体打包上传结果 {
         清单写入请求: usecase::流媒体清单写入请求 {
@@ -469,4 +498,43 @@ pub(super) fn 重写_dash清单内容(
         asset_path,
     );
     重写_xml属性路径(rewritten, "media", attachment_id, session_id, asset_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::上传本地文件到附件对象存储;
+    use object_store::{
+        memory::InMemory, path::Path as ObjectPath, ObjectStore, ObjectStoreExt,
+    };
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn 流式写入本地文件会保留超过缓冲阈值的原始字节() {
+        let 原始字节 = vec![0x5a; 16 * 1024 * 1024 + 321];
+        let 临时文件路径 =
+            std::env::temp_dir().join(format!("koko-stream-upload-test-{}.bin", Uuid::new_v4()));
+        std::fs::write(&临时文件路径, &原始字节).expect("应能写入测试临时文件");
+
+        let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
+        上传本地文件到附件对象存储(
+            store.clone(),
+            临时文件路径.as_path(),
+            "tests/stream-upload.bin",
+            "测试流式对象",
+        )
+        .await
+        .expect("流式 helper 应能把本地文件写进 object_store");
+
+        let 已写入字节 = store
+            .get(&ObjectPath::from("tests/stream-upload.bin"))
+            .await
+            .expect("应能读取已写入对象")
+            .bytes()
+            .await
+            .expect("应能读出对象字节");
+        assert_eq!(已写入字节.as_ref(), 原始字节.as_slice());
+
+        let _ = std::fs::remove_file(临时文件路径);
+    }
 }

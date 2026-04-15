@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 dotenvy = "0.15"
 # 启动入口现在既要接系统退出信号，也要在测试里注入关闭信号并等待优雅停机，
-# 因此把 signal/sync/time 显式列出来，避免后续继续依赖上游 feature 侧带。
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+# 同时上传热路径也已经显式依赖 fs/io-util；这里把真实依赖面写明，避免继续偷吃上游 feature 侧带。
+tokio = { version = "1", features = ["fs", "io-util", "macros", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1"
 # 日志输出只显式保留当前确实使用的格式化、过滤与 ANSI 终端能力，
 # 避免把 tracing-subscriber 的默认特性整包带进来。
@@ -39,6 +39,9 @@ nom-exif = "2.7"
 # `nom-exif` 当前不暴露 MP4 轨道旋转矩阵；这里只用成熟 mp4 轮子补齐展示方向，
 # 不接管 MIME 校验、WebM 宽高或视频转码链路。
 mp4 = "0.14"
+# 大视频 complete 热路径先站在操作系统只读内存映射能力肩膀上，
+# 用成熟 crate 把 `fs::read -> Vec<u8>` 的整块拷贝挪掉，而不是手搓第二套文件缓存。
+memmap2 = "0.9"
 sha2 = "0.10"
 hex = "0.4"
 bip_metainfo = "0.12"
