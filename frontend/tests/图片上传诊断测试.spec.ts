@@ -111,6 +111,31 @@ describe("图片上传诊断", () => {
     expect(payload).not.toHaveProperty("uploadTraceId");
   });
 
+  it("诊断日志会记录 tus 错误消息里的 request id", () => {
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    consoleWarnSpy.mockClear();
+
+    记录媒体上传失败诊断({
+      attachmentId: "att-request-id-1",
+      localId: "draft-request-id-1",
+      fileName: "broken.jpg",
+      error: {
+        message:
+          "tus: unexpected response while uploading chunk, originated from request (method: PATCH, url: http://127.0.0.1:1081/files/demo, response code: 413, response text: , request id: req-123)",
+      },
+      response: undefined,
+      errorCode: "attachment_too_large",
+    });
+
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+    const [, payload] = consoleWarnSpy.mock.calls[0] ?? [];
+    expect(payload).toMatchObject({
+      attachmentId: "att-request-id-1",
+      requestId: "req-123",
+      status: 413,
+    });
+  });
+
   it("传输错误对象会优先取 code 字段", () => {
     const errorCode = 解析传输错误代码({
       code: "attachment_type_not_allowed",

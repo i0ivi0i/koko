@@ -22,6 +22,14 @@ export type 媒体上传失败错误 = {
   originalResponse?: Tus原始响应 | null;
 };
 
+function 读取响应头(
+  getHeader: ((name: string) => string | null) | undefined,
+  name: string
+): string {
+  const value = getHeader?.(name) ?? getHeader?.(name.toLowerCase()) ?? getHeader?.(name.toUpperCase());
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function 安全解析上传失败响应体(response: 媒体上传失败响应): 媒体上传失败响应体 | null {
   if (response?.body && typeof response.body === "object") {
     return response.body;
@@ -99,6 +107,23 @@ function 从Tus错误消息归一化失败响应(error: 媒体上传失败错误
   return normalizedResponse;
 }
 
+function 读取媒体上传请求标识(
+  error: 媒体上传失败错误,
+  response: 媒体上传失败响应
+): string {
+  const responseRequestId = 读取响应头(response?.getResponseHeader, "X-Request-ID");
+  if (responseRequestId) {
+    return responseRequestId;
+  }
+  const originalResponseRequestId = 读取响应头(error.originalResponse?.getHeader, "X-Request-ID");
+  if (originalResponseRequestId) {
+    return originalResponseRequestId;
+  }
+  const requestIdMatch = error.message.match(/request id:\s*([^)]+)/i);
+  const requestId = requestIdMatch?.[1]?.trim() ?? "";
+  return requestId.toLowerCase() === "n/a" ? "" : requestId;
+}
+
 function 归一化媒体上传失败响应(
   error: 媒体上传失败错误,
   response: 媒体上传失败响应
@@ -152,6 +177,7 @@ export function 记录媒体上传失败诊断(input: {
   const normalizedResponse = 归一化媒体上传失败响应(input.error, input.response);
   const responseText =
     typeof normalizedResponse?.responseText === "string" ? normalizedResponse.responseText.trim() : "";
+  const requestId = 读取媒体上传请求标识(input.error, normalizedResponse);
   console.warn("[koko:image-upload:error]", {
     attachmentId: input.attachmentId,
     localId: input.localId,
@@ -162,6 +188,11 @@ export function 记录媒体上传失败诊断(input: {
     errorCode: input.errorCode,
     originalMessage: input.error.message,
     receivedUploadResponse: 判断是否已收到上传层响应(normalizedResponse),
+    /**
+     * requestId 只是 transport 诊断锚点，不参与业务裁决。
+     * 它存在的意义，是把浏览器里的 tus 错误和 sidecar / 主服务日志更快串起来。
+     */
+    requestId,
     responseText: responseText ? responseText.slice(0, 240) : "",
   });
 }

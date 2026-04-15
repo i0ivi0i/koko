@@ -166,6 +166,7 @@ async fn handle_rustus_hook_post_finish(
     headers: HeaderMap,
     body: RustusHookBody,
 ) -> Response {
+    let request_id = 读取可选请求标识(&headers);
     let upload_token = match 读取媒体上传令牌(&headers) {
         Ok(token) => token,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
@@ -202,6 +203,13 @@ async fn handle_rustus_hook_post_finish(
 
     let state_for_repo = state.clone();
     let upload_id = body.upload.id.clone();
+    // 这里显式拆出一份给阻塞闭包使用：
+    // - `spawn_blocking(move || ...)` 必须拿走它依赖的数据所有权；
+    // - 但 hook 返回前的结构化日志也需要稳定锚点；
+    // - 因此 transport 更新和日志诊断各自持有一份，只共享值，不共享可变状态。
+    let attachment_id_for_repo = attachment_id.clone();
+    let upload_id_for_repo = upload_id.clone();
+    let storage_locator_for_repo = storage_locator.clone();
     let update_result = match task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_repo);
         let Some(transport) = repo
@@ -221,7 +229,7 @@ async fn handle_rustus_hook_post_finish(
                 "上传令牌已失效".to_string(),
             ));
         }
-        if transport.附件标识 != attachment_id {
+        if transport.附件标识 != attachment_id_for_repo {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
@@ -245,11 +253,11 @@ async fn handle_rustus_hook_post_finish(
                 "附件不再处于待上传状态".to_string(),
             ));
         }
-        解析rustus临时文件路径(&state_for_repo.rustus_data_dir, &storage_locator)?;
+        解析rustus临时文件路径(&state_for_repo.rustus_data_dir, &storage_locator_for_repo)?;
         repo.更新媒体上传运输回执(
             &transport.附件标识,
-            &upload_id,
-            &storage_locator,
+            &upload_id_for_repo,
+            &storage_locator_for_repo,
             body.upload.length,
         )
         .map_err(map_domain_err_tuple)?;
@@ -259,6 +267,17 @@ async fn handle_rustus_hook_post_finish(
     {
         Ok(result) => result,
         Err(err) => {
+            tracing::error!(
+                adapter = "rustus_hook",
+                hook = "post-finish",
+                attachment_id = attachment_id.as_str(),
+                upload_id = upload_id.as_str(),
+                request_id = request_id.as_deref().unwrap_or(""),
+                storage_locator = storage_locator.as_str(),
+                error_code = "system_error",
+                detail = %err,
+                "Rustus post-finish 任务执行失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
@@ -268,8 +287,32 @@ async fn handle_rustus_hook_post_finish(
         }
     };
     match update_result {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err((status, code, message)) => err_resp(status, code, message).into_response(),
+        Ok(()) => {
+            tracing::info!(
+                adapter = "rustus_hook",
+                hook = "post-finish",
+                attachment_id = attachment_id.as_str(),
+                upload_id = upload_id.as_str(),
+                request_id = request_id.as_deref().unwrap_or(""),
+                storage_locator = storage_locator.as_str(),
+                "Rustus post-finish 已登记上传回执"
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err((status, code, message)) => {
+            tracing::warn!(
+                adapter = "rustus_hook",
+                hook = "post-finish",
+                attachment_id = attachment_id.as_str(),
+                upload_id = upload_id.as_str(),
+                request_id = request_id.as_deref().unwrap_or(""),
+                storage_locator = storage_locator.as_str(),
+                error_code = code,
+                detail = %message,
+                "Rustus post-finish 被拒绝"
+            );
+            err_resp(status, code, message).into_response()
+        }
     }
 }
 
@@ -313,6 +356,15 @@ fn 读取媒体上传令牌(
             "attachment_upload_unauthorized",
             "上传令牌非法",
         ))
+}
+
+fn 读取可选请求标识(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("X-Request-ID")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn 读取rustus_metadata字段(
@@ -375,4 +427,18 @@ pub(super) fn 解析rustus临时文件路径(
         ));
     }
     Ok(canonical_file)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::读取可选请求标识;
+    use axum::http::{HeaderMap, HeaderValue};
+
+    #[test]
+    fn 读取可选请求标识会返回非空x_request_id() {
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Request-ID", HeaderValue::from_static("req-123"));
+
+        assert_eq!(读取可选请求标识(&headers).as_deref(), Some("req-123"));
+    }
 }
