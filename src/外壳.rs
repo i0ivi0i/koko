@@ -32,22 +32,22 @@ use crate::{adapter::Pg仓储, contract};
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
-#[path = "后台外壳.rs"]
-mod 后台外壳;
-#[path = "实时外壳.rs"]
-mod 实时外壳;
-#[path = "媒体内容解析.rs"]
-mod 媒体内容解析;
-#[path = "流媒体打包.rs"]
-mod 流媒体打包;
 #[path = "rustus_hook外壳.rs"]
 mod rustus_hook外壳;
+#[path = "后台外壳.rs"]
+mod 后台外壳;
 #[path = "媒体上传外壳.rs"]
 mod 媒体上传外壳;
+#[path = "媒体内容解析.rs"]
+mod 媒体内容解析;
 #[path = "媒体资产外壳.rs"]
 mod 媒体资产外壳;
+#[path = "实时外壳.rs"]
+mod 实时外壳;
 #[path = "房间外壳.rs"]
 mod 房间外壳;
+#[path = "流媒体打包.rs"]
+mod 流媒体打包;
 
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
 /// 先把常量收在 shell 父层，供上传外壳与 Rustus hook 外壳共享，避免兄弟模块重复手抄字符串。
@@ -142,10 +142,10 @@ pub async fn 构建应用状态(
     })
 }
 
-/// 执行一次媒体原始冷源清理：
-/// 1. 应用层先给出“哪些原始对象该删了”；
-/// 2. 壳层真正删除对象存储里的 raw original；
-/// 3. 删除成功后再把 `origin_deleted_at` 回写到附件真相。
+/// 执行一次媒体冷源清理：
+/// 1. 应用层先给出“哪些图片原图 / 视频 mezzanine 该删了”；
+/// 2. 壳层真正删除对象存储里的短期回退对象；
+/// 3. 删除成功后再把删除时间回写到附件真相。
 ///
 /// 这样 24 小时规则就不再只是一个时间戳约定，而会真的落成“对象退场 + 真相留痕”的闭环。
 pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<()> {
@@ -189,6 +189,48 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         })
         .await
         .map_err(|err| io::Error::other(format!("冷源清理写回任务失败: {err}")))??;
+    }
+
+    let state_for_query = state.clone();
+    let 待清理回退母本 = tokio::task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_query);
+        crate::usecase::列出待清理媒体回退母本(&repo, 当前时间戳秒, 128)
+            .map_err(|err| io::Error::other(format!("查询待清理媒体回退母本失败: {err:?}")))
+    })
+    .await
+    .map_err(|err| io::Error::other(format!("回退母本清理查询任务失败: {err}")))??;
+
+    for 回退母本 in 待清理回退母本 {
+        let object_path = ObjectPath::from(回退母本.回退母本存储键.as_str());
+        match state.attachment_store.delete(&object_path).await {
+            Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
+            Err(err) => {
+                tracing::error!(
+                    usecase = "媒体冷源清理",
+                    adapter = "shell",
+                    outcome = "failed",
+                    attachment_id = 回退母本.附件标识.as_str(),
+                    storage_key = 回退母本.回退母本存储键.as_str(),
+                    error = %err,
+                    "删除视频 mezzanine 回退母本失败"
+                );
+                continue;
+            }
+        }
+
+        let state_for_mark = state.clone();
+        let attachment_id = 回退母本.附件标识.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut repo = 构建共享仓储(&state_for_mark);
+            crate::usecase::标记媒体回退母本已删除(
+                &mut repo,
+                &attachment_id,
+                当前时间戳秒,
+            )
+            .map_err(|err| io::Error::other(format!("标记媒体回退母本已删除失败: {err:?}")))
+        })
+        .await
+        .map_err(|err| io::Error::other(format!("回退母本清理写回任务失败: {err}")))??;
     }
 
     Ok(())
@@ -286,7 +328,14 @@ pub fn 构建路由(state: 应用状态) -> Router {
             "/api/media/{attachment_id}/complete",
             post(媒体上传外壳::complete_media_upload),
         )
-        .route("/internal/rustus/hooks", post(rustus_hook外壳::handle_rustus_hook))
+        .route(
+            "/api/media/{attachment_id}/abandon",
+            post(媒体上传外壳::abandon_media_upload),
+        )
+        .route(
+            "/internal/rustus/hooks",
+            post(rustus_hook外壳::handle_rustus_hook),
+        )
         .route(
             "/api/media/{attachment_id}/locator",
             get(媒体资产外壳::load_media_locator),

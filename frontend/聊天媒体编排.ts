@@ -223,6 +223,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     getSessionId: () => deps.读取会话编号(),
     prepareMediaUpload: (kind, sessionId, file) =>
       deps.transport().prepareMediaUpload(kind, sessionId, file),
+    abandonMediaUpload: (sessionId, attachmentId) =>
+      deps.transport().abandonMediaUpload(sessionId, attachmentId),
     completeMediaUpload: (sessionId, attachmentId) =>
       deps.transport().completeMediaUpload(sessionId, attachmentId),
     readDrafts: () => deps.读取草稿(),

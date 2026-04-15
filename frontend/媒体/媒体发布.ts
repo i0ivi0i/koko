@@ -112,6 +112,7 @@ type 媒体发布器依赖 = {
     sessionId: string,
     file: File
   ): Promise<媒体上传准备结果>;
+  abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
   readDrafts(): 媒体附件草稿[];
   writeDraft(draft: 媒体附件草稿): void;
@@ -633,6 +634,29 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     if (!draft) {
       return;
     }
+    const currentUploader = 读取草稿所属上传器(localId);
+    const attachmentId = draft.attachmentId.trim();
+    if (attachmentId) {
+      try {
+        /**
+         * restart 的第一步必须是显式 abandon 旧上传：
+         * - 让后端留下 abandoned 事实；
+         * - 让迟到的 post-finish/complete 不会复活旧附件；
+         * - 为后续临时文件清理创造权威锚点。
+         */
+        await deps.abandonMediaUpload(deps.getSessionId(), attachmentId);
+      } catch (error: unknown) {
+        deps.updateDraft(localId, {
+          status: "failed",
+          errorCode: 解析传输错误代码(error),
+        });
+        return;
+      }
+    }
+    if (currentUploader?.getFile(localId)) {
+      currentUploader.removeFile(localId);
+    }
+    草稿上传器键表.delete(localId);
     deps.updateDraft(localId, {
       attachmentId: "",
       status: "transporting",

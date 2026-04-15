@@ -417,6 +417,29 @@ describe("传输", () => {
     });
   });
 
+  it("abandonMediaUpload 会调用显式放弃旧上传的新路由", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-old-1",
+          status: "abandoned",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    await transport.abandonMediaUpload("s-1", "att-old-1");
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/media/att-old-1/abandon",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("loadMediaLocator 会把受控相对地址收口成绝对媒体地址", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

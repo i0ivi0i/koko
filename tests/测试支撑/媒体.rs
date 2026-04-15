@@ -114,9 +114,9 @@ pub fn 断言媒体准备结果是Tus契约(
         Some(expected_mime_type)
     );
     assert_eq!(
-        tus_metadata
-            .get("byte_size")
-            .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse::<i64>().ok())),
+        tus_metadata.get("byte_size").and_then(|value| value
+            .as_i64()
+            .or_else(|| value.as_str()?.parse::<i64>().ok())),
         Some(expected_byte_size)
     );
 }
@@ -190,13 +190,28 @@ pub async fn 插入ready视频附件记录(pool: &PgPool, 会话标识: &str, �
     .expect("附件 owner 必须能落到稳定匿名身份");
 
     sqlx::query(
-        "INSERT INTO attachments (attachment_id, owner_anonymous_identity_id, kind, mime_type, byte_size, width, height, storage_key, thumbnail_storage_key, status) \
-         VALUES ($1, $2, 'video', 'video/mp4', $3, 320, 240, $4, NULL, 'ready')",
+        "INSERT INTO attachments (
+            attachment_id,
+            owner_anonymous_identity_id,
+            kind,
+            mime_type,
+            byte_size,
+            width,
+            height,
+            storage_key,
+            thumbnail_storage_key,
+            mezzanine_storage_key,
+            mezzanine_expires_at,
+            status
+         ) VALUES (
+            $1, $2, 'video', 'video/mp4', $3, 320, 240, $4, NULL, $4, TO_TIMESTAMP($5), 'ready'
+         )",
     )
     .bind(附件标识)
     .bind(owner_identity_db_id)
     .bind(最小mp4字节().len() as i64)
-    .bind(format!("original/{附件标识}.mp4"))
+    .bind(format!("videos/{附件标识}/mezzanine.mp4"))
+    .bind(未来冷源到期时间戳秒())
     .execute(pool)
     .await
     .expect("应能插入 ready 视频附件");

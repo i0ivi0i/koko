@@ -283,6 +283,7 @@ export class 假传输 implements 前端传输端口 {
       expires_at: "2026-04-10T12:00:00Z",
     };
   }
+  async abandonMediaUpload(_sessionId: string, _attachmentId: string): Promise<void> {}
   async completeMediaUpload(
     sessionId: string,
     attachmentId: string

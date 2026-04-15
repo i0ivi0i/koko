@@ -52,6 +52,7 @@ export interface 前端传输端口 {
     sessionId: string,
     file: File
   ): Promise<媒体上传准备结果>;
+  abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
   loadMediaLocator(sessionId: string, attachmentId: string): Promise<媒体定位结果>;
   buildAttachmentContentUrl(
@@ -283,6 +284,16 @@ export class HttpRealtime传输 implements 前端传输端口 {
       ...prepared,
       tus_endpoint: this.解析绝对地址(prepared.tus_endpoint),
     };
+  }
+
+  /**
+   * restart 不是本地换个 attachmentId 就算完成，
+   * 必须先让后端把旧附件和旧 transport 一起标成 abandoned。
+   */
+  async abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void> {
+    await this.post<{ attachment_id: string; status: string }>(`/api/media/${attachmentId}/abandon`, {
+      session_id: sessionId,
+    });
   }
 
   /**

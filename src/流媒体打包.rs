@@ -34,15 +34,17 @@ pub(super) struct 流媒体打包结果 {
     hls主清单相对路径: String,
     dash主清单相对路径: String,
     静态封面本地路径: PathBuf,
+    高质量回退母本本地路径: PathBuf,
     文件列表: Vec<流媒体打包文件>,
 }
 
 /// 视频打包上传返回两类稳定事实：
 /// 1. 正式流媒体清单写入请求；
-/// 2. 与附件同锚点的静态封面存储键。
+/// 2. 与附件同锚点的静态封面与 24 小时 mezzanine 回退层存储键。
 pub(super) struct 流媒体打包上传结果 {
     pub 清单写入请求: usecase::流媒体清单写入请求,
     pub 静态封面存储键: String,
+    pub 回退母本存储键: String,
 }
 
 /// 受控流媒体地址是浏览器唯一允许看到的正式播放入口。
@@ -349,6 +351,7 @@ pub(super) fn 生成流媒体打包产物(
         hls主清单相对路径: "hls/master.m3u8".to_string(),
         dash主清单相对路径: "dash/stream.mpd".to_string(),
         静态封面本地路径: 静态封面文件,
+        高质量回退母本本地路径: 视频轨道文件,
         文件列表,
     })
 }
@@ -378,6 +381,14 @@ pub(super) async fn 上传流媒体打包产物(
         "视频静态封面",
     )
     .await?;
+    let 回退母本存储键 = format!("videos/{attachment_id}/mezzanine.mp4");
+    上传本地文件到附件对象存储(
+        state.attachment_store.clone(),
+        打包结果.高质量回退母本本地路径.as_path(),
+        回退母本存储键.as_str(),
+        "视频 mezzanine 回退母本",
+    )
+    .await?;
 
     Ok(流媒体打包上传结果 {
         清单写入请求: usecase::流媒体清单写入请求 {
@@ -392,6 +403,7 @@ pub(super) async fn 上传流媒体打包产物(
             ),
         },
         静态封面存储键,
+        回退母本存储键,
     })
 }
 
@@ -437,8 +449,11 @@ pub(super) fn 重写_hls清单内容(
                             let value_end = value_start + end_rel;
                             let raw = &line[value_start..value_end];
                             let resolved = 解析流媒体相对路径(asset_path, raw);
-                            let absolute =
-                                构造流媒体受控地址(attachment_id, session_id, resolved.as_str());
+                            let absolute = 构造流媒体受控地址(
+                                attachment_id,
+                                session_id,
+                                resolved.as_str(),
+                            );
                             rewritten.replace_range(value_start..value_end, absolute.as_str());
                             return rewritten;
                         }
@@ -503,9 +518,7 @@ pub(super) fn 重写_dash清单内容(
 #[cfg(test)]
 mod tests {
     use super::上传本地文件到附件对象存储;
-    use object_store::{
-        memory::InMemory, path::Path as ObjectPath, ObjectStore, ObjectStoreExt,
-    };
+    use object_store::{memory::InMemory, path::Path as ObjectPath, ObjectStore, ObjectStoreExt};
     use std::sync::Arc;
     use uuid::Uuid;
 

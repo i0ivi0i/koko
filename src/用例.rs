@@ -89,8 +89,9 @@ pub struct 待完成媒体附件读取结果 {
 }
 
 /// complete 阶段拿到真实字节后，进入应用层持久化所需的最小媒体字段。
-/// 这里除了基础宽高和缩略图键，还要把图片真实资产键与原始冷源生命周期收口，
-/// 避免 shell 以后又各自推导 full/original 或偷偷发明另一套 24h 规则。
+/// 这里刻意把“图片原始冷源”和“视频 24h mezzanine 回退层”并列收口：
+/// 1. 图片仍以原图冷源为唯一 fallback；
+/// 2. 视频则改成高质量 mezzanine 作为短期回退层，避免 raw upload 被删后壳层继续猜测另一套 cold source。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 媒体附件写入请求 {
     pub 附件标识: String,
@@ -104,6 +105,8 @@ pub struct 媒体附件写入请求 {
     pub 资产原图存储键: Option<String>,
     pub 完整图存储键: Option<String>,
     pub 原始冷源到期时间戳秒: Option<i64>,
+    pub 回退母本存储键: Option<String>,
+    pub 回退母本到期时间戳秒: Option<i64>,
 }
 
 /// 媒体上传成功后返回给壳层的最小快照。
@@ -215,6 +218,14 @@ pub struct 媒体定位结果 {
 pub struct 待清理媒体冷源 {
     pub 附件标识: String,
     pub 原始内容存储键: String,
+}
+
+/// 视频 mezzanine 是短期回退层，不是长期主资产。
+/// 因此后台清理需要有一条独立待删清单，避免跟图片原图冷源混成一个 owner。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 待清理媒体回退母本 {
+    pub 附件标识: String,
+    pub 回退母本存储键: String,
 }
 
 /// 原始冷源只保留 24 小时窗口。
@@ -539,6 +550,36 @@ pub trait 仓储端口 {
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
         let _ = (附件标识, 删除时间戳秒);
+        Err(contract::错误码::系统错误)
+    }
+
+    /// 视频 mezzanine 24h TTL 到期后，需要由后台统一回收。
+    fn 列出待清理媒体回退母本(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<待清理媒体回退母本>, contract::错误码> {
+        let _ = (当前时间戳秒, 限制条数);
+        Ok(vec![])
+    }
+
+    fn 标记媒体回退母本已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let _ = (附件标识, 删除时间戳秒);
+        Err(contract::错误码::系统错误)
+    }
+
+    /// restart 语义下，旧附件和旧 transport 都必须先显式退场。
+    /// 这里只有“留事实”这一层；删临时文件仍由 shell 根据 storage_locator 执行。
+    fn 标记媒体上传已放弃(
+        &mut self,
+        附件标识: &str,
+        放弃时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let _ = (附件标识, 放弃时间戳秒);
         Err(contract::错误码::系统错误)
     }
 
@@ -1220,6 +1261,62 @@ pub fn 标记媒体冷源已删除(
         return Err(contract::错误码::参数非法);
     }
     仓储.标记媒体冷源已删除(附件标识, 删除时间戳秒)
+}
+
+/// 视频 mezzanine TTL 到期后，只能回收短期回退层本身，不能误删流媒体主资产。
+pub fn 列出待清理媒体回退母本(
+    仓储: &dyn 仓储端口,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<待清理媒体回退母本>, contract::错误码> {
+    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.列出待清理媒体回退母本(当前时间戳秒, 限制条数)
+}
+
+/// mezzanine 删除事实要单独回写，避免 locator 继续把过期回退层冒充可用 original。
+pub fn 标记媒体回退母本已删除(
+    仓储: &mut dyn 仓储端口,
+    附件标识: &str,
+    删除时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    if 附件标识.trim().is_empty() || 删除时间戳秒 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.标记媒体回退母本已删除(附件标识, 删除时间戳秒)
+}
+
+/// 显式放弃旧上传：
+/// 1. 只有 owner 自己能放弃；
+/// 2. ready 附件不能走这条退场路径；
+/// 3. 一旦放弃，就必须把附件和 transport 一起标脏，后面的 hook/complete 才不会复活旧上传。
+pub fn 放弃媒体上传(
+    仓储: &mut dyn 仓储端口,
+    会话标识: &str,
+    附件标识: &str,
+    放弃时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    if 附件标识.trim().is_empty() || 放弃时间戳秒 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    校验实时连接会话(仓储, 会话标识)?;
+    let 所属匿名身份标识 = 仓储
+        .查询会话所属匿名身份(会话标识)?
+        .ok_or(contract::错误码::会话无效)?;
+    let snapshot = 仓储
+        .查询附件快照(附件标识)?
+        .ok_or(contract::错误码::附件不存在)?;
+    if snapshot.所属匿名身份标识 != 所属匿名身份标识 {
+        return Err(contract::错误码::附件不属于当前发送者);
+    }
+    if snapshot.状态 == 附件状态读取结果::就绪 {
+        return Err(contract::错误码::附件未就绪);
+    }
+    if snapshot.状态 == 附件状态读取结果::已过期 {
+        return Ok(());
+    }
+    仓储.标记媒体上传已放弃(附件标识, 放弃时间戳秒)
 }
 
 /// 领域错误 -> 契约错误码映射。

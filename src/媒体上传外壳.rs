@@ -1,6 +1,6 @@
 use super::{
-    err_resp, map_domain_err_tuple, rustus_hook外壳, 媒体内容解析, 流媒体打包, 媒体上传运输方式_TUS,
-    应用状态, 构建共享仓储,
+    err_resp, map_domain_err_tuple, rustus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态,
+    构建共享仓储, 流媒体打包,
 };
 use crate::{
     adapter::{媒体上传运输授权写入请求, 媒体上传运输记录},
@@ -43,6 +43,13 @@ pub(super) struct PrepareMediaUploadBody {
 /// 媒体 complete 请求体。
 #[derive(Deserialize)]
 pub(super) struct CompleteMediaUploadBody {
+    session_id: Option<String>,
+}
+
+/// 媒体 abandon 请求体。
+/// 这条冷路径只表达“显式放弃旧上传”意图，不夹带 restart/prepare 之类的下一步动作。
+#[derive(Deserialize)]
+pub(super) struct AbandonMediaUploadBody {
     session_id: Option<String>,
 }
 
@@ -100,7 +107,9 @@ pub(super) async fn prepare_media_upload(
             )
         }
     };
-    if let Err((status, code, message)) = 校验媒体准备请求(&media_kind, &mime_type, byte_size) {
+    if let Err((status, code, message)) =
+        校验媒体准备请求(&media_kind, &mime_type, byte_size)
+    {
         return err_resp(status, code, message);
     }
 
@@ -255,7 +264,8 @@ pub(super) async fn complete_media_upload(
         }
     };
     let (prepared, transport) = prepared_and_transport;
-    let transport = match 等待complete所需运输回执(state.clone(), &attachment_id, transport).await {
+    let transport = match 等待complete所需运输回执(state.clone(), &attachment_id, transport).await
+    {
         Ok(transport) => transport,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
@@ -320,11 +330,13 @@ pub(super) async fn complete_media_upload(
             "原图尚未上传完成",
         );
     };
-    let temp_file_path =
-        match rustus_hook外壳::解析rustus临时文件路径(&state.rustus_data_dir, storage_locator) {
-            Ok(path) => path,
-            Err((status, code, message)) => return err_resp(status, code, message),
-        };
+    let temp_file_path = match rustus_hook外壳::解析rustus临时文件路径(
+        &state.rustus_data_dir,
+        storage_locator,
+    ) {
+        Ok(path) => path,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
     let attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类);
     let attachment_byte_size = prepared.字节大小;
     let _complete_heavy_work_permit =
@@ -529,6 +541,8 @@ pub(super) async fn complete_media_upload(
                 资产原图存储键: Some(asset_original_storage_key),
                 完整图存储键: Some(full_storage_key),
                 原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
+                回退母本存储键: None,
+                回退母本到期时间戳秒: None,
             };
             let torrent_request = usecase::协作分发torrent元信息写入请求 {
                 附件标识: attachment_id.clone(),
@@ -539,51 +553,53 @@ pub(super) async fn complete_media_upload(
             (ready_request, distribution_request, torrent_request)
         }
         usecase::媒体附件类型::视频 => {
-            let parsed = match 媒体内容解析::解析视频文件内容(temp_file_path.as_path()) {
-                Ok(parsed) => parsed,
-                Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::BAD_REQUEST,
-                        "attachment_type_not_allowed",
-                        message,
-                        "parse_video_kind_not_allowed",
-                        message,
-                    )
-                }
-                Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message,
-                        "parse_video_system_error",
-                        message,
-                    )
-                }
-            };
-            let original_video_map = match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
-                Ok(mapped) => mapped,
-                Err(err) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        "映射原视频临时文件失败",
-                        "map_original_video_failed",
-                        format!("映射 Rustus 临时原视频失败: {err}"),
-                    );
-                }
-            };
+            let parsed =
+                match 媒体内容解析::解析视频文件内容(temp_file_path.as_path()) {
+                    Ok(parsed) => parsed,
+                    Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::BAD_REQUEST,
+                            "attachment_type_not_allowed",
+                            message,
+                            "parse_video_kind_not_allowed",
+                            message,
+                        )
+                    }
+                    Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            message,
+                            "parse_video_system_error",
+                            message,
+                        )
+                    }
+                };
+            let original_video_map =
+                match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
+                    Ok(mapped) => mapped,
+                    Err(err) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            "映射原视频临时文件失败",
+                            "map_original_video_failed",
+                            format!("映射 Rustus 临时原视频失败: {err}"),
+                        );
+                    }
+                };
             let distribution_request = media_distribution::构造协作分发元数据写入请求(
                 &attachment_id,
                 original_video_map.as_ref(),
@@ -609,26 +625,6 @@ pub(super) async fn complete_media_upload(
                 }
             };
             drop(original_video_map);
-            if let Err((status, code, message)) = 流媒体打包::上传本地文件到附件对象存储(
-                state.attachment_store.clone(),
-                temp_file_path.as_path(),
-                prepared.原始内容存储键.as_str(),
-                "原视频对象",
-            )
-            .await
-            {
-                return 记录并返回complete重活失败(
-                    attachment_id.as_str(),
-                    attachment_kind,
-                    attachment_byte_size,
-                    complete_heavy_work_started_at,
-                    status,
-                    code,
-                    message.clone(),
-                    "put_original_video_object_failed",
-                    message,
-                );
-            }
             let 打包结果 = match task::spawn_blocking({
                 let ffmpeg_bin = state.ffmpeg_bin.clone();
                 let ffprobe_bin = state.ffprobe_bin.clone();
@@ -675,25 +671,30 @@ pub(super) async fn complete_media_upload(
                     )
                 }
             };
-            let uploaded = match 流媒体打包::上传流媒体打包产物(&state, &attachment_id, 打包结果)
-                .await
-            {
-                Ok(uploaded) => uploaded,
-                Err((status, code, message)) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        status,
-                        code,
-                        message.clone(),
-                        "upload_streaming_assets_failed",
-                        message,
-                    )
-                }
-            };
-            streaming_manifest_request = Some(uploaded.清单写入请求);
+            let uploaded =
+                match 流媒体打包::上传流媒体打包产物(&state, &attachment_id, 打包结果).await
+                {
+                    Ok(uploaded) => uploaded,
+                    Err((status, code, message)) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            status,
+                            code,
+                            message.clone(),
+                            "upload_streaming_assets_failed",
+                            message,
+                        )
+                    }
+                };
+            let 流媒体打包::流媒体打包上传结果 {
+                清单写入请求,
+                静态封面存储键,
+                回退母本存储键,
+            } = uploaded;
+            streaming_manifest_request = Some(清单写入请求);
             let ready_request = usecase::媒体附件写入请求 {
                 附件标识: attachment_id.clone(),
                 种类: prepared.种类.clone(),
@@ -701,11 +702,15 @@ pub(super) async fn complete_media_upload(
                 字节大小: attachment_byte_size,
                 宽: parsed.宽,
                 高: parsed.高,
-                原始内容存储键: prepared.原始内容存储键.clone(),
-                缩略图存储键: Some(uploaded.静态封面存储键),
+                // 视频 ready 后的 original 变体不再指向用户原片，而是指向 24h 的高质量 mezzanine。
+                // 这样 original_url / web_seed / range 读取链都继续走同一个稳定入口，不必再为“原片已删”额外分叉。
+                原始内容存储键: 回退母本存储键.clone(),
+                缩略图存储键: Some(静态封面存储键),
                 资产原图存储键: None,
                 完整图存储键: None,
-                原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
+                原始冷源到期时间戳秒: None,
+                回退母本存储键: Some(回退母本存储键),
+                回退母本到期时间戳秒: Some(原始冷源到期时间戳秒),
             };
             let torrent_request = usecase::协作分发torrent元信息写入请求 {
                 附件标识: attachment_id.clone(),
@@ -738,65 +743,72 @@ pub(super) async fn complete_media_upload(
     .await;
     match complete_result {
         Ok(Ok(snapshot)) => {
-            let 原始冷源删除时间戳秒 = if matches!(prepared.种类, usecase::媒体附件类型::视频)
-            {
-                let original_path = ObjectPath::from(prepared.原始内容存储键.as_str());
-                match state.attachment_store.delete(&original_path).await {
-                    Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
-                    Err(err) => {
-                        return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "system_error",
-                            "删除原始上传冷源对象失败",
-                            "delete_original_cold_source_failed",
-                            format!("删除原始上传冷源对象失败: {err}"),
-                        )
+            let (_原片删除时间戳秒, 冷备层到期时间戳秒, 冷备层删除时间戳秒) =
+                if matches!(prepared.种类, usecase::媒体附件类型::视频) {
+                    match fs::remove_file(&temp_file_path).await {
+                        Ok(_) => {}
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => {
+                            return 记录并返回complete重活失败(
+                                attachment_id.as_str(),
+                                attachment_kind,
+                                attachment_byte_size,
+                                complete_heavy_work_started_at,
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "system_error",
+                                "删除原始上传临时文件失败",
+                                "delete_original_temp_file_failed",
+                                format!("删除 Rustus 原始上传临时文件失败: {err}"),
+                            )
+                        }
                     }
-                }
-                let state_for_mark = state.clone();
-                let attachment_id_for_mark = attachment_id.clone();
-                match task::spawn_blocking(move || {
-                    let mut repo = 构建共享仓储(&state_for_mark);
-                    usecase::标记媒体冷源已删除(&mut repo, &attachment_id_for_mark, ready_epoch秒)
+                    // 视频原片删除记录的是“用户上传母本已退场”，
+                    // 但对外暴露的 original 冷备入口此时已经切成 mezzanine，不能把这两个事实混成一个删除位。
+                    let 原片删除时间戳秒 = ready_epoch秒;
+                    let state_for_mark = state.clone();
+                    let attachment_id_for_mark = attachment_id.clone();
+                    match task::spawn_blocking(move || {
+                        let mut repo = 构建共享仓储(&state_for_mark);
+                        usecase::标记媒体冷源已删除(
+                            &mut repo,
+                            &attachment_id_for_mark,
+                            原片删除时间戳秒,
+                        )
                         .map_err(map_domain_err_tuple)
-                })
-                .await
-                {
-                    Ok(Ok(())) => Some(ready_epoch秒),
-                    Ok(Err((status, code, message))) => {
-                        return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
-                            status,
-                            code,
-                            message.clone(),
-                            "mark_original_cold_source_deleted_failed",
-                            message,
-                        )
+                    })
+                    .await
+                    {
+                        Ok(Ok(())) => (Some(原片删除时间戳秒), Some(原始冷源到期时间戳秒), None),
+                        Ok(Err((status, code, message))) => {
+                            return 记录并返回complete重活失败(
+                                attachment_id.as_str(),
+                                attachment_kind,
+                                attachment_byte_size,
+                                complete_heavy_work_started_at,
+                                status,
+                                code,
+                                message.clone(),
+                                "mark_original_cold_source_deleted_failed",
+                                message,
+                            )
+                        }
+                        Err(err) => {
+                            return 记录并返回complete重活失败(
+                                attachment_id.as_str(),
+                                attachment_kind,
+                                attachment_byte_size,
+                                complete_heavy_work_started_at,
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "system_error",
+                                format!("标记原始上传冷源已删除任务失败: {err}"),
+                                "mark_original_cold_source_deleted_task_failed",
+                                format!("标记原始上传冷源已删除任务失败: {err}"),
+                            )
+                        }
                     }
-                    Err(err) => {
-                        return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "system_error",
-                            format!("标记原始上传冷源已删除任务失败: {err}"),
-                            "mark_original_cold_source_deleted_task_failed",
-                            format!("标记原始上传冷源已删除任务失败: {err}"),
-                        )
-                    }
-                }
-            } else {
-                None
-            };
+                } else {
+                    (None, Some(原始冷源到期时间戳秒), None)
+                };
             let distribution_snapshot = usecase::协作分发元数据快照 {
                 附件标识: attachment_id.clone(),
                 content_id: distribution_request.content_id.clone(),
@@ -817,8 +829,8 @@ pub(super) async fn complete_media_upload(
             );
             let 冷源仍可用 = usecase::冷源当前可用(
                 Some(original_url.as_str()),
-                Some(原始冷源到期时间戳秒),
-                原始冷源删除时间戳秒,
+                冷备层到期时间戳秒,
+                冷备层删除时间戳秒,
                 now_epoch秒,
             );
             let runtime_distribution = media_distribution::协作分发快照转响应值(
@@ -848,8 +860,8 @@ pub(super) async fn complete_media_upload(
                     分发快照: Some(&distribution_snapshot),
                     流媒体清单: streaming_manifest_snapshot.as_ref(),
                     原始地址: original_url,
-                    原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
-                    原始冷源删除时间戳秒,
+                    原始冷源到期时间戳秒: 冷备层到期时间戳秒,
+                    原始冷源删除时间戳秒: 冷备层删除时间戳秒,
                     会话标识: session_id.as_str(),
                     当前时间戳秒: now_epoch秒,
                 },
@@ -903,6 +915,88 @@ pub(super) async fn complete_media_upload(
     }
 }
 
+/// 冷路径：显式放弃旧上传。
+/// 这里先让应用层把旧附件和 transport 一起标成 abandoned，
+/// 然后 shell 再根据已登记的 storage_locator 尝试删除临时文件。
+pub(super) async fn abandon_media_upload(
+    State(state): State<应用状态>,
+    Path(attachment_id): Path<String>,
+    Json(body): Json<AbandonMediaUploadBody>,
+) -> impl IntoResponse {
+    let session_id = match super::读取非空会话标识(body.session_id) {
+        Ok(session_id) => session_id,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let abandoned_epoch秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs() as i64)
+        .unwrap_or_default();
+    let state_for_usecase = state.clone();
+    let attachment_id_for_usecase = attachment_id.clone();
+    let session_id_for_usecase = session_id.clone();
+    let abandon_result = match task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_usecase);
+        let transport = repo
+            .查询媒体上传运输记录(&attachment_id_for_usecase)
+            .map_err(map_domain_err_tuple)?;
+        usecase::放弃媒体上传(
+            &mut repo,
+            &session_id_for_usecase,
+            &attachment_id_for_usecase,
+            abandoned_epoch秒,
+        )
+        .map_err(map_domain_err_tuple)?;
+        Ok::<_, (StatusCode, &'static str, String)>(transport)
+    })
+    .await
+    {
+        Ok(Ok(transport)) => transport,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("abandon 任务执行失败: {err}"),
+            )
+        }
+    };
+
+    if let Some(storage_locator) = abandon_result
+        .as_ref()
+        .and_then(|transport| transport.storage_locator.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let temp_file_path = match rustus_hook外壳::解析rustus临时文件路径(
+            &state.rustus_data_dir,
+            storage_locator,
+        ) {
+            Ok(path) => path,
+            Err((status, code, message)) => return err_resp(status, code, message),
+        };
+        match fs::remove_file(temp_file_path.as_path()).await {
+            Ok(_) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("删除已放弃上传临时文件失败: {err}"),
+                )
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "attachment_id": attachment_id,
+            "status": "abandoned",
+        })),
+    )
+        .into_response()
+}
+
 fn 生成附件标识() -> String {
     let raw = Uuid::new_v4().simple().to_string();
     format!("att-{}", &raw[..12])
@@ -927,7 +1021,9 @@ fn 解析媒体类型(
     }
 }
 
-fn 推导原始内容扩展名(kind: &usecase::媒体附件类型, mime_type: &str) -> &'static str {
+fn 推导原始内容扩展名(
+    kind: &usecase::媒体附件类型, mime_type: &str
+) -> &'static str {
     match kind {
         usecase::媒体附件类型::图片 => match mime_type {
             "image/png" => ".png",
@@ -985,8 +1081,8 @@ fn 推导rustus对外入口(
     let authority = raw_host.parse::<Authority>().ok()?;
     let forwarded_proto = 读取首个非空请求头(headers, "x-forwarded-proto")
         .or_else(|| 读取首个非空请求头(headers, "x-forwarded-scheme"));
-    let forwarded_port = 读取首个非空请求头(headers, "x-forwarded-port")
-        .and_then(|value| value.parse::<u16>().ok());
+    let forwarded_port =
+        读取首个非空请求头(headers, "x-forwarded-port").and_then(|value| value.parse::<u16>().ok());
     let scheme = forwarded_proto
         .clone()
         .unwrap_or_else(|| "http".to_string());
@@ -1031,7 +1127,12 @@ fn 读取媒体_tus对外地址(state: &应用状态, headers: &HeaderMap) -> St
         .rustus_public_endpoint
         .clone()
         .or_else(|| 推导rustus对外入口(headers, state.rustus_server_port, &state.rustus_url))
-        .unwrap_or_else(|| format!("http://127.0.0.1:{}{}", state.rustus_server_port, state.rustus_url))
+        .unwrap_or_else(|| {
+            format!(
+                "http://127.0.0.1:{}{}",
+                state.rustus_server_port, state.rustus_url
+            )
+        })
 }
 
 fn 校验媒体准备请求(

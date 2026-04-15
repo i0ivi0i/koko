@@ -4,8 +4,9 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
-    contract, domain, user_identity,
+    contract, domain,
     usecase::{self, 仓储端口},
+    user_identity,
 };
 
 #[path = "媒体附件适配.rs"]
@@ -547,6 +548,30 @@ impl 仓储端口 for Pg仓储 {
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
         媒体附件适配::标记媒体冷源已删除(self, 附件标识, 删除时间戳秒)
+    }
+
+    fn 列出待清理媒体回退母本(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<usecase::待清理媒体回退母本>, contract::错误码> {
+        媒体附件适配::列出待清理媒体回退母本(self, 当前时间戳秒, 限制条数)
+    }
+
+    fn 标记媒体回退母本已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        媒体附件适配::标记媒体回退母本已删除(self, 附件标识, 删除时间戳秒)
+    }
+
+    fn 标记媒体上传已放弃(
+        &mut self,
+        附件标识: &str,
+        放弃时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        媒体附件适配::标记媒体上传已放弃(self, 附件标识, 放弃时间戳秒)
     }
 
     /// 拉取当前身份在房间里的阅读锚点。

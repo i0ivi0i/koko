@@ -192,9 +192,11 @@ function 创建场景() {
     height: attachmentId.endsWith(".mp4") ? 720 : 90,
     status: "ready" as const,
   }));
+  const abandonMediaUpload = vi.fn(async (_sessionId: string, _attachmentId: string) => undefined);
   const 发布器 = 创建媒体发布器({
     getSessionId: () => "s-test",
     prepareMediaUpload,
+    abandonMediaUpload,
     completeMediaUpload,
     readDrafts: drafts.readDrafts,
     writeDraft: drafts.writeDraft,
@@ -219,6 +221,7 @@ function 创建场景() {
     大视频上传器,
     drafts,
     prepareMediaUpload,
+    abandonMediaUpload,
     completeMediaUpload,
     createUploaderCalls,
     yieldToMainThread,
@@ -692,6 +695,7 @@ describe("媒体发布器", () => {
       }
     ).重新上传草稿("att-restart.jpg");
 
+    expect(场景.abandonMediaUpload).toHaveBeenCalledWith("s-test", "att-restart.jpg");
     expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(2);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
@@ -700,5 +704,32 @@ describe("媒体发布器", () => {
         errorCode: "",
       }),
     ]);
+  });
+
+  it("重新上传附件占位失败草稿时，若旧 attachmentId 为空则不会伪造 abandon 调用", async () => {
+    const 场景 = 创建场景();
+    场景.drafts.writeDraft({
+      localId: "failed-no-attachment",
+      kind: "image",
+      attachmentId: "",
+      previewUrl: "blob:no-attachment",
+      width: 0,
+      height: 0,
+      status: "failed",
+      fileName: "fallback.jpg",
+      errorCode: "attachment_upload_failed",
+      sourceFile: new File([new Uint8Array([1, 2, 3])], "fallback.jpg", {
+        type: "image/jpeg",
+      }),
+    });
+
+    await (
+      场景.发布器 as unknown as {
+        重新上传草稿(localId: string): Promise<void>;
+      }
+    ).重新上传草稿("failed-no-attachment");
+
+    expect(场景.abandonMediaUpload).not.toHaveBeenCalled();
+    expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(1);
   });
 });

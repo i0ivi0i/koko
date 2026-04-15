@@ -21,7 +21,7 @@ fn 解析附件状态(
         "processing" => Ok(usecase::附件状态读取结果::处理中),
         "ready" => Ok(usecase::附件状态读取结果::就绪),
         "failed" => Ok(usecase::附件状态读取结果::失败),
-        "expired" | "canceled" => Ok(usecase::附件状态读取结果::已过期),
+        "expired" | "canceled" | "abandoned" => Ok(usecase::附件状态读取结果::已过期),
         _ => Err(contract::错误码::系统错误),
     }
 }
@@ -78,8 +78,18 @@ pub(super) async fn 查询附件快照_异步(
                 a.thumbnail_storage_key IS NOT NULL AS has_thumbnail,
                 a.asset_original_storage_key,
                 a.full_storage_key,
-                EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT AS origin_expires_at_epoch,
-                EXTRACT(EPOCH FROM a.origin_deleted_at)::BIGINT AS origin_deleted_at_epoch \
+                EXTRACT(
+                    EPOCH FROM CASE
+                        WHEN a.kind = 'video' THEN a.mezzanine_expires_at
+                        ELSE a.origin_expires_at
+                    END
+                )::BIGINT AS origin_expires_at_epoch,
+                EXTRACT(
+                    EPOCH FROM CASE
+                        WHEN a.kind = 'video' THEN a.mezzanine_deleted_at
+                        ELSE a.origin_deleted_at
+                    END
+                )::BIGINT AS origin_deleted_at_epoch \
          FROM attachments a \
          JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
          WHERE a.attachment_id = $1",
@@ -249,9 +259,12 @@ async fn 创建媒体附件记录_异步(
             full_storage_key,
             origin_expires_at,
             origin_deleted_at,
+            mezzanine_storage_key,
+            mezzanine_expires_at,
+            mezzanine_deleted_at,
             status
          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TO_TIMESTAMP($12), NULL, 'ready'
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TO_TIMESTAMP($12), NULL, $13, TO_TIMESTAMP($14), NULL, 'ready'
          ) \
          ON CONFLICT (attachment_id) DO UPDATE SET \
              kind = EXCLUDED.kind, \
@@ -265,6 +278,9 @@ async fn 创建媒体附件记录_异步(
              full_storage_key = EXCLUDED.full_storage_key, \
              origin_expires_at = EXCLUDED.origin_expires_at, \
              origin_deleted_at = NULL, \
+             mezzanine_storage_key = EXCLUDED.mezzanine_storage_key, \
+             mezzanine_expires_at = EXCLUDED.mezzanine_expires_at, \
+             mezzanine_deleted_at = NULL, \
              status = 'ready' \
          WHERE attachments.owner_anonymous_identity_id = EXCLUDED.owner_anonymous_identity_id",
     )
@@ -280,6 +296,8 @@ async fn 创建媒体附件记录_异步(
     .bind(&附件.资产原图存储键)
     .bind(&附件.完整图存储键)
     .bind(附件.原始冷源到期时间戳秒)
+    .bind(&附件.回退母本存储键)
+    .bind(附件.回退母本到期时间戳秒)
     .execute(pool)
     .await
     .map_err(|_| contract::错误码::系统错误)?;
@@ -863,5 +881,152 @@ pub(super) fn 标记媒体冷源已删除(
         &repo.pool,
         附件标识,
         删除时间戳秒,
+    ))
+}
+
+/// 视频 mezzanine 只是一层 24h 回退母本，因此清理查询必须单独挑 video + mezzanine_*。
+async fn 列出待清理媒体回退母本_异步(
+    pool: &PgPool,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<usecase::待清理媒体回退母本>, contract::错误码> {
+    let rows = sqlx::query(
+        "SELECT attachment_id, mezzanine_storage_key
+         FROM attachments
+         WHERE kind = 'video'
+           AND status = 'ready'
+           AND mezzanine_storage_key IS NOT NULL
+           AND mezzanine_expires_at IS NOT NULL
+           AND mezzanine_expires_at <= TO_TIMESTAMP($1)
+           AND mezzanine_deleted_at IS NULL
+         ORDER BY mezzanine_expires_at ASC
+         LIMIT $2",
+    )
+    .bind(当前时间戳秒)
+    .bind(限制条数)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| usecase::待清理媒体回退母本 {
+            附件标识: row.get("attachment_id"),
+            回退母本存储键: row.get("mezzanine_storage_key"),
+        })
+        .collect())
+}
+
+pub(super) fn 列出待清理媒体回退母本(
+    repo: &Pg仓储,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<usecase::待清理媒体回退母本>, contract::错误码> {
+    repo.在运行时执行(列出待清理媒体回退母本_异步(
+        &repo.pool,
+        当前时间戳秒,
+        限制条数,
+    ))
+}
+
+async fn 标记媒体回退母本已删除_异步(
+    pool: &PgPool,
+    附件标识: &str,
+    删除时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    let result = sqlx::query(
+        "UPDATE attachments
+         SET mezzanine_deleted_at = TO_TIMESTAMP($2)
+         WHERE attachment_id = $1
+           AND mezzanine_deleted_at IS NULL",
+    )
+    .bind(附件标识)
+    .bind(删除时间戳秒)
+    .execute(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    if result.rows_affected() == 0 {
+        return Err(contract::错误码::附件不存在);
+    }
+    Ok(())
+}
+
+pub(super) fn 标记媒体回退母本已删除(
+    repo: &mut Pg仓储,
+    附件标识: &str,
+    删除时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    repo.在运行时执行(标记媒体回退母本已删除_异步(
+        &repo.pool,
+        附件标识,
+        删除时间戳秒,
+    ))
+}
+
+/// 放弃旧上传必须同时污染附件与 transport：
+/// 1. 附件状态显式切到 abandoned，complete 不再允许继续推进；
+/// 2. transport 记录留下 abandoned_at，迟到的 post-finish 也会被拒绝。
+async fn 标记媒体上传已放弃_异步(
+    pool: &PgPool,
+    附件标识: &str,
+    放弃时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    let mut tx = pool.begin().await.map_err(|_| contract::错误码::系统错误)?;
+    let attachment_result = sqlx::query(
+        "UPDATE attachments
+         SET status = 'abandoned',
+             abandoned_at = TO_TIMESTAMP($2)
+         WHERE attachment_id = $1
+           AND abandoned_at IS NULL",
+    )
+    .bind(附件标识)
+    .bind(放弃时间戳秒)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+    if attachment_result.rows_affected() == 0 {
+        let existing_status = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT status FROM attachments WHERE attachment_id = $1",
+        )
+        .bind(附件标识)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| contract::错误码::系统错误)?
+        .flatten();
+        return match existing_status.as_deref() {
+            Some("abandoned") => {
+                tx.rollback().await.ok();
+                Ok(())
+            }
+            Some(_) => Err(contract::错误码::附件不存在),
+            None => Err(contract::错误码::附件不存在),
+        };
+    }
+    sqlx::query(
+        "UPDATE attachment_upload_transports
+         SET abandoned_at = TO_TIMESTAMP($2),
+             token_expires_at = TO_TIMESTAMP($2)
+         WHERE attachment_id = $1
+           AND abandoned_at IS NULL",
+    )
+    .bind(附件标识)
+    .bind(放弃时间戳秒)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+    tx.commit().await.map_err(|_| contract::错误码::系统错误)?;
+    Ok(())
+}
+
+pub(super) fn 标记媒体上传已放弃(
+    repo: &mut Pg仓储,
+    附件标识: &str,
+    放弃时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    repo.在运行时执行(标记媒体上传已放弃_异步(
+        &repo.pool,
+        附件标识,
+        放弃时间戳秒,
     ))
 }

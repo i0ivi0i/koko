@@ -163,9 +163,7 @@ async fn prepare视频上传会拒绝超过200mb的请求并允许200mb边界值
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(
-            serde_json::json!({"device_anonymous_token": format!("prepare-video-200mb-{uniq}")}),
-        ),
+        Some(serde_json::json!({"device_anonymous_token": format!("prepare-video-200mb-{uniq}")})),
         &[],
     )
     .await;
@@ -267,7 +265,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
         &最小png字节(),
     )
     .expect("应能写入 rustus 原图文件");
-    let (hook_status, hook_body) = send_json(
+    let (hook_status, _) = send_json(
         app.clone(),
         Method::POST,
         "/internal/rustus/hooks",
@@ -286,7 +284,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
         ],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    assert_eq!(hook_status, StatusCode::NO_CONTENT);
 
     let (complete_status, complete_body) = send_json(
         app.clone(),
@@ -482,6 +480,153 @@ async fn prepare图片和视频都会返回统一Tus契约() {
         "prepare.mp4",
         "video/mp4",
         最小mp4字节().len() as i64,
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 放弃媒体上传会同时标记附件与transport为abandoned并清掉已登记的临时文件() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("abandon-upload-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"]
+        .as_str()
+        .expect("session_id")
+        .to_string();
+
+    let source_bytes = 最小png字节();
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "abandon.png",
+            "mime_type": "image/png",
+            "byte_size": source_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let upload_id = format!("upload-abandon-{attachment_id}");
+    let temp_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "abandon.png",
+        &source_bytes,
+    )
+    .expect("应能写入 rustus 临时图片文件");
+
+    let (hook_status, _) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &upload_id,
+            &attachment_id,
+            "abandon.png",
+            "image/png",
+            source_bytes.len() as i64,
+            source_bytes.len() as i64,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Authorization", authorization.as_str()),
+            ("Hook-Name", "post-finish"),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT);
+
+    let (abandon_status, abandon_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/abandon"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(
+        abandon_status,
+        StatusCode::OK,
+        "abandon_body={abandon_body}"
+    );
+    assert_eq!(
+        abandon_body["attachment_id"].as_str(),
+        Some(attachment_id.as_str())
+    );
+    assert_eq!(abandon_body["status"].as_str(), Some("abandoned"));
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let row = sqlx::query(
+        "SELECT status,
+                EXTRACT(EPOCH FROM abandoned_at)::BIGINT AS attachment_abandoned_at_epoch
+         FROM attachments
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询附件废弃状态");
+    let status: String = row.get("status");
+    let attachment_abandoned_at_epoch: Option<i64> = row.get("attachment_abandoned_at_epoch");
+    assert_eq!(status, "abandoned");
+    assert!(
+        attachment_abandoned_at_epoch.is_some(),
+        "旧附件一旦被 restart 显式放弃，业务真相里必须留下 abandoned_at"
+    );
+    let transport_row = sqlx::query(
+        "SELECT EXTRACT(EPOCH FROM abandoned_at)::BIGINT AS transport_abandoned_at_epoch
+         FROM attachment_upload_transports
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询 transport 废弃状态");
+    let transport_abandoned_at_epoch: Option<i64> =
+        transport_row.get("transport_abandoned_at_epoch");
+    assert!(
+        transport_abandoned_at_epoch.is_some(),
+        "旧 upload 对应的 transport 也必须一起废弃，post-finish/complete 才不会复活它"
+    );
+    pool.close().await;
+
+    assert!(
+        !std::path::Path::new(temp_file.as_str()).exists(),
+        "后端明确 abandon 且已知道 storage_locator 时，必须顺手清掉临时文件，避免服务器越积越多废弃上传"
     );
 }
 
@@ -801,12 +946,12 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     );
     assert_eq!(
         complete_body["media_asset"]["origin"]["available"].as_bool(),
-        Some(false),
-        "视频一旦完成打包并进入分发 ready，原始上传冷源就应立即退场，不能继续作为可用读取入口"
+        Some(true),
+        "视频 complete 后应切到 24 小时 mezzanine 回退层，协议面仍要把 original 描述成可用冷备入口"
     );
     let original_url = complete_body["media_asset"]["origin"]["original_url"]
         .as_str()
-        .expect("即使原始冷源不可用，也必须返回稳定冷源描述");
+        .expect("即使视频主链已经切到流媒体分发，仍必须保留稳定的冷备 original 描述");
     assert!(complete_body["media_asset"]["distribution"]["swarm_id"].is_string());
     assert!(
         complete_body["media_asset"]["distribution"]["announce_urls"].is_array(),
@@ -863,11 +1008,23 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         .trim()
         .to_string();
 
-    let (original_status, _, _) = send_bytes(app.clone(), Method::GET, original_url, &[]).await;
+    let (original_status, original_headers, original_bytes) =
+        send_bytes(app.clone(), Method::GET, original_url, &[]).await;
     assert_eq!(
         original_status,
-        StatusCode::NOT_FOUND,
-        "视频分发 ready 后，原始上传冷源应立即物理删除，不能继续返回 200"
+        StatusCode::OK,
+        "视频 complete 后，original_url 应该回退到 mezzanine，而不是继续 404"
+    );
+    assert_eq!(
+        original_headers
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some("video/mp4"),
+        "mezzanine 回退层应继续暴露稳定的 MP4 内容类型"
+    );
+    assert!(
+        !original_bytes.is_empty(),
+        "mezzanine 回退层必须真的能读到字节，不能只回一个空壳 200"
     );
     let (segment_status, segment_headers, segment_bytes) =
         send_bytes(app.clone(), Method::GET, segment_url.as_str(), &[]).await;
@@ -898,7 +1055,17 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     );
 
     let row = sqlx::query(
-        "SELECT kind, status, width, height, thumbnail_storage_key FROM attachments WHERE attachment_id = $1",
+        "SELECT kind,
+                status,
+                width,
+                height,
+                thumbnail_storage_key,
+                storage_key,
+                mezzanine_storage_key,
+                EXTRACT(EPOCH FROM mezzanine_expires_at)::BIGINT AS mezzanine_expires_at_epoch,
+                EXTRACT(EPOCH FROM origin_deleted_at)::BIGINT AS origin_deleted_at_epoch
+         FROM attachments
+         WHERE attachment_id = $1",
     )
     .bind(&attachment_id)
     .fetch_one(&pool)
@@ -909,6 +1076,10 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     let width_in_db: Option<i32> = row.get("width");
     let height_in_db: Option<i32> = row.get("height");
     let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
+    let storage_key: String = row.get("storage_key");
+    let mezzanine_storage_key: Option<String> = row.get("mezzanine_storage_key");
+    let mezzanine_expires_at_epoch: Option<i64> = row.get("mezzanine_expires_at_epoch");
+    let origin_deleted_at_epoch: Option<i64> = row.get("origin_deleted_at_epoch");
     assert_eq!(kind_in_db, "video");
     assert_eq!(status_in_db, "ready");
     assert_eq!(width_in_db, Some(1080));
@@ -916,6 +1087,29 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     assert!(
         thumbnail_storage_key.is_some(),
         "视频 complete 后必须把静态封面落到既有 thumbnail_storage_key，而不是继续留空"
+    );
+    assert_eq!(
+        mezzanine_storage_key.as_deref(),
+        Some(storage_key.as_str()),
+        "视频附件的 storage_key 应直接收口到 mezzanine，避免 original 读取链再认已经秒删的原片"
+    );
+    assert!(
+        storage_key.contains("/mezzanine.")
+            || storage_key.contains("\\mezzanine.")
+            || storage_key.ends_with("mezzanine.mp4"),
+        "视频 mezzanine 应落到明确可读的稳定对象键，而不是继续复用语义含混的 original 键"
+    );
+    assert!(
+        mezzanine_expires_at_epoch.is_some(),
+        "视频 complete 后必须写入 24 小时 mezzanine 回退窗口"
+    );
+    assert!(
+        origin_deleted_at_epoch.is_some(),
+        "用户原片上传成功后应立即从临时冷源退场，并回写 origin_deleted_at 事实"
+    );
+    assert!(
+        !std::path::Path::new(temp_file.as_str()).exists(),
+        "视频 complete 成功后应立即删掉 Rustus 临时原片，避免源文件在服务器上继续滞留"
     );
 }
 

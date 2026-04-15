@@ -36,6 +36,10 @@ class 假后台内核传输 implements 前端传输端口 {
     throw new Error("unused");
   }
 
+  async abandonMediaUpload(): Promise<void> {
+    throw new Error("unused");
+  }
+
   async completeMediaUpload(): Promise<媒体附件上传结果> {
     throw new Error("unused");
   }

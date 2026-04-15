@@ -416,9 +416,8 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
             .expect("应能引导发送者匿名身份");
         let peer = koko::usecase::引导匿名身份(&mut repo, &peer_device_token)
             .expect("应能引导群友匿名身份");
-        let room =
-            koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, &room_code)
-                .expect("发送者应能进房");
+        let room = koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, &room_code)
+            .expect("发送者应能进房");
         koko::usecase::按短码进房或建房(&mut repo, &peer.会话标识, &room_code)
             .expect("群友也应能进同一个房间");
         let room_id = match room {
@@ -523,7 +522,8 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
         .expect("群友 locator 也应返回冷备原图入口");
 
     assert!(
-        sender_hls.contains(sender_session_id.as_str()) && peer_hls.contains(peer_session_id.as_str()),
+        sender_hls.contains(sender_session_id.as_str())
+            && peer_hls.contains(peer_session_id.as_str()),
         "受控 HLS 地址必须带各自会话，用来保持成员可见性裁决"
     );
     assert!(
@@ -915,7 +915,10 @@ async fn 查询附件快照会带出图片真实资产与冷源生命周期字�
         snapshot.完整图存储键.as_deref(),
         Some(format!("images/{attachment_id}/full.webp").as_str())
     );
-    assert_eq!(snapshot.原始冷源到期时间戳秒, Some(future_origin_expires_at));
+    assert_eq!(
+        snapshot.原始冷源到期时间戳秒,
+        Some(future_origin_expires_at)
+    );
     assert_eq!(snapshot.原始冷源删除时间戳秒, None);
 }
 
@@ -1567,6 +1570,91 @@ async fn 原始冷源超过24小时后会被后台清理并写入删除时间() 
 
 #[tokio::test]
 #[serial]
+async fn 视频mezzanine超过24小时后会被后台清理并写入删除时间() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let attachment_id = format!("att-mezzanine-cleanup-{uniq}");
+    let device_token = format!("mezzanine-cleanup-device-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let session_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        koko::usecase::引导匿名身份(&mut repo, &device_token)
+            .expect("应能引导匿名身份")
+            .会话标识
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库插入视频附件");
+    插入ready视频附件记录(&pool, &session_id, &attachment_id).await;
+    sqlx::query(
+        "UPDATE attachments
+         SET mezzanine_expires_at = NOW() - INTERVAL '25 hours',
+             mezzanine_deleted_at = NULL
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .execute(&pool)
+    .await
+    .expect("应能把视频 mezzanine 挪到 24 小时外");
+    pool.close().await;
+
+    let mezzanine_storage_key = format!("videos/{attachment_id_for_worker}/mezzanine.mp4");
+    写入测试对象(&state, &mezzanine_storage_key, 最小mp4字节()).await;
+
+    koko::shell::执行一次媒体冷源清理(state.clone())
+        .await
+        .expect("应能执行一次冷源清理");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库校验视频 mezzanine 清理结果");
+    let row = sqlx::query(
+        "SELECT EXTRACT(EPOCH FROM mezzanine_deleted_at)::BIGINT AS mezzanine_deleted_at_epoch
+         FROM attachments
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id_for_worker)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询视频 mezzanine 删除时间");
+    let mezzanine_deleted_at_epoch: Option<i64> = row.get("mezzanine_deleted_at_epoch");
+    assert!(
+        mezzanine_deleted_at_epoch.is_some(),
+        "视频 mezzanine 超时后必须留下 mezzanine_deleted_at，后续 locator 才能共享同一条回退层退场事实"
+    );
+    pool.close().await;
+
+    let head_result = state
+        .attachment_store
+        .head(&ObjectPath::from(mezzanine_storage_key.as_str()))
+        .await;
+    assert!(
+        head_result.is_err(),
+        "视频 mezzanine 超过 24 小时后必须被物理删除，不能在对象存储里继续滞留"
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn 冷源删除后locator顶层original失效但blob_original仍可读() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -1852,13 +1940,17 @@ async fn 原图内容接口支持标准range读取() {
             .and_then(|value| value.to_str().ok()),
         Some("bytes")
     );
-    let expected_content_range = format!("bytes 0-63/{}", 最小mp4字节().len());
-    assert_eq!(
-        headers
-            .get(header::CONTENT_RANGE)
-            .and_then(|value| value.to_str().ok()),
-        Some(expected_content_range.as_str())
+    let content_range = headers
+        .get(header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .expect("Range 响应必须带 Content-Range");
+    assert!(
+        content_range.starts_with("bytes 0-63/"),
+        "视频 original range 现在读到的是 mezzanine，不能再假定总长度仍等于原始上传字节"
     );
     assert_eq!(body.len(), 64);
-    assert_eq!(body, 最小mp4字节()[0..64].to_vec());
+    assert!(
+        !body.is_empty(),
+        "视频 mezzanine 的 range 读取必须返回真实字节，而不是空响应"
+    );
 }
