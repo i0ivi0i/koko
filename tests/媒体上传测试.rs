@@ -646,6 +646,125 @@ async fn 放弃媒体上传会同时标记附件与transport为abandoned并清�
 
 #[tokio::test]
 #[serial]
+async fn 放弃媒体上传会清掉当前会话下所有partial临时文件() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("abandon-partials-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let source_bytes = 最小mp4字节();
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "abandon-partials.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": source_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+
+    let partial_one = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "abandon-partials-1.part",
+        &source_bytes[..(source_bytes.len() / 2)],
+    )
+    .expect("应能写入 partial-1 测试文件");
+    let partial_two = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "abandon-partials-2.part",
+        &source_bytes[(source_bytes.len() / 2)..],
+    )
+    .expect("应能写入 partial-2 测试文件");
+
+    for (upload_id, path) in [
+        (format!("partial-abandon-{attachment_id}-1"), partial_one.as_str()),
+        (format!("partial-abandon-{attachment_id}-2"), partial_two.as_str()),
+    ] {
+        let (hook_status, hook_body) = send_json(
+            app.clone(),
+            Method::POST,
+            "/internal/rustus/hooks",
+            Some(构造rustus_concatenation_hook请求体(
+                &upload_id,
+                &attachment_id,
+                &upload_session_id,
+                "abandon-partials.mp4",
+                "video/mp4",
+                (source_bytes.len() / 2) as i64,
+                (source_bytes.len() / 2) as i64,
+                Some(path),
+                true,
+                false,
+                None,
+            )),
+            &[
+                ("Authorization", authorization.as_str()),
+                ("Hook-Name", "post-finish"),
+            ],
+        )
+        .await;
+        assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    }
+
+    let (abandon_status, abandon_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/abandon"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(abandon_status, StatusCode::OK, "{abandon_body:?}");
+    assert!(
+        !std::path::Path::new(partial_one.as_str()).exists(),
+        "显式 abandon 当前上传会话时，partial-1 临时文件也必须一起清掉"
+    );
+    assert!(
+        !std::path::Path::new(partial_two.as_str()).exists(),
+        "显式 abandon 当前上传会话时，partial-2 临时文件也必须一起清掉"
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn 没有上传回执时complete媒体上传会返回attachment_not_ready() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -803,6 +922,266 @@ async fn complete在只有partial没有final时会返回attachment_not_ready() {
     .await;
     assert_eq!(complete_status, StatusCode::CONFLICT, "{complete_body:?}");
     assert_eq!(complete_body["code"].as_str(), Some("attachment_not_ready"));
+}
+
+#[tokio::test]
+#[serial]
+async fn 后台会清理final完成后遗留的partial临时文件() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("cleanup-finalized-partials-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "cleanup-finalized.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+
+    let partial_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "cleanup-finalized.part",
+        &[1, 2, 3, 4],
+    )
+    .expect("应能写入 partial 文件");
+    let final_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "cleanup-finalized.png",
+        &最小png字节(),
+    )
+    .expect("应能写入 final 文件");
+
+    let (partial_status, partial_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_concatenation_hook请求体(
+            &format!("cleanup-partial-{attachment_id}"),
+            &attachment_id,
+            &upload_session_id,
+            "cleanup-finalized.png",
+            "image/png",
+            34,
+            34,
+            Some(partial_file.as_str()),
+            true,
+            false,
+            None,
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(partial_status, StatusCode::NO_CONTENT, "{partial_body:?}");
+
+    let (final_status, final_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_concatenation_hook请求体(
+            &format!("cleanup-final-{attachment_id}"),
+            &attachment_id,
+            &upload_session_id,
+            "cleanup-finalized.png",
+            "image/png",
+            68,
+            68,
+            Some(final_file.as_str()),
+            false,
+            true,
+            Some(vec![
+                "http://127.0.0.1:7070/files/part-1",
+                "http://127.0.0.1:7070/files/part-2",
+            ]),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(final_status, StatusCode::NO_CONTENT, "{final_body:?}");
+
+    koko::shell::执行一次媒体上传残留清理(state.clone())
+        .await
+        .expect("应能执行一次上传残留清理");
+
+    assert!(
+        !std::path::Path::new(partial_file.as_str()).exists(),
+        "final 已经落成后，后台应清掉 partial 临时文件，避免分片残留越积越多"
+    );
+    assert!(
+        std::path::Path::new(final_file.as_str()).exists(),
+        "final 临时文件仍然要留给 complete 主链消费，不能被后台残留清理误删"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 后台会清理过期unfinished上传并把附件标成expired() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("cleanup-expired-upload-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let source_bytes = 最小mp4字节();
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "cleanup-expired.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": source_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let partial_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "cleanup-expired.part",
+        &source_bytes[..(source_bytes.len() / 2)],
+    )
+    .expect("应能写入 expired partial 文件");
+
+    let (partial_status, partial_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_concatenation_hook请求体(
+            &format!("expired-partial-{attachment_id}"),
+            &attachment_id,
+            &upload_session_id,
+            "cleanup-expired.mp4",
+            "video/mp4",
+            (source_bytes.len() / 2) as i64,
+            (source_bytes.len() / 2) as i64,
+            Some(partial_file.as_str()),
+            true,
+            false,
+            None,
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(partial_status, StatusCode::NO_CONTENT, "{partial_body:?}");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    sqlx::query(
+        "UPDATE attachment_upload_sessions
+         SET token_expires_at = NOW() - INTERVAL '1 second'
+         WHERE upload_session_id = $1",
+    )
+    .bind(&upload_session_id)
+    .execute(&pool)
+    .await
+    .expect("测试需要先把 upload token 标成过期");
+
+    koko::shell::执行一次媒体上传残留清理(state.clone())
+        .await
+        .expect("应能执行一次上传残留清理");
+
+    let row = sqlx::query(
+        "SELECT status, current_upload_session_id
+         FROM attachments
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询过期清理后的附件状态");
+    let status: String = row.get("status");
+    let current_upload_session_id: Option<String> = row.get("current_upload_session_id");
+    assert_eq!(status, "expired");
+    assert!(
+        current_upload_session_id.is_none(),
+        "后台认定 unfinished upload 已过期后，attachment 不应继续挂着旧 upload_session 真相"
+    );
+    assert!(
+        !std::path::Path::new(partial_file.as_str()).exists(),
+        "过期 unfinished upload 的临时文件必须被后台删除，不能永远卡在 rustus data dir 里"
+    );
 }
 
 #[tokio::test]

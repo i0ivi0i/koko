@@ -90,6 +90,16 @@ where
                     "后台媒体冷源清理失败"
                 );
             }
+            if let Err(err) = crate::shell::执行一次媒体上传残留清理(cleanup_state.clone()).await
+            {
+                tracing::error!(
+                    usecase = "上传残留清理",
+                    adapter = "entry",
+                    outcome = "failed",
+                    error = %err,
+                    "后台上传残留清理失败"
+                );
+            }
         }
     });
     let serve_result = axum::serve(listener, app)

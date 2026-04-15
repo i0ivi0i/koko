@@ -59,6 +59,17 @@ fn 行转媒体上传运输记录(row: PgRow) -> Result<媒体上传运输记录
     })
 }
 
+fn 解析上传残留清理原因(
+    raw: &str,
+) -> Result<usecase::上传残留清理原因, contract::错误码> {
+    match raw {
+        "abandoned_session" => Ok(usecase::上传残留清理原因::已放弃会话),
+        "finalized_partial" => Ok(usecase::上传残留清理原因::最终合并后的分片残留),
+        "expired_unfinished" => Ok(usecase::上传残留清理原因::已过期未完成上传),
+        _ => Err(contract::错误码::系统错误),
+    }
+}
+
 /// 媒体 owner 在写 prepared/ready 附件时，需要先把应用层持有的内部身份反查成数据库主键。
 /// 迁移窗口里优先吃 `identity_uuid`，只在存量还没补齐时回落兼容旧串。
 /// 这个反查只服务媒体链路，因此直接跟着媒体 owner 走，不把“查 owner id”升级成共享垃圾 helper。
@@ -1022,6 +1033,201 @@ pub(super) fn 标记媒体回退母本已删除(
         &repo.pool,
         附件标识,
         删除时间戳秒,
+    ))
+}
+
+/// 上传残留清理查询继续只回答“哪些 locator 现在已经可以删”。
+/// 真正的文件删除仍然留在 shell，避免 adapter 越权拥有文件系统副作用。
+async fn 列出待清理上传残留_异步(
+    pool: &PgPool,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<usecase::待清理上传残留>, contract::错误码> {
+    let rows = sqlx::query(
+        "SELECT
+            t.attachment_id,
+            t.upload_session_id,
+            t.storage_locator,
+            CASE
+                WHEN s.abandoned_at IS NOT NULL THEN 'abandoned_session'
+                WHEN t.transport_role = 'partial'
+                     AND EXISTS (
+                        SELECT 1
+                        FROM attachment_upload_transports tf
+                        WHERE tf.upload_session_id = t.upload_session_id
+                          AND tf.transport_role = 'final'
+                          AND tf.finished_at IS NOT NULL
+                          AND tf.abandoned_at IS NULL
+                     ) THEN 'finalized_partial'
+                WHEN s.token_expires_at <= TO_TIMESTAMP($1)
+                     AND a.current_upload_session_id = s.upload_session_id
+                     AND a.status IN ('prepared', 'uploading', 'processing', 'failed')
+                     AND NOT EXISTS (
+                        SELECT 1
+                        FROM attachment_upload_transports tf
+                        WHERE tf.upload_session_id = t.upload_session_id
+                          AND tf.transport_role IN ('single', 'final')
+                          AND tf.finished_at IS NOT NULL
+                          AND tf.abandoned_at IS NULL
+                     ) THEN 'expired_unfinished'
+                ELSE NULL
+            END AS cleanup_reason
+         FROM attachment_upload_sessions s
+         JOIN attachments a ON a.attachment_id = s.attachment_id
+         JOIN attachment_upload_transports t ON t.upload_session_id = s.upload_session_id
+         WHERE t.storage_locator IS NOT NULL
+           AND (
+                s.abandoned_at IS NOT NULL
+                OR (
+                    t.transport_role = 'partial'
+                    AND EXISTS (
+                        SELECT 1
+                        FROM attachment_upload_transports tf
+                        WHERE tf.upload_session_id = t.upload_session_id
+                          AND tf.transport_role = 'final'
+                          AND tf.finished_at IS NOT NULL
+                          AND tf.abandoned_at IS NULL
+                    )
+                )
+                OR (
+                    s.token_expires_at <= TO_TIMESTAMP($1)
+                    AND a.current_upload_session_id = s.upload_session_id
+                    AND a.status IN ('prepared', 'uploading', 'processing', 'failed')
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM attachment_upload_transports tf
+                        WHERE tf.upload_session_id = t.upload_session_id
+                          AND tf.transport_role IN ('single', 'final')
+                          AND tf.finished_at IS NOT NULL
+                          AND tf.abandoned_at IS NULL
+                    )
+                )
+           )
+         ORDER BY COALESCE(s.abandoned_at, s.token_expires_at, t.finished_at, t.created_at) ASC, t.id ASC
+         LIMIT $2",
+    )
+    .bind(当前时间戳秒)
+    .bind(限制条数)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    rows.into_iter()
+        .map(|row| {
+            let raw_reason: Option<String> = row.get("cleanup_reason");
+            let storage_locator: Option<String> = row.get("storage_locator");
+            let Some(raw_reason) = raw_reason else {
+                return Err(contract::错误码::系统错误);
+            };
+            let Some(storage_locator) = storage_locator else {
+                return Err(contract::错误码::系统错误);
+            };
+            Ok(usecase::待清理上传残留 {
+                附件标识: row.get("attachment_id"),
+                上传会话标识: row.get("upload_session_id"),
+                临时文件定位: storage_locator,
+                清理原因: 解析上传残留清理原因(raw_reason.as_str())?,
+            })
+        })
+        .collect()
+}
+
+pub(super) fn 列出待清理上传残留(
+    repo: &Pg仓储,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<usecase::待清理上传残留>, contract::错误码> {
+    repo.在运行时执行(列出待清理上传残留_异步(
+        &repo.pool,
+        当前时间戳秒,
+        限制条数,
+    ))
+}
+
+/// 文件删完之后，adapter 只负责把“这些 locator 已经退场”回写到数据库。
+/// 这里按 cleanup reason 收口不同的状态推进，避免 shell 自己拼 UPDATE。
+async fn 标记上传残留已清理_异步(
+    pool: &PgPool,
+    上传会话标识: &str,
+    清理原因: usecase::上传残留清理原因,
+    清理时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    let mut tx = pool.begin().await.map_err(|_| contract::错误码::系统错误)?;
+    match 清理原因 {
+        usecase::上传残留清理原因::已放弃会话 => {
+            sqlx::query(
+                "UPDATE attachment_upload_transports
+                 SET storage_locator = NULL
+                 WHERE upload_session_id = $1
+                   AND storage_locator IS NOT NULL",
+            )
+            .bind(上传会话标识)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+        }
+        usecase::上传残留清理原因::最终合并后的分片残留 => {
+            sqlx::query(
+                "UPDATE attachment_upload_transports
+                 SET storage_locator = NULL
+                 WHERE upload_session_id = $1
+                   AND transport_role = 'partial'
+                   AND storage_locator IS NOT NULL",
+            )
+            .bind(上传会话标识)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+        }
+        usecase::上传残留清理原因::已过期未完成上传 => {
+            sqlx::query(
+                "UPDATE attachment_upload_transports
+                 SET storage_locator = NULL
+                 WHERE upload_session_id = $1
+                   AND storage_locator IS NOT NULL",
+            )
+            .bind(上传会话标识)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+            sqlx::query(
+                "UPDATE attachments
+                 SET status = 'expired',
+                     current_upload_session_id = NULL
+                 WHERE current_upload_session_id = $1
+                   AND status <> 'ready'",
+            )
+            .bind(上传会话标识)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+            sqlx::query(
+                "UPDATE attachment_upload_sessions
+                 SET abandoned_at = COALESCE(abandoned_at, TO_TIMESTAMP($2))
+                 WHERE upload_session_id = $1",
+            )
+            .bind(上传会话标识)
+            .bind(清理时间戳秒)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| contract::错误码::系统错误)?;
+        }
+    }
+    tx.commit().await.map_err(|_| contract::错误码::系统错误)?;
+    Ok(())
+}
+
+pub(super) fn 标记上传残留已清理(
+    repo: &mut Pg仓储,
+    上传会话标识: &str,
+    清理原因: usecase::上传残留清理原因,
+    清理时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    repo.在运行时执行(标记上传残留已清理_异步(
+        &repo.pool,
+        上传会话标识,
+        清理原因,
+        清理时间戳秒,
     ))
 }
 

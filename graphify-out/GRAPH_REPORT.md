@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-16)
 
 ## Corpus Check
-- 162 files · ~202,021 words
+- 162 files · ~203,718 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 353 nodes · 431 edges · 28 communities detected
+- 356 nodes · 434 edges · 28 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -67,11 +67,11 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.04
-Nodes (42): AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值() (+34 more)
+Nodes (43): AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值() (+35 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.04
-Nodes (3): 最小mp4字节(), 插入ready图片附件记录(), 会话所属匿名身份返回内部uuid而不是兼容旧串()
+Nodes (2): 最小mp4字节(), 插入ready图片附件记录()
 
 ### Community 2 - "Community 2"
 Cohesion: 0.06
@@ -180,9 +180,9 @@ Nodes (0):
 ## Knowledge Gaps
 - **23 isolated node(s):** `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `RustusHookBody`, `RustusUploadBody` (+18 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 16`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 16`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 17`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 18`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

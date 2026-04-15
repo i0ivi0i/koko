@@ -19,6 +19,7 @@ use socketioxide::{
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{
+    collections::HashMap,
     fs, io,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -234,6 +235,121 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     }
 
     Ok(())
+}
+
+fn 上传残留清理原因标签(原因: crate::usecase::上传残留清理原因) -> &'static str {
+    match 原因 {
+        crate::usecase::上传残留清理原因::已放弃会话 => "abandoned_session",
+        crate::usecase::上传残留清理原因::最终合并后的分片残留 => "finalized_partial",
+        crate::usecase::上传残留清理原因::已过期未完成上传 => "expired_unfinished",
+    }
+}
+
+async fn 执行一次媒体上传残留清理_按会话(
+    state: 应用状态,
+    仅清理上传会话: Option<&str>,
+) -> io::Result<()> {
+    let 当前时间戳秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
+    let 限定上传会话 = 仅清理上传会话.map(str::to_string);
+    let state_for_query = state.clone();
+    let 待清理残留 = tokio::task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_query);
+        crate::usecase::列出待清理上传残留(&repo, 当前时间戳秒, 256)
+            .map_err(|err| io::Error::other(format!("查询待清理上传残留失败: {err:?}")))
+    })
+    .await
+    .map_err(|err| io::Error::other(format!("上传残留清理查询任务失败: {err}")))??;
+
+    let mut 分组结果: HashMap<
+        (String, crate::usecase::上传残留清理原因),
+        Vec<crate::usecase::待清理上传残留>,
+    > = HashMap::new();
+    for 残留 in 待清理残留 {
+        if 限定上传会话
+            .as_deref()
+            .is_some_and(|target| target != 残留.上传会话标识)
+        {
+            continue;
+        }
+        分组结果
+            .entry((残留.上传会话标识.clone(), 残留.清理原因))
+            .or_default()
+            .push(残留);
+    }
+
+    for ((上传会话标识, 清理原因), 残留列表) in 分组结果 {
+        let mut 全部删除成功 = true;
+        for 残留 in &残留列表 {
+            let temp_file_path = match rustus_hook外壳::解析rustus临时文件路径(
+                &state.rustus_data_dir,
+                残留.临时文件定位.as_str(),
+            ) {
+                Ok(path) => path,
+                Err((_, _, message)) => {
+                    tracing::error!(
+                        usecase = "上传残留清理",
+                        adapter = "shell",
+                        outcome = "failed",
+                        attachment_id = 残留.附件标识.as_str(),
+                        upload_session_id = 上传会话标识.as_str(),
+                        cleanup_reason = 上传残留清理原因标签(清理原因),
+                        storage_locator = 残留.临时文件定位.as_str(),
+                        error = %message,
+                        "解析上传残留临时文件路径失败"
+                    );
+                    全部删除成功 = false;
+                    continue;
+                }
+            };
+            match tokio::fs::remove_file(temp_file_path.as_path()).await {
+                Ok(_) => {}
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => {
+                    tracing::error!(
+                        usecase = "上传残留清理",
+                        adapter = "shell",
+                        outcome = "failed",
+                        attachment_id = 残留.附件标识.as_str(),
+                        upload_session_id = 上传会话标识.as_str(),
+                        cleanup_reason = 上传残留清理原因标签(清理原因),
+                        storage_locator = 残留.临时文件定位.as_str(),
+                        error = %err,
+                        "删除上传残留临时文件失败"
+                    );
+                    全部删除成功 = false;
+                }
+            }
+        }
+        if !全部删除成功 {
+            continue;
+        }
+
+        let state_for_mark = state.clone();
+        let 上传会话标识 = 上传会话标识.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut repo = 构建共享仓储(&state_for_mark);
+            crate::usecase::标记上传残留已清理(
+                &mut repo,
+                &上传会话标识,
+                清理原因,
+                当前时间戳秒,
+            )
+            .map_err(|err| io::Error::other(format!("标记上传残留已清理失败: {err:?}")))
+        })
+        .await
+        .map_err(|err| io::Error::other(format!("上传残留清理写回任务失败: {err}")))??;
+    }
+
+    Ok(())
+}
+
+/// 上传残留清理属于“上传生命周期尾处理”，不属于冷源 TTL。
+/// 这里单独公开入口，给后台 loop 和 abandon 冷路径共用，避免两处各自发明第二套文件清理逻辑。
+pub async fn 执行一次媒体上传残留清理(state: 应用状态) -> io::Result<()> {
+    执行一次媒体上传残留清理_按会话(state, None).await
 }
 
 /// 统一装配附件对象存储：

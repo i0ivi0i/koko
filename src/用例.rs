@@ -231,6 +231,25 @@ pub struct 待清理媒体回退母本 {
     pub 回退母本存储键: String,
 }
 
+/// 上传残留清理原因只表达“为什么这批临时文件已经没有长期价值”。
+/// 它不描述 shell 要怎么删文件，也不承载 UI 语义。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum 上传残留清理原因 {
+    已放弃会话,
+    最终合并后的分片残留,
+    已过期未完成上传,
+}
+
+/// 后台残留清理一条只描述一个可删除的临时文件事实。
+/// shell 层后续可以按 upload_session 分组执行删除，但用例层不提前替它发明文件系统策略。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 待清理上传残留 {
+    pub 附件标识: String,
+    pub 上传会话标识: String,
+    pub 临时文件定位: String,
+    pub 清理原因: 上传残留清理原因,
+}
+
 /// 原始冷源只保留 24 小时窗口。
 /// 这里先把窗口值收成应用层常量，避免后续在外壳、handler、测试里继续散落“86400”。
 pub const 媒体原始冷源保留秒数: i64 = 24 * 60 * 60;
@@ -572,6 +591,29 @@ pub trait 仓储端口 {
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
         let _ = (附件标识, 删除时间戳秒);
+        Err(contract::错误码::系统错误)
+    }
+
+    /// 上传残留清理只回答“有哪些文件现在已经可以删了”。
+    /// 约束：这里不决定 shell 应该如何删文件，也不绕过应用层直接改 ready/room/message 真相。
+    fn 列出待清理上传残留(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<待清理上传残留>, contract::错误码> {
+        let _ = (当前时间戳秒, 限制条数);
+        Ok(vec![])
+    }
+
+    /// shell 删除残留文件之后，要把“这批 locator 已经不再可用”写回权威库。
+    /// 约束：这里只写清理结果，不发明第二条上传完成语义。
+    fn 标记上传残留已清理(
+        &mut self,
+        上传会话标识: &str,
+        清理原因: 上传残留清理原因,
+        清理时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let _ = (上传会话标识, 清理原因, 清理时间戳秒);
         Err(contract::错误码::系统错误)
     }
 
@@ -1276,6 +1318,35 @@ pub fn 列出待清理媒体回退母本(
         return Err(contract::错误码::参数非法);
     }
     仓储.列出待清理媒体回退母本(当前时间戳秒, 限制条数)
+}
+
+/// 上传残留清理是上传生命周期的尾处理：
+/// 1. abandoned session 的残留必须退场；
+/// 2. final concat 成功后的 partial 文件不再有长期价值；
+/// 3. 过期 unfinished upload 也不能永远卡在 prepared。
+pub fn 列出待清理上传残留(
+    仓储: &dyn 仓储端口,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<待清理上传残留>, contract::错误码> {
+    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.列出待清理上传残留(当前时间戳秒, 限制条数)
+}
+
+/// shell 真删完残留文件之后，应用层要把“这批残留已经清掉”回写真相。
+/// 这里故意只收口到 upload_session，避免 adapter/shell 重新发明 attachment 级第二套清理锚点。
+pub fn 标记上传残留已清理(
+    仓储: &mut dyn 仓储端口,
+    上传会话标识: &str,
+    清理原因: 上传残留清理原因,
+    清理时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    if 上传会话标识.trim().is_empty() || 清理时间戳秒 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.标记上传残留已清理(上传会话标识, 清理原因, 清理时间戳秒)
 }
 
 /// mezzanine 删除事实要单独回写，避免 locator 继续把过期回退层冒充可用 original。

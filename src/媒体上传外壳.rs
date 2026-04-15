@@ -5,6 +5,7 @@ use super::{
 use crate::{
     adapter::{媒体上传会话授权写入请求, 媒体上传运输记录},
     media_distribution, usecase,
+    usecase::仓储端口,
 };
 use axum::{
     extract::{Path, State},
@@ -938,11 +939,12 @@ pub(super) async fn abandon_media_upload(
     let state_for_usecase = state.clone();
     let attachment_id_for_usecase = attachment_id.clone();
     let session_id_for_usecase = session_id.clone();
-    let abandon_result = match task::spawn_blocking(move || {
+    let abandon_result: Option<String> = match task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
-        let transport = repo
-            .查询附件当前最终运输记录(&attachment_id_for_usecase)
-            .map_err(map_domain_err_tuple)?;
+        let current_upload_session_id = repo
+            .查询待完成媒体附件(&attachment_id_for_usecase)
+            .map_err(map_domain_err_tuple)?
+            .and_then(|prepared| prepared.当前上传会话标识);
         usecase::放弃媒体上传(
             &mut repo,
             &session_id_for_usecase,
@@ -950,11 +952,11 @@ pub(super) async fn abandon_media_upload(
             abandoned_epoch秒,
         )
         .map_err(map_domain_err_tuple)?;
-        Ok::<_, (StatusCode, &'static str, String)>(transport)
+        Ok::<_, (StatusCode, &'static str, String)>(current_upload_session_id)
     })
     .await
     {
-        Ok(Ok(transport)) => transport,
+        Ok(Ok(current_upload_session_id)) => current_upload_session_id,
         Ok(Err((status, code, message))) => return err_resp(status, code, message),
         Err(err) => {
             return err_resp(
@@ -965,29 +967,18 @@ pub(super) async fn abandon_media_upload(
         }
     };
 
-    if let Some(storage_locator) = abandon_result
-        .as_ref()
-        .and_then(|transport| transport.storage_locator.as_deref())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        let temp_file_path = match rustus_hook外壳::解析rustus临时文件路径(
-            &state.rustus_data_dir,
-            storage_locator,
-        ) {
-            Ok(path) => path,
-            Err((status, code, message)) => return err_resp(status, code, message),
-        };
-        match fs::remove_file(temp_file_path.as_path()).await {
-            Ok(_) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => {
-                return err_resp(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    format!("删除已放弃上传临时文件失败: {err}"),
-                )
-            }
+    if let Some(upload_session_id) = abandon_result.as_deref() {
+        if let Err(err) = super::执行一次媒体上传残留清理_按会话(
+            state.clone(),
+            Some(upload_session_id),
+        )
+        .await
+        {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("删除已放弃上传临时文件失败: {err}"),
+            );
         }
     }
 
