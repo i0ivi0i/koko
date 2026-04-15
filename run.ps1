@@ -218,6 +218,19 @@ function Resolve-RustusBinaryPath {
     return $command.Source
 }
 
+function Test-TruthyEnvironmentFlag {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $false
+    }
+
+    switch ($Value.Trim().ToLowerInvariant()) {
+        { $_ -in @("0", "false", "no", "off") } { return $false }
+        default { return $true }
+    }
+}
+
 function Stop-ManagedProcess {
     param($ManagedProcess)
 
@@ -343,6 +356,13 @@ try {
     if ([string]::IsNullOrWhiteSpace($rustusMaxFileSize)) {
         $rustusMaxFileSize = (200 * 1024 * 1024).ToString()
     }
+    $rustusServerWorkers = [Environment]::GetEnvironmentVariable("RUSTUS_SERVER_WORKERS")
+    $rustusTusExtensions = [Environment]::GetEnvironmentVariable("RUSTUS_TUS_EXTENSIONS")
+    $rustusBehindProxy = [Environment]::GetEnvironmentVariable("RUSTUS_BEHIND_PROXY")
+    $rustusHooksHttpProxyHeaders = [Environment]::GetEnvironmentVariable("RUSTUS_HOOKS_HTTP_PROXY_HEADERS")
+    if ([string]::IsNullOrWhiteSpace($rustusHooksHttpProxyHeaders)) {
+        $rustusHooksHttpProxyHeaders = "Authorization,X-Request-ID"
+    }
     $trackerPort = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_PORT")
     if ([string]::IsNullOrWhiteSpace($trackerPort)) {
         $trackerPort = "7072"
@@ -380,24 +400,38 @@ try {
     #    Uppy/Tus 默认会直接把整块文件作为 PATCH 发送，若沿用 Rustus 256 KiB 默认值，
     #    正常图片也会在 transport 层被 413 拦死，业务层根本看不到。
     # 5. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
-    Write-Host "启动 Rustus: rustus --host $rustusHost --port $rustusPort --url $rustusUrl --max-body-size $rustusMaxBodySize --max-file-size $rustusMaxFileSize"
+    # 6. 额外吞吐参数只做“显式接线，不篡改默认”：
+    #    - workers / tus-extensions 只有在环境变量给值时才覆盖官方默认；
+    #    - behind-proxy 仍然保留 flag 语义，不把布尔配置伪装成字符串参数；
+    #    - `Authorization,X-Request-ID` 是默认例外，因为 hook 诊断链必须拿到这两个头才能串起浏览器与主服务日志。
+    $rustusArgumentList = @(
+        "--host", $rustusHost,
+        "--port", $rustusPort,
+        "--url", $rustusUrl,
+        "--max-body-size", $rustusMaxBodySize,
+        "--max-file-size", $rustusMaxFileSize,
+        "--hooks", $rustusHooks,
+        "--storage", "file-storage",
+        "--data-dir", $resolvedRustusDataDir,
+        "--info-storage", "file-info-storage",
+        "--info-dir", $resolvedRustusInfoDir,
+        "--hooks-http-urls", $rustusHookUrl,
+        "--hooks-http-proxy-headers", $rustusHooksHttpProxyHeaders
+    )
+    if (-not [string]::IsNullOrWhiteSpace($rustusServerWorkers)) {
+        $rustusArgumentList += @("--workers", $rustusServerWorkers.Trim())
+    }
+    if (-not [string]::IsNullOrWhiteSpace($rustusTusExtensions)) {
+        $rustusArgumentList += @("--tus-extensions", $rustusTusExtensions.Trim())
+    }
+    if (Test-TruthyEnvironmentFlag $rustusBehindProxy) {
+        $rustusArgumentList += @("--behind-proxy")
+    }
+    Write-Host ("启动 Rustus: rustus {0}" -f ($rustusArgumentList -join " "))
     $rustusProcess = New-ManagedProcess `
         -Name "rustus" `
         -FilePath $rustusPath `
-        -ArgumentList @(
-            "--host", $rustusHost,
-            "--port", $rustusPort,
-            "--url", $rustusUrl,
-            "--max-body-size", $rustusMaxBodySize,
-            "--max-file-size", $rustusMaxFileSize,
-            "--hooks", $rustusHooks,
-            "--storage", "file-storage",
-            "--data-dir", $resolvedRustusDataDir,
-            "--info-storage", "file-info-storage",
-            "--info-dir", $resolvedRustusInfoDir,
-            "--hooks-http-urls", $rustusHookUrl,
-            "--hooks-http-proxy-headers", "Authorization"
-        ) `
+        -ArgumentList $rustusArgumentList `
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 

@@ -57,6 +57,14 @@ Assert-True (
     $runScript -match '200\s*\*\s*1024\s*\*\s*1024' -or
     $runScript -match '209715200'
 ) "run.ps1 默认的 rustus 整文件上限应该覆盖当前群聊视频 200 MiB 的业务上限。"
+Assert-True ($runScript -match 'RUSTUS_SERVER_WORKERS') "run.ps1 应允许显式覆写 rustus workers。"
+Assert-True ($runScript -match '--workers') "run.ps1 应显式把 workers 传给 rustus。"
+Assert-True ($runScript -match 'RUSTUS_TUS_EXTENSIONS') "run.ps1 应允许显式覆写 tus extensions。"
+Assert-True ($runScript -match '--tus-extensions') "run.ps1 应显式把 tus extensions 传给 rustus。"
+Assert-True ($runScript -match 'RUSTUS_BEHIND_PROXY') "run.ps1 应允许显式声明 behind-proxy。"
+Assert-True ($runScript -match '--behind-proxy') "run.ps1 应在启用时把 behind-proxy 传给 rustus。"
+Assert-True ($runScript -match 'RUSTUS_HOOKS_HTTP_PROXY_HEADERS') "run.ps1 应允许显式覆写 hook proxy headers。"
+Assert-True ($runScript -match 'Authorization,X-Request-ID') "run.ps1 默认应透传 Authorization 和 X-Request-ID。"
 Assert-True ($runScript -match 'RUSTUS_SERVER_HOST') "run.ps1 应该允许显式覆写 rustus 的监听 host，避免 LAN / 公网模拟设备只能打到本机回环地址。"
 Assert-True ($runScript -match '"0\.0\.0\.0"') "run.ps1 默认的 rustus 监听 host 应该允许局域网设备访问，不能继续硬编码成本机回环。"
 Assert-True ($runScript -match '--url') "run.ps1 应该显式固定 rustus 的 Tus base url。"
