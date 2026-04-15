@@ -738,6 +738,65 @@ pub(super) async fn complete_media_upload(
     .await;
     match complete_result {
         Ok(Ok(snapshot)) => {
+            let 原始冷源删除时间戳秒 = if matches!(prepared.种类, usecase::媒体附件类型::视频)
+            {
+                let original_path = ObjectPath::from(prepared.原始内容存储键.as_str());
+                match state.attachment_store.delete(&original_path).await {
+                    Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
+                    Err(err) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            "删除原始上传冷源对象失败",
+                            "delete_original_cold_source_failed",
+                            format!("删除原始上传冷源对象失败: {err}"),
+                        )
+                    }
+                }
+                let state_for_mark = state.clone();
+                let attachment_id_for_mark = attachment_id.clone();
+                match task::spawn_blocking(move || {
+                    let mut repo = 构建共享仓储(&state_for_mark);
+                    usecase::标记媒体冷源已删除(&mut repo, &attachment_id_for_mark, ready_epoch秒)
+                        .map_err(map_domain_err_tuple)
+                })
+                .await
+                {
+                    Ok(Ok(())) => Some(ready_epoch秒),
+                    Ok(Err((status, code, message))) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            status,
+                            code,
+                            message.clone(),
+                            "mark_original_cold_source_deleted_failed",
+                            message,
+                        )
+                    }
+                    Err(err) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            format!("标记原始上传冷源已删除任务失败: {err}"),
+                            "mark_original_cold_source_deleted_task_failed",
+                            format!("标记原始上传冷源已删除任务失败: {err}"),
+                        )
+                    }
+                }
+            } else {
+                None
+            };
             let distribution_snapshot = usecase::协作分发元数据快照 {
                 附件标识: attachment_id.clone(),
                 content_id: distribution_request.content_id.clone(),
@@ -759,7 +818,7 @@ pub(super) async fn complete_media_upload(
             let 冷源仍可用 = usecase::冷源当前可用(
                 Some(original_url.as_str()),
                 Some(原始冷源到期时间戳秒),
-                None,
+                原始冷源删除时间戳秒,
                 now_epoch秒,
             );
             let runtime_distribution = media_distribution::协作分发快照转响应值(
@@ -790,7 +849,7 @@ pub(super) async fn complete_media_upload(
                     流媒体清单: streaming_manifest_snapshot.as_ref(),
                     原始地址: original_url,
                     原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
-                    原始冷源删除时间戳秒: None,
+                    原始冷源删除时间戳秒,
                     会话标识: session_id.as_str(),
                     当前时间戳秒: now_epoch秒,
                 },

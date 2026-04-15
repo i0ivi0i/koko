@@ -522,7 +522,8 @@ type 聊天媒体测试端口 = {
   设置媒体发布器供测试(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
-    重试草稿(localId: string): Promise<void>;
+    继续上传草稿(localId: string): Promise<void>;
+    重新上传草稿(localId: string): Promise<void>;
     清空(): void;
     销毁(): void;
   }): void;
@@ -600,7 +601,8 @@ export function 注入媒体发布器供测试(
   publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
-    重试草稿(localId: string): Promise<void>;
+    继续上传草稿(localId: string): Promise<void>;
+    重新上传草稿(localId: string): Promise<void>;
     清空(): void;
     销毁(): void;
   }

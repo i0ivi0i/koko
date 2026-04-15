@@ -50,7 +50,8 @@ type 聊天媒体测试端口 = {
   设置媒体发布器供测试(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
-    重试草稿(localId: string): Promise<void>;
+    继续上传草稿(localId: string): Promise<void>;
+    重新上传草稿(localId: string): Promise<void>;
     清空(): void;
     销毁(): void;
   }): void;
@@ -153,7 +154,8 @@ describe("聊天应用内核", () => {
     const fake媒体发布器 = {
       处理选择媒体文件: vi.fn().mockResolvedValue(undefined),
       移除草稿: vi.fn(),
-      重试草稿: vi.fn().mockResolvedValue(undefined),
+      继续上传草稿: vi.fn().mockResolvedValue(undefined),
+      重新上传草稿: vi.fn().mockResolvedValue(undefined),
       清空: vi.fn(),
       销毁: vi.fn(),
     };
@@ -166,7 +168,8 @@ describe("聊天应用内核", () => {
     读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
 
     await kernel.dispatch({ type: "MEDIA_FILES_SELECTED", files: [imageFile] });
-    await kernel.dispatch({ type: "MEDIA_DRAFT_RETRY_REQUESTED", localId: "draft-1" });
+    await kernel.dispatch({ type: "MEDIA_DRAFT_RESUME_REQUESTED", localId: "draft-1" });
+    await kernel.dispatch({ type: "MEDIA_DRAFT_RESTART_REQUESTED", localId: "draft-3" });
     await kernel.dispatch({ type: "MEDIA_DRAFT_REMOVE_REQUESTED", localId: "draft-2" });
     await kernel.dispatch({
       type: "MEDIA_OPEN_REQUESTED",
@@ -177,12 +180,44 @@ describe("聊天应用内核", () => {
     });
 
     expect(fake媒体发布器.处理选择媒体文件).toHaveBeenCalledWith([imageFile]);
-    expect(fake媒体发布器.重试草稿).toHaveBeenCalledWith("draft-1");
+    expect(fake媒体发布器.继续上传草稿).toHaveBeenCalledWith("draft-1");
+    expect(fake媒体发布器.重新上传草稿).toHaveBeenCalledWith("draft-3");
     expect(fake媒体发布器.移除草稿).toHaveBeenCalledWith("draft-2");
     expect(fake查看器.打开).toHaveBeenCalledWith({
       startAttachmentId: "att-1",
       items: [],
     });
+  });
+
+  it("壳层媒体失败草稿的新双动作也必须只通过 dispatch 进入内核", async () => {
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const fake媒体发布器 = {
+      处理选择媒体文件: vi.fn().mockResolvedValue(undefined),
+      移除草稿: vi.fn(),
+      继续上传草稿: vi.fn().mockResolvedValue(undefined),
+      重新上传草稿: vi.fn().mockResolvedValue(undefined),
+      清空: vi.fn(),
+      销毁: vi.fn(),
+    };
+
+    读取媒体编排供测试(kernel).设置媒体发布器供测试(fake媒体发布器);
+
+    await kernel.dispatch({
+      type: "MEDIA_DRAFT_RESUME_REQUESTED",
+      localId: "draft-resume",
+    } as never);
+    await kernel.dispatch({
+      type: "MEDIA_DRAFT_RESTART_REQUESTED",
+      localId: "draft-restart",
+    } as never);
+
+    expect(fake媒体发布器.继续上传草稿).toHaveBeenCalledWith("draft-resume");
+    expect(fake媒体发布器.重新上传草稿).toHaveBeenCalledWith("draft-restart");
   });
 
   it("消息列表不变时，媒体运行时信号也会刷新 media snapshot", async () => {

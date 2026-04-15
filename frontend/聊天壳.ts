@@ -841,14 +841,18 @@ export class 聊天壳 extends LitElement {
   }
 
   /**
-   * 失败草稿点“重试”后，UI 会立刻回到 uploading。
-   * 真正的上传文件 id 仍以底层上传器回填为准：
-   * - 如果底层沿用旧 localId，草稿会原地更新；
-   * - 如果底层为新一轮 prepare 生成了新的 localId，媒体发布器会在 file-added 后清掉旧草稿，
-   *   继续保证草稿带里只保留一条真上传项，不长幽灵副本。
+   * 失败草稿的“继续上传”和“重新上传”必须是两条不同意图：
+   * - 继续上传：只允许复用旧 upload；
+   * - 重新上传：明确放弃旧 upload，开启新一轮 prepare。
+   *
+   * 壳层只负责把用户意图转成应用事件，不在这里偷偷猜条件。
    */
-  private async retryComposerDraft(localId: string): Promise<void> {
-    await this.kernel.dispatch({ type: "MEDIA_DRAFT_RETRY_REQUESTED", localId });
+  private async resumeComposerDraft(localId: string): Promise<void> {
+    await this.kernel.dispatch({ type: "MEDIA_DRAFT_RESUME_REQUESTED", localId });
+  }
+
+  private async restartComposerDraft(localId: string): Promise<void> {
+    await this.kernel.dispatch({ type: "MEDIA_DRAFT_RESTART_REQUESTED", localId });
   }
 
   override connectedCallback(): void {
@@ -1073,10 +1077,18 @@ export class 聊天壳 extends LitElement {
                             <button
                               type="button"
                               class="composer-draft-remove"
-                              data-draft-retry-id=${draft.localId}
-                              @click=${() => this.retryComposerDraft(draft.localId)}
+                              data-draft-resume-id=${draft.localId}
+                              @click=${() => this.resumeComposerDraft(draft.localId)}
                             >
-                              重试
+                              继续上传
+                            </button>
+                            <button
+                              type="button"
+                              class="composer-draft-remove"
+                              data-draft-restart-id=${draft.localId}
+                              @click=${() => this.restartComposerDraft(draft.localId)}
+                            >
+                              重新上传
                             </button>
                           `
                         : null}

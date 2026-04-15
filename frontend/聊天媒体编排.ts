@@ -57,7 +57,8 @@ export interface 聊天媒体编排端口 {
   snapshot(): 聊天媒体快照;
   处理选择媒体文件(files: Iterable<File>): Promise<void>;
   移除媒体草稿(localId: string): void;
-  重试媒体草稿(localId: string): Promise<void>;
+  继续上传媒体草稿(localId: string): Promise<void>;
+  重新上传媒体草稿(localId: string): Promise<void>;
   清空草稿(): void;
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
@@ -89,7 +90,8 @@ export interface 聊天媒体编排端口 {
   设置媒体发布器供测试(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
-    重试草稿(localId: string): Promise<void>;
+    继续上传草稿(localId: string): Promise<void>;
+    重新上传草稿(localId: string): Promise<void>;
     清空(): void;
     销毁(): void;
   }): void;
@@ -531,8 +533,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       媒体发布器.移除草稿(localId);
     },
 
-    async 重试媒体草稿(localId: string): Promise<void> {
-      await 媒体发布器.重试草稿(localId);
+    async 继续上传媒体草稿(localId: string): Promise<void> {
+      await 媒体发布器.继续上传草稿(localId);
+    },
+
+    async 重新上传媒体草稿(localId: string): Promise<void> {
+      await 媒体发布器.重新上传草稿(localId);
     },
 
     清空草稿(): void {

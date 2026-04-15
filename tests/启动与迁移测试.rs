@@ -149,6 +149,23 @@ fn 匿名内部身份迁移已包含uuid与主题投影字段() {
 }
 
 #[test]
+fn 视频上传生命周期迁移已包含abandoned与mezzanine字段() {
+    let sql = std::fs::read_to_string("migrations/0012_视频上传重试回收与mezzanine生命周期.sql")
+        .expect("应能读到视频上传生命周期迁移文件");
+
+    // 这条迁移必须同时锁住三件事：
+    // 1. 旧 upload 可以被明确标成 abandoned；
+    // 2. 视频有独立 mezzanine 回退层；
+    // 3. 过期 mezzanine 可以被后台按 TTL 清理。
+    assert!(sql.contains("ALTER TABLE attachments"));
+    assert!(sql.contains("abandoned_at"));
+    assert!(sql.contains("mezzanine_storage_key"));
+    assert!(sql.contains("mezzanine_expires_at"));
+    assert!(sql.contains("mezzanine_deleted_at"));
+    assert!(sql.contains("ALTER TABLE attachment_upload_transports"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),

@@ -287,3 +287,91 @@ async fn rustus_post_finish会登记上传回执() {
     assert_eq!(byte_size, Some(68));
     assert!(is_finished, "post-finish 必须把 finished 回执落库");
 }
+
+#[tokio::test]
+#[serial]
+async fn rustus_post_finish不会复活已废弃的旧上传() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("rustus-post-finish-abandoned-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "abandoned.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let expected_upload_id = format!("upload-post-finish-abandoned-{attachment_id}");
+    let temp_file =
+        写入rustus测试文件(&rustus_data_dir, attachment_id, "abandoned.png", &最小png字节())
+            .expect("应能写入 rustus 测试文件");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    sqlx::query(
+        "UPDATE attachment_upload_transports SET abandoned_at = NOW() WHERE attachment_id = $1",
+    )
+    .bind(attachment_id)
+    .execute(&pool)
+    .await
+    .expect("测试需要先把旧 transport 标成 abandoned");
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &expected_upload_id,
+            attachment_id,
+            "abandoned.png",
+            "image/png",
+            68,
+            68,
+            Some(temp_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
+    assert_eq!(body["code"].as_str(), Some("attachment_not_ready"));
+}

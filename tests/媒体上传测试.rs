@@ -801,9 +801,12 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     );
     assert_eq!(
         complete_body["media_asset"]["origin"]["available"].as_bool(),
-        Some(true),
-        "刚完成上传的 24 小时窗口内，冷源应该仍然可用"
+        Some(false),
+        "视频一旦完成打包并进入分发 ready，原始上传冷源就应立即退场，不能继续作为可用读取入口"
     );
+    let original_url = complete_body["media_asset"]["origin"]["original_url"]
+        .as_str()
+        .expect("即使原始冷源不可用，也必须返回稳定冷源描述");
     assert!(complete_body["media_asset"]["distribution"]["swarm_id"].is_string());
     assert!(
         complete_body["media_asset"]["distribution"]["announce_urls"].is_array(),
@@ -859,6 +862,13 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         .expect("子清单应至少包含一条受控 media segment URL")
         .trim()
         .to_string();
+
+    let (original_status, _, _) = send_bytes(app.clone(), Method::GET, original_url, &[]).await;
+    assert_eq!(
+        original_status,
+        StatusCode::NOT_FOUND,
+        "视频分发 ready 后，原始上传冷源应立即物理删除，不能继续返回 200"
+    );
     let (segment_status, segment_headers, segment_bytes) =
         send_bytes(app.clone(), Method::GET, segment_url.as_str(), &[]).await;
     assert_eq!(segment_status, StatusCode::OK);

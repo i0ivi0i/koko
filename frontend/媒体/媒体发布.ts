@@ -591,6 +591,102 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     }
   };
 
+  /**
+   * `resume` 只允许在同一上传语义内继续：
+   * - 不重新 prepare；
+   * - 不改 attachmentId；
+   * - 旧 uploader/file 一旦丢失，就明确失败，不再偷偷转成 restart。
+   */
+  const 继续上传失败草稿 = async (localId: string): Promise<void> => {
+    const draft = 读取媒体草稿(localId);
+    if (!draft) {
+      return;
+    }
+    const currentUploader = 读取草稿所属上传器(localId);
+    deps.updateDraft(localId, {
+      status: "transporting",
+      errorCode: "",
+    });
+    if (!currentUploader || !currentUploader.getFile(localId)) {
+      deps.updateDraft(localId, {
+        status: "failed",
+        errorCode: "attachment_upload_failed",
+      });
+      return;
+    }
+    void currentUploader.retryUpload(localId).catch((error: unknown) => {
+      deps.updateDraft(localId, {
+        status: "failed",
+        errorCode: 解析传输错误代码(error),
+      });
+    });
+  };
+
+  /**
+   * `restart` 是显式放弃旧上传后的新一轮 prepare：
+   * - 这里会清空旧 attachmentId；
+   * - 然后重新拿新的 prepare 结果；
+   * - 最后仍然只保留一条草稿真相，避免 restart 长出幽灵副本。
+   */
+  const 重新上传失败草稿 = async (localId: string): Promise<void> => {
+    const draft = 读取媒体草稿(localId);
+    if (!draft) {
+      return;
+    }
+    deps.updateDraft(localId, {
+      attachmentId: "",
+      status: "transporting",
+      errorCode: "",
+    });
+    if (!draft.sourceFile) {
+      deps.updateDraft(localId, {
+        status: "failed",
+        errorCode: "attachment_upload_failed",
+      });
+      return;
+    }
+    try {
+      const prepared = await deps.prepareMediaUpload(
+        draft.kind,
+        deps.getSessionId(),
+        draft.sourceFile
+      );
+      const uploaderInput: 媒体上传器创建参数 = {
+        tusEndpoint: prepared.tus_endpoint,
+        profile: 读取媒体上传档位(draft.kind, draft.sourceFile),
+      };
+      const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
+      const nextLocalId = currentUploader.addFile({
+        id: localId,
+        name: draft.fileName,
+        type: draft.sourceFile.type,
+        data: draft.sourceFile,
+        meta: 构造媒体上传Meta({
+          sessionId: deps.getSessionId(),
+          kind: draft.kind,
+          prepared,
+          previewWidth: draft.width,
+          previewHeight: draft.height,
+        }),
+      });
+      草稿上传器键表.set(nextLocalId, uploaderKey);
+      /**
+       * 真正的 Uppy 本地文件 id 由它自己根据文件属性和 meta.relativePath 生成，
+       * 不保证等于我们传给 addFile 的 `id`。如果 restart 后还把旧草稿留着，
+       * 就会同时留下“旧失败草稿 + 新上传草稿”两条活路径。
+       */
+      if (nextLocalId !== localId) {
+        草稿上传器键表.delete(localId);
+        deps.removeDraft(localId);
+      }
+    } catch (error: unknown) {
+      deps.updateDraft(localId, {
+        status: "failed",
+        errorCode: 解析传输错误代码(error),
+      });
+    }
+  };
+
   return {
     async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
       const selectedFiles = Array.from(files);
@@ -624,73 +720,12 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       }
     },
 
-    async 重试草稿(localId: string): Promise<void> {
-      const draft = 读取媒体草稿(localId);
-      if (!draft) {
-        return;
-      }
-      const currentUploader = 读取草稿所属上传器(localId);
-      deps.updateDraft(localId, {
-        attachmentId: "",
-        status: "transporting",
-        errorCode: "",
-      });
-      if (!currentUploader || !currentUploader.getFile(localId)) {
-        if (!draft.sourceFile) {
-          deps.updateDraft(localId, {
-            status: "failed",
-            errorCode: "attachment_upload_failed",
-          });
-          return;
-        }
-        try {
-          const prepared = await deps.prepareMediaUpload(
-            draft.kind,
-            deps.getSessionId(),
-            draft.sourceFile
-          );
-          const uploaderInput: 媒体上传器创建参数 = {
-            tusEndpoint: prepared.tus_endpoint,
-            profile: 读取媒体上传档位(draft.kind, draft.sourceFile),
-          };
-          const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
-          const nextLocalId = currentUploader.addFile({
-            id: localId,
-            name: draft.fileName,
-            type: draft.sourceFile.type,
-            data: draft.sourceFile,
-            meta: 构造媒体上传Meta({
-              sessionId: deps.getSessionId(),
-              kind: draft.kind,
-              prepared,
-              previewWidth: draft.width,
-              previewHeight: draft.height,
-            }),
-          });
-          草稿上传器键表.set(nextLocalId, uploaderKey);
-          /**
-           * 真正的 Uppy 本地文件 id 由它自己根据文件属性和 meta.relativePath 生成，
-           * 不保证等于我们传给 addFile 的 `id`。如果这里还把旧草稿留着，就会让失败重试
-           * 长出“旧 localId + 新 localId”两条草稿，形成幽灵副本。
-           */
-          if (nextLocalId !== localId) {
-            草稿上传器键表.delete(localId);
-            deps.removeDraft(localId);
-          }
-        } catch (error: unknown) {
-          deps.updateDraft(localId, {
-            status: "failed",
-            errorCode: 解析传输错误代码(error),
-          });
-        }
-        return;
-      }
-      void currentUploader.retryUpload(localId).catch((error: unknown) => {
-        deps.updateDraft(localId, {
-          status: "failed",
-          errorCode: 解析传输错误代码(error),
-        });
-      });
+    async 继续上传草稿(localId: string): Promise<void> {
+      await 继续上传失败草稿(localId);
+    },
+
+    async 重新上传草稿(localId: string): Promise<void> {
+      await 重新上传失败草稿(localId);
     },
 
     清空(): void {

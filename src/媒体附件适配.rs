@@ -34,6 +34,7 @@ fn 行转媒体上传运输记录(row: PgRow) -> 媒体上传运输记录 {
         运输方式: row.get("transport_kind"),
         上传令牌: row.get("upload_token"),
         令牌仍有效: row.get("token_is_active"),
+        废弃时间戳秒: row.get("abandoned_at_epoch"),
         transport_upload_id: row.get("transport_upload_id"),
         storage_locator: row.get("storage_locator"),
         字节大小: row.get("byte_size"),
@@ -644,12 +645,13 @@ async fn 写入媒体上传运输授权_异步(
 ) -> Result<(), contract::错误码> {
     sqlx::query(
         "INSERT INTO attachment_upload_transports \
-            (attachment_id, transport_kind, upload_token, token_expires_at, transport_upload_id, storage_locator, byte_size, finished_at) \
-         VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 second'), NULL, NULL, $5, NULL) \
+            (attachment_id, transport_kind, upload_token, token_expires_at, abandoned_at, transport_upload_id, storage_locator, byte_size, finished_at) \
+         VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 second'), NULL, NULL, NULL, $5, NULL) \
          ON CONFLICT (attachment_id) DO UPDATE SET \
             transport_kind = EXCLUDED.transport_kind, \
             upload_token = EXCLUDED.upload_token, \
             token_expires_at = EXCLUDED.token_expires_at, \
+            abandoned_at = NULL, \
             transport_upload_id = NULL, \
             storage_locator = NULL, \
             byte_size = EXCLUDED.byte_size, \
@@ -684,6 +686,7 @@ async fn 查询媒体上传运输记录_异步(
             transport_kind, \
             upload_token, \
             token_expires_at > NOW() AS token_is_active, \
+            EXTRACT(EPOCH FROM abandoned_at)::BIGINT AS abandoned_at_epoch, \
             transport_upload_id, \
             storage_locator, \
             byte_size, \
@@ -716,6 +719,7 @@ async fn 根据上传令牌查询媒体上传运输记录_异步(
             transport_kind, \
             upload_token, \
             token_expires_at > NOW() AS token_is_active, \
+            EXTRACT(EPOCH FROM abandoned_at)::BIGINT AS abandoned_at_epoch, \
             transport_upload_id, \
             storage_locator, \
             byte_size, \

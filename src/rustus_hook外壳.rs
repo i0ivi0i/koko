@@ -110,6 +110,13 @@ async fn handle_rustus_hook_pre_create(
                 "上传令牌已失效".to_string(),
             ));
         }
+        if transport.废弃时间戳秒.is_some() {
+            return Err((
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件上传已被放弃".to_string(),
+            ));
+        }
         if transport.附件标识 != attachment_id {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -227,6 +234,13 @@ async fn handle_rustus_hook_post_finish(
                 StatusCode::UNAUTHORIZED,
                 "attachment_upload_unauthorized",
                 "上传令牌已失效".to_string(),
+            ));
+        }
+        if transport.废弃时间戳秒.is_some() {
+            return Err((
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件上传已被放弃".to_string(),
             ));
         }
         if transport.附件标识 != attachment_id_for_repo {

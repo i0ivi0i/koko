@@ -101,7 +101,8 @@ export type 聊天应用命令 =
   | { type: "MEDIA_SESSION_SIGNALLED"; attachmentId: string; signal: 媒体会话信号 }
   | { type: "MEDIA_FILES_SELECTED"; files: Iterable<File> }
   | { type: "MEDIA_DRAFT_REMOVE_REQUESTED"; localId: string }
-  | { type: "MEDIA_DRAFT_RETRY_REQUESTED"; localId: string };
+  | { type: "MEDIA_DRAFT_RESUME_REQUESTED"; localId: string }
+  | { type: "MEDIA_DRAFT_RESTART_REQUESTED"; localId: string };
 
 interface 聊天应用渲染桥 {
   /**
@@ -323,8 +324,11 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       case "MEDIA_DRAFT_REMOVE_REQUESTED":
         this.移除媒体草稿(command.localId);
         return;
-      case "MEDIA_DRAFT_RETRY_REQUESTED":
-        await this.重试媒体草稿(command.localId);
+      case "MEDIA_DRAFT_RESUME_REQUESTED":
+        await this.继续上传媒体草稿(command.localId);
+        return;
+      case "MEDIA_DRAFT_RESTART_REQUESTED":
+        await this.重新上传媒体草稿(command.localId);
         return;
     }
   }
@@ -380,8 +384,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.媒体编排.移除媒体草稿(localId);
   }
 
-  private async 重试媒体草稿(localId: string): Promise<void> {
-    await this.媒体编排.重试媒体草稿(localId);
+  private async 继续上传媒体草稿(localId: string): Promise<void> {
+    await this.媒体编排.继续上传媒体草稿(localId);
+  }
+
+  private async 重新上传媒体草稿(localId: string): Promise<void> {
+    await this.媒体编排.重新上传媒体草稿(localId);
   }
 
   private 打开媒体查看器(request: 媒体查看器打开请求): void {

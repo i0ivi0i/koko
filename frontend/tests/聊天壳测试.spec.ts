@@ -55,7 +55,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
   const 创建假媒体发布器 = () => ({
     处理选择媒体文件: vi.fn().mockResolvedValue(undefined),
     移除草稿: vi.fn(),
-    重试草稿: vi.fn().mockResolvedValue(undefined),
+    继续上传草稿: vi.fn().mockResolvedValue(undefined),
+    重新上传草稿: vi.fn().mockResolvedValue(undefined),
     清空: vi.fn(),
     销毁: vi.fn(),
   });
@@ -931,7 +932,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("失败图片点击重试时会把 localId 转交给媒体发布器", async () => {
+  it("失败图片点击继续上传时会把 localId 转交给媒体发布器", async () => {
     const el = await 创建已入房聊天壳();
     const fake媒体发布器 = 创建假媒体发布器();
     注入媒体发布器供测试(el, fake媒体发布器);
@@ -950,12 +951,70 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
     (
       el.shadowRoot!.querySelector(
-        '[data-draft-retry-id="draft-retry"]'
+        '[data-draft-resume-id="draft-retry"]'
       ) as HTMLButtonElement
     ).click();
     await 等待组件稳定(el);
 
-    expect(fake媒体发布器.重试草稿).toHaveBeenCalledWith("draft-retry");
+    expect(fake媒体发布器.继续上传草稿).toHaveBeenCalledWith("draft-retry");
+    el.remove();
+  });
+
+  it("失败图片会同时渲染继续上传和重新上传动作", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-retry-split",
+      kind: "image",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-retry-split",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "retry-split.png",
+      errorCode: "attachment_upload_failed",
+    });
+    await 等待组件稳定(el);
+
+    expect(
+      el.shadowRoot!.querySelector('[data-draft-resume-id="draft-retry-split"]')
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(
+      el.shadowRoot!.querySelector('[data-draft-restart-id="draft-retry-split"]')
+    ).toBeInstanceOf(HTMLButtonElement);
+    el.remove();
+  });
+
+  it("失败图片点击继续上传和重新上传时会转交不同的媒体发布器方法", async () => {
+    const el = await 创建已入房聊天壳();
+    const fake媒体发布器 = 创建假媒体发布器();
+    注入媒体发布器供测试(el, fake媒体发布器);
+    注入图片草稿(el, {
+      localId: "draft-retry-actions",
+      kind: "image",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-retry-actions",
+      width: 120,
+      height: 90,
+      status: "failed",
+      fileName: "retry-actions.png",
+      errorCode: "attachment_upload_failed",
+    });
+    await 等待组件稳定(el);
+
+    (
+      el.shadowRoot!.querySelector(
+        '[data-draft-resume-id="draft-retry-actions"]'
+      ) as HTMLButtonElement
+    ).click();
+    (
+      el.shadowRoot!.querySelector(
+        '[data-draft-restart-id="draft-retry-actions"]'
+      ) as HTMLButtonElement
+    ).click();
+    await 等待组件稳定(el);
+
+    expect(fake媒体发布器.继续上传草稿).toHaveBeenCalledWith("draft-retry-actions");
+    expect(fake媒体发布器.重新上传草稿).toHaveBeenCalledWith("draft-retry-actions");
     el.remove();
   });
 

@@ -48,6 +48,7 @@ pub(crate) struct 媒体上传运输记录 {
     pub 运输方式: String,
     pub 上传令牌: String,
     pub 令牌仍有效: bool,
+    pub 废弃时间戳秒: Option<i64>,
     pub transport_upload_id: Option<String>,
     pub storage_locator: Option<String>,
     pub 字节大小: Option<i64>,

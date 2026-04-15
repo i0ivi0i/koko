@@ -617,12 +617,85 @@ describe("媒体发布器", () => {
     });
     场景.默认上传器.nextAddFileReturnedId = "uppy-retry-second-local-id";
 
-    await 场景.发布器.重试草稿("att-retry.jpg");
+    await (
+      场景.发布器 as unknown as {
+        重新上传草稿(localId: string): Promise<void>;
+      }
+    ).重新上传草稿("att-retry.jpg");
 
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "uppy-retry-second-local-id",
         attachmentId: "att-retry-second",
+        status: "transporting",
+        errorCode: "",
+      }),
+    ]);
+  });
+
+  it("继续上传失败草稿时会复用旧 attachmentId，不会重新 prepare", async () => {
+    const 场景 = 创建场景();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "resume.jpg", {
+      type: "image/jpeg",
+    });
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
+    场景.drafts.updateDraft("att-resume.jpg", {
+      status: "failed",
+      errorCode: "attachment_upload_failed",
+    });
+
+    await (
+      场景.发布器 as unknown as {
+        继续上传草稿(localId: string): Promise<void>;
+      }
+    ).继续上传草稿("att-resume.jpg");
+
+    expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(1);
+    expect(场景.默认上传器.retryUploadCalls).toEqual(["att-resume.jpg"]);
+    expect(场景.drafts.readDrafts()).toEqual([
+      expect.objectContaining({
+        localId: "att-resume.jpg",
+        attachmentId: "att-resume.jpg",
+        status: "transporting",
+      }),
+    ]);
+  });
+
+  it("重新上传失败草稿时会明确走新一轮 prepare 并拿到新的 attachmentId", async () => {
+    const 场景 = 创建场景();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "restart.jpg", {
+      type: "image/jpeg",
+    });
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
+    场景.drafts.updateDraft("att-restart.jpg", {
+      status: "failed",
+      errorCode: "attachment_upload_failed",
+    });
+    场景.默认上传器.静默丢弃文件("att-restart.jpg");
+    场景.prepareMediaUpload.mockResolvedValueOnce({
+      attachment_id: "att-restart-second",
+      upload_method: "tus" as const,
+      tus_endpoint: "http://storage.local/files",
+      tus_headers: { Authorization: "Bearer media-upload-token" },
+      tus_metadata: {
+        attachment_id: "att-restart-second",
+        file_name: sourceFile.name,
+        mime_type: sourceFile.type,
+        byte_size: String(sourceFile.size),
+      },
+      expires_at: "2026-04-10T12:00:00Z",
+    });
+
+    await (
+      场景.发布器 as unknown as {
+        重新上传草稿(localId: string): Promise<void>;
+      }
+    ).重新上传草稿("att-restart.jpg");
+
+    expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(2);
+    expect(场景.drafts.readDrafts()).toEqual([
+      expect.objectContaining({
+        attachmentId: "att-restart-second",
         status: "transporting",
         errorCode: "",
       }),
