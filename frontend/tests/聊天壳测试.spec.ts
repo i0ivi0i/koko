@@ -829,16 +829,16 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("上传中时发送按钮会被禁用并显示明确原因", async () => {
+  it("transporting 草稿存在时发送按钮会被禁用并显示正在上传", async () => {
     const el = await 创建已入房聊天壳();
     注入图片草稿(el, {
-      localId: "draft-uploading",
+      localId: "draft-transporting",
       kind: "image",
       attachmentId: "",
-      previewUrl: "blob:http://test.local/draft-uploading",
+      previewUrl: "blob:http://test.local/draft-transporting",
       width: 120,
       height: 90,
-      status: "uploading",
+      status: "transporting",
       fileName: "demo.png",
       errorCode: "",
     });
@@ -846,6 +846,27 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
     expect(读取操作台主动作(el).disabled).toBe(true);
     expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在上传");
+
+    el.remove();
+  });
+
+  it("processing 草稿存在时发送按钮会被禁用并显示正在处理", async () => {
+    const el = await 创建已入房聊天壳();
+    注入图片草稿(el, {
+      localId: "draft-processing",
+      kind: "image",
+      attachmentId: "att-processing",
+      previewUrl: "blob:http://test.local/draft-processing",
+      width: 120,
+      height: 90,
+      status: "processing",
+      fileName: "demo.png",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    expect(读取操作台主动作(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("#shellConsoleStatus")?.textContent).toContain("正在处理");
 
     el.remove();
   });
@@ -1536,7 +1557,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       previewUrl: "blob:http://test.local/draft-uploading-submit",
       width: 120,
       height: 90,
-      status: "uploading",
+      status: "transporting",
       fileName: "demo.png",
       errorCode: "",
     });
@@ -1550,17 +1571,17 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("存在 uploading 视频草稿时主发送按钮仍会被禁用", async () => {
+  it("存在 transporting 视频草稿时主发送按钮仍会被禁用", async () => {
     const el = await 创建已入房聊天壳();
     输入消息到操作台(el, "video pending");
     注入媒体草稿(el, {
-      localId: "draft-video-uploading",
+      localId: "draft-video-transporting",
       kind: "video",
       attachmentId: "",
-      previewUrl: "blob:http://test.local/draft-video-uploading",
+      previewUrl: "blob:http://test.local/draft-video-transporting",
       width: 1280,
       height: 720,
-      status: "uploading",
+      status: "transporting",
       fileName: "demo.mp4",
       errorCode: "",
     });
@@ -1610,7 +1631,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       previewUrl: "blob:http://test.local/draft-uploading-enter",
       width: 120,
       height: 90,
-      status: "uploading",
+      status: "transporting",
       fileName: "demo.png",
       errorCode: "",
     });

@@ -11,7 +11,13 @@ export interface 媒体附件草稿 {
   previewUrl: string;
   width: number;
   height: number;
-  status: "uploading" | "ready" | "failed";
+  /**
+   * 草稿状态只表达发送区本地体验态，不替后端裁决 ready 真相：
+   * 1. transporting: 字节仍在 Tus/Rustus 传输；
+   * 2. processing: 字节已传完，正在等 complete 升级成业务 ready；
+   * 3. ready / failed: 仍然保持原有终态语义。
+   */
+  status: "transporting" | "processing" | "ready" | "failed";
   fileName: string;
   errorCode: string;
   /**

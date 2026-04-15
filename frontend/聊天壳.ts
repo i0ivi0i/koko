@@ -1051,8 +1051,10 @@ export class 聊天壳 extends LitElement {
                         >
                           ${draft.status === "ready"
                             ? "可发送"
-                            : draft.status === "uploading"
+                            : draft.status === "transporting"
                               ? "上传中"
+                              : draft.status === "processing"
+                                ? "处理中"
                               : 派生媒体草稿失败文案(draft.errorCode)}
                         </div>
                       </div>

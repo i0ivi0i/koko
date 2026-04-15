@@ -29,7 +29,13 @@ describe("媒体草稿", () => {
   });
 
   it("提取可发送媒体附件标识 遇到未 ready 草稿时返回 null", () => {
-    const drafts = [创建草稿({ status: "uploading" })];
+    const drafts = [创建草稿({ status: "transporting" })];
+
+    expect(提取可发送媒体附件标识(drafts)).toBeNull();
+  });
+
+  it("提取可发送媒体附件标识 遇到 processing 草稿时返回 null", () => {
+    const drafts = [创建草稿({ status: "processing" })];
 
     expect(提取可发送媒体附件标识(drafts)).toBeNull();
   });

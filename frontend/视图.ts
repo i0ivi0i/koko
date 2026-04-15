@@ -420,7 +420,8 @@ export function 派生壳级操作台状态(input: {
   composerMediaDrafts?: 媒体附件草稿[];
 }): 壳级操作台状态 {
   const 媒体草稿列表 = input.composerMediaDrafts ?? [];
-  const 上传中的媒体数 = 媒体草稿列表.filter((draft) => draft.status === "uploading").length;
+  const 运输中的媒体数 = 媒体草稿列表.filter((draft) => draft.status === "transporting").length;
+  const 处理中的媒体数 = 媒体草稿列表.filter((draft) => draft.status === "processing").length;
   const 失败媒体数 = 媒体草稿列表.filter((draft) => draft.status === "failed").length;
   const baseState = {
     statusText: input.statusText,
@@ -454,8 +455,9 @@ export function 派生壳级操作台状态(input: {
     /**
      * 发送区的禁用理由必须和按钮状态同源派生：
      * 1. 先看失败媒体草稿，因为这是用户最需要处理的阻塞项；
-     * 2. 再看仍在上传中的媒体草稿；
-     * 3. 最后才回到房间普通状态文案。
+     * 2. 再看仍在传字节的媒体草稿；
+     * 3. 再看已经传完、但仍在等后端 complete 的媒体草稿；
+     * 4. 最后才回到房间普通状态文案。
      *
      * 这样 Enter 提交和按钮点击至少会看到同一份可见原因，
      * 不再出现“按钮看起来能点，但命令层 silent return”的体验落差。
@@ -463,11 +465,13 @@ export function 派生壳级操作台状态(input: {
     const statusText =
       失败媒体数 > 0
         ? `${失败媒体数} 个媒体附件上传失败，请重试或删除`
-        : 上传中的媒体数 > 0
-          ? `正在上传 ${上传中的媒体数} 个媒体附件`
+        : 运输中的媒体数 > 0
+          ? `正在上传 ${运输中的媒体数} 个媒体附件`
+          : 处理中的媒体数 > 0
+            ? `正在处理 ${处理中的媒体数} 个媒体附件`
           : input.statusText;
     const statusAttention = 失败媒体数 > 0 || Boolean(input.statusAttention);
-    const hasBlockingDraft = 上传中的媒体数 > 0 || 失败媒体数 > 0;
+    const hasBlockingDraft = 运输中的媒体数 > 0 || 处理中的媒体数 > 0 || 失败媒体数 > 0;
     return {
       mode: "message",
       ...baseState,
