@@ -1491,9 +1491,9 @@
       "label": "\u65ad\u8a00\u5a92\u4f53\u51c6\u5907\u7ed3\u679c\u662fTus\u5951\u7ea6()",
       "file_type": "code",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L64",
+      "source_location": "L100",
       "id": "tus",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u6784\u9020\u5a92\u4f53\u4e0a\u4f20Meta()",
@@ -1837,7 +1837,7 @@
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
       "source_location": "L58",
       "id": "prepare_media_upload",
-      "community": 1
+      "community": 0
     },
     {
       "label": "complete_media_upload()",
@@ -1861,7 +1861,7 @@
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
       "source_location": "L1067",
       "id": "url",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u5199\u5165rustus\u6d4b\u8bd5\u6587\u4ef6()",
@@ -1869,7 +1869,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
       "source_location": "L18",
       "id": "rustus",
-      "community": 1
+      "community": 0
     },
     {
       "label": "\u7b49\u5f85complete\u6240\u9700\u8fd0\u8f93\u56de\u6267()",
@@ -1891,7 +1891,7 @@
       "label": "\u6700\u5c0fmp4\u5b57\u8282()",
       "file_type": "code",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L278",
+      "source_location": "L314",
       "id": "mp4",
       "community": 1
     },
@@ -2299,7 +2299,7 @@
       "label": "\u63d2\u5165ready\u56fe\u7247\u9644\u4ef6\u8bb0\u5f55()",
       "file_type": "code",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L137",
+      "source_location": "L173",
       "id": "ready",
       "community": 1
     },
@@ -2512,10 +2512,26 @@
       "community": 1
     },
     {
-      "label": "post_finish\u7a0d\u540e\u5230\u8fbe\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u7b49\u5f85\u56de\u6267\u5e76\u6210\u529f()",
+      "label": "complete\u5728\u53ea\u6709partial\u6ca1\u6709final\u65f6\u4f1a\u8fd4\u56deattachment_not_ready()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
       "source_location": "L711",
+      "id": "complete_partial_final_attachment_not_ready",
+      "community": 1
+    },
+    {
+      "label": "complete\u4f1a\u4f18\u5148\u6d88\u8d39\u5f53\u524d\u4f1a\u8bdd\u7684final\u56de\u6267\u800c\u4e0d\u662fsingle\u56de\u6267()",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
+      "source_location": "L810",
+      "id": "complete_final_single",
+      "community": 1
+    },
+    {
+      "label": "post_finish\u7a0d\u540e\u5230\u8fbe\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u7b49\u5f85\u56de\u6267\u5e76\u6210\u529f()",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
+      "source_location": "L940",
       "id": "post_finish_complete",
       "community": 1
     },
@@ -2523,7 +2539,7 @@
       "label": "complete\u89c6\u9891\u4e0a\u4f20\u4f1a\u5199\u5165\u9759\u6001\u5c01\u9762\u5e76\u8fd4\u56depreview_asset()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
-      "source_location": "L822",
+      "source_location": "L1051",
       "id": "complete_preview_asset",
       "community": 1
     },
@@ -2531,7 +2547,7 @@
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u9047\u5230\u975e\u56fe\u7247\u539f\u56fe\u4f1a\u8fd4\u56deattachment_type_not_allowed()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
-      "source_location": "L1132",
+      "source_location": "L1361",
       "id": "complete_attachment_type_not_allowed",
       "community": 1
     },
@@ -2808,10 +2824,18 @@
       "community": 7
     },
     {
+      "label": "\u6784\u9020rustus_concatenation_hook\u8bf7\u6c42\u4f53()",
+      "file_type": "code",
+      "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
+      "source_location": "L66",
+      "id": "rustus_concatenation_hook",
+      "community": 7
+    },
+    {
       "label": "\u6700\u5c0fpng\u5b57\u8282()",
       "file_type": "code",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L266",
+      "source_location": "L302",
       "id": "png",
       "community": 1
     }
@@ -4525,7 +4549,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L251",
+      "source_location": "L287",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "",
@@ -5977,7 +6001,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L64",
+      "source_location": "L100",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "tus",
@@ -6247,6 +6271,18 @@
       "_tgt": "rustus_hook",
       "source": "rustus_hook",
       "target": "tests_rs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
+      "source_location": "L79",
+      "weight": 1.0,
+      "_src": "rustus_concatenation_hook",
+      "_tgt": "rustus_hook",
+      "source": "rustus_hook",
+      "target": "rustus_concatenation_hook",
       "confidence_score": 1.0
     },
     {
@@ -7141,7 +7177,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L278",
+      "source_location": "L314",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "mp4",
@@ -7153,7 +7189,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L221",
+      "source_location": "L257",
       "weight": 1.0,
       "_src": "ready",
       "_tgt": "mp4",
@@ -7333,7 +7369,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L191",
+      "source_location": "L227",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "ready",
@@ -7588,6 +7624,30 @@
       "source_location": "L711",
       "weight": 1.0,
       "_src": "tests_rs",
+      "_tgt": "complete_partial_final_attachment_not_ready",
+      "source": "tests_rs",
+      "target": "complete_partial_final_attachment_not_ready",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
+      "source_location": "L810",
+      "weight": 1.0,
+      "_src": "tests_rs",
+      "_tgt": "complete_final_single",
+      "source": "tests_rs",
+      "target": "complete_final_single",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
+      "source_location": "L940",
+      "weight": 1.0,
+      "_src": "tests_rs",
       "_tgt": "post_finish_complete",
       "source": "tests_rs",
       "target": "post_finish_complete",
@@ -7597,7 +7657,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
-      "source_location": "L822",
+      "source_location": "L1051",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "complete_preview_asset",
@@ -7609,7 +7669,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5.rs",
-      "source_location": "L1132",
+      "source_location": "L1361",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "complete_attachment_type_not_allowed",
@@ -7873,7 +7933,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
-      "source_location": "L266",
+      "source_location": "L66",
+      "weight": 1.0,
+      "_src": "tests_rs",
+      "_tgt": "rustus_concatenation_hook",
+      "source": "tests_rs",
+      "target": "rustus_concatenation_hook",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53.rs",
+      "source_location": "L302",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "png",

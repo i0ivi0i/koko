@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-16)
 
 ## Corpus Check
-- 162 files · ~201,109 words
+- 162 files · ~202,021 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 350 nodes · 427 edges · 28 communities detected
+- 353 nodes · 431 edges · 28 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -47,9 +47,9 @@
 5. `假Socket` - 5 edges
 6. `handle_rustus_hook_pre_create()` - 5 edges
 7. `handle_rustus_hook_post_finish()` - 5 edges
-8. `parse_attachment_content_query()` - 5 edges
-9. `Pg仓储` - 5 edges
-10. `handle_rustus_hook()` - 4 edges
+8. `构造rustus_hook请求体()` - 5 edges
+9. `parse_attachment_content_query()` - 5 edges
+10. `Pg仓储` - 5 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `dispatchScroll()` --calls--> `dispatch()`  [EXTRACTED]
@@ -67,11 +67,11 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.04
-Nodes (38): AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值() (+30 more)
+Nodes (42): AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值() (+34 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.04
-Nodes (7): 最小mp4字节(), prepare_media_upload(), 插入ready图片附件记录(), 写入rustus测试文件(), 断言媒体准备结果是Tus契约(), 包装url主机(), 会话所属匿名身份返回内部uuid而不是兼容旧串()
+Nodes (3): 最小mp4字节(), 插入ready图片附件记录(), 会话所属匿名身份返回内部uuid而不是兼容旧串()
 
 ### Community 2 - "Community 2"
 Cohesion: 0.06
@@ -94,8 +94,8 @@ Cohesion: 0.12
 Nodes (1): HttpRealtime传输
 
 ### Community 7 - "Community 7"
-Cohesion: 0.21
-Nodes (9): 构造rustus_hook请求体(), handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus_hook_pre_create(), 判定rustus运输角色(), 读取rustus_hook名称(), 读取可选rustus_metadata字段(), RustusHookBody (+1 more)
+Cohesion: 0.19
+Nodes (10): 构造rustus_concatenation_hook请求体(), 构造rustus_hook请求体(), handle_rustus_hook(), handle_rustus_hook_post_finish(), handle_rustus_hook_pre_create(), 判定rustus运输角色(), 读取rustus_hook名称(), 读取可选rustus_metadata字段() (+2 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.14
@@ -209,9 +209,9 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 6` to `Community 2`?**
-  _High betweenness centrality (0.100) - this node is a cross-community bridge._
-- **Why does `断言媒体准备结果是Tus契约()` connect `Community 1` to `Community 0`, `Community 2`, `Community 3`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
+  _High betweenness centrality (0.099) - this node is a cross-community bridge._
+- **Why does `断言媒体准备结果是Tus契约()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`?**
+  _High betweenness centrality (0.046) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`?**
   _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **What connects `frontend/房间内核.ts`, `文本布局`, `文本布局测试` to the rest of the system?**
