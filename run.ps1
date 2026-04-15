@@ -361,6 +361,21 @@ try {
         $rustusServerWorkers = "4"
     }
     $rustusTusExtensions = [Environment]::GetEnvironmentVariable("RUSTUS_TUS_EXTENSIONS")
+    if ([string]::IsNullOrWhiteSpace($rustusTusExtensions)) {
+        # 官方文档当前写的是“默认启用全部扩展”，但这里仍然把运行时依赖显式钉住：
+        # 1. 大视频单文件高吞吐现在已经依赖 Concatenation，不该再把它藏在 sidecar 默认里；
+        # 2. `creation-with-upload` 也要一起保留，避免未来有人只顾着打开 concatenation 却顺手砍掉一次请求内完成上传的能力；
+        # 3. 显式默认值能把“我们的上传主链到底依赖哪些 Tus 扩展”直接暴露给维护者和启动检查脚本。
+        $rustusTusExtensions = "getting,creation,termination,creation-with-upload,creation-defer-length,concatenation,checksum"
+    }
+    $rustusRemoveParts = [Environment]::GetEnvironmentVariable("RUSTUS_REMOVE_PARTS")
+    if ([string]::IsNullOrWhiteSpace($rustusRemoveParts)) {
+        # Concatenation 打通后，partial 残留不再有长期保留价值：
+        # - final upload 才是当前会话的 canonical transport；
+        # - partial 文件只是运输中间态；
+        # - 默认打开 remove-parts，尽量把“成功合并后的碎片垃圾”交给成熟 sidecar 直接收掉。
+        $rustusRemoveParts = "true"
+    }
     $rustusBehindProxy = [Environment]::GetEnvironmentVariable("RUSTUS_BEHIND_PROXY")
     $rustusHooksHttpProxyHeaders = [Environment]::GetEnvironmentVariable("RUSTUS_HOOKS_HTTP_PROXY_HEADERS")
     if ([string]::IsNullOrWhiteSpace($rustusHooksHttpProxyHeaders)) {
@@ -405,7 +420,8 @@ try {
     # 5. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
     # 6. 额外吞吐参数只做“显式接线，不篡改默认”：
     #    - workers 默认直接提到 4，避免开发态继续吃官方保守默认；
-    #    - tus-extensions 只有在环境变量给值时才覆盖官方默认；
+    #    - tus-extensions 现在显式钉住 concatenation 所需集合，避免运行时只靠官方默认兜底；
+    #    - remove-parts 默认开启，让 final concat 成功后的 partial 残留优先由 Rustus 自己回收；
     #    - behind-proxy 仍然保留 flag 语义，不把布尔配置伪装成字符串参数；
     #    - `Authorization,X-Request-ID` 是默认例外，因为 hook 诊断链必须拿到这两个头才能串起浏览器与主服务日志。
     $rustusArgumentList = @(
@@ -427,6 +443,9 @@ try {
     }
     if (-not [string]::IsNullOrWhiteSpace($rustusTusExtensions)) {
         $rustusArgumentList += @("--tus-extensions", $rustusTusExtensions.Trim())
+    }
+    if (Test-TruthyEnvironmentFlag $rustusRemoveParts) {
+        $rustusArgumentList += @("--remove-parts")
     }
     if (Test-TruthyEnvironmentFlag $rustusBehindProxy) {
         $rustusArgumentList += @("--behind-proxy")

@@ -369,6 +369,87 @@ async fn rustus_pre_create_partial在同会话下未来应当放行但当前还�
 
 #[tokio::test]
 #[serial]
+async fn rustus_pre_create_final_concat在同会话下会放行() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({
+            "device_anonymous_token": format!("rustus-pre-create-final-{uniq}")
+        })),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "future-final.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 96
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id");
+    let authorization = 提取媒体上传授权头(&prepare_body);
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_concatenation_hook请求体(
+            &format!("final-upload-{attachment_id}"),
+            attachment_id,
+            upload_session_id,
+            "future-final.mp4",
+            "video/mp4",
+            96,
+            0,
+            None,
+            false,
+            true,
+            Some(vec![
+                "http://127.0.0.1:7070/files/partial-1",
+                "http://127.0.0.1:7070/files/partial-2",
+            ]),
+        )),
+        &[
+            ("Hook-Name", "pre-create"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+}
+
+#[tokio::test]
+#[serial]
 async fn rustus_post_finish会登记上传回执() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -463,6 +544,115 @@ async fn rustus_post_finish会登记上传回执() {
     assert_eq!(storage_locator.as_deref(), Some(temp_file.as_str()));
     assert_eq!(byte_size, Some(68));
     assert!(is_finished, "post-finish 必须把 finished 回执落库");
+}
+
+#[tokio::test]
+#[serial]
+async fn rustus_post_finish_partial只登记partial_transport() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({ "device_anonymous_token": format!("rustus-post-finish-partial-{uniq}") })),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "partial-only.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 96
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"].as_str().expect("attachment_id");
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id");
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let temp_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        attachment_id,
+        "partial-only.part",
+        &[1, 2, 3, 4],
+    )
+    .expect("应能写入 partial 测试文件");
+
+    let (status, body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_concatenation_hook请求体(
+            &format!("partial-upload-{attachment_id}-1"),
+            attachment_id,
+            upload_session_id,
+            "partial-only.mp4",
+            "video/mp4",
+            48,
+            48,
+            Some(temp_file.as_str()),
+            true,
+            false,
+            None,
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let partial_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT
+         FROM attachment_upload_transports
+         WHERE upload_session_id = $1
+           AND transport_role = 'partial'",
+    )
+    .bind(upload_session_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询 partial transport 记录");
+    let final_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT
+         FROM attachment_upload_transports
+         WHERE upload_session_id = $1
+           AND transport_role = 'final'",
+    )
+    .bind(upload_session_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询 final transport 记录");
+    assert_eq!(partial_count, 1);
+    assert_eq!(final_count, 0);
 }
 
 #[tokio::test]

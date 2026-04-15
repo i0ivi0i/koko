@@ -708,6 +708,235 @@ async fn 没有上传回执时complete媒体上传会返回attachment_not_ready(
 
 #[tokio::test]
 #[serial]
+async fn complete在只有partial没有final时会返回attachment_not_ready() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("complete-partial-only-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let video_bytes = 最小mp4字节();
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "partial-only.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": video_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let partial_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "partial-only.part",
+        &video_bytes[..(video_bytes.len() / 2)],
+    )
+    .expect("应能写入 partial 视频文件");
+
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_concatenation_hook请求体(
+            &format!("partial-only-{attachment_id}-1"),
+            &attachment_id,
+            &upload_session_id,
+            "partial-only.mp4",
+            "video/mp4",
+            (video_bytes.len() / 2) as i64,
+            (video_bytes.len() / 2) as i64,
+            Some(partial_file.as_str()),
+            true,
+            false,
+            None,
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+
+    let (complete_status, complete_body) = send_json(
+        app,
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(complete_status, StatusCode::CONFLICT, "{complete_body:?}");
+    assert_eq!(complete_body["code"].as_str(), Some("attachment_not_ready"));
+}
+
+#[tokio::test]
+#[serial]
+async fn complete会优先消费当前会话的final回执而不是single回执() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let rustus_data_dir = state.rustus_data_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("complete-final-preferred-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "final-preferred.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let wrong_single_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "final-preferred-single.bin",
+        b"not-an-image",
+    )
+    .expect("应能写入 single 假文件");
+    let final_png_file = 写入rustus测试文件(
+        &rustus_data_dir,
+        &attachment_id,
+        "final-preferred-final.png",
+        &最小png字节(),
+    )
+    .expect("应能写入 final png 文件");
+
+    let (single_hook_status, single_hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_hook请求体(
+            &format!("single-{attachment_id}"),
+            &attachment_id,
+            "final-preferred.png",
+            "image/png",
+            68,
+            68,
+            Some(wrong_single_file.as_str()),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(single_hook_status, StatusCode::NO_CONTENT, "{single_hook_body:?}");
+
+    let (final_hook_status, final_hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(构造rustus_concatenation_hook请求体(
+            &format!("final-{attachment_id}"),
+            &attachment_id,
+            &upload_session_id,
+            "final-preferred.png",
+            "image/png",
+            68,
+            68,
+            Some(final_png_file.as_str()),
+            false,
+            true,
+            Some(vec![
+                "http://127.0.0.1:7070/files/part-1",
+                "http://127.0.0.1:7070/files/part-2",
+            ]),
+        )),
+        &[
+            ("Hook-Name", "post-finish"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(final_hook_status, StatusCode::NO_CONTENT, "{final_hook_body:?}");
+
+    let (complete_status, complete_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({
+            "session_id": session_id
+        })),
+        &[],
+    )
+    .await;
+
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    assert_eq!(complete_body["status"].as_str(), Some("ready"));
+}
+
+#[tokio::test]
+#[serial]
 async fn post_finish稍后到达时complete媒体上传会等待回执并成功() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

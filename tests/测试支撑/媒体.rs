@@ -58,6 +58,42 @@ pub fn 构造rustus_hook请求体(
     })
 }
 
+/// Concatenation 场景下，测试需要显式表达 partial / final 与 upload_session_id。
+/// 这里继续保持“最小 fixture”原则：
+/// 1. 默认仍沿用基础 hook 负载，避免和真实 shell 判断脱节；
+/// 2. 只有角色布尔位、parts 和 upload_session_id 这些 Concatenation 必需字段才额外注入；
+/// 3. fixture 负责表达协议事实，不替业务层做任何裁决。
+pub fn 构造rustus_concatenation_hook请求体(
+    upload_id: &str,
+    attachment_id: &str,
+    upload_session_id: &str,
+    file_name: &str,
+    mime_type: &str,
+    length: i64,
+    offset: i64,
+    storage_locator: Option<&str>,
+    is_partial: bool,
+    is_final: bool,
+    parts: Option<Vec<&str>>,
+) -> Value {
+    let mut body = 构造rustus_hook请求体(
+        upload_id,
+        attachment_id,
+        file_name,
+        mime_type,
+        length,
+        offset,
+        storage_locator,
+    );
+    body["upload"]["is_partial"] = Value::Bool(is_partial);
+    body["upload"]["is_final"] = Value::Bool(is_final);
+    body["upload"]["parts"] = parts
+        .map(|items| Value::Array(items.into_iter().map(|value| Value::String(value.to_string())).collect()))
+        .unwrap_or(Value::Null);
+    body["upload"]["metadata"]["upload_session_id"] = Value::String(upload_session_id.to_string());
+    body
+}
+
 /// 统一校验媒体 prepare 的 Tus 契约，避免图片/视频在迁移过程中各自漂移出第二套字段约定。
 /// 这里同时锁住“必须给出 Tus 所需元数据”和“旧 PUT 字段必须下线”两个边界。
 #[allow(non_snake_case)]
