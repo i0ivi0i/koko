@@ -242,4 +242,32 @@ describe("Video.js 播放器壳", () => {
     expect(createPlayer).toHaveBeenCalledTimes(1);
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
+
+  it("默认根节点只从挂载盒子继承宽度，不在 provider 上再养第二套尺寸真相", async () => {
+    const mountTarget = document.createElement("div");
+    document.body.append(mountTarget);
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-layout-1",
+        posterSrc: "http://media.local/poster-layout-1.jpg",
+        width: 1280,
+        height: 720,
+      },
+      {
+        mountTarget,
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+
+    const provider = mountTarget.querySelector<HTMLElement>("video-player[data-player-shell='videojs']");
+    expect(provider).not.toBeNull();
+    expect(provider?.style.width).toBe("100%");
+    expect(provider?.style.maxWidth).toBe("100%");
+    expect(shell.读取容器元素().style.width).toBe("100%");
+    expect(shell.读取容器元素().style.aspectRatio).toBe("1280 / 720");
+
+    shell.destroy();
+  });
 });

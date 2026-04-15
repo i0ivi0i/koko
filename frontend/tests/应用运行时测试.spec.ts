@@ -87,4 +87,26 @@ describe("应用运行时", () => {
       signal,
     });
   });
+
+  it("自动播候选观察结果也必须先进入应用运行时，再翻成内核 command", () => {
+    const deps = 创建运行时依赖();
+    const runtime = 创建应用运行时(deps);
+    const candidates = [
+      {
+        attachmentId: "att-video-1",
+        visibilityRatio: 0.78,
+        distanceToViewportCenter: 18,
+      },
+    ];
+
+    runtime.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates,
+    });
+
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates,
+    });
+  });
 });

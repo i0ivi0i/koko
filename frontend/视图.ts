@@ -263,7 +263,13 @@ function 派生媒体附件展示项列表(
           displayWidth,
           displayHeight,
           originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
-          posterSrc: null,
+          /**
+           * 视频消息流默认态只吃后端权威封面：
+           * 1. 让 snapshot 和 locator 共用同一份 preview 真相；
+           * 2. 不再让壳层临时抠首帧、长第二套预览链；
+           * 3. 正式播放仍然继续走唯一媒体主链。
+           */
+          posterSrc: attachment.preview_asset?.still_url ?? null,
         };
       }
       return {

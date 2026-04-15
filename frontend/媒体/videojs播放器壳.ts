@@ -95,7 +95,12 @@ const 创建默认播放器根 = (
   const video = document.createElement("video") as 可原生全屏视频元素;
 
   provider.dataset.playerShell = "videojs";
-  provider.style.cssText = "display:block;width:min(100%,1120px);max-width:100%;";
+  /**
+   * 尺寸真相只允许存在于 mountTarget：
+   * provider 自己只负责占满父盒子，不再偷偷带第二套宽度公式，
+   * 这样查看器、Video.js 壳和真实 video 就不会各算各的尺寸。
+   */
+  provider.style.cssText = "display:block;width:100%;max-width:100%;";
   /**
    * 官方文档说 `slot="media"` 已不是必需，但显式声明能让当前测试环境和部分浏览器
    * 更稳定地把真实媒体元素投影进 skin 内的 container。
@@ -104,7 +109,7 @@ const 创建默认播放器根 = (
   video.setAttribute("preload", "metadata");
   video.autoplay = true;
   video.playsInline = true;
-  video.style.cssText = "background:#000;";
+  video.style.cssText = "display:block;width:100%;height:100%;background:#000;";
 
   provider.append(skin);
   skin.append(video);
@@ -112,7 +117,7 @@ const 创建默认播放器根 = (
   const container =
     (skin.shadowRoot?.querySelector("media-container") as 可请求全屏容器 | null) ?? provider;
   container.style.cssText =
-    `width:100%;max-height:calc(100vh - 40px);aspect-ratio:${读取纵横比(source)};`;
+    `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);aspect-ratio:${读取纵横比(source)};`;
 
   return {
     provider,

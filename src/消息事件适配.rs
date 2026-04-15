@@ -43,18 +43,26 @@ fn 已校验附件转契约快照(
 ) -> contract::附件快照 {
     match 附件 {
         domain::message::已校验附件引用::图片 {
-            附件标识, 宽, 高
+            附件标识,
+            宽,
+            高,
+            有预览图,
         } => contract::附件快照::图片(contract::图片附件快照 {
             附件标识: 附件标识.clone(),
             宽: *宽,
             高: *高,
+            有预览图: *有预览图,
         }),
         domain::message::已校验附件引用::视频 {
-            附件标识, 宽, 高
+            附件标识,
+            宽,
+            高,
+            有预览图,
         } => contract::附件快照::视频(contract::视频附件快照 {
             附件标识: 附件标识.clone(),
             宽: *宽,
             高: *高,
+            有预览图: *有预览图,
         }),
     }
 }
@@ -70,7 +78,13 @@ async fn 查询消息附件映射_异步(
     }
 
     let rows = sqlx::query(
-        "SELECT mar.message_id, mar.sort_order, a.attachment_id, a.kind, a.width, a.height \
+        "SELECT mar.message_id,
+                mar.sort_order,
+                a.attachment_id,
+                a.kind,
+                a.width,
+                a.height,
+                a.thumbnail_storage_key IS NOT NULL AS has_preview_asset \
          FROM message_attachment_refs mar \
          JOIN attachments a ON a.id = mar.attachment_id \
          WHERE mar.message_id = ANY($1) \
@@ -94,6 +108,7 @@ async fn 查询消息附件映射_异步(
                 高: row
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
+                有预览图: row.get("has_preview_asset"),
             }),
             "video" => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: row.get("attachment_id"),
@@ -103,6 +118,7 @@ async fn 查询消息附件映射_异步(
                 高: row
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
+                有预览图: row.get("has_preview_asset"),
             }),
             _ => return Err(contract::错误码::系统错误),
         };

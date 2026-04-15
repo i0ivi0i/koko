@@ -378,11 +378,19 @@ const 创建默认VideoJs播放器层 = async (
   const closeButton = document.createElement("button");
 
   overlay.dataset.mediaViewerMode = "video";
+  mount.dataset.mediaViewerMount = "video";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "视频查看器");
   overlay.style.cssText =
     "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+  /**
+   * 查看器必须先给播放器壳一个明确的挂载盒子：
+   * 1. 尺寸上限属于查看器 overlay，本身就是 shell 的职责；
+   * 2. provider/container/video 之后都只跟这一个盒子算宽高；
+   * 3. 避免父盒子是 auto/0 宽时，下面一整串媒体节点一起塌成 0x0。
+   */
+  mount.style.cssText = "display:block;width:100%;max-width:1120px;min-width:0;";
 
   closeButton.type = "button";
   closeButton.textContent = "关闭";

@@ -148,6 +148,59 @@ describe("传输", () => {
     expect(snapshot.has_more_before).toBe(true);
   });
 
+  it("loadRoomSnapshot 会把视频附件 preview_asset.still_url 收口成绝对地址", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          room_id: "r-1",
+          latest_event_position: 9,
+          last_read_event_position: 4,
+          first_unread_event_position: 5,
+          has_more_before: false,
+          snapshot_messages: [
+            {
+              type: "message_created",
+              room_id: "r-1",
+              message_id: "m-1",
+              client_message_id: "c-1",
+              sender_session_id: "s-1",
+              sender_display_alias: "暴躁的企鹅",
+              text: "",
+              body: "",
+              event_position: 9,
+              attachments: [
+                {
+                  kind: "video",
+                  attachment_id: "att-snapshot-video-1",
+                  width: 1080,
+                  height: 1920,
+                  preview_asset: {
+                    still_url:
+                      "/api/attachments/att-snapshot-video-1/content?session_id=s-1&variant=thumbnail",
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const snapshot = await transport.loadRoomSnapshot("r-1", "s-1");
+    const attachment = snapshot.snapshot_messages[0]?.attachments?.[0] as
+      | { preview_asset?: { still_url?: string } }
+      | undefined;
+
+    expect(attachment?.preview_asset?.still_url).toBe(
+      "http://localhost:3000/api/attachments/att-snapshot-video-1/content?session_id=s-1&variant=thumbnail"
+    );
+  });
+
   it("updateRoomReadAnchor 会以 POST 发送 session_id 和 last_read_event_position", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("{}", {
@@ -373,6 +426,10 @@ describe("传输", () => {
           status: "ready",
           original_url: "/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
           thumbnail_url: "/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+          preview_asset: {
+            still_url:
+              "/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+          },
           distribution: {
             content_id: "content_att-locator-1",
             content_hash: "hash-att-locator-1",
@@ -429,6 +486,10 @@ describe("传输", () => {
         "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
       thumbnail_url:
         "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+      preview_asset: {
+        still_url:
+          "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
+      },
       distribution: {
         content_id: "content_att-locator-1",
         content_hash: "hash-att-locator-1",

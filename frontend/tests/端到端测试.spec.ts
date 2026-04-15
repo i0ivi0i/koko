@@ -391,14 +391,18 @@ describe("前后台壳端到端冒烟", () => {
           sender_display_alias: "冷静的水獭",
           text: "",
           body: "",
-          attachments: [
-            {
-              kind: "video",
-              attachment_id: "att-video-e2e",
-              width: 1280,
-              height: 720,
-            },
-          ],
+           attachments: [
+             {
+               kind: "video",
+               attachment_id: "att-video-e2e",
+               width: 1280,
+               height: 720,
+               preview_asset: {
+                 still_url:
+                   "/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=thumbnail",
+               },
+             },
+           ],
           event_position: 1,
         },
       ],
@@ -424,13 +428,19 @@ describe("前后台壳端到端冒烟", () => {
     const previewTrigger = chat.shadowRoot!.querySelector(
       'button.message-video-preview-trigger[data-attachment-id="att-video-e2e"]'
     ) as HTMLButtonElement | null;
-    const previewVideo = chat.shadowRoot!.querySelector(
-      'video.message-video-preview[data-attachment-id="att-video-e2e"]'
-    ) as HTMLVideoElement | null;
+    const previewPoster = chat.shadowRoot!.querySelector(
+      'img.message-video-poster[data-attachment-id="att-video-e2e"]'
+    ) as HTMLImageElement | null;
     expect(previewTrigger).not.toBeNull();
-    expect(previewVideo).not.toBeNull();
-    expect(previewVideo?.getAttribute("src")).toBeNull();
-    expect(previewVideo?.getAttribute("poster")).toContain("data:image/svg+xml");
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toContain(
+      "/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=thumbnail"
+    );
+    expect(
+      chat.shadowRoot!.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-e2e"]'
+      )
+    ).toBeNull();
 
     previewTrigger?.click();
     await 等待组件稳定(chat);
@@ -443,7 +453,8 @@ describe("前后台壳端到端冒烟", () => {
             attachmentId: "att-video-e2e",
             kind: "video",
             src: "http://test.local/api/media/att-video-e2e/stream/hls/master.m3u8?session_id=s-e2e",
-            posterSrc: null,
+            posterSrc:
+              "/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=thumbnail",
           }),
         ],
       })

@@ -511,7 +511,7 @@ export class 聊天壳 extends LitElement {
       outline-offset: 3px;
     }
 
-    .message-video-preview {
+    .message-video-poster {
       position: relative;
       z-index: 0;
       display: block;
@@ -1304,9 +1304,11 @@ export class 聊天壳 extends LitElement {
               消息文本布局环境,
               聊天快照.media.contentUrlByAttachmentId
              )}
-            .mediaPlaybackByAttachmentId=${聊天快照.media.playbackByAttachmentId}
-            .historyHint=${historyHint}
-            .jumpToLatestLabel=${jumpToLatestLabel}
+             .mediaPlaybackByAttachmentId=${聊天快照.media.playbackByAttachmentId}
+             .inlineAutoplayOwnerAttachmentId=${聊天快照.media.inlineAutoplayOwnerAttachmentId}
+             .inlineAutoplayPlaybackByAttachmentId=${聊天快照.media.inlineAutoplayPlaybackByAttachmentId}
+             .historyHint=${historyHint}
+             .jumpToLatestLabel=${jumpToLatestLabel}
             @room-scroll-intent=${() =>
               this.应用运行时.dispatch({ type: "ROOM_SCROLL_INTENT" })}
             @room-scroll=${(event: Event) => {
@@ -1316,6 +1318,20 @@ export class 聊天壳 extends LitElement {
               this.应用运行时.dispatch({
                 type: "ROOM_SCROLL_OBSERVED",
                 scrollContainer: target,
+              });
+            }}
+            @room-inline-autoplay-observed=${(
+              event: CustomEvent<{
+                candidates: Array<{
+                  attachmentId: string;
+                  visibilityRatio: number;
+                  distanceToViewportCenter: number;
+                }>;
+              }>
+            ) => {
+              this.应用运行时.dispatch({
+                type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+                candidates: event.detail.candidates,
               });
             }}
             @jump-to-latest=${() =>

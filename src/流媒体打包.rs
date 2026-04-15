@@ -21,7 +21,16 @@ struct 流媒体打包文件 {
 pub(super) struct 流媒体打包结果 {
     hls主清单相对路径: String,
     dash主清单相对路径: String,
+    静态封面本地路径: PathBuf,
     文件列表: Vec<流媒体打包文件>,
+}
+
+/// 视频打包上传返回两类稳定事实：
+/// 1. 正式流媒体清单写入请求；
+/// 2. 与附件同锚点的静态封面存储键。
+pub(super) struct 流媒体打包上传结果 {
+    pub 清单写入请求: usecase::流媒体清单写入请求,
+    pub 静态封面存储键: String,
 }
 
 /// 受控流媒体地址是浏览器唯一允许看到的正式播放入口。
@@ -203,6 +212,7 @@ pub(super) fn 生成流媒体打包产物(
     })?;
 
     let 视频轨道文件 = workdir.join("video.mp4");
+    let 静态封面文件 = workdir.join("thumbnail.png");
     let mut 转码视频 = Command::new(ffmpeg_bin);
     转码视频.args(["-y", "-i"]);
     转码视频.arg(输入文件);
@@ -225,6 +235,18 @@ pub(super) fn 生成流媒体打包产物(
     ]);
     转码视频.arg(视频轨道文件.as_os_str());
     执行外部命令(&mut 转码视频, "FFmpeg 视频转码")?;
+
+    let mut 抽帧命令 = Command::new(ffmpeg_bin);
+    抽帧命令.args(["-y", "-ss", "1", "-i"]);
+    抽帧命令.arg(输入文件);
+    抽帧命令.args([
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=512:-2:force_original_aspect_ratio=decrease",
+    ]);
+    抽帧命令.arg(静态封面文件.as_os_str());
+    执行外部命令(&mut 抽帧命令, "FFmpeg 抽取视频静态封面")?;
 
     let 有音轨 = ffprobe检测首音轨是否存在(ffprobe_bin, 输入文件)?;
     let 音频轨道文件 = workdir.join("audio.mp4");
@@ -273,6 +295,7 @@ pub(super) fn 生成流媒体打包产物(
     Ok(流媒体打包结果 {
         hls主清单相对路径: "hls/master.m3u8".to_string(),
         dash主清单相对路径: "dash/stream.mpd".to_string(),
+        静态封面本地路径: 静态封面文件,
         文件列表,
     })
 }
@@ -282,7 +305,7 @@ pub(super) async fn 上传流媒体打包产物(
     state: &应用状态,
     attachment_id: &str,
     打包结果: 流媒体打包结果,
-) -> Result<usecase::流媒体清单写入请求, (StatusCode, &'static str, String)> {
+) -> Result<流媒体打包上传结果, (StatusCode, &'static str, String)> {
     for file in &打包结果.文件列表 {
         let storage_key = 推导流媒体对象存储键(attachment_id, file.相对路径.as_str());
         let bytes = fs::read(file.本地路径.as_path()).await.map_err(|err| {
@@ -305,16 +328,41 @@ pub(super) async fn 上传流媒体打包产物(
             })?;
     }
 
-    Ok(usecase::流媒体清单写入请求 {
-        附件标识: attachment_id.to_string(),
-        hls主清单存储键: 推导流媒体对象存储键(
-            attachment_id,
-            打包结果.hls主清单相对路径.as_str(),
-        ),
-        dash主清单存储键: 推导流媒体对象存储键(
-            attachment_id,
-            打包结果.dash主清单相对路径.as_str(),
-        ),
+    let 静态封面存储键 = format!("videos/{attachment_id}/thumbnail.png");
+    let 静态封面字节 = fs::read(打包结果.静态封面本地路径.as_path())
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("读取视频静态封面失败: {err}"),
+            )
+        })?;
+    state
+        .attachment_store
+        .put(&ObjectPath::from(静态封面存储键.as_str()), 静态封面字节.into())
+        .await
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("写入视频静态封面失败: {err}"),
+            )
+        })?;
+
+    Ok(流媒体打包上传结果 {
+        清单写入请求: usecase::流媒体清单写入请求 {
+            附件标识: attachment_id.to_string(),
+            hls主清单存储键: 推导流媒体对象存储键(
+                attachment_id,
+                打包结果.hls主清单相对路径.as_str(),
+            ),
+            dash主清单存储键: 推导流媒体对象存储键(
+                attachment_id,
+                打包结果.dash主清单相对路径.as_str(),
+            ),
+        },
+        静态封面存储键,
     })
 }
 

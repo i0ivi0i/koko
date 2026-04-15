@@ -2,8 +2,10 @@ import { io, type Socket } from "socket.io-client";
 import type {
   Blob媒体资产描述,
   Blob媒体变体描述,
+  附件快照,
   匿名身份引导结果,
   增量事件快照,
+  消息事件,
   流媒体资产描述,
   媒体冷源描述,
   媒体资产分发表面,
@@ -11,6 +13,7 @@ import type {
   媒体定位结果,
   媒体上传准备结果,
   媒体种类,
+  预览资源描述,
   阅读推进请求,
   房间历史页,
   房间快照,
@@ -139,6 +142,56 @@ export class HttpRealtime传输 implements 前端传输端口 {
     };
   }
 
+  private 解析预览资源(preview: 预览资源描述 | null | undefined): 预览资源描述 | null {
+    if (!preview) {
+      return null;
+    }
+    return {
+      ...preview,
+      still_url: this.解析绝对地址(preview.still_url),
+    };
+  }
+
+  private 解析附件快照(attachment: 附件快照): 附件快照 {
+    return {
+      ...attachment,
+      preview_asset: this.解析预览资源(attachment.preview_asset),
+    };
+  }
+
+  private 解析消息事件(event: 消息事件): 消息事件 {
+    const attachments = event.attachments?.map((attachment) => this.解析附件快照(attachment));
+    return {
+      ...event,
+      /**
+       * `消息事件.attachments` 在共享契约里是“可选字段”，不是“必有但值可为 undefined”。
+       * 这里按 contract 原语义投影，避免 exactOptionalPropertyTypes 下长出脏形状。
+       */
+      ...(attachments ? { attachments } : {}),
+    };
+  }
+
+  private 解析房间快照(snapshot: 房间快照): 房间快照 {
+    return {
+      ...snapshot,
+      snapshot_messages: snapshot.snapshot_messages.map((event) => this.解析消息事件(event)),
+    };
+  }
+
+  private 解析增量事件快照(snapshot: 增量事件快照): 增量事件快照 {
+    return {
+      ...snapshot,
+      events: snapshot.events.map((event) => this.解析消息事件(event)),
+    };
+  }
+
+  private 解析房间历史页(page: 房间历史页): 房间历史页 {
+    return {
+      ...page,
+      messages: page.messages.map((event) => this.解析消息事件(event)),
+    };
+  }
+
   private 解析流媒体资产(asset: 流媒体资产描述): 流媒体资产描述 {
     return {
       ...asset,
@@ -169,17 +222,23 @@ export class HttpRealtime传输 implements 前端传输端口 {
   }
 
   private 解析媒体上传结果(result: 媒体附件上传结果): 媒体附件上传结果 {
+    const preview_asset = this.解析预览资源(result.preview_asset);
     if (!result.media_asset) {
-      return result;
+      return {
+        ...result,
+        preview_asset,
+      };
     }
     if (result.media_asset.kind === "blob_image") {
       return {
         ...result,
+        preview_asset,
         media_asset: this.解析Blob媒体资产(result.media_asset),
       };
     }
     return {
       ...result,
+      preview_asset,
       media_asset: this.解析流媒体资产(result.media_asset),
     };
   }
@@ -191,14 +250,18 @@ export class HttpRealtime传输 implements 前端传输端口 {
   }
 
   async joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照> {
-    return this.post("/api/rooms/join-or-create", {
+    const snapshot = await this.post<房间快照>("/api/rooms/join-or-create", {
       session_id: sessionId,
       room_code: roomCode,
     });
+    return this.解析房间快照(snapshot);
   }
 
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
-    return this.get(`/api/rooms/${roomId}/snapshot?session_id=${sessionId}`);
+    const snapshot = await this.get<房间快照>(
+      `/api/rooms/${roomId}/snapshot?session_id=${sessionId}`
+    );
+    return this.解析房间快照(snapshot);
   }
 
   /**
@@ -246,6 +309,7 @@ export class HttpRealtime传输 implements 前端传输端口 {
     return {
       ...locator,
       original_url: this.解析绝对地址(locator.original_url),
+      preview_asset: this.解析预览资源(locator.preview_asset),
       thumbnail_url: locator.thumbnail_url
         ? this.解析绝对地址(locator.thumbnail_url)
         : null,
@@ -303,7 +367,10 @@ export class HttpRealtime传输 implements 前端传输端口 {
     sessionId: string,
     from: number
   ): Promise<增量事件快照> {
-    return this.get(`/api/rooms/${roomId}/events?session_id=${sessionId}&from=${from}`);
+    const snapshot = await this.get<增量事件快照>(
+      `/api/rooms/${roomId}/events?session_id=${sessionId}&from=${from}`
+    );
+    return this.解析增量事件快照(snapshot);
   }
 
   async loadRoomHistory(
@@ -312,9 +379,10 @@ export class HttpRealtime传输 implements 前端传输端口 {
     beforeEventPosition: number,
     limit: number
   ): Promise<房间历史页> {
-    return this.get(
+    const page = await this.get<房间历史页>(
       `/api/rooms/${roomId}/history?session_id=${sessionId}&before_event_position=${beforeEventPosition}&limit=${limit}`
     );
+    return this.解析房间历史页(page);
   }
 
   async loadAdminOverview(token: string): Promise<后台概览> {

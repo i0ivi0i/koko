@@ -35,6 +35,9 @@ pub struct 附件读取结果 {
     pub 状态: 附件状态读取结果,
     pub 宽: Option<i32>,
     pub 高: Option<i32>,
+    /// 这里只表达“当前附件是否已经拥有稳定静态封面真相”，
+    /// 不把具体 URL 或存储键倒灌进应用层。
+    pub 允许缩略图: bool,
     pub 资产原图存储键: Option<String>,
     pub 完整图存储键: Option<String>,
     pub 原始冷源到期时间戳秒: Option<i64>,
@@ -112,6 +115,9 @@ pub struct 媒体附件快照 {
     pub 字节大小: i64,
     pub 宽: i32,
     pub 高: i32,
+    /// ready 快照要把“有没有静态封面”一起带出去，
+    /// 这样 complete / locator / 消息时间线都能共用同一份 preview 真相。
+    pub 允许缩略图: bool,
     pub 状态: 附件状态读取结果,
 }
 
@@ -884,12 +890,14 @@ pub fn 创建消息(
                     种类: domain::message::附件种类::图片,
                     宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
                     高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
+                    有预览图: snapshot.允许缩略图,
                 },
                 附件种类读取结果::视频 => domain::message::待发送附件 {
                     附件标识: snapshot.附件标识,
                     种类: domain::message::附件种类::视频,
                     宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
                     高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
+                    有预览图: snapshot.允许缩略图,
                 },
                 附件种类读取结果::语音 => {
                     return Err(contract::错误码::附件类型不支持);
@@ -947,12 +955,14 @@ pub async fn 创建消息_异步<R: Realtime仓储端口 + ?Sized>(
                     种类: domain::message::附件种类::图片,
                     宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
                     高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
+                    有预览图: snapshot.允许缩略图,
                 },
                 附件种类读取结果::视频 => domain::message::待发送附件 {
                     附件标识: snapshot.附件标识,
                     种类: domain::message::附件种类::视频,
                     宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
                     高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
+                    有预览图: snapshot.允许缩略图,
                 },
                 附件种类读取结果::语音 | 附件种类读取结果::GIF | 附件种类读取结果::文件 =>
                 {
@@ -1178,7 +1188,7 @@ pub fn 查询媒体定位(
         状态: snapshot.状态,
         宽: snapshot.宽,
         高: snapshot.高,
-        允许缩略图: matches!(kind, 媒体附件类型::图片),
+        允许缩略图: snapshot.允许缩略图,
         原始冷源到期时间戳秒: snapshot.原始冷源到期时间戳秒,
         原始冷源删除时间戳秒: snapshot.原始冷源删除时间戳秒,
         协作分发: distribution,

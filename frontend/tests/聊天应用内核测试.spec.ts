@@ -1458,4 +1458,324 @@ describe("聊天应用内核", () => {
 
     expect(释放附件播放资源).toHaveBeenCalledWith("att-video-release-1");
   });
+
+  it("打开正式查看器前会先释放当前自动播 owner，并通过 inline_autoplay surface 解析轻量播放源", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-1",
+            client_message_id: "c-video-inline-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 打开查看器 = vi.fn();
+    const 释放附件播放资源 = vi.fn();
+    const 解析播放结果 = vi
+      .fn()
+      .mockResolvedValue({
+        mode: "anchor",
+        attachmentId: "att-video-inline-1",
+        kind: "video",
+        src: "http://media.local/original-att-video-inline-1",
+        thumbnailUrl: "http://media.local/poster-att-video-inline-1",
+        hint: null,
+      });
+    读取媒体编排供测试(kernel).设置媒体查看器供测试({
+      打开: 打开查看器,
+      销毁: vi.fn(),
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果,
+      释放附件播放资源,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-1",
+          visibilityRatio: 0.82,
+          distanceToViewportCenter: 12,
+        },
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).toHaveBeenCalledWith({
+      attachmentId: "att-video-inline-1",
+      kind: "video",
+      surface: "inline_autoplay",
+    });
+    expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe("att-video-inline-1");
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-inline-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-inline-1",
+            src: "http://media.local/original-att-video-inline-1",
+            posterSrc: "http://media.local/poster-att-video-inline-1",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+
+    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-inline-1");
+    expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(打开查看器).toHaveBeenCalledTimes(1);
+  });
+
+  it("平台切到后台排空时，会释放当前消息流自动播 owner", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-1",
+            client_message_id: "c-video-inline-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+      platform: {
+        lifecycle: {} as never,
+        storage: {} as never,
+        serviceWorker: {} as never,
+        transport: { transport: () => transport } as never,
+        multiContext: {} as never,
+        notification: {} as never,
+        offline: {
+          snapshot: () => ({
+            online: true,
+            backgroundSyncSupported: true,
+            queuedTaskCapability: "background-sync" as const,
+          }),
+          就绪: async () => {},
+          排空到期任务: vi.fn(async () => {}),
+        } as never,
+        启动: async () => {},
+        snapshot: () =>
+          ({
+            lifecycle: { visibility: "visible", phase: "active" },
+            serviceWorker: {
+              appShellRegistered: true,
+              mediaWorkerRegistered: true,
+              persistentStorageRequested: true,
+              controllerAttached: false,
+              appShellWaiting: false,
+              mediaWorkerWaiting: false,
+              lastMessageType: null,
+              lastMessage: null,
+            },
+            transport: {
+              lastLifecycle: { visibility: "visible", phase: "active" },
+              realtimePolicy: {
+                intent: "resume",
+                reconnection: true,
+                reason: "active",
+              },
+            },
+            multiContext: {
+              contextId: "tab-a",
+              isPrimaryContext: true,
+              lastPrimaryContextId: "tab-a",
+              lastFocusedContextId: null,
+              deliveredNotificationIds: [],
+            },
+            notification: {
+              permission: "granted",
+              lastClickedNotificationId: null,
+              badgeCount: 0,
+            },
+            offline: {
+              online: true,
+              backgroundSyncSupported: true,
+              queuedTaskCapability: "background-sync",
+            },
+          }) as 浏览器应用平台快照,
+        dispatch: async () => true,
+        订阅事件: (listener: (event: 浏览器应用平台事件) => void) => {
+          平台事件监听器 = listener;
+          return () => {
+            平台事件监听器 = null;
+          };
+        },
+      },
+    });
+    const 释放附件播放资源 = vi.fn();
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "anchor",
+        attachmentId: "att-video-inline-1",
+        kind: "video",
+        src: "http://media.local/original-att-video-inline-1",
+        thumbnailUrl: "http://media.local/poster-att-video-inline-1",
+        hint: null,
+      }),
+      释放附件播放资源,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-1",
+          visibilityRatio: 0.82,
+          distanceToViewportCenter: 12,
+        },
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe("att-video-inline-1");
+
+    const 触发平台事件 =
+      平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null;
+    触发平台事件?.({ type: "BACKGROUND_DRAIN_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-inline-1");
+    expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
+  });
+
+  it("退出房间视图时，会清空当前消息流自动播 owner", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-1",
+            client_message_id: "c-video-inline-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 释放附件播放资源 = vi.fn();
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "anchor",
+        attachmentId: "att-video-inline-1",
+        kind: "video",
+        src: "http://media.local/original-att-video-inline-1",
+        thumbnailUrl: "http://media.local/poster-att-video-inline-1",
+        hint: null,
+      }),
+      释放附件播放资源,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-1",
+          visibilityRatio: 0.82,
+          distanceToViewportCenter: 12,
+        },
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe("att-video-inline-1");
+
+    await kernel.dispatch({ type: "LEAVE_ROOM_VIEW_REQUESTED" });
+
+    expect(释放附件播放资源).toHaveBeenCalledWith("att-video-inline-1");
+    expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
+  });
 });

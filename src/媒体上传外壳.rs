@@ -508,11 +508,13 @@ pub(super) async fn complete_media_upload(
                     )
                 }
             };
-            streaming_manifest_request =
-                match 流媒体打包::上传流媒体打包产物(&state, &attachment_id, 打包结果).await {
-                    Ok(request) => Some(request),
-                    Err((status, code, message)) => return err_resp(status, code, message),
-                };
+            let uploaded = match 流媒体打包::上传流媒体打包产物(&state, &attachment_id, 打包结果)
+                .await
+            {
+                Ok(uploaded) => uploaded,
+                Err((status, code, message)) => return err_resp(status, code, message),
+            };
+            streaming_manifest_request = Some(uploaded.清单写入请求);
             usecase::媒体附件写入请求 {
                 附件标识: attachment_id.clone(),
                 种类: prepared.种类.clone(),
@@ -521,7 +523,7 @@ pub(super) async fn complete_media_upload(
                 宽: parsed.宽,
                 高: parsed.高,
                 原始内容存储键: prepared.原始内容存储键.clone(),
-                缩略图存储键: None,
+                缩略图存储键: Some(uploaded.静态封面存储键),
                 资产原图存储键: None,
                 完整图存储键: None,
                 原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
@@ -590,14 +592,6 @@ pub(super) async fn complete_media_upload(
                 session_id.as_str(),
                 "original",
             );
-            let thumbnail_url = match &snapshot.种类 {
-                usecase::媒体附件类型::图片 => Some(super::媒体资产外壳::构造附件受控地址(
-                    attachment_id.as_str(),
-                    session_id.as_str(),
-                    "thumbnail",
-                )),
-                usecase::媒体附件类型::视频 => None,
-            };
             let 冷源仍可用 = usecase::冷源当前可用(
                 Some(original_url.as_str()),
                 Some(原始冷源到期时间戳秒),
@@ -631,16 +625,24 @@ pub(super) async fn complete_media_upload(
                     分发快照: Some(&distribution_snapshot),
                     流媒体清单: streaming_manifest_snapshot.as_ref(),
                     原始地址: original_url,
-                    缩略图地址: thumbnail_url,
                     原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
                     原始冷源删除时间戳秒: None,
                     会话标识: session_id.as_str(),
                     当前时间戳秒: now_epoch秒,
                 },
             );
+            let preview_asset = super::媒体资产外壳::构造预览资源响应体(
+                snapshot.附件标识.as_str(),
+                Some(session_id.as_str()),
+                snapshot.允许缩略图,
+            );
             (
                 StatusCode::OK,
-                Json(super::媒体资产外壳::媒体附件快照转响应体(&snapshot, media_asset)),
+                Json(super::媒体资产外壳::媒体附件快照转响应体(
+                    &snapshot,
+                    media_asset,
+                    preview_asset,
+                )),
             )
                 .into_response()
         }

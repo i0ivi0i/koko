@@ -8,11 +8,13 @@ import {
   创建媒体发布器,
   创建媒体会话,
   创建媒体查看器,
+  选择消息视频自动播Owner,
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
   解析协作分发源,
   释放协作分发消费者,
+  type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体缓存仓库,
   type 媒体草稿状态补丁,
@@ -34,6 +36,8 @@ export type 聊天媒体快照 = {
   playbackByAttachmentId: Record<string, 媒体播放结果>;
   sessionByAttachmentId: Record<string, 媒体会话快照>;
   contentUrlByAttachmentId: Record<string, 附件内容地址快照>;
+  inlineAutoplayOwnerAttachmentId: string | null;
+  inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
 };
 
 type 聊天媒体编排依赖 = {
@@ -57,12 +61,18 @@ export interface 聊天媒体编排端口 {
   清空草稿(): void;
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
+  处理自动播候选(candidates: 消息视频自动播候选[]): void;
+  释放消息流自动播Owner(): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
   处理平台在线状态变化(online: boolean): void;
   清空(): void;
   销毁(): void;
   设置媒体播放器供测试(player: {
-    解析播放结果(input: { attachmentId: string; kind: "image" | "video" }): Promise<媒体播放结果>;
+    解析播放结果(input: {
+      attachmentId: string;
+      kind: "image" | "video";
+      surface?: "viewer" | "inline_autoplay";
+    }): Promise<媒体播放结果>;
     激活协作补齐?(input: {
       attachmentId: string;
       kind: "image" | "video";
@@ -111,6 +121,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   });
 
   let 当前查看器请求: 媒体查看器打开请求 | null = null;
+  let inlineAutoplayOwnerAttachmentId: string | null = null;
+  let inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果> = {};
+  let inlineAutoplay解析代次 = 0;
   const 投影查看器请求到当前播放真相 = (
     request: 媒体查看器打开请求
   ): 媒体查看器打开请求 => {
@@ -229,6 +242,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     return attachments;
   };
+
+  const 读取附件条目 = (attachmentId: string): 媒体附件条目 | null =>
+    读取当前房间媒体附件().find((attachment) => attachment.attachmentId === attachmentId) ?? null;
 
   /**
    * 附件内容地址属于“当前会话下可访问的媒体资源定位结果”。
@@ -374,6 +390,77 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     媒体播放器.释放附件播放资源?.(attachmentId);
   };
 
+  const 清空自动播播放结果 = (): void => {
+    if (
+      inlineAutoplayOwnerAttachmentId === null &&
+      Object.keys(inlineAutoplayPlaybackByAttachmentId).length === 0
+    ) {
+      return;
+    }
+    inlineAutoplayOwnerAttachmentId = null;
+    inlineAutoplayPlaybackByAttachmentId = {};
+    inlineAutoplay解析代次 += 1;
+    deps.请求重渲染();
+  };
+
+  const 释放当前自动播Owner = (): void => {
+    const 当前Owner = inlineAutoplayOwnerAttachmentId;
+    if (!当前Owner) {
+      清空自动播播放结果();
+      return;
+    }
+    释放附件播放资源(当前Owner);
+    清空自动播播放结果();
+  };
+
+  const 解析自动播播放结果 = (attachmentId: string): void => {
+    const attachment = 读取附件条目(attachmentId);
+    if (!attachment || attachment.kind !== "video") {
+      清空自动播播放结果();
+      return;
+    }
+    const 当前代次 = ++inlineAutoplay解析代次;
+    inlineAutoplayOwnerAttachmentId = attachmentId;
+    inlineAutoplayPlaybackByAttachmentId = {};
+    deps.请求重渲染();
+    void 媒体播放器
+      .解析播放结果({
+        attachmentId,
+        kind: attachment.kind,
+        surface: "inline_autoplay",
+      })
+      .then((playback) => {
+        if (
+          inlineAutoplayOwnerAttachmentId !== attachmentId ||
+          当前代次 !== inlineAutoplay解析代次
+        ) {
+          return;
+        }
+        if (
+          playback.mode === "anchor" ||
+          playback.mode === "swarm" ||
+          playback.mode === "blob"
+        ) {
+          inlineAutoplayPlaybackByAttachmentId = {
+            [attachmentId]: playback,
+          };
+        } else {
+          inlineAutoplayPlaybackByAttachmentId = {};
+        }
+        deps.请求重渲染();
+      })
+      .catch(() => {
+        if (
+          inlineAutoplayOwnerAttachmentId !== attachmentId ||
+          当前代次 !== inlineAutoplay解析代次
+        ) {
+          return;
+        }
+        inlineAutoplayPlaybackByAttachmentId = {};
+        deps.请求重渲染();
+      });
+  };
+
   const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
     let session: 媒体会话端口;
     session = 创建媒体会话({
@@ -415,6 +502,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         playbackByAttachmentId: 读取媒体播放结果表(),
         sessionByAttachmentId: 读取媒体会话快照表(),
         contentUrlByAttachmentId: 读取附件内容地址表(),
+        inlineAutoplayOwnerAttachmentId,
+        inlineAutoplayPlaybackByAttachmentId,
       };
     },
 
@@ -435,12 +524,41 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     打开查看器(request: 媒体查看器打开请求): void {
+      释放当前自动播Owner();
       当前查看器请求 = 投影查看器请求到当前播放真相({
         startAttachmentId: request.startAttachmentId,
         items: request.items.map((item) => ({ ...item })),
       });
       deps.登记程序滚动来源("media_viewer_open");
       媒体查看器.打开(当前查看器请求);
+    },
+
+    处理自动播候选(candidates: 消息视频自动播候选[]): void {
+      if (当前查看器请求) {
+        释放当前自动播Owner();
+        return;
+      }
+      const nextOwnerAttachmentId = 选择消息视频自动播Owner(candidates);
+      if (!nextOwnerAttachmentId) {
+        释放当前自动播Owner();
+        return;
+      }
+      if (nextOwnerAttachmentId === inlineAutoplayOwnerAttachmentId) {
+        return;
+      }
+      if (inlineAutoplayOwnerAttachmentId) {
+        释放附件播放资源(inlineAutoplayOwnerAttachmentId);
+      }
+      解析自动播播放结果(nextOwnerAttachmentId);
+    },
+
+    释放消息流自动播Owner(): void {
+      /**
+       * 自动播只是消息流壳层的轻量体验态，不是正式播放会话。
+       * 页面退到后台时，这里必须立即释放 owner 和底层资源，
+       * 避免后台继续占着 `<video>`、解码器和协作分发占用。
+       */
+      释放当前自动播Owner();
     },
 
     /**
@@ -466,6 +584,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
       if (hasSessionSetChanged) {
         deps.请求重渲染();
+      }
+      if (
+        inlineAutoplayOwnerAttachmentId &&
+        !activeAttachmentIds.has(inlineAutoplayOwnerAttachmentId)
+      ) {
+        释放当前自动播Owner();
       }
 
       for (const attachment of attachments) {
@@ -504,6 +628,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     清空(): void {
       当前查看器请求 = null;
+      释放当前自动播Owner();
       媒体查看器.销毁();
       媒体发布器.清空();
       清空播放状态();
@@ -512,6 +637,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     销毁(): void {
       当前查看器请求 = null;
+      释放当前自动播Owner();
       媒体查看器.销毁();
       媒体发布器.销毁();
       清空播放状态();

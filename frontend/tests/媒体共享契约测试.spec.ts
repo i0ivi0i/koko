@@ -17,6 +17,10 @@ describe("媒体共享契约", () => {
             "/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
           thumbnail_url:
             "/api/attachments/att-shared-video-1/content?session_id=s-1&variant=thumbnail",
+          preview_asset: {
+            still_url:
+              "/api/attachments/att-shared-video-1/content?session_id=s-1&variant=thumbnail",
+          },
           distribution: {
             content_id: "content_att-shared-video-1",
             content_hash: "hash-att-shared-video-1",
@@ -79,6 +83,17 @@ describe("媒体共享契约", () => {
     expect(
       "drawerOpen" in
         (locator.streaming_asset?.distribution as unknown as Record<string, unknown>)
+    ).toBe(false);
+    expect(
+      (locator as unknown as { preview_asset?: { still_url?: string } }).preview_asset
+    ).toEqual({
+      still_url:
+        "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=thumbnail",
+    });
+    expect(
+      "panelMode" in
+        (((locator as unknown as { preview_asset?: Record<string, unknown> })
+          .preview_asset ?? {}) as Record<string, unknown>)
     ).toBe(false);
     expect(locator.streaming_asset?.distribution).toEqual({
       swarm_id: "swarm-hash-att-shared-video-1",

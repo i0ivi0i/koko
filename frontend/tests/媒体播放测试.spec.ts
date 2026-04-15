@@ -266,6 +266,74 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
+  it("inline_autoplay surface 会复用同一个 resolver，但 manifest 视频优先走浏览器原生可播锚点", async () => {
+    const resolveSwarmSource = vi.fn();
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-inline-hls",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-video-inline-hls",
+        thumbnail_url: "http://media.local/poster-video-inline-hls",
+        distribution: {
+          content_id: "content_att-video-inline-hls",
+          content_hash: "hash-video-inline-hls",
+          swarm_id: "swarm-hash-video-inline-hls",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-inline-hls",
+          torrent_info_hash: "torrent-info-hash-video-inline-hls",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-inline-hls",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-inline-hls",
+          content_hash: "hash-video-inline-hls",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-inline-hls/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-inline-hls/stream.mpd",
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-inline-hls",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-video-inline-hls",
+            join_ticket: null,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-video-inline-hls",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-inline-hls",
+      kind: "video",
+      surface: "inline_autoplay",
+    });
+
+    expect(result).toEqual({
+      mode: "anchor",
+      attachmentId: "att-video-inline-hls",
+      kind: "video",
+      src: "http://media.local/cold-origin-video-inline-hls",
+      thumbnailUrl: "http://media.local/poster-video-inline-hls",
+      hint: null,
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-video-inline-hls");
+  });
+
   it("协作分发仍在后台补齐整附件时，不把内部补块状态透给视图层", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-4",

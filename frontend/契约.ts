@@ -81,11 +81,20 @@ export interface 消息事件 {
   event_position: number;
 }
 
+/**
+ * preview_asset 是消息流和 locator 共用的静态封面协议面。
+ * 它只表达“当前可以拿哪张权威封面”，不承载播放器状态或壳层流程字段。
+ */
+export interface 预览资源描述 {
+  still_url: string;
+}
+
 export interface 图片附件快照 {
   kind: "image";
   attachment_id: string;
   width: number;
   height: number;
+  preview_asset?: 预览资源描述 | null;
 }
 
 /**
@@ -97,6 +106,7 @@ export interface 视频附件快照 {
   attachment_id: string;
   width: number;
   height: number;
+  preview_asset?: 预览资源描述 | null;
 }
 
 export type 附件快照 = 图片附件快照 | 视频附件快照;
@@ -115,6 +125,7 @@ export interface 媒体附件上传结果 {
   width: number;
   height: number;
   status: "ready";
+  preview_asset?: 预览资源描述 | null;
   media_asset?: 流媒体资产描述 | Blob媒体资产描述 | null;
 }
 
@@ -231,6 +242,7 @@ export interface 媒体定位结果 {
   kind: 媒体种类;
   status: "ready" | "degraded" | "deleted";
   original_url: string;
+  preview_asset?: 预览资源描述 | null;
   thumbnail_url: string | null;
   distribution: 媒体协作分发定位片段 | null;
   streaming_asset?: 流媒体资产描述 | null;

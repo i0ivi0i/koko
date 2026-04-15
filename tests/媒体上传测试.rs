@@ -595,7 +595,7 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
 
 #[tokio::test]
 #[serial]
-async fn complete视频上传会把prepared附件升级成ready并写入视频元数据() {
+async fn complete视频上传会写入静态封面并返回preview_asset() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -704,6 +704,16 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
         complete_body["media_asset"]["asset_id"].as_str(),
         Some(attachment_id.as_str()),
         "当前过渡阶段先以 attachment_id 作为稳定资产锚点，避免再造第二个临时主键"
+    );
+    assert_eq!(
+        complete_body["preview_asset"]["still_url"].as_str(),
+        Some(
+            format!(
+                "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=thumbnail"
+            )
+            .as_str()
+        ),
+        "视频 complete 后必须直接把静态封面真相投影出来，不能再让消息流自己脑补首帧"
     );
     let hls_master_url = complete_body["media_asset"]["manifest"]["hls_master_url"]
         .as_str()
@@ -829,8 +839,8 @@ async fn complete视频上传会把prepared附件升级成ready并写入视频�
     assert_eq!(width_in_db, Some(1080));
     assert_eq!(height_in_db, Some(1920));
     assert!(
-        thumbnail_storage_key.is_none(),
-        "当前视频主链不应伪造图片缩略图存储键"
+        thumbnail_storage_key.is_some(),
+        "视频 complete 后必须把静态封面落到既有 thumbnail_storage_key，而不是继续留空"
     );
 }
 

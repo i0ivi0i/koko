@@ -38,7 +38,6 @@ pub(super) struct 媒体资产响应上下文<'a> {
     pub 分发快照: Option<&'a usecase::协作分发元数据快照>,
     pub 流媒体清单: Option<&'a usecase::流媒体清单快照>,
     pub 原始地址: String,
-    pub 缩略图地址: Option<String>,
     pub 原始冷源到期时间戳秒: Option<i64>,
     pub 原始冷源删除时间戳秒: Option<i64>,
     pub 会话标识: &'a str,
@@ -331,6 +330,22 @@ pub(super) fn 构造附件受控地址(attachment_id: &str, session_id: &str, va
     format!("/api/attachments/{attachment_id}/content?session_id={session_id}&variant={variant}")
 }
 
+/// preview_asset 只有在“附件真相确认有静态封面”且“当前请求带会话上下文”时才能被安全投影。
+/// 这样 complete / locator / 房间快照都会复用同一条 still_url 生成规则，而不是各自手搓。
+pub(super) fn 构造预览资源响应体(
+    attachment_id: &str,
+    session_id: Option<&str>,
+    有预览图: bool,
+) -> Option<serde_json::Value> {
+    if !有预览图 {
+        return None;
+    }
+    let session_id = session_id?;
+    Some(serde_json::json!({
+        "still_url": 构造附件受控地址(attachment_id, session_id, "thumbnail")
+    }))
+}
+
 /// 图片 blob 主链统一收口到 `/api/media/{id}/blob/*`，
 /// 避免前端继续把旧附件内容地址误认成正式资产地址。
 fn 构造blob受控地址(attachment_id: &str, session_id: &str, variant: &str) -> String {
@@ -478,7 +493,7 @@ pub(super) fn 构造媒体资产响应体(
             运行态分发: 上下文.运行态分发,
             分发快照: 上下文.分发快照,
             旧原始地址: 上下文.原始地址,
-            有预览图: 上下文.缩略图地址.is_some(),
+            有预览图: snapshot.允许缩略图,
             mime_type: snapshot.mime_type.as_str(),
             宽: Some(snapshot.宽),
             高: Some(snapshot.高),
@@ -531,6 +546,7 @@ fn 构造定位媒体资产响应体(
 pub(super) fn 媒体附件快照转响应体(
     snapshot: &usecase::媒体附件快照,
     media_asset: Option<serde_json::Value>,
+    preview_asset: Option<serde_json::Value>,
 ) -> serde_json::Value {
     let mut response = serde_json::json!({
         "attachment_id": snapshot.附件标识,
@@ -543,6 +559,9 @@ pub(super) fn 媒体附件快照转响应体(
     });
     if let Some(media_asset) = media_asset {
         response["media_asset"] = media_asset;
+    }
+    if let Some(preview_asset) = preview_asset {
+        response["preview_asset"] = preview_asset;
     }
     response
 }
@@ -591,6 +610,11 @@ pub(super) async fn load_media_locator(
             "thumbnail",
         )
     });
+    let preview_asset = 构造预览资源响应体(
+        attachment_id.as_str(),
+        Some(query.session_id.as_str()),
+        locator.允许缩略图,
+    );
     let now_epoch秒 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
@@ -620,6 +644,7 @@ pub(super) async fn load_media_locator(
         "kind": 媒体类型转标签(&locator.种类),
         "status": 附件状态转标签(&locator.状态),
         "original_url": original_url,
+        "preview_asset": preview_asset,
         "thumbnail_url": thumbnail_url,
         "distribution": runtime_distribution.clone(),
     });

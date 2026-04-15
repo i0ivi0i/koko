@@ -195,7 +195,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("视频预览运行时信号会抛给应用层，而不是继续困在 DOM/video 元素里", async () => {
+  it("默认静态视频封面不会偷偷挂真实 video 预览", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
@@ -216,22 +216,69 @@ describe("房间消息窗媒体查看器", () => {
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    const preview = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
     );
-    preview?.dispatchEvent(new Event("playing"));
-    preview?.dispatchEvent(new Event("waiting"));
+    expect(previewPoster?.getAttribute("src")).toBe("http://media.local/poster-video-1");
+    expect(
+      pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+    expect(信号记录).toEqual([]);
 
-    expect(信号记录).toEqual([
+    pane.remove();
+  });
+
+  it("同屏多个视频时，只会给当前自动播 owner 渲染一颗轻量 video", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      创建媒体消息项(),
       {
-        attachmentId: "att-video-1",
-        signal: { type: "PLAYER_PLAYING" },
+        ...创建媒体消息项(),
+        id: "m-2",
+        eventPosition: 2,
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
       },
-      {
-        attachmentId: "att-video-1",
-        signal: { type: "PLAYER_WAITING" },
-      },
-    ]);
+    ];
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayOwnerAttachmentId = "att-video-2";
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-2": {
+        mode: "anchor",
+        attachmentId: "att-video-2",
+        kind: "video",
+        src: "http://media.local/original-video-2",
+        thumbnailUrl: "http://media.local/poster-video-2",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const inlineVideos = pane.querySelectorAll("video.message-video-preview");
+    expect(inlineVideos).toHaveLength(1);
+    expect(inlineVideos[0]?.getAttribute("data-attachment-id")).toBe("att-video-2");
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).not.toBeNull();
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-2"]')
+    ).toBeNull();
 
     pane.remove();
   });
@@ -262,11 +309,13 @@ describe("房间消息窗媒体查看器", () => {
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    const preview = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
     );
-    expect(preview?.getAttribute("src")).toBeNull();
-    expect(preview?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
+    expect(previewPoster?.getAttribute("src")).toBe("http://media.local/poster-video-1");
+    expect(
+      pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
+    ).toBeNull();
 
     pane
       .querySelector<HTMLButtonElement>(
@@ -347,11 +396,13 @@ describe("房间消息窗媒体查看器", () => {
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    const preview = pane.querySelector<HTMLVideoElement>(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
     );
-    expect(preview?.getAttribute("src")).toBeNull();
-    expect(preview?.getAttribute("poster")).toContain("data:image/svg+xml");
+    expect(previewPoster?.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(
+      pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
+    ).toBeNull();
 
     pane
       .querySelector<HTMLButtonElement>(

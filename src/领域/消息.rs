@@ -25,6 +25,9 @@ pub struct 待发送附件 {
     pub 种类: 附件种类,
     pub 宽: i32,
     pub 高: i32,
+    /// 领域只保存“这条附件有没有稳定预览图”这个渲染事实，
+    /// 不碰 URL 和存储实现，让后续投影层按当前会话去生成受控地址。
+    pub 有预览图: bool,
 }
 
 /// 领域校验通过后的附件引用。
@@ -35,11 +38,13 @@ pub enum 已校验附件引用 {
         附件标识: String,
         宽: i32,
         高: i32,
+        有预览图: bool,
     },
     视频 {
         附件标识: String,
         宽: i32,
         高: i32,
+        有预览图: bool,
     },
 }
 
@@ -93,11 +98,13 @@ pub fn 创建消息(
                 附件标识: attachment.附件标识.clone(),
                 宽: attachment.宽,
                 高: attachment.高,
+                有预览图: attachment.有预览图,
             }),
             附件种类::视频 => refs.push(已校验附件引用::视频 {
                 附件标识: attachment.附件标识.clone(),
                 宽: attachment.宽,
                 高: attachment.高,
+                有预览图: attachment.有预览图,
             }),
             附件种类::语音 | 附件种类::GIF | 附件种类::文件 => {
                 return Err(领域错误::附件类型不支持)

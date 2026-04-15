@@ -47,6 +47,7 @@ import {
   type 聊天输入状态,
 } from "./状态.js";
 import {
+  type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
   type 媒体会话信号,
@@ -94,6 +95,7 @@ export type 聊天应用命令 =
   | { type: "SEND_MESSAGE_REQUESTED" }
   | { type: "ROOM_SCROLL_INTENT" }
   | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
+  | { type: "MEDIA_INLINE_AUTOPLAY_OBSERVED"; candidates: 消息视频自动播候选[] }
   | { type: "ROOM_JUMP_TO_LATEST_REQUESTED" }
   | { type: "MEDIA_OPEN_REQUESTED"; request: 媒体查看器打开请求 }
   | { type: "MEDIA_SESSION_SIGNALLED"; attachmentId: string; signal: 媒体会话信号 }
@@ -302,6 +304,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       case "ROOM_SCROLL_OBSERVED":
         this.处理聊天视口滚动(command.scrollContainer);
         return;
+      case "MEDIA_INLINE_AUTOPLAY_OBSERVED":
+        this.媒体编排.处理自动播候选(command.candidates);
+        return;
       case "ROOM_JUMP_TO_LATEST_REQUESTED":
         await this.请求跳到最新();
         return;
@@ -464,10 +469,16 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   private async 处理平台事件(event: 浏览器应用平台事件): Promise<void> {
-    if (
-      event.type === "BACKGROUND_DRAIN_REQUESTED" ||
-      event.type === "SERVICE_WORKER_CONTROLLER_READY"
-    ) {
+    if (event.type === "BACKGROUND_DRAIN_REQUESTED") {
+      /**
+       * Service Worker 请求后台排空时，页面已经准备退到后台或被冻结。
+       * 这里先释放消息流自动播 owner，再排空离线任务，避免后台还挂着轻量视频预览。
+       */
+      this.媒体编排.释放消息流自动播Owner();
+      await this.尝试排空待补发任务();
+      return;
+    }
+    if (event.type === "SERVICE_WORKER_CONTROLLER_READY") {
       await this.尝试排空待补发任务();
       return;
     }

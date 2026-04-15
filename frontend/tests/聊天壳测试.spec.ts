@@ -131,6 +131,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("box-shadow: none");
     expect(styles).toContain(".message-video-card");
     expect(styles).toContain(".message-video-preview-trigger");
+    expect(styles).toContain(".message-video-poster");
+    expect(styles).not.toContain(".message-video-preview {");
     expect(styles).not.toContain(".message-media-preview-video");
     expect(styles).not.toContain(".message-media-preview-backdrop");
     expect(styles).toContain("z-index: 0");
@@ -441,14 +443,18 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_display_alias: "冷静的水獭",
             text: "看视频",
             body: "看视频",
-            attachments: [
-              {
-                kind: "video",
-                attachment_id: "att-video-1",
-                width: 1280,
-                height: 720,
-              },
-            ],
+             attachments: [
+               {
+                 kind: "video",
+                 attachment_id: "att-video-1",
+                 width: 1280,
+                 height: 720,
+                 preview_asset: {
+                   still_url:
+                     "/api/attachments/att-video-1/content?session_id=s-test&variant=thumbnail",
+                 },
+               },
+             ],
             event_position: 1,
           },
         ],
@@ -472,16 +478,19 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const previewTrigger = el.shadowRoot!.querySelector(
       'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
     ) as HTMLButtonElement | null;
-    const previewVideo = el.shadowRoot!.querySelector(
-      'video.message-video-preview[data-attachment-id="att-video-1"]'
-    ) as HTMLVideoElement | null;
+    const previewPoster = el.shadowRoot!.querySelector(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    ) as HTMLImageElement | null;
     expect(previewTrigger).not.toBeNull();
-    expect(previewVideo).not.toBeNull();
-    expect(previewVideo?.getAttribute("src")).toContain(
-      "/api/attachments/att-video-1/content?session_id=s-test&variant=original#t=0.1"
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toContain(
+      "/api/attachments/att-video-1/content?session_id=s-test&variant=thumbnail"
     );
-    expect(previewVideo?.hasAttribute("controls")).toBe(false);
-    expect(previewVideo?.hasAttribute("poster")).toBe(false);
+    expect(
+      el.shadowRoot!.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-1"]'
+      )
+    ).toBeNull();
 
     previewTrigger!.click();
     await 等待组件稳定(el);
@@ -519,14 +528,18 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_display_alias: "冷静的水獭",
             text: "看协作分发视频",
             body: "看协作分发视频",
-            attachments: [
-              {
-                kind: "video",
-                attachment_id: "att-video-swarm-1",
-                width: 1280,
-                height: 720,
-              },
-            ],
+             attachments: [
+               {
+                 kind: "video",
+                 attachment_id: "att-video-swarm-1",
+                 width: 1280,
+                 height: 720,
+                 preview_asset: {
+                   still_url:
+                     "/api/attachments/att-video-swarm-1/content?session_id=s-test&variant=thumbnail",
+                 },
+               },
+             ],
             event_position: 1,
           },
         ],
@@ -560,15 +573,21 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const previewTrigger = el.shadowRoot!.querySelector(
       'button.message-video-preview-trigger[data-attachment-id="att-video-swarm-1"]'
     ) as HTMLButtonElement | null;
-    const previewVideo = el.shadowRoot!.querySelector(
-      'video.message-video-preview[data-attachment-id="att-video-swarm-1"]'
-    ) as HTMLVideoElement | null;
+    const previewPoster = el.shadowRoot!.querySelector(
+      'img.message-video-poster[data-attachment-id="att-video-swarm-1"]'
+    ) as HTMLImageElement | null;
     const hint = el.shadowRoot!.querySelector(
       '[data-media-hint="att-video-swarm-1"]'
     ) as HTMLElement | null;
     expect(previewTrigger).not.toBeNull();
-    expect(previewVideo?.getAttribute("src")).toBe("blob:http://localhost/swarm-video-1#t=0.1");
-    expect(previewVideo?.hasAttribute("controls")).toBe(false);
+    expect(previewPoster?.getAttribute("src")).toContain(
+      "/api/attachments/att-video-swarm-1/content?session_id=s-test&variant=thumbnail"
+    );
+    expect(
+      el.shadowRoot!.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-swarm-1"]'
+      )
+    ).toBeNull();
     expect(hint?.textContent).toContain("正在协作分发");
 
     previewTrigger!.click();

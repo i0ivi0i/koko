@@ -1,9 +1,9 @@
 import { html, LitElement } from "lit";
 import { VirtualizerController } from "@tanstack/lit-virtual";
-import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { 媒体播放结果 } from "./媒体/媒体播放.js";
+import type { 消息视频自动播候选 } from "./媒体/消息视频自动播编排.js";
 import type { 媒体会话信号 } from "./媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
@@ -12,14 +12,6 @@ type 消息虚拟项 = {
   key: unknown;
   index: number;
   start: number;
-};
-
-const 构建视频首帧预览源 = (src: string, posterSrc: string | null): string => {
-  // 没有服务端 poster 时，用媒体片段让浏览器预取首帧，避免群聊里出现一片黑的视频卡片。
-  if (posterSrc || src.includes("#")) {
-    return src;
-  }
-  return `${src}#t=0.1`;
 };
 
 /**
@@ -62,12 +54,16 @@ export class 房间消息窗 extends LitElement {
     historyHint: { type: String },
     jumpToLatestLabel: { type: String },
     mediaPlaybackByAttachmentId: { attribute: false },
+    inlineAutoplayOwnerAttachmentId: { type: String },
+    inlineAutoplayPlaybackByAttachmentId: { attribute: false },
   };
 
   declare items: 聊天列表展示项[];
   declare historyHint: string;
   declare jumpToLatestLabel: string;
   declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+  declare inlineAutoplayOwnerAttachmentId: string | null;
+  declare inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
 
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
@@ -90,6 +86,8 @@ export class 房间消息窗 extends LitElement {
     this.historyHint = "";
     this.jumpToLatestLabel = "";
     this.mediaPlaybackByAttachmentId = {};
+    this.inlineAutoplayOwnerAttachmentId = null;
+    this.inlineAutoplayPlaybackByAttachmentId = {};
   }
 
   /**
@@ -130,13 +128,63 @@ export class 房间消息窗 extends LitElement {
   }
 
   private dispatchScroll(event: Event): void {
+    const scrollContainer = event.currentTarget as HTMLElement;
     this.dispatchEvent(
       new CustomEvent<{ scrollContainer: HTMLElement }>("room-scroll", {
-        detail: { scrollContainer: event.currentTarget as HTMLElement },
+        detail: { scrollContainer },
         bubbles: true,
         composed: true,
       })
     );
+    this.dispatch自动播候选(scrollContainer);
+  }
+
+  override updated(): void {
+    const scrollContainer = this.messageScrollRef.value;
+    if (!scrollContainer) {
+      return;
+    }
+    this.dispatch自动播候选(scrollContainer);
+  }
+
+  private dispatch自动播候选(scrollContainer: HTMLElement): void {
+    const candidates = this.读取自动播候选(scrollContainer);
+    this.dispatchEvent(
+      new CustomEvent<{ candidates: 消息视频自动播候选[] }>("room-inline-autoplay-observed", {
+        detail: { candidates },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  /**
+   * 消息窗只把“浏览器当前看到了什么”翻成候选集合：
+   * - 可见比例和距视口中心的距离是壳层事实；
+   * - 真正谁拥有自动播资格，必须继续交给上层编排裁决。
+   */
+  private 读取自动播候选(scrollContainer: HTMLElement): 消息视频自动播候选[] {
+    const viewportRect = scrollContainer.getBoundingClientRect();
+    const videoEntries = Array.from(
+      this.querySelectorAll<HTMLButtonElement>("button.message-video-preview-trigger[data-attachment-id]")
+    );
+    return videoEntries
+      .map((entry) => {
+        const rect = entry.getBoundingClientRect();
+        const visibleTop = Math.max(rect.top, viewportRect.top);
+        const visibleBottom = Math.min(rect.bottom, viewportRect.bottom);
+        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+        const visibilityRatio = rect.height > 0 ? visibleHeight / rect.height : 0;
+        const distanceToViewportCenter = Math.abs(
+          (rect.top + rect.bottom) / 2 - (viewportRect.top + viewportRect.bottom) / 2
+        );
+        return {
+          attachmentId: entry.dataset.attachmentId ?? "",
+          visibilityRatio,
+          distanceToViewportCenter,
+        } satisfies 消息视频自动播候选;
+      })
+      .filter((candidate) => candidate.attachmentId !== "");
   }
 
   private dispatchJumpToLatest(): void {
@@ -376,25 +424,25 @@ export class 房间消息窗 extends LitElement {
           if (playback?.mode === "expired" || playback?.mode === "degraded") {
             return 渲染不可用附件(attachment.attachmentId, playback);
           }
-          const playbackSrc =
-            playback?.mode === "swarm" ||
-            playback?.mode === "anchor" ||
-            playback?.mode === "manifest"
-              ? playback.src
-              : null;
           if (attachment.kind === "video") {
             const previewPosterSrc =
-              playback?.thumbnailUrl ??
               attachment.posterSrc ??
-              (playback?.mode === "manifest" ? 默认视频清单占位Poster : null);
+              playback?.thumbnailUrl ??
+              默认视频清单占位Poster;
+            const inlineAutoplayPlayback =
+              this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+            const shouldRenderInlineVideo =
+              this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
+              Boolean(inlineAutoplayPlayback?.src) &&
+              (inlineAutoplayPlayback?.mode === "anchor" ||
+                inlineAutoplayPlayback?.mode === "swarm" ||
+                inlineAutoplayPlayback?.mode === "blob");
             /**
-             * 标准流媒体主链成立后，时间线卡片只负责“静态可点预览”：
-             * - 不再让原生 `<video>` 误吃 `master.m3u8`；
-             * - 没有 poster 时也统一退到静态占位；
-             * - 真正播放交给查看器里的 HLS provider。
+             * 时间线默认态现在只承载“静态可点封面”：
+             * 1. 不再在消息流里常驻真实 `<video>`，彻底关掉第二套首帧预览链；
+             * 2. 视频封面优先吃消息快照里的权威 preview，其次才吃播放会话补回来的同源封面；
+             * 3. 真正播放统一交给查看器，避免列表卡片和正式播放器同时长真相。
              */
-            const 应使用Poster占位 = playback?.mode === "manifest";
-            const videoSrc = 应使用Poster占位 ? null : playbackSrc ?? attachment.originalSrc;
             return html`
               <div class="message-video-card">
                 <button
@@ -405,40 +453,52 @@ export class 房间消息窗 extends LitElement {
                   @click=${(event: Event) =>
                     this.打开媒体查看器(event, attachment.attachmentId)}
                 >
-                  <video
-                    class="message-video-preview"
-                    data-attachment-id=${attachment.attachmentId}
-                    src=${ifDefined(
-                      videoSrc
-                        ? 构建视频首帧预览源(videoSrc, previewPosterSrc)
-                        : undefined
-                    )}
-                    width=${attachment.displayWidth}
-                    height=${attachment.displayHeight}
-                    muted
-                    playsinline
-                    preload="metadata"
-                    tabindex="-1"
-                    aria-hidden="true"
-                    poster=${ifDefined(previewPosterSrc ?? undefined)}
-                    @playing=${() =>
-                      this.广播媒体会话信号(attachment.attachmentId, {
-                        type: "PLAYER_PLAYING",
-                      })}
-                    @waiting=${() =>
-                      this.广播媒体会话信号(attachment.attachmentId, {
-                        type: "PLAYER_WAITING",
-                      })}
-                    @stalled=${() =>
-                      this.广播媒体会话信号(attachment.attachmentId, {
-                        type: "PLAYER_STALLED",
-                      })}
-                    @error=${() =>
-                      this.广播媒体会话信号(attachment.attachmentId, {
-                        type: "PLAYER_ERROR",
-                      })}
-                  ></video>
-                  <span class="message-video-play-indicator" aria-hidden="true">▶</span>
+                  ${shouldRenderInlineVideo && inlineAutoplayPlayback
+                    ? html`
+                        <video
+                          class="message-video-preview"
+                          data-attachment-id=${attachment.attachmentId}
+                          src=${inlineAutoplayPlayback.src}
+                          width=${attachment.displayWidth}
+                          height=${attachment.displayHeight}
+                          muted
+                          autoplay
+                          playsinline
+                          preload="metadata"
+                          tabindex="-1"
+                          aria-hidden="true"
+                          poster=${previewPosterSrc}
+                          @playing=${() =>
+                            this.广播媒体会话信号(attachment.attachmentId, {
+                              type: "PLAYER_PLAYING",
+                            })}
+                          @waiting=${() =>
+                            this.广播媒体会话信号(attachment.attachmentId, {
+                              type: "PLAYER_WAITING",
+                            })}
+                          @stalled=${() =>
+                            this.广播媒体会话信号(attachment.attachmentId, {
+                              type: "PLAYER_STALLED",
+                            })}
+                          @error=${() =>
+                            this.广播媒体会话信号(attachment.attachmentId, {
+                              type: "PLAYER_ERROR",
+                            })}
+                        ></video>
+                      `
+                    : html`
+                        <img
+                          class="message-video-poster"
+                          data-attachment-id=${attachment.attachmentId}
+                          src=${previewPosterSrc}
+                          alt="视频封面"
+                          width=${attachment.displayWidth}
+                          height=${attachment.displayHeight}
+                          loading="lazy"
+                          aria-hidden="true"
+                        />
+                        <span class="message-video-play-indicator" aria-hidden="true">▶</span>
+                      `}
                 </button>
                 ${渲染媒体提示(attachment.attachmentId, playback)}
               </div>

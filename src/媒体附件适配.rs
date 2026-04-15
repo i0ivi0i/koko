@@ -74,6 +74,7 @@ pub(super) async fn 查询附件快照_异步(
                 a.status,
                 a.width,
                 a.height,
+                a.thumbnail_storage_key IS NOT NULL AS has_thumbnail,
                 a.asset_original_storage_key,
                 a.full_storage_key,
                 EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT AS origin_expires_at_epoch,
@@ -105,6 +106,7 @@ pub(super) async fn 查询附件快照_异步(
             状态: status,
             宽: row.get("width"),
             高: row.get("height"),
+            允许缩略图: row.get("has_thumbnail"),
             资产原图存储键: row.get("asset_original_storage_key"),
             完整图存储键: row.get("full_storage_key"),
             原始冷源到期时间戳秒: row.get("origin_expires_at_epoch"),
@@ -288,6 +290,7 @@ async fn 创建媒体附件记录_异步(
         字节大小: 附件.字节大小,
         宽: 附件.宽,
         高: 附件.高,
+        允许缩略图: 附件.缩略图存储键.is_some(),
         状态: usecase::附件状态读取结果::就绪,
     })
 }

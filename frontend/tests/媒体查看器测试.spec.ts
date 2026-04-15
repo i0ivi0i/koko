@@ -309,9 +309,15 @@ describe("媒体查看器适配器", () => {
     });
     const provider = await 等待查询元素<HTMLElement>("video-player[data-player-shell='videojs']");
     const video = document.body.querySelector("video");
+    const mount = document.body.querySelector<HTMLElement>("[data-media-viewer-mount='video']");
 
     expect(provider).not.toBeNull();
     expect(video).toBeInstanceOf(HTMLVideoElement);
+    expect(mount).not.toBeNull();
+    expect(mount?.style.width).toBe("100%");
+    expect(mount?.style.maxWidth).toBe("1120px");
+    expect(provider?.style.width).toBe("100%");
+    expect(读取VideoJs媒体容器()?.style.width).toBe("100%");
     expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
       1
     );

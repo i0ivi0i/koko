@@ -2,6 +2,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use std::io;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// prepare 返回的 Tus headers 当前只要求一条稳定 Authorization。
 /// 测试统一从这里拿，避免每个用例各自硬编码字段路径。
@@ -159,10 +160,20 @@ pub async fn 插入ready图片附件记录(pool: &PgPool, 会话标识: &str, �
     .bind(format!("thumbnail/{附件标识}.png"))
     .bind(format!("asset-original/{附件标识}.png"))
     .bind(format!("full/{附件标识}.webp"))
-    .bind(1_776_000_000_i64)
+    .bind(未来冷源到期时间戳秒())
     .execute(pool)
     .await
     .expect("应能插入 ready 图片附件");
+}
+
+/// 图片冷源测试夹具必须用“当前时间之后”的 TTL。
+/// 否则整套协作分发/清理回归一起跑时，会被后台清理逻辑误删，测试结果就会漂。
+pub fn 未来冷源到期时间戳秒() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_secs() as i64
+        + 24 * 60 * 60
 }
 
 /// 视频 ready helper 和图片 helper 保持同一层级：

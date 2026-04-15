@@ -4,9 +4,12 @@ import {
   type 协作分发会话事件,
 } from "./媒体协作分发.js";
 
+type 播放表面 = "viewer" | "inline_autoplay";
+
 type 媒体播放输入 = {
   attachmentId: string;
   kind: 媒体种类;
+  surface?: 播放表面;
   onSessionEvent?: (event: 协作分发会话事件) => void;
 };
 
@@ -102,6 +105,9 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 读取锚点地址 = (locator: 媒体定位结果): string =>
     locator.streaming_asset?.origin.original_url ?? locator.original_url;
 
+  const 读取预览缩略图地址 = (locator: 媒体定位结果): string | null =>
+    locator.preview_asset?.still_url ?? locator.thumbnail_url;
+
   /**
    * 视频一旦拿到正式 HLS manifest，就不应该继续把原始附件冷源当主播放链。
    * 当前阶段先统一优先消费 HLS：
@@ -137,7 +143,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     return {
       src: previewSrc,
       viewerSrc,
-      thumbnailUrl: locator.blob_asset.preview?.url ?? locator.thumbnail_url,
+      thumbnailUrl: locator.blob_asset.preview?.url ?? 读取预览缩略图地址(locator),
     };
   };
 
@@ -150,7 +156,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     attachmentId: input.attachmentId,
     kind: input.kind,
     src: "",
-    thumbnailUrl: locator?.thumbnail_url ?? null,
+    thumbnailUrl: locator ? 读取预览缩略图地址(locator) : null,
     reason,
     hint: "附件当前不可获取",
   });
@@ -169,7 +175,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         attachmentId: input.attachmentId,
         kind: input.kind,
         src: anchorUrl,
-        thumbnailUrl: locator.thumbnail_url,
+        thumbnailUrl: 读取预览缩略图地址(locator),
         hint: null,
       };
     } catch {
@@ -188,7 +194,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           attachmentId: input.attachmentId,
           kind: input.kind,
           src: refreshedAnchorUrl,
-          thumbnailUrl: refreshedLocator.thumbnail_url,
+          thumbnailUrl: 读取预览缩略图地址(refreshedLocator),
           hint: null,
         };
       } catch {
@@ -237,6 +243,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   };
 
   const 解析播放结果 = async (input: 媒体播放输入): Promise<媒体播放结果> => {
+    const surface = input.surface ?? "viewer";
     let locator: 媒体定位结果;
     try {
       locator = await deps.locate(input.attachmentId);
@@ -266,19 +273,28 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       };
     }
     const manifestUrl = 读取流媒体主链地址(locator);
-    if (manifestUrl) {
+    if (surface === "viewer" && manifestUrl) {
       释放协作分发占用(input.attachmentId);
       return {
         mode: "manifest",
         attachmentId: input.attachmentId,
         kind: input.kind,
         src: manifestUrl,
-        thumbnailUrl: locator.thumbnail_url,
+        thumbnailUrl: 读取预览缩略图地址(locator),
         // 标准流媒体主链一旦成立，查看器/播放器适配层就应该直接消费统一分发表面，
         // 而不是再从旧 file-level locator 里猜 swarm 线索。
         streamingDistribution: locator.streaming_asset?.distribution ?? null,
         hint: null,
       };
+    }
+    if (surface === "inline_autoplay") {
+      /**
+       * 消息流自动播复用同一个 resolver，但只拿浏览器原生最稳的直链：
+       * 1. 不让列表里的轻量 `<video>` 去直接吞 HLS manifest；
+       * 2. 也不为了自动播去抢第二套 swarm 正式主链占用；
+       * 3. 当前没有可播锚点时，就退回静态封面。
+       */
+      return 尝试锚点(input, locator, true);
     }
     const distribution = 读取协作分发定位片段(locator);
     if (distribution?.availability === "expired") {
@@ -288,7 +304,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         attachmentId: input.attachmentId,
         kind: input.kind,
         src: "",
-        thumbnailUrl: locator.thumbnail_url,
+        thumbnailUrl: 读取预览缩略图地址(locator),
         hint: "内容已过期",
       };
     }
@@ -308,7 +324,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           attachmentId: input.attachmentId,
           kind: input.kind,
           src: swarmSource.src,
-          thumbnailUrl: locator.thumbnail_url,
+          thumbnailUrl: 读取预览缩略图地址(locator),
           hint: 过滤可播放媒体提示(swarmSource.hint),
         };
       }

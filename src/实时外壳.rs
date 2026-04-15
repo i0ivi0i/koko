@@ -263,7 +263,7 @@ pub(super) async fn handle_realtime_subscribe(
             let events_json = serde_json::json!({
                 "room_id": 房间标识,
                 "latest_event_position": 最新事件位置,
-                "events": events_to_json(事件)
+                "events": events_to_json(事件, Some(auth.session_id.as_str()))
             });
             if let Err(err) = socket.emit("control_result", &control) {
                 match 分类单连接发送失败(&err) {
@@ -433,7 +433,9 @@ pub(super) async fn handle_realtime_create_message(
                     ..
                 } => (房间标识.clone(), 客户端消息标识.clone(), *事件位置),
             };
-            let payload = event_to_json(event);
+            // 广播路径当前没有逐连接会话上下文，不能安全地把受控 preview URL 广播成同一份。
+            // 这里显式传 `None`，保持 preview 真相仍由同一个投影函数 owner 控制。
+            let payload = event_to_json(event, None);
             if let Err(err) = socket
                 .within(room_id.clone())
                 .emit("room_event", &payload)
@@ -595,7 +597,7 @@ mod 实时外壳测试 {
             文本: "hello".to_string(),
             附件: Vec::new(),
             事件位置: 1,
-        });
+        }, None);
 
         assert_eq!(payload["type"], "message_created");
         assert_eq!(payload["room_id"], "room-1");

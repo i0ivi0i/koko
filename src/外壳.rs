@@ -464,32 +464,61 @@ struct ApiError {
 
 /// 领域事件 -> 传输 JSON 的稳定映射层。
 /// 约束：只做字段翻译，不添加业务语义。
-fn events_to_json(events: Vec<contract::领域事件>) -> Vec<serde_json::Value> {
-    events.into_iter().map(event_to_json).collect()
+fn events_to_json(
+    events: Vec<contract::领域事件>,
+    session_id: Option<&str>,
+) -> Vec<serde_json::Value> {
+    events
+        .into_iter()
+        .map(|event| event_to_json(event, session_id))
+        .collect()
 }
 
-fn attachments_to_json(attachments: &[contract::附件快照]) -> Vec<serde_json::Value> {
+fn attachments_to_json(
+    attachments: &[contract::附件快照],
+    session_id: Option<&str>,
+) -> Vec<serde_json::Value> {
     attachments
         .iter()
         .map(|attachment| match attachment {
-            contract::附件快照::图片(image) => serde_json::json!({
-                "kind": "image",
-                "attachment_id": image.附件标识,
-                "width": image.宽,
-                "height": image.高
-            }),
-            contract::附件快照::视频(video) => serde_json::json!({
-                "kind": "video",
-                "attachment_id": video.附件标识,
-                "width": video.宽,
-                "height": video.高
-            }),
+            contract::附件快照::图片(image) => {
+                let mut payload = serde_json::json!({
+                    "kind": "image",
+                    "attachment_id": image.附件标识,
+                    "width": image.宽,
+                    "height": image.高
+                });
+                if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
+                    image.附件标识.as_str(),
+                    session_id,
+                    image.有预览图,
+                ) {
+                    payload["preview_asset"] = preview_asset;
+                }
+                payload
+            }
+            contract::附件快照::视频(video) => {
+                let mut payload = serde_json::json!({
+                    "kind": "video",
+                    "attachment_id": video.附件标识,
+                    "width": video.宽,
+                    "height": video.高
+                });
+                if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
+                    video.附件标识.as_str(),
+                    session_id,
+                    video.有预览图,
+                ) {
+                    payload["preview_asset"] = preview_asset;
+                }
+                payload
+            }
         })
         .collect()
 }
 
 /// 单条领域事件 -> JSON。
-fn event_to_json(event: contract::领域事件) -> serde_json::Value {
+fn event_to_json(event: contract::领域事件, session_id: Option<&str>) -> serde_json::Value {
     match event {
         contract::领域事件::消息已创建 {
             房间标识,
@@ -509,7 +538,7 @@ fn event_to_json(event: contract::领域事件) -> serde_json::Value {
             "sender_display_alias": 发送者花名,
             "text": 文本,
             "body": 文本,
-            "attachments": attachments_to_json(&附件),
+            "attachments": attachments_to_json(&附件, session_id),
             "event_position": 事件位置
         }),
     }
