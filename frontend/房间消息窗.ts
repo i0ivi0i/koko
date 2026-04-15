@@ -2,7 +2,7 @@ import { html, LitElement } from "lit";
 import { VirtualizerController } from "@tanstack/lit-virtual";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
-import type { 媒体播放结果 } from "./媒体/媒体播放.js";
+import { 媒体是否默认循环播放, type 媒体播放结果 } from "./媒体/媒体播放.js";
 import type { 消息视频自动播候选 } from "./媒体/消息视频自动播编排.js";
 import type { 媒体会话信号 } from "./媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
@@ -441,7 +441,8 @@ export class 房间消息窗 extends LitElement {
              * 时间线默认态现在只承载“静态可点封面”：
              * 1. 不再在消息流里常驻真实 `<video>`，彻底关掉第二套首帧预览链；
              * 2. 视频封面优先吃消息快照里的权威 preview，其次才吃播放会话补回来的同源封面；
-             * 3. 真正播放统一交给查看器，避免列表卡片和正式播放器同时长真相。
+             * 3. 当前若进入自动播态，也只是投影统一播放策略，不在这里再发明第二套 loop/恢复规则；
+             * 4. 真正播放统一交给查看器，避免列表卡片和正式播放器同时长真相。
              */
             return html`
               <div class="message-video-card">
@@ -463,6 +464,7 @@ export class 房间消息窗 extends LitElement {
                           height=${attachment.displayHeight}
                           muted
                           autoplay
+                          ?loop=${媒体是否默认循环播放("video")}
                           playsinline
                           preload="metadata"
                           tabindex="-1"

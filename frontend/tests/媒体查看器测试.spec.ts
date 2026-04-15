@@ -324,6 +324,29 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
+  it("正式视频查看器里的唯一 video 默认循环播放", async () => {
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-loop-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-loop-1",
+          src: "blob:http://media.local/video-loop-1",
+          posterSrc: "http://media.local/poster-loop-1",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+
+    const video = await 等待查询元素<HTMLVideoElement>("video");
+    expect(video?.loop).toBe(true);
+  });
+
   it("manifest 视频也会进入同一个 Video.js 壳，不再单独拉起 HLS overlay", async () => {
     const createVideoJsPlayerShell = vi.fn(() => ({
       destroy: vi.fn(),
