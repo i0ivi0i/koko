@@ -113,10 +113,11 @@
 
 ### 5.2 唯一视频预览真相
 
-- 视频预览由后端生成并持久化成同一组 preview 资产
+- 视频预览只指静态封面，由后端生成并持久化
 - 预览真相不是 UI 临时变量，而是共享合同的一部分
 - `message snapshot` 与 `locator` 只是投影同一份 preview 真相
 - 前端不再把 `original#t=0.1` 当默认缩略图来源
+- 不再新增面向消息流自动播的第二份视频 preview 资产
 
 ### 5.3 唯一自动播 owner
 
@@ -156,18 +157,16 @@
 - `preview_asset.still_url`
   - 稳定静态封面图
   - 默认消息流卡片总是先吃它
-- `preview_asset.motion_url`
-  - 可选的轻量静音短预览
-  - 用于消息流自动播
-  - 不能被视为正式播放主链
 - `preview_asset.width / height`
   - preview 资产自身几何
 - `preview_asset.version`
   - preview 资产版本或稳定标识
   - 供前端避免脏缓存或旧 preview 漂移
 
-这里的 `preview_asset` 是唯一 preview 真相。  
-`message snapshot` 和 `locator` 都只能投影它，不能再各自长视频专属字段。
+这里的 `preview_asset` 是唯一静态 preview 真相。
+它只表达“看什么封面”，不表达“自动播吃什么视频源”。
+自动播视频源必须继续复用现有正式媒体 contract 与同一个 media owner，
+`message snapshot` 和 `locator` 都只能投影这份静态 preview 真相，不能再各自长视频专属字段。
 
 ### 6.3 `snapshot` / `locator` 的职责
 
@@ -178,6 +177,7 @@
   - 负责正式播放定位、协作分发、运行态补充
   - 也必须带同一个 `preview_asset`
   - 不再单独为视频维护顶层 `thumbnail_url`
+  - 自动播若需要视频源，也必须经由同一个媒体 owner / source resolver 解析
 
 迁移期间允许保留旧字段兼容旧调用方，  
 但必须明确它只是从 `preview_asset.still_url` 派生的过渡投影，  
@@ -196,24 +196,28 @@
 - 消息流卡片不再长期保留真实 `<video>` 默认态
 - 默认态：`poster + play entry`
 - 自动播态：`muted + playsinline + no controls` 的轻量 `<video>`
+- 自动播态只承接同一媒体 owner 解析出的正式播放源
 - 正式播放态：交给页面级查看器，不在消息流里继续扩张
 
 ### 6.6 `manifest` 视频的单链路自动播裁决
 
 这是本次设计的关键阻断点，必须明确写死：
 
-- `manifest/HLS` 视频在消息流里 **绝不直接使用 `master.m3u8` 自动播**
-- 消息流自动播永远只允许消费 `preview_asset.motion_url`
-- 如果某条视频还没有 `motion_url`，它就保持 `poster-only`
+- 消息流自动播不再生成、持有或依赖额外 `preview clip / motion_url`
+- `manifest/HLS` 视频若要自动播，必须复用现有正式播放资产
+- 具体吃 `hls_master_url / file / blob / swarm`，必须由同一个媒体 owner / source resolver 裁决
+- 壳层不允许自己拼 URL、猜来源、绕过 locator 或私造第二套恢复逻辑
+- 如果该视频当前没有可播放正式源，消息流就保持 `poster-only`
 - 这意味着：
-  - 消息流里不会再挂一套 `hls.js`
-  - 不会为了自动播绕开媒体 owner 再找第二来源
-  - `Video.js + hls.js` 仍然只属于正式播放器壳
+  - 自动播和正式播放共享同一条媒体主链
+  - 消息流里不会再为 preview clip 养第二套视频资产
+  - 消息流里的轻量 `<video>` 只是展示模式，不是第二套真相
+  - `Video.js` 仍然只属于正式播放器壳
 
 换句话说：
 
-**消息流自动播看的是 preview clip，不是正式主链。  
-正式播放看的是正式主链，不是 preview clip。**
+**消息流自动播和正式播放看的是同一条正式媒体主链。
+两者区别只在壳层模式，不在来源真相。**
 
 ## 7. 数据流设计
 
@@ -222,9 +226,10 @@
 视频上传 `complete` 后，后端必须完成：
 
 1. 生成稳定 `preview_asset.still_url`；
-2. 生成可选的 `preview_asset.motion_url`；
-3. 持久化 preview 元数据与可读地址；
-4. 让后续 `message snapshot` 与 `locator` 都能读到同一份视频预览真相。
+2. 持久化 preview 元数据与可读地址；
+3. 继续产出当前已经存在的正式播放资产，例如 `HLS + DASH + 原始冷备`；
+4. 让后续 `message snapshot` 与 `locator` 都能读到同一份视频预览真相；
+5. 不再额外生成仅服务消息流自动播的第二份视频 preview 资产。
 
 ### 7.2 消息恢复与晚进群
 
@@ -232,8 +237,8 @@
 
 1. `snapshot_messages.attachments` 直接带稳定 `preview_asset`；
 2. 前端展示层先用 `preview_asset.still_url` 渲染静态封面；
-3. 若该卡片后续获得自动播 owner，再尝试消费 `preview_asset.motion_url`；
-4. 若用户打开查看器，再向媒体 owner 取正式播放源；
+3. 若该卡片后续获得自动播 owner，再向同一个媒体 owner 取当前正式播放源；
+4. 若用户打开查看器，继续向同一个媒体 owner 取正式播放源；
 5. 不再依赖“先没有图，等 locator 再补”这条弱链路。
 
 ### 7.3 自动播数据流
@@ -243,9 +248,10 @@
 3. `视频预览自动播编排` 在壳层只维护“当前 preview owner 是谁”；
 4. 满足阈值的视频进入候选集合；
 5. owner 选择器只挑一个“离视口中心最近”的候选；
-6. 若该卡片有 `preview_asset.motion_url`，就切入轻量自动播；
-7. 若没有 `motion_url`，就保持静态封面；
-8. 失去 owner 后立即 `pause` 并退回静态封面。
+6. owner 确认后，壳层向同一个媒体 owner / source resolver 申请当前正式播放源；
+7. 若源可播放，就以 `muted + playsinline + 无控件` 进入轻量自动播；
+8. 若当前无可播放源，或浏览器策略拒绝自动播，就保持静态封面；
+9. 失去 owner 后立即 `pause`、释放当前源，并退回静态封面。
 
 这里的壳层编排只拥有：
 
@@ -272,16 +278,17 @@
 
 为真正关闭“晚进群偶尔没图”，必须补齐旧资产和灰度顺序：
 
-1. 新上传视频先开始生成 `preview_asset`
+1. 新上传视频先开始生成 `preview_asset.still_url`
 2. 后台补历史视频 preview backfill
 3. `snapshot` 与 `locator` 同时接入 `preview_asset`
-4. 前端优先消费 `preview_asset`
-5. 所有 Web 入口完成切换后，再退场视频专用旧字段和 `original#t=0.1` 兜底
+4. 前端优先消费 `preview_asset` 作为静态封面真相
+5. 消息流自动播与正式播放统一走既有正式媒体主链
+6. 所有 Web 入口完成切换后，再退场视频专用旧字段和 `original#t=0.1` 兜底
 
 灰度期间：
 
 - 对已有 preview 的视频，前端只认 `preview_asset`
-- 对尚未回填的视频，只显示统一占位图
+- 对尚未回填的视频，只显示统一占位图且不参与自动播
 - 不允许为了回填过渡期重新启用 `original#t=0.1` 作为主链
 
 这样虽然会让部分旧视频暂时只有占位图，  
@@ -306,8 +313,9 @@
 - 只允许 `muted + playsinline + 无控件`
 - 自动播只属于轻量预览，不拉起正式播放器壳
 - 自动播不会修改媒体真相，只是壳层展示策略
-- 自动播只消费 `preview_asset.motion_url`
-- 没有 `motion_url` 时不降级成 `master.m3u8` 或 `original#t=0.1`
+- 自动播复用与正式播放相同的媒体 source resolver
+- 自动播可以命中 `hls_master_url / file / blob / swarm`，但壳层自己不能裁决具体吃哪条源
+- 没有静态 preview 时不回退成 `original#t=0.1`
 
 ### 8.4 停播规则
 
@@ -348,7 +356,7 @@
 ### 10.1 后端测试
 
 - 视频 `complete` 后能生成稳定 `preview_asset.still_url`
-- 可自动播的视频能生成 `preview_asset.motion_url`
+- 视频 `complete` 后不会额外生成只服务消息流的第二份 preview 视频资产
 - 晚进群 session 能通过 `snapshot` 和 `locator` 看到同一 `preview_asset`
 - 旧 session / 新 session / sender / late joiner 的 preview 字段一致
 - 历史视频 backfill 完成后，旧消息也能拿到同一 `preview_asset`
@@ -356,10 +364,10 @@
 ### 10.2 前端单测
 
 - 消息流默认只显示静态封面，不默认渲染真实 `<video>` 播放态
-- `manifest` 视频在消息流里绝不直接创建 `hls.js` / `video-player`
+- `manifest` 视频在消息流自动播时，必须走和正式播放同一个 media owner / source resolver
 - 同屏多个视频时，只能选出一个自动播 owner
 - 自动播卡片离开阈值后会暂停并回退成封面
-- 没有 `motion_url` 的视频保持 `poster-only`
+- 没有稳定 preview 的视频保持占位图且不参与自动播
 - 打开正式查看器时，列表里的自动播 owner 会被释放
 - 浏览器事件会先转应用事件，再更新自动播 owner
 - 正式查看器挂载后的 `mount` / `video-player` / `media-container` / `video` 不能为 `0x0`
@@ -369,7 +377,7 @@
 - `Chrome Stable`
 - 发送者、原有成员、晚进群成员均能看到同一视频封面
 - 消息流滚动时，同屏只有一个视频自动播
-- `manifest` 视频在消息流里不会直接拉 `master.m3u8` 自动播
+- 消息流自动播与正式播放复用同一条正式媒体主链，不再出现额外 preview 视频请求
 - 打开正式查看器后，视频画面可见、控件正常、声音正常
 - 关闭查看器后，列表重新按照视口规则选择唯一自动播 owner
 
@@ -380,6 +388,7 @@
 如果后端尚未产出 preview：
 
 - 消息流显示统一占位图；
+- 该视频不参与自动播；
 - 不再默认回退成 `original#t=0.1`；
 - 这是为了坚守唯一真相边界，避免再把临时兜底误升级成长期主链。
 
@@ -400,7 +409,7 @@
 
 - 允许回滚到“静态占位图 + 正式播放器仍可打开”
 - 不允许回滚到 `original#t=0.1` 主链
-- 不允许为了维持自动播而临时启用消息流 `master.m3u8`
+- 不允许为了维持自动播而新增第二份 preview 视频资产或壳层私有源链
 
 优先级永远是：
 
@@ -416,18 +425,19 @@
 2. 不把 WebTorrent 或 P2P runtime 做成第二套视频 UI；
 3. 不允许前端长期依赖首帧抠图代替稳定视频 preview 真相；
 4. 不让多个视频在同一屏里同时自动播；
-5. 不为了自动播去下放业务真相到壳层。
+5. 不为了自动播去下放业务真相到壳层；
+6. 不再额外生成只服务消息流自动播的第二份视频 preview 资产。
 
 ## 13. 最终裁决
 
 本次视频链路收口的标准是：
 
-**默认静态、视口唯一自动播、正式播放唯一 Video.js 壳、视频 preview 唯一后端真相。**
+**默认静态、视口唯一自动播、正式播放唯一 Video.js 壳、静态封面唯一后端真相、自动播复用正式媒体主链。**
 
 只要还存在下面任意一条，这次收口就算失败：
 
 1. 消息流默认态仍靠真实 `<video>` 抠首帧；
-2. `manifest` 视频在消息流里直接靠 `master.m3u8` 自动播；
+2. 消息流自动播又长出额外 preview clip、私有 source resolver 或第二份视频资产；
 3. 视频 preview 仍然不是后端权威事实；
 4. 正式查看器还能出现 `0x0` 尺寸塌陷；
 5. 同屏能同时自动播多个视频；
