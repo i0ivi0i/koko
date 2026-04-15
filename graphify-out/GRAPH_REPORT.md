@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-15)
 
 ## Corpus Check
-- 161 files · ~176,241 words
+- 162 files · ~177,015 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 325 nodes · 399 edges · 27 communities detected
+- 335 nodes · 409 edges · 27 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -65,8 +65,8 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.05
-Nodes (41): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+33 more)
+Cohesion: 0.04
+Nodes (42): ApiError, Blob媒体资产响应参数, BootstrapBody, 等待complete所需运输回执(), complete_media_upload(), CompleteMediaUploadBody, 构造content_range值(), 重写_dash清单内容() (+34 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.06
@@ -106,23 +106,23 @@ Nodes (4): New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Write-Ma
 
 ### Community 10 - "Community 10"
 Cohesion: 0.22
-Nodes (2): ensureBackendBinaryPrepared(), startBackend()
+Nodes (2): Assert-ServicesStopped(), Test-TcpPortOpen()
 
 ### Community 11 - "Community 11"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.22
+Nodes (2): ensureBackendBinaryPrepared(), startBackend()
 
 ### Community 12 - "Community 12"
 Cohesion: 0.5
-Nodes (1): 假Hls构造器
-
-### Community 13 - "Community 13"
-Cohesion: 0.67
 Nodes (0): 
 
+### Community 13 - "Community 13"
+Cohesion: 0.5
+Nodes (1): 假Hls构造器
+
 ### Community 14 - "Community 14"
-Cohesion: 1.0
-Nodes (1): Pg仓储
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
@@ -175,11 +175,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **23 isolated node(s):** `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局`, `文本布局测试`, `RustusHookBody` (+18 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 15`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 15`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (2 nodes): `main.rs`, `main()`
+- **Thin community `Community 16`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 17`** (2 nodes): `main.rs`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 18`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -204,15 +204,15 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 6` to `Community 1`?**
-  _High betweenness centrality (0.108) - this node is a cross-community bridge._
+  _High betweenness centrality (0.101) - this node is a cross-community bridge._
 - **Why does `构造rustus_hook请求体()` connect `Community 7` to `Community 2`?**
-  _High betweenness centrality (0.067) - this node is a cross-community bridge._
+  _High betweenness centrality (0.063) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`?**
-  _High betweenness centrality (0.036) - this node is a cross-community bridge._
+  _High betweenness centrality (0.033) - this node is a cross-community bridge._
 - **What connects `frontend/存储.ts`, `frontend/房间内核.ts`, `文本布局` to the rest of the system?**
   _23 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.05 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.04 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.06 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
