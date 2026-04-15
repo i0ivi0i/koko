@@ -1,7 +1,10 @@
 use super::{
     err_resp, map_domain_err_tuple, 应用状态, 媒体上传运输方式_TUS, 构建共享仓储,
 };
-use crate::usecase::{self, 仓储端口};
+use crate::{
+    adapter::媒体上传运输角色,
+    usecase::{self, 仓储端口},
+};
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -29,6 +32,9 @@ struct RustusUploadBody {
     offset: i64,
     length: i64,
     path: Option<String>,
+    is_partial: Option<bool>,
+    is_final: Option<bool>,
+    parts: Option<Vec<String>>,
     metadata: HashMap<String, String>,
 }
 
@@ -66,10 +72,15 @@ async fn handle_rustus_hook_pre_create(
         Ok(token) => token,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
+    let transport_role = match 判定rustus运输角色(&body.upload) {
+        Ok(role) => role,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
     let attachment_id = match 读取rustus_metadata字段(&body.upload.metadata, "attachment_id") {
         Ok(value) => value,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
+    let upload_session_id = 读取可选rustus_metadata字段(&body.upload.metadata, "upload_session_id");
     /*
      * `pre-create` 发生在 Rustus 真正接收字节之前：
      * - `length` 代表客户端声明的总长度；
@@ -93,8 +104,8 @@ async fn handle_rustus_hook_pre_create(
     let state_for_repo = state.clone();
     let check_result = match task::spawn_blocking(move || {
         let repo = 构建共享仓储(&state_for_repo);
-        let Some(transport) = repo
-            .根据上传令牌查询媒体上传运输记录(&upload_token)
+        let Some(upload_session) = repo
+            .根据上传令牌查询媒体上传会话(&upload_token)
             .map_err(map_domain_err_tuple)?
         else {
             return Err((
@@ -103,29 +114,44 @@ async fn handle_rustus_hook_pre_create(
                 "上传令牌无效".to_string(),
             ));
         };
-        if !transport.令牌仍有效 || transport.运输方式 != 媒体上传运输方式_TUS {
+        if !upload_session.令牌仍有效 || upload_session.运输方式 != 媒体上传运输方式_TUS {
             return Err((
                 StatusCode::UNAUTHORIZED,
                 "attachment_upload_unauthorized",
                 "上传令牌已失效".to_string(),
             ));
         }
-        if transport.废弃时间戳秒.is_some() {
+        if upload_session.废弃时间戳秒.is_some() {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",
                 "附件上传已被放弃".to_string(),
             ));
         }
-        if transport.附件标识 != attachment_id {
+        if upload_session.附件标识 != attachment_id {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 "attachment_id 与上传令牌不匹配".to_string(),
             ));
         }
+        if let Some(upload_session_id) = upload_session_id.as_deref() {
+            if upload_session.上传会话标识 != upload_session_id {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "invalid_argument",
+                    "upload_session_id 与上传令牌不匹配".to_string(),
+                ));
+            }
+        } else if transport_role != 媒体上传运输角色::单文件 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "partial/final upload 缺少 upload_session_id".to_string(),
+            ));
+        }
         let Some(prepared) = repo
-            .查询待完成媒体附件(&transport.附件标识)
+            .查询待完成媒体附件(&upload_session.附件标识)
             .map_err(map_domain_err_tuple)?
         else {
             return Err((
@@ -141,12 +167,41 @@ async fn handle_rustus_hook_pre_create(
                 "附件不再处于待上传状态".to_string(),
             ));
         }
-        if prepared.字节大小 != body.upload.length {
+        if prepared.当前上传会话标识.as_deref() != Some(upload_session.上传会话标识.as_str()) {
             return Err((
-                StatusCode::BAD_REQUEST,
-                "invalid_argument",
-                "上传文件大小与 prepare 不一致".to_string(),
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件当前上传会话已切换".to_string(),
             ));
+        }
+        match transport_role {
+            媒体上传运输角色::单文件 => {
+                if prepared.字节大小 != body.upload.length {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "invalid_argument",
+                        "上传文件大小与 prepare 不一致".to_string(),
+                    ));
+                }
+            }
+            媒体上传运输角色::分片 => {
+                if body.upload.length <= 0 || body.upload.length >= prepared.字节大小 {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "invalid_argument",
+                        "partial upload 必须小于 prepare 整文件大小".to_string(),
+                    ));
+                }
+            }
+            媒体上传运输角色::最终合并 => {
+                if body.upload.parts.as_ref().is_none_or(|parts| parts.is_empty()) {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "invalid_argument",
+                        "final concat 缺少 partial parts 列表".to_string(),
+                    ));
+                }
+            }
         }
         Ok::<_, (StatusCode, &'static str, String)>(())
     })
@@ -178,10 +233,15 @@ async fn handle_rustus_hook_post_finish(
         Ok(token) => token,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
+    let transport_role = match 判定rustus运输角色(&body.upload) {
+        Ok(role) => role,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
     let attachment_id = match 读取rustus_metadata字段(&body.upload.metadata, "attachment_id") {
         Ok(value) => value,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
+    let upload_session_id = 读取可选rustus_metadata字段(&body.upload.metadata, "upload_session_id");
     let storage_locator = match body
         .upload
         .path
@@ -215,12 +275,13 @@ async fn handle_rustus_hook_post_finish(
     // - 但 hook 返回前的结构化日志也需要稳定锚点；
     // - 因此 transport 更新和日志诊断各自持有一份，只共享值，不共享可变状态。
     let attachment_id_for_repo = attachment_id.clone();
+    let upload_session_id_for_repo = upload_session_id.clone();
     let upload_id_for_repo = upload_id.clone();
     let storage_locator_for_repo = storage_locator.clone();
     let update_result = match task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_repo);
-        let Some(transport) = repo
-            .根据上传令牌查询媒体上传运输记录(&upload_token)
+        let Some(upload_session) = repo
+            .根据上传令牌查询媒体上传会话(&upload_token)
             .map_err(map_domain_err_tuple)?
         else {
             return Err((
@@ -229,29 +290,44 @@ async fn handle_rustus_hook_post_finish(
                 "上传令牌无效".to_string(),
             ));
         };
-        if !transport.令牌仍有效 || transport.运输方式 != 媒体上传运输方式_TUS {
+        if !upload_session.令牌仍有效 || upload_session.运输方式 != 媒体上传运输方式_TUS {
             return Err((
                 StatusCode::UNAUTHORIZED,
                 "attachment_upload_unauthorized",
                 "上传令牌已失效".to_string(),
             ));
         }
-        if transport.废弃时间戳秒.is_some() {
+        if upload_session.废弃时间戳秒.is_some() {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",
                 "附件上传已被放弃".to_string(),
             ));
         }
-        if transport.附件标识 != attachment_id_for_repo {
+        if upload_session.附件标识 != attachment_id_for_repo {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 "attachment_id 与上传令牌不匹配".to_string(),
             ));
         }
+        if let Some(upload_session_id) = upload_session_id_for_repo.as_deref() {
+            if upload_session.上传会话标识 != upload_session_id {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "invalid_argument",
+                    "upload_session_id 与上传令牌不匹配".to_string(),
+                ));
+            }
+        } else if transport_role != 媒体上传运输角色::单文件 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                "partial/final upload 缺少 upload_session_id".to_string(),
+            ));
+        }
         let Some(prepared) = repo
-            .查询待完成媒体附件(&transport.附件标识)
+            .查询待完成媒体附件(&upload_session.附件标识)
             .map_err(map_domain_err_tuple)?
         else {
             return Err((
@@ -267,9 +343,20 @@ async fn handle_rustus_hook_post_finish(
                 "附件不再处于待上传状态".to_string(),
             ));
         }
+        if prepared.当前上传会话标识.as_deref() != Some(upload_session.上传会话标识.as_str()) {
+            return Err((
+                StatusCode::CONFLICT,
+                "attachment_not_ready",
+                "附件当前上传会话已切换".to_string(),
+            ));
+        }
         解析rustus临时文件路径(&state_for_repo.rustus_data_dir, &storage_locator_for_repo)?;
-        repo.更新媒体上传运输回执(
-            &transport.附件标识,
+        repo.登记媒体上传运输回执(
+            &upload_session.上传会话标识,
+            &upload_session.附件标识,
+            &upload_session.运输方式,
+            transport_role,
+            None,
             &upload_id_for_repo,
             &storage_locator_for_repo,
             body.upload.length,
@@ -285,8 +372,10 @@ async fn handle_rustus_hook_post_finish(
                 adapter = "rustus_hook",
                 hook = "post-finish",
                 attachment_id = attachment_id.as_str(),
+                upload_session_id = upload_session_id.as_deref().unwrap_or(""),
                 upload_id = upload_id.as_str(),
                 request_id = request_id.as_deref().unwrap_or(""),
+                transport_role = transport_role.as_str(),
                 storage_locator = storage_locator.as_str(),
                 error_code = "system_error",
                 detail = %err,
@@ -306,8 +395,10 @@ async fn handle_rustus_hook_post_finish(
                 adapter = "rustus_hook",
                 hook = "post-finish",
                 attachment_id = attachment_id.as_str(),
+                upload_session_id = upload_session_id.as_deref().unwrap_or(""),
                 upload_id = upload_id.as_str(),
                 request_id = request_id.as_deref().unwrap_or(""),
+                transport_role = transport_role.as_str(),
                 storage_locator = storage_locator.as_str(),
                 "Rustus post-finish 已登记上传回执"
             );
@@ -318,8 +409,10 @@ async fn handle_rustus_hook_post_finish(
                 adapter = "rustus_hook",
                 hook = "post-finish",
                 attachment_id = attachment_id.as_str(),
+                upload_session_id = upload_session_id.as_deref().unwrap_or(""),
                 upload_id = upload_id.as_str(),
                 request_id = request_id.as_deref().unwrap_or(""),
+                transport_role = transport_role.as_str(),
                 storage_locator = storage_locator.as_str(),
                 error_code = code,
                 detail = %message,
@@ -379,6 +472,32 @@ fn 读取可选请求标识(headers: &HeaderMap) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+/// 协议字段 `is_partial/is_final` 只允许在 Rustus adapter 停留。
+/// 这里统一把它们翻译成我们自己的 transport role，避免 shell / usecase 直接吃协议布尔位。
+fn 判定rustus运输角色(
+    upload: &RustusUploadBody,
+) -> Result<媒体上传运输角色, (StatusCode, &'static str, String)> {
+    let is_partial = upload.is_partial.unwrap_or(false);
+    let is_final = upload.is_final.unwrap_or(false);
+    match (is_partial, is_final) {
+        (true, true) => Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "upload 不能同时是 partial 和 final".to_string(),
+        )),
+        (true, false) => Ok(媒体上传运输角色::分片),
+        (false, true) => Ok(媒体上传运输角色::最终合并),
+        (false, false) => Ok(媒体上传运输角色::单文件),
+    }
+}
+
+fn 读取可选rustus_metadata字段(metadata: &HashMap<String, String>, key: &'static str) -> Option<String> {
+    metadata
+        .get(key)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn 读取rustus_metadata字段(

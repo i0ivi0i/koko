@@ -24,6 +24,7 @@ import {
 export type 媒体上传Meta = {
   session_id?: string;
   attachment_id?: string;
+  upload_session_id?: string;
   attachment_kind?: 媒体种类;
   /**
    * 这是只给 Uppy 本地文件标识使用的内部字段：
@@ -89,6 +90,15 @@ export const 媒体Tus文件并发上限 = 8;
 export const 大视频高吞吐阈值字节数 = 32 * 1024 * 1024;
 
 /**
+ * `parallelUploads` 只针对单个大视频生效。
+ * 这里先保守固定为 4：
+ * 1. 与官方文档建议一致，避免把浏览器公共连接池一把打满；
+ * 2. 后端这期只刚接通 concatenation，先留一档可观察、可回退的默认值；
+ * 3. 真要继续往上推，必须以后续压测结果为准，不能靠拍脑袋。
+ */
+export const 大视频单文件并行分片数 = 4;
+
+/**
  * 重试节奏也显式导出，避免未来升级 Uppy/Tus 后默默吃到默认值漂移。
  * `0` 表示第一次失败立即重试一次，后续退避保持克制，既给慢网恢复机会，也不把失败放大成请求风暴。
  */
@@ -99,6 +109,18 @@ type 媒体Tus上传档位 = "default" | "large-video";
 type 媒体上传器创建参数 = {
   tusEndpoint: string;
   profile: 媒体Tus上传档位;
+  attachmentId?: string;
+  uploadSessionId?: string;
+};
+
+type 媒体Tus传输选项 = {
+  endpoint: string;
+  limit: number;
+  retryDelays: number[];
+  uploadDataDuringCreation: boolean;
+  addRequestId: boolean;
+  parallelUploads?: number;
+  metadataForPartialUploads?: Record<string, string>;
 };
 
 type 媒体发布器依赖 = {
@@ -193,17 +215,26 @@ function 读取媒体上传档位(kind: 媒体种类, file: File): 媒体Tus上�
 }
 
 function 构造媒体上传器键(input: 媒体上传器创建参数): string {
+  /**
+   * default 档位仍然可以按 endpoint 复用上传器；
+   * 但 large-video 的 partial metadata 绑定在某一个 attachment/session 上，
+   * 不能再让多个大视频共用同一个 uploader，否则后创建的视频会把前一个视频的 partial metadata 覆盖掉。
+   */
+  if (input.profile === "large-video") {
+    return `${input.profile}@${input.tusEndpoint}@${input.uploadSessionId ?? "missing-session"}`;
+  }
   return `${input.profile}@${input.tusEndpoint}`;
 }
 
 /**
- * 当前主链里，Tus transport 只承诺“单附件对应一条运输回执”。
- * 因此这里必须显式禁止 large-video 再偷偷开启 `parallelUploads`：
- * 1. `tus-js-client` 的 partial upload 不会自动复用普通 metadata；
- * 2. Rustus hook 仍要求 `pre-create/post-finish` 围绕同一 attachment_id 与整文件长度工作；
- * 3. 在后端还没正式建模 concatenation 之前，前端不能假装单文件并行分片已经成立。
+ * Tus Concatenation 的关键约束：
+ * 1. final upload 用普通 `metadata`；
+ * 2. partial uploads 不会自动继承 final metadata，必须显式给 `metadataForPartialUploads`；
+ * 3. 所以 large-video 不能只开 `parallelUploads`，而必须把 attachment/session 锚点一起带进去。
  */
-export function 构造媒体Tus传输选项(input: 媒体上传器创建参数) {
+export function 构造媒体Tus传输选项(
+  input: 媒体上传器创建参数,
+): 媒体Tus传输选项 {
   const transportOptions = {
     endpoint: input.tusEndpoint,
     limit: 媒体Tus文件并发上限,
@@ -212,7 +243,14 @@ export function 构造媒体Tus传输选项(input: 媒体上传器创建参数) 
     addRequestId: true,
   };
   if (input.profile === "large-video") {
-    return transportOptions;
+    return {
+      ...transportOptions,
+      parallelUploads: 大视频单文件并行分片数,
+      metadataForPartialUploads: {
+        attachment_id: input.attachmentId ?? "",
+        upload_session_id: input.uploadSessionId ?? "",
+      },
+    };
   }
   return transportOptions;
 }
@@ -259,7 +297,7 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
      * Rustus sidecar 只需要业务最小元数据，不应该把 session_id、预览尺寸这类壳层字段也透传进去。
      * 这里显式收口 allowedMetaFields，避免 transport sidecar 反向长成业务真相持有者。
      */
-    allowedMetaFields: ["attachment_id", "file_name", "mime_type", "byte_size"],
+    allowedMetaFields: ["attachment_id", "upload_session_id", "file_name", "mime_type", "byte_size"],
     headers: (file) => 读取媒体Tus请求头((file.meta ?? {}) as 媒体上传Meta),
   }) as unknown as 媒体上传器;
 }
@@ -287,6 +325,7 @@ function 构造媒体上传Meta(input: {
   const meta: 媒体上传Meta = {
     session_id: sessionId,
     attachment_id: prepared.attachment_id,
+    upload_session_id: prepared.upload_session_id,
     attachment_kind: kind,
     relativePath: prepared.attachment_id,
     upload_method: prepared.upload_method,
@@ -565,6 +604,8 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
         const uploaderInput: 媒体上传器创建参数 = {
           tusEndpoint: prepared.tus_endpoint,
           profile: 读取媒体上传档位(kind, preparedFile.file),
+          attachmentId: prepared.attachment_id,
+          uploadSessionId: prepared.upload_session_id,
         };
         const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
         const nextLocalId = currentUploader.addFile({
@@ -686,6 +727,8 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       const uploaderInput: 媒体上传器创建参数 = {
         tusEndpoint: prepared.tus_endpoint,
         profile: 读取媒体上传档位(draft.kind, draft.sourceFile),
+        attachmentId: prepared.attachment_id,
+        uploadSessionId: prepared.upload_session_id,
       };
       const { key: uploaderKey, uploader: currentUploader } = ensureUploader(uploaderInput);
       const nextLocalId = currentUploader.addFile({

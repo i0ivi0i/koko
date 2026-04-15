@@ -31,6 +31,7 @@ import type { Socket } from "socket.io-client";
 
 type 假媒体上传准备结果 = {
   attachment_id: string;
+  upload_session_id: string;
   upload_method: "tus";
   tus_endpoint: string;
   tus_headers: Record<string, string>;
@@ -269,6 +270,7 @@ export class 假传输 implements 前端传输端口 {
     if (queued) return queued;
     return {
       attachment_id: "att-prepared-test",
+      upload_session_id: "upl-prepared-test",
       upload_method: "tus",
       tus_endpoint: "http://storage.local/files",
       tus_headers: {
@@ -276,6 +278,7 @@ export class 假传输 implements 前端传输端口 {
       },
       tus_metadata: {
         attachment_id: "att-prepared-test",
+        upload_session_id: "upl-prepared-test",
         file_name: file.name,
         mime_type: file.type || (kind === "video" ? "video/mp4" : "image/png"),
         byte_size: String(file.size),

@@ -81,6 +81,9 @@ pub struct 待完成媒体附件读取结果 {
     pub 附件标识: String,
     /// prepare/complete owner 校验只认内部身份，不再认旧 `anonymous_identity_id` 文本串。
     pub 所属匿名身份标识: String,
+    /// 当前 attachment 活着的上传会话锚点。
+    /// 它不参与 UI 展示，但 complete / abandon / hook 必须围绕它收口。
+    pub 当前上传会话标识: Option<String>,
     pub 种类: 媒体附件类型,
     pub mime_type: String,
     pub 字节大小: i64,

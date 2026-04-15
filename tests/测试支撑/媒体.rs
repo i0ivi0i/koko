@@ -71,6 +71,9 @@ pub fn 断言媒体准备结果是Tus契约(
     let attachment_id = body["attachment_id"]
         .as_str()
         .expect("统一媒体 prepare 至少要返回稳定 attachment_id");
+    let upload_session_id = body["upload_session_id"]
+        .as_str()
+        .expect("统一媒体 prepare 必须返回 upload_session_id");
     assert_eq!(body["kind"].as_str(), Some(expected_kind));
     assert_eq!(body["upload_method"].as_str(), Some("tus"));
     assert!(
@@ -104,6 +107,12 @@ pub fn 断言媒体准备结果是Tus契约(
     assert_eq!(
         tus_metadata.get("attachment_id").and_then(Value::as_str),
         Some(attachment_id)
+    );
+    assert_eq!(
+        tus_metadata
+            .get("upload_session_id")
+            .and_then(Value::as_str),
+        Some(upload_session_id)
     );
     assert_eq!(
         tus_metadata.get("file_name").and_then(Value::as_str),

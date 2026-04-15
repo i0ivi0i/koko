@@ -28,32 +28,75 @@ pub struct Pg仓储 {
     pool: PgPool,
 }
 
-/// 运输授权写入请求只描述 Tus sidecar 所需的最小事实：
-/// - 业务锚点仍然是 attachment_id；
-/// - upload_token 只是一段短期运输凭证，不升级成领域主键；
-/// - 有效期继续用秒数表达，避免把时间库类型扩散到壳层。
+/// 上传会话授权写入请求只描述 Tus sidecar 所需的最小事实：
+/// - attachment_id 仍是业务附件锚点；
+/// - upload_session_id 是“一次上传生命周期”的运输锚点；
+/// - upload_token 只属于上传会话，不再错误地复制到每一条 partial/final transport 上。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct 媒体上传运输授权写入请求 {
+pub(crate) struct 媒体上传会话授权写入请求 {
+    pub 上传会话标识: String,
     pub 附件标识: String,
     pub 运输方式: String,
     pub 上传令牌: String,
     pub 令牌有效期秒数: i64,
-    pub 字节大小: i64,
 }
 
-/// 运输记录读取结果服务于 shell 对 sidecar 状态的受控判断。
-/// 它不是附件业务真相，因此仍然停留在 adapter 边界。
+/// 上传会话记录服务于 shell / hook 判断“这次 token 到底属于哪个 attachment/session”。
+/// 注意：
+/// 1. 这里仍然是 adapter 侧运输事实，不上浮为领域消息真相；
+/// 2. 令牌有效性、会话是否已放弃，都只服务上传链收口，不服务房间成员或权限判断。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct 媒体上传运输记录 {
+pub(crate) struct 媒体上传会话记录 {
+    pub 上传会话标识: String,
     pub 附件标识: String,
     pub 运输方式: String,
     pub 上传令牌: String,
     pub 令牌仍有效: bool,
     pub 废弃时间戳秒: Option<i64>,
+}
+
+/// partial / final / single 只在 adapter 停留，用来翻译 Tus Concatenation 协议负载。
+/// 业务层依然只认“transport finished != attachment ready”这一条稳定原则。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum 媒体上传运输角色 {
+    单文件,
+    分片,
+    最终合并,
+}
+
+impl 媒体上传运输角色 {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::单文件 => "single",
+            Self::分片 => "partial",
+            Self::最终合并 => "final",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, contract::错误码> {
+        match value {
+            "single" => Ok(Self::单文件),
+            "partial" => Ok(Self::分片),
+            "final" => Ok(Self::最终合并),
+            _ => Err(contract::错误码::系统错误),
+        }
+    }
+}
+
+/// transport 记录只描述某一条 single / partial / final 上传事实。
+/// 它不拥有 token，也不负责声明哪个 transport 才是业务可 complete 的 canonical final。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct 媒体上传运输记录 {
+    pub 上传会话标识: String,
+    pub 附件标识: String,
+    pub 运输方式: String,
+    pub 运输角色: 媒体上传运输角色,
+    pub concat_order: Option<i32>,
     pub transport_upload_id: Option<String>,
     pub storage_locator: Option<String>,
     pub 字节大小: Option<i64>,
     pub 完成时间戳秒: Option<i64>,
+    pub 废弃时间戳秒: Option<i64>,
 }
 
 /// 生成迁移窗口内仍需保留的兼容匿名身份短标识。
@@ -170,41 +213,52 @@ impl Pg仓储 {
         }
     }
 
-    /// 共享连接池仓储也要暴露运输授权写入口，避免 shell 重新手搓 SQL。
-    pub(crate) fn 写入媒体上传运输授权(
+    /// prepare 结束后要把“当前 attachment 的活跃上传会话”落到权威库里，
+    /// 避免前端和 sidecar 各自凭感觉发明第二条会话真相。
+    pub(crate) fn 写入媒体上传会话授权(
         &mut self,
-        授权: &媒体上传运输授权写入请求,
+        授权: &媒体上传会话授权写入请求,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::写入媒体上传运输授权(self, 授权)
+        媒体附件适配::写入媒体上传会话授权(self, 授权)
     }
 
-    /// shell 用它判断 transport 是否已经真正 finished，避免把 prepare 成功误判成 ready。
-    pub(crate) fn 查询媒体上传运输记录(
-        &self,
-        附件标识: &str,
-    ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-        媒体附件适配::查询媒体上传运输记录(self, 附件标识)
-    }
-
-    /// hook 只靠上传令牌做 sidecar 鉴权，不把会话/成员判断塞进 transport 层。
-    pub(crate) fn 根据上传令牌查询媒体上传运输记录(
+    /// hook 只靠上传令牌做 sidecar 鉴权，但 token 现在只属于上传会话。
+    pub(crate) fn 根据上传令牌查询媒体上传会话(
         &self,
         上传令牌: &str,
-    ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-        媒体附件适配::根据上传令牌查询媒体上传运输记录(self, 上传令牌)
+    ) -> Result<Option<媒体上传会话记录>, contract::错误码> {
+        媒体附件适配::根据上传令牌查询媒体上传会话(self, 上传令牌)
     }
 
-    /// transport finished 只登记回执；prepared -> ready 仍由 complete 主链完成。
-    pub(crate) fn 更新媒体上传运输回执(
-        &mut self,
+    /// 查询当前活跃上传会话上 canonical 的 single/final transport 回执。
+    /// complete 只认它，不认 partial。
+    pub(crate) fn 查询附件当前最终运输记录(
+        &self,
         附件标识: &str,
+    ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+        媒体附件适配::查询附件当前最终运输记录(self, 附件标识)
+    }
+
+    /// transport finished 只登记某条 single/partial/final 上传事实；
+    /// prepared -> ready 仍由 complete 主链完成。
+    pub(crate) fn 登记媒体上传运输回执(
+        &mut self,
+        上传会话标识: &str,
+        附件标识: &str,
+        运输方式: &str,
+        运输角色: 媒体上传运输角色,
+        concat_order: Option<i32>,
         transport_upload_id: &str,
         storage_locator: &str,
         byte_size: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::更新媒体上传运输回执(
+        媒体附件适配::登记媒体上传运输回执(
             self,
+            上传会话标识,
             附件标识,
+            运输方式,
+            运输角色,
+            concat_order,
             transport_upload_id,
             storage_locator,
             byte_size,

@@ -3,7 +3,7 @@ use super::{
     构建共享仓储, 流媒体打包,
 };
 use crate::{
-    adapter::{媒体上传运输授权写入请求, 媒体上传运输记录},
+    adapter::{媒体上传会话授权写入请求, 媒体上传运输记录},
     media_distribution, usecase,
 };
 use axum::{
@@ -114,6 +114,7 @@ pub(super) async fn prepare_media_upload(
     }
 
     let attachment_id = 生成附件标识();
+    let upload_session_id = 生成媒体上传会话标识();
     let storage_prefix = match media_kind {
         usecase::媒体附件类型::图片 => "images",
         usecase::媒体附件类型::视频 => "videos",
@@ -151,20 +152,20 @@ pub(super) async fn prepare_media_upload(
 
     // prepare 只负责：
     // 1. 落 prepared 附件真相；
-    // 2. 下发一段短期 Tus 运输授权；
-    // 3. 不把 transport token/upload id 倒灌进附件业务表。
+    // 2. 下发一段短期 Tus 上传会话授权；
+    // 3. token 只属于 upload_session，不再错误地复制到 partial/final transport 记录。
     let upload_token = 生成媒体上传令牌();
-    let transport_auth = 媒体上传运输授权写入请求 {
+    let transport_auth = 媒体上传会话授权写入请求 {
+        上传会话标识: upload_session_id.clone(),
         附件标识: snapshot.附件标识.clone(),
         运输方式: 媒体上传运输方式_TUS.to_string(),
         上传令牌: upload_token.clone(),
         令牌有效期秒数: 媒体上传授权有效期秒数 as i64,
-        字节大小: snapshot.字节大小,
     };
     let state_for_transport = state.clone();
     let transport_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_transport);
-        repo.写入媒体上传运输授权(&transport_auth)
+        repo.写入媒体上传会话授权(&transport_auth)
             .map_err(map_domain_err_tuple)
     })
     .await;
@@ -192,6 +193,7 @@ pub(super) async fn prepare_media_upload(
         request_kind = "媒体上传 prepare",
         session_id = session_id.as_str(),
         attachment_id = snapshot.附件标识.as_str(),
+        upload_session_id = upload_session_id.as_str(),
         attachment_kind = super::媒体资产外壳::媒体类型转标签(&snapshot.种类),
         file_name = file_name.as_str(),
         byte_size = byte_size,
@@ -206,6 +208,7 @@ pub(super) async fn prepare_media_upload(
         StatusCode::OK,
         Json(serde_json::json!({
             "attachment_id": response_attachment_id,
+            "upload_session_id": upload_session_id,
             "kind": response_kind,
             "upload_method": 媒体上传运输方式_TUS,
             "tus_endpoint": rustus_public_endpoint,
@@ -214,6 +217,7 @@ pub(super) async fn prepare_media_upload(
             },
             "tus_metadata": {
                 "attachment_id": snapshot.附件标识,
+                "upload_session_id": upload_session_id,
                 "file_name": file_name,
                 "mime_type": response_mime_type,
                 "byte_size": response_byte_size.to_string(),
@@ -247,7 +251,7 @@ pub(super) async fn complete_media_upload(
         )
         .map_err(map_domain_err_tuple)?;
         let transport = repo
-            .查询媒体上传运输记录(&attachment_id_for_usecase)
+            .查询附件当前最终运输记录(&attachment_id_for_usecase)
             .map_err(map_domain_err_tuple)?;
         Ok::<_, (StatusCode, &'static str, String)>((prepared, transport))
     })
@@ -937,7 +941,7 @@ pub(super) async fn abandon_media_upload(
     let abandon_result = match task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
         let transport = repo
-            .查询媒体上传运输记录(&attachment_id_for_usecase)
+            .查询附件当前最终运输记录(&attachment_id_for_usecase)
             .map_err(map_domain_err_tuple)?;
         usecase::放弃媒体上传(
             &mut repo,
@@ -1000,6 +1004,11 @@ pub(super) async fn abandon_media_upload(
 fn 生成附件标识() -> String {
     let raw = Uuid::new_v4().simple().to_string();
     format!("att-{}", &raw[..12])
+}
+
+fn 生成媒体上传会话标识() -> String {
+    let raw = Uuid::new_v4().simple().to_string();
+    format!("upl-{}", raw)
 }
 
 fn 生成媒体上传令牌() -> String {
@@ -1210,7 +1219,7 @@ pub(super) async fn 等待complete所需运输回执(
         let attachment_id_for_usecase = attachment_id.to_string();
         transport = match task::spawn_blocking(move || {
             let repo = 构建共享仓储(&state_for_usecase);
-            repo.查询媒体上传运输记录(&attachment_id_for_usecase)
+            repo.查询附件当前最终运输记录(&attachment_id_for_usecase)
                 .map_err(map_domain_err_tuple)
         })
         .await

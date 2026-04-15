@@ -149,6 +149,7 @@ class 端到端假传输 implements 前端传输端口 {
   ): Promise<媒体上传准备结果> {
     return {
       attachment_id: "att-e2e-prepared",
+      upload_session_id: "upl-e2e-prepared",
       upload_method: "tus",
       tus_endpoint: "http://storage.local/files",
       tus_headers: {
@@ -156,6 +157,7 @@ class 端到端假传输 implements 前端传输端口 {
       },
       tus_metadata: {
         attachment_id: "att-e2e-prepared",
+        upload_session_id: "upl-e2e-prepared",
         file_name: file.name,
         mime_type: file.type || (kind === "video" ? "video/mp4" : "image/png"),
         byte_size: String(file.size),

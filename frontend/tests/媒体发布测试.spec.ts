@@ -168,15 +168,19 @@ function 创建场景() {
   const createUploaderCalls: Array<{
     tusEndpoint?: string;
     profile?: string;
+    attachmentId?: string;
+    uploadSessionId?: string;
   }> = [];
   const yieldToMainThread = vi.fn(async () => {});
   const prepareMediaUpload = vi.fn(async (_kind: "image" | "video", _sessionId: string, file: File) => ({
     attachment_id: `att-${file.name}`,
+    upload_session_id: `upl-${file.name}`,
     upload_method: "tus" as const,
     tus_endpoint: "http://storage.local/files",
     tus_headers: { Authorization: "Bearer media-upload-token" },
     tus_metadata: {
       attachment_id: `att-${file.name}`,
+      upload_session_id: `upl-${file.name}`,
       file_name: file.name,
       mime_type: file.type || "application/octet-stream",
       byte_size: String(file.size),
@@ -207,7 +211,12 @@ function 创建场景() {
       const normalized =
         typeof input === "string"
           ? { tusEndpoint: input, profile: "legacy-single-uploader" }
-          : ((input ?? {}) as { tusEndpoint?: string; profile?: string });
+          : ((input ?? {}) as {
+              tusEndpoint?: string;
+              profile?: string;
+              attachmentId?: string;
+              uploadSessionId?: string;
+            });
       createUploaderCalls.push(normalized);
       return normalized.profile === "large-video" ? 大视频上传器 : 默认上传器;
     },
@@ -239,13 +248,32 @@ describe("媒体发布器", () => {
     expect(媒体Tus重试延迟毫秒数组).toEqual([0, 1000, 3000, 5000]);
   });
 
-  it("large-video 档位当前不会开启单文件并行分片", () => {
+  it("large-video 恢复 parallelUploads 时必须同时声明 partial metadata", () => {
     const transportOptions = 构造媒体Tus传输选项({
       tusEndpoint: "http://storage.local/files",
       profile: "large-video",
-    });
+      /**
+       * 这里继续锁住 Concatenation 的最小契约：
+       * - `parallelUploads` 只是 transport 优化开关，不是业务锚点；
+       * - partial upload 必须显式带回 attachment/session，否则 Rustus hook 无法知道这些分片属于谁；
+       * - 所以这条测试专门防回归“只开并行、不补 metadataForPartialUploads”的假高吞吐。
+       */
+      attachmentId: "att-large-video",
+      uploadSessionId: "upload-session-1",
+    }) as {
+      parallelUploads?: number;
+      metadataForPartialUploads?: Record<string, string>;
+      uploadDataDuringCreation: boolean;
+      addRequestId: boolean;
+    };
 
-    expect("parallelUploads" in transportOptions).toBe(false);
+    expect(transportOptions.parallelUploads).toBe(4);
+    expect(transportOptions.metadataForPartialUploads).toEqual(
+      expect.objectContaining({
+        attachment_id: "att-large-video",
+        upload_session_id: "upload-session-1",
+      }),
+    );
     expect(transportOptions.uploadDataDuringCreation).toBe(true);
     expect(transportOptions.addRequestId).toBe(true);
   });
@@ -361,6 +389,7 @@ describe("媒体发布器", () => {
           upload_method: "tus",
           tus_endpoint: "http://storage.local/files",
           attachment_id: "att-picked.jpg",
+          upload_session_id: "upl-picked.jpg",
           relativePath: "att-picked.jpg",
           file_name: "picked.jpg",
           mime_type: "image/jpeg",
@@ -372,6 +401,8 @@ describe("媒体发布器", () => {
       {
         tusEndpoint: "http://storage.local/files",
         profile: "default",
+        attachmentId: "att-picked.jpg",
+        uploadSessionId: "upl-picked.jpg",
       },
     ]);
     expect(场景.drafts.readDrafts()).toEqual([
@@ -526,10 +557,14 @@ describe("媒体发布器", () => {
       {
         tusEndpoint: "http://storage.local/files",
         profile: "default",
+        attachmentId: "att-small.jpg",
+        uploadSessionId: "upl-small.jpg",
       },
       {
         tusEndpoint: "http://storage.local/files",
         profile: "large-video",
+        attachmentId: "att-large.mp4",
+        uploadSessionId: "upl-large.mp4",
       },
     ]);
     expect(场景.默认上传器.addFileCalls.map((item) => item.id)).toEqual([
@@ -617,11 +652,13 @@ describe("媒体发布器", () => {
     场景.默认上传器.静默丢弃文件("att-retry.jpg");
     场景.prepareMediaUpload.mockResolvedValueOnce({
       attachment_id: "att-retry-second",
+      upload_session_id: "upl-retry-second",
       upload_method: "tus" as const,
       tus_endpoint: "http://storage.local/files",
       tus_headers: { Authorization: "Bearer media-upload-token" },
       tus_metadata: {
         attachment_id: "att-retry-second",
+        upload_session_id: "upl-retry-second",
         file_name: sourceFile.name,
         mime_type: sourceFile.type,
         byte_size: String(sourceFile.size),
@@ -687,11 +724,13 @@ describe("媒体发布器", () => {
     场景.默认上传器.静默丢弃文件("att-restart.jpg");
     场景.prepareMediaUpload.mockResolvedValueOnce({
       attachment_id: "att-restart-second",
+      upload_session_id: "upl-restart-second",
       upload_method: "tus" as const,
       tus_endpoint: "http://storage.local/files",
       tus_headers: { Authorization: "Bearer media-upload-token" },
       tus_metadata: {
         attachment_id: "att-restart-second",
+        upload_session_id: "upl-restart-second",
         file_name: sourceFile.name,
         mime_type: sourceFile.type,
         byte_size: String(sourceFile.size),

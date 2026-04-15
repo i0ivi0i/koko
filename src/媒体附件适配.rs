@@ -2,7 +2,10 @@ use sqlx::{postgres::PgRow, PgPool, Row};
 
 use crate::{contract, usecase};
 
-use super::{Pg仓储, 媒体上传运输授权写入请求, 媒体上传运输记录};
+use super::{
+    Pg仓储, 媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输角色,
+    媒体上传运输记录,
+};
 
 // 媒体附件适配 owner 只负责回答三类问题：
 // 1. 附件真相当前是什么状态；
@@ -26,20 +29,34 @@ fn 解析附件状态(
     }
 }
 
-/// 运输记录在两条查询路径里都要做同一套行映射。
-/// 把它收口在 owner 内，避免 `attachment_id/upload_token` 两个入口各手搓一遍。
-fn 行转媒体上传运输记录(row: PgRow) -> 媒体上传运输记录 {
-    媒体上传运输记录 {
+/// 上传会话读取既要服务 `prepare/complete`，也要服务 Rustus hook token 鉴权。
+/// 这里统一行映射，避免 adapter 各处再手搓“token 属于谁”的第二套真相。
+fn 行转媒体上传会话记录(row: PgRow) -> 媒体上传会话记录 {
+    媒体上传会话记录 {
+        上传会话标识: row.get("upload_session_id"),
         附件标识: row.get("attachment_id"),
         运输方式: row.get("transport_kind"),
         上传令牌: row.get("upload_token"),
         令牌仍有效: row.get("token_is_active"),
         废弃时间戳秒: row.get("abandoned_at_epoch"),
+    }
+}
+
+/// transport 记录在 complete / cleanup 两条路径都会读。
+/// 把 `role/order/finished` 的翻译都收口在这里，避免每个调用方自己猜 partial/final 语义。
+fn 行转媒体上传运输记录(row: PgRow) -> Result<媒体上传运输记录, contract::错误码> {
+    Ok(媒体上传运输记录 {
+        上传会话标识: row.get("upload_session_id"),
+        附件标识: row.get("attachment_id"),
+        运输方式: row.get("transport_kind"),
+        运输角色: 媒体上传运输角色::from_db(row.get::<String, _>("transport_role").as_str())?,
+        concat_order: row.get("concat_order"),
         transport_upload_id: row.get("transport_upload_id"),
         storage_locator: row.get("storage_locator"),
         字节大小: row.get("byte_size"),
         完成时间戳秒: row.get("finished_at_epoch"),
-    }
+        废弃时间戳秒: row.get("abandoned_at_epoch"),
+    })
 }
 
 /// 媒体 owner 在写 prepared/ready 附件时，需要先把应用层持有的内部身份反查成数据库主键。
@@ -143,6 +160,7 @@ async fn 查询待完成媒体附件_异步(
     let row = sqlx::query(
         "SELECT a.attachment_id,
                 COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) AS owner_identity_text,
+                a.current_upload_session_id,
                 a.kind,
                 a.mime_type,
                 a.byte_size,
@@ -166,6 +184,7 @@ async fn 查询待完成媒体附件_异步(
         Ok(usecase::待完成媒体附件读取结果 {
             附件标识: row.get("attachment_id"),
             所属匿名身份标识: row.get("owner_identity_text"),
+            当前上传会话标识: row.get("current_upload_session_id"),
             种类: kind,
             mime_type: row.get("mime_type"),
             字节大小: row.get("byte_size"),
@@ -657,92 +676,68 @@ pub(super) fn 查询附件可读内容(
     ))
 }
 
-async fn 写入媒体上传运输授权_异步(
+async fn 写入媒体上传会话授权_异步(
     pool: &PgPool,
-    授权: &媒体上传运输授权写入请求,
+    授权: &媒体上传会话授权写入请求,
 ) -> Result<(), contract::错误码> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| contract::错误码::系统错误)?;
     sqlx::query(
-        "INSERT INTO attachment_upload_transports \
-            (attachment_id, transport_kind, upload_token, token_expires_at, abandoned_at, transport_upload_id, storage_locator, byte_size, finished_at) \
-         VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 second'), NULL, NULL, NULL, $5, NULL) \
-         ON CONFLICT (attachment_id) DO UPDATE SET \
+        "INSERT INTO attachment_upload_sessions \
+            (upload_session_id, attachment_id, transport_kind, upload_token, token_expires_at, abandoned_at) \
+         VALUES ($1, $2, $3, $4, NOW() + ($5 * INTERVAL '1 second'), NULL) \
+         ON CONFLICT (upload_session_id) DO UPDATE SET \
             transport_kind = EXCLUDED.transport_kind, \
             upload_token = EXCLUDED.upload_token, \
             token_expires_at = EXCLUDED.token_expires_at, \
-            abandoned_at = NULL, \
-            transport_upload_id = NULL, \
-            storage_locator = NULL, \
-            byte_size = EXCLUDED.byte_size, \
-            finished_at = NULL",
+            abandoned_at = NULL",
     )
+    .bind(&授权.上传会话标识)
     .bind(&授权.附件标识)
     .bind(&授权.运输方式)
     .bind(&授权.上传令牌)
     .bind(授权.令牌有效期秒数)
-    .bind(授权.字节大小)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
+    sqlx::query(
+        "UPDATE attachments \
+         SET current_upload_session_id = $2 \
+         WHERE attachment_id = $1",
+    )
+    .bind(&授权.附件标识)
+    .bind(&授权.上传会话标识)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    tx.commit().await.map_err(|_| contract::错误码::系统错误)?;
     Ok(())
 }
 
-pub(super) fn 写入媒体上传运输授权(
+pub(super) fn 写入媒体上传会话授权(
     repo: &mut Pg仓储,
-    授权: &媒体上传运输授权写入请求,
+    授权: &媒体上传会话授权写入请求,
 ) -> Result<(), contract::错误码> {
-    repo.在运行时执行(写入媒体上传运输授权_异步(&repo.pool, 授权))
+    repo.在运行时执行(写入媒体上传会话授权_异步(&repo.pool, 授权))
 }
 
-async fn 查询媒体上传运输记录_异步(
-    pool: &PgPool,
-    附件标识: &str,
-) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-    let row = sqlx::query(
-        "SELECT \
-            attachment_id, \
-            transport_kind, \
-            upload_token, \
-            token_expires_at > NOW() AS token_is_active, \
-            EXTRACT(EPOCH FROM abandoned_at)::BIGINT AS abandoned_at_epoch, \
-            transport_upload_id, \
-            storage_locator, \
-            byte_size, \
-            EXTRACT(EPOCH FROM finished_at)::BIGINT AS finished_at_epoch \
-         FROM attachment_upload_transports \
-         WHERE attachment_id = $1",
-    )
-    .bind(附件标识)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| contract::错误码::系统错误)?;
-
-    Ok(row.map(行转媒体上传运输记录))
-}
-
-pub(super) fn 查询媒体上传运输记录(
-    repo: &Pg仓储,
-    附件标识: &str,
-) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-    repo.在运行时执行(查询媒体上传运输记录_异步(&repo.pool, 附件标识))
-}
-
-async fn 根据上传令牌查询媒体上传运输记录_异步(
+async fn 根据上传令牌查询媒体上传会话_异步(
     pool: &PgPool,
     上传令牌: &str,
-) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+) -> Result<Option<媒体上传会话记录>, contract::错误码> {
     let row = sqlx::query(
         "SELECT \
+            upload_session_id, \
             attachment_id, \
             transport_kind, \
             upload_token, \
             token_expires_at > NOW() AS token_is_active, \
-            EXTRACT(EPOCH FROM abandoned_at)::BIGINT AS abandoned_at_epoch, \
-            transport_upload_id, \
-            storage_locator, \
-            byte_size, \
-            EXTRACT(EPOCH FROM finished_at)::BIGINT AS finished_at_epoch \
-         FROM attachment_upload_transports \
+            EXTRACT(EPOCH FROM abandoned_at)::BIGINT AS abandoned_at_epoch \
+         FROM attachment_upload_sessions \
          WHERE upload_token = $1",
     )
     .bind(上传令牌)
@@ -750,34 +745,92 @@ async fn 根据上传令牌查询媒体上传运输记录_异步(
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    Ok(row.map(行转媒体上传运输记录))
+    Ok(row.map(行转媒体上传会话记录))
 }
 
-pub(super) fn 根据上传令牌查询媒体上传运输记录(
+pub(super) fn 根据上传令牌查询媒体上传会话(
     repo: &Pg仓储,
     上传令牌: &str,
-) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-    repo.在运行时执行(根据上传令牌查询媒体上传运输记录_异步(
+) -> Result<Option<媒体上传会话记录>, contract::错误码> {
+    repo.在运行时执行(根据上传令牌查询媒体上传会话_异步(
         &repo.pool,
         上传令牌,
     ))
 }
 
-/// 运输回执只登记 transport finished 事实，不在这里偷偷把附件升级成 ready。
-/// 这样 complete 主链仍然是 prepared -> ready 的唯一入口。
-async fn 更新媒体上传运输回执_异步(
+async fn 查询附件当前最终运输记录_异步(
     pool: &PgPool,
     附件标识: &str,
+) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+    let row = sqlx::query(
+        "SELECT \
+            t.upload_session_id, \
+            t.attachment_id, \
+            t.transport_kind, \
+            t.transport_role, \
+            t.concat_order, \
+            EXTRACT(EPOCH FROM COALESCE(t.abandoned_at, s.abandoned_at))::BIGINT AS abandoned_at_epoch, \
+            t.transport_upload_id, \
+            t.storage_locator, \
+            t.byte_size, \
+            EXTRACT(EPOCH FROM t.finished_at)::BIGINT AS finished_at_epoch \
+         FROM attachments a \
+         JOIN attachment_upload_sessions s ON s.upload_session_id = a.current_upload_session_id \
+         JOIN attachment_upload_transports t ON t.upload_session_id = s.upload_session_id \
+         WHERE a.attachment_id = $1 \
+           AND t.transport_role IN ('single', 'final') \
+         ORDER BY CASE t.transport_role WHEN 'final' THEN 0 ELSE 1 END, t.finished_at DESC NULLS LAST \
+         LIMIT 1",
+    )
+    .bind(附件标识)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    row.map(行转媒体上传运输记录).transpose()
+}
+
+pub(super) fn 查询附件当前最终运输记录(
+    repo: &Pg仓储,
+    附件标识: &str,
+) -> Result<Option<媒体上传运输记录>, contract::错误码> {
+    repo.在运行时执行(查询附件当前最终运输记录_异步(&repo.pool, 附件标识))
+}
+
+/// 运输回执只登记 transport finished 事实，不在这里偷偷把附件升级成 ready。
+/// 注意现在的主键已经换成“上传会话 + transport 角色/上传资源”，而不是 attachment 自己。
+async fn 登记媒体上传运输回执_异步(
+    pool: &PgPool,
+    上传会话标识: &str,
+    附件标识: &str,
+    运输方式: &str,
+    运输角色: 媒体上传运输角色,
+    concat_order: Option<i32>,
     transport_upload_id: &str,
     storage_locator: &str,
     byte_size: i64,
 ) -> Result<(), contract::错误码> {
+    /*
+     * 这里必须把 `ON CONFLICT` 的谓词写全：
+     * - `transport_upload_id` 现在靠“非空时唯一”的 partial unique index 兜住幂等；
+     * - PostgreSQL 不会从裸 `ON CONFLICT (transport_upload_id)` 自动推导这个 partial index；
+     * - 如果不写 `WHERE transport_upload_id IS NOT NULL`，happy path 也会直接炸成 system_error。
+     */
     sqlx::query(
-        "UPDATE attachment_upload_transports \
-         SET transport_upload_id = $2, storage_locator = $3, byte_size = $4, finished_at = NOW() \
-         WHERE attachment_id = $1",
+        "INSERT INTO attachment_upload_transports \
+            (attachment_id, upload_session_id, transport_kind, transport_role, concat_order, abandoned_at, transport_upload_id, storage_locator, byte_size, finished_at) \
+         VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, NOW()) \
+         ON CONFLICT (transport_upload_id) WHERE transport_upload_id IS NOT NULL DO UPDATE SET \
+            storage_locator = EXCLUDED.storage_locator, \
+            byte_size = EXCLUDED.byte_size, \
+            finished_at = EXCLUDED.finished_at, \
+            abandoned_at = NULL",
     )
     .bind(附件标识)
+    .bind(上传会话标识)
+    .bind(运输方式)
+    .bind(运输角色.as_str())
+    .bind(concat_order)
     .bind(transport_upload_id)
     .bind(storage_locator)
     .bind(byte_size)
@@ -788,16 +841,24 @@ async fn 更新媒体上传运输回执_异步(
     Ok(())
 }
 
-pub(super) fn 更新媒体上传运输回执(
+pub(super) fn 登记媒体上传运输回执(
     repo: &mut Pg仓储,
+    上传会话标识: &str,
     附件标识: &str,
+    运输方式: &str,
+    运输角色: 媒体上传运输角色,
+    concat_order: Option<i32>,
     transport_upload_id: &str,
     storage_locator: &str,
     byte_size: i64,
 ) -> Result<(), contract::错误码> {
-    repo.在运行时执行(更新媒体上传运输回执_异步(
+    repo.在运行时执行(登记媒体上传运输回执_异步(
         &repo.pool,
+        上传会话标识,
         附件标识,
+        运输方式,
+        运输角色,
+        concat_order,
         transport_upload_id,
         storage_locator,
         byte_size,
@@ -966,7 +1027,8 @@ pub(super) fn 标记媒体回退母本已删除(
 
 /// 放弃旧上传必须同时污染附件与 transport：
 /// 1. 附件状态显式切到 abandoned，complete 不再允许继续推进；
-/// 2. transport 记录留下 abandoned_at，迟到的 post-finish 也会被拒绝。
+/// 2. 当前 upload session 与它已经落库的 transport 事实都要一起留下 abandoned_at；
+/// 3. 这样 restart 之后，旧 token、旧 post-finish、旧 complete 都只能读到“这轮上传已死”的同一真相。
 async fn 标记媒体上传已放弃_异步(
     pool: &PgPool,
     附件标识: &str,
@@ -1004,9 +1066,19 @@ async fn 标记媒体上传已放弃_异步(
         };
     }
     sqlx::query(
+        "UPDATE attachment_upload_sessions
+         SET abandoned_at = TO_TIMESTAMP($2)
+         WHERE attachment_id = $1
+           AND abandoned_at IS NULL",
+    )
+    .bind(附件标识)
+    .bind(放弃时间戳秒)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+    sqlx::query(
         "UPDATE attachment_upload_transports
-         SET abandoned_at = TO_TIMESTAMP($2),
-             token_expires_at = TO_TIMESTAMP($2)
+         SET abandoned_at = TO_TIMESTAMP($2)
          WHERE attachment_id = $1
            AND abandoned_at IS NULL",
     )

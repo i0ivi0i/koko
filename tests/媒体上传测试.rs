@@ -106,6 +106,9 @@ async fn prepare媒体上传会返回Tus契约() {
     assert_eq!(status, StatusCode::OK);
     断言媒体准备结果是Tus契约(&body, "image", "prepared.png", "image/png", 68);
     let attachment_id = body["attachment_id"].as_str().expect("attachment_id");
+    let upload_session_id = body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id");
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -122,23 +125,34 @@ async fn prepare媒体上传会返回Tus契约() {
     .expect("prepare 后应存在 prepared 附件记录");
     assert_eq!(status_in_db, "prepared");
 
-    let transport_row = sqlx::query(
-        "SELECT transport_kind, upload_token, byte_size \
-         FROM attachment_upload_transports WHERE attachment_id = $1",
+    let current_upload_session_in_db = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT current_upload_session_id FROM attachments WHERE attachment_id = $1",
     )
     .bind(attachment_id)
     .fetch_one(&pool)
     .await
-    .expect("prepare 后应同时写入运输授权记录");
-    let transport_kind: String = transport_row.get("transport_kind");
-    let upload_token: String = transport_row.get("upload_token");
-    let transport_byte_size: Option<i64> = transport_row.get("byte_size");
+    .expect("prepare 后应能读出当前上传会话");
+    assert_eq!(
+        current_upload_session_in_db.as_deref(),
+        Some(upload_session_id),
+        "prepare 必须把当前 attachment 锚到同一条 upload_session 真相上"
+    );
+
+    let session_row = sqlx::query(
+        "SELECT transport_kind, upload_token \
+         FROM attachment_upload_sessions WHERE upload_session_id = $1",
+    )
+    .bind(upload_session_id)
+    .fetch_one(&pool)
+    .await
+    .expect("prepare 后应同时写入上传会话授权记录");
+    let transport_kind: String = session_row.get("transport_kind");
+    let upload_token: String = session_row.get("upload_token");
     assert_eq!(transport_kind, "tus");
     assert!(
         !upload_token.trim().is_empty(),
-        "运输授权记录必须保存非空 upload_token"
+        "上传会话授权记录必须保存非空 upload_token"
     );
-    assert_eq!(transport_byte_size, Some(68));
 }
 
 #[tokio::test]

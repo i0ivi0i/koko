@@ -79,7 +79,10 @@ it("large-video 恢复 parallelUploads 时必须同时声明 metadataForPartialU
 
   expect(options.parallelUploads).toBe(4);
   expect(options.metadataForPartialUploads).toEqual(
-    expect.arrayContaining(["attachment_id", "upload_session_id"]),
+    expect.objectContaining({
+      attachment_id: expect.any(String),
+      upload_session_id: expect.any(String),
+    }),
   );
 });
 ```
@@ -277,7 +280,7 @@ Expected: FAIL because `upload_session_id` does not yet exist in contract/meta.
 2. `构造媒体上传Meta` 带入 `upload_session_id`
 3. `构造媒体Tus传输选项` 为 `large-video` 恢复：
    - `parallelUploads: 4`
-   - `metadataForPartialUploads: ["attachment_id", "upload_session_id"]`
+   - `metadataForPartialUploads: { attachment_id, upload_session_id }`
 4. 保留详细中文注释，写清这是 partial/final 协议边界，不是普通优化
 
 - [ ] **Step 5: Update frontend HTTP layer**

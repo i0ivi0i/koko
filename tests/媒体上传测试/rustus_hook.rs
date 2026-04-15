@@ -277,6 +277,98 @@ async fn rustus_pre_create长度小于prepare整文件大小时会拒绝当前pa
 
 #[tokio::test]
 #[serial]
+async fn rustus_pre_create_partial在同会话下未来应当放行但当前还做不到() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({
+            "device_anonymous_token": format!("rustus-pre-create-partial-session-{uniq}")
+        })),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "future-partial.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id");
+    let authorization = 提取媒体上传授权头(&prepare_body);
+
+    /*
+     * 这条红测锁的是未来真正要打通的语义：
+     * - partial upload 只要和 prepare 返回的 upload_session_id 对上，
+     *   就应该允许在 pre-create 进入传输层；
+     * - 当前实现还只有 attachment_id -> 单运输回执，所以这里会先失败。
+     */
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/rustus/hooks",
+        Some(serde_json::json!({
+            "upload": {
+                "id": format!("partial-upload-{attachment_id}-1"),
+                "offset": 0,
+                "length": 34,
+                "path": serde_json::Value::Null,
+                "created_at": 1_711_111_111i64,
+                "deferred_size": false,
+                "is_partial": true,
+                "is_final": false,
+                "parts": serde_json::Value::Null,
+                "storage": "file_storage",
+                "metadata": {
+                    "attachment_id": attachment_id,
+                    "upload_session_id": upload_session_id,
+                    "file_name": "future-partial.png",
+                    "mime_type": "image/png",
+                    "byte_size": "68"
+                }
+            }
+        })),
+        &[
+            ("Hook-Name", "pre-create"),
+            ("Authorization", authorization.as_str()),
+        ],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+}
+
+#[tokio::test]
+#[serial]
 async fn rustus_post_finish会登记上传回执() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -320,13 +412,16 @@ async fn rustus_post_finish会登记上传回执() {
     let attachment_id = prepare_body["attachment_id"]
         .as_str()
         .expect("attachment_id");
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id");
     let authorization = 提取媒体上传授权头(&prepare_body);
     let expected_upload_id = format!("upload-post-finish-{attachment_id}");
     let temp_file =
         写入rustus测试文件(&rustus_data_dir, attachment_id, "hook.png", &最小png字节())
             .expect("应能写入 rustus 测试文件");
 
-    let (status, _) = send_json(
+    let (status, body) = send_json(
         app.clone(),
         Method::POST,
         "/internal/rustus/hooks",
@@ -345,7 +440,7 @@ async fn rustus_post_finish会登记上传回执() {
         ],
     )
     .await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -354,9 +449,9 @@ async fn rustus_post_finish会登记上传回执() {
         .expect("应能连接数据库");
     let row = sqlx::query(
         "SELECT transport_upload_id, storage_locator, byte_size, finished_at IS NOT NULL AS is_finished \
-         FROM attachment_upload_transports WHERE attachment_id = $1",
+         FROM attachment_upload_transports WHERE upload_session_id = $1",
     )
-    .bind(attachment_id)
+    .bind(upload_session_id)
     .fetch_one(&pool)
     .await
     .expect("post-finish 后应存在运输回执");
@@ -415,6 +510,9 @@ async fn rustus_post_finish不会复活已废弃的旧上传() {
     let attachment_id = prepare_body["attachment_id"]
         .as_str()
         .expect("attachment_id");
+    let upload_session_id = prepare_body["upload_session_id"]
+        .as_str()
+        .expect("upload_session_id");
     let authorization = 提取媒体上传授权头(&prepare_body);
     let expected_upload_id = format!("upload-post-finish-abandoned-{attachment_id}");
     let temp_file = 写入rustus测试文件(
@@ -431,12 +529,12 @@ async fn rustus_post_finish不会复活已废弃的旧上传() {
         .await
         .expect("应能连接数据库");
     sqlx::query(
-        "UPDATE attachment_upload_transports SET abandoned_at = NOW() WHERE attachment_id = $1",
+        "UPDATE attachment_upload_sessions SET abandoned_at = NOW() WHERE upload_session_id = $1",
     )
-    .bind(attachment_id)
+    .bind(upload_session_id)
     .execute(&pool)
     .await
-    .expect("测试需要先把旧 transport 标成 abandoned");
+    .expect("测试需要先把旧 upload session 标成 abandoned");
 
     let (status, body) = send_json(
         app,
