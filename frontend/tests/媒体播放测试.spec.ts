@@ -31,8 +31,11 @@ describe("媒体播放器", () => {
           height: 800,
         },
         blob_asset: {
+          asset_id: "att-image-blob-1",
           content_hash: "hash-image-blob-1",
+          kind: "blob_image" as const,
           preview: {
+            id: "att-image-blob-1:preview",
             url: "http://media.local/blob/att-image-blob-1/preview.webp",
             mime_type: "image/webp",
             width: 480,
@@ -40,6 +43,7 @@ describe("媒体播放器", () => {
             bytes: 1024,
           },
           full: {
+            id: "att-image-blob-1:full",
             url: "http://media.local/blob/att-image-blob-1/full.webp",
             mime_type: "image/webp",
             width: 1200,
@@ -47,6 +51,7 @@ describe("媒体播放器", () => {
             bytes: 2048,
           },
           original: {
+            id: "att-image-blob-1:original",
             url: "http://media.local/blob/att-image-blob-1/original.png",
             mime_type: "image/png",
             width: 1200,
@@ -58,6 +63,12 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-image-blob-1",
             join_ticket: null,
+          },
+          origin: {
+            original_url: "http://media.local/blob/att-image-blob-1/original.png",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
           },
         },
         streaming_asset: null,
@@ -123,8 +134,11 @@ describe("媒体播放器", () => {
           height: 800,
         },
         blob_asset: {
+          asset_id: "att-image-backfill-1",
           content_hash: "hash-image-backfill-1",
+          kind: "blob_image" as const,
           preview: {
+            id: "att-image-backfill-1:preview",
             url: "http://media.local/blob/att-image-backfill-1/preview.webp",
             mime_type: "image/webp",
             width: 480,
@@ -132,6 +146,7 @@ describe("媒体播放器", () => {
             bytes: 1024,
           },
           full: {
+            id: "att-image-backfill-1:full",
             url: "http://media.local/blob/att-image-backfill-1/full.webp",
             mime_type: "image/webp",
             width: 1200,
@@ -139,6 +154,7 @@ describe("媒体播放器", () => {
             bytes: 2048,
           },
           original: {
+            id: "att-image-backfill-1:original",
             url: "http://media.local/blob/att-image-backfill-1/original.png",
             mime_type: "image/png",
             width: 1200,
@@ -150,6 +166,12 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-image-backfill-1",
             join_ticket: null,
+          },
+          origin: {
+            original_url: "http://media.local/blob/att-image-backfill-1/original.png",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
           },
         },
         streaming_asset: null,

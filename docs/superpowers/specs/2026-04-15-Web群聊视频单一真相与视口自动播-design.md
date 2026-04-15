@@ -208,6 +208,9 @@
 - 具体吃 `hls_master_url / file / blob / swarm`，必须由同一个媒体 owner / source resolver 裁决
 - 壳层不允许自己拼 URL、猜来源、绕过 locator 或私造第二套恢复逻辑
 - 如果该视频当前没有可播放正式源，消息流就保持 `poster-only`
+- `inline_autoplay -> anchor/original 优先` 只允许作为已经退场的止血版历史说明，不再作为长期裁决
+- 当前正式裁决收口为：`inline_autoplay -> swarm/web seed 优先 -> anchor/original fallback`
+- 前提是 `WebTorrent/swarm` 已支持多消费者 owner，自动播与时间线媒体会话只共享同一个 runtime，不再互相误释放
 - 这意味着：
   - 自动播和正式播放共享同一条媒体主链
   - 消息流里不会再为 preview clip 养第二套视频资产
@@ -314,7 +317,8 @@
 - 自动播只属于轻量预览，不拉起正式播放器壳
 - 自动播不会修改媒体真相，只是壳层展示策略
 - 自动播复用与正式播放相同的媒体 source resolver
-- 自动播可以命中 `hls_master_url / file / blob / swarm`，但壳层自己不能裁决具体吃哪条源
+- 自动播可以命中 `file / blob / swarm` 等正式资产，但列表态仍不直接吃 `hls_master_url`
+- 自动播对视频的默认优先级是：`swarm/web seed -> anchor/original fallback`
 - 没有静态 preview 时不回退成 `original#t=0.1`
 
 ### 8.4 停播规则

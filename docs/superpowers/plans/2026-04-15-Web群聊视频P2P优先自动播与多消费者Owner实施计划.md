@@ -8,6 +8,12 @@
 
 **Tech Stack:** TypeScript, Lit, Vitest, WebTorrent, BrowserAppPlatform, Service Worker, Video.js v10, hls.js
 
+**Execution Result (2026-04-15):**
+- 已完成 `WebTorrent/swarm` 多消费者 owner 改造，`session:*` 与 `inline_autoplay:*` 可以安全共存并独立释放。
+- 已完成 `consumerId` 贯穿：媒体会话、消息流自动播、后台/退房/开查看器释放路径都只操作自己的 consumer。
+- 已完成 `inline_autoplay -> swarm/web seed 优先 -> anchor/original fallback` 收口；`viewer` 仍保持 `manifest` 正式主链。
+- 已补图片秒开与 backfill 回归护栏：图片首开继续优先 `preview/full blob`，backfill 继续复用同一个协作分发 resolver。
+
 ---
 
 ## 范围裁决
