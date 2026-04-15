@@ -2,6 +2,177 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放器 } from "../媒体/媒体播放";
 
 describe("媒体播放器", () => {
+  it("图片首开仍优先 preview/full blob 主链，不会因为多消费者改造而强行切到 WebTorrent", async () => {
+    const resolveSwarmSource = vi.fn();
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-image-blob-1",
+        kind: "image" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/original-image-blob-1",
+        thumbnail_url: "http://media.local/poster-image-blob-1",
+        distribution: {
+          content_id: "content_att-image-blob-1",
+          content_hash: "hash-image-blob-1",
+          swarm_id: "swarm-hash-image-blob-1",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-image-blob-1",
+          torrent_info_hash: "torrent-info-hash-image-blob-1",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-image-blob-1",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+        },
+        preview_asset: {
+          still_url: "http://media.local/preview-image-blob-1.jpg",
+          width: 1200,
+          height: 800,
+        },
+        blob_asset: {
+          content_hash: "hash-image-blob-1",
+          preview: {
+            url: "http://media.local/blob/att-image-blob-1/preview.webp",
+            mime_type: "image/webp",
+            width: 480,
+            height: 320,
+            bytes: 1024,
+          },
+          full: {
+            url: "http://media.local/blob/att-image-blob-1/full.webp",
+            mime_type: "image/webp",
+            width: 1200,
+            height: 800,
+            bytes: 2048,
+          },
+          original: {
+            url: "http://media.local/blob/att-image-blob-1/original.png",
+            mime_type: "image/png",
+            width: 1200,
+            height: 800,
+            bytes: 4096,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-image-blob-1",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-image-blob-1",
+            join_ticket: null,
+          },
+        },
+        streaming_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-image-blob-1",
+      kind: "image",
+      consumerId: "session:att-image-blob-1",
+    });
+
+    expect(result).toEqual({
+      mode: "blob",
+      attachmentId: "att-image-blob-1",
+      kind: "image",
+      src: "http://media.local/blob/att-image-blob-1/preview.webp",
+      viewerSrc: "http://media.local/blob/att-image-blob-1/full.webp",
+      thumbnailUrl: "http://media.local/blob/att-image-blob-1/preview.webp",
+      contentHash: "hash-image-blob-1",
+      distribution: {
+        swarm_id: "swarm-hash-image-blob-1",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-image-blob-1",
+        join_ticket: null,
+      },
+      hint: null,
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("图片进入 backfill 时，仍复用同一个协作分发 resolver 并透传 consumerId", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-image-backfill-1",
+      hint: "正在协作分发" as const,
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-image-backfill-1",
+        kind: "image" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/original-image-backfill-1",
+        thumbnail_url: "http://media.local/poster-image-backfill-1",
+        distribution: {
+          content_id: "content_att-image-backfill-1",
+          content_hash: "hash-image-backfill-1",
+          swarm_id: "swarm-hash-image-backfill-1",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-image-backfill-1",
+          torrent_info_hash: "torrent-info-hash-image-backfill-1",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-image-backfill-1",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+        },
+        preview_asset: {
+          still_url: "http://media.local/preview-image-backfill-1.jpg",
+          width: 1200,
+          height: 800,
+        },
+        blob_asset: {
+          content_hash: "hash-image-backfill-1",
+          preview: {
+            url: "http://media.local/blob/att-image-backfill-1/preview.webp",
+            mime_type: "image/webp",
+            width: 480,
+            height: 320,
+            bytes: 1024,
+          },
+          full: {
+            url: "http://media.local/blob/att-image-backfill-1/full.webp",
+            mime_type: "image/webp",
+            width: 1200,
+            height: 800,
+            bytes: 2048,
+          },
+          original: {
+            url: "http://media.local/blob/att-image-backfill-1/original.png",
+            mime_type: "image/png",
+            width: 1200,
+            height: 800,
+            bytes: 4096,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-image-backfill-1",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-image-backfill-1",
+            join_ticket: null,
+          },
+        },
+        streaming_asset: null,
+      }),
+      resolveSwarmSource,
+    });
+
+    await 播放器.激活协作补齐({
+      attachmentId: "att-image-backfill-1",
+      kind: "image",
+      consumerId: "session:att-image-backfill-1",
+      onSessionEvent: vi.fn(),
+    });
+
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-image-backfill-1",
+        kind: "image",
+        consumerId: "session:att-image-backfill-1",
+      })
+    );
+  });
+
   it("swarm 不足时会回退到锚点地址", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-1",
