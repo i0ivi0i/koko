@@ -143,6 +143,71 @@ async fn prepare媒体上传会返回Tus契约() {
 
 #[tokio::test]
 #[serial]
+#[allow(non_snake_case)]
+async fn prepare视频上传会拒绝超过200mb的请求并允许200mb边界值() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("prepare-video-200mb-{uniq}")}),
+        ),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (ok_status, _) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "edge.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 200 * 1024 * 1024
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(ok_status, StatusCode::OK);
+
+    let (too_large_status, too_large_body) = send_json(
+        app,
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "too-large.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": 200 * 1024 * 1024 + 1
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(too_large_status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(
+        too_large_body["code"].as_str(),
+        Some("attachment_too_large")
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn complete图片上传会把prepared附件升级成ready并写入缩略图() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

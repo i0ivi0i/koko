@@ -791,6 +791,9 @@ fn 校验媒体准备请求(
     mime_type: &str,
     byte_size: i64,
 ) -> Result<(), (StatusCode, &'static str, &'static str)> {
+    const 图片附件上传上限字节数: i64 = 10 * 1024 * 1024;
+    const 视频附件上传上限字节数: i64 = 200 * 1024 * 1024;
+
     if byte_size <= 0 {
         return Err((StatusCode::BAD_REQUEST, "invalid_argument", "媒体大小非法"));
     }
@@ -803,7 +806,7 @@ fn 校验媒体准备请求(
                     "只允许上传图片",
                 ));
             }
-            if byte_size > 10 * 1024 * 1024 {
+            if byte_size > 图片附件上传上限字节数 {
                 return Err((
                     StatusCode::PAYLOAD_TOO_LARGE,
                     "attachment_too_large",
@@ -819,11 +822,11 @@ fn 校验媒体准备请求(
                     "只允许上传视频",
                 ));
             }
-            if byte_size > 50 * 1024 * 1024 {
+            if byte_size > 视频附件上传上限字节数 {
                 return Err((
                     StatusCode::PAYLOAD_TOO_LARGE,
                     "attachment_too_large",
-                    "视频超过 50MB 上限",
+                    "视频超过 200MB 上限",
                 ));
             }
         }

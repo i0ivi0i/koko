@@ -53,6 +53,10 @@ mod 房间外壳;
 /// 先把常量收在 shell 父层，供上传外壳与 Rustus hook 外壳共享，避免兄弟模块重复手抄字符串。
 const 媒体上传运输方式_TUS: &str = "tus";
 
+/// HTTP 入口只负责限制“单次请求体能进壳多少字节”，这是纯资源门禁，不是业务时长或媒体真相。
+/// 把它显式收成常量，避免 prepare/脚本/body limit 三处再各写各的数字。
+pub(crate) const 媒体上传HTTP请求体上限字节数: usize = 200 * 1024 * 1024;
+
 /// 外壳层统一解析“必填但允许空字符串传进来的 session_id”。
 /// 这属于多个 HTTP 壳共享的协议清洗，不应该继续挂在某个具体业务壳名下。
 pub(super) fn 读取非空会话标识(
@@ -326,7 +330,7 @@ pub fn 构建路由(state: 应用状态) -> Router {
             get(后台外壳::admin_room_detail),
         )
         .merge(构建前端静态资源路由())
-        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(媒体上传HTTP请求体上限字节数))
         .layer(socket_layer)
         .with_state(state)
 }
