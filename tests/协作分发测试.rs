@@ -84,20 +84,22 @@ async fn ready附件会落协作分发元数据() {
         .expect("attachment_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &state.rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &state.tus_upload_dir,
         &attachment_id,
         "distribution-ready.png",
         &最小png字节(),
     )
-    .expect("应能写入 rustus 临时图片文件");
+    .expect("应能写入 tus 临时图片文件");
     let upload_id = format!("upload-distribution-ready-{attachment_id}");
 
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "distribution-ready.png",
@@ -106,10 +108,7 @@ async fn ready附件会落协作分发元数据() {
             68,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
@@ -933,7 +932,7 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
             .await
             .expect("应能构建共享应用状态");
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let app = koko::shell::构建路由(state.clone());
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -985,20 +984,22 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
         .expect("attachment_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "torrent-route.mp4",
         &最小mp4字节(),
     )
-    .expect("应能写入 rustus 临时视频文件");
+    .expect("应能写入 tus 临时视频文件");
     let upload_id = format!("upload-torrent-route-{attachment_id}");
 
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "torrent-route.mp4",
@@ -1007,10 +1008,7 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
             最小mp4字节().len() as i64,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
@@ -1107,7 +1105,7 @@ async fn locator会返回announce与web_seed并保留ticket占位() {
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
             .await
             .expect("应能构建共享应用状态");
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let app = koko::shell::构建路由(state);
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1159,20 +1157,22 @@ async fn locator会返回announce与web_seed并保留ticket占位() {
         .expect("attachment_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "locator-runtime.mp4",
         &最小mp4字节(),
     )
-    .expect("应能写入 rustus 临时视频文件");
+    .expect("应能写入 tus 临时视频文件");
     let upload_id = format!("upload-locator-runtime-{attachment_id}");
 
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "locator-runtime.mp4",
@@ -1181,10 +1181,7 @@ async fn locator会返回announce与web_seed并保留ticket占位() {
             最小mp4字节().len() as i64,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
@@ -1807,7 +1804,7 @@ async fn 原图内容接口支持标准range读取() {
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
             .await
             .expect("应能构建共享应用状态");
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let app = koko::shell::构建路由(state);
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1859,20 +1856,22 @@ async fn 原图内容接口支持标准range读取() {
         .expect("attachment_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "range-original.mp4",
         &最小mp4字节(),
     )
-    .expect("应能写入 rustus 临时视频文件");
+    .expect("应能写入 tus 临时视频文件");
     let upload_id = format!("upload-range-original-{attachment_id}");
 
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "range-original.mp4",
@@ -1881,10 +1880,7 @@ async fn 原图内容接口支持标准range读取() {
             最小mp4字节().len() as i64,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");

@@ -13,15 +13,15 @@ pub fn 提取媒体上传授权头(body: &Value) -> String {
         .to_string()
 }
 
-/// Rustus file storage 在测试里直接共享本地目录，因此 fixture 也应写进同一个 data dir。
+/// Tus sidecar 在测试里直接共享本地上传目录，因此 fixture 也应写进同一个 upload dir。
 /// 这样 complete 读到的就是真正 sidecar 会交回来的临时文件，而不是测试私造的第二套输入源。
-pub fn 写入rustus测试文件(
-    rustus_data_dir: &str,
+pub fn 写入tus测试文件(
+    tus_upload_dir: &str,
     attachment_id: &str,
     file_name: &str,
     bytes: &[u8],
 ) -> io::Result<String> {
-    let root = PathBuf::from(rustus_data_dir);
+    let root = PathBuf::from(tus_upload_dir);
     let fixture_dir = root.join("tests");
     std::fs::create_dir_all(&fixture_dir)?;
     let path = fixture_dir.join(format!("{attachment_id}-{file_name}"));
@@ -29,30 +29,78 @@ pub fn 写入rustus测试文件(
     Ok(std::fs::canonicalize(path)?.to_string_lossy().to_string())
 }
 
-/// 这里构造的是我们当前 shell 关心的最小 Rustus hook 负载：
-/// - upload.id/path/length/offset 只表达“当前 hook 所处的运输状态”；
-/// - metadata 继续把 attachment_id 作为业务锚点传回来；
-/// - 其余字段即便 Rustus 实际会发，也不应该成为我们判断业务真相的依赖。
-pub fn 构造rustus_hook请求体(
+/// 这里构造的是我们当前 shell 关心的最小 tusd HTTP hook 负载：
+/// - 顶层走官方 `Type / Event / Upload / HTTPRequest` 结构；
+/// - `Upload.MetaData` 继续把 attachment_id 作为业务锚点传回来；
+/// - `HTTPRequest.Header.Authorization` 代表客户端最初打给 sidecar 的上传令牌；
+/// - 其余字段即便 tusd 还会发，也不应该成为我们判断业务真相的依赖。
+pub fn 构造tus_hook请求体(
+    hook_type: &str,
+    authorization: Option<&str>,
     upload_id: &str,
     attachment_id: &str,
     file_name: &str,
     mime_type: &str,
-    length: i64,
+    size: i64,
     offset: i64,
     storage_locator: Option<&str>,
 ) -> Value {
+    let request_method = match hook_type {
+        "pre-create" => "POST",
+        "pre-terminate" | "post-terminate" => "DELETE",
+        _ => "PATCH",
+    };
+    let request_uri = if hook_type == "pre-create" {
+        "/files".to_string()
+    } else {
+        format!("/files/{upload_id}")
+    };
+    let upload_id_value = if hook_type == "pre-create" {
+        Value::Null
+    } else {
+        Value::String(upload_id.to_string())
+    };
+    let storage_value = storage_locator
+        .map(|path| {
+            serde_json::json!({
+                "Type": "filestore",
+                "Path": path,
+            })
+        })
+        .unwrap_or(Value::Null);
+    let mut request_headers = serde_json::Map::new();
+    if let Some(value) = authorization
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        request_headers.insert(
+            "Authorization".to_string(),
+            Value::Array(vec![Value::String(value.to_string())]),
+        );
+    }
     serde_json::json!({
-        "upload": {
-            "id": upload_id,
-            "offset": offset,
-            "length": length,
-            "path": storage_locator,
-            "metadata": {
-                "attachment_id": attachment_id,
-                "file_name": file_name,
-                "mime_type": mime_type,
-                "byte_size": length.to_string(),
+        "Type": hook_type,
+        "Event": {
+            "Upload": {
+                "ID": upload_id_value,
+                "Size": size,
+                "SizeIsDeferred": false,
+                "Offset": offset,
+                "MetaData": {
+                    "attachment_id": attachment_id,
+                    "file_name": file_name,
+                    "mime_type": mime_type,
+                    "byte_size": size.to_string(),
+                },
+                "IsPartial": false,
+                "IsFinal": false,
+                "PartialUploads": Value::Null,
+                "Storage": storage_value,
+            },
+            "HTTPRequest": {
+                "Method": request_method,
+                "URI": request_uri,
+                "Header": request_headers,
             }
         }
     })
@@ -63,34 +111,39 @@ pub fn 构造rustus_hook请求体(
 /// 1. 默认仍沿用基础 hook 负载，避免和真实 shell 判断脱节；
 /// 2. 只有角色布尔位、parts 和 upload_session_id 这些 Concatenation 必需字段才额外注入；
 /// 3. fixture 负责表达协议事实，不替业务层做任何裁决。
-pub fn 构造rustus_concatenation_hook请求体(
+pub fn 构造tus_concatenation_hook请求体(
+    hook_type: &str,
+    authorization: Option<&str>,
     upload_id: &str,
     attachment_id: &str,
     upload_session_id: &str,
     file_name: &str,
     mime_type: &str,
-    length: i64,
+    size: i64,
     offset: i64,
     storage_locator: Option<&str>,
     is_partial: bool,
     is_final: bool,
     parts: Option<Vec<&str>>,
 ) -> Value {
-    let mut body = 构造rustus_hook请求体(
+    let mut body = 构造tus_hook请求体(
+        hook_type,
+        authorization,
         upload_id,
         attachment_id,
         file_name,
         mime_type,
-        length,
+        size,
         offset,
         storage_locator,
     );
-    body["upload"]["is_partial"] = Value::Bool(is_partial);
-    body["upload"]["is_final"] = Value::Bool(is_final);
-    body["upload"]["parts"] = parts
+    body["Event"]["Upload"]["IsPartial"] = Value::Bool(is_partial);
+    body["Event"]["Upload"]["IsFinal"] = Value::Bool(is_final);
+    body["Event"]["Upload"]["PartialUploads"] = parts
         .map(|items| Value::Array(items.into_iter().map(|value| Value::String(value.to_string())).collect()))
         .unwrap_or(Value::Null);
-    body["upload"]["metadata"]["upload_session_id"] = Value::String(upload_session_id.to_string());
+    body["Event"]["Upload"]["MetaData"]["upload_session_id"] =
+        Value::String(upload_session_id.to_string());
     body
 }
 

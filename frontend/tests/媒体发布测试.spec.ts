@@ -255,7 +255,7 @@ describe("媒体发布器", () => {
       /**
        * 这里继续锁住 Concatenation 的最小契约：
        * - `parallelUploads` 只是 transport 优化开关，不是业务锚点；
-       * - partial upload 必须显式带回 attachment/session，否则 Rustus hook 无法知道这些分片属于谁；
+       * - partial upload 必须显式带回 attachment/session，否则 Tus hook 无法知道这些分片属于谁；
        * - 所以这条测试专门防回归“只开并行、不补 metadataForPartialUploads”的假高吞吐。
        */
       attachmentId: "att-large-video",

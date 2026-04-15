@@ -10,14 +10,14 @@ mod test_support;
 
 #[path = "媒体上传测试/公网地址推导.rs"]
 mod public_endpoint_tests;
-#[path = "媒体上传测试/rustus_hook.rs"]
-mod rustus_hook_tests;
+#[path = "媒体上传测试/tus_hook.rs"]
+mod tus_hook_tests;
 
 use test_support::{env_support::*, http::*, media::*};
 
 /// 媒体上传测试：
 /// 1. 顶层只守 prepare / complete 的上传主链与旧入口回归。
-/// 2. Rustus hook 和公网地址推导拆到子模块，避免热点再次堆在单文件。
+/// 2. Tus hook 和公网地址推导拆到子模块，避免热点再次堆在单文件。
 /// 3. 不负责消息成立、房间历史恢复、协作分发 locator/torrent 等后续业务语义。
 #[tokio::test]
 #[serial]
@@ -230,7 +230,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -272,18 +272,20 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
         .expect("应能连接数据库");
     let authorization = 提取媒体上传授权头(&prepare_body);
     let upload_id = format!("upload-complete-image-{attachment_id}");
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "complete.png",
         &最小png字节(),
     )
-    .expect("应能写入 rustus 原图文件");
+    .expect("应能写入 tus 原图文件");
     let (hook_status, _) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "complete.png",
@@ -292,10 +294,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
             68,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT);
@@ -509,7 +508,7 @@ async fn 放弃媒体上传会同时标记附件与transport为abandoned并清�
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -549,19 +548,21 @@ async fn 放弃媒体上传会同时标记附件与transport为abandoned并清�
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
     let upload_id = format!("upload-abandon-{attachment_id}");
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "abandon.png",
         &source_bytes,
     )
-    .expect("应能写入 rustus 临时图片文件");
+    .expect("应能写入 tus 临时图片文件");
 
     let (hook_status, _) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "abandon.png",
@@ -570,10 +571,7 @@ async fn 放弃媒体上传会同时标记附件与transport为abandoned并清�
             source_bytes.len() as i64,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Authorization", authorization.as_str()),
-            ("Hook-Name", "post-finish"),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT);
@@ -656,7 +654,7 @@ async fn 放弃媒体上传会清掉当前会话下所有partial临时文件() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -697,15 +695,15 @@ async fn 放弃媒体上传会清掉当前会话下所有partial临时文件() {
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
 
-    let partial_one = 写入rustus测试文件(
-        &rustus_data_dir,
+    let partial_one = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "abandon-partials-1.part",
         &source_bytes[..(source_bytes.len() / 2)],
     )
     .expect("应能写入 partial-1 测试文件");
-    let partial_two = 写入rustus测试文件(
-        &rustus_data_dir,
+    let partial_two = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "abandon-partials-2.part",
         &source_bytes[(source_bytes.len() / 2)..],
@@ -719,8 +717,10 @@ async fn 放弃媒体上传会清掉当前会话下所有partial临时文件() {
         let (hook_status, hook_body) = send_json(
             app.clone(),
             Method::POST,
-            "/internal/rustus/hooks",
-            Some(构造rustus_concatenation_hook请求体(
+            "/internal/tus/hooks",
+            Some(构造tus_concatenation_hook请求体(
+                "post-finish",
+                Some(authorization.as_str()),
                 &upload_id,
                 &attachment_id,
                 &upload_session_id,
@@ -733,10 +733,7 @@ async fn 放弃媒体上传会清掉当前会话下所有partial临时文件() {
                 false,
                 None,
             )),
-            &[
-                ("Authorization", authorization.as_str()),
-                ("Hook-Name", "post-finish"),
-            ],
+            &[],
         )
         .await;
         assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
@@ -837,7 +834,7 @@ async fn complete在只有partial没有final时会返回attachment_not_ready() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -877,8 +874,8 @@ async fn complete在只有partial没有final时会返回attachment_not_ready() {
         .expect("upload_session_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let partial_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let partial_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "partial-only.part",
         &video_bytes[..(video_bytes.len() / 2)],
@@ -888,8 +885,10 @@ async fn complete在只有partial没有final时会返回attachment_not_ready() {
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_concatenation_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("partial-only-{attachment_id}-1"),
             &attachment_id,
             &upload_session_id,
@@ -902,10 +901,7 @@ async fn complete在只有partial没有final时会返回attachment_not_ready() {
             false,
             None,
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
@@ -936,7 +932,7 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -976,15 +972,15 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
 
-    let partial_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let partial_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "cleanup-finalized.part",
         &[1, 2, 3, 4],
     )
     .expect("应能写入 partial 文件");
-    let final_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let final_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "cleanup-finalized.png",
         &最小png字节(),
@@ -994,8 +990,10 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
     let (partial_status, partial_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_concatenation_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("cleanup-partial-{attachment_id}"),
             &attachment_id,
             &upload_session_id,
@@ -1008,10 +1006,7 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
             false,
             None,
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(partial_status, StatusCode::NO_CONTENT, "{partial_body:?}");
@@ -1019,8 +1014,10 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
     let (final_status, final_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_concatenation_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("cleanup-final-{attachment_id}"),
             &attachment_id,
             &upload_session_id,
@@ -1036,10 +1033,7 @@ async fn 后台会清理final完成后遗留的partial临时文件() {
                 "http://127.0.0.1:7070/files/part-2",
             ]),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(final_status, StatusCode::NO_CONTENT, "{final_body:?}");
@@ -1070,7 +1064,7 @@ async fn 后台会清理过期unfinished上传并把附件标成expired() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -1110,8 +1104,8 @@ async fn 后台会清理过期unfinished上传并把附件标成expired() {
         .expect("upload_session_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let partial_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let partial_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "cleanup-expired.part",
         &source_bytes[..(source_bytes.len() / 2)],
@@ -1121,8 +1115,10 @@ async fn 后台会清理过期unfinished上传并把附件标成expired() {
     let (partial_status, partial_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_concatenation_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("expired-partial-{attachment_id}"),
             &attachment_id,
             &upload_session_id,
@@ -1135,10 +1131,7 @@ async fn 后台会清理过期unfinished上传并把附件标成expired() {
             false,
             None,
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(partial_status, StatusCode::NO_CONTENT, "{partial_body:?}");
@@ -1180,7 +1173,7 @@ async fn 后台会清理过期unfinished上传并把附件标成expired() {
     );
     assert!(
         !std::path::Path::new(partial_file.as_str()).exists(),
-        "过期 unfinished upload 的临时文件必须被后台删除，不能永远卡在 rustus data dir 里"
+        "过期 unfinished upload 的临时文件必须被后台删除，不能永远卡在 tus upload dir 里"
     );
 }
 
@@ -1196,7 +1189,7 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -1235,15 +1228,15 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
         .expect("upload_session_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let wrong_single_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let wrong_single_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "final-preferred-single.bin",
         b"not-an-image",
     )
     .expect("应能写入 single 假文件");
-    let final_png_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let final_png_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "final-preferred-final.png",
         &最小png字节(),
@@ -1253,8 +1246,10 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
     let (single_hook_status, single_hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("single-{attachment_id}"),
             &attachment_id,
             "final-preferred.png",
@@ -1263,10 +1258,7 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
             68,
             Some(wrong_single_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(single_hook_status, StatusCode::NO_CONTENT, "{single_hook_body:?}");
@@ -1274,8 +1266,10 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
     let (final_hook_status, final_hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_concatenation_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("final-{attachment_id}"),
             &attachment_id,
             &upload_session_id,
@@ -1291,10 +1285,7 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
                 "http://127.0.0.1:7070/files/part-2",
             ]),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(final_hook_status, StatusCode::NO_CONTENT, "{final_hook_body:?}");
@@ -1326,7 +1317,7 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -1364,17 +1355,17 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
         .expect("attachment_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "complete-race.png",
         &最小png字节(),
     )
-    .expect("应能写入 rustus 临时图片文件");
+    .expect("应能写入 tus 临时图片文件");
     let upload_id = format!("upload-complete-race-{attachment_id}");
 
     // 真实浏览器里，Uppy 会在最终 PATCH 204 后立刻触发 upload-success，
-    // 但 Rustus 的 post-finish 回执可能稍后才打到主服务。
+    // 但 Tus sidecar 的 post-finish 回执可能稍后才打到主服务。
     // 这里故意让 complete 先发起，再延迟 50ms 才送 post-finish，锁住这条竞态。
     let app_for_hook = app.clone();
     let attachment_id_for_hook = attachment_id.clone();
@@ -1386,8 +1377,10 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
         send_json(
             app_for_hook,
             Method::POST,
-            "/internal/rustus/hooks",
-            Some(构造rustus_hook请求体(
+            "/internal/tus/hooks",
+            Some(构造tus_hook请求体(
+                "post-finish",
+                Some(authorization_for_hook.as_str()),
                 &upload_id_for_hook,
                 &attachment_id_for_hook,
                 "complete-race.png",
@@ -1396,10 +1389,7 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
                 68,
                 Some(temp_file_for_hook.as_str()),
             )),
-            &[
-                ("Hook-Name", "post-finish"),
-                ("Authorization", authorization_for_hook.as_str()),
-            ],
+            &[],
         )
         .await
     });
@@ -1437,7 +1427,7 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -1481,18 +1471,20 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         .expect("应能连接数据库");
     let authorization = 提取媒体上传授权头(&prepare_body);
     let upload_id = format!("upload-complete-video-{attachment_id}");
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "complete.mp4",
         &video_bytes,
     )
-    .expect("应能写入 rustus 临时视频文件");
+    .expect("应能写入 tus 临时视频文件");
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "complete.mp4",
@@ -1501,10 +1493,7 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
             video_byte_size,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
@@ -1731,7 +1720,7 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     );
     assert!(
         !std::path::Path::new(temp_file.as_str()).exists(),
-        "视频 complete 成功后应立即删掉 Rustus 临时原片，避免源文件在服务器上继续滞留"
+        "视频 complete 成功后应立即删掉 Tus 临时原片，避免源文件在服务器上继续滞留"
     );
 }
 
@@ -1786,18 +1775,20 @@ async fn complete图片上传遇到非图片原图会返回attachment_type_not_a
 
     let authorization = 提取媒体上传授权头(&prepare_body);
     let upload_id = format!("upload-invalid-image-{attachment_id}");
-    let temp_file = 写入rustus测试文件(
-        &state.rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &state.tus_upload_dir,
         &attachment_id,
         "broken.png",
         invalid_bytes,
     )
-    .expect("应能写入 rustus 非法图片文件");
+    .expect("应能写入 tus 非法图片文件");
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "broken.png",
@@ -1806,10 +1797,7 @@ async fn complete图片上传遇到非图片原图会返回attachment_type_not_a
             invalid_bytes.len() as i64,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");

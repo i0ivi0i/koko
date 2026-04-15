@@ -1,5 +1,5 @@
 use super::{
-    err_resp, map_domain_err_tuple, rustus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态,
+    err_resp, map_domain_err_tuple, tus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态,
     构建共享仓储, 流媒体打包,
 };
 use crate::{
@@ -204,7 +204,7 @@ pub(super) async fn prepare_media_upload(
     let response_kind = super::媒体资产外壳::媒体类型转标签(&snapshot.种类);
     let response_mime_type = snapshot.mime_type.clone();
     let response_byte_size = snapshot.字节大小;
-    let rustus_public_endpoint = 读取媒体_tus对外地址(&state, &headers);
+    let tus_public_endpoint = 读取媒体_tus对外地址(&state, &headers);
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -212,7 +212,7 @@ pub(super) async fn prepare_media_upload(
             "upload_session_id": upload_session_id,
             "kind": response_kind,
             "upload_method": 媒体上传运输方式_TUS,
-            "tus_endpoint": rustus_public_endpoint,
+            "tus_endpoint": tus_public_endpoint,
             "tus_headers": {
                 "Authorization": format!("Bearer {upload_token}"),
             },
@@ -230,7 +230,7 @@ pub(super) async fn prepare_media_upload(
 }
 
 /// 冷路径：完成媒体附件上传。
-/// 这里消费 Rustus finished 回执指向的 shared file，写回 canonical store 后，再把 prepared 升级成 ready。
+/// 这里消费 Tus sidecar finished 回执指向的 shared file，写回 canonical store 后，再把 prepared 升级成 ready。
 pub(super) async fn complete_media_upload(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
@@ -335,8 +335,8 @@ pub(super) async fn complete_media_upload(
             "原图尚未上传完成",
         );
     };
-    let temp_file_path = match rustus_hook外壳::解析rustus临时文件路径(
-        &state.rustus_data_dir,
+    let temp_file_path = match tus_hook外壳::解析tus临时文件路径(
+        &state.tus_upload_dir,
         storage_locator,
     ) {
         Ok(path) => path,
@@ -399,7 +399,7 @@ pub(super) async fn complete_media_upload(
                         "system_error",
                         "读取原图临时文件失败",
                         "read_temp_file_failed",
-                        format!("读取 Rustus 临时原图文件失败: {err}"),
+                        format!("读取 Tus 临时原图文件失败: {err}"),
                     );
                 }
             };
@@ -601,7 +601,7 @@ pub(super) async fn complete_media_upload(
                             "system_error",
                             "映射原视频临时文件失败",
                             "map_original_video_failed",
-                            format!("映射 Rustus 临时原视频失败: {err}"),
+                            format!("映射 Tus 临时原视频失败: {err}"),
                         );
                     }
                 };
@@ -763,7 +763,7 @@ pub(super) async fn complete_media_upload(
                                 "system_error",
                                 "删除原始上传临时文件失败",
                                 "delete_original_temp_file_failed",
-                                format!("删除 Rustus 原始上传临时文件失败: {err}"),
+                                format!("删除 Tus 原始上传临时文件失败: {err}"),
                             )
                         }
                     }
@@ -1063,16 +1063,16 @@ fn 包装url主机(host: &str) -> String {
     }
 }
 
-/// `RUSTUS_PUBLIC_ENDPOINT` 没显式配置时，这里按当前 HTTP 请求 Host 推导一个 LAN 可达的地址。
+/// `MEDIA_TUS_PUBLIC_ENDPOINT` 没显式配置时，这里按当前 HTTP 请求 Host 推导一个 LAN 可达的地址。
 ///
 /// 边界约束：
 /// 1. 显式配置永远优先，生产反向代理场景仍应直接给出权威 public endpoint；
 /// 2. 这里只作为本机/局域网开发兜底，避免 prepare 默认把 `127.0.0.1` 塞给异机浏览器；
 /// 3. 推导结果仍然只描述“Tus sidecar 暴露在哪”，不改变业务真相归属。
-fn 推导rustus对外入口(
+fn 推导媒体tus对外入口(
     headers: &HeaderMap,
-    rustus_server_port: u16,
-    rustus_url: &str,
+    tus_server_port: u16,
+    tus_base_path: &str,
 ) -> Option<String> {
     let forwarded_host = 读取首个非空请求头(headers, "x-forwarded-host");
     let raw_host = forwarded_host
@@ -1089,8 +1089,8 @@ fn 推导rustus对外入口(
     let hostname = authority.host();
     let host_for_url = 包装url主机(hostname);
 
-    // 端口推导要区分“公网 authority”与“内部 Rustus 监听端口”：
-    // 1. 开发/LAN 直连时，Host 通常只是应用入口端口（例如 8080），Tus 仍应落到单独的 Rustus 端口；
+    // 端口推导要区分“公网 authority”与“内部 Tus sidecar 监听端口”：
+    // 1. 开发/LAN 直连时，Host 通常只是应用入口端口（例如 8080），Tus 仍应落到单独的 sidecar 端口；
     // 2. 反向代理场景若已经通过 forwarded 头给出公网端口/authority，就应该优先沿用公网信息，
     //    不能再把内部 1081 一类监听端口泄漏给浏览器。
     let should_trust_authority_port =
@@ -1111,7 +1111,7 @@ fn 推导rustus对外入口(
                 .flatten()
         })
         .or(inferred_proxy_default_port)
-        .unwrap_or(rustus_server_port);
+        .unwrap_or(tus_server_port);
     let should_omit_port =
         (scheme == "http" && public_port == 80) || (scheme == "https" && public_port == 443);
     let authority_for_url = if should_omit_port {
@@ -1119,18 +1119,18 @@ fn 推导rustus对外入口(
     } else {
         format!("{host_for_url}:{public_port}")
     };
-    Some(format!("{scheme}://{authority_for_url}{rustus_url}"))
+    Some(format!("{scheme}://{authority_for_url}{tus_base_path}"))
 }
 
 fn 读取媒体_tus对外地址(state: &应用状态, headers: &HeaderMap) -> String {
     state
-        .rustus_public_endpoint
+        .tus_public_endpoint
         .clone()
-        .or_else(|| 推导rustus对外入口(headers, state.rustus_server_port, &state.rustus_url))
+        .or_else(|| 推导媒体tus对外入口(headers, state.tus_server_port, &state.tus_base_path))
         .unwrap_or_else(|| {
             format!(
                 "http://127.0.0.1:{}{}",
-                state.rustus_server_port, state.rustus_url
+                state.tus_server_port, state.tus_base_path
             )
         })
 }
@@ -1233,7 +1233,7 @@ pub(super) async fn 等待complete所需运输回执(
 
 fn 映射只读完成媒体临时文件(path: &StdPath) -> Result<Mmap, std::io::Error> {
     let file = StdFile::open(path)?;
-    // 安全性：Rustus `post-finish` 回执后的临时文件在 complete 阶段只做只读消费；
+    // 安全性：Tus `post-finish` 回执后的临时文件在 complete 阶段只做只读消费；
     // 这里既不写回文件，也不泄漏可变别名，因此只读映射满足 memmap 的前提。
     unsafe { MmapOptions::new().map(&file) }
 }

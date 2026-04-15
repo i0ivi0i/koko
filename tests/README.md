@@ -13,7 +13,7 @@
 - `消息主链测试.rs`
   只守消息成立顺序、附件引用落库、ready/prepared 附件进入消息主链的边界。
 - `媒体上传测试.rs`
-  只守 `prepare / complete / rustus hook / 公网地址推导`。
+  只守 `prepare / complete / tus hook / 公网地址推导`。
 - `房间接口测试.rs`
   只守 `bootstrap / events / snapshot / history / 阅读推进`。
 - `协作分发测试.rs`

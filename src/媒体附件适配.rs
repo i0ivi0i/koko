@@ -29,7 +29,7 @@ fn 解析附件状态(
     }
 }
 
-/// 上传会话读取既要服务 `prepare/complete`，也要服务 Rustus hook token 鉴权。
+/// 上传会话读取既要服务 `prepare/complete`，也要服务 Tus hook token 鉴权。
 /// 这里统一行映射，避免 adapter 各处再手搓“token 属于谁”的第二套真相。
 fn 行转媒体上传会话记录(row: PgRow) -> 媒体上传会话记录 {
     媒体上传会话记录 {

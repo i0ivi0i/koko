@@ -1,11 +1,52 @@
 use super::*;
 
-/// Rustus hook 测试：
+/// Tus hook 测试：
 /// 1. 这里只验证 hook 与上传运输真相之间的最小权威关系。
 /// 2. pre-create / post-finish 的契约必须稳定，但不在这里验证消息成立或房间读取。
 #[tokio::test]
 #[serial]
-async fn rustus_pre_create非法token会被拒绝() {
+async fn 内部tus_hook入口应使用协议命名而不是供应商命名() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    /*
+     * 这条红测只锁切换 cut line：
+     * - 新协议入口必须是 /internal/tus/hooks；
+     * - 旧 vendor 路由后面会整体退场；
+     * - 这里先不要求完整业务成功，只要求新入口真实存在。
+     */
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "pre-create",
+            Some("Bearer not-a-real-token"),
+            "upload-invalid-token",
+            "att-invalid-token",
+            "invalid.png",
+            "image/png",
+            68,
+            0,
+            None,
+        )),
+        &[],
+    )
+    .await;
+
+    assert_ne!(status, StatusCode::NOT_FOUND, "{body:?}");
+}
+
+#[tokio::test]
+#[serial]
+async fn tus_pre_create非法token会被拒绝() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -19,8 +60,10 @@ async fn rustus_pre_create非法token会被拒绝() {
     let (status, body) = send_json(
         app,
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "pre-create",
+            Some("Bearer not-a-real-token"),
             "upload-invalid-token",
             "att-invalid-token",
             "invalid.png",
@@ -29,10 +72,7 @@ async fn rustus_pre_create非法token会被拒绝() {
             0,
             None,
         )),
-        &[
-            ("Hook-Name", "pre-create"),
-            ("Authorization", "Bearer not-a-real-token"),
-        ],
+        &[],
     )
     .await;
 
@@ -45,7 +85,7 @@ async fn rustus_pre_create非法token会被拒绝() {
 
 #[tokio::test]
 #[serial]
-async fn rustus_pre_create允许offset为0且length等于metadata_byte_size() {
+async fn tus_pre_create允许offset为0且length等于metadata_byte_size() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -65,7 +105,7 @@ async fn rustus_pre_create允许offset为0且length等于metadata_byte_size() {
         Method::POST,
         "/api/session/bootstrap",
         Some(serde_json::json!({
-            "device_anonymous_token": format!("rustus-pre-create-{uniq}")
+            "device_anonymous_token": format!("tus-pre-create-{uniq}")
         })),
         &[],
     )
@@ -94,8 +134,10 @@ async fn rustus_pre_create允许offset为0且length等于metadata_byte_size() {
     let (status, body) = send_json(
         app,
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "pre-create",
+            Some(authorization.as_str()),
             &format!("upload-pre-create-{attachment_id}"),
             attachment_id,
             "pre-create.png",
@@ -104,10 +146,7 @@ async fn rustus_pre_create允许offset为0且length等于metadata_byte_size() {
             0,
             None,
         )),
-        &[
-            ("Hook-Name", "pre-create"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
 
@@ -116,7 +155,7 @@ async fn rustus_pre_create允许offset为0且length等于metadata_byte_size() {
 
 #[tokio::test]
 #[serial]
-async fn rustus_pre_create缺少byte_size元数据时仍按prepare权威长度放行() {
+async fn tus_pre_create缺少byte_size元数据时仍按prepare权威长度放行() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -136,7 +175,7 @@ async fn rustus_pre_create缺少byte_size元数据时仍按prepare权威长度�
         Method::POST,
         "/api/session/bootstrap",
         Some(serde_json::json!({
-            "device_anonymous_token": format!("rustus-pre-create-metadata-{uniq}")
+            "device_anonymous_token": format!("tus-pre-create-metadata-{uniq}")
         })),
         &[],
     )
@@ -161,7 +200,9 @@ async fn rustus_pre_create缺少byte_size元数据时仍按prepare权威长度�
         .as_str()
         .expect("attachment_id");
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let mut hook_body = 构造rustus_hook请求体(
+    let mut hook_body = 构造tus_hook请求体(
+        "pre-create",
+        Some(authorization.as_str()),
         &format!("upload-pre-create-metadata-{attachment_id}"),
         attachment_id,
         "pre-create-metadata.png",
@@ -171,22 +212,19 @@ async fn rustus_pre_create缺少byte_size元数据时仍按prepare权威长度�
         None,
     );
     /*
-     * 真实 Rustus create-upload 场景里，hook 不保证把每个 metadata 键都稳定回显给主服务。
+     * 真实 Tus create-upload 场景里，hook 不保证把每个 metadata 键都稳定回显给主服务。
      * 这里故意只保留 attachment_id，锁住“pre-create 应依赖 prepare 权威长度，而不是重复 metadata.byte_size”。
      */
-    hook_body["upload"]["metadata"] = serde_json::json!({
+    hook_body["Event"]["Upload"]["MetaData"] = serde_json::json!({
         "attachment_id": attachment_id
     });
 
     let (status, body) = send_json(
         app,
         Method::POST,
-        "/internal/rustus/hooks",
+        "/internal/tus/hooks",
         Some(hook_body),
-        &[
-            ("Hook-Name", "pre-create"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
 
@@ -195,7 +233,7 @@ async fn rustus_pre_create缺少byte_size元数据时仍按prepare权威长度�
 
 #[tokio::test]
 #[serial]
-async fn rustus_pre_create长度小于prepare整文件大小时会拒绝当前partial_upload语义() {
+async fn tus_pre_create长度小于prepare整文件大小时会拒绝当前partial_upload语义() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -215,7 +253,7 @@ async fn rustus_pre_create长度小于prepare整文件大小时会拒绝当前pa
         Method::POST,
         "/api/session/bootstrap",
         Some(serde_json::json!({
-            "device_anonymous_token": format!("rustus-pre-create-partial-{uniq}")
+            "device_anonymous_token": format!("tus-pre-create-partial-{uniq}")
         })),
         &[],
     )
@@ -245,13 +283,15 @@ async fn rustus_pre_create长度小于prepare整文件大小时会拒绝当前pa
      * 当前主链仍以“单附件 = 一条最终运输回执”为真相：
      * - pre-create 里的 length 必须就是 prepare 时登记的整文件大小；
      * - 这条测试专门防止前端再次偷偷打开 partial upload / concatenation，
-     *   却忘了同时升级 Rustus hook 与 complete 契约。
+     *   却忘了同时升级 Tus hook 与 complete 契约。
      */
     let (status, body) = send_json(
         app,
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "pre-create",
+            Some(authorization.as_str()),
             &format!("upload-pre-create-partial-{attachment_id}"),
             attachment_id,
             "pre-create-partial.png",
@@ -260,10 +300,7 @@ async fn rustus_pre_create长度小于prepare整文件大小时会拒绝当前pa
             0,
             None,
         )),
-        &[
-            ("Hook-Name", "pre-create"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
 
@@ -277,7 +314,7 @@ async fn rustus_pre_create长度小于prepare整文件大小时会拒绝当前pa
 
 #[tokio::test]
 #[serial]
-async fn rustus_pre_create_partial在同会话下未来应当放行但当前还做不到() {
+async fn tus_pre_create_partial在同会话下未来应当放行但当前还做不到() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -297,7 +334,7 @@ async fn rustus_pre_create_partial在同会话下未来应当放行但当前还�
         Method::POST,
         "/api/session/bootstrap",
         Some(serde_json::json!({
-            "device_anonymous_token": format!("rustus-pre-create-partial-session-{uniq}")
+            "device_anonymous_token": format!("tus-pre-create-partial-session-{uniq}")
         })),
         &[],
     )
@@ -335,32 +372,37 @@ async fn rustus_pre_create_partial在同会话下未来应当放行但当前还�
     let (status, body) = send_json(
         app,
         Method::POST,
-        "/internal/rustus/hooks",
+        "/internal/tus/hooks",
         Some(serde_json::json!({
-            "upload": {
-                "id": format!("partial-upload-{attachment_id}-1"),
-                "offset": 0,
-                "length": 34,
-                "path": serde_json::Value::Null,
-                "created_at": 1_711_111_111i64,
-                "deferred_size": false,
-                "is_partial": true,
-                "is_final": false,
-                "parts": serde_json::Value::Null,
-                "storage": "file_storage",
-                "metadata": {
-                    "attachment_id": attachment_id,
-                    "upload_session_id": upload_session_id,
-                    "file_name": "future-partial.png",
-                    "mime_type": "image/png",
-                    "byte_size": "68"
+            "Type": "pre-create",
+            "Event": {
+                "Upload": {
+                    "ID": serde_json::Value::Null,
+                    "Size": 34,
+                    "SizeIsDeferred": false,
+                    "Offset": 0,
+                    "MetaData": {
+                        "attachment_id": attachment_id,
+                        "upload_session_id": upload_session_id,
+                        "file_name": "future-partial.png",
+                        "mime_type": "image/png",
+                        "byte_size": "68"
+                    },
+                    "IsPartial": true,
+                    "IsFinal": false,
+                    "PartialUploads": serde_json::Value::Null,
+                    "Storage": serde_json::Value::Null
+                },
+                "HTTPRequest": {
+                    "Method": "POST",
+                    "URI": "/files",
+                    "Header": {
+                        "Authorization": [authorization.as_str()]
+                    }
                 }
             }
         })),
-        &[
-            ("Hook-Name", "pre-create"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
 
@@ -369,7 +411,7 @@ async fn rustus_pre_create_partial在同会话下未来应当放行但当前还�
 
 #[tokio::test]
 #[serial]
-async fn rustus_pre_create_final_concat在同会话下会放行() {
+async fn tus_pre_create_final_concat在同会话下会放行() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -389,7 +431,7 @@ async fn rustus_pre_create_final_concat在同会话下会放行() {
         Method::POST,
         "/api/session/bootstrap",
         Some(serde_json::json!({
-            "device_anonymous_token": format!("rustus-pre-create-final-{uniq}")
+            "device_anonymous_token": format!("tus-pre-create-final-{uniq}")
         })),
         &[],
     )
@@ -421,8 +463,10 @@ async fn rustus_pre_create_final_concat在同会话下会放行() {
     let (status, body) = send_json(
         app,
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_concatenation_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "pre-create",
+            Some(authorization.as_str()),
             &format!("final-upload-{attachment_id}"),
             attachment_id,
             upload_session_id,
@@ -438,10 +482,7 @@ async fn rustus_pre_create_final_concat在同会话下会放行() {
                 "http://127.0.0.1:7070/files/partial-2",
             ]),
         )),
-        &[
-            ("Hook-Name", "pre-create"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
 
@@ -450,7 +491,7 @@ async fn rustus_pre_create_final_concat在同会话下会放行() {
 
 #[tokio::test]
 #[serial]
-async fn rustus_post_finish会登记上传回执() {
+async fn tus_post_finish会登记上传回执() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -460,7 +501,7 @@ async fn rustus_post_finish会登记上传回执() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -470,7 +511,7 @@ async fn rustus_post_finish会登记上传回执() {
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("rustus-post-finish-{uniq}")})),
+        Some(serde_json::json!({"device_anonymous_token": format!("tus-post-finish-{uniq}")})),
         &[],
     )
     .await;
@@ -499,14 +540,16 @@ async fn rustus_post_finish会登记上传回执() {
     let authorization = 提取媒体上传授权头(&prepare_body);
     let expected_upload_id = format!("upload-post-finish-{attachment_id}");
     let temp_file =
-        写入rustus测试文件(&rustus_data_dir, attachment_id, "hook.png", &最小png字节())
-            .expect("应能写入 rustus 测试文件");
+        写入tus测试文件(&tus_upload_dir, attachment_id, "hook.png", &最小png字节())
+            .expect("应能写入 tus 测试文件");
 
     let (status, body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &expected_upload_id,
             attachment_id,
             "hook.png",
@@ -515,10 +558,7 @@ async fn rustus_post_finish会登记上传回执() {
             68,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
@@ -548,7 +588,7 @@ async fn rustus_post_finish会登记上传回执() {
 
 #[tokio::test]
 #[serial]
-async fn rustus_post_finish_partial只登记partial_transport() {
+async fn tus_post_finish_partial只登记partial_transport() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -558,7 +598,7 @@ async fn rustus_post_finish_partial只登记partial_transport() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -568,7 +608,7 @@ async fn rustus_post_finish_partial只登记partial_transport() {
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({ "device_anonymous_token": format!("rustus-post-finish-partial-{uniq}") })),
+        Some(serde_json::json!({ "device_anonymous_token": format!("tus-post-finish-partial-{uniq}") })),
         &[],
     )
     .await;
@@ -593,8 +633,8 @@ async fn rustus_post_finish_partial只登记partial_transport() {
         .as_str()
         .expect("upload_session_id");
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         attachment_id,
         "partial-only.part",
         &[1, 2, 3, 4],
@@ -604,8 +644,10 @@ async fn rustus_post_finish_partial只登记partial_transport() {
     let (status, body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_concatenation_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_concatenation_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("partial-upload-{attachment_id}-1"),
             attachment_id,
             upload_session_id,
@@ -618,10 +660,7 @@ async fn rustus_post_finish_partial只登记partial_transport() {
             false,
             None,
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
@@ -657,7 +696,7 @@ async fn rustus_post_finish_partial只登记partial_transport() {
 
 #[tokio::test]
 #[serial]
-async fn rustus_post_finish不会复活已废弃的旧上传() {
+async fn tus_post_finish不会复活已废弃的旧上传() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -667,7 +706,7 @@ async fn rustus_post_finish不会复活已废弃的旧上传() {
             .await
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -677,7 +716,7 @@ async fn rustus_post_finish不会复活已废弃的旧上传() {
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("rustus-post-finish-abandoned-{uniq}")})),
+        Some(serde_json::json!({"device_anonymous_token": format!("tus-post-finish-abandoned-{uniq}")})),
         &[],
     )
     .await;
@@ -705,13 +744,13 @@ async fn rustus_post_finish不会复活已废弃的旧上传() {
         .expect("upload_session_id");
     let authorization = 提取媒体上传授权头(&prepare_body);
     let expected_upload_id = format!("upload-post-finish-abandoned-{attachment_id}");
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         attachment_id,
         "abandoned.png",
         &最小png字节(),
     )
-    .expect("应能写入 rustus 测试文件");
+    .expect("应能写入 tus 测试文件");
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -729,8 +768,10 @@ async fn rustus_post_finish不会复活已废弃的旧上传() {
     let (status, body) = send_json(
         app,
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &expected_upload_id,
             attachment_id,
             "abandoned.png",
@@ -739,10 +780,7 @@ async fn rustus_post_finish不会复活已废弃的旧上传() {
             68,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
 

@@ -35,7 +35,7 @@ export type 媒体上传Meta = {
    * 仍可能撞上旧 fingerprint，直接复用旧 upload URL，最终导致新 attachment 永远等不到
    * 对应的 post-finish 回执。
    *
-   * 该字段不会进入 Rustus metadata，因为 allowedMetaFields 已明确把它排除在 transport 契约外。
+   * 该字段不会进入 Tus metadata，因为 allowedMetaFields 已明确把它排除在 transport 契约外。
    */
   relativePath?: string;
   upload_method?: "tus";
@@ -294,7 +294,7 @@ function 创建默认媒体上传器(input: 媒体上传器创建参数): 媒体
   }).use(Tus, {
     ...tusOptions,
     /**
-     * Rustus sidecar 只需要业务最小元数据，不应该把 session_id、预览尺寸这类壳层字段也透传进去。
+     * Tus sidecar 只需要业务最小元数据，不应该把 session_id、预览尺寸这类壳层字段也透传进去。
      * 这里显式收口 allowedMetaFields，避免 transport sidecar 反向长成业务真相持有者。
      */
     allowedMetaFields: ["attachment_id", "upload_session_id", "file_name", "mime_type", "byte_size"],

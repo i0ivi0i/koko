@@ -39,7 +39,7 @@ async fn 视频locator共享契约不包含_web_页面流程和展示文案字�
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
             .await
             .expect("应能构建共享应用状态");
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let app = koko::shell::构建路由(state);
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -78,19 +78,21 @@ async fn 视频locator共享契约不包含_web_页面流程和展示文案字�
         .expect("attachment_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "shared-contract-video.mp4",
         &最小mp4字节(),
     )
-    .expect("应能写入 rustus 临时视频文件");
+    .expect("应能写入 tus 临时视频文件");
 
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("upload-shared-contract-video-{attachment_id}"),
             &attachment_id,
             "shared-contract-video.mp4",
@@ -99,10 +101,7 @@ async fn 视频locator共享契约不包含_web_页面流程和展示文案字�
             最小mp4字节().len() as i64,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
@@ -154,7 +153,7 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
             .await
             .expect("应能构建共享应用状态");
-    let rustus_data_dir = state.rustus_data_dir.clone();
+    let tus_upload_dir = state.tus_upload_dir.clone();
     let app = koko::shell::构建路由(state);
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -193,19 +192,21 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         .expect("attachment_id")
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
-    let temp_file = 写入rustus测试文件(
-        &rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
         &attachment_id,
         "shared-contract-image.png",
         &最小png字节(),
     )
-    .expect("应能写入 rustus 临时图片文件");
+    .expect("应能写入 tus 临时图片文件");
 
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &format!("upload-shared-contract-image-{attachment_id}"),
             &attachment_id,
             "shared-contract-image.png",
@@ -214,10 +215,7 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
             最小png字节().len() as i64,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");

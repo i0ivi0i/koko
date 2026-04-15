@@ -150,7 +150,7 @@ pub(super) fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结�
 fn 映射只读视频文件(path: &Path) -> Result<Mmap, 媒体内容解析错误> {
     let file =
         StdFile::open(path).map_err(|_| 媒体内容解析错误::系统错误("打开视频临时文件失败"))?;
-    // 安全性：complete 阶段拿到的 Rustus 临时文件已经封口，只做只读消费；
+    // 安全性：complete 阶段拿到的 Tus 临时文件已经封口，只做只读消费；
     // 这里既不修改文件，也不暴露可变别名，因此把它映射成只读字节视图是安全的。
     unsafe { MmapOptions::new().map(&file) }
         .map_err(|_| 媒体内容解析错误::系统错误("映射视频临时文件失败"))

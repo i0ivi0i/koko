@@ -33,8 +33,8 @@ use crate::{adapter::Pg仓储, contract};
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
-#[path = "rustus_hook外壳.rs"]
-mod rustus_hook外壳;
+#[path = "tus_hook外壳.rs"]
+mod tus_hook外壳;
 #[path = "后台外壳.rs"]
 mod 后台外壳;
 #[path = "媒体上传外壳.rs"]
@@ -51,7 +51,7 @@ mod 房间外壳;
 mod 流媒体打包;
 
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
-/// 先把常量收在 shell 父层，供上传外壳与 Rustus hook 外壳共享，避免兄弟模块重复手抄字符串。
+/// 先把常量收在 shell 父层，供上传外壳与 Tus hook 外壳共享，避免兄弟模块重复手抄字符串。
 const 媒体上传运输方式_TUS: &str = "tus";
 
 /// HTTP 入口只负责限制“单次请求体能进壳多少字节”，这是纯资源门禁，不是业务时长或媒体真相。
@@ -88,10 +88,10 @@ pub struct 应用状态 {
     pub swarm_tracker_port: u16,
     pub swarm_web_seed_public_endpoint: Option<String>,
     pub swarm_peer_presence_stale_seconds: i64,
-    pub rustus_public_endpoint: Option<String>,
-    pub rustus_server_port: u16,
-    pub rustus_url: String,
-    pub rustus_data_dir: String,
+    pub tus_public_endpoint: Option<String>,
+    pub tus_server_port: u16,
+    pub tus_base_path: String,
+    pub tus_upload_dir: String,
     pub media_complete_max_concurrency: usize,
     pub media_complete_gate: Arc<tokio::sync::Semaphore>,
 }
@@ -109,11 +109,11 @@ pub async fn 构建应用状态(
     let media_storage = crate::assembly::读取媒体存储配置()?;
     let media_packaging = crate::assembly::读取媒体打包配置();
     let swarm = crate::assembly::读取协作分发配置()?;
-    let rustus = crate::assembly::读取rustus配置()?;
+    let tus = crate::assembly::读取媒体_tus侧车配置()?;
     let media_complete_max_concurrency = crate::assembly::读取媒体上传完成并发上限()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
-    fs::create_dir_all(&rustus.data_dir)
-        .map_err(|err| std::io::Error::other(format!("创建 Rustus data dir 失败: {err}")))?;
+    fs::create_dir_all(&tus.upload_dir)
+        .map_err(|err| std::io::Error::other(format!("创建媒体 Tus 上传目录失败: {err}")))?;
     let attachment_store = 构建附件对象存储(&media_storage, &attachment_storage_dir)?;
     let pool = PgPoolOptions::new()
         .max_connections(20)
@@ -134,10 +134,10 @@ pub async fn 构建应用状态(
         swarm_tracker_port: swarm.tracker_port,
         swarm_web_seed_public_endpoint: swarm.web_seed_public_endpoint,
         swarm_peer_presence_stale_seconds: swarm.peer_presence_stale_seconds,
-        rustus_public_endpoint: rustus.public_endpoint,
-        rustus_server_port: rustus.server_port,
-        rustus_url: rustus.url,
-        rustus_data_dir: rustus.data_dir,
+        tus_public_endpoint: tus.public_endpoint,
+        tus_server_port: tus.server_port,
+        tus_base_path: tus.base_path,
+        tus_upload_dir: tus.upload_dir,
         media_complete_max_concurrency,
         media_complete_gate: Arc::new(tokio::sync::Semaphore::new(media_complete_max_concurrency)),
     })
@@ -283,8 +283,8 @@ async fn 执行一次媒体上传残留清理_按会话(
     for ((上传会话标识, 清理原因), 残留列表) in 分组结果 {
         let mut 全部删除成功 = true;
         for 残留 in &残留列表 {
-            let temp_file_path = match rustus_hook外壳::解析rustus临时文件路径(
-                &state.rustus_data_dir,
+            let temp_file_path = match tus_hook外壳::解析tus临时文件路径(
+                &state.tus_upload_dir,
                 残留.临时文件定位.as_str(),
             ) {
                 Ok(path) => path,
@@ -449,8 +449,8 @@ pub fn 构建路由(state: 应用状态) -> Router {
             post(媒体上传外壳::abandon_media_upload),
         )
         .route(
-            "/internal/rustus/hooks",
-            post(rustus_hook外壳::handle_rustus_hook),
+            "/internal/tus/hooks",
+            post(tus_hook外壳::handle_tus_hook),
         )
         .route(
             "/api/media/{attachment_id}/locator",

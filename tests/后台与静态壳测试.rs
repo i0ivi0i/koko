@@ -499,18 +499,20 @@ async fn 非成员不能读取房间消息里的图片内容() {
         .to_string();
     let authorization = 提取媒体上传授权头(&prepare_body);
     let upload_id = format!("upload-owner-image-{attachment_id}");
-    let temp_file = 写入rustus测试文件(
-        &state.rustus_data_dir,
+    let temp_file = 写入tus测试文件(
+        &state.tus_upload_dir,
         &attachment_id,
         "owner.png",
         &最小png字节(),
     )
-    .expect("应能写入 rustus 原图文件");
+    .expect("应能写入 tus 原图文件");
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
-        "/internal/rustus/hooks",
-        Some(构造rustus_hook请求体(
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
             "owner.png",
@@ -519,10 +521,7 @@ async fn 非成员不能读取房间消息里的图片内容() {
             68,
             Some(temp_file.as_str()),
         )),
-        &[
-            ("Hook-Name", "post-finish"),
-            ("Authorization", authorization.as_str()),
-        ],
+        &[],
     )
     .await;
     assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");

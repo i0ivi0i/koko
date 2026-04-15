@@ -7,7 +7,7 @@ use crate::{
 };
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
@@ -18,81 +18,122 @@ use std::{
 };
 use tokio::task;
 
-/// Rustus hook 顶层负载。
-/// 我们只解析自己真正依赖的最小字段，其余字段继续留给 Rustus 自己演进。
+/// 当前 hook adapter 顶层负载直接贴 tusd 官方 `Type / Event` 结构。
+/// 业务层仍然只认 attachment/upload_session/transport_role；协议字段只允许停留在 adapter。
 #[derive(Deserialize)]
-pub(super) struct RustusHookBody {
-    upload: RustusUploadBody,
+pub(super) struct TusHookBody {
+    #[serde(rename = "Type")]
+    hook_type: String,
+    #[serde(rename = "Event")]
+    event: TusHookEventBody,
 }
 
-/// Rustus v2 hook 里和我们有关的上传字段。
+/// 当前 hook 里和我们有关的上传字段只覆盖 tusd 官方 payload 的最小子集。
 #[derive(Deserialize)]
-struct RustusUploadBody {
-    id: String,
+struct TusUploadBody {
+    #[serde(rename = "ID")]
+    id: Option<String>,
+    #[serde(rename = "Size")]
+    size: Option<i64>,
+    #[serde(rename = "SizeIsDeferred", default)]
+    size_is_deferred: bool,
+    #[serde(rename = "Offset")]
     offset: i64,
-    length: i64,
-    path: Option<String>,
-    is_partial: Option<bool>,
-    is_final: Option<bool>,
-    parts: Option<Vec<String>>,
+    #[serde(rename = "Storage")]
+    storage: Option<TusUploadStorageBody>,
+    #[serde(rename = "IsPartial", default)]
+    is_partial: bool,
+    #[serde(rename = "IsFinal", default)]
+    is_final: bool,
+    #[serde(rename = "PartialUploads")]
+    partial_uploads: Option<Vec<String>>,
+    #[serde(rename = "MetaData", default)]
     metadata: HashMap<String, String>,
 }
 
-/// Rustus hook 收口点：
+#[derive(Deserialize)]
+struct TusHookEventBody {
+    #[serde(rename = "Upload")]
+    upload: TusUploadBody,
+    #[serde(rename = "HTTPRequest")]
+    http_request: TusHttpRequestBody,
+}
+
+#[derive(Deserialize)]
+struct TusHttpRequestBody {
+    #[serde(rename = "Method")]
+    _method: Option<String>,
+    #[serde(rename = "URI")]
+    _uri: Option<String>,
+    #[serde(rename = "Header", default)]
+    headers: HashMap<String, Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct TusUploadStorageBody {
+    #[serde(rename = "Type")]
+    _storage_type: Option<String>,
+    #[serde(rename = "Path")]
+    path: Option<String>,
+}
+
+/// Tus hook 收口点：
 /// 1. `pre-create` 负责阻止非法上传创建；
 /// 2. `post-finish` 只登记运输回执；
 /// 3. 无论哪个 hook，都不能越权把 prepared 直接升级成 ready。
-pub(super) async fn handle_rustus_hook(
+pub(super) async fn handle_tus_hook(
     State(state): State<应用状态>,
-    headers: HeaderMap,
-    Json(body): Json<RustusHookBody>,
+    Json(body): Json<TusHookBody>,
 ) -> Response {
-    let hook_name = match 读取rustus_hook名称(&headers) {
+    let hook_name = match 读取tus_hook名称(&body) {
         Ok(name) => name,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
     match hook_name.as_str() {
-        "pre-create" => handle_rustus_hook_pre_create(state, headers, body).await,
-        "post-finish" => handle_rustus_hook_post_finish(state, headers, body).await,
+        "pre-create" => handle_tus_hook_pre_create(state, body).await,
+        "post-finish" => handle_tus_hook_post_finish(state, body).await,
         _ => err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            format!("不支持的 Hook-Name: {hook_name}"),
+            format!("不支持的 tus hook 类型: {hook_name}"),
         )
         .into_response(),
     }
 }
 
-async fn handle_rustus_hook_pre_create(
+async fn handle_tus_hook_pre_create(
     state: 应用状态,
-    headers: HeaderMap,
-    body: RustusHookBody,
+    body: TusHookBody,
 ) -> Response {
-    let upload_token = match 读取媒体上传令牌(&headers) {
+    let upload_token = match 读取媒体上传令牌(&body.event.http_request) {
         Ok(token) => token,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let transport_role = match 判定rustus运输角色(&body.upload) {
+    let transport_role = match 判定tus运输角色(&body.event.upload) {
         Ok(role) => role,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let attachment_id = match 读取rustus_metadata字段(&body.upload.metadata, "attachment_id") {
+    let attachment_id = match 读取tus_metadata字段(&body.event.upload.metadata, "attachment_id") {
         Ok(value) => value,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let upload_session_id = 读取可选rustus_metadata字段(&body.upload.metadata, "upload_session_id");
+    let upload_session_id = 读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
+    let upload_size = match 读取tus上传大小(&body.event.upload, "pre-create") {
+        Ok(size) => size,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
     /*
-     * `pre-create` 发生在 Rustus 真正接收字节之前：
-     * - `length` 代表客户端声明的总长度；
-     * - `offset` 此时应当还是 0；
-     * - 真正“offset == length”的完成事实只允许出现在 `post-finish`。
+     * `pre-create` 发生在 Tus sidecar 真正接收字节之前：
+     * - `Upload.Size` 代表客户端声明的总长度；
+     * - `Offset` 此时应当还是 0；
+     * - 真正“offset == size”的完成事实只允许出现在 `post-finish`。
      *
-     * 同时，这里不能再把 `metadata.byte_size` 当成硬依赖：
+     * 同时，这里不能再把 `MetaData.byte_size` 当成硬依赖：
      * - prepare / transport 授权里已经持有权威字节大小；
      * - create-upload 场景下 sidecar 透传回来的 metadata 并不保证完整回显所有键；
      * - attachment_id 继续作为 sidecar -> 主服务之间唯一稳定的业务锚点。
      */
-    if body.upload.offset != 0 {
+    if body.event.upload.offset != 0 {
         return err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
@@ -176,7 +217,7 @@ async fn handle_rustus_hook_pre_create(
         }
         match transport_role {
             媒体上传运输角色::单文件 => {
-                if prepared.字节大小 != body.upload.length {
+                if prepared.字节大小 != upload_size {
                     return Err((
                         StatusCode::BAD_REQUEST,
                         "invalid_argument",
@@ -185,7 +226,7 @@ async fn handle_rustus_hook_pre_create(
                 }
             }
             媒体上传运输角色::分片 => {
-                if body.upload.length <= 0 || body.upload.length >= prepared.字节大小 {
+                if upload_size <= 0 || upload_size >= prepared.字节大小 {
                     return Err((
                         StatusCode::BAD_REQUEST,
                         "invalid_argument",
@@ -194,11 +235,17 @@ async fn handle_rustus_hook_pre_create(
                 }
             }
             媒体上传运输角色::最终合并 => {
-                if body.upload.parts.as_ref().is_none_or(|parts| parts.is_empty()) {
+                if body
+                    .event
+                    .upload
+                    .partial_uploads
+                    .as_ref()
+                    .is_none_or(|parts| parts.is_empty())
+                {
                     return Err((
                         StatusCode::BAD_REQUEST,
                         "invalid_argument",
-                        "final concat 缺少 partial parts 列表".to_string(),
+                        "final concat 缺少 partial uploads 列表".to_string(),
                     ));
                 }
             }
@@ -212,7 +259,7 @@ async fn handle_rustus_hook_pre_create(
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
-                format!("Rustus pre-create 任务执行失败: {err}"),
+                format!("Tus pre-create 任务执行失败: {err}"),
             )
             .into_response()
         }
@@ -223,53 +270,46 @@ async fn handle_rustus_hook_pre_create(
     }
 }
 
-async fn handle_rustus_hook_post_finish(
+async fn handle_tus_hook_post_finish(
     state: 应用状态,
-    headers: HeaderMap,
-    body: RustusHookBody,
+    body: TusHookBody,
 ) -> Response {
-    let request_id = 读取可选请求标识(&headers);
-    let upload_token = match 读取媒体上传令牌(&headers) {
+    let request_id = 读取可选请求标识(&body.event.http_request);
+    let upload_token = match 读取媒体上传令牌(&body.event.http_request) {
         Ok(token) => token,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let transport_role = match 判定rustus运输角色(&body.upload) {
+    let transport_role = match 判定tus运输角色(&body.event.upload) {
         Ok(role) => role,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let attachment_id = match 读取rustus_metadata字段(&body.upload.metadata, "attachment_id") {
+    let attachment_id = match 读取tus_metadata字段(&body.event.upload.metadata, "attachment_id") {
         Ok(value) => value,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let upload_session_id = 读取可选rustus_metadata字段(&body.upload.metadata, "upload_session_id");
-    let storage_locator = match body
-        .upload
-        .path
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some(path) => path.to_string(),
-        None => {
-            return err_resp(
-                StatusCode::BAD_REQUEST,
-                "invalid_argument",
-                "post-finish 缺少 upload.path",
-            )
-            .into_response()
-        }
+    let upload_session_id = 读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
+    let upload_size = match 读取tus上传大小(&body.event.upload, "post-finish") {
+        Ok(size) => size,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    if body.upload.offset != body.upload.length {
+    let upload_id = match 读取tus上传标识(&body.event.upload, "post-finish") {
+        Ok(upload_id) => upload_id,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    let storage_locator = match 读取tus存储路径(&body.event.upload) {
+        Ok(path) => path,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    if body.event.upload.offset != upload_size {
         return err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            "post-finish 只接受 offset 等于 length 的完成回执",
+            "post-finish 只接受 offset 等于 size 的完成回执",
         )
         .into_response();
     }
 
     let state_for_repo = state.clone();
-    let upload_id = body.upload.id.clone();
     // 这里显式拆出一份给阻塞闭包使用：
     // - `spawn_blocking(move || ...)` 必须拿走它依赖的数据所有权；
     // - 但 hook 返回前的结构化日志也需要稳定锚点；
@@ -350,7 +390,7 @@ async fn handle_rustus_hook_post_finish(
                 "附件当前上传会话已切换".to_string(),
             ));
         }
-        解析rustus临时文件路径(&state_for_repo.rustus_data_dir, &storage_locator_for_repo)?;
+        解析tus临时文件路径(&state_for_repo.tus_upload_dir, &storage_locator_for_repo)?;
         repo.登记媒体上传运输回执(
             &upload_session.上传会话标识,
             &upload_session.附件标识,
@@ -359,7 +399,7 @@ async fn handle_rustus_hook_post_finish(
             None,
             &upload_id_for_repo,
             &storage_locator_for_repo,
-            body.upload.length,
+            upload_size,
         )
         .map_err(map_domain_err_tuple)?;
         Ok::<_, (StatusCode, &'static str, String)>(())
@@ -369,7 +409,7 @@ async fn handle_rustus_hook_post_finish(
         Ok(result) => result,
         Err(err) => {
             tracing::error!(
-                adapter = "rustus_hook",
+                adapter = "tus_hook",
                 hook = "post-finish",
                 attachment_id = attachment_id.as_str(),
                 upload_session_id = upload_session_id.as_deref().unwrap_or(""),
@@ -379,12 +419,12 @@ async fn handle_rustus_hook_post_finish(
                 storage_locator = storage_locator.as_str(),
                 error_code = "system_error",
                 detail = %err,
-                "Rustus post-finish 任务执行失败"
+                "Tus post-finish 任务执行失败"
             );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
-                format!("Rustus post-finish 任务执行失败: {err}"),
+                format!("Tus post-finish 任务执行失败: {err}"),
             )
             .into_response()
         }
@@ -392,7 +432,7 @@ async fn handle_rustus_hook_post_finish(
     match update_result {
         Ok(()) => {
             tracing::info!(
-                adapter = "rustus_hook",
+                adapter = "tus_hook",
                 hook = "post-finish",
                 attachment_id = attachment_id.as_str(),
                 upload_session_id = upload_session_id.as_deref().unwrap_or(""),
@@ -400,13 +440,13 @@ async fn handle_rustus_hook_post_finish(
                 request_id = request_id.as_deref().unwrap_or(""),
                 transport_role = transport_role.as_str(),
                 storage_locator = storage_locator.as_str(),
-                "Rustus post-finish 已登记上传回执"
+                "Tus post-finish 已登记上传回执"
             );
             StatusCode::NO_CONTENT.into_response()
         }
         Err((status, code, message)) => {
             tracing::warn!(
-                adapter = "rustus_hook",
+                adapter = "tus_hook",
                 hook = "post-finish",
                 attachment_id = attachment_id.as_str(),
                 upload_session_id = upload_session_id.as_deref().unwrap_or(""),
@@ -416,36 +456,29 @@ async fn handle_rustus_hook_post_finish(
                 storage_locator = storage_locator.as_str(),
                 error_code = code,
                 detail = %message,
-                "Rustus post-finish 被拒绝"
+                "Tus post-finish 被拒绝"
             );
             err_resp(status, code, message).into_response()
         }
     }
 }
 
-fn 读取rustus_hook名称(
-    headers: &HeaderMap,
-) -> Result<String, (StatusCode, &'static str, &'static str)> {
-    headers
-        .get("Hook-Name")
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.trim().to_ascii_lowercase())
-        .filter(|value| !value.is_empty())
-        .ok_or((
+fn 读取tus_hook名称(body: &TusHookBody) -> Result<String, (StatusCode, &'static str, &'static str)> {
+    let hook_name = body.hook_type.trim().to_ascii_lowercase();
+    if hook_name.is_empty() {
+        return Err((
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            "缺少 Hook-Name",
-        ))
+            "缺少 tus hook 类型",
+        ));
+    }
+    Ok(hook_name)
 }
 
 fn 读取媒体上传令牌(
-    headers: &HeaderMap,
+    http_request: &TusHttpRequestBody,
 ) -> Result<String, (StatusCode, &'static str, &'static str)> {
-    let Some(raw_authorization) = headers
-        .get("Authorization")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-    else {
+    let Some(raw_authorization) = 读取首个非空tus请求头值(http_request, "Authorization") else {
         return Err((
             StatusCode::UNAUTHORIZED,
             "attachment_upload_unauthorized",
@@ -465,23 +498,16 @@ fn 读取媒体上传令牌(
         ))
 }
 
-fn 读取可选请求标识(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get("X-Request-ID")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+fn 读取可选请求标识(http_request: &TusHttpRequestBody) -> Option<String> {
+    读取首个非空tus请求头值(http_request, "X-Request-Id")
 }
 
-/// 协议字段 `is_partial/is_final` 只允许在 Rustus adapter 停留。
+/// 协议字段 `IsPartial/IsFinal` 只允许在 Tus hook adapter 停留。
 /// 这里统一把它们翻译成我们自己的 transport role，避免 shell / usecase 直接吃协议布尔位。
-fn 判定rustus运输角色(
-    upload: &RustusUploadBody,
+fn 判定tus运输角色(
+    upload: &TusUploadBody,
 ) -> Result<媒体上传运输角色, (StatusCode, &'static str, String)> {
-    let is_partial = upload.is_partial.unwrap_or(false);
-    let is_final = upload.is_final.unwrap_or(false);
-    match (is_partial, is_final) {
+    match (upload.is_partial, upload.is_final) {
         (true, true) => Err((
             StatusCode::BAD_REQUEST,
             "invalid_argument",
@@ -493,14 +519,84 @@ fn 判定rustus运输角色(
     }
 }
 
-fn 读取可选rustus_metadata字段(metadata: &HashMap<String, String>, key: &'static str) -> Option<String> {
+fn 读取首个非空tus请求头值(
+    http_request: &TusHttpRequestBody,
+    key: &'static str,
+) -> Option<String> {
+    http_request
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(key))
+        .and_then(|(_, values)| {
+            values
+                .iter()
+                .map(String::as_str)
+                .map(str::trim)
+                .find(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn 读取tus上传大小(
+    upload: &TusUploadBody,
+    hook_name: &'static str,
+) -> Result<i64, (StatusCode, &'static str, String)> {
+    if upload.size_is_deferred {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            format!("{hook_name} 暂不支持 deferred size 上传"),
+        ));
+    }
+    upload.size.ok_or((
+        StatusCode::BAD_REQUEST,
+        "invalid_argument",
+        format!("{hook_name} 缺少 Upload.Size"),
+    ))
+}
+
+fn 读取tus上传标识(
+    upload: &TusUploadBody,
+    hook_name: &'static str,
+) -> Result<String, (StatusCode, &'static str, String)> {
+    upload
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            format!("{hook_name} 缺少 Upload.ID"),
+        ))
+}
+
+fn 读取tus存储路径(
+    upload: &TusUploadBody,
+) -> Result<String, (StatusCode, &'static str, String)> {
+    upload
+        .storage
+        .as_ref()
+        .and_then(|storage| storage.path.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "post-finish 缺少 Upload.Storage.Path".to_string(),
+        ))
+}
+
+fn 读取可选tus_metadata字段(metadata: &HashMap<String, String>, key: &'static str) -> Option<String> {
     metadata
         .get(key)
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
 
-fn 读取rustus_metadata字段(
+fn 读取tus_metadata字段(
     metadata: &HashMap<String, String>,
     key: &'static str,
 ) -> Result<String, (StatusCode, &'static str, String)> {
@@ -516,15 +612,15 @@ fn 读取rustus_metadata字段(
 }
 
 /// storage locator 来自 sidecar，不可被客户端随意扩展成任意磁盘路径。
-/// 这里统一解析并锁死在 Rustus shared data dir 之内，避免 token 持有者伪造路径探测主机文件。
+/// 这里统一解析并锁死在 Tus upload dir 之内，避免 token 持有者伪造路径探测主机文件。
 ///
-/// 这个解析器继续留在 Rustus owner 下，后续上传 complete 也必须复用它，
+/// 这个解析器继续留在 Tus hook owner 下，后续上传 complete 也必须复用它，
 /// 防止 hook 与 complete 各自维护一套“路径是否可信”的判断。
-pub(super) fn 解析rustus临时文件路径(
-    rustus_data_dir: &str,
+pub(super) fn 解析tus临时文件路径(
+    tus_upload_dir: &str,
     storage_locator: &str,
 ) -> Result<PathBuf, (StatusCode, &'static str, String)> {
-    let shared_root = PathBuf::from(rustus_data_dir);
+    let shared_root = PathBuf::from(tus_upload_dir);
     let candidate = PathBuf::from(storage_locator);
     let resolved = if candidate.is_absolute() {
         candidate
@@ -535,21 +631,21 @@ pub(super) fn 解析rustus临时文件路径(
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
-            format!("解析 Rustus shared dir 失败: {err}"),
+            format!("解析 Tus upload dir 失败: {err}"),
         )
     })?;
     let canonical_file = std::fs::canonicalize(&resolved).map_err(|err| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
-            format!("解析 Rustus 临时文件失败: {err}"),
+            format!("解析 Tus 临时文件失败: {err}"),
         )
     })?;
     if !canonical_file.starts_with(&canonical_root) {
         return Err((
             StatusCode::BAD_REQUEST,
             "invalid_argument",
-            "storage locator 超出 Rustus data dir".to_string(),
+            "storage locator 超出 Tus upload dir".to_string(),
         ));
     }
     if !StdPath::new(&canonical_file).is_file() {
@@ -564,14 +660,19 @@ pub(super) fn 解析rustus临时文件路径(
 
 #[cfg(test)]
 mod tests {
-    use super::读取可选请求标识;
-    use axum::http::{HeaderMap, HeaderValue};
+    use super::{读取可选请求标识, TusHttpRequestBody};
+    use std::collections::HashMap;
 
     #[test]
     fn 读取可选请求标识会返回非空x_request_id() {
-        let mut headers = HeaderMap::new();
-        headers.insert("X-Request-ID", HeaderValue::from_static("req-123"));
+        let mut headers = HashMap::new();
+        headers.insert("X-Request-Id".to_string(), vec!["req-123".to_string()]);
+        let http_request = TusHttpRequestBody {
+            _method: None,
+            _uri: None,
+            headers,
+        };
 
-        assert_eq!(读取可选请求标识(&headers).as_deref(), Some("req-123"));
+        assert_eq!(读取可选请求标识(&http_request).as_deref(), Some("req-123"));
     }
 }
