@@ -55,6 +55,7 @@ pub(super) struct 流媒体打包上传结果 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum 视频打包策略 {
     直接包装原始文件 { 有音轨: bool },
+    无损归一化后打包 { 有音轨: bool },
     转码后打包 { 有音轨: bool },
 }
 
@@ -68,6 +69,13 @@ struct Ffprobe流信息 {
 #[derive(Debug, Deserialize)]
 struct Ffprobe格式信息 {
     format_name: Option<String>,
+    tags: Option<Ffprobe格式标签>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Ffprobe格式标签 {
+    major_brand: Option<String>,
+    compatible_brands: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -296,14 +304,42 @@ fn 解析ffprobe视频打包策略(
                 .split(',')
                 .any(|name| name.trim().eq_ignore_ascii_case("mp4"))
         });
-    let 可直接包装原始文件 = (ffprobe格式允许直包 || 扩展名允许直包)
+    let qt品牌容器需要先归一化 = 探测结果
+        .format
+        .as_ref()
+        .and_then(|format| format.tags.as_ref())
+        .is_some_and(|tags| {
+            let major_brand是qt = tags
+                .major_brand
+                .as_deref()
+                .is_some_and(|brand| brand.trim().eq_ignore_ascii_case("qt"));
+            let compatible_brands包含qt = tags
+                .compatible_brands
+                .as_deref()
+                .is_some_and(|brands| {
+                    brands
+                        .split_whitespace()
+                        .any(|brand| brand.trim().eq_ignore_ascii_case("qt"))
+                });
+            major_brand是qt || compatible_brands包含qt
+        });
+    let 编码层允许直包 = (ffprobe格式允许直包 || 扩展名允许直包)
         && 视频流.codec_name.as_deref() == Some("h264")
         && 视频流.pix_fmt.as_deref() == Some("yuv420p")
         && 音轨全部可直包;
-    Ok(if 可直接包装原始文件 {
-        视频打包策略::直接包装原始文件 { 有音轨 }
-    } else {
+    Ok(if !编码层允许直包 {
         视频打包策略::转码后打包 { 有音轨 }
+    } else if qt品牌容器需要先归一化 {
+        /*
+         * 这类文件的编码本身是兼容的，但容器盒结构会把 Shaka Packager 直接打爆。
+         * 这里先走一次 `ffmpeg -c copy` 无损归一化：
+         * 1. 不重新编码，避免额外画质损失和 CPU 热路径膨胀；
+         * 2. 统一把 mezzanine / packager 输入都钉到更稳定的标准 MP4；
+         * 3. 只在 ffprobe 明确暴露出 qt 品牌时触发，不扩大到其他直包主链。
+         */
+        视频打包策略::无损归一化后打包 { 有音轨 }
+    } else {
+        视频打包策略::直接包装原始文件 { 有音轨 }
     })
 }
 
@@ -316,7 +352,9 @@ fn ffprobe检测视频打包策略(
             "-v",
             "error",
             "-show_entries",
-            "stream=codec_type,codec_name,pix_fmt:format=format_name",
+            // 这里必须把容器 tags 一起取回来；否则运行时永远看不到 `major_brand=qt`，
+            // 测试虽然能手喂 tags 走通，真实上传链却会继续把 QuickTime 容器误判成直包主链。
+            "stream=codec_type,codec_name,pix_fmt:format=format_name:format_tags=major_brand,compatible_brands",
             "-of",
             "json",
         ])
@@ -420,14 +458,35 @@ pub(super) fn 生成流媒体打包产物(
 
     let 静态封面文件 = workdir.join("thumbnail.png");
     let 打包策略 = ffprobe检测视频打包策略(ffprobe_bin, 输入文件)?;
-    let (视频打包输入文件, 音频打包输入文件, 高质量回退母本本地路径, 有音轨) = match 打包策略
-    {
+    let (视频打包输入文件, 音频打包输入文件, 高质量回退母本本地路径, 有音轨) =
+        match 打包策略 {
         视频打包策略::直接包装原始文件 { 有音轨 } => (
             输入文件.to_path_buf(),
             有音轨.then(|| 输入文件.to_path_buf()),
             输入文件.to_path_buf(),
             有音轨,
         ),
+        视频打包策略::无损归一化后打包 { 有音轨 } => {
+            let 归一化文件 = workdir.join("normalized.mp4");
+            let mut 归一化容器 = Command::new(ffmpeg_bin);
+            归一化容器.args(["-y", "-i"]);
+            归一化容器.arg(输入文件);
+            归一化容器.args(["-map", "0:v:0"]);
+            if 有音轨 {
+                归一化容器.args(["-map", "0:a:0?"]);
+            }
+            归一化容器.args(["-c", "copy", "-movflags", "+faststart"]);
+            归一化容器.arg(归一化文件.as_os_str());
+            执行外部命令(&mut 归一化容器, "FFmpeg 无损归一化视频容器")?;
+
+            (
+                归一化文件.clone(),
+                有音轨.then(|| 归一化文件.clone()),
+                // mezzanine 也切到同一个已归一化文件，避免 24h 回退层继续保留会打爆 packager 的 qt 容器。
+                归一化文件,
+                有音轨,
+            )
+        }
         视频打包策略::转码后打包 { 有音轨 } => {
             let 视频轨道文件 = workdir.join("video.mp4");
             let mut 转码视频 = Command::new(ffmpeg_bin);
@@ -822,6 +881,28 @@ mod tests {
     }
 
     #[test]
+    fn ffprobe探测会把qt品牌的无扩展名临时文件判定为无损归一化后打包() {
+        let 输入文件 = std::path::Path::new("E:/tmp/tus-upload-without-extension");
+        let stdout = br#"{
+  "format": {
+    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+    "tags": {
+      "major_brand": "qt  ",
+      "compatible_brands": "qt  "
+    }
+  },
+  "streams": [
+    { "codec_type": "video", "codec_name": "h264", "pix_fmt": "yuv420p" },
+    { "codec_type": "audio", "codec_name": "aac" }
+  ]
+}"#;
+
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
+            .expect("应能解析 ffprobe 探测结果");
+        assert_eq!(策略, 视频打包策略::无损归一化后打包 { 有音轨: true });
+    }
+
+    #[test]
     fn ffprobe探测会把非h264视频回落到转码链路() {
         let 输入文件 = std::path::Path::new("sample.mp4");
         let stdout = br#"{
@@ -960,6 +1041,176 @@ for index, arg in enumerate(args):
             结果.高质量回退母本本地路径,
             输入文件,
             "可直包视频应直接复用原始上传文件作为 mezzanine 回退层"
+        );
+
+        let _ = std::fs::remove_dir_all(临时目录);
+    }
+
+    #[test]
+    fn qt品牌文件会先走无损归一化而不是直接打包或重转码() {
+        let 临时目录 =
+            std::env::temp_dir().join(format!("koko-stream-qt-remux-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&临时目录).expect("应能创建测试目录");
+        let 输入文件 = 临时目录.join("input");
+        std::fs::write(&输入文件, b"fake mp4 bytes").expect("应能写入输入文件");
+
+        let python = PathBuf::from(std::env::var("LOCALAPPDATA").expect("应有 LOCALAPPDATA"))
+            .join("Programs")
+            .join("Python")
+            .join("Python314")
+            .join("python.exe");
+        assert!(python.exists(), "测试需要本机 python 可用");
+
+        let ffprobe_py = 临时目录.join("fake_ffprobe.py");
+        std::fs::write(
+            &ffprobe_py,
+            r#"import json
+import pathlib
+import sys
+
+root = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+(root / "ffprobe.log").write_text(" ".join(args), encoding="utf-8")
+show_entries = ""
+for index, arg in enumerate(args):
+    if arg == "-show_entries" and index + 1 < len(args):
+        show_entries = args[index + 1]
+        break
+
+format_payload = {
+  "format_name": "mov,mp4,m4a,3gp,3g2,mj2"
+}
+if "format_tags=major_brand,compatible_brands" in show_entries:
+    format_payload["tags"] = {
+      "major_brand": "qt  ",
+      "compatible_brands": "qt  "
+    }
+
+print(json.dumps({
+  "format": format_payload,
+  "streams": [
+    {"codec_type": "video", "codec_name": "h264", "pix_fmt": "yuv420p"},
+    {"codec_type": "audio", "codec_name": "aac"}
+  ]
+}))
+"#,
+        )
+        .expect("应能写入 fake ffprobe");
+        let ffprobe_cmd = 临时目录.join("ffprobe.cmd");
+        std::fs::write(
+            &ffprobe_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_ffprobe.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 ffprobe wrapper");
+
+        let ffmpeg_py = 临时目录.join("fake_ffmpeg.py");
+        std::fs::write(
+            &ffmpeg_py,
+            r#"import pathlib
+import sys
+
+root = pathlib.Path(__file__).resolve().parent
+with (root / "ffmpeg.log").open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(sys.argv[1:]) + "\n")
+output_path = pathlib.Path(sys.argv[-1])
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_bytes(b"fake ffmpeg output")
+"#,
+        )
+        .expect("应能写入 fake ffmpeg");
+        let ffmpeg_cmd = 临时目录.join("ffmpeg.cmd");
+        std::fs::write(
+            &ffmpeg_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_ffmpeg.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 ffmpeg wrapper");
+
+        let shaka_py = 临时目录.join("fake_shaka.py");
+        std::fs::write(
+            &shaka_py,
+            r##"import pathlib
+import sys
+
+def ensure_file(path_str: str, content: bytes) -> None:
+    path = pathlib.Path(path_str)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+
+args = sys.argv[1:]
+for index, arg in enumerate(args):
+    if arg.startswith("in="):
+        for piece in arg.split(","):
+            if piece.startswith("init_segment="):
+                ensure_file(piece.split("=", 1)[1], b"init")
+            elif piece.startswith("segment_template="):
+                ensure_file(piece.split("=", 1)[1].replace("$Number$", "1"), b"segment")
+            elif piece.startswith("playlist_name="):
+                ensure_file(piece.split("=", 1)[1], b"#EXTM3U\n")
+    elif arg == "--mpd_output":
+        ensure_file(args[index + 1], b"<MPD/>")
+    elif arg == "--hls_master_playlist_output":
+        ensure_file(args[index + 1], b"#EXTM3U\n")
+"##,
+        )
+        .expect("应能写入 fake shaka");
+        let shaka_cmd = 临时目录.join("shaka.cmd");
+        std::fs::write(
+            &shaka_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_shaka.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 shaka wrapper");
+
+        let 结果 = 生成流媒体打包产物(
+            ffmpeg_cmd.to_str().expect("ffmpeg wrapper 路径应可转字符串"),
+            ffprobe_cmd.to_str().expect("ffprobe wrapper 路径应可转字符串"),
+            shaka_cmd.to_str().expect("shaka wrapper 路径应可转字符串"),
+            "att-qt-remux",
+            输入文件.as_path(),
+        )
+        .expect("qt 品牌 MP4 应能通过无损归一化链路生成流媒体打包结果");
+
+        let ffmpeg_log = std::fs::read_to_string(临时目录.join("ffmpeg.log"))
+            .expect("应能读取 ffmpeg 调用日志");
+        assert_eq!(
+            ffmpeg_log.lines().count(),
+            2,
+            "qt 品牌 MP4 应只多一次无损归一化，不应该直接退化成视频/音频重转码"
+        );
+        assert!(
+            ffmpeg_log.contains("-c copy"),
+            "容器归一化必须是无损 copy，不能偷偷退化成重新编码"
+        );
+        assert!(
+            !ffmpeg_log.contains("libx264") && !ffmpeg_log.contains("-b:a 128k"),
+            "qt 品牌 MP4 的救援链路不应误走现有重转码分支"
+        );
+        assert_eq!(
+            结果
+                .高质量回退母本本地路径
+                .file_name()
+                .and_then(|value| value.to_str()),
+            Some("normalized.mp4"),
+            "无损归一化后的标准 MP4 应成为 mezzanine 回退层，而不是继续回退到原始 qt 容器"
+        );
+        assert_ne!(
+            结果.高质量回退母本本地路径,
+            输入文件,
+            "qt 品牌 MP4 的 mezzanine 不应继续指回原始上传文件"
+        );
+        let ffprobe_log = std::fs::read_to_string(临时目录.join("ffprobe.log"))
+            .expect("应能读取 ffprobe 调用日志");
+        assert!(
+            ffprobe_log.contains("format_tags=major_brand,compatible_brands"),
+            "运行时 ffprobe 必须显式请求 format_tags，qt 品牌容器判定才能真正命中真实上传文件"
         );
 
         let _ = std::fs::remove_dir_all(临时目录);
