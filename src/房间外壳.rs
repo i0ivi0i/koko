@@ -446,16 +446,29 @@ pub(super) async fn load_room_snapshot(
             )
         }
         Err((status, code, message)) => {
-            tracing::warn!(
-                usecase = "加载房间快照",
-                adapter = "http",
-                outcome = "rejected",
-                request_kind = "房间快照查询",
-                room_id = room_id,
-                session_id = session_id,
-                error_code = code,
-                "加载房间快照被拒绝"
-            );
+            if 房间快照拒绝应记为警告(code) {
+                tracing::warn!(
+                    usecase = "加载房间快照",
+                    adapter = "http",
+                    outcome = "rejected",
+                    request_kind = "房间快照查询",
+                    room_id = room_id,
+                    session_id = session_id,
+                    error_code = code,
+                    "加载房间快照被拒绝"
+                );
+            } else {
+                tracing::info!(
+                    usecase = "加载房间快照",
+                    adapter = "http",
+                    outcome = "rejected",
+                    request_kind = "房间快照查询",
+                    room_id = room_id,
+                    session_id = session_id,
+                    error_code = code,
+                    "加载房间快照被拒绝"
+                );
+            }
             err_resp(status, code, message)
         }
     }
@@ -856,6 +869,25 @@ pub(super) async fn load_room_history(
             );
             err_resp(status, code, message)
         }
+    }
+}
+
+fn 房间快照拒绝应记为警告(error_code: &str) -> bool {
+    error_code != "room_not_found"
+}
+
+#[cfg(test)]
+mod 拒绝日志级别测试 {
+    use super::*;
+
+    #[test]
+    fn 房间快照_room_not_found_拒绝不算警告() {
+        assert!(!房间快照拒绝应记为警告("room_not_found"));
+    }
+
+    #[test]
+    fn 房间快照_其他拒绝仍算警告() {
+        assert!(房间快照拒绝应记为警告("membership_required"));
     }
 }
 

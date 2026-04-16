@@ -2,6 +2,7 @@ use std::{
     env, io, panic,
     sync::{Once, OnceLock},
 };
+use sqlx::{postgres::PgConnectOptions, ConnectOptions};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
 static PANIC_HOOK_INIT: Once = Once::new();
@@ -227,9 +228,10 @@ fn 提取panic消息(panic_info: &panic::PanicHookInfo<'_>) -> String {
 /// - 这里必须忠实执行 migrations 目录里的每一个顺序迁移；
 /// - 发现真实线上/本地 bug 时，优先补顺序迁移修正，不要回改已发布迁移编号。
 pub async fn 自动追平迁移(database_url: &str) -> io::Result<()> {
+    let connect_options = 构建迁移数据库连接选项(database_url)?;
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(1)
-        .connect(database_url)
+        .connect_with(connect_options)
         .await
         .map_err(|err| io::Error::other(format!("连接数据库失败: {err}")))?;
 
@@ -240,6 +242,15 @@ pub async fn 自动追平迁移(database_url: &str) -> io::Result<()> {
 
     pool.close().await;
     Ok(())
+}
+
+/// 迁移阶段的数据库连接只承载 schema 准备，不应把 SQLx 内部探测 SQL 当成业务慢查询噪音打出来。
+/// 这里仅关闭迁移连接自己的 statement logging，运行期连接池仍保留默认诊断能力。
+fn 构建迁移数据库连接选项(database_url: &str) -> io::Result<PgConnectOptions> {
+    database_url
+        .parse::<PgConnectOptions>()
+        .map(ConnectOptions::disable_statement_logging)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, format!("DATABASE_URL 非法: {err}")))
 }
 
 /// 读取必填环境变量并做“非空字符串”校验。
@@ -625,6 +636,16 @@ mod tests {
         assert_eq!(读取媒体上传完成并发上限().expect("显式值应可读"), 6);
 
         恢复环境变量("MEDIA_COMPLETE_MAX_CONCURRENCY", old);
+    }
+
+    #[test]
+    fn 构建迁移数据库连接选项会关闭_statement_日志() {
+        let options = 构建迁移数据库连接选项("postgres://postgres:postgres@127.0.0.1:5432/koko")
+            .expect("迁移连接选项应可构建");
+        let debug = format!("{options:?}");
+
+        assert!(debug.contains("statements_level: Off"));
+        assert!(debug.contains("slow_statements_level: Off"));
     }
 
     #[test]
