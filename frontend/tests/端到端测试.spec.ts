@@ -200,6 +200,7 @@ class 端到端假传输 implements 前端传输端口 {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available",
+          survival_mode: "server_assisted",
         },
         streaming_asset: {
           asset_id: attachmentId,
@@ -209,11 +210,16 @@ class 端到端假传输 implements 前端传输端口 {
             hls_master_url: this.buildStreamingAssetUrl(attachmentId, "s-e2e", "hls"),
             dash_mpd_url: this.buildStreamingAssetUrl(attachmentId, "s-e2e", "dash"),
           },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
           distribution: {
             swarm_id: `swarm-hash-${attachmentId}`,
             announce_urls: ["wss://tracker.test.local/announce"],
             web_seed_url: `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=s-e2e`,
             join_ticket: null,
+            survival_mode: "server_assisted",
           },
           origin: {
             original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),

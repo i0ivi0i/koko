@@ -184,6 +184,7 @@ describe("媒体查看器适配器", () => {
             announce_urls: ["wss://tracker.koko.local/announce"],
             web_seed_url: "http://media.local/blob/att-image-complete-1/original.png",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           alt: "图片附件原图",
           width: 1600,
@@ -388,13 +389,15 @@ describe("媒体查看器适配器", () => {
 
   it("默认视频查看器会把 HLS P2P 增强挂接函数交给 Video.js 壳，而不是让 provider 裸跑", async () => {
     vi.resetModules();
-    const 创建VideoJs播放器壳 = vi.fn(async () => ({
+    const 创建VideoJs播放器壳 = vi.fn(
+      async (_source?: unknown, _deps?: Record<string, unknown>) => ({
       destroy: vi.fn(),
       同步: vi.fn(),
       读取视频元素: () => document.createElement("video"),
       读取容器元素: () => document.createElement("div"),
       进入全屏: vi.fn(),
-    }));
+      })
+    );
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
     }));

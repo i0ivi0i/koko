@@ -33,6 +33,7 @@ function 准备好的定位结果(
       join_ticket: null,
       ticket_expires_at: null,
       availability: "available" as const,
+      survival_mode: "server_assisted" as const,
     },
   };
 }
@@ -142,6 +143,7 @@ describe("媒体协作分发", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "available" as const,
+        survival_mode: "server_assisted" as const,
       },
     });
 
@@ -157,6 +159,7 @@ describe("媒体协作分发", () => {
       join_ticket: null,
       ticket_expires_at: null,
       availability: "available" as const,
+      survival_mode: "server_assisted" as const,
     });
   });
 

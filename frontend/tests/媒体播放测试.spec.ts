@@ -29,6 +29,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
         preview_asset: {
           still_url: "http://media.local/preview-image-blob-1.jpg",
@@ -68,6 +69,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-image-blob-1",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           origin: {
             original_url: "http://media.local/blob/att-image-blob-1/original.png",
@@ -101,6 +103,7 @@ describe("媒体播放器", () => {
         announce_urls: ["http://media.local/announce"],
         web_seed_url: "http://media.local/web-seed-image-blob-1",
         join_ticket: null,
+        survival_mode: "server_assisted" as const,
       },
       hint: null,
     });
@@ -132,6 +135,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
         preview_asset: {
           still_url: "http://media.local/preview-image-backfill-1.jpg",
@@ -171,6 +175,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-image-backfill-1",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           origin: {
             original_url: "http://media.local/blob/att-image-backfill-1/original.png",
@@ -219,6 +224,7 @@ describe("媒体播放器", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "available" as const,
+        survival_mode: "server_assisted" as const,
       },
     }));
     const 播放器 = 创建媒体播放器({
@@ -261,6 +267,7 @@ describe("媒体播放器", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "available" as const,
+        survival_mode: "server_assisted" as const,
       },
     }));
     const probeAnchor = vi.fn();
@@ -316,6 +323,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
       }),
       resolveSwarmSource,
@@ -355,6 +363,7 @@ describe("媒体播放器", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "available" as const,
+        survival_mode: "server_assisted" as const,
       },
     }));
     const 释放协作分发源 = vi.fn();
@@ -400,11 +409,16 @@ describe("媒体播放器", () => {
             hls_master_url: null,
             dash_mpd_url: null,
           },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
           distribution: {
             swarm_id: "swarm-hash-video-transition",
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-transition",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           origin: {
             original_url: "http://media.local/cold-origin-transition",
@@ -462,6 +476,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
           asset_id: "att-video-hls",
@@ -471,11 +486,16 @@ describe("媒体播放器", () => {
             hls_master_url: "http://media.local/stream/att-video-hls/master.m3u8",
             dash_mpd_url: "http://media.local/stream/att-video-hls/stream.mpd",
           },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
           distribution: {
             swarm_id: "swarm-hash-video-hls",
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-hls",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           origin: {
             original_url: "http://media.local/cold-origin-video-hls",
@@ -540,6 +560,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
           asset_id: "att-video-hls",
@@ -549,11 +570,16 @@ describe("媒体播放器", () => {
             hls_master_url: "http://media.local/stream/att-video-hls/master.m3u8",
             dash_mpd_url: "http://media.local/stream/att-video-hls/stream.mpd",
           },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
           distribution: {
             swarm_id: "swarm-hash-video-hls",
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-hls",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           origin: {
             original_url: "http://media.local/cold-origin-video-hls",
@@ -588,6 +614,7 @@ describe("媒体播放器", () => {
           announce_urls: ["http://media.local/announce"],
           web_seed_url: "http://media.local/web-seed-video-hls",
           join_ticket: null,
+          survival_mode: "server_assisted" as const,
         },
         hint: null,
       });
@@ -623,6 +650,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
           asset_id: "att-video-inline-hls",
@@ -632,11 +660,16 @@ describe("媒体播放器", () => {
             hls_master_url: "http://media.local/stream/att-video-inline-hls/master.m3u8",
             dash_mpd_url: "http://media.local/stream/att-video-inline-hls/stream.mpd",
           },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
           distribution: {
             swarm_id: "swarm-hash-video-inline-hls",
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-inline-hls",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           origin: {
             original_url: "http://media.local/cold-origin-video-inline-hls",
@@ -697,6 +730,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
           asset_id: "att-video-inline-fallback",
@@ -706,11 +740,16 @@ describe("媒体播放器", () => {
             hls_master_url: "http://media.local/stream/att-video-inline-fallback/master.m3u8",
             dash_mpd_url: "http://media.local/stream/att-video-inline-fallback/stream.mpd",
           },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
           distribution: {
             swarm_id: "swarm-hash-video-inline-fallback",
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-inline-fallback",
             join_ticket: null,
+            survival_mode: "server_assisted" as const,
           },
           origin: {
             original_url: "http://media.local/cold-origin-inline-fallback",
@@ -765,6 +804,7 @@ describe("媒体播放器", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "available" as const,
+        survival_mode: "server_assisted" as const,
       },
     }));
     const 播放器 = 创建媒体播放器({
@@ -810,6 +850,7 @@ describe("媒体播放器", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "expired" as const,
+        survival_mode: "server_assisted" as const,
       },
     }));
     const resolveSwarmSource = vi.fn();

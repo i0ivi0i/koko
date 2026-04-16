@@ -21,6 +21,7 @@ describe("媒体定位器", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "available" as const,
+        survival_mode: "server_assisted" as const,
       },
     }));
     const 定位器 = 创建媒体定位器({
@@ -58,6 +59,7 @@ describe("媒体定位器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
       })
       .mockResolvedValueOnce({
@@ -78,6 +80,7 @@ describe("媒体定位器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
+          survival_mode: "server_assisted" as const,
         },
       });
     const 定位器 = 创建媒体定位器({
