@@ -1,0 +1,35 @@
+use std::io;
+use std::path::PathBuf;
+
+/// Tus sidecar 在测试里直接共享本地上传目录，因此 fixture 也应写进同一个 upload dir。
+/// 这样 complete 读到的就是真正 sidecar 会交回来的临时文件，而不是测试私造的第二套输入源。
+pub fn 写入tus测试文件(
+    tus_upload_dir: &str,
+    attachment_id: &str,
+    file_name: &str,
+    bytes: &[u8],
+) -> io::Result<String> {
+    let root = PathBuf::from(tus_upload_dir);
+    let fixture_dir = root.join("tests");
+    std::fs::create_dir_all(&fixture_dir)?;
+    let path = fixture_dir.join(format!("{attachment_id}-{file_name}"));
+    std::fs::write(&path, bytes)?;
+    Ok(std::fs::canonicalize(path)?.to_string_lossy().to_string())
+}
+
+/// 最小 PNG fixture 继续内嵌在代码里，避免为了 1x1 图片样本再多维护一个独立文件。
+pub fn 最小png字节() -> Vec<u8> {
+    vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8,
+        0xCF, 0xC0, 0xF0, 0x1F, 0x00, 0x05, 0x00, 0x01, 0xFF, 0x89, 0x99, 0x3D, 0x1D, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ]
+}
+
+/// 最小 MP4 样本来自上游公开测试夹具，避免我们在仓库里手搓一份脆弱的伪视频字节。
+/// 后端视频 complete 与 locator 回归都统一复用这份 fixture，确保测试针对真实容器格式。
+pub fn 最小mp4字节() -> Vec<u8> {
+    include_bytes!("../../fixtures/minimal.mp4").to_vec()
+}
