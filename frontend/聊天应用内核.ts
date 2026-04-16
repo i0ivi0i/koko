@@ -228,6 +228,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       ...(this.platform.storage.媒体资产仓库
         ? { 媒体缓存仓库: this.platform.storage.媒体资产仓库() }
         : {}),
+      ...(this.platform.storage.媒体定位仓库
+        ? { 媒体定位仓库: this.platform.storage.媒体定位仓库() }
+        : {}),
       写入草稿列表: (nextDrafts) => {
         this.应用本地状态补丁({ composerMediaDrafts: nextDrafts });
       },

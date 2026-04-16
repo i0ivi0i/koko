@@ -11,6 +11,30 @@ import {
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
 
+function 创建假Storage(): Storage {
+  const records = new Map<string, string>();
+  return {
+    get length() {
+      return records.size;
+    },
+    clear() {
+      records.clear();
+    },
+    getItem(key: string) {
+      return records.get(key) ?? null;
+    },
+    key(index: number) {
+      return Array.from(records.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      records.delete(key);
+    },
+    setItem(key: string, value: string) {
+      records.set(key, value);
+    },
+  };
+}
+
 function 准备好的定位结果(
   attachmentId: string,
   kind: 媒体定位结果["kind"] = "video"
@@ -401,6 +425,97 @@ describe("媒体协作分发", () => {
     expect(读取协作分发会话状态("swarm-att-stream-probe-1")).toBeNull();
   });
 
+  it("受控 torrent 首次拉到后会缓存元数据，后端临时离线重开时仍能复用本地 swarm 描述", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    vi.stubGlobal("localStorage", 创建假Storage());
+    let 在线可拉取Torrent = true;
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-offline-reopen")) {
+        if (!在线可拉取Torrent) {
+          throw new Error("backend offline");
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([7, 8, 9]).buffer,
+        };
+      }
+      if (url.includes("/webtorrent/offline-reopen.mp4")) {
+        return {
+          ok: true,
+          status: 206,
+        };
+      }
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const firstTorrent = 创建可观测假Torrent("/webtorrent/offline-reopen.mp4");
+    const firstAdd = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(firstTorrent.torrent);
+      return firstTorrent.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const firstCtor = 创建假WebTorrent构造器(firstAdd);
+    await 获取或创建协作分发浏览器运行时(
+      async () => firstCtor.ctor,
+      async () => registration
+    );
+
+    const locator = 准备好的定位结果("att-offline-reopen");
+    const firstSource = await 解析协作分发源({
+      attachmentId: "att-offline-reopen",
+      kind: "video",
+      locator,
+    });
+
+    expect(firstSource).toEqual({
+      src: "/webtorrent/offline-reopen.mp4",
+      hint: "正在补块",
+    });
+    expect(firstAdd).toHaveBeenCalledWith(
+      new Uint8Array([7, 8, 9]),
+      expect.any(Object),
+      expect.any(Function)
+    );
+
+    重置协作分发浏览器运行时();
+    在线可拉取Torrent = false;
+
+    const secondTorrent = 创建可观测假Torrent("/webtorrent/offline-reopen.mp4");
+    const secondAdd = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(secondTorrent.torrent);
+      return secondTorrent.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const secondCtor = 创建假WebTorrent构造器(secondAdd);
+    await 获取或创建协作分发浏览器运行时(
+      async () => secondCtor.ctor,
+      async () => registration
+    );
+
+    const reopenedSource = await 解析协作分发源({
+      attachmentId: "att-offline-reopen",
+      kind: "video",
+      locator,
+      consumerId: "viewer:att-offline-reopen:reopen",
+    });
+
+    expect(reopenedSource).toEqual({
+      src: "/webtorrent/offline-reopen.mp4",
+      hint: "正在补块",
+    });
+    expect(secondAdd).toHaveBeenCalledWith(
+      new Uint8Array([7, 8, 9]),
+      expect.any(Object),
+      expect.any(Function)
+    );
+  });
+
   it("开始协作分发后会尝试请求 storage.persist，但失败不会中断 swarm 会话", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const persist = vi.fn(async () => {
@@ -540,7 +655,7 @@ describe("媒体协作分发", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("释放最后一个协作分发消费者后会停止 presence 上报并清掉会话", async () => {
+  it("释放最后一个协作分发消费者后会停止 presence 上报，但继续保留补齐中的 swarm 会话", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-release");
@@ -585,14 +700,66 @@ describe("媒体协作分发", () => {
     释放协作分发消费者("att-release");
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(读取协作分发会话状态("swarm-att-release")).toBeNull();
+    expect(读取协作分发会话状态("swarm-att-release")).toMatchObject({
+      refs: 0,
+      consumers: [],
+      eagerCompleting: true,
+      hint: "正在补块",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(remove).toHaveBeenCalledWith("torrent-info-hash-att-release", {
-      destroyStore: false,
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("完整 swarm 在释放最后一个消费者后仍会保留，以便后端退场后继续重开", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-retain-complete"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor, remove } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-retain-complete");
+    await 解析协作分发源({
+      attachmentId: "att-retain-complete",
+      kind: "video",
+      locator,
+      consumerId: "viewer:att-retain-complete",
+    });
+    emit("done");
+
+    释放协作分发消费者({
+      attachmentId: "att-retain-complete",
+      consumerId: "viewer:att-retain-complete",
+    });
+
+    expect(读取协作分发会话状态("swarm-att-retain-complete")).toMatchObject({
+      refs: 0,
+      consumers: [],
+      eagerCompleting: false,
+      hint: "正在协作分发",
+    });
+    expect(remove).not.toHaveBeenCalled();
+
+    await 解析协作分发源({
+      attachmentId: "att-retain-complete",
+      kind: "video",
+      locator,
+      consumerId: "viewer:att-retain-complete-reopen",
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(读取协作分发会话状态("swarm-att-retain-complete")).toMatchObject({
+      refs: 1,
+      consumers: ["viewer:att-retain-complete-reopen"],
+      eagerCompleting: false,
     });
   });
 
-  it("只释放其中一个消费者时，不会提前 destroy torrent/runtime", async () => {
+  it("只释放其中一个消费者时不会提前 destroy，而最后一个消费者释放后也会保留 swarm", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-partial-release");
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -632,7 +799,12 @@ describe("媒体协作分发", () => {
       consumerId: "session:att-partial-release",
     });
 
-    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove).not.toHaveBeenCalled();
+    expect(读取协作分发会话状态("swarm-att-partial-release")).toMatchObject({
+      refs: 0,
+      consumers: [],
+      eagerCompleting: true,
+    });
   });
 
   it("重置协作分发运行时时会关闭 stream server 并销毁 WebTorrent client", async () => {

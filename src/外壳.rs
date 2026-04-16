@@ -656,7 +656,10 @@ fn 构建前端静态资源路由() -> Router<应用状态> {
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache"),
         ));
-    let media_service_worker_router = Router::<应用状态>::new()
+    let root_scope_service_worker_router = Router::<应用状态>::new()
+        // App shell worker 负责根导航兜底。
+        // 它必须挂在根路径，浏览器才能以 "/" scope 接管离线重载与房间恢复。
+        .route_service("/app-sw.js", ServeFile::new("frontend/dist/app-sw.js"))
         .route_service("/media-sw.js", ServeFile::new("frontend/dist/media-sw.js"))
         .layer(SetResponseHeaderLayer::overriding(
             header::HeaderName::from_static("service-worker-allowed"),
@@ -675,7 +678,7 @@ fn 构建前端静态资源路由() -> Router<应用状态> {
             HeaderValue::from_static("public, max-age=31536000, immutable"),
         ));
     html_router
-        .merge(media_service_worker_router)
+        .merge(root_scope_service_worker_router)
         .merge(assets_router)
 }
 

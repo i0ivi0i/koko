@@ -96,4 +96,57 @@ describe("媒体定位器", () => {
     expect(refreshed.distribution?.content_hash).toBe("hash-refresh");
     expect(loadMediaLocator).toHaveBeenCalledTimes(2);
   });
+
+  it("重新创建定位器后会继续命中持久化 locator，而不是重开页面就重新请求后端", async () => {
+    const records = new Map<string, unknown>();
+    const repo = {
+      async 读取(attachmentId: string) {
+        return (records.get(attachmentId) as { value: unknown; stale: boolean } | null) ?? null;
+      },
+      async 保存(record: { attachmentId: string; value: unknown; stale: boolean }) {
+        records.set(record.attachmentId, record);
+      },
+    };
+    const loadMediaLocator = vi.fn(async () => ({
+      attachment_id: "att-1",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-persisted",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-1",
+        content_hash: "hash-persisted",
+        swarm_id: "swarm-hash-persisted",
+        web_seed_until: "1776028800",
+        torrent_url: "http://media.local/torrent-persisted",
+        torrent_info_hash: "torrent-info-hash-persisted",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-persisted",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+        survival_mode: "server_assisted" as const,
+      },
+    }));
+
+    const 首次定位器 = 创建媒体定位器({
+      getSessionId: () => "s-test",
+      loadMediaLocator,
+      repo,
+    } as never);
+    await 首次定位器.获取定位("att-1");
+
+    const 重开后定位器 = 创建媒体定位器({
+      getSessionId: () => "s-test",
+      loadMediaLocator: vi.fn(async () => {
+        throw new Error("offline");
+      }),
+      repo,
+    } as never);
+    const restored = await 重开后定位器.获取定位("att-1");
+
+    expect(restored.original_url).toBe("http://media.local/original-persisted");
+    expect(restored.distribution?.swarm_id).toBe("swarm-hash-persisted");
+    expect(loadMediaLocator).toHaveBeenCalledTimes(1);
+  });
 });

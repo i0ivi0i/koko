@@ -3,6 +3,7 @@ import type { 前端传输端口 } from "./传输.js";
 import {
   创建媒体定位器,
   创建媒体缓存,
+  创建内存媒体定位缓存仓库,
   创建内存媒体缓存仓库,
   创建媒体播放器,
   创建媒体发布器,
@@ -17,6 +18,7 @@ import {
   type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体缓存仓库,
+  type 媒体定位缓存仓库,
   type 媒体草稿状态补丁,
   type 媒体查看器打开请求,
   type 媒体会话信号,
@@ -46,6 +48,7 @@ type 聊天媒体编排依赖 = {
   读取消息(): 消息事件[];
   读取草稿(): 媒体附件草稿[];
   媒体缓存仓库?: 媒体缓存仓库;
+  媒体定位仓库?: 媒体定位缓存仓库;
   写入草稿列表(next: 媒体附件草稿[]): void;
   请求重渲染(): void;
   回收媒体草稿预览地址(previewUrls: string[]): void;
@@ -119,6 +122,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     getSessionId: () => deps.读取会话编号(),
     loadMediaLocator: (sessionId, attachmentId) =>
       deps.transport().loadMediaLocator(sessionId, attachmentId),
+    repo: deps.媒体定位仓库 ?? 创建内存媒体定位缓存仓库(),
   });
 
   let 媒体播放器 = 创建媒体播放器({

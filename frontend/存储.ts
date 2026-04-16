@@ -1,12 +1,26 @@
+import type { 房间快照 } from "./契约.js";
+
 const 设备匿名凭证存储键 = "koko_device_anonymous_token";
 const 当前房间存储键 = "koko_current_room_id";
 const 当前房间短码存储键 = "koko_current_room_code";
 const 首页房间历史存储键 = "koko_home_sessions";
+const 最近引导身份存储键 = "koko_bootstrap_identity";
+const 当前房间恢复快照存储键 = "koko_current_room_snapshot";
 
 export interface 首页房间历史条目 {
   roomId: string;
   roomCode: string;
   lastEnteredAt: number;
+}
+
+export interface 最近引导身份缓存 {
+  sessionId: string;
+  displayAlias: string;
+}
+
+export interface 当前房间恢复快照缓存 {
+  roomCode: string;
+  snapshot: 房间快照;
 }
 
 /**
@@ -19,12 +33,18 @@ export interface 首页房间历史条目 {
  */
 export interface 前端存储端口 {
   读取或创建设备匿名凭证(): string;
+  读取最近引导身份(): 最近引导身份缓存 | null;
+  写入最近引导身份(identity: 最近引导身份缓存): void;
+  清除最近引导身份(): void;
   读取当前房间标识(): string;
   写入当前房间标识(roomId: string): void;
   清除当前房间标识(): void;
   读取当前房间短码(): string;
   写入当前房间短码(roomCode: string): void;
   清除当前房间短码(): void;
+  读取当前房间恢复快照(): 当前房间恢复快照缓存 | null;
+  写入当前房间恢复快照(cache: 当前房间恢复快照缓存): void;
+  清除当前房间恢复快照(): void;
   读取首页房间历史(): 首页房间历史条目[];
   写入或更新首页房间历史条目(item: 首页房间历史条目): void;
   按房间标识删除首页房间历史条目(roomId: string): void;
@@ -50,6 +70,99 @@ function 删除字符串(storage: Partial<Storage> | undefined, key: string): vo
   if (storage && typeof storage.removeItem === "function") {
     storage.removeItem(key);
   }
+}
+
+function 读取JSON<T>(
+  storage: Partial<Storage> | undefined,
+  key: string,
+  normalize: (value: unknown) => T | null
+): T | null {
+  const raw = 读取字符串(storage, key);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalize(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function 写入JSON(
+  storage: Partial<Storage> | undefined,
+  key: string,
+  value: unknown
+): void {
+  写入字符串(storage, key, JSON.stringify(value));
+}
+
+function 规范化最近引导身份缓存(value: unknown): 最近引导身份缓存 | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const candidate = value as {
+    sessionId?: unknown;
+    displayAlias?: unknown;
+  };
+  const sessionId =
+    typeof candidate.sessionId === "string" ? candidate.sessionId.trim() : "";
+  const displayAlias =
+    typeof candidate.displayAlias === "string" ? candidate.displayAlias.trim() : "";
+  if (!sessionId || !displayAlias) {
+    return null;
+  }
+  return {
+    sessionId,
+    displayAlias,
+  };
+}
+
+function 规范化当前房间恢复快照缓存(
+  value: unknown
+): 当前房间恢复快照缓存 | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const candidate = value as {
+    roomCode?: unknown;
+    snapshot?: Partial<房间快照> | null;
+  };
+  const roomCode = typeof candidate.roomCode === "string" ? candidate.roomCode.trim() : "";
+  const snapshot = candidate.snapshot;
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+  if (
+    typeof snapshot.room_id !== "string" ||
+    !snapshot.room_id.trim() ||
+    typeof snapshot.latest_event_position !== "number" ||
+    !Number.isFinite(snapshot.latest_event_position) ||
+    !Array.isArray(snapshot.snapshot_messages) ||
+    typeof snapshot.has_more_before !== "boolean"
+  ) {
+    return null;
+  }
+  const lastReadEventPosition =
+    typeof snapshot.last_read_event_position === "number" &&
+    Number.isFinite(snapshot.last_read_event_position)
+      ? snapshot.last_read_event_position
+      : null;
+  const firstUnreadEventPosition =
+    typeof snapshot.first_unread_event_position === "number" &&
+    Number.isFinite(snapshot.first_unread_event_position)
+      ? snapshot.first_unread_event_position
+      : null;
+  return {
+    roomCode,
+    snapshot: {
+      room_id: snapshot.room_id,
+      latest_event_position: snapshot.latest_event_position,
+      last_read_event_position: lastReadEventPosition,
+      first_unread_event_position: firstUnreadEventPosition,
+      snapshot_messages: snapshot.snapshot_messages,
+      has_more_before: snapshot.has_more_before,
+    },
+  };
 }
 
 /**
@@ -147,6 +260,22 @@ export function 创建浏览器存储(
       return generated;
     },
 
+    读取最近引导身份(): 最近引导身份缓存 | null {
+      return 读取JSON(storage, 最近引导身份存储键, 规范化最近引导身份缓存);
+    },
+
+    写入最近引导身份(identity: 最近引导身份缓存): void {
+      const normalized = 规范化最近引导身份缓存(identity);
+      if (!normalized) {
+        return;
+      }
+      写入JSON(storage, 最近引导身份存储键, normalized);
+    },
+
+    清除最近引导身份(): void {
+      删除字符串(storage, 最近引导身份存储键);
+    },
+
     读取当前房间标识(): string {
       return 读取字符串(storage, 当前房间存储键);
     },
@@ -169,6 +298,22 @@ export function 创建浏览器存储(
 
     清除当前房间短码(): void {
       删除字符串(storage, 当前房间短码存储键);
+    },
+
+    读取当前房间恢复快照(): 当前房间恢复快照缓存 | null {
+      return 读取JSON(storage, 当前房间恢复快照存储键, 规范化当前房间恢复快照缓存);
+    },
+
+    写入当前房间恢复快照(cache: 当前房间恢复快照缓存): void {
+      const normalized = 规范化当前房间恢复快照缓存(cache);
+      if (!normalized) {
+        return;
+      }
+      写入JSON(storage, 当前房间恢复快照存储键, normalized);
+    },
+
+    清除当前房间恢复快照(): void {
+      删除字符串(storage, 当前房间恢复快照存储键);
     },
 
     读取首页房间历史(): 首页房间历史条目[] {

@@ -77,8 +77,7 @@ const 是可注册结果 = (value: unknown): value is 服务工作线程注册�
 
 /**
  * 这里统一接管页面和浏览器平台能力的握手：
- * - 注册 app shell worker
- * - 注册 media worker
+ * - 注册根 scope worker
  * - best-effort 申请持久化存储
  *
  * 它不判断聊天业务该不该缓存、该不该通知；只做浏览器运行时层面的动作。
@@ -124,33 +123,20 @@ export function 创建服务工作线程运行时(
     });
   };
 
-  const 同步等待状态 = (
-    registration: unknown,
-    key: "appShellWaiting" | "mediaWorkerWaiting"
-  ): void => {
+  const 同步共享Worker等待状态 = (registration: unknown): void => {
     const hasWaiting = 是可注册结果(registration) ? Boolean(registration.waiting) : false;
     更新快照({
-      [key]: hasWaiting,
+      appShellWaiting: hasWaiting,
+      mediaWorkerWaiting: hasWaiting,
     });
-    // 等待中的 worker 代表“更新已就绪但尚未被页面接受”，平台需要把这个事实发给上层。
     if (hasWaiting) {
+      // 现在根 scope 只有一个 worker owner。
+      // 这里仍保留 app/media 两组快照字段，只是把“更新已就绪”统一按 app scope 对外广播。
       发布事件({
         type: "SERVICE_WORKER_UPDATE_READY",
-        scope: key === "appShellWaiting" ? "app" : "media",
+        scope: "app",
       });
     }
-  };
-
-  const 绑定更新观察 = (
-    registration: unknown,
-    key: "appShellWaiting" | "mediaWorkerWaiting"
-  ): void => {
-    if (!是可注册结果(registration) || typeof registration.addEventListener !== "function") {
-      return;
-    }
-    registration.addEventListener("updatefound", () => {
-      同步等待状态(registration, key);
-    });
   };
 
   const 绑定容器事件 = (): void => {
@@ -193,24 +179,23 @@ export function 创建服务工作线程运行时(
           const nextAppRegistration = await platformNavigator.serviceWorker.register("/app-sw.js", {
             scope: "/",
           });
-          更新快照({ appShellRegistered: true });
+          更新快照({
+            appShellRegistered: true,
+            mediaWorkerRegistered: true,
+          });
           appRegistration = 是可注册结果(nextAppRegistration) ? nextAppRegistration : null;
-          同步等待状态(nextAppRegistration, "appShellWaiting");
-          绑定更新观察(nextAppRegistration, "appShellWaiting");
+          mediaRegistration = appRegistration;
+          同步共享Worker等待状态(nextAppRegistration);
+          if (
+            是可注册结果(nextAppRegistration) &&
+            typeof nextAppRegistration.addEventListener === "function"
+          ) {
+            nextAppRegistration.addEventListener("updatefound", () => {
+              同步共享Worker等待状态(nextAppRegistration);
+            });
+          }
         } catch {
           // best-effort：这里不把浏览器平台失败升级成聊天业务失败。
-        }
-
-        try {
-          const nextMediaRegistration = await platformNavigator.serviceWorker.register("/media-sw.js", {
-            scope: "/",
-          });
-          更新快照({ mediaWorkerRegistered: true });
-          mediaRegistration = 是可注册结果(nextMediaRegistration) ? nextMediaRegistration : null;
-          同步等待状态(nextMediaRegistration, "mediaWorkerWaiting");
-          绑定更新观察(nextMediaRegistration, "mediaWorkerWaiting");
-        } catch {
-          // media worker 失败同样只留在平台层快照里，不污染业务语义。
         }
       }
 
@@ -240,8 +225,8 @@ export function 创建服务工作线程运行时(
 
     接受更新(): boolean {
       let accepted = false;
-      // 允许 app/media 两个 worker 分别处于 waiting，显式触发升级请求时统一广播给等待实例。
-      for (const registration of [appRegistration, mediaRegistration]) {
+      // 兼容字段仍保留 app/media 两个入口，但根 scope 实际只有一个 worker owner。
+      for (const registration of new Set([appRegistration, mediaRegistration])) {
         const waiting = registration?.waiting;
         if (waiting && typeof waiting.postMessage === "function") {
           waiting.postMessage({ type: "SKIP_WAITING" });

@@ -27,8 +27,9 @@ describe("服务工作线程运行时", () => {
     vi.restoreAllMocks();
   });
 
-  it("会统一注册 app shell 与 media 两个 worker，并 best-effort 申请持久化存储", async () => {
-    const register = vi.fn().mockResolvedValue({});
+  it("会只注册一个根 scope worker 来同时承载 app shell 与 media 能力，并 best-effort 申请持久化存储", async () => {
+    const registration = {};
+    const register = vi.fn().mockResolvedValue(registration);
     const persist = vi.fn().mockResolvedValue(true);
     const runtime = 创建服务工作线程运行时({
       navigator: {
@@ -40,13 +41,13 @@ describe("服务工作线程运行时", () => {
     await runtime.启动();
 
     expect(register).toHaveBeenCalledWith("/app-sw.js", { scope: "/" });
-    expect(register).toHaveBeenCalledWith("/media-sw.js", { scope: "/" });
+    expect(register).toHaveBeenCalledTimes(1);
     expect(persist).toHaveBeenCalledTimes(1);
-    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("app")).toEqual(
-      {}
+    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("app")).toBe(
+      registration
     );
-    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("media")).toEqual(
-      {}
+    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("media")).toBe(
+      registration
     );
     expect(runtime.snapshot()).toEqual({
       appShellRegistered: true,
@@ -63,7 +64,6 @@ describe("服务工作线程运行时", () => {
   it("会把 controller / waiting / message 状态收进 runtime 快照，并允许页面向当前 controller 发消息", async () => {
     const 容器事件 = 创建事件目标();
     const app注册事件 = 创建事件目标();
-    const media注册事件 = 创建事件目标();
     const controller = {
       postMessage: vi.fn(),
     };
@@ -71,16 +71,9 @@ describe("服务工作线程运行时", () => {
       waiting: null as unknown,
       addEventListener: app注册事件.addEventListener,
     };
-    const mediaRegistration = {
-      waiting: { scriptURL: "/media-sw.js" },
-      addEventListener: media注册事件.addEventListener,
-    };
     const serviceWorker = {
       controller,
-      register: vi
-        .fn()
-        .mockResolvedValueOnce(appRegistration)
-        .mockResolvedValueOnce(mediaRegistration),
+      register: vi.fn().mockResolvedValue(appRegistration),
       addEventListener: 容器事件.addEventListener,
     };
     const runtime = 创建服务工作线程运行时({
@@ -95,7 +88,7 @@ describe("服务工作线程运行时", () => {
     expect(runtime.snapshot()).toMatchObject({
       controllerAttached: true,
       appShellWaiting: false,
-      mediaWorkerWaiting: true,
+      mediaWorkerWaiting: false,
       lastMessageType: null,
       lastMessage: null,
     });
@@ -115,7 +108,7 @@ describe("服务工作线程运行时", () => {
       (runtime as unknown as {
         读取注册(kind: "app" | "media"): unknown;
       }).读取注册("media")
-    ).toBe(mediaRegistration);
+    ).toBe(appRegistration);
     expect(runtime.snapshot()).toMatchObject({
       controllerAttached: true,
       appShellWaiting: true,
@@ -128,7 +121,6 @@ describe("服务工作线程运行时", () => {
   it("等待中的 worker 更新与后台唤醒会发出平台事件，并且只在显式接受后才会 skip waiting", async () => {
     const 容器事件 = 创建事件目标();
     const app注册事件 = 创建事件目标();
-    const media注册事件 = 创建事件目标();
     const 等待中的AppWorker = {
       postMessage: vi.fn(),
     };
@@ -136,16 +128,9 @@ describe("服务工作线程运行时", () => {
       waiting: 等待中的AppWorker,
       addEventListener: app注册事件.addEventListener,
     };
-    const mediaRegistration = {
-      waiting: null as unknown,
-      addEventListener: media注册事件.addEventListener,
-    };
     const serviceWorker = {
       controller: null as { postMessage: (message: unknown) => void } | null,
-      register: vi
-        .fn()
-        .mockResolvedValueOnce(appRegistration)
-        .mockResolvedValueOnce(mediaRegistration),
+      register: vi.fn().mockResolvedValue(appRegistration),
       addEventListener: 容器事件.addEventListener,
     };
     const runtime = 创建服务工作线程运行时({

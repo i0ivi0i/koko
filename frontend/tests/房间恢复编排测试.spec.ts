@@ -121,6 +121,68 @@ describe("房间恢复编排", () => {
     ]);
     expect(场景.读取状态().roomId).toBe("");
   });
+
+  it("bootstrap 失败但本地还留着身份和当前房间快照时，会离线恢复当前房间而不是直接掉回失败页", async () => {
+    const 创建房间恢复编排 = await 读取房间恢复编排工厂();
+    const 场景 = 创建恢复编排测试场景({
+      roomId: "r-offline",
+      roomCode: "ROOM88",
+      sessionId: "s-stale",
+      displayAlias: "旧身份",
+      skipInitialBootstrap: true,
+    });
+    场景.rawStorage.setItem(
+      "koko_bootstrap_identity",
+      JSON.stringify({
+        sessionId: "s-cached",
+        displayAlias: "离线海豚",
+      })
+    );
+    场景.rawStorage.setItem(
+      "koko_current_room_snapshot",
+      JSON.stringify({
+        roomCode: "ROOM88",
+        snapshot: 创建房间快照("r-offline", 7, {
+          snapshot_messages: [
+            {
+              type: "message_created",
+              room_id: "r-offline",
+              message_id: "m-offline-1",
+              client_message_id: "c-offline-1",
+              sender_session_id: "s-peer",
+              sender_display_alias: "缓存同伴",
+              text: "cached video",
+              body: "cached video",
+              attachments: [
+                {
+                  kind: "video",
+                  attachment_id: "att-video-offline-1",
+                  width: 1280,
+                  height: 720,
+                },
+              ],
+              event_position: 7,
+            },
+          ],
+        }),
+      })
+    );
+    场景.transport.bootstrapQueue = [创建传输错误(0, "offline_unreachable")];
+    场景.transport.snapshotQueue = [创建传输错误(0, "offline_unreachable")];
+
+    const 编排 = 创建房间恢复编排(场景.deps) as {
+      bootstrap(): Promise<void>;
+    };
+    await 编排.bootstrap();
+
+    expect(场景.读取状态().sessionId).toBe("s-cached");
+    expect(场景.读取状态().displayAlias).toBe("离线海豚");
+    expect(场景.读取状态().roomId).toBe("r-offline");
+    expect(场景.读取状态().messages).toHaveLength(1);
+    expect(场景.读取状态().messages[0]?.attachments?.[0]?.attachment_id).toBe(
+      "att-video-offline-1"
+    );
+  });
 });
 
 

@@ -1,5 +1,14 @@
+// 根 scope 只能有一个 service worker owner。
+// 媒体 fetch / WebTorrent 逻辑继续复用既有模块，但必须并进同一个 root worker，
+// 否则后注册的 media worker 会把 app shell 的导航控制权整块顶掉。
+import "./media-sw";
 import { clientsClaim } from "workbox-core";
-import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
+import {
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+  precacheAndRoute,
+} from "workbox-precaching";
+import { NavigationRoute, registerRoute } from "workbox-routing";
 
 type 可通信窗口客户端 = {
   postMessage(message: unknown): void;
@@ -41,6 +50,20 @@ const 向受控页面广播后台补发请求 = async (): Promise<void> => {
 // App Shell worker 只缓存构建期静态壳资源；聊天 API、socket 和媒体业务数据不进入这里。
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
+// 离线导航只回退到构建期生成的 app-shell.html：
+// 1. 它只包含静态 HTML + 已预缓存的 JS/CSS；
+// 2. `/api/*`、`/socket.io/*` 这类运行态入口继续留给真实网络或上层恢复编排裁决；
+// 3. 这样离线刷新至少能重新拉起应用壳，不会直接掉进 chrome-error 页面。
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL("/dist/app-shell.html"), {
+    denylist: [
+      /^\/api\//,
+      /^\/socket\.io\//,
+      /^\/app-sw\.js$/,
+      /^\/media-sw\.js$/,
+    ],
+  })
+);
 clientsClaim();
 
 self.addEventListener("message", (event) => {

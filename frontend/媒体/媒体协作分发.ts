@@ -59,6 +59,15 @@ export type 协作分发会话事件 =
   | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string };
 
 const 协作分发存活上报间隔毫秒 = 60_000;
+const 协作分发Torrent缓存存储键 = "koko_swarm_torrent_records";
+
+type 协作分发Torrent缓存记录 = {
+  torrentInfoHash: string;
+  torrentUrl: string;
+  bytes: number[];
+};
+
+type 协作分发Torrent缓存快照 = Record<string, 协作分发Torrent缓存记录>;
 
 type 协作分发会话 = {
   attachmentId: string;
@@ -82,6 +91,110 @@ type 协作分发会话 = {
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
 let 协作分发浏览器运行时实例: 协作分发浏览器运行时 | null = null;
 const 协作分发会话表 = new Map<string, 协作分发会话>();
+
+function 读取协作分发Torrent缓存存储源():
+  | Pick<Storage, "getItem" | "setItem">
+  | undefined {
+  const candidate =
+    typeof window !== "undefined" && window.localStorage
+      ? window.localStorage
+      : (globalThis as { localStorage?: unknown }).localStorage;
+  if (
+    candidate &&
+    typeof (candidate as Pick<Storage, "getItem">).getItem === "function" &&
+    typeof (candidate as Pick<Storage, "setItem">).setItem === "function"
+  ) {
+    return candidate as Pick<Storage, "getItem" | "setItem">;
+  }
+  return undefined;
+}
+
+function 规范化协作分发Torrent缓存记录(
+  raw: unknown,
+  fallbackInfoHash?: string
+): 协作分发Torrent缓存记录 | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const candidate = raw as {
+    torrentInfoHash?: unknown;
+    torrentUrl?: unknown;
+    bytes?: unknown;
+  };
+  const torrentInfoHash =
+    typeof candidate.torrentInfoHash === "string" && candidate.torrentInfoHash.trim()
+      ? candidate.torrentInfoHash.trim()
+      : fallbackInfoHash;
+  const torrentUrl =
+    typeof candidate.torrentUrl === "string" ? candidate.torrentUrl.trim() : "";
+  const bytes = Array.isArray(candidate.bytes)
+    ? candidate.bytes.filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 255
+      )
+    : [];
+  if (!torrentInfoHash || !torrentUrl || bytes.length === 0) {
+    return null;
+  }
+  return {
+    torrentInfoHash,
+    torrentUrl,
+    bytes,
+  };
+}
+
+function 读取协作分发Torrent缓存快照(): 协作分发Torrent缓存快照 {
+  const storage = 读取协作分发Torrent缓存存储源();
+  const raw = storage?.getItem(协作分发Torrent缓存存储键);
+  if (!raw) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+    const normalized: 协作分发Torrent缓存快照 = {};
+    for (const [torrentInfoHash, value] of Object.entries(parsed)) {
+      const record = 规范化协作分发Torrent缓存记录(value, torrentInfoHash);
+      if (record) {
+        normalized[torrentInfoHash] = record;
+      }
+    }
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+function 写入协作分发Torrent缓存快照(snapshot: 协作分发Torrent缓存快照): void {
+  读取协作分发Torrent缓存存储源()?.setItem(
+    协作分发Torrent缓存存储键,
+    JSON.stringify(snapshot)
+  );
+}
+
+function 保存协作分发Torrent缓存记录(
+  torrentInfoHash: string,
+  torrentUrl: string,
+  bytes: Uint8Array
+): void {
+  const current = 读取协作分发Torrent缓存快照();
+  current[torrentInfoHash] = {
+    torrentInfoHash,
+    torrentUrl,
+    bytes: Array.from(bytes),
+  };
+  写入协作分发Torrent缓存快照(current);
+}
+
+function 读取协作分发Torrent缓存字节(torrentInfoHash: string): Uint8Array | null {
+  const record = 读取协作分发Torrent缓存快照()[torrentInfoHash];
+  if (!record) {
+    return null;
+  }
+  return new Uint8Array(record.bytes);
+}
 
 async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏览器构造器> {
   const mod = await import("webtorrent/dist/webtorrent.min.js");
@@ -149,14 +262,30 @@ function 读取可用协作分发片段(locator: 媒体定位结果): 媒体协�
   };
 }
 
-async function 拉取受控Torrent字节(torrentUrl: string): Promise<Uint8Array> {
-  const response = await fetch(torrentUrl, {
-    method: "GET",
-  });
-  if (!response.ok) {
-    throw new Error(`加载受控 torrent 失败: ${response.status}`);
+async function 拉取受控Torrent字节(
+  distribution: 媒体协作分发定位片段
+): Promise<Uint8Array> {
+  const torrentInfoHash = distribution.torrent_info_hash!;
+  const torrentUrl = distribution.torrent_url!;
+  try {
+    const response = await fetch(torrentUrl, {
+      method: "GET",
+    });
+    if (!response.ok) {
+      throw new Error(`加载受控 torrent 失败: ${response.status}`);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    // WebTorrent 的块持久化只能解决“字节还在本机磁盘”；
+    // 想要在页面重开、后端临时离线时重新挂回同一 swarm，还得把极小的 .torrent 描述一起记住。
+    保存协作分发Torrent缓存记录(torrentInfoHash, torrentUrl, bytes);
+    return bytes;
+  } catch (error) {
+    const cachedBytes = 读取协作分发Torrent缓存字节(torrentInfoHash);
+    if (cachedBytes) {
+      return cachedBytes;
+    }
+    throw error;
   }
-  return new Uint8Array(await response.arrayBuffer());
 }
 
 async function 探测协作分发媒体源可读性(streamUrl: string): Promise<void> {
@@ -201,7 +330,7 @@ async function 接入协作分发种子(
   runtime: 协作分发浏览器运行时,
   distribution: 媒体协作分发定位片段
 ): Promise<WebTorrent种子> {
-  const torrentBytes = await 拉取受控Torrent字节(distribution.torrent_url!);
+  const torrentBytes = await 拉取受控Torrent字节(distribution);
   return await new Promise<WebTorrent种子>((resolve, reject) => {
     const torrent = runtime.client.add(
       torrentBytes,
@@ -414,20 +543,14 @@ async function 确保协作分发会话(input: {
     const runtime = await 获取或创建协作分发浏览器运行时();
     const torrent = await 接入协作分发种子(runtime, input.distribution);
     session.torrent = torrent;
-    if (
-      协作分发会话表.get(session.swarmId) !== session ||
-      session.consumerBindings.size === 0
-    ) {
+    if (协作分发会话表.get(session.swarmId) !== session) {
       清理协作分发底层会话(session, runtime);
       return null;
     }
     绑定协作分发会话事件(session, torrent);
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
     await 探测协作分发媒体源可读性(file.streamURL);
-    if (
-      协作分发会话表.get(session.swarmId) !== session ||
-      session.consumerBindings.size === 0
-    ) {
+    if (协作分发会话表.get(session.swarmId) !== session) {
       清理协作分发底层会话(session, runtime);
       return null;
     }
@@ -464,9 +587,13 @@ export function 释放协作分发消费者(
     if (session.consumerBindings.size > 0) {
       continue;
     }
-    协作分发会话表.delete(swarmId);
+    /**
+     * 最后一个 viewer 释放后，swarm 也不能立刻跟着死：
+     * 1. eagerCompleting=true 时要继续把整附件补齐，不然“刚播过却没真正缓存完整”会长期存在；
+     * 2. done 后也要继续保留本地 swarm，才能支撑同页重开和后端临时退场后的续播；
+     * 3. 真正的回收交给显式 runtime reset / 页面退出，而不是把“关查看器”误当成“放弃 swarm”。
+     */
     停止协作分发存活上报(session);
-    清理协作分发底层会话(session);
   }
 }
 

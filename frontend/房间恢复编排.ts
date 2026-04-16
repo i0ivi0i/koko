@@ -119,9 +119,25 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       session_id: string;
     }
   ): void {
+    deps.storage.写入最近引导身份({
+      sessionId: identity.session_id,
+      displayAlias: identity.display_alias,
+    });
     写入恢复状态({
       deviceAnonymousToken,
     });
+  }
+
+  function 读取当前房间恢复快照(roomIdHint = "") {
+    const cached = deps.storage.读取当前房间恢复快照();
+    if (!cached) {
+      return null;
+    }
+    const roomId = roomIdHint.trim() || deps.storage.读取当前房间标识();
+    if (!roomId || cached.snapshot.room_id !== roomId) {
+      return null;
+    }
+    return cached;
   }
 
   function asRecoveryFailure(error: unknown): 恢复失败 {
@@ -200,6 +216,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       const failedRoomId = 读取恢复状态().roomId || deps.storage.读取当前房间标识();
       const fallbackRoomCode = resolveFallbackRoomCode(failedRoomId);
       pruneHomeSessionIfRoomMissing(failure.code, failedRoomId);
+      deps.storage.清除当前房间恢复快照();
       deps.roomKernel.send({
         type: "RECOVERY_FAILED",
         code: failure.code ?? "",
@@ -275,9 +292,15 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     deps.写入恢复补锚标记(primeReadAnchorAfterInitialSettle);
     deps.storage.写入当前房间标识(snapshot.room_id);
     const roomDisplayTitle = resolveRoomDisplayTitle(roomCodeForDisplay);
+    const persistedRoomCode =
+      roomCodeForDisplay?.trim() || deps.storage.读取当前房间短码().trim();
+    deps.storage.写入当前房间恢复快照({
+      roomCode: persistedRoomCode,
+      snapshot,
+    });
     recordHomeSession(
       snapshot.room_id,
-      roomCodeForDisplay?.trim() || deps.storage.读取当前房间短码()
+      persistedRoomCode
     );
     deps.roomKernel.send({
       type: "SNAPSHOT_LOADED",
@@ -405,6 +428,11 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       deps.roomScroller.安排首屏定位();
       deps.subscribeRoom(latestEventPosition);
     } catch (error) {
+      const cached = 读取当前房间恢复快照(roomId);
+      if (cached) {
+        enterRoomFromSnapshot(cached.snapshot, cached.roomCode, true);
+        return;
+      }
       处理恢复失败(error, true);
     }
   }
@@ -466,9 +494,9 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
   }
 
   async function bootstrap(): Promise<void> {
+    const deviceAnonymousToken = deps.storage.读取或创建设备匿名凭证();
+    const roomId = deps.storage.读取当前房间标识();
     try {
-      const deviceAnonymousToken = deps.storage.读取或创建设备匿名凭证();
-      const roomId = deps.storage.读取当前房间标识();
       同步首页房间历史();
       const identity = await deps.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
       应用引导身份(deviceAnonymousToken, identity);
@@ -481,10 +509,26 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       deps.ensureRealtimeSocket(identity.session_id);
       await restoreCurrentRoomIfNeeded();
     } catch (error) {
-      deps.roomKernel.send({
-        type: "BOOTSTRAP_FAILED",
-        code: asRecoveryFailure(error).code ?? "system_error",
-      });
+      const cachedIdentity = deps.storage.读取最近引导身份();
+      const cachedRoom = 读取当前房间恢复快照(roomId);
+      if (roomId && cachedIdentity && cachedRoom) {
+        写入恢复状态({
+          deviceAnonymousToken,
+        });
+        deps.roomKernel.send({
+          type: "BOOTSTRAP_SUCCEEDED",
+          sessionId: cachedIdentity.sessionId,
+          displayAlias: cachedIdentity.displayAlias,
+          roomId,
+        });
+        deps.ensureRealtimeSocket(cachedIdentity.sessionId);
+        await restoreCurrentRoomIfNeeded();
+      } else {
+        deps.roomKernel.send({
+          type: "BOOTSTRAP_FAILED",
+          code: asRecoveryFailure(error).code ?? "system_error",
+        });
+      }
       同步首页房间历史();
     } finally {
       await deps.等待壳渲染完成();
@@ -536,6 +580,11 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       enterRoomFromSnapshot(snapshot, undefined, true);
       deps.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
+      const cached = 读取当前房间恢复快照(roomId);
+      if (cached) {
+        enterRoomFromSnapshot(cached.snapshot, cached.roomCode, true);
+        return;
+      }
       处理恢复失败(error, false);
     }
   }

@@ -803,6 +803,7 @@ export function 创建恢复编排测试场景(input: {
   sessionId?: string;
   displayAlias?: string;
   homeSessionItems?: Array<{ roomId: string; roomCode: string; lastEnteredAt: number }>;
+  skipInitialBootstrap?: boolean;
 } = {}) {
   const rawStorage = createFakeStorage();
   const storage = 创建浏览器存储(rawStorage);
@@ -826,16 +827,18 @@ export function 创建恢复编排测试场景(input: {
     homeSessionItems: storage.读取首页房间历史(),
   };
 
-  roomKernel.send({
-    type: "BOOTSTRAP_SUCCEEDED",
-    sessionId: state.sessionId,
-    displayAlias: state.displayAlias,
-    roomId,
-  });
-  state = {
-    ...state,
-    ...创建房间壳补丁(roomKernel),
-  };
+  if (!input.skipInitialBootstrap) {
+    roomKernel.send({
+      type: "BOOTSTRAP_SUCCEEDED",
+      sessionId: state.sessionId,
+      displayAlias: state.displayAlias,
+      roomId,
+    });
+    state = {
+      ...state,
+      ...创建房间壳补丁(roomKernel),
+    };
+  }
 
   const transport = new 假传输();
   const ensureRealtimeSocketCalls: string[] = [];
@@ -903,6 +906,7 @@ export function 创建恢复编排测试场景(input: {
   return {
     transport,
     storage,
+    rawStorage,
     roomKernel,
     roomScroller,
     ensureRealtimeSocketCalls,
