@@ -174,18 +174,43 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
   }
 
   /**
+   * 硬失败退出房间时，首页仍然需要一份“最后一次可用的 room code”继续承接用户动作。
+   * 否则像 qingli 这种把房间实体清掉的场景，刷新后只会把人甩回一个空输入框。
+   */
+  function resolveFallbackRoomCode(roomIdHint = ""): string {
+    const cachedRoomCode = deps.storage.读取当前房间短码().trim();
+    if (cachedRoomCode) {
+      return cachedRoomCode;
+    }
+    const roomId =
+      roomIdHint.trim() || 读取恢复状态().roomId || deps.storage.读取当前房间标识();
+    if (!roomId) {
+      return "";
+    }
+    const matched = 读取恢复状态().homeSessionItems.find((item) => item.roomId === roomId);
+    return matched?.roomCode.trim() ?? "";
+  }
+
+  /**
    * 硬失败要清 room 锚点并退出房间；临时失败则保留锚点，让用户还能重试。
    */
   function 处理恢复失败(error: unknown, keepRoomVisible: boolean): void {
     const failure = asRecoveryFailure(error);
     if (isHardRoomFailure(failure)) {
-      pruneHomeSessionIfRoomMissing(failure.code);
+      const failedRoomId = 读取恢复状态().roomId || deps.storage.读取当前房间标识();
+      const fallbackRoomCode = resolveFallbackRoomCode(failedRoomId);
+      pruneHomeSessionIfRoomMissing(failure.code, failedRoomId);
       deps.roomKernel.send({
         type: "RECOVERY_FAILED",
         code: failure.code ?? "",
         keepRoomVisible: false,
       });
-      deps.exitCurrentRoomView({ keepRoomCodeCache: false });
+      deps.exitCurrentRoomView({
+        keepRoomCodeCache: failure.code === "room_not_found" && fallbackRoomCode.length > 0,
+      });
+      if (fallbackRoomCode) {
+        写入恢复状态({ roomCodeInput: fallbackRoomCode });
+      }
       return;
     }
 

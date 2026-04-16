@@ -57,6 +57,34 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     el.remove();
   });
 
+  it("room_not_found 回首页后仍保留上一间房短码，允许直接重新进房", async () => {
+    window.localStorage.setItem("koko_current_room_id", "r-missing");
+    window.localStorage.setItem("koko_current_room_code", "ROOM01");
+    window.localStorage.setItem(
+      "koko_home_sessions",
+      JSON.stringify([{ roomId: "r-missing", roomCode: "ROOM01", lastEnteredAt: 100 }])
+    );
+    const transport = new 假传输();
+    transport.snapshotQueue = [创建传输错误(404, "room_not_found")];
+    transport.joinQueue = [创建房间快照("r-recreated")];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(读取操作台主输入(el).value).toBe("ROOM01");
+    expect(读取操作台主动作(el).disabled).toBe(false);
+
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(transport.joinCalls).toEqual([{ sessionId: "s-test", roomCode: "ROOM01" }]);
+    expect(el.shadowRoot!.querySelector("#roomView")).not.toBeNull();
+    el.remove();
+  });
+
   it("membership_required 会清掉 current_room_id、但保留历史并回到首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-blocked");
     window.localStorage.setItem(

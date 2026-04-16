@@ -282,8 +282,9 @@ Write-Host "不会触碰的目录：src/ frontend/ docs/ migrations/ tests/ asse
 Write-Host "不会触碰的数据库对象：迁移元数据表、schema、角色、扩展。"
 
 Write-Host ""
-Write-Host "浏览器端仍建议手动清理："
-Write-Host "- localStorage: koko_current_room_id / koko_current_room_code / koko_device_anonymous_token / koko_home_sessions / koko_media_asset_records"
+Write-Host "浏览器端如需彻底重置媒体/离线缓存，仍可手动清理："
+Write-Host "- 房间锚点 koko_current_room_id / koko_current_room_code / koko_home_sessions 现在会在 room_not_found 时自动自愈，通常不用手清。"
+Write-Host "- localStorage: koko_media_asset_records"
 Write-Host "- IndexedDB: koko-offline-tasks"
 Write-Host "- Cache Storage: koko-image-blob-assets"
 Write-Host "- Chrome DevTools -> Application -> Clear storage -> http://127.0.0.1:$AppPort/"
