@@ -38,6 +38,8 @@
     盘点纯 Rust 轮子候选，以及哪些有篡位风险。
   - [群聊媒体-WebTorrent协作分发官方实践清单.md](./群聊媒体-WebTorrent协作分发官方实践清单.md)
     把 WebTorrent、tracker、Web Seed 和浏览器真实边界收成实现可直接复用的一张清单。
+  - [Web大视频秒开播放与P2P协同主链官方实践清单-2026.md](./Web大视频秒开播放与P2P协同主链官方实践清单-2026.md)
+    只看当前 Web 阶段，把 WebTorrent、WebRTC、HLS、DASH、CMAF、hls.js、p2p-media-loader、Video.js v10 的官方边界和 `koko` 的直接工程裁决一次压清。
   - [群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md](./群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md)
     把群聊媒体上传当前配置、官方建议和生产前缺口收成一张清单。
   - [Video.js-v10-beta-播放器候选笔记.md](./Video.js-v10-beta-播放器候选笔记.md)
