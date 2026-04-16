@@ -231,6 +231,20 @@ fn 构造content_range值(range: &标准字节范围, 总字节数: u64) -> Stri
     )
 }
 
+fn 流媒体清单缓存控制值() -> &'static str {
+    // manifest 是“当前标准流媒体平面是否仍然成立”的入口真相。
+    // 即使正文可被本地缓存，也必须每次先回源重验证，避免沿用已退场清单。
+    "private, no-cache"
+}
+
+fn 流媒体分段缓存控制值() -> &'static str {
+    // segment 在服务端 24 小时标准流媒体窗口内属于稳定对象：
+    // 1. 允许浏览器在当前会话内强复用，降低重复观看时的源站压力；
+    // 2. 标成 private，避免带 session_id 的受控 URL 被共享缓存误存；
+    // 3. 生命周期由服务端清理任务兜底，窗口内可以安全 immutable。
+    "private, max-age=86400, immutable"
+}
+
 /// 下面这组 helper 的 owner 已经跟着“媒体资产外壳”一起迁移。
 /// 原因是它们表达的是媒体资产 HTTP 协议面，而不是房间查询协议面；
 /// 继续留在房间壳只会让兄弟模块反向依赖一个并不拥有该真相的文件。
@@ -1076,10 +1090,16 @@ pub(super) async fn load_streaming_asset_content(
             )
         };
         return (
-            [(
-                header::CONTENT_TYPE,
-                流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
-            )],
+            [
+                (
+                    header::CONTENT_TYPE,
+                    流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
+                ),
+                (
+                    header::CACHE_CONTROL,
+                    流媒体清单缓存控制值().to_string(),
+                ),
+            ],
             rewritten,
         )
             .into_response();
@@ -1144,6 +1164,10 @@ pub(super) async fn load_streaming_asset_content(
                     header::CONTENT_TYPE,
                     流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
                 ),
+                (
+                    header::CACHE_CONTROL,
+                    流媒体分段缓存控制值().to_string(),
+                ),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
                 (
                     header::CONTENT_RANGE,
@@ -1158,6 +1182,10 @@ pub(super) async fn load_streaming_asset_content(
                 (
                     header::CONTENT_TYPE,
                     流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
+                ),
+                (
+                    header::CACHE_CONTROL,
+                    流媒体分段缓存控制值().to_string(),
                 ),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
             ],

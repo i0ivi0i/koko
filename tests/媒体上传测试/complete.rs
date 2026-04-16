@@ -802,6 +802,13 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
             .and_then(|value| value.to_str().ok()),
         Some("application/vnd.apple.mpegurl")
     );
+    assert_eq!(
+        master_headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-cache"),
+        "HLS master manifest 必须显式要求浏览器每次重验证，不能把播放入口缓存成陈旧真相"
+    );
     let master_text = String::from_utf8(master_bytes).expect("HLS master 应是 UTF-8 文本");
     assert!(
         master_text.contains("/api/media/")
@@ -818,9 +825,16 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         .trim()
         .to_string();
 
-    let (child_status, _, child_bytes) =
+    let (child_status, child_headers, child_bytes) =
         send_bytes(app.clone(), Method::GET, child_url.as_str(), &[]).await;
     assert_eq!(child_status, StatusCode::OK);
+    assert_eq!(
+        child_headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-cache"),
+        "HLS 子清单和 master 一样必须走重验证，不能把旧 segment 目录结构长时间缓存住"
+    );
     let child_text = String::from_utf8(child_bytes).expect("HLS media playlist 应是 UTF-8 文本");
     assert!(
         child_text.contains("init.mp4?session_id=") && child_text.contains(".m4s?session_id="),
@@ -860,9 +874,48 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
             .and_then(|value| value.to_str().ok()),
         Some("bytes")
     );
+    assert_eq!(
+        segment_headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, max-age=86400, immutable"),
+        "稳定 segment 在 24 小时标准流媒体窗口内应允许浏览器强复用，避免重复观看继续打源站"
+    );
     assert!(
         !segment_bytes.is_empty(),
         "媒体 segment 必须能通过受控流媒体路由读取到真实字节"
+    );
+    let (segment_range_status, segment_range_headers, segment_range_bytes) = send_bytes(
+        app.clone(),
+        Method::GET,
+        segment_url.as_str(),
+        &[("range", "bytes=0-15")],
+    )
+    .await;
+    assert_eq!(segment_range_status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        segment_range_headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, max-age=86400, immutable"),
+        "segment 走 Range 时也必须保持同样的缓存策略，不能退回成未声明的部分响应"
+    );
+    assert_eq!(
+        segment_range_headers
+            .get(header::ACCEPT_RANGES)
+            .and_then(|value| value.to_str().ok()),
+        Some("bytes")
+    );
+    assert_eq!(
+        segment_range_headers
+            .get(header::CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok()),
+        Some(format!("bytes 0-15/{}", segment_bytes.len()).as_str())
+    );
+    assert_eq!(
+        segment_range_bytes.len(),
+        16,
+        "segment range 读取必须返回请求到的真实字节长度"
     );
     let (dash_status, dash_headers, dash_bytes) =
         send_bytes(app.clone(), Method::GET, dash_mpd_url, &[]).await;
@@ -872,6 +925,13 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
             .get("content-type")
             .and_then(|value| value.to_str().ok()),
         Some("application/dash+xml")
+    );
+    assert_eq!(
+        dash_headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-cache"),
+        "DASH MPD 也必须显式重验证，避免播放器继续沿用已退场的清单"
     );
     let dash_text = String::from_utf8(dash_bytes).expect("MPD 应是 UTF-8 文本");
     assert!(
