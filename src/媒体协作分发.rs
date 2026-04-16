@@ -143,5 +143,8 @@ pub(crate) fn 协作分发快照转响应值(
         "join_ticket": serde_json::Value::Null,
         "ticket_expires_at": serde_json::Value::Null,
         "availability": availability,
+        // survival_mode 表达的是“服务器流媒体退场后正式靠什么继续活”，
+        // 它是稳定共享语义，不等于当前 availability，也不承载前端页面提示文案。
+        "survival_mode": "peer_only_after_expiry",
     })
 }

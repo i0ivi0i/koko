@@ -211,6 +211,15 @@ pub struct 媒体分发描述 {
     pub announce_urls: Vec<String>,
     pub web_seed_url: Option<String>,
     pub join_ticket: Option<String>,
+    pub 生存模式: 媒体分发生存模式,
+}
+
+/// 生存模式只表达“服务器冷备窗口结束后，正式平面靠什么继续活”。
+/// 它不表达当前一定有多少 peer，也不承载 Web 专属 UI 文案。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum 媒体分发生存模式 {
+    服务端冷备窗口,
+    到期后仅peer存活,
 }
 
 /// 冷源角色是领域语义，不是页面流程。
@@ -233,6 +242,14 @@ pub struct 媒体冷源描述 {
     pub 角色: 媒体冷源角色,
 }
 
+/// 流媒体生命周期只描述服务端标准流媒体冷备窗口。
+/// 它不表达 swarm 是否还活着，因为那是另一条分发生存语义。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 流媒体生命周期描述 {
+    pub streaming到期时间戳秒: Option<String>,
+    pub streaming删除时间戳秒: Option<String>,
+}
+
 /// 流媒体资产描述是视频/音频主链的共享入口。
 /// 它把 manifest、分发和平滑退化所需的冷源窗口一次收口，避免后续继续回到“单个 src 真相”。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -241,6 +258,7 @@ pub struct 流媒体资产描述 {
     pub 内容哈希: String,
     pub 种类: 媒体资产种类,
     pub 清单: 媒体清单描述,
+    pub 生命周期: 流媒体生命周期描述,
     pub 分发: 媒体分发描述,
     pub 冷源: 媒体冷源描述,
 }

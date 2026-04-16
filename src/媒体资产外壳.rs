@@ -267,6 +267,15 @@ fn 媒体冷源角色转标签(role: &contract::媒体冷源角色) -> &'static 
     }
 }
 
+fn 媒体分发生存模式转标签(
+    mode: &contract::媒体分发生存模式
+) -> &'static str {
+    match mode {
+        contract::媒体分发生存模式::服务端冷备窗口 => "server_assisted",
+        contract::媒体分发生存模式::到期后仅peer存活 => "peer_only_after_expiry",
+    }
+}
+
 fn 变体描述转响应体(variant: &contract::变体描述) -> serde_json::Value {
     serde_json::json!({
         "id": variant.标识,
@@ -281,6 +290,15 @@ fn 媒体清单描述转响应体(manifest: &contract::媒体清单描述) -> se
     serde_json::json!({
         "hls_master_url": manifest.hls主清单地址,
         "dash_mpd_url": manifest.dash主清单地址,
+    })
+}
+
+fn 流媒体生命周期描述转响应体(
+    lifecycle: &contract::流媒体生命周期描述
+) -> serde_json::Value {
+    serde_json::json!({
+        "streaming_expires_at": lifecycle.streaming到期时间戳秒,
+        "streaming_deleted_at": lifecycle.streaming删除时间戳秒,
     })
 }
 
@@ -312,6 +330,10 @@ fn 从运行态协作分发响应提取共享分发表面(
         join_ticket: runtime_distribution["join_ticket"]
             .as_str()
             .map(str::to_string),
+        生存模式: match runtime_distribution["survival_mode"].as_str() {
+            Some("server_assisted") => contract::媒体分发生存模式::服务端冷备窗口,
+            _ => contract::媒体分发生存模式::到期后仅peer存活,
+        },
     }
 }
 
@@ -323,6 +345,7 @@ fn 媒体分发描述转响应体(
         "announce_urls": distribution.announce_urls,
         "web_seed_url": distribution.web_seed_url,
         "join_ticket": distribution.join_ticket,
+        "survival_mode": 媒体分发生存模式转标签(&distribution.生存模式),
     })
 }
 
@@ -364,6 +387,7 @@ fn 流媒体资产描述转响应体(asset: &contract::流媒体资产描述) ->
         "content_hash": asset.内容哈希,
         "kind": 媒体资产种类转标签(&asset.种类),
         "manifest": 媒体清单描述转响应体(&asset.清单),
+        "lifecycle": 流媒体生命周期描述转响应体(&asset.生命周期),
         "distribution": 媒体分发描述转响应体(&asset.分发),
         "origin": 媒体冷源描述转响应体(&asset.冷源),
     })
@@ -412,6 +436,14 @@ fn 构造流媒体资产响应体(参数: 流媒体资产响应参数<'_>) -> se
                     ),
                 )
             }),
+        },
+        生命周期: contract::流媒体生命周期描述 {
+            streaming到期时间戳秒: 参数
+                .流媒体清单
+                .and_then(|manifest| manifest.streaming到期时间戳秒.map(|value| value.to_string())),
+            streaming删除时间戳秒: 参数
+                .流媒体清单
+                .and_then(|manifest| manifest.streaming删除时间戳秒.map(|value| value.to_string())),
         },
         分发: 从运行态协作分发响应提取共享分发表面(
             参数.分发快照,

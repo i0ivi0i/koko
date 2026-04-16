@@ -130,6 +130,131 @@ async fn 视频locator与房间快照会共享同一套preview_asset() {
 
 #[tokio::test]
 #[serial]
+async fn 视频complete与locator会共享同一套streaming生命周期与peer_only生存字段() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let tus_upload_dir = state.tus_upload_dir.clone();
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("projection-video-lifecycle-{uniq}")}),
+        ),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let video_bytes = 最小mp4字节();
+    let video_byte_size = video_bytes.len() as i64;
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/video/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "projection.mp4",
+            "mime_type": "video/mp4",
+            "byte_size": video_bytes.len()
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+    let authorization = 提取媒体上传授权头(&prepare_body);
+    let upload_id = format!("upload-projection-video-{attachment_id}");
+    let temp_file = 写入tus测试文件(
+        &tus_upload_dir,
+        &attachment_id,
+        "projection.mp4",
+        &video_bytes,
+    )
+    .expect("应能写入 tus 临时视频文件");
+    let (hook_status, hook_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/tus/hooks",
+        Some(构造tus_hook请求体(
+            "post-finish",
+            Some(authorization.as_str()),
+            &upload_id,
+            &attachment_id,
+            "projection.mp4",
+            "video/mp4",
+            video_byte_size,
+            video_byte_size,
+            Some(temp_file.as_str()),
+        )),
+        &[],
+    )
+    .await;
+    断言TusHook已接受(hook_status, &hook_body);
+
+    let (complete_status, complete_body) = send_json(
+        app.clone(),
+        Method::POST,
+        &format!("/api/media/{attachment_id}/complete"),
+        Some(serde_json::json!({ "session_id": session_id })),
+        &[],
+    )
+    .await;
+    let (locator_status, locator_body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    assert_eq!(locator_status, StatusCode::OK, "{locator_body:?}");
+    assert_eq!(
+        complete_body["media_asset"]["lifecycle"]["streaming_expires_at"].as_str(),
+        locator_body["streaming_asset"]["lifecycle"]["streaming_expires_at"].as_str(),
+        "complete 和 locator 必须共享同一条 streaming_expires_at 真相"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["lifecycle"]["streaming_deleted_at"].as_str(),
+        locator_body["streaming_asset"]["lifecycle"]["streaming_deleted_at"].as_str(),
+        "complete 和 locator 不能各自脑补 streaming_deleted_at"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
+        Some("peer_only_after_expiry"),
+        "complete 必须直接表达删源后的长期正式平面只剩 peer"
+    );
+    assert_eq!(
+        locator_body["distribution"]["survival_mode"].as_str(),
+        Some("peer_only_after_expiry"),
+        "locator 顶层 distribution 也必须共享同一套 survival_mode"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
+        locator_body["streaming_asset"]["distribution"]["survival_mode"].as_str(),
+        "complete.media_asset 与 locator.streaming_asset 不能把 survival_mode 投影成两套不同语义"
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn 查询附件快照会带出图片真实资产与冷源生命周期字段() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

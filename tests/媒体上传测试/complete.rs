@@ -768,6 +768,21 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         "即使真正的流媒体主链还没切完，过渡资产面也必须提前暴露稳定 swarm 线索"
     );
     assert_eq!(
+        complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
+        Some("peer_only_after_expiry"),
+        "视频分发表面必须明确表达：24 小时窗口结束后，只剩 peer 平面继续承担长期存活"
+    );
+    assert!(
+        complete_body["media_asset"]["lifecycle"]["streaming_expires_at"]
+            .as_str()
+            .is_some(),
+        "视频 complete 后必须直接投影 streaming_expires_at，避免前端再去猜标准流媒体窗口什么时候结束"
+    );
+    assert!(
+        complete_body["media_asset"]["lifecycle"]["streaming_deleted_at"].is_null(),
+        "刚 complete 完的流媒体资产还没删，不允许提前伪造 streaming_deleted_at"
+    );
+    assert_eq!(
         complete_body["width"].as_i64(),
         Some(1080),
         "竖拍 MP4 complete 后必须写入展示宽度，而不是编码宽度"
@@ -916,6 +931,29 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     assert!(
         origin_deleted_at_epoch.is_some(),
         "用户原片上传成功后应立即从临时冷源退场，并回写 origin_deleted_at 事实"
+    );
+    let manifest_row = sqlx::query(
+        "SELECT EXTRACT(EPOCH FROM streaming_expires_at)::BIGINT AS streaming_expires_at_epoch,
+                EXTRACT(EPOCH FROM streaming_deleted_at)::BIGINT AS streaming_deleted_at_epoch
+         FROM attachment_streaming_manifests
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询 complete 后的流媒体清单生命周期");
+    let streaming_expires_at_epoch: Option<i64> = manifest_row.get("streaming_expires_at_epoch");
+    let streaming_deleted_at_epoch: Option<i64> = manifest_row.get("streaming_deleted_at_epoch");
+    let expected_streaming_expires_at = streaming_expires_at_epoch.map(|value| value.to_string());
+    assert_eq!(
+        complete_body["media_asset"]["lifecycle"]["streaming_expires_at"].as_str(),
+        expected_streaming_expires_at.as_deref(),
+        "视频 complete 返回的 streaming 生命周期必须和 manifest 真相保持一致"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["lifecycle"]["streaming_deleted_at"].as_str(),
+        streaming_deleted_at_epoch.map(|value| value.to_string()).as_deref(),
+        "视频 complete 返回的 streaming_deleted_at 必须直接投影权威真相"
     );
     assert!(
         !std::path::Path::new(temp_file.as_str()).exists(),

@@ -554,6 +554,150 @@ describe("传输", () => {
     });
   });
 
+  it("loadMediaLocator 与 complete 响应会把 streaming 生命周期和 survival_mode 收口进共享契约", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            attachment_id: "att-ready-2",
+            kind: "video",
+            mime_type: "video/mp4",
+            byte_size: 2048,
+            width: 1080,
+            height: 1920,
+            status: "ready",
+            media_asset: {
+              asset_id: "att-ready-2",
+              content_hash: "hash-att-ready-2",
+              kind: "streaming_video",
+              manifest: {
+                hls_master_url: "/api/media/att-ready-2/stream/hls/master.m3u8?session_id=s-1",
+                dash_mpd_url: null,
+              },
+              lifecycle: {
+                streaming_expires_at: "1775942400",
+                streaming_deleted_at: null,
+              },
+              distribution: {
+                swarm_id: "swarm-hash-att-ready-2",
+                announce_urls: ["/api/swarm/announce"],
+                web_seed_url:
+                  "/api/attachments/att-ready-2/content?session_id=s-1&variant=original",
+                join_ticket: null,
+                survival_mode: "peer_only_after_expiry",
+              },
+              origin: {
+                original_url:
+                  "/api/attachments/att-ready-2/content?session_id=s-1&variant=original",
+                expires_at_epoch_seconds: 1775942400,
+                available: true,
+                role: "cold_backup_only",
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            attachment_id: "att-ready-2",
+            kind: "video",
+            status: "ready",
+            original_url: "/api/attachments/att-ready-2/content?session_id=s-1&variant=original",
+            thumbnail_url: "/api/attachments/att-ready-2/content?session_id=s-1&variant=thumbnail",
+            preview_asset: {
+              still_url:
+                "/api/attachments/att-ready-2/content?session_id=s-1&variant=thumbnail",
+            },
+            distribution: {
+              content_id: "content_att-ready-2",
+              content_hash: "hash-att-ready-2",
+              swarm_id: "swarm-hash-att-ready-2",
+              web_seed_until: "1775942400",
+              torrent_url: "/api/media/att-ready-2/torrent?session_id=s-1",
+              torrent_info_hash: "torrent-info-hash-2",
+              announce_urls: ["/api/swarm/announce"],
+              web_seed_url: null,
+              join_ticket: null,
+              ticket_expires_at: null,
+              availability: "available",
+              survival_mode: "peer_only_after_expiry",
+            },
+            streaming_asset: {
+              asset_id: "att-ready-2",
+              content_hash: "hash-att-ready-2",
+              kind: "streaming_video",
+              manifest: {
+                hls_master_url: "/api/media/att-ready-2/stream/hls/master.m3u8?session_id=s-1",
+                dash_mpd_url: null,
+              },
+              lifecycle: {
+                streaming_expires_at: "1775942400",
+                streaming_deleted_at: null,
+              },
+              distribution: {
+                swarm_id: "swarm-hash-att-ready-2",
+                announce_urls: ["/api/swarm/announce"],
+                web_seed_url: null,
+                join_ticket: null,
+                survival_mode: "peer_only_after_expiry",
+              },
+              origin: {
+                original_url:
+                  "/api/attachments/att-ready-2/content?session_id=s-1&variant=original",
+                expires_at_epoch_seconds: 1775942400,
+                available: false,
+                role: "cold_backup_only",
+              },
+            },
+            blob_asset: null,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const ready = await transport.completeMediaUpload("s-1", "att-ready-2");
+    const locator = await transport.loadMediaLocator("s-1", "att-ready-2");
+
+    const readyAsset = ready.media_asset as
+      | {
+          lifecycle?: {
+            streaming_expires_at: string | null;
+            streaming_deleted_at: string | null;
+          };
+          distribution: { survival_mode?: string };
+        }
+      | null
+      | undefined;
+    const locatorAsset = locator.streaming_asset as
+      | {
+          lifecycle?: {
+            streaming_expires_at: string | null;
+            streaming_deleted_at: string | null;
+          };
+          distribution: { survival_mode?: string; web_seed_url?: string | null };
+        }
+      | null
+      | undefined;
+
+    expect(readyAsset?.lifecycle?.streaming_expires_at).toBe("1775942400");
+    expect(readyAsset?.lifecycle?.streaming_deleted_at).toBeNull();
+    expect(readyAsset?.distribution.survival_mode).toBe("peer_only_after_expiry");
+    expect(locator.distribution?.survival_mode).toBe("peer_only_after_expiry");
+    expect(locator.distribution?.web_seed_url).toBeNull();
+    expect(locatorAsset?.lifecycle?.streaming_expires_at).toBe("1775942400");
+    expect(locatorAsset?.distribution.survival_mode).toBe("peer_only_after_expiry");
+    expect(locatorAsset?.distribution.web_seed_url).toBeNull();
+  });
+
   it("buildAttachmentContentUrl 会生成受控图片内容地址", () => {
     const transport = new HttpRealtime传输("http://localhost:3000");
 

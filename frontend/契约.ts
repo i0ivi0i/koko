@@ -171,12 +171,13 @@ export interface 媒体协作分发定位片段 {
   /** announce 线索属于 runtime transport，不属于业务真相。 */
   announce_urls: string[];
   /** web seed 是 24 小时保底源地址；前端可以继续把相对地址收口成绝对地址。 */
-  web_seed_url: string;
+  web_seed_url: string | null;
   /** presence 仍然是后端裁决链的一部分，前端只负责按受控 URL 上报活跃，不自己判过期。 */
   presence_url?: string | null;
   join_ticket: string | null;
   ticket_expires_at: string | null;
   availability: "available" | "expired";
+  survival_mode: "server_assisted" | "peer_only_after_expiry";
 }
 
 /**
@@ -200,6 +201,15 @@ export interface 流媒体清单描述 {
 }
 
 /**
+ * 流媒体生命周期只回答服务端标准流媒体冷备窗口。
+ * 它不表达 swarm 当前热不热，因为那是另一条分发生存语义。
+ */
+export interface 流媒体生命周期描述 {
+  streaming_expires_at: string | null;
+  streaming_deleted_at: string | null;
+}
+
+/**
  * 资产级分发表面比旧 locator.runtime 分发片段更克制：
  * 这里只保留共享协议需要的 swarm 线索，不把 Web 专属 presence/torrent 运行态混进来。
  */
@@ -208,6 +218,7 @@ export interface 媒体资产分发表面 {
   announce_urls: string[];
   web_seed_url: string | null;
   join_ticket: string | null;
+  survival_mode: "server_assisted" | "peer_only_after_expiry";
 }
 
 export interface 流媒体资产描述 {
@@ -215,6 +226,7 @@ export interface 流媒体资产描述 {
   content_hash: string;
   kind: "streaming_video" | "streaming_audio";
   manifest: 流媒体清单描述;
+  lifecycle: 流媒体生命周期描述;
   distribution: 媒体资产分发表面;
   origin: 媒体冷源描述;
 }
