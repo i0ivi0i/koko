@@ -45,6 +45,9 @@ memmap2 = "0.9"
 sha2 = "0.10"
 hex = "0.4"
 bip_metainfo = "0.12"
+# 后端现在只需要极薄地向 tusd 发官方 DELETE；
+# 这里显式收一层成熟 HTTP client，避免再手搓 transport 删除调用。
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 
 [dev-dependencies]
 serial_test = "3"

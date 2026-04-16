@@ -111,7 +111,7 @@ async fn ready附件会落协作分发元数据() {
         &[],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    断言TusHook已接受(hook_status, &hook_body);
 
     let (complete_status, complete_body) = send_json(
         app,
@@ -1011,7 +1011,7 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
         &[],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    断言TusHook已接受(hook_status, &hook_body);
 
     let (complete_status, complete_body) = send_json(
         app.clone(),
@@ -1184,7 +1184,7 @@ async fn locator会返回announce与web_seed并保留ticket占位() {
         &[],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    断言TusHook已接受(hook_status, &hook_body);
 
     let (complete_status, complete_body) = send_json(
         app.clone(),
@@ -1883,7 +1883,7 @@ async fn 原图内容接口支持标准range读取() {
         &[],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    断言TusHook已接受(hook_status, &hook_body);
 
     let (complete_status, complete_body) = send_json(
         app.clone(),

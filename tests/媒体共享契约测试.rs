@@ -50,7 +50,9 @@ async fn 视频locator共享契约不包含_web_页面流程和展示文案字�
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("shared-contract-video-{uniq}")})),
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("shared-contract-video-{uniq}")}),
+        ),
         &[],
     )
     .await;
@@ -104,7 +106,7 @@ async fn 视频locator共享契约不包含_web_页面流程和展示文案字�
         &[],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    断言TusHook已接受(hook_status, &hook_body);
 
     let (complete_status, complete_body) = send_json(
         app.clone(),
@@ -164,7 +166,9 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("shared-contract-image-{uniq}")})),
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("shared-contract-image-{uniq}")}),
+        ),
         &[],
     )
     .await;
@@ -218,7 +222,7 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         &[],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    断言TusHook已接受(hook_status, &hook_body);
 
     let (complete_status, complete_body) = send_json(
         app,

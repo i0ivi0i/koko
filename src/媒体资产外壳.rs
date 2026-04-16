@@ -1,4 +1,4 @@
-use super::{err_resp, map_domain_err_tuple, 流媒体打包, 应用状态, 构建共享仓储};
+use super::{err_resp, map_domain_err_tuple, 应用状态, 构建共享仓储, 流媒体打包};
 use crate::{contract, media_distribution, usecase};
 use axum::{
     extract::{Path, Query, State},
@@ -315,7 +315,9 @@ fn 从运行态协作分发响应提取共享分发表面(
     }
 }
 
-fn 媒体分发描述转响应体(distribution: &contract::媒体分发描述) -> serde_json::Value {
+fn 媒体分发描述转响应体(
+    distribution: &contract::媒体分发描述
+) -> serde_json::Value {
     serde_json::json!({
         "swarm_id": distribution.swarm_id,
         "announce_urls": distribution.announce_urls,
@@ -326,7 +328,11 @@ fn 媒体分发描述转响应体(distribution: &contract::媒体分发描述) -
 
 /// 旧附件内容读取路由仍要保留给兼容调用方和冷源 origin。
 /// 但它不再承担图片正式 blob 主链的地址身份。
-pub(super) fn 构造附件受控地址(attachment_id: &str, session_id: &str, variant: &str) -> String {
+pub(super) fn 构造附件受控地址(
+    attachment_id: &str,
+    session_id: &str,
+    variant: &str,
+) -> String {
     format!("/api/attachments/{attachment_id}/content?session_id={session_id}&variant={variant}")
 }
 
@@ -363,7 +369,9 @@ fn 流媒体资产描述转响应体(asset: &contract::流媒体资产描述) ->
     })
 }
 
-fn blob媒体资产描述转响应体(asset: &contract::Blob媒体资产描述) -> serde_json::Value {
+fn blob媒体资产描述转响应体(
+    asset: &contract::Blob媒体资产描述
+) -> serde_json::Value {
     serde_json::json!({
         "asset_id": asset.资产标识,
         "content_hash": asset.内容哈希,
@@ -420,8 +428,9 @@ fn 构造流媒体资产响应体(参数: 流媒体资产响应参数<'_>) -> se
 }
 
 fn 构造blob媒体资产响应体(参数: Blob媒体资产响应参数<'_>) -> serde_json::Value {
-    let preview_url =
-        参数.有预览图.then(|| 构造blob受控地址(参数.附件标识, 参数.会话标识, "preview"));
+    let preview_url = 参数
+        .有预览图
+        .then(|| 构造blob受控地址(参数.附件标识, 参数.会话标识, "preview"));
     let full_url = 构造blob受控地址(参数.附件标识, 参数.会话标识, "full");
     let original_url = 构造blob受控地址(参数.附件标识, 参数.会话标识, "original");
     let asset = contract::Blob媒体资产描述 {
@@ -476,31 +485,35 @@ pub(super) fn 构造媒体资产响应体(
     上下文: 媒体资产响应上下文<'_>,
 ) -> Option<serde_json::Value> {
     match &snapshot.种类 {
-        usecase::媒体附件类型::视频 => Some(构造流媒体资产响应体(流媒体资产响应参数 {
-            附件标识: snapshot.附件标识.as_str(),
-            运行态分发: 上下文.运行态分发?,
-            分发快照: 上下文.分发快照?,
-            流媒体清单: 上下文.流媒体清单,
-            原始地址: 上下文.原始地址,
-            原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
-            原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
-            会话标识: 上下文.会话标识,
-            当前时间戳秒: 上下文.当前时间戳秒,
-        })),
-        usecase::媒体附件类型::图片 => Some(构造blob媒体资产响应体(Blob媒体资产响应参数 {
-            附件标识: snapshot.附件标识.as_str(),
-            会话标识: 上下文.会话标识,
-            运行态分发: 上下文.运行态分发,
-            分发快照: 上下文.分发快照,
-            旧原始地址: 上下文.原始地址,
-            有预览图: snapshot.允许缩略图,
-            mime_type: snapshot.mime_type.as_str(),
-            宽: Some(snapshot.宽),
-            高: Some(snapshot.高),
-            原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
-            原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
-            当前时间戳秒: 上下文.当前时间戳秒,
-        })),
+        usecase::媒体附件类型::视频 => {
+            Some(构造流媒体资产响应体(流媒体资产响应参数 {
+                附件标识: snapshot.附件标识.as_str(),
+                运行态分发: 上下文.运行态分发?,
+                分发快照: 上下文.分发快照?,
+                流媒体清单: 上下文.流媒体清单,
+                原始地址: 上下文.原始地址,
+                原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
+                原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
+                会话标识: 上下文.会话标识,
+                当前时间戳秒: 上下文.当前时间戳秒,
+            }))
+        }
+        usecase::媒体附件类型::图片 => {
+            Some(构造blob媒体资产响应体(Blob媒体资产响应参数 {
+                附件标识: snapshot.附件标识.as_str(),
+                会话标识: 上下文.会话标识,
+                运行态分发: 上下文.运行态分发,
+                分发快照: 上下文.分发快照,
+                旧原始地址: 上下文.原始地址,
+                有预览图: snapshot.允许缩略图,
+                mime_type: snapshot.mime_type.as_str(),
+                宽: Some(snapshot.宽),
+                高: Some(snapshot.高),
+                原始冷源到期时间戳秒: 上下文.原始冷源到期时间戳秒,
+                原始冷源删除时间戳秒: 上下文.原始冷源删除时间戳秒,
+                当前时间戳秒: 上下文.当前时间戳秒,
+            }))
+        }
     }
 }
 

@@ -53,6 +53,8 @@ mod 流媒体打包;
 /// 当前媒体上传运输契约仍统一走 TUS sidecar。
 /// 先把常量收在 shell 父层，供上传外壳与 Tus hook 外壳共享，避免兄弟模块重复手抄字符串。
 const 媒体上传运输方式_TUS: &str = "tus";
+pub(crate) const TUS协议版本_HEADER值: &str = "1.0.0";
+pub(crate) const TUS_INTERNAL_TERMINATION_GUARD_HEADER: &str = "X-Koko-Internal-Termination";
 
 /// HTTP 入口只负责限制“单次请求体能进壳多少字节”，这是纯资源门禁，不是业务时长或媒体真相。
 /// 把它显式收成常量，避免 prepare/脚本/body limit 三处再各写各的数字。
@@ -92,6 +94,8 @@ pub struct 应用状态 {
     pub tus_server_port: u16,
     pub tus_base_path: String,
     pub tus_upload_dir: String,
+    pub tus_internal_base_url: Option<String>,
+    pub tus_internal_termination_token: Option<String>,
     pub media_complete_max_concurrency: usize,
     pub media_complete_gate: Arc<tokio::sync::Semaphore>,
 }
@@ -138,6 +142,8 @@ pub async fn 构建应用状态(
         tus_server_port: tus.server_port,
         tus_base_path: tus.base_path,
         tus_upload_dir: tus.upload_dir,
+        tus_internal_base_url: tus.internal_base_url,
+        tus_internal_termination_token: tus.internal_termination_token,
         media_complete_max_concurrency,
         media_complete_gate: Arc::new(tokio::sync::Semaphore::new(media_complete_max_concurrency)),
     })
@@ -237,10 +243,14 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
     Ok(())
 }
 
-fn 上传残留清理原因标签(原因: crate::usecase::上传残留清理原因) -> &'static str {
+fn 上传残留清理原因标签(
+    原因: crate::usecase::上传残留清理原因
+) -> &'static str {
     match 原因 {
         crate::usecase::上传残留清理原因::已放弃会话 => "abandoned_session",
-        crate::usecase::上传残留清理原因::最终合并后的分片残留 => "finalized_partial",
+        crate::usecase::上传残留清理原因::最终合并后的分片残留 => {
+            "finalized_partial"
+        }
         crate::usecase::上传残留清理原因::已过期未完成上传 => "expired_unfinished",
     }
 }
@@ -448,10 +458,7 @@ pub fn 构建路由(state: 应用状态) -> Router {
             "/api/media/{attachment_id}/abandon",
             post(媒体上传外壳::abandon_media_upload),
         )
-        .route(
-            "/internal/tus/hooks",
-            post(tus_hook外壳::handle_tus_hook),
-        )
+        .route("/internal/tus/hooks", post(tus_hook外壳::handle_tus_hook))
         .route(
             "/api/media/{attachment_id}/locator",
             get(媒体资产外壳::load_media_locator),

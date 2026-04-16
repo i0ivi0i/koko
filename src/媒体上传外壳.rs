@@ -335,13 +335,11 @@ pub(super) async fn complete_media_upload(
             "原图尚未上传完成",
         );
     };
-    let temp_file_path = match tus_hook外壳::解析tus临时文件路径(
-        &state.tus_upload_dir,
-        storage_locator,
-    ) {
-        Ok(path) => path,
-        Err((status, code, message)) => return err_resp(status, code, message),
-    };
+    let temp_file_path =
+        match tus_hook外壳::解析tus临时文件路径(&state.tus_upload_dir, storage_locator) {
+            Ok(path) => path,
+            Err((status, code, message)) => return err_resp(status, code, message),
+        };
     let attachment_kind = super::媒体资产外壳::媒体类型转标签(&prepared.种类);
     let attachment_byte_size = prepared.字节大小;
     let _complete_heavy_work_permit =
@@ -922,16 +920,18 @@ pub(super) async fn complete_media_upload(
 
 /// 冷路径：显式放弃旧上传。
 /// 这里先让应用层把旧附件和 transport 一起标成 abandoned，
-/// 然后 shell 再根据已登记的 storage_locator 尝试删除临时文件。
+/// 然后 shell 再先协调官方 termination，最后继续按既有残留清理兜底收尾。
 pub(super) async fn abandon_media_upload(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
+    headers: HeaderMap,
     Json(body): Json<AbandonMediaUploadBody>,
 ) -> impl IntoResponse {
     let session_id = match super::读取非空会话标识(body.session_id) {
         Ok(session_id) => session_id,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
+    let request_id = 读取首个非空请求头(&headers, "x-request-id");
     let abandoned_epoch秒 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_secs() as i64)
@@ -939,12 +939,18 @@ pub(super) async fn abandon_media_upload(
     let state_for_usecase = state.clone();
     let attachment_id_for_usecase = attachment_id.clone();
     let session_id_for_usecase = session_id.clone();
-    let abandon_result: Option<String> = match task::spawn_blocking(move || {
+    let abandon_result: (Option<String>, Vec<String>) = match task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
         let current_upload_session_id = repo
             .查询待完成媒体附件(&attachment_id_for_usecase)
             .map_err(map_domain_err_tuple)?
             .and_then(|prepared| prepared.当前上传会话标识);
+        let transport_upload_ids = match current_upload_session_id.as_deref() {
+            Some(upload_session_id) => repo
+                .列出上传会话运输上传标识(upload_session_id)
+                .map_err(map_domain_err_tuple)?,
+            None => Vec::new(),
+        };
         usecase::放弃媒体上传(
             &mut repo,
             &session_id_for_usecase,
@@ -952,11 +958,14 @@ pub(super) async fn abandon_media_upload(
             abandoned_epoch秒,
         )
         .map_err(map_domain_err_tuple)?;
-        Ok::<_, (StatusCode, &'static str, String)>(current_upload_session_id)
+        Ok::<_, (StatusCode, &'static str, String)>((
+            current_upload_session_id,
+            transport_upload_ids,
+        ))
     })
     .await
     {
-        Ok(Ok(current_upload_session_id)) => current_upload_session_id,
+        Ok(Ok(payload)) => payload,
         Ok(Err((status, code, message))) => return err_resp(status, code, message),
         Err(err) => {
             return err_resp(
@@ -967,7 +976,30 @@ pub(super) async fn abandon_media_upload(
         }
     };
 
-    if let Some(upload_session_id) = abandon_result.as_deref() {
+    let (upload_session_id, transport_upload_ids) = abandon_result;
+    for transport_upload_id in &transport_upload_ids {
+        if let Err(err) = 尝试终止媒体_tus上传(
+            &state,
+            transport_upload_id.as_str(),
+            request_id.as_deref(),
+        )
+        .await
+        {
+            tracing::warn!(
+                usecase = "放弃媒体上传",
+                adapter = "http",
+                outcome = "transport_termination_failed",
+                attachment_id = attachment_id.as_str(),
+                upload_session_id = upload_session_id.as_deref().unwrap_or(""),
+                transport_upload_id = transport_upload_id.as_str(),
+                request_id = request_id.as_deref().unwrap_or(""),
+                error = %err,
+                "媒体上传业务放弃已成立，但协调官方 Tus termination 失败"
+            );
+        }
+    }
+
+    if let Some(upload_session_id) = upload_session_id.as_deref() {
         if let Err(err) = super::执行一次媒体上传残留清理_按会话(
             state.clone(),
             Some(upload_session_id),
@@ -990,6 +1022,77 @@ pub(super) async fn abandon_media_upload(
         })),
     )
         .into_response()
+}
+
+/// 官方 termination 仍只是 transport 删除能力：
+/// 1. 只有 business abandon 已经成功之后，shell 才会来协调它；
+/// 2. 没配置内部 guard 时，继续退回本地残留清理兜底，不让取消主链直接失败；
+/// 3. DELETE 失败只记日志，不回滚已经成立的 abandoned 真相。
+async fn 尝试终止媒体_tus上传(
+    state: &应用状态,
+    upload_id: &str,
+    request_id: Option<&str>,
+) -> Result<(), String> {
+    let Some(internal_termination_token) = state
+        .tus_internal_termination_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+    let raw_internal_base_url = state
+        .tus_internal_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("http://127.0.0.1:{}", state.tus_server_port));
+    // `MEDIA_TUS_INTERNAL_BASE_URL` 既兼容“只给 sidecar origin”，也兼容“直接给到 /files endpoint”。
+    // 这里统一归一成真正的上传资源前缀，避免测试、脚本和部署配置各猜各的。
+    let internal_delete_endpoint = if raw_internal_base_url
+        .trim_end_matches('/')
+        .ends_with(state.tus_base_path.as_str())
+    {
+        raw_internal_base_url.trim_end_matches('/').to_string()
+    } else {
+        format!(
+            "{}{}",
+            raw_internal_base_url.trim_end_matches('/'),
+            state.tus_base_path
+        )
+    };
+    let delete_url = format!(
+        "{}/{}",
+        internal_delete_endpoint.trim_end_matches('/'),
+        upload_id.trim()
+    );
+    let client = reqwest::Client::new();
+    let mut request = client
+        .delete(delete_url.as_str())
+        .header("Tus-Resumable", super::TUS协议版本_HEADER值)
+        .header(
+            super::TUS_INTERNAL_TERMINATION_GUARD_HEADER,
+            internal_termination_token,
+        );
+    if let Some(request_id) = request_id.map(str::trim).filter(|value| !value.is_empty()) {
+        request = request.header("X-Request-Id", request_id);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|err| format!("调用 Tus termination DELETE 失败: {err}"))?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(());
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Tus termination DELETE 返回 {status}，响应体: {body}"
+        ));
+    }
+    Ok(())
 }
 
 fn 生成附件标识() -> String {
@@ -1126,7 +1229,9 @@ fn 读取媒体_tus对外地址(state: &应用状态, headers: &HeaderMap) -> St
     state
         .tus_public_endpoint
         .clone()
-        .or_else(|| 推导媒体tus对外入口(headers, state.tus_server_port, &state.tus_base_path))
+        .or_else(|| {
+            推导媒体tus对外入口(headers, state.tus_server_port, &state.tus_base_path)
+        })
         .unwrap_or_else(|| {
             format!(
                 "http://127.0.0.1:{}{}",

@@ -1,3 +1,4 @@
+use axum::http::StatusCode;
 use serde_json::Value;
 use sqlx::PgPool;
 use std::io;
@@ -11,6 +12,67 @@ pub fn 提取媒体上传授权头(body: &Value) -> String {
         .as_str()
         .expect("Tus prepare 必须返回 Authorization 头")
         .to_string()
+}
+
+/// tusd HTTP hooks 只认 `2XX + application/json + HookResponse`。
+/// 测试统一从这里断言成功，避免每个用例继续把旧的 204 vendor 语义写回仓库。
+#[allow(non_snake_case)]
+pub fn 断言TusHook已接受(status: StatusCode, body: &Value) {
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body, &serde_json::json!({}), "{body:?}");
+}
+
+fn 解析_tus_hook回传_http响应体(body: &Value) -> Value {
+    let raw_body = body["HTTPResponse"]["Body"]
+        .as_str()
+        .expect("Tus hook 拒绝响应必须带 HTTPResponse.Body");
+    serde_json::from_str(raw_body).expect("Tus hook HTTPResponse.Body 必须是 JSON 字符串")
+}
+
+#[allow(non_snake_case)]
+pub fn 断言TusHook拒绝上传(
+    status: StatusCode,
+    body: &Value,
+    expected_status: StatusCode,
+    expected_code: &str,
+) {
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["RejectUpload"].as_bool(), Some(true), "{body:?}");
+    assert_eq!(
+        body["HTTPResponse"]["StatusCode"].as_u64(),
+        Some(expected_status.as_u16() as u64),
+        "{body:?}"
+    );
+    assert_eq!(
+        body["HTTPResponse"]["Header"]["Content-Type"].as_str(),
+        Some("application/json"),
+        "{body:?}"
+    );
+    let inner = 解析_tus_hook回传_http响应体(body);
+    assert_eq!(inner["code"].as_str(), Some(expected_code), "{inner:?}");
+}
+
+#[allow(non_snake_case)]
+pub fn 断言TusHook拒绝Termination(
+    status: StatusCode,
+    body: &Value,
+    expected_status: StatusCode,
+    expected_code: &str,
+) {
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(body["RejectTermination"].as_bool(), Some(true), "{body:?}");
+    assert_eq!(
+        body["HTTPResponse"]["StatusCode"].as_u64(),
+        Some(expected_status.as_u16() as u64),
+        "{body:?}"
+    );
+    assert_eq!(
+        body["HTTPResponse"]["Header"]["Content-Type"].as_str(),
+        Some("application/json"),
+        "{body:?}"
+    );
+    let inner = 解析_tus_hook回传_http响应体(body);
+    assert_eq!(inner["code"].as_str(), Some(expected_code), "{inner:?}");
 }
 
 /// Tus sidecar 在测试里直接共享本地上传目录，因此 fixture 也应写进同一个 upload dir。
@@ -140,7 +202,14 @@ pub fn 构造tus_concatenation_hook请求体(
     body["Event"]["Upload"]["IsPartial"] = Value::Bool(is_partial);
     body["Event"]["Upload"]["IsFinal"] = Value::Bool(is_final);
     body["Event"]["Upload"]["PartialUploads"] = parts
-        .map(|items| Value::Array(items.into_iter().map(|value| Value::String(value.to_string())).collect()))
+        .map(|items| {
+            Value::Array(
+                items
+                    .into_iter()
+                    .map(|value| Value::String(value.to_string()))
+                    .collect(),
+            )
+        })
         .unwrap_or(Value::Null);
     body["Event"]["Upload"]["MetaData"]["upload_session_id"] =
         Value::String(upload_session_id.to_string());

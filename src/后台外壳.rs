@@ -184,8 +184,7 @@ pub(super) async fn admin_overview(
     };
     match result {
         Ok(contract::快照::后台概览 {
-            房间总数,
-            消息总数,
+            房间总数, 消息总数
         }) => {
             tracing::info!(
                 usecase = "后台概览查询",
@@ -465,7 +464,10 @@ mod 后台外壳测试 {
     #[test]
     fn 后台鉴权令牌正确时直接放行() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-admin-token", HeaderValue::from_static("koko-admin-token"));
+        headers.insert(
+            "x-admin-token",
+            HeaderValue::from_static("koko-admin-token"),
+        );
 
         let result = 校验后台请求(
             &headers,

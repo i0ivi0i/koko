@@ -12,7 +12,10 @@ async fn prepare媒体上传会尊重MEDIA_TUS显式公网配置() {
         "MEDIA_TUS_SERVER_PORT",
         "MEDIA_TUS_BASE_PATH",
     ]);
-    env::set_var("MEDIA_TUS_PUBLIC_ENDPOINT", "https://upload.example.com/files");
+    env::set_var(
+        "MEDIA_TUS_PUBLIC_ENDPOINT",
+        "https://upload.example.com/files",
+    );
     env::set_var("MEDIA_TUS_SERVER_PORT", "3081");
     env::set_var("MEDIA_TUS_BASE_PATH", "/files");
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
@@ -66,10 +69,11 @@ async fn prepare媒体上传会尊重MEDIA_TUS显式公网配置() {
 #[serial]
 #[allow(non_snake_case)]
 async fn prepare媒体上传在未显式配置public_endpoint时会按请求Host推导LAN可访问Tus地址() {
-    let backup =
-        备份并清空环境变量(
-            &["MEDIA_TUS_PUBLIC_ENDPOINT", "MEDIA_TUS_SERVER_PORT", "MEDIA_TUS_BASE_PATH"],
-        );
+    let backup = 备份并清空环境变量(&[
+        "MEDIA_TUS_PUBLIC_ENDPOINT",
+        "MEDIA_TUS_SERVER_PORT",
+        "MEDIA_TUS_BASE_PATH",
+    ]);
     env::set_var("MEDIA_TUS_SERVER_PORT", "2081");
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -122,10 +126,11 @@ async fn prepare媒体上传在未显式配置public_endpoint时会按请求Host
 #[serial]
 #[allow(non_snake_case)]
 async fn prepare媒体上传在反向代理HTTPS下会优先使用forwarded公网端口() {
-    let backup =
-        备份并清空环境变量(
-            &["MEDIA_TUS_PUBLIC_ENDPOINT", "MEDIA_TUS_SERVER_PORT", "MEDIA_TUS_BASE_PATH"],
-        );
+    let backup = 备份并清空环境变量(&[
+        "MEDIA_TUS_PUBLIC_ENDPOINT",
+        "MEDIA_TUS_SERVER_PORT",
+        "MEDIA_TUS_BASE_PATH",
+    ]);
     env::set_var("MEDIA_TUS_SERVER_PORT", "1081");
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -182,10 +187,11 @@ async fn prepare媒体上传在反向代理HTTPS下会优先使用forwarded公�
 #[serial]
 #[allow(non_snake_case)]
 async fn prepare媒体上传在forwarded_host自带公网端口时会保留该端口() {
-    let backup =
-        备份并清空环境变量(
-            &["MEDIA_TUS_PUBLIC_ENDPOINT", "MEDIA_TUS_SERVER_PORT", "MEDIA_TUS_BASE_PATH"],
-        );
+    let backup = 备份并清空环境变量(&[
+        "MEDIA_TUS_PUBLIC_ENDPOINT",
+        "MEDIA_TUS_SERVER_PORT",
+        "MEDIA_TUS_BASE_PATH",
+    ]);
     env::set_var("MEDIA_TUS_SERVER_PORT", "1081");
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -241,10 +247,11 @@ async fn prepare媒体上传在forwarded_host自带公网端口时会保留该�
 #[serial]
 #[allow(non_snake_case)]
 async fn prepare媒体上传在仅有forwarded_proto时会按协议默认端口构造公网地址() {
-    let backup =
-        备份并清空环境变量(
-            &["MEDIA_TUS_PUBLIC_ENDPOINT", "MEDIA_TUS_SERVER_PORT", "MEDIA_TUS_BASE_PATH"],
-        );
+    let backup = 备份并清空环境变量(&[
+        "MEDIA_TUS_PUBLIC_ENDPOINT",
+        "MEDIA_TUS_SERVER_PORT",
+        "MEDIA_TUS_BASE_PATH",
+    ]);
     env::set_var("MEDIA_TUS_SERVER_PORT", "1081");
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)

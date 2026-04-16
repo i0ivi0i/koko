@@ -588,16 +588,19 @@ mod 实时外壳测试 {
     fn 发送成功时仍然通过room_event表达权威事实而不是control_result成功() {
         // 这条测试锁住“消息成立真相”的承载通道。
         // 发送成功必须表现为领域事件 payload，而不是再长出一个 control_result 成功分支。
-        let payload = super::event_to_json(contract::领域事件::消息已创建 {
-            房间标识: "room-1".to_string(),
-            消息标识: "msg-1".to_string(),
-            客户端消息标识: "client-1".to_string(),
-            发送者会话标识: "session-1".to_string(),
-            发送者花名: "花名-1".to_string(),
-            文本: "hello".to_string(),
-            附件: Vec::new(),
-            事件位置: 1,
-        }, None);
+        let payload = super::event_to_json(
+            contract::领域事件::消息已创建 {
+                房间标识: "room-1".to_string(),
+                消息标识: "msg-1".to_string(),
+                客户端消息标识: "client-1".to_string(),
+                发送者会话标识: "session-1".to_string(),
+                发送者花名: "花名-1".to_string(),
+                文本: "hello".to_string(),
+                附件: Vec::new(),
+                事件位置: 1,
+            },
+            None,
+        );
 
         assert_eq!(payload["type"], "message_created");
         assert_eq!(payload["room_id"], "room-1");

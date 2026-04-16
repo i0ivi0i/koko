@@ -86,7 +86,9 @@ fn 生成完整图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageEr
 /// 1. 真 MIME 以后端探测为准；
 /// 2. 宽高和缩略图以后端解码结果为准；
 /// 3. 不把“文件后缀/前端 mime”冒充成权威事实。
-pub(super) fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结果, 媒体内容解析错误> {
+pub(super) fn 解析图片内容(
+    bytes: &[u8],
+) -> Result<图片内容解析结果, 媒体内容解析错误> {
     let Some(kind) = infer::get(bytes) else {
         return Err(媒体内容解析错误::类型不允许("只允许上传图片"));
     };
@@ -113,7 +115,9 @@ pub(super) fn 解析图片内容(bytes: &[u8]) -> Result<图片内容解析结�
 /// 1. 真 MIME 仍以后端探测为准；
 /// 2. 宽高从容器元数据读取，不靠前端 file.type 或文件后缀冒充；
 /// 3. 当前只收口 ready 所需的最小事实，不在后端手搓转码或截图链。
-pub(super) fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结果, 媒体内容解析错误> {
+pub(super) fn 解析视频内容(
+    bytes: &[u8],
+) -> Result<视频内容解析结果, 媒体内容解析错误> {
     let Some(kind) = infer::get(bytes) else {
         return Err(媒体内容解析错误::类型不允许("只允许上传视频"));
     };
@@ -133,12 +137,16 @@ pub(super) fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结�
         .get(TrackInfoTag::ImageWidth)
         .and_then(解析视频轨道整数)
         .filter(|value| *value > 0)
-        .ok_or(媒体内容解析错误::类型不允许("视频缺少宽度元数据"))?;
+        .ok_or(媒体内容解析错误::类型不允许(
+            "视频缺少宽度元数据",
+        ))?;
     let 高 = info
         .get(TrackInfoTag::ImageHeight)
         .and_then(解析视频轨道整数)
         .filter(|value| *value > 0)
-        .ok_or(媒体内容解析错误::类型不允许("视频缺少高度元数据"))?;
+        .ok_or(媒体内容解析错误::类型不允许(
+            "视频缺少高度元数据",
+        ))?;
     let (宽, 高) = 应用mp4展示方向到视频宽高(bytes, 宽, 高);
     Ok(视频内容解析结果 {
         mime_type: kind.mime_type().to_string(),
@@ -148,8 +156,8 @@ pub(super) fn 解析视频内容(bytes: &[u8]) -> Result<视频内容解析结�
 }
 
 fn 映射只读视频文件(path: &Path) -> Result<Mmap, 媒体内容解析错误> {
-    let file =
-        StdFile::open(path).map_err(|_| 媒体内容解析错误::系统错误("打开视频临时文件失败"))?;
+    let file = StdFile::open(path)
+        .map_err(|_| 媒体内容解析错误::系统错误("打开视频临时文件失败"))?;
     // 安全性：complete 阶段拿到的 Tus 临时文件已经封口，只做只读消费；
     // 这里既不修改文件，也不暴露可变别名，因此把它映射成只读字节视图是安全的。
     unsafe { MmapOptions::new().map(&file) }
@@ -158,7 +166,9 @@ fn 映射只读视频文件(path: &Path) -> Result<Mmap, 媒体内容解析错�
 
 /// 大视频 complete 热路径优先复用操作系统只读映射，
 /// 避免先 `fs::read` 整块进内存再交给同一套解析器重复消费。
-pub(super) fn 解析视频文件内容(path: &Path) -> Result<视频内容解析结果, 媒体内容解析错误> {
+pub(super) fn 解析视频文件内容(
+    path: &Path,
+) -> Result<视频内容解析结果, 媒体内容解析错误> {
     let mapped = 映射只读视频文件(path)?;
     解析视频内容(mapped.as_ref())
 }
@@ -207,8 +217,8 @@ mod tests {
 
     #[test]
     fn 文件级视频解析会保持与字节级解析相同的展示尺寸() {
-        let 字节级结果 =
-            解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4")).expect("最小 mp4 应该能被字节级解析");
+        let 字节级结果 = 解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4"))
+            .expect("最小 mp4 应该能被字节级解析");
         let 文件级结果 = 解析视频文件内容(Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/minimal.mp4"

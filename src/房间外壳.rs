@@ -67,12 +67,6 @@ pub(super) struct ParsedHistoryQuery {
     limit: i64,
 }
 
-
-
-
-
-
-
 /// 先把宽松 query map 收口成稳定内部参数。
 ///
 /// 这样缺参和格式错误也能继续走项目自己的错误 JSON，而不是被框架提前拦截。
@@ -163,14 +157,6 @@ pub(super) fn parse_history_query(
         limit,
     })
 }
-
-
-
-
-
-
-
-
 
 /// 冷路径：引导匿名身份。
 ///
@@ -873,20 +859,6 @@ pub(super) async fn load_room_history(
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #[cfg(test)]
 mod 媒体内容解析迁移测试 {
     use crate::shell::媒体内容解析;
@@ -916,8 +888,9 @@ mod 媒体内容解析迁移测试 {
 
     #[test]
     fn 新模块会给最小_mp4_返回展示尺寸() {
-        let parsed = 媒体内容解析::解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4"))
-            .expect("最小 mp4 应该能被新模块解析");
+        let parsed =
+            媒体内容解析::解析视频内容(include_bytes!("../tests/fixtures/minimal.mp4"))
+                .expect("最小 mp4 应该能被新模块解析");
         assert!(parsed.宽 > 0);
         assert!(parsed.高 > 0);
     }
@@ -935,7 +908,9 @@ mod 流媒体打包迁移测试 {
             "hls/master.m3u8",
             "#EXTM3U\nvideo/main.m3u8\n",
         );
-        assert!(rewritten.contains("/api/media/att-1/stream/hls/video/main.m3u8?session_id=session-1"));
+        assert!(
+            rewritten.contains("/api/media/att-1/stream/hls/video/main.m3u8?session_id=session-1")
+        );
     }
 
     #[test]
@@ -946,7 +921,10 @@ mod 流媒体打包迁移测试 {
             "dash/stream.mpd",
             r#"<SegmentTemplate initialization="video/init.mp4" media="video/$Number$.m4s" />"#,
         );
-        assert!(rewritten.contains("/api/media/att-1/stream/dash/video/init.mp4?session_id=session-1"));
-        assert!(rewritten.contains("/api/media/att-1/stream/dash/video/$Number$.m4s?session_id=session-1"));
+        assert!(
+            rewritten.contains("/api/media/att-1/stream/dash/video/init.mp4?session_id=session-1")
+        );
+        assert!(rewritten
+            .contains("/api/media/att-1/stream/dash/video/$Number$.m4s?session_id=session-1"));
     }
 }

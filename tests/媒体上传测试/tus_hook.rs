@@ -76,10 +76,11 @@ async fn tus_pre_create非法token会被拒绝() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(
-        body["code"].as_str(),
-        Some("attachment_upload_unauthorized")
+    断言TusHook拒绝上传(
+        status,
+        &body,
+        StatusCode::UNAUTHORIZED,
+        "attachment_upload_unauthorized",
     );
 }
 
@@ -150,7 +151,7 @@ async fn tus_pre_create允许offset为0且length等于metadata_byte_size() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+    断言TusHook已接受(status, &body);
 }
 
 #[tokio::test]
@@ -228,7 +229,7 @@ async fn tus_pre_create缺少byte_size元数据时仍按prepare权威长度放�
     )
     .await;
 
-    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+    断言TusHook已接受(status, &body);
 }
 
 #[tokio::test]
@@ -304,10 +305,15 @@ async fn tus_pre_create长度小于prepare整文件大小时会拒绝当前parti
     )
     .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
-    assert_eq!(body["code"].as_str(), Some("invalid_argument"));
+    断言TusHook拒绝上传(status, &body, StatusCode::BAD_REQUEST, "invalid_argument");
+    let inner = serde_json::from_str::<serde_json::Value>(
+        body["HTTPResponse"]["Body"]
+            .as_str()
+            .expect("拒绝上传必须带回客户端错误体"),
+    )
+    .expect("拒绝上传的 HTTPResponse.Body 必须是 JSON");
     assert_eq!(
-        body["message"].as_str(),
+        inner["message"].as_str(),
         Some("上传文件大小与 prepare 不一致")
     );
 }
@@ -406,7 +412,7 @@ async fn tus_pre_create_partial在同会话下未来应当放行但当前还做�
     )
     .await;
 
-    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+    断言TusHook已接受(status, &body);
 }
 
 #[tokio::test]
@@ -486,7 +492,7 @@ async fn tus_pre_create_final_concat在同会话下会放行() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+    断言TusHook已接受(status, &body);
 }
 
 #[tokio::test]
@@ -561,7 +567,7 @@ async fn tus_post_finish会登记上传回执() {
         &[],
     )
     .await;
-    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+    断言TusHook已接受(status, &body);
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -628,7 +634,9 @@ async fn tus_post_finish_partial只登记partial_transport() {
     )
     .await;
     assert_eq!(prepare_status, StatusCode::OK);
-    let attachment_id = prepare_body["attachment_id"].as_str().expect("attachment_id");
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id");
     let upload_session_id = prepare_body["upload_session_id"]
         .as_str()
         .expect("upload_session_id");
@@ -663,7 +671,7 @@ async fn tus_post_finish_partial只登记partial_transport() {
         &[],
     )
     .await;
-    assert_eq!(status, StatusCode::NO_CONTENT, "{body:?}");
+    断言TusHook已接受(status, &body);
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -784,6 +792,175 @@ async fn tus_post_finish不会复活已废弃的旧上传() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
-    assert_eq!(body["code"].as_str(), Some("attachment_not_ready"));
+    断言TusHook已接受(status, &body);
+    let transport_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT
+         FROM attachment_upload_transports
+         WHERE upload_session_id = $1
+           AND transport_upload_id = $2",
+    )
+    .bind(upload_session_id)
+    .bind(expected_upload_id.as_str())
+    .fetch_one(&pool)
+    .await
+    .expect("已废弃 upload session 不应写入新的 finished transport");
+    assert_eq!(transport_count, 0);
+}
+
+#[tokio::test]
+#[serial]
+async fn tus_pre_terminate缺少内部守卫头会被拒绝() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/internal/tus/hooks",
+        Some(serde_json::json!({
+            "Type": "pre-terminate",
+            "Event": {
+                "Upload": {
+                    "ID": "upload-pre-terminate-1",
+                    "Size": 68,
+                    "SizeIsDeferred": false,
+                    "Offset": 68,
+                    "MetaData": {
+                        "attachment_id": "att-pre-terminate-1"
+                    },
+                    "IsPartial": false,
+                    "IsFinal": false,
+                    "PartialUploads": serde_json::Value::Null,
+                    "Storage": serde_json::Value::Null
+                },
+                "HTTPRequest": {
+                    "Method": "DELETE",
+                    "URI": "/files/upload-pre-terminate-1",
+                    "Header": {}
+                }
+            }
+        })),
+        &[],
+    )
+    .await;
+
+    断言TusHook拒绝Termination(
+        status,
+        &body,
+        StatusCode::UNAUTHORIZED,
+        "attachment_upload_unauthorized",
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn tus_post_terminate不会单独推进业务状态() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({
+            "device_anonymous_token": format!("tus-post-terminate-{uniq}")
+        })),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let (prepare_status, prepare_body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "post-terminate.png",
+            "mime_type": "image/png",
+            "byte_size": 68
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(prepare_status, StatusCode::OK);
+    let attachment_id = prepare_body["attachment_id"]
+        .as_str()
+        .expect("attachment_id")
+        .to_string();
+
+    let (status, body) = send_json(
+        app.clone(),
+        Method::POST,
+        "/internal/tus/hooks",
+        Some(serde_json::json!({
+            "Type": "post-terminate",
+            "Event": {
+                "Upload": {
+                    "ID": format!("upload-post-terminate-{attachment_id}"),
+                    "Size": 68,
+                    "SizeIsDeferred": false,
+                    "Offset": 68,
+                    "MetaData": {
+                        "attachment_id": attachment_id,
+                        "upload_session_id": prepare_body["upload_session_id"].as_str().expect("upload_session_id"),
+                        "file_name": "post-terminate.png",
+                        "mime_type": "image/png",
+                        "byte_size": "68"
+                    },
+                    "IsPartial": false,
+                    "IsFinal": false,
+                    "PartialUploads": serde_json::Value::Null,
+                    "Storage": serde_json::Value::Null
+                },
+                "HTTPRequest": {
+                    "Method": "DELETE",
+                    "URI": "/files/upload-post-terminate",
+                    "Header": {
+                        "X-Koko-Internal-Termination": ["test-guard"]
+                    }
+                }
+            }
+        })),
+        &[],
+    )
+    .await;
+    断言TusHook已接受(status, &body);
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let status_in_db = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT status FROM attachments WHERE attachment_id = $1",
+    )
+    .bind(
+        prepare_body["attachment_id"]
+            .as_str()
+            .expect("attachment_id"),
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("应能查询附件状态")
+    .expect("prepare 后应存在附件记录");
+    assert_eq!(status_in_db, "prepared");
 }

@@ -3,8 +3,7 @@ use sqlx::{postgres::PgRow, PgPool, Row};
 use crate::{contract, usecase};
 
 use super::{
-    Pg仓储, 媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输角色,
-    媒体上传运输记录,
+    Pg仓储, 媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输角色, 媒体上传运输记录,
 };
 
 // 媒体附件适配 owner 只负责回答三类问题：
@@ -44,12 +43,16 @@ fn 行转媒体上传会话记录(row: PgRow) -> 媒体上传会话记录 {
 
 /// transport 记录在 complete / cleanup 两条路径都会读。
 /// 把 `role/order/finished` 的翻译都收口在这里，避免每个调用方自己猜 partial/final 语义。
-fn 行转媒体上传运输记录(row: PgRow) -> Result<媒体上传运输记录, contract::错误码> {
+fn 行转媒体上传运输记录(
+    row: PgRow,
+) -> Result<媒体上传运输记录, contract::错误码> {
     Ok(媒体上传运输记录 {
         上传会话标识: row.get("upload_session_id"),
         附件标识: row.get("attachment_id"),
         运输方式: row.get("transport_kind"),
-        运输角色: 媒体上传运输角色::from_db(row.get::<String, _>("transport_role").as_str())?,
+        运输角色: 媒体上传运输角色::from_db(
+            row.get::<String, _>("transport_role").as_str(),
+        )?,
         concat_order: row.get("concat_order"),
         transport_upload_id: row.get("transport_upload_id"),
         storage_locator: row.get("storage_locator"),
@@ -691,10 +694,7 @@ async fn 写入媒体上传会话授权_异步(
     pool: &PgPool,
     授权: &媒体上传会话授权写入请求,
 ) -> Result<(), contract::错误码> {
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|_| contract::错误码::系统错误)?;
+    let mut tx = pool.begin().await.map_err(|_| contract::错误码::系统错误)?;
     sqlx::query(
         "INSERT INTO attachment_upload_sessions \
             (upload_session_id, attachment_id, transport_kind, upload_token, token_expires_at, abandoned_at) \
@@ -805,7 +805,41 @@ pub(super) fn 查询附件当前最终运输记录(
     repo: &Pg仓储,
     附件标识: &str,
 ) -> Result<Option<媒体上传运输记录>, contract::错误码> {
-    repo.在运行时执行(查询附件当前最终运输记录_异步(&repo.pool, 附件标识))
+    repo.在运行时执行(查询附件当前最终运输记录_异步(
+        &repo.pool,
+        附件标识,
+    ))
+}
+
+/// abandon 想协调官方 termination 时，需要先知道“当前 upload_session 下有哪些 upload id 还活过”。
+/// 这里只回传去重后的 transport upload id，不在 adapter 层直接发 DELETE。
+async fn 列出上传会话运输上传标识_异步(
+    pool: &PgPool,
+    上传会话标识: &str,
+) -> Result<Vec<String>, contract::错误码> {
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT transport_upload_id
+         FROM attachment_upload_transports
+         WHERE upload_session_id = $1
+           AND transport_upload_id IS NOT NULL
+           AND transport_upload_id <> ''
+         ORDER BY transport_upload_id ASC",
+    )
+    .bind(上传会话标识)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+    Ok(rows)
+}
+
+pub(super) fn 列出上传会话运输上传标识(
+    repo: &Pg仓储,
+    上传会话标识: &str,
+) -> Result<Vec<String>, contract::错误码> {
+    repo.在运行时执行(列出上传会话运输上传标识_异步(
+        &repo.pool,
+        上传会话标识,
+    ))
 }
 
 /// 运输回执只登记 transport finished 事实，不在这里偷偷把附件升级成 ready。

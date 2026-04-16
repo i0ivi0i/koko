@@ -61,6 +61,8 @@ pub struct 媒体Tus侧车配置 {
     pub server_port: u16,
     pub base_path: String,
     pub upload_dir: String,
+    pub internal_base_url: Option<String>,
+    pub internal_termination_token: Option<String>,
 }
 
 /// 协作分发配置只回答“runtime 线索怎么暴露给前端”：
@@ -314,6 +316,8 @@ fn 推导默认shaka_packager命令() -> String {
 /// 1. 未显式配置 `MEDIA_TUS_PUBLIC_ENDPOINT` 时，不抢先把 `127.0.0.1` 写死进 prepare 契约；
 /// 2. 上传字节继续落到一处稳定共享目录，给 hook / complete / 清理主链复用；
 /// 3. `server_port/base_path` 继续保留，给 prepare 在 LAN / 调试场景下按当前请求 Host 推导可达地址。
+/// 4. `internal_*` 只服务主服务 -> tus sidecar 的官方 termination 调用；
+///    没配置时继续保留“业务放弃 + 本地残留清理”兜底，不让取消主链退化。
 pub fn 读取媒体_tus侧车配置() -> io::Result<媒体Tus侧车配置> {
     let server_port = 读取可选端口("MEDIA_TUS_SERVER_PORT", 1081)?;
     let public_endpoint = 读取可选环境变量("MEDIA_TUS_PUBLIC_ENDPOINT")
@@ -328,12 +332,21 @@ pub fn 读取媒体_tus侧车配置() -> io::Result<媒体Tus侧车配置> {
     };
     let upload_dir =
         读取可选环境变量("MEDIA_TUS_UPLOAD_DIR").unwrap_or_else(|| "data/tus".to_string());
+    let internal_base_url = 读取可选环境变量("MEDIA_TUS_INTERNAL_BASE_URL")
+        .map(|value| value.trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty());
+    let internal_termination_token =
+        读取可选环境变量("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN")
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
 
     Ok(媒体Tus侧车配置 {
         public_endpoint,
         server_port,
         base_path,
         upload_dir,
+        internal_base_url,
+        internal_termination_token,
     })
 }
 
@@ -431,21 +444,24 @@ pub fn 读取媒体上传完成并发上限() -> io::Result<usize> {
     let raw = 读取可选环境变量("MEDIA_COMPLETE_MAX_CONCURRENCY");
     match raw.as_deref() {
         None => Ok(4),
-        Some(value) => value.parse::<usize>().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("环境变量 MEDIA_COMPLETE_MAX_CONCURRENCY 不是合法整数: {value}"),
-            )
-        }).and_then(|value| {
-            if value == 0 {
-                Err(io::Error::new(
+        Some(value) => value
+            .parse::<usize>()
+            .map_err(|_| {
+                io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "MEDIA_COMPLETE_MAX_CONCURRENCY 不能为 0",
-                ))
-            } else {
-                Ok(value)
-            }
-        }),
+                    format!("环境变量 MEDIA_COMPLETE_MAX_CONCURRENCY 不是合法整数: {value}"),
+                )
+            })
+            .and_then(|value| {
+                if value == 0 {
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "MEDIA_COMPLETE_MAX_CONCURRENCY 不能为 0",
+                    ))
+                } else {
+                    Ok(value)
+                }
+            }),
     }
 }
 
@@ -532,6 +548,8 @@ mod tests {
         let old_server_port = 读并清空环境变量("MEDIA_TUS_SERVER_PORT");
         let old_base_path = 读并清空环境变量("MEDIA_TUS_BASE_PATH");
         let old_upload_dir = 读并清空环境变量("MEDIA_TUS_UPLOAD_DIR");
+        let old_internal_base_url = 读并清空环境变量("MEDIA_TUS_INTERNAL_BASE_URL");
+        let old_internal_token = 读并清空环境变量("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN");
 
         let config = 读取媒体_tus侧车配置().expect("默认媒体 Tus 侧车配置应可读");
 
@@ -539,11 +557,15 @@ mod tests {
         assert_eq!(config.server_port, 1081);
         assert_eq!(config.base_path, "/files");
         assert_eq!(config.upload_dir, "data/tus");
+        assert_eq!(config.internal_base_url, None);
+        assert_eq!(config.internal_termination_token, None);
 
         恢复环境变量("MEDIA_TUS_PUBLIC_ENDPOINT", old_public_endpoint);
         恢复环境变量("MEDIA_TUS_SERVER_PORT", old_server_port);
         恢复环境变量("MEDIA_TUS_BASE_PATH", old_base_path);
         恢复环境变量("MEDIA_TUS_UPLOAD_DIR", old_upload_dir);
+        恢复环境变量("MEDIA_TUS_INTERNAL_BASE_URL", old_internal_base_url);
+        恢复环境变量("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN", old_internal_token);
     }
 
     #[test]
@@ -553,11 +575,18 @@ mod tests {
         let old_server_port = env::var("MEDIA_TUS_SERVER_PORT").ok();
         let old_base_path = env::var("MEDIA_TUS_BASE_PATH").ok();
         let old_upload_dir = env::var("MEDIA_TUS_UPLOAD_DIR").ok();
+        let old_internal_base_url = env::var("MEDIA_TUS_INTERNAL_BASE_URL").ok();
+        let old_internal_token = env::var("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN").ok();
 
         env::set_var("MEDIA_TUS_PUBLIC_ENDPOINT", "https://im.example.com/files");
         env::set_var("MEDIA_TUS_SERVER_PORT", "2081");
         env::set_var("MEDIA_TUS_BASE_PATH", "uploads");
         env::set_var("MEDIA_TUS_UPLOAD_DIR", "E:/tmp/tus-data");
+        env::set_var(
+            "MEDIA_TUS_INTERNAL_BASE_URL",
+            "http://127.0.0.1:2081/uploads/",
+        );
+        env::set_var("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN", "internal-guard");
 
         let config = 读取媒体_tus侧车配置().expect("显式媒体 Tus 侧车配置应可读");
 
@@ -568,11 +597,21 @@ mod tests {
         assert_eq!(config.server_port, 2081);
         assert_eq!(config.base_path, "/uploads");
         assert_eq!(config.upload_dir, "E:/tmp/tus-data");
+        assert_eq!(
+            config.internal_base_url,
+            Some("http://127.0.0.1:2081/uploads".to_string())
+        );
+        assert_eq!(
+            config.internal_termination_token,
+            Some("internal-guard".to_string())
+        );
 
         恢复环境变量("MEDIA_TUS_PUBLIC_ENDPOINT", old_public_endpoint);
         恢复环境变量("MEDIA_TUS_SERVER_PORT", old_server_port);
         恢复环境变量("MEDIA_TUS_BASE_PATH", old_base_path);
         恢复环境变量("MEDIA_TUS_UPLOAD_DIR", old_upload_dir);
+        恢复环境变量("MEDIA_TUS_INTERNAL_BASE_URL", old_internal_base_url);
+        恢复环境变量("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN", old_internal_token);
     }
 
     #[test]

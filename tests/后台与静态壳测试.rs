@@ -524,7 +524,7 @@ async fn 非成员不能读取房间消息里的图片内容() {
         &[],
     )
     .await;
-    assert_eq!(hook_status, StatusCode::NO_CONTENT, "{hook_body:?}");
+    断言TusHook已接受(hook_status, &hook_body);
     let (complete_status, complete_body) = send_json(
         app.clone(),
         Method::POST,

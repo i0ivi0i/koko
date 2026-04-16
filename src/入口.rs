@@ -90,7 +90,8 @@ where
                     "后台媒体冷源清理失败"
                 );
             }
-            if let Err(err) = crate::shell::执行一次媒体上传残留清理(cleanup_state.clone()).await
+            if let Err(err) =
+                crate::shell::执行一次媒体上传残留清理(cleanup_state.clone()).await
             {
                 tracing::error!(
                     usecase = "上传残留清理",

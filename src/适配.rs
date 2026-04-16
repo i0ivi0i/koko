@@ -239,6 +239,16 @@ impl Pg仓储 {
         媒体附件适配::查询附件当前最终运输记录(self, 附件标识)
     }
 
+    /// business abandon 先裁决业务真相，再由 shell 协调 transport 删除；
+    /// 因此这里单独暴露“这条 upload_session 目前对应过哪些 upload id”，
+    /// 让官方 termination 调用仍然站在 adapter 提供的运输事实上。
+    pub(crate) fn 列出上传会话运输上传标识(
+        &self,
+        上传会话标识: &str,
+    ) -> Result<Vec<String>, contract::错误码> {
+        媒体附件适配::列出上传会话运输上传标识(self, 上传会话标识)
+    }
+
     /// transport finished 只登记某条 single/partial/final 上传事实；
     /// prepared -> ready 仍由 complete 主链完成。
     pub(crate) fn 登记媒体上传运输回执(
@@ -642,12 +652,7 @@ impl 仓储端口 for Pg仓储 {
         清理原因: usecase::上传残留清理原因,
         清理时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::标记上传残留已清理(
-            self,
-            上传会话标识,
-            清理原因,
-            清理时间戳秒,
-        )
+        媒体附件适配::标记上传残留已清理(self, 上传会话标识, 清理原因, 清理时间戳秒)
     }
 
     /// 拉取当前身份在房间里的阅读锚点。

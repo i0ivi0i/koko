@@ -1,5 +1,5 @@
 use koko::contract::{
-    媒体资产种类, 媒体冷源描述, 媒体冷源角色, 媒体清单描述, 媒体分发描述, 流媒体资产描述,
+    媒体冷源描述, 媒体冷源角色, 媒体分发描述, 媒体清单描述, 媒体资产种类, 流媒体资产描述,
 };
 use koko::usecase::构造媒体冷源描述;
 
@@ -28,9 +28,16 @@ fn 视频资产描述包含_manifest_swarm_origin_而不是原始附件主链() 
     };
 
     assert_eq!(asset.种类, 媒体资产种类::流媒体视频);
-    assert_eq!(asset.清单.hls主清单地址.as_deref(), Some("/media/asset-video-1/master.m3u8"));
+    assert_eq!(
+        asset.清单.hls主清单地址.as_deref(),
+        Some("/media/asset-video-1/master.m3u8")
+    );
     assert_eq!(asset.冷源.角色, 媒体冷源角色::冷备引导);
-    assert!(asset.分发.announce_urls.iter().any(|value| value.starts_with("wss://")));
+    assert!(asset
+        .分发
+        .announce_urls
+        .iter()
+        .any(|value| value.starts_with("wss://")));
 }
 
 #[test]

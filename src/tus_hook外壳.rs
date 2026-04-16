@@ -1,5 +1,6 @@
 use super::{
-    err_resp, map_domain_err_tuple, 应用状态, 媒体上传运输方式_TUS, 构建共享仓储,
+    err_resp, map_domain_err_tuple, 媒体上传运输方式_TUS, 应用状态, 构建共享仓储,
+    TUS_INTERNAL_TERMINATION_GUARD_HEADER,
 };
 use crate::{
     adapter::媒体上传运输角色,
@@ -11,7 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path as StdPath, PathBuf},
@@ -77,10 +78,31 @@ struct TusUploadStorageBody {
     path: Option<String>,
 }
 
+#[derive(Serialize, Default)]
+struct TusHookResponseBody {
+    #[serde(rename = "HTTPResponse", skip_serializing_if = "Option::is_none")]
+    http_response: Option<TusHookHttpResponseBody>,
+    #[serde(rename = "RejectUpload", skip_serializing_if = "布尔值为假")]
+    reject_upload: bool,
+    #[serde(rename = "RejectTermination", skip_serializing_if = "布尔值为假")]
+    reject_termination: bool,
+}
+
+#[derive(Serialize)]
+struct TusHookHttpResponseBody {
+    #[serde(rename = "StatusCode")]
+    status_code: u16,
+    #[serde(rename = "Body")]
+    body: String,
+    #[serde(rename = "Header")]
+    headers: HashMap<String, String>,
+}
+
 /// Tus hook 收口点：
 /// 1. `pre-create` 负责阻止非法上传创建；
 /// 2. `post-finish` 只登记运输回执；
-/// 3. 无论哪个 hook，都不能越权把 prepared 直接升级成 ready。
+/// 3. `pre/post-terminate` 只处理 transport 删除门禁与日志；
+/// 4. 无论哪个 hook，都不能越权把 prepared 直接升级成 ready。
 pub(super) async fn handle_tus_hook(
     State(state): State<应用状态>,
     Json(body): Json<TusHookBody>,
@@ -92,6 +114,8 @@ pub(super) async fn handle_tus_hook(
     match hook_name.as_str() {
         "pre-create" => handle_tus_hook_pre_create(state, body).await,
         "post-finish" => handle_tus_hook_post_finish(state, body).await,
+        "pre-terminate" => handle_tus_hook_pre_terminate(state, body).await,
+        "post-terminate" => handle_tus_hook_post_terminate(state, body).await,
         _ => err_resp(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
@@ -101,26 +125,83 @@ pub(super) async fn handle_tus_hook(
     }
 }
 
-async fn handle_tus_hook_pre_create(
-    state: 应用状态,
-    body: TusHookBody,
+fn 布尔值为假(value: &bool) -> bool {
+    !*value
+}
+
+fn 构造tus_hook客户端错误响应(
+    status: StatusCode,
+    code: &'static str,
+    message: impl Into<String>,
+) -> TusHookHttpResponseBody {
+    let payload = serde_json::json!({
+        "code": code,
+        "message": message.into(),
+    });
+    let mut headers = HashMap::new();
+    headers.insert("Content-Type".to_string(), "application/json".to_string());
+    TusHookHttpResponseBody {
+        status_code: status.as_u16(),
+        body: payload.to_string(),
+        headers,
+    }
+}
+
+fn 返回tus_hook成功响应() -> Response {
+    (StatusCode::OK, Json(TusHookResponseBody::default())).into_response()
+}
+
+fn 返回tus_hook拒绝上传响应(
+    status: StatusCode,
+    code: &'static str,
+    message: impl Into<String>,
 ) -> Response {
+    (
+        StatusCode::OK,
+        Json(TusHookResponseBody {
+            http_response: Some(构造tus_hook客户端错误响应(status, code, message)),
+            reject_upload: true,
+            reject_termination: false,
+        }),
+    )
+        .into_response()
+}
+
+fn 返回tus_hook拒绝termination响应(
+    status: StatusCode,
+    code: &'static str,
+    message: impl Into<String>,
+) -> Response {
+    (
+        StatusCode::OK,
+        Json(TusHookResponseBody {
+            http_response: Some(构造tus_hook客户端错误响应(status, code, message)),
+            reject_upload: false,
+            reject_termination: true,
+        }),
+    )
+        .into_response()
+}
+
+async fn handle_tus_hook_pre_create(state: 应用状态, body: TusHookBody) -> Response {
     let upload_token = match 读取媒体上传令牌(&body.event.http_request) {
         Ok(token) => token,
-        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
     };
     let transport_role = match 判定tus运输角色(&body.event.upload) {
         Ok(role) => role,
-        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
     };
-    let attachment_id = match 读取tus_metadata字段(&body.event.upload.metadata, "attachment_id") {
+    let attachment_id = match 读取tus_metadata字段(&body.event.upload.metadata, "attachment_id")
+    {
         Ok(value) => value,
-        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
     };
-    let upload_session_id = 读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
+    let upload_session_id =
+        读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
     let upload_size = match 读取tus上传大小(&body.event.upload, "pre-create") {
         Ok(size) => size,
-        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+        Err((status, code, message)) => return 返回tus_hook拒绝上传响应(status, code, message),
     };
     /*
      * `pre-create` 发生在 Tus sidecar 真正接收字节之前：
@@ -134,12 +215,11 @@ async fn handle_tus_hook_pre_create(
      * - attachment_id 继续作为 sidecar -> 主服务之间唯一稳定的业务锚点。
      */
     if body.event.upload.offset != 0 {
-        return err_resp(
+        return 返回tus_hook拒绝上传响应(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
             "pre-create 要求 offset 必须为 0",
-        )
-        .into_response();
+        );
     }
 
     let state_for_repo = state.clone();
@@ -155,7 +235,8 @@ async fn handle_tus_hook_pre_create(
                 "上传令牌无效".to_string(),
             ));
         };
-        if !upload_session.令牌仍有效 || upload_session.运输方式 != 媒体上传运输方式_TUS {
+        if !upload_session.令牌仍有效 || upload_session.运输方式 != 媒体上传运输方式_TUS
+        {
             return Err((
                 StatusCode::UNAUTHORIZED,
                 "attachment_upload_unauthorized",
@@ -208,7 +289,8 @@ async fn handle_tus_hook_pre_create(
                 "附件不再处于待上传状态".to_string(),
             ));
         }
-        if prepared.当前上传会话标识.as_deref() != Some(upload_session.上传会话标识.as_str()) {
+        if prepared.当前上传会话标识.as_deref() != Some(upload_session.上传会话标识.as_str())
+        {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",
@@ -265,15 +347,12 @@ async fn handle_tus_hook_pre_create(
         }
     };
     match check_result {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err((status, code, message)) => err_resp(status, code, message).into_response(),
+        Ok(()) => 返回tus_hook成功响应(),
+        Err((status, code, message)) => 返回tus_hook拒绝上传响应(status, code, message),
     }
 }
 
-async fn handle_tus_hook_post_finish(
-    state: 应用状态,
-    body: TusHookBody,
-) -> Response {
+async fn handle_tus_hook_post_finish(state: 应用状态, body: TusHookBody) -> Response {
     let request_id = 读取可选请求标识(&body.event.http_request);
     let upload_token = match 读取媒体上传令牌(&body.event.http_request) {
         Ok(token) => token,
@@ -283,11 +362,13 @@ async fn handle_tus_hook_post_finish(
         Ok(role) => role,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let attachment_id = match 读取tus_metadata字段(&body.event.upload.metadata, "attachment_id") {
+    let attachment_id = match 读取tus_metadata字段(&body.event.upload.metadata, "attachment_id")
+    {
         Ok(value) => value,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
     };
-    let upload_session_id = 读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
+    let upload_session_id =
+        读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
     let upload_size = match 读取tus上传大小(&body.event.upload, "post-finish") {
         Ok(size) => size,
         Err((status, code, message)) => return err_resp(status, code, message).into_response(),
@@ -330,7 +411,8 @@ async fn handle_tus_hook_post_finish(
                 "上传令牌无效".to_string(),
             ));
         };
-        if !upload_session.令牌仍有效 || upload_session.运输方式 != 媒体上传运输方式_TUS {
+        if !upload_session.令牌仍有效 || upload_session.运输方式 != 媒体上传运输方式_TUS
+        {
             return Err((
                 StatusCode::UNAUTHORIZED,
                 "attachment_upload_unauthorized",
@@ -383,7 +465,8 @@ async fn handle_tus_hook_post_finish(
                 "附件不再处于待上传状态".to_string(),
             ));
         }
-        if prepared.当前上传会话标识.as_deref() != Some(upload_session.上传会话标识.as_str()) {
+        if prepared.当前上传会话标识.as_deref() != Some(upload_session.上传会话标识.as_str())
+        {
             return Err((
                 StatusCode::CONFLICT,
                 "attachment_not_ready",
@@ -426,7 +509,7 @@ async fn handle_tus_hook_post_finish(
                 "system_error",
                 format!("Tus post-finish 任务执行失败: {err}"),
             )
-            .into_response()
+            .into_response();
         }
     };
     match update_result {
@@ -442,7 +525,7 @@ async fn handle_tus_hook_post_finish(
                 storage_locator = storage_locator.as_str(),
                 "Tus post-finish 已登记上传回执"
             );
-            StatusCode::NO_CONTENT.into_response()
+            返回tus_hook成功响应()
         }
         Err((status, code, message)) => {
             tracing::warn!(
@@ -458,12 +541,15 @@ async fn handle_tus_hook_post_finish(
                 detail = %message,
                 "Tus post-finish 被拒绝"
             );
-            err_resp(status, code, message).into_response()
+            let _ = status;
+            返回tus_hook成功响应()
         }
     }
 }
 
-fn 读取tus_hook名称(body: &TusHookBody) -> Result<String, (StatusCode, &'static str, &'static str)> {
+fn 读取tus_hook名称(
+    body: &TusHookBody,
+) -> Result<String, (StatusCode, &'static str, &'static str)> {
     let hook_name = body.hook_type.trim().to_ascii_lowercase();
     if hook_name.is_empty() {
         return Err((
@@ -478,7 +564,8 @@ fn 读取tus_hook名称(body: &TusHookBody) -> Result<String, (StatusCode, &'sta
 fn 读取媒体上传令牌(
     http_request: &TusHttpRequestBody,
 ) -> Result<String, (StatusCode, &'static str, &'static str)> {
-    let Some(raw_authorization) = 读取首个非空tus请求头值(http_request, "Authorization") else {
+    let Some(raw_authorization) = 读取首个非空tus请求头值(http_request, "Authorization")
+    else {
         return Err((
             StatusCode::UNAUTHORIZED,
             "attachment_upload_unauthorized",
@@ -589,7 +676,10 @@ fn 读取tus存储路径(
         ))
 }
 
-fn 读取可选tus_metadata字段(metadata: &HashMap<String, String>, key: &'static str) -> Option<String> {
+fn 读取可选tus_metadata字段(
+    metadata: &HashMap<String, String>,
+    key: &'static str,
+) -> Option<String> {
     metadata
         .get(key)
         .map(|value| value.trim().to_string())
@@ -660,7 +750,7 @@ pub(super) fn 解析tus临时文件路径(
 
 #[cfg(test)]
 mod tests {
-    use super::{读取可选请求标识, TusHttpRequestBody};
+    use super::{TusHttpRequestBody, 读取可选请求标识};
     use std::collections::HashMap;
 
     #[test]
@@ -675,4 +765,89 @@ mod tests {
 
         assert_eq!(读取可选请求标识(&http_request).as_deref(), Some("req-123"));
     }
+}
+
+async fn handle_tus_hook_pre_terminate(state: 应用状态, body: TusHookBody) -> Response {
+    let request_id = 读取可选请求标识(&body.event.http_request);
+    let upload_id = match 读取tus上传标识(&body.event.upload, "pre-terminate") {
+        Ok(upload_id) => upload_id,
+        Err((status, code, message)) => {
+            return 返回tus_hook拒绝termination响应(status, code, message)
+        }
+    };
+    let Some(expected_guard) = state
+        .tus_internal_termination_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        tracing::warn!(
+            adapter = "tus_hook",
+            hook = "pre-terminate",
+            upload_id = upload_id.as_str(),
+            request_id = request_id.as_deref().unwrap_or(""),
+            error_code = "attachment_upload_unauthorized",
+            "Tus pre-terminate 缺少内部守卫配置，拒绝删除"
+        );
+        return 返回tus_hook拒绝termination响应(
+            StatusCode::UNAUTHORIZED,
+            "attachment_upload_unauthorized",
+            "termination 未授权",
+        );
+    };
+    let Some(actual_guard) = 读取首个非空tus请求头值(
+        &body.event.http_request,
+        TUS_INTERNAL_TERMINATION_GUARD_HEADER,
+    ) else {
+        return 返回tus_hook拒绝termination响应(
+            StatusCode::UNAUTHORIZED,
+            "attachment_upload_unauthorized",
+            "termination 未授权",
+        );
+    };
+    if actual_guard != expected_guard {
+        tracing::warn!(
+            adapter = "tus_hook",
+            hook = "pre-terminate",
+            upload_id = upload_id.as_str(),
+            request_id = request_id.as_deref().unwrap_or(""),
+            error_code = "attachment_upload_unauthorized",
+            "Tus pre-terminate 内部守卫头不匹配，拒绝删除"
+        );
+        return 返回tus_hook拒绝termination响应(
+            StatusCode::UNAUTHORIZED,
+            "attachment_upload_unauthorized",
+            "termination 未授权",
+        );
+    }
+    tracing::info!(
+        adapter = "tus_hook",
+        hook = "pre-terminate",
+        upload_id = upload_id.as_str(),
+        request_id = request_id.as_deref().unwrap_or(""),
+        "Tus pre-terminate 已放行内部 transport 删除"
+    );
+    返回tus_hook成功响应()
+}
+
+async fn handle_tus_hook_post_terminate(_state: 应用状态, body: TusHookBody) -> Response {
+    let request_id = 读取可选请求标识(&body.event.http_request);
+    let upload_id = match 读取tus上传标识(&body.event.upload, "post-terminate") {
+        Ok(upload_id) => upload_id,
+        Err((status, code, message)) => return err_resp(status, code, message).into_response(),
+    };
+    let attachment_id =
+        读取可选tus_metadata字段(&body.event.upload.metadata, "attachment_id");
+    let upload_session_id =
+        读取可选tus_metadata字段(&body.event.upload.metadata, "upload_session_id");
+    tracing::info!(
+        adapter = "tus_hook",
+        hook = "post-terminate",
+        attachment_id = attachment_id.as_deref().unwrap_or(""),
+        upload_session_id = upload_session_id.as_deref().unwrap_or(""),
+        upload_id = upload_id.as_str(),
+        request_id = request_id.as_deref().unwrap_or(""),
+        "Tus post-terminate 已记录 transport 删除事实"
+    );
+    返回tus_hook成功响应()
 }

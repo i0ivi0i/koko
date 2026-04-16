@@ -208,12 +208,12 @@ function Stop-StaleLauncherBackend {
     }
 }
 
-function Resolve-RustusBinaryPath {
-    # Rustus 是独立 sidecar，不属于主服务二进制；这里只负责确认它存在，
+function Resolve-TusdBinaryPath {
+    # tusd 是独立 sidecar，不属于主服务二进制；这里只负责确认它存在，
     # 缺失时直接让启动失败，避免开发脚本偷偷改机器状态。
-    $command = Get-Command rustus.exe -ErrorAction SilentlyContinue
+    $command = Get-Command tusd.exe -ErrorAction SilentlyContinue
     if ($null -eq $command) {
-        $command = Get-Command rustus -ErrorAction Stop
+        $command = Get-Command tusd -ErrorAction Stop
     }
     return $command.Source
 }
@@ -265,14 +265,14 @@ if ($null -eq $nodeCommand) {
     $nodeCommand = Get-Command node -ErrorAction Stop
 }
 $nodePath = $nodeCommand.Source
-$rustusPath = Resolve-RustusBinaryPath
+$tusdPath = Resolve-TusdBinaryPath
 $logDirectory = New-LauncherLogDirectory -RootDirectory $env:TEMP -SessionName "koko-runner"
 $backendTargetDir = Join-Path $repoRoot "target\\launcher-run"
 $frontendRoot = Join-Path $repoRoot "frontend"
 $frontendWatch = $null
 $frontendTypeWatch = $null
 $backendProcess = $null
-$rustusProcess = $null
+$tusdProcess = $null
 $trackerProcess = $null
 
 try {
@@ -324,63 +324,58 @@ try {
     if ([string]::IsNullOrWhiteSpace($appPort)) {
         $appPort = "8080"
     }
-    $rustusPort = [Environment]::GetEnvironmentVariable("RUSTUS_SERVER_PORT")
-    if ([string]::IsNullOrWhiteSpace($rustusPort)) {
-        $rustusPort = "1081"
+    $mediaTusBasePath = [Environment]::GetEnvironmentVariable("MEDIA_TUS_BASE_PATH")
+    if ([string]::IsNullOrWhiteSpace($mediaTusBasePath)) {
+        $mediaTusBasePath = "/files"
     }
-    $rustusHost = [Environment]::GetEnvironmentVariable("RUSTUS_SERVER_HOST")
-    if ([string]::IsNullOrWhiteSpace($rustusHost)) {
-        $rustusHost = "0.0.0.0"
+    if (-not $mediaTusBasePath.StartsWith("/")) {
+        $mediaTusBasePath = "/$mediaTusBasePath"
     }
-    $rustusDataDir = [Environment]::GetEnvironmentVariable("RUSTUS_DATA_DIR")
-    if ([string]::IsNullOrWhiteSpace($rustusDataDir)) {
-        $rustusDataDir = "data/rustus"
+    $mediaTusUploadDir = [Environment]::GetEnvironmentVariable("MEDIA_TUS_UPLOAD_DIR")
+    if ([string]::IsNullOrWhiteSpace($mediaTusUploadDir)) {
+        $mediaTusUploadDir = "data/tus"
     }
-    $rustusInfoDir = [Environment]::GetEnvironmentVariable("RUSTUS_INFO_DIR")
-    if ([string]::IsNullOrWhiteSpace($rustusInfoDir)) {
-        $rustusInfoDir = "data/rustus-info"
+    $tusdPort = [Environment]::GetEnvironmentVariable("TUSD_PORT")
+    if ([string]::IsNullOrWhiteSpace($tusdPort)) {
+        $tusdPort = [Environment]::GetEnvironmentVariable("MEDIA_TUS_SERVER_PORT")
     }
-    $rustusUrl = [Environment]::GetEnvironmentVariable("RUSTUS_URL")
-    if ([string]::IsNullOrWhiteSpace($rustusUrl)) {
-        $rustusUrl = "/files"
+    if ([string]::IsNullOrWhiteSpace($tusdPort)) {
+        $tusdPort = "1081"
     }
-    $rustusHooks = [Environment]::GetEnvironmentVariable("RUSTUS_HOOKS")
-    if ([string]::IsNullOrWhiteSpace($rustusHooks)) {
-        $rustusHooks = "pre-create,post-finish"
+    $tusdHost = [Environment]::GetEnvironmentVariable("TUSD_HOST")
+    if ([string]::IsNullOrWhiteSpace($tusdHost)) {
+        $tusdHost = "0.0.0.0"
     }
-    $rustusMaxBodySize = [Environment]::GetEnvironmentVariable("RUSTUS_MAX_BODY_SIZE")
-    if ([string]::IsNullOrWhiteSpace($rustusMaxBodySize)) {
-        $rustusMaxBodySize = (200 * 1024 * 1024).ToString()
+    $tusdMaxSize = [Environment]::GetEnvironmentVariable("TUSD_MAX_SIZE")
+    if ([string]::IsNullOrWhiteSpace($tusdMaxSize)) {
+        $tusdMaxSize = (200 * 1024 * 1024).ToString()
     }
-    $rustusMaxFileSize = [Environment]::GetEnvironmentVariable("RUSTUS_MAX_FILE_SIZE")
-    if ([string]::IsNullOrWhiteSpace($rustusMaxFileSize)) {
-        $rustusMaxFileSize = (200 * 1024 * 1024).ToString()
+    $tusdBehindProxy = [Environment]::GetEnvironmentVariable("TUSD_BEHIND_PROXY")
+    $tusdHooksEnabledEvents = [Environment]::GetEnvironmentVariable("TUSD_HOOKS_ENABLED_EVENTS")
+    if ([string]::IsNullOrWhiteSpace($tusdHooksEnabledEvents)) {
+        $tusdHooksEnabledEvents = "pre-create,post-finish,pre-terminate,post-terminate"
     }
-    $rustusServerWorkers = [Environment]::GetEnvironmentVariable("RUSTUS_SERVER_WORKERS")
-    if ([string]::IsNullOrWhiteSpace($rustusServerWorkers)) {
-        $rustusServerWorkers = "4"
+    $tusdHooksHttpForwardHeaders = [Environment]::GetEnvironmentVariable("TUSD_HOOKS_HTTP_FORWARD_HEADERS")
+    if ([string]::IsNullOrWhiteSpace($tusdHooksHttpForwardHeaders)) {
+        $tusdHooksHttpForwardHeaders = "Authorization,X-Request-ID,X-Koko-Internal-Termination"
     }
-    $rustusTusExtensions = [Environment]::GetEnvironmentVariable("RUSTUS_TUS_EXTENSIONS")
-    if ([string]::IsNullOrWhiteSpace($rustusTusExtensions)) {
-        # 官方文档当前写的是“默认启用全部扩展”，但这里仍然把运行时依赖显式钉住：
-        # 1. 大视频单文件高吞吐现在已经依赖 Concatenation，不该再把它藏在 sidecar 默认里；
-        # 2. `creation-with-upload` 也要一起保留，避免未来有人只顾着打开 concatenation 却顺手砍掉一次请求内完成上传的能力；
-        # 3. 显式默认值能把“我们的上传主链到底依赖哪些 Tus 扩展”直接暴露给维护者和启动检查脚本。
-        $rustusTusExtensions = "getting,creation,termination,creation-with-upload,creation-defer-length,concatenation,checksum"
+    $mediaTusInternalTerminationToken = [Environment]::GetEnvironmentVariable("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN")
+    if ([string]::IsNullOrWhiteSpace($mediaTusInternalTerminationToken)) {
+        # 当前阶段只有 run.ps1 同时掌握“后端进程 + tusd sidecar”两端编排；
+        # 因此开发态默认直接生成一份内部 guard，避免把 termination 功能退化回“脚本没配好就永远没启用”。
+        $mediaTusInternalTerminationToken = [Guid]::NewGuid().ToString("N")
     }
-    $rustusRemoveParts = [Environment]::GetEnvironmentVariable("RUSTUS_REMOVE_PARTS")
-    if ([string]::IsNullOrWhiteSpace($rustusRemoveParts)) {
-        # Concatenation 打通后，partial 残留不再有长期保留价值：
-        # - final upload 才是当前会话的 canonical transport；
-        # - partial 文件只是运输中间态；
-        # - 默认打开 remove-parts，尽量把“成功合并后的碎片垃圾”交给成熟 sidecar 直接收掉。
-        $rustusRemoveParts = "true"
+    $mediaTusInternalBaseUrl = [Environment]::GetEnvironmentVariable("MEDIA_TUS_INTERNAL_BASE_URL")
+    if ([string]::IsNullOrWhiteSpace($mediaTusInternalBaseUrl)) {
+        $mediaTusInternalBaseUrl = "http://127.0.0.1:$tusdPort"
     }
-    $rustusBehindProxy = [Environment]::GetEnvironmentVariable("RUSTUS_BEHIND_PROXY")
-    $rustusHooksHttpProxyHeaders = [Environment]::GetEnvironmentVariable("RUSTUS_HOOKS_HTTP_PROXY_HEADERS")
-    if ([string]::IsNullOrWhiteSpace($rustusHooksHttpProxyHeaders)) {
-        $rustusHooksHttpProxyHeaders = "Authorization,X-Request-ID"
-    }
+    # app 读 generic MEDIA_TUS_*，sidecar 读 TUSD_*。
+    # launcher 在这里把双方最终解析后的值写回同一批环境变量，避免“准备返回的 tus_endpoint”和真正监听的 tusd 参数各自漂一套。
+    [Environment]::SetEnvironmentVariable("MEDIA_TUS_SERVER_PORT", $tusdPort)
+    [Environment]::SetEnvironmentVariable("MEDIA_TUS_BASE_PATH", $mediaTusBasePath)
+    [Environment]::SetEnvironmentVariable("MEDIA_TUS_UPLOAD_DIR", $mediaTusUploadDir)
+    [Environment]::SetEnvironmentVariable("MEDIA_TUS_INTERNAL_BASE_URL", $mediaTusInternalBaseUrl)
+    [Environment]::SetEnvironmentVariable("MEDIA_TUS_INTERNAL_TERMINATION_TOKEN", $mediaTusInternalTerminationToken)
     $trackerPort = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_PORT")
     if ([string]::IsNullOrWhiteSpace($trackerPort)) {
         $trackerPort = "7072"
@@ -389,13 +384,11 @@ try {
     if ([string]::IsNullOrWhiteSpace($trackerPublicUrl)) {
         $trackerPublicUrl = "ws://127.0.0.1:$trackerPort"
     }
-    $rustusHookUrl = "http://127.0.0.1:$appPort/internal/rustus/hooks"
-    $resolvedRustusDataDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusDataDir))
-    $resolvedRustusInfoDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $rustusInfoDir))
-    New-Item -ItemType Directory -Path $resolvedRustusDataDir -Force | Out-Null
-    New-Item -ItemType Directory -Path $resolvedRustusInfoDir -Force | Out-Null
+    $tusHookUrl = "http://127.0.0.1:$appPort/internal/tus/hooks"
+    $resolvedTusUploadDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $mediaTusUploadDir))
+    New-Item -ItemType Directory -Path $resolvedTusUploadDir -Force | Out-Null
     Write-Host "访问入口: http://127.0.0.1:$appPort/"
-    Write-Host "Rustus 监听: http://${rustusHost}:$rustusPort$rustusUrl"
+    Write-Host "tusd 监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
     Write-Host "WebTorrent tracker 对外 announce: $trackerPublicUrl"
     Write-Host "子进程日志目录: $logDirectory"
     # 启动器使用独立 target 目录：
@@ -409,52 +402,31 @@ try {
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 
-    # Rustus 只负责字节运输与断点续传：
-    # 1. `--url` 固定前端要访问的 Tus 基础路径；
-    # 2. `--hooks` 只打开当前后端真正消费的 `pre-create/post-finish`，
-    #    避免默认的 post-create/post-receive 等事件把 sidecar 配置漂移升级成上传失败；
-    # 3. hooks 回调主服务做令牌校验和上传回执登记；
-    # 4. `max-body-size/max-file-size` 默认至少覆盖当前群聊 200 MiB 视频上限。
-    #    Uppy/Tus 默认会直接把整块文件作为 PATCH 发送，若沿用 Rustus 256 KiB 默认值，
-    #    正常图片也会在 transport 层被 413 拦死，业务层根本看不到。
-    # 5. `data-dir/info-dir` 明确落在项目可读目录，给 complete 消费共享文件。
-    # 6. 额外吞吐参数只做“显式接线，不篡改默认”：
-    #    - workers 默认直接提到 4，避免开发态继续吃官方保守默认；
-    #    - tus-extensions 现在显式钉住 concatenation 所需集合，避免运行时只靠官方默认兜底；
-    #    - remove-parts 默认开启，让 final concat 成功后的 partial 残留优先由 Rustus 自己回收；
-    #    - behind-proxy 仍然保留 flag 语义，不把布尔配置伪装成字符串参数；
-    #    - `Authorization,X-Request-ID` 是默认例外，因为 hook 诊断链必须拿到这两个头才能串起浏览器与主服务日志。
-    $rustusArgumentList = @(
-        "--host", $rustusHost,
-        "--port", $rustusPort,
-        "--url", $rustusUrl,
-        "--max-body-size", $rustusMaxBodySize,
-        "--max-file-size", $rustusMaxFileSize,
-        "--hooks", $rustusHooks,
-        "--storage", "file-storage",
-        "--data-dir", $resolvedRustusDataDir,
-        "--info-storage", "file-info-storage",
-        "--info-dir", $resolvedRustusInfoDir,
-        "--hooks-http-urls", $rustusHookUrl,
-        "--hooks-http-proxy-headers", $rustusHooksHttpProxyHeaders
+    # tusd 只负责官方 resumable upload / concatenation / termination / local disk：
+    # 1. `-base-path` 明确固定前端真正要打的 Tus 路径；
+    # 2. `-upload-dir` 继续和 complete / gc 共享同一个临时目录；
+    # 3. `-hooks-http` + `-hooks-enabled-events` 只接当前主服务真正消费的事件，不让默认 hook 表面继续漂；
+    # 4. `-hooks-http-forward-headers` 显式保留 Authorization / request id / 内部 termination guard，避免诊断和删除门禁各靠猜；
+    # 5. `-max-size` 与 `-disable-download` 把协议能力收口到当前业务边界，不把调试默认值带进正式主链。
+    $tusdArgumentList = @(
+        "-host", $tusdHost,
+        "-port", $tusdPort,
+        "-base-path", $mediaTusBasePath,
+        "-upload-dir", $resolvedTusUploadDir,
+        "-max-size", $tusdMaxSize,
+        "-disable-download",
+        "-hooks-http", $tusHookUrl,
+        "-hooks-enabled-events", $tusdHooksEnabledEvents,
+        "-hooks-http-forward-headers", $tusdHooksHttpForwardHeaders
     )
-    if (-not [string]::IsNullOrWhiteSpace($rustusServerWorkers)) {
-        $rustusArgumentList += @("--workers", $rustusServerWorkers.Trim())
+    if (Test-TruthyEnvironmentFlag $tusdBehindProxy) {
+        $tusdArgumentList += @("-behind-proxy")
     }
-    if (-not [string]::IsNullOrWhiteSpace($rustusTusExtensions)) {
-        $rustusArgumentList += @("--tus-extensions", $rustusTusExtensions.Trim())
-    }
-    if (Test-TruthyEnvironmentFlag $rustusRemoveParts) {
-        $rustusArgumentList += @("--remove-parts")
-    }
-    if (Test-TruthyEnvironmentFlag $rustusBehindProxy) {
-        $rustusArgumentList += @("--behind-proxy")
-    }
-    Write-Host ("启动 Rustus: rustus {0}" -f ($rustusArgumentList -join " "))
-    $rustusProcess = New-ManagedProcess `
-        -Name "rustus" `
-        -FilePath $rustusPath `
-        -ArgumentList $rustusArgumentList `
+    Write-Host ("启动 tusd: tusd {0}" -f ($tusdArgumentList -join " "))
+    $tusdProcess = New-ManagedProcess `
+        -Name "tusd" `
+        -FilePath $tusdPath `
+        -ArgumentList $tusdArgumentList `
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 
@@ -475,7 +447,7 @@ try {
         Write-ManagedProcessLogs $frontendWatch
         Write-ManagedProcessLogs $frontendTypeWatch
         Write-ManagedProcessLogs $backendProcess
-        Write-ManagedProcessLogs $rustusProcess
+        Write-ManagedProcessLogs $tusdProcess
         Write-ManagedProcessLogs $trackerProcess
 
         if ($frontendWatch.Process.HasExited) {
@@ -494,11 +466,13 @@ try {
             }
             break
         }
-        if ($rustusProcess.Process.HasExited) {
-            Write-ManagedProcessLogs $rustusProcess
-            $rustusExitCode = $rustusProcess.Process.ExitCode
-            if ($rustusExitCode -ne 0) {
-                throw "Rustus 进程异常退出，退出码: $rustusExitCode"
+        # tusd 是当前开发态唯一活着的 Tus sidecar；
+        # 一旦它退出，launcher 就必须立刻把异常暴露出来，避免前端继续命中一个“看似在跑、其实已断”的假上传路径。
+        if ($tusdProcess.Process.HasExited) {
+            Write-ManagedProcessLogs $tusdProcess
+            $tusdExitCode = $tusdProcess.Process.ExitCode
+            if ($tusdExitCode -ne 0) {
+                throw "tusd 进程异常退出，退出码: $tusdExitCode"
             }
             break
         }
@@ -512,12 +486,12 @@ try {
 }
 finally {
     Write-ManagedProcessLogs $trackerProcess
-    Write-ManagedProcessLogs $rustusProcess
+    Write-ManagedProcessLogs $tusdProcess
     Write-ManagedProcessLogs $backendProcess
     Write-ManagedProcessLogs $frontendTypeWatch
     Write-ManagedProcessLogs $frontendWatch
     Stop-ManagedProcess $trackerProcess
-    Stop-ManagedProcess $rustusProcess
+    Stop-ManagedProcess $tusdProcess
     Stop-ManagedProcess $backendProcess
     Stop-ManagedProcess $frontendTypeWatch
     Stop-ManagedProcess $frontendWatch

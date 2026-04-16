@@ -1,5 +1,5 @@
 use koko::contract::{
-    Blob媒体资产描述, 变体描述, 媒体资产种类, 媒体冷源描述, 媒体冷源角色, 媒体分发描述,
+    Blob媒体资产描述, 变体描述, 媒体冷源描述, 媒体冷源角色, 媒体分发描述, 媒体资产种类,
 };
 
 #[test]
@@ -46,16 +46,26 @@ fn 图片资产描述包含_preview_full_original_而不是普通附件直链() 
     };
 
     assert_eq!(asset.种类, 媒体资产种类::图片Blob);
-    assert_eq!(asset.preview.as_ref().map(|value| value.标识.as_str()), Some("preview"));
-    assert_eq!(asset.full.as_ref().map(|value| value.标识.as_str()), Some("full"));
-    assert_eq!(asset.original.as_ref().map(|value| value.标识.as_str()), Some("original"));
+    assert_eq!(
+        asset.preview.as_ref().map(|value| value.标识.as_str()),
+        Some("preview")
+    );
+    assert_eq!(
+        asset.full.as_ref().map(|value| value.标识.as_str()),
+        Some("full")
+    );
+    assert_eq!(
+        asset.original.as_ref().map(|value| value.标识.as_str()),
+        Some("original")
+    );
     assert!(
         asset.full.as_ref().map(|value| value.地址.as_str())
             != asset.original.as_ref().map(|value| value.地址.as_str()),
         "full 和 original 必须是可区分的稳定资产地址"
     );
     assert!(
-        asset.full
+        asset
+            .full
             .as_ref()
             .is_some_and(|value| !value.地址.contains("/api/attachments/"))
             && asset
