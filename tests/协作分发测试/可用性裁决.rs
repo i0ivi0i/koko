@@ -219,3 +219,102 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
         Some("expired")
     );
 }
+
+#[tokio::test]
+#[serial]
+async fn web_seed过期且streaming已删除但最近peer仍存活时locator会进入peer_only可用态() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("peer-only-after-streaming-delete-{uniq}")}),
+        ),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+    let attachment_id = format!("att-peer-only-after-streaming-delete-{uniq}");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库插入附件");
+    插入ready视频附件记录(&pool, session_id, &attachment_id).await;
+    插入附件协作分发元数据记录(&pool, &attachment_id).await;
+    插入流媒体清单元数据记录(&pool, &attachment_id).await;
+    sqlx::query(
+        "UPDATE attachment_distribution_metadata
+         SET web_seed_until = NOW() - INTERVAL '5 minutes',
+             last_peer_seen_at = NOW()
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .execute(&pool)
+    .await
+    .expect("应能把 web_seed 挪出窗口，同时保留最近 peer 存活");
+    sqlx::query(
+        "UPDATE attachment_streaming_manifests
+         SET streaming_expires_at = NOW() - INTERVAL '25 hours',
+             streaming_deleted_at = NOW() - INTERVAL '1 minute'
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .execute(&pool)
+    .await
+    .expect("应能把流媒体清单标成已删除");
+    pool.close().await;
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        body["distribution"]["availability"].as_str(),
+        Some("available"),
+        "只要最近 peer 仍在活跃，locator 就必须进入 peer-only 可用态，而不是因为服务器 streaming 已删就直接 expired"
+    );
+    assert_eq!(
+        body["distribution"]["survival_mode"].as_str(),
+        Some("peer_only_after_expiry")
+    );
+    assert!(
+        body["distribution"]["web_seed_url"].is_null(),
+        "web_seed 已过期时，locator 顶层分发表面必须明确退场"
+    );
+    assert!(
+        body["streaming_asset"]["manifest"]["hls_master_url"].is_null(),
+        "streaming_deleted_at 已写入后，locator 不能继续投影 HLS manifest 地址"
+    );
+    assert!(
+        body["streaming_asset"]["manifest"]["dash_mpd_url"].is_null(),
+        "streaming_deleted_at 已写入后，locator 不能继续投影 DASH manifest 地址"
+    );
+    assert!(
+        body["streaming_asset"]["lifecycle"]["streaming_deleted_at"]
+            .as_str()
+            .is_some(),
+        "peer-only 存活语义必须和流媒体退场事实同时出现，不能让前端自己猜 manifest 是否已删"
+    );
+}

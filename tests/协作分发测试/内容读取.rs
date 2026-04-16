@@ -1,8 +1,17 @@
 use super::*;
+use object_store::{path::Path as ObjectPath, ObjectStoreExt};
 
 /// 内容读取测试只守受控媒体读路径：
 /// 1. original 变体仍要支持标准 HTTP range；
 /// 2. 视频 original 现在读的是 mezzanine，但仍必须返回真实可续传字节。
+async fn 写入测试对象(state: &koko::shell::应用状态, 存储键: &str, 字节: Vec<u8>) {
+    state
+        .attachment_store
+        .put(&ObjectPath::from(存储键), 字节.into())
+        .await
+        .expect("应能写入测试对象");
+}
+
 #[tokio::test]
 #[serial]
 async fn 原图内容接口支持标准range读取() {
@@ -159,4 +168,88 @@ async fn 原图内容接口支持标准range读取() {
         !body.is_empty(),
         "视频 mezzanine 的 range 读取必须返回真实字节，而不是空响应"
     );
+}
+
+#[tokio::test]
+#[serial]
+async fn 流媒体清单删除后hls和dash受控内容读取会返回not_found() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state.clone());
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("streaming-deleted-read-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+    let attachment_id = format!("att-streaming-read-deleted-{uniq}");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能直连数据库插入附件");
+    插入ready视频附件记录(&pool, session_id, &attachment_id).await;
+    插入附件协作分发元数据记录(&pool, &attachment_id).await;
+    插入流媒体清单元数据记录(&pool, &attachment_id).await;
+    sqlx::query(
+        "UPDATE attachment_streaming_manifests
+         SET streaming_expires_at = NOW() - INTERVAL '25 hours',
+             streaming_deleted_at = NOW() - INTERVAL '1 minute'
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .execute(&pool)
+    .await
+    .expect("应能把 streaming_deleted_at 写成已退场");
+    pool.close().await;
+
+    写入测试对象(
+        &state,
+        format!("streams/{attachment_id}/hls/master.m3u8").as_str(),
+        b"#EXTM3U\n".to_vec(),
+    )
+    .await;
+    写入测试对象(
+        &state,
+        format!("streams/{attachment_id}/dash/stream.mpd").as_str(),
+        br#"<?xml version="1.0" encoding="UTF-8"?><MPD />"#.to_vec(),
+    )
+    .await;
+
+    let (hls_status, hls_body) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/media/{attachment_id}/stream/hls/master.m3u8?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(hls_status, StatusCode::NOT_FOUND, "{hls_body:?}");
+    assert_eq!(hls_body["code"].as_str(), Some("attachment_not_ready"));
+
+    let (dash_status, dash_body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/stream/dash/stream.mpd?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(dash_status, StatusCode::NOT_FOUND, "{dash_body:?}");
+    assert_eq!(dash_body["code"].as_str(), Some("attachment_not_ready"));
 }

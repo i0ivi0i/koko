@@ -409,6 +409,12 @@ fn blob媒体资产描述转响应体(
 }
 
 fn 构造流媒体资产响应体(参数: 流媒体资产响应参数<'_>) -> serde_json::Value {
+    // `streaming_deleted_at` 是服务端流媒体入口的退场事实。
+    // 事实一旦写入，locator/complete 仍可继续告知生命周期与 peer-only 分发，
+    // 但不能再把 HLS/DASH manifest 地址投影给前端，避免服务器冷备悄悄复活成长期主链。
+    let 流媒体入口仍可暴露 = 参数
+        .流媒体清单
+        .is_some_and(|manifest| manifest.streaming删除时间戳秒.is_none());
     let asset = contract::流媒体资产描述 {
         // 真实独立 media_asset_id 还没落表前，先显式复用 attachment_id 当稳定资产锚点；
         // 这样能把共享协议面立起来，但不会伪造第二个尚不存在的权威主键。
@@ -416,26 +422,34 @@ fn 构造流媒体资产响应体(参数: 流媒体资产响应参数<'_>) -> se
         内容哈希: 参数.分发快照.content_hash.clone(),
         种类: contract::媒体资产种类::流媒体视频,
         清单: contract::媒体清单描述 {
-            hls主清单地址: 参数.流媒体清单.map(|manifest| {
-                流媒体打包::构造流媒体受控地址(
-                    参数.附件标识,
-                    参数.会话标识,
-                    流媒体打包::流媒体存储键转受控路径(
+            hls主清单地址: if 流媒体入口仍可暴露 {
+                参数.流媒体清单.map(|manifest| {
+                    流媒体打包::构造流媒体受控地址(
                         参数.附件标识,
-                        manifest.hls主清单存储键.as_str(),
-                    ),
-                )
-            }),
-            dash主清单地址: 参数.流媒体清单.map(|manifest| {
-                流媒体打包::构造流媒体受控地址(
-                    参数.附件标识,
-                    参数.会话标识,
-                    流媒体打包::流媒体存储键转受控路径(
+                        参数.会话标识,
+                        流媒体打包::流媒体存储键转受控路径(
+                            参数.附件标识,
+                            manifest.hls主清单存储键.as_str(),
+                        ),
+                    )
+                })
+            } else {
+                None
+            },
+            dash主清单地址: if 流媒体入口仍可暴露 {
+                参数.流媒体清单.map(|manifest| {
+                    流媒体打包::构造流媒体受控地址(
                         参数.附件标识,
-                        manifest.dash主清单存储键.as_str(),
-                    ),
-                )
-            }),
+                        参数.会话标识,
+                        流媒体打包::流媒体存储键转受控路径(
+                            参数.附件标识,
+                            manifest.dash主清单存储键.as_str(),
+                        ),
+                    )
+                })
+            } else {
+                None
+            },
         },
         生命周期: contract::流媒体生命周期描述 {
             streaming到期时间戳秒: 参数
@@ -995,6 +1009,19 @@ pub(super) async fn load_streaming_asset_content(
             StatusCode::CONFLICT,
             "attachment_not_ready",
             "流媒体清单尚未准备完成",
+        );
+    }
+    if locator
+        .流媒体清单
+        .as_ref()
+        .and_then(|manifest| manifest.streaming删除时间戳秒)
+        .is_some()
+    {
+        // 这里直接拦住对象存储读取，避免已退场的服务端流媒体平面被旧 URL 或缓存路径继续命中。
+        return err_resp(
+            StatusCode::NOT_FOUND,
+            "attachment_not_ready",
+            "流媒体冷备窗口已结束",
         );
     }
 
