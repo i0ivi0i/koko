@@ -166,6 +166,7 @@ export function 创建内存媒体定位缓存仓库(
 export function 创建媒体定位器(deps: 媒体定位器依赖) {
   const repo = deps.repo ?? 创建内存媒体定位缓存仓库();
   const cache = new Map<string, 定位缓存项>();
+  const inflight = new Map<string, Promise<媒体定位结果>>();
 
   const 读取缓存 = (attachmentId: string): 媒体定位结果 | null =>
     cache.get(attachmentId)?.value ?? null;
@@ -202,6 +203,7 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
 
   const 清空 = (): void => {
     cache.clear();
+    inflight.clear();
   };
 
   const 获取定位 = async (
@@ -212,21 +214,40 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
     if (cached && !cached.stale && !options.forceRefresh) {
       return cached.value;
     }
-    try {
-      const locator = await deps.loadMediaLocator(deps.getSessionId(), attachmentId);
-      const next = {
-        attachmentId,
-        value: locator,
-        stale: false,
-      };
-      cache.set(attachmentId, next);
-      await repo.保存(next);
-      return locator;
-    } catch (error) {
-      if (cached) {
-        return cached.value;
+    const inflightRequest = inflight.get(attachmentId);
+    if (inflightRequest) {
+      return inflightRequest;
+    }
+    let request!: Promise<媒体定位结果>;
+    request = (async () => {
+      try {
+        const locator = await deps.loadMediaLocator(deps.getSessionId(), attachmentId);
+        const next = {
+          attachmentId,
+          value: locator,
+          stale: false,
+        };
+        cache.set(attachmentId, next);
+        await repo.保存(next);
+        return locator;
+      } catch (error) {
+        if (cached) {
+          return cached.value;
+        }
+        throw error;
+      } finally {
+        if (inflight.get(attachmentId) === request) {
+          inflight.delete(attachmentId);
+        }
       }
-      throw error;
+    })();
+    inflight.set(attachmentId, request);
+    try {
+      return await request;
+    } finally {
+      if (inflight.get(attachmentId) === request) {
+        inflight.delete(attachmentId);
+      }
     }
   };
 

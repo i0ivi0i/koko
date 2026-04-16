@@ -97,6 +97,93 @@ describe("媒体定位器", () => {
     expect(loadMediaLocator).toHaveBeenCalledTimes(2);
   });
 
+  it("同一个 attachment 并发请求 locator 时会复用同一个 inflight promise", async () => {
+    let resolveLocator!: (value: {
+      attachment_id: string;
+      kind: "video";
+      status: "ready";
+      original_url: string;
+      thumbnail_url: string | null;
+      distribution: {
+        content_id: string;
+        content_hash: string;
+        swarm_id: string;
+        web_seed_until: string;
+        torrent_url: string;
+        torrent_info_hash: string;
+        announce_urls: string[];
+        web_seed_url: string;
+        join_ticket: null;
+        ticket_expires_at: null;
+        availability: "available";
+        survival_mode: "server_assisted";
+      };
+    }) => void;
+    const loadMediaLocator = vi.fn(
+      () =>
+        new Promise<{
+          attachment_id: string;
+          kind: "video";
+          status: "ready";
+          original_url: string;
+          thumbnail_url: string | null;
+          distribution: {
+            content_id: string;
+            content_hash: string;
+            swarm_id: string;
+            web_seed_until: string;
+            torrent_url: string;
+            torrent_info_hash: string;
+            announce_urls: string[];
+            web_seed_url: string;
+            join_ticket: null;
+            ticket_expires_at: null;
+            availability: "available";
+            survival_mode: "server_assisted";
+          };
+        }>((resolve) => {
+          resolveLocator = resolve;
+        })
+    );
+    const 定位器 = 创建媒体定位器({
+      getSessionId: () => "s-test",
+      loadMediaLocator,
+    });
+
+    const firstPromise = 定位器.获取定位("att-concurrent-1");
+    const secondPromise = 定位器.获取定位("att-concurrent-1");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    resolveLocator({
+      attachment_id: "att-concurrent-1",
+      kind: "video",
+      status: "ready",
+      original_url: "http://media.local/original-concurrent-1",
+      thumbnail_url: "http://media.local/thumb-concurrent-1",
+      distribution: {
+        content_id: "content_att-concurrent-1",
+        content_hash: "hash-concurrent-1",
+        swarm_id: "swarm-hash-concurrent-1",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-concurrent-1",
+        torrent_info_hash: "torrent-info-hash-concurrent-1",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-concurrent-1",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available",
+        survival_mode: "server_assisted",
+      },
+    });
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+
+    expect(first.original_url).toBe("http://media.local/original-concurrent-1");
+    expect(second.original_url).toBe("http://media.local/original-concurrent-1");
+    expect(loadMediaLocator).toHaveBeenCalledTimes(1);
+  });
+
   it("重新创建定位器后会继续命中持久化 locator，而不是重开页面就重新请求后端", async () => {
     const records = new Map<string, unknown>();
     const repo = {

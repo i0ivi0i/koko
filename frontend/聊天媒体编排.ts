@@ -185,7 +185,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     const session = 媒体会话表.get(startItem.attachmentId);
     const sessionSnapshot = session?.snapshot();
-    if (!sessionSnapshot?.locallyComplete) {
+    if (!sessionSnapshot?.playback) {
+      return true;
+    }
+    if (!sessionSnapshot.locallyComplete) {
       if (待重裁决的本地完整视频附件标识 === startItem.attachmentId) {
         待重裁决的本地完整视频附件标识 = null;
       }
@@ -206,10 +209,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      * manifest 只重裁一次：如果重裁后仍然只能回到 manifest，就直接打开，
      * 避免为了追求 P2P 复用把查看器卡进无限等待。
      */
-    if (!sessionSnapshot.playback) {
-      待重裁决的本地完整视频附件标识 = startItem.attachmentId;
-      return true;
-    }
     if (sessionSnapshot.playback.mode !== "manifest") {
       待重裁决的本地完整视频附件标识 = null;
       return false;
@@ -232,6 +231,16 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     deps.登记程序滚动来源("media_viewer_open");
     媒体查看器.打开(request);
   };
+  const 起始视频会话当前不可打开 = (request: 媒体查看器打开请求): boolean => {
+    const startItem = request.items.find(
+      (item) => item.attachmentId === request.startAttachmentId
+    );
+    if (!startItem || startItem.kind !== "video") {
+      return false;
+    }
+    const playback = 媒体会话表.get(startItem.attachmentId)?.snapshot().playback;
+    return playback?.mode === "expired" || playback?.mode === "degraded";
+  };
   const 同步当前查看器请求 = (): void => {
     if (!当前查看器请求) {
       return;
@@ -239,6 +248,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const nextRequest = 投影查看器请求到当前播放真相(当前查看器请求);
     当前查看器请求 = nextRequest;
     if (!正式查看器已打开) {
+      if (起始视频会话当前不可打开(nextRequest)) {
+        return;
+      }
       if (是否应等待本地完整视频会话真相(nextRequest)) {
         return;
       }
@@ -571,6 +583,28 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return session;
   };
 
+  const 读取或创建媒体会话 = (attachment: 媒体附件条目): 媒体会话端口 => {
+    const current = 媒体会话表.get(attachment.attachmentId);
+    if (current) {
+      return current;
+    }
+    const session = 创建媒体会话条目(attachment);
+    媒体会话表.set(attachment.attachmentId, session);
+    deps.请求重渲染();
+    return session;
+  };
+
+  const 启动查看器起始附件会话 = (request: 媒体查看器打开请求): void => {
+    const startAttachment = 读取附件条目(request.startAttachmentId);
+    if (!startAttachment || startAttachment.kind !== "video") {
+      return;
+    }
+    const session = 读取或创建媒体会话(startAttachment);
+    if (!session.snapshot().playback) {
+      void session.启动();
+    }
+  };
+
   const 清空播放状态 = (): void => {
     for (const [attachmentId, session] of 媒体会话表) {
       释放附件播放资源({
@@ -628,6 +662,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         items: request.items.map((item) => ({ ...item })),
       });
       正式查看器已打开 = false;
+      启动查看器起始附件会话(当前查看器请求);
       if (是否应等待本地完整视频会话真相(当前查看器请求)) {
         return;
       }
@@ -706,7 +741,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         hasSessionSetChanged = true;
         const session = 创建媒体会话条目(attachment);
         媒体会话表.set(attachment.attachmentId, session);
-        void session.启动();
+        if (attachment.kind === "image") {
+          void session.启动();
+        }
       }
 
       if (hasSessionSetChanged) {
@@ -722,6 +759,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         return;
       }
       if (signal.type === "ASSET_BACKFILLING") {
+        激活附件协作补齐(attachmentId);
+      }
+      if (
+        signal.type === "PLAYER_PLAYING" &&
+        当前查看器请求?.startAttachmentId === attachmentId &&
+        读取附件条目(attachmentId)?.kind === "video"
+      ) {
         激活附件协作补齐(attachmentId);
       }
       转发媒体查看器会话信号(attachmentId, signal);

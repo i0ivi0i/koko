@@ -161,6 +161,7 @@ describe("Blob 媒体资产", () => {
 
     expect(resolveSwarmSource).toHaveBeenCalledWith({
       attachmentId: "att-image-blob-2",
+      eagerCompleting: true,
       kind: "image",
       locator,
     });

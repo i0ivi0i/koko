@@ -1,12 +1,26 @@
 # 群聊媒体时间线性能止血与 Owner 收口设计
 
 日期：2026-04-17  
-状态：Draft  
+状态：Implemented (Phase 1)  
 适用范围：`koko` 当前 Web 群聊时间线中图片/视频附件的浏览器侧媒体解析、自动播、协作分发接入与首屏滚动性能。  
 关联资料：
 
 - `docs/superpowers/specs/2026-04-16-Web大视频上传秒开播放与P2P协同主链-design.md`
 - `docs/superpowers/specs/2026-04-16-媒体集成测试按真相归属瘦身-design.md`
+
+## 0. 本轮已落地范围
+
+本轮代码已经落下这三刀：
+
+1. 时间线视频附件只建会话条目，不再在进房时为整房视频立即 `session.启动()`
+2. `媒体定位器` 已补 attachment 级 inflight 去重，并发 owner 会复用同一条 `/locator` 请求
+3. WebTorrent 协作分发默认不再 whole-file eager backfill，只有显式补齐激活才会 `select(1)`
+
+仍保持不动的边界：
+
+1. 后端媒体契约与数据库 schema 不改
+2. 正式查看器仍沿用现有唯一播放器壳
+3. 自动播仍走统一媒体播放器解析链，不另造第二套播放实现
 
 ## 1. 为什么要补这份 spec
 

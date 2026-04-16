@@ -326,14 +326,14 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-image-1",
-      hint: "正在补块",
+      hint: "正在协作分发",
     });
-    expect(select).toHaveBeenCalledWith(1);
+    expect(select).not.toHaveBeenCalled();
     expect(读取协作分发会话状态("swarm-att-image-1")).toMatchObject({
       attachmentId: "att-image-1",
       refs: 1,
-      eagerCompleting: true,
-      hint: "正在补块",
+      eagerCompleting: false,
+      hint: "正在协作分发",
     });
   });
 
@@ -353,6 +353,7 @@ describe("媒体协作分发", () => {
       attachmentId: "att-2",
       kind: "video",
       locator: 准备好的定位结果("att-2"),
+      eagerCompleting: true,
     });
 
     expect(source).toEqual({
@@ -373,6 +374,35 @@ describe("媒体协作分发", () => {
 
     emit("done");
     expect(读取协作分发会话状态("swarm-att-2")).toMatchObject({
+      eagerCompleting: false,
+      hint: "正在协作分发",
+    });
+  });
+
+  it("首次接入协作分发时默认只保当前可播，不立即 whole-file eager 补齐", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, select } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-lazy-backfill-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-lazy-backfill-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-lazy-backfill-1"),
+    });
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-lazy-backfill-1",
+      hint: "正在协作分发",
+    });
+    expect(select).not.toHaveBeenCalled();
+    expect(读取协作分发会话状态("swarm-att-lazy-backfill-1")).toMatchObject({
       eagerCompleting: false,
       hint: "正在协作分发",
     });
@@ -476,7 +506,7 @@ describe("媒体协作分发", () => {
 
     expect(firstSource).toEqual({
       src: "/webtorrent/offline-reopen.mp4",
-      hint: "正在补块",
+      hint: "正在协作分发",
     });
     expect(firstAdd).toHaveBeenCalledWith(
       new Uint8Array([7, 8, 9]),
@@ -507,7 +537,7 @@ describe("媒体协作分发", () => {
 
     expect(reopenedSource).toEqual({
       src: "/webtorrent/offline-reopen.mp4",
-      hint: "正在补块",
+      hint: "正在协作分发",
     });
     expect(secondAdd).toHaveBeenCalledWith(
       new Uint8Array([7, 8, 9]),
@@ -543,7 +573,7 @@ describe("媒体协作分发", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-persist",
-      hint: "正在补块",
+      hint: "正在协作分发",
     });
     expect(add).toHaveBeenCalledTimes(1);
     expect(persist).toHaveBeenCalledTimes(1);
@@ -690,6 +720,7 @@ describe("媒体协作分发", () => {
       attachmentId: "att-release",
       kind: "video",
       locator,
+      eagerCompleting: true,
     });
 
     expect(读取协作分发会话状态("swarm-att-release")).toMatchObject({
@@ -803,7 +834,7 @@ describe("媒体协作分发", () => {
     expect(读取协作分发会话状态("swarm-att-partial-release")).toMatchObject({
       refs: 0,
       consumers: [],
-      eagerCompleting: true,
+      eagerCompleting: false,
     });
   });
 

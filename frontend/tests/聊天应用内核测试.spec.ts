@@ -274,6 +274,30 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            src: "http://media.local/original-att-video-1",
+            posterSrc: null,
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
+      if (playback?.mode === "anchor") {
+        break;
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -813,23 +837,11 @@ describe("聊天应用内核", () => {
     await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
     await reopenedKernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
     await reopenedKernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const session =
-        reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-manifest-1"];
-      if (session?.locallyComplete && session.playback?.mode === "manifest") {
-        break;
-      }
-      await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-
     expect(
       reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-manifest-1"]
     ).toMatchObject({
       locallyComplete: true,
-      playback: {
-        mode: "manifest",
-      },
+      playback: null,
     });
 
     await reopenedKernel.dispatch({
@@ -939,6 +951,30 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            src: "http://media.local/original-att-video-1",
+            posterSrc: null,
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
+      if (playback?.mode === "anchor") {
+        break;
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -1684,6 +1720,19 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-1",
+      signal: { type: "PLAYER_WAITING" },
+    });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
+      if (playback?.mode === "anchor") {
+        break;
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -1705,8 +1754,14 @@ describe("聊天应用内核", () => {
     if (typeof 触发平台事件 === "function") {
       触发平台事件({ type: "OFFLINE_STATUS_CHANGED", online: true });
     }
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
+      if (playback?.mode === "swarm") {
+        break;
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
 
     expect(kernel.snapshot().media.playbackByAttachmentId["att-video-1"]).toMatchObject({
       src: "blob:http://media.local/recovered-att-video-1",
@@ -1967,6 +2022,67 @@ describe("聊天应用内核", () => {
     });
     expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
     expect(打开查看器).toHaveBeenCalledTimes(1);
+  });
+
+  it("加入房间后不会为时间线里的视频附件立即启动正式解析", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-lazy-1",
+            client_message_id: "c-video-lazy-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-lazy-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 解析播放结果 = vi.fn().mockResolvedValue({
+      mode: "anchor",
+      attachmentId: "att-video-lazy-1",
+      kind: "video",
+      src: "http://media.local/original-att-video-lazy-1",
+      thumbnailUrl: "http://media.local/poster-att-video-lazy-1",
+      hint: null,
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).not.toHaveBeenCalled();
+    expect(kernel.snapshot().media.playbackByAttachmentId["att-video-lazy-1"]).toBeUndefined();
+    expect(kernel.snapshot().media.sessionByAttachmentId["att-video-lazy-1"]).toMatchObject({
+      attachmentId: "att-video-lazy-1",
+      playback: null,
+      status: "bootstrapping",
+    });
   });
 
   it("平台切到后台排空时，会释放当前消息流自动播 owner", async () => {

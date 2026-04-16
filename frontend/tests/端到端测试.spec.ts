@@ -453,6 +453,7 @@ describe("前后台壳端到端冒烟", () => {
 
     previewTrigger?.click();
     await 等待组件稳定(chat);
+    await 等待组件稳定(chat);
 
     expect(viewer.打开).toHaveBeenCalledWith(
       expect.objectContaining({

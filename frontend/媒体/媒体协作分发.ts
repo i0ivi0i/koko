@@ -79,6 +79,7 @@ type 协作分发会话 = {
   hint: 协作分发媒体源["hint"] | null;
   presenceIntervalId: ReturnType<typeof setInterval> | null;
   torrent: WebTorrent种子 | null;
+  file: WebTorrent文件 | null;
   consumerBindings: Map<
     string,
     {
@@ -364,9 +365,15 @@ function 读取首个可播放文件(
   if (!file) {
     throw new Error(`协作分发未返回可播放文件: ${attachmentId}`);
   }
-  // 一旦用户开始查看，就默认尽快补齐整个附件，而不是只按观看进度懒加载。
-  file.select(1);
   return file;
+}
+
+function 激活整附件补齐(session: 协作分发会话): void {
+  if (session.eagerCompleting) {
+    return;
+  }
+  session.eagerCompleting = true;
+  session.file?.select(1);
 }
 
 function 推导协作分发提示(session: 协作分发会话): 协作分发媒体源["hint"] {
@@ -489,6 +496,7 @@ async function 确保协作分发会话(input: {
   distribution: 媒体协作分发定位片段;
   consumerId?: string;
   onSessionEvent?: (event: 协作分发会话事件) => void;
+  eagerCompleting?: boolean;
 }): Promise<协作分发会话> {
   const consumerBinding = 归一化协作分发消费者(input);
   let session = 协作分发会话表.get(input.distribution.swarm_id);
@@ -504,6 +512,9 @@ async function 确保协作分发会话(input: {
       attachmentId: consumerBinding.attachmentId,
       onSessionEvent: consumerBinding.onSessionEvent,
     });
+    if (input.eagerCompleting) {
+      激活整附件补齐(session);
+    }
     更新协作分发会话主附件(session);
     启动协作分发存活上报(session, input.distribution);
     return session;
@@ -515,10 +526,11 @@ async function 确保协作分发会话(input: {
     torrentInfoHash: input.distribution.torrent_info_hash!,
     contentHash: input.distribution.content_hash,
     sourcePromise: Promise.resolve(null),
-    eagerCompleting: true,
-    hint: input.distribution.web_seed_url ? "正在补块" : null,
+    eagerCompleting: Boolean(input.eagerCompleting),
+    hint: null,
     presenceIntervalId: null,
     torrent: null,
+    file: null,
     consumerBindings: new Map([
       [
         consumerBinding.consumerId,
@@ -549,6 +561,10 @@ async function 确保协作分发会话(input: {
     }
     绑定协作分发会话事件(session, torrent);
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
+    session.file = file;
+    if (session.eagerCompleting) {
+      file.select(1);
+    }
     await 探测协作分发媒体源可读性(file.streamURL);
     if (协作分发会话表.get(session.swarmId) !== session) {
       清理协作分发底层会话(session, runtime);
@@ -618,6 +634,7 @@ export async function 解析协作分发源(input: {
   locator: 媒体定位结果;
   consumerId?: string;
   onSessionEvent?: (event: 协作分发会话事件) => void;
+  eagerCompleting?: boolean;
 }): Promise<协作分发媒体源 | null> {
   const distribution = 读取可用协作分发片段(input.locator);
   if (!distribution) {
@@ -629,6 +646,7 @@ export async function 解析协作分发源(input: {
     distribution,
     ...(input.consumerId ? { consumerId: input.consumerId } : {}),
     ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+    ...(input.eagerCompleting ? { eagerCompleting: true } : {}),
   });
   const source = await session.sourcePromise;
   if (!source) {

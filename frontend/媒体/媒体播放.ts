@@ -53,6 +53,7 @@ type 媒体播放器依赖 = {
     locator: 媒体定位结果;
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
+    eagerCompleting?: boolean;
   }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
   releaseSwarmSource?(input: { attachmentId: string; consumerId?: string }): void;
   probeAnchor?(url: string): Promise<void>;
@@ -326,10 +327,13 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (locator.status !== "ready") {
       return;
     }
-    if (!读取图片Blob主链(locator) || !locator.blob_asset?.distribution) {
+    const distribution = 读取协作分发定位片段(locator);
+    if (!distribution) {
       return;
     }
-    const distribution = 读取协作分发定位片段(locator);
+    if (locator.kind === "image" && (!读取图片Blob主链(locator) || !locator.blob_asset?.distribution)) {
+      return;
+    }
     if (!distribution || distribution.availability === "expired") {
       return;
     }
@@ -338,6 +342,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         attachmentId: input.attachmentId,
         kind: input.kind,
         locator,
+        eagerCompleting: true,
         ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
       });

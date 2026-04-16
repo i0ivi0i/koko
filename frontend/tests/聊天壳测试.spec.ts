@@ -589,9 +589,10 @@ describe("聊天壳集成 / 首页与控制台", () => {
         'video.message-video-preview[data-attachment-id="att-video-swarm-1"]'
       )
     ).toBeNull();
-    expect(hint?.textContent).toContain("正在协作分发");
+    expect(hint).toBeNull();
 
     previewTrigger!.click();
+    await 等待组件稳定(el);
     await 等待组件稳定(el);
 
     expect(viewer.打开).toHaveBeenCalledWith(
@@ -666,6 +667,8 @@ describe("聊天壳集成 / 首页与控制台", () => {
         'button.message-video-preview-trigger[data-attachment-id="att-video-viewer-1"]'
       )
       ?.click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
 
     expect(viewer.打开).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -729,13 +732,18 @@ describe("聊天壳集成 / 首页与控制台", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
 
-    const video = el.shadowRoot!.querySelector(
-      'video[data-attachment-id="att-video-expired-1"]'
-    ) as HTMLVideoElement | null;
+    const previewTrigger = el.shadowRoot!.querySelector(
+      'button.message-video-preview-trigger[data-attachment-id="att-video-expired-1"]'
+    ) as HTMLButtonElement | null;
+    expect(previewTrigger).not.toBeNull();
+
+    previewTrigger?.click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
     const hint = el.shadowRoot!.querySelector(
       '[data-media-hint="att-video-expired-1"]'
     ) as HTMLElement | null;
-    expect(video).toBeNull();
     expect(hint?.textContent).toContain("内容已过期");
     el.remove();
   });
