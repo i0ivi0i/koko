@@ -30,9 +30,5 @@ Thumbs.db
 # Local runtime data stays out of version control.
 /data/
 
-# Keep graphify's stable knowledge indexes, but do not track its local runtime/cache byproducts.
-graphify-out/cache/
-graphify-out/.graphify_python
-graphify-out/cost.json
-graphify-out/graph.html
-graphify-out/manifest.json
+# Graphify output is local generated state and should not participate in version control.
+graphify-out/
