@@ -22,6 +22,8 @@ frontend/.tsbuildinfo
 # Common local OS noise.
 Thumbs.db
 .DS_Store
+__pycache__/
+*.pyc
 
 # Local study clones stay outside this repo's version history.
 学习/Telegram-iOS/

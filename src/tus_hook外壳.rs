@@ -748,6 +748,53 @@ pub(super) fn 解析tus临时文件路径(
     Ok(canonical_file)
 }
 
+/// 后台残留清理和 complete/hook 的语义不同：
+/// 1. complete/hook 必须严格拒绝脏 locator，不能把越界路径带进主链；
+/// 2. 清理阶段面对的是“历史上曾经写进数据库、现在已经没有长期价值”的 locator；
+/// 3. 因此历史 rustus 外部路径、或当前文件已先被删掉时，都应该被视为可收口的 no-op，而不是持续报错。
+pub(super) enum Tus残留清理定位结果 {
+    当前上传目录文件(PathBuf),
+    当前上传目录文件已缺失,
+    历史外部定位,
+}
+
+pub(super) fn 解析tus残留清理目标(
+    tus_upload_dir: &str,
+    storage_locator: &str,
+) -> Result<Tus残留清理定位结果, String> {
+    let shared_root = PathBuf::from(tus_upload_dir);
+    let candidate = PathBuf::from(storage_locator);
+    let resolved = if candidate.is_absolute() {
+        candidate
+    } else {
+        shared_root.join(candidate)
+    };
+    let canonical_root = std::fs::canonicalize(&shared_root)
+        .map_err(|err| format!("解析 Tus upload dir 失败: {err}"))?;
+    match std::fs::canonicalize(&resolved) {
+        Ok(canonical_file) => {
+            if !canonical_file.starts_with(&canonical_root) {
+                return Ok(Tus残留清理定位结果::历史外部定位);
+            }
+            if !StdPath::new(&canonical_file).is_file() {
+                return Err("storage locator 不是文件".to_string());
+            }
+            Ok(Tus残留清理定位结果::当前上传目录文件(canonical_file))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(parent) = resolved.parent() {
+                if let Ok(canonical_parent) = std::fs::canonicalize(parent) {
+                    if !canonical_parent.starts_with(&canonical_root) {
+                        return Ok(Tus残留清理定位结果::历史外部定位);
+                    }
+                }
+            }
+            Ok(Tus残留清理定位结果::当前上传目录文件已缺失)
+        }
+        Err(err) => Err(format!("解析 Tus 临时文件失败: {err}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{TusHttpRequestBody, 读取可选请求标识};

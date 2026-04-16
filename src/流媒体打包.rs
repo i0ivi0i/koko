@@ -2,6 +2,7 @@ use super::应用状态;
 use crate::usecase;
 use axum::http::StatusCode;
 use object_store::{buffered::BufWriter, path::Path as ObjectPath, ObjectStore};
+use serde::Deserialize;
 use std::{
     path::{Path as StdPath, PathBuf},
     process::Command,
@@ -10,6 +11,7 @@ use std::{
 use tokio::{
     fs,
     io::{AsyncWriteExt, BufReader},
+    task::JoinSet,
 };
 use uuid::Uuid;
 
@@ -20,6 +22,9 @@ const 附件对象流式写入缓冲字节数: usize = 8 * 1024 * 1024;
 const 附件对象流式写入最大并发: usize = 8;
 /// 本地磁盘读取也走一层小缓冲，减少大文件 copy 时的 syscall 抖动。
 const 附件对象流式读取缓冲字节数: usize = 1024 * 1024;
+/// 打包文件、静态封面和 mezzanine 回退母本彼此独立，应该在 complete 热路径里并发上传，
+/// 否则会把本可并行的 object_store 写入白白串成一条长链。
+const 流媒体打包产物上传最大并发: usize = 4;
 
 /// 打包阶段先把本地产物清单和最终入库键分开：
 /// 1. 本地产物路径只活在当前 complete 调度里；
@@ -45,6 +50,38 @@ pub(super) struct 流媒体打包上传结果 {
     pub 清单写入请求: usecase::流媒体清单写入请求,
     pub 静态封面存储键: String,
     pub 回退母本存储键: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum 视频打包策略 {
+    直接包装原始文件 { 有音轨: bool },
+    转码后打包 { 有音轨: bool },
+}
+
+#[derive(Debug, Deserialize)]
+struct Ffprobe流信息 {
+    codec_type: Option<String>,
+    codec_name: Option<String>,
+    pix_fmt: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Ffprobe格式信息 {
+    format_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Ffprobe探测结果 {
+    streams: Vec<Ffprobe流信息>,
+    format: Option<Ffprobe格式信息>,
+}
+
+/// 这里的上传任务只描述“哪一个本地文件写到哪个稳定键”，
+/// 不承载任何业务真相，避免 complete 热路径继续散落 tuple 胶水。
+struct 待上传本地资产 {
+    本地路径: PathBuf,
+    存储键: String,
+    资产标签: &'static str,
 }
 
 /// 受控流媒体地址是浏览器唯一允许看到的正式播放入口。
@@ -128,6 +165,70 @@ pub(super) async fn 上传本地文件到附件对象存储(
     Ok(())
 }
 
+/// 打包产物上传如果串行执行，会把 HLS/DASH 分片、静态封面和 mezzanine 的 object_store 写入
+/// 变成 complete 热路径里的纯等待；这里显式限流并发上传，既缩短总耗时，也避免一次性放飞过多任务。
+async fn 并发上传本地资产到附件对象存储(
+    store: Arc<dyn ObjectStore>,
+    待上传资产: Vec<待上传本地资产>,
+) -> Result<(), (StatusCode, &'static str, String)> {
+    if 待上传资产.is_empty() {
+        return Ok(());
+    }
+
+    let mut uploads = JoinSet::new();
+    for 资产 in 待上传资产 {
+        while uploads.len() >= 流媒体打包产物上传最大并发 {
+            match uploads.join_next().await {
+                Some(Ok(Ok(()))) => {}
+                Some(Ok(Err(err))) => {
+                    uploads.abort_all();
+                    return Err(err);
+                }
+                Some(Err(err)) => {
+                    uploads.abort_all();
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        format!("流媒体并发上传任务失败: {err}"),
+                    ));
+                }
+                None => break,
+            }
+        }
+
+        let store_for_task = store.clone();
+        uploads.spawn(async move {
+            上传本地文件到附件对象存储(
+                store_for_task,
+                资产.本地路径.as_path(),
+                资产.存储键.as_str(),
+                资产.资产标签,
+            )
+            .await
+        });
+    }
+
+    while let Some(result) = uploads.join_next().await {
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                uploads.abort_all();
+                return Err(err);
+            }
+            Err(err) => {
+                uploads.abort_all();
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("流媒体并发上传任务失败: {err}"),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn 执行外部命令(
     command: &mut Command,
     step: &str,
@@ -153,20 +254,71 @@ fn 执行外部命令(
     ))
 }
 
-fn ffprobe检测首音轨是否存在(
+fn 解析ffprobe视频打包策略(
+    输入文件: &StdPath,
+    stdout: &[u8],
+) -> Result<视频打包策略, (StatusCode, &'static str, String)> {
+    let 探测结果: Ffprobe探测结果 = serde_json::from_slice(stdout).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("解析 ffprobe 输出失败: {err}"),
+        )
+    })?;
+    let 视频流 = 探测结果
+        .streams
+        .iter()
+        .find(|stream| stream.codec_type.as_deref() == Some("video"))
+        .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            "ffprobe 未返回视频轨道信息".to_string(),
+        ))?;
+    let 有音轨 = 探测结果
+        .streams
+        .iter()
+        .any(|stream| stream.codec_type.as_deref() == Some("audio"));
+    let 音轨全部可直包 = 探测结果
+        .streams
+        .iter()
+        .filter(|stream| stream.codec_type.as_deref() == Some("audio"))
+        .all(|stream| stream.codec_name.as_deref() == Some("aac"));
+    let 扩展名允许直包 = 输入文件
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("mp4"));
+    let ffprobe格式允许直包 = 探测结果
+        .format
+        .as_ref()
+        .and_then(|format| format.format_name.as_deref())
+        .is_some_and(|format_name| {
+            format_name
+                .split(',')
+                .any(|name| name.trim().eq_ignore_ascii_case("mp4"))
+        });
+    let 可直接包装原始文件 = (ffprobe格式允许直包 || 扩展名允许直包)
+        && 视频流.codec_name.as_deref() == Some("h264")
+        && 视频流.pix_fmt.as_deref() == Some("yuv420p")
+        && 音轨全部可直包;
+    Ok(if 可直接包装原始文件 {
+        视频打包策略::直接包装原始文件 { 有音轨 }
+    } else {
+        视频打包策略::转码后打包 { 有音轨 }
+    })
+}
+
+fn ffprobe检测视频打包策略(
     ffprobe_bin: &str,
     输入文件: &StdPath,
-) -> Result<bool, (StatusCode, &'static str, String)> {
+) -> Result<视频打包策略, (StatusCode, &'static str, String)> {
     let output = Command::new(ffprobe_bin)
         .args([
             "-v",
             "error",
-            "-select_streams",
-            "a:0",
             "-show_entries",
-            "stream=index",
+            "stream=codec_type,codec_name,pix_fmt:format=format_name",
             "-of",
-            "csv=p=0",
+            "json",
         ])
         .arg(输入文件)
         .output()
@@ -188,7 +340,7 @@ fn ffprobe检测首音轨是否存在(
             ),
         ));
     }
-    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+    解析ffprobe视频打包策略(输入文件, &output.stdout)
 }
 
 fn 收集目录文件(
@@ -266,30 +418,68 @@ pub(super) fn 生成流媒体打包产物(
         )
     })?;
 
-    let 视频轨道文件 = workdir.join("video.mp4");
     let 静态封面文件 = workdir.join("thumbnail.png");
-    let mut 转码视频 = Command::new(ffmpeg_bin);
-    转码视频.args(["-y", "-i"]);
-    转码视频.arg(输入文件);
-    转码视频.args([
-        "-map",
-        "0:v:0",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-g",
-        "48",
-        "-keyint_min",
-        "48",
-        "-sc_threshold",
-        "0",
-        "-pix_fmt",
-        "yuv420p",
-        "-an",
-    ]);
-    转码视频.arg(视频轨道文件.as_os_str());
-    执行外部命令(&mut 转码视频, "FFmpeg 视频转码")?;
+    let 打包策略 = ffprobe检测视频打包策略(ffprobe_bin, 输入文件)?;
+    let (视频打包输入文件, 音频打包输入文件, 高质量回退母本本地路径, 有音轨) = match 打包策略
+    {
+        视频打包策略::直接包装原始文件 { 有音轨 } => (
+            输入文件.to_path_buf(),
+            有音轨.then(|| 输入文件.to_path_buf()),
+            输入文件.to_path_buf(),
+            有音轨,
+        ),
+        视频打包策略::转码后打包 { 有音轨 } => {
+            let 视频轨道文件 = workdir.join("video.mp4");
+            let mut 转码视频 = Command::new(ffmpeg_bin);
+            转码视频.args(["-y", "-i"]);
+            转码视频.arg(输入文件);
+            转码视频.args([
+                "-map",
+                "0:v:0",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-g",
+                "48",
+                "-keyint_min",
+                "48",
+                "-sc_threshold",
+                "0",
+                "-pix_fmt",
+                "yuv420p",
+                "-an",
+            ]);
+            转码视频.arg(视频轨道文件.as_os_str());
+            执行外部命令(&mut 转码视频, "FFmpeg 视频转码")?;
+
+            let 音频打包输入文件 = if 有音轨 {
+                std::fs::create_dir_all(hls_audio_dir.as_path()).map_err(|err| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        format!("创建 HLS 音频目录失败: {err}"),
+                    )
+                })?;
+                let 音频轨道文件 = workdir.join("audio.mp4");
+                let mut 转码音频 = Command::new(ffmpeg_bin);
+                转码音频.args(["-y", "-i"]);
+                转码音频.arg(输入文件);
+                转码音频.args(["-map", "0:a:0", "-c:a", "aac", "-b:a", "128k", "-vn"]);
+                转码音频.arg(音频轨道文件.as_os_str());
+                执行外部命令(&mut 转码音频, "FFmpeg 音频转码")?;
+                Some(音频轨道文件)
+            } else {
+                None
+            };
+            (
+                视频轨道文件.clone(),
+                音频打包输入文件,
+                视频轨道文件,
+                有音轨,
+            )
+        }
+    };
 
     let mut 抽帧命令 = Command::new(ffmpeg_bin);
     抽帧命令.args(["-y", "-ss", "1", "-i"]);
@@ -302,9 +492,6 @@ pub(super) fn 生成流媒体打包产物(
     ]);
     抽帧命令.arg(静态封面文件.as_os_str());
     执行外部命令(&mut 抽帧命令, "FFmpeg 抽取视频静态封面")?;
-
-    let 有音轨 = ffprobe检测首音轨是否存在(ffprobe_bin, 输入文件)?;
-    let 音频轨道文件 = workdir.join("audio.mp4");
     if 有音轨 {
         std::fs::create_dir_all(hls_audio_dir.as_path()).map_err(|err| {
             (
@@ -313,26 +500,20 @@ pub(super) fn 生成流媒体打包产物(
                 format!("创建 HLS 音频目录失败: {err}"),
             )
         })?;
-        let mut 转码音频 = Command::new(ffmpeg_bin);
-        转码音频.args(["-y", "-i"]);
-        转码音频.arg(输入文件);
-        转码音频.args(["-map", "0:a:0", "-c:a", "aac", "-b:a", "128k", "-vn"]);
-        转码音频.arg(音频轨道文件.as_os_str());
-        执行外部命令(&mut 转码音频, "FFmpeg 音频转码")?;
     }
 
     let mut 打包命令 = Command::new(shaka_packager_bin);
     打包命令.arg(format!(
         "in={},stream=video,init_segment={},segment_template={},playlist_name={}",
-        视频轨道文件.display(),
+        视频打包输入文件.display(),
         hls_video_dir.join("init.mp4").display(),
         hls_video_dir.join("$Number$.m4s").display(),
         hls_video_dir.join("main.m3u8").display()
     ));
-    if 有音轨 {
+    if let Some(音频打包输入文件) = 音频打包输入文件.as_ref() {
         打包命令.arg(format!(
             "in={},stream=audio,init_segment={},segment_template={},playlist_name={},hls_group_id=audio,hls_name=audio",
-            音频轨道文件.display(),
+            音频打包输入文件.display(),
             hls_audio_dir.join("init.mp4").display(),
             hls_audio_dir.join("$Number$.m4s").display(),
             hls_audio_dir.join("main.m3u8").display()
@@ -351,7 +532,7 @@ pub(super) fn 生成流媒体打包产物(
         hls主清单相对路径: "hls/master.m3u8".to_string(),
         dash主清单相对路径: "dash/stream.mpd".to_string(),
         静态封面本地路径: 静态封面文件,
-        高质量回退母本本地路径: 视频轨道文件,
+        高质量回退母本本地路径,
         文件列表,
     })
 }
@@ -362,33 +543,27 @@ pub(super) async fn 上传流媒体打包产物(
     attachment_id: &str,
     打包结果: 流媒体打包结果,
 ) -> Result<流媒体打包上传结果, (StatusCode, &'static str, String)> {
-    for file in &打包结果.文件列表 {
-        let storage_key = 推导流媒体对象存储键(attachment_id, file.相对路径.as_str());
-        上传本地文件到附件对象存储(
-            state.attachment_store.clone(),
-            file.本地路径.as_path(),
-            storage_key.as_str(),
-            "流媒体打包产物",
-        )
-        .await?;
-    }
-
     let 静态封面存储键 = format!("videos/{attachment_id}/thumbnail.png");
-    上传本地文件到附件对象存储(
-        state.attachment_store.clone(),
-        打包结果.静态封面本地路径.as_path(),
-        静态封面存储键.as_str(),
-        "视频静态封面",
-    )
-    .await?;
     let 回退母本存储键 = format!("videos/{attachment_id}/mezzanine.mp4");
-    上传本地文件到附件对象存储(
-        state.attachment_store.clone(),
-        打包结果.高质量回退母本本地路径.as_path(),
-        回退母本存储键.as_str(),
-        "视频 mezzanine 回退母本",
-    )
-    .await?;
+    let mut 待上传资产 = Vec::with_capacity(打包结果.文件列表.len() + 2);
+    for file in &打包结果.文件列表 {
+        待上传资产.push(待上传本地资产 {
+            本地路径: file.本地路径.clone(),
+            存储键: 推导流媒体对象存储键(attachment_id, file.相对路径.as_str()),
+            资产标签: "流媒体打包产物",
+        });
+    }
+    待上传资产.push(待上传本地资产 {
+        本地路径: 打包结果.静态封面本地路径.clone(),
+        存储键: 静态封面存储键.clone(),
+        资产标签: "视频静态封面",
+    });
+    待上传资产.push(待上传本地资产 {
+        本地路径: 打包结果.高质量回退母本本地路径.clone(),
+        存储键: 回退母本存储键.clone(),
+        资产标签: "视频 mezzanine 回退母本",
+    });
+    并发上传本地资产到附件对象存储(state.attachment_store.clone(), 待上传资产).await?;
 
     Ok(流媒体打包上传结果 {
         清单写入请求: usecase::流媒体清单写入请求 {
@@ -517,9 +692,16 @@ pub(super) fn 重写_dash清单内容(
 
 #[cfg(test)]
 mod tests {
-    use super::上传本地文件到附件对象存储;
-    use object_store::{memory::InMemory, path::Path as ObjectPath, ObjectStore, ObjectStoreExt};
-    use std::sync::Arc;
+    use super::{
+        上传本地文件到附件对象存储, 并发上传本地资产到附件对象存储,
+        生成流媒体打包产物, 解析ffprobe视频打包策略, 待上传本地资产, 视频打包策略,
+    };
+    use object_store::{
+        memory::InMemory, path::Path as ObjectPath, throttle::ThrottleConfig,
+        throttle::ThrottledStore, ObjectStore, ObjectStoreExt,
+    };
+    use std::{path::PathBuf, sync::Arc, time::Duration};
+    use tokio::time::Instant;
     use uuid::Uuid;
 
     #[tokio::test]
@@ -549,5 +731,234 @@ mod tests {
         assert_eq!(已写入字节.as_ref(), 原始字节.as_slice());
 
         let _ = std::fs::remove_file(临时文件路径);
+    }
+
+    #[tokio::test]
+    async fn 打包产物上传会并发执行而不是串行阻塞complete热路径() {
+        let 临时目录 =
+            std::env::temp_dir().join(format!("koko-stream-upload-batch-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&临时目录).expect("应能创建测试目录");
+
+        let mut 待上传资产 = Vec::new();
+        for index in 0..6 {
+            let 文件路径 = 临时目录.join(format!("asset-{index}.bin"));
+            std::fs::write(&文件路径, vec![index as u8; 1024]).expect("应能写入测试文件");
+            待上传资产.push(待上传本地资产 {
+                本地路径: 文件路径,
+                存储键: format!("tests/concurrent-upload-{index}.bin"),
+                资产标签: "测试打包产物",
+            });
+        }
+
+        let throttled = ThrottledStore::new(
+            InMemory::new(),
+            ThrottleConfig {
+                wait_put_per_call: Duration::from_millis(180),
+                ..Default::default()
+            },
+        );
+        let store: Arc<dyn ObjectStore> = Arc::new(throttled);
+        let started_at = Instant::now();
+        并发上传本地资产到附件对象存储(store.clone(), 待上传资产)
+            .await
+            .expect("并发上传 helper 应能把全部打包资产写进 object_store");
+        let elapsed = started_at.elapsed();
+
+        // 6 个对象若串行上传，180ms * 6 至少接近 1 秒；
+        // 当前 helper 限流并发上限是 4，正常应在两个波次内完成。
+        assert!(
+            elapsed < Duration::from_millis(750),
+            "打包产物上传不应继续串行阻塞 complete 热路径，实际耗时: {elapsed:?}"
+        );
+
+        for index in 0..6 {
+            let 已写入字节 = store
+                .get(&ObjectPath::from(format!("tests/concurrent-upload-{index}.bin")))
+                .await
+                .expect("应能读取已写入对象")
+                .bytes()
+                .await
+                .expect("应能读出对象字节");
+            assert_eq!(已写入字节.len(), 1024);
+            assert!(已写入字节.iter().all(|value| *value == index as u8));
+        }
+
+        let _ = std::fs::remove_dir_all(临时目录);
+    }
+
+    #[test]
+    fn ffprobe探测会把h264_aac_mp4判定为可直接包装原始文件() {
+        let 输入文件 = std::path::Path::new("sample.mp4");
+        let stdout = br#"{
+  "format": { "format_name": "mov,mp4,m4a,3gp,3g2,mj2" },
+  "streams": [
+    { "codec_type": "video", "codec_name": "h264", "pix_fmt": "yuv420p" },
+    { "codec_type": "audio", "codec_name": "aac" }
+  ]
+}"#;
+
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
+            .expect("应能解析 ffprobe 探测结果");
+        assert_eq!(策略, 视频打包策略::直接包装原始文件 { 有音轨: true });
+    }
+
+    #[test]
+    fn ffprobe探测会把无扩展名的mp4临时文件仍判定为可直接包装原始文件() {
+        let 输入文件 = std::path::Path::new("E:/tmp/tus-upload-without-extension");
+        let stdout = br#"{
+  "format": { "format_name": "mov,mp4,m4a,3gp,3g2,mj2" },
+  "streams": [
+    { "codec_type": "video", "codec_name": "h264", "pix_fmt": "yuv420p" },
+    { "codec_type": "audio", "codec_name": "aac" }
+  ]
+}"#;
+
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
+            .expect("应能解析 ffprobe 探测结果");
+        assert_eq!(策略, 视频打包策略::直接包装原始文件 { 有音轨: true });
+    }
+
+    #[test]
+    fn ffprobe探测会把非h264视频回落到转码链路() {
+        let 输入文件 = std::path::Path::new("sample.mp4");
+        let stdout = br#"{
+  "format": { "format_name": "mov,mp4,m4a,3gp,3g2,mj2" },
+  "streams": [
+    { "codec_type": "video", "codec_name": "hevc", "pix_fmt": "yuv420p" },
+    { "codec_type": "audio", "codec_name": "aac" }
+  ]
+}"#;
+
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
+            .expect("应能解析 ffprobe 探测结果");
+        assert_eq!(策略, 视频打包策略::转码后打包 { 有音轨: true });
+    }
+
+    #[test]
+    fn 直包路径不会再触发视频和音频重转码() {
+        let 临时目录 =
+            std::env::temp_dir().join(format!("koko-stream-direct-pack-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&临时目录).expect("应能创建测试目录");
+        // tusd 落盘的临时文件默认没有扩展名；这里用真实形态守住“无后缀也要直包”的回归。
+        let 输入文件 = 临时目录.join("input");
+        std::fs::write(&输入文件, b"fake mp4 bytes").expect("应能写入输入文件");
+
+        let python = PathBuf::from(std::env::var("LOCALAPPDATA").expect("应有 LOCALAPPDATA"))
+            .join("Programs")
+            .join("Python")
+            .join("Python314")
+            .join("python.exe");
+        assert!(python.exists(), "测试需要本机 python 可用");
+
+        let ffprobe_py = 临时目录.join("fake_ffprobe.py");
+        std::fs::write(
+            &ffprobe_py,
+            r#"import json
+print(json.dumps({
+  "format": {"format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
+  "streams": [
+    {"codec_type": "video", "codec_name": "h264", "pix_fmt": "yuv420p"},
+    {"codec_type": "audio", "codec_name": "aac"}
+  ]
+}))
+"#,
+        )
+        .expect("应能写入 fake ffprobe");
+        let ffprobe_cmd = 临时目录.join("ffprobe.cmd");
+        std::fs::write(
+            &ffprobe_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_ffprobe.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 ffprobe wrapper");
+
+        let ffmpeg_py = 临时目录.join("fake_ffmpeg.py");
+        std::fs::write(
+            &ffmpeg_py,
+            r#"import pathlib
+import sys
+
+root = pathlib.Path(__file__).resolve().parent
+with (root / "ffmpeg.log").open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(sys.argv[1:]) + "\n")
+output_path = pathlib.Path(sys.argv[-1])
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_bytes(b"fake ffmpeg output")
+"#,
+        )
+        .expect("应能写入 fake ffmpeg");
+        let ffmpeg_cmd = 临时目录.join("ffmpeg.cmd");
+        std::fs::write(
+            &ffmpeg_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_ffmpeg.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 ffmpeg wrapper");
+
+        let shaka_py = 临时目录.join("fake_shaka.py");
+        std::fs::write(
+            &shaka_py,
+            r##"import pathlib
+import sys
+
+def ensure_file(path_str: str, content: bytes) -> None:
+    path = pathlib.Path(path_str)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+
+args = sys.argv[1:]
+for index, arg in enumerate(args):
+    if arg.startswith("in="):
+        for piece in arg.split(","):
+            if piece.startswith("init_segment="):
+                ensure_file(piece.split("=", 1)[1], b"init")
+            elif piece.startswith("segment_template="):
+                ensure_file(piece.split("=", 1)[1].replace("$Number$", "1"), b"segment")
+            elif piece.startswith("playlist_name="):
+                ensure_file(piece.split("=", 1)[1], b"#EXTM3U\n")
+    elif arg == "--mpd_output":
+        ensure_file(args[index + 1], b"<MPD/>")
+    elif arg == "--hls_master_playlist_output":
+        ensure_file(args[index + 1], b"#EXTM3U\n")
+"##,
+        )
+        .expect("应能写入 fake shaka");
+        let shaka_cmd = 临时目录.join("shaka.cmd");
+        std::fs::write(
+            &shaka_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_shaka.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 shaka wrapper");
+
+        let 结果 = 生成流媒体打包产物(
+            ffmpeg_cmd.to_str().expect("ffmpeg wrapper 路径应可转字符串"),
+            ffprobe_cmd.to_str().expect("ffprobe wrapper 路径应可转字符串"),
+            shaka_cmd.to_str().expect("shaka wrapper 路径应可转字符串"),
+            "att-direct-pack",
+            输入文件.as_path(),
+        )
+        .expect("直包策略应能生成流媒体打包结果");
+
+        let ffmpeg_log = std::fs::read_to_string(临时目录.join("ffmpeg.log"))
+            .expect("应能读取 ffmpeg 调用日志");
+        assert_eq!(
+            ffmpeg_log.lines().count(),
+            1,
+            "可直包的 H264/AAC MP4 不应再额外触发视频/音频重转码"
+        );
+        assert_eq!(
+            结果.高质量回退母本本地路径,
+            输入文件,
+            "可直包视频应直接复用原始上传文件作为 mezzanine 回退层"
+        );
+
+        let _ = std::fs::remove_dir_all(临时目录);
     }
 }

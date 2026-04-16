@@ -375,6 +375,20 @@ pub(super) async fn complete_media_upload(
         media_complete_max_concurrency = state.media_complete_max_concurrency,
         "媒体上传 complete 重活开始"
     );
+    // complete 是当前视频上传的主要重活热点。
+    // 这里按稳定阶段输出耗时，便于把瓶颈收敛到“哪一段慢”，避免靠感觉继续误改上传层。
+    let 记录complete阶段耗时 = |阶段: &'static str, 开始时间: Instant| {
+        tracing::info!(
+            usecase = "完成媒体上传",
+            phase = "complete_heavy_work_stage",
+            attachment_id = attachment_id.as_str(),
+            kind = attachment_kind,
+            byte_size = attachment_byte_size,
+            stage = 阶段,
+            duration_ms = 开始时间.elapsed().as_millis() as u64,
+            "媒体上传 complete 阶段耗时"
+        );
+    };
     // ready 真相和 24 小时冷源窗口必须共用同一个完成时刻，
     // 否则后端存储、locator 冷源描述和分发窗口会各自漂成不同时间源。
     let ready_epoch秒 = SystemTime::now()
@@ -556,6 +570,7 @@ pub(super) async fn complete_media_upload(
             (ready_request, distribution_request, torrent_request)
         }
         usecase::媒体附件类型::视频 => {
+            let 视频解析开始 = Instant::now();
             let parsed =
                 match 媒体内容解析::解析视频文件内容(temp_file_path.as_path()) {
                     Ok(parsed) => parsed,
@@ -586,6 +601,8 @@ pub(super) async fn complete_media_upload(
                         )
                     }
                 };
+            记录complete阶段耗时("parse_video", 视频解析开始);
+            let 视频映射开始 = Instant::now();
             let original_video_map =
                 match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
                     Ok(mapped) => mapped,
@@ -603,11 +620,15 @@ pub(super) async fn complete_media_upload(
                         );
                     }
                 };
+            记录complete阶段耗时("map_original_video", 视频映射开始);
+            let 分发元数据构造开始 = Instant::now();
             let distribution_request = media_distribution::构造协作分发元数据写入请求(
                 &attachment_id,
                 original_video_map.as_ref(),
                 ready_epoch秒,
             );
+            记录complete阶段耗时("build_distribution_request", 分发元数据构造开始);
+            let torrent生成开始 = Instant::now();
             let torrent = match media_distribution::生成附件torrent元信息(
                 distribution_request.content_hash.as_str(),
                 original_video_map.as_ref(),
@@ -627,7 +648,9 @@ pub(super) async fn complete_media_upload(
                     );
                 }
             };
+            记录complete阶段耗时("generate_torrent", torrent生成开始);
             drop(original_video_map);
+            let 流媒体打包开始 = Instant::now();
             let 打包结果 = match task::spawn_blocking({
                 let ffmpeg_bin = state.ffmpeg_bin.clone();
                 let ffprobe_bin = state.ffprobe_bin.clone();
@@ -674,6 +697,8 @@ pub(super) async fn complete_media_upload(
                     )
                 }
             };
+            记录complete阶段耗时("package_streaming_assets", 流媒体打包开始);
+            let 流媒体产物上传开始 = Instant::now();
             let uploaded =
                 match 流媒体打包::上传流媒体打包产物(&state, &attachment_id, 打包结果).await
                 {
@@ -692,6 +717,7 @@ pub(super) async fn complete_media_upload(
                         )
                     }
                 };
+            记录complete阶段耗时("upload_streaming_assets", 流媒体产物上传开始);
             let 流媒体打包::流媒体打包上传结果 {
                 清单写入请求,
                 静态封面存储键,
@@ -729,6 +755,7 @@ pub(super) async fn complete_media_upload(
     let distribution_request_for_write = distribution_request.clone();
     let torrent_request_for_write = torrent_request.clone();
     let streaming_manifest_request_for_write = streaming_manifest_request.clone();
+    let 写入权威真相开始 = Instant::now();
     let complete_result = task::spawn_blocking(move || {
         let mut repo = 构建共享仓储(&state_for_usecase);
         let snapshot =
@@ -744,10 +771,12 @@ pub(super) async fn complete_media_upload(
         Ok::<_, (StatusCode, &'static str, String)>(snapshot)
     })
     .await;
+    记录complete阶段耗时("write_authoritative_snapshot", 写入权威真相开始);
     match complete_result {
         Ok(Ok(snapshot)) => {
             let (_原片删除时间戳秒, 冷备层到期时间戳秒, 冷备层删除时间戳秒) =
                 if matches!(prepared.种类, usecase::媒体附件类型::视频) {
+                    let 原始冷源退场开始 = Instant::now();
                     match fs::remove_file(&temp_file_path).await {
                         Ok(_) => {}
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -770,7 +799,7 @@ pub(super) async fn complete_media_upload(
                     let 原片删除时间戳秒 = ready_epoch秒;
                     let state_for_mark = state.clone();
                     let attachment_id_for_mark = attachment_id.clone();
-                    match task::spawn_blocking(move || {
+                    let 原始冷源退场结果 = match task::spawn_blocking(move || {
                         let mut repo = 构建共享仓储(&state_for_mark);
                         usecase::标记媒体冷源已删除(
                             &mut repo,
@@ -808,7 +837,9 @@ pub(super) async fn complete_media_upload(
                                 format!("标记原始上传冷源已删除任务失败: {err}"),
                             )
                         }
-                    }
+                    };
+                    记录complete阶段耗时("retire_original_upload_source", 原始冷源退场开始);
+                    原始冷源退场结果
                 } else {
                     (None, Some(原始冷源到期时间戳秒), None)
                 };

@@ -293,12 +293,41 @@ async fn 执行一次媒体上传残留清理_按会话(
     for ((上传会话标识, 清理原因), 残留列表) in 分组结果 {
         let mut 全部删除成功 = true;
         for 残留 in &残留列表 {
-            let temp_file_path = match tus_hook外壳::解析tus临时文件路径(
+            let temp_file_path = match tus_hook外壳::解析tus残留清理目标(
                 &state.tus_upload_dir,
                 残留.临时文件定位.as_str(),
             ) {
-                Ok(path) => path,
-                Err((_, _, message)) => {
+                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件(path)) => path,
+                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件已缺失) => {
+                    tracing::info!(
+                        usecase = "上传残留清理",
+                        adapter = "shell",
+                        outcome = "skipped_missing_file",
+                        attachment_id = 残留.附件标识.as_str(),
+                        upload_session_id = 上传会话标识.as_str(),
+                        cleanup_reason = 上传残留清理原因标签(清理原因),
+                        storage_locator = 残留.临时文件定位.as_str(),
+                        "上传残留文件已不存在，直接收口数据库真相"
+                    );
+                    continue;
+                }
+                Ok(tus_hook外壳::Tus残留清理定位结果::历史外部定位) => {
+                    // 这里专门兜住历史 rustus 测试数据和旧 locator：
+                    // 它们已经不属于当前 tus upload dir，继续报错只会在每次启动时制造噪音；
+                    // 但 cleanup 也绝不能越权删当前 upload dir 之外的文件，所以这里只收口数据库真相。
+                    tracing::info!(
+                        usecase = "上传残留清理",
+                        adapter = "shell",
+                        outcome = "skipped_legacy_external_locator",
+                        attachment_id = 残留.附件标识.as_str(),
+                        upload_session_id = 上传会话标识.as_str(),
+                        cleanup_reason = 上传残留清理原因标签(清理原因),
+                        storage_locator = 残留.临时文件定位.as_str(),
+                        "历史外部 storage locator 已不再属于当前 Tus upload dir，仅收口数据库真相"
+                    );
+                    continue;
+                }
+                Err(message) => {
                     tracing::error!(
                         usecase = "上传残留清理",
                         adapter = "shell",
