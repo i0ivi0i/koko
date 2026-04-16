@@ -809,6 +809,16 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         Some("private, no-cache"),
         "HLS master manifest 必须显式要求浏览器每次重验证，不能把播放入口缓存成陈旧真相"
     );
+    let master_etag = master_headers
+        .get(header::ETAG)
+        .and_then(|value| value.to_str().ok())
+        .expect("HLS master manifest 必须带稳定 ETag，重复观看时才有轻量 304 可用")
+        .to_string();
+    let master_last_modified = master_headers
+        .get(header::LAST_MODIFIED)
+        .and_then(|value| value.to_str().ok())
+        .expect("HLS master manifest 也必须带 Last-Modified，标准 HTTP 缓存链路才能自然复用")
+        .to_string();
     let master_text = String::from_utf8(master_bytes).expect("HLS master 应是 UTF-8 文本");
     assert!(
         master_text.contains("/api/media/")
@@ -824,6 +834,57 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         .expect("master playlist 应包含受控子播放列表 URL")
         .trim()
         .to_string();
+    let (master_not_modified_status, master_not_modified_headers, master_not_modified_bytes) =
+        send_bytes(
+            app.clone(),
+            Method::GET,
+            hls_master_url,
+            &[("if-none-match", master_etag.as_str())],
+        )
+        .await;
+    assert_eq!(master_not_modified_status, StatusCode::NOT_MODIFIED);
+    assert_eq!(
+        master_not_modified_headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-cache"),
+        "manifest 走 304 时也必须保持同样的重验证缓存语义"
+    );
+    assert_eq!(
+        master_not_modified_headers
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok()),
+        Some(master_etag.as_str()),
+        "304 响应必须回显同一个 ETag，浏览器才能稳定复用条件请求结果"
+    );
+    assert!(
+        master_not_modified_bytes.is_empty(),
+        "304 响应不应再回正文，避免 manifest 重验证继续传无意义字节"
+    );
+    let (master_since_not_modified_status, master_since_not_modified_headers, master_since_not_modified_bytes) =
+        send_bytes(
+            app.clone(),
+            Method::GET,
+            hls_master_url,
+            &[("if-modified-since", master_last_modified.as_str())],
+        )
+        .await;
+    assert_eq!(
+        master_since_not_modified_status,
+        StatusCode::NOT_MODIFIED,
+        "浏览器只带 If-Modified-Since 时，master manifest 也应能轻量返回 304"
+    );
+    assert_eq!(
+        master_since_not_modified_headers
+            .get(header::LAST_MODIFIED)
+            .and_then(|value| value.to_str().ok()),
+        Some(master_last_modified.as_str()),
+        "304 响应必须回显同一个 Last-Modified，标准缓存验证器才能稳定收敛"
+    );
+    assert!(
+        master_since_not_modified_bytes.is_empty(),
+        "If-Modified-Since 命中时也不应继续回传正文"
+    );
 
     let (child_status, child_headers, child_bytes) =
         send_bytes(app.clone(), Method::GET, child_url.as_str(), &[]).await;
@@ -881,6 +942,11 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         Some("private, max-age=86400, immutable"),
         "稳定 segment 在 24 小时标准流媒体窗口内应允许浏览器强复用，避免重复观看继续打源站"
     );
+    let segment_last_modified = segment_headers
+        .get(header::LAST_MODIFIED)
+        .and_then(|value| value.to_str().ok())
+        .expect("segment 也必须带 Last-Modified，超过缓存窗口后浏览器才能标准重验证")
+        .to_string();
     assert!(
         !segment_bytes.is_empty(),
         "媒体 segment 必须能通过受控流媒体路由读取到真实字节"
@@ -913,6 +979,13 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         Some(format!("bytes 0-15/{}", segment_bytes.len()).as_str())
     );
     assert_eq!(
+        segment_range_headers
+            .get(header::LAST_MODIFIED)
+            .and_then(|value| value.to_str().ok()),
+        Some(segment_last_modified.as_str()),
+        "segment 走 Range 时也必须回显同一个 Last-Modified，避免条件请求语义被部分响应打散"
+    );
+    assert_eq!(
         segment_range_bytes.len(),
         16,
         "segment range 读取必须返回请求到的真实字节长度"
@@ -932,6 +1005,14 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
             .and_then(|value| value.to_str().ok()),
         Some("private, no-cache"),
         "DASH MPD 也必须显式重验证，避免播放器继续沿用已退场的清单"
+    );
+    assert!(
+        dash_headers.get(header::ETAG).is_some(),
+        "DASH MPD 也必须带 ETag，避免只有 HLS 能享受轻量条件请求"
+    );
+    assert!(
+        dash_headers.get(header::LAST_MODIFIED).is_some(),
+        "DASH MPD 也必须带 Last-Modified，标准缓存验证器不能只覆盖 HLS"
     );
     let dash_text = String::from_utf8(dash_bytes).expect("MPD 应是 UTF-8 文本");
     assert!(

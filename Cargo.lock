@@ -1538,6 +1538,7 @@ dependencies = [
  "bip_metainfo",
  "dotenvy",
  "hex",
+ "httpdate",
  "image",
  "infer",
  "kamadak-exif",

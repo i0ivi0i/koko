@@ -6,7 +6,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use object_store::{path::Path as ObjectPath, GetOptions, GetRange, ObjectStoreExt};
+use object_store::{path::Path as ObjectPath, GetOptions, GetRange, ObjectMeta, ObjectStoreExt};
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},
@@ -243,6 +243,67 @@ fn 流媒体分段缓存控制值() -> &'static str {
     // 2. 标成 private，避免带 session_id 的受控 URL 被共享缓存误存；
     // 3. 生命周期由服务端清理任务兜底，窗口内可以安全 immutable。
     "private, max-age=86400, immutable"
+}
+
+fn 构造流媒体对象etag(meta: &ObjectMeta, asset_path: &str) -> String {
+    if let Some(raw) = meta.e_tag.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        if raw.starts_with("W/\"") || (raw.starts_with('"') && raw.ends_with('"')) {
+            return raw.to_string();
+        }
+        return format!("\"{raw}\"");
+    }
+    // 本地文件对象存储未必原生提供 e_tag，这里退回到“路径 + 长度 + 最后修改时间”组成的弱校验值。
+    // 对当前受控清单读取来说，这已经足够支撑浏览器条件请求，而不用额外读取正文做哈希。
+    let normalized_path = asset_path.replace(['/', '\\', ':', '.'], "_");
+    format!(
+        "W/\"{}-{}-{normalized_path}\"",
+        meta.size,
+        meta.last_modified.timestamp_millis(),
+    )
+}
+
+fn 构造流媒体对象最后修改时间(meta: &ObjectMeta) -> String {
+    let last_modified: SystemTime = meta.last_modified.into();
+    httpdate::fmt_http_date(last_modified)
+}
+
+fn 请求命中if_none_match(headers: &HeaderMap, etag: &str) -> bool {
+    headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .any(|candidate| candidate == "*" || candidate == etag)
+        })
+        .unwrap_or(false)
+}
+
+fn 请求命中if_modified_since(headers: &HeaderMap, meta: &ObjectMeta) -> bool {
+    let Some(raw) = headers
+        .get(header::IF_MODIFIED_SINCE)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return false;
+    };
+    let Ok(since) = httpdate::parse_http_date(raw) else {
+        return false;
+    };
+    let last_modified: SystemTime = meta.last_modified.into();
+    // HTTP-date 只有秒级精度；这里按秒对齐，避免对象存储里的毫秒时间把本可命中的条件请求误判成未命中。
+    let since_epoch_secs = since
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|value| value.as_secs());
+    let last_modified_epoch_secs = last_modified
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|value| value.as_secs());
+    match (since_epoch_secs, last_modified_epoch_secs) {
+        (Some(since), Some(last_modified)) => since >= last_modified,
+        _ => false,
+    }
 }
 
 /// 下面这组 helper 的 owner 已经跟着“媒体资产外壳”一起迁移。
@@ -1044,6 +1105,31 @@ pub(super) async fn load_streaming_asset_content(
         asset_path.as_str(),
     ));
     if asset_path.ends_with(".m3u8") || asset_path.ends_with(".mpd") {
+        let head_result = match state.attachment_store.head(&object_path).await {
+            Ok(meta) => meta,
+            Err(err) => {
+                return err_resp(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    format!("读取流媒体清单元数据失败: {err}"),
+                )
+            }
+        };
+        let etag = 构造流媒体对象etag(&head_result, asset_path.as_str());
+        let last_modified = 构造流媒体对象最后修改时间(&head_result);
+        if 请求命中if_none_match(&headers, etag.as_str())
+            || 请求命中if_modified_since(&headers, &head_result)
+        {
+            return (
+                StatusCode::NOT_MODIFIED,
+                [
+                    (header::CACHE_CONTROL, 流媒体清单缓存控制值().to_string()),
+                    (header::ETAG, etag),
+                    (header::LAST_MODIFIED, last_modified),
+                ],
+            )
+                .into_response();
+        }
         let get_result = match state.attachment_store.get(&object_path).await {
             Ok(result) => result,
             Err(err) => {
@@ -1099,6 +1185,8 @@ pub(super) async fn load_streaming_asset_content(
                     header::CACHE_CONTROL,
                     流媒体清单缓存控制值().to_string(),
                 ),
+                (header::ETAG, etag),
+                (header::LAST_MODIFIED, last_modified),
             ],
             rewritten,
         )
@@ -1145,6 +1233,7 @@ pub(super) async fn load_streaming_asset_content(
             )
         }
     };
+    let object_last_modified = 构造流媒体对象最后修改时间(&get_result.meta);
     let object_size = get_result.meta.size;
     let body = match get_result.bytes().await {
         Ok(bytes) => bytes,
@@ -1173,6 +1262,7 @@ pub(super) async fn load_streaming_asset_content(
                     header::CONTENT_RANGE,
                     构造content_range值(&range, object_size),
                 ),
+                (header::LAST_MODIFIED, object_last_modified.clone()),
             ],
             body,
         )
@@ -1188,6 +1278,7 @@ pub(super) async fn load_streaming_asset_content(
                     流媒体分段缓存控制值().to_string(),
                 ),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
+                (header::LAST_MODIFIED, object_last_modified),
             ],
             body,
         )
