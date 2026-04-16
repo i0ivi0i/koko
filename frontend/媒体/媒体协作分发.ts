@@ -107,6 +107,18 @@ async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
   return registration;
 }
 
+async function 尝试请求持久化存储(): Promise<void> {
+  const storage = globalThis.navigator?.storage;
+  if (!storage || typeof storage.persist !== "function") {
+    return;
+  }
+  try {
+    await storage.persist();
+  } catch {
+    return;
+  }
+}
+
 /**
  * Phase 2 先把“浏览器运行时底座”收口在这里：
  * 1. 页面内只创建一个 WebTorrent client；
@@ -361,6 +373,13 @@ async function 确保协作分发会话(input: {
   };
   协作分发会话表.set(input.distribution.swarm_id, session);
   启动协作分发存活上报(session, input.distribution);
+  /**
+   * 浏览器持久化存储只是“尽量保住本地整附件”的增强动作：
+   * 1. 不等待结果，不阻塞 swarm 冷启动；
+   * 2. 失败不回写任何业务可用性字段；
+   * 3. 真正能不能继续活，仍由后端 locator 和 peer 事实共同裁决。
+   */
+  void 尝试请求持久化存储();
 
   session.sourcePromise = (async () => {
     const runtime = await 获取或创建协作分发浏览器运行时();

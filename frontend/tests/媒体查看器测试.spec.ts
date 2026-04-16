@@ -386,6 +386,54 @@ describe("媒体查看器适配器", () => {
     );
   });
 
+  it("默认视频查看器会把 HLS P2P 增强挂接函数交给 Video.js 壳，而不是让 provider 裸跑", async () => {
+    vi.resetModules();
+    const 创建VideoJs播放器壳 = vi.fn(async () => ({
+      destroy: vi.fn(),
+      同步: vi.fn(),
+      读取视频元素: () => document.createElement("video"),
+      读取容器元素: () => document.createElement("div"),
+      进入全屏: vi.fn(),
+    }));
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+    }));
+
+    try {
+      const { 创建媒体查看器: 创建默认媒体查看器 } = await import("../媒体/媒体查看器");
+      const viewer = 创建默认媒体查看器({
+        isMobileViewport: () => false,
+      });
+
+      viewer.打开({
+        startAttachmentId: "att-video-default-p2p-hls-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-default-p2p-hls-1",
+            src: "http://media.local/stream/att-video-default-p2p-hls-1/master.m3u8",
+            posterSrc: "http://media.local/poster-default-p2p-hls-1",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      });
+      await Promise.resolve();
+
+      expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(1);
+      expect(创建VideoJs播放器壳.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({
+          挂接P2PHls增强层: expect.any(Function),
+        })
+      );
+
+      viewer.销毁();
+    } finally {
+      vi.doUnmock("../媒体/videojs播放器壳");
+      vi.resetModules();
+    }
+  });
+
   it("视频壳会把 waiting 信号回抛给媒体会话，并允许后续同步新的播放源", async () => {
     const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
     const viewer = 创建媒体查看器({

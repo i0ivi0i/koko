@@ -72,6 +72,10 @@ type VideoJs播放器壳工厂 = (
   lifecycle: 媒体查看器视口占用生命周期,
   hooks: 媒体查看器运行时钩子
 ) => 媒体查看器工厂结果;
+type 默认VideoJs播放器壳依赖 = NonNullable<Parameters<typeof 创建VideoJs播放器壳>[1]>;
+type 壳外P2PHls增强层输入 = Parameters<
+  NonNullable<默认VideoJs播放器壳依赖["挂接P2PHls增强层"]>
+>[0];
 
 export type 媒体查看器依赖 = {
   createPhotoSwipeLightbox?: PhotoSwipe查看器工厂;
@@ -406,10 +410,22 @@ const 创建默认VideoJs播放器层 = async (
   let cleaned = false;
   let 解绑媒体运行时信号: () => void = () => undefined;
   let 清理全屏策略: () => void = () => undefined;
+  const 挂接P2PHls增强层 = async ({ hls }: 壳外P2PHls增强层输入): Promise<void> => {
+    /**
+     * `p2p-media-loader-hlsjs` 在这里始终只是 HLS 支路的外挂增强：
+     * 1. 真正的播放 owner 仍然是外层媒体会话和唯一 Video.js 壳；
+     * 2. 动态导入放在查看器默认工厂，避免把具体库绑死进壳层核心；
+     * 3. 是否成功挂上只影响带宽协作，不影响 HLS 首播真相。
+     */
+    const { HlsJsP2PEngine } = await import("p2p-media-loader-hlsjs");
+    const engine = new HlsJsP2PEngine();
+    engine.bindHls(hls);
+  };
 
   try {
     const shell = await 创建VideoJs播放器壳(映射VideoJs播放源(item), {
       mountTarget: mount,
+      挂接P2PHls增强层,
     });
     const video = shell.读取视频元素();
     const container = shell.读取容器元素();

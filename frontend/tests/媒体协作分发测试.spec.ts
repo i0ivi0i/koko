@@ -351,6 +351,39 @@ describe("媒体协作分发", () => {
     });
   });
 
+  it("开始协作分发后会尝试请求 storage.persist，但失败不会中断 swarm 会话", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const persist = vi.fn(async () => {
+      throw new Error("persist denied");
+    });
+    vi.stubGlobal("navigator", {
+      storage: {
+        persist,
+      },
+    });
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-persist");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-persist",
+      kind: "video",
+      locator: 准备好的定位结果("att-persist"),
+    });
+    await Promise.resolve();
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-persist",
+      hint: "正在补块",
+    });
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
   it("torrent done 后会发出完整资产事件，而不只是改 hint", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent("blob:http://media.local/swarm-att-4");
