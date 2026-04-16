@@ -17,5 +17,7 @@ mod test_support;
 // 而不是一上来顺手改断言或改业务语义。
 #[path = "媒体后台测试/上传残留清理.rs"]
 mod upload_cleanup_tests;
+#[path = "媒体后台测试/冷源清理.rs"]
+mod cold_source_cleanup_tests;
 
 use test_support::{http::*, media::*};
