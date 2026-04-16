@@ -166,6 +166,21 @@ fn 视频上传生命周期迁移已包含abandoned与mezzanine字段() {
 }
 
 #[test]
+fn 流媒体清单生命周期迁移已包含streaming过期与删除字段() {
+    let sql = std::fs::read_to_string("migrations/0014_流媒体清单24小时生命周期.sql")
+        .expect("应能读到流媒体生命周期迁移");
+
+    // 这条迁移必须把“标准流媒体只活 24 小时”写成独立真相：
+    // 1. manifest/segment 何时该退场，由 streaming_expires_at 表达；
+    // 2. 真正删完后要留下 streaming_deleted_at；
+    // 3. 删除 streaming 不能顺手抹掉 distribution swarm 线索。
+    assert!(sql.contains("ALTER TABLE attachment_streaming_manifests"));
+    assert!(sql.contains("streaming_expires_at"));
+    assert!(sql.contains("streaming_deleted_at"));
+    assert!(sql.contains("idx_attachment_streaming_manifest_cleanup"));
+}
+
+#[test]
 fn 共享契约已为房间阅读推进预留稳定命令() {
     let command = koko::contract::命令::推进房间阅读位置 {
         房间标识: "r-test".to_string(),

@@ -700,7 +700,13 @@ pub(super) async fn complete_media_upload(
             记录complete阶段耗时("package_streaming_assets", 流媒体打包开始);
             let 流媒体产物上传开始 = Instant::now();
             let uploaded =
-                match 流媒体打包::上传流媒体打包产物(&state, &attachment_id, 打包结果).await
+                match 流媒体打包::上传流媒体打包产物(
+                    &state,
+                    &attachment_id,
+                    原始冷源到期时间戳秒,
+                    打包结果,
+                )
+                .await
                 {
                     Ok(uploaded) => uploaded,
                     Err((status, code, message)) => {
@@ -886,6 +892,8 @@ pub(super) async fn complete_media_upload(
                         附件标识: request.附件标识.clone(),
                         hls主清单存储键: request.hls主清单存储键.clone(),
                         dash主清单存储键: request.dash主清单存储键.clone(),
+                        streaming到期时间戳秒: Some(request.streaming到期时间戳秒),
+                        streaming删除时间戳秒: request.streaming删除时间戳秒,
                     });
             let media_asset = super::媒体资产外壳::构造媒体资产响应体(
                 &snapshot,

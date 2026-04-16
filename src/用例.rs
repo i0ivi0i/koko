@@ -188,6 +188,11 @@ pub struct 流媒体清单写入请求 {
     pub 附件标识: String,
     pub hls主清单存储键: String,
     pub dash主清单存储键: String,
+    /// writer 侧必须显式写入 24h 冷备窗口的截止时间，
+    /// 避免把“清单什么时候退场”继续藏在 shell 默认值或测试约定里。
+    pub streaming到期时间戳秒: i64,
+    /// 新写入默认应为 `None`；只有后台真的删完 manifest/segment 后，才允许回写删除时间。
+    pub streaming删除时间戳秒: Option<i64>,
 }
 
 /// locator/complete 只需要知道“这条视频有没有正式清单入口”。
@@ -197,6 +202,10 @@ pub struct 流媒体清单快照 {
     pub 附件标识: String,
     pub hls主清单存储键: String,
     pub dash主清单存储键: String,
+    /// 读侧允许为 `None`，是为了兼容旧数据刚迁移但还没被 complete 重写的过渡窗口；
+    /// 真正的新主链写入请求则必须始终给出明确 TTL。
+    pub streaming到期时间戳秒: Option<i64>,
+    pub streaming删除时间戳秒: Option<i64>,
 }
 
 /// locator 只回答“当前怎么受控取媒体”，不暴露存储键、权限投影或 swarm 运行态。
@@ -231,6 +240,15 @@ pub struct 待清理媒体回退母本 {
     pub 回退母本存储键: String,
 }
 
+/// 流媒体清单只代表服务端 24h 标准流媒体冷备窗口。
+/// 它的删除不能顺手影响 swarm metadata，否则就会把服务器冷备和平面长期存活混成一个 owner。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 待清理流媒体清单 {
+    pub 附件标识: String,
+    pub hls主清单存储键: String,
+    pub dash主清单存储键: String,
+}
+
 /// 上传残留清理原因只表达“为什么这批临时文件已经没有长期价值”。
 /// 它不描述 shell 要怎么删文件，也不承载 UI 语义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -253,6 +271,9 @@ pub struct 待清理上传残留 {
 /// 原始冷源只保留 24 小时窗口。
 /// 这里先把窗口值收成应用层常量，避免后续在外壳、handler、测试里继续散落“86400”。
 pub const 媒体原始冷源保留秒数: i64 = 24 * 60 * 60;
+/// 标准流媒体产物同样只保留 24 小时冷备窗口。
+/// 这条常量只回答“服务端清单什么时候该退场”，不等于 swarm 长期存活时间。
+pub const 流媒体冷备保留秒数: i64 = 24 * 60 * 60;
 
 /// 冷源可用性只看三件事：
 /// 1. 还有没有冷源地址；
@@ -523,6 +544,28 @@ pub trait 仓储端口 {
     ) -> Result<Option<流媒体清单快照>, contract::错误码> {
         let _ = 附件标识;
         Ok(None)
+    }
+
+    /// 列出已经超过标准流媒体冷备窗口、且还没留下删除时间的 manifest 真相。
+    /// 注意：这里只回答“服务端清单该删了”，不碰 swarm/distribution 线索。
+    fn 列出待清理流媒体清单(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<待清理流媒体清单>, contract::错误码> {
+        let _ = (当前时间戳秒, 限制条数);
+        Ok(vec![])
+    }
+
+    /// manifest/segment 真删完后，必须把 streaming_deleted_at 回写真相。
+    /// 这样 locator 与内容读取才能共享同一条“标准流媒体已退场”的事实。
+    fn 标记流媒体清单已删除(
+        &mut self,
+        附件标识: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let _ = (附件标识, 删除时间戳秒);
+        Err(contract::错误码::系统错误)
     }
 
     /// 创建 prepared 附件占位，供浏览器后续直传对象内容。
@@ -1182,6 +1225,10 @@ pub fn 写入流媒体清单元数据(
     if 请求.附件标识.trim().is_empty()
         || 请求.hls主清单存储键.trim().is_empty()
         || 请求.dash主清单存储键.trim().is_empty()
+        || 请求.streaming到期时间戳秒 < 0
+        || 请求
+            .streaming删除时间戳秒
+            .is_some_and(|value| value < 0)
     {
         return Err(contract::错误码::参数非法);
     }
@@ -1318,6 +1365,32 @@ pub fn 列出待清理媒体回退母本(
         return Err(contract::错误码::参数非法);
     }
     仓储.列出待清理媒体回退母本(当前时间戳秒, 限制条数)
+}
+
+/// 标准流媒体冷备窗口结束后，只允许回收 manifest/segment 本身。
+/// distribution/swarm 线索必须继续活在另一条权威面，不能被这条 cleanup 顺手抹掉。
+pub fn 列出待清理流媒体清单(
+    仓储: &dyn 仓储端口,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<待清理流媒体清单>, contract::错误码> {
+    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.列出待清理流媒体清单(当前时间戳秒, 限制条数)
+}
+
+/// 服务端 manifest/segment 删除成功后，应用层要留下 streaming_deleted_at。
+/// 这样后续 locator、受控读取和 cleanup 重试才能共用同一条退场事实。
+pub fn 标记流媒体清单已删除(
+    仓储: &mut dyn 仓储端口,
+    附件标识: &str,
+    删除时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    if 附件标识.trim().is_empty() || 删除时间戳秒 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.标记流媒体清单已删除(附件标识, 删除时间戳秒)
 }
 
 /// 上传残留清理是上传生命周期的尾处理：

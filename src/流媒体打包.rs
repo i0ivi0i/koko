@@ -541,6 +541,7 @@ pub(super) fn 生成流媒体打包产物(
 pub(super) async fn 上传流媒体打包产物(
     state: &应用状态,
     attachment_id: &str,
+    streaming到期时间戳秒: i64,
     打包结果: 流媒体打包结果,
 ) -> Result<流媒体打包上传结果, (StatusCode, &'static str, String)> {
     let 静态封面存储键 = format!("videos/{attachment_id}/thumbnail.png");
@@ -576,6 +577,8 @@ pub(super) async fn 上传流媒体打包产物(
                 attachment_id,
                 打包结果.dash主清单相对路径.as_str(),
             ),
+            streaming到期时间戳秒,
+            streaming删除时间戳秒: None,
         },
         静态封面存储键,
         回退母本存储键,
