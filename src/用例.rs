@@ -578,6 +578,13 @@ pub trait 仓储端口 {
         Err(contract::错误码::系统错误)
     }
 
+    /// prepare 第二阶段失败时，需要把还没绑定上传会话的 prepared 占位回滚掉。
+    /// 约束：这里只回收“孤儿 prepared 附件”，不承载正常业务删除语义。
+    fn 回滚预备媒体附件记录(&mut self, 附件标识: &str) -> Result<(), contract::错误码> {
+        let _ = 附件标识;
+        Err(contract::错误码::系统错误)
+    }
+
     /// 读取“当前还能否继续上传/完成上传”的最小附件事实。
     fn 查询待完成媒体附件(
         &self,

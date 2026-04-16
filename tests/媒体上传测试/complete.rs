@@ -212,6 +212,10 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
         full_body, original_body,
         "blob/full 和 blob/original 必须读取不同对象，不能继续都走同一份原始冷源字节"
     );
+    assert!(
+        !std::path::Path::new(temp_file.as_str()).exists(),
+        "图片 complete 成功后必须同步删掉 Tus 临时原图，不能把 happy path 残留丢给后台慢慢积灰"
+    );
 }
 
 #[tokio::test]

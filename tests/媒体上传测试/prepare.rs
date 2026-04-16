@@ -270,3 +270,124 @@ async fn prepare图片和视频都会返回统一Tus契约() {
         最小mp4字节().len() as i64,
     );
 }
+
+#[tokio::test]
+#[serial]
+#[allow(non_snake_case)]
+async fn prepare运输授权写入失败时不会留下孤儿prepared附件() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+
+    let (_, bootstrap) = send_json(
+        app.clone(),
+        Method::POST,
+        "/api/session/bootstrap",
+        Some(serde_json::json!({"device_anonymous_token": format!("prepare-transport-fail-{uniq}")})),
+        &[],
+    )
+    .await;
+    let session_id = bootstrap["session_id"].as_str().expect("session_id");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&cfg.database_url)
+        .await
+        .expect("应能连接数据库");
+    let probe_byte_size = 68_017_i64;
+    let baseline_attachment_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT
+         FROM attachments
+         WHERE status = 'prepared'
+           AND mime_type = 'image/png'
+           AND byte_size = $1
+           AND storage_key LIKE 'images/%/original.png'",
+    )
+    .bind(probe_byte_size)
+    .fetch_one(&pool)
+    .await
+    .expect("应能读取 prepare 失败前的孤儿附件基线");
+    sqlx::query(
+        "CREATE OR REPLACE FUNCTION koko_fail_attachment_upload_session_insert()
+         RETURNS trigger AS $$
+         BEGIN
+             RAISE EXCEPTION 'forced attachment_upload_sessions insert failure';
+         END;
+         $$ LANGUAGE plpgsql",
+    )
+    .execute(&pool)
+    .await
+    .expect("应能创建测试 trigger 函数");
+    sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_koko_fail_attachment_upload_session_insert
+         ON attachment_upload_sessions",
+    )
+    .execute(&pool)
+    .await
+    .expect("应能先清理旧测试 trigger");
+    sqlx::query(
+        "CREATE TRIGGER trg_koko_fail_attachment_upload_session_insert
+         BEFORE INSERT ON attachment_upload_sessions
+         FOR EACH ROW
+         EXECUTE FUNCTION koko_fail_attachment_upload_session_insert()",
+    )
+    .execute(&pool)
+    .await
+    .expect("应能安装测试 trigger");
+
+    let (status, body) = send_json(
+        app,
+        Method::POST,
+        "/api/media/image/prepare",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "file_name": "transport-fail.png",
+            "mime_type": "image/png",
+            "byte_size": probe_byte_size
+        })),
+        &[],
+    )
+    .await;
+
+    sqlx::query(
+        "DROP TRIGGER IF EXISTS trg_koko_fail_attachment_upload_session_insert
+         ON attachment_upload_sessions",
+    )
+    .execute(&pool)
+    .await
+    .expect("prepare 结束后应能卸载测试 trigger");
+    sqlx::query("DROP FUNCTION IF EXISTS koko_fail_attachment_upload_session_insert()")
+        .execute(&pool)
+        .await
+        .expect("prepare 结束后应能卸载测试 trigger 函数");
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(body["code"].as_str(), Some("system_error"));
+
+    let attachment_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT
+         FROM attachments
+         WHERE status = 'prepared'
+           AND mime_type = 'image/png'
+           AND byte_size = $1
+           AND storage_key LIKE 'images/%/original.png'",
+    )
+    .bind(probe_byte_size)
+    .fetch_one(&pool)
+    .await
+    .expect("应能检查 prepare 失败后的附件残留");
+    assert_eq!(
+        attachment_count, baseline_attachment_count,
+        "第二阶段上传会话授权失败时，不能留下没有 upload_session 锚点的 prepared 孤儿附件"
+    );
+}

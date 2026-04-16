@@ -54,6 +54,27 @@ pub(super) struct AbandonMediaUploadBody {
     session_id: Option<String>,
 }
 
+async fn 回滚prepare失败留下的预备附件(
+    state: 应用状态,
+    attachment_id: String,
+) -> Result<(), String> {
+    match task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state);
+        repo.回滚预备媒体附件记录(&attachment_id)
+            .map_err(map_domain_err_tuple)
+    })
+    .await
+    {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err((status, code, message))) => Err(format!(
+            "status={}, code={}, message={message}",
+            status.as_u16(),
+            code
+        )),
+        Err(err) => Err(format!("回滚孤儿 prepared 附件任务执行失败: {err}")),
+    }
+}
+
 /// 冷路径：申请媒体附件上传占位。
 /// 这一步只创建 prepared 真相，并返回后续直传所需参数；不在这里上传字节。
 pub(super) async fn prepare_media_upload(
@@ -170,16 +191,53 @@ pub(super) async fn prepare_media_upload(
             .map_err(map_domain_err_tuple)
     })
     .await;
-    match transport_result {
-        Ok(Ok(())) => {}
-        Ok(Err((status, code, message))) => return err_resp(status, code, message),
-        Err(err) => {
+    let transport_error = match transport_result {
+        Ok(Ok(())) => None,
+        Ok(Err((status, code, message))) => Some((status, code, message)),
+        Err(err) => Some((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "system_error",
+            format!("prepare 运输授权任务执行失败: {err}"),
+        )),
+    };
+    if let Some((status, code, message)) = transport_error {
+        if let Err(rollback_detail) =
+            回滚prepare失败留下的预备附件(state.clone(), snapshot.附件标识.clone()).await
+        {
+            tracing::error!(
+                usecase = "准备媒体上传",
+                adapter = "http",
+                outcome = "rollback_failed",
+                request_kind = "媒体上传 prepare",
+                session_id = session_id.as_str(),
+                attachment_id = snapshot.附件标识.as_str(),
+                upload_session_id = upload_session_id.as_str(),
+                error_code = code,
+                detail = %rollback_detail,
+                original_error = %message,
+                "prepare 第二阶段失败后回滚孤儿 prepared 附件失败"
+            );
             return err_resp(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
-                format!("prepare 运输授权任务执行失败: {err}"),
-            )
+                format!(
+                    "prepare 运输授权失败且回滚孤儿附件失败: {rollback_detail}; 原始错误: {message}"
+                ),
+            );
         }
+        tracing::warn!(
+            usecase = "准备媒体上传",
+            adapter = "http",
+            outcome = "rolled_back",
+            request_kind = "媒体上传 prepare",
+            session_id = session_id.as_str(),
+            attachment_id = snapshot.附件标识.as_str(),
+            upload_session_id = upload_session_id.as_str(),
+            error_code = code,
+            detail = %message,
+            "prepare 第二阶段失败，已回滚孤儿 prepared 附件"
+        );
+        return err_resp(status, code, message);
     }
 
     let expires_at = (SystemTime::now() + Duration::from_secs(媒体上传授权有效期秒数))
@@ -809,26 +867,28 @@ pub(super) async fn complete_media_upload(
     记录complete阶段耗时("write_authoritative_snapshot", 写入权威真相开始);
     match complete_result {
         Ok(Ok(snapshot)) => {
+            let 上传临时文件退场开始 = Instant::now();
+            match fs::remove_file(&temp_file_path).await {
+                Ok(_) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        "删除上传临时文件失败",
+                        "delete_upload_temp_file_failed",
+                        format!("删除 Tus 上传临时文件失败: {err}"),
+                    )
+                }
+            }
+            记录complete阶段耗时("delete_upload_temp_file", 上传临时文件退场开始);
             let (_原片删除时间戳秒, 冷备层到期时间戳秒, 冷备层删除时间戳秒) =
                 if matches!(prepared.种类, usecase::媒体附件类型::视频) {
                     let 原始冷源退场开始 = Instant::now();
-                    match fs::remove_file(&temp_file_path).await {
-                        Ok(_) => {}
-                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(err) => {
-                            return 记录并返回complete重活失败(
-                                attachment_id.as_str(),
-                                attachment_kind,
-                                attachment_byte_size,
-                                complete_heavy_work_started_at,
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "system_error",
-                                "删除原始上传临时文件失败",
-                                "delete_original_temp_file_failed",
-                                format!("删除 Tus 原始上传临时文件失败: {err}"),
-                            )
-                        }
-                    }
                     // 视频原片删除记录的是“用户上传母本已退场”，
                     // 但对外暴露的 original 冷备入口此时已经切成 mezzanine，不能把这两个事实混成一个删除位。
                     let 原片删除时间戳秒 = ready_epoch秒;

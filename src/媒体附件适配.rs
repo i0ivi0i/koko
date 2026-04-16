@@ -264,6 +264,40 @@ pub(super) fn 创建预备媒体附件记录(
     ))
 }
 
+/// 只有 prepare 第二阶段失败时，才允许把没挂上 upload session 的 prepared 占位整条回滚。
+/// 这里直接删 attachment 根事实，让 session/transport 继续靠级联保持干净。
+async fn 回滚预备媒体附件记录_异步(
+    pool: &PgPool,
+    附件标识: &str,
+) -> Result<(), contract::错误码> {
+    let delete_result = sqlx::query(
+        "DELETE FROM attachments
+         WHERE attachment_id = $1
+           AND status = 'prepared'
+           AND current_upload_session_id IS NULL
+           AND NOT EXISTS (
+               SELECT 1
+               FROM attachment_upload_sessions
+               WHERE attachment_upload_sessions.attachment_id = attachments.attachment_id
+           )",
+    )
+    .bind(附件标识)
+    .execute(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+    if delete_result.rows_affected() == 0 {
+        return Err(contract::错误码::系统错误);
+    }
+    Ok(())
+}
+
+pub(super) fn 回滚预备媒体附件记录(
+    repo: &mut Pg仓储,
+    附件标识: &str,
+) -> Result<(), contract::错误码> {
+    repo.在运行时执行(回滚预备媒体附件记录_异步(&repo.pool, 附件标识))
+}
+
 /// ready 附件落库时，会把图片/视频真正需要长期保留的稳定渲染事实一并写好。
 /// 这样消息主链以后只认附件真相，不再反问上传 sidecar。
 async fn 创建媒体附件记录_异步(
