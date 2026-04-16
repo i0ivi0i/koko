@@ -528,6 +528,358 @@ describe("聊天应用内核", () => {
     });
   });
 
+  it("缓存完整的视频在刷新后重开查看器时，不会先回落到静态 HLS 请求", async () => {
+    const 创建视频消息传输 = () => {
+      const transport = new 假传输();
+      transport.joinQueue = [
+        创建房间快照("r-test", 1, {
+          snapshot_messages: [
+            {
+              type: "message_created",
+              room_id: "r-test",
+              message_id: "m-video-cache-1",
+              client_message_id: "c-video-cache-1",
+              sender_session_id: "s-other",
+              sender_display_alias: "冷静的水獭",
+              text: "",
+              body: "",
+              attachments: [
+                {
+                  kind: "video",
+                  attachment_id: "att-video-cache-1",
+                  width: 1280,
+                  height: 720,
+                },
+              ],
+              event_position: 1,
+            },
+          ],
+        }),
+      ];
+      return transport;
+    };
+    const storageSource = createFakeStorage();
+    const 创建共享平台 = () =>
+      创建浏览器应用平台({
+        storage: 创建存储运行时({ storage: storageSource }),
+      });
+    const blob播放结果 = {
+      mode: "blob" as const,
+      attachmentId: "att-video-cache-1",
+      kind: "video" as const,
+      src: "http://media.local/webtorrent/att-video-cache-1.mp4",
+      thumbnailUrl: "http://media.local/poster-att-video-cache-1",
+      contentHash: "hash-video-cache-1",
+      distribution: {
+        swarm_id: "swarm-video-cache-1",
+        announce_urls: ["wss://tracker.koko.local/announce"],
+        web_seed_url: "http://media.local/original-att-video-cache-1.mp4",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
+    };
+
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport: 创建视频消息传输(),
+      platform: 创建共享平台(),
+      storage: 创建浏览器存储(storageSource),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue(blob播放结果),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-cache-1",
+      signal: {
+        type: "ASSET_COMPLETE",
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(
+      kernel.snapshot().media.sessionByAttachmentId["att-video-cache-1"]
+    ).toMatchObject({
+      status: "locally_complete",
+      locallyComplete: true,
+    });
+
+    let 恢复播放结果!: (playback: 媒体播放结果) => void;
+    const 刷新后等待中的播放结果 = new Promise<媒体播放结果>((resolve) => {
+      恢复播放结果 = resolve;
+    });
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const reopenedKernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport: 创建视频消息传输(),
+      platform: 创建共享平台(),
+      storage: 创建浏览器存储(storageSource),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(reopenedKernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(reopenedKernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockImplementation(() => 刷新后等待中的播放结果),
+    });
+
+    await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await reopenedKernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await reopenedKernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const session =
+        reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-1"];
+      if (session?.locallyComplete) {
+        break;
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(
+      reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-1"]
+    ).toMatchObject({
+      locallyComplete: true,
+      playback: null,
+    });
+
+    await reopenedKernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-cache-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-cache-1",
+            src: "http://media.local/stream/att-video-cache-1/master.m3u8",
+            posterSrc: null,
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+
+    expect(fake查看器.打开).not.toHaveBeenCalled();
+
+    恢复播放结果(blob播放结果);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fake查看器.打开).toHaveBeenCalledWith({
+      startAttachmentId: "att-video-cache-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-cache-1",
+          src: "http://media.local/webtorrent/att-video-cache-1.mp4",
+          posterSrc: "http://media.local/poster-att-video-cache-1",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+  });
+
+  it("本地完整视频已先落到 manifest 时，打开正式查看器会先触发一次会话重裁决，再决定是否继续走 HLS", async () => {
+    const 创建视频消息传输 = () => {
+      const transport = new 假传输();
+      transport.joinQueue = [
+        创建房间快照("r-test", 1, {
+          snapshot_messages: [
+            {
+              type: "message_created",
+              room_id: "r-test",
+              message_id: "m-video-cache-manifest-1",
+              client_message_id: "c-video-cache-manifest-1",
+              sender_session_id: "s-other",
+              sender_display_alias: "冷静的水獭",
+              text: "",
+              body: "",
+              attachments: [
+                {
+                  kind: "video",
+                  attachment_id: "att-video-cache-manifest-1",
+                  width: 1280,
+                  height: 720,
+                },
+              ],
+              event_position: 1,
+            },
+          ],
+        }),
+      ];
+      return transport;
+    };
+    const storageSource = createFakeStorage();
+    const 创建共享平台 = () =>
+      创建浏览器应用平台({
+        storage: 创建存储运行时({ storage: storageSource }),
+      });
+    const blob播放结果 = {
+      mode: "blob" as const,
+      attachmentId: "att-video-cache-manifest-1",
+      kind: "video" as const,
+      src: "http://media.local/webtorrent/att-video-cache-manifest-1.mp4",
+      thumbnailUrl: "http://media.local/poster-att-video-cache-manifest-1",
+      contentHash: "hash-video-cache-manifest-1",
+      distribution: {
+        swarm_id: "swarm-video-cache-manifest-1",
+        announce_urls: ["wss://tracker.koko.local/announce"],
+        web_seed_url: "http://media.local/original-att-video-cache-manifest-1.mp4",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
+    };
+    const manifest播放结果 = {
+      mode: "manifest" as const,
+      attachmentId: "att-video-cache-manifest-1",
+      kind: "video" as const,
+      src: "http://media.local/stream/att-video-cache-manifest-1/master.m3u8",
+      thumbnailUrl: "http://media.local/poster-att-video-cache-manifest-1",
+      streamingDistribution: {
+        swarm_id: "swarm-video-cache-manifest-1",
+        announce_urls: ["wss://tracker.koko.local/announce"],
+        web_seed_url: "http://media.local/original-att-video-cache-manifest-1.mp4",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
+    };
+
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport: 创建视频消息传输(),
+      platform: 创建共享平台(),
+      storage: 创建浏览器存储(storageSource),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue(blob播放结果),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+    await kernel.dispatch({
+      type: "MEDIA_SESSION_SIGNALLED",
+      attachmentId: "att-video-cache-manifest-1",
+      signal: {
+        type: "ASSET_COMPLETE",
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const reopenedKernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport: 创建视频消息传输(),
+      platform: 创建共享平台(),
+      storage: 创建浏览器存储(storageSource),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 解析播放结果 = vi
+      .fn()
+      .mockResolvedValueOnce(manifest播放结果)
+      .mockResolvedValueOnce(blob播放结果);
+    读取媒体编排供测试(reopenedKernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(reopenedKernel).设置媒体播放器供测试({
+      解析播放结果,
+    });
+
+    await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await reopenedKernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await reopenedKernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const session =
+        reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-manifest-1"];
+      if (session?.locallyComplete && session.playback?.mode === "manifest") {
+        break;
+      }
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(
+      reopenedKernel.snapshot().media.sessionByAttachmentId["att-video-cache-manifest-1"]
+    ).toMatchObject({
+      locallyComplete: true,
+      playback: {
+        mode: "manifest",
+      },
+    });
+
+    await reopenedKernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-cache-manifest-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-cache-manifest-1",
+            src: "http://media.local/stream/att-video-cache-manifest-1/master.m3u8",
+            posterSrc: null,
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).toHaveBeenCalledTimes(2);
+    expect(
+      reopenedKernel.snapshot().media.playbackByAttachmentId["att-video-cache-manifest-1"]
+    ).toMatchObject({
+      mode: "blob",
+      src: "http://media.local/webtorrent/att-video-cache-manifest-1.mp4",
+    });
+    expect(fake查看器.打开).toHaveBeenCalledWith({
+      startAttachmentId: "att-video-cache-manifest-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-cache-manifest-1",
+          src: "http://media.local/webtorrent/att-video-cache-manifest-1.mp4",
+          posterSrc: "http://media.local/poster-att-video-cache-manifest-1",
+          streamingDistribution: {
+            swarm_id: "swarm-video-cache-manifest-1",
+            announce_urls: ["wss://tracker.koko.local/announce"],
+            web_seed_url: "http://media.local/original-att-video-cache-manifest-1.mp4",
+            join_ticket: null,
+            survival_mode: "server_assisted" as const,
+          },
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+  });
+
   it("媒体会话在 locally_complete 后收到 SEEDING_STARTED 会进入 seeding，而不丢失完整度真相", async () => {
     const transport = new 假传输();
     transport.joinQueue = [

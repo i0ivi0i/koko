@@ -159,6 +159,35 @@ async function 拉取受控Torrent字节(torrentUrl: string): Promise<Uint8Array
   return new Uint8Array(await response.arrayBuffer());
 }
 
+async function 探测协作分发媒体源可读性(streamUrl: string): Promise<void> {
+  const probeUrl = new URL(
+    streamUrl,
+    globalThis.location?.href ?? "http://127.0.0.1/"
+  );
+  if (!/^https?:$/i.test(probeUrl.protocol)) {
+    return;
+  }
+  /**
+   * `file.streamURL` 可能先于本地 stream server 真正就绪而生成出来。
+   * 如果现在就把这条 URL 暴露给上层，正式查看器会直接撞进 404，
+   * 看起来像“明明用了缓存，结果反而播不出来”。
+   *
+   * 这里用极小 Range 先探测一次：
+   * - 命中 2xx/206，说明这条本地协作分发路径已经可读；
+   * - 非 2xx 直接视为当前不可用，让上层继续按既有 HLS/锚点回退；
+   * - 不读取响应体，避免把探测放大成真正的数据下载。
+   */
+  const response = await fetch(probeUrl.href, {
+    method: "GET",
+    headers: {
+      Range: "bytes=0-1",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`探测协作分发媒体源失败: ${response.status}`);
+  }
+}
+
 async function 上报协作分发存活(presenceUrl: string): Promise<void> {
   const response = await fetch(presenceUrl, {
     method: "POST",
@@ -394,6 +423,14 @@ async function 确保协作分发会话(input: {
     }
     绑定协作分发会话事件(session, torrent);
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
+    await 探测协作分发媒体源可读性(file.streamURL);
+    if (
+      协作分发会话表.get(session.swarmId) !== session ||
+      session.consumerBindings.size === 0
+    ) {
+      清理协作分发底层会话(session, runtime);
+      return null;
+    }
     return {
       src: file.streamURL,
     };

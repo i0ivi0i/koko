@@ -128,6 +128,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   });
 
   let 当前查看器请求: 媒体查看器打开请求 | null = null;
+  let 正式查看器已打开 = false;
+  let 待重裁决的本地完整视频附件标识: string | null = null;
   let inlineAutoplayOwnerAttachmentId: string | null = null;
   let inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果> = {};
   let inlineAutoplay解析代次 = 0;
@@ -167,12 +169,78 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       }),
     };
   };
+  const 是否应等待本地完整视频会话真相 = (
+    request: 媒体查看器打开请求
+  ): boolean => {
+    const startItem = request.items.find(
+      (item) => item.attachmentId === request.startAttachmentId
+    );
+    if (!startItem || startItem.kind !== "video") {
+      待重裁决的本地完整视频附件标识 = null;
+      return false;
+    }
+    const session = 媒体会话表.get(startItem.attachmentId);
+    const sessionSnapshot = session?.snapshot();
+    if (!sessionSnapshot?.locallyComplete) {
+      if (待重裁决的本地完整视频附件标识 === startItem.attachmentId) {
+        待重裁决的本地完整视频附件标识 = null;
+      }
+      return false;
+    }
+    /**
+     * 刷新后，MediaCacheOwner 可能先把“本地已完整”恢复出来，
+     * 但时间线会话的 playback 还没来得及 hydrate，或者只拿到一条
+     * 为了首屏预算先保底的 manifest 主链。
+     * 这时如果直接拿 request 里的静态 HLS / original src 去打开正式查看器，
+     * 浏览器就会先发一轮冷源请求，随后才被会话真相纠正，用户就会误以为“缓存没复用”。
+     *
+     * 所以这里只拦截两种非常窄的窗口：
+     * - 目标是视频；
+     * - 本地完整度已经确定；
+     * - 会话当前还没有可投影的 playback 真相，或只拿到一次预算内保底的 manifest。
+     *
+     * manifest 只重裁一次：如果重裁后仍然只能回到 manifest，就直接打开，
+     * 避免为了追求 P2P 复用把查看器卡进无限等待。
+     */
+    if (!sessionSnapshot.playback) {
+      待重裁决的本地完整视频附件标识 = startItem.attachmentId;
+      return true;
+    }
+    if (sessionSnapshot.playback.mode !== "manifest") {
+      待重裁决的本地完整视频附件标识 = null;
+      return false;
+    }
+    if (待重裁决的本地完整视频附件标识 !== startItem.attachmentId) {
+      待重裁决的本地完整视频附件标识 = startItem.attachmentId;
+      session?.send({
+        type: "PLAYER_WAITING",
+      });
+      return true;
+    }
+    if (sessionSnapshot.status === "recovering") {
+      return true;
+    }
+    待重裁决的本地完整视频附件标识 = null;
+    return false;
+  };
+  const 正式打开查看器 = (request: 媒体查看器打开请求): void => {
+    正式查看器已打开 = true;
+    deps.登记程序滚动来源("media_viewer_open");
+    媒体查看器.打开(request);
+  };
   const 同步当前查看器请求 = (): void => {
     if (!当前查看器请求) {
       return;
     }
     const nextRequest = 投影查看器请求到当前播放真相(当前查看器请求);
     当前查看器请求 = nextRequest;
+    if (!正式查看器已打开) {
+      if (是否应等待本地完整视频会话真相(nextRequest)) {
+        return;
+      }
+      正式打开查看器(nextRequest);
+      return;
+    }
     媒体查看器.同步?.(nextRequest);
   };
   const 转发媒体查看器会话信号 = (attachmentId: string, signal: 媒体会话信号): void => {
@@ -180,6 +248,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
   let 媒体查看器 = 创建媒体查看器({
     onViewportCaptureEnd: () => {
+      正式查看器已打开 = false;
+      待重裁决的本地完整视频附件标识 = null;
       当前查看器请求 = null;
       deps.清除程序滚动来源("media_viewer_open");
     },
@@ -553,8 +623,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         startAttachmentId: request.startAttachmentId,
         items: request.items.map((item) => ({ ...item })),
       });
-      deps.登记程序滚动来源("media_viewer_open");
-      媒体查看器.打开(当前查看器请求);
+      正式查看器已打开 = false;
+      if (是否应等待本地完整视频会话真相(当前查看器请求)) {
+        return;
+      }
+      正式打开查看器(当前查看器请求);
     },
 
     处理自动播候选(candidates: 消息视频自动播候选[]): void {

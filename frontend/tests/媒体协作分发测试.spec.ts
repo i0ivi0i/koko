@@ -354,6 +354,53 @@ describe("媒体协作分发", () => {
     });
   });
 
+  it("streamURL 当前不可读时，不会把 404 的 webtorrent 地址提前暴露给上层", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-stream-probe-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/stream-probe-1.mp4")) {
+          return {
+            ok: false,
+            status: 404,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const { torrent } = 创建可观测假Torrent("/webtorrent/stream-probe-1.mp4");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await expect(
+      解析协作分发源({
+        attachmentId: "att-stream-probe-1",
+        kind: "video",
+        locator: 准备好的定位结果("att-stream-probe-1"),
+      })
+    ).rejects.toThrow(/404/);
+
+    expect(读取协作分发会话状态("swarm-att-stream-probe-1")).toBeNull();
+  });
+
   it("开始协作分发后会尝试请求 storage.persist，但失败不会中断 swarm 会话", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const persist = vi.fn(async () => {
