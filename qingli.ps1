@@ -1,4 +1,5 @@
 param(
+    [switch]$Apply,
     [switch]$Preview,
     [switch]$Force,
     [switch]$SkipDatabase,
@@ -141,8 +142,145 @@ function Assert-ServicesStopped {
 
     $listening = @($Ports | Where-Object { Test-TcpPortOpen $_ })
     if ($listening.Count -gt 0) {
-        throw "检测到本地服务仍在运行，拒绝清理。请先停止这些端口对应的项目进程：$($listening -join ', ')"
+        throw "检测到本地服务仍在运行，拒绝清理。请先停止这些端口对应的项目进程：$($listening -join ', ')；如需无人值守自动停服，请改用 .\qingli.ps1 -Apply -Force"
     }
+}
+
+function Get-ListeningPortProcessRecords {
+    param([int[]]$Ports)
+
+    $targetPorts = @($Ports | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+    if ($targetPorts.Count -eq 0) {
+        return @()
+    }
+
+    $connections = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {
+            $targetPorts -contains $_.LocalPort
+        })
+    if ($connections.Count -eq 0) {
+        return @()
+    }
+
+    $records = @()
+    foreach ($group in ($connections | Group-Object LocalPort, OwningProcess)) {
+        $connection = $group.Group[0]
+        $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($connection.OwningProcess)" -ErrorAction SilentlyContinue
+        $records += [pscustomobject]@{
+            Port           = [int]$connection.LocalPort
+            ProcessId      = [int]$connection.OwningProcess
+            Name           = if ($process) { $process.Name } else { "" }
+            ExecutablePath = if ($process) { $process.ExecutablePath } else { "" }
+            CommandLine    = if ($process) { $process.CommandLine } else { "" }
+        }
+    }
+
+    return $records
+}
+
+function Resolve-RecognizedProjectService {
+    param(
+        $PortRecord,
+        [string]$RepoRoot,
+        [int]$AppPort,
+        [int]$TrackerPort,
+        [int]$TusPort,
+        [string]$TusUploadDir
+    )
+
+    $backendTargetDir = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot "target\\launcher-run"))
+    $backendTargetPattern = [Regex]::Escape($backendTargetDir)
+    $tusUploadDirPattern = [Regex]::Escape($TusUploadDir)
+    $tusHookUrlPattern = [Regex]::Escape("http://127.0.0.1:$AppPort/internal/tus/hooks")
+
+    if (
+        $PortRecord.Port -eq $AppPort -and
+        $PortRecord.Name -in @("cargo.exe", "koko.exe") -and (
+            $PortRecord.ExecutablePath -like "*target\launcher-run\debug\koko.exe" -or
+            $PortRecord.CommandLine -match $backendTargetPattern -or
+            $PortRecord.CommandLine -match 'target\\\\launcher-run\\debug\\koko\.exe'
+        )
+    ) {
+        return [pscustomobject]@{
+            Role      = "backend"
+            Port       = $PortRecord.Port
+            ProcessId  = $PortRecord.ProcessId
+            Name       = $PortRecord.Name
+            CommandLine = $PortRecord.CommandLine
+        }
+    }
+
+    if (
+        $PortRecord.Port -eq $TrackerPort -and
+        $PortRecord.Name -match '^node(?:\.exe)?$' -and
+        $PortRecord.CommandLine -match 'dev-tracker\.mjs' -and
+        $PortRecord.CommandLine -match ("--port\s+$TrackerPort(\s|$)")
+    ) {
+        return [pscustomobject]@{
+            Role      = "tracker"
+            Port      = $PortRecord.Port
+            ProcessId = $PortRecord.ProcessId
+            Name      = $PortRecord.Name
+            CommandLine = $PortRecord.CommandLine
+        }
+    }
+
+    if (
+        $PortRecord.Port -eq $TusPort -and
+        $PortRecord.Name -match '^tusd(?:\.exe)?$' -and
+        $PortRecord.CommandLine -match ("-port\s+$TusPort(\s|$)") -and
+        (
+            $PortRecord.CommandLine -match $tusHookUrlPattern -or
+            $PortRecord.CommandLine -match $tusUploadDirPattern
+        )
+    ) {
+        return [pscustomobject]@{
+            Role      = "tusd"
+            Port      = $PortRecord.Port
+            ProcessId = $PortRecord.ProcessId
+            Name      = $PortRecord.Name
+            CommandLine = $PortRecord.CommandLine
+        }
+    }
+
+    return $null
+}
+
+function Stop-RecognizedProjectServices {
+    param(
+        [int[]]$Ports,
+        [string]$RepoRoot,
+        [int]$AppPort,
+        [int]$TrackerPort,
+        [int]$TusPort,
+        [string]$TusUploadDir
+    )
+
+    $listeningRecords = Get-ListeningPortProcessRecords -Ports $Ports
+    if ($listeningRecords.Count -eq 0) {
+        return @()
+    }
+
+    $recognizedServices = @()
+    foreach ($record in $listeningRecords) {
+        $recognized = Resolve-RecognizedProjectService `
+            -PortRecord $record `
+            -RepoRoot $RepoRoot `
+            -AppPort $AppPort `
+            -TrackerPort $TrackerPort `
+            -TusPort $TusPort `
+            -TusUploadDir $TusUploadDir
+        if ($null -ne $recognized) {
+            $recognizedServices += $recognized
+        }
+    }
+
+    foreach ($service in $recognizedServices) {
+        $processId = $service.ProcessId
+        Write-Host "自动停止项目服务 [$($service.Role)]：端口 $($service.Port) -> PID $processId ($($service.Name))"
+        & taskkill.exe /PID $processId /T /F 2>$null | Out-Null
+    }
+
+    return $recognizedServices
 }
 
 function Invoke-DatabaseCleanup {
@@ -225,6 +363,11 @@ else {
     Get-ConfigValue -DotEnv $dotEnv -Key "RUSTUS_DATA_DIR" -Fallback "data/rustus"
 }
 
+$TusUploadDir = Get-ConfigValue `
+    -DotEnv $dotEnv `
+    -Key "MEDIA_TUS_UPLOAD_DIR" `
+    -Fallback (Get-ConfigValue -DotEnv $dotEnv -Key "RUSTUS_DATA_DIR" -Fallback "data/tus")
+
 $RustusInfoDir = if ($PSBoundParameters.ContainsKey("RustusInfoDir")) {
     $RustusInfoDir
 }
@@ -248,15 +391,24 @@ else {
 
 $AppPort = [int](Get-ConfigValue -DotEnv $dotEnv -Key "APP_PORT" -Fallback "8080")
 $TrackerPort = [int](Get-ConfigValue -DotEnv $dotEnv -Key "SWARM_TRACKER_PORT" -Fallback "7072")
-$RustusPort = [int](Get-ConfigValue -DotEnv $dotEnv -Key "RUSTUS_SERVER_PORT" -Fallback "1081")
+$TusPort = [int](Get-ConfigValue `
+    -DotEnv $dotEnv `
+    -Key "TUSD_PORT" `
+    -Fallback (Get-ConfigValue `
+        -DotEnv $dotEnv `
+        -Key "MEDIA_TUS_SERVER_PORT" `
+        -Fallback (Get-ConfigValue -DotEnv $dotEnv -Key "RUSTUS_SERVER_PORT" -Fallback "1081")))
 
 $managedDirectories = @(
-    Resolve-ManagedPath -RawPath $AttachmentDir
-    Resolve-ManagedPath -RawPath $RustusDataDir
-    Resolve-ManagedPath -RawPath $RustusInfoDir
-    Resolve-ManagedPath -RawPath $RustusVerifyDir
-    Resolve-ManagedPath -RawPath $RustusInfoVerifyDir
-)
+    $AttachmentDir
+    $TusUploadDir
+    $RustusDataDir
+    $RustusInfoDir
+    $RustusVerifyDir
+    $RustusInfoVerifyDir
+) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
+    Resolve-ManagedPath -RawPath $_
+} | Sort-Object -Unique
 
 $directorySummaries = $managedDirectories | ForEach-Object { Get-DirectorySummary -Path $_ }
 
@@ -289,17 +441,40 @@ Write-Host "- IndexedDB: koko-offline-tasks"
 Write-Host "- Cache Storage: koko-image-blob-assets"
 Write-Host "- Chrome DevTools -> Application -> Clear storage -> http://127.0.0.1:$AppPort/"
 
+if ($Preview -and $Apply) {
+    throw "-Preview 与 -Apply 不能同时使用。"
+}
+
 if ($Preview) {
     Write-Host ""
     Write-Host "当前是预览模式；默认直接执行清理。"
     Write-Host "真正执行："
-    Write-Host ".\\qingli.ps1"
+    Write-Host ".\\qingli.ps1 -Apply"
     Write-Host "如需跳过确认："
-    Write-Host ".\\qingli.ps1 -Force"
+    Write-Host ".\\qingli.ps1 -Apply -Force"
     return
 }
 
-Assert-ServicesStopped -Ports @($AppPort, $TrackerPort, $RustusPort)
+$servicePorts = @($AppPort, $TrackerPort, $TusPort)
+if ($Force) {
+    Write-Host ""
+    Write-Host "Force 模式：尝试自动停止已识别的项目开发服务..."
+    $stoppedServices = Stop-RecognizedProjectServices `
+        -Ports $servicePorts `
+        -RepoRoot $RepoRoot `
+        -AppPort $AppPort `
+        -TrackerPort $TrackerPort `
+        -TusPort $TusPort `
+        -TusUploadDir (Resolve-ManagedPath -RawPath $TusUploadDir)
+    if ($stoppedServices.Count -eq 0) {
+        Write-Host "未发现可自动停止的项目开发服务；继续检查端口占用。"
+    }
+    else {
+        Start-Sleep -Milliseconds 800
+    }
+}
+
+Assert-ServicesStopped -Ports $servicePorts
 
 if (-not $Force) {
     $confirmation = Read-Host "确认执行？这会清空测试业务数据和媒体目录。输入 YES 继续"
@@ -333,5 +508,5 @@ if (-not $SkipFiles) {
 Write-Host ""
 Write-Host "清理完成。"
 Write-Host "建议下一步："
-Write-Host "1. 打开 Chrome DevTools 清掉该站点的 localStorage / IndexedDB / Cache Storage。"
+Write-Host "1. 如需连浏览器媒体/离线缓存也一起归零，再打开 Chrome DevTools 清掉该站点的 localStorage / IndexedDB / Cache Storage。"
 Write-Host "2. 重新启动项目，再开始新一轮群聊联测。"

@@ -14,13 +14,16 @@ function Assert-True {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runScriptPath = Join-Path $repoRoot "run.ps1"
 $upScriptPath = Join-Path $repoRoot "up.ps1"
+$cleanScriptPath = Join-Path $repoRoot "qingli.ps1"
 $trackerScriptPath = Join-Path $repoRoot "frontend\\dev-tracker.mjs"
 
 Assert-True (Test-Path -LiteralPath $runScriptPath) "缺少 run.ps1。"
 Assert-True (Test-Path -LiteralPath $upScriptPath) "缺少 up.ps1；应该提供显式升级入口，而不是让 run.ps1 偷偷升级依赖。"
+Assert-True (Test-Path -LiteralPath $cleanScriptPath) "缺少 qingli.ps1；应该提供项目级测试数据清理入口。"
 
 $runScript = Get-Content -LiteralPath $runScriptPath -Raw
 $upScript = Get-Content -LiteralPath $upScriptPath -Raw
+$cleanScript = Get-Content -LiteralPath $cleanScriptPath -Raw
 $trackerScript = if (Test-Path -LiteralPath $trackerScriptPath) {
     Get-Content -LiteralPath $trackerScriptPath -Raw
 } else {
@@ -33,8 +36,16 @@ $runScriptParseErrors = $null
     [ref]$runScriptTokens,
     [ref]$runScriptParseErrors
 ) | Out-Null
+$cleanScriptTokens = $null
+$cleanScriptParseErrors = $null
+[System.Management.Automation.Language.Parser]::ParseFile(
+    $cleanScriptPath,
+    [ref]$cleanScriptTokens,
+    [ref]$cleanScriptParseErrors
+) | Out-Null
 
 Assert-True ($runScriptParseErrors.Count -eq 0) "run.ps1 必须先通过 PowerShell 语法解析，不能连启动前都在脚本插值阶段炸掉。"
+Assert-True ($cleanScriptParseErrors.Count -eq 0) "qingli.ps1 必须先通过 PowerShell 语法解析，不能连清理前都在参数或插值阶段炸掉。"
 
 Assert-True ($runScript -match '\[switch\]\$UpgradeDependencies') "run.ps1 应该显式接受 UpgradeDependencies 开关。"
 Assert-True ($runScript -match 'if \(\$UpgradeDependencies\)') "run.ps1 应该只在显式升级模式下刷新依赖。"
@@ -79,4 +90,10 @@ Assert-True (-not ($runScript -match 'CancelKeyPress')) "run.ps1 不应该接管
 Assert-True ($runScript -match 'taskkill\.exe /PID \$process\.Id /T /F') "run.ps1 仍然应该保留强杀兜底，避免失控 watcher 留下孤儿进程。"
 Assert-True ($upScript -match '-UpgradeDependencies') "up.ps1 应该把 UpgradeDependencies 开关传给 run.ps1。"
 Assert-True ($upScript -match 'run\.ps1') "up.ps1 应该复用 run.ps1，而不是复制出第二套启动主链。"
+Assert-True ($cleanScript -match '\[switch\]\$Apply') "qingli.ps1 应该显式接受 Apply 开关，避免无人值守调用把 -Apply 误解析成别的参数。"
+Assert-True ($cleanScript -match 'MEDIA_TUS_UPLOAD_DIR') "qingli.ps1 应该跟随 tusd 主链清理 MEDIA_TUS_UPLOAD_DIR，而不是继续只盯着旧的 Rustus 目录。"
+Assert-True ($cleanScript -match 'TUSD_PORT' -or $cleanScript -match 'MEDIA_TUS_SERVER_PORT') "qingli.ps1 应该优先读取当前 tusd 端口配置，而不是只看旧的 RUSTUS_SERVER_PORT。"
+Assert-True ($cleanScript -match 'Get-NetTCPConnection') "qingli.ps1 的停服判断应该直接查看端口归属，而不是只做盲猜。"
+Assert-True ($cleanScript -match 'taskkill\.exe /PID \$processId /T /F') "qingli.ps1 在 Force 模式下应该能强制结束已识别的项目开发进程。"
+Assert-True ($cleanScript -match 'if \(\$Force\) \{[\s\S]*Stop-RecognizedProjectServices') "qingli.ps1 应该只在 Force 无人值守模式下自动停掉已识别项目服务。"
 Write-Host "启动器脚本检查通过。"
