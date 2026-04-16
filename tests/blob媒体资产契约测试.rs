@@ -1,5 +1,6 @@
 use koko::contract::{
-    Blob媒体资产描述, 变体描述, 媒体冷源描述, 媒体冷源角色, 媒体分发描述, 媒体资产种类,
+    Blob媒体资产描述, 变体描述, 媒体冷源描述, 媒体冷源角色, 媒体分发描述,
+    媒体分发生存模式, 媒体资产种类,
 };
 
 #[test]
@@ -34,6 +35,7 @@ fn 图片资产描述包含_preview_full_original_而不是普通附件直链() 
             announce_urls: vec!["wss://swarm.example.com/announce".into()],
             web_seed_url: Some("https://cdn.example.com/media/asset-image-1".into()),
             join_ticket: None,
+            生存模式: 媒体分发生存模式::到期后仅peer存活,
         }),
         冷源: 媒体冷源描述 {
             原始地址: Some(
@@ -73,6 +75,10 @@ fn 图片资产描述包含_preview_full_original_而不是普通附件直链() 
                 .as_ref()
                 .is_some_and(|value| !value.地址.contains("/api/attachments/")),
         "blob 资产正式主链不能继续暴露旧附件内容直链"
+    );
+    assert_eq!(
+        asset.分发.as_ref().map(|value| value.生存模式),
+        Some(媒体分发生存模式::到期后仅peer存活)
     );
     assert_eq!(asset.冷源.角色, 媒体冷源角色::冷备引导);
 }
