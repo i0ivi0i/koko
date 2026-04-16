@@ -437,8 +437,11 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("视频存在 HLS manifest 时，会优先返回标准流媒体主链而不是继续抱着原始附件冷源", async () => {
-    const resolveSwarmSource = vi.fn();
+  it("viewer 在 manifest 存在且 swarm 很快可播时，会优先吃 swarm 而不是抢先落 HLS", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-hls-fast",
+      hint: "正在协作分发" as const,
+    }));
     const probeAnchor = vi.fn();
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -485,6 +488,7 @@ describe("媒体播放器", () => {
       }),
       resolveSwarmSource,
       probeAnchor,
+      swarmStartupBudgetMs: 40,
     });
 
     const result = await 播放器.解析播放结果({
@@ -493,21 +497,105 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "manifest",
+      mode: "swarm",
       attachmentId: "att-video-hls",
       kind: "video",
-      src: "http://media.local/stream/att-video-hls/master.m3u8",
+      src: "blob:http://media.local/swarm-video-hls-fast",
       thumbnailUrl: "http://media.local/poster-video-hls",
-      streamingDistribution: {
-        swarm_id: "swarm-hash-video-hls",
-        announce_urls: ["http://media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-video-hls",
-        join_ticket: null,
-      },
-      hint: null,
+      hint: "正在协作分发",
     });
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
     expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("viewer 在 manifest 存在时，会先给 swarm 一个短预算，miss 后再稳定落到 HLS 主链", async () => {
+    vi.useFakeTimers();
+    const resolveSwarmSource = vi.fn(
+      () =>
+        new Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>(
+          (resolve) => {
+            setTimeout(() => {
+              resolve(null);
+            }, 80);
+          }
+        )
+    );
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-hls",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-video-hls",
+        thumbnail_url: "http://media.local/poster-video-hls",
+        distribution: {
+          content_id: "content_att-video-hls",
+          content_hash: "hash-video-hls",
+          swarm_id: "swarm-hash-video-hls",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-hls",
+          torrent_info_hash: "torrent-info-hash-video-hls",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-hls",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-hls",
+          content_hash: "hash-video-hls",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-hls/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-hls/stream.mpd",
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-hls",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-video-hls",
+            join_ticket: null,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-video-hls",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+      swarmStartupBudgetMs: 40,
+    });
+
+    try {
+      const resultPromise = 播放器.解析播放结果({
+        attachmentId: "att-video-hls",
+        kind: "video",
+      });
+      await vi.advanceTimersByTimeAsync(41);
+      const result = await resultPromise;
+
+      expect(result).toEqual({
+        mode: "manifest",
+        attachmentId: "att-video-hls",
+        kind: "video",
+        src: "http://media.local/stream/att-video-hls/master.m3u8",
+        thumbnailUrl: "http://media.local/poster-video-hls",
+        streamingDistribution: {
+          swarm_id: "swarm-hash-video-hls",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-hls",
+          join_ticket: null,
+        },
+        hint: null,
+      });
+      expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
+      expect(probeAnchor).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("inline_autoplay surface 在 distribution 可用时，会先尝试 swarm/web seed，而不是先 probe anchor", async () => {

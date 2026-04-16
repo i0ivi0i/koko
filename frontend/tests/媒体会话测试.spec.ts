@@ -11,6 +11,21 @@ const 创建锚点播放结果 = (attachmentId: string): 媒体播放结果 => (
   hint: null,
 });
 
+const 创建流媒体播放结果 = (attachmentId: string): 媒体播放结果 => ({
+  mode: "manifest",
+  attachmentId,
+  kind: "video",
+  src: `http://media.local/stream/${attachmentId}/master.m3u8`,
+  thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+  streamingDistribution: {
+    swarm_id: `swarm-${attachmentId}`,
+    announce_urls: ["http://media.local/announce"],
+    web_seed_url: "http://media.local/web-seed",
+    join_ticket: null,
+  },
+  hint: null,
+});
+
 describe("媒体会话", () => {
   it("启动与恢复解析时，会携带稳定的 session consumerId", async () => {
     const 解析播放结果 = vi.fn().mockResolvedValue(创建锚点播放结果("att-video-session-1"));
@@ -81,6 +96,36 @@ describe("媒体会话", () => {
     expect(会话.snapshot()).toMatchObject({
       status: "locally_complete",
       locallyComplete: true,
+    });
+  });
+
+  it("会话已经稳定在 manifest 后，后续 SWARM_ACTIVE 只保留后台补齐机会，不会热切回 swarm", async () => {
+    const 解析播放结果 = vi
+      .fn()
+      .mockResolvedValue(创建流媒体播放结果("att-video-manifest-1"));
+    const 会话 = 创建媒体会话({
+      attachmentId: "att-video-manifest-1",
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    会话.send({ type: "PLAYER_PLAYING" });
+    const 稳定后快照 = 会话.snapshot();
+
+    会话.send({ type: "SWARM_ACTIVE" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).toHaveBeenCalledTimes(1);
+    expect(会话.snapshot()).toMatchObject({
+      status: "playing",
+      playback: {
+        mode: "manifest",
+        src: "http://media.local/stream/att-video-manifest-1/master.m3u8",
+      },
+      sourceVersion: 稳定后快照.sourceVersion,
+      lastSignal: "SWARM_ACTIVE",
     });
   });
 });
