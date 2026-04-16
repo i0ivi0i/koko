@@ -34,6 +34,7 @@
     "webtorrent": "^2.8.5",
     "workbox-core": "^7.4.0",
     "workbox-precaching": "^7.4.0",
+    "workbox-range-requests": "^7.4.0",
     "xstate": "^5.30.0"
   },
   "devDependencies": {

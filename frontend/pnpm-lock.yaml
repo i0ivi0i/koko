@@ -56,6 +56,9 @@ importers:
       workbox-precaching:
         specifier: ^7.4.0
         version: 7.4.0
+      workbox-range-requests:
+        specifier: ^7.4.0
+        version: 7.4.0
       xstate:
         specifier: ^5.30.0
         version: 5.30.0
