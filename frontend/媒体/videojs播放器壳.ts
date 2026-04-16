@@ -147,6 +147,53 @@ const 应用展示源 = (root: VideoJs播放器根节点, source: VideoJs播放�
   }
 };
 
+const 地址看起来是绝对地址 = (src: string): boolean => /^[a-zA-Z][\w+.-]*:/.test(src);
+
+const 解析可比较媒体地址 = (src: string): URL | null => {
+  if (!src) {
+    return null;
+  }
+  try {
+    const fallbackBase =
+      typeof window !== "undefined" && window.location?.href
+        ? window.location.href
+        : "http://127.0.0.1/";
+    return new URL(src, fallbackBase);
+  } catch {
+    return null;
+  }
+};
+
+const 是同一个文件媒体地址 = (left: string, right: string): boolean => {
+  if (left === right) {
+    return true;
+  }
+  const leftUrl = 解析可比较媒体地址(left);
+  const rightUrl = 解析可比较媒体地址(right);
+  if (!leftUrl || !rightUrl) {
+    return false;
+  }
+  if (leftUrl.href === rightUrl.href) {
+    return true;
+  }
+  /**
+   * 浏览器会把 `<video>.src` 自动展开成绝对地址，但媒体会话里的播放结果常常还是相对路径。
+   * 对 `/webtorrent/...` 这类同站资源来说，只要 path/query/hash 相同，就仍然代表同一份媒体字节；
+   * 只有在双方都已经是绝对地址时，才继续要求 origin 也一致，避免把跨站资源误判成同一源。
+   */
+  const pathIdentity相同 =
+    leftUrl.pathname === rightUrl.pathname &&
+    leftUrl.search === rightUrl.search &&
+    leftUrl.hash === rightUrl.hash;
+  if (!pathIdentity相同) {
+    return false;
+  }
+  if (!地址看起来是绝对地址(left) || !地址看起来是绝对地址(right)) {
+    return true;
+  }
+  return leftUrl.origin === rightUrl.origin;
+};
+
 export async function 创建VideoJs播放器壳(
   initialSource: VideoJs播放器源描述,
   deps: VideoJs播放器壳依赖 = {}
@@ -183,7 +230,7 @@ export async function 创建VideoJs播放器壳(
   const 应用文件源 = (source: VideoJs播放器源描述): void => {
     销毁Hls实例();
     已挂接P2PHls增强层 = false;
-    if (root.video.src !== source.src) {
+    if (!是同一个文件媒体地址(root.video.src, source.src)) {
       root.video.src = source.src;
     }
   };

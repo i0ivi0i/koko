@@ -39,7 +39,7 @@ pub(super) struct 流媒体打包结果 {
     hls主清单相对路径: String,
     dash主清单相对路径: String,
     静态封面本地路径: PathBuf,
-    高质量回退母本本地路径: PathBuf,
+    pub 高质量回退母本本地路径: PathBuf,
     文件列表: Vec<流媒体打包文件>,
 }
 

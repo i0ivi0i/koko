@@ -6,13 +6,13 @@ use sha2::{Digest, Sha256};
 /// 这里故意收口成常量，避免 shell、adapter、前端各自写一份“24 * 60 * 60”。
 pub(crate) const WEB_SEED_TTL秒: i64 = 24 * 60 * 60;
 
-/// 协作分发的内容哈希先只认 canonical 原始字节。
+/// 协作分发的内容哈希只认 canonical 共享载荷字节。
 /// 这样 Phase 1 就能稳定得到：
 /// 1. 与上传主链解耦的内容标识；
 /// 2. 不依赖 torrent/runtime 的 swarm 锚点；
 /// 3. 后续 Phase 2 生成 metainfo 时仍可继续复用的内容摘要。
-pub(crate) fn 生成内容哈希(原始字节: &[u8]) -> String {
-    let digest = Sha256::digest(原始字节);
+pub(crate) fn 生成内容哈希(共享字节: &[u8]) -> String {
+    let digest = Sha256::digest(共享字节);
     hex::encode(digest)
 }
 
@@ -20,10 +20,10 @@ pub(crate) fn 生成内容哈希(原始字节: &[u8]) -> String {
 /// attachment_id 继续是业务锚点，content_hash / swarm_id 只是分发层的稳定附属事实。
 pub(crate) fn 构造协作分发元数据写入请求(
     附件标识: &str,
-    原始字节: &[u8],
+    共享字节: &[u8],
     ready_epoch秒: i64,
 ) -> usecase::协作分发元数据写入请求 {
-    let content_hash = 生成内容哈希(原始字节);
+    let content_hash = 生成内容哈希(共享字节);
     usecase::协作分发元数据写入请求 {
         附件标识: 附件标识.to_string(),
         content_id: format!("content_{附件标识}"),
@@ -41,13 +41,16 @@ pub(crate) struct 附件torrent元信息 {
 }
 
 /// metainfo 必须只由权威字节派生，不依赖临时文件路径。
-/// 这里把 torrent 内文件名固定到 content_hash 上，确保同内容附件能共享同一 info hash。
+/// 这里继续把 torrent 内文件名固定到 `content_hash + canonical 扩展名`：
+/// 1. 同内容同 canonical 媒体类型仍可共享同一 info hash；
+/// 2. 前端 WebTorrent/file.type 也能拿到浏览器可播放的 MIME，而不是退化成 octet-stream。
 pub(crate) fn 生成附件torrent元信息(
     content_hash: &str,
-    原始字节: &[u8],
+    稳定扩展名: &str,
+    共享字节: &[u8],
 ) -> Result<附件torrent元信息, String> {
-    let file_name = format!("content-{content_hash}.bin");
-    let accessor = DirectAccessor::new(file_name.as_str(), 原始字节);
+    let file_name = format!("content-{content_hash}{稳定扩展名}");
+    let accessor = DirectAccessor::new(file_name.as_str(), 共享字节);
     let torrent_bytes = MetainfoBuilder::new()
         .set_private_flag(Some(true))
         .set_piece_length(PieceLength::OptBalanced)

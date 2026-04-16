@@ -173,6 +173,51 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
+  it("同一 swarm 相对路径重复同步时，不会因为 video.src 被浏览器绝对化而反复触发新 load", async () => {
+    const root = 创建假播放器根();
+    const 写入记录: string[] = [];
+    let 当前原始地址 = "";
+    Object.defineProperty(root.video, "src", {
+      configurable: true,
+      get() {
+        return 当前原始地址
+          ? new URL(当前原始地址, "http://127.0.0.1:8080/").href
+          : "";
+      },
+      set(value: string) {
+        当前原始地址 = value;
+        写入记录.push(value);
+      },
+    });
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "/webtorrent/swarm-relative-1/content.bin",
+        posterSrc: null,
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => root,
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+
+    shell.同步({
+      kind: "file",
+      src: "/webtorrent/swarm-relative-1/content.bin",
+      posterSrc: null,
+      width: 1280,
+      height: 720,
+    });
+
+    expect(写入记录).toEqual(["/webtorrent/swarm-relative-1/content.bin"]);
+    expect(root.video.src).toBe("http://127.0.0.1:8080/webtorrent/swarm-relative-1/content.bin");
+
+    shell.destroy();
+  });
+
   it("p2p-media-loader-hlsjs 只能作为壳外增强挂到 HLS provider，不进入 file/blob 首播必经路径", async () => {
     const attachMedia = vi.fn();
     const loadSource = vi.fn();

@@ -634,6 +634,19 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
 
     let metainfo =
         bip_metainfo::Metainfo::from_bytes(body.as_slice()).expect("torrent bytes 必须可解析");
+    let content_hash = locator_body["distribution"]["content_hash"]
+        .as_str()
+        .expect("locator 必须返回稳定的 content_hash");
+    let single_file = metainfo
+        .info()
+        .files()
+        .next()
+        .expect("单文件附件的 torrent 内必须保留一个可播放文件条目");
+    assert_eq!(
+        single_file.path().to_str(),
+        Some(format!("content-{content_hash}.mp4").as_str()),
+        "视频协作分发 torrent 内文件名必须保留稳定的可播放扩展，不能退化成 .bin"
+    );
     let info_hash_hex = hex::encode(metainfo.info().info_hash().as_ref());
     assert_eq!(
         locator_body["distribution"]["torrent_info_hash"].as_str(),

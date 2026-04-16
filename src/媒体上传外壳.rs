@@ -522,14 +522,22 @@ pub(super) async fn complete_media_upload(
                     format!("写入图片完整图对象失败: {err}"),
                 );
             }
+            let 协作分发共享载荷 = 选择协作分发共享载荷(
+                &prepared.种类,
+                parsed.mime_type.as_str(),
+                original_bytes.as_ref(),
+                None,
+            )
+            .expect("图片协作分发应直接复用 canonical 原图字节");
             let distribution_request = media_distribution::构造协作分发元数据写入请求(
                 &attachment_id,
-                original_bytes.as_ref(),
+                协作分发共享载荷.字节,
                 ready_epoch秒,
             );
             let torrent = match media_distribution::生成附件torrent元信息(
                 distribution_request.content_hash.as_str(),
-                original_bytes.as_ref(),
+                协作分发共享载荷.稳定扩展名,
+                协作分发共享载荷.字节,
             ) {
                 Ok(torrent) => torrent,
                 Err(message) => {
@@ -602,54 +610,6 @@ pub(super) async fn complete_media_upload(
                     }
                 };
             记录complete阶段耗时("parse_video", 视频解析开始);
-            let 视频映射开始 = Instant::now();
-            let original_video_map =
-                match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
-                    Ok(mapped) => mapped,
-                    Err(err) => {
-                        return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "system_error",
-                            "映射原视频临时文件失败",
-                            "map_original_video_failed",
-                            format!("映射 Tus 临时原视频失败: {err}"),
-                        );
-                    }
-                };
-            记录complete阶段耗时("map_original_video", 视频映射开始);
-            let 分发元数据构造开始 = Instant::now();
-            let distribution_request = media_distribution::构造协作分发元数据写入请求(
-                &attachment_id,
-                original_video_map.as_ref(),
-                ready_epoch秒,
-            );
-            记录complete阶段耗时("build_distribution_request", 分发元数据构造开始);
-            let torrent生成开始 = Instant::now();
-            let torrent = match media_distribution::生成附件torrent元信息(
-                distribution_request.content_hash.as_str(),
-                original_video_map.as_ref(),
-            ) {
-                Ok(torrent) => torrent,
-                Err(message) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message.clone(),
-                        "generate_torrent_failed",
-                        message,
-                    );
-                }
-            };
-            记录complete阶段耗时("generate_torrent", torrent生成开始);
-            drop(original_video_map);
             let 流媒体打包开始 = Instant::now();
             let 打包结果 = match task::spawn_blocking({
                 let ffmpeg_bin = state.ffmpeg_bin.clone();
@@ -698,6 +658,75 @@ pub(super) async fn complete_media_upload(
                 }
             };
             记录complete阶段耗时("package_streaming_assets", 流媒体打包开始);
+            let 分发元数据构造开始 = Instant::now();
+            let 回退母本映射 =
+                match 映射只读完成媒体临时文件(打包结果.高质量回退母本本地路径.as_path())
+                {
+                    Ok(mapped) => mapped,
+                    Err(err) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            "映射视频 mezzanine 回退母本失败",
+                            "map_mezzanine_video_failed",
+                            format!("映射视频 canonical mezzanine 失败: {err}"),
+                        );
+                    }
+                };
+            let 协作分发共享载荷 = match 选择协作分发共享载荷(
+                &prepared.种类,
+                parsed.mime_type.as_str(),
+                &[],
+                Some(回退母本映射.as_ref()),
+            ) {
+                Ok(payload) => payload,
+                Err(message) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message,
+                        "select_swarm_payload_failed",
+                        message,
+                    );
+                }
+            };
+            let distribution_request = media_distribution::构造协作分发元数据写入请求(
+                &attachment_id,
+                协作分发共享载荷.字节,
+                ready_epoch秒,
+            );
+            记录complete阶段耗时("build_distribution_request", 分发元数据构造开始);
+            let torrent生成开始 = Instant::now();
+            let torrent = match media_distribution::生成附件torrent元信息(
+                distribution_request.content_hash.as_str(),
+                协作分发共享载荷.稳定扩展名,
+                协作分发共享载荷.字节,
+            ) {
+                Ok(torrent) => torrent,
+                Err(message) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message.clone(),
+                        "generate_torrent_failed",
+                        message,
+                    );
+                }
+            };
+            记录complete阶段耗时("generate_torrent", torrent生成开始);
+            drop(回退母本映射);
             let 流媒体产物上传开始 = Instant::now();
             let uploaded =
                 match 流媒体打包::上传流媒体打包产物(
@@ -1184,6 +1213,36 @@ fn 推导原始内容扩展名(
     }
 }
 
+struct 协作分发共享载荷<'a> {
+    字节: &'a [u8],
+    稳定扩展名: &'static str,
+}
+
+fn 选择协作分发共享载荷<'a>(
+    kind: &usecase::媒体附件类型,
+    原始mime_type: &str,
+    原始字节: &'a [u8],
+    视频回退母本字节: Option<&'a [u8]>,
+) -> Result<协作分发共享载荷<'a>, &'static str> {
+    match kind {
+        usecase::媒体附件类型::图片 => Ok(协作分发共享载荷 {
+            字节: 原始字节,
+            稳定扩展名: 推导原始内容扩展名(kind, 原始mime_type),
+        }),
+        // 视频对外长期可播放的 canonical 冷备已经收口到 mezzanine.mp4；
+        // swarm 也必须复用同一份字节与扩展，不能继续认上传原片的容器类型。
+        usecase::媒体附件类型::视频 => {
+            let Some(视频回退母本字节) = 视频回退母本字节 else {
+                return Err("视频协作分发缺少 canonical mezzanine 载荷");
+            };
+            Ok(协作分发共享载荷 {
+                字节: 视频回退母本字节,
+                稳定扩展名: ".mp4",
+            })
+        }
+    }
+}
+
 fn 读取首个非空请求头(headers: &HeaderMap, name: &'static str) -> Option<String> {
     headers
         .get(name)
@@ -1436,6 +1495,28 @@ fn 记录并返回complete重活失败(
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    #[test]
+    fn 视频协作分发共享载荷会收口到mezzanine_mp4而不是继续沿用原片mime() {
+        let 共享载荷 = 选择协作分发共享载荷(
+            &usecase::媒体附件类型::视频,
+            "video/quicktime",
+            b"original-mov",
+            Some(b"mezzanine-mp4"),
+        )
+        .expect("视频协作分发应能拿到 canonical mezzanine 载荷");
+
+        assert_eq!(
+            共享载荷.稳定扩展名,
+            ".mp4",
+            "视频协作分发 torrent 内文件名必须跟随长期可播放的 mezzanine，而不是继续沿用上传原片后缀"
+        );
+        assert_eq!(
+            共享载荷.字节,
+            b"mezzanine-mp4",
+            "视频协作分发的 content_hash / swarm payload 必须认 canonical mezzanine 字节，而不是认已退场原片"
+        );
+    }
 
     #[tokio::test]
     async fn 完成阶段并发闸门会阻止超过额度的重活同时进入() {
