@@ -11,6 +11,7 @@ import {
   读取可用协作分发片段,
   读取首个可播放文件,
   请求协作分发持久化存储,
+  重置协作分发浏览器运行时,
   type 协作分发会话事件,
   type 协作分发媒体源,
   type WebTorrent文件,
@@ -109,6 +110,40 @@ export type 资产协作分发事件 =
       type: "RESET";
     };
 
+export interface 资产协作分发运行时端口 {
+  send(event: 资产协作分发事件): void;
+  snapshot(): 资产协作分发快照;
+  读取会话状态(swarmId: string): {
+    attachmentId: string;
+    swarmId: string;
+    refs: number;
+    consumers: string[];
+    eagerCompleting: boolean;
+    locallyComplete: boolean;
+    hint: 协作分发媒体源["hint"];
+  } | null;
+  读取预算(
+    snapshot?: 资产协作分发快照
+  ): {
+    activeSwarmCount: number;
+    hiddenHeavyTaskCount: number;
+  };
+  解析协作分发源(input: {
+    attachmentId: string;
+    kind: 媒体种类;
+    locator: 媒体定位结果;
+    consumerId?: string;
+    onSessionEvent?: (event: 协作分发会话事件) => void;
+    eagerCompleting?: boolean;
+    reuseOnly?: boolean;
+  }): Promise<协作分发媒体源 | null>;
+  释放协作分发消费者(
+    input: string | { attachmentId: string; consumerId?: string }
+  ): void;
+  重置(): void;
+  销毁(): void;
+}
+
 const 初始资产协作分发上下文: 资产协作分发上下文 = {
   heavyWorkPolicy: "normal",
   sessions: {},
@@ -118,16 +153,16 @@ const 复制会话表 = (
   sessions: Record<string, 资产协作分发会话快照>
 ): Record<string, 资产协作分发会话快照> => ({ ...sessions });
 
-const 推导主附件标识 = (consumerAttachmentIds: Record<string, string>): string => {
-  return Object.values(consumerAttachmentIds)[0] ?? "";
-};
+const 推导主附件标识 = (consumerAttachmentIds: Record<string, string>): string =>
+  Object.values(consumerAttachmentIds)[0] ?? "";
 
 const 是否为零消费者冷协作分发会话 = (session: 底层协作分发会话): boolean =>
   session.consumerBindings.size === 0 && !session.locallyComplete;
 
 /**
- * AssetDistributionActor 只拥有“哪一个 swarm 会话当前还活着、被谁占用、是否可复用”的真相。
- * WebTorrent client / stream server / torrent 接线仍留在浏览器 adapter，不在这里复制第二套底层实现。
+ * AssetDistributionActor 只回答 swarm 会话是否存活、被谁占用、是否已经完整。
+ * 浏览器里的 WebTorrent / stream server / 可读性探测仍由 adapter 负责，
+ * 这里不复制第二套底层基础设施。
  */
 const 资产协作分发机 = createMachine(
   {
@@ -344,39 +379,17 @@ const 资产协作分发机 = createMachine(
 
 export type 资产协作分发快照 = SnapshotFrom<typeof 资产协作分发机>;
 
-export function 创建资产协作分发Actor() {
-  return createActor(资产协作分发机).start();
-}
+const 创建资产协作分发Actor = () => createActor(资产协作分发机).start();
 
-let 资产协作分发Actor实例 = 创建资产协作分发Actor();
-const 底层协作分发会话表 = new Map<string, 底层协作分发会话>();
+type 资产协作分发Actor = ReturnType<typeof 创建资产协作分发Actor>;
 
-const 按生命周期策略清理协作分发会话 = (
-  heavyWorkPolicy: 资产协作分发上下文["heavyWorkPolicy"]
-): void => {
-  if (heavyWorkPolicy === "normal") {
-    return;
-  }
-  for (const [swarmId, session] of 底层协作分发会话表) {
-    if (!是否为零消费者冷协作分发会话(session)) {
-      continue;
-    }
-    停止协作分发存活上报(session);
-    底层协作分发会话表.delete(swarmId);
-    清理协作分发底层会话(session);
-    资产协作分发Actor实例.send({
-      type: "SESSION_DROPPED",
-      swarmId,
-    });
-  }
+type 资产协作分发运行时内部 = {
+  actor: 资产协作分发Actor;
+  底层会话表: Map<string, 底层协作分发会话>;
+  已销毁: boolean;
 };
 
-export const 发送资产协作分发事件 = (event: 资产协作分发事件): void => {
-  资产协作分发Actor实例.send(event);
-  if (event.type === "LIFECYCLE_POLICY_CHANGED") {
-    按生命周期策略清理协作分发会话(event.heavyWorkPolicy);
-  }
-};
+let 活跃资产协作分发运行时实例数 = 0;
 
 const 推导协作分发提示 = (session: 底层协作分发会话): 协作分发媒体源["hint"] => {
   if (session.hint) {
@@ -447,13 +460,58 @@ function 发布协作分发会话事件(
   }
 }
 
+const 发送事件 = (
+  runtime: 资产协作分发运行时内部,
+  event: 资产协作分发事件
+): void => {
+  if (runtime.已销毁) {
+    return;
+  }
+  runtime.actor.send(event);
+  if (event.type === "LIFECYCLE_POLICY_CHANGED") {
+    按生命周期策略清理协作分发会话(runtime, event.heavyWorkPolicy);
+  }
+};
+
+const 删除底层协作分发会话 = (
+  runtime: 资产协作分发运行时内部,
+  swarmId: string,
+  session: 底层协作分发会话
+): void => {
+  停止协作分发存活上报(session);
+  runtime.底层会话表.delete(swarmId);
+  清理协作分发底层会话(session);
+};
+
+const 按生命周期策略清理协作分发会话 = (
+  runtime: 资产协作分发运行时内部,
+  heavyWorkPolicy: 资产协作分发上下文["heavyWorkPolicy"]
+): void => {
+  if (heavyWorkPolicy === "normal") {
+    return;
+  }
+  for (const [swarmId, session] of runtime.底层会话表) {
+    if (!是否为零消费者冷协作分发会话(session)) {
+      continue;
+    }
+    删除底层协作分发会话(runtime, swarmId, session);
+    if (!runtime.已销毁) {
+      runtime.actor.send({
+        type: "SESSION_DROPPED",
+        swarmId,
+      });
+    }
+  }
+};
+
 function 绑定协作分发会话事件(
+  runtime: 资产协作分发运行时内部,
   session: 底层协作分发会话,
   torrent: WebTorrent种子
 ) {
   torrent.on("wire", (wire) => {
     session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
-    发送资产协作分发事件({
+    发送事件(runtime, {
       type: "SWARM_ACTIVE",
       swarmId: session.swarmId,
       hint: session.hint,
@@ -462,7 +520,7 @@ function 绑定协作分发会话事件(
   });
   torrent.on("noPeers", () => {
     session.hint = "正在补块";
-    发送资产协作分发事件({
+    发送事件(runtime, {
       type: "SWARM_NO_PEERS",
       swarmId: session.swarmId,
     });
@@ -472,7 +530,7 @@ function 绑定协作分发会话事件(
     session.eagerCompleting = false;
     session.locallyComplete = true;
     session.hint = "正在协作分发";
-    发送资产协作分发事件({
+    发送事件(runtime, {
       type: "TORRENT_DONE",
       swarmId: session.swarmId,
       contentHash: session.contentHash,
@@ -481,12 +539,15 @@ function 绑定协作分发会话事件(
   });
 }
 
-function 激活整附件补齐(session: 底层协作分发会话): void {
+function 激活整附件补齐(
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话
+): void {
   if (session.eagerCompleting) {
     return;
   }
   session.eagerCompleting = true;
-  发送资产协作分发事件({
+  发送事件(runtime, {
     type: "BACKFILL_REQUESTED",
     swarmId: session.swarmId,
   });
@@ -497,20 +558,26 @@ function 协作分发会话可在零引用后保留(session: 底层协作分发�
   return session.eagerCompleting || session.locallyComplete;
 }
 
-async function 确保协作分发会话(input: {
-  attachmentId: string;
-  kind: 媒体种类;
-  distribution: NonNullable<ReturnType<typeof 读取协作分发定位片段>>;
-  consumerId?: string;
-  onSessionEvent?: (event: 协作分发会话事件) => void;
-  eagerCompleting?: boolean;
-  reuseOnly?: boolean;
-}): Promise<底层协作分发会话 | null> {
+async function 确保协作分发会话(
+  runtime: 资产协作分发运行时内部,
+  input: {
+    attachmentId: string;
+    kind: 媒体种类;
+    distribution: NonNullable<ReturnType<typeof 读取协作分发定位片段>>;
+    consumerId?: string;
+    onSessionEvent?: (event: 协作分发会话事件) => void;
+    eagerCompleting?: boolean;
+    reuseOnly?: boolean;
+  }
+): Promise<底层协作分发会话 | null> {
+  if (runtime.已销毁) {
+    return null;
+  }
   const consumerBinding = 归一化协作分发消费者(input);
-  let session = 底层协作分发会话表.get(input.distribution.swarm_id);
+  let session = runtime.底层会话表.get(input.distribution.swarm_id);
   if (session) {
     session.consumerBindings.set(consumerBinding.consumerId, consumerBinding);
-    发送资产协作分发事件({
+    发送事件(runtime, {
       type: "ACQUIRE_REQUESTED",
       attachmentId: consumerBinding.attachmentId,
       swarmId: session.swarmId,
@@ -520,7 +587,7 @@ async function 确保协作分发会话(input: {
       mode: consumerBinding.mode,
     });
     if (input.eagerCompleting) {
-      激活整附件补齐(session);
+      激活整附件补齐(runtime, session);
     }
     更新协作分发会话主附件(session);
     启动协作分发存活上报(session, input.distribution);
@@ -545,8 +612,8 @@ async function 确保协作分发会话(input: {
     file: null,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
   };
-  底层协作分发会话表.set(input.distribution.swarm_id, session);
-  发送资产协作分发事件({
+  runtime.底层会话表.set(input.distribution.swarm_id, session);
+  发送事件(runtime, {
     type: "ACQUIRE_REQUESTED",
     attachmentId: consumerBinding.attachmentId,
     swarmId: session.swarmId,
@@ -556,7 +623,7 @@ async function 确保协作分发会话(input: {
     mode: consumerBinding.mode,
   });
   if (session.eagerCompleting) {
-    发送资产协作分发事件({
+    发送事件(runtime, {
       type: "BACKFILL_REQUESTED",
       swarmId: session.swarmId,
     });
@@ -565,22 +632,22 @@ async function 确保协作分发会话(input: {
   void 请求协作分发持久化存储();
 
   session.sourcePromise = (async () => {
-    const runtime = await 获取或创建协作分发浏览器运行时();
-    const torrent = await 接入协作分发种子(runtime, input.distribution);
+    const browserRuntime = await 获取或创建协作分发浏览器运行时();
+    const torrent = await 接入协作分发种子(browserRuntime, input.distribution);
     session.torrent = torrent;
-    if (底层协作分发会话表.get(session.swarmId) !== session) {
-      清理协作分发底层会话(session, runtime);
+    if (runtime.底层会话表.get(session.swarmId) !== session) {
+      清理协作分发底层会话(session, browserRuntime);
       return null;
     }
-    绑定协作分发会话事件(session, torrent);
+    绑定协作分发会话事件(runtime, session, torrent);
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
     session.file = file;
     if (session.eagerCompleting) {
       file.select(1);
     }
     await 探测协作分发媒体源可读性(file.streamURL);
-    if (底层协作分发会话表.get(session.swarmId) !== session) {
-      清理协作分发底层会话(session, runtime);
+    if (runtime.底层会话表.get(session.swarmId) !== session) {
+      清理协作分发底层会话(session, browserRuntime);
       return null;
     }
     return {
@@ -588,12 +655,14 @@ async function 确保协作分发会话(input: {
     };
   })().catch((error) => {
     停止协作分发存活上报(session);
-    if (底层协作分发会话表.get(input.distribution.swarm_id) === session) {
-      底层协作分发会话表.delete(input.distribution.swarm_id);
-      发送资产协作分发事件({
-        type: "SESSION_DROPPED",
-        swarmId: input.distribution.swarm_id,
-      });
+    if (runtime.底层会话表.get(input.distribution.swarm_id) === session) {
+      runtime.底层会话表.delete(input.distribution.swarm_id);
+      if (!runtime.已销毁) {
+        runtime.actor.send({
+          type: "SESSION_DROPPED",
+          swarmId: input.distribution.swarm_id,
+        });
+      }
     }
     throw error;
   });
@@ -601,8 +670,11 @@ async function 确保协作分发会话(input: {
   return session;
 }
 
-export function 读取协作分发会话状态(swarmId: string) {
-  const session = 资产协作分发Actor实例.getSnapshot().context.sessions[swarmId];
+const 读取会话状态 = (
+  runtime: 资产协作分发运行时内部,
+  swarmId: string
+) => {
+  const session = runtime.actor.getSnapshot().context.sessions[swarmId];
   if (!session) {
     return null;
   }
@@ -615,94 +687,145 @@ export function 读取协作分发会话状态(swarmId: string) {
     locallyComplete: session.locallyComplete,
     hint: session.hint ?? (session.eagerCompleting ? "正在补块" : "正在协作分发"),
   };
-}
+};
 
-export function 投影资产协作分发预算(
-  snapshot: 资产协作分发快照 = 资产协作分发Actor实例.getSnapshot()
-) {
+const 读取资产协作分发预算 = (
+  runtime: 资产协作分发运行时内部,
+  snapshot: 资产协作分发快照 = runtime.actor.getSnapshot()
+) => {
   const sessions = Object.values(snapshot.context.sessions);
   return {
     activeSwarmCount: sessions.length,
     hiddenHeavyTaskCount:
       snapshot.context.heavyWorkPolicy === "normal" ? 0 : sessions.length,
   };
-}
+};
 
-export async function 解析协作分发源(input: {
-  attachmentId: string;
-  kind: 媒体种类;
-  locator: 媒体定位结果;
-  consumerId?: string;
-  onSessionEvent?: (event: 协作分发会话事件) => void;
-  eagerCompleting?: boolean;
-  reuseOnly?: boolean;
-}): Promise<协作分发媒体源 | null> {
-  const distribution = 读取可用协作分发片段(input.locator);
-  if (!distribution) {
-    return null;
+const 重置运行时 = (runtime: 资产协作分发运行时内部): void => {
+  for (const [swarmId, session] of runtime.底层会话表) {
+    删除底层协作分发会话(runtime, swarmId, session);
   }
-  const session = await 确保协作分发会话({
-    attachmentId: input.attachmentId,
-    kind: input.kind,
-    distribution,
-    ...(input.consumerId ? { consumerId: input.consumerId } : {}),
-    ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
-    ...(input.eagerCompleting ? { eagerCompleting: true } : {}),
-    ...(input.reuseOnly ? { reuseOnly: true } : {}),
-  });
-  if (!session) {
-    return null;
-  }
-  const source = await session.sourcePromise;
-  if (!source) {
-    return null;
-  }
-  return {
-    src: source.src,
-    hint: 推导协作分发提示(session),
+  runtime.actor.send({ type: "RESET" });
+};
+
+/**
+ * 协作分发运行时现在是可装配实例：
+ * - 每个聊天内核/测试都显式持有自己的端口；
+ * - 生命周期降载、预算投影、会话清理都沿着这条装配链走；
+ * - 不再靠模块级 singleton 把浏览器真相泄漏到别的上下文。
+ */
+export function 创建资产协作分发运行时(): 资产协作分发运行时端口 {
+  活跃资产协作分发运行时实例数 += 1;
+  const runtime: 资产协作分发运行时内部 = {
+    actor: 创建资产协作分发Actor(),
+    底层会话表: new Map<string, 底层协作分发会话>(),
+    已销毁: false,
   };
-}
 
-export function 释放协作分发消费者(
-  input: string | { attachmentId: string; consumerId?: string }
-): void {
-  const consumerBinding =
-    typeof input === "string"
-      ? 归一化协作分发消费者({ attachmentId: input })
-      : 归一化协作分发消费者(input);
-  for (const [swarmId, session] of 底层协作分发会话表) {
-    const binding = session.consumerBindings.get(consumerBinding.consumerId);
-    if (!binding || binding.attachmentId !== consumerBinding.attachmentId) {
-      continue;
-    }
-    session.consumerBindings.delete(consumerBinding.consumerId);
-    发送资产协作分发事件({
-      type: "CONSUMER_RELEASED",
-      swarmId,
-      attachmentId: binding.attachmentId,
-      consumerId: consumerBinding.consumerId,
-    });
-    if (session.attachmentId === binding.attachmentId) {
-      更新协作分发会话主附件(session);
-    }
-    if (session.consumerBindings.size > 0) {
-      continue;
-    }
-    停止协作分发存活上报(session);
-    if (协作分发会话可在零引用后保留(session)) {
-      continue;
-    }
-    底层协作分发会话表.delete(swarmId);
-    清理协作分发底层会话(session);
-  }
-}
+  return {
+    send(event): void {
+      发送事件(runtime, event);
+    },
 
-export function 重置资产协作分发运行时(): void {
-  for (const session of 底层协作分发会话表.values()) {
-    停止协作分发存活上报(session);
-    清理协作分发底层会话(session);
-  }
-  底层协作分发会话表.clear();
-  资产协作分发Actor实例.stop();
-  资产协作分发Actor实例 = 创建资产协作分发Actor();
+    snapshot(): 资产协作分发快照 {
+      return runtime.actor.getSnapshot();
+    },
+
+    读取会话状态(swarmId: string) {
+      return 读取会话状态(runtime, swarmId);
+    },
+
+    读取预算(snapshot = runtime.actor.getSnapshot()) {
+      return 读取资产协作分发预算(runtime, snapshot);
+    },
+
+    async 解析协作分发源(input) {
+      const distribution = 读取可用协作分发片段(input.locator);
+      if (!distribution) {
+        return null;
+      }
+      const session = await 确保协作分发会话(runtime, {
+        attachmentId: input.attachmentId,
+        kind: input.kind,
+        distribution,
+        ...(input.consumerId ? { consumerId: input.consumerId } : {}),
+        ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+        ...(input.eagerCompleting ? { eagerCompleting: true } : {}),
+        ...(input.reuseOnly ? { reuseOnly: true } : {}),
+      });
+      if (!session) {
+        return null;
+      }
+      const source = await session.sourcePromise;
+      if (!source) {
+        return null;
+      }
+      return {
+        src: source.src,
+        hint: 推导协作分发提示(session),
+      };
+    },
+
+    释放协作分发消费者(input): void {
+      if (runtime.已销毁) {
+        return;
+      }
+      const consumerBinding =
+        typeof input === "string"
+          ? 归一化协作分发消费者({ attachmentId: input })
+          : 归一化协作分发消费者(input);
+      for (const [swarmId, session] of runtime.底层会话表) {
+        const binding = session.consumerBindings.get(consumerBinding.consumerId);
+        if (!binding || binding.attachmentId !== consumerBinding.attachmentId) {
+          continue;
+        }
+        session.consumerBindings.delete(consumerBinding.consumerId);
+        发送事件(runtime, {
+          type: "CONSUMER_RELEASED",
+          swarmId,
+          attachmentId: binding.attachmentId,
+          consumerId: consumerBinding.consumerId,
+        });
+        if (session.attachmentId === binding.attachmentId) {
+          更新协作分发会话主附件(session);
+        }
+        if (session.consumerBindings.size > 0) {
+          continue;
+        }
+        停止协作分发存活上报(session);
+        if (协作分发会话可在零引用后保留(session)) {
+          continue;
+        }
+        删除底层协作分发会话(runtime, swarmId, session);
+      }
+    },
+
+    重置(): void {
+      if (runtime.已销毁) {
+        return;
+      }
+      重置运行时(runtime);
+    },
+
+    销毁(): void {
+      if (runtime.已销毁) {
+        return;
+      }
+      重置运行时(runtime);
+      runtime.已销毁 = true;
+      runtime.actor.stop();
+      活跃资产协作分发运行时实例数 = Math.max(
+        0,
+        活跃资产协作分发运行时实例数 - 1
+      );
+      /**
+       * 协作分发浏览器 adapter 仍然是全局共享基础设施。
+       * 当最后一个资产运行时实例退场时，一并把它回收掉，
+       * 避免测试和多轮会话之间残留旧的 WebTorrent client / stream server。
+       */
+      if (活跃资产协作分发运行时实例数 === 0) {
+        重置协作分发浏览器运行时();
+      }
+    },
+  };
 }

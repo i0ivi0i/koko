@@ -9,13 +9,36 @@ import {
   type WebTorrent种子,
 } from "../媒体/媒体协作分发.js";
 import {
-  解析协作分发源,
-  发送资产协作分发事件,
-  释放协作分发消费者,
-  读取协作分发会话状态,
-  重置资产协作分发运行时,
-  投影资产协作分发预算,
+  创建资产协作分发运行时,
+  type 资产协作分发事件,
+  type 资产协作分发运行时端口,
 } from "../媒体/资产协作分发运行时.js";
+
+let 资产协作分发运行时: 资产协作分发运行时端口;
+
+const 解析协作分发源 = (
+  ...args: Parameters<资产协作分发运行时端口["解析协作分发源"]>
+): ReturnType<资产协作分发运行时端口["解析协作分发源"]> =>
+  资产协作分发运行时.解析协作分发源(...args);
+
+const 发送资产协作分发事件 = (event: 资产协作分发事件): void => {
+  资产协作分发运行时.send(event);
+};
+
+const 释放协作分发消费者 = (
+  ...args: Parameters<资产协作分发运行时端口["释放协作分发消费者"]>
+): void => {
+  资产协作分发运行时.释放协作分发消费者(...args);
+};
+
+const 读取协作分发会话状态 = (swarmId: string) =>
+  资产协作分发运行时.读取会话状态(swarmId);
+
+const 重置资产协作分发运行时 = (): void => {
+  资产协作分发运行时.重置();
+};
+
+const 读取资产协作分发预算 = () => 资产协作分发运行时.读取预算();
 
 function 准备好的定位结果(
   attachmentId: string,
@@ -124,12 +147,12 @@ describe("资产协作分发运行时", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
-    重置资产协作分发运行时();
+    资产协作分发运行时 = 创建资产协作分发运行时();
     重置协作分发浏览器运行时();
   });
 
   afterEach(() => {
-    重置资产协作分发运行时();
+    资产协作分发运行时.销毁();
     重置协作分发浏览器运行时();
     vi.useRealTimers();
   });
@@ -269,7 +292,7 @@ describe("资产协作分发运行时", () => {
     });
 
     expect(读取协作分发会话状态("swarm-att-hidden-1")).toBeNull();
-    expect(投影资产协作分发预算()).toMatchObject({
+    expect(读取资产协作分发预算()).toMatchObject({
       activeSwarmCount: 0,
       hiddenHeavyTaskCount: 0,
     });

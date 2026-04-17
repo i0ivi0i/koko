@@ -68,4 +68,40 @@ describe("缓存更新运行时", () => {
     });
     expect(runtime.snapshot().accelerationState).toBe("acceleration_loss");
   });
+
+  it("controller ready、storage eviction、primary context handoff 会进入同一条运行时协议，而不是互相绕过", () => {
+    const runtime = 创建缓存更新运行时();
+
+    runtime.send({
+      type: "SERVICE_WORKER_UPDATE_READY",
+      scope: "app",
+    });
+    runtime.send({
+      type: "STORAGE_EVICTION_DETECTED",
+    });
+    runtime.send({
+      type: "SERVICE_WORKER_CONTROLLER_READY",
+    });
+
+    expect(runtime.snapshot()).toMatchObject({
+      updateState: "waiting_refresh",
+      controllerReadyPending: true,
+      controllerReadyContextId: null,
+      accelerationState: "acceleration_loss",
+    });
+
+    runtime.send({
+      type: "PRIMARY_CONTEXT_CHANGED",
+      contextId: "tab-handoff-primary",
+    });
+
+    expect(runtime.snapshot()).toMatchObject({
+      updateState: "idle",
+      waitingScope: null,
+      controllerReadyPending: false,
+      controllerReadyContextId: "tab-handoff-primary",
+      primaryContextId: "tab-handoff-primary",
+      accelerationState: "acceleration_loss",
+    });
+  });
 });

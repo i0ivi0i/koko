@@ -141,4 +141,32 @@ describe("媒体运行时", () => {
     expect(source).toContain("创建媒体运行时Actor");
     expect(source).not.toContain("let inlineAutoplayOwnerAttachmentId");
   });
+
+  it("hidden/background 释放自动播 owner 后，不会再通过旧路径重新把它补回来", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-hidden-1",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-inline-hidden-1"
+    );
+
+    actor.send({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "suspended",
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+  });
 });

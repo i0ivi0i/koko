@@ -18,10 +18,7 @@ import {
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
-  解析协作分发源,
-  发送资产协作分发事件,
-  释放协作分发消费者,
-  投影资产协作分发预算,
+  创建资产协作分发运行时,
   type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体缓存仓库,
@@ -144,6 +141,7 @@ const 自动播候选稳定等待毫秒 = 120;
  */
 export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天媒体编排端口 {
   const 媒体运行时 = 创建媒体运行时Actor();
+  const 协作分发运行时 = 创建资产协作分发运行时();
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 媒体定位器 = 创建媒体定位器({
     getSessionId: () => deps.读取会话编号(),
@@ -154,12 +152,17 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   let 媒体播放器 = 创建媒体播放器({
     locate: (attachmentId, options) => 媒体定位器.获取定位(attachmentId, options),
-    resolveSwarmSource: 解析协作分发源,
-    releaseSwarmSource: (input) => 释放协作分发消费者(input),
+    resolveSwarmSource: (input) => 协作分发运行时.解析协作分发源(input),
+    releaseSwarmSource: (input) => 协作分发运行时.释放协作分发消费者(input),
   });
   let 待重裁决的本地完整视频附件标识: string | null = null;
   let inlineAutoplay启动定时器: ReturnType<typeof setTimeout> | null = null;
-  let inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果> = {};
+  /**
+   * 自动播真正的 owner 仍由 `媒体运行时` 裁决。
+   * 这里仅缓存“当前 owner 已解析出的瞬时播放结果”，
+   * 让壳层 presenter 能读到稳定快照，但不再自己维护一张按附件长期共写的大表。
+   */
+  let 当前自动播解析结果: 媒体播放结果 | null = null;
   let inlineAutoplay解析代次 = 0;
   const 投影查看器请求到当前播放真相 = (
     request: 媒体查看器打开请求
@@ -265,6 +268,27 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const playback = 媒体会话表.get(startItem.attachmentId)?.snapshot().playback;
     return playback?.mode === "expired" || playback?.mode === "degraded";
   };
+  const 起始视频请求可直接用正式流媒体主链打开 = (
+    request: 媒体查看器打开请求
+  ): boolean => {
+    const startItem = request.items.find(
+      (item) => item.attachmentId === request.startAttachmentId
+    );
+    if (
+      !startItem ||
+      startItem.kind !== "video" ||
+      !/\.m3u8(?:$|\?)/.test(startItem.src)
+    ) {
+      return false;
+    }
+    const sessionSnapshot = 媒体会话表.get(startItem.attachmentId)?.snapshot();
+    /**
+     * request 本身已经携带正式 HLS 主链时，不要再为了等待第一次会话 hydrate 把查看器卡住。
+     * 这里只放行“还没有更强 playback 真相，且本地完整度也没宣布成立”的极窄窗口；
+     * 一旦会话已经有权威 playback 或 locally_complete，就继续走 owner 重裁决路径。
+     */
+    return !sessionSnapshot?.playback && !sessionSnapshot?.locallyComplete;
+  };
   const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
     const before = 媒体运行时.getSnapshot();
     媒体运行时.send(event);
@@ -285,6 +309,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     if (!读取媒体运行时上下文().viewerOpen) {
       if (起始视频会话当前不可打开(nextRequest)) {
+        return;
+      }
+      if (起始视频请求可直接用正式流媒体主链打开(nextRequest)) {
+        正式打开查看器(nextRequest);
         return;
       }
       if (是否应等待本地完整视频会话真相(nextRequest)) {
@@ -565,13 +593,23 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     媒体播放器.释放附件播放资源?.(input);
   };
 
+  const 读取自动播播放结果表 = (): Record<string, 媒体播放结果> => {
+    const ownerAttachmentId = 读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId;
+    if (!ownerAttachmentId || 当前自动播解析结果 === null) {
+      return {};
+    }
+    return {
+      [ownerAttachmentId]: 当前自动播解析结果,
+    };
+  };
+
   const 清空自动播播放结果 = (): void => {
     const 媒体运行时上下文 = 读取媒体运行时上下文();
     if (
       媒体运行时上下文.inlineAutoplayOwnerAttachmentId === null &&
       媒体运行时上下文.inlineAutoplayPendingAttachmentId === null &&
       inlineAutoplay启动定时器 === null &&
-      Object.keys(inlineAutoplayPlaybackByAttachmentId).length === 0
+      当前自动播解析结果 === null
     ) {
       return;
     }
@@ -579,7 +617,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       clearTimeout(inlineAutoplay启动定时器);
       inlineAutoplay启动定时器 = null;
     }
-    inlineAutoplayPlaybackByAttachmentId = {};
+    当前自动播解析结果 = null;
     inlineAutoplay解析代次 += 1;
     deps.请求重渲染();
   };
@@ -606,7 +644,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       return;
     }
     const 当前代次 = ++inlineAutoplay解析代次;
-    inlineAutoplayPlaybackByAttachmentId = {};
+    当前自动播解析结果 = null;
     deps.请求重渲染();
     void 媒体播放器
       .解析播放结果({
@@ -627,11 +665,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           playback.mode === "swarm" ||
           playback.mode === "blob"
         ) {
-          inlineAutoplayPlaybackByAttachmentId = {
-            [attachmentId]: playback,
-          };
+          当前自动播解析结果 = playback;
         } else {
-          inlineAutoplayPlaybackByAttachmentId = {};
+          当前自动播解析结果 = null;
         }
         deps.请求重渲染();
       })
@@ -642,7 +678,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         ) {
           return;
         }
-        inlineAutoplayPlaybackByAttachmentId = {};
+        当前自动播解析结果 = null;
         deps.请求重渲染();
       });
   };
@@ -733,14 +769,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         contentUrlByAttachmentId: 读取附件内容地址表(),
         inlineAutoplayOwnerAttachmentId:
           读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId,
-        inlineAutoplayPlaybackByAttachmentId,
+        inlineAutoplayPlaybackByAttachmentId: 读取自动播播放结果表(),
       };
     },
 
     读取预算(): 聊天媒体预算快照 {
       return {
         ...投影媒体运行时预算(媒体运行时.getSnapshot()),
-        ...投影资产协作分发预算(),
+        ...协作分发运行时.读取预算(),
       };
     },
 
@@ -874,7 +910,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         type: "LIFECYCLE_POLICY_CHANGED",
         heavyWorkPolicy: input.heavyWorkPolicy,
       });
-      发送资产协作分发事件({
+      协作分发运行时.send({
         type: "LIFECYCLE_POLICY_CHANGED",
         heavyWorkPolicy: input.heavyWorkPolicy,
       });
@@ -893,6 +929,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       媒体查看器.销毁();
       媒体发布器.清空();
       清空播放状态();
+      协作分发运行时.重置();
       void 同步媒体运行时快照并执行副作用(before);
       deps.请求重渲染();
     },
@@ -904,6 +941,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       媒体查看器.销毁();
       媒体发布器.销毁();
       清空播放状态();
+      协作分发运行时.销毁();
       void 同步媒体运行时快照并执行副作用(before);
       媒体运行时.stop();
       deps.请求重渲染();
@@ -921,12 +959,27 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     设置媒体查看器供测试(viewer): void {
       媒体查看器.销毁();
+      let 测试查看器已打开 = false;
       // 测试替身允许只关心“打开/销毁”两件事；
       // 这里把它适配成正式查看器契约，避免生产代码为了测试而放宽 owner 边界。
       媒体查看器 = {
-        打开: viewer.打开,
-        同步: viewer.同步 ?? (() => undefined),
-        销毁: viewer.销毁,
+        打开: (input) => {
+          测试查看器已打开 = true;
+          viewer.打开(input);
+        },
+        同步:
+          viewer.同步 ??
+          ((input) => {
+            if (测试查看器已打开) {
+              return;
+            }
+            测试查看器已打开 = true;
+            viewer.打开(input);
+          }),
+        销毁: () => {
+          测试查看器已打开 = false;
+          viewer.销毁();
+        },
       };
     },
 

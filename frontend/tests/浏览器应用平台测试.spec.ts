@@ -130,6 +130,14 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("globalThis.localStorage");
   });
 
+  it("资产协作分发运行时不再通过模块级 singleton 持有全局真相", () => {
+    const source = 读取前端源码("媒体/资产协作分发运行时.ts");
+
+    expect(source).not.toContain("let 资产协作分发Actor实例");
+    expect(source).not.toContain("发送资产协作分发事件 =");
+    expect(source).not.toContain("投影资产协作分发预算(");
+  });
+
   it("前端 package.json 会把浏览器应用宪法守门脚本接入构建前置检查", () => {
     const packageJson = JSON.parse(读取前端源码("package.json"));
 

@@ -2518,6 +2518,14 @@ describe("聊天应用内核", () => {
     }
   });
 
+  it("正式查看器、inline autoplay、协作分发预算变化都必须来自同一条媒体 owner 链，而不是聊天媒体编排自己补状态", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+
+    expect(source).not.toContain("inlineAutoplayPlaybackByAttachmentId =");
+    expect(source).not.toContain("发送资产协作分发事件(");
+    expect(source).not.toContain("投影资产协作分发预算(");
+  });
+
   it("background/hidden 不会误清正式查看器会话真相", async () => {
     const transport = new 假传输();
     transport.joinQueue = [

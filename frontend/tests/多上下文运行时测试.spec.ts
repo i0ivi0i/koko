@@ -141,4 +141,33 @@ describe("多上下文运行时", () => {
     expect(focusSelf).toHaveBeenCalledTimes(2);
     expect(openSelf).toHaveBeenCalledTimes(2);
   });
+
+  it("非主上下文不会在 controller ready 后抢先宣布更新完成", () => {
+    const hub = new 假广播信道中枢();
+    const runtimeA = 创建多上下文运行时({
+      contextId: "tab-a",
+      createChannel: (name) => hub.创建信道(name),
+    });
+    const runtimeB = 创建多上下文运行时({
+      contextId: "tab-b",
+      createChannel: (name) => hub.创建信道(name),
+    });
+
+    runtimeA.声明主上下文();
+
+    expect(runtimeA.snapshot()).toMatchObject({
+      isPrimaryContext: true,
+      lastPrimaryContextId: "tab-a",
+    });
+    expect(runtimeB.snapshot()).toMatchObject({
+      isPrimaryContext: false,
+      lastPrimaryContextId: "tab-a",
+    });
+
+    runtimeB.请求聚焦当前上下文();
+
+    expect(runtimeA.snapshot().lastPrimaryContextId).toBe("tab-a");
+    expect(runtimeB.snapshot().lastPrimaryContextId).toBe("tab-a");
+    expect(runtimeB.snapshot().isPrimaryContext).toBe(false);
+  });
 });
