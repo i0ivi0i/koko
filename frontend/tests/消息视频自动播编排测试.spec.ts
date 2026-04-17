@@ -38,4 +38,23 @@ describe("消息视频自动播编排", () => {
 
     expect(选择消息视频自动播Owner(candidates)).toBeNull();
   });
+
+  it("当前 owner 仍在可见阈值内时，会保持粘性而不是在相邻视频间来回切换", () => {
+    const candidates: 消息视频自动播候选[] = [
+      {
+        attachmentId: "att-video-current",
+        visibilityRatio: 0.78,
+        distanceToViewportCenter: 28,
+      },
+      {
+        attachmentId: "att-video-new",
+        visibilityRatio: 0.92,
+        distanceToViewportCenter: 12,
+      },
+    ];
+
+    expect(选择消息视频自动播Owner(candidates, undefined, "att-video-current")).toBe(
+      "att-video-current"
+    );
+  });
 });

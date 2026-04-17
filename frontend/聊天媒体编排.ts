@@ -108,6 +108,7 @@ type 媒体附件条目 = {
 
 const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
+const 自动播候选稳定等待毫秒 = 120;
 
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：
@@ -135,6 +136,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   let 正式查看器已打开 = false;
   let 待重裁决的本地完整视频附件标识: string | null = null;
   let inlineAutoplayOwnerAttachmentId: string | null = null;
+  let inlineAutoplay待启动AttachmentId: string | null = null;
+  let inlineAutoplay启动定时器: ReturnType<typeof setTimeout> | null = null;
   let inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果> = {};
   let inlineAutoplay解析代次 = 0;
   const 投影查看器请求到当前播放真相 = (
@@ -492,11 +495,18 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 清空自动播播放结果 = (): void => {
     if (
       inlineAutoplayOwnerAttachmentId === null &&
+      inlineAutoplay待启动AttachmentId === null &&
+      inlineAutoplay启动定时器 === null &&
       Object.keys(inlineAutoplayPlaybackByAttachmentId).length === 0
     ) {
       return;
     }
+    if (inlineAutoplay启动定时器 !== null) {
+      clearTimeout(inlineAutoplay启动定时器);
+      inlineAutoplay启动定时器 = null;
+    }
     inlineAutoplayOwnerAttachmentId = null;
+    inlineAutoplay待启动AttachmentId = null;
     inlineAutoplayPlaybackByAttachmentId = {};
     inlineAutoplay解析代次 += 1;
     deps.请求重渲染();
@@ -562,6 +572,34 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         inlineAutoplayPlaybackByAttachmentId = {};
         deps.请求重渲染();
       });
+  };
+
+  const 调度自动播播放结果解析 = (attachmentId: string): void => {
+    if (
+      attachmentId === inlineAutoplayOwnerAttachmentId ||
+      attachmentId === inlineAutoplay待启动AttachmentId
+    ) {
+      return;
+    }
+    if (inlineAutoplay启动定时器 !== null) {
+      clearTimeout(inlineAutoplay启动定时器);
+      inlineAutoplay启动定时器 = null;
+    }
+    inlineAutoplay待启动AttachmentId = attachmentId;
+    inlineAutoplay启动定时器 = setTimeout(() => {
+      inlineAutoplay启动定时器 = null;
+      if (inlineAutoplay待启动AttachmentId !== attachmentId) {
+        return;
+      }
+      inlineAutoplay待启动AttachmentId = null;
+      if (inlineAutoplayOwnerAttachmentId && inlineAutoplayOwnerAttachmentId !== attachmentId) {
+        释放附件播放资源({
+          attachmentId: inlineAutoplayOwnerAttachmentId,
+          consumerId: 构造自动播ConsumerId(inlineAutoplayOwnerAttachmentId),
+        });
+      }
+      解析自动播播放结果(attachmentId);
+    }, 自动播候选稳定等待毫秒);
   };
 
   const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
@@ -674,7 +712,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         释放当前自动播Owner();
         return;
       }
-      const nextOwnerAttachmentId = 选择消息视频自动播Owner(candidates);
+      const nextOwnerAttachmentId = 选择消息视频自动播Owner(
+        candidates,
+        undefined,
+        inlineAutoplay待启动AttachmentId ?? inlineAutoplayOwnerAttachmentId
+      );
       if (!nextOwnerAttachmentId) {
         释放当前自动播Owner();
         return;
@@ -682,13 +724,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       if (nextOwnerAttachmentId === inlineAutoplayOwnerAttachmentId) {
         return;
       }
-      if (inlineAutoplayOwnerAttachmentId) {
-        释放附件播放资源({
-          attachmentId: inlineAutoplayOwnerAttachmentId,
-          consumerId: 构造自动播ConsumerId(inlineAutoplayOwnerAttachmentId),
-        });
-      }
-      解析自动播播放结果(nextOwnerAttachmentId);
+      调度自动播播放结果解析(nextOwnerAttachmentId);
     },
 
     释放消息流自动播Owner(): void {

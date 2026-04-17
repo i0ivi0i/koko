@@ -57,10 +57,7 @@ type 媒体播放器依赖 = {
   }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
   releaseSwarmSource?(input: { attachmentId: string; consumerId?: string }): void;
   probeAnchor?(url: string): Promise<void>;
-  swarmStartupBudgetMs?: number;
 };
-
-const 默认查看器抢占Swarm预算毫秒 = 40;
 
 const 过滤可播放媒体提示 = (
   hint: "正在协作分发" | "正在补块" | null
@@ -107,10 +104,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     (async () => {
       return;
     });
-  const swarmStartupBudgetMs = Math.max(
-    0,
-    deps.swarmStartupBudgetMs ?? 默认查看器抢占Swarm预算毫秒
-  );
 
   const 释放协作分发占用 = (input: {
     attachmentId: string;
@@ -282,32 +275,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   };
 
   /**
-   * 查看器首播允许先给 swarm 一个很短的冷启动窗口：
-   * 1. 抢到可播 swarm，就直接进 P2P 主链；
-   * 2. 超过预算后立刻落回标准 HLS，不让首屏继续等待；
-   * 3. 预算只裁决“当前先播谁”，不会主动中断已经起跑的 swarm backfill。
-   */
-  const 在预算内尝试查看器协作分发主链 = async (
-    input: 媒体播放输入,
-    locator: 媒体定位结果
-  ): Promise<媒体播放结果 | null> => {
-    const distribution = 读取协作分发定位片段(locator);
-    if (!distribution || distribution.availability === "expired") {
-      return null;
-    }
-    const 抢占Promise = 尝试协作分发主链(input, locator);
-    if (swarmStartupBudgetMs === 0) {
-      return 抢占Promise;
-    }
-    return Promise.race([
-      抢占Promise,
-      new Promise<null>((resolve) => {
-        setTimeout(() => resolve(null), swarmStartupBudgetMs);
-      }),
-    ]);
-  };
-
-  /**
    * 图片查看器一旦进入 backfilling，就要把 blob 资产绑定的协作分发平面真正激活起来：
    * 1. 是否值得进入 swarm，仍然先看 blob_asset 这个共享资产真相；
    * 2. 真正启动 WebTorrent 仍复用现有 resolveSwarmSource/runtime，不新造图片专用实现；
@@ -383,12 +350,13 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     const manifestUrl = 读取流媒体主链地址(locator);
     if (surface === "viewer" && manifestUrl) {
-      const swarmPlayback = await 在预算内尝试查看器协作分发主链(input, locator);
-      if (swarmPlayback) {
-        return swarmPlayback;
-      }
-      // 只有根本不存在可用协作分发表面时，才在 viewer 选择 manifest 前主动释放旧 lease；
-      // 如果只是 swarm 冷启动超预算，则继续保留后台补齐机会，不让 HLS 会话把 P2P 热起来的机会提前掐掉。
+      /**
+       * 查看器一旦拿到正式 manifest，就必须把首播 owner 固定到 HLS 主链：
+       * 1. 避免 raw WebTorrent file.streamURL 重新把浏览器拉回字节范围回源循环；
+       * 2. Web 端 P2P 仍由同一个 Video.js + hls.js 增强层承担，不需要再并行开 raw mp4 主链；
+       * 3. WebTorrent 整附件补齐继续由后续 PLAYER_PLAYING/ASSET_BACKFILLING 信号触发，
+       *    不在“首播地址裁决”这里抢跑第二套播放真相。
+       */
       const distribution = 读取协作分发定位片段(locator);
       if (!distribution || distribution.availability === "expired") {
         释放协作分发占用(input);

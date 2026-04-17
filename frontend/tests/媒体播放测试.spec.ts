@@ -451,7 +451,7 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("viewer 在 manifest 存在且 swarm 很快可播时，会优先吃 swarm 而不是抢先落 HLS", async () => {
+  it("viewer 在 manifest 存在且 swarm 很快可播时，也应坚持走 HLS 主链，只把 swarm 留给后台补齐", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-fast",
       hint: "正在协作分发" as const,
@@ -508,7 +508,6 @@ describe("媒体播放器", () => {
       }),
       resolveSwarmSource,
       probeAnchor,
-      swarmStartupBudgetMs: 40,
     });
 
     const result = await 播放器.解析播放结果({
@@ -517,27 +516,29 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "swarm",
+      mode: "manifest",
       attachmentId: "att-video-hls",
       kind: "video",
-      src: "blob:http://media.local/swarm-video-hls-fast",
+      src: "http://media.local/stream/att-video-hls/master.m3u8",
       thumbnailUrl: "http://media.local/poster-video-hls",
-      hint: "正在协作分发",
+      streamingDistribution: {
+        swarm_id: "swarm-hash-video-hls",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-hls",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
     });
-    expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("viewer 在 manifest 存在时，会先给 swarm 一个短预算，miss 后再稳定落到 HLS 主链", async () => {
-    vi.useFakeTimers();
+  it("viewer 在 manifest 存在时，不应等待 raw swarm 冷启动预算，而要立即落到 HLS 主链", async () => {
     const resolveSwarmSource = vi.fn(
       () =>
         new Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>(
-          (resolve) => {
-            setTimeout(() => {
-              resolve(null);
-            }, 80);
-          }
+          () => undefined
         )
     );
     const probeAnchor = vi.fn();
@@ -592,37 +593,30 @@ describe("媒体播放器", () => {
       }),
       resolveSwarmSource,
       probeAnchor,
-      swarmStartupBudgetMs: 40,
     });
 
-    try {
-      const resultPromise = 播放器.解析播放结果({
-        attachmentId: "att-video-hls",
-        kind: "video",
-      });
-      await vi.advanceTimersByTimeAsync(41);
-      const result = await resultPromise;
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-hls",
+      kind: "video",
+    });
 
-      expect(result).toEqual({
-        mode: "manifest",
-        attachmentId: "att-video-hls",
-        kind: "video",
-        src: "http://media.local/stream/att-video-hls/master.m3u8",
-        thumbnailUrl: "http://media.local/poster-video-hls",
-        streamingDistribution: {
-          swarm_id: "swarm-hash-video-hls",
-          announce_urls: ["http://media.local/announce"],
-          web_seed_url: "http://media.local/web-seed-video-hls",
-          join_ticket: null,
-          survival_mode: "server_assisted" as const,
-        },
-        hint: null,
-      });
-      expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
-      expect(probeAnchor).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(result).toEqual({
+      mode: "manifest",
+      attachmentId: "att-video-hls",
+      kind: "video",
+      src: "http://media.local/stream/att-video-hls/master.m3u8",
+      thumbnailUrl: "http://media.local/poster-video-hls",
+      streamingDistribution: {
+        swarm_id: "swarm-hash-video-hls",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-hls",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
   });
 
   it("inline_autoplay surface 在 distribution 可用时，会先尝试 swarm/web seed，而不是先 probe anchor", async () => {

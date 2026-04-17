@@ -12,7 +12,8 @@ const 默认自动播可见阈值 = 0.6;
  */
 export function 选择消息视频自动播Owner(
   candidates: 消息视频自动播候选[],
-  minVisibilityRatio = 默认自动播可见阈值
+  minVisibilityRatio = 默认自动播可见阈值,
+  preferredAttachmentId: string | null = null
 ): string | null {
   const 可进入竞争的候选 = candidates
     .filter((candidate) => candidate.visibilityRatio >= minVisibilityRatio)
@@ -25,6 +26,13 @@ export function 选择消息视频自动播Owner(
       }
       return left.attachmentId.localeCompare(right.attachmentId);
     });
+
+  if (
+    preferredAttachmentId &&
+    可进入竞争的候选.some((candidate) => candidate.attachmentId === preferredAttachmentId)
+  ) {
+    return preferredAttachmentId;
+  }
 
   return 可进入竞争的候选[0]?.attachmentId ?? null;
 }
