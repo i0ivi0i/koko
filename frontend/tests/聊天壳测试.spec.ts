@@ -1660,13 +1660,13 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("发送区视频草稿只渲染轻量占位，不会直接挂本地 video 元素再次触发媒体读取", async () => {
+  it("发送区视频草稿会渲染静态缩略图，但不会直接挂本地 video 元素再次触发媒体读取", async () => {
     const el = await 创建已入房聊天壳();
     注入媒体草稿(el, {
       localId: "draft-video-lightweight",
       kind: "video",
       attachmentId: "",
-      previewUrl: "blob:http://test.local/draft-video-lightweight",
+      previewUrl: "blob:http://test.local/draft-video-lightweight-poster",
       width: 1280,
       height: 720,
       status: "transporting",
@@ -1680,11 +1680,52 @@ describe("聊天壳集成 / 首页与控制台", () => {
         '[data-draft-card-id="draft-video-lightweight"] video.composer-draft-thumb'
       )
     ).toBeNull();
+    const draftImage = el.shadowRoot!.querySelector(
+      '[data-draft-card-id="draft-video-lightweight"] img.composer-draft-thumb[data-draft-id="draft-video-lightweight"]'
+    ) as HTMLImageElement | null;
+    expect(draftImage).not.toBeNull();
+    expect(draftImage?.getAttribute("src")).toBe("blob:http://test.local/draft-video-lightweight-poster");
     expect(
       el.shadowRoot!.querySelector(
         '[data-draft-card-id="draft-video-lightweight"] [data-video-draft-placeholder="true"]'
       )
-    ).not.toBeNull();
+    ).toBeNull();
+
+    el.remove();
+  });
+
+  it("当前会话发送带视频附件后，首条 realtime 权威消息会回填当前会话缩略图，而不是退回默认占位图", async () => {
+    const el = await 创建已入房聊天壳();
+    注入媒体草稿(el, {
+      localId: "draft-video-send-1",
+      kind: "video",
+      attachmentId: "att-video-send-1",
+      previewUrl: "blob:http://test.local/draft-video-send-1-poster",
+      width: 1280,
+      height: 720,
+      status: "ready",
+      fileName: "send.mp4",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const previewPoster = el.shadowRoot!.querySelector(
+      'img.message-video-poster[data-attachment-id="att-video-send-1"]'
+    ) as HTMLImageElement | null;
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toContain(
+      "/api/attachments/att-video-send-1/content?session_id=s-test&variant=thumbnail"
+    );
+    expect(previewPoster?.getAttribute("src")).not.toContain("data:image/svg+xml");
+    expect(
+      el.shadowRoot!.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-send-1"]'
+      )
+    ).toBeNull();
 
     el.remove();
   });

@@ -805,7 +805,8 @@ fn attachments_to_json(
                     "kind": "image",
                     "attachment_id": image.附件标识,
                     "width": image.宽,
-                    "height": image.高
+                    "height": image.高,
+                    "has_preview_asset": image.有预览图
                 });
                 if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
                     image.附件标识.as_str(),
@@ -821,7 +822,8 @@ fn attachments_to_json(
                     "kind": "video",
                     "attachment_id": video.附件标识,
                     "width": video.宽,
-                    "height": video.高
+                    "height": video.高,
+                    "has_preview_asset": video.有预览图
                 });
                 if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
                     video.附件标识.as_str(),

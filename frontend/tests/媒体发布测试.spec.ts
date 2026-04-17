@@ -220,7 +220,11 @@ function 创建场景() {
       createUploaderCalls.push(normalized);
       return normalized.profile === "large-video" ? 大视频上传器 : 默认上传器;
     },
-    readVideoMetadata: async () => ({ width: 1280, height: 720 }),
+    readVideoMetadata: async (file) => ({
+      width: 1280,
+      height: 720,
+      previewUrl: `blob:poster-${file.name}`,
+    }),
     createPreviewUrl: (file) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
     yieldToMainThread,
   });
@@ -531,6 +535,7 @@ describe("媒体发布器", () => {
         kind: "video",
         attachmentId: "att-picked.mp4",
         status: "transporting",
+        previewUrl: "blob:poster-picked.mp4",
         width: 1280,
         height: 720,
       }),

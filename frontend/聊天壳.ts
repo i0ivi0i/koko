@@ -1049,16 +1049,25 @@ export class 聊天壳 extends LitElement {
                       data-draft-card-id=${draft.localId}
                     >
                       ${draft.kind === "video"
-                        ? html`
-                            <div
-                              class="composer-draft-thumb composer-draft-video-placeholder"
-                              data-draft-id=${draft.localId}
-                              data-video-draft-placeholder="true"
-                              aria-label=${`${draft.fileName} 本地视频草稿占位`}
-                            >
-                              <span class="composer-draft-video-badge">视频</span>
-                            </div>
-                          `
+                        ? draft.previewUrl
+                          ? html`
+                              <img
+                                class="composer-draft-thumb"
+                                data-draft-id=${draft.localId}
+                                src=${draft.previewUrl}
+                                alt=${draft.fileName}
+                              />
+                            `
+                          : html`
+                              <div
+                                class="composer-draft-thumb composer-draft-video-placeholder"
+                                data-draft-id=${draft.localId}
+                                data-video-draft-placeholder="true"
+                                aria-label=${`${draft.fileName} 本地视频草稿占位`}
+                              >
+                                <span class="composer-draft-video-badge">视频</span>
+                              </div>
+                            `
                         : html`
                             <img
                               class="composer-draft-thumb"

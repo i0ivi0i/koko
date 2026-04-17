@@ -609,4 +609,34 @@ mod 实时外壳测试 {
             "权威消息事件不应冒充 control_result"
         );
     }
+
+    #[test]
+    fn room_event在无会话上下文时仍会带出附件是否有静态封面的稳定事实() {
+        let payload = super::event_to_json(
+            contract::领域事件::消息已创建 {
+                房间标识: "room-1".to_string(),
+                消息标识: "msg-1".to_string(),
+                客户端消息标识: "client-1".to_string(),
+                发送者会话标识: "session-1".to_string(),
+                发送者花名: "花名-1".to_string(),
+                文本: "".to_string(),
+                附件: vec![contract::附件快照::视频(contract::视频附件快照 {
+                    附件标识: "att-video-1".to_string(),
+                    宽: 1280,
+                    高: 720,
+                    有预览图: true,
+                })],
+                事件位置: 1,
+            },
+            None,
+        );
+
+        assert_eq!(payload["attachments"][0]["kind"], "video");
+        assert_eq!(payload["attachments"][0]["attachment_id"], "att-video-1");
+        assert_eq!(payload["attachments"][0]["has_preview_asset"], true);
+        assert!(
+            payload["attachments"][0].get("preview_asset").is_none(),
+            "没有逐连接会话上下文时，不应在 room_event 里伪造 still_url"
+        );
+    }
 }

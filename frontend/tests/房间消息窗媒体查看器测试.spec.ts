@@ -462,6 +462,10 @@ describe("房间消息窗媒体查看器", () => {
       'img.message-video-poster[data-attachment-id="att-video-1"]'
     );
     expect(previewPoster?.getAttribute("src")).toContain("data:image/svg+xml");
+    const placeholderSvg = decodeURIComponent(
+      previewPoster?.getAttribute("src")?.split(",")[1] ?? ""
+    );
+    expect(placeholderSvg).not.toContain("<polygon");
     expect(
       pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
     ).toBeNull();

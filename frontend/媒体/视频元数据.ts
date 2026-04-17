@@ -16,12 +16,14 @@ export type 视频文件元数据 = {
   width: number;
   height: number;
   durationSeconds: number;
+  previewUrl: string | null;
 };
 
 type 视频元数据依赖 = {
   createObjectUrl?: (file: Blob) => string;
   revokeObjectUrl?: (url: string) => void;
   createProbeElement?: () => HTMLVideoElement;
+  createCanvasElement?: () => HTMLCanvasElement;
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
   timeoutMs?: number;
@@ -54,16 +56,38 @@ export async function 读取视频文件元数据(
   const revokeObjectUrl = deps.revokeObjectUrl ?? URL.revokeObjectURL;
   const createProbeElement =
     deps.createProbeElement ?? (() => document.createElement("video") as HTMLVideoElement);
+  const createCanvasElement =
+    deps.createCanvasElement ?? (() => document.createElement("canvas") as HTMLCanvasElement);
   const scheduleTimeout = deps.setTimeout ?? globalThis.setTimeout.bind(globalThis);
   const cancelTimeout = deps.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
   const timeoutMs = deps.timeoutMs ?? 默认视频元数据探测超时毫秒;
   const objectUrl = createObjectUrl(file);
   const probe = createProbeElement();
-  probe.preload = "metadata";
+  probe.preload = "auto";
+  probe.muted = true;
+  probe.playsInline = true;
 
   return await new Promise<视频文件元数据>((resolve, reject) => {
     let settled = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const 生成静态预览图 = (): string | null => {
+      if (probe.videoWidth <= 0 || probe.videoHeight <= 0) {
+        return null;
+      }
+      const canvas = createCanvasElement();
+      canvas.width = probe.videoWidth;
+      canvas.height = probe.videoHeight;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        return null;
+      }
+      try {
+        context.drawImage(probe, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL("image/jpeg", 0.82);
+      } catch {
+        return null;
+      }
+    };
 
     const cleanup = (): void => {
       if (timeoutHandle) {
@@ -86,6 +110,20 @@ export async function 读取视频文件元数据(
     };
 
     probe.onloadedmetadata = () => {
+      if (settled || probe.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        return;
+      }
+      settled = true;
+      const result = {
+        width: probe.videoWidth,
+        height: probe.videoHeight,
+        durationSeconds: probe.duration,
+        previewUrl: 生成静态预览图(),
+      };
+      cleanup();
+      resolve(result);
+    };
+    probe.onloadeddata = () => {
       if (settled) {
         return;
       }
@@ -94,6 +132,7 @@ export async function 读取视频文件元数据(
         width: probe.videoWidth,
         height: probe.videoHeight,
         durationSeconds: probe.duration,
+        previewUrl: 生成静态预览图(),
       };
       cleanup();
       resolve(result);

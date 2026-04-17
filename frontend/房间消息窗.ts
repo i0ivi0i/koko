@@ -33,7 +33,6 @@ const 默认视频清单占位Poster =
       </defs>
       <rect width="320" height="180" fill="url(#bg)"/>
       <circle cx="160" cy="90" r="34" fill="rgba(255,255,255,0.18)"/>
-      <polygon points="150,72 150,108 182,90" fill="#f9fafb"/>
     </svg>
   `);
 

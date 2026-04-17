@@ -266,10 +266,16 @@ function 派生媒体附件展示项列表(
           /**
            * 视频消息流默认态只吃后端权威封面：
            * 1. 让 snapshot 和 locator 共用同一份 preview 真相；
-           * 2. 不再让壳层临时抠首帧、长第二套预览链；
-           * 3. 正式播放仍然继续走唯一媒体主链。
+           * 2. realtime room_event 在无逐连接 session 上下文时，不会直接带 still_url，
+           *    这时只允许根据后端显式给出的 `has_preview_asset` 真相，回填当前会话的 thumbnail 地址；
+           * 3. 不再让壳层临时抠首帧、长第二套预览链；
+           * 4. 正式播放仍然继续走唯一媒体主链。
            */
-          posterSrc: attachment.preview_asset?.still_url ?? null,
+          posterSrc:
+            attachment.preview_asset?.still_url ??
+            (attachment.has_preview_asset
+              ? 读取附件内容地址(附件内容地址表, attachment.attachment_id, "thumbnail")
+              : null),
         };
       }
       return {

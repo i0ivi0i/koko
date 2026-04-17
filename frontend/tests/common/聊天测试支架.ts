@@ -159,6 +159,7 @@ export class 假Socket {
           attachment_id: String(attachmentId),
           width: String(attachmentId).includes("video") ? 1280 : 120,
           height: String(attachmentId).includes("video") ? 720 : 90,
+          has_preview_asset: true,
         })),
         event_position: 1,
       });

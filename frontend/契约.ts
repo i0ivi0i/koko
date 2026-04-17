@@ -94,6 +94,7 @@ export interface 图片附件快照 {
   attachment_id: string;
   width: number;
   height: number;
+  has_preview_asset?: boolean;
   preview_asset?: 预览资源描述 | null;
 }
 
@@ -106,6 +107,7 @@ export interface 视频附件快照 {
   attachment_id: string;
   width: number;
   height: number;
+  has_preview_asset?: boolean;
   preview_asset?: 预览资源描述 | null;
 }
 

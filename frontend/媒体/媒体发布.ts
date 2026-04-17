@@ -46,6 +46,13 @@ export type 媒体上传Meta = {
   byte_size?: string;
   preview_width?: number;
   preview_height?: number;
+  /**
+   * 本地静态预览图只服务浏览器发送区体验：
+   * - 它不会进入 Tus metadata；
+   * - 不属于后端业务真相；
+   * - 只是把“发送前不要再挂第二颗 `<video>`”收口成一张静态封面。
+   */
+  local_preview_url?: string;
 };
 
 export type 媒体上传响应体 = Record<string, unknown>;
@@ -138,7 +145,11 @@ type 媒体发布器依赖 = {
   removeDraft(localId: string): void;
   clearDrafts(): void;
   createUploader?(input: 媒体上传器创建参数): 媒体上传器;
-  readVideoMetadata?(file: File): Promise<{ width: number; height: number }>;
+  readVideoMetadata?(file: File): Promise<{
+    width: number;
+    height: number;
+    previewUrl?: string | null;
+  }>;
   createPreviewUrl?(file: Blob | null): string;
   yieldToMainThread?(): Promise<void>;
 };
@@ -180,6 +191,17 @@ function 读取预览宽高(file: 媒体上传文件 | undefined): { width: numb
     width: typeof meta.preview_width === "number" ? meta.preview_width : 0,
     height: typeof meta.preview_height === "number" ? meta.preview_height : 0,
   };
+}
+
+function 读取本地预览地址(
+  file: 媒体上传文件 | undefined,
+  createPreviewUrl: (file: Blob | null) => string
+): string {
+  const meta = (file?.meta ?? {}) as 媒体上传Meta;
+  if (typeof meta.local_preview_url === "string" && meta.local_preview_url.trim()) {
+    return meta.local_preview_url;
+  }
+  return file?.data instanceof Blob ? createPreviewUrl(file.data) : "";
 }
 
 function 读取媒体上传上限(kind: 媒体种类): number {
@@ -314,6 +336,7 @@ function 构造媒体上传Meta(input: {
   prepared: 媒体上传准备结果;
   previewWidth: number;
   previewHeight: number;
+  localPreviewUrl?: string;
 }): 媒体上传Meta {
   const {
     sessionId,
@@ -321,6 +344,7 @@ function 构造媒体上传Meta(input: {
     prepared,
     previewWidth,
     previewHeight,
+    localPreviewUrl,
   } = input;
   const meta: 媒体上传Meta = {
     session_id: sessionId,
@@ -334,6 +358,9 @@ function 构造媒体上传Meta(input: {
     preview_width: previewWidth,
     preview_height: previewHeight,
   };
+  if (typeof localPreviewUrl === "string" && localPreviewUrl.trim()) {
+    meta.local_preview_url = localPreviewUrl;
+  }
   /**
    * exactOptionalPropertyTypes 打开后，可选字段不能显式写成 `undefined`。
    * 这里按后端实际给到的 metadata 逐项落值，既满足类型约束，也避免把空值误当成有效 Tus metadata。
@@ -382,7 +409,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       localId: file.id,
       kind,
       attachmentId: 提取媒体附件标识(file),
-      previewUrl: file.data instanceof Blob ? createPreviewUrl(file.data) : "",
+      previewUrl: 读取本地预览地址(file, createPreviewUrl),
       width: previewSize.width,
       height: previewSize.height,
       status: "transporting",
@@ -548,13 +575,14 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const 准备待上传媒体文件 = async (
     kind: 媒体种类,
     sourceFile: File
-  ): Promise<{ file: File; width: number; height: number }> => {
+  ): Promise<{ file: File; width: number; height: number; previewUrl?: string | null }> => {
     if (kind === "video") {
       const metadata = await readVideoMetadata(sourceFile);
       return {
         file: sourceFile,
         width: metadata.width,
         height: metadata.height,
+        previewUrl: metadata.previewUrl ?? null,
       };
     }
     const normalizedFile = await 准备待上传图片文件(sourceFile);
@@ -621,6 +649,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             prepared,
             previewWidth: preparedFile.width,
             previewHeight: preparedFile.height,
+            ...(preparedFile.previewUrl ? { localPreviewUrl: preparedFile.previewUrl } : {}),
           }),
         });
         草稿上传器键表.set(nextLocalId, uploaderKey);
