@@ -499,6 +499,14 @@ export class 房间消息窗 extends LitElement {
     );
   }
 
+  private 阻止时间线媒体预览原生菜单(event: Event): void {
+    /**
+     * 时间线卡片只表达“打开查看器”这一种意图。
+     * 这里主动拦住原生媒体右键/长按菜单，避免浏览器把预览层误当成正式播放器表面。
+     */
+    event.preventDefault();
+  }
+
   /**
    * `video` 元素抛出来的只是浏览器层运行时信号。
    * 这里统一翻译后回抛给外层应用运行时，真正的恢复/等待/降级仍由媒体会话 owner 裁决。
@@ -597,6 +605,7 @@ export class 房间消息窗 extends LitElement {
                   type="button"
                   data-attachment-id=${attachment.attachmentId}
                   aria-label="观看视频"
+                  @contextmenu=${this.阻止时间线媒体预览原生菜单}
                   @click=${(event: Event) =>
                     this.打开媒体查看器(event, attachment.attachmentId)}
                 >
@@ -613,6 +622,9 @@ export class 房间消息窗 extends LitElement {
                           ?loop=${媒体是否默认循环播放("video")}
                           playsinline
                           preload="metadata"
+                          disablepictureinpicture
+                          disableremoteplayback
+                          controlslist="nodownload nofullscreen noremoteplayback"
                           tabindex="-1"
                           aria-hidden="true"
                           poster=${previewPosterSrc}

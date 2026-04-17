@@ -275,12 +275,58 @@ describe("房间消息窗媒体查看器", () => {
     expect(inlineVideos).toHaveLength(1);
     expect(inlineVideos[0]?.getAttribute("data-attachment-id")).toBe("att-video-2");
     expect(inlineVideos[0]?.loop).toBe(true);
+    expect(inlineVideos[0]?.hasAttribute("disablepictureinpicture")).toBe(true);
+    expect(inlineVideos[0]?.hasAttribute("disableremoteplayback")).toBe(true);
+    expect(inlineVideos[0]?.getAttribute("controlslist")).toBe(
+      "nodownload nofullscreen noremoteplayback"
+    );
+    expect(inlineVideos[0]?.getAttribute("tabindex")).toBe("-1");
+    expect(inlineVideos[0]?.getAttribute("aria-hidden")).toBe("true");
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).not.toBeNull();
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-2"]')
     ).toBeNull();
+
+    pane.remove();
+  });
+
+  it("时间线自动播 video 只承载查看器入口，不暴露原生媒体右键菜单", async () => {
+    const pane = 创建媒体消息窗();
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayOwnerAttachmentId = "att-video-1";
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: "http://media.local/poster-video-1",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const inlineVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(inlineVideo).not.toBeNull();
+
+    const menuEvent = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+    inlineVideo!.dispatchEvent(menuEvent);
+
+    expect(menuEvent.defaultPrevented).toBe(true);
 
     pane.remove();
   });
