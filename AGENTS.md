@@ -40,6 +40,7 @@ _你不止是聊天机器人。你要成为一个有判断力、智慧、能逻�
 - 抽象必须服务于清晰、可测试、可维护与可演进，避免为“看起来高级”而过度设计。
 - 每次新增或重构功能时，都必须先判断它属于 `domain / application / contract / adapter / shell` 哪一层，再落代码。
 - 执行前端浏览器应用化相关计划或编码时，必须以 `docs/superpowers/specs/2026-04-12-前端浏览器应用化-design.md` 为硬施工准绳：浏览器事件只作信号，先转应用事件再由 AppRuntime/actor owner 裁决；阶段 0/1 先补保护测试和 AppRuntime 薄壳，不换播放器/虚拟列表/后端契约；每阶段必须写清旧入口退场、真相 owner、失败测试和验证，新增包装但旧真相仍活着视为失败。
+- 涉及前端浏览器应用化的判断、复盘、讨论、记忆、计划或编码时，都必须先重新通读并对齐 `docs/superpowers/specs/2026-04-12-前端浏览器应用化-design.md`，不得只凭旧印象摘句作答，更不得绕开文档另起一套运行时 owner、生命周期、预算与恢复语义。
 - 执行 Web 大视频上传、秒开播放、`24 小时` 冷备退场或 `P2P` 协同主链相关计划或编码时，必须以 `docs/superpowers/specs/2026-04-16-Web大视频上传秒开播放与P2P协同主链-design.md` 为硬施工准绳：`0-24 小时` 保留服务器冷备、标准流媒体秒开和 aggressive swarm；`24 小时` 后允许删掉原视频、服务端 mezzanine、副本和 `HLS/DASH manifest + segments`；删源后的长期正式协作分发主平面只能是 `WebTorrent`；`Video.js v10` 只做唯一播放器壳，`p2p-media-loader` 只做 `HLS` 支路增强，不得违背这份主链裁决。
 
 ## Execution
