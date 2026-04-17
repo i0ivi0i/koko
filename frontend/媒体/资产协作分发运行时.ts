@@ -122,6 +122,9 @@ const 推导主附件标识 = (consumerAttachmentIds: Record<string, string>): s
   return Object.values(consumerAttachmentIds)[0] ?? "";
 };
 
+const 是否为零消费者冷协作分发会话 = (session: 底层协作分发会话): boolean =>
+  session.consumerBindings.size === 0 && !session.locallyComplete;
+
 /**
  * AssetDistributionActor 只拥有“哪一个 swarm 会话当前还活着、被谁占用、是否可复用”的真相。
  * WebTorrent client / stream server / torrent 接线仍留在浏览器 adapter，不在这里复制第二套底层实现。
@@ -348,8 +351,31 @@ export function 创建资产协作分发Actor() {
 let 资产协作分发Actor实例 = 创建资产协作分发Actor();
 const 底层协作分发会话表 = new Map<string, 底层协作分发会话>();
 
-const 发送资产协作分发事件 = (event: 资产协作分发事件): void => {
+const 按生命周期策略清理协作分发会话 = (
+  heavyWorkPolicy: 资产协作分发上下文["heavyWorkPolicy"]
+): void => {
+  if (heavyWorkPolicy === "normal") {
+    return;
+  }
+  for (const [swarmId, session] of 底层协作分发会话表) {
+    if (!是否为零消费者冷协作分发会话(session)) {
+      continue;
+    }
+    停止协作分发存活上报(session);
+    底层协作分发会话表.delete(swarmId);
+    清理协作分发底层会话(session);
+    资产协作分发Actor实例.send({
+      type: "SESSION_DROPPED",
+      swarmId,
+    });
+  }
+};
+
+export const 发送资产协作分发事件 = (event: 资产协作分发事件): void => {
   资产协作分发Actor实例.send(event);
+  if (event.type === "LIFECYCLE_POLICY_CHANGED") {
+    按生命周期策略清理协作分发会话(event.heavyWorkPolicy);
+  }
 };
 
 const 推导协作分发提示 = (session: 底层协作分发会话): 协作分发媒体源["hint"] => {
@@ -588,6 +614,17 @@ export function 读取协作分发会话状态(swarmId: string) {
     eagerCompleting: session.eagerCompleting,
     locallyComplete: session.locallyComplete,
     hint: session.hint ?? (session.eagerCompleting ? "正在补块" : "正在协作分发"),
+  };
+}
+
+export function 投影资产协作分发预算(
+  snapshot: 资产协作分发快照 = 资产协作分发Actor实例.getSnapshot()
+) {
+  const sessions = Object.values(snapshot.context.sessions);
+  return {
+    activeSwarmCount: sessions.length,
+    hiddenHeavyTaskCount:
+      snapshot.context.heavyWorkPolicy === "normal" ? 0 : sessions.length,
   };
 }
 

@@ -6,6 +6,8 @@ export interface 应用生命周期上下文 {
   phase: 生命周期快照["phase"];
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   updateState: "idle" | "waiting_refresh";
+  updatePendingStartedAtMs: number | null;
+  updatePendingDurationMs: number;
   online: boolean;
 }
 
@@ -26,6 +28,8 @@ const 初始应用生命周期上下文: 应用生命周期上下文 = {
   phase: "active",
   heavyWorkPolicy: "normal",
   updateState: "idle",
+  updatePendingStartedAtMs: null,
+  updatePendingDurationMs: 0,
   online: true,
 };
 
@@ -80,7 +84,7 @@ const 应用生命周期机 = createMachine(
   },
   {
     actions: {
-      写入生命周期快照: assign(({ event }) => {
+      写入生命周期快照: assign(({ event, context }) => {
         if (event.type !== "LIFECYCLE_SNAPSHOT_CHANGED") {
           return {};
         }
@@ -88,6 +92,11 @@ const 应用生命周期机 = createMachine(
           visibility: event.snapshot.visibility,
           phase: event.snapshot.phase,
           heavyWorkPolicy: 派生重型工作策略(event.snapshot),
+          updatePendingDurationMs:
+            context.updateState === "waiting_refresh" &&
+            typeof context.updatePendingStartedAtMs === "number"
+              ? Date.now() - context.updatePendingStartedAtMs
+              : context.updatePendingDurationMs,
         };
       }),
       标记等待刷新: assign(({ event }) => {
@@ -97,10 +106,14 @@ const 应用生命周期机 = createMachine(
         void event.scope;
         return {
           updateState: "waiting_refresh" as const,
+          updatePendingStartedAtMs: Date.now(),
+          updatePendingDurationMs: 0,
         };
       }),
       清除等待刷新: assign(() => ({
         updateState: "idle" as const,
+        updatePendingStartedAtMs: null,
+        updatePendingDurationMs: 0,
       })),
       写入在线状态: assign(({ event }) => {
         if (event.type !== "OFFLINE_STATUS_CHANGED") {
@@ -122,7 +135,15 @@ export function 创建应用生命周期Actor(): 应用生命周期Actor {
     },
 
     snapshot(): 应用生命周期上下文 {
-      return { ...actor.getSnapshot().context };
+      const context = actor.getSnapshot().context;
+      return {
+        ...context,
+        updatePendingDurationMs:
+          context.updateState === "waiting_refresh" &&
+          typeof context.updatePendingStartedAtMs === "number"
+            ? Date.now() - context.updatePendingStartedAtMs
+            : context.updatePendingDurationMs,
+      };
     },
 
     stop(): void {

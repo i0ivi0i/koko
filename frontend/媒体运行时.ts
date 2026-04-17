@@ -2,12 +2,17 @@ import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
 import type { 媒体会话信号, 媒体查看器打开请求, 消息视频自动播候选 } from "./媒体/index.js";
 import { 选择消息视频自动播Owner } from "./媒体/index.js";
 
+const 长任务阈值毫秒 = 100;
+
 export interface 媒体运行时上下文 {
   currentViewerRequest: 媒体查看器打开请求 | null;
   viewerOpen: boolean;
   inlineAutoplayOwnerAttachmentId: string | null;
   inlineAutoplayPendingAttachmentId: string | null;
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
+  inflightLocatorCount: number;
+  inflightManifestOrRangeCount: number;
+  longTaskCount: number;
 }
 
 export type 媒体运行时事件 =
@@ -47,6 +52,20 @@ export type 媒体运行时事件 =
   | {
       type: "LIFECYCLE_POLICY_CHANGED";
       heavyWorkPolicy: "normal" | "reduced" | "suspended";
+    }
+  | {
+      type: "LOCATOR_REQUEST_STARTED";
+    }
+  | {
+      type: "LOCATOR_REQUEST_FINISHED";
+      durationMs: number;
+    }
+  | {
+      type: "PLAYBACK_REQUEST_STARTED";
+    }
+  | {
+      type: "PLAYBACK_REQUEST_FINISHED";
+      durationMs: number;
     };
 
 const 初始媒体运行时上下文: 媒体运行时上下文 = {
@@ -55,6 +74,9 @@ const 初始媒体运行时上下文: 媒体运行时上下文 = {
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
   heavyWorkPolicy: "normal",
+  inflightLocatorCount: 0,
+  inflightManifestOrRangeCount: 0,
+  longTaskCount: 0,
 };
 
 const 克隆查看器请求 = (request: 媒体查看器打开请求): 媒体查看器打开请求 => ({
@@ -65,6 +87,14 @@ const 克隆查看器请求 = (request: 媒体查看器打开请求): 媒体查�
 const 清空自动播Owner补丁 = () => ({
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
+});
+
+const 累加长任务计数补丁 = (
+  current: 媒体运行时上下文,
+  durationMs: number
+): Pick<媒体运行时上下文, "longTaskCount"> => ({
+  longTaskCount:
+    durationMs >= 长任务阈值毫秒 ? current.longTaskCount + 1 : current.longTaskCount,
 });
 
 /**
@@ -116,6 +146,18 @@ const 媒体运行时机 = createMachine(
           },
           LIFECYCLE_POLICY_CHANGED: {
             actions: "同步生命周期策略",
+          },
+          LOCATOR_REQUEST_STARTED: {
+            actions: "登记定位请求开始",
+          },
+          LOCATOR_REQUEST_FINISHED: {
+            actions: "登记定位请求结束",
+          },
+          PLAYBACK_REQUEST_STARTED: {
+            actions: "登记播放请求开始",
+          },
+          PLAYBACK_REQUEST_FINISHED: {
+            actions: "登记播放请求结束",
           },
         },
       },
@@ -237,11 +279,60 @@ const 媒体运行时机 = createMachine(
           ...清空自动播Owner补丁(),
         };
       }),
+      登记定位请求开始: assign(({ context }) => ({
+        inflightLocatorCount: context.inflightLocatorCount + 1,
+      })),
+      登记定位请求结束: assign(({ event, context }) => {
+        if (event.type !== "LOCATOR_REQUEST_FINISHED") {
+          return {};
+        }
+        return {
+          inflightLocatorCount: Math.max(0, context.inflightLocatorCount - 1),
+          ...累加长任务计数补丁(context, event.durationMs),
+        };
+      }),
+      登记播放请求开始: assign(({ context }) => ({
+        inflightManifestOrRangeCount: context.inflightManifestOrRangeCount + 1,
+      })),
+      登记播放请求结束: assign(({ event, context }) => {
+        if (event.type !== "PLAYBACK_REQUEST_FINISHED") {
+          return {};
+        }
+        return {
+          inflightManifestOrRangeCount: Math.max(
+            0,
+            context.inflightManifestOrRangeCount - 1
+          ),
+          ...累加长任务计数补丁(context, event.durationMs),
+        };
+      }),
     },
   }
 );
 
 export type 媒体运行时快照 = SnapshotFrom<typeof 媒体运行时机>;
+
+const 当前查看器占用视频 = (context: 媒体运行时上下文): number => {
+  if (!context.viewerOpen || !context.currentViewerRequest) {
+    return 0;
+  }
+  const startItem = context.currentViewerRequest.items.find(
+    (item) => item.attachmentId === context.currentViewerRequest?.startAttachmentId
+  );
+  return startItem?.kind === "video" ? 1 : 0;
+};
+
+export function 投影媒体运行时预算(snapshot: 媒体运行时快照) {
+  const { context } = snapshot;
+  const autoplayOwnerCount = context.inlineAutoplayOwnerAttachmentId ? 1 : 0;
+  return {
+    activeVideoCount: 当前查看器占用视频(context) + autoplayOwnerCount,
+    autoplayOwnerCount,
+    inflightLocatorCount: context.inflightLocatorCount,
+    inflightManifestOrRangeCount: context.inflightManifestOrRangeCount,
+    longTaskCount: context.longTaskCount,
+  };
+}
 
 export function 创建媒体运行时Actor() {
   return createActor(媒体运行时机).start();

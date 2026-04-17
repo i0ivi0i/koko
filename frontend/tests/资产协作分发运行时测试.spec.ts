@@ -10,9 +10,11 @@ import {
 } from "../媒体/媒体协作分发.js";
 import {
   解析协作分发源,
+  发送资产协作分发事件,
   释放协作分发消费者,
   读取协作分发会话状态,
   重置资产协作分发运行时,
+  投影资产协作分发预算,
 } from "../媒体/资产协作分发运行时.js";
 
 function 准备好的定位结果(
@@ -231,6 +233,45 @@ describe("资产协作分发运行时", () => {
     expect(读取协作分发会话状态("swarm-att-reopen-1")).toMatchObject({
       refs: 1,
       consumers: ["viewer:att-reopen-1"],
+    });
+  });
+
+  it("hidden 后会把 heavyWorkPolicy 变成 suspended，并释放无 consumer 的冷 swarm", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-hidden-1");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-hidden-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-hidden-1"),
+      consumerId: "backfill:att-hidden-1",
+      eagerCompleting: true,
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-hidden-1",
+      consumerId: "backfill:att-hidden-1",
+    });
+    expect(读取协作分发会话状态("swarm-att-hidden-1")).toMatchObject({
+      refs: 0,
+      eagerCompleting: true,
+    });
+
+    发送资产协作分发事件({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "suspended",
+    });
+
+    expect(读取协作分发会话状态("swarm-att-hidden-1")).toBeNull();
+    expect(投影资产协作分发预算()).toMatchObject({
+      activeSwarmCount: 0,
+      hiddenHeavyTaskCount: 0,
     });
   });
 

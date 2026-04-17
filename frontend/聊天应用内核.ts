@@ -35,6 +35,7 @@ import type { 前端传输端口 } from "./传输.js";
 import type { 前端存储端口 } from "./存储.js";
 import {
   初始聊天运行时状态,
+  初始聊天运行时预算状态,
   初始聊天会话状态,
   初始聊天时间线状态,
   初始聊天流程状态,
@@ -43,6 +44,7 @@ import {
   type 聊天会话状态,
   type 聊天时间线状态,
   type 聊天流程状态,
+  type 聊天运行时预算状态,
   type 聊天运行时状态,
   type 聊天状态,
   type 聊天视口状态,
@@ -101,8 +103,10 @@ type 聊天本地状态补丁 = Partial<
     聊天时间线状态 &
     聊天视口状态 &
     聊天流程状态 &
-    聊天运行时状态
->;
+    Omit<聊天运行时状态, "runtimeBudget">
+> & {
+  runtimeBudget?: Partial<聊天运行时预算状态>;
+};
 
 export type 聊天应用命令 =
   | { type: "BOOTSTRAP_REQUESTED" }
@@ -244,7 +248,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.时间线状态 = { ...初始聊天时间线状态 };
     this.视口状态 = { ...初始聊天视口状态 };
     this.流程状态 = { ...初始聊天流程状态 };
-    this.运行时状态 = { ...初始聊天运行时状态 };
+    this.运行时状态 = {
+      ...初始聊天运行时状态,
+      runtimeBudget: { ...初始聊天运行时状态.runtimeBudget },
+    };
     this.同步房间视口快照();
     this.roomScroller = new 房间滚动器(deps.滚动宿主, {
       读取状态: () => this.读取滚动观察状态(),
@@ -674,6 +681,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       heavyWorkPolicy: snapshot.heavyWorkPolicy,
       swUpdateState: snapshot.updateState,
       online: snapshot.online,
+      runtimeBudget: {
+        ...this.运行时状态.runtimeBudget,
+        updatePendingDurationMs: snapshot.updatePendingDurationMs,
+      },
     });
     this.媒体编排.处理应用生命周期({
       visibility: snapshot.visibility,
@@ -862,6 +873,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     if (Object.hasOwn(patch, "online")) {
       运行时补丁.online = patch.online ?? true;
     }
+    if (Object.hasOwn(patch, "runtimeBudget")) {
+      运行时补丁.runtimeBudget = {
+        ...this.运行时状态.runtimeBudget,
+        ...patch.runtimeBudget,
+      };
+    }
 
     if (Object.keys(会话补丁).length > 0) {
       this.会话状态 = { ...this.会话状态, ...会话补丁 };
@@ -899,6 +916,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   private 读取聊天基础快照(): Omit<聊天应用快照, "media"> {
+    const runtimeBudget = this.读取当前运行时预算();
     return {
       ...this.会话状态,
       ...this.输入状态,
@@ -906,7 +924,17 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       ...this.视口状态,
       ...this.流程状态,
       ...this.运行时状态,
+      runtimeBudget,
       ...this.回填房间壳补丁(),
+    };
+  }
+
+  private 读取当前运行时预算(): 聊天运行时预算状态 {
+    return {
+      ...初始聊天运行时预算状态,
+      ...this.运行时状态.runtimeBudget,
+      ...this.媒体编排.读取预算(),
+      updatePendingDurationMs: this.appLifecycle.snapshot().updatePendingDurationMs,
     };
   }
 

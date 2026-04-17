@@ -95,12 +95,24 @@ export interface 聊天流程状态 {
  *
  * 它不承载消息、成员、权限这些业务真相。
  */
+export interface 聊天运行时预算状态 {
+  activeVideoCount: number;
+  autoplayOwnerCount: number;
+  activeSwarmCount: number;
+  inflightLocatorCount: number;
+  inflightManifestOrRangeCount: number;
+  hiddenHeavyTaskCount: number;
+  longTaskCount: number;
+  updatePendingDurationMs: number;
+}
+
 export interface 聊天运行时状态 {
   lifecycleVisibility: "visible" | "hidden";
   lifecyclePhase: "active" | "background" | "page_hidden" | "frozen" | "resumed";
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   swUpdateState: "idle" | "waiting_refresh";
   online: boolean;
+  runtimeBudget: 聊天运行时预算状态;
 }
 
 /**
@@ -164,12 +176,24 @@ export const 初始聊天流程状态: 聊天流程状态 = {
   pending: false,
 };
 
+export const 初始聊天运行时预算状态: 聊天运行时预算状态 = {
+  activeVideoCount: 0,
+  autoplayOwnerCount: 0,
+  activeSwarmCount: 0,
+  inflightLocatorCount: 0,
+  inflightManifestOrRangeCount: 0,
+  hiddenHeavyTaskCount: 0,
+  longTaskCount: 0,
+  updatePendingDurationMs: 0,
+};
+
 export const 初始聊天运行时状态: 聊天运行时状态 = {
   lifecycleVisibility: "visible",
   lifecyclePhase: "active",
   heavyWorkPolicy: "normal",
   swUpdateState: "idle",
   online: true,
+  runtimeBudget: { ...初始聊天运行时预算状态 },
 };
 
 export const 初始聊天状态: 聊天状态 = {

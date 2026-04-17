@@ -1,6 +1,11 @@
 import type { 消息事件, 媒体种类 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
-import { 创建媒体运行时Actor, type 媒体运行时事件 } from "./媒体运行时.js";
+import type { 聊天运行时预算状态 } from "./状态.js";
+import {
+  创建媒体运行时Actor,
+  投影媒体运行时预算,
+  type 媒体运行时事件,
+} from "./媒体运行时.js";
 import {
   创建媒体定位器,
   创建媒体缓存,
@@ -14,7 +19,9 @@ import {
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
   解析协作分发源,
+  发送资产协作分发事件,
   释放协作分发消费者,
+  投影资产协作分发预算,
   type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体缓存仓库,
@@ -42,6 +49,17 @@ export type 聊天媒体快照 = {
   inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
 };
 
+type 聊天媒体预算快照 = Pick<
+  聊天运行时预算状态,
+  | "activeVideoCount"
+  | "autoplayOwnerCount"
+  | "activeSwarmCount"
+  | "inflightLocatorCount"
+  | "inflightManifestOrRangeCount"
+  | "hiddenHeavyTaskCount"
+  | "longTaskCount"
+>;
+
 type 聊天媒体编排依赖 = {
   transport(): 前端传输端口;
   读取会话编号(): string;
@@ -58,6 +76,7 @@ type 聊天媒体编排依赖 = {
 
 export interface 聊天媒体编排端口 {
   snapshot(): 聊天媒体快照;
+  读取预算(): 聊天媒体预算快照;
   处理选择媒体文件(files: Iterable<File>): Promise<void>;
   移除媒体草稿(localId: string): void;
   继续上传媒体草稿(localId: string): Promise<void>;
@@ -124,6 +143,8 @@ const 自动播候选稳定等待毫秒 = 120;
  * 它不拥有聊天时间线真相，也不直接暴露 transport。
  */
 export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天媒体编排端口 {
+  const 媒体运行时 = 创建媒体运行时Actor();
+  const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 媒体定位器 = 创建媒体定位器({
     getSessionId: () => deps.读取会话编号(),
     loadMediaLocator: (sessionId, attachmentId) =>
@@ -136,13 +157,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     resolveSwarmSource: 解析协作分发源,
     releaseSwarmSource: (input) => 释放协作分发消费者(input),
   });
-
-  const 媒体运行时 = 创建媒体运行时Actor();
   let 待重裁决的本地完整视频附件标识: string | null = null;
   let inlineAutoplay启动定时器: ReturnType<typeof setTimeout> | null = null;
   let inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果> = {};
   let inlineAutoplay解析代次 = 0;
-  const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 投影查看器请求到当前播放真相 = (
     request: 媒体查看器打开请求
   ): 媒体查看器打开请求 => {
@@ -719,6 +737,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       };
     },
 
+    读取预算(): 聊天媒体预算快照 {
+      return {
+        ...投影媒体运行时预算(媒体运行时.getSnapshot()),
+        ...投影资产协作分发预算(),
+      };
+    },
+
     async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
       await 媒体发布器.处理选择媒体文件(files);
     },
@@ -846,6 +871,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     处理应用生命周期(input): void {
       接收媒体运行时事实({
+        type: "LIFECYCLE_POLICY_CHANGED",
+        heavyWorkPolicy: input.heavyWorkPolicy,
+      });
+      发送资产协作分发事件({
         type: "LIFECYCLE_POLICY_CHANGED",
         heavyWorkPolicy: input.heavyWorkPolicy,
       });

@@ -2708,6 +2708,101 @@ describe("聊天应用内核", () => {
     expect(排空到期任务).toHaveBeenCalledTimes(1);
   });
 
+  it("更新 pending 期间会累计持续时间，并显示为统一运行时预算项", async () => {
+    vi.useFakeTimers();
+    const transport = new 假传输();
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+      platform: {
+        lifecycle: {} as never,
+        storage: {} as never,
+        serviceWorker: {} as never,
+        transport: { transport: () => transport } as never,
+        multiContext: {} as never,
+        notification: {} as never,
+        offline: {
+          snapshot: () => ({
+            online: true,
+            backgroundSyncSupported: true,
+            queuedTaskCapability: "background-sync" as const,
+          }),
+          就绪: async () => {},
+          排空到期任务: vi.fn(async () => {}),
+        } as never,
+        启动: async () => {},
+        snapshot: () =>
+          ({
+            lifecycle: { visibility: "visible", phase: "active" },
+            serviceWorker: {
+              appShellRegistered: true,
+              mediaWorkerRegistered: true,
+              persistentStorageRequested: true,
+              controllerAttached: false,
+              appShellWaiting: false,
+              mediaWorkerWaiting: false,
+              lastMessageType: null,
+              lastMessage: null,
+            },
+            transport: {
+              lastLifecycle: { visibility: "visible", phase: "active" },
+              realtimePolicy: {
+                intent: "resume",
+                reconnection: true,
+                reason: "active",
+              },
+            },
+            multiContext: {
+              contextId: "tab-a",
+              isPrimaryContext: true,
+              lastPrimaryContextId: "tab-a",
+              lastFocusedContextId: null,
+              deliveredNotificationIds: [],
+            },
+            notification: {
+              permission: "granted",
+              lastClickedNotificationId: null,
+              badgeCount: 0,
+            },
+            offline: {
+              online: true,
+              backgroundSyncSupported: true,
+              queuedTaskCapability: "background-sync",
+            },
+          }) as 浏览器应用平台快照,
+        dispatch: async () => true,
+      },
+    });
+
+    try {
+      await kernel.dispatch({
+        type: "PLATFORM_SERVICE_WORKER_UPDATE_READY",
+        scope: "media",
+      });
+      await vi.advanceTimersByTimeAsync(1_250);
+      await kernel.dispatch({
+        type: "PLATFORM_LIFECYCLE_CHANGED",
+        snapshot: { visibility: "visible", phase: "active" },
+      });
+
+      expect(kernel.snapshot().runtimeBudget).toMatchObject({
+        updatePendingDurationMs: 1_250,
+        activeVideoCount: 0,
+        autoplayOwnerCount: 0,
+        activeSwarmCount: 0,
+        inflightLocatorCount: 0,
+        inflightManifestOrRangeCount: 0,
+        hiddenHeavyTaskCount: 0,
+        longTaskCount: 0,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("退出房间视图时，会清空当前消息流自动播 owner", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();
