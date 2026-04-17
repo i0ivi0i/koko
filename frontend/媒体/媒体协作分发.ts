@@ -38,7 +38,10 @@ export interface WebTorrent浏览器客户端 {
     },
     onTorrent: (torrent: WebTorrent种子) => void
   ): WebTorrent种子;
-  remove?(torrentId: string | Uint8Array | ArrayBuffer, options?: { destroyStore?: boolean }): void;
+  remove?(
+    torrentId: string | Uint8Array | ArrayBuffer,
+    options?: { destroyStore?: boolean }
+  ): void | Promise<void>;
   destroy?(): void;
 }
 
@@ -313,18 +316,33 @@ export function 停止协作分发存活上报(session: 协作分发底层会话
   session.presenceIntervalId = null;
 }
 
+function 销毁协作分发Torrent(session: 协作分发底层会话): void {
+  session.torrent?.destroy?.({
+    destroyStore: false,
+  });
+}
+
 export function 清理协作分发底层会话(
   session: 协作分发底层会话,
   runtime: 协作分发浏览器运行时 | null = 协作分发浏览器运行时实例
 ): void {
-  // 优先调用 client.remove，让 WebTorrent 自己负责把 torrent 从 client 生命周期里摘掉；
-  // 如果当前测试替身或运行环境没暴露 remove，再退回 torrent.destroy。
-  runtime?.client.remove?.(session.torrentInfoHash, {
-    destroyStore: false,
-  });
-  session.torrent?.destroy?.({
-    destroyStore: false,
-  });
+  const remove = runtime?.client.remove;
+  if (!remove) {
+    销毁协作分发Torrent(session);
+    return;
+  }
+  try {
+    // `client.remove()` 本身就是 WebTorrent 官方的移除入口；
+    // 成功时不要再同步二次 destroy，同失败时才回退到当前 torrent。
+    const removeResult = remove.call(runtime.client, session.torrentInfoHash, {
+      destroyStore: false,
+    });
+    void Promise.resolve(removeResult).catch(() => {
+      销毁协作分发Torrent(session);
+    });
+  } catch {
+    销毁协作分发Torrent(session);
+  }
 }
 
 export async function 获取或创建协作分发浏览器运行时(

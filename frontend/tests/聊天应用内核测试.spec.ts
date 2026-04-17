@@ -2851,6 +2851,30 @@ describe("聊天应用内核", () => {
     expect(kernel.snapshot().messages).toBe(原消息快照);
   });
 
+  it("同值本地补丁不会重复 requestUpdate，也不会把同引用消息重新同步给媒体层", () => {
+    const deps = 创建内核依赖();
+    const kernel = 创建聊天应用内核({
+      ...deps,
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 当前消息 = kernel.snapshot().messages;
+    const 媒体编排 = 读取媒体编排供测试(kernel) as unknown as {
+      同步消息附件播放结果(): void;
+    };
+    const 同步消息附件播放结果 = vi.spyOn(媒体编排, "同步消息附件播放结果");
+    const 应用本地状态补丁 = (
+      kernel as unknown as {
+        应用本地状态补丁(patch: Record<string, unknown>): boolean;
+      }
+    ).应用本地状态补丁.bind(kernel);
+
+    expect(应用本地状态补丁({ historyLoading: false })).toBe(false);
+    expect(应用本地状态补丁({ messages: 当前消息 })).toBe(false);
+    expect(deps.滚动宿主.requestUpdate).not.toHaveBeenCalled();
+    expect(同步消息附件播放结果).not.toHaveBeenCalled();
+  });
+
   it("更新 pending 期间会累计持续时间，并显示为统一运行时预算项", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();

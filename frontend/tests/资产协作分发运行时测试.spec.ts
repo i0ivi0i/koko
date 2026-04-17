@@ -180,7 +180,7 @@ describe("资产协作分发运行时", () => {
     expect(读取协作分发会话状态("swarm-att-inline-cold-1")).toBeNull();
   });
 
-  it("最后一个 consumer 释放后，未补齐且未完成的冷 swarm 会立即销毁", async () => {
+  it("最后一个 consumer 释放后，未补齐且未完成的冷 swarm 会立即从运行时摘除，并交给 client.remove 清理", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, destroy } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-release-1"
@@ -207,10 +207,11 @@ describe("资产协作分发运行时", () => {
       attachmentId: "att-release-1",
       consumerId: "session:att-release-1",
     });
+    await Promise.resolve();
 
     expect(读取协作分发会话状态("swarm-att-release-1")).toBeNull();
     expect(remove).toHaveBeenCalled();
-    expect(destroy).toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
   });
 
   it("locallyComplete 的资源可被同页重开直接复用，不需要重新冷启动", async () => {

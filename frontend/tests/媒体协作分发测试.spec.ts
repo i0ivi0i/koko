@@ -4,6 +4,7 @@ import {
   获取或创建协作分发浏览器运行时,
   读取协作分发定位片段,
   重置协作分发浏览器运行时,
+  清理协作分发底层会话,
   type WebTorrent浏览器客户端,
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
@@ -259,6 +260,57 @@ describe("媒体协作分发", () => {
     expect(ctorSpy).toHaveBeenCalledTimes(1);
     expect(createServer).toHaveBeenCalledWith({ controller: registration });
     expect(first).toBe(second);
+  });
+
+  it("client.remove 可用时只走官方移除链，不会再同步二次 destroy 同一 torrent", async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const destroy = vi.fn();
+    const session = {
+      torrentInfoHash: "torrent-info-hash-cleanup-1",
+      torrent: {
+        destroy,
+      },
+    } as unknown as Parameters<typeof 清理协作分发底层会话>[0];
+    const runtime = {
+      client: {
+        remove,
+      },
+    } as unknown as Parameters<typeof 清理协作分发底层会话>[1];
+
+    清理协作分发底层会话(session, runtime);
+    await Promise.resolve();
+
+    expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-1", {
+      destroyStore: false,
+    });
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it("client.remove 异步失败时会降级 destroy 当前 torrent，而不是把 reject 泄到外面", async () => {
+    const remove = vi.fn().mockRejectedValue(new Error("remove failed"));
+    const destroy = vi.fn();
+    const session = {
+      torrentInfoHash: "torrent-info-hash-cleanup-2",
+      torrent: {
+        destroy,
+      },
+    } as unknown as Parameters<typeof 清理协作分发底层会话>[0];
+    const runtime = {
+      client: {
+        remove,
+      },
+    } as unknown as Parameters<typeof 清理协作分发底层会话>[1];
+
+    清理协作分发底层会话(session, runtime);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-2", {
+      destroyStore: false,
+    });
+    expect(destroy).toHaveBeenCalledWith({
+      destroyStore: false,
+    });
   });
 
   it("同一 attachment 在同一页面被再次打开时会复用同一个 torrent 会话", async () => {

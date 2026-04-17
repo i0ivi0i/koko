@@ -109,6 +109,34 @@ type 聊天本地状态补丁 = Partial<
   runtimeBudget?: Partial<聊天运行时预算状态>;
 };
 
+function 记录有变化字段<T extends object, K extends keyof T>(
+  currentState: T,
+  nextPatch: Partial<T>,
+  key: K,
+  nextValue: T[K],
+  onChange?: () => void
+): void {
+  if (Object.is(currentState[key], nextValue)) {
+    return;
+  }
+  nextPatch[key] = nextValue;
+  onChange?.();
+}
+
+function 浅比较对象<T extends object>(left: T, right: T): boolean {
+  if (left === right) {
+    return true;
+  }
+  const leftKeys = Object.keys(left) as Array<keyof T>;
+  const rightKeys = Object.keys(right) as Array<keyof T>;
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every(
+    (key) => Object.hasOwn(right, key) && Object.is(left[key], right[key])
+  );
+}
+
 export type 聊天应用命令 =
   | { type: "BOOTSTRAP_REQUESTED" }
   | { type: "ROOM_CODE_INPUT_CHANGED"; value: string }
@@ -811,89 +839,198 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     const 运行时补丁: Partial<聊天运行时状态> = {};
 
     if (Object.hasOwn(patch, "deviceAnonymousToken")) {
-      会话补丁.deviceAnonymousToken = patch.deviceAnonymousToken ?? "";
+      记录有变化字段(
+        this.会话状态,
+        会话补丁,
+        "deviceAnonymousToken",
+        patch.deviceAnonymousToken ?? ""
+      );
     }
     if (Object.hasOwn(patch, "homeSessionItems")) {
-      会话补丁.homeSessionItems = patch.homeSessionItems ?? [];
+      记录有变化字段(
+        this.会话状态,
+        会话补丁,
+        "homeSessionItems",
+        patch.homeSessionItems ?? []
+      );
     }
     if (Object.hasOwn(patch, "roomCodeInput")) {
-      输入补丁.roomCodeInput = patch.roomCodeInput ?? "";
+      记录有变化字段(this.输入状态, 输入补丁, "roomCodeInput", patch.roomCodeInput ?? "");
     }
     if (Object.hasOwn(patch, "messageInput")) {
-      输入补丁.messageInput = patch.messageInput ?? "";
+      记录有变化字段(this.输入状态, 输入补丁, "messageInput", patch.messageInput ?? "");
     }
     if (Object.hasOwn(patch, "composerMediaDrafts")) {
-      输入补丁.composerMediaDrafts = patch.composerMediaDrafts ?? [];
+      记录有变化字段(
+        this.输入状态,
+        输入补丁,
+        "composerMediaDrafts",
+        patch.composerMediaDrafts ?? []
+      );
     }
     if (Object.hasOwn(patch, "messages")) {
-      时间线补丁.messages = patch.messages ?? [];
-      消息列表发生变化 = true;
+      记录有变化字段(this.时间线状态, 时间线补丁, "messages", patch.messages ?? [], () => {
+        消息列表发生变化 = true;
+      });
     }
     if (Object.hasOwn(patch, "hasMoreBefore")) {
-      时间线补丁.hasMoreBefore = patch.hasMoreBefore ?? false;
+      记录有变化字段(
+        this.时间线状态,
+        时间线补丁,
+        "hasMoreBefore",
+        patch.hasMoreBefore ?? false
+      );
     }
     if (Object.hasOwn(patch, "historyLoading")) {
-      时间线补丁.historyLoading = patch.historyLoading ?? false;
+      记录有变化字段(
+        this.时间线状态,
+        时间线补丁,
+        "historyLoading",
+        patch.historyLoading ?? false
+      );
     }
     if (Object.hasOwn(patch, "historyErrorCode")) {
-      时间线补丁.historyErrorCode = patch.historyErrorCode ?? "";
+      记录有变化字段(
+        this.时间线状态,
+        时间线补丁,
+        "historyErrorCode",
+        patch.historyErrorCode ?? ""
+      );
     }
     if (Object.hasOwn(patch, "viewportMode")) {
-      视口补丁.viewportMode = patch.viewportMode ?? "离底浏览";
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "viewportMode",
+        patch.viewportMode ?? "离底浏览"
+      );
     }
     if (Object.hasOwn(patch, "candidateReadAnchorPosition")) {
-      视口补丁.candidateReadAnchorPosition = patch.candidateReadAnchorPosition ?? null;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "candidateReadAnchorPosition",
+        patch.candidateReadAnchorPosition ?? null
+      );
     }
     if (Object.hasOwn(patch, "hasUnreadNewerMessages")) {
-      视口补丁.hasUnreadNewerMessages = patch.hasUnreadNewerMessages ?? false;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "hasUnreadNewerMessages",
+        patch.hasUnreadNewerMessages ?? false
+      );
     }
     if (Object.hasOwn(patch, "lastReadEventPosition")) {
-      视口补丁.lastReadEventPosition = patch.lastReadEventPosition ?? null;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "lastReadEventPosition",
+        patch.lastReadEventPosition ?? null
+      );
     }
     if (Object.hasOwn(patch, "firstUnreadEventPosition")) {
-      视口补丁.firstUnreadEventPosition = patch.firstUnreadEventPosition ?? null;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "firstUnreadEventPosition",
+        patch.firstUnreadEventPosition ?? null
+      );
     }
     if (Object.hasOwn(patch, "initialUnreadSettled")) {
-      视口补丁.initialUnreadSettled = patch.initialUnreadSettled ?? false;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "initialUnreadSettled",
+        patch.initialUnreadSettled ?? false
+      );
     }
     if (Object.hasOwn(patch, "scrollPhase")) {
-      视口补丁.scrollPhase = patch.scrollPhase ?? "idle";
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "scrollPhase",
+        patch.scrollPhase ?? "idle"
+      );
     }
     if (Object.hasOwn(patch, "hasUserScrollIntent")) {
-      视口补丁.hasUserScrollIntent = patch.hasUserScrollIntent ?? false;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "hasUserScrollIntent",
+        patch.hasUserScrollIntent ?? false
+      );
     }
     if (Object.hasOwn(patch, "pendingReadAnchorPosition")) {
-      视口补丁.pendingReadAnchorPosition = patch.pendingReadAnchorPosition ?? null;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "pendingReadAnchorPosition",
+        patch.pendingReadAnchorPosition ?? null
+      );
     }
     if (Object.hasOwn(patch, "historyLoadThrottleUntil")) {
-      视口补丁.historyLoadThrottleUntil = patch.historyLoadThrottleUntil ?? 0;
+      记录有变化字段(
+        this.视口状态,
+        视口补丁,
+        "historyLoadThrottleUntil",
+        patch.historyLoadThrottleUntil ?? 0
+      );
     }
     if (Object.hasOwn(patch, "pending")) {
-      流程补丁.pending = patch.pending ?? false;
+      记录有变化字段(this.流程状态, 流程补丁, "pending", patch.pending ?? false);
     }
     if (Object.hasOwn(patch, "lifecycleVisibility")) {
-      运行时补丁.lifecycleVisibility = patch.lifecycleVisibility ?? "visible";
+      记录有变化字段(
+        this.运行时状态,
+        运行时补丁,
+        "lifecycleVisibility",
+        patch.lifecycleVisibility ?? "visible"
+      );
     }
     if (Object.hasOwn(patch, "lifecyclePhase")) {
-      运行时补丁.lifecyclePhase = patch.lifecyclePhase ?? "active";
+      记录有变化字段(
+        this.运行时状态,
+        运行时补丁,
+        "lifecyclePhase",
+        patch.lifecyclePhase ?? "active"
+      );
     }
     if (Object.hasOwn(patch, "heavyWorkPolicy")) {
-      运行时补丁.heavyWorkPolicy = patch.heavyWorkPolicy ?? "normal";
+      记录有变化字段(
+        this.运行时状态,
+        运行时补丁,
+        "heavyWorkPolicy",
+        patch.heavyWorkPolicy ?? "normal"
+      );
     }
     if (Object.hasOwn(patch, "swUpdateState")) {
-      运行时补丁.swUpdateState = patch.swUpdateState ?? "idle";
+      记录有变化字段(
+        this.运行时状态,
+        运行时补丁,
+        "swUpdateState",
+        patch.swUpdateState ?? "idle"
+      );
     }
     if (Object.hasOwn(patch, "accelerationState")) {
-      运行时补丁.accelerationState = patch.accelerationState ?? "best_effort";
+      记录有变化字段(
+        this.运行时状态,
+        运行时补丁,
+        "accelerationState",
+        patch.accelerationState ?? "best_effort"
+      );
     }
     if (Object.hasOwn(patch, "online")) {
-      运行时补丁.online = patch.online ?? true;
+      记录有变化字段(this.运行时状态, 运行时补丁, "online", patch.online ?? true);
     }
     if (Object.hasOwn(patch, "runtimeBudget")) {
-      运行时补丁.runtimeBudget = {
+      const nextRuntimeBudget = {
         ...this.运行时状态.runtimeBudget,
         ...patch.runtimeBudget,
       };
+      if (!浅比较对象(this.运行时状态.runtimeBudget, nextRuntimeBudget)) {
+        运行时补丁.runtimeBudget = nextRuntimeBudget;
+      }
     }
 
     if (Object.keys(会话补丁).length > 0) {
