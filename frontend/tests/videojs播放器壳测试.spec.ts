@@ -385,6 +385,37 @@ describe("Video.js 播放器壳", () => {
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
+  it("缺少标准 Fullscreen API 时，播放器壳不会退回原生 webkit fullscreen 旁路", async () => {
+    const createPlayer = vi.fn(() => {
+      const root = 创建假播放器根();
+      Object.assign(root.video, {
+        webkitEnterFullscreen: vi.fn(),
+      });
+      return root;
+    });
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-overlay-only-1",
+        posterSrc: "http://media.local/poster-overlay-only-1.jpg",
+        width: 720,
+        height: 1280,
+      },
+      {
+        createPlayer,
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+
+    await shell.进入全屏();
+
+    const root = createPlayer.mock.results[0]?.value;
+    expect(root?.video.webkitEnterFullscreen).not.toHaveBeenCalled();
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
+
+    shell.destroy();
+  });
+
   it("默认根节点只从挂载盒子继承宽度，不在 provider 上再养第二套尺寸真相", async () => {
     const mountTarget = document.createElement("div");
     document.body.append(mountTarget);

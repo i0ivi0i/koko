@@ -95,9 +95,7 @@ type PhotoSwipeLightbox构造器 = new (
   options: PhotoSwipe查看器选项
 ) => 媒体查看器实例;
 
-type 可原生全屏视频元素 = HTMLVideoElement & {
-  webkitEnterFullscreen?: () => void;
-};
+type 可原生全屏视频元素 = HTMLVideoElement;
 type 可原生全屏容器元素 = HTMLElement & {
   requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
 };
@@ -264,7 +262,6 @@ const 启动同会话全屏策略 = (
       historyCleanupTimer = null;
     }
     document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    video.removeEventListener("webkitendfullscreen", handleWebkitEndFullscreen);
     video.removeEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
     unlockScreenOrientation();
     if (
@@ -307,10 +304,6 @@ const 启动同会话全屏策略 = (
       请求关闭查看器();
     }
   };
-  const handleWebkitEndFullscreen = (): void => {
-    cleanup();
-    请求关闭查看器();
-  };
   const pushMediaHistoryEntry = (): void => {
     if (
       typeof window === "undefined" ||
@@ -336,32 +329,25 @@ const 启动同会话全屏策略 = (
 
   container.dataset.videoOrientation = videoOrientation ?? "natural";
   document.addEventListener("fullscreenchange", handleFullscreenChange);
-  video.addEventListener("webkitendfullscreen", handleWebkitEndFullscreen);
   video.addEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
   pushMediaHistoryEntry();
 
+  /**
+   * 查看器 overlay 本身已经是应用 owner 的全屏表面。
+   * 标准 Fullscreen API 可用时进一步接管系统级展示；不可用时就停留在同一 overlay，
+   * 不能再退回原生 video controller，否则移动端会把会话 owner 让给浏览器。
+   */
+  startPlayback();
   if (typeof container.requestFullscreen === "function") {
-    startPlayback();
     void container
       .requestFullscreen({ navigationUI: "hide" })
       .then(() => {
         lockScreenOrientation();
         startPlayback();
       })
-      .catch(() => {
-        if (typeof video.webkitEnterFullscreen === "function") {
-          lockScreenOrientation();
-          startPlayback();
-          video.webkitEnterFullscreen();
-        }
-      });
-    return cleanup;
-  }
-
-  if (typeof video.webkitEnterFullscreen === "function") {
+      .catch(() => undefined);
+  } else {
     lockScreenOrientation();
-    startPlayback();
-    video.webkitEnterFullscreen();
   }
 
   return cleanup;

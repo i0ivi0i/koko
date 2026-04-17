@@ -13,27 +13,45 @@ type 假视频探针 = {
   videoWidth: number;
   videoHeight: number;
   duration: number;
+  currentTime: number;
   onloadedmetadata: null | (() => void);
   onloadeddata?: null | (() => void);
+  onseeked?: null | (() => void);
   onerror: null | (() => void);
   load(): void;
 };
 
 function 创建成功探针(): 假视频探针 {
-  return {
+  const probe: 假视频探针 = {
     preload: "",
     src: "",
     readyState: 1,
     videoWidth: 1920,
     videoHeight: 1080,
     duration: 12.5,
+    currentTime: 0,
     onloadedmetadata: null,
     onloadeddata: null,
+    onseeked: null,
     onerror: null,
     load() {
       this.onloadedmetadata?.();
+      this.readyState = 2;
+      this.onloadeddata?.();
     },
   };
+  let 内部当前时间 = 0;
+  Object.defineProperty(probe, "currentTime", {
+    configurable: true,
+    get() {
+      return 内部当前时间;
+    },
+    set(value: number) {
+      内部当前时间 = value;
+      probe.onseeked?.();
+    },
+  });
+  return probe;
 }
 
 describe("视频元数据", () => {
@@ -77,8 +95,10 @@ describe("视频元数据", () => {
       videoWidth: 0,
       videoHeight: 0,
       duration: 0,
+      currentTime: 0,
       onloadedmetadata: null,
       onloadeddata: null,
+      onseeked: null,
       onerror: null,
       load() {
         // 故意不回调，模拟某些浏览器/相册代理文件长时间挂住。
@@ -100,6 +120,60 @@ describe("视频元数据", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("首帧预览会等待可解码画面并采样非零时间点，避免 0 秒黑帧直接当作发送封面", async () => {
+    const revokeObjectUrl = vi.fn();
+    const drawImage = vi.fn();
+    const toDataUrl = vi.fn(() => "data:image/jpeg;base64,preview-frame");
+    const file = new File([new Uint8Array([1, 2, 3])], "cover.mp4", {
+      type: "video/mp4",
+    });
+    const probe = 创建成功探针();
+    probe.readyState = 0;
+    let 内部当前时间 = 0;
+    Object.defineProperty(probe, "currentTime", {
+      configurable: true,
+      get() {
+        return 内部当前时间;
+      },
+      set(value: number) {
+        内部当前时间 = value;
+        probe.onseeked?.();
+      },
+    });
+    probe.load = function () {
+      this.onloadedmetadata?.();
+      this.readyState = 2;
+      this.onloadeddata?.();
+    };
+
+    const result = await 读取视频文件元数据(file, {
+      createObjectUrl: () => "blob:cover.mp4",
+      revokeObjectUrl,
+      createProbeElement: () => probe as unknown as HTMLVideoElement,
+      createCanvasElement: () =>
+        ({
+          width: 0,
+          height: 0,
+          getContext: () =>
+            ({
+              drawImage,
+            }) as unknown as CanvasRenderingContext2D,
+          toDataURL: toDataUrl,
+        }) as unknown as HTMLCanvasElement,
+    });
+
+    expect(result).toEqual({
+      width: 1920,
+      height: 1080,
+      durationSeconds: 12.5,
+      previewUrl: "data:image/jpeg;base64,preview-frame",
+    });
+    expect(内部当前时间).toBeGreaterThan(0);
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(toDataUrl).toHaveBeenCalledWith("image/jpeg", 0.82);
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:cover.mp4");
   });
 
   it("导出的视频 accept 类型保持稳定", () => {

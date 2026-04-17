@@ -519,6 +519,49 @@ describe("媒体查看器适配器", () => {
     );
   });
 
+  it("移动端缺少标准 Fullscreen API 时，会继续停留在应用查看器里而不是逃逸到原生 webkit 全屏旁路", async () => {
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    const webkitEnterFullscreen = vi.fn();
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(
+      ((tagName: string, options?: ElementCreationOptions) => {
+        const element = createElement(tagName, options);
+        if (tagName.toLowerCase() === "video") {
+          Object.assign(element, {
+            play,
+            pause,
+            webkitEnterFullscreen,
+          });
+        }
+        return element;
+      }) as typeof document.createElement
+    );
+
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-overlay-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-overlay-1",
+          src: "blob:http://media.local/mobile-overlay-video-1",
+          posterSrc: "http://media.local/poster-mobile-overlay-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+
+    expect(webkitEnterFullscreen).not.toHaveBeenCalled();
+    expect(document.body.querySelector("[data-media-viewer-mount='video']")).not.toBeNull();
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
+  });
+
   it("竖屏视频进入移动端全屏时锁定 portrait，并在元数据更可信时纠正方向", async () => {
     安装全屏DOM模拟();
     const { lock } = 安装方向模拟();

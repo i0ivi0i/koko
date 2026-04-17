@@ -31,6 +31,21 @@ type 视频元数据依赖 = {
 
 const 默认视频元数据探测超时毫秒 = 10_000;
 
+const 读取预览采样时间 = (durationSeconds: number): number => {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return 0;
+  }
+  /**
+   * 很多手机视频在 0 秒只有黑场或还没解码出有效画面。
+   * 发送侧预览图默认往后采一个轻量时间点，避免把黑帧固化成消息封面。
+   */
+  const 可用末尾 = Math.max(durationSeconds - 0.1, 0);
+  if (可用末尾 <= 0.2) {
+    return 0;
+  }
+  return Math.min(Math.max(durationSeconds * 0.1, 0.35), 1.5, 可用末尾);
+};
+
 export function 解析视频元数据失败代码(error: unknown): string {
   const normalizedMessage =
     error instanceof Error ? error.message.trim().toLowerCase() : String(error ?? "").trim().toLowerCase();
@@ -70,9 +85,14 @@ export async function 读取视频文件元数据(
     typeof HTMLMediaElement === "undefined"
       ? 1
       : HTMLMediaElement.HAVE_METADATA;
+  const 最小当前帧ReadyState =
+    typeof HTMLMediaElement === "undefined"
+      ? 2
+      : HTMLMediaElement.HAVE_CURRENT_DATA;
 
   return await new Promise<视频文件元数据>((resolve, reject) => {
     let settled = false;
+    let 等待Seek完成 = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
     const 生成静态预览图 = (): string | null => {
       if (probe.videoWidth <= 0 || probe.videoHeight <= 0) {
@@ -104,6 +124,8 @@ export async function 读取视频文件元数据(
         timeoutHandle = null;
       }
       probe.onloadedmetadata = null;
+      probe.onloadeddata = null;
+      probe.onseeked = null;
       probe.onerror = null;
       probe.src = "";
       revokeObjectUrl(objectUrl);
@@ -118,7 +140,7 @@ export async function 读取视频文件元数据(
       reject(error);
     };
 
-    probe.onloadedmetadata = () => {
+    const 完成探测 = (): void => {
       if (
         settled ||
         (typeof probe.readyState === "number" && probe.readyState < 最小元数据ReadyState)
@@ -135,19 +157,56 @@ export async function 读取视频文件元数据(
       cleanup();
       resolve(result);
     };
-    probe.onloadeddata = () => {
-      if (settled) {
+
+    const 尝试采样预览帧 = (): void => {
+      if (
+        settled ||
+        等待Seek完成 ||
+        (typeof probe.readyState === "number" && probe.readyState < 最小当前帧ReadyState)
+      ) {
         return;
       }
-      settled = true;
-      const result = {
-        width: probe.videoWidth,
-        height: probe.videoHeight,
-        durationSeconds: probe.duration,
-        previewUrl: 生成静态预览图(),
-      };
-      cleanup();
-      resolve(result);
+      const sampleTime = 读取预览采样时间(probe.duration);
+      if (sampleTime <= 0 || typeof probe.currentTime !== "number") {
+        完成探测();
+        return;
+      }
+      if (Math.abs(probe.currentTime - sampleTime) < 0.05) {
+        完成探测();
+        return;
+      }
+      try {
+        等待Seek完成 = true;
+        probe.currentTime = sampleTime;
+      } catch {
+        等待Seek完成 = false;
+        完成探测();
+      }
+    };
+
+    probe.onloadedmetadata = () => {
+      if (
+        settled ||
+        (typeof probe.readyState === "number" && probe.readyState < 最小元数据ReadyState)
+      ) {
+        return;
+      }
+      if (
+        typeof probe.readyState === "number" &&
+        probe.readyState >= 最小当前帧ReadyState
+      ) {
+        尝试采样预览帧();
+      }
+    };
+    probe.onloadeddata = () => {
+      尝试采样预览帧();
+    };
+    probe.onseeked = () => {
+      if (!等待Seek完成) {
+        return;
+      }
+      等待Seek完成 = false;
+      完成探测();
     };
     probe.onerror = () => {
       const code = 解析视频元数据失败代码(new Error("NotSupportedError"));

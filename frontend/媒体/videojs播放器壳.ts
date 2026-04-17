@@ -23,9 +23,7 @@ type 可请求全屏容器 = HTMLElement & {
   requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
 };
 
-type 可原生全屏视频元素 = HTMLVideoElement & {
-  webkitEnterFullscreen?: () => void;
-};
+type 可原生全屏视频元素 = HTMLVideoElement;
 
 type VideoJs播放器根节点 = {
   provider: HTMLElement;
@@ -327,13 +325,12 @@ export async function 创建VideoJs播放器壳(
       }
       /**
        * 官方文档要求 fullscreen 以 container 为准，而不是 video 元素。
-       * 但移动端原生播放器只要是对同一颗 video 的平台展示策略，仍然算单会话。
+       * 当前浏览器应用化路线里，这个壳只负责 app-owned surface；
+       * 如果标准 Fullscreen API 不可用，就维持当前壳布局，不再逃逸到原生 video controller。
        */
       if (typeof root.container.requestFullscreen === "function") {
         await root.container.requestFullscreen({ navigationUI: "hide" });
-        return;
       }
-      root.video.webkitEnterFullscreen?.();
     },
     读取容器元素() {
       return root.container;
