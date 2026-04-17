@@ -1011,6 +1011,7 @@ export function 创建实时编排测试场景(input: {
   const transportErrors: Array<Record<string, unknown>> = [];
   const recoveryFailures: Array<{ error: unknown; keepRoomVisible: boolean }> = [];
   const followLatestCalls: number[] = [];
+  const realtimeSessionEvents: Array<Record<string, unknown>> = [];
 
   const updateState = (patch: Partial<聊天状态>): void => {
     state = { ...state, ...patch };
@@ -1028,6 +1029,9 @@ export function 创建实时编排测试场景(input: {
     读取实时状态: () => state,
     写入实时状态: updateState,
     接收时间线事实: (event: 房间时间线事件) => roomTimelinePort.send(event),
+    接收实时会话事实: (event: Record<string, unknown>) => {
+      realtimeSessionEvents.push(event);
+    },
     transport,
     roomKernel: roomKernelPort,
     上报Transport异常: async (error: Record<string, unknown>) => {
@@ -1048,6 +1052,7 @@ export function 创建实时编排测试场景(input: {
     transportErrors,
     recoveryFailures,
     followLatestCalls,
+    realtimeSessionEvents,
     deps,
   };
 }

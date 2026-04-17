@@ -346,10 +346,6 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       if (!isInvalidSessionError(error)) {
         throw error;
       }
-      deps.roomKernel.send({
-        type: "RECONNECTING_STARTED",
-        code: "invalid_session",
-      });
       const sessionId = await bootstrapFreshSession();
       return operation(sessionId);
     }
@@ -472,10 +468,6 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     const targetRoomId = roomId.trim();
     invalidSessionRecoveryTask = (async () => {
       try {
-        deps.roomKernel.send({
-          type: "RECONNECTING_STARTED",
-          code: "invalid_session",
-        });
         await bootstrapFreshSession();
         if (targetRoomId) {
           await reloadRoomFromSnapshot(targetRoomId);

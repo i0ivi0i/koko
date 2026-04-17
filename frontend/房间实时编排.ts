@@ -2,6 +2,7 @@ import type { Socket } from "socket.io-client";
 import type { 消息事件 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
 import type { 房间时间线事件 } from "./房间时间线运行时.js";
+import type { 实时会话事件 } from "./实时会话运行时.js";
 import {
   创建乐观房间消息,
 } from "./房间时间线.js";
@@ -44,6 +45,7 @@ export interface 房间实时编排依赖 {
   读取实时状态(): 实时编排状态;
   写入实时状态(patch: Partial<实时编排状态>): void;
   接收时间线事实(event: 房间时间线事件): void;
+  接收实时会话事实(event: 实时会话事件): void;
   transport: 前端传输端口;
   roomKernel: 房间内核端口;
   上报Transport异常(error: Transport异常): Promise<void>;
@@ -89,6 +91,10 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     deps.接收时间线事实(event);
   }
 
+  function 接收实时会话事实(event: 实时会话事件): void {
+    deps.接收实时会话事实(event);
+  }
+
   function asRecoveryFailure(error: unknown): 恢复失败 {
     if (error instanceof Http接口错误) {
       return error;
@@ -131,6 +137,10 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     if (!isInvalidSessionError(error)) {
       return;
     }
+    接收实时会话事实({
+      type: "SOCKET_DISCONNECTED",
+      code: "invalid_session",
+    });
     await deps.上报Transport异常({
       kind: "invalid_session",
     });
@@ -138,6 +148,10 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
 
   async function handleControlResult(control: 控制面结果): Promise<void> {
     if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
+      接收实时会话事实({
+        type: "SUBSCRIPTION_ESTABLISHED",
+        latestEventPosition: control.latest_event_position,
+      });
       deps.roomKernel.send({
         type: "SUBSCRIPTION_ESTABLISHED",
         latestEventPosition: control.latest_event_position,
@@ -163,6 +177,10 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     }
 
     if (control.code === "invalid_session") {
+      接收实时会话事实({
+        type: "SOCKET_DISCONNECTED",
+        code: "invalid_session",
+      });
       await deps.上报Transport异常({
         kind: "invalid_session",
         roomId: 读取实时状态().roomId,
@@ -186,6 +204,12 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     });
     socket.on("connect_error", (error: unknown) => {
       void handleConnectError(error);
+    });
+    socket.on("disconnect", (reason: string) => {
+      接收实时会话事实({
+        type: "SOCKET_DISCONNECTED",
+        code: String(reason || "disconnect"),
+      });
     });
     socket.on("room_events", (events: { latest_event_position: number; events: 消息事件[] }) => {
       applyAuthoritativeEvents(events.events, events.latest_event_position);
@@ -220,6 +244,9 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     if (!读取实时状态().roomId || !realtimeSocket) {
       return;
     }
+    接收实时会话事实({
+      type: "SUBSCRIPTION_STARTED",
+    });
     deps.roomKernel.send({ type: "SUBSCRIPTION_STARTED" });
     realtimeSocket.emit("subscribe_room_stream", {
       room_id: 读取实时状态().roomId,

@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   创建传输错误,
@@ -7,6 +9,13 @@ import {
   读取房间实时编排工厂,
 } from "./common/聊天测试支架";
 describe("房间实时编排", () => {
+  it("socket 回调不会直接宣布 reconnecting，而是先回灌给 realtime owner", () => {
+    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+
+    expect(source).toContain("接收实时会话事实");
+    expect(source).not.toContain('type: "RECONNECTING_STARTED"');
+  });
+
   it("connect_error invalid_session 只上报 transport 异常，不自己刷新会话", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({
@@ -21,6 +30,10 @@ describe("房间实时编排", () => {
     场景.transport.socket.trigger("connect_error", 创建传输错误(401, "invalid_session"));
 
     expect(场景.transportErrors).toEqual([{ kind: "invalid_session" }]);
+    expect(场景.realtimeSessionEvents).toContainEqual({
+      type: "SOCKET_DISCONNECTED",
+      code: "invalid_session",
+    });
     expect(场景.transport.bootstrapTokens).toEqual([]);
     expect(场景.recoveryFailures).toEqual([]);
   });
@@ -45,6 +58,10 @@ describe("房间实时编排", () => {
     编排.ensureRealtimeSocket("s-test");
     编排.subscribeRoom(1);
 
+    expect(场景.realtimeSessionEvents).toContainEqual({
+      type: "SUBSCRIPTION_ESTABLISHED",
+      latestEventPosition: 5,
+    });
     expect(场景.读取状态().latestEventPosition).toBe(5);
     expect(场景.读取状态().recoveryState).toBe("idle");
   });

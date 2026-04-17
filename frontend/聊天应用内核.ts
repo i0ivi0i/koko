@@ -59,6 +59,11 @@ import {
   type 房间时间线事件,
 } from "./房间时间线运行时.js";
 import {
+  创建实时会话Actor,
+  type 实时会话事件,
+  type 实时会话快照,
+} from "./实时会话运行时.js";
+import {
   type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
@@ -197,6 +202,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private readonly appLifecycle = 创建应用生命周期Actor();
   private readonly roomViewport = 创建房间视口Actor();
   private readonly roomTimeline = 创建房间时间线Actor();
+  private readonly realtimeSession = 创建实时会话Actor();
   private 会话状态: 聊天会话状态;
   private 输入状态: 聊天输入状态;
   private 时间线状态: 聊天时间线状态;
@@ -397,6 +403,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.销毁();
+    this.realtimeSession.stop();
     this.roomTimeline.stop();
     this.roomViewport.stop();
     this.appLifecycle.stop();
@@ -576,6 +583,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         读取实时状态: () => this.读取实时编排状态(),
         写入实时状态: (patch) => this.写入实时编排状态(patch),
         接收时间线事实: (event) => this.接收时间线事实(event),
+        接收实时会话事实: (event) => this.接收实时会话事实(event),
         transport: this.transport,
         roomKernel: {
           send: (event) => this.发送房间事件(event),
@@ -614,6 +622,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           snapshot: command.snapshot,
         });
         this.同步应用生命周期快照并执行副作用();
+        this.接收实时会话事实({
+          type: "LIFECYCLE_POLICY_CHANGED",
+          heavyWorkPolicy: this.appLifecycle.snapshot().heavyWorkPolicy,
+        });
         return;
       case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
         this.appLifecycle.send({
@@ -628,12 +640,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
          * 这里先释放消息流自动播 owner，再排空离线任务，避免后台还挂着轻量视频预览。
          */
         this.媒体编排.释放消息流自动播Owner();
-        await this.尝试排空待补发任务();
+        this.接收实时会话事实({ type: "BACKGROUND_DRAIN_REQUESTED" });
         return;
       case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":
         this.appLifecycle.send({ type: "SERVICE_WORKER_CONTROLLER_READY" });
         this.同步应用生命周期快照并执行副作用();
-        await this.尝试排空待补发任务();
+        this.接收实时会话事实({ type: "BACKGROUND_DRAIN_REQUESTED" });
         return;
       case "PLATFORM_OFFLINE_STATUS_CHANGED":
         this.appLifecycle.send({
@@ -642,6 +654,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         });
         this.同步应用生命周期快照并执行副作用();
         this.媒体编排.处理平台在线状态变化(command.online);
+        this.接收实时会话事实({
+          type: "OFFLINE_STATUS_CHANGED",
+          online: command.online,
+        });
         return;
     }
   }
@@ -716,6 +732,38 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         type: "LATEST_EVENT_ADVANCED",
         latestEventPosition: snapshot.latestEventPosition,
       });
+    }
+  }
+
+  private 接收实时会话事实(event: 实时会话事件): void {
+    const before = this.realtimeSession.getSnapshot();
+    this.realtimeSession.send(event);
+    void this.同步实时会话快照并执行副作用(before);
+  }
+
+  private async 同步实时会话快照并执行副作用(
+    before: 实时会话快照 = this.realtimeSession.getSnapshot()
+  ): Promise<void> {
+    const snapshot = this.realtimeSession.getSnapshot().context;
+    const beforeContext = before.context;
+
+    if (
+      snapshot.needsResubscribe &&
+      !beforeContext.needsResubscribe &&
+      snapshot.roomId &&
+      snapshot.sessionId
+    ) {
+      this.发送房间事件({
+        type: "RECONNECTING_STARTED",
+        code: snapshot.lastDisconnectCode || "reconnect",
+      });
+      this.实时编排端口.ensureRealtimeSocket(snapshot.sessionId);
+      this.实时编排端口.subscribeRoom(snapshot.latestEventPosition);
+    }
+
+    if (snapshot.backgroundDrainPending && !beforeContext.backgroundDrainPending) {
+      await this.尝试排空待补发任务();
+      this.realtimeSession.send({ type: "BACKGROUND_DRAIN_FINISHED" });
     }
   }
 
@@ -970,8 +1018,33 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 因此只要发了房间事件，就必须顺手请求一次壳层重渲染，不能再指望别的本地 patch 帮它“顺带刷新”。
    */
   private 发送房间事件(event: 房间内核事件): void {
+    const realtimeBefore = this.realtimeSession.getSnapshot();
+    const 当前房间壳 = this.读取房间壳外观();
+    if (event.type === "SNAPSHOT_LOADED") {
+      this.realtimeSession.send({
+        type: "CONNECT_REQUESTED",
+        roomId: event.roomId,
+        sessionId: 当前房间壳.sessionId,
+        latestEventPosition: event.latestEventPosition,
+      });
+    } else if (event.type === "SESSION_REFRESHED" && 当前房间壳.roomId) {
+      this.realtimeSession.send({
+        type: "CONNECT_REQUESTED",
+        roomId: 当前房间壳.roomId,
+        sessionId: event.sessionId,
+        latestEventPosition: 当前房间壳.latestEventPosition,
+      });
+    } else if (event.type === "SUBSCRIPTION_ESTABLISHED") {
+      this.realtimeSession.send({
+        type: "SUBSCRIPTION_ESTABLISHED",
+        latestEventPosition: event.latestEventPosition,
+      });
+    } else if (event.type === "SOFT_LEAVE_REQUESTED") {
+      this.realtimeSession.send({ type: "ROOM_VIEW_EXITED" });
+    }
     this.roomKernel.send(event);
     this.deps.渲染桥.请求重渲染();
+    void this.同步实时会话快照并执行副作用(realtimeBefore);
   }
 
   private 回填房间壳补丁(): 房间壳补丁 {
