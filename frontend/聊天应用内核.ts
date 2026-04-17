@@ -34,6 +34,7 @@ import type { 消息事件 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
 import type { 前端存储端口 } from "./存储.js";
 import {
+  初始聊天运行时状态,
   初始聊天会话状态,
   初始聊天时间线状态,
   初始聊天流程状态,
@@ -42,10 +43,12 @@ import {
   type 聊天会话状态,
   type 聊天时间线状态,
   type 聊天流程状态,
+  type 聊天运行时状态,
   type 聊天状态,
   type 聊天视口状态,
   type 聊天输入状态,
 } from "./状态.js";
+import { 创建应用生命周期Actor } from "./应用生命周期.js";
 import {
   type 消息视频自动播候选,
   type 媒体附件草稿,
@@ -82,7 +85,12 @@ type 房间壳补丁 = Pick<
 >;
 
 type 聊天本地状态补丁 = Partial<
-  聊天会话状态 & 聊天输入状态 & 聊天时间线状态 & 聊天视口状态 & 聊天流程状态
+  聊天会话状态 &
+    聊天输入状态 &
+    聊天时间线状态 &
+    聊天视口状态 &
+    聊天流程状态 &
+    聊天运行时状态
 >;
 
 export type 聊天应用命令 =
@@ -168,21 +176,24 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private readonly roomKernel = 创建房间内核();
 
   /**
-   * 聊天主链本地状态现在按职责拆成五个 slice：
+   * 聊天主链本地状态现在按职责拆成六个 slice：
    * - 会话：浏览器端恢复锚点；
    * - 输入：草稿与输入框；
    * - 时间线：消息数组与历史分页；
    * - 视口：已读与滚动协作；
    * - 流程：短生命周期忙闲位。
+   * - 运行时：浏览器生命周期/在线状态/更新待接管。
    *
    * room/session/viewportMode 这类房间壳外观继续只从 room kernel 派生，
    * 不再复制进一个共享 `chatState` 里让多个 owner 共写。
    */
+  private readonly appLifecycle = 创建应用生命周期Actor();
   private 会话状态: 聊天会话状态;
   private 输入状态: 聊天输入状态;
   private 时间线状态: 聊天时间线状态;
   private 视口状态: 聊天视口状态;
   private 流程状态: 聊天流程状态;
+  private 运行时状态: 聊天运行时状态;
 
   /**
    * transport / storage 现在都属于聊天内核依赖。
@@ -218,6 +229,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.时间线状态 = { ...初始聊天时间线状态 };
     this.视口状态 = { ...初始聊天视口状态 };
     this.流程状态 = { ...初始聊天流程状态 };
+    this.运行时状态 = { ...初始聊天运行时状态 };
     this.roomScroller = new 房间滚动器(deps.滚动宿主, {
       读取状态: () => this.读取滚动观察状态(),
       更新状态: (patch) => this.写入滚动观察状态(patch),
@@ -369,6 +381,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.销毁();
+    this.appLifecycle.stop();
   }
 
   private 标记用户滚动意图(): void {
@@ -497,18 +510,18 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private async 处理平台桥接命令(command: 平台桥接命令): Promise<void> {
     switch (command.type) {
       case "PLATFORM_LIFECYCLE_CHANGED":
-        /**
-         * 这一阶段先只完成“平台事件统一过 AppRuntime 再进内核”的边界迁移。
-         * 生命周期策略 owner 会在后续专门的 AppLifecycleActor 里落地，这里不提前散落策略判断。
-         */
-        void command.snapshot;
+        this.appLifecycle.send({
+          type: "LIFECYCLE_SNAPSHOT_CHANGED",
+          snapshot: command.snapshot,
+        });
+        this.同步应用生命周期快照();
         return;
       case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
-        /**
-         * 更新就绪目前只保留为稳定应用命令，暂不在聊天内核里直接做业务裁决。
-         * 后续如果要挂到统一生命周期 actor，也只需要在那一处接住这条命令。
-         */
-        void command.scope;
+        this.appLifecycle.send({
+          type: "SERVICE_WORKER_UPDATE_READY",
+          scope: command.scope,
+        });
+        this.同步应用生命周期快照();
         return;
       case "PLATFORM_BACKGROUND_DRAIN_REQUESTED":
         /**
@@ -519,11 +532,37 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         await this.尝试排空待补发任务();
         return;
       case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":
+        this.appLifecycle.send({ type: "SERVICE_WORKER_CONTROLLER_READY" });
+        this.同步应用生命周期快照();
         await this.尝试排空待补发任务();
         return;
       case "PLATFORM_OFFLINE_STATUS_CHANGED":
+        this.appLifecycle.send({
+          type: "OFFLINE_STATUS_CHANGED",
+          online: command.online,
+        });
+        this.同步应用生命周期快照();
         this.媒体编排.处理平台在线状态变化(command.online);
         return;
+    }
+  }
+
+  /**
+   * 生命周期 actor 只给出运行时真相。
+   * 真正如何刷新快照、是否触发前端副作用，仍由聊天应用内核来编排。
+   */
+  private 同步应用生命周期快照(): void {
+    const snapshot = this.appLifecycle.snapshot();
+    this.应用本地状态补丁({
+      lifecycleVisibility: snapshot.visibility,
+      lifecyclePhase: snapshot.phase,
+      heavyWorkPolicy: snapshot.heavyWorkPolicy,
+      swUpdateState: snapshot.updateState,
+      online: snapshot.online,
+    });
+
+    if (snapshot.heavyWorkPolicy !== "normal") {
+      this.媒体编排.释放消息流自动播Owner();
     }
   }
 
@@ -581,6 +620,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     const 时间线补丁: Partial<聊天时间线状态> = {};
     const 视口补丁: Partial<聊天视口状态> = {};
     const 流程补丁: Partial<聊天流程状态> = {};
+    const 运行时补丁: Partial<聊天运行时状态> = {};
 
     if (Object.hasOwn(patch, "deviceAnonymousToken")) {
       会话补丁.deviceAnonymousToken = patch.deviceAnonymousToken ?? "";
@@ -634,6 +674,21 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     if (Object.hasOwn(patch, "pending")) {
       流程补丁.pending = patch.pending ?? false;
     }
+    if (Object.hasOwn(patch, "lifecycleVisibility")) {
+      运行时补丁.lifecycleVisibility = patch.lifecycleVisibility ?? "visible";
+    }
+    if (Object.hasOwn(patch, "lifecyclePhase")) {
+      运行时补丁.lifecyclePhase = patch.lifecyclePhase ?? "active";
+    }
+    if (Object.hasOwn(patch, "heavyWorkPolicy")) {
+      运行时补丁.heavyWorkPolicy = patch.heavyWorkPolicy ?? "normal";
+    }
+    if (Object.hasOwn(patch, "swUpdateState")) {
+      运行时补丁.swUpdateState = patch.swUpdateState ?? "idle";
+    }
+    if (Object.hasOwn(patch, "online")) {
+      运行时补丁.online = patch.online ?? true;
+    }
 
     if (Object.keys(会话补丁).length > 0) {
       this.会话状态 = { ...this.会话状态, ...会话补丁 };
@@ -655,6 +710,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       this.流程状态 = { ...this.流程状态, ...流程补丁 };
       写入了本地补丁 = true;
     }
+    if (Object.keys(运行时补丁).length > 0) {
+      this.运行时状态 = { ...this.运行时状态, ...运行时补丁 };
+      写入了本地补丁 = true;
+    }
 
     if (!写入了本地补丁) {
       return false;
@@ -673,6 +732,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       ...this.时间线状态,
       ...this.视口状态,
       ...this.流程状态,
+      ...this.运行时状态,
       ...this.回填房间壳补丁(),
     };
   }

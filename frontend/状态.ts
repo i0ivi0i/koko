@@ -76,6 +76,23 @@ export interface 聊天流程状态 {
 }
 
 /**
+ * 运行时 slice 只保存浏览器应用本地真相：
+ * - 生命周期可见性与阶段；
+ * - 重型工作降载策略；
+ * - SW 更新待接管状态；
+ * - 当前在线状态。
+ *
+ * 它不承载消息、成员、权限这些业务真相。
+ */
+export interface 聊天运行时状态 {
+  lifecycleVisibility: "visible" | "hidden";
+  lifecyclePhase: "active" | "background" | "page_hidden" | "frozen" | "resumed";
+  heavyWorkPolicy: "normal" | "reduced" | "suspended";
+  swUpdateState: "idle" | "waiting_refresh";
+  online: boolean;
+}
+
+/**
  * `聊天状态` 现在只保留给壳层快照和测试支架使用。
  * 真正的 owner 不应再拿整份大对象直接共写，而是只消费自己负责的 slice。
  */
@@ -84,7 +101,8 @@ export interface 聊天状态
     聊天输入状态,
     聊天时间线状态,
     聊天视口状态,
-    聊天流程状态 {
+    聊天流程状态,
+    聊天运行时状态 {
   /** 当前展示给用户和其他成员看的花名。 */
   displayAlias: string;
   /** 当前 bootstrap 返回的权威会话锚点；其来源已统一收口到房间编排内核。 */
@@ -143,12 +161,21 @@ export const 初始聊天流程状态: 聊天流程状态 = {
   pending: false,
 };
 
+export const 初始聊天运行时状态: 聊天运行时状态 = {
+  lifecycleVisibility: "visible",
+  lifecyclePhase: "active",
+  heavyWorkPolicy: "normal",
+  swUpdateState: "idle",
+  online: true,
+};
+
 export const 初始聊天状态: 聊天状态 = {
   ...初始聊天会话状态,
   ...初始聊天输入状态,
   ...初始聊天时间线状态,
   ...初始聊天视口状态,
   ...初始聊天流程状态,
+  ...初始聊天运行时状态,
   displayAlias: "",
   sessionId: "",
   roomId: "",
