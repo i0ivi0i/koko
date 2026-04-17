@@ -1,5 +1,4 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
-import type { 房间视口模式 } from "./状态.js";
 
 export type 房间阶段 =
   | "引导中"
@@ -14,15 +13,15 @@ export type 房间阶段 =
   | "已离房";
 
 /**
- * 房间内核上下文只保存“前端同步编排需要知道的壳层事实”。
+ * 房间内核只保存“房间会话编排基线”。
  *
- * 这里不是后端领域真相：
- * - 不裁决成员资格；
- * - 不裁决权限；
- * - 不裁决消息是否成立。
+ * 它负责回答：
+ * - 当前引导 / 入房 / 恢复 / 重连处在哪个阶段；
+ * - 当前壳层应该拿哪一个房间基线去恢复；
+ * - 当前恢复错误码是什么。
  *
- * 它只为前端回答：
- * “当前房间编排处在哪个阶段，以及壳层应该展示成什么样子。”
+ * 它明确不再承载视口、滚动、未读候选这类浏览器运行时真相，
+ * 那些裁决已经收口到 RoomViewportActor。
  */
 export interface 房间内核上下文 {
   sessionId: string;
@@ -30,9 +29,6 @@ export interface 房间内核上下文 {
   roomId: string;
   roomDisplayTitle: string;
   latestEventPosition: number;
-  viewportMode: 房间视口模式;
-  candidateReadAnchorPosition: number | null;
-  hasUnreadNewerMessages: boolean;
   lastRecoveryErrorCode: string;
 }
 
@@ -60,14 +56,9 @@ export type 房间内核事件 =
       roomId: string;
       roomDisplayTitle: string;
       latestEventPosition: number;
-      viewportMode?: 房间视口模式;
     }
   | {
       type: "LATEST_EVENT_ADVANCED";
-      latestEventPosition: number;
-    }
-  | {
-      type: "AUTHORITATIVE_EVENTS_ARRIVED";
       latestEventPosition: number;
     }
   | {
@@ -88,18 +79,6 @@ export type 房间内核事件 =
     }
   | {
       type: "SOFT_LEAVE_REQUESTED";
-    }
-  | {
-      type: "INITIAL_SETTLE_COMPLETED";
-      mode: 房间视口模式;
-    }
-  | {
-      type: "VIEWPORT_OBSERVED";
-      candidateReadAnchorPosition: number | null;
-      isNearBottom: boolean;
-    }
-  | {
-      type: "USER_JUMPED_TO_LATEST";
     };
 
 const 房间编排机 = createMachine(
@@ -116,9 +95,6 @@ const 房间编排机 = createMachine(
       roomId: "",
       roomDisplayTitle: "",
       latestEventPosition: 0,
-      viewportMode: "离底浏览",
-      candidateReadAnchorPosition: null,
-      hasUnreadNewerMessages: false,
       lastRecoveryErrorCode: "",
     },
     states: {
@@ -204,18 +180,6 @@ const 房间编排机 = createMachine(
           LATEST_EVENT_ADVANCED: {
             actions: "推进最新事件位置",
           },
-          AUTHORITATIVE_EVENTS_ARRIVED: {
-            actions: "处理权威新消息到达",
-          },
-          INITIAL_SETTLE_COMPLETED: {
-            actions: "记录首屏稳定完成",
-          },
-          VIEWPORT_OBSERVED: {
-            actions: "记录视口观测结果",
-          },
-          USER_JUMPED_TO_LATEST: {
-            actions: "切到贴底跟随",
-          },
           SUBSCRIPTION_STARTED: {
             target: "订阅中",
           },
@@ -247,18 +211,6 @@ const 房间编排机 = createMachine(
         on: {
           LATEST_EVENT_ADVANCED: {
             actions: "推进最新事件位置",
-          },
-          AUTHORITATIVE_EVENTS_ARRIVED: {
-            actions: "处理权威新消息到达",
-          },
-          INITIAL_SETTLE_COMPLETED: {
-            actions: "记录首屏稳定完成",
-          },
-          VIEWPORT_OBSERVED: {
-            actions: "记录视口观测结果",
-          },
-          USER_JUMPED_TO_LATEST: {
-            actions: "切到贴底跟随",
           },
           SUBSCRIPTION_ESTABLISHED: {
             target: "在线会话中",
@@ -293,18 +245,6 @@ const 房间编排机 = createMachine(
           LATEST_EVENT_ADVANCED: {
             actions: "推进最新事件位置",
           },
-          AUTHORITATIVE_EVENTS_ARRIVED: {
-            actions: "处理权威新消息到达",
-          },
-          INITIAL_SETTLE_COMPLETED: {
-            actions: "记录首屏稳定完成",
-          },
-          VIEWPORT_OBSERVED: {
-            actions: "记录视口观测结果",
-          },
-          USER_JUMPED_TO_LATEST: {
-            actions: "切到贴底跟随",
-          },
           RECONNECTING_STARTED: {
             target: "重连中",
             actions: "标记重连中",
@@ -334,18 +274,6 @@ const 房间编排机 = createMachine(
           LATEST_EVENT_ADVANCED: {
             actions: "推进最新事件位置",
           },
-          AUTHORITATIVE_EVENTS_ARRIVED: {
-            actions: "处理权威新消息到达",
-          },
-          INITIAL_SETTLE_COMPLETED: {
-            actions: "记录首屏稳定完成",
-          },
-          VIEWPORT_OBSERVED: {
-            actions: "记录视口观测结果",
-          },
-          USER_JUMPED_TO_LATEST: {
-            actions: "切到贴底跟随",
-          },
           SNAPSHOT_LOADED: {
             target: "房间就绪",
             actions: "写入房间快照",
@@ -365,6 +293,10 @@ const 房间编排机 = createMachine(
               actions: "清空房间并记录失败",
             },
           ],
+          SOFT_LEAVE_REQUESTED: {
+            target: "已离房",
+            actions: "清空当前房间",
+          },
           SESSION_REFRESHED: {
             actions: "写入刷新身份",
           },
@@ -428,11 +360,10 @@ const 房间编排机 = createMachine(
           sessionId: event.sessionId,
           displayAlias: event.displayAlias,
           roomId: event.roomId,
-          roomDisplayTitle: event.roomId.trim().length > 0 ? context.roomDisplayTitle : "",
-          latestEventPosition: event.roomId.trim().length > 0 ? context.latestEventPosition : 0,
-          viewportMode: event.roomId.trim().length > 0 ? context.viewportMode : "离底浏览",
-          candidateReadAnchorPosition: event.roomId.trim().length > 0 ? context.candidateReadAnchorPosition : null,
-          hasUnreadNewerMessages: event.roomId.trim().length > 0 ? context.hasUnreadNewerMessages : false,
+          roomDisplayTitle:
+            event.roomId.trim().length > 0 ? context.roomDisplayTitle : "",
+          latestEventPosition:
+            event.roomId.trim().length > 0 ? context.latestEventPosition : 0,
           lastRecoveryErrorCode: "",
         };
       }),
@@ -444,9 +375,6 @@ const 房间编排机 = createMachine(
           roomId: "",
           roomDisplayTitle: "",
           latestEventPosition: 0,
-          viewportMode: "离底浏览",
-          candidateReadAnchorPosition: null,
-          hasUnreadNewerMessages: false,
           lastRecoveryErrorCode: event.code,
         };
       }),
@@ -467,9 +395,6 @@ const 房间编排机 = createMachine(
           roomId: event.roomId,
           roomDisplayTitle: event.roomDisplayTitle,
           latestEventPosition: event.latestEventPosition,
-          viewportMode: event.viewportMode ?? "离底浏览",
-          candidateReadAnchorPosition: null,
-          hasUnreadNewerMessages: false,
           lastRecoveryErrorCode: "",
         };
       }),
@@ -479,7 +404,6 @@ const 房间编排机 = createMachine(
         }
         return {
           latestEventPosition: event.latestEventPosition,
-          hasUnreadNewerMessages: false,
           lastRecoveryErrorCode: "",
         };
       }),
@@ -488,59 +412,13 @@ const 房间编排机 = createMachine(
           return {};
         }
         return {
-          latestEventPosition: Math.max(context.latestEventPosition, event.latestEventPosition),
+          latestEventPosition: Math.max(
+            context.latestEventPosition,
+            event.latestEventPosition
+          ),
           lastRecoveryErrorCode: "",
         };
       }),
-      处理权威新消息到达: assign(({ event, context }) => {
-        if (event.type !== "AUTHORITATIVE_EVENTS_ARRIVED") {
-          return {};
-        }
-        const nextLatestEventPosition = Math.max(context.latestEventPosition, event.latestEventPosition);
-        return {
-          latestEventPosition: nextLatestEventPosition,
-          hasUnreadNewerMessages:
-            context.viewportMode === "贴底跟随"
-              ? false
-              : event.latestEventPosition > context.latestEventPosition,
-          lastRecoveryErrorCode: "",
-        };
-      }),
-      记录首屏稳定完成: assign(({ event }) => {
-        if (event.type !== "INITIAL_SETTLE_COMPLETED") {
-          return {};
-        }
-        return {
-          viewportMode: event.mode,
-          hasUnreadNewerMessages: false,
-        };
-      }),
-      记录视口观测结果: assign(({ event, context }) => {
-        if (event.type !== "VIEWPORT_OBSERVED") {
-          return {};
-        }
-        const nextCandidate =
-          event.candidateReadAnchorPosition === null
-            ? context.candidateReadAnchorPosition
-            : context.candidateReadAnchorPosition === null
-            ? event.candidateReadAnchorPosition
-            : Math.max(context.candidateReadAnchorPosition, event.candidateReadAnchorPosition);
-        let nextViewportMode = context.viewportMode;
-        if (event.isNearBottom) {
-          nextViewportMode = "贴底跟随";
-        } else if (context.viewportMode === "贴底跟随") {
-          nextViewportMode = "离底浏览";
-        }
-        return {
-          candidateReadAnchorPosition: nextCandidate,
-          viewportMode: nextViewportMode,
-          hasUnreadNewerMessages: nextViewportMode === "贴底跟随" ? false : context.hasUnreadNewerMessages,
-        };
-      }),
-      切到贴底跟随: assign(() => ({
-        viewportMode: "贴底跟随",
-        hasUnreadNewerMessages: false,
-      })),
       标记重连中: assign(({ event }) => {
         if (event.type !== "RECONNECTING_STARTED") {
           return {};
@@ -565,9 +443,6 @@ const 房间编排机 = createMachine(
           roomId: "",
           roomDisplayTitle: "",
           latestEventPosition: 0,
-          viewportMode: "离底浏览",
-          candidateReadAnchorPosition: null,
-          hasUnreadNewerMessages: false,
           lastRecoveryErrorCode: event.code,
         };
       }),
@@ -575,9 +450,6 @@ const 房间编排机 = createMachine(
         roomId: "",
         roomDisplayTitle: "",
         latestEventPosition: 0,
-        viewportMode: "离底浏览",
-        candidateReadAnchorPosition: null,
-        hasUnreadNewerMessages: false,
         lastRecoveryErrorCode: "",
       })),
     },
@@ -594,15 +466,12 @@ export interface 房间壳外观 {
   roomId: string;
   roomDisplayTitle: string;
   latestEventPosition: number;
-  viewportMode: 房间视口模式;
-  candidateReadAnchorPosition: number | null;
-  hasUnreadNewerMessages: boolean;
   lastRecoveryErrorCode: string;
 }
 
 /**
- * 壳层只消费这个稳定外观，不需要知道状态机内部细节。
- * 以后换模板、换主题、换前端框架时，仍然只要围绕这层外观重新适配。
+ * 壳层只读取这个稳定外观：
+ * 房间阶段和恢复语义可以继续演进，但房间壳补丁的消费面保持窄而稳。
  */
 export function 派生房间壳外观(snapshot: 房间内核快照): 房间壳外观 {
   const phase = snapshot.value as 房间阶段;
@@ -612,16 +481,13 @@ export function 派生房间壳外观(snapshot: 房间内核快照): 房间壳�
       phase === "重连中"
         ? "reconnecting"
         : phase === "可重试失败"
-        ? "retryable_failure"
-        : "idle",
+          ? "retryable_failure"
+          : "idle",
     sessionId: snapshot.context.sessionId,
     displayAlias: snapshot.context.displayAlias,
     roomId: snapshot.context.roomId,
     roomDisplayTitle: snapshot.context.roomDisplayTitle,
     latestEventPosition: snapshot.context.latestEventPosition,
-    viewportMode: snapshot.context.viewportMode,
-    candidateReadAnchorPosition: snapshot.context.candidateReadAnchorPosition,
-    hasUnreadNewerMessages: snapshot.context.hasUnreadNewerMessages,
     lastRecoveryErrorCode: snapshot.context.lastRecoveryErrorCode,
   };
 }

@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { 聊天状态 } from "../状态";
 
@@ -56,6 +58,13 @@ function 创建消息节点(eventPosition: number, top: number, bottom: number):
 }
 
 describe("房间滚动器", () => {
+  it("不再直接在滚动器里请求更早历史或提交候选已读", () => {
+    const source = readFileSync(resolve(process.cwd(), "房间滚动器.ts"), "utf8");
+
+    expect(source).not.toContain("this.deps.请求更早历史");
+    expect(source).not.toContain("this.deps.采样阅读锚点");
+  });
+
   it("首屏恢复期间的程序滚动不会立刻采样成用户已读", async () => {
     const { 房间滚动器 } = await import("../房间滚动器");
 
@@ -362,7 +371,7 @@ describe("房间滚动器", () => {
       historyLoadThrottleUntil: 0,
     };
     const 容器 = 创建滚动容器();
-    const 已读采样 = vi.fn();
+    const 滚动观测 = vi.fn();
     let nextAnimationFrameId = 1;
     const rafCallbacks = new Map<number, FrameRequestCallback>();
     const flushAnimationFrame = () => {
@@ -414,22 +423,28 @@ describe("房间滚动器", () => {
 
       const 滚动器 = new 房间滚动器(主机, {
         读取状态: () => 状态,
-        更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
         查询滚动容器: () => 容器,
         查询消息节点: () => [长消息节点],
-        请求更早历史: vi.fn(),
-        采样阅读锚点: 已读采样,
+        上报滚动观测: 滚动观测,
         读取是否需要恢复补锚: () => false,
         消耗恢复补锚标记: () => {},
         报告首屏稳定完成: vi.fn(),
       });
 
       滚动器.处理滚动事件(容器);
-      expect(已读采样).not.toHaveBeenCalled();
+      expect(滚动观测).toHaveBeenCalledWith({
+        candidateReadAnchorPosition: null,
+        isNearBottom: false,
+        reachedTop: false,
+      });
 
       flushAnimationFrame();
 
-      expect(已读采样).toHaveBeenCalledWith(7);
+      expect(滚动观测).toHaveBeenLastCalledWith({
+        candidateReadAnchorPosition: 7,
+        isNearBottom: false,
+        reachedTop: false,
+      });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -460,7 +475,7 @@ describe("房间滚动器", () => {
     };
     const 容器 = 创建滚动容器();
     容器.scrollTop = 48;
-    const 已读采样 = vi.fn();
+    const 滚动观测 = vi.fn();
     let nextAnimationFrameId = 1;
     const rafCallbacks = new Map<number, FrameRequestCallback>();
     const flushAnimationFrame = () => {
@@ -495,11 +510,9 @@ describe("房间滚动器", () => {
     try {
       const 滚动器 = new 房间滚动器(主机, {
         读取状态: () => 状态,
-        更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
         查询滚动容器: () => 容器,
         查询消息节点: () => [创建消息节点(7, 40, 140)],
-        请求更早历史: vi.fn(),
-        采样阅读锚点: 已读采样,
+        上报滚动观测: 滚动观测,
         读取是否需要恢复补锚: () => false,
         消耗恢复补锚标记: () => {},
         报告首屏稳定完成: vi.fn(),
@@ -508,13 +521,16 @@ describe("房间滚动器", () => {
       滚动器.处理滚动事件(容器);
       滚动器.处理滚动事件(容器);
 
-      expect(已读采样).not.toHaveBeenCalled();
+      expect(滚动观测).toHaveBeenCalledTimes(2);
       expect(rafCallbacks.size).toBe(1);
 
       flushAnimationFrame();
 
-      expect(已读采样).toHaveBeenCalledTimes(1);
-      expect(已读采样).toHaveBeenCalledWith(7);
+      expect(
+        滚动观测.mock.calls.filter(
+          ([payload]) => payload.candidateReadAnchorPosition === 7
+        )
+      ).toHaveLength(1);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -730,8 +746,7 @@ describe("房间滚动器", () => {
     };
     const 容器 = 创建滚动容器();
     容器.scrollTop = 0;
-    const 请求更早历史 = vi.fn();
-    const 已读采样 = vi.fn();
+    const 滚动观测 = vi.fn();
     const 主机 = {
       addController() {},
       removeController() {},
@@ -741,11 +756,9 @@ describe("房间滚动器", () => {
 
     const 滚动器 = new 房间滚动器(主机, {
       读取状态: () => 状态,
-      更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
       查询滚动容器: () => 容器,
       查询消息节点: () => [创建消息节点(3, 24, 96)],
-      请求更早历史,
-      采样阅读锚点: 已读采样,
+      上报滚动观测: 滚动观测,
       读取是否需要恢复补锚: () => false,
       消耗恢复补锚标记: () => {},
       报告首屏稳定完成: vi.fn(),
@@ -763,8 +776,7 @@ describe("房间滚动器", () => {
     ).处理滚动事件(容器);
 
     expect(应继续观察视口).toBe(false);
-    expect(请求更早历史).not.toHaveBeenCalled();
-    expect(已读采样).not.toHaveBeenCalled();
+    expect(滚动观测).not.toHaveBeenCalled();
   });
 
   it("媒体查看器释放后的无意图滚动尾波不会误触发历史分页", async () => {
@@ -792,8 +804,7 @@ describe("房间滚动器", () => {
     };
     const 容器 = 创建滚动容器();
     容器.scrollTop = 0;
-    const 请求更早历史 = vi.fn();
-    const 已读采样 = vi.fn();
+    const 滚动观测 = vi.fn();
     const 主机 = {
       addController() {},
       removeController() {},
@@ -803,11 +814,9 @@ describe("房间滚动器", () => {
 
     const 滚动器 = new 房间滚动器(主机, {
       读取状态: () => 状态,
-      更新状态: (patch: Partial<聊天状态>) => Object.assign(状态, patch),
       查询滚动容器: () => 容器,
       查询消息节点: () => [创建消息节点(3, 24, 96)],
-      请求更早历史,
-      采样阅读锚点: 已读采样,
+      上报滚动观测: 滚动观测,
       读取是否需要恢复补锚: () => false,
       消耗恢复补锚标记: () => {},
       报告首屏稳定完成: vi.fn(),
@@ -819,13 +828,16 @@ describe("房间滚动器", () => {
     const 尾波滚动应继续观察视口 = 滚动器.处理滚动事件(容器);
 
     expect(尾波滚动应继续观察视口).toBe(false);
-    expect(请求更早历史).not.toHaveBeenCalled();
-    expect(已读采样).not.toHaveBeenCalled();
+    expect(滚动观测).not.toHaveBeenCalled();
 
     滚动器.标记用户滚动意图();
     const 用户滚动应继续观察视口 = 滚动器.处理滚动事件(容器);
 
     expect(用户滚动应继续观察视口).toBe(true);
-    expect(请求更早历史).toHaveBeenCalledTimes(1);
+    expect(滚动观测).toHaveBeenCalledWith({
+      candidateReadAnchorPosition: null,
+      isNearBottom: false,
+      reachedTop: true,
+    });
   });
 });

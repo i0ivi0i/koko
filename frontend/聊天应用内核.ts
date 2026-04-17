@@ -21,6 +21,7 @@ import {
 } from "./阅读推进编排.js";
 import {
   房间滚动器,
+  type 房间滚动观测,
   type 房间滚动器依赖,
   type 房间滚动器宿主,
 } from "./房间滚动器.js";
@@ -50,6 +51,10 @@ import {
 } from "./状态.js";
 import { 创建应用生命周期Actor } from "./应用生命周期.js";
 import {
+  创建房间视口Actor,
+  投影视口快照到聊天视口状态,
+} from "./房间视口运行时.js";
+import {
   type 消息视频自动播候选,
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
@@ -77,9 +82,6 @@ type 房间壳补丁 = Pick<
   | "roomId"
   | "roomDisplayTitle"
   | "latestEventPosition"
-  | "viewportMode"
-  | "candidateReadAnchorPosition"
-  | "hasUnreadNewerMessages"
   | "recoveryState"
   | "lastRecoveryErrorCode"
 >;
@@ -184,10 +186,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * - 流程：短生命周期忙闲位。
    * - 运行时：浏览器生命周期/在线状态/更新待接管。
    *
-   * room/session/viewportMode 这类房间壳外观继续只从 room kernel 派生，
-   * 不再复制进一个共享 `chatState` 里让多个 owner 共写。
+   * room/session 继续从 room kernel 派生；
+   * 视口模式、未读新增标记、候选已读锚点改由 RoomViewportActor 投影，
+   * 不再让 room kernel 和滚动/阅读链路各写一份。
    */
   private readonly appLifecycle = 创建应用生命周期Actor();
+  private readonly roomViewport = 创建房间视口Actor();
   private 会话状态: 聊天会话状态;
   private 输入状态: 聊天输入状态;
   private 时间线状态: 聊天时间线状态;
@@ -230,20 +234,27 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.视口状态 = { ...初始聊天视口状态 };
     this.流程状态 = { ...初始聊天流程状态 };
     this.运行时状态 = { ...初始聊天运行时状态 };
+    this.同步房间视口快照();
     this.roomScroller = new 房间滚动器(deps.滚动宿主, {
       读取状态: () => this.读取滚动观察状态(),
-      更新状态: (patch) => this.写入滚动观察状态(patch),
       查询滚动容器: () => deps.查询滚动容器(),
       查询消息节点: () => deps.查询消息节点(),
-      请求更早历史: () => {
-        void this.阅读推进编排端口.请求加载更早历史();
-      },
-      采样阅读锚点: (position) => this.阅读推进编排端口.接收候选已读位置(position),
+      上报滚动观测: (observation) => this.处理房间滚动观测(observation),
       读取是否需要恢复补锚: () => this.shouldPrimeReadAnchorAfterInitialSettle,
       消耗恢复补锚标记: () => {
         this.shouldPrimeReadAnchorAfterInitialSettle = false;
       },
-      报告首屏稳定完成: (mode) => this.阅读推进编排端口.接收首屏稳定完成(mode),
+      报告首屏稳定完成: (mode) => this.处理首屏定位稳定完成(mode),
+      报告历史补偿程序滚动已稳定: () => {
+        this.roomViewport.send({
+          type: "PROGRAMMATIC_SCROLL_FINISHED",
+          reason: "compensate_history",
+        });
+        this.同步房间视口快照();
+      },
+      报告恢复补锚候选: (position) => {
+        this.阅读推进编排端口.接收候选已读位置(position);
+      },
     });
     this.媒体编排 = 创建聊天媒体编排({
       transport: () => this.transport,
@@ -381,22 +392,67 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.销毁();
+    this.roomViewport.stop();
     this.appLifecycle.stop();
   }
 
   private 标记用户滚动意图(): void {
     this.roomScroller.标记用户滚动意图();
+    this.roomViewport.send({ type: "USER_SCROLL_INTENT_STARTED" });
+    this.同步房间视口快照();
   }
 
   private 处理聊天视口滚动(scrollContainer: HTMLElement): void {
-    const 应继续观察视口 = this.roomScroller.处理滚动事件(scrollContainer);
-    if (应继续观察视口) {
-      this.阅读推进编排端口.接收视口滚动();
+    this.roomScroller.处理滚动事件(scrollContainer);
+  }
+
+  private async 请求跳到最新(): Promise<void> {
+    this.roomViewport.send({ type: "JUMP_TO_LATEST_REQUESTED" });
+    this.同步房间视口快照();
+    return this.阅读推进编排端口.请求跳到最新();
+  }
+
+  /**
+   * DOM 观测先到这里，再由 RoomViewportActor 决定：
+   * - 这次候选已读要不要接收；
+   * - 当前是否该切回贴底跟随；
+   * - 顶部触达是否真的允许触发历史分页。
+   */
+  private 处理房间滚动观测(observation: 房间滚动观测): void {
+    this.roomViewport.send({
+      type: "SCROLL_OBSERVED",
+      ...observation,
+      canLoadHistory: this.时间线状态.hasMoreBefore && !this.时间线状态.historyLoading,
+      now: Date.now(),
+    });
+    const beforeCandidate = this.视口状态.candidateReadAnchorPosition;
+    const snapshot = this.roomViewport.snapshot();
+    this.同步房间视口快照();
+    if (
+      snapshot.candidateReadAnchorPosition !== null &&
+      snapshot.candidateReadAnchorPosition !== beforeCandidate
+    ) {
+      this.阅读推进编排端口.接收候选已读位置(snapshot.candidateReadAnchorPosition);
+    }
+    if (snapshot.shouldLoadHistory) {
+      this.roomViewport.send({ type: "HISTORY_LOAD_CONSUMED" });
+      this.同步房间视口快照();
+      void this.阅读推进编排端口.请求加载更早历史();
     }
   }
 
-  private 请求跳到最新(): Promise<void> {
-    return this.阅读推进编排端口.请求跳到最新();
+  private 处理首屏定位稳定完成(mode: 聊天状态["viewportMode"]): void {
+    this.roomViewport.send({
+      type: "INITIAL_UNREAD_SETTLED",
+      firstUnreadEventPosition: this.视口状态.firstUnreadEventPosition,
+    });
+    this.同步房间视口快照();
+    void mode;
+    this.阅读推进编排端口.接收首屏稳定完成();
+  }
+
+  private 同步房间视口快照(): void {
+    this.应用本地状态补丁(投影视口快照到聊天视口状态(this.roomViewport.snapshot()));
   }
 
   private 登记程序滚动来源(source: 程序滚动来源): void {
@@ -438,10 +494,45 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * - 房间壳派生状态仍然要翻成真实 room event，而不是直接改房间真相。
    */
   写入视口调试状态供测试(patch: Partial<聊天视口调试状态>): void {
-    if (patch.viewportMode === "贴底跟随") {
-      this.发送房间事件({ type: "USER_JUMPED_TO_LATEST" });
-    }
     this.应用本地状态补丁(patch);
+    const nextFirstUnreadEventPosition =
+      Object.hasOwn(patch, "firstUnreadEventPosition")
+        ? patch.firstUnreadEventPosition ?? null
+        : this.视口状态.firstUnreadEventPosition;
+    if (
+      Object.hasOwn(patch, "initialUnreadSettled") &&
+      patch.initialUnreadSettled === false
+    ) {
+      this.roomViewport.send({
+        type: "SNAPSHOT_BASELINE_SYNCED",
+        firstUnreadEventPosition: nextFirstUnreadEventPosition,
+      });
+    }
+    if (patch.hasUserScrollIntent) {
+      this.roomViewport.send({ type: "USER_SCROLL_INTENT_STARTED" });
+    }
+    if (patch.scrollPhase === "restoring_unread") {
+      this.roomViewport.send({
+        type: "PROGRAMMATIC_SCROLL_STARTED",
+        reason: "restore_unread",
+      });
+    }
+    if (patch.scrollPhase === "compensating_history") {
+      this.roomViewport.send({
+        type: "PROGRAMMATIC_SCROLL_STARTED",
+        reason: "compensate_history",
+      });
+    }
+    if (patch.viewportMode === "贴底跟随") {
+      this.roomViewport.send({ type: "JUMP_TO_LATEST_REQUESTED" });
+    }
+    if (patch.initialUnreadSettled === true) {
+      this.roomViewport.send({
+        type: "INITIAL_UNREAD_SETTLED",
+        firstUnreadEventPosition: nextFirstUnreadEventPosition,
+      });
+    }
+    this.同步房间视口快照();
   }
 
   private get 恢复编排端口(): 房间恢复编排端口 {
@@ -493,6 +584,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           await this.阅读推进编排端口.接收Realtime追加后跟随();
         },
         接收权威事件后副作用: (events) => {
+          this.roomViewport.send({ type: "AUTHORITATIVE_EVENTS_APPENDED" });
+          this.同步房间视口快照();
           this.处理权威新消息平台副作用(events);
         },
         登记待补发任务: async (task) => {
@@ -584,8 +677,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         写入阅读状态: (patch) => this.写入阅读状态(patch),
         推进时间线: (input) => this.推进时间线(input),
         transport: this.transport,
-        roomKernel: {
-          send: (event) => this.发送房间事件(event),
+        上报历史前插开始: () => {
+          this.roomViewport.send({
+            type: "PROGRAMMATIC_SCROLL_STARTED",
+            reason: "compensate_history",
+          });
+          this.同步房间视口快照();
         },
         roomScroller: this.roomScroller,
         withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
@@ -650,6 +747,15 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     }
     if (Object.hasOwn(patch, "historyErrorCode")) {
       时间线补丁.historyErrorCode = patch.historyErrorCode ?? "";
+    }
+    if (Object.hasOwn(patch, "viewportMode")) {
+      视口补丁.viewportMode = patch.viewportMode ?? "离底浏览";
+    }
+    if (Object.hasOwn(patch, "candidateReadAnchorPosition")) {
+      视口补丁.candidateReadAnchorPosition = patch.candidateReadAnchorPosition ?? null;
+    }
+    if (Object.hasOwn(patch, "hasUnreadNewerMessages")) {
+      视口补丁.hasUnreadNewerMessages = patch.hasUnreadNewerMessages ?? false;
     }
     if (Object.hasOwn(patch, "lastReadEventPosition")) {
       视口补丁.lastReadEventPosition = patch.lastReadEventPosition ?? null;
@@ -752,10 +858,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     };
   }
 
-  private 写入滚动观察状态(patch: Parameters<房间滚动器依赖["更新状态"]>[0]): void {
-    this.应用本地状态补丁(patch);
-  }
-
   private 读取恢复编排状态(): ReturnType<房间恢复编排依赖["读取恢复状态"]> {
     const 房间壳 = this.回填房间壳补丁();
     return {
@@ -783,6 +885,17 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     patch: Parameters<房间恢复编排依赖["写入恢复状态"]>[0]
   ): void {
     this.应用本地状态补丁(patch);
+    if (
+      Object.hasOwn(patch, "initialUnreadSettled") &&
+      patch.initialUnreadSettled === false &&
+      Object.hasOwn(patch, "firstUnreadEventPosition")
+    ) {
+      this.roomViewport.send({
+        type: "SNAPSHOT_BASELINE_SYNCED",
+        firstUnreadEventPosition: patch.firstUnreadEventPosition ?? null,
+      });
+      this.同步房间视口快照();
+    }
   }
 
   private 读取实时编排状态(): ReturnType<房间实时编排依赖["读取实时状态"]> {
@@ -792,7 +905,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       sessionId: 房间壳.sessionId,
       roomId: 房间壳.roomId,
       latestEventPosition: 房间壳.latestEventPosition,
-      viewportMode: 房间壳.viewportMode,
+      viewportMode: this.视口状态.viewportMode,
       messageInput: this.输入状态.messageInput,
       composerMediaDrafts: this.输入状态.composerMediaDrafts,
       messages: this.时间线状态.messages,
@@ -812,8 +925,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       roomId: 房间壳.roomId,
       sessionId: 房间壳.sessionId,
       latestEventPosition: 房间壳.latestEventPosition,
-      viewportMode: 房间壳.viewportMode,
-      candidateReadAnchorPosition: 房间壳.candidateReadAnchorPosition,
+      viewportMode: this.视口状态.viewportMode,
+      candidateReadAnchorPosition: this.视口状态.candidateReadAnchorPosition,
       messages: this.时间线状态.messages,
       hasMoreBefore: this.时间线状态.hasMoreBefore,
       historyLoading: this.时间线状态.historyLoading,
@@ -852,9 +965,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       roomId: roomShell.roomId,
       roomDisplayTitle: roomShell.roomDisplayTitle,
       latestEventPosition: roomShell.latestEventPosition,
-      viewportMode: roomShell.viewportMode,
-      candidateReadAnchorPosition: roomShell.candidateReadAnchorPosition,
-      hasUnreadNewerMessages: roomShell.hasUnreadNewerMessages,
       recoveryState: roomShell.recoveryState,
       lastRecoveryErrorCode: roomShell.lastRecoveryErrorCode,
     };
@@ -878,21 +988,19 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.清空();
+    this.roomViewport.send({ type: "ROOM_VIEW_EXITED" });
     this.应用本地状态补丁({
       messageInput: "",
+      hasMoreBefore: false,
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,
-      hasMoreBefore: false,
-      initialUnreadSettled: true,
-      scrollPhase: "idle",
-      hasUserScrollIntent: false,
       pendingReadAnchorPosition: null,
-      historyLoadThrottleUntil: 0,
       messages: [],
       pending: false,
       historyLoading: false,
       historyErrorCode: "",
     });
+    this.同步房间视口快照();
   }
 
   private leaveCurrentRoomView(): void {

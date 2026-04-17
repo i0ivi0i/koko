@@ -114,7 +114,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   function applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
     const shouldFollowLatest = 读取实时状态().viewportMode === "贴底跟随";
     deps.roomKernel.send({
-      type: "AUTHORITATIVE_EVENTS_ARRIVED",
+      type: "LATEST_EVENT_ADVANCED",
       latestEventPosition,
     });
     推进时间线({

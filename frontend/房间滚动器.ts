@@ -1,7 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import type { 聊天状态, 房间视口模式 } from "./状态.js";
 
-const 历史分页顶部节流毫秒 = 180;
 const 稳定可读最小可见像素 = 40;
 const 稳定可读最小可见比例 = 0.55;
 const 贴底跟随阈值像素 = 24;
@@ -28,6 +27,12 @@ export interface 历史补偿上下文 {
   锚点距容器顶部: number | null;
 }
 
+export interface 房间滚动观测 {
+  candidateReadAnchorPosition: number | null;
+  isNearBottom: boolean;
+  reachedTop: boolean;
+}
+
 interface 消息可见片段 {
   eventPosition: number;
   行顶部相对容器: number;
@@ -39,14 +44,21 @@ type 程序滚动来源 = "media_viewer_open" | "jump_to_latest";
 
 export interface 房间滚动器依赖 {
   读取状态(): 房间滚动观察态;
-  更新状态(patch: Partial<房间滚动观察态>): void;
+  /**
+   * 旧测试支架仍可能带着这些属性进来；
+   * 真正的视口 owner 已经不再消费它们，这里只保留兼容类型口子，避免测试基建在迁移期整片爆炸。
+   */
+  更新状态?(patch: Partial<房间滚动观察态>): void;
   查询滚动容器(): HTMLElement | null;
   查询消息节点(): HTMLElement[];
-  请求更早历史(): void;
-  采样阅读锚点(position: number): void;
+  请求更早历史?(): void;
+  采样阅读锚点?(position: number): void;
+  上报滚动观测?(observation: 房间滚动观测): void;
   读取是否需要恢复补锚(): boolean;
   消耗恢复补锚标记(): void;
-  报告首屏稳定完成(mode: 房间视口模式): void;
+  报告首屏稳定完成?(mode: 房间视口模式): void;
+  报告历史补偿程序滚动已稳定?(): void;
+  报告恢复补锚候选?(position: number): void;
 }
 
 /**
@@ -86,17 +98,18 @@ export class 房间滚动器 implements ReactiveController {
   标记用户滚动意图(): void {
     // 媒体查看器这类覆盖层关闭后，浏览器可能补发恢复滚动事件；只有新的用户滚动意图才能结束这段尾波。
     this.待吸收程序滚动尾波来源.clear();
-    if (this.deps.读取状态().hasUserScrollIntent) {
-      return;
-    }
-    this.deps.更新状态({ hasUserScrollIntent: true });
   }
 
   处理滚动事件(scrollContainer: HTMLElement): boolean {
     if (!this.本次滚动属于聊天视口()) {
       return false;
     }
-    this.按需加载更早历史(scrollContainer);
+    const reachedTop = scrollContainer.scrollTop <= 0;
+    this.deps.上报滚动观测?.({
+      candidateReadAnchorPosition: null,
+      isNearBottom: reachedTop ? false : this.读取当前是否接近底部(),
+      reachedTop,
+    });
     this.调度阅读锚点采样(scrollContainer);
     return true;
   }
@@ -205,7 +218,9 @@ export class 房间滚动器 implements ReactiveController {
       const 新滚动高度 = scrollContainer.scrollHeight;
       scrollContainer.scrollTop += 新滚动高度 - 补偿上下文.旧滚动高度;
     }
-    this.安排程序滚动释放("compensating_history");
+    this.安排程序滚动释放("compensating_history", () => {
+      this.deps.报告历史补偿程序滚动已稳定?.();
+    });
   }
 
   取消挂起滚动副作用(): void {
@@ -254,7 +269,7 @@ export class 房间滚动器 implements ReactiveController {
         scrollContainer.scrollHeight - scrollContainer.clientHeight
       );
       this.补一次恢复阅读锚点();
-      this.deps.报告首屏稳定完成("贴底跟随");
+      this.deps.报告首屏稳定完成?.("贴底跟随");
       return;
     }
 
@@ -272,8 +287,8 @@ export class 房间滚动器 implements ReactiveController {
 
     target.scrollIntoView?.({ block: "center" });
     this.补一次恢复阅读锚点();
-    this.安排程序滚动释放("restoring_unread", {}, () => {
-      this.deps.报告首屏稳定完成("围绕未读阅读");
+    this.安排程序滚动释放("restoring_unread", () => {
+      this.deps.报告首屏稳定完成?.("围绕未读阅读");
     });
   }
 
@@ -291,27 +306,8 @@ export class 房间滚动器 implements ReactiveController {
       if (nextReadPosition === null) {
         return;
       }
-      this.deps.采样阅读锚点(nextReadPosition);
+      this.deps.报告恢复补锚候选?.(nextReadPosition);
     });
-  }
-
-  private 按需加载更早历史(scrollContainer: HTMLElement): void {
-    const 状态 = this.deps.读取状态();
-    if (
-      scrollContainer.scrollTop > 0 ||
-      状态.scrollPhase !== "idle" ||
-      !状态.hasUserScrollIntent
-    ) {
-      return;
-    }
-    const now = Date.now();
-    if (now < 状态.historyLoadThrottleUntil) {
-      return;
-    }
-    this.deps.更新状态({
-      historyLoadThrottleUntil: now + 历史分页顶部节流毫秒,
-    });
-    this.deps.请求更早历史();
   }
 
   private 调度阅读锚点采样(scrollContainer: HTMLElement): void {
@@ -350,10 +346,11 @@ export class 房间滚动器 implements ReactiveController {
       return;
     }
     const nextReadPosition = this.查找可见阅读锚点(scrollContainer);
-    if (nextReadPosition === null) {
-      return;
-    }
-    this.deps.采样阅读锚点(nextReadPosition);
+    this.deps.上报滚动观测?.({
+      candidateReadAnchorPosition: nextReadPosition,
+      isNearBottom: this.读取当前是否接近底部(),
+      reachedTop: scrollContainer.scrollTop <= 0,
+    });
   }
 
   private 查找历史补偿锚点(scrollContainer: HTMLElement): 消息可见片段 | null {
@@ -420,6 +417,9 @@ export class 房间滚动器 implements ReactiveController {
       return null;
     }
     const rowRect = row.getBoundingClientRect();
+    if (rowRect.bottom <= rowRect.top) {
+      return null;
+    }
     const 可见顶部 = Math.max(rowRect.top, containerRect.top);
     const 可见底部 = Math.min(rowRect.bottom, containerRect.bottom);
     return {
@@ -462,6 +462,9 @@ export class 房间滚动器 implements ReactiveController {
     }
     const containerRect = scrollContainer.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
+    if (targetRect.bottom <= targetRect.top) {
+      return false;
+    }
     const 当前位置差值 =
       targetRect.top - containerRect.top - 补偿上下文.锚点距容器顶部;
     if (!Number.isFinite(当前位置差值)) {
@@ -477,7 +480,6 @@ export class 房间滚动器 implements ReactiveController {
    */
   private 安排程序滚动释放(
     expectedPhase: 房间滚动观察态["scrollPhase"],
-    patch: Partial<房间滚动观察态> = {},
     onReleased?: () => void
   ): void {
     this.取消挂起滚动副作用();
@@ -486,10 +488,6 @@ export class 房间滚动器 implements ReactiveController {
       if (this.deps.读取状态().scrollPhase !== expectedPhase) {
         return;
       }
-      this.deps.更新状态({
-        ...patch,
-        scrollPhase: "idle",
-      });
       onReleased?.();
     }, 0);
   }

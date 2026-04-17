@@ -1,4 +1,3 @@
-import type { 房间内核事件 } from "./房间内核.js";
 import type { 时间线输入 } from "./房间时间线.js";
 import type { 历史补偿上下文 } from "./房间滚动器.js";
 import type { 聊天状态 } from "./状态.js";
@@ -6,13 +5,8 @@ import type { 前端传输端口 } from "./传输.js";
 
 const 阅读推进节流毫秒 = 400;
 
-type 房间内核端口 = {
-  send(event: 房间内核事件): void;
-};
-
 type 房间滚动器端口 = {
   读取当前可见阅读锚点(): number | null;
-  读取当前是否接近底部(): boolean;
   读取历史补偿上下文(): 历史补偿上下文;
   应用历史补偿(补偿上下文: 历史补偿上下文, 插入了消息: boolean): Promise<void>;
 };
@@ -22,8 +16,8 @@ export interface 阅读推进编排依赖 {
   写入阅读状态(patch: Partial<阅读推进状态>): void;
   推进时间线(input: 时间线输入): void;
   transport: 前端传输端口;
-  roomKernel: 房间内核端口;
   roomScroller: 房间滚动器端口;
+  上报历史前插开始?(): void;
   withSessionRefreshOnInvalid<T>(operation: (sessionId: string) => Promise<T>): Promise<T>;
   等待壳渲染完成(): Promise<void>;
   滚到最新位置(): Promise<void>;
@@ -31,8 +25,7 @@ export interface 阅读推进编排依赖 {
 
 export interface 阅读推进编排端口 {
   接收候选已读位置(position: number): void;
-  接收首屏稳定完成(mode: 聊天状态["viewportMode"]): void;
-  接收视口滚动(): void;
+  接收首屏稳定完成(): void;
   请求加载更早历史(): Promise<void>;
   请求跳到最新(): Promise<void>;
   接收Realtime追加后跟随(): Promise<void>;
@@ -99,10 +92,8 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   }
 
   function 接收候选已读位置(nextPosition: number): void {
-    deps.roomKernel.send({
-      type: "VIEWPORT_OBSERVED",
+    写入阅读状态({
       candidateReadAnchorPosition: nextPosition,
-      isNearBottom: deps.roomScroller.读取当前是否接近底部(),
     });
     promoteCandidateReadAnchorToPending();
   }
@@ -169,31 +160,18 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   }
 
   /**
-   * 首屏稳定完成必须显式回灌给房间内核，而不是只在壳层里改一个布尔值。
-   * 这样以后换模板、换滚动实现时，内核仍然能明确知道：
-   * “当前房间已经从恢复阶段进入了可解释阅读语义的稳定状态。”
+   * 首屏稳定完成必须显式回灌给视口 owner，而不是只在壳层里改一个布尔值。
+   * 这样以后换模板、换滚动实现时，阅读推进仍然只消费“视口已经稳定”的领域事实，
+   * 不会再次退化成由某个 DOM 控件临时宣布已读语义。
    */
-  function 接收首屏稳定完成(mode: 聊天状态["viewportMode"]): void {
+  function 接收首屏稳定完成(): void {
     if (读取阅读状态().initialUnreadSettled) {
       return;
     }
-    deps.roomKernel.send({
-      type: "INITIAL_SETTLE_COMPLETED",
-      mode,
-    });
     写入阅读状态({
       initialUnreadSettled: true,
-      scrollPhase: "idle",
     });
     promoteCandidateReadAnchorToPending();
-  }
-
-  function 接收视口滚动(): void {
-    deps.roomKernel.send({
-      type: "VIEWPORT_OBSERVED",
-      candidateReadAnchorPosition: null,
-      isNearBottom: deps.roomScroller.读取当前是否接近底部(),
-    });
   }
 
   /**
@@ -233,10 +211,12 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
         // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。
         hasMoreBefore: page.messages.length > 0,
         historyErrorCode: "",
-        scrollPhase: page.messages.length > 0 ? "compensating_history" : 读取阅读状态().scrollPhase,
       });
       // 历史页是往列表顶部前插的，但守视口不能再只靠 scrollHeight 差值。
       // 新策略优先围绕旧锚点恢复；只有锚点彻底找不回时，才退回高度差值兜底。
+      if (page.messages.length > 0) {
+        deps.上报历史前插开始?.();
+      }
       await deps.roomScroller.应用历史补偿(补偿上下文, page.messages.length > 0);
     } catch (error) {
       const code =
@@ -246,10 +226,6 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       写入阅读状态({
         historyLoading: false,
         historyErrorCode: code,
-        scrollPhase:
-          读取阅读状态().scrollPhase === "compensating_history"
-            ? "idle"
-            : 读取阅读状态().scrollPhase,
       });
     }
   }
@@ -257,7 +233,6 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   async function scrollToLatestAndEnterFollowMode(): Promise<void> {
     await deps.等待壳渲染完成();
     await deps.滚到最新位置();
-    deps.roomKernel.send({ type: "USER_JUMPED_TO_LATEST" });
     schedulePassiveReadAnchorAfterFollowLatest();
   }
 
@@ -293,7 +268,6 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   return {
     接收候选已读位置,
     接收首屏稳定完成,
-    接收视口滚动,
     请求加载更早历史,
     请求跳到最新,
     接收Realtime追加后跟随,

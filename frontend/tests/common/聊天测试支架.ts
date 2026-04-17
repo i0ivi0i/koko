@@ -755,9 +755,6 @@ function 创建房间壳补丁(roomKernel: ReturnType<typeof 创建房间内核>
     roomId: roomShell.roomId,
     roomDisplayTitle: roomShell.roomDisplayTitle,
     latestEventPosition: roomShell.latestEventPosition,
-    viewportMode: roomShell.viewportMode,
-    candidateReadAnchorPosition: roomShell.candidateReadAnchorPosition,
-    hasUnreadNewerMessages: roomShell.hasUnreadNewerMessages,
     recoveryState: roomShell.recoveryState,
     lastRecoveryErrorCode: roomShell.lastRecoveryErrorCode,
   };
@@ -965,7 +962,6 @@ export function 创建实时编排测试场景(input: {
       roomId: input.roomId,
       roomDisplayTitle: input.roomDisplayTitle ?? "ROOM01",
       latestEventPosition: input.latestEventPosition ?? 0,
-      viewportMode: input.viewportMode ?? "离底浏览",
     });
   }
   state = {
@@ -1072,7 +1068,6 @@ export function 创建阅读推进测试场景(input: {
       roomId: input.roomId,
       roomDisplayTitle: input.roomDisplayTitle ?? "ROOM01",
       latestEventPosition: input.latestEventPosition ?? 0,
-      viewportMode: input.viewportMode ?? "离底浏览",
     });
   }
   state = {
@@ -1132,7 +1127,6 @@ export function 创建阅读推进测试场景(input: {
     写入阅读状态: updateState,
     推进时间线,
     transport,
-    roomKernel: roomKernelPort,
     roomScroller,
     withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>
       operation(state.sessionId),

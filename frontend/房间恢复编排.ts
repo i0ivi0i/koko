@@ -307,8 +307,6 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       roomId: snapshot.room_id,
       roomDisplayTitle,
       latestEventPosition: snapshot.latest_event_position,
-      viewportMode:
-        snapshot.first_unread_event_position === null ? "贴底跟随" : "围绕未读阅读",
     });
     写入恢复状态({
       lastReadEventPosition: snapshot.last_read_event_position,

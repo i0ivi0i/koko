@@ -46,6 +46,17 @@ export interface 聊天时间线状态 {
  * DOM 观测仍然来自滚动器，但真正的阅读推进节奏只在这里落地。
  */
 export interface 聊天视口状态 {
+  /**
+   * 当前视口模式只回答“壳层现在该怎么解释新消息和滚动”：
+   * - `围绕未读阅读`：用户正在从上次未读继续读；
+   * - `贴底跟随`：用户已经贴近底部，允许新消息自然跟随；
+   * - `离底浏览`：用户在中段浏览历史，新消息不能抢视角。
+   */
+  viewportMode: 房间视口模式;
+  /** 当前壳层观测到的候选已读锚点；真正提交仍要再经过视口/阅读协作裁决。 */
+  candidateReadAnchorPosition: number | null;
+  /** 用户不在底部时，后续新消息是否已经在当前阅读位置之后继续累积。 */
+  hasUnreadNewerMessages: boolean;
   /** 当前身份上次已读到的事件位置；`null` 表示还没有阅读锚点。 */
   lastReadEventPosition: number | null;
   /** 当前首屏里的第一条未读位置；用于后续未读分隔条与首屏定位。 */
@@ -112,17 +123,6 @@ export interface 聊天状态
   /** 当前房间标题只服务壳层展示，具体值统一由房间编排内核外观派生。 */
   roomDisplayTitle: string;
   latestEventPosition: number;
-  /**
-   * 当前视口模式只回答“壳层现在该怎么解释新消息和滚动”：
-   * - `围绕未读阅读`：用户正在从上次未读继续读；
-   * - `贴底跟随`：用户已经贴近底部，允许新消息自然跟随；
-   * - `离底浏览`：用户在中段浏览历史，新消息不能抢视角。
-   */
-  viewportMode: 房间视口模式;
-  /** 当前壳层观测到的候选已读锚点；真正提交仍要再经过内核裁决。 */
-  candidateReadAnchorPosition: number | null;
-  /** 用户不在底部时，后续新消息是否已经在当前阅读位置之后继续累积。 */
-  hasUnreadNewerMessages: boolean;
   /** 恢复相关的临时状态，只服务壳层交互，且已改为由房间编排内核统一回填。 */
   recoveryState: "idle" | "retryable_failure" | "reconnecting";
   /** 最近一次恢复/订阅失败的稳定错误码，供壳层决定提示文案，来源同样收口到房间编排内核。 */
@@ -148,6 +148,9 @@ export const 初始聊天时间线状态: 聊天时间线状态 = {
 };
 
 export const 初始聊天视口状态: 聊天视口状态 = {
+  viewportMode: "离底浏览",
+  candidateReadAnchorPosition: null,
+  hasUnreadNewerMessages: false,
   lastReadEventPosition: null,
   firstUnreadEventPosition: null,
   initialUnreadSettled: true,
@@ -181,9 +184,6 @@ export const 初始聊天状态: 聊天状态 = {
   roomId: "",
   roomDisplayTitle: "",
   latestEventPosition: 0,
-  viewportMode: "离底浏览",
-  candidateReadAnchorPosition: null,
-  hasUnreadNewerMessages: false,
   recoveryState: "idle",
   lastRecoveryErrorCode: "",
 };

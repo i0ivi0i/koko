@@ -1,11 +1,20 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   创建阅读推进测试场景,
   读取阅读推进编排工厂,
 } from "./common/聊天测试支架";
 describe("阅读推进编排", () => {
+  it("不再在阅读推进编排里直接决定最终 viewportMode", () => {
+    const source = readFileSync(resolve(process.cwd(), "阅读推进编排.ts"), "utf8");
+
+    expect(source).not.toContain('type: "VIEWPORT_OBSERVED"');
+    expect(source).not.toContain('type: "USER_JUMPED_TO_LATEST"');
+  });
+
   it("首屏稳定完成后，已有候选已读才会进入正式待提交队列", async () => {
     const 创建阅读推进编排 = await 读取阅读推进编排工厂();
     const 场景 = 创建阅读推进测试场景({
@@ -48,7 +57,6 @@ describe("阅读推进编排", () => {
       await vi.advanceTimersByTimeAsync(1);
 
       expect(场景.滚到最新调用).toHaveLength(1);
-      expect(场景.读取状态().viewportMode).toBe("贴底跟随");
       expect(场景.读取状态().pendingReadAnchorPosition).toBe(8);
     } finally {
       vi.useRealTimers();
