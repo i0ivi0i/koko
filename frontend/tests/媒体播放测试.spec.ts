@@ -451,7 +451,7 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("viewer 在 manifest 存在且 swarm 很快可播时，也应坚持走 HLS 主链，只把 swarm 留给后台补齐", async () => {
+  it("0-24 小时内 viewer 打开时会并行预热 swarm 与 HLS；swarm 在短预算内可播时由 swarm 赢下首播", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-fast",
       hint: "正在协作分发" as const,
@@ -513,32 +513,33 @@ describe("媒体播放器", () => {
     const result = await 播放器.解析播放结果({
       attachmentId: "att-video-hls",
       kind: "video",
+      consumerId: "session:att-video-hls",
     });
 
     expect(result).toEqual({
-      mode: "manifest",
+      mode: "swarm",
       attachmentId: "att-video-hls",
       kind: "video",
-      src: "http://media.local/stream/att-video-hls/master.m3u8",
+      src: "blob:http://media.local/swarm-video-hls-fast",
       thumbnailUrl: "http://media.local/poster-video-hls",
-      streamingDistribution: {
-        swarm_id: "swarm-hash-video-hls",
-        announce_urls: ["http://media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-video-hls",
-        join_ticket: null,
-        survival_mode: "server_assisted" as const,
-      },
-      hint: null,
+      hint: "正在协作分发",
     });
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-hls",
+        consumerId: "session:att-video-hls",
+      })
+    );
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("viewer 在 manifest 存在时，不应等待 raw swarm 冷启动预算，而要立即落到 HLS 主链", async () => {
+  it("0-24 小时内 viewer 打开时只给 swarm 很短预算；超时后立即落到 HLS，但后台预热继续保留", async () => {
     const resolveSwarmSource = vi.fn(
       () =>
         new Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>(
-          () => undefined
+          (resolve) => {
+            setTimeout(() => resolve(null), 300);
+          }
         )
     );
     const probeAnchor = vi.fn();
@@ -615,12 +616,22 @@ describe("媒体播放器", () => {
       },
       hint: null,
     });
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("视频查看器已经拿到 manifest 主链时，激活协作补齐不会再并发启动 raw swarm 整附件补块", async () => {
-    const resolveSwarmSource = vi.fn(async () => ({
+  it("视频查看器已经稳定在 HLS 时，激活协作补齐只升级已预热 swarm，不会再冷启第二条 raw whole-file 主链", async () => {
+    const resolveSwarmSource = vi.fn<
+      (input: {
+        attachmentId: string;
+        kind: "image" | "video";
+        locator: unknown;
+        consumerId?: string;
+        onSessionEvent?: unknown;
+        eagerCompleting?: boolean;
+        reuseOnly?: boolean;
+      }) => Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>
+    >(async () => ({
       src: "blob:http://media.local/swarm-video-hls-backfill",
       hint: "正在补块" as const,
     }));
@@ -683,7 +694,29 @@ describe("媒体播放器", () => {
       onSessionEvent: vi.fn(),
     });
 
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
+    const 调用参数 = resolveSwarmSource.mock.calls[0]![0] as {
+      attachmentId: string;
+      kind: "video";
+      consumerId?: string;
+      eagerCompleting?: boolean;
+      reuseOnly?: boolean;
+      locator: {
+        attachment_id: string;
+      };
+      onSessionEvent?: unknown;
+    };
+    expect(调用参数).toMatchObject({
+      attachmentId: "att-video-hls-backfill",
+      kind: "video",
+      consumerId: "session:att-video-hls-backfill",
+      eagerCompleting: true,
+      reuseOnly: true,
+    });
+    expect(调用参数?.locator).toMatchObject({
+      attachment_id: "att-video-hls-backfill",
+    });
+    expect(调用参数?.onSessionEvent).toEqual(expect.any(Function));
   });
 
   it("inline_autoplay surface 会先尝试复用已热 swarm/web seed，而不是直接 probe anchor", async () => {
@@ -935,6 +968,81 @@ describe("媒体播放器", () => {
       kind: "video",
       src: "",
       thumbnailUrl: null,
+      hint: "内容已过期",
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("24 小时后就算旧 locator 还带着 manifest，也不会偷偷继续走 HLS 主链", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-streaming-expired",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-streaming-expired",
+      thumbnail_url: "http://media.local/poster-video-streaming-expired",
+      distribution: {
+        content_id: "content_att-video-streaming-expired",
+        content_hash: "hash-video-streaming-expired",
+        swarm_id: "swarm-hash-video-streaming-expired",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-streaming-expired",
+        torrent_info_hash: "torrent-info-hash-video-streaming-expired",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-streaming-expired",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "expired" as const,
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+      streaming_asset: {
+        asset_id: "att-video-streaming-expired",
+        content_hash: "hash-video-streaming-expired",
+        kind: "streaming_video" as const,
+        manifest: {
+          hls_master_url:
+            "http://media.local/stream/att-video-streaming-expired/master.m3u8",
+          dash_mpd_url: "http://media.local/stream/att-video-streaming-expired/stream.mpd",
+        },
+        lifecycle: {
+          streaming_expires_at: "1",
+          streaming_deleted_at: "2",
+        },
+        distribution: {
+          swarm_id: "swarm-hash-video-streaming-expired",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-streaming-expired",
+          join_ticket: null,
+          survival_mode: "peer_only_after_expiry" as const,
+        },
+        origin: {
+          original_url: "http://media.local/original-video-streaming-expired",
+          expires_at_epoch_seconds: 1,
+          available: false,
+          role: "cold_backup_only" as const,
+        },
+      },
+      blob_asset: null,
+    }));
+    const resolveSwarmSource = vi.fn();
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-streaming-expired",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "expired",
+      attachmentId: "att-video-streaming-expired",
+      kind: "video",
+      src: "",
+      thumbnailUrl: "http://media.local/poster-video-streaming-expired",
       hint: "内容已过期",
     });
     expect(resolveSwarmSource).not.toHaveBeenCalled();

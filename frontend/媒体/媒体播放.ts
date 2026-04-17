@@ -68,6 +68,47 @@ const 过滤可播放媒体提示 = (
 };
 
 /**
+ * 查看器首开允许给 swarm 一个很短的抢跑窗口：
+ * 1. 命中本地完整资产或已热 swarm 时，直接让 whole-file 主链赢；
+ * 2. 超过这段预算就立刻交给 HLS 秒开，不把查看器卡在“等 P2P”上；
+ * 3. 即便 HLS 赢了，前面启动的 swarm 预热仍继续留在后台，为后续 backfill 服务。
+ */
+const 查看器Swarm抢跑预算毫秒 = 120;
+
+const 流媒体冷备窗口已退场 = (locator: 媒体定位结果): boolean => {
+  const lifecycle = locator.streaming_asset?.lifecycle;
+  if (!lifecycle) {
+    return false;
+  }
+  /**
+   * 流媒体冷备是否正式退场，以后端已经宣布的删除事实为准：
+   * 1. 前端墙钟不能越位替后端裁“是不是到点了”；
+   * 2. 这样不会因为缓存 locator、时钟漂移或测试固化时间把有效 HLS 误判成过期；
+   * 3. 真正整体是否 expired，仍继续由 distribution.availability 这条权威裁决兜底。
+   */
+  return Boolean(lifecycle.streaming_deleted_at);
+};
+
+const 在预算内等待协作分发结果 = async (
+  sourcePromise: Promise<媒体播放结果 | null>,
+  timeoutMs: number
+): Promise<媒体播放结果 | null> => {
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      sourcePromise,
+      new Promise<null>((resolve) => {
+        timerId = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timerId !== null) {
+      clearTimeout(timerId);
+    }
+  }
+};
+
+/**
  * “视频默认循环播放”属于前端播放器行为策略，而不是媒体来源真相的一部分。
  * 当前阶段只需要一条最薄的 owner 规则：
  * - 视频默认循环；
@@ -137,8 +178,12 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
    * 2. DASH 先保留作契约冗余与后续多端适配，不在浏览器主链里同时搞双入口；
    * 3. 没有 manifest 时才继续走旧的 swarm/file 过渡路径。
    */
-  const 读取流媒体主链地址 = (locator: 媒体定位结果): string | null =>
-    locator.kind === "video" ? locator.streaming_asset?.manifest.hls_master_url ?? null : null;
+  const 读取流媒体主链地址 = (locator: 媒体定位结果): string | null => {
+    if (locator.kind !== "video" || 流媒体冷备窗口已退场(locator)) {
+      return null;
+    }
+    return locator.streaming_asset?.manifest.hls_master_url ?? null;
+  };
 
   /**
    * 图片资产不再默认回到原始附件直链：
@@ -228,7 +273,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 尝试协作分发主链 = async (
     input: 媒体播放输入,
     locator: 媒体定位结果,
-    options: { reuseOnly?: boolean } = {}
+    options: { eagerCompleting?: boolean; reuseOnly?: boolean } = {}
   ): Promise<媒体播放结果 | null> => {
     const distribution = 读取协作分发定位片段(locator);
     if (distribution?.availability === "expired") {
@@ -252,6 +297,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         locator,
         ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+        ...(options.eagerCompleting ? { eagerCompleting: true } : {}),
         ...(options.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!swarmSource) {
@@ -298,17 +344,26 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return;
     }
     /**
-     * 视频查看器一旦已经拿到正式 manifest，就不能再通过“后台补齐”这条入口
-     * 同步启动 raw WebTorrent whole-file 补块：
-     * 1. 前台此时已经有 HLS 主链在持续取 segment；
-     * 2. 这里再 eagerCompleting=true，会额外触发 streamURL probe + file.select(1)；
-     * 3. 两条重链路并发正是群聊里大视频把页面拖卡、拖死的根因之一。
-     *
-     * 这条分支只挡“当前仍有正式流媒体主链可用”的 Web 冷备窗口；
-     * 真到 24 小时后 manifest 退场，locator 自然会回到 swarm/anchor 主链，
-     * 不会伤到删源后的长期 WebTorrent 存活语义。
+     * HLS 已经赢下本次会话时，后台补齐只能升级“已经预热过的同一条 swarm 会话”，
+     * 不能再冷启动第二条 raw whole-file 主链：
+     * 1. 正式播放继续留在 HLS，不引入中途切源；
+     * 2. 已存在的 swarm 会话可以进入 eagerCompleting，继续补齐完整资产；
+     * 3. 如果前面根本没预热 swarm，这里就保持静默，不为了补齐再新开重链路。
      */
     if (locator.kind === "video" && 读取流媒体主链地址(locator)) {
+      try {
+        await resolveSwarmSource({
+          attachmentId: input.attachmentId,
+          kind: input.kind,
+          locator,
+          eagerCompleting: true,
+          reuseOnly: true,
+          ...(input.consumerId ? { consumerId: input.consumerId } : {}),
+          ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+        });
+      } catch {
+        return;
+      }
       return;
     }
     const distribution = 读取协作分发定位片段(locator);
@@ -368,13 +423,22 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     const manifestUrl = 读取流媒体主链地址(locator);
     if (surface === "viewer" && manifestUrl) {
       /**
-       * 查看器一旦拿到正式 manifest，就必须把首播 owner 固定到 HLS 主链：
-       * 1. 避免 raw WebTorrent file.streamURL 重新把浏览器拉回字节范围回源循环；
-       * 2. Web 端 P2P 仍由同一个 Video.js + hls.js 增强层承担，不需要再并行开 raw mp4 主链；
-       * 3. WebTorrent 整附件补齐继续由后续 PLAYER_PLAYING/ASSET_BACKFILLING 信号触发，
-       *    不在“首播地址裁决”这里抢跑第二套播放真相。
+       * 0-24 小时冷备窗口里，查看器正式打开要并行预热 swarm 与 HLS：
+       * 1. 先给 swarm 一个很短预算，命中已热 peer / 本地完整资产时直接让它赢；
+       * 2. 超过预算就立刻把正式播放交给 HLS 秒开，不把查看器卡住；
+       * 3. 即便 HLS 赢了，前面已启动的 swarm 预热仍继续留在后台，供后续 backfill 复用。
        */
       const distribution = 读取协作分发定位片段(locator);
+      const swarmWarmup = distribution
+        ? 尝试协作分发主链(input, locator)
+        : Promise.resolve<媒体播放结果 | null>(null);
+      const swarmWinner = await 在预算内等待协作分发结果(
+        swarmWarmup,
+        查看器Swarm抢跑预算毫秒
+      );
+      if (swarmWinner) {
+        return swarmWinner;
+      }
       if (!distribution || distribution.availability === "expired") {
         释放协作分发占用(input);
       }
