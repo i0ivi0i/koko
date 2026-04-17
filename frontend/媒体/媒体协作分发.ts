@@ -76,6 +76,7 @@ type 协作分发会话 = {
   contentHash: string;
   sourcePromise: Promise<{ src: string } | null>;
   eagerCompleting: boolean;
+  locallyComplete: boolean;
   hint: 协作分发媒体源["hint"] | null;
   presenceIntervalId: ReturnType<typeof setInterval> | null;
   torrent: WebTorrent种子 | null;
@@ -442,6 +443,7 @@ function 绑定协作分发会话事件(session: 协作分发会话, torrent: We
   });
   torrent.on("done", () => {
     session.eagerCompleting = false;
+    session.locallyComplete = true;
     session.hint = "正在协作分发";
     发布协作分发会话事件(session, "ASSET_COMPLETE");
   });
@@ -490,6 +492,17 @@ function 清理协作分发底层会话(
   });
 }
 
+function 协作分发会话可在零引用后保留(session: 协作分发会话): boolean {
+  /**
+   * 只有两类 swarm 值得在 refs=0 后继续留着：
+   * 1. 正在 eagerCompleting，必须把整附件补齐；
+   * 2. 已经 locallyComplete，后续同页重开才能直接复用。
+   *
+   * 纯列表自动播扫出来、既没补齐也没完成的冷会话，不应该继续挂在 runtime 里吃内存和连接。
+   */
+  return session.eagerCompleting || session.locallyComplete;
+}
+
 async function 确保协作分发会话(input: {
   attachmentId: string;
   kind: 媒体种类;
@@ -497,7 +510,8 @@ async function 确保协作分发会话(input: {
   consumerId?: string;
   onSessionEvent?: (event: 协作分发会话事件) => void;
   eagerCompleting?: boolean;
-}): Promise<协作分发会话> {
+  reuseOnly?: boolean;
+}): Promise<协作分发会话 | null> {
   const consumerBinding = 归一化协作分发消费者(input);
   let session = 协作分发会话表.get(input.distribution.swarm_id);
   if (session) {
@@ -520,6 +534,14 @@ async function 确保协作分发会话(input: {
     return session;
   }
 
+  /**
+   * inline_autoplay 只允许复用已经热起来的 swarm。
+   * 如果当前消息只是滚动路过，不值得为了轻量预览新开一整套 whole-file WebTorrent 会话。
+   */
+  if (input.reuseOnly) {
+    return null;
+  }
+
   session = {
     attachmentId: input.attachmentId,
     swarmId: input.distribution.swarm_id,
@@ -527,6 +549,7 @@ async function 确保协作分发会话(input: {
     contentHash: input.distribution.content_hash,
     sourcePromise: Promise.resolve(null),
     eagerCompleting: Boolean(input.eagerCompleting),
+    locallyComplete: false,
     hint: null,
     presenceIntervalId: null,
     torrent: null,
@@ -604,12 +627,17 @@ export function 释放协作分发消费者(
       continue;
     }
     /**
-     * 最后一个 viewer 释放后，swarm 也不能立刻跟着死：
-     * 1. eagerCompleting=true 时要继续把整附件补齐，不然“刚播过却没真正缓存完整”会长期存在；
-     * 2. done 后也要继续保留本地 swarm，才能支撑同页重开和后端临时退场后的续播；
-     * 3. 真正的回收交给显式 runtime reset / 页面退出，而不是把“关查看器”误当成“放弃 swarm”。
+     * 最后一个 consumer 释放后，要按“是否还有保留价值”裁决：
+     * 1. eagerCompleting=true 时继续补齐整附件；
+     * 2. 已经 locallyComplete 的 swarm 继续保留，支撑同页重开；
+     * 3. 既没补齐也没完成的冷会话立即销毁，避免列表自动播滚着滚着堆出一排空转 torrent。
      */
     停止协作分发存活上报(session);
+    if (协作分发会话可在零引用后保留(session)) {
+      continue;
+    }
+    协作分发会话表.delete(swarmId);
+    清理协作分发底层会话(session);
   }
 }
 
@@ -635,6 +663,7 @@ export async function 解析协作分发源(input: {
   consumerId?: string;
   onSessionEvent?: (event: 协作分发会话事件) => void;
   eagerCompleting?: boolean;
+  reuseOnly?: boolean;
 }): Promise<协作分发媒体源 | null> {
   const distribution = 读取可用协作分发片段(input.locator);
   if (!distribution) {
@@ -647,7 +676,11 @@ export async function 解析协作分发源(input: {
     ...(input.consumerId ? { consumerId: input.consumerId } : {}),
     ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
     ...(input.eagerCompleting ? { eagerCompleting: true } : {}),
+    ...(input.reuseOnly ? { reuseOnly: true } : {}),
   });
+  if (!session) {
+    return null;
+  }
   const source = await session.sourcePromise;
   if (!source) {
     return null;

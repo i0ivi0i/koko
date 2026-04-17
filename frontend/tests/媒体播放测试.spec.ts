@@ -686,7 +686,7 @@ describe("媒体播放器", () => {
     expect(resolveSwarmSource).not.toHaveBeenCalled();
   });
 
-  it("inline_autoplay surface 在 distribution 可用时，会先尝试 swarm/web seed，而不是先 probe anchor", async () => {
+  it("inline_autoplay surface 会先尝试复用已热 swarm/web seed，而不是直接 probe anchor", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-inline-hls",
       hint: "正在协作分发" as const,
@@ -764,12 +764,13 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-inline-hls",
         consumerId: "inline_autoplay:att-video-inline-hls",
+        reuseOnly: true,
       })
     );
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("inline_autoplay 在 swarm 不可用时，才会回退到锚点冷源", async () => {
+  it("inline_autoplay 在没有可复用 swarm 时，才会回退到锚点冷源", async () => {
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({
@@ -836,6 +837,7 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-inline-fallback",
         consumerId: "inline_autoplay:att-video-inline-fallback",
+        reuseOnly: true,
       })
     );
     expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-inline-fallback");

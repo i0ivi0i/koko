@@ -54,6 +54,7 @@ type 媒体播放器依赖 = {
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
+    reuseOnly?: boolean;
   }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
   releaseSwarmSource?(input: { attachmentId: string; consumerId?: string }): void;
   probeAnchor?(url: string): Promise<void>;
@@ -226,7 +227,8 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
 
   const 尝试协作分发主链 = async (
     input: 媒体播放输入,
-    locator: 媒体定位结果
+    locator: 媒体定位结果,
+    options: { reuseOnly?: boolean } = {}
   ): Promise<媒体播放结果 | null> => {
     const distribution = 读取协作分发定位片段(locator);
     if (distribution?.availability === "expired") {
@@ -250,6 +252,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         locator,
         ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
+        ...(options.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!swarmSource) {
         return null;
@@ -389,12 +392,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     if (surface === "inline_autoplay") {
       /**
-       * 消息流自动播现在回到 P2P/WebTorrent 优先：
-       * 1. 仍然禁止列表里的轻量 `<video>` 直接吞 HLS manifest；
-       * 2. 但会先复用同一个 swarm/web seed resolver，吃正式分发平面的真相；
-       * 3. 只有 swarm 不足时，才回退到浏览器原生冷源锚点。
+       * 消息流自动播不再为冷视频新开 whole-file WebTorrent：
+       * 1. 列表态只尝试复用已经热起来的 swarm/web seed；
+       * 2. 没命中已热 swarm 时，才回退到浏览器原生冷源锚点；
+       * 3. 这样自动播仍复用同一条正式媒体主链，但不会在滚动里把 torrent/client 越滚越多。
        */
-      const swarmPlayback = await 尝试协作分发主链(input, locator);
+      const swarmPlayback = await 尝试协作分发主链(input, locator, {
+        reuseOnly: true,
+      });
       if (swarmPlayback) {
         return swarmPlayback;
       }

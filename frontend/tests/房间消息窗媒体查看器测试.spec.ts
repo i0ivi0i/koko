@@ -342,6 +342,157 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("支持 IntersectionObserver 时，只根据进入视口的按钮派发自动播候选，而不会同步量测整列视频", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      创建媒体消息项(),
+      {
+        ...创建媒体消息项(),
+        id: "m-2",
+        eventPosition: 2,
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];
+    let nextAnimationFrameId = 1;
+    const rafCallbacks = new Map<number, FrameRequestCallback>();
+    const flushAnimationFrame = () => {
+      const callbacks = Array.from(rafCallbacks.values());
+      rafCallbacks.clear();
+      for (const callback of callbacks) {
+        callback(performance.now());
+      }
+    };
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    type 观察回调 = (
+      entries: IntersectionObserverEntry[],
+      observer: IntersectionObserver
+    ) => void;
+    let observerCallback: 观察回调 | null = null;
+    let observerInstance: IntersectionObserver | null = null;
+
+    class 假交叉观察器 {
+      readonly root: Element | Document | null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0, 0.25, 0.5, 0.75, 1];
+      readonly observe = observe;
+      readonly unobserve = unobserve;
+      readonly disconnect = disconnect;
+
+      constructor(callback: 观察回调, options?: IntersectionObserverInit) {
+        observerCallback = callback;
+        this.root = (options?.root as Element | Document | null) ?? null;
+        observerInstance = this as unknown as IntersectionObserver;
+      }
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const id = nextAnimationFrameId++;
+        rafCallbacks.set(id, callback);
+        return id;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        rafCallbacks.delete(id);
+      })
+    );
+    vi.stubGlobal(
+      "IntersectionObserver",
+      假交叉观察器 as unknown as typeof IntersectionObserver
+    );
+
+    try {
+      pane.addEventListener("room-inline-autoplay-observed", (event) => {
+        observedEvents.push(event as CustomEvent<{ candidates: unknown[] }>);
+      });
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const firstButton = pane.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      );
+      const secondButton = pane.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-2"]'
+      );
+      expect(firstButton).not.toBeNull();
+      expect(secondButton).not.toBeNull();
+
+      const firstRectSpy = vi
+        .spyOn(firstButton!, "getBoundingClientRect")
+        .mockReturnValue(new DOMRect(0, 0, 320, 180));
+      const secondRectSpy = vi
+        .spyOn(secondButton!, "getBoundingClientRect")
+        .mockReturnValue(new DOMRect(0, 0, 320, 180));
+
+      flushAnimationFrame();
+      observedEvents.length = 0;
+
+      expect(observe).toHaveBeenCalledTimes(2);
+      expect(firstRectSpy).not.toHaveBeenCalled();
+      expect(secondRectSpy).not.toHaveBeenCalled();
+      expect(observerCallback).not.toBeNull();
+      expect(observerInstance).not.toBeNull();
+      if (!observerCallback || !observerInstance) {
+        throw new Error("IntersectionObserver 回调未就绪");
+      }
+
+      (observerCallback as 观察回调)(
+        [
+          {
+            target: secondButton!,
+            isIntersecting: true,
+            intersectionRatio: 0.82,
+            boundingClientRect: new DOMRect(0, 270, 320, 180),
+            rootBounds: new DOMRect(0, 0, 320, 720),
+            intersectionRect: new DOMRect(0, 270, 320, 180),
+            time: performance.now(),
+          } as IntersectionObserverEntry,
+        ],
+        observerInstance as IntersectionObserver
+      );
+
+      expect(observedEvents).toHaveLength(0);
+      expect(rafCallbacks.size).toBe(1);
+
+      flushAnimationFrame();
+
+      expect(observedEvents).toHaveLength(1);
+      expect(observedEvents[0]?.detail.candidates).toEqual([
+        {
+          attachmentId: "att-video-2",
+          visibilityRatio: 0.82,
+          distanceToViewportCenter: 0,
+        },
+      ]);
+      expect(firstRectSpy).not.toHaveBeenCalled();
+      expect(secondRectSpy).not.toHaveBeenCalled();
+    } finally {
+      pane.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("视频已经切到 HLS manifest 主链时，消息卡片继续用 poster 占位，但查看器要拿到 manifest 地址", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {

@@ -67,6 +67,10 @@ export class 房间消息窗 extends LitElement {
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
   private 自动播候选调度句柄: number | null = null;
   private 自动播候选滚动容器: HTMLElement | null = null;
+  private 自动播候选观察根: HTMLElement | null = null;
+  private 自动播候选观察器: IntersectionObserver | null = null;
+  private readonly 自动播候选观察目标 = new Map<HTMLButtonElement, string>();
+  private readonly 自动播候选可见条目 = new Map<string, 消息视频自动播候选>();
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -102,6 +106,7 @@ export class 房间消息窗 extends LitElement {
 
   override disconnectedCallback(): void {
     this.取消自动播候选调度();
+    this.清理自动播候选观察();
     super.disconnectedCallback();
   }
 
@@ -150,6 +155,7 @@ export class 房间消息窗 extends LitElement {
     if (!scrollContainer) {
       return;
     }
+    this.同步自动播候选观察(scrollContainer);
     this.调度自动播候选(scrollContainer);
   }
 
@@ -192,12 +198,118 @@ export class 房间消息窗 extends LitElement {
     this.自动播候选滚动容器 = null;
   }
 
+  private 清理自动播候选观察(): void {
+    this.自动播候选观察器?.disconnect();
+    this.自动播候选观察器 = null;
+    this.自动播候选观察根 = null;
+    this.自动播候选观察目标.clear();
+    this.自动播候选可见条目.clear();
+  }
+
+  /**
+   * 列表自动播只关心“真正进入滚动容器视口的少量视频卡片”：
+   * 1. Chrome/现代浏览器优先走 IntersectionObserver，避免每帧对整列视频按钮同步量测；
+   * 2. 观察器只维护候选快照，真正何时派发仍收口到现有 rAF 节流，不额外发明新 owner；
+   * 3. 旧环境缺少观察器时再回退到同步扫描，保证行为不丢。
+   */
+  private 同步自动播候选观察(scrollContainer: HTMLElement): void {
+    if (typeof IntersectionObserver !== "function") {
+      this.清理自动播候选观察();
+      return;
+    }
+    if (this.自动播候选观察根 !== scrollContainer) {
+      this.清理自动播候选观察();
+      this.自动播候选观察根 = scrollContainer;
+      this.自动播候选观察器 = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!(entry.target instanceof HTMLButtonElement)) {
+              continue;
+            }
+            const button = entry.target;
+            const currentAttachmentId = button.dataset.attachmentId ?? "";
+            const knownAttachmentId =
+              this.自动播候选观察目标.get(button) ?? currentAttachmentId;
+            if (knownAttachmentId !== currentAttachmentId && knownAttachmentId !== "") {
+              this.自动播候选可见条目.delete(knownAttachmentId);
+            }
+            if (currentAttachmentId !== "") {
+              this.自动播候选观察目标.set(button, currentAttachmentId);
+            }
+            if (!currentAttachmentId || !entry.isIntersecting || entry.intersectionRatio <= 0) {
+              if (currentAttachmentId !== "") {
+                this.自动播候选可见条目.delete(currentAttachmentId);
+              }
+              continue;
+            }
+            const rootBounds =
+              entry.rootBounds ?? this.自动播候选观察根?.getBoundingClientRect() ?? null;
+            if (!rootBounds) {
+              continue;
+            }
+            const distanceToViewportCenter = Math.abs(
+              (entry.boundingClientRect.top + entry.boundingClientRect.bottom) / 2 -
+                (rootBounds.top + rootBounds.bottom) / 2
+            );
+            this.自动播候选可见条目.set(currentAttachmentId, {
+              attachmentId: currentAttachmentId,
+              visibilityRatio: entry.intersectionRatio,
+              distanceToViewportCenter,
+            });
+          }
+          this.调度自动播候选(scrollContainer);
+        },
+        {
+          root: scrollContainer,
+          threshold: [0, 0.25, 0.5, 0.75, 1],
+        }
+      );
+    }
+    const observer = this.自动播候选观察器;
+    if (!observer) {
+      return;
+    }
+    const currentButtons = new Set(
+      this.querySelectorAll<HTMLButtonElement>(
+        "button.message-video-preview-trigger[data-attachment-id]"
+      )
+    );
+    for (const [button, attachmentId] of this.自动播候选观察目标) {
+      if (currentButtons.has(button)) {
+        continue;
+      }
+      observer.unobserve(button);
+      this.自动播候选观察目标.delete(button);
+      if (attachmentId !== "") {
+        this.自动播候选可见条目.delete(attachmentId);
+      }
+    }
+    for (const button of currentButtons) {
+      const attachmentId = button.dataset.attachmentId ?? "";
+      const previousAttachmentId = this.自动播候选观察目标.get(button);
+      if (previousAttachmentId === undefined) {
+        this.自动播候选观察目标.set(button, attachmentId);
+        observer.observe(button);
+        continue;
+      }
+      if (previousAttachmentId !== attachmentId) {
+        if (previousAttachmentId !== "") {
+          this.自动播候选可见条目.delete(previousAttachmentId);
+        }
+        this.自动播候选观察目标.set(button, attachmentId);
+      }
+    }
+  }
+
   /**
    * 消息窗只把“浏览器当前看到了什么”翻成候选集合：
    * - 可见比例和距视口中心的距离是壳层事实；
    * - 真正谁拥有自动播资格，必须继续交给上层编排裁决。
    */
   private 读取自动播候选(scrollContainer: HTMLElement): 消息视频自动播候选[] {
+    if (this.自动播候选观察器) {
+      return Array.from(this.自动播候选可见条目.values());
+    }
     const viewportRect = scrollContainer.getBoundingClientRect();
     const videoEntries = Array.from(
       this.querySelectorAll<HTMLButtonElement>("button.message-video-preview-trigger[data-attachment-id]")

@@ -286,6 +286,7 @@ describe("媒体协作分发", () => {
       kind: "video",
       locator,
       consumerId: "inline_autoplay:att-multi-1",
+      reuseOnly: true,
     });
 
     expect(add).toHaveBeenCalledTimes(1);
@@ -304,6 +305,29 @@ describe("媒体协作分发", () => {
       refs: 1,
       consumers: ["session:att-multi-1"],
     });
+  });
+
+  it("reuseOnly 的 inline_autoplay 不会为冷附件新开 torrent 会话", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-autoplay-cold");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-autoplay-cold",
+      kind: "video",
+      locator: 准备好的定位结果("att-autoplay-cold"),
+      consumerId: "inline_autoplay:att-autoplay-cold",
+      reuseOnly: true,
+    });
+
+    expect(source).toBeNull();
+    expect(add).not.toHaveBeenCalled();
+    expect(读取协作分发会话状态("swarm-att-autoplay-cold")).toBeNull();
   });
 
   it("图片也会复用同一套协作分发 runtime，而不是分叉第二套实现", async () => {
@@ -790,7 +814,7 @@ describe("媒体协作分发", () => {
     });
   });
 
-  it("只释放其中一个消费者时不会提前 destroy，而最后一个消费者释放后也会保留 swarm", async () => {
+  it("只释放其中一个消费者时不会提前 destroy，但未完整的最后一个消费者释放后会清理 swarm", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-partial-release");
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -830,12 +854,8 @@ describe("媒体协作分发", () => {
       consumerId: "session:att-partial-release",
     });
 
-    expect(remove).not.toHaveBeenCalled();
-    expect(读取协作分发会话状态("swarm-att-partial-release")).toMatchObject({
-      refs: 0,
-      consumers: [],
-      eagerCompleting: false,
-    });
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(读取协作分发会话状态("swarm-att-partial-release")).toBeNull();
   });
 
   it("重置协作分发运行时时会关闭 stream server 并销毁 WebTorrent client", async () => {
