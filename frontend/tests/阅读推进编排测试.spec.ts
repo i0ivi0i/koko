@@ -13,6 +13,9 @@ describe("阅读推进编排", () => {
 
     expect(source).not.toContain('type: "VIEWPORT_OBSERVED"');
     expect(source).not.toContain('type: "USER_JUMPED_TO_LATEST"');
+    expect(source).not.toContain("function 读取阅读状态()");
+    expect(source).not.toContain("function 写入阅读状态(");
+    expect(source).not.toContain("function 接收时间线事实(");
   });
 
   it("首屏稳定完成后，已有候选已读才会进入正式待提交队列", async () => {

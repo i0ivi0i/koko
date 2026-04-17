@@ -63,18 +63,6 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   let readAnchorFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let followLatestReadSampleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function 读取阅读状态(): 阅读推进状态 {
-    return deps.读取阅读状态();
-  }
-
-  function 写入阅读状态(patch: Partial<阅读推进状态>): void {
-    deps.写入阅读状态(patch);
-  }
-
-  function 接收时间线事实(event: 房间时间线事件): void {
-    deps.接收时间线事实(event);
-  }
-
   function cancelPendingReadAnchorFlush(): void {
     if (readAnchorFlushTimer === null) {
       return;
@@ -92,7 +80,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   }
 
   function 接收候选已读位置(nextPosition: number): void {
-    写入阅读状态({
+    deps.写入阅读状态({
       candidateReadAnchorPosition: nextPosition,
     });
     promoteCandidateReadAnchorToPending();
@@ -104,7 +92,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
    * - 只有当前房间已经处于稳定阅读阶段，才允许它进入真正的提交队列。
    */
   function promoteCandidateReadAnchorToPending(): void {
-    const state = 读取阅读状态();
+    const state = deps.读取阅读状态();
     if (!state.roomId || !state.initialUnreadSettled) {
       return;
     }
@@ -121,7 +109,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     if (candidatePosition <= floor) {
       return;
     }
-    写入阅读状态({
+    deps.写入阅读状态({
       pendingReadAnchorPosition: candidatePosition,
     });
     if (readAnchorFlushTimer !== null) {
@@ -134,18 +122,18 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
   }
 
   async function flushReadAnchorUpdate(): Promise<void> {
-    const state = 读取阅读状态();
+    const state = deps.读取阅读状态();
     const nextPosition = state.pendingReadAnchorPosition;
     if (!state.roomId || nextPosition === null) {
       return;
     }
     if (nextPosition <= (state.lastReadEventPosition ?? 0)) {
-      写入阅读状态({ pendingReadAnchorPosition: null });
+      deps.写入阅读状态({ pendingReadAnchorPosition: null });
       return;
     }
     try {
       await deps.transport.updateRoomReadAnchor(state.roomId, state.sessionId, nextPosition);
-      写入阅读状态({
+      deps.写入阅读状态({
         lastReadEventPosition: nextPosition,
         pendingReadAnchorPosition: null,
         firstUnreadEventPosition:
@@ -155,7 +143,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       });
     } catch {
       // 阅读推进失败不应破坏当前房间内容；丢掉这次 pending，等待后续滚动再重试即可。
-      写入阅读状态({ pendingReadAnchorPosition: null });
+      deps.写入阅读状态({ pendingReadAnchorPosition: null });
     }
   }
 
@@ -165,10 +153,10 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
    * 不会再次退化成由某个 DOM 控件临时宣布已读语义。
    */
   function 接收首屏稳定完成(): void {
-    if (读取阅读状态().initialUnreadSettled) {
+    if (deps.读取阅读状态().initialUnreadSettled) {
       return;
     }
-    写入阅读状态({
+    deps.写入阅读状态({
       initialUnreadSettled: true,
     });
     promoteCandidateReadAnchorToPending();
@@ -181,7 +169,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
    * - 与 snapshot / realtime 共用同一套合流逻辑，避免重复和乱序。
    */
   async function 请求加载更早历史(): Promise<void> {
-    const state = 读取阅读状态();
+    const state = deps.读取阅读状态();
     if (!state.roomId || state.historyLoading || !state.hasMoreBefore) {
       return;
     }
@@ -192,7 +180,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     }
     const 补偿上下文 = deps.roomScroller.读取历史补偿上下文();
 
-    写入阅读状态({
+    deps.写入阅读状态({
       historyLoading: true,
       historyErrorCode: "",
     });
@@ -201,12 +189,12 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       const page = await deps.withSessionRefreshOnInvalid((sessionId) =>
         deps.transport.loadRoomHistory(state.roomId, sessionId, oldestMessage.event_position, 55)
       );
-      接收时间线事实({
+      deps.接收时间线事实({
         type: "HISTORY_PAGE_APPENDED",
         messages: page.messages,
         hasMoreBefore: page.messages.length > 0,
       });
-      写入阅读状态({
+      deps.写入阅读状态({
         historyLoading: false,
         historyErrorCode: "",
       });
@@ -221,7 +209,7 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
         typeof (error as { code?: unknown })?.code === "string"
           ? ((error as { code: string }).code || "system_error")
           : "system_error";
-      写入阅读状态({
+      deps.写入阅读状态({
         historyLoading: false,
         historyErrorCode: code,
       });

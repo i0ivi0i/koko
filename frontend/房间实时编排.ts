@@ -79,22 +79,6 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   const 读取当前时间 = deps.读取当前时间 ?? (() => Date.now());
   const 后台补发同步标识 = "koko-queue-main";
 
-  function 读取实时状态(): 实时编排状态 {
-    return deps.读取实时状态();
-  }
-
-  function 写入实时状态(patch: Partial<实时编排状态>): void {
-    deps.写入实时状态(patch);
-  }
-
-  function 接收时间线事实(event: 房间时间线事件): void {
-    deps.接收时间线事实(event);
-  }
-
-  function 接收实时会话事实(event: 实时会话事件): void {
-    deps.接收实时会话事实(event);
-  }
-
   function asRecoveryFailure(error: unknown): 恢复失败 {
     if (error instanceof Http接口错误) {
       return error;
@@ -118,13 +102,13 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   }
 
   function applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
-    const shouldFollowLatest = 读取实时状态().viewportMode === "贴底跟随";
-    接收时间线事实({
+    const shouldFollowLatest = deps.读取实时状态().viewportMode === "贴底跟随";
+    deps.接收时间线事实({
       type: "REALTIME_EVENTS_RECEIVED",
       messages: events,
       latestEventPosition,
     });
-    写入实时状态({
+    deps.写入实时状态({
       pending: false,
     });
     deps.接收权威事件后副作用?.(events);
@@ -137,7 +121,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     if (!isInvalidSessionError(error)) {
       return;
     }
-    接收实时会话事实({
+    deps.接收实时会话事实({
       type: "SOCKET_DISCONNECTED",
       code: "invalid_session",
     });
@@ -148,7 +132,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
 
   async function handleControlResult(control: 控制面结果): Promise<void> {
     if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
-      接收实时会话事实({
+      deps.接收实时会话事实({
         type: "SUBSCRIPTION_ESTABLISHED",
         latestEventPosition: control.latest_event_position,
       });
@@ -171,19 +155,20 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       return;
     }
 
-    if (!读取实时状态().roomId) {
-      写入实时状态({ pending: false });
+    const currentRoomId = deps.读取实时状态().roomId;
+    if (!currentRoomId) {
+      deps.写入实时状态({ pending: false });
       return;
     }
 
     if (control.code === "invalid_session") {
-      接收实时会话事实({
+      deps.接收实时会话事实({
         type: "SOCKET_DISCONNECTED",
         code: "invalid_session",
       });
       await deps.上报Transport异常({
         kind: "invalid_session",
-        roomId: 读取实时状态().roomId,
+        roomId: currentRoomId,
         keepRoomVisible: true,
       });
       return;
@@ -198,15 +183,16 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     }
     const socket = deps.transport.createSocket(sessionId);
     socket.on("connect", () => {
-      if (读取实时状态().roomId) {
-        subscribeRoom(读取实时状态().latestEventPosition);
+      const state = deps.读取实时状态();
+      if (state.roomId) {
+        subscribeRoom(state.latestEventPosition);
       }
     });
     socket.on("connect_error", (error: unknown) => {
       void handleConnectError(error);
     });
     socket.on("disconnect", (reason: string) => {
-      接收实时会话事实({
+      deps.接收实时会话事实({
         type: "SOCKET_DISCONNECTED",
         code: String(reason || "disconnect"),
       });
@@ -241,21 +227,22 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   }
 
   function subscribeRoom(from: number): void {
-    if (!读取实时状态().roomId || !realtimeSocket) {
+    const roomId = deps.读取实时状态().roomId;
+    if (!roomId || !realtimeSocket) {
       return;
     }
-    接收实时会话事实({
+    deps.接收实时会话事实({
       type: "SUBSCRIPTION_STARTED",
     });
     deps.roomKernel.send({ type: "SUBSCRIPTION_STARTED" });
     realtimeSocket.emit("subscribe_room_stream", {
-      room_id: 读取实时状态().roomId,
+      room_id: roomId,
       from,
     });
   }
 
   async function sendMessage(): Promise<void> {
-    const state = 读取实时状态();
+    const state = deps.读取实时状态();
     if (!state.roomId) {
       return;
     }
@@ -302,7 +289,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       if (!入队成功) {
         return;
       }
-      写入实时状态({
+      deps.写入实时状态({
         messageInput: "",
         composerMediaDrafts: [],
         pending: false,
@@ -312,7 +299,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     }
 
     if (attachmentIds.length === 0) {
-      接收时间线事实({
+      deps.接收时间线事实({
         type: "OPTIMISTIC_MESSAGE_ADDED",
         message: 创建乐观房间消息({
           roomId: state.roomId,
@@ -324,7 +311,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
         }),
       });
     }
-    写入实时状态({
+    deps.写入实时状态({
       messageInput: "",
       composerMediaDrafts: [],
       pending: true,
@@ -357,7 +344,7 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     if (!roomId || !clientMessageId) {
       return "done";
     }
-    if (读取实时状态().roomId !== roomId) {
+    if (deps.读取实时状态().roomId !== roomId) {
       return "retry";
     }
     const text = typeof payload.text === "string" ? payload.text : "";

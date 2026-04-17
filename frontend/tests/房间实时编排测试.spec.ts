@@ -14,6 +14,9 @@ describe("房间实时编排", () => {
 
     expect(source).toContain("接收实时会话事实");
     expect(source).not.toContain('type: "RECONNECTING_STARTED"');
+    expect(source).not.toContain("function 读取实时状态()");
+    expect(source).not.toContain("function 写入实时状态(");
+    expect(source).not.toContain("function 接收时间线事实(");
   });
 
   it("connect_error invalid_session 只上报 transport 异常，不自己刷新会话", async () => {
