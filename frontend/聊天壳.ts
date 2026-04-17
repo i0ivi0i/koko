@@ -518,7 +518,12 @@ export class 聊天壳 extends LitElement {
       outline-offset: 3px;
     }
 
-    .message-video-poster {
+    /*
+     * 时间线里的自动播 video 只是预览层，不是第二颗正式播放器。
+     * 它必须和 poster 共用同一套尺寸、裁剪和命中规则，避免黑边和原生媒体误触。
+     */
+    .message-video-poster,
+    .message-video-preview {
       position: relative;
       z-index: 0;
       display: block;

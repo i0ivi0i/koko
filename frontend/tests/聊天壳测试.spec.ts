@@ -133,7 +133,13 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain(".message-video-card");
     expect(styles).toContain(".message-video-preview-trigger");
     expect(styles).toContain(".message-video-poster");
-    expect(styles).not.toContain(".message-video-preview {");
+    expect(styles).toMatch(
+      /\.message-video-preview(?:\s*,\s*\.message-video-poster|\s*\{)/
+    );
+    expect(styles).toMatch(/\.message-video-preview[\s\S]*width:\s*100%/);
+    expect(styles).toMatch(/\.message-video-preview[\s\S]*max-width:\s*100%/);
+    expect(styles).toMatch(/\.message-video-preview[\s\S]*object-fit:\s*cover/);
+    expect(styles).toMatch(/\.message-video-preview[\s\S]*pointer-events:\s*none/);
     expect(styles).not.toContain(".message-media-preview-video");
     expect(styles).not.toContain(".message-media-preview-backdrop");
     expect(styles).toContain("z-index: 0");
