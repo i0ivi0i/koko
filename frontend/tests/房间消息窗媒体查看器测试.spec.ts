@@ -66,7 +66,7 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
     template: "hero-strip",
     columnCount: 2,
     gap: 8,
-    rowHeight: 131,
+    rowHeight: 182,
     contentWidth: 336,
   },
   attachments: [
@@ -76,11 +76,11 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       width: 1200,
       height: 800,
       gridColumnStart: 1,
-      gridColumnSpan: 2,
+      gridColumnSpan: 1,
       gridRowStart: 1,
-      gridRowSpan: 1,
-      displayWidth: 336,
-      displayHeight: 131,
+      gridRowSpan: 2,
+      displayWidth: 164,
+      displayHeight: 372,
       thumbnailSrc: "http://media.local/thumb-hero",
       originalSrc: "http://media.local/original-hero",
     },
@@ -89,12 +89,12 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       attachmentId: "att-video-2",
       width: 1280,
       height: 720,
-      gridColumnStart: 1,
+      gridColumnStart: 2,
       gridColumnSpan: 1,
-      gridRowStart: 2,
+      gridRowStart: 1,
       gridRowSpan: 1,
       displayWidth: 164,
-      displayHeight: 131,
+      displayHeight: 182,
       originalSrc: "http://media.local/original-video-2",
       posterSrc: "http://media.local/poster-video-2",
     },
@@ -108,7 +108,7 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowStart: 2,
       gridRowSpan: 1,
       displayWidth: 164,
-      displayHeight: 131,
+      displayHeight: 182,
       thumbnailSrc: "http://media.local/thumb-image-3",
       originalSrc: "http://media.local/original-image-3",
     },
@@ -122,7 +122,7 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowStart: 3,
       gridRowSpan: 1,
       displayWidth: 164,
-      displayHeight: 131,
+      displayHeight: 182,
       originalSrc: "http://media.local/original-video-4",
       posterSrc: "http://media.local/poster-video-4",
     },
@@ -136,7 +136,7 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridRowStart: 3,
       gridRowSpan: 1,
       displayWidth: 164,
-      displayHeight: 131,
+      displayHeight: 182,
       thumbnailSrc: "http://media.local/thumb-image-5",
       originalSrc: "http://media.local/original-image-5",
     },
@@ -160,7 +160,7 @@ describe("房间消息窗媒体查看器", () => {
     const grid = pane.querySelector<HTMLElement>(".message-attachment-grid");
     expect(grid?.dataset.attachmentTemplate).toBe("hero-strip");
     expect(grid?.style.getPropertyValue("--attachment-grid-columns")).toBe("2");
-    expect(grid?.style.getPropertyValue("--attachment-grid-row-height")).toBe("131px");
+    expect(grid?.style.getPropertyValue("--attachment-grid-row-height")).toBe("182px");
 
     const heroCard = pane.querySelector<HTMLElement>(
       '.message-attachment-card[data-attachment-id="att-hero"]'
@@ -168,9 +168,11 @@ describe("房间消息窗媒体查看器", () => {
     const lowerVideoCard = pane.querySelector<HTMLElement>(
       '.message-attachment-card[data-attachment-id="att-video-4"]'
     );
-    expect(heroCard?.dataset.gridColumnSpan).toBe("2");
+    expect(heroCard?.dataset.gridColumnSpan).toBe("1");
     expect(heroCard?.dataset.gridRowStart).toBe("1");
-    expect(heroCard?.style.getPropertyValue("grid-column")).toBe("1 / span 2");
+    expect(heroCard?.dataset.gridRowSpan).toBe("2");
+    expect(heroCard?.style.getPropertyValue("grid-column")).toBe("1 / span 1");
+    expect(heroCard?.style.getPropertyValue("grid-row")).toBe("1 / span 2");
     expect(lowerVideoCard?.dataset.gridColumnStart).toBe("1");
     expect(lowerVideoCard?.dataset.gridRowStart).toBe("3");
     expect(lowerVideoCard?.style.getPropertyValue("grid-row")).toBe("3 / span 1");

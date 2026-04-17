@@ -380,7 +380,18 @@ function 规划媒体拼贴布局(
   slots: 媒体附件拼贴槽位[];
 } {
   const gap = 8;
-  const multiAttachmentWidth = Math.max(220, Math.min(layoutEnv.maxContentWidth, 336));
+  const multiAttachmentWidth = Math.max(232, Math.min(layoutEnv.maxContentWidth, 352));
+  const 双列单元宽度 = Math.floor((multiAttachmentWidth - gap) / 2);
+  const 双列单元高度 = Math.max(168, Math.floor(双列单元宽度 * 1.06));
+  const 三列单元宽度 = Math.floor((multiAttachmentWidth - gap * 2) / 3);
+  const 三列单元高度 = Math.max(136, Math.floor(三列单元宽度 * 1.22));
+
+  /**
+   * 多媒体拼贴现在明确向“竖向短视频优先”的几何收口：
+   * 1. 双列和三列单元都默认做成 portrait cell，而不是横向海报卡；
+   * 2. 三图/五图模板改成 leader column，让主卡片纵向跨两行；
+   * 3. 这样混合图片/视频时不会再出现满屏宽扁卡片，阅读节奏也更接近 Telegram。
+   */
   if (attachmentCount <= 1) {
     return {
       layout: {
@@ -400,7 +411,7 @@ function 规划媒体拼贴布局(
         template: "double-grid",
         columnCount: 2,
         gap,
-        rowHeight: Math.max(88, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.78)),
+        rowHeight: 双列单元高度,
         contentWidth: multiAttachmentWidth,
       },
       slots: [
@@ -416,12 +427,12 @@ function 规划媒体拼贴布局(
         template: "hero-top",
         columnCount: 2,
         gap,
-        rowHeight: Math.max(92, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.8)),
+        rowHeight: 双列单元高度,
         contentWidth: multiAttachmentWidth,
       },
       slots: [
-        { columnStart: 1, columnSpan: 2, rowStart: 1, rowSpan: 1 },
-        { columnStart: 1, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 2 },
+        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
         { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
       ],
     };
@@ -433,7 +444,7 @@ function 规划媒体拼贴布局(
         template: "quad-grid",
         columnCount: 2,
         gap,
-        rowHeight: Math.max(92, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.8)),
+        rowHeight: 双列单元高度,
         contentWidth: multiAttachmentWidth,
       },
       slots: [
@@ -451,12 +462,12 @@ function 规划媒体拼贴布局(
         template: "hero-strip",
         columnCount: 2,
         gap,
-        rowHeight: Math.max(92, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.8)),
+        rowHeight: 双列单元高度,
         contentWidth: multiAttachmentWidth,
       },
       slots: [
-        { columnStart: 1, columnSpan: 2, rowStart: 1, rowSpan: 1 },
-        { columnStart: 1, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 2 },
+        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
         { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
         { columnStart: 1, columnSpan: 1, rowStart: 3, rowSpan: 1 },
         { columnStart: 2, columnSpan: 1, rowStart: 3, rowSpan: 1 },
@@ -469,7 +480,7 @@ function 规划媒体拼贴布局(
       template: "triple-grid",
       columnCount: 3,
       gap,
-      rowHeight: Math.max(88, Math.floor(((multiAttachmentWidth - gap * 2) / 3) * 0.96)),
+      rowHeight: 三列单元高度,
       contentWidth: multiAttachmentWidth,
     },
     slots: Array.from({ length: attachmentCount }, (_, index) => ({

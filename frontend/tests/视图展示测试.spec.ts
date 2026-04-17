@@ -86,15 +86,15 @@ describe("视图 / 消息展示项派生", () => {
       {
         attachmentId: "att-1",
         gridColumnStart: 1,
-        gridColumnSpan: 2,
+        gridColumnSpan: 1,
         gridRowStart: 1,
-        gridRowSpan: 1,
+        gridRowSpan: 2,
       },
       {
         attachmentId: "att-2",
-        gridColumnStart: 1,
+        gridColumnStart: 2,
         gridColumnSpan: 1,
-        gridRowStart: 2,
+        gridRowStart: 1,
         gridRowSpan: 1,
       },
       {
@@ -126,7 +126,12 @@ describe("视图 / 消息展示项派生", () => {
      * 只要这一层成立，Renderer 和 CSS 就能稳定消费同一份真相，
      * 不会再退回“所有多媒体都只会两列平铺”的旧路。
      */
-    expect(item.attachments[0]?.displayWidth).toBe(item.bubbleWidth);
+    expect(item.attachments[0]?.displayHeight).toBeGreaterThan(
+      item.attachments[0]?.displayWidth ?? 0
+    );
+    expect(item.attachments[1]?.displayHeight).toBeGreaterThan(
+      item.attachments[1]?.displayWidth ?? 0
+    );
     expect(item.attachments[1]?.displayWidth).toBe(item.attachments[2]?.displayWidth);
     expect(item.attachments[2]?.displayWidth).toBe(item.attachments[3]?.displayWidth);
     expect(item.attachments[3]?.displayWidth).toBe(item.attachments[4]?.displayWidth);
@@ -159,5 +164,8 @@ describe("视图 / 消息展示项派生", () => {
     ).toEqual([1, 2, 3, 1, 2, 3]);
     expect(item.attachments.every((attachment) => attachment.gridColumnSpan === 1)).toBe(true);
     expect(item.attachments.every((attachment) => attachment.gridRowSpan === 1)).toBe(true);
+    expect(item.attachments.every((attachment) => attachment.displayHeight > attachment.displayWidth)).toBe(
+      true
+    );
   });
 });

@@ -193,9 +193,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain(".room-header");
-    expect(styles).toContain("gap: 8px");
+    expect(styles).toContain("gap: 6px");
     expect(styles).toContain("min-width: 44px");
-    expect(styles).toContain("padding: calc(2px + env(safe-area-inset-top, 0px)) 0 4px");
+    expect(styles).toContain("padding: calc(1px + env(safe-area-inset-top, 0px)) 0 2px");
   });
 
   it("多附件网格会消费 presenter 提供的列数与行高变量，而不是把所有消息锁死在双列模板", () => {
@@ -215,6 +215,40 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toMatch(/\.message-alias\s*\{[^}]*white-space:\s*normal/);
     expect(styles).toMatch(/\.message-alias\s*\{[^}]*overflow-wrap:\s*anywhere/);
     expect(styles).not.toMatch(/\.message-alias\s*\{[^}]*text-overflow:\s*ellipsis/);
+  });
+
+  it("房间消息布局预算会更积极利用横向空间，而不是继续保留网页式左右留白", async () => {
+    const el = await 创建已入房聊天壳();
+    const roomView = el.shadowRoot!.querySelector("#roomView") as HTMLElement | null;
+    expect(roomView).not.toBeNull();
+    Object.defineProperty(roomView!, "clientWidth", {
+      configurable: true,
+      value: 1024,
+    });
+
+    const env = (
+      el as unknown as {
+        读取消息文本布局环境(): {
+          maxContentWidth: number;
+          singleLineMaxContentWidth: number;
+        };
+      }
+    ).读取消息文本布局环境();
+
+    expect(env.maxContentWidth).toBeGreaterThanOrEqual(800);
+    expect(env.singleLineMaxContentWidth).toBeGreaterThanOrEqual(env.maxContentWidth);
+    el.remove();
+  });
+
+  it("控制器输入区域会继续压缩垂直留白，而不是让状态提示下面再空出一大片区域", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain(".shell-screen");
+    expect(styles).toContain("gap: 8px");
+    expect(styles).toContain(".composer-bar");
+    expect(styles).toContain("padding: 4px 8px");
+    expect(styles).toContain("gap: 6px");
+    expect(styles).toMatch(/#shellConsoleStatus[\s\S]*min-height:\s*0/);
   });
 
   it("启动恢复房间时在 bootstrap 完成前不会先闪出空态首页", async () => {

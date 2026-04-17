@@ -141,7 +141,7 @@ export class 聊天壳 extends LitElement {
       min-height: 100dvh;
       display: grid;
       grid-template-rows: minmax(0, 1fr) auto;
-      gap: 12px;
+      gap: 8px;
       padding: 12px 14px;
       padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     }
@@ -308,7 +308,7 @@ export class 聊天壳 extends LitElement {
       position: relative;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
-      gap: 8px;
+      gap: 6px;
       padding: 0;
     }
 
@@ -316,15 +316,15 @@ export class 聊天壳 extends LitElement {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
-      gap: 8px;
-      padding: calc(2px + env(safe-area-inset-top, 0px)) 0 4px;
+      gap: 6px;
+      padding: calc(1px + env(safe-area-inset-top, 0px)) 0 2px;
     }
 
     .back-button {
       min-width: 44px;
-      min-height: 40px;
-      padding: 0 12px;
-      border-radius: 14px;
+      min-height: 36px;
+      padding: 0 10px;
+      border-radius: 12px;
       background: var(--surface-nav);
       color: var(--text-secondary);
       box-shadow: var(--shadow-warm);
@@ -333,7 +333,7 @@ export class 聊天壳 extends LitElement {
     .room-heading {
       min-width: 0;
       display: grid;
-      gap: 2px;
+      gap: 1px;
       text-align: left;
     }
 
@@ -372,8 +372,8 @@ export class 聊天壳 extends LitElement {
       min-height: 0;
       height: 100%;
       overflow-y: auto;
-      padding: 2px 0;
-      border-radius: 22px;
+      padding: 0;
+      border-radius: 18px;
       /* 聊天窗口是内层滚动容器，触顶/触底时不应把浏览器页面回弹和外层滚动链带进来。 */
       overscroll-behavior-y: contain;
       /* 历史前插后由壳层自己做锚点恢复与兜底补偿，不能再让浏览器默认滚动锚点重复干预。 */
@@ -387,9 +387,9 @@ export class 聊天壳 extends LitElement {
     .message-list {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       min-height: 100%;
-      padding: 6px 0 0;
+      padding: 2px 0 0;
       margin: 0;
       list-style: none;
     }
@@ -619,8 +619,8 @@ export class 聊天壳 extends LitElement {
     /* 输入区单独放在底部壳层栏位里，避免消息很多时把输入框重新挤回顶部。 */
     .composer-bar {
       display: grid;
-      gap: 10px;
-      padding: 8px 10px;
+      gap: 6px;
+      padding: 4px 8px;
       border: 1px solid var(--line-soft);
       border-radius: 20px;
       background:
@@ -706,7 +706,7 @@ export class 聊天壳 extends LitElement {
     }
 
     .composer-status {
-      min-height: 18px;
+      min-height: 0;
       padding: 0 4px;
       font-size: 12px;
       color: var(--text-muted);
@@ -717,11 +717,11 @@ export class 聊天壳 extends LitElement {
     }
 
     #shellConsoleStatus {
-      min-height: 34px;
+      min-height: 0;
       overflow: visible;
       white-space: normal;
       overflow-wrap: anywhere;
-      line-height: 1.4;
+      line-height: 1.3;
     }
 
     .shell-console-form {
@@ -750,14 +750,14 @@ export class 聊天壳 extends LitElement {
     #shellConsoleMainRow {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
+      gap: 8px;
       align-items: end;
     }
 
     #shellConsoleInputGroup {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
-      gap: 10px;
+      gap: 8px;
       align-items: end;
       min-width: 0;
     }
@@ -791,7 +791,7 @@ export class 聊天壳 extends LitElement {
       }
 
       .room-header {
-        gap: 8px;
+        gap: 6px;
       }
 
       .back-button {
@@ -1225,10 +1225,10 @@ export class 聊天壳 extends LitElement {
       默认消息文本布局环境.bubbleHorizontalBorderWidth;
     const bubbleMaxWidth =
       roomWidth <= 640
-        ? Math.min(roomWidth * 0.88, 720)
+        ? Math.min(roomWidth * 0.94, 760)
         : roomWidth >= 768
-          ? Math.min(roomWidth * 0.7, 760)
-          : Math.min(roomWidth * 0.82, 720);
+          ? Math.min(roomWidth * 0.82, 860)
+          : Math.min(roomWidth * 0.9, 780);
     const 多行正文上限 = Math.max(
       120,
       bubbleMaxWidth - 气泡外框附加宽度
@@ -1248,6 +1248,8 @@ export class 聊天壳 extends LitElement {
      * 2. 传给 Pretext 的是正文可用内容宽度，不是整个气泡外框宽度；
      * 3. 当前宿主使用 `border-box`，所以左右边框也必须一起扣掉；
      * 4. `.message-bubble` 不再保留 CSS `max-width` 第二裁决，真正的宽度主权只留给 Presenter。
+     * 5. 这一轮继续把聊天主舞台往“真浏览器中的应用”方向收紧：
+     *    消息区要更像原生 IM，而不是中间留大块网页边距的内容栏。
      */
     return {
       ...默认消息文本布局环境,
