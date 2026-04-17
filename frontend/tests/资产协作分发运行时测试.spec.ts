@@ -259,6 +259,41 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("查看器关闭释放最后一个未完成补齐消费者时，会立即销毁重型 swarm", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-viewer-close-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor, remove } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-viewer-close-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-viewer-close-1"),
+      consumerId: "session:att-viewer-close-1",
+      eagerCompleting: true,
+    });
+
+    expect(读取协作分发会话状态("swarm-att-viewer-close-1")).toMatchObject({
+      refs: 1,
+      eagerCompleting: true,
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-viewer-close-1",
+      consumerId: "session:att-viewer-close-1",
+      丢弃未完成补齐: true,
+    });
+
+    expect(读取协作分发会话状态("swarm-att-viewer-close-1")).toBeNull();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
   it("hidden 后会把 heavyWorkPolicy 变成 suspended，并释放无 consumer 的冷 swarm", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-hidden-1");

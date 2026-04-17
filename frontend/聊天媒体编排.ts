@@ -104,13 +104,14 @@ export interface 聊天媒体编排端口 {
       kind: "image" | "video";
       consumerId?: string;
     }): Promise<void>;
-    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
+    释放附件播放资源?(input: 媒体播放释放请求): void;
   }): void;
   设置媒体查看器供测试(viewer: {
     打开(input: 媒体查看器打开请求): void;
     同步?(input: 媒体查看器打开请求): void;
     销毁(): void;
   }): void;
+  关闭媒体查看器供测试(): void;
   设置媒体发布器供测试(publisher: {
     处理选择媒体文件(files: Iterable<File>): Promise<void>;
     移除草稿(localId: string): void;
@@ -126,6 +127,7 @@ type 媒体附件条目 = {
   attachmentId: string;
   kind: 媒体种类;
 };
+type 媒体播放释放请求 = { attachmentId: string; consumerId?: string; 丢弃未完成补齐?: boolean };
 
 const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
@@ -216,19 +218,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       return false;
     }
     /**
-     * 刷新后，MediaCacheOwner 可能先把“本地已完整”恢复出来，
-     * 但时间线会话的 playback 还没来得及 hydrate，或者只拿到一条
-     * 为了首屏预算先保底的 manifest 主链。
-     * 这时如果直接拿 request 里的静态 HLS / original src 去打开正式查看器，
-     * 浏览器就会先发一轮冷源请求，随后才被会话真相纠正，用户就会误以为“缓存没复用”。
-     *
-     * 所以这里只拦截两种非常窄的窗口：
-     * - 目标是视频；
-     * - 本地完整度已经确定；
-     * - 会话当前还没有可投影的 playback 真相，或只拿到一次预算内保底的 manifest。
-     *
-     * manifest 只重裁一次：如果重裁后仍然只能回到 manifest，就直接打开，
-     * 避免为了追求 P2P 复用把查看器卡进无限等待。
+     * 本地完整度可能先于 playback hydrate 恢复；这时先等会话真相一拍，
+     * 避免查看器拿静态 HLS/original src 先打一轮冷源请求。
+     * manifest 只重裁一次，防止为了 P2P 复用把查看器卡进无限等待。
      */
     if (sessionSnapshot.playback.mode !== "manifest") {
       待重裁决的本地完整视频附件标识 = null;
@@ -276,11 +268,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       return false;
     }
     const sessionSnapshot = 媒体会话表.get(startItem.attachmentId)?.snapshot();
-    /**
-     * request 本身已经携带正式 HLS 主链时，不要再为了等待第一次会话 hydrate 把查看器卡住。
-     * 这里只放行“还没有更强 playback 真相，且本地完整度也没宣布成立”的极窄窗口；
-     * 一旦会话已经有权威 playback 或 locally_complete，就继续走 owner 重裁决路径。
-     */
+    // request 已携带 HLS 时，只在没有更强 playback 和本地完整度真相的窄窗口直开。
     return !sessionSnapshot?.playback && !sessionSnapshot?.locallyComplete;
   };
   const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
@@ -352,6 +340,18 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
 
     if (beforeContext.currentViewerRequest && !afterContext.currentViewerRequest) {
+      const attachmentId = beforeContext.currentViewerRequest.startAttachmentId;
+      const session = 媒体会话表.get(attachmentId);
+      if (session) {
+        释放附件播放资源({
+          attachmentId,
+          consumerId: 构造媒体会话ConsumerId(attachmentId),
+          丢弃未完成补齐: true,
+        });
+        session.销毁();
+        媒体会话表.delete(attachmentId);
+        deps.请求重渲染();
+      }
       待重裁决的本地完整视频附件标识 = null;
       deps.清除程序滚动来源("media_viewer_open");
     }
@@ -578,10 +578,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }).catch(() => undefined);
   };
 
-  const 释放附件播放资源 = (input: {
-    attachmentId: string;
-    consumerId?: string;
-  }): void => {
+  const 释放附件播放资源 = (input: 媒体播放释放请求): void => {
     // 编排层只在附件会话退场时通知播放器释放底层占用；
     // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
     媒体播放器.释放附件播放资源?.(input);
@@ -824,21 +821,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     释放消息流自动播Owner(): void {
-      /**
-       * 自动播只是消息流壳层的轻量体验态，不是正式播放会话。
-       * 页面退到后台时，这里必须立即释放 owner 和底层资源，
-       * 避免后台继续占着 `<video>`、解码器和协作分发占用。
-       */
+      // 自动播只是消息流轻量体验态；后台必须释放 owner、video、解码器和协作分发占用。
       接收媒体运行时事实({
         type: "INLINE_AUTOPLAY_RELEASE_REQUESTED",
       });
     },
 
     /**
-     * 播放结果只从“当前时间线里的附件集合”推导：
-     * - 新出现的附件进入解析；
-     * - 已经不在时间线里的附件立即退场；
-     * - 壳层只读这个结果表，不再自己记一份播放缓存。
+     * 播放结果只从当前时间线附件集合推导；新增附件进入解析，
+     * 退场附件释放资源，壳层不再自己记播放缓存。
      */
     同步消息附件播放结果(): void {
       const attachments = 读取当前房间媒体附件();
@@ -985,6 +976,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           viewer.销毁();
         },
       };
+    },
+
+    关闭媒体查看器供测试(): void {
+      const before = 媒体运行时.getSnapshot();
+      媒体运行时.send({ type: "VIEWER_CLOSED" });
+      媒体查看器.销毁();
+      void 同步媒体运行时快照并执行副作用(before);
     },
 
     设置媒体发布器供测试(publisher): void {

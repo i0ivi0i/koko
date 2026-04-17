@@ -56,7 +56,11 @@ type 媒体播放器依赖 = {
     eagerCompleting?: boolean;
     reuseOnly?: boolean;
   }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
-  releaseSwarmSource?(input: { attachmentId: string; consumerId?: string }): void;
+  releaseSwarmSource?(input: {
+    attachmentId: string;
+    consumerId?: string;
+    丢弃未完成补齐?: boolean;
+  }): void;
   probeAnchor?(url: string): Promise<void>;
 };
 

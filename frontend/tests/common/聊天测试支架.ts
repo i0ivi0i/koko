@@ -518,7 +518,11 @@ type 聊天媒体测试端口 = {
       surface?: "viewer" | "inline_autoplay";
       consumerId?: string;
     }): Promise<媒体播放结果>;
-    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
+    释放附件播放资源?(input: {
+      attachmentId: string;
+      consumerId?: string;
+      丢弃未完成补齐?: boolean;
+    }): void;
   }): void;
   设置媒体查看器供测试(viewer: {
     打开(input: 媒体查看器打开请求): void;
@@ -585,7 +589,11 @@ export function 注入媒体播放器供测试(
       surface?: "viewer" | "inline_autoplay";
       consumerId?: string;
     }): Promise<媒体播放结果>;
-    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
+    释放附件播放资源?(input: {
+      attachmentId: string;
+      consumerId?: string;
+      丢弃未完成补齐?: boolean;
+    }): void;
   }
 ): void {
   读取聊天媒体编排供测试(el).设置媒体播放器供测试(player);

@@ -218,6 +218,40 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
+  it("销毁播放器壳时会清空真实 video 的媒体源，让浏览器释放网络和解码资源", async () => {
+    const root = 创建假播放器根();
+    const pause = vi.fn();
+    const load = vi.fn();
+    Object.defineProperty(root.video, "pause", {
+      configurable: true,
+      value: pause,
+    });
+    Object.defineProperty(root.video, "load", {
+      configurable: true,
+      value: load,
+    });
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-destroy-release-1",
+        posterSrc: null,
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => root,
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+
+    shell.destroy();
+
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(root.video.hasAttribute("src")).toBe(false);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it("p2p-media-loader-hlsjs 只能作为壳外增强挂到 HLS provider，不进入 file/blob 首播必经路径", async () => {
     const attachMedia = vi.fn();
     const loadSource = vi.fn();

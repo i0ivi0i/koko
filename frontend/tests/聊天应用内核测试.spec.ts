@@ -69,9 +69,14 @@ type 聊天媒体测试端口 = {
       consumerId?: string;
     }): Promise<媒体播放结果>;
     激活协作补齐?(input: 图片协作补齐激活请求): Promise<void>;
-    释放附件播放资源?(input: { attachmentId: string; consumerId?: string }): void;
+    释放附件播放资源?(input: {
+      attachmentId: string;
+      consumerId?: string;
+      丢弃未完成补齐?: boolean;
+    }): void;
   }): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
+  关闭媒体查看器供测试(): void;
 };
 
 const 读取媒体编排供测试 = (kernel: unknown): 聊天媒体测试端口 =>
@@ -2614,6 +2619,112 @@ describe("聊天应用内核", () => {
       attachmentId: "att-video-viewer-1",
       consumerId: "session:att-video-viewer-1",
     });
+  });
+
+  it("正式查看器关闭时会释放播放 consumer，并丢弃未完成的整附件补齐", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-viewer-close-1",
+            client_message_id: "c-video-viewer-close-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-viewer-close-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 释放附件播放资源 = vi.fn();
+    const 激活协作补齐 = vi.fn(async () => {});
+    读取媒体编排供测试(kernel).设置媒体查看器供测试({
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "manifest",
+        attachmentId: "att-video-viewer-close-1",
+        kind: "video",
+        src: "http://media.local/stream/att-video-viewer-close-1/master.m3u8",
+        thumbnailUrl: "http://media.local/poster-att-video-viewer-close-1",
+        streamingDistribution: {
+          swarm_id: "swarm-att-video-viewer-close-1",
+          torrent_info_hash: "info-att-video-viewer-close-1",
+          content_hash: "hash-att-video-viewer-close-1",
+          availability: "active",
+        },
+        hint: null,
+      }),
+      激活协作补齐,
+      释放附件播放资源,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-viewer-close-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-viewer-close-1",
+            src: "http://media.local/stream/att-video-viewer-close-1/master.m3u8",
+            posterSrc: "http://media.local/poster-att-video-viewer-close-1",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    读取媒体编排供测试(kernel).处理媒体会话信号("att-video-viewer-close-1", {
+      type: "PLAYER_PLAYING",
+    });
+    expect(激活协作补齐).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-viewer-close-1",
+        consumerId: "session:att-video-viewer-close-1",
+      })
+    );
+
+    读取媒体编排供测试(kernel).关闭媒体查看器供测试();
+
+    expect(释放附件播放资源).toHaveBeenCalledWith({
+      attachmentId: "att-video-viewer-close-1",
+      consumerId: "session:att-video-viewer-close-1",
+      丢弃未完成补齐: true,
+    });
+    expect(
+      kernel.snapshot().media.sessionByAttachmentId["att-video-viewer-close-1"]
+    ).toBeUndefined();
   });
 
   it("frozen/page_hidden 会把重型工作意图降到 suspended，并投影到运行时快照", async () => {

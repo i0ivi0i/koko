@@ -210,6 +210,16 @@ export async function 创建VideoJs播放器壳(
   let hls实例: InstanceType<Hls构造器> | null = null;
   let 已挂接P2PHls增强层 = false;
 
+  const 释放真实视频资源 = (): void => {
+    try {
+      root.video.pause();
+    } catch {
+      // 部分测试环境或平台实现可能在无源状态抛错；释放流程不能因此中断。
+    }
+    root.video.removeAttribute("src");
+    root.video.load();
+  };
+
   const 销毁Hls实例 = (): void => {
     if (!hls实例) {
       return;
@@ -337,6 +347,7 @@ export async function 创建VideoJs播放器壳(
       }
       已销毁 = true;
       销毁Hls实例();
+      释放真实视频资源();
       root.destroy?.();
       root.provider.remove();
     },

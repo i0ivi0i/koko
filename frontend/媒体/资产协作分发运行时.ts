@@ -138,7 +138,13 @@ export interface 资产协作分发运行时端口 {
     reuseOnly?: boolean;
   }): Promise<协作分发媒体源 | null>;
   释放协作分发消费者(
-    input: string | { attachmentId: string; consumerId?: string }
+    input:
+      | string
+      | {
+          attachmentId: string;
+          consumerId?: string;
+          丢弃未完成补齐?: boolean;
+        }
   ): void;
   重置(): void;
   销毁(): void;
@@ -558,6 +564,14 @@ function 协作分发会话可在零引用后保留(session: 底层协作分发�
   return session.eagerCompleting || session.locallyComplete;
 }
 
+const 是否应强制丢弃未完成补齐 = (
+  input: Parameters<资产协作分发运行时端口["释放协作分发消费者"]>[0],
+  session: 底层协作分发会话
+): boolean =>
+  typeof input !== "string" &&
+  input.丢弃未完成补齐 === true &&
+  !session.locallyComplete;
+
 async function 确保协作分发会话(
   runtime: 资产协作分发运行时内部,
   input: {
@@ -793,6 +807,16 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
           continue;
         }
         停止协作分发存活上报(session);
+        if (是否应强制丢弃未完成补齐(input, session)) {
+          删除底层协作分发会话(runtime, swarmId, session);
+          if (!runtime.已销毁) {
+            runtime.actor.send({
+              type: "SESSION_DROPPED",
+              swarmId,
+            });
+          }
+          continue;
+        }
         if (协作分发会话可在零引用后保留(session)) {
           continue;
         }
