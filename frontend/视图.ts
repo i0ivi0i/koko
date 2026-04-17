@@ -28,6 +28,22 @@ export const 默认消息文本布局环境: 消息文本布局环境 = {
   bubbleHorizontalBorderWidth: 2,
 };
 
+export type 媒体拼贴模板 =
+  | "single"
+  | "double-grid"
+  | "hero-top"
+  | "quad-grid"
+  | "hero-strip"
+  | "triple-grid";
+
+export interface 媒体附件拼贴布局 {
+  template: 媒体拼贴模板;
+  columnCount: number;
+  gap: number;
+  rowHeight: number;
+  contentWidth: number;
+}
+
 export interface 消息展示项 {
   kind: "message";
   id: string;
@@ -35,6 +51,7 @@ export interface 消息展示项 {
   body: string;
   hasText: boolean;
   attachments: 媒体附件展示项[];
+  attachmentLayout?: 媒体附件拼贴布局;
   layout: 文本布局结果;
   bubbleWidth: number;
   senderDisplayAlias: string;
@@ -47,6 +64,10 @@ export interface 图片附件展示项 {
   attachmentId: string;
   width: number;
   height: number;
+  gridColumnStart?: number;
+  gridColumnSpan?: number;
+  gridRowStart?: number;
+  gridRowSpan?: number;
   displayWidth: number;
   displayHeight: number;
   thumbnailSrc: string;
@@ -58,6 +79,10 @@ export interface 视频附件展示项 {
   attachmentId: string;
   width: number;
   height: number;
+  gridColumnStart?: number;
+  gridColumnSpan?: number;
+  gridRowStart?: number;
+  gridRowSpan?: number;
   displayWidth: number;
   displayHeight: number;
   originalSrc: string;
@@ -65,6 +90,18 @@ export interface 视频附件展示项 {
 }
 
 export type 媒体附件展示项 = 图片附件展示项 | 视频附件展示项;
+interface 媒体附件拼贴槽位 {
+  columnStart: number;
+  columnSpan: number;
+  rowStart: number;
+  rowSpan: number;
+}
+
+interface 媒体附件展示结果 {
+  attachments: 媒体附件展示项[];
+  attachmentLayout: 媒体附件拼贴布局 | null;
+}
+
 export type 附件内容地址表 = Record<
   string,
   {
@@ -167,7 +204,7 @@ export function 派生消息展示项(
   const isMine = event.sender_session_id === currentSessionId;
   const body = 读取消息文本(event);
   const hasText = body.trim().length > 0;
-  const attachments = 派生媒体附件展示项列表(
+  const { attachments, attachmentLayout } = 派生媒体附件展示结果(
     event.attachments ?? [],
     layoutEnv,
     附件内容地址表
@@ -204,8 +241,8 @@ export function 派生消息展示项(
   const 媒体气泡宽度 =
     attachments.length > 0
       ? hasText
-        ? 计算媒体附件气泡宽度(attachments, layoutEnv)
-        : 计算媒体附件内容宽度(attachments, layoutEnv)
+        ? 计算媒体附件气泡宽度(attachments, layoutEnv, attachmentLayout)
+        : 计算媒体附件内容宽度(attachments, layoutEnv, attachmentLayout)
       : 0;
 
   /**
@@ -224,6 +261,7 @@ export function 派生消息展示项(
     body,
     hasText,
     attachments,
+    ...(attachmentLayout ? { attachmentLayout } : {}),
     layout,
     bubbleWidth: Math.max(文本气泡宽度, 媒体气泡宽度),
     senderDisplayAlias: event.sender_display_alias,
@@ -236,30 +274,55 @@ function 读取消息文本(event: 消息事件): string {
   return event.text ?? event.body ?? "";
 }
 
-function 派生媒体附件展示项列表(
+function 派生媒体附件展示结果(
   attachments: 附件快照[],
   layoutEnv: 消息文本布局环境,
   附件内容地址表: 附件内容地址表
-): 媒体附件展示项[] {
+): 媒体附件展示结果 {
   if (attachments.length === 0) {
-    return [];
+    return {
+      attachments: [],
+      attachmentLayout: null,
+    };
   }
-  const 多图宫格宽度 = Math.max(96, Math.floor((Math.min(layoutEnv.maxContentWidth, 320) - 8) / 2));
+
+  const 拼贴规划 = 规划媒体拼贴布局(attachments.length, layoutEnv);
   const 单图宽度上限 = Math.max(140, Math.min(layoutEnv.maxContentWidth, 320));
-  return attachments
-    .map((attachment, index, list) => {
+  const attachmentsItems = attachments.map<媒体附件展示项>((attachment, index) => {
+      const slot = 拼贴规划.slots[index] ?? {
+        columnStart: 1,
+        columnSpan: 1,
+        rowStart: 1,
+        rowSpan: 1,
+      };
       const displayWidth =
-        list.length === 1 ? Math.min(attachment.width, 单图宽度上限) : 多图宫格宽度;
-      const displayHeight = Math.max(
-        72,
-        Math.round((displayWidth * attachment.height) / Math.max(1, attachment.width))
-      );
+        拼贴规划.layout.template === "single"
+          ? Math.min(attachment.width, 单图宽度上限)
+          : 计算拼贴槽位宽度(拼贴规划.layout, slot);
+      const displayHeight =
+        拼贴规划.layout.template === "single"
+          ? Math.max(
+              72,
+              Math.round((displayWidth * attachment.height) / Math.max(1, attachment.width))
+            )
+          : 计算拼贴槽位高度(拼贴规划.layout, slot);
+
+      /**
+       * 多附件消息在 presenter 层先收口成统一拼贴几何：
+       * 1. 壳层和 renderer 只消费一份槽位真相，不再各自猜“几列几行”；
+       * 2. 混合图片/视频也共用同一模板选择逻辑，避免一边是图片网格、一边是视频列表；
+       * 3. 多附件时不再逐张保留原始纵横比，而是统一裁切到拼贴槽位，换取 Telegram 式整齐结构。
+       */
       if (attachment.kind === "video") {
         return {
           kind: "video",
           attachmentId: attachment.attachment_id,
           width: attachment.width,
           height: attachment.height,
+          gridColumnStart: slot.columnStart,
+          gridColumnSpan: slot.columnSpan,
+          gridRowStart: slot.rowStart,
+          gridRowSpan: slot.rowSpan,
           displayWidth,
           displayHeight,
           originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
@@ -283,12 +346,156 @@ function 派生媒体附件展示项列表(
         attachmentId: attachment.attachment_id,
         width: attachment.width,
         height: attachment.height,
+        gridColumnStart: slot.columnStart,
+        gridColumnSpan: slot.columnSpan,
+        gridRowStart: slot.rowStart,
+        gridRowSpan: slot.rowSpan,
         displayWidth,
         displayHeight,
         thumbnailSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "thumbnail"),
         originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
       };
     });
+
+  const attachmentLayout =
+    拼贴规划.layout.template === "single"
+      ? {
+          ...拼贴规划.layout,
+          contentWidth: attachmentsItems[0]?.displayWidth ?? 拼贴规划.layout.contentWidth,
+          rowHeight: attachmentsItems[0]?.displayHeight ?? 拼贴规划.layout.rowHeight,
+        }
+      : 拼贴规划.layout;
+
+  return {
+    attachments: attachmentsItems,
+    attachmentLayout,
+  };
+}
+
+function 规划媒体拼贴布局(
+  attachmentCount: number,
+  layoutEnv: 消息文本布局环境
+): {
+  layout: 媒体附件拼贴布局;
+  slots: 媒体附件拼贴槽位[];
+} {
+  const gap = 8;
+  const multiAttachmentWidth = Math.max(220, Math.min(layoutEnv.maxContentWidth, 336));
+  if (attachmentCount <= 1) {
+    return {
+      layout: {
+        template: "single",
+        columnCount: 1,
+        gap: 0,
+        rowHeight: 0,
+        contentWidth: multiAttachmentWidth,
+      },
+      slots: [{ columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 1 }],
+    };
+  }
+
+  if (attachmentCount === 2) {
+    return {
+      layout: {
+        template: "double-grid",
+        columnCount: 2,
+        gap,
+        rowHeight: Math.max(88, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.78)),
+        contentWidth: multiAttachmentWidth,
+      },
+      slots: [
+        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 1 },
+        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
+      ],
+    };
+  }
+
+  if (attachmentCount === 3) {
+    return {
+      layout: {
+        template: "hero-top",
+        columnCount: 2,
+        gap,
+        rowHeight: Math.max(92, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.8)),
+        contentWidth: multiAttachmentWidth,
+      },
+      slots: [
+        { columnStart: 1, columnSpan: 2, rowStart: 1, rowSpan: 1 },
+        { columnStart: 1, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+        { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+      ],
+    };
+  }
+
+  if (attachmentCount === 4) {
+    return {
+      layout: {
+        template: "quad-grid",
+        columnCount: 2,
+        gap,
+        rowHeight: Math.max(92, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.8)),
+        contentWidth: multiAttachmentWidth,
+      },
+      slots: [
+        { columnStart: 1, columnSpan: 1, rowStart: 1, rowSpan: 1 },
+        { columnStart: 2, columnSpan: 1, rowStart: 1, rowSpan: 1 },
+        { columnStart: 1, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+        { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+      ],
+    };
+  }
+
+  if (attachmentCount === 5) {
+    return {
+      layout: {
+        template: "hero-strip",
+        columnCount: 2,
+        gap,
+        rowHeight: Math.max(92, Math.floor(((multiAttachmentWidth - gap) / 2) * 0.8)),
+        contentWidth: multiAttachmentWidth,
+      },
+      slots: [
+        { columnStart: 1, columnSpan: 2, rowStart: 1, rowSpan: 1 },
+        { columnStart: 1, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+        { columnStart: 2, columnSpan: 1, rowStart: 2, rowSpan: 1 },
+        { columnStart: 1, columnSpan: 1, rowStart: 3, rowSpan: 1 },
+        { columnStart: 2, columnSpan: 1, rowStart: 3, rowSpan: 1 },
+      ],
+    };
+  }
+
+  return {
+    layout: {
+      template: "triple-grid",
+      columnCount: 3,
+      gap,
+      rowHeight: Math.max(88, Math.floor(((multiAttachmentWidth - gap * 2) / 3) * 0.96)),
+      contentWidth: multiAttachmentWidth,
+    },
+    slots: Array.from({ length: attachmentCount }, (_, index) => ({
+      columnStart: (index % 3) + 1,
+      columnSpan: 1,
+      rowStart: Math.floor(index / 3) + 1,
+      rowSpan: 1,
+    })),
+  };
+}
+
+function 计算拼贴槽位宽度(
+  layout: 媒体附件拼贴布局,
+  slot: 媒体附件拼贴槽位
+): number {
+  const 单列宽度 = Math.floor(
+    (layout.contentWidth - layout.gap * Math.max(0, layout.columnCount - 1)) / layout.columnCount
+  );
+  return 单列宽度 * slot.columnSpan + layout.gap * Math.max(0, slot.columnSpan - 1);
+}
+
+function 计算拼贴槽位高度(
+  layout: 媒体附件拼贴布局,
+  slot: 媒体附件拼贴槽位
+): number {
+  return layout.rowHeight * slot.rowSpan + layout.gap * Math.max(0, slot.rowSpan - 1);
 }
 
 /**
@@ -309,10 +516,11 @@ function 读取附件内容地址(
 
 function 计算媒体附件气泡宽度(
   attachments: 媒体附件展示项[],
-  layoutEnv: 消息文本布局环境
+  layoutEnv: 消息文本布局环境,
+  attachmentLayout?: 媒体附件拼贴布局 | null
 ): number {
   return (
-    计算媒体附件内容宽度(attachments, layoutEnv) +
+    计算媒体附件内容宽度(attachments, layoutEnv, attachmentLayout) +
     layoutEnv.bubbleHorizontalPadding +
     layoutEnv.bubbleHorizontalBorderWidth
   );
@@ -320,8 +528,12 @@ function 计算媒体附件气泡宽度(
 
 function 计算媒体附件内容宽度(
   attachments: 媒体附件展示项[],
-  layoutEnv: 消息文本布局环境
+  layoutEnv: 消息文本布局环境,
+  attachmentLayout?: 媒体附件拼贴布局 | null
 ): number {
+  if (attachmentLayout) {
+    return Math.min(layoutEnv.maxContentWidth, attachmentLayout.contentWidth);
+  }
   const 宫格间距 = 8;
   const 列数 = attachments.length >= 2 ? 2 : 1;
   return 列数 === 1

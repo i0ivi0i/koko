@@ -51,6 +51,98 @@ const 创建媒体消息项 = (): 消息展示项 => ({
   ],
 });
 
+const 创建五附件拼贴消息项 = (): 消息展示项 => ({
+  kind: "message",
+  id: "m-collage-1",
+  owner: "other",
+  body: "",
+  hasText: false,
+  layout: 空文本布局,
+  bubbleWidth: 336,
+  senderDisplayAlias: "冷静的水獭",
+  showAlias: true,
+  eventPosition: 1,
+  attachmentLayout: {
+    template: "hero-strip",
+    columnCount: 2,
+    gap: 8,
+    rowHeight: 131,
+    contentWidth: 336,
+  },
+  attachments: [
+    {
+      kind: "image",
+      attachmentId: "att-hero",
+      width: 1200,
+      height: 800,
+      gridColumnStart: 1,
+      gridColumnSpan: 2,
+      gridRowStart: 1,
+      gridRowSpan: 1,
+      displayWidth: 336,
+      displayHeight: 131,
+      thumbnailSrc: "http://media.local/thumb-hero",
+      originalSrc: "http://media.local/original-hero",
+    },
+    {
+      kind: "video",
+      attachmentId: "att-video-2",
+      width: 1280,
+      height: 720,
+      gridColumnStart: 1,
+      gridColumnSpan: 1,
+      gridRowStart: 2,
+      gridRowSpan: 1,
+      displayWidth: 164,
+      displayHeight: 131,
+      originalSrc: "http://media.local/original-video-2",
+      posterSrc: "http://media.local/poster-video-2",
+    },
+    {
+      kind: "image",
+      attachmentId: "att-image-3",
+      width: 1200,
+      height: 800,
+      gridColumnStart: 2,
+      gridColumnSpan: 1,
+      gridRowStart: 2,
+      gridRowSpan: 1,
+      displayWidth: 164,
+      displayHeight: 131,
+      thumbnailSrc: "http://media.local/thumb-image-3",
+      originalSrc: "http://media.local/original-image-3",
+    },
+    {
+      kind: "video",
+      attachmentId: "att-video-4",
+      width: 1280,
+      height: 720,
+      gridColumnStart: 1,
+      gridColumnSpan: 1,
+      gridRowStart: 3,
+      gridRowSpan: 1,
+      displayWidth: 164,
+      displayHeight: 131,
+      originalSrc: "http://media.local/original-video-4",
+      posterSrc: "http://media.local/poster-video-4",
+    },
+    {
+      kind: "image",
+      attachmentId: "att-image-5",
+      width: 1200,
+      height: 800,
+      gridColumnStart: 2,
+      gridColumnSpan: 1,
+      gridRowStart: 3,
+      gridRowSpan: 1,
+      displayWidth: 164,
+      displayHeight: 131,
+      thumbnailSrc: "http://media.local/thumb-image-5",
+      originalSrc: "http://media.local/original-image-5",
+    },
+  ],
+});
+
 const 创建媒体消息窗 = (): 房间消息窗 => {
   // 阶段 0 的保护测试共用同一条“图片 + 视频”消息，防止两条入口的 fixture 漂移。
   const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
@@ -59,6 +151,33 @@ const 创建媒体消息窗 = (): 房间消息窗 => {
 };
 
 describe("房间消息窗媒体查看器", () => {
+  it("拼贴模板和槽位元数据会从 presenter 透传到 DOM，而不是在 renderer 里重新猜多附件布局", async () => {
+    const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
+    pane.items = [创建五附件拼贴消息项()];
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const grid = pane.querySelector<HTMLElement>(".message-attachment-grid");
+    expect(grid?.dataset.attachmentTemplate).toBe("hero-strip");
+    expect(grid?.style.getPropertyValue("--attachment-grid-columns")).toBe("2");
+    expect(grid?.style.getPropertyValue("--attachment-grid-row-height")).toBe("131px");
+
+    const heroCard = pane.querySelector<HTMLElement>(
+      '.message-attachment-card[data-attachment-id="att-hero"]'
+    );
+    const lowerVideoCard = pane.querySelector<HTMLElement>(
+      '.message-attachment-card[data-attachment-id="att-video-4"]'
+    );
+    expect(heroCard?.dataset.gridColumnSpan).toBe("2");
+    expect(heroCard?.dataset.gridRowStart).toBe("1");
+    expect(heroCard?.style.getPropertyValue("grid-column")).toBe("1 / span 2");
+    expect(lowerVideoCard?.dataset.gridColumnStart).toBe("1");
+    expect(lowerVideoCard?.dataset.gridRowStart).toBe("3");
+    expect(lowerVideoCard?.style.getPropertyValue("grid-row")).toBe("3 / span 1");
+
+    pane.remove();
+  });
+
   it("点击图片和视频入口时只抛出 viewer 意图，并优先使用 WebTorrent swarm 播放源", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {

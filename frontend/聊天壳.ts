@@ -64,50 +64,50 @@ export class 聊天壳 extends LitElement {
 
   static override styles = css`
     :host {
-      --surface-canvas: #0b0f14;
-      --surface-panel: #151b23;
-      --surface-elevated: #1b2430;
-      --surface-soft: #243042;
-      --surface-overlay: rgba(21, 27, 35, 0.92);
-      --surface-input: rgba(18, 24, 32, 0.96);
-      --surface-nav: rgba(24, 31, 41, 0.92);
-      --surface-scroll: rgba(9, 13, 18, 0.48);
-      --surface-panel-top: rgba(28, 36, 47, 0.94);
-      --surface-panel-bottom: rgba(16, 21, 29, 0.96);
-      --surface-elevated-bottom: rgba(20, 27, 36, 0.96);
-      --bubble-other-top: rgba(34, 43, 56, 0.98);
-      --bubble-other-bottom: rgba(24, 31, 41, 0.98);
-      --bubble-mine-top: rgba(255, 56, 92, 0.22);
-      --bubble-mine-bottom: rgba(91, 34, 56, 0.92);
-      --text-primary: #f3f7fb;
-      --text-secondary: #c7d1dc;
-      --text-muted: #8a97a8;
-      --text-on-accent: #fff7f9;
-      --accent-core: #ff385c;
-      --accent-pressed: #d92a4f;
-      --accent-hover: #ff5a78;
-      --accent-glow: rgba(255, 56, 92, 0.2);
+      --surface-canvas: #040506;
+      --surface-panel: #0d0f12;
+      --surface-elevated: #15181d;
+      --surface-soft: #20252e;
+      --surface-overlay: rgba(13, 15, 18, 0.92);
+      --surface-input: rgba(11, 13, 17, 0.96);
+      --surface-nav: rgba(15, 18, 23, 0.92);
+      --surface-scroll: rgba(5, 6, 8, 0.36);
+      --surface-panel-top: rgba(20, 24, 29, 0.94);
+      --surface-panel-bottom: rgba(11, 13, 17, 0.98);
+      --surface-elevated-bottom: rgba(16, 19, 24, 0.98);
+      --bubble-other-top: rgba(24, 28, 34, 0.98);
+      --bubble-other-bottom: rgba(14, 17, 22, 0.98);
+      --bubble-mine-top: rgba(255, 106, 0, 0.18);
+      --bubble-mine-bottom: rgba(18, 16, 14, 0.96);
+      --text-primary: #f5f7fb;
+      --text-secondary: #d2d7df;
+      --text-muted: #97a0ad;
+      --text-on-accent: #fff8f2;
+      --accent-core: #ff6a00;
+      --accent-pressed: #d95a00;
+      --accent-hover: #ff8a1f;
+      --accent-glow: rgba(255, 106, 0, 0.18);
       --line-soft: rgba(255, 255, 255, 0.08);
       --line-strong: rgba(255, 255, 255, 0.16);
-      --line-accent-soft: rgba(255, 107, 132, 0.18);
+      --line-accent-soft: rgba(255, 138, 31, 0.22);
       --line-on-accent: rgba(255, 255, 255, 0.08);
       --line-on-bubble: rgba(255, 255, 255, 0.05);
-      --status-warn-bg: rgba(30, 39, 52, 0.9);
-      --status-warn-text: #dbe7f5;
-      --status-warn-strong: #ff9bb0;
-      --status-divider: rgba(255, 56, 92, 0.32);
+      --status-warn-bg: rgba(18, 21, 27, 0.94);
+      --status-warn-text: #e3e7ee;
+      --status-warn-strong: #ffb066;
+      --status-divider: rgba(255, 106, 0, 0.3);
       --shadow-warm:
-        rgba(0, 0, 0, 0.2) 0px 0px 0px 1px,
-        rgba(0, 0, 0, 0.28) 0px 12px 28px,
-        rgba(0, 0, 0, 0.38) 0px 22px 44px;
+        rgba(0, 0, 0, 0.24) 0px 0px 0px 1px,
+        rgba(0, 0, 0, 0.3) 0px 14px 32px,
+        rgba(0, 0, 0, 0.42) 0px 24px 54px;
       display: block;
       height: 100%;
       min-height: 100dvh;
       overflow: hidden;
       background:
-        radial-gradient(circle at top, rgba(255, 56, 92, 0.14), transparent 30%),
-        radial-gradient(circle at 82% 18%, rgba(96, 165, 250, 0.12), transparent 24%),
-        linear-gradient(180deg, #0b0f14 0%, #0f141b 52%, #090d12 100%);
+        radial-gradient(circle at 18% 0%, rgba(255, 106, 0, 0.14), transparent 26%),
+        radial-gradient(circle at 88% 14%, rgba(255, 207, 64, 0.06), transparent 18%),
+        linear-gradient(180deg, #040506 0%, #080a0d 54%, #030405 100%);
       font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
       color: var(--text-primary);
     }
@@ -280,7 +280,7 @@ export class 聊天壳 extends LitElement {
     }
 
     .text-input:focus {
-      border-color: rgba(255, 56, 92, 0.45);
+      border-color: rgba(255, 106, 0, 0.4);
       box-shadow:
         0 0 0 3px var(--accent-glow),
         inset 0 1px 2px rgba(0, 0, 0, 0.18);
@@ -293,7 +293,7 @@ export class 聊天壳 extends LitElement {
       color: var(--text-on-accent);
       box-shadow:
         0 0 0 1px var(--line-on-accent),
-        0 12px 24px rgba(224, 11, 65, 0.22);
+        0 12px 24px rgba(255, 106, 0, 0.22);
     }
 
     .primary-button:not(:disabled):hover {
@@ -308,7 +308,7 @@ export class 聊天壳 extends LitElement {
       position: relative;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
-      gap: 12px;
+      gap: 8px;
       padding: 0;
     }
 
@@ -316,14 +316,15 @@ export class 聊天壳 extends LitElement {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
-      gap: 12px;
-      padding: calc(4px + env(safe-area-inset-top, 0px)) 4px 10px;
+      gap: 8px;
+      padding: calc(2px + env(safe-area-inset-top, 0px)) 0 4px;
     }
 
     .back-button {
-      min-width: 72px;
-      padding: 10px 14px;
-      border-radius: 999px;
+      min-width: 44px;
+      min-height: 40px;
+      padding: 0 12px;
+      border-radius: 14px;
       background: var(--surface-nav);
       color: var(--text-secondary);
       box-shadow: var(--shadow-warm);
@@ -331,7 +332,9 @@ export class 聊天壳 extends LitElement {
 
     .room-heading {
       min-width: 0;
-      text-align: center;
+      display: grid;
+      gap: 2px;
+      text-align: left;
     }
 
     .room-title {
@@ -346,11 +349,8 @@ export class 聊天壳 extends LitElement {
     }
 
     .room-subtitle {
-      overflow: hidden;
-      margin-top: 4px;
+      margin-top: 0;
       font-size: 12px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
       color: var(--text-muted);
     }
 
@@ -372,24 +372,24 @@ export class 聊天壳 extends LitElement {
       min-height: 0;
       height: 100%;
       overflow-y: auto;
-      padding: 6px 2px;
-      border-radius: 28px;
+      padding: 2px 0;
+      border-radius: 22px;
       /* 聊天窗口是内层滚动容器，触顶/触底时不应把浏览器页面回弹和外层滚动链带进来。 */
       overscroll-behavior-y: contain;
       /* 历史前插后由壳层自己做锚点恢复与兜底补偿，不能再让浏览器默认滚动锚点重复干预。 */
       overflow-anchor: none;
       scrollbar-gutter: stable both-edges;
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
         var(--surface-scroll);
     }
 
     .message-list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
       min-height: 100%;
-      padding: 8px 4px 0;
+      padding: 6px 0 0;
       margin: 0;
       list-style: none;
     }
@@ -461,8 +461,9 @@ export class 聊天壳 extends LitElement {
 
     .message-attachment-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(var(--attachment-grid-columns, 2), minmax(0, 1fr));
+      grid-auto-rows: var(--attachment-grid-row-height, auto);
+      gap: var(--attachment-grid-gap, 8px);
       margin-top: 10px;
     }
 
@@ -482,9 +483,13 @@ export class 聊天壳 extends LitElement {
       grid-template-columns: minmax(0, 1fr);
     }
 
+    .message-attachment-card,
     .message-image-card,
     .message-video-card {
       min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      border-radius: 18px;
     }
 
     .message-video-card {
@@ -503,6 +508,7 @@ export class 聊天壳 extends LitElement {
       position: relative;
       display: block;
       width: 100%;
+      height: 100%;
       padding: 0;
       line-height: 0;
       border-radius: inherit;
@@ -529,7 +535,7 @@ export class 聊天壳 extends LitElement {
       display: block;
       width: 100%;
       max-width: 100%;
-      height: auto;
+      height: 100%;
       border-radius: inherit;
       object-fit: cover;
       pointer-events: none;
@@ -554,6 +560,7 @@ export class 聊天壳 extends LitElement {
     .message-image-preview-trigger {
       display: block;
       width: 100%;
+      height: 100%;
       padding: 0;
       line-height: 0;
       border-radius: 16px;
@@ -572,7 +579,7 @@ export class 聊天壳 extends LitElement {
     .message-image {
       display: block;
       width: 100%;
-      height: auto;
+      height: 100%;
       border-radius: 16px;
       object-fit: cover;
       background: rgba(255, 255, 255, 0.04);
@@ -599,18 +606,23 @@ export class 聊天壳 extends LitElement {
     }
 
     .message-alias {
-      margin-bottom: 4px;
+      margin-bottom: 6px;
+      padding: 0 2px;
       font-size: 12px;
+      line-height: 1.4;
+      white-space: normal;
+      overflow: visible;
+      overflow-wrap: anywhere;
       color: var(--text-muted);
     }
 
     /* 输入区单独放在底部壳层栏位里，避免消息很多时把输入框重新挤回顶部。 */
     .composer-bar {
       display: grid;
-      gap: 8px;
-      padding: 10px 12px;
+      gap: 10px;
+      padding: 8px 10px;
       border: 1px solid var(--line-soft);
-      border-radius: 24px;
+      border-radius: 20px;
       background:
         linear-gradient(180deg, var(--surface-panel-top), var(--surface-elevated-bottom)),
         var(--surface-elevated);
@@ -704,12 +716,12 @@ export class 聊天壳 extends LitElement {
       color: var(--status-warn-strong);
     }
 
-    /* 操作台状态槽必须单行收口。
-       如果这里允许两行，home -> room 一切换就会把整块操作台高度撑变。 */
     #shellConsoleStatus {
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
+      min-height: 34px;
+      overflow: visible;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.4;
     }
 
     .shell-console-form {
@@ -779,12 +791,12 @@ export class 聊天壳 extends LitElement {
       }
 
       .room-header {
-        gap: 10px;
+        gap: 8px;
       }
 
       .back-button {
-        min-width: 60px;
-        padding-inline: 12px;
+        min-width: 44px;
+        padding-inline: 10px;
       }
 
       #shellConsolePrimaryAction {

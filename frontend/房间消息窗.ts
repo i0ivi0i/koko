@@ -549,8 +549,31 @@ export class 房间消息窗 extends LitElement {
       return null;
     }
 
+    const attachmentLayout = item.attachmentLayout;
+    const gridColumnCount =
+      attachmentLayout?.columnCount ?? (item.attachments.length >= 2 ? 2 : 1);
+    const gridStyle = [
+      `--attachment-grid-columns: ${gridColumnCount}`,
+      `--attachment-grid-gap: ${attachmentLayout?.gap ?? 8}px`,
+      attachmentLayout ? `--attachment-grid-row-height: ${attachmentLayout.rowHeight}px` : "",
+    ]
+      .filter((value) => value.length > 0)
+      .join("; ");
+
     const 读取附件播放结果 = (attachmentId: string): 媒体播放结果 | null =>
       this.mediaPlaybackByAttachmentId[attachmentId] ?? null;
+
+    const 读取附件卡片样式 = (attachment: 消息展示项["attachments"][number]): string =>
+      [
+        attachment.gridColumnStart
+          ? `grid-column: ${attachment.gridColumnStart} / span ${attachment.gridColumnSpan ?? 1}`
+          : "",
+        attachment.gridRowStart
+          ? `grid-row: ${attachment.gridRowStart} / span ${attachment.gridRowSpan ?? 1}`
+          : "",
+      ]
+        .filter((value) => value.length > 0)
+        .join("; ");
 
     const 渲染媒体提示 = (attachmentId: string, playback: 媒体播放结果 | null) => {
       if (!playback?.hint) {
@@ -572,11 +595,26 @@ export class 房间消息窗 extends LitElement {
       <div
         class="message-attachment-grid"
         data-attachment-count=${item.attachments.length}
+        data-attachment-template=${attachmentLayout?.template ?? "legacy-grid"}
+        style=${gridStyle}
       >
         ${item.attachments.map((attachment) => {
           const playback = 读取附件播放结果(attachment.attachmentId);
+          const attachmentCardStyle = 读取附件卡片样式(attachment);
           if (playback?.mode === "expired" || playback?.mode === "degraded") {
-            return 渲染不可用附件(attachment.attachmentId, playback);
+            return html`
+              <div
+                class="message-attachment-card message-media-unavailable"
+                data-attachment-id=${attachment.attachmentId}
+                data-grid-column-start=${attachment.gridColumnStart ?? ""}
+                data-grid-column-span=${attachment.gridColumnSpan ?? ""}
+                data-grid-row-start=${attachment.gridRowStart ?? ""}
+                data-grid-row-span=${attachment.gridRowSpan ?? ""}
+                style=${attachmentCardStyle}
+              >
+                ${渲染不可用附件(attachment.attachmentId, playback)}
+              </div>
+            `;
           }
           if (attachment.kind === "video") {
             const previewPosterSrc =
@@ -599,7 +637,15 @@ export class 房间消息窗 extends LitElement {
              * 4. 真正播放统一交给查看器，避免列表卡片和正式播放器同时长真相。
              */
             return html`
-              <div class="message-video-card">
+              <div
+                class="message-attachment-card message-video-card"
+                data-attachment-id=${attachment.attachmentId}
+                data-grid-column-start=${attachment.gridColumnStart ?? ""}
+                data-grid-column-span=${attachment.gridColumnSpan ?? ""}
+                data-grid-row-start=${attachment.gridRowStart ?? ""}
+                data-grid-row-span=${attachment.gridRowSpan ?? ""}
+                style=${attachmentCardStyle}
+              >
                 <button
                   class="message-video-preview-trigger"
                   type="button"
@@ -665,7 +711,15 @@ export class 房间消息窗 extends LitElement {
             `;
           }
           return html`
-            <div class="message-image-card">
+            <div
+              class="message-attachment-card message-image-card"
+              data-attachment-id=${attachment.attachmentId}
+              data-grid-column-start=${attachment.gridColumnStart ?? ""}
+              data-grid-column-span=${attachment.gridColumnSpan ?? ""}
+              data-grid-row-start=${attachment.gridRowStart ?? ""}
+              data-grid-row-span=${attachment.gridRowSpan ?? ""}
+              style=${attachmentCardStyle}
+            >
               ${(() => {
                 const imagePreviewSrc =
                   playback?.thumbnailUrl ??

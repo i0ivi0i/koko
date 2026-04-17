@@ -157,17 +157,19 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("overflow-y: auto");
   });
 
-  it("聊天壳样式会声明深空石墨色板，而不是棕色底板", () => {
+  it("聊天壳样式会声明黑曜石夜间底板和社论橙强调，而不是粉红或棕脏底板", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
-    expect(styles).toContain("--surface-canvas: #0b0f14");
-    expect(styles).toContain("--surface-panel: #151b23");
-    expect(styles).toContain("--surface-elevated: #1b2430");
-    expect(styles).toContain("--text-primary: #f3f7fb");
-    expect(styles).toContain("--accent-core: #ff385c");
+    expect(styles).toContain("--surface-canvas: #040506");
+    expect(styles).toContain("--surface-panel: #0d0f12");
+    expect(styles).toContain("--surface-elevated: #15181d");
+    expect(styles).toContain("--text-primary: #f5f7fb");
+    expect(styles).toContain("--accent-core: #ff6a00");
+    expect(styles).toContain("--accent-hover: #ff8a1f");
     expect(styles).not.toContain("--surface-canvas: #171312");
     expect(styles).not.toContain("--surface-panel: #211b19");
     expect(styles).not.toContain("--surface-elevated: #2a2321");
+    expect(styles).not.toContain("--accent-core: #ff385c");
   });
 
   it("操作台主输入和主动作在不同模式下共用同一套高度约束", () => {
@@ -178,13 +180,41 @@ describe("聊天壳集成 / 首页与控制台", () => {
     expect(styles).toContain("min-height: 50px");
   });
 
-  it("状态槽会单行截断，不会因文案变化撑高操作台", () => {
+  it("状态槽会保留可读换行，而不是用单行省略号吞掉房间状态真相", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain("#shellConsoleStatus");
-    expect(styles).toContain("white-space: nowrap");
-    expect(styles).toContain("text-overflow: ellipsis");
-    expect(styles).toContain("overflow: hidden");
+    expect(styles).toMatch(/#shellConsoleStatus[\s\S]*white-space:\s*normal/);
+    expect(styles).toMatch(/#shellConsoleStatus[\s\S]*overflow-wrap:\s*anywhere/);
+    expect(styles).not.toMatch(/#shellConsoleStatus[\s\S]*text-overflow:\s*ellipsis/);
+  });
+
+  it("房间头部会收成更薄的 iPhone 式导航条，把垂直空间还给消息主舞台", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain(".room-header");
+    expect(styles).toContain("gap: 8px");
+    expect(styles).toContain("min-width: 44px");
+    expect(styles).toContain("padding: calc(2px + env(safe-area-inset-top, 0px)) 0 4px");
+  });
+
+  it("多附件网格会消费 presenter 提供的列数与行高变量，而不是把所有消息锁死在双列模板", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain(".message-attachment-grid");
+    expect(styles).toContain("repeat(var(--attachment-grid-columns, 2), minmax(0, 1fr))");
+    expect(styles).toContain("gap: var(--attachment-grid-gap, 8px)");
+    expect(styles).toContain("grid-auto-rows: var(--attachment-grid-row-height, auto)");
+    expect(styles).toContain(".message-attachment-card");
+  });
+
+  it("群友昵称会优先保证阅读性，而不是随着屏幕收缩被压成省略号", () => {
+    const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
+
+    expect(styles).toContain(".message-alias");
+    expect(styles).toMatch(/\.message-alias\s*\{[^}]*white-space:\s*normal/);
+    expect(styles).toMatch(/\.message-alias\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(styles).not.toMatch(/\.message-alias\s*\{[^}]*text-overflow:\s*ellipsis/);
   });
 
   it("启动恢复房间时在 bootstrap 完成前不会先闪出空态首页", async () => {
