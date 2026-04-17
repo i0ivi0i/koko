@@ -71,6 +71,7 @@ export type 浏览器应用平台命令 =
 export type 浏览器应用平台事件 =
   | { type: "LIFECYCLE_CHANGED"; snapshot: 生命周期快照 }
   | 服务工作线程运行时事件
+  | { type: "CACHE_UPDATE_CHANGED"; snapshot: 缓存更新快照 }
   | { type: "PRIMARY_CONTEXT_FOCUSED" }
   | { type: "OFFLINE_STATUS_CHANGED"; online: boolean };
 
@@ -129,6 +130,13 @@ export function 创建浏览器应用平台(
     }
     最近一次已广播的刷新完成上下文 = snapshot.controllerReadyContextId;
     发布平台事件({ type: "SERVICE_WORKER_CONTROLLER_READY" });
+    发布平台事件({ type: "CACHE_UPDATE_CHANGED", snapshot });
+  };
+  const 发布缓存更新快照事件 = (): void => {
+    发布平台事件({
+      type: "CACHE_UPDATE_CHANGED",
+      snapshot: cacheUpdate.snapshot(),
+    });
   };
 
   /**
@@ -181,10 +189,12 @@ export function 创建浏览器应用平台(
         scope: event.scope,
       });
       发布平台事件(event);
+      发布缓存更新快照事件();
       return;
     }
     if (event.type === "SERVICE_WORKER_CONTROLLER_READY") {
       cacheUpdate.send({ type: "SERVICE_WORKER_CONTROLLER_READY" });
+      发布缓存更新快照事件();
       尝试广播刷新完成事件();
       return;
     }
@@ -192,6 +202,7 @@ export function 创建浏览器应用平台(
   });
   storage.订阅事件?.((event) => {
     cacheUpdate.send(event);
+    发布缓存更新快照事件();
     if (event.type === "STORAGE_PERSISTENCE_RESULT") {
       serviceWorker.写入持久化存储结果?.(event.persisted);
     }

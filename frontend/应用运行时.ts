@@ -16,6 +16,7 @@ type 平台桥接命令 = Extract<
   | { type: "PLATFORM_LIFECYCLE_CHANGED" }
   | { type: "PLATFORM_SERVICE_WORKER_UPDATE_READY" }
   | { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" }
+  | { type: "PLATFORM_CACHE_UPDATE_CHANGED" }
   | { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" }
   | { type: "PLATFORM_OFFLINE_STATUS_CHANGED" }
 >;
@@ -55,6 +56,11 @@ const 翻译平台事件为内核命令 = (event: 浏览器应用平台事件): 
       };
     case "SERVICE_WORKER_CONTROLLER_READY":
       return { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" };
+    case "CACHE_UPDATE_CHANGED":
+      return {
+        type: "PLATFORM_CACHE_UPDATE_CHANGED",
+        snapshot: event.snapshot,
+      };
     case "BACKGROUND_DRAIN_REQUESTED":
       return { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" };
     case "OFFLINE_STATUS_CHANGED":

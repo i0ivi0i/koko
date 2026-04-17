@@ -141,6 +141,44 @@ describe("应用运行时", () => {
     });
   });
 
+  it("缓存更新与存储驱逐快照会先进入应用运行时，再翻成内核 command", () => {
+    const commands: unknown[] = [];
+    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
+    const cacheUpdateSnapshot = {
+      updateState: "idle" as const,
+      waitingScope: null,
+      primaryContextId: "tab-a",
+      controllerReadyPending: false,
+      controllerReadyContextId: "tab-a",
+      accelerationState: "acceleration_loss" as const,
+    };
+
+    const runtime = 创建应用运行时({
+      dispatch: (command) => {
+        commands.push(command);
+      },
+      subscribePlatformEvents: (listener) => {
+        平台事件监听器 = listener;
+        return () => {
+          平台事件监听器 = null;
+        };
+      },
+    });
+
+    runtime.start();
+    (
+      平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null
+    )?.({
+      type: "CACHE_UPDATE_CHANGED",
+      snapshot: cacheUpdateSnapshot,
+    });
+
+    expect(commands).toContainEqual({
+      type: "PLATFORM_CACHE_UPDATE_CHANGED",
+      snapshot: cacheUpdateSnapshot,
+    });
+  });
+
   it("应用运行时销毁后会解除平台事件订阅", () => {
     let 已解除订阅 = false;
     const runtime = 创建应用运行时({

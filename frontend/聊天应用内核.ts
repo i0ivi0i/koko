@@ -28,6 +28,7 @@ import {
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
+  type 缓存更新快照,
   type 生命周期快照,
 } from "./平台/index.js";
 import type { 消息事件 } from "./契约.js";
@@ -129,6 +130,7 @@ export type 聊天应用命令 =
   | { type: "PLATFORM_LIFECYCLE_CHANGED"; snapshot: 生命周期快照 }
   | { type: "PLATFORM_SERVICE_WORKER_UPDATE_READY"; scope: "app" | "media" }
   | { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" }
+  | { type: "PLATFORM_CACHE_UPDATE_CHANGED"; snapshot: 缓存更新快照 }
   | { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" }
   | { type: "PLATFORM_OFFLINE_STATUS_CHANGED"; online: boolean };
 
@@ -137,6 +139,7 @@ type 平台桥接命令 = Extract<
   | { type: "PLATFORM_LIFECYCLE_CHANGED" }
   | { type: "PLATFORM_SERVICE_WORKER_UPDATE_READY" }
   | { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" }
+  | { type: "PLATFORM_CACHE_UPDATE_CHANGED" }
   | { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" }
   | { type: "PLATFORM_OFFLINE_STATUS_CHANGED" }
 >;
@@ -387,6 +390,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       case "PLATFORM_LIFECYCLE_CHANGED":
       case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
       case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":
+      case "PLATFORM_CACHE_UPDATE_CHANGED":
       case "PLATFORM_BACKGROUND_DRAIN_REQUESTED":
       case "PLATFORM_OFFLINE_STATUS_CHANGED":
         await this.处理平台桥接命令(command);
@@ -654,6 +658,15 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.同步应用生命周期快照并执行副作用();
         this.接收实时会话事实({ type: "BACKGROUND_DRAIN_REQUESTED" });
         return;
+      case "PLATFORM_CACHE_UPDATE_CHANGED":
+        /**
+         * 缓存/存储只是本地加速层真相。
+         * 加速层被驱逐时只能更新运行时状态，不能推断任何消息业务事实缺失。
+         */
+        this.应用本地状态补丁({
+          accelerationState: command.snapshot.accelerationState,
+        });
+        return;
       case "PLATFORM_OFFLINE_STATUS_CHANGED":
         this.appLifecycle.send({
           type: "OFFLINE_STATUS_CHANGED",
@@ -869,6 +882,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     }
     if (Object.hasOwn(patch, "swUpdateState")) {
       运行时补丁.swUpdateState = patch.swUpdateState ?? "idle";
+    }
+    if (Object.hasOwn(patch, "accelerationState")) {
+      运行时补丁.accelerationState = patch.accelerationState ?? "best_effort";
     }
     if (Object.hasOwn(patch, "online")) {
       运行时补丁.online = patch.online ?? true;

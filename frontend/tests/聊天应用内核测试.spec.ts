@@ -2716,6 +2716,30 @@ describe("聊天应用内核", () => {
     expect(排空到期任务).toHaveBeenCalledTimes(1);
   });
 
+  it("storage eviction 只会降级加速层状态，不会伪装成业务消息缺失", async () => {
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 原消息快照 = kernel.snapshot().messages;
+
+    await kernel.dispatch({
+      type: "PLATFORM_CACHE_UPDATE_CHANGED",
+      snapshot: {
+        updateState: "idle",
+        waitingScope: null,
+        primaryContextId: "tab-a",
+        controllerReadyPending: false,
+        controllerReadyContextId: "tab-a",
+        accelerationState: "acceleration_loss",
+      },
+    });
+
+    expect(kernel.snapshot().accelerationState).toBe("acceleration_loss");
+    expect(kernel.snapshot().messages).toBe(原消息快照);
+  });
+
   it("更新 pending 期间会累计持续时间，并显示为统一运行时预算项", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();

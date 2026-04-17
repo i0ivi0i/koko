@@ -495,7 +495,7 @@
       "label": "setTransportForTest()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L397",
+      "source_location": "L401",
       "id": "settransportfortest",
       "community": 2
     },
@@ -535,7 +535,7 @@
       "label": "constructor()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L241",
+      "source_location": "L244",
       "id": "constructor",
       "community": 2
     },
@@ -543,7 +543,7 @@
       "label": "snapshot()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L306",
+      "source_location": "L309",
       "id": "snapshot",
       "community": 2
     },
@@ -551,7 +551,7 @@
       "label": "dispatch()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L313",
+      "source_location": "L316",
       "id": "dispatch",
       "community": 2
     },
@@ -763,7 +763,7 @@
       "label": "dispose()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L407",
+      "source_location": "L411",
       "id": "dispose",
       "community": 2
     },
@@ -771,7 +771,7 @@
       "label": "exitCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L1096",
+      "source_location": "L1112",
       "id": "exitcurrentroomview",
       "community": 2
     },
@@ -779,7 +779,7 @@
       "label": "leaveCurrentRoomView()",
       "file_type": "code",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L1125",
+      "source_location": "L1141",
       "id": "leavecurrentroomview",
       "community": 2
     },
@@ -2689,7 +2689,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2697,7 +2697,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -2809,7 +2809,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 23
+      "community": 22
     },
     {
       "label": "Assert-True()",
@@ -2817,7 +2817,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 23
+      "community": 22
     },
     {
       "label": "\u89c6\u9891locator\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3921,7 +3921,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L397",
+      "source_location": "L401",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "settransportfortest",
@@ -3981,7 +3981,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L241",
+      "source_location": "L244",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "constructor",
@@ -3993,7 +3993,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L306",
+      "source_location": "L309",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "snapshot",
@@ -4005,7 +4005,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L313",
+      "source_location": "L316",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispatch",
@@ -4305,7 +4305,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L407",
+      "source_location": "L411",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispose",
@@ -4317,7 +4317,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L1096",
+      "source_location": "L1112",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "exitcurrentroomview",
@@ -4329,7 +4329,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L1125",
+      "source_location": "L1141",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "leavecurrentroomview",
@@ -4917,7 +4917,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L449",
+      "source_location": "L453",
       "weight": 1.0,
       "_src": "",
       "_tgt": "snapshot",
@@ -4929,7 +4929,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L1153",
+      "source_location": "L1169",
       "weight": 1.0,
       "_src": "",
       "_tgt": "dispatch",
@@ -5301,7 +5301,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L400",
+      "source_location": "L404",
       "weight": 1.0,
       "_src": "settransportfortest",
       "_tgt": "dispose",
@@ -5337,7 +5337,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L344",
+      "source_location": "L347",
       "weight": 1.0,
       "_src": "dispatch",
       "_tgt": "leavecurrentroomview",
@@ -5421,7 +5421,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L1106",
+      "source_location": "L1122",
       "weight": 1.0,
       "_src": "exitcurrentroomview",
       "_tgt": "dispose",
@@ -5433,7 +5433,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L1127",
+      "source_location": "L1143",
       "weight": 1.0,
       "_src": "leavecurrentroomview",
       "_tgt": "exitcurrentroomview",

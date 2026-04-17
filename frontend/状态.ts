@@ -91,6 +91,7 @@ export interface 聊天流程状态 {
  * - 生命周期可见性与阶段；
  * - 重型工作降载策略；
  * - SW 更新待接管状态；
+ * - 本地加速层是否被浏览器清理或降级；
  * - 当前在线状态。
  *
  * 它不承载消息、成员、权限这些业务真相。
@@ -111,6 +112,7 @@ export interface 聊天运行时状态 {
   lifecyclePhase: "active" | "background" | "page_hidden" | "frozen" | "resumed";
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   swUpdateState: "idle" | "waiting_refresh";
+  accelerationState: "best_effort" | "persistent" | "acceleration_loss";
   online: boolean;
   runtimeBudget: 聊天运行时预算状态;
 }
@@ -192,6 +194,7 @@ export const 初始聊天运行时状态: 聊天运行时状态 = {
   lifecyclePhase: "active",
   heavyWorkPolicy: "normal",
   swUpdateState: "idle",
+  accelerationState: "best_effort",
   online: true,
   runtimeBudget: { ...初始聊天运行时预算状态 },
 };
