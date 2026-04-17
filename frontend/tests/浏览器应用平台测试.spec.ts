@@ -148,6 +148,16 @@ describe("浏览器端应用平台化基线", () => {
     expect(packageJson.scripts.build).toContain("check:browser-app-constitution");
   });
 
+  it("宪法守门会拦住协作分发全局 singleton 和新增浏览器全局旁路", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-browser-app-constitution.mjs");
+
+    expect(source).toContain('label: "module-level actor singleton"');
+    expect(source).toContain("Actor实例");
+    expect(source).toContain('label: "navigator.serviceWorker"');
+    expect(source).toContain('label: "navigator.storage"');
+    expect(source).toContain('label: "BroadcastChannel"');
+  });
+
   it("宪法守门脚本会拦住 controllerchange 直监听和组件层 @state 运行时真相回流", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-browser-app-constitution.mjs");
 

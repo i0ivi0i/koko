@@ -454,6 +454,10 @@ describe("前后台壳端到端冒烟", () => {
     previewTrigger?.click();
     await 等待组件稳定(chat);
     await 等待组件稳定(chat);
+    // 打开查看器会穿过 AppRuntime 与媒体会话 owner；端到端断言等待事实成立，避免全量并发下靠固定 tick 竞速。
+    await vi.waitFor(() => {
+      expect(viewer.打开).toHaveBeenCalled();
+    });
 
     expect(viewer.打开).toHaveBeenCalledWith(
       expect.objectContaining({

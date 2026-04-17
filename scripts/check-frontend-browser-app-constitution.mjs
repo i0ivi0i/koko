@@ -16,6 +16,19 @@ const 允许前缀 = [
 const 需要扫描的扩展名 = new Set([".ts", ".js", ".mjs"]);
 
 const 禁止模式 = [
+  // 应用 owner 必须由 AppKernel 显式装配；模块级 Actor 实例会让多上下文重新双活。
+  {
+    label: "module-level actor singleton",
+    pattern: /^\s*(?:let|const|var)\s+[\w$\u4e00-\u9fff]*Actor实例\b/gm,
+  },
+  {
+    label: "asset distribution global event bridge",
+    pattern: /发送资产协作分发事件\s*=/g,
+  },
+  {
+    label: "asset distribution global budget projection",
+    pattern: /投影资产协作分发预算\s*\(/g,
+  },
   {
     label: "navigator.serviceWorker",
     pattern: /\bnavigator(?:\?\.)?serviceWorker\b/g,
@@ -94,7 +107,7 @@ for (const absolutePath of 收集文件(前端目录)) {
 }
 
 if (违规记录.length > 0) {
-  console.error("前端浏览器应用宪法检查失败：发现越层浏览器全局访问。");
+  console.error("前端浏览器应用宪法检查失败：发现越层浏览器全局访问或 owner 双活风险。");
   for (const violation of 违规记录) {
     console.error(`- ${violation.file}: ${violation.label}`);
   }
