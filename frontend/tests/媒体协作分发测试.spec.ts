@@ -2,14 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { 媒体定位结果 } from "../契约.js";
 import {
   获取或创建协作分发浏览器运行时,
-  解析协作分发源,
-  释放协作分发消费者,
   读取协作分发定位片段,
-  读取协作分发会话状态,
   重置协作分发浏览器运行时,
   type WebTorrent浏览器客户端,
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
+import {
+  解析协作分发源,
+  释放协作分发消费者,
+  读取协作分发会话状态,
+  重置资产协作分发运行时,
+} from "../媒体/资产协作分发运行时.js";
 
 function 创建假Storage(): Storage {
   const records = new Map<string, string>();
@@ -140,10 +143,14 @@ describe("媒体协作分发", () => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
     vi.resetModules();
+    重置资产协作分发运行时();
+    重置资产协作分发运行时();
+    重置资产协作分发运行时();
     重置协作分发浏览器运行时();
   });
 
   afterEach(() => {
+    重置资产协作分发运行时();
     重置协作分发浏览器运行时();
     vi.useRealTimers();
   });
@@ -538,6 +545,7 @@ describe("媒体协作分发", () => {
       expect.any(Function)
     );
 
+    重置资产协作分发运行时();
     重置协作分发浏览器运行时();
     在线可拉取Torrent = false;
 

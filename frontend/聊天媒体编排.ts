@@ -1,5 +1,6 @@
 import type { 消息事件, 媒体种类 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
+import { 创建媒体运行时Actor, type 媒体运行时事件 } from "./媒体运行时.js";
 import {
   创建媒体定位器,
   创建媒体缓存,
@@ -9,7 +10,6 @@ import {
   创建媒体发布器,
   创建媒体会话,
   创建媒体查看器,
-  选择消息视频自动播Owner,
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
@@ -137,23 +137,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     releaseSwarmSource: (input) => 释放协作分发消费者(input),
   });
 
-  let 当前查看器请求: 媒体查看器打开请求 | null = null;
-  let 正式查看器已打开 = false;
+  const 媒体运行时 = 创建媒体运行时Actor();
   let 待重裁决的本地完整视频附件标识: string | null = null;
-  let inlineAutoplayOwnerAttachmentId: string | null = null;
-  let inlineAutoplay待启动AttachmentId: string | null = null;
   let inlineAutoplay启动定时器: ReturnType<typeof setTimeout> | null = null;
-  let 当前应用生命周期: {
-    visibility: "visible" | "hidden";
-    phase: "active" | "background" | "page_hidden" | "frozen" | "resumed";
-    heavyWorkPolicy: "normal" | "reduced" | "suspended";
-  } = {
-    visibility: "visible",
-    phase: "active",
-    heavyWorkPolicy: "normal",
-  };
   let inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果> = {};
   let inlineAutoplay解析代次 = 0;
+  const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 投影查看器请求到当前播放真相 = (
     request: 媒体查看器打开请求
   ): 媒体查看器打开请求 => {
@@ -244,9 +233,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return false;
   };
   const 正式打开查看器 = (request: 媒体查看器打开请求): void => {
-    正式查看器已打开 = true;
     deps.登记程序滚动来源("media_viewer_open");
     媒体查看器.打开(request);
+    接收媒体运行时事实({ type: "VIEWER_OPEN_CONFIRMED" });
   };
   const 起始视频会话当前不可打开 = (request: 媒体查看器打开请求): boolean => {
     const startItem = request.items.find(
@@ -258,13 +247,25 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const playback = 媒体会话表.get(startItem.attachmentId)?.snapshot().playback;
     return playback?.mode === "expired" || playback?.mode === "degraded";
   };
+  const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
+    const before = 媒体运行时.getSnapshot();
+    媒体运行时.send(event);
+    void 同步媒体运行时快照并执行副作用(before);
+  };
   const 同步当前查看器请求 = (): void => {
+    const 当前查看器请求 = 读取媒体运行时上下文().currentViewerRequest;
     if (!当前查看器请求) {
       return;
     }
     const nextRequest = 投影查看器请求到当前播放真相(当前查看器请求);
-    当前查看器请求 = nextRequest;
-    if (!正式查看器已打开) {
+    if (JSON.stringify(nextRequest) !== JSON.stringify(当前查看器请求)) {
+      接收媒体运行时事实({
+        type: "VIEWER_REQUEST_SYNCED",
+        request: nextRequest,
+      });
+      return;
+    }
+    if (!读取媒体运行时上下文().viewerOpen) {
       if (起始视频会话当前不可打开(nextRequest)) {
         return;
       }
@@ -276,15 +277,55 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     媒体查看器.同步?.(nextRequest);
   };
+  const 同步媒体运行时快照并执行副作用 = async (
+    before = 媒体运行时.getSnapshot()
+  ): Promise<void> => {
+    const after = 媒体运行时.getSnapshot();
+    const beforeContext = before.context;
+    const afterContext = after.context;
+
+    if (
+      beforeContext.inlineAutoplayPendingAttachmentId !==
+      afterContext.inlineAutoplayPendingAttachmentId
+    ) {
+      if (inlineAutoplay启动定时器 !== null) {
+        clearTimeout(inlineAutoplay启动定时器);
+        inlineAutoplay启动定时器 = null;
+      }
+      if (afterContext.inlineAutoplayPendingAttachmentId) {
+        调度自动播播放结果解析(afterContext.inlineAutoplayPendingAttachmentId);
+      }
+    }
+
+    if (
+      beforeContext.inlineAutoplayOwnerAttachmentId !==
+      afterContext.inlineAutoplayOwnerAttachmentId
+    ) {
+      if (beforeContext.inlineAutoplayOwnerAttachmentId) {
+        释放当前自动播Owner(beforeContext.inlineAutoplayOwnerAttachmentId);
+      } else {
+        清空自动播播放结果();
+      }
+      if (afterContext.inlineAutoplayOwnerAttachmentId) {
+        解析自动播播放结果(afterContext.inlineAutoplayOwnerAttachmentId);
+      }
+    }
+
+    if (beforeContext.currentViewerRequest && !afterContext.currentViewerRequest) {
+      待重裁决的本地完整视频附件标识 = null;
+      deps.清除程序滚动来源("media_viewer_open");
+    }
+
+    if (afterContext.currentViewerRequest) {
+      同步当前查看器请求();
+    }
+  };
   const 转发媒体查看器会话信号 = (attachmentId: string, signal: 媒体会话信号): void => {
     媒体会话表.get(attachmentId)?.send(signal);
   };
   let 媒体查看器 = 创建媒体查看器({
     onViewportCaptureEnd: () => {
-      正式查看器已打开 = false;
-      待重裁决的本地完整视频附件标识 = null;
-      当前查看器请求 = null;
-      deps.清除程序滚动来源("media_viewer_open");
+      接收媒体运行时事实({ type: "VIEWER_CLOSED" });
     },
     onMediaSessionSignal: 转发媒体查看器会话信号,
   });
@@ -430,7 +471,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         contentHash: playback.contentHash ?? null,
       };
     }
-    const currentViewerItem = 当前查看器请求?.items.find(
+    const currentViewerItem = 读取媒体运行时上下文().currentViewerRequest?.items.find(
       (item) => item.attachmentId === attachmentId && item.kind === "image"
     );
     if (currentViewerItem?.kind === "image") {
@@ -507,9 +548,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   const 清空自动播播放结果 = (): void => {
+    const 媒体运行时上下文 = 读取媒体运行时上下文();
     if (
-      inlineAutoplayOwnerAttachmentId === null &&
-      inlineAutoplay待启动AttachmentId === null &&
+      媒体运行时上下文.inlineAutoplayOwnerAttachmentId === null &&
+      媒体运行时上下文.inlineAutoplayPendingAttachmentId === null &&
       inlineAutoplay启动定时器 === null &&
       Object.keys(inlineAutoplayPlaybackByAttachmentId).length === 0
     ) {
@@ -519,15 +561,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       clearTimeout(inlineAutoplay启动定时器);
       inlineAutoplay启动定时器 = null;
     }
-    inlineAutoplayOwnerAttachmentId = null;
-    inlineAutoplay待启动AttachmentId = null;
     inlineAutoplayPlaybackByAttachmentId = {};
     inlineAutoplay解析代次 += 1;
     deps.请求重渲染();
   };
 
-  const 释放当前自动播Owner = (): void => {
-    const 当前Owner = inlineAutoplayOwnerAttachmentId;
+  const 释放当前自动播Owner = (
+    ownerAttachmentId = 读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId
+  ): void => {
+    const 当前Owner = ownerAttachmentId;
     if (!当前Owner) {
       清空自动播播放结果();
       return;
@@ -546,7 +588,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       return;
     }
     const 当前代次 = ++inlineAutoplay解析代次;
-    inlineAutoplayOwnerAttachmentId = attachmentId;
     inlineAutoplayPlaybackByAttachmentId = {};
     deps.请求重渲染();
     void 媒体播放器
@@ -558,7 +599,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       })
       .then((playback) => {
         if (
-          inlineAutoplayOwnerAttachmentId !== attachmentId ||
+          读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
           当前代次 !== inlineAutoplay解析代次
         ) {
           return;
@@ -578,7 +619,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       })
       .catch(() => {
         if (
-          inlineAutoplayOwnerAttachmentId !== attachmentId ||
+          读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
           当前代次 !== inlineAutoplay解析代次
         ) {
           return;
@@ -589,30 +630,20 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   const 调度自动播播放结果解析 = (attachmentId: string): void => {
-    if (
-      attachmentId === inlineAutoplayOwnerAttachmentId ||
-      attachmentId === inlineAutoplay待启动AttachmentId
-    ) {
-      return;
-    }
     if (inlineAutoplay启动定时器 !== null) {
       clearTimeout(inlineAutoplay启动定时器);
       inlineAutoplay启动定时器 = null;
     }
-    inlineAutoplay待启动AttachmentId = attachmentId;
     inlineAutoplay启动定时器 = setTimeout(() => {
       inlineAutoplay启动定时器 = null;
-      if (inlineAutoplay待启动AttachmentId !== attachmentId) {
+      if (
+        读取媒体运行时上下文().inlineAutoplayPendingAttachmentId !== attachmentId
+      ) {
         return;
       }
-      inlineAutoplay待启动AttachmentId = null;
-      if (inlineAutoplayOwnerAttachmentId && inlineAutoplayOwnerAttachmentId !== attachmentId) {
-        释放附件播放资源({
-          attachmentId: inlineAutoplayOwnerAttachmentId,
-          consumerId: 构造自动播ConsumerId(inlineAutoplayOwnerAttachmentId),
-        });
-      }
-      解析自动播播放结果(attachmentId);
+      接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_SETTLE_ELAPSED",
+      });
     }, 自动播候选稳定等待毫秒);
   };
 
@@ -682,7 +713,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         playbackByAttachmentId: 读取媒体播放结果表(),
         sessionByAttachmentId: 读取媒体会话快照表(),
         contentUrlByAttachmentId: 读取附件内容地址表(),
-        inlineAutoplayOwnerAttachmentId,
+        inlineAutoplayOwnerAttachmentId:
+          读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId,
         inlineAutoplayPlaybackByAttachmentId,
       };
     },
@@ -708,41 +740,22 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     打开查看器(request: 媒体查看器打开请求): void {
-      释放当前自动播Owner();
-      当前查看器请求 = 投影查看器请求到当前播放真相({
+      const nextRequest = 投影查看器请求到当前播放真相({
         startAttachmentId: request.startAttachmentId,
         items: request.items.map((item) => ({ ...item })),
       });
-      正式查看器已打开 = false;
-      启动查看器起始附件会话(当前查看器请求);
-      if (是否应等待本地完整视频会话真相(当前查看器请求)) {
-        return;
-      }
-      正式打开查看器(当前查看器请求);
+      启动查看器起始附件会话(nextRequest);
+      接收媒体运行时事实({
+        type: "VIEWER_OPEN_REQUESTED",
+        request: nextRequest,
+      });
     },
 
     处理自动播候选(candidates: 消息视频自动播候选[]): void {
-      if (当前应用生命周期.heavyWorkPolicy !== "normal") {
-        释放当前自动播Owner();
-        return;
-      }
-      if (当前查看器请求) {
-        释放当前自动播Owner();
-        return;
-      }
-      const nextOwnerAttachmentId = 选择消息视频自动播Owner(
+      接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
         candidates,
-        undefined,
-        inlineAutoplay待启动AttachmentId ?? inlineAutoplayOwnerAttachmentId
-      );
-      if (!nextOwnerAttachmentId) {
-        释放当前自动播Owner();
-        return;
-      }
-      if (nextOwnerAttachmentId === inlineAutoplayOwnerAttachmentId) {
-        return;
-      }
-      调度自动播播放结果解析(nextOwnerAttachmentId);
+      });
     },
 
     释放消息流自动播Owner(): void {
@@ -751,7 +764,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
        * 页面退到后台时，这里必须立即释放 owner 和底层资源，
        * 避免后台继续占着 `<video>`、解码器和协作分发占用。
        */
-      释放当前自动播Owner();
+      接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_RELEASE_REQUESTED",
+      });
     },
 
     /**
@@ -781,12 +796,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       if (hasSessionSetChanged) {
         deps.请求重渲染();
       }
-      if (
-        inlineAutoplayOwnerAttachmentId &&
-        !activeAttachmentIds.has(inlineAutoplayOwnerAttachmentId)
-      ) {
-        释放当前自动播Owner();
-      }
+      接收媒体运行时事实({
+        type: "MESSAGE_ATTACHMENTS_SYNCED",
+        attachmentIds: Array.from(activeAttachmentIds),
+      });
 
       for (const attachment of attachments) {
         if (媒体会话表.has(attachment.attachmentId)) {
@@ -817,25 +830,25 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       }
       if (
         signal.type === "PLAYER_PLAYING" &&
-        当前查看器请求?.startAttachmentId === attachmentId &&
+        读取媒体运行时上下文().currentViewerRequest?.startAttachmentId ===
+          attachmentId &&
         读取附件条目(attachmentId)?.kind === "video"
       ) {
         激活附件协作补齐(attachmentId);
       }
+      接收媒体运行时事实({
+        type: "MEDIA_SESSION_SIGNALLED",
+        attachmentId,
+        signal,
+      });
       转发媒体查看器会话信号(attachmentId, signal);
     },
 
     处理应用生命周期(input): void {
-      当前应用生命周期 = { ...input };
-      /**
-       * 生命周期降载只作用于消息流自动播这条轻量体验链：
-       * - reduced / suspended 都立即释放现有 owner；
-       * - 待启动自动播定时器也会一并取消；
-       * - 正式查看器会话与其播放真相继续保留。
-       */
-      if (input.heavyWorkPolicy !== "normal") {
-        释放当前自动播Owner();
-      }
+      接收媒体运行时事实({
+        type: "LIFECYCLE_POLICY_CHANGED",
+        heavyWorkPolicy: input.heavyWorkPolicy,
+      });
     },
 
     处理平台在线状态变化(online: boolean): void {
@@ -845,20 +858,25 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     清空(): void {
-      当前查看器请求 = null;
-      释放当前自动播Owner();
+      const before = 媒体运行时.getSnapshot();
+      媒体运行时.send({ type: "VIEWER_CLOSED" });
+      媒体运行时.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
       媒体查看器.销毁();
       媒体发布器.清空();
       清空播放状态();
+      void 同步媒体运行时快照并执行副作用(before);
       deps.请求重渲染();
     },
 
     销毁(): void {
-      当前查看器请求 = null;
-      释放当前自动播Owner();
+      const before = 媒体运行时.getSnapshot();
+      媒体运行时.send({ type: "VIEWER_CLOSED" });
+      媒体运行时.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
       媒体查看器.销毁();
       媒体发布器.销毁();
       清空播放状态();
+      void 同步媒体运行时快照并执行副作用(before);
+      媒体运行时.stop();
       deps.请求重渲染();
     },
 

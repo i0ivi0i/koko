@@ -61,7 +61,7 @@ export type 协作分发会话事件 =
 
 const 协作分发存活上报间隔毫秒 = 60_000;
 
-type 协作分发会话 = {
+export type 协作分发底层会话 = {
   attachmentId: string;
   swarmId: string;
   torrentInfoHash: string;
@@ -84,7 +84,6 @@ type 协作分发会话 = {
 
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
 let 协作分发浏览器运行时实例: 协作分发浏览器运行时 | null = null;
-const 协作分发会话表 = new Map<string, 协作分发会话>();
 
 function 读取协作分发Torrent缓存仓库() {
   return 获取默认浏览器应用平台().storage.协作分发缓存仓库?.() ?? null;
@@ -144,7 +143,7 @@ async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
   return registration;
 }
 
-async function 尝试请求持久化存储(): Promise<void> {
+export async function 请求协作分发持久化存储(): Promise<void> {
   await 获取默认浏览器应用平台().storage.请求持久化存储?.();
 }
 
@@ -160,7 +159,9 @@ export function 读取协作分发定位片段(
   return locator.distribution ?? null;
 }
 
-function 读取可用协作分发片段(locator: 媒体定位结果): 媒体协作分发定位片段 | null {
+export function 读取可用协作分发片段(
+  locator: 媒体定位结果
+): 媒体协作分发定位片段 | null {
   const distribution = 读取协作分发定位片段(locator);
   if (
     !distribution ||
@@ -204,7 +205,7 @@ async function 拉取受控Torrent字节(
   }
 }
 
-async function 探测协作分发媒体源可读性(streamUrl: string): Promise<void> {
+export async function 探测协作分发媒体源可读性(streamUrl: string): Promise<void> {
   const probeUrl = new URL(
     streamUrl,
     globalThis.location?.href ?? "http://127.0.0.1/"
@@ -242,7 +243,7 @@ async function 上报协作分发存活(presenceUrl: string): Promise<void> {
   }
 }
 
-async function 接入协作分发种子(
+export async function 接入协作分发种子(
   runtime: 协作分发浏览器运行时,
   distribution: 媒体协作分发定位片段
 ): Promise<WebTorrent种子> {
@@ -271,7 +272,7 @@ async function 接入协作分发种子(
   });
 }
 
-function 读取首个可播放文件(
+export function 读取首个可播放文件(
   torrent: WebTorrent种子,
   attachmentId: string,
   _kind: 媒体种类
@@ -283,88 +284,8 @@ function 读取首个可播放文件(
   return file;
 }
 
-function 激活整附件补齐(session: 协作分发会话): void {
-  if (session.eagerCompleting) {
-    return;
-  }
-  session.eagerCompleting = true;
-  session.file?.select(1);
-}
-
-function 推导协作分发提示(session: 协作分发会话): 协作分发媒体源["hint"] {
-  if (session.hint) {
-    return session.hint;
-  }
-  return session.eagerCompleting ? "正在补块" : "正在协作分发";
-}
-
-function 归一化协作分发消费者(input: {
-  attachmentId: string;
-  consumerId?: string;
-  onSessionEvent?: (event: 协作分发会话事件) => void;
-}) {
-  return {
-    consumerId: input.consumerId ?? input.attachmentId,
-    attachmentId: input.attachmentId,
-    onSessionEvent: input.onSessionEvent ?? null,
-  };
-}
-
-function 更新协作分发会话主附件(session: 协作分发会话): void {
-  const nextBinding = session.consumerBindings.values().next().value;
-  if (nextBinding && typeof nextBinding.attachmentId === "string") {
-    session.attachmentId = nextBinding.attachmentId;
-  }
-}
-
-function 发布协作分发会话事件(
-  session: 协作分发会话,
-  type: 协作分发会话事件["type"]
-): void {
-  for (const binding of session.consumerBindings.values()) {
-    if (!binding.onSessionEvent) {
-      continue;
-    }
-    const event: 协作分发会话事件 =
-      type === "ASSET_COMPLETE"
-        ? {
-            type,
-            attachmentId: binding.attachmentId,
-            swarmId: session.swarmId,
-            contentHash: session.contentHash,
-          }
-        : {
-            type,
-            attachmentId: binding.attachmentId,
-            swarmId: session.swarmId,
-          };
-    binding.onSessionEvent(event);
-  }
-}
-
-function 绑定协作分发会话事件(session: 协作分发会话, torrent: WebTorrent种子) {
-  // 运行态提示严格站在官方 torrent 事件上：
-  // 1. 有 peer/wire 说明开始进入群友接力；
-  // 2. noPeers 或只剩 web seed 时，提示回到“正在补块”；
-  // 3. done 代表整附件已经补齐，本地后续就能完整参与协作分发。
-  torrent.on("wire", (wire) => {
-    session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
-    发布协作分发会话事件(session, "SWARM_ACTIVE");
-  });
-  torrent.on("noPeers", () => {
-    session.hint = "正在补块";
-    发布协作分发会话事件(session, "SWARM_NO_PEERS");
-  });
-  torrent.on("done", () => {
-    session.eagerCompleting = false;
-    session.locallyComplete = true;
-    session.hint = "正在协作分发";
-    发布协作分发会话事件(session, "ASSET_COMPLETE");
-  });
-}
-
-function 启动协作分发存活上报(
-  session: 协作分发会话,
+export function 启动协作分发存活上报(
+  session: 协作分发底层会话,
   distribution: 媒体协作分发定位片段
 ) {
   if (!distribution.presence_url || session.presenceIntervalId !== null) {
@@ -384,7 +305,7 @@ function 启动协作分发存活上报(
   );
 }
 
-function 停止协作分发存活上报(session: 协作分发会话): void {
+export function 停止协作分发存活上报(session: 协作分发底层会话): void {
   if (session.presenceIntervalId === null) {
     return;
   }
@@ -392,8 +313,8 @@ function 停止协作分发存活上报(session: 协作分发会话): void {
   session.presenceIntervalId = null;
 }
 
-function 清理协作分发底层会话(
-  session: 协作分发会话,
+export function 清理协作分发底层会话(
+  session: 协作分发底层会话,
   runtime: 协作分发浏览器运行时 | null = 协作分发浏览器运行时实例
 ): void {
   // 优先调用 client.remove，让 WebTorrent 自己负责把 torrent 从 client 生命周期里摘掉；
@@ -404,205 +325,6 @@ function 清理协作分发底层会话(
   session.torrent?.destroy?.({
     destroyStore: false,
   });
-}
-
-function 协作分发会话可在零引用后保留(session: 协作分发会话): boolean {
-  /**
-   * 只有两类 swarm 值得在 refs=0 后继续留着：
-   * 1. 正在 eagerCompleting，必须把整附件补齐；
-   * 2. 已经 locallyComplete，后续同页重开才能直接复用。
-   *
-   * 纯列表自动播扫出来、既没补齐也没完成的冷会话，不应该继续挂在 runtime 里吃内存和连接。
-   */
-  return session.eagerCompleting || session.locallyComplete;
-}
-
-async function 确保协作分发会话(input: {
-  attachmentId: string;
-  kind: 媒体种类;
-  distribution: 媒体协作分发定位片段;
-  consumerId?: string;
-  onSessionEvent?: (event: 协作分发会话事件) => void;
-  eagerCompleting?: boolean;
-  reuseOnly?: boolean;
-}): Promise<协作分发会话 | null> {
-  const consumerBinding = 归一化协作分发消费者(input);
-  let session = 协作分发会话表.get(input.distribution.swarm_id);
-  if (session) {
-    /**
-     * 一个 swarm 会话可以被多个浏览器内消费者同时复用：
-     * - 时间线媒体会话
-     * - 消息流 inline_autoplay
-     * - 后续可能存在的其它只读消费者
-     * 这里按 consumerId 建绑定，避免“一个附件的自动播释放掉正式链路”。
-     */
-    session.consumerBindings.set(consumerBinding.consumerId, {
-      attachmentId: consumerBinding.attachmentId,
-      onSessionEvent: consumerBinding.onSessionEvent,
-    });
-    if (input.eagerCompleting) {
-      激活整附件补齐(session);
-    }
-    更新协作分发会话主附件(session);
-    启动协作分发存活上报(session, input.distribution);
-    return session;
-  }
-
-  /**
-   * inline_autoplay 只允许复用已经热起来的 swarm。
-   * 如果当前消息只是滚动路过，不值得为了轻量预览新开一整套 whole-file WebTorrent 会话。
-   */
-  if (input.reuseOnly) {
-    return null;
-  }
-
-  session = {
-    attachmentId: input.attachmentId,
-    swarmId: input.distribution.swarm_id,
-    torrentInfoHash: input.distribution.torrent_info_hash!,
-    contentHash: input.distribution.content_hash,
-    sourcePromise: Promise.resolve(null),
-    eagerCompleting: Boolean(input.eagerCompleting),
-    locallyComplete: false,
-    hint: null,
-    presenceIntervalId: null,
-    torrent: null,
-    file: null,
-    consumerBindings: new Map([
-      [
-        consumerBinding.consumerId,
-        {
-          attachmentId: consumerBinding.attachmentId,
-          onSessionEvent: consumerBinding.onSessionEvent,
-        },
-      ],
-    ]),
-  };
-  协作分发会话表.set(input.distribution.swarm_id, session);
-  启动协作分发存活上报(session, input.distribution);
-  /**
-   * 浏览器持久化存储只是“尽量保住本地整附件”的增强动作：
-   * 1. 不等待结果，不阻塞 swarm 冷启动；
-   * 2. 失败不回写任何业务可用性字段；
-   * 3. 真正能不能继续活，仍由后端 locator 和 peer 事实共同裁决。
-   */
-  void 尝试请求持久化存储();
-
-  session.sourcePromise = (async () => {
-    const runtime = await 获取或创建协作分发浏览器运行时();
-    const torrent = await 接入协作分发种子(runtime, input.distribution);
-    session.torrent = torrent;
-    if (协作分发会话表.get(session.swarmId) !== session) {
-      清理协作分发底层会话(session, runtime);
-      return null;
-    }
-    绑定协作分发会话事件(session, torrent);
-    const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
-    session.file = file;
-    if (session.eagerCompleting) {
-      file.select(1);
-    }
-    await 探测协作分发媒体源可读性(file.streamURL);
-    if (协作分发会话表.get(session.swarmId) !== session) {
-      清理协作分发底层会话(session, runtime);
-      return null;
-    }
-    return {
-      src: file.streamURL,
-    };
-  })().catch((error) => {
-    停止协作分发存活上报(session);
-    if (协作分发会话表.get(input.distribution.swarm_id) === session) {
-      协作分发会话表.delete(input.distribution.swarm_id);
-    }
-    throw error;
-  });
-
-  return session;
-}
-
-export function 释放协作分发消费者(
-  input: string | { attachmentId: string; consumerId?: string }
-): void {
-  const consumerBinding =
-    typeof input === "string"
-      ? 归一化协作分发消费者({ attachmentId: input })
-      : 归一化协作分发消费者(input);
-  for (const [swarmId, session] of 协作分发会话表) {
-    const binding = session.consumerBindings.get(consumerBinding.consumerId);
-    if (!binding || binding.attachmentId !== consumerBinding.attachmentId) {
-      continue;
-    }
-    session.consumerBindings.delete(consumerBinding.consumerId);
-    if (session.attachmentId === binding.attachmentId) {
-      更新协作分发会话主附件(session);
-    }
-    if (session.consumerBindings.size > 0) {
-      continue;
-    }
-    /**
-     * 最后一个 consumer 释放后，要按“是否还有保留价值”裁决：
-     * 1. eagerCompleting=true 时继续补齐整附件；
-     * 2. 已经 locallyComplete 的 swarm 继续保留，支撑同页重开；
-     * 3. 既没补齐也没完成的冷会话立即销毁，避免列表自动播滚着滚着堆出一排空转 torrent。
-     */
-    停止协作分发存活上报(session);
-    if (协作分发会话可在零引用后保留(session)) {
-      continue;
-    }
-    协作分发会话表.delete(swarmId);
-    清理协作分发底层会话(session);
-  }
-}
-
-export function 读取协作分发会话状态(swarmId: string) {
-  const session = 协作分发会话表.get(swarmId);
-  if (!session) {
-    return null;
-  }
-  return {
-    attachmentId: session.attachmentId,
-    swarmId: session.swarmId,
-    refs: session.consumerBindings.size,
-    consumers: Array.from(session.consumerBindings.keys()),
-    eagerCompleting: session.eagerCompleting,
-    hint: 推导协作分发提示(session),
-  };
-}
-
-export async function 解析协作分发源(input: {
-  attachmentId: string;
-  kind: 媒体种类;
-  locator: 媒体定位结果;
-  consumerId?: string;
-  onSessionEvent?: (event: 协作分发会话事件) => void;
-  eagerCompleting?: boolean;
-  reuseOnly?: boolean;
-}): Promise<协作分发媒体源 | null> {
-  const distribution = 读取可用协作分发片段(input.locator);
-  if (!distribution) {
-    return null;
-  }
-  const session = await 确保协作分发会话({
-    attachmentId: input.attachmentId,
-    kind: input.kind,
-    distribution,
-    ...(input.consumerId ? { consumerId: input.consumerId } : {}),
-    ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
-    ...(input.eagerCompleting ? { eagerCompleting: true } : {}),
-    ...(input.reuseOnly ? { reuseOnly: true } : {}),
-  });
-  if (!session) {
-    return null;
-  }
-  const source = await session.sourcePromise;
-  if (!source) {
-    return null;
-  }
-  return {
-    src: source.src,
-    hint: 推导协作分发提示(session),
-  };
 }
 
 export async function 获取或创建协作分发浏览器运行时(
@@ -634,10 +356,6 @@ export function 重置协作分发浏览器运行时() {
   const runtime = 协作分发浏览器运行时实例;
   协作分发浏览器运行时Promise = null;
   协作分发浏览器运行时实例 = null;
-  for (const session of 协作分发会话表.values()) {
-    停止协作分发存活上报(session);
-  }
-  协作分发会话表.clear();
   runtime?.streamServer.close?.();
   runtime?.client.destroy?.();
   if (!runtime && runtimePromise) {

@@ -3,6 +3,7 @@ export * from "./媒体缓存.js";
 export * from "./媒体会话.js";
 export * from "./消息视频自动播编排.js";
 export * from "./媒体协作分发.js";
+export * from "./资产协作分发运行时.js";
 export * from "./媒体诊断.js";
 export * from "./媒体发布.js";
 export * from "./媒体定位.js";
