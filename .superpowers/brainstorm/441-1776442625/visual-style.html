@@ -1,0 +1,426 @@
+<style>
+  .intro {
+    max-width: 980px;
+    margin-bottom: 24px;
+  }
+  .intro p {
+    margin: 0;
+    color: #b7bfd3;
+    line-height: 1.7;
+  }
+  .cards.visual-directions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+  .card.visual-directions-card {
+    overflow: hidden;
+    border-radius: 26px;
+  }
+  .card.visual-directions-card .card-body {
+    display: grid;
+    gap: 14px;
+  }
+  .direction-tagline {
+    margin: -4px 0 0;
+    color: #d6dcf0;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .mini-points {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .mini-points li {
+    padding: 10px 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.03);
+    color: #c6cde0;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .mock-chat {
+    position: relative;
+    min-height: 560px;
+    padding: 18px;
+    border-radius: 28px;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 14px;
+    color: #f6f7fb;
+  }
+  .mock-chat::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 20% 0%, rgba(255,255,255,0.12), transparent 22%),
+      radial-gradient(circle at 100% 10%, rgba(255,255,255,0.08), transparent 20%);
+    mix-blend-mode: screen;
+  }
+  .theme-a {
+    background:
+      radial-gradient(circle at top left, rgba(255, 92, 122, 0.34), transparent 26%),
+      radial-gradient(circle at 88% 14%, rgba(27, 233, 255, 0.26), transparent 22%),
+      linear-gradient(180deg, #11131c 0%, #0a0c13 58%, #07080d 100%);
+  }
+  .theme-b {
+    background:
+      radial-gradient(circle at 10% 12%, rgba(255, 132, 0, 0.26), transparent 20%),
+      radial-gradient(circle at 84% 6%, rgba(255, 63, 120, 0.22), transparent 18%),
+      linear-gradient(180deg, #160f17 0%, #0b0b12 55%, #07070c 100%);
+  }
+  .theme-c {
+    background:
+      radial-gradient(circle at 22% 10%, rgba(203, 255, 75, 0.2), transparent 18%),
+      radial-gradient(circle at 92% 18%, rgba(0, 224, 197, 0.22), transparent 20%),
+      linear-gradient(180deg, #111714 0%, #090d0d 54%, #060808 100%);
+  }
+  .topbar {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+  .back-chip,
+  .pulse-chip {
+    height: 34px;
+    min-width: 34px;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px);
+  }
+  .room-meta {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .room-name {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+  .room-state {
+    font-size: 12px;
+    color: rgba(246,247,251,0.74);
+    white-space: nowrap;
+  }
+  .timeline {
+    position: relative;
+    z-index: 1;
+    min-height: 0;
+    border-radius: 24px;
+    padding: 18px 14px;
+    background: rgba(7, 9, 16, 0.52);
+    border: 1px solid rgba(255,255,255,0.06);
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    overflow: hidden;
+  }
+  .bubble-row {
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+  .bubble-row.mine {
+    justify-items: end;
+  }
+  .alias-line {
+    max-width: 100%;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.82);
+    white-space: nowrap;
+  }
+  .bubble {
+    max-width: 100%;
+    border-radius: 22px;
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.55;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  }
+  .bubble-row.other .bubble {
+    background: rgba(255,255,255,0.08);
+  }
+  .theme-a .bubble-row.mine .bubble {
+    background: linear-gradient(135deg, #ff4f87 0%, #ff7f50 100%);
+  }
+  .theme-b .bubble-row.mine .bubble {
+    background: linear-gradient(135deg, #ff7a18 0%, #ff2d55 100%);
+  }
+  .theme-c .bubble-row.mine .bubble {
+    background: linear-gradient(135deg, #b6ff37 0%, #00d5b5 100%);
+    color: #04110d;
+  }
+  .media-cluster {
+    width: min(100%, 252px);
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 72px;
+  }
+  .media-tile {
+    border-radius: 16px;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.15), rgba(255,255,255,0.03)),
+      rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    overflow: hidden;
+    position: relative;
+  }
+  .media-tile.wide {
+    grid-column: span 2;
+  }
+  .media-tile.tall {
+    grid-row: span 2;
+  }
+  .media-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.38) 100%),
+      var(--tile-bg, linear-gradient(135deg, #2f3646 0%, #181c27 100%));
+  }
+  .media-tile span {
+    position: absolute;
+    left: 10px;
+    bottom: 8px;
+    z-index: 1;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .composer {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 8px;
+  }
+  .composer-status {
+    padding-left: 4px;
+    font-size: 12px;
+    color: rgba(246,247,251,0.72);
+  }
+  .composer-row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 72px;
+    gap: 10px;
+    align-items: end;
+  }
+  .composer-icon,
+  .composer-send,
+  .composer-input {
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(12px);
+  }
+  .composer-icon,
+  .composer-send {
+    height: 44px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .composer-input {
+    min-height: 68px;
+    border-radius: 22px;
+    padding: 14px 16px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: rgba(246,247,251,0.9);
+  }
+  .theme-a .pulse-chip,
+  .theme-a .back-chip {
+    color: #7cf4ff;
+  }
+  .theme-b .pulse-chip,
+  .theme-b .back-chip {
+    color: #ffb14a;
+  }
+  .theme-c .pulse-chip,
+  .theme-c .back-chip {
+    color: #cbff4b;
+  }
+  .recommend {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255, 90, 116, 0.18);
+    color: #ff93ab;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+  }
+</style>
+
+<h2>群聊 UI 方向稿</h2>
+<p class="subtitle">同一套结构改法，先只看整体气质和空间感。共同点：压缩顶部、放大消息窗、输入区更开阔、混合媒体改成 Telegram 式整齐拼贴、昵称始终完整可读。</p>
+
+<div class="intro">
+  <p>我更推荐 A，因为它最贴近“夜间主题 + 波普活力 + 万人实时群聊”的目标，冲击力够，但还没到赛博酒吧那种过躁。你也可以直接说“要 A 的配色、B 的秩序感”这种组合，我再收一版。</p>
+</div>
+
+<div class="cards visual-directions">
+  <div class="card visual-directions-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="mock-chat theme-a">
+      <div class="topbar">
+        <div class="back-chip">←</div>
+        <div class="room-meta">
+          <div class="room-name">万人实时大厅</div>
+          <div class="room-state">9,842 在线 · 98 条新消息</div>
+        </div>
+        <div class="pulse-chip">LIVE</div>
+      </div>
+      <div class="timeline">
+        <div class="bubble-row other">
+          <div class="alias-line">夜航船长 / Tokyo</div>
+          <div class="bubble">今晚转场速度很顺，消息区也终于展开了，不再像被框在小盒子里。</div>
+        </div>
+        <div class="bubble-row other">
+          <div class="alias-line">胶片猫咪频道</div>
+          <div class="media-cluster">
+            <div class="media-tile tall" style="--tile-bg: linear-gradient(135deg, #ff4f87 0%, #ff8c5a 100%);"><span>IMG</span></div>
+            <div class="media-tile wide" style="--tile-bg: linear-gradient(135deg, #13d6ff 0%, #445bff 100%);"><span>VID</span></div>
+            <div class="media-tile" style="--tile-bg: linear-gradient(135deg, #ffc83d 0%, #ff5f6d 100%);"><span>IMG</span></div>
+            <div class="media-tile" style="--tile-bg: linear-gradient(135deg, #0ee6b7 0%, #00a6ff 100%);"><span>VID</span></div>
+          </div>
+        </div>
+        <div class="bubble-row mine">
+          <div class="bubble">这种更像热闹的夜场直播大厅，节奏很快，但还算干净。</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="composer-status">图片 3 · 视频 2 已就绪</div>
+        <div class="composer-row">
+          <div class="composer-icon">＋</div>
+          <div class="composer-input">输入消息，草稿区和发送区都更松一点。</div>
+          <div class="composer-send">发</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 A：夜色波普 <span class="recommend">推荐</span></h3>
+      <p class="direction-tagline">黑底不脏，靠珊瑚红、冰蓝和一点亮黄提神。整体像 Telegram 夜间版被做得更有舞台感。</p>
+      <ul class="mini-points">
+        <li>更适合“高并发、热闹、实时感强”的万人群聊。</li>
+        <li>头部收窄成一条信息带，主要空间让给消息流。</li>
+        <li>媒体拼贴整齐，但不死板全方格，保留视频/图片混排节奏。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card visual-directions-card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="mock-chat theme-b">
+      <div class="topbar">
+        <div class="back-chip">←</div>
+        <div class="room-meta">
+          <div class="room-name">群聊现场</div>
+          <div class="room-state">房间短码弱化，只保留场域信息</div>
+        </div>
+        <div class="pulse-chip">ON</div>
+      </div>
+      <div class="timeline">
+        <div class="bubble-row other">
+          <div class="alias-line">长昵称也不折叠的用户名字示例</div>
+          <div class="bubble">这版更像夜间杂志封面，秩序更强，适合把“脏感”彻底洗掉。</div>
+        </div>
+        <div class="bubble-row other">
+          <div class="alias-line">混合附件消息</div>
+          <div class="media-cluster">
+            <div class="media-tile wide" style="--tile-bg: linear-gradient(135deg, #ff8b34 0%, #ff2d55 100%);"><span>VID</span></div>
+            <div class="media-tile" style="--tile-bg: linear-gradient(135deg, #f9d423 0%, #ff4e50 100%);"><span>IMG</span></div>
+            <div class="media-tile" style="--tile-bg: linear-gradient(135deg, #b24592 0%, #f15f79 100%);"><span>IMG</span></div>
+            <div class="media-tile wide" style="--tile-bg: linear-gradient(135deg, #1f1c2c 0%, #928dab 100%);"><span>VID</span></div>
+          </div>
+        </div>
+        <div class="bubble-row mine">
+          <div class="bubble">它更成熟，更“品牌化”，但冲击力会比 A 稍微收一点。</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="composer-status">输入区变成稳定的大底座，不再像网页底栏</div>
+        <div class="composer-row">
+          <div class="composer-icon">＋</div>
+          <div class="composer-input">适合做成更高级、更稳的夜间舞台。</div>
+          <div class="composer-send">发</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 B：霓虹社论</h3>
+      <p class="direction-tagline">偏橙红和洋红，秩序感最强，像被精修过的新闻现场，而不是随手搭的聊天壳。</p>
+      <ul class="mini-points">
+        <li>最适合解决“脏脏的”问题，气质更稳。</li>
+        <li>空间开阔，但情绪比 A 稍冷静。</li>
+        <li>如果你想更像成熟产品而不是实验感产品，这版更安全。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card visual-directions-card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="mock-chat theme-c">
+      <div class="topbar">
+        <div class="back-chip">←</div>
+        <div class="room-meta">
+          <div class="room-name">实时热区</div>
+          <div class="room-state">更锋利、更数字化的夜间荧光调</div>
+        </div>
+        <div class="pulse-chip">SYNC</div>
+      </div>
+      <div class="timeline">
+        <div class="bubble-row other">
+          <div class="alias-line">昵称不缩写，不躲进气泡里</div>
+          <div class="bubble">这版最“新”，也最挑人。好处是辨识度强，坏处是如果收不好会过于赛博。</div>
+        </div>
+        <div class="bubble-row other">
+          <div class="alias-line">资源混发消息</div>
+          <div class="media-cluster">
+            <div class="media-tile tall" style="--tile-bg: linear-gradient(135deg, #cbff4b 0%, #00d7ae 100%);"><span>IMG</span></div>
+            <div class="media-tile" style="--tile-bg: linear-gradient(135deg, #00d5b5 0%, #0f8dff 100%);"><span>IMG</span></div>
+            <div class="media-tile" style="--tile-bg: linear-gradient(135deg, #1a2a6c 0%, #00d2ff 100%);"><span>VID</span></div>
+            <div class="media-tile wide" style="--tile-bg: linear-gradient(135deg, #0f2027 0%, #2c5364 100%);"><span>VID</span></div>
+          </div>
+        </div>
+        <div class="bubble-row mine">
+          <div class="bubble">更偏科技感聊天室，不是最 Telegram，但会很独特。</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="composer-status">更锐利，也更需要克制，避免刺眼</div>
+        <div class="composer-row">
+          <div class="composer-icon">＋</div>
+          <div class="composer-input">适合想把产品做得更前卫、更数字感的时候。</div>
+          <div class="composer-send">发</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 C：酸性数字夜</h3>
+      <p class="direction-tagline">荧光绿和青色更强，记忆点最大，但也最容易用过头。</p>
+      <ul class="mini-points">
+        <li>适合强调“实时系统感”和先锋气质。</li>
+        <li>如果你要的是 Telegram 风格，这版可能偏离稍大。</li>
+        <li>更像独立产品，不像大众聊天 App。</li>
+      </ul>
+    </div>
+  </div>
+</div>

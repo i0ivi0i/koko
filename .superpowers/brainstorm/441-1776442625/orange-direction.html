@@ -1,0 +1,435 @@
+<style>
+  .lead {
+    max-width: 980px;
+    margin-bottom: 24px;
+    color: #b8becb;
+    line-height: 1.72;
+  }
+  .cards.orange-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+  .card.orange-card {
+    overflow: hidden;
+    border-radius: 26px;
+  }
+  .card.orange-card .card-body {
+    display: grid;
+    gap: 14px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    color: #d6dbe6;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .recommend {
+    background: rgba(255, 122, 24, 0.18);
+    color: #ffbe92;
+    margin-left: 8px;
+  }
+  .mock-chat {
+    min-height: 592px;
+    padding: 16px;
+    border-radius: 28px;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 14px;
+    position: relative;
+    color: #f7f7f4;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(255,255,255,0.06), transparent 28%),
+      linear-gradient(180deg, #101114 0%, #0a0b0e 58%, #08090b 100%);
+  }
+  .mock-chat::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0)),
+      radial-gradient(circle at 100% 12%, rgba(255,255,255,0.05), transparent 20%);
+  }
+  .variant-a .accent-line {
+    background: linear-gradient(90deg, #ff7a18 0%, #ff9a3d 100%);
+  }
+  .variant-b .accent-line {
+    background: linear-gradient(90deg, #ff6a00 0%, #ff9340 70%, #ff3f86 100%);
+  }
+  .variant-c .accent-line {
+    background: linear-gradient(90deg, #ff6f1a 0%, #ff9440 72%, #f4e64e 100%);
+  }
+  .variant-a .mine {
+    --bubble-fill: linear-gradient(135deg, #ff7a18 0%, #ff9340 100%);
+    --chip-fill: rgba(255, 122, 24, 0.16);
+  }
+  .variant-b .mine {
+    --bubble-fill: linear-gradient(135deg, #ff6a00 0%, #ff9340 78%, #ff3f86 100%);
+    --chip-fill: rgba(255, 106, 0, 0.16);
+  }
+  .variant-c .mine {
+    --bubble-fill: linear-gradient(135deg, #ff7216 0%, #ff9a42 82%, #f4e64e 100%);
+    --chip-fill: rgba(255, 114, 22, 0.16);
+  }
+  .shell-head {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+  }
+  .nav-chip,
+  .state-chip {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.05);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .head-copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+  }
+  .head-copy h4 {
+    margin: 0;
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    font-weight: 700;
+  }
+  .head-copy p {
+    margin: 0;
+    font-size: 11px;
+    color: rgba(247,247,244,0.56);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  .accent-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 3px;
+    border-radius: 999px;
+    opacity: 0.96;
+  }
+  .timeline {
+    position: relative;
+    z-index: 1;
+    min-height: 0;
+    padding: 16px 14px;
+    border-radius: 24px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    overflow: hidden;
+  }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0 1px, transparent 1px 6px);
+    opacity: 0.32;
+  }
+  .msg {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+  .msg.mine {
+    justify-items: end;
+  }
+  .alias {
+    max-width: 100%;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(247,247,244,0.84);
+  }
+  .bubble {
+    max-width: 100%;
+    padding: 12px 14px;
+    border-radius: 22px;
+    font-size: 14px;
+    line-height: 1.56;
+    background: rgba(255,255,255,0.05);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+  .msg.mine .bubble {
+    background: var(--bubble-fill);
+    color: #150f0b;
+  }
+  .media-grid {
+    width: min(100%, 254px);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 72px;
+    gap: 6px;
+  }
+  .tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.015)),
+      rgba(255,255,255,0.04);
+  }
+  .tile::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.28) 100%),
+      var(--tile-ink, linear-gradient(135deg, #31343a 0%, #16181d 100%));
+  }
+  .tile span {
+    position: absolute;
+    left: 10px;
+    bottom: 8px;
+    z-index: 1;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .wide { grid-column: span 2; }
+  .tall { grid-row: span 2; }
+  .composer {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 8px;
+  }
+  .status {
+    padding-left: 4px;
+    font-size: 12px;
+    color: rgba(247,247,244,0.64);
+  }
+  .status strong {
+    color: #ffb074;
+    font-weight: 700;
+  }
+  .composer-row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 72px;
+    gap: 10px;
+    align-items: end;
+  }
+  .plus,
+  .send,
+  .input {
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.05);
+  }
+  .plus,
+  .send {
+    height: 44px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+  }
+  .send {
+    background: var(--chip-fill);
+  }
+  .input {
+    min-height: 68px;
+    border-radius: 22px;
+    padding: 14px 16px;
+    line-height: 1.56;
+    font-size: 14px;
+    color: rgba(247,247,244,0.84);
+  }
+  .pros {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+  .pros li {
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.03);
+    color: #c8cfdd;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+</style>
+
+<h2>活力橙的三种用法</h2>
+<p class="subtitle">共同前提都一样：棕色彻底禁止，网页卡片感继续打掉，房间头更薄、消息窗更开、输入区更像持续在场的控制台，媒体混排继续走工整拼贴，昵称完整保留。</p>
+
+<div class="lead">
+  这次不再讨论“脏不脏”，而是讨论橙色该占多大权。你可以把它理解成同一套聊天应用骨架下的三种信号密度。
+</div>
+
+<div class="cards orange-grid">
+  <div class="card orange-card" data-choice="signal-orange" onclick="toggleSelect(this)">
+    <div class="mock-chat variant-a">
+      <div class="accent-line"></div>
+      <div class="shell-head">
+        <div class="nav-chip">←</div>
+        <div class="head-copy">
+          <h4>万人实时大厅</h4>
+          <p>Signal Orange</p>
+        </div>
+        <div class="state-chip">LIVE</div>
+      </div>
+      <div class="timeline">
+        <div class="msg">
+          <div class="alias">长昵称保持完整，不缩写不折叠</div>
+          <div class="bubble">橙色只负责关键节点，其他一切都回到黑、灰、白的秩序里。</div>
+        </div>
+        <div class="msg">
+          <div class="alias">混合附件消息</div>
+          <div class="media-grid">
+            <div class="tile wide" style="--tile-ink: linear-gradient(135deg, #ff7a18 0%, #ff9a3d 100%);"><span>VID</span></div>
+            <div class="tile" style="--tile-ink: linear-gradient(135deg, #5f6672 0%, #22262d 100%);"><span>IMG</span></div>
+            <div class="tile" style="--tile-ink: linear-gradient(135deg, #ff8b38 0%, #5a5f68 100%);"><span>IMG</span></div>
+            <div class="tile wide" style="--tile-ink: linear-gradient(135deg, #2c2f36 0%, #17191d 100%);"><span>VID</span></div>
+          </div>
+        </div>
+        <div class="msg mine">
+          <div class="bubble">它最稳，最接近“系统级高级感”。</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="status"><strong>状态</strong> 固定在输入区上方，不靠 toast 漂过去。</div>
+        <div class="composer-row">
+          <div class="plus">＋</div>
+          <div class="input">橙色像电流，只在真正该亮的地方亮。</div>
+          <div class="send">发</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 A：信号橙</h3>
+      <p><span class="pill">最克制</span></p>
+      <ul class="pros">
+        <li>最不容易脏，也最有 Shopify 那种高级系统感。</li>
+        <li>橙色只在 live、发送、未读、主行动作上出现。</li>
+        <li>风险最小，但“波普味”也最轻。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card orange-card" data-choice="editorial-orange" onclick="toggleSelect(this)">
+    <div class="mock-chat variant-b">
+      <div class="accent-line"></div>
+      <div class="shell-head">
+        <div class="nav-chip">←</div>
+        <div class="head-copy">
+          <h4>万人实时大厅</h4>
+          <p>Editorial Orange</p>
+        </div>
+        <div class="state-chip">LIVE</div>
+      </div>
+      <div class="timeline">
+        <div class="msg">
+          <div class="alias">长昵称保持完整，不缩写不折叠</div>
+          <div class="bubble">橙色是主角，但会带极少量玫红做锋利边缘，让它更有真正波普的骨相。</div>
+        </div>
+        <div class="msg">
+          <div class="alias">混合附件消息</div>
+          <div class="media-grid">
+            <div class="tile tall" style="--tile-ink: linear-gradient(135deg, #ff6a00 0%, #ff9340 100%);"><span>IMG</span></div>
+            <div class="tile" style="--tile-ink: linear-gradient(135deg, #ff3f86 0%, #2a2d34 100%);"><span>IMG</span></div>
+            <div class="tile" style="--tile-ink: linear-gradient(135deg, #5b606b 0%, #171a20 100%);"><span>VID</span></div>
+            <div class="tile wide" style="--tile-ink: linear-gradient(135deg, #ff7c1f 0%, #ff3f86 100%);"><span>VID</span></div>
+          </div>
+        </div>
+        <div class="msg mine">
+          <div class="bubble">还是产品，不是海报；但已经有一点编辑设计的锋芒。<br>这版最平衡。</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="status"><strong>状态</strong> 和输入、上传、恢复都在同一块控制台里闭环。</div>
+        <div class="composer-row">
+          <div class="plus">＋</div>
+          <div class="input">橙色是主脉冲，玫红只做极少量锐边，不会把页面弄花。</div>
+          <div class="send">发</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 B：社论橙 <span class="pill recommend">推荐</span></h3>
+      <p><span class="pill">最平衡</span></p>
+      <ul class="pros">
+        <li>仍然干净，但已经能看出你要的“真正波普”，不是平庸企业风。</li>
+        <li>橙色更成体系，微量玫红只做刀锋，不做大面积背景。</li>
+        <li>最像“高级的聊天应用”，不是“好看的网站”。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card orange-card" data-choice="broadcast-orange" onclick="toggleSelect(this)">
+    <div class="mock-chat variant-c">
+      <div class="accent-line"></div>
+      <div class="shell-head">
+        <div class="nav-chip">←</div>
+        <div class="head-copy">
+          <h4>万人实时大厅</h4>
+          <p>Broadcast Orange</p>
+        </div>
+        <div class="state-chip">LIVE</div>
+      </div>
+      <div class="timeline">
+        <div class="msg">
+          <div class="alias">长昵称保持完整，不缩写不折叠</div>
+          <div class="bubble">橙色铺得更开，再拿一点柠檬黄做系统闪点，现场感和广播感都更强。</div>
+        </div>
+        <div class="msg">
+          <div class="alias">混合附件消息</div>
+          <div class="media-grid">
+            <div class="tile wide" style="--tile-ink: linear-gradient(135deg, #ff7216 0%, #ff9a42 76%, #f4e64e 100%);"><span>VID</span></div>
+            <div class="tile" style="--tile-ink: linear-gradient(135deg, #f4e64e 0%, #2b2f35 100%);"><span>IMG</span></div>
+            <div class="tile" style="--tile-ink: linear-gradient(135deg, #666c76 0%, #181b20 100%);"><span>IMG</span></div>
+            <div class="tile wide" style="--tile-ink: linear-gradient(135deg, #ff7d1f 0%, #ffb54d 100%);"><span>VID</span></div>
+          </div>
+        </div>
+        <div class="msg mine">
+          <div class="bubble">最有气场，也最容易一脚踩回“活动页”那种躁感。</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="status"><strong>状态</strong> 很亮眼，但要小心别让用户一直被颜色喊叫。</div>
+        <div class="composer-row">
+          <div class="plus">＋</div>
+          <div class="input">更像广播现场，不一定最适合高频久用。</div>
+          <div class="send">发</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 C：广播橙</h3>
+      <p><span class="pill">最有张力</span></p>
+      <ul class="pros">
+        <li>最活，最有现场冲击力。</li>
+        <li>会更接近活动品牌和媒体品牌的强视觉。</li>
+        <li>如果你最怕“花”和“吵”，这版风险最高。</li>
+      </ul>
+    </div>
+  </div>
+</div>
