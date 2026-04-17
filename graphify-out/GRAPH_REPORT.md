@@ -115,11 +115,11 @@ Nodes (5): Assert-ServicesStopped(), Get-ListeningPortProcessRecords(), Resolve-
 
 ### Community 11 - "Community 11"
 Cohesion: 0.2
-Nodes (2): handleSummary(), summarizeTrend()
+Nodes (4): New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Write-ManagedProcessLogs()
 
 ### Community 12 - "Community 12"
 Cohesion: 0.2
-Nodes (4): New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Write-ManagedProcessLogs()
+Nodes (2): handleSummary(), summarizeTrend()
 
 ### Community 13 - "Community 13"
 Cohesion: 0.22
@@ -202,9 +202,9 @@ Nodes (0):
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 22`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 23`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 25`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

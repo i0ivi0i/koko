@@ -113,7 +113,7 @@
       "source_file": "run.ps1",
       "source_location": "L1",
       "id": "run_ps1",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Assert-PowerShellVersion()",
@@ -121,7 +121,7 @@
       "source_file": "run.ps1",
       "source_location": "L7",
       "id": "run_assert_powershellversion",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Import-DotEnv()",
@@ -129,7 +129,7 @@
       "source_file": "run.ps1",
       "source_location": "L14",
       "id": "run_import_dotenv",
-      "community": 12
+      "community": 11
     },
     {
       "label": "New-LauncherLogDirectory()",
@@ -137,7 +137,7 @@
       "source_file": "run.ps1",
       "source_location": "L33",
       "id": "run_new_launcherlogdirectory",
-      "community": 12
+      "community": 11
     },
     {
       "label": "New-StreamState()",
@@ -145,7 +145,7 @@
       "source_file": "run.ps1",
       "source_location": "L52",
       "id": "run_new_streamstate",
-      "community": 12
+      "community": 11
     },
     {
       "label": "New-ManagedProcess()",
@@ -153,7 +153,7 @@
       "source_file": "run.ps1",
       "source_location": "L66",
       "id": "run_new_managedprocess",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Read-NewLogLines()",
@@ -161,7 +161,7 @@
       "source_file": "run.ps1",
       "source_location": "L101",
       "id": "run_read_newloglines",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Write-ManagedProcessLogs()",
@@ -169,7 +169,7 @@
       "source_file": "run.ps1",
       "source_location": "L161",
       "id": "run_write_managedprocesslogs",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Stop-StaleLauncherBackend()",
@@ -177,7 +177,7 @@
       "source_file": "run.ps1",
       "source_location": "L185",
       "id": "run_stop_stalelauncherbackend",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Resolve-TusdBinaryPath()",
@@ -185,7 +185,7 @@
       "source_file": "run.ps1",
       "source_location": "L211",
       "id": "run_resolve_tusdbinarypath",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Test-TruthyEnvironmentFlag()",
@@ -193,7 +193,7 @@
       "source_file": "run.ps1",
       "source_location": "L221",
       "id": "run_test_truthyenvironmentflag",
-      "community": 12
+      "community": 11
     },
     {
       "label": "Stop-ManagedProcess()",
@@ -201,7 +201,7 @@
       "source_file": "run.ps1",
       "source_location": "L234",
       "id": "run_stop_managedprocess",
-      "community": 12
+      "community": 11
     },
     {
       "label": "up.ps1",
@@ -289,7 +289,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L1",
       "id": "http",
-      "community": 11
+      "community": 12
     },
     {
       "label": ".constructor()",
@@ -297,7 +297,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L36",
       "id": "http_constructor",
-      "community": 11
+      "community": 12
     },
     {
       "label": "HttpRealtime\u4f20\u8f93",
@@ -1633,7 +1633,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L1",
       "id": "scripts_js",
-      "community": 11
+      "community": 12
     },
     {
       "label": "jsonHeaders()",
@@ -1641,7 +1641,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L50",
       "id": "jsonheaders",
-      "community": 11
+      "community": 12
     },
     {
       "label": "buildTusMetadata()",
@@ -1649,7 +1649,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L60",
       "id": "buildtusmetadata",
-      "community": 11
+      "community": 12
     },
     {
       "label": "resolveTusLocation()",
@@ -1657,7 +1657,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L66",
       "id": "resolvetuslocation",
-      "community": 11
+      "community": 12
     },
     {
       "label": "mustParseJson()",
@@ -1665,7 +1665,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L77",
       "id": "mustparsejson",
-      "community": 11
+      "community": 12
     },
     {
       "label": "summarizeTrend()",
@@ -1673,7 +1673,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L85",
       "id": "summarizetrend",
-      "community": 11
+      "community": 12
     },
     {
       "label": "handleSummary()",
@@ -1681,7 +1681,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L185",
       "id": "handlesummary",
-      "community": 11
+      "community": 12
     },
     {
       "label": "\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
@@ -2697,7 +2697,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 24
+      "community": 23
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2705,7 +2705,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 24
+      "community": 23
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -2817,7 +2817,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 23
+      "community": 24
     },
     {
       "label": "Assert-True()",
@@ -2825,7 +2825,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 23
+      "community": 24
     },
     {
       "label": "\u89c6\u9891locator\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3361,7 +3361,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L14",
       "id": "http_send_json",
-      "community": 11
+      "community": 12
     },
     {
       "label": "send_bytes()",
@@ -3369,7 +3369,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L51",
       "id": "http_send_bytes",
-      "community": 11
+      "community": 12
     },
     {
       "label": "send_multipart_response()",
@@ -3377,7 +3377,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L77",
       "id": "http_send_multipart_response",
-      "community": 11
+      "community": 12
     },
     {
       "label": "fixture.rs",
