@@ -59,6 +59,8 @@ export interface 房间滚动器依赖 {
  */
 export class 房间滚动器 implements ReactiveController {
   private scrollPhaseReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+  private 阅读锚点采样句柄: number | null = null;
+  private 待采样阅读锚点容器: HTMLElement | null = null;
   private readonly 活跃程序滚动来源 = new Set<程序滚动来源>();
   private readonly 待吸收程序滚动尾波来源 = new Set<程序滚动来源>();
 
@@ -95,7 +97,7 @@ export class 房间滚动器 implements ReactiveController {
       return false;
     }
     this.按需加载更早历史(scrollContainer);
-    this.按需采样阅读锚点(scrollContainer);
+    this.调度阅读锚点采样(scrollContainer);
     return true;
   }
 
@@ -207,11 +209,15 @@ export class 房间滚动器 implements ReactiveController {
   }
 
   取消挂起滚动副作用(): void {
-    if (this.scrollPhaseReleaseTimer === null) {
-      return;
+    if (this.scrollPhaseReleaseTimer !== null) {
+      clearTimeout(this.scrollPhaseReleaseTimer);
+      this.scrollPhaseReleaseTimer = null;
     }
-    clearTimeout(this.scrollPhaseReleaseTimer);
-    this.scrollPhaseReleaseTimer = null;
+    if (this.阅读锚点采样句柄 !== null) {
+      cancelAnimationFrame(this.阅读锚点采样句柄);
+      this.阅读锚点采样句柄 = null;
+    }
+    this.待采样阅读锚点容器 = null;
   }
 
   private 本次滚动属于聊天视口(): boolean {
@@ -306,6 +312,30 @@ export class 房间滚动器 implements ReactiveController {
       historyLoadThrottleUntil: now + 历史分页顶部节流毫秒,
     });
     this.deps.请求更早历史();
+  }
+
+  private 调度阅读锚点采样(scrollContainer: HTMLElement): void {
+    this.待采样阅读锚点容器 = scrollContainer;
+    if (this.阅读锚点采样句柄 !== null) {
+      return;
+    }
+    /**
+     * 阅读锚点采样需要量消息节点和容器几何。
+     * 这里改成“同一帧只量一次”，避免浏览器在连续 scroll 事件里
+     * 被重复 `getBoundingClientRect()` 拖进 forced reflow。
+     *
+     * 历史分页仍保持同步判断，因为它只看 scrollTop；
+     * 只有真正需要量布局的阅读锚点采样才延后到帧尾统一做。
+     */
+    this.阅读锚点采样句柄 = requestAnimationFrame(() => {
+      this.阅读锚点采样句柄 = null;
+      const nextScrollContainer = this.待采样阅读锚点容器;
+      this.待采样阅读锚点容器 = null;
+      if (!nextScrollContainer) {
+        return;
+      }
+      this.按需采样阅读锚点(nextScrollContainer);
+    });
   }
 
   private 按需采样阅读锚点(scrollContainer: HTMLElement): void {

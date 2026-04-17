@@ -1660,6 +1660,35 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("发送区视频草稿只渲染轻量占位，不会直接挂本地 video 元素再次触发媒体读取", async () => {
+    const el = await 创建已入房聊天壳();
+    注入媒体草稿(el, {
+      localId: "draft-video-lightweight",
+      kind: "video",
+      attachmentId: "",
+      previewUrl: "blob:http://test.local/draft-video-lightweight",
+      width: 1280,
+      height: 720,
+      status: "transporting",
+      fileName: "demo.mp4",
+      errorCode: "",
+    });
+    await 等待组件稳定(el);
+
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-draft-card-id="draft-video-lightweight"] video.composer-draft-thumb'
+      )
+    ).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-draft-card-id="draft-video-lightweight"] [data-video-draft-placeholder="true"]'
+      )
+    ).not.toBeNull();
+
+    el.remove();
+  });
+
   it("视频草稿失败后不会伪造成时间线消息", async () => {
     const el = await 创建已入房聊天壳();
     输入消息到操作台(el, "失败视频不要伪装成已发送");

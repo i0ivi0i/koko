@@ -619,6 +619,73 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
+  it("视频查看器已经拿到 manifest 主链时，激活协作补齐不会再并发启动 raw swarm 整附件补块", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-hls-backfill",
+      hint: "正在补块" as const,
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-hls-backfill",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-video-hls-backfill",
+        thumbnail_url: "http://media.local/poster-video-hls-backfill",
+        distribution: {
+          content_id: "content_att-video-hls-backfill",
+          content_hash: "hash-video-hls-backfill",
+          swarm_id: "swarm-hash-video-hls-backfill",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-hls-backfill",
+          torrent_info_hash: "torrent-info-hash-video-hls-backfill",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-hls-backfill",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-hls-backfill",
+          content_hash: "hash-video-hls-backfill",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-hls-backfill/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-hls-backfill/stream.mpd",
+          },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-hls-backfill",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-video-hls-backfill",
+            join_ticket: null,
+            survival_mode: "server_assisted" as const,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-video-hls-backfill",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+    });
+
+    await 播放器.激活协作补齐({
+      attachmentId: "att-video-hls-backfill",
+      kind: "video",
+      consumerId: "session:att-video-hls-backfill",
+      onSessionEvent: vi.fn(),
+    });
+
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+  });
+
   it("inline_autoplay surface 在 distribution 可用时，会先尝试 swarm/web seed，而不是先 probe anchor", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-inline-hls",

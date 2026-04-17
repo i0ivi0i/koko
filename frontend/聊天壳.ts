@@ -630,6 +630,26 @@ export class 聊天壳 extends LitElement {
       background: rgba(255, 255, 255, 0.04);
     }
 
+    .composer-draft-video-placeholder {
+      display: grid;
+      align-items: end;
+      justify-items: start;
+      padding: 10px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.12), transparent 42%),
+        linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.18)),
+        rgba(255, 255, 255, 0.04);
+    }
+
+    .composer-draft-video-badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.36);
+      color: var(--text-primary);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+
     .composer-draft-meta {
       min-width: 0;
       display: grid;
@@ -1030,14 +1050,14 @@ export class 聊天壳 extends LitElement {
                     >
                       ${draft.kind === "video"
                         ? html`
-                            <video
-                              class="composer-draft-thumb"
+                            <div
+                              class="composer-draft-thumb composer-draft-video-placeholder"
                               data-draft-id=${draft.localId}
-                              src=${draft.previewUrl}
-                              muted
-                              playsinline
-                              preload="metadata"
-                            ></video>
+                              data-video-draft-placeholder="true"
+                              aria-label=${`${draft.fileName} 本地视频草稿占位`}
+                            >
+                              <span class="composer-draft-video-badge">视频</span>
+                            </div>
                           `
                         : html`
                             <img

@@ -294,6 +294,20 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (locator.status !== "ready") {
       return;
     }
+    /**
+     * 视频查看器一旦已经拿到正式 manifest，就不能再通过“后台补齐”这条入口
+     * 同步启动 raw WebTorrent whole-file 补块：
+     * 1. 前台此时已经有 HLS 主链在持续取 segment；
+     * 2. 这里再 eagerCompleting=true，会额外触发 streamURL probe + file.select(1)；
+     * 3. 两条重链路并发正是群聊里大视频把页面拖卡、拖死的根因之一。
+     *
+     * 这条分支只挡“当前仍有正式流媒体主链可用”的 Web 冷备窗口；
+     * 真到 24 小时后 manifest 退场，locator 自然会回到 swarm/anchor 主链，
+     * 不会伤到删源后的长期 WebTorrent 存活语义。
+     */
+    if (locator.kind === "video" && 读取流媒体主链地址(locator)) {
+      return;
+    }
     const distribution = 读取协作分发定位片段(locator);
     if (!distribution) {
       return;
