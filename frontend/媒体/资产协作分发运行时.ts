@@ -12,6 +12,7 @@ import {
   读取首个可播放文件,
   请求协作分发持久化存储,
   重置协作分发浏览器运行时,
+  type 协作分发底层会话,
   type 协作分发会话事件,
   type 协作分发媒体源,
   type WebTorrent文件,
@@ -31,18 +32,7 @@ type 协作分发消费者绑定 = {
   onSessionEvent: ((event: 协作分发会话事件) => void) | null;
 };
 
-type 底层协作分发会话 = {
-  attachmentId: string;
-  swarmId: string;
-  torrentInfoHash: string;
-  contentHash: string;
-  sourcePromise: Promise<{ src: string } | null>;
-  eagerCompleting: boolean;
-  locallyComplete: boolean;
-  hint: 协作分发媒体源["hint"] | null;
-  presenceIntervalId: ReturnType<typeof setInterval> | null;
-  torrent: WebTorrent种子 | null;
-  file: WebTorrent文件 | null;
+type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings"> & {
   consumerBindings: Map<string, 协作分发消费者绑定>;
 };
 
@@ -624,6 +614,7 @@ async function 确保协作分发会话(
     presenceIntervalId: null,
     torrent: null,
     file: null,
+    cleanupStarted: false,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);

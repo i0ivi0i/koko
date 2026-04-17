@@ -313,6 +313,33 @@ describe("媒体协作分发", () => {
     });
   });
 
+  it("同一个会话被重复清理时只会走一次 remove，不会把第二次清理变成新的 reject 源", async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const destroy = vi.fn();
+    const session = {
+      torrentInfoHash: "torrent-info-hash-cleanup-3",
+      cleanupStarted: false,
+      torrent: {
+        destroy,
+      },
+    } as unknown as Parameters<typeof 清理协作分发底层会话>[0];
+    const runtime = {
+      client: {
+        remove,
+      },
+    } as unknown as Parameters<typeof 清理协作分发底层会话>[1];
+
+    清理协作分发底层会话(session, runtime);
+    清理协作分发底层会话(session, runtime);
+    await Promise.resolve();
+
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith("torrent-info-hash-cleanup-3", {
+      destroyStore: false,
+    });
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
   it("同一 attachment 在同一页面被再次打开时会复用同一个 torrent 会话", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-1");

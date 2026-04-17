@@ -1,4 +1,4 @@
-import { html, LitElement } from "lit";
+import { html, LitElement, type PropertyValues } from "lit";
 import { VirtualizerController } from "@tanstack/lit-virtual";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -150,9 +150,15 @@ export class 房间消息窗 extends LitElement {
     this.调度自动播候选(scrollContainer);
   }
 
-  override updated(): void {
+  override updated(changedProperties: PropertyValues<this>): void {
     const scrollContainer = this.messageScrollRef.value;
     if (!scrollContainer) {
+      return;
+    }
+    if (
+      !changedProperties.has("items") &&
+      !changedProperties.has("mediaPlaybackByAttachmentId")
+    ) {
       return;
     }
     this.同步自动播候选观察(scrollContainer);

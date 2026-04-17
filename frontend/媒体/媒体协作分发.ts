@@ -76,6 +76,7 @@ export type 协作分发底层会话 = {
   presenceIntervalId: ReturnType<typeof setInterval> | null;
   torrent: WebTorrent种子 | null;
   file: WebTorrent文件 | null;
+  cleanupStarted: boolean;
   consumerBindings: Map<
     string,
     {
@@ -326,6 +327,11 @@ export function 清理协作分发底层会话(
   session: 协作分发底层会话,
   runtime: 协作分发浏览器运行时 | null = 协作分发浏览器运行时实例
 ): void {
+  // sourcePromise 和 consumer 释放链都可能同时试图收尾同一个 swarm，会话清理必须幂等。
+  if (session.cleanupStarted) {
+    return;
+  }
+  session.cleanupStarted = true;
   const remove = runtime?.client.remove;
   if (!remove) {
     销毁协作分发Torrent(session);

@@ -1204,6 +1204,62 @@ describe("聊天壳集成 / 首页与控制台", () => {
     }
   });
 
+  it("无关重渲染不会重复读取房间宿主宽度，而是复用缓存的消息文本布局环境", async () => {
+    const 原始宽度 = globalThis.innerWidth;
+    Object.defineProperty(globalThis, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1024,
+    });
+    const el = await 创建已入房聊天壳();
+    const roomView = el.shadowRoot!.querySelector("#roomView") as HTMLElement | null;
+    expect(roomView).not.toBeNull();
+
+    try {
+      let 宿主宽度读取次数 = 0;
+      Object.defineProperty(roomView!, "clientWidth", {
+        configurable: true,
+        get() {
+          宿主宽度读取次数 += 1;
+          return 1024;
+        },
+      });
+
+      globalThis.dispatchEvent(new Event("resize"));
+      await 等待组件稳定(el);
+      宿主宽度读取次数 = 0;
+
+      el.requestUpdate();
+      await 等待组件稳定(el);
+
+      expect(宿主宽度读取次数).toBe(0);
+    } finally {
+      Object.defineProperty(globalThis, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: 原始宽度,
+      });
+      el.remove();
+    }
+  });
+
+  it("无关重渲染不会重新生成消息展示项数组，而是复用上一次 presenter 结果", async () => {
+    const el = await 创建已入房聊天壳();
+    const pane = el.shadowRoot!.querySelector("koko-room-message-pane") as 房间消息窗 | null;
+    expect(pane).not.toBeNull();
+
+    try {
+      const 首次展示项 = pane!.items;
+
+      el.requestUpdate();
+      await 等待组件稳定(el);
+
+      expect(pane!.items).toBe(首次展示项);
+    } finally {
+      el.remove();
+    }
+  });
+
   it("boot 态时唯一操作台骨架仍然常驻，但主输入和主动作不可交互", async () => {
     const transport = new 假传输();
     vi.spyOn(transport, "bootstrapAnonymousIdentity").mockImplementation(

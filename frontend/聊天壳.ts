@@ -1,6 +1,6 @@
 import { css, html, LitElement } from "lit";
 import { 创建应用运行时, type 应用运行时端口 } from "./应用运行时.js";
-import { 创建聊天应用内核 } from "./聊天应用内核.js";
+import { 创建聊天应用内核, type 聊天应用快照 } from "./聊天应用内核.js";
 import { 获取默认浏览器应用平台 } from "./平台/index.js";
 import "./房间消息窗.js";
 import {
@@ -46,15 +46,81 @@ function 派生媒体草稿失败文案(errorCode: string): string {
   }
 }
 
+function 按房间宽度派生消息文本布局环境(roomWidth: number): 消息文本布局环境 {
+  const 宿主宽度 = Math.max(1, roomWidth || globalThis.innerWidth || 1024);
+  const 气泡外框附加宽度 =
+    默认消息文本布局环境.bubbleHorizontalPadding +
+    默认消息文本布局环境.bubbleHorizontalBorderWidth;
+  const bubbleMaxWidth =
+    宿主宽度 <= 640
+      ? Math.min(宿主宽度 * 0.94, 760)
+      : 宿主宽度 >= 768
+        ? Math.min(宿主宽度 * 0.82, 860)
+        : Math.min(宿主宽度 * 0.9, 780);
+  const 多行正文上限 = Math.max(120, bubbleMaxWidth - 气泡外框附加宽度);
+  const 单行正文直通上限 = Math.max(
+    多行正文上限,
+    Math.min(
+      多行正文上限 + 56,
+      Math.max(120, 宿主宽度 - 气泡外框附加宽度 - 8),
+      420
+    )
+  );
+
+  return {
+    ...默认消息文本布局环境,
+    maxContentWidth: 多行正文上限,
+    singleLineMaxContentWidth: 单行正文直通上限,
+  };
+}
+
+function 附件内容地址表相同(
+  left: 聊天应用快照["media"]["contentUrlByAttachmentId"],
+  right: 聊天应用快照["media"]["contentUrlByAttachmentId"]
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => {
+    const leftEntry = left[key];
+    const rightEntry = right[key];
+    return (
+      leftEntry !== undefined &&
+      rightEntry !== undefined &&
+      leftEntry.originalSrc === rightEntry.originalSrc &&
+      leftEntry.thumbnailSrc === rightEntry.thumbnailSrc
+    );
+  });
+}
+
 export class 聊天壳 extends LitElement {
   /**
    * 文本几何已经改由 Pretext 主导后，宿主尺寸变化就不能再指望浏览器自然流偷偷兜底。
-   * 这里不引入第二份“宽度状态”，只在 viewport 改变时请求一次重渲染，
-   * 让消息气泡和输入区都重新按当前宿主宽度计算布局。
+   * render 路径禁止再同步读几何；这里只把 resize 信号翻译成一次缓存同步。
    */
   private readonly handleViewportResize = (): void => {
-    this.requestUpdate();
+    this.同步消息文本布局环境();
   };
+
+  private 房间宽度观察目标: HTMLElement | null = null;
+  private 房间宽度观察器: ResizeObserver | null = null;
+  private 消息文本布局宽度缓存 = Math.max(1, globalThis.innerWidth || 1024);
+  private 消息文本布局环境缓存 = 按房间宽度派生消息文本布局环境(
+    this.消息文本布局宽度缓存
+  );
+  private 聊天列表展示项缓存: {
+    messages: 聊天应用快照["messages"];
+    sessionId: 聊天应用快照["sessionId"];
+    firstUnreadEventPosition: 聊天应用快照["firstUnreadEventPosition"];
+    layoutEnv: 消息文本布局环境;
+    contentUrlByAttachmentId: 聊天应用快照["media"]["contentUrlByAttachmentId"];
+    items: ReturnType<typeof 派生聊天列表展示项>;
+  } | null = null;
 
   /**
    * 壳层和 AppRuntime 需要共享同一份浏览器平台门面。
@@ -909,8 +975,13 @@ export class 聊天壳 extends LitElement {
     void this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
   }
 
+  override updated(): void {
+    this.同步房间宽度观察();
+  }
+
   override disconnectedCallback(): void {
     globalThis.removeEventListener("resize", this.handleViewportResize);
+    this.清理房间宽度观察();
     this._应用运行时?.dispose();
     this.kernel.dispose();
     this._应用运行时 = null;
@@ -1216,51 +1287,93 @@ export class 聊天壳 extends LitElement {
     `;
   }
 
-  private 读取消息文本布局环境(): 消息文本布局环境 {
+  private 应用消息文本布局宽度(roomWidth: number): void {
+    const nextWidth = Math.max(1, Math.round(roomWidth || globalThis.innerWidth || 1024));
+    if (nextWidth === this.消息文本布局宽度缓存) {
+      return;
+    }
+    this.消息文本布局宽度缓存 = nextWidth;
+    this.消息文本布局环境缓存 = 按房间宽度派生消息文本布局环境(nextWidth);
+    this.聊天列表展示项缓存 = null;
+    this.requestUpdate();
+  }
+
+  private 清理房间宽度观察(): void {
+    this.房间宽度观察器?.disconnect();
+    this.房间宽度观察器 = null;
+    this.房间宽度观察目标 = null;
+  }
+
+  private 读取当前房间宽度(): number {
+    const roomView =
+      (this.房间宽度观察目标 ??
+        ((this.shadowRoot?.querySelector("#roomView") as HTMLElement | null) ?? null));
+    return roomView?.clientWidth || globalThis.innerWidth || 1024;
+  }
+
+  private 同步消息文本布局环境(): void {
+    this.应用消息文本布局宽度(this.读取当前房间宽度());
+  }
+
+  private 同步房间宽度观察(): void {
     const roomView =
       (this.shadowRoot?.querySelector("#roomView") as HTMLElement | null) ?? null;
-    const roomWidth = roomView?.clientWidth || globalThis.innerWidth || 1024;
-    const 气泡外框附加宽度 =
-      默认消息文本布局环境.bubbleHorizontalPadding +
-      默认消息文本布局环境.bubbleHorizontalBorderWidth;
-    const bubbleMaxWidth =
-      roomWidth <= 640
-        ? Math.min(roomWidth * 0.94, 760)
-        : roomWidth >= 768
-          ? Math.min(roomWidth * 0.82, 860)
-          : Math.min(roomWidth * 0.9, 780);
-    const 多行正文上限 = Math.max(
-      120,
-      bubbleMaxWidth - 气泡外框附加宽度
-    );
-    const 单行正文直通上限 = Math.max(
-      多行正文上限,
-      Math.min(
-        多行正文上限 + 56,
-        Math.max(120, roomWidth - 气泡外框附加宽度 - 8),
-        420
-      )
-    );
+    if (roomView === this.房间宽度观察目标) {
+      return;
+    }
+    this.清理房间宽度观察();
+    if (!roomView) {
+      return;
+    }
+    this.房间宽度观察目标 = roomView;
+    if (typeof ResizeObserver === "function") {
+      this.房间宽度观察器 = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) {
+          return;
+        }
+        this.应用消息文本布局宽度(
+          entry.contentRect.width || roomView.clientWidth || globalThis.innerWidth || 1024
+        );
+      });
+      this.房间宽度观察器.observe(roomView);
+    }
+    this.同步消息文本布局环境();
+  }
 
-    /**
-     * 这里把当前 CSS 气泡宽度规则翻译成 Presenter 可消费的稳定布局环境：
-     * 1. 宽度来源收口到壳层，避免 Presenter 和消息窗各自再猜；
-     * 2. 传给 Pretext 的是正文可用内容宽度，不是整个气泡外框宽度；
-     * 3. 当前宿主使用 `border-box`，所以左右边框也必须一起扣掉；
-     * 4. `.message-bubble` 不再保留 CSS `max-width` 第二裁决，真正的宽度主权只留给 Presenter。
-     * 5. 这一轮继续把聊天主舞台往“真浏览器中的应用”方向收紧：
-     *    消息区要更像原生 IM，而不是中间留大块网页边距的内容栏。
-     */
-    return {
-      ...默认消息文本布局环境,
-      maxContentWidth: 多行正文上限,
-      /**
-       * 单行直通上限只做很小幅度放宽：
-       * - 让本来就短的消息有机会保持单行；
-       * - 但不把长消息一路放大成超长单行。
-       */
-      singleLineMaxContentWidth: 单行正文直通上限,
+  private 读取消息文本布局环境(): 消息文本布局环境 {
+    return this.消息文本布局环境缓存;
+  }
+
+  private 读取聊天列表展示项(聊天快照: 聊天应用快照): ReturnType<typeof 派生聊天列表展示项> {
+    const layoutEnv = this.读取消息文本布局环境();
+    const cache = this.聊天列表展示项缓存;
+    if (
+      cache &&
+      cache.messages === 聊天快照.messages &&
+      cache.sessionId === 聊天快照.sessionId &&
+      cache.firstUnreadEventPosition === 聊天快照.firstUnreadEventPosition &&
+      cache.layoutEnv === layoutEnv &&
+      附件内容地址表相同(cache.contentUrlByAttachmentId, 聊天快照.media.contentUrlByAttachmentId)
+    ) {
+      return cache.items;
+    }
+    const items = 派生聊天列表展示项(
+      聊天快照.messages,
+      聊天快照.sessionId,
+      聊天快照.firstUnreadEventPosition,
+      layoutEnv,
+      聊天快照.media.contentUrlByAttachmentId
+    );
+    this.聊天列表展示项缓存 = {
+      messages: 聊天快照.messages,
+      sessionId: 聊天快照.sessionId,
+      firstUnreadEventPosition: 聊天快照.firstUnreadEventPosition,
+      layoutEnv,
+      contentUrlByAttachmentId: 聊天快照.media.contentUrlByAttachmentId,
+      items,
     };
+    return items;
   }
 
   override render() {
@@ -1286,7 +1399,6 @@ export class 聊天壳 extends LitElement {
       bootstrapState: 聊天快照.bootstrapState,
       roomId: 聊天快照.roomId,
     });
-    const 消息文本布局环境 = this.读取消息文本布局环境();
     const homeSessionViewItems = 派生首页会话展示项(聊天快照.homeSessionItems);
     const shellConsole = this.renderShellConsole({
       mode: consoleMode,
@@ -1352,6 +1464,7 @@ export class 聊天壳 extends LitElement {
         </section>
       `;
     }
+    const 聊天列表展示项 = this.读取聊天列表展示项(聊天快照);
     return html`
       <section class="shell-screen">
         <section id="roomView" class="room-screen">
@@ -1371,13 +1484,7 @@ export class 聊天壳 extends LitElement {
             </div>
           </header>
           <koko-room-message-pane
-              .items=${派生聊天列表展示项(
-              聊天快照.messages,
-              聊天快照.sessionId,
-              聊天快照.firstUnreadEventPosition,
-              消息文本布局环境,
-              聊天快照.media.contentUrlByAttachmentId
-             )}
+             .items=${聊天列表展示项}
              .mediaPlaybackByAttachmentId=${聊天快照.media.playbackByAttachmentId}
              .inlineAutoplayOwnerAttachmentId=${聊天快照.media.inlineAutoplayOwnerAttachmentId}
              .inlineAutoplayPlaybackByAttachmentId=${聊天快照.media.inlineAutoplayPlaybackByAttachmentId}

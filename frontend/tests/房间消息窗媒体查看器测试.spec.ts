@@ -509,6 +509,33 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("historyHint 和 jumpToLatestLabel 这类无关更新不会重跑自动播观察与候选调度", async () => {
+    const pane = 创建媒体消息窗();
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const 同步自动播候选观察 = vi.spyOn(
+      pane as unknown as {
+        同步自动播候选观察(scrollContainer: HTMLElement): void;
+      },
+      "同步自动播候选观察"
+    );
+    const 调度自动播候选 = vi.spyOn(
+      pane as unknown as {
+        调度自动播候选(scrollContainer: HTMLElement): void;
+      },
+      "调度自动播候选"
+    );
+
+    pane.historyHint = "正在加载更早消息";
+    pane.jumpToLatestLabel = "跳到最新";
+    await pane.updateComplete;
+
+    expect(同步自动播候选观察).not.toHaveBeenCalled();
+    expect(调度自动播候选).not.toHaveBeenCalled();
+    pane.remove();
+  });
+
   it("支持 IntersectionObserver 时，只根据进入视口的按钮派发自动播候选，而不会同步量测整列视频", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
