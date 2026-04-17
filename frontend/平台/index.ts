@@ -64,6 +64,12 @@ export {
   type 离线运行时,
 } from "./离线运行时.js";
 export {
+  创建缓存更新运行时,
+  type 缓存更新事件,
+  type 缓存更新快照,
+  type 缓存更新运行时,
+} from "./缓存更新运行时.js";
+export {
   创建离线任务仓库,
   type 平台离线任务,
   type 离线任务仓库,

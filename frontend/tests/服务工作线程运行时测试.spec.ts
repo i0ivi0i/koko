@@ -27,14 +27,12 @@ describe("服务工作线程运行时", () => {
     vi.restoreAllMocks();
   });
 
-  it("会只注册一个根 scope worker 来同时承载 app shell 与 media 能力，并 best-effort 申请持久化存储", async () => {
+  it("会只注册一个根 scope worker 来同时承载 app shell 与 media 能力，持久化申请改由存储运行时统一托管", async () => {
     const registration = {};
     const register = vi.fn().mockResolvedValue(registration);
-    const persist = vi.fn().mockResolvedValue(true);
     const runtime = 创建服务工作线程运行时({
       navigator: {
         serviceWorker: { register },
-        storage: { persist },
       } as unknown as Navigator,
     });
 
@@ -42,7 +40,6 @@ describe("服务工作线程运行时", () => {
 
     expect(register).toHaveBeenCalledWith("/app-sw.js", { scope: "/" });
     expect(register).toHaveBeenCalledTimes(1);
-    expect(persist).toHaveBeenCalledTimes(1);
     expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("app")).toBe(
       registration
     );
@@ -52,13 +49,16 @@ describe("服务工作线程运行时", () => {
     expect(runtime.snapshot()).toEqual({
       appShellRegistered: true,
       mediaWorkerRegistered: true,
-      persistentStorageRequested: true,
+      persistentStorageRequested: false,
       controllerAttached: false,
       appShellWaiting: false,
       mediaWorkerWaiting: false,
       lastMessageType: null,
       lastMessage: null,
     });
+
+    runtime.写入持久化存储结果?.(true);
+    expect(runtime.snapshot().persistentStorageRequested).toBe(true);
   });
 
   it("会把 controller / waiting / message 状态收进 runtime 快照，并允许页面向当前 controller 发消息", async () => {
@@ -79,7 +79,6 @@ describe("服务工作线程运行时", () => {
     const runtime = 创建服务工作线程运行时({
       navigator: {
         serviceWorker,
-        storage: { persist: vi.fn().mockResolvedValue(true) },
       } as unknown as Navigator,
     });
 
@@ -136,7 +135,6 @@ describe("服务工作线程运行时", () => {
     const runtime = 创建服务工作线程运行时({
       navigator: {
         serviceWorker,
-        storage: { persist: vi.fn().mockResolvedValue(true) },
       } as unknown as Navigator,
     });
     const 新增能力端口 = runtime as unknown as {

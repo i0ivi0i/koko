@@ -34,6 +34,11 @@ import {
   type 离线运行时,
   type 离线运行时快照,
 } from "./离线运行时.js";
+import {
+  创建缓存更新运行时,
+  type 缓存更新快照,
+  type 缓存更新运行时,
+} from "./缓存更新运行时.js";
 
 export interface 浏览器应用平台依赖 {
   lifecycle?: 生命周期运行时;
@@ -43,6 +48,7 @@ export interface 浏览器应用平台依赖 {
   multiContext?: 多上下文运行时;
   notification?: 通知运行时;
   offline?: 离线运行时;
+  cacheUpdate?: 缓存更新运行时;
 }
 
 export interface 浏览器应用平台快照 {
@@ -52,6 +58,7 @@ export interface 浏览器应用平台快照 {
   multiContext: 多上下文运行时快照;
   notification: 通知运行时快照;
   offline: 离线运行时快照;
+  cacheUpdate?: 缓存更新快照;
 }
 
 export type 浏览器应用平台命令 =
@@ -75,6 +82,7 @@ export interface 浏览器应用平台 {
   multiContext: 多上下文运行时;
   notification: 通知运行时;
   offline: 离线运行时;
+  cacheUpdate?: 缓存更新运行时;
   启动(): Promise<void>;
   snapshot(): 浏览器应用平台快照;
   订阅事件?(listener: (event: 浏览器应用平台事件) => void): () => void;
@@ -101,12 +109,26 @@ export function 创建浏览器应用平台(
   const multiContext = deps.multiContext ?? 创建多上下文运行时();
   const notification = deps.notification ?? 创建通知运行时();
   const offline = deps.offline ?? 创建离线运行时();
+  const cacheUpdate = deps.cacheUpdate ?? 创建缓存更新运行时();
   const 事件监听器 = new Set<(event: 浏览器应用平台事件) => void>();
+  let 最近一次已广播的刷新完成上下文: string | null = null;
 
   const 发布平台事件 = (event: 浏览器应用平台事件): void => {
     for (const listener of 事件监听器) {
       listener(event);
     }
+  };
+  const 尝试广播刷新完成事件 = (): void => {
+    const snapshot = cacheUpdate.snapshot();
+    if (
+      snapshot.updateState !== "idle" ||
+      !snapshot.controllerReadyContextId ||
+      snapshot.controllerReadyContextId === 最近一次已广播的刷新完成上下文
+    ) {
+      return;
+    }
+    最近一次已广播的刷新完成上下文 = snapshot.controllerReadyContextId;
+    发布平台事件({ type: "SERVICE_WORKER_CONTROLLER_READY" });
   };
 
   /**
@@ -141,8 +163,38 @@ export function 创建浏览器应用平台(
       发布平台事件({ type: "PRIMARY_CONTEXT_FOCUSED" });
     })();
   });
+  multiContext.订阅事件?.((event) => {
+    if (event.type !== "PRIMARY_CONTEXT_CHANGED" || !event.isPrimaryContext) {
+      return;
+    }
+    cacheUpdate.send({
+      type: "PRIMARY_CONTEXT_CHANGED",
+      contextId: event.contextId,
+    });
+    尝试广播刷新完成事件();
+  });
   serviceWorker.订阅事件?.((event) => {
+    if (event.type === "SERVICE_WORKER_UPDATE_READY") {
+      最近一次已广播的刷新完成上下文 = null;
+      cacheUpdate.send({
+        type: "SERVICE_WORKER_UPDATE_READY",
+        scope: event.scope,
+      });
+      发布平台事件(event);
+      return;
+    }
+    if (event.type === "SERVICE_WORKER_CONTROLLER_READY") {
+      cacheUpdate.send({ type: "SERVICE_WORKER_CONTROLLER_READY" });
+      尝试广播刷新完成事件();
+      return;
+    }
     发布平台事件(event);
+  });
+  storage.订阅事件?.((event) => {
+    cacheUpdate.send(event);
+    if (event.type === "STORAGE_PERSISTENCE_RESULT") {
+      serviceWorker.写入持久化存储结果?.(event.persisted);
+    }
   });
 
   const 读取平台快照 = (): 浏览器应用平台快照 => ({
@@ -152,6 +204,7 @@ export function 创建浏览器应用平台(
     multiContext: multiContext.snapshot(),
     notification: notification.snapshot(),
     offline: offline.snapshot(),
+    cacheUpdate: cacheUpdate.snapshot(),
   });
 
   let 启动中: Promise<void> | null = null;
@@ -164,12 +217,17 @@ export function 创建浏览器应用平台(
     multiContext,
     notification,
     offline,
+    cacheUpdate,
     async 启动(): Promise<void> {
       if (!启动中) {
         启动中 = (async () => {
           transport.接收生命周期变化(lifecycle.snapshot());
           multiContext.声明主上下文();
           await serviceWorker.启动();
+          if (typeof storage.请求持久化存储 === "function") {
+            const persisted = await storage.请求持久化存储();
+            serviceWorker.写入持久化存储结果?.(persisted);
+          }
           await offline.就绪({
             已注册服务工作线程: [
               serviceWorker.读取注册("app"),

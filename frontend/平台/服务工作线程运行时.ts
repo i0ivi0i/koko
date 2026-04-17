@@ -40,14 +40,9 @@ type 可注册服务工作线程 = {
   ): Promise<服务工作线程注册结果 | unknown>;
 } & 可监听事件目标;
 
-type 可持久化存储 = {
-  persist(): Promise<unknown>;
-};
-
 type 平台导航器 =
   | (Navigator & {
       serviceWorker?: 可注册服务工作线程;
-      storage?: NavigatorStorage["storage"] & 可持久化存储;
     })
   | undefined;
 
@@ -61,6 +56,7 @@ export interface 服务工作线程运行时 {
   订阅事件?(listener: (event: 服务工作线程运行时事件) => void): () => void;
   接受更新?(): boolean;
   发送消息?(message: unknown): boolean;
+  写入持久化存储结果?(persisted: boolean): void;
   读取注册(kind: "app" | "media"): 服务工作线程注册结果 | null;
 }
 
@@ -199,17 +195,6 @@ export function 创建服务工作线程运行时(
         }
       }
 
-      if (
-        platformNavigator?.storage &&
-        typeof platformNavigator.storage.persist === "function"
-      ) {
-        try {
-          await platformNavigator.storage.persist();
-          更新快照({ persistentStorageRequested: true });
-        } catch {
-          // 持久化申请失败不阻塞应用启动，只保留为平台层状态。
-        }
-      }
     },
 
     snapshot(): 服务工作线程快照 {
@@ -244,6 +229,12 @@ export function 创建服务工作线程运行时(
       }
       controller.postMessage(message);
       return true;
+    },
+
+    写入持久化存储结果(persisted: boolean): void {
+      更新快照({
+        persistentStorageRequested: persisted,
+      });
     },
 
     读取注册(kind: "app" | "media"): 服务工作线程注册结果 | null {

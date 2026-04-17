@@ -1003,4 +1003,159 @@ describe("浏览器端应用平台化基线", () => {
       lastMessage: { type: "SW_UPDATED", scope: "app" },
     });
   });
+
+  it("controllerchange 后只有主上下文允许推进应用刷新完成态", async () => {
+    let 服务工作线程事件监听器: ((event: 服务工作线程运行时事件) => void) | null = null;
+    let 多上下文事件监听器:
+      | ((event: {
+          type: "PRIMARY_CONTEXT_CHANGED";
+          contextId: string;
+          isPrimaryContext: boolean;
+        }) => void)
+      | null = null;
+    const 平台事件记录: Array<{ type: string; scope?: "app" | "media" }> = [];
+    const 多上下文快照 = {
+      contextId: "tab-a",
+      isPrimaryContext: false,
+      lastPrimaryContextId: null as string | null,
+      lastFocusedContextId: null,
+      deliveredNotificationIds: [],
+    };
+
+    const platform = 创建浏览器应用平台({
+      lifecycle: {
+        snapshot: () => ({ visibility: "visible" as const, phase: "active" as const }),
+        订阅: () => () => {},
+      },
+      storage: {
+        壳层记忆: () => {
+          throw new Error("not used");
+        },
+      },
+      serviceWorker: {
+        启动: async () => {},
+        读取注册: () => null,
+        订阅事件: (listener) => {
+          服务工作线程事件监听器 = listener;
+          return () => {
+            服务工作线程事件监听器 = null;
+          };
+        },
+        snapshot: () => ({
+          appShellRegistered: true,
+          mediaWorkerRegistered: true,
+          persistentStorageRequested: false,
+          controllerAttached: false,
+          appShellWaiting: false,
+          mediaWorkerWaiting: false,
+          lastMessageType: null,
+          lastMessage: null,
+        }),
+      },
+      transport: {
+        transport: () => {
+          throw new Error("not used");
+        },
+        接收生命周期变化: () => {},
+        snapshot: () => ({
+          lastLifecycle: { visibility: "visible" as const, phase: "active" as const },
+          realtimePolicy: {
+            intent: "resume" as const,
+            reconnection: true,
+            reason: "active" as const,
+          },
+        }),
+      },
+      multiContext: {
+        snapshot: () => ({ ...多上下文快照 }),
+        订阅事件: (listener) => {
+          多上下文事件监听器 = listener;
+          return () => {
+            多上下文事件监听器 = null;
+          };
+        },
+        声明主上下文: () => {},
+        请求聚焦当前上下文: () => {},
+        通知已展示: () => false,
+        登记通知已展示: () => true,
+      },
+      notification: {
+        snapshot: () => ({
+          permission: "granted" as const,
+          lastClickedNotificationId: null,
+          badgeCount: 0,
+        }),
+        请求权限: async () => "granted" as const,
+        显示通知: async () => true,
+        设置角标: async () => {},
+        清除角标: async () => {},
+        订阅点击: () => () => {},
+      },
+      offline: {
+        就绪: async () => {},
+        snapshot: () => ({
+          online: true,
+          backgroundSyncSupported: true,
+          queuedTaskCapability: "background-sync" as const,
+        }),
+      },
+    });
+    platform.订阅事件?.((event) => {
+      平台事件记录.push(event);
+    });
+
+    await platform.启动();
+    const 派发服务工作线程事件 =
+      服务工作线程事件监听器 as
+        | ((event: 服务工作线程运行时事件) => void)
+        | null;
+    if (派发服务工作线程事件) {
+      派发服务工作线程事件({
+        type: "SERVICE_WORKER_UPDATE_READY",
+        scope: "app",
+      });
+      派发服务工作线程事件({
+        type: "SERVICE_WORKER_CONTROLLER_READY",
+      });
+    }
+
+    expect(平台事件记录).toContainEqual({
+      type: "SERVICE_WORKER_UPDATE_READY",
+      scope: "app",
+    });
+    expect(平台事件记录).not.toContainEqual({
+      type: "SERVICE_WORKER_CONTROLLER_READY",
+    });
+    expect(platform.snapshot().cacheUpdate).toMatchObject({
+      updateState: "waiting_refresh",
+      controllerReadyPending: true,
+      controllerReadyContextId: null,
+    });
+
+    多上下文快照.isPrimaryContext = true;
+    多上下文快照.lastPrimaryContextId = "tab-a";
+    const 派发多上下文事件 =
+      多上下文事件监听器 as
+        | ((event: {
+            type: "PRIMARY_CONTEXT_CHANGED";
+            contextId: string;
+            isPrimaryContext: boolean;
+          }) => void)
+        | null;
+    if (派发多上下文事件) {
+      派发多上下文事件({
+        type: "PRIMARY_CONTEXT_CHANGED",
+        contextId: "tab-a",
+        isPrimaryContext: true,
+      });
+    }
+
+    expect(平台事件记录).toContainEqual({
+      type: "SERVICE_WORKER_CONTROLLER_READY",
+    });
+    expect(platform.snapshot().cacheUpdate).toMatchObject({
+      updateState: "idle",
+      controllerReadyContextId: "tab-a",
+    });
+  });
 });

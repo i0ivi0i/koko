@@ -26,12 +26,18 @@ export interface 存储运行时依赖 {
   navigator?: 可持久化导航器;
 }
 
+export type 存储运行时事件 =
+  | { type: "STORAGE_PERSISTENCE_RESULT"; persisted: boolean }
+  | { type: "STORAGE_EVICTION_DETECTED" };
+
 export interface 存储运行时 {
   壳层记忆(): 前端存储端口;
   媒体资产仓库?(): 媒体缓存仓库;
   媒体定位仓库?(): 媒体定位缓存仓库;
   协作分发缓存仓库?(): 协作分发Torrent缓存仓库;
+  订阅事件?(listener: (event: 存储运行时事件) => void): () => void;
   请求持久化存储?(): Promise<boolean>;
+  报告加速层丢失?(): void;
 }
 
 /**
@@ -45,6 +51,7 @@ export interface 存储运行时 {
 export function 创建存储运行时(
   deps: 存储运行时依赖 = {}
 ): 存储运行时 {
+  const 事件监听器 = new Set<(event: 存储运行时事件) => void>();
   const 读取当前导航器 = (): 可持久化导航器 | undefined =>
     deps.navigator ??
     (typeof navigator !== "undefined" ? (navigator as 可持久化导航器) : undefined);
@@ -57,6 +64,11 @@ export function 创建存储运行时(
         ? (window.localStorage as Partial<Storage>)
         : ((globalThis as { localStorage?: Partial<Storage> }).localStorage ?? undefined);
     return candidate;
+  };
+  const 发布事件 = (event: 存储运行时事件): void => {
+    for (const listener of 事件监听器) {
+      listener(event);
+    }
   };
 
   return {
@@ -101,16 +113,36 @@ export function 创建存储运行时(
       );
     },
 
+    订阅事件(listener: (event: 存储运行时事件) => void): () => void {
+      事件监听器.add(listener);
+      return () => {
+        事件监听器.delete(listener);
+      };
+    },
+
     async 请求持久化存储(): Promise<boolean> {
       const persist = 读取当前导航器()?.storage?.persist;
       if (typeof persist !== "function") {
         return false;
       }
       try {
-        return Boolean(await persist());
+        const persisted = Boolean(await persist());
+        发布事件({
+          type: "STORAGE_PERSISTENCE_RESULT",
+          persisted,
+        });
+        return persisted;
       } catch {
+        发布事件({
+          type: "STORAGE_PERSISTENCE_RESULT",
+          persisted: false,
+        });
         return false;
       }
+    },
+
+    报告加速层丢失(): void {
+      发布事件({ type: "STORAGE_EVICTION_DETECTED" });
     },
   };
 }

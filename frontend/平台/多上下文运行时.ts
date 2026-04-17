@@ -22,6 +22,17 @@ export interface 多上下文运行时快照 {
   deliveredNotificationIds: string[];
 }
 
+export type 多上下文运行时事件 =
+  | {
+      type: "PRIMARY_CONTEXT_CHANGED";
+      contextId: string;
+      isPrimaryContext: boolean;
+    }
+  | {
+      type: "FOCUS_CONTEXT_REQUESTED";
+      contextId: string;
+    };
+
 export interface 多上下文运行时依赖 {
   channelName?: string;
   contextId?: string;
@@ -32,6 +43,7 @@ export interface 多上下文运行时依赖 {
 
 export interface 多上下文运行时 {
   snapshot(): 多上下文运行时快照;
+  订阅事件?(listener: (event: 多上下文运行时事件) => void): () => void;
   声明主上下文(): void;
   请求聚焦当前上下文(): void;
   请求回到应用前台?(): Promise<boolean>;
@@ -82,9 +94,15 @@ export function 创建多上下文运行时(
     deliveredNotificationIds: [],
   };
   const deliveredNotifications = new Set<string>();
+  const 事件监听器 = new Set<(event: 多上下文运行时事件) => void>();
 
   const 更新快照 = (patch: Partial<多上下文运行时快照>): void => {
     current = { ...current, ...patch };
+  };
+  const 发布事件 = (event: 多上下文运行时事件): void => {
+    for (const listener of 事件监听器) {
+      listener(event);
+    }
   };
 
   const 尝试恢复前台 = async (
@@ -106,11 +124,20 @@ export function 创建多上下文运行时(
         isPrimaryContext: message.contextId === contextId,
         lastPrimaryContextId: message.contextId,
       });
+      发布事件({
+        type: "PRIMARY_CONTEXT_CHANGED",
+        contextId: message.contextId,
+        isPrimaryContext: message.contextId === contextId,
+      });
       return;
     }
     if (message.type === "focus-context") {
       更新快照({
         lastFocusedContextId: message.contextId,
+      });
+      发布事件({
+        type: "FOCUS_CONTEXT_REQUESTED",
+        contextId: message.contextId,
       });
       return;
     }
@@ -135,6 +162,13 @@ export function 创建多上下文运行时(
       return {
         ...current,
         deliveredNotificationIds: [...current.deliveredNotificationIds],
+      };
+    },
+
+    订阅事件(listener: (event: 多上下文运行时事件) => void): () => void {
+      事件监听器.add(listener);
+      return () => {
+        事件监听器.delete(listener);
       };
     },
 

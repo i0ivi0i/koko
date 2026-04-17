@@ -46,6 +46,10 @@ describe("多上下文运行时", () => {
       isPrimaryContext: false,
     });
 
+    runtimeB.声明主上下文();
+    expect(runtimeA.snapshot().isPrimaryContext).toBe(false);
+    expect(runtimeB.snapshot().isPrimaryContext).toBe(true);
+
     expect(runtimeA.通知已展示("message-1")).toBe(false);
     expect(runtimeA.登记通知已展示("message-1")).toBe(true);
     expect(runtimeA.通知已展示("message-1")).toBe(true);
@@ -58,6 +62,50 @@ describe("多上下文运行时", () => {
     });
     expect(runtimeB.snapshot()).toMatchObject({
       lastFocusedContextId: "tab-b",
+    });
+  });
+
+  it("主上下文切换会发出稳定平台事件，避免多个标签页同时宣布自己是 primary", () => {
+    const hub = new 假广播信道中枢();
+    const runtimeA = 创建多上下文运行时({
+      contextId: "tab-a",
+      createChannel: (name) => hub.创建信道(name),
+    });
+    const runtimeB = 创建多上下文运行时({
+      contextId: "tab-b",
+      createChannel: (name) => hub.创建信道(name),
+    });
+    const eventsA: Array<{ type: string; contextId: string; isPrimaryContext?: boolean }> = [];
+    const eventsB: Array<{ type: string; contextId: string; isPrimaryContext?: boolean }> = [];
+
+    runtimeA.订阅事件?.((event) => {
+      eventsA.push(event);
+    });
+    runtimeB.订阅事件?.((event) => {
+      eventsB.push(event);
+    });
+
+    runtimeA.声明主上下文();
+    runtimeB.声明主上下文();
+
+    expect(eventsA).toEqual(
+      expect.arrayContaining([
+        {
+          type: "PRIMARY_CONTEXT_CHANGED",
+          contextId: "tab-a",
+          isPrimaryContext: true,
+        },
+        {
+          type: "PRIMARY_CONTEXT_CHANGED",
+          contextId: "tab-b",
+          isPrimaryContext: false,
+        },
+      ])
+    );
+    expect(eventsB.at(-1)).toEqual({
+      type: "PRIMARY_CONTEXT_CHANGED",
+      contextId: "tab-b",
+      isPrimaryContext: true,
     });
   });
 
