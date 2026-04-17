@@ -94,7 +94,7 @@ const 写入仓库快照 = (storage: 媒体缓存存储源, snapshot: 媒体缓�
 };
 
 export function 创建浏览器媒体缓存仓库(
-  storage: 媒体缓存存储源 = typeof window !== "undefined" ? window.localStorage : undefined
+  storage: 媒体缓存存储源
 ): 媒体缓存仓库 {
   return {
     async 读取(attachmentId: string): Promise<媒体缓存记录 | null> {

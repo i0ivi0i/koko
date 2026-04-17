@@ -17,8 +17,8 @@ const 是可写协作分发缓存存储 = (
   storage: Pick<Storage, "getItem" | "setItem"> | undefined
 ): storage is Pick<Storage, "getItem" | "setItem"> =>
   Boolean(storage) &&
-  typeof storage.getItem === "function" &&
-  typeof storage.setItem === "function";
+  typeof storage?.getItem === "function" &&
+  typeof storage?.setItem === "function";
 
 const 规范化协作分发Torrent缓存记录 = (
   raw: unknown,

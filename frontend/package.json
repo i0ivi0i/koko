@@ -11,9 +11,10 @@
   "scripts": {
     "test": "vitest run --exclude dist/**",
     "test:e2e": "vitest run --exclude dist/** tests/端到端测试.spec.ts",
+    "check:browser-app-constitution": "node ../scripts/check-frontend-browser-app-constitution.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch --preserveWatchOutput",
-    "build": "pnpm typecheck && node build.mjs",
+    "build": "pnpm check:browser-app-constitution && pnpm typecheck && node build.mjs",
     "dev:watch": "node build.mjs --watch",
     "dev:watch:supervised": "node build.mjs --watch=forever"
   },

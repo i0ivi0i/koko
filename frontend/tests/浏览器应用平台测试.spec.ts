@@ -127,6 +127,15 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("globalThis.localStorage");
   });
 
+  it("前端 package.json 会把浏览器应用宪法守门脚本接入构建前置检查", () => {
+    const packageJson = JSON.parse(读取前端源码("package.json"));
+
+    expect(packageJson.scripts["check:browser-app-constitution"]).toContain(
+      "check-frontend-browser-app-constitution.mjs"
+    );
+    expect(packageJson.scripts.build).toContain("check:browser-app-constitution");
+  });
+
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {
     const chatSource = 读取前端源码("聊天壳.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");

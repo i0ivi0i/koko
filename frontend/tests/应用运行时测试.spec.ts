@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { 创建应用运行时 } from "../应用运行时";
+import type { 浏览器应用平台事件 } from "../平台";
 import type { 媒体查看器打开请求 } from "../媒体";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
 
@@ -112,7 +113,7 @@ describe("应用运行时", () => {
 
   it("平台生命周期变化会先进入应用运行时，再翻成内核 command", () => {
     const commands: unknown[] = [];
-    let 平台事件监听器: ((event: unknown) => void) | null = null;
+    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
 
     const runtime = 创建应用运行时({
       dispatch: (command) => {
@@ -127,7 +128,9 @@ describe("应用运行时", () => {
     });
 
     runtime.start();
-    平台事件监听器?.({
+    (
+      平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null
+    )?.({
       type: "LIFECYCLE_CHANGED",
       snapshot: { visibility: "hidden", phase: "background" },
     });

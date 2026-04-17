@@ -239,11 +239,7 @@ function 写入首页房间历史条目(
  * - 未来更换运行壳时只需替换这里。
  */
 export function 创建浏览器存储(
-  storage:
-    | Partial<Storage>
-    | undefined = typeof window !== "undefined"
-    ? (window.localStorage as Partial<Storage>)
-    : undefined
+  storage: Partial<Storage> | undefined
 ): 前端存储端口 {
   return {
     读取或创建设备匿名凭证(): string {

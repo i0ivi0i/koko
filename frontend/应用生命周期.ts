@@ -80,12 +80,20 @@ const 应用生命周期机 = createMachine(
   },
   {
     actions: {
-      写入生命周期快照: assign(({ event }) => ({
-        visibility: event.snapshot.visibility,
-        phase: event.snapshot.phase,
-        heavyWorkPolicy: 派生重型工作策略(event.snapshot),
-      })),
+      写入生命周期快照: assign(({ event }) => {
+        if (event.type !== "LIFECYCLE_SNAPSHOT_CHANGED") {
+          return {};
+        }
+        return {
+          visibility: event.snapshot.visibility,
+          phase: event.snapshot.phase,
+          heavyWorkPolicy: 派生重型工作策略(event.snapshot),
+        };
+      }),
       标记等待刷新: assign(({ event }) => {
+        if (event.type !== "SERVICE_WORKER_UPDATE_READY") {
+          return {};
+        }
         void event.scope;
         return {
           updateState: "waiting_refresh" as const,
@@ -94,9 +102,14 @@ const 应用生命周期机 = createMachine(
       清除等待刷新: assign(() => ({
         updateState: "idle" as const,
       })),
-      写入在线状态: assign(({ event }) => ({
-        online: event.online,
-      })),
+      写入在线状态: assign(({ event }) => {
+        if (event.type !== "OFFLINE_STATUS_CHANGED") {
+          return {};
+        }
+        return {
+          online: event.online,
+        };
+      }),
     },
   }
 );
