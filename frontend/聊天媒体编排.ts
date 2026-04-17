@@ -68,6 +68,11 @@ export interface 聊天媒体编排端口 {
   处理自动播候选(candidates: 消息视频自动播候选[]): void;
   释放消息流自动播Owner(): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
+  处理应用生命周期(input: {
+    visibility: "visible" | "hidden";
+    phase: "active" | "background" | "page_hidden" | "frozen" | "resumed";
+    heavyWorkPolicy: "normal" | "reduced" | "suspended";
+  }): void;
   处理平台在线状态变化(online: boolean): void;
   清空(): void;
   销毁(): void;
@@ -138,6 +143,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   let inlineAutoplayOwnerAttachmentId: string | null = null;
   let inlineAutoplay待启动AttachmentId: string | null = null;
   let inlineAutoplay启动定时器: ReturnType<typeof setTimeout> | null = null;
+  let 当前应用生命周期: {
+    visibility: "visible" | "hidden";
+    phase: "active" | "background" | "page_hidden" | "frozen" | "resumed";
+    heavyWorkPolicy: "normal" | "reduced" | "suspended";
+  } = {
+    visibility: "visible",
+    phase: "active",
+    heavyWorkPolicy: "normal",
+  };
   let inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果> = {};
   let inlineAutoplay解析代次 = 0;
   const 投影查看器请求到当前播放真相 = (
@@ -708,6 +722,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     处理自动播候选(candidates: 消息视频自动播候选[]): void {
+      if (当前应用生命周期.heavyWorkPolicy !== "normal") {
+        释放当前自动播Owner();
+        return;
+      }
       if (当前查看器请求) {
         释放当前自动播Owner();
         return;
@@ -805,6 +823,19 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         激活附件协作补齐(attachmentId);
       }
       转发媒体查看器会话信号(attachmentId, signal);
+    },
+
+    处理应用生命周期(input): void {
+      当前应用生命周期 = { ...input };
+      /**
+       * 生命周期降载只作用于消息流自动播这条轻量体验链：
+       * - reduced / suspended 都立即释放现有 owner；
+       * - 待启动自动播定时器也会一并取消；
+       * - 正式查看器会话与其播放真相继续保留。
+       */
+      if (input.heavyWorkPolicy !== "normal") {
+        释放当前自动播Owner();
+      }
     },
 
     处理平台在线状态变化(online: boolean): void {

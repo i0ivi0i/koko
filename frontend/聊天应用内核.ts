@@ -514,14 +514,14 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           type: "LIFECYCLE_SNAPSHOT_CHANGED",
           snapshot: command.snapshot,
         });
-        this.同步应用生命周期快照();
+        this.同步应用生命周期快照并执行副作用();
         return;
       case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
         this.appLifecycle.send({
           type: "SERVICE_WORKER_UPDATE_READY",
           scope: command.scope,
         });
-        this.同步应用生命周期快照();
+        this.同步应用生命周期快照并执行副作用();
         return;
       case "PLATFORM_BACKGROUND_DRAIN_REQUESTED":
         /**
@@ -533,7 +533,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         return;
       case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":
         this.appLifecycle.send({ type: "SERVICE_WORKER_CONTROLLER_READY" });
-        this.同步应用生命周期快照();
+        this.同步应用生命周期快照并执行副作用();
         await this.尝试排空待补发任务();
         return;
       case "PLATFORM_OFFLINE_STATUS_CHANGED":
@@ -541,7 +541,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           type: "OFFLINE_STATUS_CHANGED",
           online: command.online,
         });
-        this.同步应用生命周期快照();
+        this.同步应用生命周期快照并执行副作用();
         this.媒体编排.处理平台在线状态变化(command.online);
         return;
     }
@@ -551,7 +551,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 生命周期 actor 只给出运行时真相。
    * 真正如何刷新快照、是否触发前端副作用，仍由聊天应用内核来编排。
    */
-  private 同步应用生命周期快照(): void {
+  private 同步应用生命周期快照并执行副作用(): void {
     const snapshot = this.appLifecycle.snapshot();
     this.应用本地状态补丁({
       lifecycleVisibility: snapshot.visibility,
@@ -560,10 +560,11 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       swUpdateState: snapshot.updateState,
       online: snapshot.online,
     });
-
-    if (snapshot.heavyWorkPolicy !== "normal") {
-      this.媒体编排.释放消息流自动播Owner();
-    }
+    this.媒体编排.处理应用生命周期({
+      visibility: snapshot.visibility,
+      phase: snapshot.phase,
+      heavyWorkPolicy: snapshot.heavyWorkPolicy,
+    });
   }
 
   private async 尝试排空待补发任务(): Promise<void> {

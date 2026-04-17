@@ -2510,6 +2510,196 @@ describe("聊天应用内核", () => {
     }
   });
 
+  it("background/hidden 不会误清正式查看器会话真相", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-viewer-1",
+            client_message_id: "c-video-viewer-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-viewer-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 打开查看器 = vi.fn();
+    const 释放附件播放资源 = vi.fn();
+    读取媒体编排供测试(kernel).设置媒体查看器供测试({
+      打开: 打开查看器,
+      销毁: vi.fn(),
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "anchor",
+        attachmentId: "att-video-viewer-1",
+        kind: "video",
+        src: "http://media.local/original-att-video-viewer-1",
+        thumbnailUrl: "http://media.local/poster-att-video-viewer-1",
+        hint: null,
+      }),
+      释放附件播放资源,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-viewer-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-viewer-1",
+            src: "http://media.local/original-att-video-viewer-1",
+            posterSrc: "http://media.local/poster-att-video-viewer-1",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(打开查看器).toHaveBeenCalledTimes(1);
+
+    await kernel.dispatch({
+      type: "PLATFORM_LIFECYCLE_CHANGED",
+      snapshot: { visibility: "hidden", phase: "background" },
+    });
+
+    expect(释放附件播放资源).not.toHaveBeenCalledWith({
+      attachmentId: "att-video-viewer-1",
+      consumerId: "session:att-video-viewer-1",
+    });
+  });
+
+  it("frozen/page_hidden 会把重型工作意图降到 suspended，并投影到运行时快照", async () => {
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+
+    await kernel.dispatch({
+      type: "PLATFORM_LIFECYCLE_CHANGED",
+      snapshot: { visibility: "hidden", phase: "frozen" },
+    });
+
+    expect(kernel.snapshot()).toMatchObject({
+      lifecycleVisibility: "hidden",
+      lifecyclePhase: "frozen",
+      heavyWorkPolicy: "suspended",
+    });
+  });
+
+  it("service worker update ready 会进入 waiting_refresh，而 controller ready 会清掉状态并尝试排空后台补发", async () => {
+    const transport = new 假传输();
+    const 排空到期任务 = vi.fn(async () => {});
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+      platform: {
+        lifecycle: {} as never,
+        storage: {} as never,
+        serviceWorker: {} as never,
+        transport: { transport: () => transport } as never,
+        multiContext: {} as never,
+        notification: {} as never,
+        offline: {
+          snapshot: () => ({
+            online: true,
+            backgroundSyncSupported: true,
+            queuedTaskCapability: "background-sync" as const,
+          }),
+          就绪: async () => {},
+          排空到期任务,
+        } as never,
+        启动: async () => {},
+        snapshot: () =>
+          ({
+            lifecycle: { visibility: "visible", phase: "active" },
+            serviceWorker: {
+              appShellRegistered: true,
+              mediaWorkerRegistered: true,
+              persistentStorageRequested: true,
+              controllerAttached: false,
+              appShellWaiting: false,
+              mediaWorkerWaiting: false,
+              lastMessageType: null,
+              lastMessage: null,
+            },
+            transport: {
+              lastLifecycle: { visibility: "visible", phase: "active" },
+              realtimePolicy: {
+                intent: "resume",
+                reconnection: true,
+                reason: "active",
+              },
+            },
+            multiContext: {
+              contextId: "tab-a",
+              isPrimaryContext: true,
+              lastPrimaryContextId: "tab-a",
+              lastFocusedContextId: null,
+              deliveredNotificationIds: [],
+            },
+            notification: {
+              permission: "granted",
+              lastClickedNotificationId: null,
+              badgeCount: 0,
+            },
+            offline: {
+              online: true,
+              backgroundSyncSupported: true,
+              queuedTaskCapability: "background-sync",
+            },
+          }) as 浏览器应用平台快照,
+        dispatch: async () => true,
+      },
+    });
+
+    await kernel.dispatch({
+      type: "PLATFORM_SERVICE_WORKER_UPDATE_READY",
+      scope: "app",
+    });
+    expect(kernel.snapshot().swUpdateState).toBe("waiting_refresh");
+
+    await kernel.dispatch({ type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" });
+
+    expect(kernel.snapshot().swUpdateState).toBe("idle");
+    expect(排空到期任务).toHaveBeenCalledTimes(1);
+  });
+
   it("退出房间视图时，会清空当前消息流自动播 owner", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();
