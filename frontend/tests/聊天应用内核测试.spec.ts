@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../存储";
 import { createFakeStorage, 假传输, 创建房间快照 } from "./common/聊天测试支架";
@@ -76,6 +78,12 @@ const 读取媒体编排供测试 = (kernel: unknown): 聊天媒体测试端口 
   (kernel as { 媒体编排: 聊天媒体测试端口 }).媒体编排;
 
 describe("聊天应用内核", () => {
+  it("时间线合流不再在聊天应用内核里直接揉 messages 数组", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+
+    expect(source).not.toContain("推进房间时间线(this.时间线状态.messages");
+  });
+
   it("不再暴露 transportPort / replaceSnapshot 这类兼容旧壳层的旁路入口", () => {
     const kernel = 创建聊天应用内核({
       ...创建内核依赖(),

@@ -1,4 +1,4 @@
-import type { 时间线输入 } from "./房间时间线.js";
+import type { 房间时间线事件 } from "./房间时间线运行时.js";
 import type { 历史补偿上下文 } from "./房间滚动器.js";
 import type { 聊天状态 } from "./状态.js";
 import type { 前端传输端口 } from "./传输.js";
@@ -14,7 +14,7 @@ type 房间滚动器端口 = {
 export interface 阅读推进编排依赖 {
   读取阅读状态(): 阅读推进状态;
   写入阅读状态(patch: Partial<阅读推进状态>): void;
-  推进时间线(input: 时间线输入): void;
+  接收时间线事实(event: 房间时间线事件): void;
   transport: 前端传输端口;
   roomScroller: 房间滚动器端口;
   上报历史前插开始?(): void;
@@ -71,8 +71,8 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     deps.写入阅读状态(patch);
   }
 
-  function 推进时间线(input: 时间线输入): void {
-    deps.推进时间线(input);
+  function 接收时间线事实(event: 房间时间线事件): void {
+    deps.接收时间线事实(event);
   }
 
   function cancelPendingReadAnchorFlush(): void {
@@ -201,15 +201,13 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
       const page = await deps.withSessionRefreshOnInvalid((sessionId) =>
         deps.transport.loadRoomHistory(state.roomId, sessionId, oldestMessage.event_position, 55)
       );
-      推进时间线({
-        type: "HISTORY",
+      接收时间线事实({
+        type: "HISTORY_PAGE_APPENDED",
         messages: page.messages,
+        hasMoreBefore: page.messages.length > 0,
       });
       写入阅读状态({
         historyLoading: false,
-        // 历史分页接口当前还只返回这一页消息本身：
-        // 因此前端仍维持“拿到空页才确认到顶”的保守语义，不再额外猜首屏恢复真相。
-        hasMoreBefore: page.messages.length > 0,
         historyErrorCode: "",
       });
       // 历史页是往列表顶部前插的，但守视口不能再只靠 scrollHeight 差值。

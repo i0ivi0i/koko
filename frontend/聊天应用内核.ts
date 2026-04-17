@@ -25,7 +25,6 @@ import {
   type 房间滚动器依赖,
   type 房间滚动器宿主,
 } from "./房间滚动器.js";
-import { 推进房间时间线, type 时间线输入 } from "./房间时间线.js";
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
@@ -54,6 +53,11 @@ import {
   创建房间视口Actor,
   投影视口快照到聊天视口状态,
 } from "./房间视口运行时.js";
+import {
+  创建房间时间线Actor,
+  投影时间线快照到聊天时间线状态,
+  type 房间时间线事件,
+} from "./房间时间线运行时.js";
 import {
   type 消息视频自动播候选,
   type 媒体附件草稿,
@@ -192,6 +196,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    */
   private readonly appLifecycle = 创建应用生命周期Actor();
   private readonly roomViewport = 创建房间视口Actor();
+  private readonly roomTimeline = 创建房间时间线Actor();
   private 会话状态: 聊天会话状态;
   private 输入状态: 聊天输入状态;
   private 时间线状态: 聊天时间线状态;
@@ -392,6 +397,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.销毁();
+    this.roomTimeline.stop();
     this.roomViewport.stop();
     this.appLifecycle.stop();
   }
@@ -540,7 +546,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       this._恢复编排端口 = 创建房间恢复编排({
         读取恢复状态: () => this.读取恢复编排状态(),
         写入恢复状态: (patch) => this.写入恢复编排状态(patch),
-        推进时间线: (input) => this.推进时间线(input),
+        接收时间线事实: (event) => this.接收时间线事实(event),
         transport: this.transport,
         storage: this.storage,
         roomKernel: {
@@ -569,7 +575,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       this._实时编排端口 = 创建房间实时编排({
         读取实时状态: () => this.读取实时编排状态(),
         写入实时状态: (patch) => this.写入实时编排状态(patch),
-        推进时间线: (input) => this.推进时间线(input),
+        接收时间线事实: (event) => this.接收时间线事实(event),
         transport: this.transport,
         roomKernel: {
           send: (event) => this.发送房间事件(event),
@@ -675,7 +681,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       this._阅读推进编排端口 = 创建阅读推进编排({
         读取阅读状态: () => this.读取阅读推进状态(),
         写入阅读状态: (patch) => this.写入阅读状态(patch),
-        推进时间线: (input) => this.推进时间线(input),
+        接收时间线事实: (event) => this.接收时间线事实(event),
         transport: this.transport,
         上报历史前插开始: () => {
           this.roomViewport.send({
@@ -700,10 +706,22 @@ class 聊天应用内核 implements 聊天应用内核端口 {
    * 时间线合流规则继续只允许走这一条入口。
    * 恢复 / realtime / 历史分页只能上报事实，不能各自在外面拼 messages 数组。
    */
-  private 推进时间线(input: 时间线输入): void {
-    this.应用本地状态补丁({
-      messages: 推进房间时间线(this.时间线状态.messages, input),
-    });
+  private 接收时间线事实(event: 房间时间线事件): void {
+    const baselineLatestEventPosition = this.回填房间壳补丁().latestEventPosition;
+    this.roomTimeline.send(event);
+    this.同步房间时间线快照();
+    const snapshot = this.roomTimeline.getSnapshot().context;
+    if (snapshot.latestEventPosition !== baselineLatestEventPosition) {
+      this.发送房间事件({
+        type: "LATEST_EVENT_ADVANCED",
+        latestEventPosition: snapshot.latestEventPosition,
+      });
+    }
+  }
+
+  private 同步房间时间线快照(): void {
+    const snapshot = this.roomTimeline.getSnapshot();
+    this.应用本地状态补丁(投影时间线快照到聊天时间线状态(snapshot));
   }
 
   /**
@@ -988,14 +1006,14 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.roomScroller.取消挂起滚动副作用();
     this.shouldPrimeReadAnchorAfterInitialSettle = false;
     this.媒体编排.清空();
+    this.roomTimeline.send({ type: "ROOM_SOFT_RESET" });
+    this.同步房间时间线快照();
     this.roomViewport.send({ type: "ROOM_VIEW_EXITED" });
     this.应用本地状态补丁({
       messageInput: "",
-      hasMoreBefore: false,
       lastReadEventPosition: null,
       firstUnreadEventPosition: null,
       pendingReadAnchorPosition: null,
-      messages: [],
       pending: false,
       historyLoading: false,
       historyErrorCode: "",

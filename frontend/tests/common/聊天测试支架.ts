@@ -5,9 +5,10 @@ import type { 前端传输端口 } from "../../传输";
 import type { 媒体附件草稿 as 图片附件草稿 } from "../../媒体/媒体草稿";
 import { 创建房间内核, 派生房间壳外观 } from "../../房间内核";
 import {
-  推进房间时间线,
-  type 时间线输入,
-} from "../../房间时间线";
+  创建房间时间线Actor,
+  投影时间线快照到聊天时间线状态,
+  type 房间时间线事件,
+} from "../../房间时间线运行时";
 import { 初始聊天状态, type 聊天状态 } from "../../状态";
 import type {
   媒体查看器打开请求,
@@ -774,6 +775,47 @@ function 创建会同步房间壳补丁的房间内核端口(
   };
 }
 
+function 创建会同步时间线补丁的时间线端口(
+  updateState: (patch: Partial<聊天状态>) => void,
+  input: {
+    messages?: 消息事件[];
+    latestEventPosition?: number;
+    hasMoreBefore?: boolean;
+  } = {}
+): {
+  send(event: 房间时间线事件): void;
+} {
+  const actor = 创建房间时间线Actor();
+  const 同步时间线补丁 = (): void => {
+    const snapshot = actor.getSnapshot();
+    updateState({
+      ...投影时间线快照到聊天时间线状态(snapshot),
+      latestEventPosition: snapshot.context.latestEventPosition,
+    });
+  };
+
+  if (
+    (input.messages?.length ?? 0) > 0 ||
+    (input.latestEventPosition ?? 0) > 0 ||
+    (input.hasMoreBefore ?? false)
+  ) {
+    actor.send({
+      type: "AUTHORITATIVE_SNAPSHOT_LOADED",
+      messages: input.messages ?? [],
+      latestEventPosition: input.latestEventPosition ?? 0,
+      hasMoreBefore: input.hasMoreBefore ?? false,
+    });
+  }
+  同步时间线补丁();
+
+  return {
+    send(event) {
+      actor.send(event);
+      同步时间线补丁();
+    },
+  };
+}
+
 function 创建房间视图重置补丁(): Partial<聊天状态> {
   return {
     messageInput: "",
@@ -857,17 +899,12 @@ export function 创建恢复编排测试场景(input: {
     updateState(创建房间壳补丁(roomKernel));
   };
   const roomKernelPort = 创建会同步房间壳补丁的房间内核端口(roomKernel, 同步房间壳补丁);
-  const 推进时间线 = (input: 时间线输入): void => {
-    state = {
-      ...state,
-      messages: 推进房间时间线(state.messages, input),
-    };
-  };
+  const roomTimelinePort = 创建会同步时间线补丁的时间线端口(updateState);
 
   const deps = {
     读取恢复状态: () => state,
     写入恢复状态: updateState,
-    推进时间线,
+    接收时间线事实: (event: 房间时间线事件) => roomTimelinePort.send(event),
     transport,
     storage,
     roomKernel: roomKernelPort,
@@ -982,17 +1019,15 @@ export function 创建实时编排测试场景(input: {
     updateState(创建房间壳补丁(roomKernel));
   };
   const roomKernelPort = 创建会同步房间壳补丁的房间内核端口(roomKernel, 同步房间壳补丁);
-  const 推进时间线 = (input: 时间线输入): void => {
-    state = {
-      ...state,
-      messages: 推进房间时间线(state.messages, input),
-    };
-  };
+  const roomTimelinePort = 创建会同步时间线补丁的时间线端口(updateState, {
+    messages: input.messages ?? [],
+    latestEventPosition: input.latestEventPosition ?? 0,
+  });
 
   const deps = {
     读取实时状态: () => state,
     写入实时状态: updateState,
-    推进时间线,
+    接收时间线事实: (event: 房间时间线事件) => roomTimelinePort.send(event),
     transport,
     roomKernel: roomKernelPort,
     上报Transport异常: async (error: Record<string, unknown>) => {
@@ -1115,17 +1150,16 @@ export function 创建阅读推进测试场景(input: {
     updateState(创建房间壳补丁(roomKernel));
   };
   const roomKernelPort = 创建会同步房间壳补丁的房间内核端口(roomKernel, 同步房间壳补丁);
-  const 推进时间线 = (input: 时间线输入): void => {
-    state = {
-      ...state,
-      messages: 推进房间时间线(state.messages, input),
-    };
-  };
+  const roomTimelinePort = 创建会同步时间线补丁的时间线端口(updateState, {
+    messages: input.messages ?? [],
+    latestEventPosition: input.latestEventPosition ?? 0,
+    hasMoreBefore: input.hasMoreBefore ?? false,
+  });
 
   const deps = {
     读取阅读状态: () => state,
     写入阅读状态: updateState,
-    推进时间线,
+    接收时间线事实: (event: 房间时间线事件) => roomTimelinePort.send(event),
     transport,
     roomScroller,
     withSessionRefreshOnInvalid: async <T,>(operation: (sessionId: string) => Promise<T>) =>

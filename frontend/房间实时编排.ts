@@ -1,9 +1,9 @@
 import type { Socket } from "socket.io-client";
 import type { 消息事件 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
+import type { 房间时间线事件 } from "./房间时间线运行时.js";
 import {
   创建乐观房间消息,
-  type 时间线输入,
 } from "./房间时间线.js";
 import { 提取可发送媒体附件标识 } from "./媒体/媒体草稿.js";
 import type { 聊天状态 } from "./状态.js";
@@ -43,7 +43,7 @@ type 实时编排状态 = Pick<
 export interface 房间实时编排依赖 {
   读取实时状态(): 实时编排状态;
   写入实时状态(patch: Partial<实时编排状态>): void;
-  推进时间线(input: 时间线输入): void;
+  接收时间线事实(event: 房间时间线事件): void;
   transport: 前端传输端口;
   roomKernel: 房间内核端口;
   上报Transport异常(error: Transport异常): Promise<void>;
@@ -85,8 +85,8 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     deps.写入实时状态(patch);
   }
 
-  function 推进时间线(input: 时间线输入): void {
-    deps.推进时间线(input);
+  function 接收时间线事实(event: 房间时间线事件): void {
+    deps.接收时间线事实(event);
   }
 
   function asRecoveryFailure(error: unknown): 恢复失败 {
@@ -113,13 +113,10 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
 
   function applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
     const shouldFollowLatest = 读取实时状态().viewportMode === "贴底跟随";
-    deps.roomKernel.send({
-      type: "LATEST_EVENT_ADVANCED",
+    接收时间线事实({
+      type: "REALTIME_EVENTS_RECEIVED",
+      messages: events,
       latestEventPosition,
-    });
-    推进时间线({
-      type: "REALTIME",
-      events,
     });
     写入实时状态({
       pending: false,
@@ -288,8 +285,8 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     }
 
     if (attachmentIds.length === 0) {
-      推进时间线({
-        type: "OPTIMISTIC",
+      接收时间线事实({
+        type: "OPTIMISTIC_MESSAGE_ADDED",
         message: 创建乐观房间消息({
           roomId: state.roomId,
           sessionId: state.sessionId,

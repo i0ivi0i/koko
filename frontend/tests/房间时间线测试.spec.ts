@@ -138,14 +138,14 @@ describe("房间时间线", () => {
     const realtimeSource = 读取前端源码("房间实时编排.ts");
     const readingSource = 读取前端源码("阅读推进编排.ts");
 
-    expect(recoverySource).toContain("推进时间线({");
+    expect(recoverySource).toContain("接收时间线事实({");
     expect(recoverySource).not.toContain("messages: 合并房间时间线消息(");
 
-    expect(realtimeSource).toContain('type: "REALTIME"');
-    expect(realtimeSource).toContain('type: "OPTIMISTIC"');
+    expect(realtimeSource).toContain('type: "REALTIME_EVENTS_RECEIVED"');
+    expect(realtimeSource).toContain('type: "OPTIMISTIC_MESSAGE_ADDED"');
     expect(realtimeSource).not.toContain("const merged = 合并房间时间线消息(");
 
-    expect(readingSource).toContain('type: "HISTORY"');
+    expect(readingSource).toContain('type: "HISTORY_PAGE_APPENDED"');
     expect(readingSource).not.toContain("messages: 合并房间时间线消息(");
   });
 });
