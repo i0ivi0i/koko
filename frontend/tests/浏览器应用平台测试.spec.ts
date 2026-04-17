@@ -148,6 +148,26 @@ describe("浏览器端应用平台化基线", () => {
     expect(packageJson.scripts.build).toContain("check:browser-app-constitution");
   });
 
+  it("前端 package.json 会把架构适应度门禁接入构建前置检查", () => {
+    const packageJson = JSON.parse(读取前端源码("package.json"));
+
+    expect(packageJson.scripts["check:architecture-fitness"]).toContain(
+      "check-frontend-architecture-fitness.mjs"
+    );
+    expect(packageJson.scripts.build).toContain("check:architecture-fitness");
+  });
+
+  it("架构适应度门禁会锁住 owner 注册表、平台内层 import 边界和热点文件增长", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain("前端运行时 owner 注册表");
+    expect(source).toContain("frontend/应用生命周期.ts");
+    expect(source).toContain("frontend/媒体/资产协作分发运行时.ts");
+    expect(source).toContain('label: "platform internal import boundary"');
+    expect(source).toContain("frontend/聊天应用内核.ts");
+    expect(source).toContain("frontend/聊天媒体编排.ts");
+  });
+
   it("宪法守门会拦住协作分发全局 singleton 和新增浏览器全局旁路", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-browser-app-constitution.mjs");
 

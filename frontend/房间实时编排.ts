@@ -10,7 +10,7 @@ import { 提取可发送媒体附件标识 } from "./媒体/媒体草稿.js";
 import type { 聊天状态 } from "./状态.js";
 import { Http接口错误, type 前端传输端口 } from "./传输.js";
 import type { Transport异常 } from "./房间恢复编排.js";
-import type { 平台离线任务 } from "./平台/离线任务仓库.js";
+import type { 平台离线任务 } from "./平台/index.js";
 
 type 控制面结果 = {
   kind?: string;
