@@ -1,5 +1,10 @@
 import { assign, createActor, createMachine, type SnapshotFrom } from "xstate";
-import type { 媒体会话信号, 媒体查看器打开请求, 消息视频自动播候选 } from "./媒体/index.js";
+import type {
+  媒体会话信号,
+  媒体查看器打开请求,
+  消息视频自动播候选,
+  媒体播放结果,
+} from "./媒体/index.js";
 import { 选择消息视频自动播Owner } from "./媒体/index.js";
 
 const 长任务阈值毫秒 = 100;
@@ -9,6 +14,7 @@ export interface 媒体运行时上下文 {
   viewerOpen: boolean;
   inlineAutoplayOwnerAttachmentId: string | null;
   inlineAutoplayPendingAttachmentId: string | null;
+  inlineAutoplayPlayback: 媒体播放结果 | null;
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   inflightLocatorCount: number;
   inflightManifestOrRangeCount: number;
@@ -39,6 +45,15 @@ export type 媒体运行时事件 =
     }
   | {
       type: "INLINE_AUTOPLAY_RELEASE_REQUESTED";
+    }
+  | {
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED";
+      attachmentId: string;
+      playback: 媒体播放结果;
+    }
+  | {
+      type: "INLINE_AUTOPLAY_PLAYBACK_FAILED";
+      attachmentId: string;
     }
   | {
       type: "MESSAGE_ATTACHMENTS_SYNCED";
@@ -73,6 +88,7 @@ const 初始媒体运行时上下文: 媒体运行时上下文 = {
   viewerOpen: false,
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
+  inlineAutoplayPlayback: null,
   heavyWorkPolicy: "normal",
   inflightLocatorCount: 0,
   inflightManifestOrRangeCount: 0,
@@ -87,7 +103,11 @@ const 克隆查看器请求 = (request: 媒体查看器打开请求): 媒体查�
 const 清空自动播Owner补丁 = () => ({
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
+  inlineAutoplayPlayback: null,
 });
+
+const 可投影为自动播播放结果 = (playback: 媒体播放结果): boolean =>
+  playback.mode === "anchor" || playback.mode === "swarm" || playback.mode === "blob";
 
 const 累加长任务计数补丁 = (
   current: 媒体运行时上下文,
@@ -137,6 +157,12 @@ const 媒体运行时机 = createMachine(
           },
           INLINE_AUTOPLAY_RELEASE_REQUESTED: {
             actions: "释放自动播Owner",
+          },
+          INLINE_AUTOPLAY_PLAYBACK_RESOLVED: {
+            actions: "记录自动播播放结果",
+          },
+          INLINE_AUTOPLAY_PLAYBACK_FAILED: {
+            actions: "清理自动播播放结果",
           },
           MESSAGE_ATTACHMENTS_SYNCED: {
             actions: "同步存活附件集合",
@@ -233,9 +259,34 @@ const 媒体运行时机 = createMachine(
         return {
           inlineAutoplayOwnerAttachmentId: context.inlineAutoplayPendingAttachmentId,
           inlineAutoplayPendingAttachmentId: null,
+          inlineAutoplayPlayback: null,
         };
       }),
       释放自动播Owner: assign(() => 清空自动播Owner补丁()),
+      记录自动播播放结果: assign(({ event, context }) => {
+        if (
+          event.type !== "INLINE_AUTOPLAY_PLAYBACK_RESOLVED" ||
+          event.attachmentId !== context.inlineAutoplayOwnerAttachmentId
+        ) {
+          return {};
+        }
+        return {
+          inlineAutoplayPlayback: 可投影为自动播播放结果(event.playback)
+            ? { ...event.playback }
+            : null,
+        };
+      }),
+      清理自动播播放结果: assign(({ event, context }) => {
+        if (
+          event.type !== "INLINE_AUTOPLAY_PLAYBACK_FAILED" ||
+          event.attachmentId !== context.inlineAutoplayOwnerAttachmentId
+        ) {
+          return {};
+        }
+        return {
+          inlineAutoplayPlayback: null,
+        };
+      }),
       同步存活附件集合: assign(({ event, context }) => {
         if (event.type !== "MESSAGE_ATTACHMENTS_SYNCED") {
           return {};
@@ -257,6 +308,7 @@ const 媒体运行时机 = createMachine(
           inlineAutoplayPendingAttachmentId: pendingAlive
             ? context.inlineAutoplayPendingAttachmentId
             : null,
+          inlineAutoplayPlayback: ownerAlive ? context.inlineAutoplayPlayback : null,
         };
       }),
       保留媒体信号占位: assign(() => {

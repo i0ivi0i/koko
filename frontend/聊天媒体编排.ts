@@ -157,12 +157,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   });
   let 待重裁决的本地完整视频附件标识: string | null = null;
   let inlineAutoplay启动定时器: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * 自动播真正的 owner 仍由 `媒体运行时` 裁决。
-   * 这里仅缓存“当前 owner 已解析出的瞬时播放结果”，
-   * 让壳层 presenter 能读到稳定快照，但不再自己维护一张按附件长期共写的大表。
-   */
-  let 当前自动播解析结果: 媒体播放结果 | null = null;
   let inlineAutoplay解析代次 = 0;
   const 投影查看器请求到当前播放真相 = (
     request: 媒体查看器打开请求
@@ -594,22 +588,27 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   const 读取自动播播放结果表 = (): Record<string, 媒体播放结果> => {
-    const ownerAttachmentId = 读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId;
-    if (!ownerAttachmentId || 当前自动播解析结果 === null) {
+    const 媒体运行时上下文 = 读取媒体运行时上下文();
+    const ownerAttachmentId = 媒体运行时上下文.inlineAutoplayOwnerAttachmentId;
+    const playback = 媒体运行时上下文.inlineAutoplayPlayback;
+    if (!ownerAttachmentId || playback === null) {
       return {};
     }
     return {
-      [ownerAttachmentId]: 当前自动播解析结果,
+      [ownerAttachmentId]: playback,
     };
   };
 
-  const 清空自动播播放结果 = (): void => {
+  const 清空自动播播放结果 = (
+    ownerAttachmentId = 读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId
+  ): void => {
     const 媒体运行时上下文 = 读取媒体运行时上下文();
     if (
+      !ownerAttachmentId &&
       媒体运行时上下文.inlineAutoplayOwnerAttachmentId === null &&
       媒体运行时上下文.inlineAutoplayPendingAttachmentId === null &&
       inlineAutoplay启动定时器 === null &&
-      当前自动播解析结果 === null
+      媒体运行时上下文.inlineAutoplayPlayback === null
     ) {
       return;
     }
@@ -617,9 +616,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       clearTimeout(inlineAutoplay启动定时器);
       inlineAutoplay启动定时器 = null;
     }
-    当前自动播解析结果 = null;
     inlineAutoplay解析代次 += 1;
-    deps.请求重渲染();
+    if (ownerAttachmentId) {
+      接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
+        attachmentId: ownerAttachmentId,
+      });
+    } else {
+      deps.请求重渲染();
+    }
   };
 
   const 释放当前自动播Owner = (
@@ -634,7 +639,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       attachmentId: 当前Owner,
       consumerId: 构造自动播ConsumerId(当前Owner),
     });
-    清空自动播播放结果();
+    清空自动播播放结果(当前Owner);
   };
 
   const 解析自动播播放结果 = (attachmentId: string): void => {
@@ -644,8 +649,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       return;
     }
     const 当前代次 = ++inlineAutoplay解析代次;
-    当前自动播解析结果 = null;
-    deps.请求重渲染();
+    接收媒体运行时事实({
+      type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
+      attachmentId,
+    });
     void 媒体播放器
       .解析播放结果({
         attachmentId,
@@ -660,16 +667,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         ) {
           return;
         }
-        if (
-          playback.mode === "anchor" ||
-          playback.mode === "swarm" ||
-          playback.mode === "blob"
-        ) {
-          当前自动播解析结果 = playback;
-        } else {
-          当前自动播解析结果 = null;
-        }
-        deps.请求重渲染();
+        接收媒体运行时事实({
+          type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+          attachmentId,
+          playback,
+        });
       })
       .catch(() => {
         if (
@@ -678,8 +680,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         ) {
           return;
         }
-        当前自动播解析结果 = null;
-        deps.请求重渲染();
+        接收媒体运行时事实({
+          type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
+          attachmentId,
+        });
       });
   };
 

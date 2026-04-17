@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { 创建媒体运行时Actor, 投影媒体运行时预算 } from "../媒体运行时.js";
+import type { 媒体播放结果 } from "../媒体/媒体播放.js";
 
 const 创建视频查看器请求 = (attachmentId: string) => ({
   startAttachmentId: attachmentId,
@@ -140,6 +141,38 @@ describe("媒体运行时", () => {
 
     expect(source).toContain("创建媒体运行时Actor");
     expect(source).not.toContain("let inlineAutoplayOwnerAttachmentId");
+    expect(source).not.toContain("let 当前自动播解析结果");
+  });
+
+  it("自动播播放结果由媒体运行时快照承载，编排层只负责解析副作用", () => {
+    const actor = 创建媒体运行时Actor();
+    const playback: 媒体播放结果 = {
+      mode: "swarm",
+      attachmentId: "att-video-inline-owned",
+      kind: "video",
+      src: "blob:http://media.local/swarm-inline",
+      thumbnailUrl: "http://media.local/poster-inline.jpg",
+      hint: null,
+    };
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-owned",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+      attachmentId: "att-video-inline-owned",
+      playback,
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
   });
 
   it("hidden/background 释放自动播 owner 后，不会再通过旧路径重新把它补回来", () => {
