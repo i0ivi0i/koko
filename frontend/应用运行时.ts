@@ -1,4 +1,5 @@
 import type { 聊天应用命令 } from "./聊天应用内核.js";
+import type { 浏览器应用平台事件 } from "./平台/index.js";
 
 type 应用运行时命令 = Extract<
   聊天应用命令,
@@ -10,6 +11,15 @@ type 应用运行时命令 = Extract<
   | { type: "MEDIA_SESSION_SIGNALLED"; attachmentId: string; signal: import("./媒体/媒体会话.js").媒体会话信号 }
 >;
 
+type 平台桥接命令 = Extract<
+  聊天应用命令,
+  | { type: "PLATFORM_LIFECYCLE_CHANGED" }
+  | { type: "PLATFORM_SERVICE_WORKER_UPDATE_READY" }
+  | { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" }
+  | { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" }
+  | { type: "PLATFORM_OFFLINE_STATUS_CHANGED" }
+>;
+
 export type 应用事件 = 应用运行时命令;
 
 export interface 应用运行时依赖 {
@@ -17,12 +27,45 @@ export interface 应用运行时依赖 {
    * AppRuntime 只负责把浏览器信号翻成聊天内核 command。
    * 它不再知道滚动 owner / 媒体 owner 的具体方法名。
    */
-  dispatch(command: 应用运行时命令): Promise<void> | void;
+  dispatch(command: 应用运行时命令 | 平台桥接命令): Promise<void> | void;
+  /**
+   * 平台事件订阅也统一收进 AppRuntime。
+   * 这样聊天内核以后只处理稳定 command，不再自己碰浏览器平台事件源。
+   */
+  subscribePlatformEvents?(listener: (event: 浏览器应用平台事件) => void): () => void;
 }
 
 export interface 应用运行时端口 {
   dispatch(event: 应用事件): void;
+  start(): void;
+  dispose(): void;
 }
+
+const 翻译平台事件为内核命令 = (event: 浏览器应用平台事件): 平台桥接命令 | null => {
+  switch (event.type) {
+    case "LIFECYCLE_CHANGED":
+      return {
+        type: "PLATFORM_LIFECYCLE_CHANGED",
+        snapshot: event.snapshot,
+      };
+    case "SERVICE_WORKER_UPDATE_READY":
+      return {
+        type: "PLATFORM_SERVICE_WORKER_UPDATE_READY",
+        scope: event.scope,
+      };
+    case "SERVICE_WORKER_CONTROLLER_READY":
+      return { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" };
+    case "BACKGROUND_DRAIN_REQUESTED":
+      return { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" };
+    case "OFFLINE_STATUS_CHANGED":
+      return {
+        type: "PLATFORM_OFFLINE_STATUS_CHANGED",
+        online: event.online,
+      };
+    case "PRIMARY_CONTEXT_FOCUSED":
+      return null;
+  }
+};
 
 /**
  * AppRuntime 现在只负责浏览器信号桥接：
@@ -31,6 +74,8 @@ export interface 应用运行时端口 {
  * - 它不再知道 roomScroller / 阅读推进端口这些具体 owner 名字。
  */
 export function 创建应用运行时(deps: 应用运行时依赖): 应用运行时端口 {
+  let 解除平台订阅: (() => void) | null = null;
+
   return {
     dispatch(event): void {
       const command: 应用运行时命令 =
@@ -51,6 +96,28 @@ export function 创建应用运行时(deps: 应用运行时依赖): 应用运行
           void deps.dispatch(command);
           return;
       }
+    },
+
+    start(): void {
+      if (解除平台订阅 || typeof deps.subscribePlatformEvents !== "function") {
+        return;
+      }
+      /**
+       * 平台事件进入应用后，先在这里翻成稳定 command。
+       * 这样后续换平台运行时实现时，聊天内核边界不会再跟着抖动。
+       */
+      解除平台订阅 = deps.subscribePlatformEvents((event) => {
+        const command = 翻译平台事件为内核命令(event);
+        if (!command) {
+          return;
+        }
+        void deps.dispatch(command);
+      });
+    },
+
+    dispose(): void {
+      解除平台订阅?.();
+      解除平台订阅 = null;
     },
   };
 }

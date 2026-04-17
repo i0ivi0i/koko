@@ -62,6 +62,7 @@ export type 浏览器应用平台命令 =
   | { type: "CLEAR_BADGE" };
 
 export type 浏览器应用平台事件 =
+  | { type: "LIFECYCLE_CHANGED"; snapshot: 生命周期快照 }
   | 服务工作线程运行时事件
   | { type: "PRIMARY_CONTEXT_FOCUSED" }
   | { type: "OFFLINE_STATUS_CHANGED"; online: boolean };
@@ -116,6 +117,7 @@ export function 创建浏览器应用平台(
    */
   lifecycle.订阅((snapshot) => {
     transport.接收生命周期变化(snapshot);
+    发布平台事件({ type: "LIFECYCLE_CHANGED", snapshot });
     if (snapshot.phase === "active") {
       multiContext.声明主上下文();
       void notification.清除角标();

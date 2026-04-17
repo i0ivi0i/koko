@@ -1,6 +1,7 @@
 import { css, html, LitElement } from "lit";
 import { 创建应用运行时, type 应用运行时端口 } from "./应用运行时.js";
 import { 创建聊天应用内核 } from "./聊天应用内核.js";
+import { 获取默认浏览器应用平台 } from "./平台/index.js";
 import "./房间消息窗.js";
 import {
   创建操作台附件入口编排,
@@ -54,6 +55,12 @@ export class 聊天壳 extends LitElement {
   private readonly handleViewportResize = (): void => {
     this.requestUpdate();
   };
+
+  /**
+   * 壳层和 AppRuntime 需要共享同一份浏览器平台门面。
+   * 这样生命周期、SW、离线状态都只会有一条真实订阅链，不会在壳层里分叉。
+   */
+  private readonly 平台 = 获取默认浏览器应用平台();
 
   static override styles = css`
     :host {
@@ -794,6 +801,7 @@ export class 聊天壳 extends LitElement {
    * - 转接少量浏览器副作用清理回调。
    */
   private readonly kernel = 创建聊天应用内核({
+    platform: this.平台,
     渲染桥: {
       请求重渲染: () => {
         this.requestUpdate();
@@ -829,12 +837,14 @@ export class 聊天壳 extends LitElement {
     if (!this._应用运行时) {
       this._应用运行时 = 创建应用运行时({
         dispatch: (command) => this.kernel.dispatch(command),
+        subscribePlatformEvents: (listener) => this.平台.订阅事件?.(listener) ?? (() => {}),
       });
     }
     return this._应用运行时;
   }
 
   setTransportForTest(transport: 前端传输端口): void {
+    this._应用运行时?.dispose();
     this._应用运行时 = null;
     this.kernel.setTransportForTest(transport);
   }
@@ -878,11 +888,13 @@ export class 聊天壳 extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     globalThis.addEventListener("resize", this.handleViewportResize);
+    this.应用运行时.start();
     void this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
   }
 
   override disconnectedCallback(): void {
     globalThis.removeEventListener("resize", this.handleViewportResize);
+    this._应用运行时?.dispose();
     this.kernel.dispose();
     this._应用运行时 = null;
     super.disconnectedCallback();

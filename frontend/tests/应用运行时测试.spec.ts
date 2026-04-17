@@ -109,4 +109,47 @@ describe("应用运行时", () => {
       candidates,
     });
   });
+
+  it("平台生命周期变化会先进入应用运行时，再翻成内核 command", () => {
+    const commands: unknown[] = [];
+    let 平台事件监听器: ((event: unknown) => void) | null = null;
+
+    const runtime = 创建应用运行时({
+      dispatch: (command) => {
+        commands.push(command);
+      },
+      subscribePlatformEvents: (listener) => {
+        平台事件监听器 = listener;
+        return () => {
+          平台事件监听器 = null;
+        };
+      },
+    });
+
+    runtime.start();
+    平台事件监听器?.({
+      type: "LIFECYCLE_CHANGED",
+      snapshot: { visibility: "hidden", phase: "background" },
+    });
+
+    expect(commands).toContainEqual({
+      type: "PLATFORM_LIFECYCLE_CHANGED",
+      snapshot: { visibility: "hidden", phase: "background" },
+    });
+  });
+
+  it("应用运行时销毁后会解除平台事件订阅", () => {
+    let 已解除订阅 = false;
+    const runtime = 创建应用运行时({
+      dispatch: () => {},
+      subscribePlatformEvents: () => () => {
+        已解除订阅 = true;
+      },
+    });
+
+    runtime.start();
+    runtime.dispose();
+
+    expect(已解除订阅).toBe(true);
+  });
 });

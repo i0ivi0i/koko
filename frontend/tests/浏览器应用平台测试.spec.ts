@@ -70,6 +70,8 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_JUMP_TO_LATEST_REQUESTED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_OPEN_REQUESTED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_SESSION_SIGNALLED"/);
+    expect(source).toContain("this.应用运行时.start()");
+    expect(source).toContain("this._应用运行时?.dispose()");
     expect(source).not.toContain("this.kernel.处理选择媒体文件(");
     expect(source).not.toContain("this.kernel.移除媒体草稿(");
     expect(source).not.toContain("this.kernel.重试媒体草稿(");
@@ -108,6 +110,13 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("请求跳到最新(): Promise<void>");
     expect(source).not.toContain("登记程序滚动来源(source:");
     expect(source).not.toContain("打开媒体(request:");
+  });
+
+  it("聊天应用内核不再自己直接订阅平台事件", () => {
+    const source = 读取前端源码("聊天应用内核.ts");
+
+    expect(source).not.toContain("this.platform.订阅事件");
+    expect(source).not.toContain("取消平台事件订阅");
   });
 
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {

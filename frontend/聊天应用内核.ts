@@ -28,7 +28,7 @@ import { 推进房间时间线, type 时间线输入 } from "./房间时间线.j
 import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
-  type 浏览器应用平台事件,
+  type 生命周期快照,
 } from "./平台/index.js";
 import type { 消息事件 } from "./契约.js";
 import type { 前端传输端口 } from "./传输.js";
@@ -102,7 +102,21 @@ export type 聊天应用命令 =
   | { type: "MEDIA_FILES_SELECTED"; files: Iterable<File> }
   | { type: "MEDIA_DRAFT_REMOVE_REQUESTED"; localId: string }
   | { type: "MEDIA_DRAFT_RESUME_REQUESTED"; localId: string }
-  | { type: "MEDIA_DRAFT_RESTART_REQUESTED"; localId: string };
+  | { type: "MEDIA_DRAFT_RESTART_REQUESTED"; localId: string }
+  | { type: "PLATFORM_LIFECYCLE_CHANGED"; snapshot: 生命周期快照 }
+  | { type: "PLATFORM_SERVICE_WORKER_UPDATE_READY"; scope: "app" | "media" }
+  | { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" }
+  | { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" }
+  | { type: "PLATFORM_OFFLINE_STATUS_CHANGED"; online: boolean };
+
+type 平台桥接命令 = Extract<
+  聊天应用命令,
+  | { type: "PLATFORM_LIFECYCLE_CHANGED" }
+  | { type: "PLATFORM_SERVICE_WORKER_UPDATE_READY" }
+  | { type: "PLATFORM_SERVICE_WORKER_CONTROLLER_READY" }
+  | { type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" }
+  | { type: "PLATFORM_OFFLINE_STATUS_CHANGED" }
+>;
 
 interface 聊天应用渲染桥 {
   /**
@@ -187,7 +201,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private _恢复编排端口: 房间恢复编排端口 | null = null;
   private _实时编排端口: 房间实时编排端口 | null = null;
   private _阅读推进编排端口: 阅读推进编排端口 | null = null;
-  private 取消平台事件订阅: (() => void) | null = null;
 
   /**
    * 视口 owner 需要 DOM 查询能力，但 owner 本身仍属于聊天应用内核。
@@ -247,9 +260,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.清除程序滚动来源(source);
       },
     });
-    this.取消平台事件订阅 = this.platform.订阅事件?.((event) => {
-      void this.处理平台事件(event);
-    }) ?? null;
   }
 
   snapshot(): 聊天应用快照 {
@@ -333,6 +343,13 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       case "MEDIA_DRAFT_RESTART_REQUESTED":
         await this.重新上传媒体草稿(command.localId);
         return;
+      case "PLATFORM_LIFECYCLE_CHANGED":
+      case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
+      case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":
+      case "PLATFORM_BACKGROUND_DRAIN_REQUESTED":
+      case "PLATFORM_OFFLINE_STATUS_CHANGED":
+        await this.处理平台桥接命令(command);
+        return;
     }
   }
 
@@ -347,8 +364,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   dispose(): void {
-    this.取消平台事件订阅?.();
-    this.取消平台事件订阅 = null;
     this._实时编排端口?.disconnect();
     this._阅读推进编排端口?.dispose();
     this.roomScroller.取消挂起滚动副作用();
@@ -479,22 +494,36 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     return this._实时编排端口;
   }
 
-  private async 处理平台事件(event: 浏览器应用平台事件): Promise<void> {
-    if (event.type === "BACKGROUND_DRAIN_REQUESTED") {
-      /**
-       * Service Worker 请求后台排空时，页面已经准备退到后台或被冻结。
-       * 这里先释放消息流自动播 owner，再排空离线任务，避免后台还挂着轻量视频预览。
-       */
-      this.媒体编排.释放消息流自动播Owner();
-      await this.尝试排空待补发任务();
-      return;
-    }
-    if (event.type === "SERVICE_WORKER_CONTROLLER_READY") {
-      await this.尝试排空待补发任务();
-      return;
-    }
-    if (event.type === "OFFLINE_STATUS_CHANGED") {
-      this.媒体编排.处理平台在线状态变化(event.online);
+  private async 处理平台桥接命令(command: 平台桥接命令): Promise<void> {
+    switch (command.type) {
+      case "PLATFORM_LIFECYCLE_CHANGED":
+        /**
+         * 这一阶段先只完成“平台事件统一过 AppRuntime 再进内核”的边界迁移。
+         * 生命周期策略 owner 会在后续专门的 AppLifecycleActor 里落地，这里不提前散落策略判断。
+         */
+        void command.snapshot;
+        return;
+      case "PLATFORM_SERVICE_WORKER_UPDATE_READY":
+        /**
+         * 更新就绪目前只保留为稳定应用命令，暂不在聊天内核里直接做业务裁决。
+         * 后续如果要挂到统一生命周期 actor，也只需要在那一处接住这条命令。
+         */
+        void command.scope;
+        return;
+      case "PLATFORM_BACKGROUND_DRAIN_REQUESTED":
+        /**
+         * Service Worker 请求后台排空时，页面已经准备退到后台或被冻结。
+         * 这里先释放消息流自动播 owner，再排空离线任务，避免后台还挂着轻量视频预览。
+         */
+        this.媒体编排.释放消息流自动播Owner();
+        await this.尝试排空待补发任务();
+        return;
+      case "PLATFORM_SERVICE_WORKER_CONTROLLER_READY":
+        await this.尝试排空待补发任务();
+        return;
+      case "PLATFORM_OFFLINE_STATUS_CHANGED":
+        this.媒体编排.处理平台在线状态变化(command.online);
+        return;
     }
   }
 

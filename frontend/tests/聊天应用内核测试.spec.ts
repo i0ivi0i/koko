@@ -5,7 +5,6 @@ import { 创建聊天应用内核 } from "../聊天应用内核";
 import { 创建浏览器应用平台 } from "../平台/浏览器应用平台";
 import { 创建存储运行时 } from "../平台/存储运行时";
 import type {
-  浏览器应用平台事件,
   浏览器应用平台命令,
   浏览器应用平台快照,
 } from "../平台/浏览器应用平台";
@@ -1623,7 +1622,6 @@ describe("聊天应用内核", () => {
         ],
       }),
     ];
-    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
     const kernel = 创建聊天应用内核({
       ...创建内核依赖(),
       transport,
@@ -1686,12 +1684,6 @@ describe("聊天应用内核", () => {
             },
           }) as 浏览器应用平台快照,
         dispatch: async () => true,
-        订阅事件: (listener: (event: 浏览器应用平台事件) => void) => {
-          平台事件监听器 = listener;
-          return () => {
-            平台事件监听器 = null;
-          };
-        },
       },
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
@@ -1749,11 +1741,7 @@ describe("聊天应用内核", () => {
       status: "waiting_for_peer_or_network",
     });
 
-    const 触发平台事件 =
-      平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null;
-    if (typeof 触发平台事件 === "function") {
-      触发平台事件({ type: "OFFLINE_STATUS_CHANGED", online: true });
-    }
+    await kernel.dispatch({ type: "PLATFORM_OFFLINE_STATUS_CHANGED", online: true });
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
       if (playback?.mode === "swarm") {
@@ -1772,7 +1760,6 @@ describe("聊天应用内核", () => {
   it("平台发出 BACKGROUND_DRAIN_REQUESTED 时，聊天内核会触发离线队列排空", async () => {
     const transport = new 假传输();
     const 排空到期任务 = vi.fn(async () => {});
-    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
     const kernel = 创建聊天应用内核({
       ...创建内核依赖(),
       transport,
@@ -1836,20 +1823,10 @@ describe("聊天应用内核", () => {
             },
           }) as 浏览器应用平台快照,
         dispatch: async () => true,
-        订阅事件: (listener: (event: 浏览器应用平台事件) => void) => {
-          平台事件监听器 = listener;
-          return () => {
-            平台事件监听器 = null;
-          };
-        },
       },
     });
 
-    const 已注册事件监听器 =
-      平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null;
-    if (typeof 已注册事件监听器 === "function") {
-      已注册事件监听器({ type: "BACKGROUND_DRAIN_REQUESTED" });
-    }
+    await kernel.dispatch({ type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" });
     await Promise.resolve();
 
     expect(排空到期任务).toHaveBeenCalledTimes(1);
@@ -2266,7 +2243,6 @@ describe("聊天应用内核", () => {
         ],
       }),
     ];
-    let 平台事件监听器: ((event: 浏览器应用平台事件) => void) | null = null;
     const kernel = 创建聊天应用内核({
       ...创建内核依赖(),
       transport,
@@ -2330,12 +2306,6 @@ describe("聊天应用内核", () => {
             },
           }) as 浏览器应用平台快照,
         dispatch: async () => true,
-        订阅事件: (listener: (event: 浏览器应用平台事件) => void) => {
-          平台事件监听器 = listener;
-          return () => {
-            平台事件监听器 = null;
-          };
-        },
       },
     });
     const 释放附件播放资源 = vi.fn();
@@ -2374,9 +2344,7 @@ describe("聊天应用内核", () => {
         "att-video-inline-1"
       );
 
-      const 触发平台事件 =
-        平台事件监听器 as ((event: 浏览器应用平台事件) => void) | null;
-      触发平台事件?.({ type: "BACKGROUND_DRAIN_REQUESTED" });
+      await kernel.dispatch({ type: "PLATFORM_BACKGROUND_DRAIN_REQUESTED" });
       await Promise.resolve();
       await Promise.resolve();
 
