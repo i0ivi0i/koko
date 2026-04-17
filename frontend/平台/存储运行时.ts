@@ -10,15 +10,28 @@ import {
   创建浏览器媒体定位缓存仓库,
   type 媒体定位缓存仓库,
 } from "../媒体/媒体定位.js";
+import {
+  创建浏览器协作分发Torrent缓存仓库,
+  type 协作分发Torrent缓存仓库,
+} from "../媒体/媒体协作分发缓存.js";
+
+type 可持久化导航器 = {
+  storage?: {
+    persist?(): Promise<unknown>;
+  };
+};
 
 export interface 存储运行时依赖 {
   storage?: Partial<Storage>;
+  navigator?: 可持久化导航器;
 }
 
 export interface 存储运行时 {
   壳层记忆(): 前端存储端口;
   媒体资产仓库?(): 媒体缓存仓库;
   媒体定位仓库?(): 媒体定位缓存仓库;
+  协作分发缓存仓库?(): 协作分发Torrent缓存仓库;
+  请求持久化存储?(): Promise<boolean>;
 }
 
 /**
@@ -32,9 +45,19 @@ export interface 存储运行时 {
 export function 创建存储运行时(
   deps: 存储运行时依赖 = {}
 ): 存储运行时 {
-  const 读取当前存储源 = (): Partial<Storage> | undefined =>
-    deps.storage ??
-    (typeof window !== "undefined" ? (window.localStorage as Partial<Storage>) : undefined);
+  const 读取当前导航器 = (): 可持久化导航器 | undefined =>
+    deps.navigator ??
+    (typeof navigator !== "undefined" ? (navigator as 可持久化导航器) : undefined);
+  const 读取当前存储源 = (): Partial<Storage> | undefined => {
+    if (deps.storage) {
+      return deps.storage;
+    }
+    const candidate =
+      typeof window !== "undefined" && window.localStorage
+        ? (window.localStorage as Partial<Storage>)
+        : ((globalThis as { localStorage?: Partial<Storage> }).localStorage ?? undefined);
+    return candidate;
+  };
 
   return {
     壳层记忆(): 前端存储端口 {
@@ -66,6 +89,28 @@ export function 创建存储运行时(
        * - 页面重开后由媒体 owner 决定是否继续复用或重签。
        */
       return 创建浏览器媒体定位缓存仓库(读取当前存储源());
+    },
+
+    协作分发缓存仓库(): 协作分发Torrent缓存仓库 {
+      /**
+       * 协作分发缓存仓库只保存可重挂 swarm 的极小元数据。
+       * 真正的 WebTorrent 会话生命周期仍然留给协作分发 runtime 自己管理。
+       */
+      return 创建浏览器协作分发Torrent缓存仓库(
+        读取当前存储源() as Pick<Storage, "getItem" | "setItem"> | undefined
+      );
+    },
+
+    async 请求持久化存储(): Promise<boolean> {
+      const persist = 读取当前导航器()?.storage?.persist;
+      if (typeof persist !== "function") {
+        return false;
+      }
+      try {
+        return Boolean(await persist());
+      } catch {
+        return false;
+      }
     },
   };
 }

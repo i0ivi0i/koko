@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createFakeStorage } from "./common/聊天测试支架";
 import { 创建存储运行时 } from "../平台/存储运行时";
 
@@ -60,6 +60,40 @@ describe("存储运行时", () => {
       contentHash: "hash-1",
       retainedAt: 1_775_942_400_000,
       lastAccessAt: 1_775_942_500_000,
+    });
+  });
+
+  it("平台存储运行时会暴露协作分发缓存仓库与 best-effort 持久化申请", async () => {
+    const storage = createFakeStorage();
+    const persist = vi.fn().mockResolvedValue(true);
+    const runtime = 创建存储运行时({
+      storage,
+      navigator: {
+        storage: {
+          persist,
+        },
+      },
+    });
+
+    const persisted = await runtime.请求持久化存储?.();
+    const repo = runtime.协作分发缓存仓库?.();
+
+    repo?.写入全部({
+      "torrent-info-hash-1": {
+        torrentInfoHash: "torrent-info-hash-1",
+        torrentUrl: "http://media.local/torrent-1",
+        bytes: [1, 2, 3],
+      },
+    });
+
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persisted).toBe(true);
+    expect(repo?.读取全部()).toMatchObject({
+      "torrent-info-hash-1": {
+        torrentInfoHash: "torrent-info-hash-1",
+        torrentUrl: "http://media.local/torrent-1",
+        bytes: [1, 2, 3],
+      },
     });
   });
 });

@@ -119,6 +119,14 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("取消平台事件订阅");
   });
 
+  it("媒体协作分发不再直接访问 navigator.storage.persist 或裸 localStorage", () => {
+    const source = 读取前端源码("媒体/媒体协作分发.ts");
+
+    expect(source).not.toContain("navigator?.storage");
+    expect(source).not.toContain("window.localStorage");
+    expect(source).not.toContain("globalThis.localStorage");
+  });
+
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {
     const chatSource = 读取前端源码("聊天壳.ts");
     const kernelSource = 读取前端源码("聊天应用内核.ts");

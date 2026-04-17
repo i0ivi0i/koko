@@ -1,5 +1,6 @@
 import type { 媒体协作分发定位片段, 媒体定位结果, 媒体种类 } from "../契约.js";
 import { 获取默认浏览器应用平台 } from "../平台/index.js";
+import type { 协作分发Torrent缓存快照 } from "./媒体协作分发缓存.js";
 
 export interface WebTorrent文件 {
   readonly streamURL: string;
@@ -59,15 +60,6 @@ export type 协作分发会话事件 =
   | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string };
 
 const 协作分发存活上报间隔毫秒 = 60_000;
-const 协作分发Torrent缓存存储键 = "koko_swarm_torrent_records";
-
-type 协作分发Torrent缓存记录 = {
-  torrentInfoHash: string;
-  torrentUrl: string;
-  bytes: number[];
-};
-
-type 协作分发Torrent缓存快照 = Record<string, 协作分发Torrent缓存记录>;
 
 type 协作分发会话 = {
   attachmentId: string;
@@ -94,86 +86,16 @@ let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行�
 let 协作分发浏览器运行时实例: 协作分发浏览器运行时 | null = null;
 const 协作分发会话表 = new Map<string, 协作分发会话>();
 
-function 读取协作分发Torrent缓存存储源():
-  | Pick<Storage, "getItem" | "setItem">
-  | undefined {
-  const candidate =
-    typeof window !== "undefined" && window.localStorage
-      ? window.localStorage
-      : (globalThis as { localStorage?: unknown }).localStorage;
-  if (
-    candidate &&
-    typeof (candidate as Pick<Storage, "getItem">).getItem === "function" &&
-    typeof (candidate as Pick<Storage, "setItem">).setItem === "function"
-  ) {
-    return candidate as Pick<Storage, "getItem" | "setItem">;
-  }
-  return undefined;
-}
-
-function 规范化协作分发Torrent缓存记录(
-  raw: unknown,
-  fallbackInfoHash?: string
-): 协作分发Torrent缓存记录 | null {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
-  const candidate = raw as {
-    torrentInfoHash?: unknown;
-    torrentUrl?: unknown;
-    bytes?: unknown;
-  };
-  const torrentInfoHash =
-    typeof candidate.torrentInfoHash === "string" && candidate.torrentInfoHash.trim()
-      ? candidate.torrentInfoHash.trim()
-      : fallbackInfoHash;
-  const torrentUrl =
-    typeof candidate.torrentUrl === "string" ? candidate.torrentUrl.trim() : "";
-  const bytes = Array.isArray(candidate.bytes)
-    ? candidate.bytes.filter(
-        (value): value is number =>
-          typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 255
-      )
-    : [];
-  if (!torrentInfoHash || !torrentUrl || bytes.length === 0) {
-    return null;
-  }
-  return {
-    torrentInfoHash,
-    torrentUrl,
-    bytes,
-  };
+function 读取协作分发Torrent缓存仓库() {
+  return 获取默认浏览器应用平台().storage.协作分发缓存仓库?.() ?? null;
 }
 
 function 读取协作分发Torrent缓存快照(): 协作分发Torrent缓存快照 {
-  const storage = 读取协作分发Torrent缓存存储源();
-  const raw = storage?.getItem(协作分发Torrent缓存存储键);
-  if (!raw) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    const normalized: 协作分发Torrent缓存快照 = {};
-    for (const [torrentInfoHash, value] of Object.entries(parsed)) {
-      const record = 规范化协作分发Torrent缓存记录(value, torrentInfoHash);
-      if (record) {
-        normalized[torrentInfoHash] = record;
-      }
-    }
-    return normalized;
-  } catch {
-    return {};
-  }
+  return 读取协作分发Torrent缓存仓库()?.读取全部() ?? {};
 }
 
 function 写入协作分发Torrent缓存快照(snapshot: 协作分发Torrent缓存快照): void {
-  读取协作分发Torrent缓存存储源()?.setItem(
-    协作分发Torrent缓存存储键,
-    JSON.stringify(snapshot)
-  );
+  读取协作分发Torrent缓存仓库()?.写入全部(snapshot);
 }
 
 function 保存协作分发Torrent缓存记录(
@@ -223,15 +145,7 @@ async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
 }
 
 async function 尝试请求持久化存储(): Promise<void> {
-  const storage = globalThis.navigator?.storage;
-  if (!storage || typeof storage.persist !== "function") {
-    return;
-  }
-  try {
-    await storage.persist();
-  } catch {
-    return;
-  }
+  await 获取默认浏览器应用平台().storage.请求持久化存储?.();
 }
 
 /**
