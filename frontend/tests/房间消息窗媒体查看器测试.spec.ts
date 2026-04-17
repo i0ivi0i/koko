@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果 } from "../媒体/媒体播放";
 import type { 媒体查看器打开请求 } from "../媒体/媒体查看器";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
@@ -283,6 +283,63 @@ describe("房间消息窗媒体查看器", () => {
     ).toBeNull();
 
     pane.remove();
+  });
+
+  it("滚动抖动和视图更新落在同一帧时，只会派发一次自动播候选观察", async () => {
+    const pane = 创建媒体消息窗();
+    const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];
+    let nextAnimationFrameId = 1;
+    const rafCallbacks = new Map<number, FrameRequestCallback>();
+    const flushAnimationFrame = () => {
+      const callbacks = Array.from(rafCallbacks.values());
+      rafCallbacks.clear();
+      for (const callback of callbacks) {
+        callback(performance.now());
+      }
+    };
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const id = nextAnimationFrameId++;
+        rafCallbacks.set(id, callback);
+        return id;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        rafCallbacks.delete(id);
+      })
+    );
+
+    try {
+      pane.addEventListener("room-inline-autoplay-observed", (event) => {
+        observedEvents.push(event as CustomEvent<{ candidates: unknown[] }>);
+      });
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+      flushAnimationFrame();
+      observedEvents.length = 0;
+
+      const scrollContainer = pane.querySelector<HTMLElement>("#messageScroll");
+      expect(scrollContainer).not.toBeNull();
+
+      scrollContainer?.dispatchEvent(new Event("scroll"));
+      scrollContainer?.dispatchEvent(new Event("scroll"));
+      pane.jumpToLatestLabel = "跳到最新";
+      await pane.updateComplete;
+
+      expect(observedEvents).toHaveLength(0);
+      expect(rafCallbacks.size).toBe(1);
+
+      flushAnimationFrame();
+
+      expect(observedEvents).toHaveLength(1);
+    } finally {
+      pane.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("视频已经切到 HLS manifest 主链时，消息卡片继续用 poster 占位，但查看器要拿到 manifest 地址", async () => {

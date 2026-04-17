@@ -66,6 +66,8 @@ export class 房间消息窗 extends LitElement {
   declare inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
 
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
+  private 自动播候选调度句柄: number | null = null;
+  private 自动播候选滚动容器: HTMLElement | null = null;
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -97,6 +99,11 @@ export class 房间消息窗 extends LitElement {
    */
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
+  }
+
+  override disconnectedCallback(): void {
+    this.取消自动播候选调度();
+    super.disconnectedCallback();
   }
 
   private dispatchPointerScrollIntent(event: Event): void {
@@ -136,7 +143,7 @@ export class 房间消息窗 extends LitElement {
         composed: true,
       })
     );
-    this.dispatch自动播候选(scrollContainer);
+    this.调度自动播候选(scrollContainer);
   }
 
   override updated(): void {
@@ -144,7 +151,7 @@ export class 房间消息窗 extends LitElement {
     if (!scrollContainer) {
       return;
     }
-    this.dispatch自动播候选(scrollContainer);
+    this.调度自动播候选(scrollContainer);
   }
 
   private dispatch自动播候选(scrollContainer: HTMLElement): void {
@@ -156,6 +163,34 @@ export class 房间消息窗 extends LitElement {
         composed: true,
       })
     );
+  }
+
+  /**
+   * 滚动与 Lit 更新会在一帧内连发；这里把候选读取收口到同一帧只跑一次，
+   * 避免时间线里每次滚轮抖动都重新全量量测所有视频卡片。
+   */
+  private 调度自动播候选(scrollContainer: HTMLElement): void {
+    this.自动播候选滚动容器 = scrollContainer;
+    if (this.自动播候选调度句柄 !== null) {
+      return;
+    }
+    this.自动播候选调度句柄 = window.requestAnimationFrame(() => {
+      this.自动播候选调度句柄 = null;
+      const nextScrollContainer = this.自动播候选滚动容器;
+      this.自动播候选滚动容器 = null;
+      if (!nextScrollContainer || !this.isConnected) {
+        return;
+      }
+      this.dispatch自动播候选(nextScrollContainer);
+    });
+  }
+
+  private 取消自动播候选调度(): void {
+    if (this.自动播候选调度句柄 !== null) {
+      window.cancelAnimationFrame(this.自动播候选调度句柄);
+      this.自动播候选调度句柄 = null;
+    }
+    this.自动播候选滚动容器 = null;
   }
 
   /**
