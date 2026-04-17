@@ -66,6 +66,10 @@ export async function 读取视频文件元数据(
   probe.preload = "auto";
   probe.muted = true;
   probe.playsInline = true;
+  const 最小元数据ReadyState =
+    typeof HTMLMediaElement === "undefined"
+      ? 1
+      : HTMLMediaElement.HAVE_METADATA;
 
   return await new Promise<视频文件元数据>((resolve, reject) => {
     let settled = false;
@@ -74,7 +78,12 @@ export async function 读取视频文件元数据(
       if (probe.videoWidth <= 0 || probe.videoHeight <= 0) {
         return null;
       }
-      const canvas = createCanvasElement();
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = createCanvasElement();
+      } catch {
+        return null;
+      }
       canvas.width = probe.videoWidth;
       canvas.height = probe.videoHeight;
       const context = canvas.getContext("2d");
@@ -110,7 +119,10 @@ export async function 读取视频文件元数据(
     };
 
     probe.onloadedmetadata = () => {
-      if (settled || probe.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (
+        settled ||
+        (typeof probe.readyState === "number" && probe.readyState < 最小元数据ReadyState)
+      ) {
         return;
       }
       settled = true;

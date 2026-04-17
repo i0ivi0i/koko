@@ -38,7 +38,12 @@ const 禁止模式 = [
   },
   {
     label: "lifecycle listeners",
-    pattern: /addEventListener\(\s*["'](?:visibilitychange|pagehide|pageshow|freeze|resume)["']/g,
+    pattern:
+      /addEventListener\(\s*["'](?:visibilitychange|pagehide|pageshow|freeze|resume|controllerchange)["']/g,
+  },
+  {
+    label: "lit @state runtime truth",
+    pattern: /@state\s*\(/g,
   },
 ];
 

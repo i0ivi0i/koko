@@ -9,10 +9,12 @@ import {
 type 假视频探针 = {
   preload: string;
   src: string;
+  readyState?: number;
   videoWidth: number;
   videoHeight: number;
   duration: number;
   onloadedmetadata: null | (() => void);
+  onloadeddata?: null | (() => void);
   onerror: null | (() => void);
   load(): void;
 };
@@ -21,10 +23,12 @@ function 创建成功探针(): 假视频探针 {
   return {
     preload: "",
     src: "",
+    readyState: 1,
     videoWidth: 1920,
     videoHeight: 1080,
     duration: 12.5,
     onloadedmetadata: null,
+    onloadeddata: null,
     onerror: null,
     load() {
       this.onloadedmetadata?.();
@@ -49,6 +53,7 @@ describe("视频元数据", () => {
       width: 1920,
       height: 1080,
       durationSeconds: 12.5,
+      previewUrl: null,
     });
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:clip.mp4");
   });
@@ -68,10 +73,12 @@ describe("视频元数据", () => {
     const pendingProbe: 假视频探针 = {
       preload: "",
       src: "",
+      readyState: 0,
       videoWidth: 0,
       videoHeight: 0,
       duration: 0,
       onloadedmetadata: null,
+      onloadeddata: null,
       onerror: null,
       load() {
         // 故意不回调，模拟某些浏览器/相册代理文件长时间挂住。

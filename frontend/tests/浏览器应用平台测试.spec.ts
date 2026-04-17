@@ -8,6 +8,9 @@ import type { 服务工作线程运行时事件 } from "../平台/服务工作�
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
 
+const 读取仓库脚本源码 = (relativePath: string): string =>
+  readFileSync(fileURLToPath(new URL(`../../${relativePath}`, import.meta.url)), "utf8");
+
 describe("浏览器端应用平台化基线", () => {
   it("聊天壳会把业务入口收进 ChatAppKernel，自身只保留 view + bridge", () => {
     const source = 读取前端源码("聊天壳.ts");
@@ -134,6 +137,14 @@ describe("浏览器端应用平台化基线", () => {
       "check-frontend-browser-app-constitution.mjs"
     );
     expect(packageJson.scripts.build).toContain("check:browser-app-constitution");
+  });
+
+  it("宪法守门脚本会拦住 controllerchange 直监听和组件层 @state 运行时真相回流", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-browser-app-constitution.mjs");
+
+    expect(source).toContain("controllerchange");
+    expect(source).toContain('label: "lit @state runtime truth"');
+    expect(source).toContain("/@state\\s*\\(/g");
   });
 
   it("聊天壳和后台壳都通过各自应用内核间接拿 transport，而不是壳层自己 new HttpRealtime传输", () => {
