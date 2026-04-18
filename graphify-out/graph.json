@@ -9,7 +9,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L1",
       "id": "qingli_ps1",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Read-DotEnvMap()",
@@ -17,7 +17,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L20",
       "id": "qingli_read_dotenvmap",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Get-ConfigValue()",
@@ -25,7 +25,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L43",
       "id": "qingli_get_configvalue",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Resolve-ManagedPath()",
@@ -33,7 +33,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L56",
       "id": "qingli_resolve_managedpath",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Get-SafeDatabaseTargetDisplay()",
@@ -41,7 +41,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L81",
       "id": "qingli_get_safedatabasetargetdisplay",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Get-DirectorySummary()",
@@ -49,7 +49,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L94",
       "id": "qingli_get_directorysummary",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Test-TcpPortOpen()",
@@ -57,7 +57,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L116",
       "id": "qingli_test_tcpportopen",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Assert-ServicesStopped()",
@@ -65,7 +65,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L140",
       "id": "qingli_assert_servicesstopped",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Get-ListeningPortProcessRecords()",
@@ -73,7 +73,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L149",
       "id": "qingli_get_listeningportprocessrecords",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Resolve-RecognizedProjectService()",
@@ -81,7 +81,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L180",
       "id": "qingli_resolve_recognizedprojectservice",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Stop-RecognizedProjectServices()",
@@ -89,7 +89,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L248",
       "id": "qingli_stop_recognizedprojectservices",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Invoke-DatabaseCleanup()",
@@ -97,7 +97,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L286",
       "id": "qingli_invoke_databasecleanup",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Clear-DirectoryContents()",
@@ -105,7 +105,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L330",
       "id": "qingli_clear_directorycontents",
-      "community": 10
+      "community": 11
     },
     {
       "label": "run.ps1",
@@ -113,7 +113,7 @@
       "source_file": "run.ps1",
       "source_location": "L1",
       "id": "run_ps1",
-      "community": 12
+      "community": 10
     },
     {
       "label": "Assert-PowerShellVersion()",
@@ -121,7 +121,7 @@
       "source_file": "run.ps1",
       "source_location": "L7",
       "id": "run_assert_powershellversion",
-      "community": 12
+      "community": 10
     },
     {
       "label": "Import-DotEnv()",
@@ -129,7 +129,7 @@
       "source_file": "run.ps1",
       "source_location": "L14",
       "id": "run_import_dotenv",
-      "community": 12
+      "community": 10
     },
     {
       "label": "New-LauncherLogDirectory()",
@@ -137,7 +137,7 @@
       "source_file": "run.ps1",
       "source_location": "L33",
       "id": "run_new_launcherlogdirectory",
-      "community": 12
+      "community": 10
     },
     {
       "label": "New-StreamState()",
@@ -145,7 +145,7 @@
       "source_file": "run.ps1",
       "source_location": "L52",
       "id": "run_new_streamstate",
-      "community": 12
+      "community": 10
     },
     {
       "label": "New-ManagedProcess()",
@@ -153,7 +153,7 @@
       "source_file": "run.ps1",
       "source_location": "L66",
       "id": "run_new_managedprocess",
-      "community": 12
+      "community": 10
     },
     {
       "label": "Read-NewLogLines()",
@@ -161,7 +161,7 @@
       "source_file": "run.ps1",
       "source_location": "L101",
       "id": "run_read_newloglines",
-      "community": 12
+      "community": 10
     },
     {
       "label": "Write-ManagedProcessLogs()",
@@ -169,7 +169,7 @@
       "source_file": "run.ps1",
       "source_location": "L161",
       "id": "run_write_managedprocesslogs",
-      "community": 12
+      "community": 10
     },
     {
       "label": "Stop-StaleLauncherBackend()",
@@ -177,31 +177,63 @@
       "source_file": "run.ps1",
       "source_location": "L185",
       "id": "run_stop_stalelauncherbackend",
-      "community": 12
+      "community": 10
+    },
+    {
+      "label": "Get-ListeningPortProcessRecords()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L211",
+      "id": "run_get_listeningportprocessrecords",
+      "community": 10
+    },
+    {
+      "label": "Resolve-StaleLauncherSidecar()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L242",
+      "id": "run_resolve_stalelaunchersidecar",
+      "community": 10
+    },
+    {
+      "label": "Stop-StaleLauncherSidecars()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L288",
+      "id": "run_stop_stalelaunchersidecars",
+      "community": 10
     },
     {
       "label": "Resolve-TusdBinaryPath()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L211",
+      "source_location": "L328",
       "id": "run_resolve_tusdbinarypath",
-      "community": 12
+      "community": 10
     },
     {
       "label": "Test-TruthyEnvironmentFlag()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L221",
+      "source_location": "L338",
       "id": "run_test_truthyenvironmentflag",
-      "community": 12
+      "community": 10
     },
     {
       "label": "Stop-ManagedProcess()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L234",
+      "source_location": "L351",
       "id": "run_stop_managedprocess",
-      "community": 12
+      "community": 10
+    },
+    {
+      "label": "Invoke-LauncherCleanup()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L374",
+      "id": "run_invoke_launchercleanup",
+      "community": 10
     },
     {
       "label": "up.ps1",
@@ -209,7 +241,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 30
+      "community": 29
     },
     {
       "label": "app-sw.ts",
@@ -217,7 +249,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 22
+      "community": 21
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -225,7 +257,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L40",
       "id": "app_sw",
-      "community": 22
+      "community": 21
     },
     {
       "label": "css.d.ts",
@@ -233,7 +265,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 26
+      "community": 25
     },
     {
       "label": "media-sw.ts",
@@ -265,7 +297,7 @@
       "source_file": "frontend\\vitest.config.ts",
       "source_location": "L1",
       "id": "frontend_vitest_config_ts",
-      "community": 28
+      "community": 27
     },
     {
       "label": "webtorrent.d.ts",
@@ -273,7 +305,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 31
+      "community": 30
     },
     {
       "label": "\u901a\u77e5\u8fd0\u884c\u65f6.ts",
@@ -289,7 +321,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L1",
       "id": "http",
-      "community": 11
+      "community": 12
     },
     {
       "label": ".constructor()",
@@ -297,7 +329,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L36",
       "id": "http_constructor",
-      "community": 11
+      "community": 12
     },
     {
       "label": "HttpRealtime\u4f20\u8f93",
@@ -677,7 +709,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 25
+      "community": 24
     },
     {
       "label": "revokeDraftPreviewUrl()",
@@ -789,7 +821,7 @@
       "source_file": "frontend\\tests\\blob\u5a92\u4f53\u8d44\u4ea7\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_blob_spec_ts",
-      "community": 27
+      "community": 26
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -1233,7 +1265,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 25
+      "community": 24
     },
     {
       "label": ".addEventListener()",
@@ -1633,7 +1665,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L1",
       "id": "scripts_js",
-      "community": 11
+      "community": 12
     },
     {
       "label": "jsonHeaders()",
@@ -1641,7 +1673,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L50",
       "id": "jsonheaders",
-      "community": 11
+      "community": 12
     },
     {
       "label": "buildTusMetadata()",
@@ -1649,7 +1681,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L60",
       "id": "buildtusmetadata",
-      "community": 11
+      "community": 12
     },
     {
       "label": "resolveTusLocation()",
@@ -1657,7 +1689,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L66",
       "id": "resolvetuslocation",
-      "community": 11
+      "community": 12
     },
     {
       "label": "mustParseJson()",
@@ -1665,7 +1697,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L77",
       "id": "mustparsejson",
-      "community": 11
+      "community": 12
     },
     {
       "label": "summarizeTrend()",
@@ -1673,7 +1705,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L85",
       "id": "summarizetrend",
-      "community": 11
+      "community": 12
     },
     {
       "label": "handleSummary()",
@@ -1681,7 +1713,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L185",
       "id": "handlesummary",
-      "community": 11
+      "community": 12
     },
     {
       "label": "\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
@@ -1817,7 +1849,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "src_lib_rs",
-      "community": 29
+      "community": 28
     },
     {
       "label": "main()",
@@ -2649,7 +2681,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L25",
       "id": "pg",
-      "community": 21
+      "community": 0
     },
     {
       "label": "as_str()",
@@ -2673,7 +2705,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L555",
       "id": "pg_peer",
-      "community": 21
+      "community": 0
     },
     {
       "label": ".\u67e5\u8be2\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f()",
@@ -2681,7 +2713,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L567",
       "id": "pg_torrent",
-      "community": 21
+      "community": 0
     },
     {
       "label": "mod.rs",
@@ -2697,7 +2729,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 23
+      "community": 22
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2705,7 +2737,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 23
+      "community": 22
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -2817,7 +2849,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 24
+      "community": 23
     },
     {
       "label": "Assert-True()",
@@ -2825,7 +2857,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 24
+      "community": 23
     },
     {
       "label": "\u89c6\u9891locator\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3361,7 +3393,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L14",
       "id": "http_send_json",
-      "community": 11
+      "community": 12
     },
     {
       "label": "send_bytes()",
@@ -3369,7 +3401,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L51",
       "id": "http_send_bytes",
-      "community": 11
+      "community": 12
     },
     {
       "label": "send_multipart_response()",
@@ -3377,7 +3409,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L77",
       "id": "http_send_multipart_response",
-      "community": 11
+      "community": 12
     },
     {
       "label": "fixture.rs",
@@ -3776,6 +3808,42 @@
       "source_location": "L211",
       "weight": 1.0,
       "_src": "run_ps1",
+      "_tgt": "run_get_listeningportprocessrecords",
+      "source": "run_ps1",
+      "target": "run_get_listeningportprocessrecords",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L242",
+      "weight": 1.0,
+      "_src": "run_ps1",
+      "_tgt": "run_resolve_stalelaunchersidecar",
+      "source": "run_ps1",
+      "target": "run_resolve_stalelaunchersidecar",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L288",
+      "weight": 1.0,
+      "_src": "run_ps1",
+      "_tgt": "run_stop_stalelaunchersidecars",
+      "source": "run_ps1",
+      "target": "run_stop_stalelaunchersidecars",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L328",
+      "weight": 1.0,
+      "_src": "run_ps1",
       "_tgt": "run_resolve_tusdbinarypath",
       "source": "run_ps1",
       "target": "run_resolve_tusdbinarypath",
@@ -3785,7 +3853,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L221",
+      "source_location": "L338",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_test_truthyenvironmentflag",
@@ -3797,12 +3865,24 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L234",
+      "source_location": "L351",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_stop_managedprocess",
       "source": "run_ps1",
       "target": "run_stop_managedprocess",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L374",
+      "weight": 1.0,
+      "_src": "run_ps1",
+      "_tgt": "run_invoke_launchercleanup",
+      "source": "run_ps1",
+      "target": "run_invoke_launchercleanup",
       "confidence_score": 1.0
     },
     {
@@ -3827,6 +3907,54 @@
       "_tgt": "run_read_newloglines",
       "source": "run_read_newloglines",
       "target": "run_write_managedprocesslogs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L386",
+      "weight": 1.0,
+      "_src": "run_invoke_launchercleanup",
+      "_tgt": "run_write_managedprocesslogs",
+      "source": "run_write_managedprocesslogs",
+      "target": "run_invoke_launchercleanup",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L296",
+      "weight": 1.0,
+      "_src": "run_stop_stalelaunchersidecars",
+      "_tgt": "run_get_listeningportprocessrecords",
+      "source": "run_get_listeningportprocessrecords",
+      "target": "run_stop_stalelaunchersidecars",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L303",
+      "weight": 1.0,
+      "_src": "run_stop_stalelaunchersidecars",
+      "_tgt": "run_resolve_stalelaunchersidecar",
+      "source": "run_resolve_stalelaunchersidecar",
+      "target": "run_stop_stalelaunchersidecars",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L391",
+      "weight": 1.0,
+      "_src": "run_invoke_launchercleanup",
+      "_tgt": "run_stop_managedprocess",
+      "source": "run_stop_managedprocess",
+      "target": "run_invoke_launchercleanup",
       "confidence_score": 1.0
     },
     {
