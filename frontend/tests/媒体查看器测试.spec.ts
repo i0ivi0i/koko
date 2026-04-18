@@ -397,10 +397,15 @@ describe("媒体查看器适配器", () => {
     const video = document.body.querySelector("video");
     const overlay = document.body.querySelector<HTMLElement>('[aria-label="视频查看器"]');
     const mount = document.body.querySelector<HTMLElement>("[data-media-viewer-mount='video']");
+    const mediaContainer = 读取VideoJs媒体容器();
 
     expect(provider).not.toBeNull();
     expect(video).toBeInstanceOf(HTMLVideoElement);
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(mediaContainer).not.toBeNull();
+    expect(document.fullscreenElement).toBe(mediaContainer);
+    expect(document.fullscreenElement).not.toBe(overlay);
+    expect(requestFullscreen).toHaveBeenCalledTimes(2);
+    expect(requestFullscreen.mock.instances.at(-1)).toBe(mediaContainer);
     expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
     expect(mount).not.toBeNull();
     expect(mount?.style.width).toBe("100%");
@@ -489,6 +494,7 @@ describe("媒体查看器适配器", () => {
     );
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
     }));
 
     try {
@@ -545,6 +551,7 @@ describe("媒体查看器适配器", () => {
     );
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
     }));
     vi.doMock("p2p-media-loader-hlsjs", () => ({
       HlsJsP2PEngine,
@@ -759,8 +766,10 @@ describe("媒体查看器适配器", () => {
     await 等待查询元素("video-player[data-player-shell='videojs']");
 
     const video = document.body.querySelector("video");
+    const mediaContainer = 读取VideoJs媒体容器();
     expect(video).toBeInstanceOf(HTMLVideoElement);
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(document.fullscreenElement).toBe(mediaContainer);
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
     expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
       1
@@ -821,6 +830,7 @@ describe("媒体查看器适配器", () => {
     );
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
     }));
     const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
     const { requestFullscreen, 激活快照, 以瞬时激活执行 } = 安装严格瞬时激活全屏模拟();
@@ -1106,6 +1116,7 @@ describe("媒体查看器适配器", () => {
     );
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
     }));
     const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
     const { requestFullscreen, 激活快照, 以瞬时激活执行 } = 安装严格瞬时激活全屏模拟();
@@ -1155,8 +1166,8 @@ describe("媒体查看器适配器", () => {
       })
     );
 
-    expect(requestFullscreen).toHaveBeenCalledTimes(2);
-    expect(激活快照).toEqual([true, true]);
+    expect(requestFullscreen).toHaveBeenCalledTimes(3);
+    expect(激活快照.filter(Boolean)).toEqual([true, true]);
 
     延迟壳解析器.at(1)?.();
     await Promise.resolve();
@@ -1186,6 +1197,7 @@ describe("媒体查看器适配器", () => {
     );
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
     }));
     const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
     const { requestFullscreen, exitFullscreen, 完成退出 } = 安装延迟退出全屏模拟();

@@ -249,7 +249,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 24
+      "community": 23
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -257,7 +257,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L42",
       "id": "app_sw",
-      "community": 24
+      "community": 23
     },
     {
       "label": "css.d.ts",
@@ -1583,7 +1583,7 @@
       "label": "\u6620\u5c04VideoJs\u64ad\u653e\u6e90()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L252",
+      "source_location": "L255",
       "id": "videojs",
       "community": 2
     },
@@ -1591,7 +1591,7 @@
       "label": "\u770b\u8d77\u6765\u50cfPromise()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L89",
+      "source_location": "L90",
       "id": "videojs_promise",
       "community": 2
     },
@@ -1599,7 +1599,7 @@
       "label": "\u517c\u5bb9RemotePlayback\u5f02\u6b65\u5951\u7ea6()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L95",
+      "source_location": "L96",
       "id": "videojs_remoteplayback",
       "community": 2
     },
@@ -1607,7 +1607,7 @@
       "label": "\u6ce8\u518c\u9ed8\u8ba4VideoJs\u5143\u7d20()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L152",
+      "source_location": "L153",
       "id": "videojs_videojs",
       "community": 2
     },
@@ -1697,6 +1697,14 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
       "source_location": "L164",
       "id": "photoswipelightbox",
+      "community": 2
+    },
+    {
+      "label": "\u770b\u8d77\u6765\u50cfPromise()",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
+      "source_location": "L175",
+      "id": "promise",
       "community": 2
     },
     {
@@ -2801,7 +2809,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 23
+      "community": 24
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2809,7 +2817,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 23
+      "community": 24
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3233,7 +3241,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L1",
       "id": "tests_prepare_rs",
-      "community": 18
+      "community": 19
     },
     {
       "label": "prepare\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deTus\u5951\u7ea6()",
@@ -3241,7 +3249,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L52",
       "id": "prepare_prepare_tus",
-      "community": 18
+      "community": 19
     },
     {
       "label": "prepare\u89c6\u9891\u4e0a\u4f20\u4f1a\u62d2\u7edd\u8d85\u8fc7200mb\u7684\u8bf7\u6c42\u5e76\u5141\u8bb8200mb\u8fb9\u754c\u503c()",
@@ -3249,7 +3257,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L146",
       "id": "prepare_prepare_200mb_200mb",
-      "community": 18
+      "community": 19
     },
     {
       "label": "prepare\u8fd0\u8f93\u6388\u6743\u5199\u5165\u5931\u8d25\u65f6\u4e0d\u4f1a\u7559\u4e0b\u5b64\u513fprepared\u9644\u4ef6()",
@@ -3257,7 +3265,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L277",
       "id": "prepare_prepare_prepared",
-      "community": 18
+      "community": 19
     },
     {
       "label": "tus_hook.rs",
@@ -3489,7 +3497,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L1",
       "id": "tests_fixture_rs",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u5199\u5165tus\u6d4b\u8bd5\u6587\u4ef6()",
@@ -3497,7 +3505,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L6",
       "id": "fixture_tus",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u6700\u5c0fpng\u5b57\u8282()",
@@ -3505,7 +3513,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L21",
       "id": "fixture_png",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u6700\u5c0fmp4\u5b57\u8282()",
@@ -3513,7 +3521,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L33",
       "id": "fixture_mp4",
-      "community": 19
+      "community": 18
     },
     {
       "label": "seed.rs",
@@ -4549,7 +4557,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L3",
+      "source_location": "L4",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "frontend_videojs_ts",
@@ -4657,7 +4665,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
-      "source_location": "L478",
+      "source_location": "L175",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "promise",
+      "source": "frontend_ts",
+      "target": "promise",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
+      "source_location": "L487",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "videojs",
@@ -6913,7 +6933,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L250",
+      "source_location": "L265",
       "weight": 1.0,
       "_src": "frontend_videojs_ts",
       "_tgt": "videojs",
@@ -6925,7 +6945,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L89",
+      "source_location": "L90",
       "weight": 1.0,
       "_src": "frontend_videojs_ts",
       "_tgt": "videojs_promise",
@@ -6937,7 +6957,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L95",
+      "source_location": "L96",
       "weight": 1.0,
       "_src": "frontend_videojs_ts",
       "_tgt": "videojs_remoteplayback",
@@ -6949,7 +6969,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L280",
+      "source_location": "L455",
       "weight": 1.0,
       "_src": "frontend_videojs_ts",
       "_tgt": "videojs_videojs",
@@ -6960,8 +6980,32 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
+      "source_location": "L575",
+      "weight": 1.0,
+      "_src": "videojs",
+      "_tgt": "promise",
+      "source": "videojs",
+      "target": "promise",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
-      "source_location": "L289",
+      "source_location": "L460",
+      "weight": 1.0,
+      "_src": "videojs_videojs",
+      "_tgt": "videojs_promise",
+      "source": "videojs_promise",
+      "target": "videojs_videojs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\videojs\u64ad\u653e\u5668\u58f3.ts",
+      "source_location": "L302",
       "weight": 1.0,
       "_src": "videojs_videojs",
       "_tgt": "videojs_remoteplayback",

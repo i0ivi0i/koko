@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-18)
 
 ## Corpus Check
-- 195 files · ~265,855 words
+- 195 files · ~229,331 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 448 nodes · 555 edges · 32 communities detected
+- 449 nodes · 558 edges · 32 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -79,7 +79,7 @@ Nodes (1): 会话所属匿名身份返回内部uuid而不是兼容旧串()
 
 ### Community 2 - "Community 2"
 Cohesion: 0.05
-Nodes (18): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), 协作分发JoinTicket失效错误, leaveCurrentRoomView(), render() (+10 more)
+Nodes (20): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), 协作分发JoinTicket失效错误, leaveCurrentRoomView(), 看起来像Promise() (+12 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.07
@@ -202,9 +202,9 @@ Nodes (0):
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 22`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 23`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 24`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 25`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

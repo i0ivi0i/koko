@@ -32,6 +32,7 @@ type 可原生全屏视频元素 = HTMLVideoElement & {
   webkitDisplayingFullscreen?: boolean;
 };
 const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
+let 默认VideoJs元素注册Promise: Promise<void> | null = null;
 
 type 可兼容远端播放对象 = {
   watchAvailability?: (...args: unknown[]) => unknown;
@@ -61,7 +62,7 @@ export type VideoJs播放器壳依赖 = {
    * Task 2 先让壳层接口站住，不把 beta 依赖直接灌进主链；Task 4 再在这里接官方
    * `@videojs/html/video/player` 注册逻辑。
    */
-  registerVideoJsElements?: () => Promise<void>;
+  registerVideoJsElements?: () => void | Promise<void>;
   /**
    * 这里只允许返回同一套播放器 DOM。
    * 不管后面接 file、blob 还是 HLS，都必须继续复用这一个 provider/container/video。
@@ -149,15 +150,29 @@ const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolea
   return false;
 };
 
-const 注册默认VideoJs元素 = async (): Promise<void> => {
+const 注册默认VideoJs元素 = (): void | Promise<void> => {
   /**
-   * Video.js v10 官方 HTML 路线把 player 和 skin 拆成独立 define 模块。
-   * 这里统一在壳适配层完成注册，业务链路只拿到稳定壳接口，
-   * 不直接感知 beta API 的模块粒度和命名细节。
+   * 默认走懒注册，但 Promise 会被复用，避免并发打开时重复 import。
+   * 一旦元素已定义，这里会同步返回，给打开手势留出“同栈创建壳 + 真全屏”的窗口。
    */
-  await import("@videojs/html/video/player");
-  await import("@videojs/html/video/skin");
+  if (
+    typeof globalThis.customElements !== "undefined" &&
+    globalThis.customElements.get("video-player") &&
+    globalThis.customElements.get("video-skin")
+  ) {
+    return;
+  }
+  if (!默认VideoJs元素注册Promise) {
+    默认VideoJs元素注册Promise = (async () => {
+      await import("@videojs/html/video/player");
+      await import("@videojs/html/video/skin");
+    })();
+  }
+  return 默认VideoJs元素注册Promise;
 };
+
+export const 预热默认VideoJs元素 = (): Promise<void> =>
+  Promise.resolve(注册默认VideoJs元素());
 
 const 创建默认播放器根 = (
   source: VideoJs播放器源描述,
@@ -277,12 +292,10 @@ const 是同一个文件媒体地址 = (left: string, right: string): boolean =>
   return leftUrl.origin === rightUrl.origin;
 };
 
-export async function 创建VideoJs播放器壳(
+const 创建VideoJs播放器壳核心 = (
   initialSource: VideoJs播放器源描述,
   deps: VideoJs播放器壳依赖 = {}
-): Promise<VideoJs播放器壳实例> {
-  await (deps.registerVideoJsElements ?? 注册默认VideoJs元素)();
-
+): VideoJs播放器壳实例 => {
   const root =
     deps.createPlayer?.(initialSource) ??
     创建默认播放器根(initialSource, deps.mountTarget);
@@ -437,4 +450,20 @@ export async function 创建VideoJs播放器壳(
       root.provider.remove();
     },
   };
+};
+
+export function 创建VideoJs播放器壳(
+  initialSource: VideoJs播放器源描述,
+  deps: VideoJs播放器壳依赖 = {}
+): VideoJs播放器壳实例 | Promise<VideoJs播放器壳实例> {
+  const 注册结果 = (deps.registerVideoJsElements ?? 注册默认VideoJs元素)();
+  if (看起来像Promise(注册结果)) {
+    return Promise.resolve(注册结果)
+      .then(() => 创建VideoJs播放器壳核心(initialSource, deps))
+      .catch((error: unknown) => {
+        console.warn("[koko:videojs-shell:register]", error);
+        return 创建VideoJs播放器壳核心(initialSource, deps);
+      });
+  }
+  return 创建VideoJs播放器壳核心(initialSource, deps);
 }
