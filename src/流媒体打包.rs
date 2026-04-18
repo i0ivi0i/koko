@@ -262,6 +262,69 @@ fn 执行外部命令(
     ))
 }
 
+fn 生成无损归一化打包输入(
+    ffmpeg_bin: &str,
+    输入文件: &StdPath,
+    workdir: &StdPath,
+    有音轨: bool,
+) -> Result<(PathBuf, Option<PathBuf>, PathBuf), (StatusCode, &'static str, String)> {
+    let 归一化文件 = workdir.join("normalized.mp4");
+    let mut 归一化容器 = Command::new(ffmpeg_bin);
+    归一化容器.args(["-y", "-i"]);
+    归一化容器.arg(输入文件);
+    归一化容器.args(["-map", "0:v:0"]);
+    if 有音轨 {
+        归一化容器.args(["-map", "0:a:0?"]);
+    }
+    归一化容器.args(["-c", "copy", "-movflags", "+faststart"]);
+    归一化容器.arg(归一化文件.as_os_str());
+    执行外部命令(&mut 归一化容器, "FFmpeg 无损归一化视频容器")?;
+
+    Ok((
+        归一化文件.clone(),
+        有音轨.then(|| 归一化文件.clone()),
+        // mezzanine 也切到同一个已归一化文件，避免 24h 回退层继续保留会打爆 packager 的容器盒结构。
+        归一化文件,
+    ))
+}
+
+fn 执行shaka打包(
+    shaka_packager_bin: &str,
+    workdir: &StdPath,
+    视频打包输入文件: &StdPath,
+    音频打包输入文件: Option<&StdPath>,
+) -> Result<(), (StatusCode, &'static str, String)> {
+    let hls_video_dir = workdir.join("hls").join("video");
+    let hls_audio_dir = workdir.join("hls").join("audio");
+    let dash_dir = workdir.join("dash");
+    let mut 打包命令 = Command::new(shaka_packager_bin);
+    打包命令.arg(format!(
+        "in={},stream=video,init_segment={},segment_template={},playlist_name={}",
+        视频打包输入文件.display(),
+        hls_video_dir.join("init.mp4").display(),
+        hls_video_dir.join("$Number$.m4s").display(),
+        hls_video_dir.join("main.m3u8").display()
+    ));
+    if let Some(音频打包输入文件) = 音频打包输入文件 {
+        打包命令.arg(format!(
+            "in={},stream=audio,init_segment={},segment_template={},playlist_name={},hls_group_id=audio,hls_name=audio",
+            音频打包输入文件.display(),
+            hls_audio_dir.join("init.mp4").display(),
+            hls_audio_dir.join("$Number$.m4s").display(),
+            hls_audio_dir.join("main.m3u8").display()
+        ));
+    }
+    打包命令.arg("--mpd_output");
+    打包命令.arg(dash_dir.join("stream.mpd").as_os_str());
+    打包命令.arg("--hls_master_playlist_output");
+    打包命令.arg(workdir.join("hls").join("master.m3u8").as_os_str());
+    执行外部命令(&mut 打包命令, "Shaka Packager 打包")
+}
+
+fn 是shaka解析失败(message: &str) -> bool {
+    message.contains("PARSER_FAILURE") || message.contains("Cannot parse media file")
+}
+
 fn 解析ffprobe视频打包策略(
     输入文件: &StdPath,
     stdout: &[u8],
@@ -458,7 +521,7 @@ pub(super) fn 生成流媒体打包产物(
 
     let 静态封面文件 = workdir.join("thumbnail.png");
     let 打包策略 = ffprobe检测视频打包策略(ffprobe_bin, 输入文件)?;
-    let (视频打包输入文件, 音频打包输入文件, 高质量回退母本本地路径, 有音轨) =
+    let (mut 视频打包输入文件, mut 音频打包输入文件, mut 高质量回退母本本地路径, 有音轨) =
         match 打包策略 {
         视频打包策略::直接包装原始文件 { 有音轨 } => (
             输入文件.to_path_buf(),
@@ -467,23 +530,12 @@ pub(super) fn 生成流媒体打包产物(
             有音轨,
         ),
         视频打包策略::无损归一化后打包 { 有音轨 } => {
-            let 归一化文件 = workdir.join("normalized.mp4");
-            let mut 归一化容器 = Command::new(ffmpeg_bin);
-            归一化容器.args(["-y", "-i"]);
-            归一化容器.arg(输入文件);
-            归一化容器.args(["-map", "0:v:0"]);
-            if 有音轨 {
-                归一化容器.args(["-map", "0:a:0?"]);
-            }
-            归一化容器.args(["-c", "copy", "-movflags", "+faststart"]);
-            归一化容器.arg(归一化文件.as_os_str());
-            执行外部命令(&mut 归一化容器, "FFmpeg 无损归一化视频容器")?;
-
+            let (视频打包输入文件, 音频打包输入文件, 高质量回退母本本地路径) =
+                生成无损归一化打包输入(ffmpeg_bin, 输入文件, workdir.as_path(), 有音轨)?;
             (
-                归一化文件.clone(),
-                有音轨.then(|| 归一化文件.clone()),
-                // mezzanine 也切到同一个已归一化文件，避免 24h 回退层继续保留会打爆 packager 的 qt 容器。
-                归一化文件,
+                视频打包输入文件,
+                音频打包输入文件,
+                高质量回退母本本地路径,
                 有音轨,
             )
         }
@@ -561,28 +613,32 @@ pub(super) fn 生成流媒体打包产物(
         })?;
     }
 
-    let mut 打包命令 = Command::new(shaka_packager_bin);
-    打包命令.arg(format!(
-        "in={},stream=video,init_segment={},segment_template={},playlist_name={}",
-        视频打包输入文件.display(),
-        hls_video_dir.join("init.mp4").display(),
-        hls_video_dir.join("$Number$.m4s").display(),
-        hls_video_dir.join("main.m3u8").display()
-    ));
-    if let Some(音频打包输入文件) = 音频打包输入文件.as_ref() {
-        打包命令.arg(format!(
-            "in={},stream=audio,init_segment={},segment_template={},playlist_name={},hls_group_id=audio,hls_name=audio",
-            音频打包输入文件.display(),
-            hls_audio_dir.join("init.mp4").display(),
-            hls_audio_dir.join("$Number$.m4s").display(),
-            hls_audio_dir.join("main.m3u8").display()
-        ));
+    let 首次打包结果 = 执行shaka打包(
+        shaka_packager_bin,
+        workdir.as_path(),
+        视频打包输入文件.as_path(),
+        音频打包输入文件.as_deref(),
+    );
+    if let Err((status, code, message)) = 首次打包结果 {
+        let 需要无损归一化重试 = matches!(打包策略, 视频打包策略::直接包装原始文件 { .. })
+            && 是shaka解析失败(message.as_str());
+        if !需要无损归一化重试 {
+            return Err((status, code, message));
+        }
+        let (归一化视频输入, 归一化音频输入, 归一化回退母本) =
+            生成无损归一化打包输入(ffmpeg_bin, 输入文件, workdir.as_path(), 有音轨)?;
+        视频打包输入文件 = 归一化视频输入;
+        音频打包输入文件 = 归一化音频输入;
+        高质量回退母本本地路径 = 归一化回退母本;
+        // ffprobe 只能预测编码和品牌，不足以覆盖所有会把 Packager 打爆的 MP4 盒结构；
+        // 这里仅对“原本判定直包但首轮 parser failure”的视频补一次无损归一化重试，保住主链成功率又不扩大热路径成本。
+        执行shaka打包(
+            shaka_packager_bin,
+            workdir.as_path(),
+            视频打包输入文件.as_path(),
+            音频打包输入文件.as_deref(),
+        )?;
     }
-    打包命令.arg("--mpd_output");
-    打包命令.arg(dash_dir.join("stream.mpd").as_os_str());
-    打包命令.arg("--hls_master_playlist_output");
-    打包命令.arg(workdir.join("hls").join("master.m3u8").as_os_str());
-    执行外部命令(&mut 打包命令, "Shaka Packager 打包")?;
 
     let mut 文件列表 = Vec::new();
     收集目录文件(workdir.join("hls").as_path(), "hls", &mut 文件列表)?;
@@ -1041,6 +1097,172 @@ for index, arg in enumerate(args):
             结果.高质量回退母本本地路径,
             输入文件,
             "可直包视频应直接复用原始上传文件作为 mezzanine 回退层"
+        );
+
+        let _ = std::fs::remove_dir_all(临时目录);
+    }
+
+    #[test]
+    fn 直包文件若被shaka判定为解析失败会回退到无损归一化后重试() {
+        let 临时目录 =
+            std::env::temp_dir().join(format!("koko-stream-direct-pack-fallback-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&临时目录).expect("应能创建测试目录");
+        let 输入文件 = 临时目录.join("input");
+        std::fs::write(&输入文件, b"fake mp4 bytes").expect("应能写入输入文件");
+
+        let python = PathBuf::from(std::env::var("LOCALAPPDATA").expect("应有 LOCALAPPDATA"))
+            .join("Programs")
+            .join("Python")
+            .join("Python314")
+            .join("python.exe");
+        assert!(python.exists(), "测试需要本机 python 可用");
+
+        let ffprobe_py = 临时目录.join("fake_ffprobe.py");
+        std::fs::write(
+            &ffprobe_py,
+            r#"import json
+print(json.dumps({
+  "format": {"format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
+  "streams": [
+    {"codec_type": "video", "codec_name": "h264", "pix_fmt": "yuv420p"},
+    {"codec_type": "audio", "codec_name": "aac"}
+  ]
+}))
+"#,
+        )
+        .expect("应能写入 fake ffprobe");
+        let ffprobe_cmd = 临时目录.join("ffprobe.cmd");
+        std::fs::write(
+            &ffprobe_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_ffprobe.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 ffprobe wrapper");
+
+        let ffmpeg_py = 临时目录.join("fake_ffmpeg.py");
+        std::fs::write(
+            &ffmpeg_py,
+            r#"import pathlib
+import sys
+
+root = pathlib.Path(__file__).resolve().parent
+with (root / "ffmpeg.log").open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(sys.argv[1:]) + "\n")
+output_path = pathlib.Path(sys.argv[-1])
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_bytes(b"fake ffmpeg output")
+"#,
+        )
+        .expect("应能写入 fake ffmpeg");
+        let ffmpeg_cmd = 临时目录.join("ffmpeg.cmd");
+        std::fs::write(
+            &ffmpeg_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_ffmpeg.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 ffmpeg wrapper");
+
+        let shaka_py = 临时目录.join("fake_shaka.py");
+        std::fs::write(
+            &shaka_py,
+            format!(
+                r##"import pathlib
+import sys
+
+def ensure_file(path_str: str, content: bytes) -> None:
+    path = pathlib.Path(path_str)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+
+original_input = pathlib.Path(r"{input_path}").resolve()
+root = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+with (root / "shaka.log").open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(args) + "\n")
+for arg in args:
+    if arg.startswith("in="):
+        input_path = pathlib.Path(arg.split(",", 1)[0].split("=", 1)[1]).resolve()
+        if input_path == original_input:
+            sys.stderr.write(
+                "E fake packager_main.cc:629] Packaging Error: 8 (PARSER_FAILURE): Cannot parse media file {{}}\n".format(input_path)
+            )
+            sys.exit(1)
+
+for index, arg in enumerate(args):
+    if arg.startswith("in="):
+        for piece in arg.split(","):
+            if piece.startswith("init_segment="):
+                ensure_file(piece.split("=", 1)[1], b"init")
+            elif piece.startswith("segment_template="):
+                ensure_file(piece.split("=", 1)[1].replace("$Number$", "1"), b"segment")
+            elif piece.startswith("playlist_name="):
+                ensure_file(piece.split("=", 1)[1], b"#EXTM3U\n")
+    elif arg == "--mpd_output":
+        ensure_file(args[index + 1], b"<MPD/>")
+    elif arg == "--hls_master_playlist_output":
+        ensure_file(args[index + 1], b"#EXTM3U\n")
+"##,
+                input_path = 输入文件.display()
+            ),
+        )
+        .expect("应能写入 fake shaka");
+        let shaka_cmd = 临时目录.join("shaka.cmd");
+        std::fs::write(
+            &shaka_cmd,
+            format!(
+                "@echo off\r\n\"{}\" \"%~dp0fake_shaka.py\" %*\r\n",
+                python.display()
+            ),
+        )
+        .expect("应能写入 shaka wrapper");
+
+        let 结果 = 生成流媒体打包产物(
+            ffmpeg_cmd.to_str().expect("ffmpeg wrapper 路径应可转字符串"),
+            ffprobe_cmd.to_str().expect("ffprobe wrapper 路径应可转字符串"),
+            shaka_cmd.to_str().expect("shaka wrapper 路径应可转字符串"),
+            "att-direct-pack-fallback",
+            输入文件.as_path(),
+        )
+        .expect("直包 parser failure 应回退到无损归一化并重新生成流媒体打包结果");
+
+        let ffmpeg_log = std::fs::read_to_string(临时目录.join("ffmpeg.log"))
+            .expect("应能读取 ffmpeg 调用日志");
+        assert_eq!(
+            ffmpeg_log.lines().count(),
+            2,
+            "直包 parser failure 的救援链路只应多一次容器归一化和一次抽帧，不应直接退化成视频/音频重转码"
+        );
+        assert!(
+            ffmpeg_log.contains("-c copy"),
+            "parser failure 回退必须先走无损 copy 归一化，不能直接掉到重新编码"
+        );
+        assert!(
+            !ffmpeg_log.contains("libx264") && !ffmpeg_log.contains("-b:a 128k"),
+            "直包 parser failure 的救援链路不应误走现有重转码分支"
+        );
+        assert_eq!(
+            结果
+                .高质量回退母本本地路径
+                .file_name()
+                .and_then(|value| value.to_str()),
+            Some("normalized.mp4"),
+            "回退成功后应把归一化后的标准 MP4 作为 mezzanine 回退层"
+        );
+        assert_ne!(
+            结果.高质量回退母本本地路径,
+            输入文件,
+            "parser failure 后的 mezzanine 不应继续指回会打爆 packager 的原始上传文件"
+        );
+        let shaka_log = std::fs::read_to_string(临时目录.join("shaka.log"))
+            .expect("应能读取 shaka 调用日志");
+        assert_eq!(
+            shaka_log.lines().count(),
+            2,
+            "shaka 应先尝试原始输入，失败后再对归一化文件重试一次"
         );
 
         let _ = std::fs::remove_dir_all(临时目录);
