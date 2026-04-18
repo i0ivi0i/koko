@@ -13,4 +13,11 @@ describe("页面骨架", () => {
     expect(html).toContain("overflow: hidden");
     expect(html).toContain("background: #0b0f14");
   });
+
+  it("会内联 favicon，避免浏览器默认去请求 /favicon.ico 打出 404 噪音", () => {
+    const html = readFileSync(resolve(import.meta.dirname, "../index.html"), "utf8");
+
+    expect(html).toContain('rel="icon"');
+    expect(html).toContain("data:image/svg+xml");
+  });
 });

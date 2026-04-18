@@ -137,6 +137,14 @@ async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏
 async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
   const platform = 获取默认浏览器应用平台();
   await platform.启动();
+  /**
+   * WebTorrent browser server 在构造时就会自测 `/webtorrent/cancel/`。
+   * 如果当前页还没被根 scope worker 接管，这条探测和后续 stream probe 都只会打到网络 404。
+   * 这里宁可先回退到既有 HLS/锚点主链，也不让浏览器背着控制台噪音去碰一条必败路径。
+   */
+  if (!platform.snapshot().serviceWorker.controllerAttached) {
+    throw new Error("media service worker 尚未接管当前页面");
+  }
   const registration = platform.serviceWorker.读取注册("media");
   if (!registration) {
     throw new Error("media service worker 尚未注册");

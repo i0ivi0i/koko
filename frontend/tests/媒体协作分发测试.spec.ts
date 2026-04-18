@@ -262,6 +262,52 @@ describe("媒体协作分发", () => {
     expect(first).toBe(second);
   });
 
+  it("当前页还没被根 service worker 接管时，不会提前启动 WebTorrent browser server 去打 /webtorrent/* 404", async () => {
+    vi.resetModules();
+    const platform = {
+      启动: vi.fn(async () => undefined),
+      snapshot: () => ({
+        serviceWorker: {
+          controllerAttached: false,
+        },
+      }),
+      serviceWorker: {
+        读取注册: () => ({
+          active: {
+            state: "activated",
+          },
+        }),
+      },
+    };
+    vi.doMock("../平台/index.js", () => ({
+      获取默认浏览器应用平台: () => platform,
+    }));
+    const ctorSpy = vi.fn();
+    const createServer = vi.fn();
+    class FakeWebTorrent {
+      constructor() {
+        ctorSpy();
+      }
+
+      createServer = createServer;
+      add = vi.fn();
+      destroy = vi.fn();
+      remove = vi.fn();
+    }
+    const mod = await import("../媒体/媒体协作分发");
+
+    await expect(
+      mod.获取或创建协作分发浏览器运行时(async () => FakeWebTorrent as never)
+    ).rejects.toThrow("service worker 尚未接管当前页面");
+
+    expect(platform.启动).toHaveBeenCalledTimes(1);
+    expect(ctorSpy).not.toHaveBeenCalled();
+    expect(createServer).not.toHaveBeenCalled();
+
+    mod.重置协作分发浏览器运行时();
+    vi.doUnmock("../平台/index.js");
+  });
+
   it("client.remove 可用时只走官方移除链，不会再同步二次 destroy 同一 torrent", async () => {
     const remove = vi.fn().mockResolvedValue(undefined);
     const destroy = vi.fn();
