@@ -208,6 +208,123 @@ function Stop-StaleLauncherBackend {
     }
 }
 
+function Get-ListeningPortProcessRecords {
+    param([int[]]$Ports)
+
+    $targetPorts = @($Ports | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+    if ($targetPorts.Count -eq 0) {
+        return @()
+    }
+
+    $connections = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {
+            $targetPorts -contains $_.LocalPort
+        })
+    if ($connections.Count -eq 0) {
+        return @()
+    }
+
+    $records = @()
+    foreach ($group in ($connections | Group-Object LocalPort, OwningProcess)) {
+        $connection = $group.Group[0]
+        $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($connection.OwningProcess)" -ErrorAction SilentlyContinue
+        $records += [pscustomobject]@{
+            Port           = [int]$connection.LocalPort
+            ProcessId      = [int]$connection.OwningProcess
+            Name           = if ($process) { $process.Name } else { "" }
+            ExecutablePath = if ($process) { $process.ExecutablePath } else { "" }
+            CommandLine    = if ($process) { $process.CommandLine } else { "" }
+        }
+    }
+
+    return $records
+}
+
+function Resolve-StaleLauncherSidecar {
+    param(
+        $PortRecord,
+        [int]$AppPort,
+        [int]$TrackerPort,
+        [int]$TusPort,
+        [string]$TusUploadDir
+    )
+
+    $tusUploadDirPattern = [Regex]::Escape($TusUploadDir)
+    $tusHookUrlPattern = [Regex]::Escape("http://127.0.0.1:$AppPort/internal/tus/hooks")
+
+    if (
+        $PortRecord.Port -eq $TrackerPort -and
+        $PortRecord.Name -match '^node(?:\.exe)?$' -and
+        $PortRecord.CommandLine -match 'dev-tracker\.mjs' -and
+        $PortRecord.CommandLine -match ("--port\s+$TrackerPort(\s|$)")
+    ) {
+        return [pscustomobject]@{
+            Role      = "tracker"
+            Port      = $PortRecord.Port
+            ProcessId = $PortRecord.ProcessId
+            Name      = $PortRecord.Name
+        }
+    }
+
+    if (
+        $PortRecord.Port -eq $TusPort -and
+        $PortRecord.Name -match '^tusd(?:\.exe)?$' -and
+        $PortRecord.CommandLine -match ("-port\s+$TusPort(\s|$)") -and
+        (
+            $PortRecord.CommandLine -match $tusHookUrlPattern -or
+            $PortRecord.CommandLine -match $tusUploadDirPattern
+        )
+    ) {
+        return [pscustomobject]@{
+            Role      = "tusd"
+            Port      = $PortRecord.Port
+            ProcessId = $PortRecord.ProcessId
+            Name      = $PortRecord.Name
+        }
+    }
+
+    return $null
+}
+
+function Stop-StaleLauncherSidecars {
+    param(
+        [int]$AppPort,
+        [int]$TrackerPort,
+        [int]$TusPort,
+        [string]$TusUploadDir
+    )
+
+    $listeningRecords = Get-ListeningPortProcessRecords -Ports @($TrackerPort, $TusPort)
+    if ($listeningRecords.Count -eq 0) {
+        return
+    }
+
+    $stoppedCount = 0
+    foreach ($record in $listeningRecords) {
+        $recognized = Resolve-StaleLauncherSidecar `
+            -PortRecord $record `
+            -AppPort $AppPort `
+            -TrackerPort $TrackerPort `
+            -TusPort $TusPort `
+            -TusUploadDir $TusUploadDir
+        if ($null -eq $recognized) {
+            continue
+        }
+
+        try {
+            Write-Host "清理上一轮 launcher 残留 sidecar [$($recognized.Role)]：端口 $($recognized.Port) -> PID $($recognized.ProcessId) ($($recognized.Name))"
+            & taskkill.exe /PID $recognized.ProcessId /T /F 2>$null | Out-Null
+            $stoppedCount++
+        }
+        catch {
+            Write-Warning "清理残留 sidecar 失败 [$($recognized.Role)][$($recognized.ProcessId)]: $($_.Exception.Message)"
+        }
+    }
+
+    if ($stoppedCount -gt 0) {
+        Start-Sleep -Milliseconds 800
+    }
+}
+
 function Resolve-TusdBinaryPath {
     # tusd 是独立 sidecar，不属于主服务二进制；这里只负责确认它存在，
     # 缺失时直接让启动失败，避免开发脚本偷偷改机器状态。
@@ -254,6 +371,30 @@ function Stop-ManagedProcess {
     }
 }
 
+function Invoke-LauncherCleanup {
+    param([string]$Reason = "")
+
+    if ($script:LauncherCleanupStarted) {
+        return
+    }
+    $script:LauncherCleanupStarted = $true
+
+    if (-not [string]::IsNullOrWhiteSpace($Reason)) {
+        Write-Host "启动器收尾: $Reason"
+    }
+
+    Write-ManagedProcessLogs $trackerProcess
+    Write-ManagedProcessLogs $tusdProcess
+    Write-ManagedProcessLogs $backendProcess
+    Write-ManagedProcessLogs $frontendTypeWatch
+    Write-ManagedProcessLogs $frontendWatch
+    Stop-ManagedProcess $trackerProcess
+    Stop-ManagedProcess $tusdProcess
+    Stop-ManagedProcess $backendProcess
+    Stop-ManagedProcess $frontendTypeWatch
+    Stop-ManagedProcess $frontendWatch
+}
+
 Assert-PowerShellVersion
 Import-DotEnv
 
@@ -274,6 +415,10 @@ $frontendTypeWatch = $null
 $backendProcess = $null
 $tusdProcess = $null
 $trackerProcess = $null
+$script:LauncherCleanupStarted = $false
+$launcherCleanupSubscription = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -SupportEvent -Action {
+    Invoke-LauncherCleanup -Reason "PowerShell.Exiting"
+}
 
 try {
     # run.ps1 只是 Win11 开发启动器，不是源码真相；
@@ -387,6 +532,11 @@ try {
     $tusHookUrl = "http://127.0.0.1:$appPort/internal/tus/hooks"
     $resolvedTusUploadDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $mediaTusUploadDir))
     New-Item -ItemType Directory -Path $resolvedTusUploadDir -Force | Out-Null
+    Stop-StaleLauncherSidecars `
+        -AppPort ([int]$appPort) `
+        -TrackerPort ([int]$trackerPort) `
+        -TusPort ([int]$tusdPort) `
+        -TusUploadDir $resolvedTusUploadDir
     Write-Host "访问入口: http://127.0.0.1:$appPort/"
     Write-Host "tusd 监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
     Write-Host "WebTorrent tracker 对外 announce: $trackerPublicUrl"
@@ -485,14 +635,9 @@ try {
     }
 }
 finally {
-    Write-ManagedProcessLogs $trackerProcess
-    Write-ManagedProcessLogs $tusdProcess
-    Write-ManagedProcessLogs $backendProcess
-    Write-ManagedProcessLogs $frontendTypeWatch
-    Write-ManagedProcessLogs $frontendWatch
-    Stop-ManagedProcess $trackerProcess
-    Stop-ManagedProcess $tusdProcess
-    Stop-ManagedProcess $backendProcess
-    Stop-ManagedProcess $frontendTypeWatch
-    Stop-ManagedProcess $frontendWatch
+    if ($null -ne $launcherCleanupSubscription) {
+        Unregister-Event -SubscriptionId $launcherCleanupSubscription.Id -ErrorAction SilentlyContinue
+        Remove-Job -Id $launcherCleanupSubscription.Id -Force -ErrorAction SilentlyContinue
+    }
+    Invoke-LauncherCleanup -Reason "finally"
 }
