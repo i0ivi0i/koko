@@ -42,6 +42,8 @@
     把 WebTorrent、tracker、Web Seed 和浏览器真实边界收成实现可直接复用的一张清单。
   - [WebTorrent最新版官方建议与高性能设计补充-2026-04.md](./WebTorrent最新版官方建议与高性能设计补充-2026-04.md)
     专门回答最新版 `WebTorrent` 到底能不能让群聊视频/图片秒开，以及官方和 WebTorrent/BitTorrent 实作者给出的高性能路线是什么。
+  - [Web主链落地前最新资料补充与依赖升级裁决-2026-04.md](./Web主链落地前最新资料补充与依赖升级裁决-2026-04.md)
+    只补当前施工前最后还缺的官方资料、依赖升降裁决，以及为什么先补门禁/调参/持久化语义而不是继续乱追版本。
   - [Web大视频秒开播放与P2P协同主链官方实践清单-2026.md](./Web大视频秒开播放与P2P协同主链官方实践清单-2026.md)
     只看当前 Web 阶段，把 WebTorrent、WebRTC、HLS、DASH、CMAF、hls.js、p2p-media-loader、Video.js v10 的官方边界和 `koko` 的直接工程裁决一次压清。
   - [群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md](./群聊媒体上传-Uppy-Tus-Rustus官方实践清单.md)
