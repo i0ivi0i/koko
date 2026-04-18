@@ -663,7 +663,7 @@
       "label": "dispatchJumpToLatest()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L342",
+      "source_location": "L373",
       "id": "dispatchjumptolatest",
       "community": 2
     },
@@ -671,7 +671,7 @@
       "label": "renderMessageBody()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L536",
+      "source_location": "L567",
       "id": "rendermessagebody",
       "community": 2
     },
@@ -679,7 +679,7 @@
       "label": "renderMessageAttachments()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L553",
+      "source_location": "L584",
       "id": "rendermessageattachments",
       "community": 2
     },
@@ -687,7 +687,7 @@
       "label": "renderVirtualMessageItem()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L772",
+      "source_location": "L803",
       "id": "rendervirtualmessageitem",
       "community": 2
     },
@@ -1243,15 +1243,39 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
-      "source_location": "L606",
+      "source_location": "L172",
       "id": "spec_constructor",
+      "community": 3
+    },
+    {
+      "label": ".observe()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L176",
+      "id": "spec_observe",
+      "community": 3
+    },
+    {
+      "label": ".unobserve()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L178",
+      "id": "spec_unobserve",
+      "community": 3
+    },
+    {
+      "label": ".disconnect()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L180",
+      "id": "spec_disconnect",
       "community": 3
     },
     {
       "label": ".takeRecords()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
-      "source_location": "L612",
+      "source_location": "L182",
       "id": "spec_takerecords",
       "community": 3
     },
@@ -2729,7 +2753,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2737,7 +2761,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -2849,7 +2873,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 23
+      "community": 22
     },
     {
       "label": "Assert-True()",
@@ -2857,7 +2881,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 23
+      "community": 22
     },
     {
       "label": "\u89c6\u9891locator\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -4261,7 +4285,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L342",
+      "source_location": "L373",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "dispatchjumptolatest",
@@ -4273,7 +4297,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L536",
+      "source_location": "L567",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendermessagebody",
@@ -4285,7 +4309,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L553",
+      "source_location": "L584",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendermessageattachments",
@@ -4297,7 +4321,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L772",
+      "source_location": "L803",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendervirtualmessageitem",
@@ -5521,7 +5545,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L821",
+      "source_location": "L852",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessagebody",
@@ -5533,7 +5557,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L822",
+      "source_location": "L853",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessageattachments",
@@ -6217,7 +6241,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
-      "source_location": "L606",
+      "source_location": "L716",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_constructor",
@@ -6229,7 +6253,43 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
-      "source_location": "L612",
+      "source_location": "L176",
+      "weight": 1.0,
+      "_src": "spec",
+      "_tgt": "spec_observe",
+      "source": "spec",
+      "target": "spec_observe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L178",
+      "weight": 1.0,
+      "_src": "spec",
+      "_tgt": "spec_unobserve",
+      "source": "spec",
+      "target": "spec_unobserve",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L180",
+      "weight": 1.0,
+      "_src": "spec",
+      "_tgt": "spec_disconnect",
+      "source": "spec",
+      "target": "spec_disconnect",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
+      "source_location": "L722",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_takerecords",

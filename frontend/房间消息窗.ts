@@ -213,6 +213,34 @@ export class 房间消息窗 extends LitElement {
   }
 
   /**
+   * IntersectionObserver 的首次回调在不同浏览器/帧节奏下可能晚一拍。
+   * 这里给新进入观察集的按钮做一次同步热启动量测，避免“视频已经完整进视口，但候选表还是空的”。
+   */
+  private 量测按钮自动播候选(
+    button: HTMLButtonElement,
+    viewportRect: DOMRect
+  ): 消息视频自动播候选 | null {
+    const attachmentId = button.dataset.attachmentId ?? "";
+    if (!attachmentId) {
+      return null;
+    }
+    const rect = button.getBoundingClientRect();
+    const visibleTop = Math.max(rect.top, viewportRect.top);
+    const visibleBottom = Math.min(rect.bottom, viewportRect.bottom);
+    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+    if (visibleHeight <= 0 || rect.height <= 0) {
+      return null;
+    }
+    return {
+      attachmentId,
+      visibilityRatio: visibleHeight / rect.height,
+      distanceToViewportCenter: Math.abs(
+        (rect.top + rect.bottom) / 2 - (viewportRect.top + viewportRect.bottom) / 2
+      ),
+    };
+  }
+
+  /**
    * 列表自动播只关心“真正进入滚动容器视口的少量视频卡片”：
    * 1. Chrome/现代浏览器优先走 IntersectionObserver，避免每帧对整列视频按钮同步量测；
    * 2. 观察器只维护候选快照，真正何时派发仍收口到现有 rAF 节流，不额外发明新 owner；
@@ -275,6 +303,11 @@ export class 房间消息窗 extends LitElement {
     if (!observer) {
       return;
     }
+    let 视口矩形: DOMRect | null = null;
+    const 读取视口矩形 = (): DOMRect => {
+      视口矩形 ??= scrollContainer.getBoundingClientRect();
+      return 视口矩形;
+    };
     const currentButtons = new Set(
       this.querySelectorAll<HTMLButtonElement>(
         "button.message-video-preview-trigger[data-attachment-id]"
@@ -296,6 +329,12 @@ export class 房间消息窗 extends LitElement {
       if (previousAttachmentId === undefined) {
         this.自动播候选观察目标.set(button, attachmentId);
         observer.observe(button);
+        const warmCandidate = this.量测按钮自动播候选(button, 读取视口矩形());
+        if (warmCandidate) {
+          this.自动播候选可见条目.set(attachmentId, warmCandidate);
+        } else if (attachmentId !== "") {
+          this.自动播候选可见条目.delete(attachmentId);
+        }
         continue;
       }
       if (previousAttachmentId !== attachmentId) {
@@ -303,6 +342,12 @@ export class 房间消息窗 extends LitElement {
           this.自动播候选可见条目.delete(previousAttachmentId);
         }
         this.自动播候选观察目标.set(button, attachmentId);
+        const warmCandidate = this.量测按钮自动播候选(button, 读取视口矩形());
+        if (warmCandidate) {
+          this.自动播候选可见条目.set(attachmentId, warmCandidate);
+        } else if (attachmentId !== "") {
+          this.自动播候选可见条目.delete(attachmentId);
+        }
       }
     }
   }
@@ -321,22 +366,8 @@ export class 房间消息窗 extends LitElement {
       this.querySelectorAll<HTMLButtonElement>("button.message-video-preview-trigger[data-attachment-id]")
     );
     return videoEntries
-      .map((entry) => {
-        const rect = entry.getBoundingClientRect();
-        const visibleTop = Math.max(rect.top, viewportRect.top);
-        const visibleBottom = Math.min(rect.bottom, viewportRect.bottom);
-        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-        const visibilityRatio = rect.height > 0 ? visibleHeight / rect.height : 0;
-        const distanceToViewportCenter = Math.abs(
-          (rect.top + rect.bottom) / 2 - (viewportRect.top + viewportRect.bottom) / 2
-        );
-        return {
-          attachmentId: entry.dataset.attachmentId ?? "",
-          visibilityRatio,
-          distanceToViewportCenter,
-        } satisfies 消息视频自动播候选;
-      })
-      .filter((candidate) => candidate.attachmentId !== "");
+      .map((entry) => this.量测按钮自动播候选(entry, viewportRect))
+      .filter((candidate): candidate is 消息视频自动播候选 => candidate !== null);
   }
 
   private dispatchJumpToLatest(): void {

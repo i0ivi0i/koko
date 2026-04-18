@@ -131,7 +131,8 @@ type 媒体播放释放请求 = { attachmentId: string; consumerId?: string; 丢
 
 const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
-const 自动播候选稳定等待毫秒 = 120;
+// 自动播保留轻微迟滞防抖，但不能继续维持旧的 120ms 网页式空窗。
+const 自动播候选稳定等待毫秒 = 80;
 
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：

@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-18)
 
 ## Corpus Check
-- 195 files · ~218,392 words
+- 195 files · ~218,894 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 439 nodes · 542 edges · 31 communities detected
+- 442 nodes · 545 edges · 31 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -81,7 +81,7 @@ Cohesion: 0.06
 Nodes (16): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), 附件owner不匹配时拒绝创建消息(), render() (+8 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.08
+Cohesion: 0.07
 Nodes (0): 
 
 ### Community 4 - "Community 4"
@@ -197,9 +197,9 @@ Nodes (0):
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 21`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 22`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 23`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 24`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -222,7 +222,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `HttpRealtime传输` connect `Community 7` to `Community 2`?**
   _High betweenness centrality (0.074) - this node is a cross-community bridge._
 - **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 15`?**
-  _High betweenness centrality (0.071) - this node is a cross-community bridge._
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 8`, `Community 0`?**
   _High betweenness centrality (0.057) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**

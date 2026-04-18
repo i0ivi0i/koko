@@ -151,6 +151,116 @@ const 创建媒体消息窗 = (): 房间消息窗 => {
 };
 
 describe("房间消息窗媒体查看器", () => {
+  it("IntersectionObserver 首次接管前，也会先用当前视口量测给出可见自动播候选", async () => {
+    const pane = 创建媒体消息窗();
+    const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];
+    let nextAnimationFrameId = 1;
+    const rafCallbacks = new Map<number, FrameRequestCallback>();
+    const flushAnimationFrame = () => {
+      const callbacks = Array.from(rafCallbacks.values());
+      rafCallbacks.clear();
+      for (const callback of callbacks) {
+        callback(performance.now());
+      }
+    };
+
+    class 假交叉观察器 {
+      readonly root: Element | Document | null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0, 0.25, 0.5, 0.75, 1];
+
+      constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        this.root = (options?.root as Element | Document | null) ?? null;
+      }
+
+      observe(): void {}
+
+      unobserve(): void {}
+
+      disconnect(): void {}
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const id = nextAnimationFrameId++;
+        rafCallbacks.set(id, callback);
+        return id;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        rafCallbacks.delete(id);
+      })
+    );
+    vi.stubGlobal(
+      "IntersectionObserver",
+      假交叉观察器 as unknown as typeof IntersectionObserver
+    );
+
+    try {
+      pane.addEventListener("room-inline-autoplay-observed", (event) => {
+        observedEvents.push(event as CustomEvent<{ candidates: unknown[] }>);
+      });
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const scrollContainer = pane.querySelector<HTMLElement>(".message-scroll");
+      const videoButton = pane.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      );
+      expect(scrollContainer).not.toBeNull();
+      expect(videoButton).not.toBeNull();
+      vi.spyOn(scrollContainer!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 320, 720)
+      );
+      const videoRectSpy = vi
+        .spyOn(videoButton!, "getBoundingClientRect")
+        .mockReturnValue(new DOMRect(0, 270, 320, 180));
+      observedEvents.length = 0;
+      (
+        pane as unknown as {
+          清理自动播候选观察(): void;
+          同步自动播候选观察(scrollContainer: HTMLElement): void;
+          调度自动播候选(scrollContainer: HTMLElement): void;
+        }
+      ).清理自动播候选观察();
+      (
+        pane as unknown as {
+          清理自动播候选观察(): void;
+          同步自动播候选观察(scrollContainer: HTMLElement): void;
+          调度自动播候选(scrollContainer: HTMLElement): void;
+        }
+      ).同步自动播候选观察(scrollContainer!);
+      (
+        pane as unknown as {
+          清理自动播候选观察(): void;
+          同步自动播候选观察(scrollContainer: HTMLElement): void;
+          调度自动播候选(scrollContainer: HTMLElement): void;
+        }
+      ).调度自动播候选(scrollContainer!);
+
+      flushAnimationFrame();
+
+      expect(videoRectSpy).toHaveBeenCalled();
+      expect(observedEvents.at(-1)?.detail.candidates).toEqual([
+        {
+          attachmentId: "att-video-1",
+          visibilityRatio: 1,
+          distanceToViewportCenter: 0,
+        },
+      ]);
+    } finally {
+      pane.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("群友昵称会渲染在气泡外层，而不是继续被气泡宽度一起挤折", async () => {
     const pane = 创建媒体消息窗();
     document.body.appendChild(pane);

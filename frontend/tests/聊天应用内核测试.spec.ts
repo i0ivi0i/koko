@@ -2023,6 +2023,89 @@ describe("聊天应用内核", () => {
     }
   });
 
+  it("单个视频已经完整进入视口时，会在旧 120ms 稳定窗之前启动自动播解析", async () => {
+    vi.useFakeTimers();
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-fast",
+            client_message_id: "c-video-inline-fast",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-fast",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 解析播放结果 = vi.fn().mockResolvedValue({
+      mode: "anchor",
+      attachmentId: "att-video-inline-fast",
+      kind: "video",
+      src: "http://media.local/original-att-video-inline-fast",
+      thumbnailUrl: "http://media.local/poster-att-video-inline-fast",
+      hint: null,
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果,
+      释放附件播放资源: vi.fn(),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-fast",
+          visibilityRatio: 1,
+          distanceToViewportCenter: 0,
+        },
+      ],
+    });
+    expect(解析播放结果).not.toHaveBeenCalled();
+
+    try {
+      await vi.advanceTimersByTimeAsync(81);
+
+      expect(解析播放结果).toHaveBeenCalledWith({
+        attachmentId: "att-video-inline-fast",
+        kind: "video",
+        consumerId: "inline_autoplay:att-video-inline-fast",
+        surface: "inline_autoplay",
+      });
+      expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe(
+        "att-video-inline-fast"
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("自动播候选在稳定前抖动时，只会为最终 owner 启动一次解析", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();
