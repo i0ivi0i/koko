@@ -13,14 +13,25 @@ describe("应用壳缓存边界", () => {
     expect(source).toContain('from "workbox-routing"');
     expect(source).toContain("precacheAndRoute(self.__WB_MANIFEST)");
     expect(source).toContain("cleanupOutdatedCaches()");
-    expect(source).toContain("createHandlerBoundToURL");
+    expect(source).toContain("PrecacheFallbackPlugin");
     expect(source).toContain("NavigationRoute");
     expect(source).toContain("registerRoute");
+    expect(source).toContain('from "workbox-strategies"');
+    expect(source).toContain("NetworkOnly");
+    expect(source).toContain("networkTimeoutSeconds");
     expect(source).toContain("denylist");
+    expect(source).not.toContain("createHandlerBoundToURL(");
     expect(source).not.toContain("caches.open(");
     expect(source).not.toContain("/api/rooms/");
     expect(source).not.toContain("/api/media/");
     expect(source).not.toContain("/api/attachments/");
+  });
+
+  it("app-sw 会在新壳安装后立即接管，同时保留显式接受更新入口，避免坏壳把旧 controller 卡死", () => {
+    const source = 读取前端文件("app-sw.ts");
+
+    expect(source).toContain('if (payload?.type === "SKIP_WAITING")');
+    expect(source.match(/void self\.skipWaiting\(\);/g)?.length ?? 0).toBe(2);
   });
 
   it("build 脚本会把 App Shell 预缓存限制在 dist 静态壳资源内", () => {
@@ -38,6 +49,17 @@ describe("应用壳缓存边界", () => {
     expect(source).toContain("**/socket.io/**");
     expect(source).toContain("**/media/**");
     expect(source).toContain("**/attachments/**");
+  });
+
+  it("build 脚本会统一降到 iPhone Safari 可解析的语法目标，避免旧 WebKit 在启动前黑屏", () => {
+    const source = 读取前端文件("build.mjs");
+
+    expect(source).toMatch(/const 浏览器兼容构建目标 = \[\s*'safari14'\s*\]/);
+    expect(source).toMatch(/const 浏览器兼容构建能力覆盖 = \{\s*destructuring: true\s*\}/);
+    expect(source.match(/target: 浏览器兼容构建目标/g)?.length ?? 0).toBe(3);
+    expect(source.match(/supported: 浏览器兼容构建能力覆盖/g)?.length ?? 0).toBe(3);
+    expect(source).not.toContain("target: 'es2022'");
+    expect(source).not.toContain('target: "es2022"');
   });
 
   it("media-sw 会给图片 blob 受控路由留出缓存命中入口，而不是只剩裸 WebTorrent worker import", () => {

@@ -16,6 +16,12 @@ const appShellServiceWorkerOutputFiles = [
   path.join(distDir, 'app-sw.js'),
 ]
 const watchMode = process.argv.some((arg) => arg === '--watch' || arg.startsWith('--watch='))
+// iOS Safari 16.4 之前不能解析 class static block，14.1 之前 private fields 也不稳。
+// 在构建边界统一降级成熟依赖的新语法，避免 koko-chat-shell 在页面启动前整包解析失败。
+const 浏览器兼容构建目标 = ['safari14']
+// Safari 早已支持 destructuring；这里显式保留该语法，只让 esbuild 转换真正会导致旧 WebKit
+// 启动前解析失败的 class static block / private fields，避免落入 esbuild 暂不支持的 destructuring 降级路径。
+const 浏览器兼容构建能力覆盖 = { destructuring: true }
 
 function 规范输出路径(filePath) {
   const relativePath = path.relative(frontendRoot, filePath)
@@ -92,7 +98,7 @@ function 创建应用壳预缓存注入配置() {
     globDirectory: 'dist',
     // app-sw.js 现在经由 Rust 挂在站点根路径 `/app-sw.js`。
     // 因此 Workbox 注入的 precache URL 也必须显式映射回线上真实的 `/dist/*` 地址，
-    // 否则 createHandlerBoundToURL('/dist/app-shell.html') 会在脚本求值阶段找不到对应预缓存条目。
+    // 否则导航失败时的 app-shell.html 预缓存回退会在 worker 求值后找不到对应条目。
     modifyURLPrefix: {
       '': '/dist/',
     },
@@ -161,7 +167,8 @@ const appBuildOptions = {
   outdir: 'dist',
   format: 'esm',
   platform: 'browser',
-  target: 'es2022',
+  target: 浏览器兼容构建目标,
+  supported: 浏览器兼容构建能力覆盖,
   conditions: ['p2pml:core-as-bundle'],
   sourcemap: true,
   metafile: true,
@@ -180,7 +187,8 @@ const mediaServiceWorkerBuildOptions = {
   outfile: 'dist/media-sw.js',
   format: 'esm',
   platform: 'browser',
-  target: 'es2022',
+  target: 浏览器兼容构建目标,
+  supported: 浏览器兼容构建能力覆盖,
   sourcemap: true,
 }
 
@@ -190,7 +198,8 @@ const appShellServiceWorkerBuildOptions = {
   outfile: 'dist/app-sw.raw.js',
   format: 'esm',
   platform: 'browser',
-  target: 'es2022',
+  target: 浏览器兼容构建目标,
+  supported: 浏览器兼容构建能力覆盖,
   sourcemap: false,
   plugins: [生成应用壳预缓存插件()],
 }
