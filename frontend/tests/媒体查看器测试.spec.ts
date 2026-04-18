@@ -136,6 +136,33 @@ const 安装延迟退出全屏模拟 = () => {
   };
 };
 
+const 安装可回退全屏堆栈模拟 = () => {
+  const stack: Element[] = [];
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => stack.at(-1) ?? null,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    stack.push(this);
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  const exitFullscreen = vi.fn(() => {
+    stack.pop();
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  return { requestFullscreen, exitFullscreen };
+};
+
 const 读取VideoJs媒体容器 = (): HTMLElement | null => {
   const skin = document.body.querySelector("video-skin");
   return skin?.shadowRoot?.querySelector("media-container") ?? null;
@@ -1301,6 +1328,68 @@ describe("媒体查看器适配器", () => {
 
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
     expect(document.body.querySelector("video")).toBeInstanceOf(HTMLVideoElement);
+  });
+
+  it("移动端主全屏退出若回落到预请求 overlay，也会在同次返回里直接回到群聊", async () => {
+    vi.resetModules();
+    const 延迟壳解析器: Array<() => void> = [];
+    const 创建VideoJs播放器壳 = vi.fn(
+      (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) =>
+        new Promise((resolve) => {
+          延迟壳解析器.push(() => {
+            const video = document.createElement("video");
+            Object.assign(video, {
+              play: vi.fn(() => Promise.resolve()),
+              pause: vi.fn(),
+            });
+            const container = document.createElement("div");
+            container.className = "fake-mobile-container";
+            (deps?.mountTarget ?? document.body).append(container, video);
+            resolve({
+              destroy: vi.fn(),
+              同步: vi.fn(),
+              读取视频元素: () => video,
+              读取容器元素: () => container,
+            });
+          });
+        })
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
+    }));
+    const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
+    const { requestFullscreen, exitFullscreen } = 安装可回退全屏堆栈模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-fallback-close-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-fallback-close-1",
+          src: "blob:http://media.local/mobile-fallback-close-video-1",
+          posterSrc: "http://media.local/poster-mobile-fallback-close-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    延迟壳解析器.at(0)?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 模拟用户按一次返回/Esc：浏览器先退出最上层 container，全屏会回落到预请求 overlay。
+    await document.exitFullscreen?.();
+    await Promise.resolve();
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(2);
+    expect(document.fullscreenElement).toBeNull();
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
+    expect(document.body.querySelector("video")).toBeNull();
   });
 
   it("异步接管中的同 renderer 视频请求不会重复创建第二个查看器会话", async () => {

@@ -275,8 +275,12 @@ const 启动同会话全屏策略 = (
   const 是本会话全屏元素 = (element: Element | null): boolean =>
     element === fullscreenTarget ||
     (options.备用全屏目标 != null && element === options.备用全屏目标);
+  const 是主全屏目标 = (element: Element | null): boolean => element === fullscreenTarget;
+  const 是备用全屏目标 = (element: Element | null): boolean =>
+    options.备用全屏目标 != null && element === options.备用全屏目标;
   let cleaned = false;
   let 本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
+  let 主全屏目标已接管 = 是主全屏目标(document.fullscreenElement);
   let 本会话正在原生视频全屏 = false;
   let historyPushed = false;
   let historyConsumedByUser = false;
@@ -397,7 +401,21 @@ const 启动同会话全屏策略 = (
     closeFullscreen();
   };
   const handleFullscreenChange = (): void => {
-    if (是本会话全屏元素(document.fullscreenElement)) {
+    if (是主全屏目标(document.fullscreenElement)) {
+      本会话已接管系统全屏 = true;
+      主全屏目标已接管 = true;
+      return;
+    }
+    if (是备用全屏目标(document.fullscreenElement)) {
+      if (主全屏目标已接管) {
+        /**
+         * 当主目标（container/skin）已经接管过后，回落到备用 overlay 代表用户触发了
+         * 一次“退出全屏”。这个时刻必须沿同一条关闭 owner 链一次性退场，
+         * 不能把 overlay 留在系统全屏里，避免出现“还要再返回一次”的双阶段体验。
+         */
+        closeFullscreen();
+        return;
+      }
       本会话已接管系统全屏 = true;
       return;
     }
