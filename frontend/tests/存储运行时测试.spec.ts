@@ -96,4 +96,43 @@ describe("存储运行时", () => {
       },
     });
   });
+
+  it("请求持久化存储时会先读取 persisted/estimate，并把结果作为 best-effort 平台事件发布", async () => {
+    const storage = createFakeStorage();
+    const persisted = vi.fn().mockResolvedValue(true);
+    const estimate = vi.fn().mockResolvedValue({
+      quota: 1024 * 1024 * 1024,
+      usage: 128 * 1024 * 1024,
+    });
+    const persist = vi.fn();
+    const runtime = 创建存储运行时({
+      storage,
+      navigator: {
+        storage: {
+          persisted,
+          estimate,
+          persist,
+        },
+      },
+    });
+    const 事件记录: Array<{ type: string; persisted: boolean }> = [];
+    runtime.订阅事件?.((event) => {
+      if (event.type === "STORAGE_PERSISTENCE_RESULT") {
+        事件记录.push(event);
+      }
+    });
+
+    const result = await runtime.请求持久化存储?.();
+
+    expect(persisted).toHaveBeenCalledTimes(1);
+    expect(estimate).toHaveBeenCalledTimes(1);
+    expect(persist).not.toHaveBeenCalled();
+    expect(result).toBe(true);
+    expect(事件记录).toEqual([
+      {
+        type: "STORAGE_PERSISTENCE_RESULT",
+        persisted: true,
+      },
+    ]);
+  });
 });

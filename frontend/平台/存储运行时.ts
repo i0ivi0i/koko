@@ -18,6 +18,8 @@ import {
 type 可持久化导航器 = {
   storage?: {
     persist?(): Promise<unknown>;
+    persisted?(): Promise<unknown>;
+    estimate?(): Promise<unknown>;
   };
 };
 
@@ -68,6 +70,35 @@ export function 创建存储运行时(
   const 发布事件 = (event: 存储运行时事件): void => {
     for (const listener of 事件监听器) {
       listener(event);
+    }
+  };
+  const 读取持久化状态 = async (
+    storageManager: NonNullable<可持久化导航器["storage"]>
+  ): Promise<boolean | null> => {
+    if (typeof storageManager.persisted !== "function") {
+      return null;
+    }
+    try {
+      return Boolean(await storageManager.persisted());
+    } catch {
+      return null;
+    }
+  };
+  const 预热存储估算 = async (
+    storageManager: NonNullable<可持久化导航器["storage"]>
+  ): Promise<void> => {
+    if (typeof storageManager.estimate !== "function") {
+      return;
+    }
+    try {
+      await storageManager.estimate();
+    } catch {
+      /**
+       * `estimate()` 只服务 best-effort 平台判断：
+       * - 这里读取它，是为了把浏览器原生存储观测也纳入统一入口；
+       * - 失败不升级成业务失败，更不阻断后面的 `persisted()/persist()`；
+       * - 真正的业务可用性仍由媒体定位与会话 owner 决定。
+       */
     }
   };
 
@@ -121,17 +152,33 @@ export function 创建存储运行时(
     },
 
     async 请求持久化存储(): Promise<boolean> {
-      const persist = 读取当前导航器()?.storage?.persist;
+      const storageManager = 读取当前导航器()?.storage;
+      if (!storageManager) {
+        return false;
+      }
+      await 预热存储估算(storageManager);
+      const 已持久化 = await 读取持久化状态(storageManager);
+      if (已持久化 === true) {
+        发布事件({
+          type: "STORAGE_PERSISTENCE_RESULT",
+          persisted: true,
+        });
+        return true;
+      }
+      const persist = storageManager.persist;
       if (typeof persist !== "function") {
         return false;
       }
+
       try {
         const persisted = Boolean(await persist());
+        const 最终持久化结果 =
+          persisted || (await 读取持久化状态(storageManager)) === true;
         发布事件({
           type: "STORAGE_PERSISTENCE_RESULT",
-          persisted,
+          persisted: 最终持久化结果,
         });
-        return persisted;
+        return 最终持久化结果;
       } catch {
         发布事件({
           type: "STORAGE_PERSISTENCE_RESULT",

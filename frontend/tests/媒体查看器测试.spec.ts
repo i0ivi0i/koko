@@ -437,6 +437,89 @@ describe("媒体查看器适配器", () => {
     }
   });
 
+  it("默认视频查看器挂接 HLS P2P 引擎时，会显式带上 announceTrackers 与正式时间窗参数", async () => {
+    vi.resetModules();
+    const 创建VideoJs播放器壳 = vi.fn(
+      async (_source?: unknown, _deps?: Record<string, unknown>) => ({
+        destroy: vi.fn(),
+        同步: vi.fn(),
+        读取视频元素: () => document.createElement("video"),
+        读取容器元素: () => document.createElement("div"),
+        进入全屏: vi.fn(),
+      })
+    );
+    const bindHls = vi.fn();
+    const HlsJsP2PEngine = vi.fn(
+      class {
+        bindHls = bindHls;
+      }
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+    }));
+    vi.doMock("p2p-media-loader-hlsjs", () => ({
+      HlsJsP2PEngine,
+    }));
+
+    try {
+      const { 创建媒体查看器: 创建默认媒体查看器 } = await import("../媒体/媒体查看器");
+      const viewer = 创建默认媒体查看器({
+        isMobileViewport: () => false,
+      });
+
+      viewer.打开({
+        startAttachmentId: "att-video-default-p2p-hls-config-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-default-p2p-hls-config-1",
+            src: "http://media.local/stream/att-video-default-p2p-hls-config-1/master.m3u8",
+            posterSrc: "http://media.local/poster-default-p2p-hls-config-1",
+            streamingDistribution: {
+              swarm_id: "swarm-default-p2p-hls-config-1",
+              announce_urls: ["wss://tracker-1.koko.local/announce", "wss://tracker-2.koko.local/announce"],
+              web_seed_url: "http://media.local/web-seed-default-p2p-hls-config-1",
+              join_ticket: "ticket-default-p2p-hls-config-1",
+              survival_mode: "server_assisted",
+            },
+            width: 1280,
+            height: 720,
+          },
+        ],
+      });
+      await Promise.resolve();
+
+      const deps = 创建VideoJs播放器壳.mock.calls[0]?.[1] as
+        | { 挂接P2PHls增强层?: (input: { hls: object }) => Promise<void> }
+        | undefined;
+      expect(deps?.挂接P2PHls增强层).toEqual(expect.any(Function));
+
+      const fakeHls = {};
+      await deps?.挂接P2PHls增强层?.({ hls: fakeHls });
+
+      expect(HlsJsP2PEngine).toHaveBeenCalledWith({
+        core: {
+          announceTrackers: [
+            "wss://tracker-1.koko.local/announce",
+            "wss://tracker-2.koko.local/announce",
+          ],
+          simultaneousHttpDownloads: 2,
+          simultaneousP2PDownloads: 3,
+          highDemandTimeWindow: 15,
+          httpDownloadTimeWindow: 3000,
+          p2pDownloadTimeWindow: 6000,
+        },
+      });
+      expect(bindHls).toHaveBeenCalledWith(fakeHls);
+
+      viewer.销毁();
+    } finally {
+      vi.doUnmock("../媒体/videojs播放器壳");
+      vi.doUnmock("p2p-media-loader-hlsjs");
+      vi.resetModules();
+    }
+  });
+
   it("视频壳会把 waiting 信号回抛给媒体会话，并允许后续同步新的播放源", async () => {
     const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
     const viewer = 创建媒体查看器({

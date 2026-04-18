@@ -404,7 +404,22 @@ const 创建默认VideoJs播放器层 = async (
      * 3. 是否成功挂上只影响带宽协作，不影响 HLS 首播真相。
      */
     const { HlsJsP2PEngine } = await import("p2p-media-loader-hlsjs");
-    const engine = new HlsJsP2PEngine();
+    const engine = new HlsJsP2PEngine({
+      core: {
+        /**
+         * 这里显式传一遍正式主链认可的核心参数，而不是默默吃库默认值：
+         * 1. announceTrackers 必须跟当前流媒体分发表面一致，避免 HLS P2P 另走野 tracker；
+         * 2. 时间窗/并发阈值沿用官方默认推荐值，保持“库升级后行为仍可审计”；
+         * 3. 这些都只是 HLS 支路增强参数，不会把 `p2p-media-loader` 升级成新的 owner。
+         */
+        announceTrackers: 当前视频项目.streamingDistribution?.announce_urls ?? [],
+        simultaneousHttpDownloads: 2,
+        simultaneousP2PDownloads: 3,
+        highDemandTimeWindow: 15,
+        httpDownloadTimeWindow: 3000,
+        p2pDownloadTimeWindow: 6000,
+      },
+    });
     engine.bindHls(hls);
   };
 
