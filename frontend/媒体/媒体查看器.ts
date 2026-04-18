@@ -65,6 +65,7 @@ type 媒体查看器实例 = {
 type 媒体查看器工厂结果 = 媒体查看器实例 | Promise<媒体查看器实例>;
 type 媒体查看器运行时钩子 = {
   发出媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
+  通知查看器已关闭?(): void;
 };
 type PhotoSwipe查看器工厂 = (options: PhotoSwipe查看器选项) => 媒体查看器工厂结果;
 type VideoJs播放器壳工厂 = (
@@ -453,6 +454,11 @@ const 创建默认VideoJs播放器层 = async (
       shell.destroy();
       overlay.remove();
       lifecycle.结束视口占用();
+      /**
+       * 查看器是可以被内部按钮、背景点击、全屏退场直接关掉的。
+       * 这里必须把“实例已死”同步回外层 owner，避免外层继续拿着已销毁实例走同会话复用分支。
+       */
+      hooks.通知查看器已关闭?.();
     };
     const closeWhenClickingBackdrop = (event: MouseEvent): void => {
       if (event.target === overlay) {
@@ -515,11 +521,6 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
       创建默认VideoJs播放器层(item, lifecycle, hooks, {
         shouldAutoEnterFullscreen: isMobileViewport(),
       }));
-  const 运行时钩子: 媒体查看器运行时钩子 = {
-    发出媒体会话信号: (attachmentId, signal) => {
-      deps.onMediaSessionSignal?.(attachmentId, signal);
-    },
-  };
   let current: 媒体查看器实例 | null = null;
   let openGeneration = 0;
   let 正在占用聊天视口 = false;
@@ -547,6 +548,30 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     },
   };
 
+  const 清空当前查看器状态 = (): void => {
+    current = null;
+    当前起点附件标识 = null;
+    当前查看器请求 = null;
+    当前查看器渲染类型 = null;
+  };
+
+  const 创建运行时钩子 = (generation: number): 媒体查看器运行时钩子 => ({
+    发出媒体会话信号: (attachmentId, signal) => {
+      deps.onMediaSessionSignal?.(attachmentId, signal);
+    },
+    通知查看器已关闭: () => {
+      /**
+       * 只有当前仍然活着的那一代查看器，才有资格回收 owner。
+       * 旧实例的异步收尾不允许把后来已经打开的新查看器一起清空。
+       */
+      if (generation !== openGeneration) {
+        return;
+      }
+      清空当前查看器状态();
+      视口占用生命周期.结束视口占用();
+    },
+  });
+
   const 接管当前查看器 = (
     generation: number,
     result: 媒体查看器工厂结果
@@ -566,8 +591,6 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   };
 
   const 打开 = (request: 媒体查看器打开请求): void => {
-    当前查看器请求 = request;
-    当前起点附件标识 = request.startAttachmentId;
     const startAt = request.items.findIndex(
       (item) => item.attachmentId === request.startAttachmentId
     );
@@ -591,8 +614,11 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     }
 
     const generation = ++openGeneration;
+    const 运行时钩子 = 创建运行时钩子(generation);
     current?.destroy();
-    current = null;
+    清空当前查看器状态();
+    当前查看器请求 = request;
+    当前起点附件标识 = request.startAttachmentId;
     当前查看器渲染类型 = nextRenderer;
 
     if (当前查看器渲染类型 === "image" && startItem.kind === "image") {
@@ -626,6 +652,14 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
           const lightbox = 是异步媒体查看器结果(photoSwipe)
             ? await photoSwipe
             : photoSwipe;
+          let 已通知查看器关闭 = false;
+          const 通知查看器关闭 = (): void => {
+            if (已通知查看器关闭) {
+              return;
+            }
+            已通知查看器关闭 = true;
+            运行时钩子.通知查看器已关闭?.();
+          };
           const releaseViewport = (): void => {
             视口占用生命周期.结束视口占用();
           };
@@ -652,8 +686,14 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
             });
           };
 
-          lightbox.on?.("close", releaseViewport);
-          lightbox.on?.("destroy", releaseViewport);
+          lightbox.on?.("close", () => {
+            releaseViewport();
+            通知查看器关闭();
+          });
+          lightbox.on?.("destroy", () => {
+            releaseViewport();
+            通知查看器关闭();
+          });
           lightbox.on?.("change", (payload) => {
             const activeIndex = payload?.slide?.index;
             if (typeof activeIndex === "number") {
@@ -672,6 +712,7 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
           if (lightbox.loadAndOpen?.(imageStartAt) === false) {
             lightbox.destroy();
             releaseViewport();
+            通知查看器关闭();
             return lightbox;
           }
           通知图片补齐中(imageStartAt);

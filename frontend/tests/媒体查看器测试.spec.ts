@@ -798,4 +798,60 @@ describe("媒体查看器适配器", () => {
     expect(pause).toHaveBeenCalled();
     expect(document.body.querySelector("video")).toBeNull();
   });
+
+  it("关闭视频查看器后，再打开另一条视频时会重新创建同一套查看器壳，而不是复用已销毁实例", async () => {
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-reopen-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-reopen-1",
+          src: "blob:http://media.local/reopen-video-1",
+          posterSrc: "http://media.local/poster-reopen-1",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="关闭视频查看器"]'
+    );
+    expect(closeButton).not.toBeNull();
+
+    closeButton?.click();
+    await Promise.resolve();
+
+    expect(document.body.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
+    expect(document.body.querySelector("video")).toBeNull();
+
+    viewer.打开({
+      startAttachmentId: "att-video-reopen-2",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-reopen-2",
+          src: "blob:http://media.local/reopen-video-2",
+          posterSrc: "http://media.local/poster-reopen-2",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    const reopenedShell = await 等待查询元素<HTMLElement>("video-player[data-player-shell='videojs']");
+    const reopenedVideo = document.body.querySelector<HTMLVideoElement>("video");
+
+    expect(reopenedShell).not.toBeNull();
+    expect(reopenedVideo).not.toBeNull();
+    expect(reopenedVideo?.poster).toBe("http://media.local/poster-reopen-2");
+    expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
+      1
+    );
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
+  });
 });

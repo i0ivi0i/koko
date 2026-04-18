@@ -914,6 +914,133 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("关闭真实视频查看器后，再点另一条视频仍会重新打开正式查看器", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-reopen-1",
+            client_message_id: "c-video-reopen-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-reopen-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-reopen-2",
+            client_message_id: "c-video-reopen-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-reopen-2",
+                width: 720,
+                height: 1280,
+              },
+            ],
+            event_position: 2,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    注入媒体播放器供测试(el, {
+      解析播放结果: vi.fn(async ({ attachmentId, kind }) => ({
+        mode: "anchor",
+        attachmentId,
+        kind,
+        src: `http://media.local/original-${attachmentId}`,
+        thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+        hint: null,
+      }) satisfies import("../媒体/媒体播放").媒体播放结果),
+    });
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const 等待查看器壳出现 = async (): Promise<Element | null> => {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const shell = document.body.querySelector("video-player[data-player-shell='videojs']");
+        if (shell) {
+          return shell;
+        }
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      return document.body.querySelector("video-player[data-player-shell='videojs']");
+    };
+    const 等待查看器壳消失 = async (): Promise<void> => {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (!document.body.querySelector("video-player[data-player-shell='videojs']")) {
+          return;
+        }
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    };
+
+    el.shadowRoot!
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-reopen-1"]'
+      )
+      ?.click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    expect(await 等待查看器壳出现()).not.toBeNull();
+
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
+      ?.click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+    await 等待查看器壳消失();
+
+    expect(document.body.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
+    expect(document.body.querySelector("video")).toBeNull();
+
+    el.shadowRoot!
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-reopen-2"]'
+      )
+      ?.click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const reopenedShell = await 等待查看器壳出现();
+    const reopenedVideo = document.body.querySelector<HTMLVideoElement>("video");
+    expect(reopenedShell).not.toBeNull();
+    expect(reopenedVideo).not.toBeNull();
+    expect(reopenedVideo?.poster).toBe("http://media.local/poster-att-video-reopen-2");
+    expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
+      1
+    );
+
+    el.remove();
+  });
+
   it("媒体播放结果是 expired 时，时间线会统一显示内容已过期", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
