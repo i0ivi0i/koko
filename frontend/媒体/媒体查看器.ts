@@ -272,12 +272,47 @@ const 启动同会话全屏策略 = (
   } = {}
 ): 同会话全屏策略控制器 => {
   const sessionId = `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const 是本会话全屏元素 = (element: Element | null): boolean =>
-    element === fullscreenTarget ||
-    (options.备用全屏目标 != null && element === options.备用全屏目标);
-  const 是主全屏目标 = (element: Element | null): boolean => element === fullscreenTarget;
+  const 读取全屏Owner链 = (target: Element | null): Element[] => {
+    if (!target) {
+      return [];
+    }
+    const owners: Element[] = [target];
+    let 当前节点: Element | null = target;
+    while (当前节点) {
+      const root: Node | null =
+        typeof 当前节点.getRootNode === "function" ? 当前节点.getRootNode() : null;
+      if (typeof ShadowRoot === "undefined" || !(root instanceof ShadowRoot)) {
+        break;
+      }
+      const host: Element | null = root.host;
+      if (!host || owners.includes(host)) {
+        break;
+      }
+      /**
+       * 浏览器可能把 shadow 内部节点的系统全屏状态上卷到 host（如 video-skin）。
+       * owner 判定必须沿 host 链展开，避免“明明进了全屏却被误判没接管”。
+       */
+      owners.push(host);
+      当前节点 = host;
+    }
+    return owners;
+  };
+  const 主目标Owner链 = 读取全屏Owner链(fullscreenTarget);
+  const 备用目标Owner链 = 读取全屏Owner链(options.备用全屏目标 ?? null);
+  const 主目标Owner集合 = new Set<Element>(主目标Owner链);
+  const 备用目标Owner集合 = new Set<Element>(备用目标Owner链);
+  const 元素落在Owner链里 = (element: Element | null, owners: Set<Element>): boolean => {
+    if (!element || owners.size === 0) {
+      return false;
+    }
+    return 读取全屏Owner链(element).some((owner) => owners.has(owner));
+  };
+  const 是主全屏目标 = (element: Element | null): boolean =>
+    元素落在Owner链里(element, 主目标Owner集合);
   const 是备用全屏目标 = (element: Element | null): boolean =>
-    options.备用全屏目标 != null && element === options.备用全屏目标;
+    元素落在Owner链里(element, 备用目标Owner集合);
+  const 是本会话全屏元素 = (element: Element | null): boolean =>
+    是主全屏目标(element) || 是备用全屏目标(element);
   let cleaned = false;
   let 本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
   let 主全屏目标已接管 = 是主全屏目标(document.fullscreenElement);

@@ -163,6 +163,50 @@ const 安装可回退全屏堆栈模拟 = () => {
   return { requestFullscreen, exitFullscreen };
 };
 
+const 安装ShadowHost全屏DOM模拟 = () => {
+  let fullscreenElement: Element | null = null;
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    const root = this.getRootNode?.();
+    if (typeof ShadowRoot !== "undefined" && root instanceof ShadowRoot) {
+      fullscreenElement = root.host;
+    } else {
+      fullscreenElement = this;
+    }
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  const exitFullscreen = vi.fn(() => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  const play = vi.fn(() => Promise.resolve());
+  const pause = vi.fn();
+  const createElement = document.createElement.bind(document);
+  vi.spyOn(document, "createElement").mockImplementation(
+    ((tagName: string, options?: ElementCreationOptions) => {
+      const element = createElement(tagName, options);
+      if (tagName.toLowerCase() === "video") {
+        Object.assign(element, { play, pause });
+      }
+      return element;
+    }) as typeof document.createElement
+  );
+  return { requestFullscreen, exitFullscreen, play, pause };
+};
+
 const 读取VideoJs媒体容器 = (): HTMLElement | null => {
   const skin = document.body.querySelector("video-skin");
   return skin?.shadowRoot?.querySelector("media-container") ?? null;
@@ -1114,6 +1158,41 @@ describe("媒体查看器适配器", () => {
     expect(exitFullscreen).toHaveBeenCalled();
     expect(unlock).toHaveBeenCalled();
     expect(pause).toHaveBeenCalled();
+    expect(document.body.querySelector("video")).toBeNull();
+  });
+
+  it("系统全屏元素落到 shadow host 时，一次系统退出也会直接回到群聊", async () => {
+    const { requestFullscreen, exitFullscreen } = 安装ShadowHost全屏DOM模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-shadow-host-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-shadow-host-1",
+          src: "blob:http://media.local/mobile-shadow-host-video-1",
+          posterSrc: "http://media.local/poster-mobile-shadow-host-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(document.fullscreenElement?.tagName).toBe("VIDEO-SKIN");
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
+
+    await document.exitFullscreen?.();
+    await Promise.resolve();
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(document.fullscreenElement).toBeNull();
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
     expect(document.body.querySelector("video")).toBeNull();
   });
 
