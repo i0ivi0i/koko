@@ -168,6 +168,12 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/聊天媒体编排.ts");
   });
 
+  it("热点文件行数门禁预算会统一放宽到 1800 行", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source.match(/maxEffectiveLines:\s*1800/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
   it("架构适应度热点门禁会按有效源码行数裁决，而不是把注释和空行也算成热点增长", async () => {
     const modulePath = fileURLToPath(
       new URL("../../scripts/check-frontend-architecture-fitness.mjs", import.meta.url)

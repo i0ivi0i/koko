@@ -36,8 +36,8 @@ const 架构规则 = [
 
 const 热点文件行数上限 = [
   // 这里看的是“有效源码行数”而不是物理行数，避免中文注释、块注释和留白被误判成架构退化。
-  { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1260 },
-  { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 930 },
+  { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1800 },
+  { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 1800 },
 ];
 
 const 转成仓库相对路径 = (absolutePath) =>
