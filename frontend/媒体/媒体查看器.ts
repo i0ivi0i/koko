@@ -669,12 +669,17 @@ const 创建默认VideoJs播放器层 = async (
 export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   const createPhotoSwipeLightbox =
     deps.createPhotoSwipeLightbox ?? 创建默认PhotoSwipeLightbox;
-  const isMobileViewport = deps.isMobileViewport ?? 是移动触屏视口;
   const createVideoJsPlayerShell =
     deps.createVideoJsPlayerShell ??
     ((item, lifecycle, hooks) =>
       创建默认VideoJs播放器层(item, lifecycle, hooks, {
-        shouldAutoEnterFullscreen: isMobileViewport(),
+        /**
+         * 从消息流显式打开正式视频查看器，本身就是“进入沉浸观看”的明确用户意图。
+         * 真全屏不该只在移动端成立；桌面端也要沿同一条 overlay/fullscreen owner 链
+         * 先尝试系统 fullscreen，失败时再自然回落到同一个查看器表面，而不是另起
+         * 一套“桌面放大卡片”的假全屏分支。
+         */
+        shouldAutoEnterFullscreen: true,
       }));
   let current: 媒体查看器实例 | null = null;
   let openGeneration = 0;

@@ -374,7 +374,8 @@ describe("媒体查看器适配器", () => {
     expect(createPhotoSwipeLightbox).not.toHaveBeenCalled();
   });
 
-  it("桌面端视频会进入同一个 Video.js 壳，而不是再分成多条正式实现", async () => {
+  it("桌面端显式打开视频时，会直接进入真全屏查看器而不是停在放大卡片", async () => {
+    const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({
       isMobileViewport: () => false,
     });
@@ -394,13 +395,17 @@ describe("媒体查看器适配器", () => {
     });
     const provider = await 等待查询元素<HTMLElement>("video-player[data-player-shell='videojs']");
     const video = document.body.querySelector("video");
+    const overlay = document.body.querySelector<HTMLElement>('[aria-label="视频查看器"]');
     const mount = document.body.querySelector<HTMLElement>("[data-media-viewer-mount='video']");
 
     expect(provider).not.toBeNull();
     expect(video).toBeInstanceOf(HTMLVideoElement);
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
     expect(mount).not.toBeNull();
     expect(mount?.style.width).toBe("100%");
-    expect(mount?.style.maxWidth).toBe("1120px");
+    expect(mount?.style.maxWidth).toBe("100%");
+    expect(mount?.dataset.mediaViewerImmersive).toBe("true");
     expect(provider?.style.width).toBe("100%");
     expect(读取VideoJs媒体容器()?.style.width).toBe("100%");
     expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
@@ -630,12 +635,10 @@ describe("媒体查看器适配器", () => {
     expect(video).not.toBeNull();
 
     video?.dispatchEvent(new Event("waiting"));
-    expect(信号记录).toEqual([
-      {
-        attachmentId: "att-video-sync-1",
-        signal: { type: "PLAYER_WAITING" },
-      },
-    ]);
+    expect(信号记录.at(-1)).toEqual({
+      attachmentId: "att-video-sync-1",
+      signal: { type: "PLAYER_WAITING" },
+    });
 
     viewer.同步({
       startAttachmentId: "att-video-sync-1",
