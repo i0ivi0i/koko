@@ -96,13 +96,21 @@ type PhotoSwipeLightbox构造器 = new (
   options: PhotoSwipe查看器选项
 ) => 媒体查看器实例;
 
-type 可原生全屏视频元素 = HTMLVideoElement;
+type 可原生全屏视频元素 = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitEnterFullScreen?: () => void;
+  webkitExitFullscreen?: () => void;
+  webkitExitFullScreen?: () => void;
+  webkitSupportsFullscreen?: boolean;
+  webkitDisplayingFullscreen?: boolean;
+};
 type 可原生全屏容器元素 = HTMLElement & {
   requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
 };
 type 媒体方向锁 = "portrait" | "landscape";
 type 同会话全屏策略控制器 = {
   清理(): void;
+  请求关闭(): void;
 };
 type 可锁定屏幕方向 = ScreenOrientation & {
   lock?: (orientation: 媒体方向锁) => Promise<void>;
@@ -110,6 +118,41 @@ type 可锁定屏幕方向 = ScreenOrientation & {
 };
 
 const 媒体全屏历史键 = "__kokoMediaFullscreenSession";
+
+const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolean => {
+  if (video.webkitSupportsFullscreen === false) {
+    return false;
+  }
+  try {
+    if (typeof video.webkitEnterFullscreen === "function") {
+      video.webkitEnterFullscreen();
+      return true;
+    }
+    if (typeof video.webkitEnterFullScreen === "function") {
+      video.webkitEnterFullScreen();
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
+
+const 退出原生视频真全屏 = (video: 可原生全屏视频元素): boolean => {
+  try {
+    if (typeof video.webkitExitFullscreen === "function") {
+      video.webkitExitFullscreen();
+      return true;
+    }
+    if (typeof video.webkitExitFullScreen === "function") {
+      video.webkitExitFullScreen();
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
 
 const 映射PhotoSwipe图片 = (item: 媒体查看器图片项目): PhotoSwipe数据源项目 => ({
   src: item.src,
@@ -219,12 +262,13 @@ const 启动同会话全屏策略 = (
   fullscreenTarget: 可原生全屏容器元素,
   container: 可原生全屏容器元素,
   video: 可原生全屏视频元素,
-  请求关闭查看器: () => void,
+  回收查看器: () => void,
   options: { 已预请求系统全屏?: boolean } = {}
 ): 同会话全屏策略控制器 => {
   const sessionId = `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let cleaned = false;
   let 本会话已接管系统全屏 = document.fullscreenElement === fullscreenTarget;
+  let 本会话正在原生视频全屏 = false;
   let historyPushed = false;
   let historyConsumedByUser = false;
   let historyCleanupInProgress = false;
@@ -266,6 +310,19 @@ const 启动同会话全屏策略 = (
     container.dataset.videoOrientation = metadataOrientation;
     lockScreenOrientation();
   };
+  const handleNativeVideoFullscreenStart = (): void => {
+    本会话已接管系统全屏 = true;
+    本会话正在原生视频全屏 = true;
+    lockScreenOrientation();
+  };
+  const handleNativeVideoFullscreenEnd = (): void => {
+    if (!本会话正在原生视频全屏 && !video.webkitDisplayingFullscreen) {
+      return;
+    }
+    本会话正在原生视频全屏 = false;
+    cleanup();
+    回收查看器();
+  };
   const cleanup = (): void => {
     if (cleaned) {
       return;
@@ -277,6 +334,8 @@ const 启动同会话全屏策略 = (
     }
     document.removeEventListener("fullscreenchange", handleFullscreenChange);
     video.removeEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
+    video.removeEventListener("webkitbeginfullscreen", handleNativeVideoFullscreenStart);
+    video.removeEventListener("webkitendfullscreen", handleNativeVideoFullscreenEnd);
     unlockScreenOrientation();
     if (
       historyPushed &&
@@ -294,14 +353,30 @@ const 启动同会话全屏策略 = (
   };
   const closeFullscreen = (): void => {
     if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
-      void document.exitFullscreen().catch(() => {
-        cleanup();
-        请求关闭查看器();
-      });
+      /**
+       * 标准 Fullscreen API 的迟到 `fullscreenchange` 需要继续走全局“待结算退出”保护，
+       * 否则上一条视频的退出事件会误打到下一条会话。
+       * 这里沿用既有真相：先标记待结算，再启动浏览器退出，查看器本体立即回收；
+       * 真正迟到的浏览器事件只负责清标志，不再二次驱动关闭。
+       */
+      存在待结算的系统全屏退出 = true;
+      void document.exitFullscreen()
+        .catch(() => undefined)
+        .finally(() => {
+          存在待结算的系统全屏退出 = false;
+        });
+      cleanup();
+      回收查看器();
+      return;
+    }
+    if (
+      (本会话正在原生视频全屏 || video.webkitDisplayingFullscreen) &&
+      退出原生视频真全屏(video)
+    ) {
       return;
     }
     cleanup();
-    请求关闭查看器();
+    回收查看器();
   };
   const handlePopState = (): void => {
     if (historyCleanupInProgress) {
@@ -329,8 +404,11 @@ const 启动同会话全屏策略 = (
       return;
     }
     if (!document.fullscreenElement) {
+      if (本会话正在原生视频全屏 || video.webkitDisplayingFullscreen) {
+        return;
+      }
       cleanup();
-      请求关闭查看器();
+      回收查看器();
     }
   };
   const pushMediaHistoryEntry = (): void => {
@@ -359,6 +437,8 @@ const 启动同会话全屏策略 = (
   container.dataset.videoOrientation = videoOrientation ?? "natural";
   document.addEventListener("fullscreenchange", handleFullscreenChange);
   video.addEventListener("loadedmetadata", syncOrientationFromVideoMetadata);
+  video.addEventListener("webkitbeginfullscreen", handleNativeVideoFullscreenStart);
+  video.addEventListener("webkitendfullscreen", handleNativeVideoFullscreenEnd);
   pushMediaHistoryEntry();
 
   /**
@@ -381,12 +461,17 @@ const 启动同会话全屏策略 = (
         startPlayback();
       })
       .catch(() => undefined);
+  } else if (!存在待结算的系统全屏退出 && 请求原生视频真全屏(video)) {
+    本会话已接管系统全屏 = true;
+    本会话正在原生视频全屏 = true;
+    lockScreenOrientation();
   } else {
     lockScreenOrientation();
   }
 
   return {
     清理: cleanup,
+    请求关闭: closeFullscreen,
   };
 };
 
@@ -449,12 +534,13 @@ const 创建默认VideoJs播放器层 = async (
     void overlay.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
   }
 
-  let 当前视频项目 = item;
-  let cleaned = false;
-  let 解绑媒体运行时信号: () => void = () => undefined;
-  let 清理全屏策略: 同会话全屏策略控制器 = {
-    清理: () => undefined,
-  };
+    let 当前视频项目 = item;
+    let cleaned = false;
+    let 解绑媒体运行时信号: () => void = () => undefined;
+    let 清理全屏策略: 同会话全屏策略控制器 = {
+      清理: () => undefined,
+      请求关闭: () => undefined,
+    };
   const 挂接P2PHls增强层 = async ({ hls }: 壳外P2PHls增强层输入): Promise<void> => {
     /**
      * `p2p-media-loader-hlsjs` 在这里始终只是 HLS 支路的外挂增强：
@@ -516,16 +602,14 @@ const 创建默认VideoJs播放器层 = async (
       overlay.remove();
       lifecycle.结束视口占用();
     };
+    清理全屏策略.请求关闭 = cleanup;
     const 请求关闭 = (): void => {
-      if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
-        存在待结算的系统全屏退出 = true;
-        void document.exitFullscreen()
-          .catch(() => undefined)
-          .finally(() => {
-            存在待结算的系统全屏退出 = false;
-          });
-      }
-      cleanup();
+      /**
+       * 所有“关闭当前视频查看器”的用户意图，都先交回同一条全屏策略 owner 链。
+       * 这样标准 Fullscreen API、iPhone 的原生 webkit fullscreen，以及无全屏能力的普通对话框，
+       * 都只维护一套退出与回收顺序，不会再出现壳层直接 cleanup、策略层却还没退全屏的双真相。
+       */
+      清理全屏策略.请求关闭();
     };
     const closeWhenClickingBackdrop = (event: MouseEvent): void => {
       if (event.target === overlay) {
@@ -548,7 +632,7 @@ const 创建默认VideoJs播放器层 = async (
         overlay,
         container,
         video,
-        请求关闭,
+        cleanup,
         {
           已预请求系统全屏: 已在查看器表面预请求系统全屏,
         }

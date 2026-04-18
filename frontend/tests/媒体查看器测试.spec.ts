@@ -853,7 +853,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
   });
 
-  it("移动端缺少标准 Fullscreen API 时，会继续停留在应用查看器里而不是逃逸到原生 webkit 全屏旁路", async () => {
+  it("移动端缺少标准 Fullscreen API 时，会退回 video 原生 webkit fullscreen 真全屏", async () => {
     const play = vi.fn(() => Promise.resolve());
     const pause = vi.fn();
     const webkitEnterFullscreen = vi.fn();
@@ -891,9 +891,114 @@ describe("媒体查看器适配器", () => {
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
 
-    expect(webkitEnterFullscreen).not.toHaveBeenCalled();
+    expect(webkitEnterFullscreen).toHaveBeenCalledTimes(1);
     expect(document.body.querySelector("[data-media-viewer-mount='video']")).not.toBeNull();
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
+  });
+
+  it("移动端原生 webkit 全屏退出时，会沿同一条关闭链回收查看器", async () => {
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    const webkitEnterFullscreen = vi.fn();
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(
+      ((tagName: string, options?: ElementCreationOptions) => {
+        const element = createElement(tagName, options);
+        if (tagName.toLowerCase() === "video") {
+          Object.assign(element, {
+            play,
+            pause,
+            webkitEnterFullscreen,
+          });
+        }
+        return element;
+      }) as typeof document.createElement
+    );
+
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-native-close-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-native-close-1",
+          src: "blob:http://media.local/mobile-native-close-video-1",
+          posterSrc: "http://media.local/poster-mobile-native-close-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+    const 已打开视频 = document.body.querySelector<HTMLVideoElement>("video");
+
+    expect(webkitEnterFullscreen).toHaveBeenCalledTimes(1);
+    expect(已打开视频).not.toBeNull();
+
+    已打开视频?.dispatchEvent(new Event("webkitendfullscreen"));
+    await Promise.resolve();
+
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
+    expect(document.body.querySelector("video")).toBeNull();
+    expect(pause).toHaveBeenCalled();
+  });
+
+  it("移动端原生 webkit 全屏活跃时，关闭请求会先退出原生全屏再回收查看器", async () => {
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    const webkitEnterFullscreen = vi.fn(function (this: HTMLVideoElement) {
+      this.dispatchEvent(new Event("webkitbeginfullscreen"));
+    });
+    const webkitExitFullscreen = vi.fn(function (this: HTMLVideoElement) {
+      this.dispatchEvent(new Event("webkitendfullscreen"));
+    });
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(
+      ((tagName: string, options?: ElementCreationOptions) => {
+        const element = createElement(tagName, options);
+        if (tagName.toLowerCase() === "video") {
+          Object.assign(element, {
+            play,
+            pause,
+            webkitEnterFullscreen,
+            webkitExitFullscreen,
+          });
+        }
+        return element;
+      }) as typeof document.createElement
+    );
+
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-native-close-button-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-native-close-button-1",
+          src: "blob:http://media.local/mobile-native-close-button-video-1",
+          posterSrc: "http://media.local/poster-mobile-native-close-button-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
+      ?.click();
+    await Promise.resolve();
+
+    expect(webkitExitFullscreen).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
+    expect(document.body.querySelector("video")).toBeNull();
+    expect(pause).toHaveBeenCalled();
   });
 
   it("竖屏视频进入移动端全屏时锁定 portrait，并在元数据更可信时纠正方向", async () => {

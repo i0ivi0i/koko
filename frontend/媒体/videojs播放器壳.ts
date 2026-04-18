@@ -23,7 +23,14 @@ type 可请求全屏容器 = HTMLElement & {
   requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
 };
 
-type 可原生全屏视频元素 = HTMLVideoElement;
+type 可原生全屏视频元素 = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitEnterFullScreen?: () => void;
+  webkitExitFullscreen?: () => void;
+  webkitExitFullScreen?: () => void;
+  webkitSupportsFullscreen?: boolean;
+  webkitDisplayingFullscreen?: boolean;
+};
 const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
 
 type 可兼容远端播放对象 = {
@@ -121,6 +128,25 @@ const 兼容RemotePlayback异步契约 = (video: 可原生全屏视频元素): v
    * 这里把宿主差异收口在壳适配层，避免销毁阶段因为测试/非标运行时而炸掉整个播放会话。
    */
   remote[远端播放Promise兼容标记] = true;
+};
+
+const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolean => {
+  if (video.webkitSupportsFullscreen === false) {
+    return false;
+  }
+  try {
+    if (typeof video.webkitEnterFullscreen === "function") {
+      video.webkitEnterFullscreen();
+      return true;
+    }
+    if (typeof video.webkitEnterFullScreen === "function") {
+      video.webkitEnterFullScreen();
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 };
 
 const 注册默认VideoJs元素 = async (): Promise<void> => {
@@ -384,13 +410,15 @@ export async function 创建VideoJs播放器壳(
         return;
       }
       /**
-       * 官方文档要求 fullscreen 以 container 为准，而不是 video 元素。
-       * 当前浏览器应用化路线里，这个壳只负责 app-owned surface；
-       * 如果标准 Fullscreen API 不可用，就维持当前壳布局，不再逃逸到原生 video controller。
+       * Video.js 官方 v10 建议是 container 优先、media element 回退。
+       * 这条统一 intent 在桌面/Android 上通常落到标准 Fullscreen API，
+       * 在 iPhone Safari 这类只给 video 原生全屏的环境里，则必须回退到 video。
        */
       if (typeof root.container.requestFullscreen === "function") {
         await root.container.requestFullscreen({ navigationUI: "hide" });
+        return;
       }
+      请求原生视频真全屏(root.video);
     },
     读取容器元素() {
       return root.container;

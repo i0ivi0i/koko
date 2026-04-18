@@ -385,7 +385,7 @@ describe("Video.js 播放器壳", () => {
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
-  it("缺少标准 Fullscreen API 时，播放器壳不会退回原生 webkit fullscreen 旁路", async () => {
+  it("缺少标准 Fullscreen API 时，播放器壳会退回 video 原生 webkit fullscreen", async () => {
     const createPlayer = vi.fn(() => {
       const root = 创建假播放器根();
       Object.assign(root.video, {
@@ -410,7 +410,7 @@ describe("Video.js 播放器壳", () => {
     await shell.进入全屏();
 
     const root = createPlayer.mock.results[0]?.value;
-    expect(root?.video.webkitEnterFullscreen).not.toHaveBeenCalled();
+    expect(root?.video.webkitEnterFullscreen).toHaveBeenCalledTimes(1);
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
 
     shell.destroy();
