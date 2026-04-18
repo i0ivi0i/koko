@@ -102,12 +102,12 @@ Cohesion: 0.12
 Nodes (1): HttpRealtime传输
 
 ### Community 8 - "Community 8"
-Cohesion: 0.12
-Nodes (2): FakeWebTorrent, 假Socket
-
-### Community 9 - "Community 9"
 Cohesion: 0.22
 Nodes (15): collect_result(), ensure_http_url(), find_command(), 读取JSON(), LauncherHandle, now_iso(), parse_concurrency_levels(), round_or_none() (+7 more)
+
+### Community 9 - "Community 9"
+Cohesion: 0.12
+Nodes (2): FakeWebTorrent, 假Socket
 
 ### Community 10 - "Community 10"
 Cohesion: 0.17
@@ -228,7 +228,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.073) - this node is a cross-community bridge._
 - **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 15`?**
   _High betweenness centrality (0.070) - this node is a cross-community bridge._
-- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`, `Community 9`?**
+- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 8`, `Community 0`?**
   _High betweenness centrality (0.056) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._
