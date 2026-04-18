@@ -168,6 +168,44 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/聊天媒体编排.ts");
   });
 
+  it("架构适应度热点门禁会按有效源码行数裁决，而不是把注释和空行也算成热点增长", async () => {
+    const modulePath = fileURLToPath(
+      new URL("../../scripts/check-frontend-architecture-fitness.mjs", import.meta.url)
+    );
+    const script = await import(modulePath);
+    const source = `
+const keep = true;
+
+// 纯注释不该把热点文件误判成增长
+/*
+ * JSDoc 和块注释也不该算进复杂度预算
+ */
+const stillKeep = true;
+`;
+
+    expect(script.统计有效源码行数(source)).toBe(2);
+    expect(
+      script.检查热点文件增长(
+        [{ path: "virtual.ts", maxEffectiveLines: 2 }],
+        (path: string) => {
+          expect(path).toBe("virtual.ts");
+          return source;
+        }
+      )
+    ).toEqual([]);
+    expect(
+      script.检查热点文件增长(
+        [{ path: "virtual.ts", maxEffectiveLines: 1 }],
+        () => source
+      )
+    ).toEqual([
+      expect.objectContaining({
+        file: "virtual.ts",
+        label: "hotspot growth ratchet",
+      }),
+    ]);
+  });
+
   it("宪法守门会拦住协作分发全局 singleton 和新增浏览器全局旁路", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-browser-app-constitution.mjs");
 

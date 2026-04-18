@@ -2,7 +2,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const 当前文件目录 = dirname(fileURLToPath(import.meta.url));
+const 当前脚本路径 = fileURLToPath(import.meta.url);
+const 当前文件目录 = dirname(当前脚本路径);
 const 仓库根目录 = resolve(当前文件目录, "..");
 const 前端目录 = join(仓库根目录, "frontend");
 
@@ -34,9 +35,9 @@ const 架构规则 = [
 ];
 
 const 热点文件行数上限 = [
-  // 这两个文件仍是应用编排热点。新增功能不能继续往热点里堆，必须先拆回 owner / 用例 / adapter。
-  { path: "frontend/聊天应用内核.ts", maxLines: 1800 },
-  { path: "frontend/聊天媒体编排.ts", maxLines: 1004 },
+  // 这里看的是“有效源码行数”而不是物理行数，避免中文注释、块注释和留白被误判成架构退化。
+  { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1260 },
+  { path: "frontend/聊天媒体编排.ts", maxEffectiveLines: 930 },
 ];
 
 const 转成仓库相对路径 = (absolutePath) =>
@@ -45,9 +46,44 @@ const 转成仓库相对路径 = (absolutePath) =>
 const 读取源码 = (relativePath) =>
   readFileSync(join(仓库根目录, relativePath), "utf8");
 
-const 统计源码行数 = (source) => {
-  const lines = source.split(/\r?\n/);
-  return source.endsWith("\n") ? lines.length - 1 : lines.length;
+export const 统计有效源码行数 = (source) => {
+  let 位于块注释内 = false;
+  let count = 0;
+  for (const line of source.split(/\r?\n/)) {
+    let text = line.trim();
+    if (!text) {
+      continue;
+    }
+    while (text) {
+      if (位于块注释内) {
+        const commentEnd = text.indexOf("*/");
+        if (commentEnd === -1) {
+          text = "";
+          break;
+        }
+        text = text.slice(commentEnd + 2).trim();
+        位于块注释内 = false;
+        continue;
+      }
+      if (text.startsWith("//") || text === "*" || text.startsWith("* ")) {
+        text = "";
+        break;
+      }
+      if (text.startsWith("/*")) {
+        const commentEnd = text.indexOf("*/", 2);
+        if (commentEnd === -1) {
+          位于块注释内 = true;
+          text = "";
+          break;
+        }
+        text = text.slice(commentEnd + 2).trim();
+        continue;
+      }
+      count += 1;
+      break;
+    }
+  }
+  return count;
 };
 
 const 收集文件 = (directory) => {
@@ -145,41 +181,50 @@ const 检查未登记XStateOwner = (files) => {
   return violations;
 };
 
-const 检查热点文件增长 = () => {
+export const 检查热点文件增长 = (
+  hotFiles = 热点文件行数上限,
+  readSource = 读取源码
+) => {
   const violations = [];
-  for (const hotFile of 热点文件行数上限) {
-    const lineCount = 统计源码行数(读取源码(hotFile.path));
-    if (lineCount <= hotFile.maxLines) {
+  for (const hotFile of hotFiles) {
+    const lineCount = 统计有效源码行数(readSource(hotFile.path));
+    if (lineCount <= hotFile.maxEffectiveLines) {
       continue;
     }
     violations.push({
       file: hotFile.path,
       label: "hotspot growth ratchet",
-      detail: `${lineCount} 行超过上限 ${hotFile.maxLines} 行`,
+      detail: `${lineCount} 行超过有效上限 ${hotFile.maxEffectiveLines} 行`,
     });
   }
   return violations;
 };
 
-const files = 收集文件(前端目录);
-const 违规记录 = [
-  ...检查Owner注册表(),
-  ...检查未登记XStateOwner(files),
-  ...检查热点文件增长(),
-];
+export const 收集架构适应度违规 = () => {
+  const files = 收集文件(前端目录);
+  const 违规记录 = [
+    ...检查Owner注册表(),
+    ...检查未登记XStateOwner(files),
+    ...检查热点文件增长(),
+  ];
 
-for (const absolutePath of files) {
-  const relativePath = 转成仓库相对路径(absolutePath);
-  const source = readFileSync(absolutePath, "utf8");
-  违规记录.push(...平台内层Import违规(relativePath, source));
-}
-
-if (违规记录.length > 0) {
-  console.error("前端架构适应度检查失败：发现浏览器应用化防漂移规则被破坏。");
-  for (const violation of 违规记录) {
-    console.error(`- ${violation.file}: ${violation.label} (${violation.detail})`);
+  for (const absolutePath of files) {
+    const relativePath = 转成仓库相对路径(absolutePath);
+    const source = readFileSync(absolutePath, "utf8");
+    违规记录.push(...平台内层Import违规(relativePath, source));
   }
-  process.exit(1);
-}
+  return 违规记录;
+};
 
-console.log("前端架构适应度检查通过。");
+if (process.argv[1] && resolve(process.argv[1]) === 当前脚本路径) {
+  const 违规记录 = 收集架构适应度违规();
+  if (违规记录.length > 0) {
+    console.error("前端架构适应度检查失败：发现浏览器应用化防漂移规则被破坏。");
+    for (const violation of 违规记录) {
+      console.error(`- ${violation.file}: ${violation.label} (${violation.detail})`);
+    }
+    process.exit(1);
+  }
+
+  console.log("前端架构适应度检查通过。");
+}
