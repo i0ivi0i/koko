@@ -52,6 +52,52 @@ const 安装全屏DOM模拟 = () => {
   return { requestFullscreen, exitFullscreen, play, pause };
 };
 
+const 安装严格瞬时激活全屏模拟 = () => {
+  let fullscreenElement: Element | null = null;
+  let 当前存在瞬时激活 = false;
+  const 激活快照: boolean[] = [];
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    激活快照.push(当前存在瞬时激活);
+    if (!当前存在瞬时激活) {
+      return Promise.reject(new Error("Fullscreen requires transient activation"));
+    }
+    fullscreenElement = this;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  const exitFullscreen = vi.fn(() => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+
+  return {
+    requestFullscreen,
+    exitFullscreen,
+    激活快照,
+    以瞬时激活执行<T>(action: () => T): T {
+      当前存在瞬时激活 = true;
+      try {
+        return action();
+      } finally {
+        当前存在瞬时激活 = false;
+      }
+    },
+  };
+};
+
 const 读取VideoJs媒体容器 = (): HTMLElement | null => {
   const skin = document.body.querySelector("video-skin");
   return skin?.shadowRoot?.querySelector("media-container") ?? null;
@@ -680,6 +726,67 @@ describe("媒体查看器适配器", () => {
     );
   });
 
+  it("移动端首击打开时，会在异步 Video.js 壳就绪前先请求系统全屏，避免丢失用户激活", async () => {
+    vi.resetModules();
+    const 延迟壳解析器: Array<() => void> = [];
+    const 创建VideoJs播放器壳 = vi.fn(
+      (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) =>
+        new Promise((resolve) => {
+          延迟壳解析器.push(() => {
+            const video = document.createElement("video");
+            Object.assign(video, {
+              play: vi.fn(() => Promise.resolve()),
+              pause: vi.fn(),
+            });
+            const container = document.createElement("div");
+            container.className = "fake-mobile-container";
+            (deps?.mountTarget ?? document.body).append(container, video);
+            resolve({
+              destroy: vi.fn(),
+              同步: vi.fn(),
+              读取视频元素: () => video,
+              读取容器元素: () => container,
+            });
+          });
+        })
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+    }));
+    const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
+    const { requestFullscreen, 激活快照, 以瞬时激活执行 } = 安装严格瞬时激活全屏模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    以瞬时激活执行(() =>
+      viewer.打开({
+        startAttachmentId: "att-video-mobile-activation-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-mobile-activation-1",
+            src: "blob:http://media.local/mobile-activation-video-1",
+            posterSrc: "http://media.local/poster-mobile-activation-1",
+            width: 720,
+            height: 1280,
+          },
+        ],
+      })
+    );
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(激活快照).toEqual([true]);
+    expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector("[data-media-viewer-mount='video']")).not.toBeNull();
+
+    延迟壳解析器.at(0)?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
+  });
+
   it("移动端缺少标准 Fullscreen API 时，会继续停留在应用查看器里而不是逃逸到原生 webkit 全屏旁路", async () => {
     const play = vi.fn(() => Promise.resolve());
     const pause = vi.fn();
@@ -797,6 +904,142 @@ describe("媒体查看器适配器", () => {
     expect(unlock).toHaveBeenCalled();
     expect(pause).toHaveBeenCalled();
     expect(document.body.querySelector("video")).toBeNull();
+  });
+
+  it("移动端关闭上一条视频后，下一条视频的首击仍会立即请求系统全屏，不需要等第二次点击", async () => {
+    vi.resetModules();
+    const 延迟壳解析器: Array<() => void> = [];
+    const 创建VideoJs播放器壳 = vi.fn(
+      (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) =>
+        new Promise((resolve) => {
+          延迟壳解析器.push(() => {
+            const video = document.createElement("video");
+            Object.assign(video, {
+              play: vi.fn(() => Promise.resolve()),
+              pause: vi.fn(),
+            });
+            const container = document.createElement("div");
+            container.className = "fake-mobile-container";
+            (deps?.mountTarget ?? document.body).append(container, video);
+            resolve({
+              destroy: vi.fn(),
+              同步: vi.fn(),
+              读取视频元素: () => video,
+              读取容器元素: () => container,
+            });
+          });
+        })
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+    }));
+    const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
+    const { requestFullscreen, 激活快照, 以瞬时激活执行 } = 安装严格瞬时激活全屏模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    以瞬时激活执行(() =>
+      viewer.打开({
+        startAttachmentId: "att-video-mobile-reopen-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-mobile-reopen-1",
+            src: "blob:http://media.local/mobile-reopen-video-1",
+            posterSrc: "http://media.local/poster-mobile-reopen-1",
+            width: 720,
+            height: 1280,
+          },
+        ],
+      })
+    );
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    延迟壳解析器.at(0)?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
+      ?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    以瞬时激活执行(() =>
+      viewer.打开({
+        startAttachmentId: "att-video-mobile-reopen-2",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-mobile-reopen-2",
+            src: "blob:http://media.local/mobile-reopen-video-2",
+            posterSrc: "http://media.local/poster-mobile-reopen-2",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      })
+    );
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(2);
+    expect(激活快照).toEqual([true, true]);
+
+    延迟壳解析器.at(1)?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
+  });
+
+  it("移动端新会话在自己尚未真正接管系统全屏前，不会被迟到的空 fullscreenchange 误关掉", async () => {
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      value: null,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: vi.fn(() => Promise.resolve()),
+    });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn(() => Promise.resolve()),
+    });
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation(
+      ((tagName: string, options?: ElementCreationOptions) => {
+        const element = createElement(tagName, options);
+        if (tagName.toLowerCase() === "video") {
+          Object.assign(element, { play, pause });
+        }
+        return element;
+      }) as typeof document.createElement
+    );
+
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-stale-exit-2",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-stale-exit-2",
+          src: "blob:http://media.local/mobile-stale-exit-video-2",
+          posterSrc: "http://media.local/poster-mobile-stale-exit-2",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await 等待查询元素("video-player[data-player-shell='videojs']");
+
+    document.dispatchEvent(new Event("fullscreenchange"));
+    await Promise.resolve();
+
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
+    expect(document.body.querySelector("video")).toBeInstanceOf(HTMLVideoElement);
   });
 
   it("关闭视频查看器后，再打开另一条视频时会重新创建同一套查看器壳，而不是复用已销毁实例", async () => {

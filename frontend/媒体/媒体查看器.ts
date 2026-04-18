@@ -206,12 +206,15 @@ const 映射VideoJs播放源 = (item: 媒体查看器视频项目): VideoJs播�
 
 const 启动同会话全屏策略 = (
   读取当前项目: () => 媒体查看器视频项目,
+  fullscreenTarget: 可原生全屏容器元素,
   container: 可原生全屏容器元素,
   video: 可原生全屏视频元素,
-  请求关闭查看器: () => void
+  请求关闭查看器: () => void,
+  options: { 已预请求系统全屏?: boolean } = {}
 ): (() => void) => {
   const sessionId = `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let cleaned = false;
+  let 本会话已接管系统全屏 = document.fullscreenElement === fullscreenTarget;
   let historyPushed = false;
   let historyConsumedByUser = false;
   let historyCleanupInProgress = false;
@@ -300,6 +303,18 @@ const 启动同会话全屏策略 = (
     closeFullscreen();
   };
   const handleFullscreenChange = (): void => {
+    if (document.fullscreenElement === fullscreenTarget) {
+      本会话已接管系统全屏 = true;
+      return;
+    }
+    /**
+     * 移动端第一次申请系统全屏、或上一会话迟到的退出事件，都可能抛出
+     * `fullscreenchange` 但当前会话其实还没真正接管系统全屏。
+     * 只有本会话确认进过系统全屏后，`null` 才代表“用户退出了当前会话”。
+     */
+    if (!本会话已接管系统全屏) {
+      return;
+    }
     if (!document.fullscreenElement) {
       cleanup();
       请求关闭查看器();
@@ -334,15 +349,18 @@ const 启动同会话全屏策略 = (
   pushMediaHistoryEntry();
 
   /**
-   * 查看器 overlay 本身已经是应用 owner 的全屏表面。
-   * 标准 Fullscreen API 可用时进一步接管系统级展示；不可用时就停留在同一 overlay，
-   * 不能再退回原生 video controller，否则移动端会把会话 owner 让给浏览器。
+   * 真正需要保住用户激活的是“进入系统全屏”这一拍，而不是播放器壳何时异步装好。
+   * 所以这里允许外层先在查看器表面预请求系统全屏；等真实 video 就绪后，再接回同一条
+   * 历史/方向锁/关闭 owner 链，避免移动端首击被异步壳注册吃掉。
    */
   startPlayback();
-  if (typeof container.requestFullscreen === "function") {
-    void container
+  if (options.已预请求系统全屏) {
+    lockScreenOrientation();
+  } else if (typeof fullscreenTarget.requestFullscreen === "function") {
+    void fullscreenTarget
       .requestFullscreen({ navigationUI: "hide" })
       .then(() => {
+        本会话已接管系统全屏 = true;
         lockScreenOrientation();
         startPlayback();
       })
@@ -364,7 +382,7 @@ const 创建默认VideoJs播放器层 = async (
     throw new Error("当前环境没有可用的浏览器文档，无法打开 Video.js 媒体层");
   }
 
-  const overlay = document.createElement("div");
+  const overlay = document.createElement("div") as 可原生全屏容器元素;
   const mount = document.createElement("div");
   const closeButton = document.createElement("button");
 
@@ -392,6 +410,16 @@ const 创建默认VideoJs播放器层 = async (
   overlay.append(mount, closeButton);
   document.body.append(overlay);
   lifecycle.开始视口占用();
+  let 已在查看器表面预请求系统全屏 = false;
+  if (options.shouldAutoEnterFullscreen && typeof overlay.requestFullscreen === "function") {
+    /**
+     * Fullscreen API 需要 transient user activation。
+     * 移动端从消息卡片点击进入时，Video.js 壳注册和挂载往往已经跨出这次手势窗口；
+     * 所以必须先在同步创建好的查看器表面上申请系统全屏，再异步把唯一播放器挂进去。
+     */
+    已在查看器表面预请求系统全屏 = true;
+    void overlay.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+  }
 
   let 当前视频项目 = item;
   let cleaned = false;
@@ -474,13 +502,17 @@ const 创建默认VideoJs播放器层 = async (
     if (options.shouldAutoEnterFullscreen) {
       /**
        * 移动端允许 native fullscreen，但它必须只是同一壳上的展示策略。
-       * 这里继续复用同一个 container/video，不再额外创建第二颗 video。
+       * 这里继续复用同一个查看器 surface + container/video，不再额外创建第二颗 video。
        */
       清理全屏策略 = 启动同会话全屏策略(
         () => 当前视频项目,
+        overlay,
         container,
         video,
-        cleanup
+        cleanup,
+        {
+          已预请求系统全屏: 已在查看器表面预请求系统全屏,
+        }
       );
     }
 
