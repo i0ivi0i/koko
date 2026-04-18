@@ -460,14 +460,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     const manifestUrl = 读取流媒体主链地址(locator);
     if (surface === "viewer" && manifestUrl) {
       /**
-       * 0-24 小时冷备窗口里，查看器正式打开要并行预热 swarm 与 HLS：
-       * 1. 先给 swarm 一个很短预算，命中已热 peer / 本地完整资产时直接让它赢；
-       * 2. 超过预算就立刻把正式播放交给 HLS 秒开，不把查看器卡住；
-       * 3. 即便 HLS 赢了，前面已启动的 swarm 预热仍继续留在后台，供后续 backfill 复用。
+       * 查看器正式打开时，manifest 主链只允许“复用已热 swarm”参与抢跑：
+       * 1. 命中已热 peer / 本地完整资产时，swarm 仍可在短预算内直接赢下首播；
+       * 2. 没命中就立刻让 HLS 秒开，不在首开裁决里冷启 raw whole-file 会话；
+       * 3. 真正的整附件补齐仍由后续显式 backfill owner 决定，避免移动端首开被 original 冷源抢成下载风暴。
        */
       const distribution = 读取协作分发定位片段(locator);
       const swarmWarmup = distribution
-        ? 尝试协作分发主链(input, locator)
+        ? 尝试协作分发主链(input, locator, { reuseOnly: true })
         : Promise.resolve<媒体播放结果 | null>(null);
       const swarmWinner = await 在预算内等待协作分发结果(
         swarmWarmup,

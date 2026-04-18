@@ -591,7 +591,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("0-24 小时内 viewer 打开时会并行预热 swarm 与 HLS；swarm 在短预算内可播时由 swarm 赢下首播", async () => {
+  it("0-24 小时内 viewer 打开时只复用已热 swarm；已热 swarm 在短预算内可播时由 swarm 赢下首播", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-fast",
       hint: "正在协作分发" as const,
@@ -668,12 +668,13 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-hls",
         consumerId: "session:att-video-hls",
+        reuseOnly: true,
       })
     );
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("0-24 小时内 viewer 打开时只给 swarm 很短预算；超时后立即落到 HLS，但后台预热继续保留", async () => {
+  it("0-24 小时内 viewer 打开时没有已热 swarm 就立即落到 HLS，不再后台冷启 raw whole-file", async () => {
     const resolveSwarmSource = vi.fn(
       () =>
         new Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>(
@@ -757,6 +758,12 @@ describe("媒体播放器", () => {
       hint: null,
     });
     expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-hls",
+        reuseOnly: true,
+      })
+    );
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
