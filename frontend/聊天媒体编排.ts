@@ -312,6 +312,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const after = 媒体运行时.getSnapshot();
     const beforeContext = before.context;
     const afterContext = after.context;
+    const 自动播消息流投影已变化 =
+      beforeContext.inlineAutoplayOwnerAttachmentId !==
+        afterContext.inlineAutoplayOwnerAttachmentId ||
+      beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback;
 
     if (
       beforeContext.inlineAutoplayPendingAttachmentId !==
@@ -359,6 +363,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     if (afterContext.currentViewerRequest) {
       同步当前查看器请求();
+    }
+
+    if (自动播消息流投影已变化) {
+      /**
+       * 自动播 owner / playback 真相已经改了，但它们不走聊天基础状态那条 patch 链；
+       * 这里必须主动触发一次壳层刷新，避免视频要等下一次无关滚动/输入才从 poster 切进来。
+       */
+      deps.请求重渲染();
     }
   };
   const 转发媒体查看器会话信号 = (attachmentId: string, signal: 媒体会话信号): void => {

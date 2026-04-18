@@ -829,6 +829,98 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("自动播 owner 和播放结果一旦成立，就会立刻投影回消息流视频卡片，而不是等下一次无关刷新", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-shell",
+            client_message_id: "c-video-inline-shell",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-shell",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    注入媒体播放器供测试(el, {
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "anchor",
+        attachmentId: "att-video-inline-shell",
+        kind: "video",
+        src: "http://media.local/original-att-video-inline-shell",
+        thumbnailUrl: "http://media.local/poster-att-video-inline-shell",
+        hint: null,
+      }),
+      释放附件播放资源: vi.fn(),
+    });
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+    vi.useFakeTimers();
+
+    const kernel = (el as unknown as {
+      kernel: {
+        dispatch(command: {
+          type: "MEDIA_INLINE_AUTOPLAY_OBSERVED";
+          candidates: Array<{
+            attachmentId: string;
+            visibilityRatio: number;
+            distanceToViewportCenter: number;
+          }>;
+        }): Promise<void>;
+      };
+    }).kernel;
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-shell",
+          visibilityRatio: 1,
+          distanceToViewportCenter: 0,
+        },
+      ],
+    });
+
+    expect(
+      el.shadowRoot!.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
+      )
+    ).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(81);
+    await Promise.resolve();
+    await el.updateComplete;
+
+    expect(
+      el.shadowRoot!.querySelector(
+        'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
+      )
+    ).not.toBeNull();
+    el.remove();
+    vi.useRealTimers();
+  });
+
   it("进入房间后发送区会显示统一附件入口和统一媒体文件输入", async () => {
     const transport = new 假传输();
     const el = document.createElement("koko-chat-shell") as 聊天壳;

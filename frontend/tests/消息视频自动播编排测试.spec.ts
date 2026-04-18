@@ -57,4 +57,40 @@ describe("消息视频自动播编排", () => {
       "att-video-current"
     );
   });
+
+  it("有完整可见视频时，会优先在完整可见集合里裁决 owner，而不是继续让半屏候选抢走焦点", () => {
+    const candidates: 消息视频自动播候选[] = [
+      {
+        attachmentId: "att-video-partial-near-center",
+        visibilityRatio: 0.72,
+        distanceToViewportCenter: 8,
+      },
+      {
+        attachmentId: "att-video-fully-visible",
+        visibilityRatio: 1,
+        distanceToViewportCenter: 54,
+      },
+    ];
+
+    expect(选择消息视频自动播Owner(candidates)).toBe("att-video-fully-visible");
+  });
+
+  it("当前 owner 只有半屏可见而新视频已完整进入视口时，会把 owner 切给完整可见的新视频", () => {
+    const candidates: 消息视频自动播候选[] = [
+      {
+        attachmentId: "att-video-current",
+        visibilityRatio: 0.69,
+        distanceToViewportCenter: 18,
+      },
+      {
+        attachmentId: "att-video-fully-visible",
+        visibilityRatio: 1,
+        distanceToViewportCenter: 44,
+      },
+    ];
+
+    expect(选择消息视频自动播Owner(candidates, undefined, "att-video-current")).toBe(
+      "att-video-fully-visible"
+    );
+  });
 });
