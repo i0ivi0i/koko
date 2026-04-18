@@ -80,14 +80,6 @@ const 过滤可播放媒体提示 = (
   return hint === "正在补块" ? null : hint;
 };
 
-/**
- * 查看器首开允许给 swarm 一个很短的抢跑窗口：
- * 1. 命中本地完整资产或已热 swarm 时，直接让 whole-file 主链赢；
- * 2. 超过这段预算就立刻交给 HLS 秒开，不把查看器卡在“等 P2P”上；
- * 3. 即便 HLS 赢了，前面启动的 swarm 预热仍继续留在后台，为后续 backfill 服务。
- */
-const 查看器Swarm抢跑预算毫秒 = 120;
-
 const 流媒体冷备窗口已退场 = (locator: 媒体定位结果): boolean => {
   const lifecycle = locator.streaming_asset?.lifecycle;
   if (!lifecycle) {
@@ -100,33 +92,6 @@ const 流媒体冷备窗口已退场 = (locator: 媒体定位结果): boolean =>
    * 3. 真正整体是否 expired，仍继续由 distribution.availability 这条权威裁决兜底。
    */
   return Boolean(lifecycle.streaming_deleted_at);
-};
-
-const 在预算内等待协作分发结果 = async (
-  sourcePromise: Promise<协作分发尝试结果>,
-  timeoutMs: number,
-  fallbackLocator: 媒体定位结果
-): Promise<协作分发尝试结果> => {
-  let timerId: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      sourcePromise,
-      new Promise<协作分发尝试结果>((resolve) => {
-        timerId = setTimeout(
-          () =>
-            resolve({
-              playback: null,
-              locator: fallbackLocator,
-            }),
-          timeoutMs
-        );
-      }),
-    ]);
-  } finally {
-    if (timerId !== null) {
-      clearTimeout(timerId);
-    }
-  }
 };
 
 /**
@@ -490,7 +455,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   };
 
   const 解析播放结果 = async (input: 媒体播放输入): Promise<媒体播放结果> => {
-    const surface = input.surface ?? "viewer";
     let locator: 媒体定位结果;
     try {
       locator = await deps.locate(input.attachmentId);
@@ -520,75 +484,15 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       };
     }
     locator = await 刷新查看器视频定位(input, locator);
-    const manifestUrl = 读取流媒体主链地址(locator);
-    if (surface === "viewer" && manifestUrl) {
-      /**
-       * 查看器正式打开时，manifest 主链只允许“复用已热 swarm”参与抢跑：
-       * 1. swarm 只负责“能否尽快接上补齐会话”，不再越位替代正式播放源；
-       * 2. 正式首播始终回到 HLS，避免原始 whole-file 在特定编码上出现全屏转圈；
-       * 3. 真正的整附件补齐仍由后续显式 backfill owner 决定，避免移动端首开被 original 冷源抢成下载风暴。
-       */
-      const distribution = 读取协作分发定位片段(locator);
-      const swarmWarmup = distribution
-        ? 尝试协作分发主链(input, locator, {
-            reuseOnly: true,
-            requireLocallyComplete: true,
-          })
-        : Promise.resolve<协作分发尝试结果>({
-            locator,
-            playback: null,
-          });
-      const swarmAttempt = await 在预算内等待协作分发结果(
-        swarmWarmup,
-        查看器Swarm抢跑预算毫秒,
-        locator
-      );
-      locator = swarmAttempt.locator;
-      if (swarmAttempt.playback?.mode === "expired") {
-        return swarmAttempt.playback;
-      }
-      if (!distribution || distribution.availability === "expired") {
-        释放协作分发占用(input);
-      }
-      return {
-        mode: "manifest",
-        attachmentId: input.attachmentId,
-        kind: input.kind,
-        src: manifestUrl,
-        fallbackSrc: 读取锚点地址(locator),
-        thumbnailUrl: 读取预览缩略图地址(locator),
-        // 标准流媒体主链一旦成立，查看器/播放器适配层就应该直接消费统一分发表面，
-        // 而不是再从旧 file-level locator 里猜 swarm 线索。
-        streamingDistribution: locator.streaming_asset?.distribution ?? null,
-        hint: null,
-      };
-    }
-    if (surface === "inline_autoplay") {
-      /**
-       * 消息流自动播不再为冷视频新开 whole-file WebTorrent：
-       * 1. 列表态只尝试复用已经热起来的 swarm/web seed；
-       * 2. 没命中已热 swarm 时，才回退到浏览器原生冷源锚点；
-       * 3. 这样自动播仍复用同一条正式媒体主链，但不会在滚动里把 torrent/client 越滚越多。
-       */
-      const swarmAttempt = await 尝试协作分发主链(input, locator, {
-        reuseOnly: true,
-        requireLocallyComplete: true,
-      });
-      locator = swarmAttempt.locator;
-      if (swarmAttempt.playback) {
-        return swarmAttempt.playback;
-      }
-      return 尝试锚点(input, locator, true);
-    }
     /**
-     * 查看器在 server-assisted 冷备窗口内，优先稳定首播而不是半成品 whole-file：
-     * 1. 如果 swarm 尚未完整落盘，直接回退到锚点冷源；
-     * 2. peer-only 阶段保留“未补齐也可边下边播”的能力，避免把长期平面彻底锁死在本地完整文件。
+     * viewer 与 inline_autoplay 必须共用同一条来源裁决真相：
+     * 1. 先尝试 WebTorrent / WebSeed 协作分发；
+     * 2. server-assisted 阶段要求本地完整，避免半成品 whole-file 导致播放异常；
+     * 3. 命不中协作分发时统一回退锚点，不再为某个 surface 维护独立 manifest 分支。
      */
-    const viewerRequireLocallyComplete =
-      surface === "viewer" && locator.distribution?.survival_mode !== "peer_only_after_expiry";
+    const requireLocallyComplete = locator.distribution?.survival_mode !== "peer_only_after_expiry";
     const swarmAttempt = await 尝试协作分发主链(input, locator, {
-      ...(viewerRequireLocallyComplete ? { requireLocallyComplete: true } : {}),
+      ...(requireLocallyComplete ? { requireLocallyComplete: true } : {}),
     });
     locator = swarmAttempt.locator;
     if (swarmAttempt.playback) {

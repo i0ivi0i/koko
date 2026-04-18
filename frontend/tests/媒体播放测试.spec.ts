@@ -519,7 +519,7 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("viewer 首次打开仍在转流的大视频时，会先强制刷新 locator 争取 manifest，而不是立刻回落冷源锚点", async () => {
+  it("viewer 首次打开仍在转流的大视频时，会先强制刷新 locator，但主链不再回到 manifest", async () => {
     const locate = vi
       .fn()
       .mockResolvedValueOnce({
@@ -636,19 +636,11 @@ describe("媒体播放器", () => {
     expect(locate).toHaveBeenNthCalledWith(1, "att-video-viewer-race");
     expect(locate).toHaveBeenNthCalledWith(2, "att-video-viewer-race", { forceRefresh: true });
     expect(result).toEqual({
-      mode: "manifest",
+      mode: "anchor",
       attachmentId: "att-video-viewer-race",
       kind: "video",
-      src: "http://media.local/stream/att-video-viewer-race/master.m3u8",
-      fallbackSrc: "http://media.local/cold-origin-viewer-race",
+      src: "http://media.local/cold-origin-viewer-race",
       thumbnailUrl: "http://media.local/poster-viewer-race",
-      streamingDistribution: {
-        swarm_id: "swarm-hash-video-viewer-race",
-        announce_urls: ["http://media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-viewer-race",
-        join_ticket: null,
-        survival_mode: "server_assisted" as const,
-      },
       hint: null,
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
@@ -657,10 +649,10 @@ describe("媒体播放器", () => {
         consumerId: "session:att-video-viewer-race",
       })
     );
-    expect(probeAnchor).not.toHaveBeenCalled();
+    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-viewer-race");
   });
 
-  it("0-24 小时内 viewer 打开时会复用已热 swarm 做后台补齐，但首播仍以 HLS 主链为准", async () => {
+  it("0-24 小时内 viewer 打开时命中已热完整 swarm，会直接复用 swarm 主链", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-fast",
       hint: "正在协作分发" as const,
@@ -727,32 +719,23 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "manifest",
+      mode: "swarm",
       attachmentId: "att-video-hls",
       kind: "video",
-      src: "http://media.local/stream/att-video-hls/master.m3u8",
-      fallbackSrc: "http://media.local/cold-origin-video-hls",
+      src: "blob:http://media.local/swarm-video-hls-fast",
       thumbnailUrl: "http://media.local/poster-video-hls",
-      streamingDistribution: {
-        swarm_id: "swarm-hash-video-hls",
-        announce_urls: ["http://media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-video-hls",
-        join_ticket: null,
-        survival_mode: "server_assisted" as const,
-      },
-      hint: null,
+      hint: "正在协作分发",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
         attachmentId: "att-video-hls",
         consumerId: "session:att-video-hls",
-        reuseOnly: true,
       })
     );
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("viewer 命中未本地完整的已热 swarm 时，会直接回到 HLS 主链，避免全屏卡在转圈", async () => {
+  it("viewer 命中未本地完整的已热 swarm 时，会回退锚点冷源避免全屏卡住", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-incomplete",
       hint: "正在协作分发" as const,
@@ -820,29 +803,20 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "manifest",
+      mode: "anchor",
       attachmentId: "att-video-hls-incomplete",
       kind: "video",
-      src: "http://media.local/stream/att-video-hls-incomplete/master.m3u8",
-      fallbackSrc: "http://media.local/cold-origin-video-hls-incomplete",
+      src: "http://media.local/cold-origin-video-hls-incomplete",
       thumbnailUrl: "http://media.local/poster-video-hls-incomplete",
-      streamingDistribution: {
-        swarm_id: "swarm-hash-video-hls-incomplete",
-        announce_urls: ["http://media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-video-hls-incomplete",
-        join_ticket: null,
-        survival_mode: "server_assisted" as const,
-      },
       hint: null,
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
         attachmentId: "att-video-hls-incomplete",
         consumerId: "session:att-video-hls-incomplete",
-        reuseOnly: true,
       })
     );
-    expect(probeAnchor).not.toHaveBeenCalled();
+    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-video-hls-incomplete");
   });
 
   it("viewer 抢 swarm 时如果 join_ticket 已失效，会强制刷新 locator 一次并重试同一条主链", async () => {
@@ -952,7 +926,6 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-ticket-refresh",
         locator: 初始定位结果,
-        reuseOnly: true,
       })
     );
     expect(resolveSwarmSource).toHaveBeenNthCalledWith(
@@ -960,29 +933,20 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-ticket-refresh",
         locator: 刷新后定位结果,
-        reuseOnly: true,
       })
     );
     expect(result).toEqual({
-      mode: "manifest",
+      mode: "swarm",
       attachmentId: "att-video-ticket-refresh",
       kind: "video",
-      src: "http://media.local/stream/att-video-ticket-refresh/master.m3u8",
-      fallbackSrc: "http://media.local/cold-origin-ticket-refresh",
+      src: "blob:http://media.local/swarm-ticket-refresh",
       thumbnailUrl: "http://media.local/poster-ticket-refresh",
-      streamingDistribution: {
-        swarm_id: "swarm-hash-video-ticket-refresh",
-        announce_urls: ["http://media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-ticket-refresh",
-        join_ticket: "ticket-refresh",
-        survival_mode: "server_assisted" as const,
-      },
-      hint: null,
+      hint: "正在协作分发",
     });
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("0-24 小时内 viewer 打开时没有已热 swarm 就立即落到 HLS，不再后台冷启 raw whole-file", async () => {
+  it("0-24 小时内 viewer 打开时没有可用 swarm 就回退锚点冷源，不再返回 manifest", async () => {
     const resolveSwarmSource = vi.fn(
       () =>
         new Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>(
@@ -1051,28 +1015,128 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "manifest",
+      mode: "anchor",
       attachmentId: "att-video-hls",
       kind: "video",
-      src: "http://media.local/stream/att-video-hls/master.m3u8",
-      fallbackSrc: "http://media.local/cold-origin-video-hls",
+      src: "http://media.local/cold-origin-video-hls",
       thumbnailUrl: "http://media.local/poster-video-hls",
-      streamingDistribution: {
-        swarm_id: "swarm-hash-video-hls",
-        announce_urls: ["http://media.local/announce"],
-        web_seed_url: "http://media.local/web-seed-video-hls",
-        join_ticket: null,
-        survival_mode: "server_assisted" as const,
-      },
       hint: null,
     });
     expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
         attachmentId: "att-video-hls",
-        reuseOnly: true,
       })
     );
+    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-video-hls");
+  });
+
+  it("viewer 与 inline_autoplay 在同一定位输入下，会裁决到同一条 swarm 首播真相", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-shared-truth",
+      hint: "正在协作分发" as const,
+      locallyComplete: true,
+    }));
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-shared-truth",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-shared-truth",
+        thumbnail_url: "http://media.local/poster-shared-truth",
+        distribution: {
+          content_id: "content_att-video-shared-truth",
+          content_hash: "hash-video-shared-truth",
+          swarm_id: "swarm-hash-video-shared-truth",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-shared-truth",
+          torrent_info_hash: "torrent-info-hash-video-shared-truth",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-shared-truth",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-shared-truth",
+          content_hash: "hash-video-shared-truth",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-shared-truth/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-shared-truth/stream.mpd",
+          },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-shared-truth",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-video-shared-truth",
+            join_ticket: null,
+            survival_mode: "server_assisted" as const,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-video-shared-truth",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const viewerResult = await 播放器.解析播放结果({
+      attachmentId: "att-video-shared-truth",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-shared-truth",
+    });
+    const inlineResult = await 播放器.解析播放结果({
+      attachmentId: "att-video-shared-truth",
+      kind: "video",
+      surface: "inline_autoplay",
+      consumerId: "inline_autoplay:att-video-shared-truth",
+    });
+
+    expect(viewerResult).toEqual({
+      mode: "swarm",
+      attachmentId: "att-video-shared-truth",
+      kind: "video",
+      src: "blob:http://media.local/swarm-video-shared-truth",
+      thumbnailUrl: "http://media.local/poster-shared-truth",
+      hint: "正在协作分发",
+    });
+    expect(inlineResult).toEqual({
+      mode: "swarm",
+      attachmentId: "att-video-shared-truth",
+      kind: "video",
+      src: "blob:http://media.local/swarm-video-shared-truth",
+      thumbnailUrl: "http://media.local/poster-shared-truth",
+      hint: "正在协作分发",
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(2);
+    const calls = resolveSwarmSource.mock.calls as unknown as Array<
+      Array<{
+        reuseOnly?: boolean;
+        eagerCompleting?: boolean;
+      }>
+    >;
+    const viewerCall = calls[0]?.[0] as {
+      reuseOnly?: boolean;
+      eagerCompleting?: boolean;
+    };
+    const inlineCall = calls[1]?.[0] as {
+      reuseOnly?: boolean;
+      eagerCompleting?: boolean;
+    };
+    expect(viewerCall?.reuseOnly).toBe(inlineCall?.reuseOnly);
+    expect(viewerCall?.eagerCompleting).toBe(inlineCall?.eagerCompleting);
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
@@ -1254,7 +1318,6 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-inline-hls",
         consumerId: "inline_autoplay:att-video-inline-hls",
-        reuseOnly: true,
       })
     );
     expect(probeAnchor).not.toHaveBeenCalled();
@@ -1331,7 +1394,6 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-inline-partial",
         consumerId: "inline_autoplay:att-video-inline-partial",
-        reuseOnly: true,
       })
     );
     expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-inline-partial");
@@ -1409,7 +1471,6 @@ describe("媒体播放器", () => {
       expect.objectContaining({
         attachmentId: "att-video-inline-fallback",
         consumerId: "inline_autoplay:att-video-inline-fallback",
-        reuseOnly: true,
       })
     );
     expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-inline-fallback");
