@@ -1,11 +1,12 @@
 use axum::http::{Method, StatusCode};
 use serial_test::serial;
+use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "测试支撑/mod.rs"]
 mod test_support;
 
-use test_support::{http::*, media::*};
+use test_support::{env_support::*, http::*, media::*};
 
 fn 断言对象不包含壳层私货(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -147,6 +148,9 @@ async fn 视频locator共享契约不包含_web_页面流程和展示文案字�
 #[tokio::test]
 #[serial]
 async fn 图片complete共享契约不包含_web_页面流程和展示文案字段() {
+    let backup = 备份并清空环境变量(&["SWARM_TICKET_SECRET", "SWARM_TICKET_TTL_SECONDS"]);
+    env::set_var("SWARM_TICKET_SECRET", "blob-shared-contract-ticket-secret");
+    env::set_var("SWARM_TICKET_TTL_SECONDS", "180");
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -234,6 +238,7 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         &[],
     )
     .await;
+    恢复环境变量(backup);
     assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
 
     let media_asset = complete_body["media_asset"]
@@ -288,5 +293,19 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
     assert!(
         distribution.get("presence_url").is_none(),
         "共享分发表面不能夹带 Web 页面 presence URL"
+    );
+    assert!(
+        distribution
+            .get("join_ticket")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|ticket| !ticket.is_empty()),
+        "图片 Blob 共享分发表面也必须能携带 join_ticket"
+    );
+    assert!(
+        distribution
+            .get("ticket_expires_at")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|expires_at| !expires_at.is_empty()),
+        "图片 Blob 共享分发表面也必须携带 ticket_expires_at"
     );
 }

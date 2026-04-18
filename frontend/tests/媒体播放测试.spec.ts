@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放器, 媒体是否默认循环播放 } from "../媒体/媒体播放";
+import { 协作分发JoinTicket失效错误 } from "../媒体/媒体协作分发";
 
 describe("媒体播放器", () => {
   it("视频默认启用循环播放，而图片不会被纳入这条策略", () => {
@@ -671,6 +672,134 @@ describe("媒体播放器", () => {
         reuseOnly: true,
       })
     );
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("viewer 抢 swarm 时如果 join_ticket 已失效，会强制刷新 locator 一次并重试同一条主链", async () => {
+    const 初始定位结果 = {
+      attachment_id: "att-video-ticket-refresh",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-ticket-stale",
+      thumbnail_url: "http://media.local/poster-ticket-refresh",
+      distribution: {
+        content_id: "content_att-video-ticket-refresh",
+        content_hash: "hash-video-ticket-refresh",
+        swarm_id: "swarm-hash-video-ticket-refresh",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-ticket-stale",
+        torrent_info_hash: "torrent-info-hash-ticket-refresh",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-ticket-stale",
+        join_ticket: "ticket-stale",
+        ticket_expires_at: "2026-04-18T10:00:00Z",
+        availability: "available" as const,
+        survival_mode: "server_assisted" as const,
+      },
+      streaming_asset: {
+        asset_id: "att-video-ticket-refresh",
+        content_hash: "hash-video-ticket-refresh",
+        kind: "streaming_video" as const,
+        manifest: {
+          hls_master_url: "http://media.local/stream/att-video-ticket-refresh/master.m3u8",
+          dash_mpd_url: "http://media.local/stream/att-video-ticket-refresh/stream.mpd",
+        },
+        lifecycle: {
+          streaming_expires_at: "1775942400",
+          streaming_deleted_at: null,
+        },
+        distribution: {
+          swarm_id: "swarm-hash-video-ticket-refresh",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-ticket-stale",
+          join_ticket: "ticket-stale",
+          survival_mode: "server_assisted" as const,
+        },
+        origin: {
+          original_url: "http://media.local/cold-origin-ticket-stale",
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only" as const,
+        },
+      },
+      blob_asset: null,
+    };
+    const 刷新后定位结果 = {
+      ...初始定位结果,
+      original_url: "http://media.local/original-ticket-refresh",
+      distribution: {
+        ...初始定位结果.distribution,
+        torrent_url: "http://media.local/torrent-ticket-refresh",
+        web_seed_url: "http://media.local/web-seed-ticket-refresh",
+        join_ticket: "ticket-refresh",
+        ticket_expires_at: "2026-04-18T10:02:00Z",
+      },
+      streaming_asset: {
+        ...初始定位结果.streaming_asset,
+        distribution: {
+          ...初始定位结果.streaming_asset.distribution,
+          web_seed_url: "http://media.local/web-seed-ticket-refresh",
+          join_ticket: "ticket-refresh",
+        },
+        origin: {
+          ...初始定位结果.streaming_asset.origin,
+          original_url: "http://media.local/cold-origin-ticket-refresh",
+        },
+      },
+    };
+    const locate = vi
+      .fn()
+      .mockResolvedValueOnce(初始定位结果)
+      .mockResolvedValueOnce(刷新后定位结果);
+    const resolveSwarmSource = vi
+      .fn()
+      .mockRejectedValueOnce(new 协作分发JoinTicket失效错误())
+      .mockResolvedValueOnce({
+        src: "blob:http://media.local/swarm-ticket-refresh",
+        hint: "正在协作分发" as const,
+      });
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-ticket-refresh",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-ticket-refresh",
+    });
+
+    expect(locate).toHaveBeenNthCalledWith(1, "att-video-ticket-refresh");
+    expect(locate).toHaveBeenNthCalledWith(2, "att-video-ticket-refresh", {
+      forceRefresh: true,
+    });
+    expect(resolveSwarmSource).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        attachmentId: "att-video-ticket-refresh",
+        locator: 初始定位结果,
+        reuseOnly: true,
+      })
+    );
+    expect(resolveSwarmSource).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        attachmentId: "att-video-ticket-refresh",
+        locator: 刷新后定位结果,
+        reuseOnly: true,
+      })
+    );
+    expect(result).toEqual({
+      mode: "swarm",
+      attachmentId: "att-video-ticket-refresh",
+      kind: "video",
+      src: "blob:http://media.local/swarm-ticket-refresh",
+      thumbnailUrl: "http://media.local/poster-ticket-refresh",
+      hint: "正在协作分发",
+    });
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 

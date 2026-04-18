@@ -4,16 +4,16 @@ use sqlx::{postgres::PgPoolOptions, Row};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[path = "测试支撑/mod.rs"]
-mod test_support;
-#[path = "协作分发测试/分发元数据.rs"]
-mod distribution_metadata_tests;
-#[path = "协作分发测试/投影一致性.rs"]
-mod projection_consistency_tests;
 #[path = "协作分发测试/可用性裁决.rs"]
 mod availability_ruling_tests;
 #[path = "协作分发测试/内容读取.rs"]
 mod content_read_tests;
+#[path = "协作分发测试/分发元数据.rs"]
+mod distribution_metadata_tests;
+#[path = "协作分发测试/投影一致性.rs"]
+mod projection_consistency_tests;
+#[path = "测试支撑/mod.rs"]
+mod test_support;
 
 // 顶层现在只保留 locator / torrent 读侧契约：
 // - 分发元数据、投影一致性、可用性裁决、内容读取都已拆到子模块
@@ -341,8 +341,6 @@ async fn 同一视频对发送者与群友返回同一套流媒体主链真相()
     assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
 }
 
-
-
 #[tokio::test]
 #[serial]
 async fn 图片locator会返回blob_asset而不是只给original_url() {
@@ -479,8 +477,6 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
     assert!(body["distribution"]["announce_urls"].is_array());
     assert!(room_id.starts_with("r-"), "应返回稳定房间标识");
 }
-
-
 
 #[tokio::test]
 #[serial]
@@ -656,12 +652,14 @@ async fn torrent接口会返回稳定metainfo并与locator对齐() {
 
 #[tokio::test]
 #[serial]
-async fn locator会返回announce与web_seed并保留ticket占位() {
+async fn locator会返回announce_web_seed与短时join_ticket() {
     let backup = 备份并清空环境变量(&[
         "SWARM_TRACKER_PUBLIC_URL",
         "SWARM_TRACKER_PORT",
         "SWARM_WEB_SEED_PUBLIC_ENDPOINT",
         "SWARM_PEER_PRESENCE_STALE_SECONDS",
+        "SWARM_TICKET_SECRET",
+        "SWARM_TICKET_TTL_SECONDS",
     ]);
     env::set_var(
         "SWARM_TRACKER_PUBLIC_URL",
@@ -670,6 +668,8 @@ async fn locator会返回announce与web_seed并保留ticket占位() {
     env::set_var("SWARM_TRACKER_PORT", "7072");
     env::set_var("SWARM_WEB_SEED_PUBLIC_ENDPOINT", "https://cdn.example.com");
     env::set_var("SWARM_PEER_PRESENCE_STALE_SECONDS", "180");
+    env::set_var("SWARM_TICKET_SECRET", "locator-ticket-secret-for-tests");
+    env::set_var("SWARM_TICKET_TTL_SECONDS", "120");
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -830,15 +830,20 @@ async fn locator会返回announce与web_seed并保留ticket占位() {
         body["distribution"]["presence_url"].as_str(),
         Some(expected_presence_url.as_str())
     );
-    assert!(body["distribution"]["join_ticket"].is_null());
+    assert!(
+        body["distribution"]["join_ticket"]
+            .as_str()
+            .is_some_and(|ticket| !ticket.is_empty()),
+        "locator 只要存在可用 swarm，就必须返回短时 join_ticket"
+    );
+    assert!(
+        body["distribution"]["ticket_expires_at"]
+            .as_str()
+            .is_some_and(|expires_at| !expires_at.is_empty()),
+        "locator 必须同时返回 ticket_expires_at，避免前端只能盲猜 refresh 时机"
+    );
     assert_eq!(
         body["distribution"]["availability"].as_str(),
         Some("available")
     );
 }
-
-
-
-
-
-

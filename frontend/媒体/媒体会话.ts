@@ -20,6 +20,7 @@ export type 媒体会话信号 =
   | { type: "ENTER_RECOVERING" }
   | { type: "SWARM_ACTIVE" }
   | { type: "SWARM_NO_PEERS" }
+  | { type: "SWARM_TICKET_INVALID" }
   | { type: "ORIGIN_AVAILABLE" }
   | { type: "ORIGIN_UNAVAILABLE" }
   | { type: "ASSET_BACKFILLING" }
@@ -226,6 +227,22 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
         case "SWARM_NO_PEERS":
           缺少群友 = true;
           标记等待恢复();
+          return;
+        case "SWARM_TICKET_INVALID":
+          /**
+           * ticket 失效不是“peer 不够”，而是当前 swarm 凭证已经过期：
+           * 1. 会话要尽快重跑 locator / swarm 裁决，拿新 ticket；
+           * 2. 如果此刻还在首轮 bootstrapping，恢复动作交给当前那次解析自己完成，避免并发双解析打架；
+           * 3. 一旦会话已经稳定下来，再收到这个信号就立即进入 recovering。
+           */
+          if (current.status === "bootstrapping") {
+            发布快照();
+            return;
+          }
+          写入快照({
+            status: "recovering",
+          });
+          触发恢复解析();
           return;
         case "ORIGIN_AVAILABLE":
           冷源不可用 = false;

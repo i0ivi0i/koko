@@ -443,4 +443,16 @@ describe("Video.js 播放器壳", () => {
 
     shell.destroy();
   });
+
+  it("默认 Video.js 根节点在 RemotePlayback 只给出非 Promise cancel 接口时，销毁也不能炸掉整个播放器会话", async () => {
+    const shell = await 创建VideoJs播放器壳({
+      kind: "file",
+      src: "blob:http://media.local/videojs-remote-playback-compat-1",
+      posterSrc: "http://media.local/poster-remote-playback-compat-1.jpg",
+      width: 1280,
+      height: 720,
+    });
+
+    expect(() => shell.destroy()).not.toThrow();
+  });
 });

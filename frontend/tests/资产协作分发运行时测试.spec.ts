@@ -260,6 +260,50 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("tracker 拒绝 join_ticket 后会丢弃旧 swarm 会话，并发出 ticket 失效信号而不是继续复用脏会话", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, emit } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-ticket-invalid"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor, remove } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+    const 事件记录: Array<{ type: string; attachmentId: string; swarmId: string }> = [];
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-ticket-invalid",
+      kind: "video",
+      locator: 准备好的定位结果("att-ticket-invalid"),
+      consumerId: "session:att-ticket-invalid",
+      onSessionEvent: (event) => {
+        事件记录.push(event);
+      },
+    });
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-ticket-invalid",
+      hint: "正在协作分发",
+      locallyComplete: false,
+    });
+
+    emit("error", new Error("join_ticket_invalid"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(事件记录).toContainEqual({
+      type: "SWARM_TICKET_INVALID",
+      attachmentId: "att-ticket-invalid",
+      swarmId: "swarm-att-ticket-invalid",
+    });
+    expect(读取协作分发会话状态("swarm-att-ticket-invalid")).toBeNull();
+    expect(remove).toHaveBeenCalledWith("torrent-info-hash-att-ticket-invalid", {
+      destroyStore: false,
+    });
+  });
+
   it("查看器关闭释放最后一个未完成补齐消费者时，会立即销毁重型 swarm", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(

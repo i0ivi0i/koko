@@ -204,13 +204,15 @@ pub struct 媒体清单描述 {
 }
 
 /// 分发表面只暴露跨端共享所需的 swarm 线索。
-/// 这里不塞本地存储键、页面 session 或某个端专属 ticket 语义。
+/// 这里不塞本地存储键、页面 session 或 Web-only 页面流程；
+/// 但 `join_ticket/ticket_expires_at` 属于跨端都需要消费的运行时门禁真相，应显式共享。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 媒体分发描述 {
     pub swarm_id: String,
     pub announce_urls: Vec<String>,
     pub web_seed_url: Option<String>,
     pub join_ticket: Option<String>,
+    pub ticket_expires_at: Option<String>,
     pub 生存模式: 媒体分发生存模式,
 }
 

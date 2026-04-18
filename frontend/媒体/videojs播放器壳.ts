@@ -24,6 +24,13 @@ type 可请求全屏容器 = HTMLElement & {
 };
 
 type 可原生全屏视频元素 = HTMLVideoElement;
+const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
+
+type 可兼容远端播放对象 = {
+  watchAvailability?: (...args: unknown[]) => unknown;
+  cancelWatchAvailability?: (...args: unknown[]) => unknown;
+  [远端播放Promise兼容标记]?: true;
+};
 
 type VideoJs播放器根节点 = {
   provider: HTMLElement;
@@ -71,6 +78,50 @@ export type VideoJs播放器壳依赖 = {
 
 const 读取纵横比 = (source: VideoJs播放器源描述): string =>
   `${Math.max(1, source.width)}/${Math.max(1, source.height)}`;
+
+const 看起来像Promise = (value: unknown): value is PromiseLike<unknown> =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  "then" in value &&
+  typeof value.then === "function";
+
+const 兼容RemotePlayback异步契约 = (video: 可原生全屏视频元素): void => {
+  const remote = (video as 可原生全屏视频元素 & { remote?: 可兼容远端播放对象 }).remote;
+  if (!remote || remote[远端播放Promise兼容标记]) {
+    return;
+  }
+
+  const 原watchAvailability = remote.watchAvailability;
+  if (typeof 原watchAvailability === "function") {
+    remote.watchAvailability = ((...args: unknown[]) => {
+      try {
+        const result = 原watchAvailability.apply(remote, args);
+        return 看起来像Promise(result) ? result : Promise.resolve(result);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }) as typeof 原watchAvailability;
+  }
+
+  const 原cancelWatchAvailability = remote.cancelWatchAvailability;
+  if (typeof 原cancelWatchAvailability === "function") {
+    remote.cancelWatchAvailability = ((...args: unknown[]) => {
+      try {
+        const result = 原cancelWatchAvailability.apply(remote, args);
+        return 看起来像Promise(result) ? result : Promise.resolve(result);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }) as typeof 原cancelWatchAvailability;
+  }
+
+  /**
+   * Video.js beta.22 会把 RemotePlayback 的 watch/cancel 都按 Promise 契约消费。
+   * 浏览器标准也是 Promise，但 `happy-dom` 20.8.9 的 cancel 仍返回 void。
+   * 这里把宿主差异收口在壳适配层，避免销毁阶段因为测试/非标运行时而炸掉整个播放会话。
+   */
+  remote[远端播放Promise兼容标记] = true;
+};
 
 const 注册默认VideoJs元素 = async (): Promise<void> => {
   /**
@@ -201,6 +252,7 @@ export async function 创建VideoJs播放器壳(
   const root =
     deps.createPlayer?.(initialSource) ??
     创建默认播放器根(initialSource, deps.mountTarget);
+  兼容RemotePlayback异步契约(root.video);
 
   let 当前源 = initialSource;
   let 已销毁 = false;

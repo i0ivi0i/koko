@@ -1,5 +1,6 @@
 import type { 媒体定位结果, 媒体种类, 媒体资产分发表面 } from "../契约.js";
 import {
+  是否为协作分发JoinTicket失效错误,
   读取协作分发定位片段,
   type 协作分发会话事件,
 } from "./媒体协作分发.js";
@@ -66,6 +67,11 @@ type 媒体播放器依赖 = {
   probeAnchor?(url: string): Promise<void>;
 };
 
+type 协作分发尝试结果 = {
+  playback: 媒体播放结果 | null;
+  locator: 媒体定位结果;
+};
+
 const 过滤可播放媒体提示 = (
   hint: "正在协作分发" | "正在补块" | null
 ): "正在协作分发" | null => {
@@ -96,15 +102,23 @@ const 流媒体冷备窗口已退场 = (locator: 媒体定位结果): boolean =>
 };
 
 const 在预算内等待协作分发结果 = async (
-  sourcePromise: Promise<媒体播放结果 | null>,
-  timeoutMs: number
-): Promise<媒体播放结果 | null> => {
+  sourcePromise: Promise<协作分发尝试结果>,
+  timeoutMs: number,
+  fallbackLocator: 媒体定位结果
+): Promise<协作分发尝试结果> => {
   let timerId: ReturnType<typeof setTimeout> | null = null;
   try {
     return await Promise.race([
       sourcePromise,
-      new Promise<null>((resolve) => {
-        timerId = setTimeout(() => resolve(null), timeoutMs);
+      new Promise<协作分发尝试结果>((resolve) => {
+        timerId = setTimeout(
+          () =>
+            resolve({
+              playback: null,
+              locator: fallbackLocator,
+            }),
+          timeoutMs
+        );
       }),
     ]);
   } finally {
@@ -311,22 +325,33 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 尝试协作分发主链 = async (
     input: 媒体播放输入,
     locator: 媒体定位结果,
-    options: { eagerCompleting?: boolean; reuseOnly?: boolean; requireLocallyComplete?: boolean } = {}
-  ): Promise<媒体播放结果 | null> => {
+    options: {
+      eagerCompleting?: boolean;
+      reuseOnly?: boolean;
+      requireLocallyComplete?: boolean;
+      allowTicketRefresh?: boolean;
+    } = {}
+  ): Promise<协作分发尝试结果> => {
     const distribution = 读取协作分发定位片段(locator);
     if (distribution?.availability === "expired") {
       释放协作分发占用(input);
       return {
-        mode: "expired",
-        attachmentId: input.attachmentId,
-        kind: input.kind,
-        src: "",
-        thumbnailUrl: 读取预览缩略图地址(locator),
-        hint: "内容已过期",
+        locator,
+        playback: {
+          mode: "expired",
+          attachmentId: input.attachmentId,
+          kind: input.kind,
+          src: "",
+          thumbnailUrl: 读取预览缩略图地址(locator),
+          hint: "内容已过期",
+        },
       };
     }
     if (!distribution) {
-      return null;
+      return {
+        locator,
+        playback: null,
+      };
     }
     try {
       const swarmSource = await resolveSwarmSource({
@@ -339,7 +364,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         ...(options.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!swarmSource) {
-        return null;
+        return {
+          locator,
+          playback: null,
+        };
       }
       /**
        * 消息流自动播的 `<video>` 只应该吃“已经完整落到本机”的 whole-file 资源：
@@ -349,7 +377,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
        */
       if (options.requireLocallyComplete && swarmSource.locallyComplete !== true) {
         释放协作分发占用(input);
-        return null;
+        return {
+          locator,
+          playback: null,
+        };
       }
       /**
        * swarm/web seed 是正式分发平面的同一份事实：
@@ -358,16 +389,35 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
        * 3. hint 继续在这里统一过滤，避免壳层各自理解“正在补块”。
        */
       return {
-        mode: "swarm",
-        attachmentId: input.attachmentId,
-        kind: input.kind,
-        src: swarmSource.src,
-        thumbnailUrl: 读取预览缩略图地址(locator),
-        hint: 过滤可播放媒体提示(swarmSource.hint),
+        locator,
+        playback: {
+          mode: "swarm",
+          attachmentId: input.attachmentId,
+          kind: input.kind,
+          src: swarmSource.src,
+          thumbnailUrl: 读取预览缩略图地址(locator),
+          hint: 过滤可播放媒体提示(swarmSource.hint),
+        },
       };
-    } catch {
+    } catch (error) {
+      if (options.allowTicketRefresh !== false && 是否为协作分发JoinTicket失效错误(error)) {
+        try {
+          const refreshedLocator = await deps.locate(input.attachmentId, { forceRefresh: true });
+          if (refreshedLocator.status === "ready") {
+            return 尝试协作分发主链(input, refreshedLocator, {
+              ...options,
+              allowTicketRefresh: false,
+            });
+          }
+        } catch {
+          // forceRefresh 失败时继续按旧 locator 走后续主链降级，不把恢复动作放大成新故障。
+        }
+      }
       // swarm 只是热分发层；失败后必须回到锚点，不允许把热路径波动升级成业务失败。
-      return null;
+      return {
+        locator,
+        playback: null,
+      };
     }
   };
 
@@ -480,13 +530,18 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       const distribution = 读取协作分发定位片段(locator);
       const swarmWarmup = distribution
         ? 尝试协作分发主链(input, locator, { reuseOnly: true })
-        : Promise.resolve<媒体播放结果 | null>(null);
-      const swarmWinner = await 在预算内等待协作分发结果(
+        : Promise.resolve<协作分发尝试结果>({
+            locator,
+            playback: null,
+          });
+      const swarmAttempt = await 在预算内等待协作分发结果(
         swarmWarmup,
-        查看器Swarm抢跑预算毫秒
+        查看器Swarm抢跑预算毫秒,
+        locator
       );
-      if (swarmWinner) {
-        return swarmWinner;
+      locator = swarmAttempt.locator;
+      if (swarmAttempt.playback) {
+        return swarmAttempt.playback;
       }
       if (!distribution || distribution.availability === "expired") {
         释放协作分发占用(input);
@@ -510,18 +565,20 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
        * 2. 没命中已热 swarm 时，才回退到浏览器原生冷源锚点；
        * 3. 这样自动播仍复用同一条正式媒体主链，但不会在滚动里把 torrent/client 越滚越多。
        */
-      const swarmPlayback = await 尝试协作分发主链(input, locator, {
+      const swarmAttempt = await 尝试协作分发主链(input, locator, {
         reuseOnly: true,
         requireLocallyComplete: true,
       });
-      if (swarmPlayback) {
-        return swarmPlayback;
+      locator = swarmAttempt.locator;
+      if (swarmAttempt.playback) {
+        return swarmAttempt.playback;
       }
       return 尝试锚点(input, locator, true);
     }
-    const swarmPlayback = await 尝试协作分发主链(input, locator);
-    if (swarmPlayback) {
-      return swarmPlayback;
+    const swarmAttempt = await 尝试协作分发主链(input, locator);
+    locator = swarmAttempt.locator;
+    if (swarmAttempt.playback) {
+      return swarmAttempt.playback;
     }
     return 尝试锚点(input, locator, true);
   };

@@ -717,24 +717,24 @@ pub(super) async fn complete_media_upload(
             };
             记录complete阶段耗时("package_streaming_assets", 流媒体打包开始);
             let 分发元数据构造开始 = Instant::now();
-            let 回退母本映射 =
-                match 映射只读完成媒体临时文件(打包结果.高质量回退母本本地路径.as_path())
-                {
-                    Ok(mapped) => mapped,
-                    Err(err) => {
-                        return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "system_error",
-                            "映射视频 mezzanine 回退母本失败",
-                            "map_mezzanine_video_failed",
-                            format!("映射视频 canonical mezzanine 失败: {err}"),
-                        );
-                    }
-                };
+            let 回退母本映射 = match 映射只读完成媒体临时文件(
+                打包结果.高质量回退母本本地路径.as_path(),
+            ) {
+                Ok(mapped) => mapped,
+                Err(err) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        "映射视频 mezzanine 回退母本失败",
+                        "map_mezzanine_video_failed",
+                        format!("映射视频 canonical mezzanine 失败: {err}"),
+                    );
+                }
+            };
             let 协作分发共享载荷 = match 选择协作分发共享载荷(
                 &prepared.种类,
                 parsed.mime_type.as_str(),
@@ -786,30 +786,29 @@ pub(super) async fn complete_media_upload(
             记录complete阶段耗时("generate_torrent", torrent生成开始);
             drop(回退母本映射);
             let 流媒体产物上传开始 = Instant::now();
-            let uploaded =
-                match 流媒体打包::上传流媒体打包产物(
-                    &state,
-                    &attachment_id,
-                    原始冷源到期时间戳秒,
-                    打包结果,
-                )
-                .await
-                {
-                    Ok(uploaded) => uploaded,
-                    Err((status, code, message)) => {
-                        return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
-                            status,
-                            code,
-                            message.clone(),
-                            "upload_streaming_assets_failed",
-                            message,
-                        )
-                    }
-                };
+            let uploaded = match 流媒体打包::上传流媒体打包产物(
+                &state,
+                &attachment_id,
+                原始冷源到期时间戳秒,
+                打包结果,
+            )
+            .await
+            {
+                Ok(uploaded) => uploaded,
+                Err((status, code, message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        status,
+                        code,
+                        message.clone(),
+                        "upload_streaming_assets_failed",
+                        message,
+                    )
+                }
+            };
             记录complete阶段耗时("upload_streaming_assets", 流媒体产物上传开始);
             let 流媒体打包::流媒体打包上传结果 {
                 清单写入请求,
@@ -969,6 +968,8 @@ pub(super) async fn complete_media_upload(
                     session_id: session_id.as_str(),
                     tracker_public_url: state.swarm_tracker_public_url.as_str(),
                     web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
+                    ticket_secret: state.swarm_ticket_secret.as_deref(),
+                    ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
                     冷源仍可用,
                     now_epoch秒,
                     stale_seconds: state.swarm_peer_presence_stale_seconds,

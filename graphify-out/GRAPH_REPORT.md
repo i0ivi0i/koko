@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-18)
 
 ## Corpus Check
-- 195 files · ~221,677 words
+- 195 files · ~224,990 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 443 nodes · 547 edges · 32 communities detected
+- 448 nodes · 554 edges · 32 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -78,16 +78,16 @@ Cohesion: 0.04
 Nodes (1): 会话所属匿名身份返回内部uuid而不是兼容旧串()
 
 ### Community 2 - "Community 2"
-Cohesion: 0.06
-Nodes (16): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), leaveCurrentRoomView(), 附件owner不匹配时拒绝创建消息(), render() (+8 more)
+Cohesion: 0.05
+Nodes (19): dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), 协作分发JoinTicket失效错误, leaveCurrentRoomView(), 附件owner不匹配时拒绝创建消息() (+11 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.07
 Nodes (0): 
 
 ### Community 4 - "Community 4"
-Cohesion: 0.08
-Nodes (16): 创建资产协作分发Actor(), AdminLoginBody, AdminLoginResp, 尝试加载dotenv(), 读取exif方向(), flush(), make_writer(), 新模块会给最小_mp4_返回展示尺寸() (+8 more)
+Cohesion: 0.07
+Nodes (17): 创建资产协作分发Actor(), AdminLoginBody, AdminLoginResp, 尝试加载dotenv(), 读取exif方向(), flush(), 签发协作分发join_ticket(), make_writer() (+9 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.09
@@ -225,11 +225,11 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 7` to `Community 2`?**
-  _High betweenness centrality (0.074) - this node is a cross-community bridge._
+  _High betweenness centrality (0.073) - this node is a cross-community bridge._
 - **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 15`?**
   _High betweenness centrality (0.070) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`, `Community 9`?**
-  _High betweenness centrality (0.057) - this node is a cross-community bridge._
+  _High betweenness centrality (0.056) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
@@ -237,4 +237,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.04 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05 - nodes in this community are weakly interconnected._

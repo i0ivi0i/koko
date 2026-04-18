@@ -45,6 +45,11 @@ memmap2 = "0.9"
 sha2 = "0.10"
 hex = "0.4"
 bip_metainfo = "0.12"
+# swarm join ticket 不应自己手搓 HMAC/JWT；
+# 这里直接复用成熟纯 Rust JWT 库，后续 tracker 校验也能共享同一套令牌语义。
+jsonwebtoken = { version = "10.3.0", default-features = false, features = ["rust_crypto"] }
+# ticket_expires_at 需要稳定 RFC3339 文本，直接复用成熟时间库，避免自己拼日期格式。
+time = { version = "0.3.47", features = ["formatting"] }
 # 后端现在只需要极薄地向 tusd 发官方 DELETE；
 # 这里显式收一层成熟 HTTP client，避免再手搓 transport 删除调用。
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

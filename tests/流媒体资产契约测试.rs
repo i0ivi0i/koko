@@ -1,6 +1,6 @@
 use koko::contract::{
-    媒体冷源描述, 媒体冷源角色, 媒体分发描述, 媒体分发生存模式, 媒体清单描述,
-    媒体资产种类, 流媒体生命周期描述, 流媒体资产描述,
+    媒体冷源描述, 媒体冷源角色, 媒体分发描述, 媒体分发生存模式, 媒体清单描述, 媒体资产种类,
+    流媒体生命周期描述, 流媒体资产描述,
 };
 use koko::usecase::构造媒体冷源描述;
 
@@ -23,6 +23,7 @@ fn 视频资产描述包含_manifest_swarm_origin_而不是原始附件主链() 
             announce_urls: vec!["wss://swarm.example.com/announce".into()],
             web_seed_url: Some("https://cdn.example.com/media/asset-video-1".into()),
             join_ticket: None,
+            ticket_expires_at: None,
             生存模式: 媒体分发生存模式::到期后仅peer存活,
         },
         冷源: 媒体冷源描述 {

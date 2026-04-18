@@ -262,6 +262,39 @@ describe("媒体协作分发", () => {
     expect(first).toBe(second);
   });
 
+  it("join_ticket 存在时会通过 getAnnounceOpts 传给 tracker，而不是前端自己拼第二套 announce URL", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-ticket-opts");
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      expect(options.getAnnounceOpts?.()).toEqual({
+        ticket: "ticket-att-ticket-opts",
+      });
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-ticket-opts");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.join_ticket = "ticket-att-ticket-opts";
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-ticket-opts",
+      kind: "video",
+      locator,
+    });
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-ticket-opts",
+      hint: "正在协作分发",
+      locallyComplete: false,
+    });
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
   it("当前页还没被根 service worker 接管时，不会提前启动 WebTorrent browser server 去打 /webtorrent/* 404", async () => {
     vi.resetModules();
     const platform = {

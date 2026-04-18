@@ -129,4 +129,30 @@ describe("媒体会话", () => {
       lastSignal: "SWARM_ACTIVE",
     });
   });
+
+  it("SWARM_TICKET_INVALID 会触发一次恢复解析，而不是继续抱着过期 join_ticket 卡在旧会话里", async () => {
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建锚点播放结果("att-video-ticket-1"));
+    const 会话 = 创建媒体会话({
+      attachmentId: "att-video-ticket-1",
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    解析播放结果.mockClear();
+    会话.send({ type: "PLAYER_PLAYING" });
+
+    会话.send({ type: "SWARM_TICKET_INVALID" });
+    expect(会话.snapshot().status).toBe("recovering");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).toHaveBeenCalledTimes(1);
+    expect(解析播放结果).toHaveBeenCalledWith({
+      attachmentId: "att-video-ticket-1",
+      kind: "video",
+      consumerId: "session:att-video-ticket-1",
+    });
+    expect(会话.snapshot().lastSignal).toBe("SWARM_TICKET_INVALID");
+  });
 });

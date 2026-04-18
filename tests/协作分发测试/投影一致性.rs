@@ -131,6 +131,9 @@ async fn 视频locator与房间快照会共享同一套preview_asset() {
 #[tokio::test]
 #[serial]
 async fn 视频complete与locator会共享同一套streaming生命周期与peer_only生存字段() {
+    let backup = 备份并清空环境变量(&["SWARM_TICKET_SECRET", "SWARM_TICKET_TTL_SECONDS"]);
+    std::env::set_var("SWARM_TICKET_SECRET", "projection-ticket-secret-for-tests");
+    std::env::set_var("SWARM_TICKET_TTL_SECONDS", "180");
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -223,6 +226,7 @@ async fn 视频complete与locator会共享同一套streaming生命周期与peer_
         &[],
     )
     .await;
+    恢复环境变量(backup);
 
     assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
     assert_eq!(locator_status, StatusCode::OK, "{locator_body:?}");
@@ -250,6 +254,30 @@ async fn 视频complete与locator会共享同一套streaming生命周期与peer_
         complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
         locator_body["streaming_asset"]["distribution"]["survival_mode"].as_str(),
         "complete.media_asset 与 locator.streaming_asset 不能把 survival_mode 投影成两套不同语义"
+    );
+    assert!(
+        complete_body["media_asset"]["distribution"]["join_ticket"]
+            .as_str()
+            .is_some_and(|ticket| !ticket.is_empty()),
+        "complete.media_asset 也必须带上 join_ticket，不能只让 locator 独占门禁线索"
+    );
+    assert!(
+        locator_body["distribution"]["join_ticket"]
+            .as_str()
+            .is_some_and(|ticket| !ticket.is_empty()),
+        "locator 顶层 distribution 必须同步下发可用的 join_ticket"
+    );
+    assert!(
+        complete_body["media_asset"]["distribution"]["ticket_expires_at"]
+            .as_str()
+            .is_some_and(|expires_at| !expires_at.is_empty()),
+        "complete.media_asset 必须同步带出 ticket 过期时间"
+    );
+    assert!(
+        locator_body["distribution"]["ticket_expires_at"]
+            .as_str()
+            .is_some_and(|expires_at| !expires_at.is_empty()),
+        "locator 顶层 distribution 也必须共享同一类 ticket 过期语义"
     );
 }
 

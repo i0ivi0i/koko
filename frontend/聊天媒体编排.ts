@@ -556,6 +556,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     event:
       | { type: "SWARM_ACTIVE"; attachmentId: string; swarmId: string }
       | { type: "SWARM_NO_PEERS"; attachmentId: string; swarmId: string }
+      | { type: "SWARM_TICKET_INVALID"; attachmentId: string; swarmId: string }
       | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string }
   ): void => {
     if (event.type === "SWARM_ACTIVE") {
@@ -564,6 +565,17 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     if (event.type === "SWARM_NO_PEERS") {
       媒体会话表.get(attachment.attachmentId)?.send({ type: "SWARM_NO_PEERS" });
+      return;
+    }
+    if (event.type === "SWARM_TICKET_INVALID") {
+      /**
+       * join ticket 过期后，真正该过期的是这条 locator 缓存，而不是附件业务真相：
+       * 1. 编排层掌握 locator owner，所以由这里统一标脏；
+       * 2. 媒体会话只收到“需要恢复”的稳定信号，不直接碰缓存实现；
+       * 3. 下一次恢复解析会自然 forceRefresh，拿到后端新签的 ticket。
+       */
+      媒体定位器.标记过期(attachment.attachmentId);
+      媒体会话表.get(attachment.attachmentId)?.send({ type: "SWARM_TICKET_INVALID" });
       return;
     }
     标记附件完整并持久化(attachment.attachmentId, {

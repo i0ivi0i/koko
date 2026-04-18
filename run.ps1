@@ -529,9 +529,18 @@ try {
     if ([string]::IsNullOrWhiteSpace($trackerPublicUrl)) {
         $trackerPublicUrl = "ws://127.0.0.1:$trackerPort"
     }
+    $swarmTicketSecret = [Environment]::GetEnvironmentVariable("SWARM_TICKET_SECRET")
+    if ([string]::IsNullOrWhiteSpace($swarmTicketSecret)) {
+        # join ticket secret 只属于“本轮开发态后端 + tracker”共识，不需要开发者每次手工预置。
+        # 这里缺省自动生成，保证 locator 签票与 tracker 验票始终站在同一份受控 secret 上。
+        $swarmTicketSecret = [Guid]::NewGuid().ToString("N")
+    }
     $tusHookUrl = "http://127.0.0.1:$appPort/internal/tus/hooks"
     $resolvedTusUploadDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $mediaTusUploadDir))
     New-Item -ItemType Directory -Path $resolvedTusUploadDir -Force | Out-Null
+    [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PORT", $trackerPort)
+    [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL", $trackerPublicUrl)
+    [Environment]::SetEnvironmentVariable("SWARM_TICKET_SECRET", $swarmTicketSecret)
     Stop-StaleLauncherSidecars `
         -AppPort ([int]$appPort) `
         -TrackerPort ([int]$trackerPort) `
@@ -584,12 +593,12 @@ try {
     # 1. 当前 11.2.2 的 `bin/cmd.js` 会先 import 整个 index，再把 client/node-datachannel 一起拖进 Node 进程；
     # 2. 这台 Win11 + Node 25 开发机上会先炸在原生模块缺失，真正的 websocket tracker 还没开始监听；
     # 3. 我们仍然站在成熟轮子上，只调用官方 `bittorrent-tracker/server` 子入口，
-    #    让 `frontend/dev-tracker.mjs` 负责极薄的端口、announce 地址和日志胶水。
-    Write-Host "启动 WebTorrent tracker: node dev-tracker.mjs --port $trackerPort --public-url $trackerPublicUrl"
+    #    让 `frontend/dev-tracker.mjs` 负责极薄的端口、announce 地址、join ticket 门禁和日志胶水。
+    Write-Host "启动 WebTorrent tracker: node dev-tracker.mjs --port $trackerPort --public-url $trackerPublicUrl --ticket-secret <hidden>"
     $trackerProcess = New-ManagedProcess `
         -Name "tracker" `
         -FilePath $nodePath `
-        -ArgumentList @("dev-tracker.mjs", "--port", $trackerPort, "--public-url", $trackerPublicUrl) `
+        -ArgumentList @("dev-tracker.mjs", "--port", $trackerPort, "--public-url", $trackerPublicUrl, "--ticket-secret", $swarmTicketSecret) `
         -WorkingDirectory $frontendRoot `
         -LogDirectory $logDirectory
 

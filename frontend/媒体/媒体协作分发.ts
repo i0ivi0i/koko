@@ -61,9 +61,61 @@ export interface 协作分发媒体源 {
 export type 协作分发会话事件 =
   | { type: "SWARM_ACTIVE"; attachmentId: string; swarmId: string }
   | { type: "SWARM_NO_PEERS"; attachmentId: string; swarmId: string }
+  | { type: "SWARM_TICKET_INVALID"; attachmentId: string; swarmId: string }
   | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string };
 
 const 协作分发存活上报间隔毫秒 = 60_000;
+export const 协作分发JoinTicket失效原因 = "join_ticket_invalid";
+
+/**
+ * join ticket 失效需要一条稳定、可跨层识别的错误语义：
+ * 1. tracker 侧对外只暴露固定 reason，避免把签名细节泄给浏览器；
+ * 2. runtime / 播放器只认这一条权威原因，不再四处猜 message 文案；
+ * 3. 后续无论是 dev tracker 还是正式 tracker，只要沿用这条 reason，前端恢复链就不用改。
+ */
+export class 协作分发JoinTicket失效错误 extends Error {
+  readonly code = 协作分发JoinTicket失效原因;
+
+  constructor(message = 协作分发JoinTicket失效原因) {
+    super(message);
+    this.name = "协作分发JoinTicket失效错误";
+  }
+}
+
+const 读取协作分发错误消息 = (error: unknown): string | null => {
+  if (error instanceof Error && typeof error.message === "string") {
+    return error.message;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+  return null;
+};
+
+export const 是否为协作分发JoinTicket失效错误 = (error: unknown): boolean => {
+  if (error instanceof 协作分发JoinTicket失效错误) {
+    return true;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 协作分发JoinTicket失效原因
+  ) {
+    return true;
+  }
+  return 读取协作分发错误消息(error) === 协作分发JoinTicket失效原因;
+};
+
+const 归一化协作分发错误 = (error: unknown): unknown =>
+  是否为协作分发JoinTicket失效错误(error)
+    ? new 协作分发JoinTicket失效错误()
+    : error;
 
 export type 协作分发底层会话 = {
   attachmentId: string;
@@ -281,7 +333,9 @@ export async function 接入协作分发种子(
       },
       resolve
     );
-    torrent.on("error", reject);
+    torrent.on("error", (error) => {
+      reject(归一化协作分发错误(error));
+    });
   });
 }
 

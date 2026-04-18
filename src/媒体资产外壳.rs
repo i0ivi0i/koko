@@ -246,7 +246,12 @@ fn 流媒体分段缓存控制值() -> &'static str {
 }
 
 fn 构造流媒体对象etag(meta: &ObjectMeta, asset_path: &str) -> String {
-    if let Some(raw) = meta.e_tag.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(raw) = meta
+        .e_tag
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         if raw.starts_with("W/\"") || (raw.starts_with('"') && raw.ends_with('"')) {
             return raw.to_string();
         }
@@ -342,9 +347,7 @@ fn 媒体冷源角色转标签(role: &contract::媒体冷源角色) -> &'static 
     }
 }
 
-fn 媒体分发生存模式转标签(
-    mode: &contract::媒体分发生存模式
-) -> &'static str {
+fn 媒体分发生存模式转标签(mode: &contract::媒体分发生存模式) -> &'static str {
     match mode {
         contract::媒体分发生存模式::服务端冷备窗口 => "server_assisted",
         contract::媒体分发生存模式::到期后仅peer存活 => "peer_only_after_expiry",
@@ -369,7 +372,7 @@ fn 媒体清单描述转响应体(manifest: &contract::媒体清单描述) -> se
 }
 
 fn 流媒体生命周期描述转响应体(
-    lifecycle: &contract::流媒体生命周期描述
+    lifecycle: &contract::流媒体生命周期描述,
 ) -> serde_json::Value {
     serde_json::json!({
         "streaming_expires_at": lifecycle.streaming到期时间戳秒,
@@ -405,6 +408,9 @@ fn 从运行态协作分发响应提取共享分发表面(
         join_ticket: runtime_distribution["join_ticket"]
             .as_str()
             .map(str::to_string),
+        ticket_expires_at: runtime_distribution["ticket_expires_at"]
+            .as_str()
+            .map(str::to_string),
         生存模式: match runtime_distribution["survival_mode"].as_str() {
             Some("server_assisted") => contract::媒体分发生存模式::服务端冷备窗口,
             _ => contract::媒体分发生存模式::到期后仅peer存活,
@@ -420,6 +426,7 @@ fn 媒体分发描述转响应体(
         "announce_urls": distribution.announce_urls,
         "web_seed_url": distribution.web_seed_url,
         "join_ticket": distribution.join_ticket,
+        "ticket_expires_at": distribution.ticket_expires_at,
         "survival_mode": 媒体分发生存模式转标签(&distribution.生存模式),
     })
 }
@@ -527,12 +534,16 @@ fn 构造流媒体资产响应体(参数: 流媒体资产响应参数<'_>) -> se
             },
         },
         生命周期: contract::流媒体生命周期描述 {
-            streaming到期时间戳秒: 参数
-                .流媒体清单
-                .and_then(|manifest| manifest.streaming到期时间戳秒.map(|value| value.to_string())),
-            streaming删除时间戳秒: 参数
-                .流媒体清单
-                .and_then(|manifest| manifest.streaming删除时间戳秒.map(|value| value.to_string())),
+            streaming到期时间戳秒: 参数.流媒体清单.and_then(|manifest| {
+                manifest
+                    .streaming到期时间戳秒
+                    .map(|value| value.to_string())
+            }),
+            streaming删除时间戳秒: 参数.流媒体清单.and_then(|manifest| {
+                manifest
+                    .streaming删除时间戳秒
+                    .map(|value| value.to_string())
+            }),
         },
         分发: 从运行态协作分发响应提取共享分发表面(
             参数.分发快照,
@@ -767,6 +778,8 @@ pub(super) async fn load_media_locator(
                 session_id: query.session_id.as_str(),
                 tracker_public_url: state.swarm_tracker_public_url.as_str(),
                 web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
+                ticket_secret: state.swarm_ticket_secret.as_deref(),
+                ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
                 冷源仍可用,
                 now_epoch秒,
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
@@ -1181,10 +1194,7 @@ pub(super) async fn load_streaming_asset_content(
                     header::CONTENT_TYPE,
                     流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
                 ),
-                (
-                    header::CACHE_CONTROL,
-                    流媒体清单缓存控制值().to_string(),
-                ),
+                (header::CACHE_CONTROL, 流媒体清单缓存控制值().to_string()),
                 (header::ETAG, etag),
                 (header::LAST_MODIFIED, last_modified),
             ],
@@ -1253,10 +1263,7 @@ pub(super) async fn load_streaming_asset_content(
                     header::CONTENT_TYPE,
                     流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
                 ),
-                (
-                    header::CACHE_CONTROL,
-                    流媒体分段缓存控制值().to_string(),
-                ),
+                (header::CACHE_CONTROL, 流媒体分段缓存控制值().to_string()),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
                 (
                     header::CONTENT_RANGE,
@@ -1273,10 +1280,7 @@ pub(super) async fn load_streaming_asset_content(
                     header::CONTENT_TYPE,
                     流媒体打包::推导流媒体内容类型(asset_path.as_str()).to_string(),
                 ),
-                (
-                    header::CACHE_CONTROL,
-                    流媒体分段缓存控制值().to_string(),
-                ),
+                (header::CACHE_CONTROL, 流媒体分段缓存控制值().to_string()),
                 (header::ACCEPT_RANGES, "bytes".to_string()),
                 (header::LAST_MODIFIED, object_last_modified),
             ],

@@ -89,6 +89,8 @@ pub struct 应用状态 {
     pub swarm_tracker_public_url: String,
     pub swarm_tracker_port: u16,
     pub swarm_web_seed_public_endpoint: Option<String>,
+    pub swarm_ticket_secret: Option<String>,
+    pub swarm_ticket_ttl_seconds: i64,
     pub swarm_peer_presence_stale_seconds: i64,
     pub tus_public_endpoint: Option<String>,
     pub tus_server_port: u16,
@@ -126,8 +128,7 @@ async fn 删除对象前缀下所有文件(
                 Err(err) => {
                     return Err(io::Error::other(format!(
                         "删除对象失败(prefix={}, object={}): {err}",
-                        当前前缀,
-                        object_meta.location
+                        当前前缀, object_meta.location
                     )));
                 }
             }
@@ -174,6 +175,8 @@ pub async fn 构建应用状态(
         swarm_tracker_public_url: swarm.tracker_public_url,
         swarm_tracker_port: swarm.tracker_port,
         swarm_web_seed_public_endpoint: swarm.web_seed_public_endpoint,
+        swarm_ticket_secret: swarm.ticket_secret,
+        swarm_ticket_ttl_seconds: swarm.ticket_ttl_seconds,
         swarm_peer_presence_stale_seconds: swarm.peer_presence_stale_seconds,
         tus_public_endpoint: tus.public_endpoint,
         tus_server_port: tus.server_port,
@@ -310,7 +313,8 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
             continue;
         };
 
-        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &hls前缀).await {
+        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &hls前缀).await
+        {
             tracing::error!(
                 usecase = "媒体冷源清理",
                 adapter = "shell",
@@ -322,7 +326,8 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
             );
             continue;
         }
-        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &dash前缀).await {
+        if let Err(err) = 删除对象前缀下所有文件(&state.attachment_store, &dash前缀).await
+        {
             tracing::error!(
                 usecase = "媒体冷源清理",
                 adapter = "shell",
@@ -403,8 +408,11 @@ async fn 执行一次媒体上传残留清理_按会话(
                 &state.tus_upload_dir,
                 残留.临时文件定位.as_str(),
             ) {
-                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件(path)) => path,
-                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件已缺失) => {
+                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件(path)) => {
+                    path
+                }
+                Ok(tus_hook外壳::Tus残留清理定位结果::当前上传目录文件已缺失) =>
+                {
                     tracing::info!(
                         usecase = "上传残留清理",
                         adapter = "shell",

@@ -1,6 +1,8 @@
 use crate::usecase;
 use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sha2::{Digest, Sha256};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 /// 第一版保底窗口固定 24 小时。
 /// 这里故意收口成常量，避免 shell、adapter、前端各自写一份“24 * 60 * 60”。
@@ -96,6 +98,12 @@ pub(crate) struct 协作分发响应上下文<'a> {
     pub session_id: &'a str,
     pub tracker_public_url: &'a str,
     pub web_seed_public_endpoint: Option<&'a str>,
+    /// ticket secret 是启动期/运维期配置，不属于分发快照真相。
+    /// 这里通过只读借用透传，避免 handler 自己拼装 secret 或散落签名逻辑。
+    pub ticket_secret: Option<&'a str>,
+    /// TTL 同样是 runtime gate，而不是领域事实。
+    /// 统一从启动配置透传，保证 complete / locator / 未来 refresh 用同一把尺子。
+    pub ticket_ttl_seconds: i64,
     /// 这里表达的是“original 变体当前还能不能作为受控冷备入口读取”，
     /// 不是协作分发 availability 本身。availability 还必须再过一层 web_seed TTL 裁决。
     pub 冷源仍可用: bool,
@@ -103,10 +111,68 @@ pub(crate) struct 协作分发响应上下文<'a> {
     pub stale_seconds: i64,
 }
 
+#[derive(serde::Serialize)]
+struct 协作分发入群票据声明<'a> {
+    /// `sub` 继续锚到会话，后续 tracker/审计链可以追溯“谁拿着这张门票进 swarm”。
+    sub: &'a str,
+    /// `aid` 锚到业务附件，避免同一 info hash 被错误复用到别的附件上下文。
+    aid: &'a str,
+    /// `ih` 必须直接绑定 torrent info hash；
+    /// tracker 看到的就是它，而不是我们内部的 swarm_id。
+    ih: &'a str,
+    /// `iat/exp` 统一使用 UNIX 秒，直接复用成熟 JWT 标准字段。
+    iat: usize,
+    exp: usize,
+}
+
+struct 协作分发入群票据签发结果 {
+    ticket: String,
+    ticket_expires_at: String,
+}
+
+/// tracker ticket 只在“当前 swarm 仍值得接入”时签发：
+/// 1. secret 没配时直接停签，避免假装有门禁；
+/// 2. availability 已经过期时不再给浏览器错误希望；
+/// 3. info hash 缺失时也不签，避免发出 tracker 根本无法校验的票。
+fn 签发协作分发join_ticket(
+    snapshot: &usecase::协作分发元数据快照,
+    上下文: &协作分发响应上下文<'_>,
+    availability: &str,
+) -> Option<协作分发入群票据签发结果> {
+    if availability != "available" {
+        return None;
+    }
+    let secret = 上下文.ticket_secret?;
+    let info_hash = snapshot.torrent_info_hash.as_deref()?;
+    let issued_at秒 = 上下文.now_epoch秒.max(0) as usize;
+    let expires_at秒 = issued_at秒.saturating_add(上下文.ticket_ttl_seconds as usize);
+    let claims = 协作分发入群票据声明 {
+        sub: 上下文.session_id,
+        aid: 上下文.attachment_id,
+        ih: info_hash,
+        iat: issued_at秒,
+        exp: expires_at秒,
+    };
+    let ticket = encode(
+        &Header::new(Algorithm::HS256),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .ok()?;
+    let ticket_expires_at = OffsetDateTime::from_unix_timestamp(expires_at秒 as i64)
+        .ok()?
+        .format(&Rfc3339)
+        .ok()?;
+    Some(协作分发入群票据签发结果 {
+        ticket,
+        ticket_expires_at,
+    })
+}
+
 /// Phase 2 的 runtime locator 仍然服从同一条边界：
 /// 1. 不下发存储键；
 /// 2. runtime 线索只包含浏览器真正要用到的 announce / web seed / presence / availability；
-/// 3. ticket 位置先留空，不提前伪造门禁真相。
+/// 3. join_ticket/ticket_expires_at 只表达 swarm 门禁，不扩散成页面流程字段。
 pub(crate) fn 协作分发快照转响应值(
     snapshot: &usecase::协作分发元数据快照,
     上下文: 协作分发响应上下文<'_>,
@@ -126,6 +192,7 @@ pub(crate) fn 协作分发快照转响应值(
         上下文.now_epoch秒,
         上下文.stale_seconds,
     );
+    let ticket = 签发协作分发join_ticket(snapshot, &上下文, availability);
     serde_json::json!({
         "content_id": snapshot.content_id,
         "content_hash": snapshot.content_hash,
@@ -143,8 +210,10 @@ pub(crate) fn 协作分发快照转响应值(
         "web_seed_url": web_seed仍可用
             .then(|| 拼接公开地址(上下文.web_seed_public_endpoint, web_seed_relative_path.as_str())),
         "presence_url": presence_relative_path,
-        "join_ticket": serde_json::Value::Null,
-        "ticket_expires_at": serde_json::Value::Null,
+        "join_ticket": ticket.as_ref().map(|value| value.ticket.as_str()),
+        "ticket_expires_at": ticket
+            .as_ref()
+            .map(|value| value.ticket_expires_at.as_str()),
         "availability": availability,
         // survival_mode 表达的是“服务器流媒体退场后正式靠什么继续活”，
         // 它是稳定共享语义，不等于当前 availability，也不承载前端页面提示文案。

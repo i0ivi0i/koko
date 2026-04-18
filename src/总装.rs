@@ -1,8 +1,8 @@
+use sqlx::{postgres::PgConnectOptions, ConnectOptions};
 use std::{
     env, io, panic,
     sync::{Once, OnceLock},
 };
-use sqlx::{postgres::PgConnectOptions, ConnectOptions};
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
 static PANIC_HOOK_INIT: Once = Once::new();
@@ -69,13 +69,16 @@ pub struct 媒体Tus侧车配置 {
 /// 协作分发配置只回答“runtime 线索怎么暴露给前端”：
 /// 1. tracker public URL 提供给浏览器进入 swarm；
 /// 2. web seed public endpoint 决定 24 小时保底源的公开地址；
-/// 3. peer presence staleness 为后续 Phase 3 的过期裁决预留稳定配置源；
-/// 4. 原始冷源清理间隔只属于启动/运维配置，不进入业务契约。
+/// 3. ticket secret / TTL 决定私有 swarm 门禁如何签发；
+/// 4. peer presence staleness 为后续 Phase 3 的过期裁决预留稳定配置源；
+/// 5. 原始冷源清理间隔只属于启动/运维配置，不进入业务契约。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 协作分发配置 {
     pub tracker_public_url: String,
     pub tracker_port: u16,
     pub web_seed_public_endpoint: Option<String>,
+    pub ticket_secret: Option<String>,
+    pub ticket_ttl_seconds: i64,
     pub peer_presence_stale_seconds: i64,
     pub media_origin_cleanup_interval_seconds: i64,
 }
@@ -250,7 +253,12 @@ fn 构建迁移数据库连接选项(database_url: &str) -> io::Result<PgConnect
     database_url
         .parse::<PgConnectOptions>()
         .map(ConnectOptions::disable_statement_logging)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, format!("DATABASE_URL 非法: {err}")))
+        .map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("DATABASE_URL 非法: {err}"),
+            )
+        })
 }
 
 /// 读取必填环境变量并做“非空字符串”校验。
@@ -427,13 +435,26 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
 /// 协作分发运行参数默认保持“本机直接能跑”：
 /// 1. tracker 默认落在本机 `7072`；
 /// 2. web seed public endpoint 为空时，后端继续下发同源相对地址；
-/// 3. stale 秒数先保守收口为 180 秒，给后续 Phase 3 的 presence 裁决复用；
-/// 4. 冷源清理默认每 60 秒扫一次，保证 TTL 真相不会只停留在数据库时间戳。
+/// 3. ticket secret 允许为空，此时 locator/complete 会显式不签发门禁令牌；
+/// 4. ticket TTL 默认 120 秒，保证浏览器不会长期复用旧门票；
+/// 5. stale 秒数先保守收口为 180 秒，给后续 Phase 3 的 presence 裁决复用；
+/// 6. 冷源清理默认每 60 秒扫一次，保证 TTL 真相不会只停留在数据库时间戳。
 pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
     let tracker_port = 读取可选端口("SWARM_TRACKER_PORT", 7072)?;
     let tracker_public_url = 读取可选环境变量("SWARM_TRACKER_PUBLIC_URL")
         .unwrap_or_else(|| format!("ws://127.0.0.1:{tracker_port}"));
     let web_seed_public_endpoint = 读取可选环境变量("SWARM_WEB_SEED_PUBLIC_ENDPOINT");
+    let ticket_secret = 读取可选环境变量("SWARM_TICKET_SECRET");
+    let ticket_ttl_seconds = 读取可选整数("SWARM_TICKET_TTL_SECONDS", 120).and_then(|value| {
+        if value <= 0 {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("环境变量 SWARM_TICKET_TTL_SECONDS 必须大于 0: {value}"),
+            ))
+        } else {
+            Ok(value)
+        }
+    })?;
     let peer_presence_stale_seconds = 读取可选整数("SWARM_PEER_PRESENCE_STALE_SECONDS", 180)?;
     let media_origin_cleanup_interval_seconds =
         读取可选整数("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS", 60)?;
@@ -442,6 +463,8 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
         tracker_public_url,
         tracker_port,
         web_seed_public_endpoint,
+        ticket_secret,
+        ticket_ttl_seconds,
         peer_presence_stale_seconds,
         media_origin_cleanup_interval_seconds,
     })
@@ -640,8 +663,9 @@ mod tests {
 
     #[test]
     fn 构建迁移数据库连接选项会关闭_statement_日志() {
-        let options = 构建迁移数据库连接选项("postgres://postgres:postgres@127.0.0.1:5432/koko")
-            .expect("迁移连接选项应可构建");
+        let options =
+            构建迁移数据库连接选项("postgres://postgres:postgres@127.0.0.1:5432/koko")
+                .expect("迁移连接选项应可构建");
         let debug = format!("{options:?}");
 
         assert!(debug.contains("statements_level: Off"));

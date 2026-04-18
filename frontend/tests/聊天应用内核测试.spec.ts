@@ -40,7 +40,7 @@ type 图片协作补齐激活请求 = {
   kind: "image" | "video";
   consumerId?: string;
   onSessionEvent?: (signal: {
-    type: "SWARM_ACTIVE" | "SWARM_NO_PEERS" | "ASSET_COMPLETE";
+    type: "SWARM_ACTIVE" | "SWARM_NO_PEERS" | "SWARM_TICKET_INVALID" | "ASSET_COMPLETE";
     attachmentId: string;
     swarmId: string;
     contentHash?: string;
