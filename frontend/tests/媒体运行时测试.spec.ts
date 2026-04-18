@@ -202,4 +202,68 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
     expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
   });
+
+  it("正式查看器关闭后，会根据最后一次可见候选重新挂起自动播 owner", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-restore-1",
+          visibilityRatio: 0.92,
+          distanceToViewportCenter: 10,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "VIEWER_OPEN_REQUESTED",
+      request: 创建视频查看器请求("att-video-inline-restore-1"),
+    });
+    actor.send({ type: "VIEWER_OPEN_CONFIRMED" });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+
+    actor.send({ type: "VIEWER_CLOSED" });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
+      "att-video-inline-restore-1"
+    );
+  });
+
+  it("生命周期恢复到 normal 后，会根据最后一次可见候选重新挂起自动播 owner", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-resume-1",
+          visibilityRatio: 0.93,
+          distanceToViewportCenter: 8,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "suspended",
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+
+    actor.send({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "normal",
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
+      "att-video-inline-resume-1"
+    );
+  });
 });

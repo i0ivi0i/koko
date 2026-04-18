@@ -572,6 +572,84 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
+  it("查看器切到另一条视频时会复用同一颗 Video.js 壳，并把媒体信号归属切到新附件", async () => {
+    const 信号记录: Array<{ attachmentId: string; signal: { type: string } }> = [];
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+      onMediaSessionSignal: (attachmentId, signal) => {
+        信号记录.push({ attachmentId, signal });
+      },
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-switch-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-switch-1",
+          src: "http://media.local/stream/att-video-switch-1/master.m3u8",
+          posterSrc: "http://media.local/poster-switch-1",
+          width: 1280,
+          height: 720,
+        },
+        {
+          kind: "video",
+          attachmentId: "att-video-switch-2",
+          src: "blob:http://media.local/video-switch-2",
+          posterSrc: "http://media.local/poster-switch-2",
+          width: 1920,
+          height: 1080,
+        },
+      ],
+    });
+    const 初始壳 = await 等待查询元素<HTMLElement>("video-player[data-player-shell='videojs']");
+    const 初始视频 = await 等待查询元素<HTMLVideoElement>("video");
+
+    expect(初始壳).not.toBeNull();
+    expect(初始视频).not.toBeNull();
+
+    viewer.同步({
+      startAttachmentId: "att-video-switch-2",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-switch-1",
+          src: "http://media.local/stream/att-video-switch-1/master.m3u8",
+          posterSrc: "http://media.local/poster-switch-1",
+          width: 1280,
+          height: 720,
+        },
+        {
+          kind: "video",
+          attachmentId: "att-video-switch-2",
+          src: "blob:http://media.local/video-switch-2",
+          posterSrc: "http://media.local/poster-switch-2",
+          width: 1920,
+          height: 1080,
+        },
+      ],
+    });
+    await Promise.resolve();
+
+    const 当前壳 = document.body.querySelector<HTMLElement>("video-player[data-player-shell='videojs']");
+    const 当前视频 = document.body.querySelector<HTMLVideoElement>("video");
+
+    expect(当前壳).toBe(初始壳);
+    expect(当前视频).toBe(初始视频);
+    expect(当前视频?.src).toBe("blob:http://media.local/video-switch-2");
+    expect(当前视频?.poster).toBe("http://media.local/poster-switch-2");
+    expect(document.body.querySelectorAll("video-player[data-player-shell='videojs']")).toHaveLength(
+      1
+    );
+    expect(document.body.querySelectorAll("video")).toHaveLength(1);
+
+    当前视频?.dispatchEvent(new Event("waiting"));
+    expect(信号记录.at(-1)).toEqual({
+      attachmentId: "att-video-switch-2",
+      signal: { type: "PLAYER_WAITING" },
+    });
+  });
+
   it("移动端全屏策略仍复用同一个播放器会话，不会额外创建第二颗 video", async () => {
     const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({

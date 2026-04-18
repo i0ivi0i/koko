@@ -15,6 +15,7 @@ export interface 媒体运行时上下文 {
   inlineAutoplayOwnerAttachmentId: string | null;
   inlineAutoplayPendingAttachmentId: string | null;
   inlineAutoplayPlayback: 媒体播放结果 | null;
+  lastInlineAutoplayCandidates: 消息视频自动播候选[];
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   inflightLocatorCount: number;
   inflightManifestOrRangeCount: number;
@@ -89,6 +90,7 @@ const 初始媒体运行时上下文: 媒体运行时上下文 = {
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
   inlineAutoplayPlayback: null,
+  lastInlineAutoplayCandidates: [],
   heavyWorkPolicy: "normal",
   inflightLocatorCount: 0,
   inflightManifestOrRangeCount: 0,
@@ -105,6 +107,51 @@ const 清空自动播Owner补丁 = () => ({
   inlineAutoplayPendingAttachmentId: null,
   inlineAutoplayPlayback: null,
 });
+
+/**
+ * 查看器打开或生命周期降载时，时间线不一定会立刻重新派发一次可见候选。
+ * 这里缓存最后一帧观测结果，让抑制条件解除后仍能沿用同一条 pending -> owner 链恢复自动播。
+ */
+const 克隆自动播候选 = (
+  candidates: 消息视频自动播候选[]
+): 消息视频自动播候选[] => candidates.map((candidate) => ({ ...candidate }));
+
+const 重算自动播候选补丁 = (
+  context: Pick<
+    媒体运行时上下文,
+    | "currentViewerRequest"
+    | "heavyWorkPolicy"
+    | "inlineAutoplayOwnerAttachmentId"
+    | "inlineAutoplayPendingAttachmentId"
+  >,
+  candidates: 消息视频自动播候选[]
+):
+  | ReturnType<typeof 清空自动播Owner补丁>
+  | Pick<媒体运行时上下文, "inlineAutoplayPendingAttachmentId">
+  | Record<string, never> => {
+  if (context.heavyWorkPolicy !== "normal" || context.currentViewerRequest !== null) {
+    return 清空自动播Owner补丁();
+  }
+  const nextOwnerAttachmentId = 选择消息视频自动播Owner(
+    candidates,
+    undefined,
+    context.inlineAutoplayPendingAttachmentId ?? context.inlineAutoplayOwnerAttachmentId
+  );
+  if (!nextOwnerAttachmentId) {
+    return 清空自动播Owner补丁();
+  }
+  if (nextOwnerAttachmentId === context.inlineAutoplayOwnerAttachmentId) {
+    return {
+      inlineAutoplayPendingAttachmentId: null,
+    };
+  }
+  if (nextOwnerAttachmentId === context.inlineAutoplayPendingAttachmentId) {
+    return {};
+  }
+  return {
+    inlineAutoplayPendingAttachmentId: nextOwnerAttachmentId,
+  };
+};
 
 const 可投影为自动播播放结果 = (playback: 媒体播放结果): boolean =>
   playback.mode === "anchor" || playback.mode === "swarm" || playback.mode === "blob";
@@ -198,7 +245,11 @@ const 媒体运行时机 = createMachine(
         return {
           ...context,
           currentViewerRequest: 克隆查看器请求(event.request),
-          viewerOpen: false,
+          /**
+           * 查看器已打开时再次点开另一条同类媒体，应该继续留在同一会话里同步 source。
+           * 这里只有在“当前根本没有已打开查看器”时，才把会话重置回待打开态。
+           */
+          viewerOpen: context.viewerOpen && context.currentViewerRequest !== null,
           ...清空自动播Owner补丁(),
         };
       }),
@@ -218,38 +269,25 @@ const 媒体运行时机 = createMachine(
           viewerOpen: true,
         };
       }),
-      关闭查看器: assign(() => ({
-        currentViewerRequest: null,
-        viewerOpen: false,
-      })),
+      关闭查看器: assign(({ context }) => {
+        const nextContext = {
+          ...context,
+          currentViewerRequest: null,
+          viewerOpen: false,
+        };
+        return {
+          currentViewerRequest: null,
+          viewerOpen: false,
+          ...重算自动播候选补丁(nextContext, context.lastInlineAutoplayCandidates),
+        };
+      }),
       裁决自动播候选: assign(({ event, context }) => {
         if (event.type !== "INLINE_AUTOPLAY_CANDIDATES_OBSERVED") {
           return {};
         }
-        if (
-          context.heavyWorkPolicy !== "normal" ||
-          context.currentViewerRequest !== null
-        ) {
-          return 清空自动播Owner补丁();
-        }
-        const nextOwnerAttachmentId = 选择消息视频自动播Owner(
-          event.candidates,
-          undefined,
-          context.inlineAutoplayPendingAttachmentId ?? context.inlineAutoplayOwnerAttachmentId
-        );
-        if (!nextOwnerAttachmentId) {
-          return 清空自动播Owner补丁();
-        }
-        if (nextOwnerAttachmentId === context.inlineAutoplayOwnerAttachmentId) {
-          return {
-            inlineAutoplayPendingAttachmentId: null,
-          };
-        }
-        if (nextOwnerAttachmentId === context.inlineAutoplayPendingAttachmentId) {
-          return {};
-        }
         return {
-          inlineAutoplayPendingAttachmentId: nextOwnerAttachmentId,
+          lastInlineAutoplayCandidates: 克隆自动播候选(event.candidates),
+          ...重算自动播候选补丁(context, event.candidates),
         };
       }),
       提升稳定自动播Owner: assign(({ context }) => {
@@ -292,23 +330,39 @@ const 媒体运行时机 = createMachine(
           return {};
         }
         const activeAttachmentIds = new Set(event.attachmentIds);
+        const nextInlineAutoplayCandidates = context.lastInlineAutoplayCandidates.filter(
+          (candidate) => activeAttachmentIds.has(candidate.attachmentId)
+        );
         const ownerAlive =
           !context.inlineAutoplayOwnerAttachmentId ||
           activeAttachmentIds.has(context.inlineAutoplayOwnerAttachmentId);
         const pendingAlive =
           !context.inlineAutoplayPendingAttachmentId ||
           activeAttachmentIds.has(context.inlineAutoplayPendingAttachmentId);
-        if (ownerAlive && pendingAlive) {
+        const candidatesChanged =
+          nextInlineAutoplayCandidates.length !== context.lastInlineAutoplayCandidates.length;
+        if (ownerAlive && pendingAlive && !candidatesChanged) {
           return {};
         }
-        return {
+        const nextContext = {
+          ...context,
           inlineAutoplayOwnerAttachmentId: ownerAlive
             ? context.inlineAutoplayOwnerAttachmentId
             : null,
           inlineAutoplayPendingAttachmentId: pendingAlive
             ? context.inlineAutoplayPendingAttachmentId
             : null,
-          inlineAutoplayPlayback: ownerAlive ? context.inlineAutoplayPlayback : null,
+        };
+        return {
+          lastInlineAutoplayCandidates: nextInlineAutoplayCandidates,
+          ...(!ownerAlive || !pendingAlive
+            ? 重算自动播候选补丁(nextContext, nextInlineAutoplayCandidates)
+            : {
+                inlineAutoplayOwnerAttachmentId: context.inlineAutoplayOwnerAttachmentId,
+                inlineAutoplayPendingAttachmentId: context.inlineAutoplayPendingAttachmentId,
+              }),
+          inlineAutoplayPlayback:
+            ownerAlive && pendingAlive ? context.inlineAutoplayPlayback : null,
         };
       }),
       保留媒体信号占位: assign(() => {
@@ -321,8 +375,13 @@ const 媒体运行时机 = createMachine(
           return {};
         }
         if (event.heavyWorkPolicy === "normal") {
+          const nextContext = {
+            ...context,
+            heavyWorkPolicy: "normal" as const,
+          };
           return {
             heavyWorkPolicy: "normal" as const,
+            ...重算自动播候选补丁(nextContext, context.lastInlineAutoplayCandidates),
           };
         }
         return {

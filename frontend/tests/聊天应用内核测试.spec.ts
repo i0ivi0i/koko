@@ -2023,6 +2023,126 @@ describe("聊天应用内核", () => {
     }
   });
 
+  it("关闭正式查看器后，会按最后一次可见候选重新建立消息流自动播 owner", async () => {
+    vi.useFakeTimers();
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-restore",
+            client_message_id: "c-video-inline-restore",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-restore",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 解析播放结果 = vi.fn().mockResolvedValue({
+      mode: "anchor",
+      attachmentId: "att-video-inline-restore",
+      kind: "video",
+      src: "http://media.local/original-att-video-inline-restore",
+      thumbnailUrl: "http://media.local/poster-att-video-inline-restore",
+      hint: null,
+    });
+    读取媒体编排供测试(kernel).设置媒体查看器供测试({
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果,
+      释放附件播放资源: vi.fn(),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-restore",
+          visibilityRatio: 0.86,
+          distanceToViewportCenter: 10,
+        },
+      ],
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(121);
+
+      expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe(
+        "att-video-inline-restore"
+      );
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
+
+      await kernel.dispatch({
+        type: "MEDIA_OPEN_REQUESTED",
+        request: {
+          startAttachmentId: "att-video-inline-restore",
+          items: [
+            {
+              kind: "video",
+              attachmentId: "att-video-inline-restore",
+              src: "http://media.local/original-att-video-inline-restore",
+              posterSrc: "http://media.local/poster-att-video-inline-restore",
+              width: 1280,
+              height: 720,
+            },
+          ],
+        },
+      });
+
+      expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
+      const 关闭查看器前解析次数 = 解析播放结果.mock.calls.length;
+
+      读取媒体编排供测试(kernel).关闭媒体查看器供测试();
+      await Promise.resolve();
+
+      expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(121);
+      await Promise.resolve();
+
+      expect(kernel.snapshot().media.inlineAutoplayOwnerAttachmentId).toBe(
+        "att-video-inline-restore"
+      );
+      expect(解析播放结果).toHaveBeenCalledTimes(关闭查看器前解析次数 + 1);
+      expect(解析播放结果).toHaveBeenLastCalledWith({
+        attachmentId: "att-video-inline-restore",
+        kind: "video",
+        consumerId: "inline_autoplay:att-video-inline-restore",
+        surface: "inline_autoplay",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("单个视频已经完整进入视口时，会在旧 120ms 稳定窗之前启动自动播解析", async () => {
     vi.useFakeTimers();
     const transport = new 假传输();
@@ -2701,6 +2821,164 @@ describe("聊天应用内核", () => {
     expect(释放附件播放资源).not.toHaveBeenCalledWith({
       attachmentId: "att-video-viewer-1",
       consumerId: "session:att-video-viewer-1",
+    });
+  });
+
+  it("正式查看器已打开时切到另一条视频，会走同步而不是重新打开第二个查看器会话", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-switch-1",
+            client_message_id: "c-video-switch-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-switch-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-switch-2",
+            client_message_id: "c-video-switch-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-switch-2",
+                width: 1920,
+                height: 1080,
+              },
+            ],
+            event_position: 2,
+          },
+        ],
+      }),
+    ];
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const fake查看器 = {
+      打开: vi.fn(),
+      同步: vi.fn(),
+      销毁: vi.fn(),
+    };
+    读取媒体编排供测试(kernel).设置媒体查看器供测试(fake查看器);
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn(async ({ attachmentId, kind }) => ({
+        mode: "anchor",
+        attachmentId,
+        kind,
+        src: `http://media.local/original-${attachmentId}`,
+        thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+        hint: null,
+      }) satisfies 媒体播放结果),
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-switch-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-switch-1",
+            src: "http://media.local/original-att-video-switch-1",
+            posterSrc: "http://media.local/poster-att-video-switch-1",
+            width: 1280,
+            height: 720,
+          },
+          {
+            kind: "video",
+            attachmentId: "att-video-switch-2",
+            src: "http://media.local/original-att-video-switch-2",
+            posterSrc: "http://media.local/poster-att-video-switch-2",
+            width: 1920,
+            height: 1080,
+          },
+        ],
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fake查看器.打开).toHaveBeenCalledTimes(1);
+    const 首次打开后的同步次数 = fake查看器.同步.mock.calls.length;
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-switch-2",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-switch-1",
+            src: "http://media.local/original-att-video-switch-1",
+            posterSrc: "http://media.local/poster-att-video-switch-1",
+            width: 1280,
+            height: 720,
+          },
+          {
+            kind: "video",
+            attachmentId: "att-video-switch-2",
+            src: "http://media.local/original-att-video-switch-2",
+            posterSrc: "http://media.local/poster-att-video-switch-2",
+            width: 1920,
+            height: 1080,
+          },
+        ],
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fake查看器.打开).toHaveBeenCalledTimes(1);
+    expect(fake查看器.同步.mock.calls.length).toBeGreaterThan(首次打开后的同步次数);
+    expect(fake查看器.同步).toHaveBeenLastCalledWith({
+      startAttachmentId: "att-video-switch-2",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-switch-1",
+          src: "http://media.local/original-att-video-switch-1",
+          posterSrc: "http://media.local/poster-att-video-switch-1",
+          width: 1280,
+          height: 720,
+        },
+        {
+          kind: "video",
+          attachmentId: "att-video-switch-2",
+          src: "http://media.local/original-att-video-switch-2",
+          posterSrc: "http://media.local/poster-att-video-switch-2",
+          width: 1920,
+          height: 1080,
+        },
+      ],
     });
   });
 

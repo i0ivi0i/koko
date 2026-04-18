@@ -430,7 +430,11 @@ const 创建默认VideoJs播放器层 = async (
     });
     const video = shell.读取视频元素();
     const container = shell.读取容器元素();
-    解绑媒体运行时信号 = 绑定媒体运行时信号(video, item.attachmentId, hooks);
+    const 重新绑定媒体运行时信号 = (attachmentId: string): void => {
+      解绑媒体运行时信号();
+      解绑媒体运行时信号 = 绑定媒体运行时信号(video, attachmentId, hooks);
+    };
+    重新绑定媒体运行时信号(item.attachmentId);
 
     const cleanup = (): void => {
       if (cleaned) {
@@ -483,6 +487,9 @@ const 创建默认VideoJs播放器层 = async (
       同步(nextItem) {
         if (nextItem.kind !== "video") {
           return;
+        }
+        if (当前视频项目.attachmentId !== nextItem.attachmentId) {
+          重新绑定媒体运行时信号(nextItem.attachmentId);
         }
         当前视频项目 = nextItem;
         shell.同步(映射VideoJs播放源(nextItem));
@@ -572,10 +579,21 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
       return;
     }
 
+    const nextRenderer = 读取查看器渲染类型(startItem);
+    /**
+     * 上游即使因为时序窗口再次发来 `打开`，同 renderer 且当前实例支持同步时，
+     * 查看器自己也必须守住“同会话秒切不重建壳”的不变量。
+     */
+    if (current && nextRenderer === 当前查看器渲染类型 && current.同步) {
+      当前查看器渲染类型 = nextRenderer;
+      current.同步(startItem);
+      return;
+    }
+
     const generation = ++openGeneration;
     current?.destroy();
     current = null;
-    当前查看器渲染类型 = 读取查看器渲染类型(startItem);
+    当前查看器渲染类型 = nextRenderer;
 
     if (当前查看器渲染类型 === "image" && startItem.kind === "image") {
       const imageEntries = request.items
@@ -675,11 +693,11 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
 
   const 同步 = (request: 媒体查看器打开请求): void => {
     当前查看器请求 = request;
-    const currentAttachmentId = 当前起点附件标识;
-    if (!currentAttachmentId) {
+    const nextAttachmentId = request.startAttachmentId;
+    if (!nextAttachmentId) {
       return;
     }
-    const activeItem = request.items.find((item) => item.attachmentId === currentAttachmentId);
+    const activeItem = request.items.find((item) => item.attachmentId === nextAttachmentId);
     if (!activeItem) {
       return;
     }
@@ -688,6 +706,20 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
       打开(request);
       return;
     }
+    if (!current) {
+      打开(request);
+      return;
+    }
+    /**
+     * 同 renderer 的附件切换不能再退回“销毁再打开”。
+     * 只有当前实例根本不支持同步时，才允许重新打开。
+     */
+    if (nextAttachmentId !== 当前起点附件标识 && !current.同步) {
+      打开(request);
+      return;
+    }
+    当前起点附件标识 = nextAttachmentId;
+    当前查看器渲染类型 = nextRenderer;
     current?.同步?.(activeItem);
   };
 

@@ -766,6 +766,154 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
+  it("真实查看器打开后切到另一条视频时，会继续复用同一颗 Video.js 壳", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-switch-1",
+            client_message_id: "c-video-switch-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-switch-1",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-switch-2",
+            client_message_id: "c-video-switch-2",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-switch-2",
+                width: 720,
+                height: 1280,
+              },
+            ],
+            event_position: 2,
+          },
+        ],
+      }),
+    ];
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    注入媒体播放器供测试(el, {
+      解析播放结果: vi.fn(async ({ attachmentId, kind }) => ({
+        mode: "anchor",
+        attachmentId,
+        kind,
+        src: `http://media.local/original-${attachmentId}`,
+        thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+        hint: null,
+      }) satisfies import("../媒体/媒体播放").媒体播放结果),
+    });
+    document.body.appendChild(el);
+    await 等待组件稳定(el);
+
+    输入房间短码到操作台(el, "ROOM01");
+    读取操作台主动作(el).click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    el.shadowRoot!
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-switch-1"]'
+      )
+      ?.click();
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const 等待查看器壳出现 = async (): Promise<Element | null> => {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const shell = document.body.querySelector("video-player[data-player-shell='videojs']");
+        if (shell) {
+          return shell;
+        }
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      return document.body.querySelector("video-player[data-player-shell='videojs']");
+    };
+
+    const 初始壳 = await 等待查看器壳出现();
+    const 初始视频 = document.body.querySelector("video");
+    expect(初始壳).not.toBeNull();
+    expect(初始视频).not.toBeNull();
+
+    const kernel = (el as unknown as {
+      kernel: {
+        dispatch(command: {
+          type: "MEDIA_OPEN_REQUESTED";
+          request: {
+            startAttachmentId: string;
+            items: Array<{
+              attachmentId: string;
+              kind: "video";
+              src: string;
+              posterSrc: string;
+              width: number;
+              height: number;
+            }>;
+          };
+        }): Promise<void>;
+      };
+    }).kernel;
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-video-switch-2",
+        items: [
+          {
+            attachmentId: "att-video-switch-1",
+            kind: "video",
+            src: "http://media.local/original-att-video-switch-1",
+            posterSrc: "http://media.local/poster-att-video-switch-1",
+            width: 1280,
+            height: 720,
+          },
+          {
+            attachmentId: "att-video-switch-2",
+            kind: "video",
+            src: "http://media.local/original-att-video-switch-2",
+            posterSrc: "http://media.local/poster-att-video-switch-2",
+            width: 720,
+            height: 1280,
+          },
+        ],
+      },
+    });
+    await 等待组件稳定(el);
+    await 等待组件稳定(el);
+
+    const 当前壳 = await 等待查看器壳出现();
+    const 当前视频 = document.body.querySelector("video");
+    expect(当前壳).toBe(初始壳);
+    expect(当前视频).toBe(初始视频);
+    expect((当前视频 as HTMLVideoElement | null)?.poster).toBe(
+      "http://media.local/poster-att-video-switch-2"
+    );
+
+    el.remove();
+  });
+
   it("媒体播放结果是 expired 时，时间线会统一显示内容已过期", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
