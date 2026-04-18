@@ -451,6 +451,146 @@ describe("媒体播放器", () => {
     });
   });
 
+  it("viewer 首次打开仍在转流的大视频时，会先强制刷新 locator 争取 manifest，而不是立刻回落冷源锚点", async () => {
+    const locate = vi
+      .fn()
+      .mockResolvedValueOnce({
+        attachment_id: "att-video-viewer-race",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-viewer-race",
+        thumbnail_url: "http://media.local/poster-viewer-race",
+        distribution: {
+          content_id: "content_att-video-viewer-race",
+          content_hash: "hash-video-viewer-race",
+          swarm_id: "swarm-hash-video-viewer-race",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-viewer-race",
+          torrent_info_hash: "torrent-info-hash-viewer-race",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-viewer-race",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-viewer-race",
+          content_hash: "hash-video-viewer-race",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: null,
+            dash_mpd_url: null,
+          },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-viewer-race",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-viewer-race",
+            join_ticket: null,
+            survival_mode: "server_assisted" as const,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-viewer-race",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      })
+      .mockResolvedValueOnce({
+        attachment_id: "att-video-viewer-race",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-viewer-race",
+        thumbnail_url: "http://media.local/poster-viewer-race",
+        distribution: {
+          content_id: "content_att-video-viewer-race",
+          content_hash: "hash-video-viewer-race",
+          swarm_id: "swarm-hash-video-viewer-race",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-viewer-race",
+          torrent_info_hash: "torrent-info-hash-viewer-race",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-viewer-race",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-viewer-race",
+          content_hash: "hash-video-viewer-race",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-viewer-race/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-viewer-race/stream.mpd",
+          },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-viewer-race",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-viewer-race",
+            join_ticket: null,
+            survival_mode: "server_assisted" as const,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-viewer-race",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      });
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-viewer-race",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-viewer-race",
+    });
+
+    expect(locate).toHaveBeenNthCalledWith(1, "att-video-viewer-race");
+    expect(locate).toHaveBeenNthCalledWith(2, "att-video-viewer-race", { forceRefresh: true });
+    expect(result).toEqual({
+      mode: "manifest",
+      attachmentId: "att-video-viewer-race",
+      kind: "video",
+      src: "http://media.local/stream/att-video-viewer-race/master.m3u8",
+      thumbnailUrl: "http://media.local/poster-viewer-race",
+      streamingDistribution: {
+        swarm_id: "swarm-hash-video-viewer-race",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-viewer-race",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-viewer-race",
+        consumerId: "session:att-video-viewer-race",
+      })
+    );
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
   it("0-24 小时内 viewer 打开时会并行预热 swarm 与 HLS；swarm 在短预算内可播时由 swarm 赢下首播", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-fast",

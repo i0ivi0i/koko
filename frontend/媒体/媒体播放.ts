@@ -218,6 +218,38 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     };
   };
 
+  const 是否值得为查看器视频强制刷新定位 = (
+    input: 媒体播放输入,
+    locator: 媒体定位结果
+  ): boolean => {
+    if (input.kind !== "video" || (input.surface ?? "viewer") !== "viewer") {
+      return false;
+    }
+    if (读取流媒体主链地址(locator)) {
+      return false;
+    }
+    /**
+     * 只有已经进入流媒体/协作过渡面的 video，才值得在首开前多问一次 locator。
+     * 纯旧式冷源附件继续直接走 anchor，避免给不相关的视频平白增加一次请求。
+     */
+    return Boolean(locator.streaming_asset || locator.distribution);
+  };
+
+  const 刷新查看器视频定位 = async (
+    input: 媒体播放输入,
+    locator: 媒体定位结果
+  ): Promise<媒体定位结果> => {
+    if (!是否值得为查看器视频强制刷新定位(input, locator)) {
+      return locator;
+    }
+    try {
+      const refreshedLocator = await deps.locate(input.attachmentId, { forceRefresh: true });
+      return refreshedLocator.status === "ready" ? refreshedLocator : locator;
+    } catch {
+      return locator;
+    }
+  };
+
   const 创建降级结果 = (
     input: 媒体播放输入,
     locator: 媒体定位结果 | null,
@@ -424,6 +456,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         hint: null,
       };
     }
+    locator = await 刷新查看器视频定位(input, locator);
     const manifestUrl = 读取流媒体主链地址(locator);
     if (surface === "viewer" && manifestUrl) {
       /**
