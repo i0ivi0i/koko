@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-19)
 
 ## Corpus Check
-- 195 files · ~229,939 words
+- 195 files · ~230,808 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 450 nodes · 559 edges · 32 communities detected
+- 452 nodes · 565 edges · 31 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -41,19 +41,18 @@
 - [[_COMMUNITY_Community 28|Community 28]]
 - [[_COMMUNITY_Community 29|Community 29]]
 - [[_COMMUNITY_Community 30|Community 30]]
-- [[_COMMUNITY_Community 31|Community 31]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 25 edges
 2. `单连接发送到已关闭socket时降级为正常断开()` - 8 edges
-3. `提取媒体上传授权头()` - 7 edges
-4. `update_status()` - 6 edges
-5. `load_streaming_asset_content()` - 6 edges
-6. `假Socket` - 5 edges
-7. `run_k6_level()` - 5 edges
-8. `handle_tus_hook()` - 5 edges
-9. `parse_attachment_content_query()` - 5 edges
-10. `Pg仓储` - 5 edges
+3. `假Hls构造器` - 7 edges
+4. `提取媒体上传授权头()` - 7 edges
+5. `update_status()` - 6 edges
+6. `load_streaming_asset_content()` - 6 edges
+7. `假Socket` - 5 edges
+8. `run_k6_level()` - 5 edges
+9. `handle_tus_hook()` - 5 edges
+10. `parse_attachment_content_query()` - 5 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `abandon_media_upload()` --calls--> `提取媒体上传授权头()`  [EXTRACTED]
@@ -70,8 +69,8 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.04
-Nodes (47): abandon_media_upload(), AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 打包产物上传会并发执行而不是串行阻塞complete热路径(), complete_media_upload(), CompleteMediaUploadBody (+39 more)
+Cohesion: 0.03
+Nodes (48): abandon_media_upload(), AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 打包产物上传会并发执行而不是串行阻塞complete热路径(), complete_media_upload(), CompleteMediaUploadBody (+40 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.04
@@ -130,12 +129,12 @@ Cohesion: 0.25
 Nodes (0): 
 
 ### Community 15 - "Community 15"
-Cohesion: 0.43
-Nodes (5): 构造tus_concatenation_hook请求体(), 构造tus_hook请求体(), 解析_tus_hook回传_http响应体(), 断言TusHook已接受(), 断言TusHook拒绝Termination()
+Cohesion: 0.39
+Nodes (3): get(), 假Hls构造器, set()
 
 ### Community 16 - "Community 16"
-Cohesion: 0.33
-Nodes (1): 假Hls构造器
+Cohesion: 0.43
+Nodes (5): 构造tus_concatenation_hook请求体(), 构造tus_hook请求体(), 解析_tus_hook回传_http响应体(), 断言TusHook已接受(), 断言TusHook拒绝Termination()
 
 ### Community 17 - "Community 17"
 Cohesion: 0.5
@@ -155,7 +154,7 @@ Nodes (0):
 
 ### Community 21 - "Community 21"
 Cohesion: 1.0
-Nodes (1): Pg仓储
+Nodes (0): 
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
@@ -167,11 +166,11 @@ Nodes (0):
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): 文本布局, 文本布局测试
 
 ### Community 25 - "Community 25"
 Cohesion: 1.0
-Nodes (2): 文本布局, 文本布局测试
+Nodes (0): 
 
 ### Community 26 - "Community 26"
 Cohesion: 1.0
@@ -193,47 +192,43 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 31 - "Community 31"
-Cohesion: 1.0
-Nodes (0): 
-
 ## Knowledge Gaps
 - **28 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+23 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 22`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 21`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 22`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 23`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (2 nodes): `文本布局`, `文本布局测试`
+- **Thin community `Community 24`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 26`** (1 nodes): `css.d.ts`
+- **Thin community `Community 25`** (1 nodes): `css.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 27`** (1 nodes): `blob媒体资产测试.spec.ts`
+- **Thin community `Community 26`** (1 nodes): `blob媒体资产测试.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 28`** (1 nodes): `vitest.config.ts`
+- **Thin community `Community 27`** (1 nodes): `vitest.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 29`** (1 nodes): `lib.rs`
+- **Thin community `Community 28`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 30`** (1 nodes): `up.ps1`
+- **Thin community `Community 29`** (1 nodes): `up.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 31`** (1 nodes): `webtorrent.d.ts`
+- **Thin community `Community 30`** (1 nodes): `webtorrent.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 7` to `Community 2`?**
-  _High betweenness centrality (0.073) - this node is a cross-community bridge._
-- **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 15`?**
-  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+  _High betweenness centrality (0.072) - this node is a cross-community bridge._
+- **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 16`, `Community 1`, `Community 2`, `Community 4`?**
+  _High betweenness centrality (0.069) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`, `Community 9`?**
   _High betweenness centrality (0.056) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.04 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.03 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.04 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**

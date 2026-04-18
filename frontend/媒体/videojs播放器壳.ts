@@ -14,6 +14,7 @@ export type VideoJs播放器源描述 =
   | {
       kind: "hls";
       src: string;
+      fallbackSrc?: string | null;
       posterSrc: string | null;
       width: number;
       height: number;
@@ -306,6 +307,7 @@ const 创建VideoJs播放器壳核心 = (
   let hls构造器Promise: Promise<Hls构造器> | null = null;
   let hls实例: InstanceType<Hls构造器> | null = null;
   let 已挂接P2PHls增强层 = false;
+  let 已致命失败Hls源地址: string | null = null;
 
   const 释放真实视频资源 = (): void => {
     try {
@@ -332,6 +334,22 @@ const 创建VideoJs播放器壳核心 = (
           : import("hls.js").then((module) => module.default);
     }
     return hls构造器Promise;
+  };
+
+  const 构造Hls回退文件源 = (
+    source: Hls播放器源描述
+  ): VideoJs播放器源描述 | null => {
+    const fallbackSrc = source.fallbackSrc?.trim();
+    if (!fallbackSrc) {
+      return null;
+    }
+    return {
+      kind: "file",
+      src: fallbackSrc,
+      posterSrc: source.posterSrc,
+      width: source.width,
+      height: source.height,
+    };
   };
 
   const 应用文件源 = (source: VideoJs播放器源描述): void => {
@@ -374,6 +392,39 @@ const 创建VideoJs播放器壳核心 = (
       if (!hls实例) {
         hls实例 = new Hls();
         hls实例.attachMedia(root.video);
+        const 错误事件名 = (
+          Hls as unknown as { Events?: { ERROR?: string } }
+        ).Events?.ERROR;
+        if (错误事件名 && typeof (hls实例 as unknown as { on?: unknown }).on === "function") {
+          (
+            hls实例 as unknown as {
+              on: (
+                eventName: string,
+                handler: (eventName: string, payload: unknown) => void
+              ) => void;
+            }
+          ).on(错误事件名, (_eventName, payload) => {
+            const fatal =
+              typeof payload === "object" &&
+              payload !== null &&
+              (payload as { fatal?: unknown }).fatal === true;
+            if (!fatal || 已销毁 || 当前源.kind !== "hls") {
+              return;
+            }
+            const fallbackSource = 构造Hls回退文件源(当前源);
+            if (!fallbackSource) {
+              return;
+            }
+            已致命失败Hls源地址 = 当前源.src;
+            console.warn("[koko:videojs-shell:hls-fallback]", {
+              from: 当前源.src,
+              to: fallbackSource.src,
+            });
+            应用展示源(root, fallbackSource);
+            应用文件源(fallbackSource);
+            当前源 = fallbackSource;
+          });
+        }
       }
       尝试挂接壳外P2PHls增强层(source);
       /**
@@ -393,13 +444,25 @@ const 创建VideoJs播放器壳核心 = (
   const 应用源 = (
     source: VideoJs播放器源描述,
     previousSource: VideoJs播放器源描述 | null
-  ): void => {
-    应用展示源(root, source);
+  ): VideoJs播放器源描述 => {
     if (source.kind === "hls") {
+      if (已致命失败Hls源地址 && 已致命失败Hls源地址 === source.src) {
+        const fallbackSource = 构造Hls回退文件源(source);
+        if (fallbackSource) {
+          应用展示源(root, fallbackSource);
+          应用文件源(fallbackSource);
+          return fallbackSource;
+        }
+      } else if (已致命失败Hls源地址 && 已致命失败Hls源地址 !== source.src) {
+        已致命失败Hls源地址 = null;
+      }
+      应用展示源(root, source);
       void 应用Hls源(source, previousSource);
-      return;
+      return source;
     }
+    应用展示源(root, source);
     应用文件源(source);
+    return source;
   };
 
   /**
@@ -407,7 +470,7 @@ const 创建VideoJs播放器壳核心 = (
    * 这样后面的 file -> HLS / HLS -> file 只是在同一会话里切 provider，
    * 不会重新长出第二套播放器实现。
    */
-  应用源(initialSource, null);
+  当前源 = 应用源(initialSource, null);
 
   return {
     同步(source) {
@@ -415,8 +478,7 @@ const 创建VideoJs播放器壳核心 = (
         return;
       }
       const previousSource = 当前源;
-      应用源(source, previousSource);
-      当前源 = source;
+      当前源 = 应用源(source, previousSource);
     },
     async 进入全屏() {
       if (已销毁) {

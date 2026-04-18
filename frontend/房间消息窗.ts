@@ -503,6 +503,11 @@ export class 房间消息窗 extends LitElement {
           kind: "video",
           attachmentId: attachment.attachmentId,
           src: this.读取附件播放源(attachment.attachmentId, attachment.originalSrc),
+          ...(playback?.mode === "manifest" && playback.fallbackSrc
+            ? {
+                fallbackSrc: playback.fallbackSrc,
+              }
+            : {}),
           posterSrc: attachment.posterSrc,
           ...(playback?.mode === "manifest" && playback.streamingDistribution
             ? {

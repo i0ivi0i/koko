@@ -173,6 +173,86 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
+  it("HLS 出现致命错误时会回退到 manifest 提供的文件冷源，且同源同步不会反复重试", async () => {
+    const root = 创建假播放器根();
+    const attachMedia = vi.fn();
+    const loadSource = vi.fn();
+    const destroyHls = vi.fn();
+
+    class 假Hls构造器 {
+      static Events = {
+        ERROR: "error",
+      } as const;
+      static 最近实例: 假Hls构造器 | null = null;
+
+      static isSupported() {
+        return true;
+      }
+
+      private listeners = new Map<string, Array<(event: string, data: unknown) => void>>();
+      attachMedia = attachMedia;
+      loadSource = loadSource;
+      destroy = destroyHls;
+
+      constructor() {
+        假Hls构造器.最近实例 = this;
+      }
+
+      on(event: string, handler: (event: string, data: unknown) => void): void {
+        this.listeners.set(event, [...(this.listeners.get(event) ?? []), handler]);
+      }
+
+      触发(event: string, data: unknown): void {
+        for (const handler of this.listeners.get(event) ?? []) {
+          handler(event, data);
+        }
+      }
+    }
+
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "hls",
+        src: "http://media.local/stream/videojs-fallback-1/master.m3u8",
+        fallbackSrc: "http://media.local/original/videojs-fallback-1.mp4",
+        posterSrc: "http://media.local/poster-videojs-fallback-1.jpg",
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => root,
+        registerVideoJsElements: async () => undefined,
+        loadHlsConstructor: async () => 假Hls构造器 as never,
+      }
+    );
+
+    await Promise.resolve();
+    const 实例 = 假Hls构造器.最近实例;
+    expect(实例).not.toBeNull();
+
+    实例?.触发("error", {
+      fatal: true,
+      details: "manifestIncompatibleCodecsError",
+    });
+
+    expect(root.video.src).toBe("http://media.local/original/videojs-fallback-1.mp4");
+    expect(destroyHls).toHaveBeenCalledTimes(1);
+
+    shell.同步({
+      kind: "hls",
+      src: "http://media.local/stream/videojs-fallback-1/master.m3u8",
+      fallbackSrc: "http://media.local/original/videojs-fallback-1.mp4",
+      posterSrc: "http://media.local/poster-videojs-fallback-1.jpg",
+      width: 1280,
+      height: 720,
+    });
+    await Promise.resolve();
+
+    expect(loadSource).toHaveBeenCalledTimes(1);
+    expect(destroyHls).toHaveBeenCalledTimes(1);
+
+    shell.destroy();
+  });
+
   it("同一 swarm 相对路径重复同步时，不会因为 video.src 被浏览器绝对化而反复触发新 load", async () => {
     const root = 创建假播放器根();
     const 写入记录: string[] = [];

@@ -180,6 +180,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
             return {
               ...item,
               src: playback.src,
+              ...(playback.mode === "manifest" && playback.fallbackSrc
+                ? {
+                    fallbackSrc: playback.fallbackSrc,
+                  }
+                : {}),
               posterSrc: playback.thumbnailUrl ?? item.posterSrc,
               ...(playback.mode === "manifest" && playback.streamingDistribution
                 ? {

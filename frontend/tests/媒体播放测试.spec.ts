@@ -278,6 +278,7 @@ describe("媒体播放器", () => {
       resolveSwarmSource: async () => ({
         src: "blob:http://media.local/swarm-video-3",
         hint: "正在协作分发" as const,
+        locallyComplete: true,
       }),
       releaseSwarmSource: 释放协作分发源,
       probeAnchor,
@@ -304,6 +305,7 @@ describe("媒体播放器", () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-consumer-1",
       hint: "正在协作分发" as const,
+      locallyComplete: true,
     }));
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -343,6 +345,71 @@ describe("媒体播放器", () => {
         consumerId: "session:att-video-consumer-1",
       })
     );
+  });
+
+  it("viewer 命中未补齐的 server-assisted swarm 时会回退锚点冷源，避免 whole-file 半成品卡住", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-consumer-incomplete",
+      hint: "正在协作分发" as const,
+      locallyComplete: false,
+    }));
+    const releaseSwarmSource = vi.fn();
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-consumer-incomplete",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/original-video-consumer-incomplete",
+        thumbnail_url: "http://media.local/poster-video-consumer-incomplete",
+        distribution: {
+          content_id: "content_att-video-consumer-incomplete",
+          content_hash: "hash-video-consumer-incomplete",
+          swarm_id: "swarm-hash-video-consumer-incomplete",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-consumer-incomplete",
+          torrent_info_hash: "torrent-info-hash-video-consumer-incomplete",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-consumer-incomplete",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        streaming_asset: null,
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      releaseSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-consumer-incomplete",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-consumer-incomplete",
+    });
+
+    expect(result).toEqual({
+      mode: "anchor",
+      attachmentId: "att-video-consumer-incomplete",
+      kind: "video",
+      src: "http://media.local/original-video-consumer-incomplete",
+      thumbnailUrl: "http://media.local/poster-video-consumer-incomplete",
+      hint: null,
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-consumer-incomplete",
+        consumerId: "session:att-video-consumer-incomplete",
+      })
+    );
+    expect(releaseSwarmSource).toHaveBeenCalledWith({
+      attachmentId: "att-video-consumer-incomplete",
+      consumerId: "session:att-video-consumer-incomplete",
+    });
+    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/original-video-consumer-incomplete");
   });
 
   it("最后裁决改走锚点时会释放旧的 swarm 协作分发占用", async () => {
@@ -573,6 +640,7 @@ describe("媒体播放器", () => {
       attachmentId: "att-video-viewer-race",
       kind: "video",
       src: "http://media.local/stream/att-video-viewer-race/master.m3u8",
+      fallbackSrc: "http://media.local/cold-origin-viewer-race",
       thumbnailUrl: "http://media.local/poster-viewer-race",
       streamingDistribution: {
         swarm_id: "swarm-hash-video-viewer-race",
@@ -592,10 +660,11 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("0-24 小时内 viewer 打开时只复用已热 swarm；已热 swarm 在短预算内可播时由 swarm 赢下首播", async () => {
+  it("0-24 小时内 viewer 打开时会复用已热 swarm 做后台补齐，但首播仍以 HLS 主链为准", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-fast",
       hint: "正在协作分发" as const,
+      locallyComplete: true,
     }));
     const probeAnchor = vi.fn();
     const 播放器 = 创建媒体播放器({
@@ -658,17 +727,118 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "swarm",
+      mode: "manifest",
       attachmentId: "att-video-hls",
       kind: "video",
-      src: "blob:http://media.local/swarm-video-hls-fast",
+      src: "http://media.local/stream/att-video-hls/master.m3u8",
+      fallbackSrc: "http://media.local/cold-origin-video-hls",
       thumbnailUrl: "http://media.local/poster-video-hls",
-      hint: "正在协作分发",
+      streamingDistribution: {
+        swarm_id: "swarm-hash-video-hls",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-hls",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
         attachmentId: "att-video-hls",
         consumerId: "session:att-video-hls",
+        reuseOnly: true,
+      })
+    );
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("viewer 命中未本地完整的已热 swarm 时，会直接回到 HLS 主链，避免全屏卡在转圈", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-hls-incomplete",
+      hint: "正在协作分发" as const,
+      locallyComplete: false,
+    }));
+    const probeAnchor = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-hls-incomplete",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-video-hls-incomplete",
+        thumbnail_url: "http://media.local/poster-video-hls-incomplete",
+        distribution: {
+          content_id: "content_att-video-hls-incomplete",
+          content_hash: "hash-video-hls-incomplete",
+          swarm_id: "swarm-hash-video-hls-incomplete",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-hls-incomplete",
+          torrent_info_hash: "torrent-info-hash-video-hls-incomplete",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-hls-incomplete",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-hls-incomplete",
+          content_hash: "hash-video-hls-incomplete",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-hls-incomplete/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-hls-incomplete/stream.mpd",
+          },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-hls-incomplete",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-video-hls-incomplete",
+            join_ticket: null,
+            survival_mode: "server_assisted" as const,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-video-hls-incomplete",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-hls-incomplete",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-hls-incomplete",
+    });
+
+    expect(result).toEqual({
+      mode: "manifest",
+      attachmentId: "att-video-hls-incomplete",
+      kind: "video",
+      src: "http://media.local/stream/att-video-hls-incomplete/master.m3u8",
+      fallbackSrc: "http://media.local/cold-origin-video-hls-incomplete",
+      thumbnailUrl: "http://media.local/poster-video-hls-incomplete",
+      streamingDistribution: {
+        swarm_id: "swarm-hash-video-hls-incomplete",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-video-hls-incomplete",
+        join_ticket: null,
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-hls-incomplete",
+        consumerId: "session:att-video-hls-incomplete",
         reuseOnly: true,
       })
     );
@@ -757,6 +927,7 @@ describe("媒体播放器", () => {
       .mockResolvedValueOnce({
         src: "blob:http://media.local/swarm-ticket-refresh",
         hint: "正在协作分发" as const,
+        locallyComplete: true,
       });
     const probeAnchor = vi.fn();
     const 播放器 = 创建媒体播放器({
@@ -793,12 +964,20 @@ describe("媒体播放器", () => {
       })
     );
     expect(result).toEqual({
-      mode: "swarm",
+      mode: "manifest",
       attachmentId: "att-video-ticket-refresh",
       kind: "video",
-      src: "blob:http://media.local/swarm-ticket-refresh",
+      src: "http://media.local/stream/att-video-ticket-refresh/master.m3u8",
+      fallbackSrc: "http://media.local/cold-origin-ticket-refresh",
       thumbnailUrl: "http://media.local/poster-ticket-refresh",
-      hint: "正在协作分发",
+      streamingDistribution: {
+        swarm_id: "swarm-hash-video-ticket-refresh",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-ticket-refresh",
+        join_ticket: "ticket-refresh",
+        survival_mode: "server_assisted" as const,
+      },
+      hint: null,
     });
     expect(probeAnchor).not.toHaveBeenCalled();
   });
@@ -876,6 +1055,7 @@ describe("媒体播放器", () => {
       attachmentId: "att-video-hls",
       kind: "video",
       src: "http://media.local/stream/att-video-hls/master.m3u8",
+      fallbackSrc: "http://media.local/cold-origin-video-hls",
       thumbnailUrl: "http://media.local/poster-video-hls",
       streamingDistribution: {
         swarm_id: "swarm-hash-video-hls",
@@ -1267,6 +1447,7 @@ describe("媒体播放器", () => {
       resolveSwarmSource: async () => ({
         src: "blob:http://media.local/swarm-video-4",
         hint: "正在补块" as const,
+        locallyComplete: true,
       }),
       probeAnchor: async () => undefined,
     });

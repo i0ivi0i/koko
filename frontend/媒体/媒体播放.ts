@@ -21,6 +21,7 @@ type 媒体播放结果 =
       attachmentId: string;
       kind: 媒体种类;
       src: string;
+      fallbackSrc?: string;
       viewerSrc?: string;
       thumbnailUrl: string | null;
       contentHash?: string | null;
@@ -523,13 +524,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (surface === "viewer" && manifestUrl) {
       /**
        * 查看器正式打开时，manifest 主链只允许“复用已热 swarm”参与抢跑：
-       * 1. 命中已热 peer / 本地完整资产时，swarm 仍可在短预算内直接赢下首播；
-       * 2. 没命中就立刻让 HLS 秒开，不在首开裁决里冷启 raw whole-file 会话；
+       * 1. swarm 只负责“能否尽快接上补齐会话”，不再越位替代正式播放源；
+       * 2. 正式首播始终回到 HLS，避免原始 whole-file 在特定编码上出现全屏转圈；
        * 3. 真正的整附件补齐仍由后续显式 backfill owner 决定，避免移动端首开被 original 冷源抢成下载风暴。
        */
       const distribution = 读取协作分发定位片段(locator);
       const swarmWarmup = distribution
-        ? 尝试协作分发主链(input, locator, { reuseOnly: true })
+        ? 尝试协作分发主链(input, locator, {
+            reuseOnly: true,
+            requireLocallyComplete: true,
+          })
         : Promise.resolve<协作分发尝试结果>({
             locator,
             playback: null,
@@ -540,7 +544,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         locator
       );
       locator = swarmAttempt.locator;
-      if (swarmAttempt.playback) {
+      if (swarmAttempt.playback?.mode === "expired") {
         return swarmAttempt.playback;
       }
       if (!distribution || distribution.availability === "expired") {
@@ -551,6 +555,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         attachmentId: input.attachmentId,
         kind: input.kind,
         src: manifestUrl,
+        fallbackSrc: 读取锚点地址(locator),
         thumbnailUrl: 读取预览缩略图地址(locator),
         // 标准流媒体主链一旦成立，查看器/播放器适配层就应该直接消费统一分发表面，
         // 而不是再从旧 file-level locator 里猜 swarm 线索。
@@ -575,7 +580,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       }
       return 尝试锚点(input, locator, true);
     }
-    const swarmAttempt = await 尝试协作分发主链(input, locator);
+    /**
+     * 查看器在 server-assisted 冷备窗口内，优先稳定首播而不是半成品 whole-file：
+     * 1. 如果 swarm 尚未完整落盘，直接回退到锚点冷源；
+     * 2. peer-only 阶段保留“未补齐也可边下边播”的能力，避免把长期平面彻底锁死在本地完整文件。
+     */
+    const viewerRequireLocallyComplete =
+      surface === "viewer" && locator.distribution?.survival_mode !== "peer_only_after_expiry";
+    const swarmAttempt = await 尝试协作分发主链(input, locator, {
+      ...(viewerRequireLocallyComplete ? { requireLocallyComplete: true } : {}),
+    });
     locator = swarmAttempt.locator;
     if (swarmAttempt.playback) {
       return swarmAttempt.playback;

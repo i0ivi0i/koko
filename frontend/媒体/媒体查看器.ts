@@ -20,6 +20,7 @@ export type 媒体查看器项目 =
       kind: "video";
       attachmentId: string;
       src: string;
+      fallbackSrc?: string | null;
       posterSrc: string | null;
       streamingDistribution?: 媒体资产分发表面 | null;
       width: number;
@@ -252,13 +253,25 @@ const 绑定媒体运行时信号 = (
   };
 };
 
-const 映射VideoJs播放源 = (item: 媒体查看器视频项目): VideoJs播放器源描述 => ({
-  kind: /\.m3u8(?:$|\?)/.test(item.src) ? "hls" : "file",
-  src: item.src,
-  posterSrc: item.posterSrc,
-  width: item.width,
-  height: item.height,
-});
+const 映射VideoJs播放源 = (item: 媒体查看器视频项目): VideoJs播放器源描述 => {
+  if (/\.m3u8(?:$|\?)/.test(item.src)) {
+    return {
+      kind: "hls",
+      src: item.src,
+      ...(item.fallbackSrc ? { fallbackSrc: item.fallbackSrc } : {}),
+      posterSrc: item.posterSrc,
+      width: item.width,
+      height: item.height,
+    };
+  }
+  return {
+    kind: "file",
+    src: item.src,
+    posterSrc: item.posterSrc,
+    width: item.width,
+    height: item.height,
+  };
+};
 
 const 启动同会话全屏策略 = (
   读取当前项目: () => 媒体查看器视频项目,
