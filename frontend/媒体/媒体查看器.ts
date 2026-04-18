@@ -601,6 +601,17 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
 
   const 读取查看器渲染类型 = (item: 媒体查看器项目): "image" | "video" =>
     item.kind === "image" ? "image" : "video";
+  const 读取查看器起点项目 = (
+    request: 媒体查看器打开请求
+  ): 媒体查看器项目 | null => {
+    const startAt = request.items.findIndex(
+      (item) => item.attachmentId === request.startAttachmentId
+    );
+    if (startAt < 0) {
+      return null;
+    }
+    return request.items[startAt] ?? null;
+  };
 
   const 视口占用生命周期: 媒体查看器视口占用生命周期 = {
     开始视口占用: () => {
@@ -655,20 +666,33 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
         return;
       }
       current = next;
+      const 最新起点项目 = 当前查看器请求
+        ? 读取查看器起点项目(当前查看器请求)
+        : null;
+      /**
+       * 异步工厂解析期间，上游可能只是在同一附件上刷新最新播放源。
+       * 这里接管完成后立刻回放最新 request，避免 pending 窗口内再次 `打开`
+       * 才能吃到新 src，或者被迫额外创建第二代查看器会话。
+       */
+      if (
+        最新起点项目 &&
+        读取查看器渲染类型(最新起点项目) === 当前查看器渲染类型 &&
+        next.同步
+      ) {
+        当前起点附件标识 = 最新起点项目.attachmentId;
+        next.同步(最新起点项目);
+      }
     })().catch((error: unknown) => {
+      if (generation === openGeneration) {
+        清空当前查看器状态();
+      }
       视口占用生命周期.结束视口占用();
       console.error("打开媒体查看器失败", error);
     });
   };
 
   const 打开 = (request: 媒体查看器打开请求): void => {
-    const startAt = request.items.findIndex(
-      (item) => item.attachmentId === request.startAttachmentId
-    );
-    if (startAt < 0) {
-      return;
-    }
-    const startItem = request.items[startAt];
+    const startItem = 读取查看器起点项目(request);
     if (!startItem) {
       return;
     }
@@ -681,6 +705,21 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
     if (current && nextRenderer === 当前查看器渲染类型 && current.同步) {
       当前查看器渲染类型 = nextRenderer;
       current.同步(startItem);
+      return;
+    }
+    if (
+      !current &&
+      当前查看器请求 &&
+      当前起点附件标识 === request.startAttachmentId &&
+      nextRenderer === 当前查看器渲染类型
+    ) {
+      /**
+       * 真正的查看器实例还在异步接管时，上游可能因为播放真相更新再次发来同附件 `打开`。
+       * 这时只能刷新 pending request，不能再长出第二个 overlay / fullscreen session。
+       */
+      当前查看器请求 = request;
+      当前起点附件标识 = request.startAttachmentId;
+      当前查看器渲染类型 = nextRenderer;
       return;
     }
 

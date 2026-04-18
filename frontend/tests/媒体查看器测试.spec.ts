@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { 创建媒体查看器 } from "../媒体/媒体查看器";
+import { 创建媒体查看器, type 媒体查看器依赖 } from "../媒体/媒体查看器";
 
 const 安装方向模拟 = () => {
   const lock = vi.fn(() => Promise.resolve());
@@ -1181,6 +1181,71 @@ describe("媒体查看器适配器", () => {
 
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
     expect(document.body.querySelector("video")).toBeInstanceOf(HTMLVideoElement);
+  });
+
+  it("异步接管中的同 renderer 视频请求不会重复创建第二个查看器会话", async () => {
+    const 延迟壳解析器: Array<() => void> = [];
+    const 同步 = vi.fn();
+    const 销毁 = vi.fn();
+    type 测试视频壳工厂 = NonNullable<媒体查看器依赖["createVideoJsPlayerShell"]>;
+    const createVideoJsPlayerShell: 测试视频壳工厂 = vi.fn(
+      (_item, _lifecycle, _hooks) =>
+        new Promise<Awaited<ReturnType<测试视频壳工厂>>>((resolve) => {
+          延迟壳解析器.push(() =>
+            resolve({
+              destroy: 销毁,
+              同步,
+            })
+          );
+        })
+    );
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+      createVideoJsPlayerShell,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-pending-open-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-pending-open-1",
+          src: "blob:http://media.local/pending-open-video-1",
+          posterSrc: "http://media.local/poster-pending-open-1",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+    viewer.打开({
+      startAttachmentId: "att-video-pending-open-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-pending-open-1",
+          src: "blob:http://media.local/pending-open-video-1-updated",
+          posterSrc: "http://media.local/poster-pending-open-1-updated",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+
+    expect(createVideoJsPlayerShell).toHaveBeenCalledTimes(1);
+
+    延迟壳解析器.at(0)?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(同步).toHaveBeenCalledWith({
+      kind: "video",
+      attachmentId: "att-video-pending-open-1",
+      src: "blob:http://media.local/pending-open-video-1-updated",
+      posterSrc: "http://media.local/poster-pending-open-1-updated",
+      width: 1280,
+      height: 720,
+    });
+    expect(销毁).not.toHaveBeenCalled();
   });
 
   it("关闭视频查看器后，再打开另一条视频时会重新创建同一套查看器壳，而不是复用已销毁实例", async () => {
