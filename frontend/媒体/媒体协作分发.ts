@@ -65,6 +65,8 @@ export type 协作分发会话事件 =
   | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string };
 
 const 协作分发存活上报间隔毫秒 = 60_000;
+const 协作分发媒体源探测最大尝试次数 = 3;
+const 协作分发媒体源探测重试间隔毫秒 = 80;
 export const 协作分发JoinTicket失效原因 = "join_ticket_invalid";
 
 /**
@@ -283,19 +285,39 @@ export async function 探测协作分发媒体源可读性(streamUrl: string): P
    * 如果现在就把这条 URL 暴露给上层，正式查看器会直接撞进 404，
    * 看起来像“明明用了缓存，结果反而播不出来”。
    *
-   * 这里用极小 Range 先探测一次：
+   * 这里用极小 Range 先探测，但允许极短的有限重试：
    * - 命中 2xx/206，说明这条本地协作分发路径已经可读；
-   * - 非 2xx 直接视为当前不可用，让上层继续按既有 HLS/锚点回退；
+   * - 刚挂载时偶发 404 不立刻判死，给 stream server 一个短暂就绪窗口；
+   * - 重试耗尽仍非 2xx，才视为当前不可用，让上层按既有锚点回退；
    * - 不读取响应体，避免把探测放大成真正的数据下载。
    */
-  const response = await fetch(probeUrl.href, {
-    method: "GET",
-    headers: {
-      Range: "bytes=0-1",
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`探测协作分发媒体源失败: ${response.status}`);
+  for (let attempt = 1; attempt <= 协作分发媒体源探测最大尝试次数; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(probeUrl.href, {
+        method: "GET",
+        headers: {
+          Range: "bytes=0-1",
+        },
+      });
+    } catch (error) {
+      if (attempt >= 协作分发媒体源探测最大尝试次数) {
+        throw error;
+      }
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 协作分发媒体源探测重试间隔毫秒);
+      });
+      continue;
+    }
+    if (response.ok) {
+      return;
+    }
+    if (attempt >= 协作分发媒体源探测最大尝试次数) {
+      throw new Error(`探测协作分发媒体源失败: ${response.status}`);
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 协作分发媒体源探测重试间隔毫秒);
+    });
   }
 }
 

@@ -666,6 +666,67 @@ describe("媒体协作分发", () => {
     expect(读取协作分发会话状态("swarm-att-stream-probe-1")).toBeNull();
   });
 
+  it("streamURL 首次探测 404 但短时间后可读时，会在同一轮解析内继续返回 swarm 源", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    let probeCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-stream-probe-retry-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/stream-probe-retry-1.mp4")) {
+          probeCount += 1;
+          if (probeCount === 1) {
+            return {
+              ok: false,
+              status: 404,
+            };
+          }
+          return {
+            ok: true,
+            status: 206,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const { torrent } = 创建可观测假Torrent("/webtorrent/stream-probe-retry-1.mp4");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-stream-probe-retry-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-stream-probe-retry-1"),
+    });
+
+    expect(source).toEqual({
+      src: "/webtorrent/stream-probe-retry-1.mp4",
+      hint: "正在协作分发",
+      locallyComplete: false,
+    });
+    expect(probeCount).toBe(2);
+    expect(读取协作分发会话状态("swarm-att-stream-probe-retry-1")).toMatchObject({
+      refs: 1,
+    });
+  });
+
   it("受控 torrent 首次拉到后会缓存元数据，后端临时离线重开时仍能复用本地 swarm 描述", async () => {
     const registration = {
       active: {
