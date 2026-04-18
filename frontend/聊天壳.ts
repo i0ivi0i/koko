@@ -53,10 +53,10 @@ function 按房间宽度派生消息文本布局环境(roomWidth: number): 消�
     默认消息文本布局环境.bubbleHorizontalBorderWidth;
   const bubbleMaxWidth =
     宿主宽度 <= 640
-      ? Math.min(宿主宽度 * 0.94, 760)
+      ? Math.min(宿主宽度 * 0.96, 780)
       : 宿主宽度 >= 768
-        ? Math.min(宿主宽度 * 0.82, 860)
-        : Math.min(宿主宽度 * 0.9, 780);
+        ? Math.min(宿主宽度 * 0.9, 920)
+        : Math.min(宿主宽度 * 0.93, 840);
   const 多行正文上限 = Math.max(120, bubbleMaxWidth - 气泡外框附加宽度);
   const 单行正文直通上限 = Math.max(
     多行正文上限,
@@ -382,30 +382,32 @@ export class 聊天壳 extends LitElement {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
-      gap: 6px;
-      padding: calc(1px + env(safe-area-inset-top, 0px)) 0 2px;
+      gap: 4px;
+      padding: env(safe-area-inset-top, 0px) 0 1px;
     }
 
     .back-button {
-      min-width: 44px;
-      min-height: 36px;
-      padding: 0 10px;
-      border-radius: 12px;
-      background: var(--surface-nav);
-      color: var(--text-secondary);
-      box-shadow: var(--shadow-warm);
+      min-width: 32px;
+      min-height: 32px;
+      padding: 0 4px;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--accent-core);
+      box-shadow: none;
+      font-size: 28px;
+      line-height: 1;
     }
 
     .room-heading {
       min-width: 0;
       display: grid;
-      gap: 1px;
+      gap: 0;
       text-align: left;
     }
 
     .room-title {
       overflow: hidden;
-      font-size: clamp(18px, 2.4vw, 22px);
+      font-size: clamp(17px, 2.1vw, 20px);
       font-weight: 700;
       line-height: 1.2;
       letter-spacing: -0.18px;
@@ -416,7 +418,8 @@ export class 聊天壳 extends LitElement {
 
     .room-subtitle {
       margin-top: 0;
-      font-size: 12px;
+      font-size: 11px;
+      line-height: 1.3;
       color: var(--text-muted);
     }
 
@@ -444,7 +447,7 @@ export class 聊天壳 extends LitElement {
       overscroll-behavior-y: contain;
       /* 历史前插后由壳层自己做锚点恢复与兜底补偿，不能再让浏览器默认滚动锚点重复干预。 */
       overflow-anchor: none;
-      scrollbar-gutter: stable both-edges;
+      scrollbar-gutter: stable;
       background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
         var(--surface-scroll);
@@ -473,6 +476,7 @@ export class 聊天壳 extends LitElement {
 
     .message-row {
       display: flex;
+      width: 100%;
     }
 
     .message-row.mine {
@@ -481,6 +485,25 @@ export class 聊天壳 extends LitElement {
 
     .message-row.other {
       justify-content: flex-start;
+    }
+
+    /*
+     * 昵称必须脱离气泡宽度约束，否则长昵称会随着窄气泡一起被折得支离破碎。
+     * 这里让消息栈吃满整行，再把气泡本体单独对齐，就能保住昵称完整阅读性。
+     */
+    .message-stack {
+      display: grid;
+      width: 100%;
+      min-width: 0;
+      gap: 4px;
+    }
+
+    .message-row.mine .message-stack {
+      justify-items: end;
+    }
+
+    .message-row.other .message-stack {
+      justify-items: start;
     }
 
     .unread-divider {
@@ -502,6 +525,7 @@ export class 聊天壳 extends LitElement {
     }
 
     .message-surface {
+      max-width: 100%;
       word-break: break-word;
     }
 
@@ -672,7 +696,7 @@ export class 聊天壳 extends LitElement {
     }
 
     .message-alias {
-      margin-bottom: 6px;
+      max-width: 100%;
       padding: 0 2px;
       font-size: 12px;
       line-height: 1.4;
@@ -841,7 +865,7 @@ export class 聊天壳 extends LitElement {
 
     @media (min-width: 768px) {
       .room-screen {
-        padding-inline: clamp(4px, 2vw, 12px);
+        padding-inline: clamp(0px, 1.2vw, 6px);
       }
     }
 
@@ -857,12 +881,12 @@ export class 聊天壳 extends LitElement {
       }
 
       .room-header {
-        gap: 6px;
+        gap: 4px;
       }
 
       .back-button {
-        min-width: 44px;
-        padding-inline: 10px;
+        min-width: 32px;
+        padding-inline: 4px;
       }
 
       #shellConsolePrimaryAction {
@@ -1472,9 +1496,10 @@ export class 聊天壳 extends LitElement {
             <button
               id="backBtn"
               class="back-button"
+              aria-label="返回"
               @click=${() => void this.kernel.dispatch({ type: "LEAVE_ROOM_VIEW_REQUESTED" })}
             >
-              返回
+              ‹
             </button>
             <div class="room-heading">
               <div id="roomTitle" class="room-title">

@@ -800,6 +800,9 @@ export class 房间消息窗 extends LitElement {
     const surfaceClass = hasAttachments
       ? `message-surface media-message ${mediaOnly ? "media-only" : ""}`
       : "message-surface message-bubble";
+    const alias = item.showAlias
+      ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
+      : null;
     return html`
       <li
         class="message-row ${item.owner}"
@@ -809,16 +812,16 @@ export class 房间消息窗 extends LitElement {
         style=${rowStyle}
         ${ref(measureRow)}
       >
-        <article
-          class=${surfaceClass}
-          style=${`width: ${item.bubbleWidth}px;`}
-        >
-          ${item.showAlias
-            ? html`<div class="message-alias">${item.senderDisplayAlias}</div>`
-            : null}
-          ${item.hasText ? this.renderMessageBody(item) : null}
-          ${this.renderMessageAttachments(item)}
-        </article>
+        <div class="message-stack ${item.owner}">
+          ${alias}
+          <article
+            class=${surfaceClass}
+            style=${`width: ${item.bubbleWidth}px;`}
+          >
+            ${item.hasText ? this.renderMessageBody(item) : null}
+            ${this.renderMessageAttachments(item)}
+          </article>
+        </div>
       </li>
     `;
   }

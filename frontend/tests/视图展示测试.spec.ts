@@ -127,10 +127,10 @@ describe("视图 / 消息展示项派生", () => {
      * 不会再退回“所有多媒体都只会两列平铺”的旧路。
      */
     expect(item.attachments[0]?.displayHeight).toBeGreaterThan(
-      item.attachments[0]?.displayWidth ?? 0
+      (item.attachments[0]?.displayWidth ?? 0) * 1.8
     );
     expect(item.attachments[1]?.displayHeight).toBeGreaterThan(
-      item.attachments[1]?.displayWidth ?? 0
+      (item.attachments[1]?.displayWidth ?? 0) * 1.22
     );
     expect(item.attachments[1]?.displayWidth).toBe(item.attachments[2]?.displayWidth);
     expect(item.attachments[2]?.displayWidth).toBe(item.attachments[3]?.displayWidth);
@@ -164,8 +164,10 @@ describe("视图 / 消息展示项派生", () => {
     ).toEqual([1, 2, 3, 1, 2, 3]);
     expect(item.attachments.every((attachment) => attachment.gridColumnSpan === 1)).toBe(true);
     expect(item.attachments.every((attachment) => attachment.gridRowSpan === 1)).toBe(true);
-    expect(item.attachments.every((attachment) => attachment.displayHeight > attachment.displayWidth)).toBe(
-      true
-    );
+    expect(
+      item.attachments.every(
+        (attachment) => attachment.displayHeight > attachment.displayWidth * 1.24
+      )
+    ).toBe(true);
   });
 });

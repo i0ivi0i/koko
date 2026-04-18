@@ -58,7 +58,7 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
   body: "",
   hasText: false,
   layout: 空文本布局,
-  bubbleWidth: 336,
+  bubbleWidth: 384,
   senderDisplayAlias: "冷静的水獭",
   showAlias: true,
   eventPosition: 1,
@@ -66,8 +66,8 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
     template: "hero-strip",
     columnCount: 2,
     gap: 8,
-    rowHeight: 182,
-    contentWidth: 336,
+    rowHeight: 240,
+    contentWidth: 384,
   },
   attachments: [
     {
@@ -79,8 +79,8 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridColumnSpan: 1,
       gridRowStart: 1,
       gridRowSpan: 2,
-      displayWidth: 164,
-      displayHeight: 372,
+      displayWidth: 188,
+      displayHeight: 488,
       thumbnailSrc: "http://media.local/thumb-hero",
       originalSrc: "http://media.local/original-hero",
     },
@@ -93,8 +93,8 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridColumnSpan: 1,
       gridRowStart: 1,
       gridRowSpan: 1,
-      displayWidth: 164,
-      displayHeight: 182,
+      displayWidth: 188,
+      displayHeight: 240,
       originalSrc: "http://media.local/original-video-2",
       posterSrc: "http://media.local/poster-video-2",
     },
@@ -107,8 +107,8 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridColumnSpan: 1,
       gridRowStart: 2,
       gridRowSpan: 1,
-      displayWidth: 164,
-      displayHeight: 182,
+      displayWidth: 188,
+      displayHeight: 240,
       thumbnailSrc: "http://media.local/thumb-image-3",
       originalSrc: "http://media.local/original-image-3",
     },
@@ -121,8 +121,8 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridColumnSpan: 1,
       gridRowStart: 3,
       gridRowSpan: 1,
-      displayWidth: 164,
-      displayHeight: 182,
+      displayWidth: 188,
+      displayHeight: 240,
       originalSrc: "http://media.local/original-video-4",
       posterSrc: "http://media.local/poster-video-4",
     },
@@ -135,8 +135,8 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
       gridColumnSpan: 1,
       gridRowStart: 3,
       gridRowSpan: 1,
-      displayWidth: 164,
-      displayHeight: 182,
+      displayWidth: 188,
+      displayHeight: 240,
       thumbnailSrc: "http://media.local/thumb-image-5",
       originalSrc: "http://media.local/original-image-5",
     },
@@ -151,6 +151,23 @@ const 创建媒体消息窗 = (): 房间消息窗 => {
 };
 
 describe("房间消息窗媒体查看器", () => {
+  it("群友昵称会渲染在气泡外层，而不是继续被气泡宽度一起挤折", async () => {
+    const pane = 创建媒体消息窗();
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const stack = pane.querySelector<HTMLElement>(".message-row.other .message-stack");
+    const alias = pane.querySelector<HTMLElement>(".message-row.other .message-alias");
+    const surface = pane.querySelector<HTMLElement>(".message-row.other .message-surface");
+    expect(stack).not.toBeNull();
+    expect(alias).not.toBeNull();
+    expect(surface).not.toBeNull();
+    expect(stack?.firstElementChild).toBe(alias);
+    expect(surface?.querySelector(".message-alias")).toBeNull();
+
+    pane.remove();
+  });
+
   it("拼贴模板和槽位元数据会从 presenter 透传到 DOM，而不是在 renderer 里重新猜多附件布局", async () => {
     const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
     pane.items = [创建五附件拼贴消息项()];
@@ -160,7 +177,7 @@ describe("房间消息窗媒体查看器", () => {
     const grid = pane.querySelector<HTMLElement>(".message-attachment-grid");
     expect(grid?.dataset.attachmentTemplate).toBe("hero-strip");
     expect(grid?.style.getPropertyValue("--attachment-grid-columns")).toBe("2");
-    expect(grid?.style.getPropertyValue("--attachment-grid-row-height")).toBe("182px");
+    expect(grid?.style.getPropertyValue("--attachment-grid-row-height")).toBe("240px");
 
     const heroCard = pane.querySelector<HTMLElement>(
       '.message-attachment-card[data-attachment-id="att-hero"]'

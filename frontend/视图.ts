@@ -380,17 +380,17 @@ function 规划媒体拼贴布局(
   slots: 媒体附件拼贴槽位[];
 } {
   const gap = 8;
-  const multiAttachmentWidth = Math.max(232, Math.min(layoutEnv.maxContentWidth, 352));
+  const multiAttachmentWidth = Math.max(248, Math.min(layoutEnv.maxContentWidth, 384));
   const 双列单元宽度 = Math.floor((multiAttachmentWidth - gap) / 2);
-  const 双列单元高度 = Math.max(168, Math.floor(双列单元宽度 * 1.06));
+  const 双列单元高度 = Math.max(196, Math.floor(双列单元宽度 * 1.28));
   const 三列单元宽度 = Math.floor((multiAttachmentWidth - gap * 2) / 3);
-  const 三列单元高度 = Math.max(136, Math.floor(三列单元宽度 * 1.22));
+  const 三列单元高度 = Math.max(152, Math.floor(三列单元宽度 * 1.36));
 
   /**
    * 多媒体拼贴现在明确向“竖向短视频优先”的几何收口：
-   * 1. 双列和三列单元都默认做成 portrait cell，而不是横向海报卡；
-   * 2. 三图/五图模板改成 leader column，让主卡片纵向跨两行；
-   * 3. 这样混合图片/视频时不会再出现满屏宽扁卡片，阅读节奏也更接近 Telegram。
+   * 1. 双列和三列单元都明确做成 portrait cell，而不是“接近正方形”的海报块；
+   * 2. 三图/五图模板继续保留 leader column，让主卡片纵向跨两行；
+   * 3. 同时把拼贴最大内容宽度略放开，减少时间线两侧空耗的网页式留白。
    */
   if (attachmentCount <= 1) {
     return {

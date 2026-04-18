@@ -193,9 +193,10 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const styles = (聊天壳 as unknown as { styles: { cssText: string } }).styles.cssText;
 
     expect(styles).toContain(".room-header");
-    expect(styles).toContain("gap: 6px");
-    expect(styles).toContain("min-width: 44px");
-    expect(styles).toContain("padding: calc(1px + env(safe-area-inset-top, 0px)) 0 2px");
+    expect(styles).toContain("gap: 4px");
+    expect(styles).toContain("min-width: 32px");
+    expect(styles).toContain("padding: env(safe-area-inset-top, 0px) 0 1px");
+    expect(styles).toMatch(/\.back-button[\s\S]*color:\s*var\(--accent-core\)/);
   });
 
   it("多附件网格会消费 presenter 提供的列数与行高变量，而不是把所有消息锁死在双列模板", () => {
@@ -235,8 +236,18 @@ describe("聊天壳集成 / 首页与控制台", () => {
       }
     ).读取消息文本布局环境();
 
-    expect(env.maxContentWidth).toBeGreaterThanOrEqual(800);
+    expect(env.maxContentWidth).toBeGreaterThanOrEqual(880);
     expect(env.singleLineMaxContentWidth).toBeGreaterThanOrEqual(env.maxContentWidth);
+    el.remove();
+  });
+
+  it("房间页头返回按钮会收成单箭头，而不是继续占用文字按钮宽度", async () => {
+    const el = await 创建已入房聊天壳();
+    const backButton = el.shadowRoot!.querySelector("#backBtn") as HTMLButtonElement | null;
+
+    expect(backButton).not.toBeNull();
+    expect(backButton?.textContent?.trim()).toBe("‹");
+    expect(backButton?.getAttribute("aria-label")).toBe("返回");
     el.remove();
   });
 
