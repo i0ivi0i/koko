@@ -65,8 +65,10 @@ export type 协作分发会话事件 =
   | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string };
 
 const 协作分发存活上报间隔毫秒 = 60_000;
-const 协作分发媒体源探测最大尝试次数 = 3;
+const 协作分发媒体源探测最大尝试次数 = 16;
 const 协作分发媒体源探测重试间隔毫秒 = 80;
+const 服务工作线程接管等待超时毫秒 = 1_200;
+const 服务工作线程接管轮询间隔毫秒 = 50;
 export const 协作分发JoinTicket失效原因 = "join_ticket_invalid";
 
 /**
@@ -119,6 +121,18 @@ const 归一化协作分发错误 = (error: unknown): unknown =>
     ? new 协作分发JoinTicket失效错误()
     : error;
 
+type 协作分发媒体源探测选项 = {
+  读取终止错误?: () => unknown | null;
+};
+
+const 读取探测终止错误 = (options: 协作分发媒体源探测选项): unknown | null => {
+  const raw = options.读取终止错误?.() ?? null;
+  if (!raw) {
+    return null;
+  }
+  return 归一化协作分发错误(raw);
+};
+
 export type 协作分发底层会话 = {
   attachmentId: string;
   swarmId: string;
@@ -131,6 +145,7 @@ export type 协作分发底层会话 = {
   presenceIntervalId: ReturnType<typeof setInterval> | null;
   torrent: WebTorrent种子 | null;
   file: WebTorrent文件 | null;
+  terminalError: unknown | null;
   cleanupStarted: boolean;
   consumerBindings: Map<
     string,
@@ -192,20 +207,40 @@ async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏
 async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
   const platform = 获取默认浏览器应用平台();
   await platform.启动();
-  /**
-   * WebTorrent browser server 在构造时就会自测 `/webtorrent/cancel/`。
-   * 如果当前页还没被根 scope worker 接管，这条探测和后续 stream probe 都只会打到网络 404。
-   * 这里宁可先回退到既有 HLS/锚点主链，也不让浏览器背着控制台噪音去碰一条必败路径。
-   */
-  if (!platform.snapshot().serviceWorker.controllerAttached) {
-    throw new Error("media service worker 尚未接管当前页面");
-  }
   const registration = platform.serviceWorker.读取注册("media");
   if (!registration) {
     throw new Error("media service worker 尚未注册");
   }
-  if (registration.active?.state !== "activated") {
+  const activeWorker = registration.active as
+    | { state?: string; postMessage?: (message: unknown) => void }
+    | null
+    | undefined;
+  if (activeWorker?.state !== "activated") {
     throw new Error("media service worker 尚未激活");
+  }
+  /**
+   * 首访窗口里常见状态是“registration 已 activated，但当前页尚未被 controller 接管”。
+   * 这里先尝试让 active worker 主动 claim 当前页，再短暂等待一次接管结果：
+   * 1. claim 成功就继续走同一条 swarm 主链；
+   * 2. claim 失败再明确抛错，保持“不可达时不伪装成功”的边界；
+   * 3. 后续真正是否可读仍由 `探测协作分发媒体源可读性` 统一裁决。
+   *
+   * 注意：这里不能依赖 controller 对象发消息，因为“尚未接管”本质上就是 controller 还不存在；
+   * 必须直接通过 registration.active 通道向 worker 发起 claim 请求。
+   */
+  if (!platform.snapshot().serviceWorker.controllerAttached) {
+    if (typeof activeWorker?.postMessage === "function") {
+      activeWorker.postMessage({ type: "CLAIM_CLIENTS" });
+    }
+    const startedAt = Date.now();
+    while (!platform.snapshot().serviceWorker.controllerAttached) {
+      if (Date.now() - startedAt >= 服务工作线程接管等待超时毫秒) {
+        throw new Error("media service worker 尚未接管当前页面");
+      }
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 服务工作线程接管轮询间隔毫秒);
+      });
+    }
   }
   return registration;
 }
@@ -272,7 +307,10 @@ async function 拉取受控Torrent字节(
   }
 }
 
-export async function 探测协作分发媒体源可读性(streamUrl: string): Promise<void> {
+export async function 探测协作分发媒体源可读性(
+  streamUrl: string,
+  options: 协作分发媒体源探测选项 = {}
+): Promise<void> {
   const probeUrl = new URL(
     streamUrl,
     globalThis.location?.href ?? "http://127.0.0.1/"
@@ -292,6 +330,10 @@ export async function 探测协作分发媒体源可读性(streamUrl: string): P
    * - 不读取响应体，避免把探测放大成真正的数据下载。
    */
   for (let attempt = 1; attempt <= 协作分发媒体源探测最大尝试次数; attempt += 1) {
+    const terminalErrorBeforeFetch = 读取探测终止错误(options);
+    if (terminalErrorBeforeFetch) {
+      throw terminalErrorBeforeFetch;
+    }
     let response: Response;
     try {
       response = await fetch(probeUrl.href, {
@@ -301,6 +343,10 @@ export async function 探测协作分发媒体源可读性(streamUrl: string): P
         },
       });
     } catch (error) {
+      const terminalErrorAfterFetch = 读取探测终止错误(options);
+      if (terminalErrorAfterFetch) {
+        throw terminalErrorAfterFetch;
+      }
       if (attempt >= 协作分发媒体源探测最大尝试次数) {
         throw error;
       }
@@ -311,6 +357,10 @@ export async function 探测协作分发媒体源可读性(streamUrl: string): P
     }
     if (response.ok) {
       return;
+    }
+    const terminalErrorAfterResponse = 读取探测终止错误(options);
+    if (terminalErrorAfterResponse) {
+      throw terminalErrorAfterResponse;
     }
     if (attempt >= 协作分发媒体源探测最大尝试次数) {
       throw new Error(`探测协作分发媒体源失败: ${response.status}`);
@@ -454,6 +504,18 @@ export async function 获取或创建协作分发浏览器运行时(
         协作分发浏览器运行时实例 = runtime;
       }
       return runtime;
+    }).catch((error) => {
+      /**
+       * 运行时冷启动失败后不能把 rejected promise 永久缓存：
+       * - 否则首轮失败会让当前页面后续所有播放都只剩锚点回退；
+       * - 下游条件恢复后（例如 SW 已接管）也无法再重试；
+       * - 这里必须释放单例锁，让后续调用能按最新事实重新初始化。
+       */
+      if (协作分发浏览器运行时Promise === nextPromise) {
+        协作分发浏览器运行时Promise = null;
+        协作分发浏览器运行时实例 = null;
+      }
+      throw error;
     });
     协作分发浏览器运行时Promise = nextPromise;
   }

@@ -549,6 +549,7 @@ function 绑定协作分发会话事件(
       return;
     }
     停止协作分发存活上报(session);
+    session.terminalError = error;
     session.hint = null;
     发布协作分发会话事件(session, "SWARM_TICKET_INVALID");
     删除底层协作分发会话(runtime, session.swarmId, session);
@@ -640,6 +641,7 @@ async function 确保协作分发会话(
     presenceIntervalId: null,
     torrent: null,
     file: null,
+    terminalError: null,
     cleanupStarted: false,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
   };
@@ -676,7 +678,9 @@ async function 确保协作分发会话(
     if (session.eagerCompleting) {
       file.select(1);
     }
-    await 探测协作分发媒体源可读性(file.streamURL);
+    await 探测协作分发媒体源可读性(file.streamURL, {
+      读取终止错误: () => session.terminalError,
+    });
     if (runtime.底层会话表.get(session.swarmId) !== session) {
       清理协作分发底层会话(session, browserRuntime);
       return null;
@@ -695,6 +699,7 @@ async function 确保协作分发会话(
         });
       }
     }
+    清理协作分发底层会话(session);
     throw error;
   });
 

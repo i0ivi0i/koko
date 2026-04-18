@@ -5,6 +5,7 @@ import {
   读取协作分发定位片段,
   重置协作分发浏览器运行时,
   清理协作分发底层会话,
+  协作分发JoinTicket失效错误,
   type WebTorrent浏览器客户端,
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
@@ -262,6 +263,49 @@ describe("媒体协作分发", () => {
     expect(first).toBe(second);
   });
 
+  it("首次初始化失败后不会把 rejected promise 永久缓存，后续条件恢复时会重新尝试并成功创建运行时", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    const createServer = vi.fn().mockReturnValue({ close: vi.fn() });
+    const ctorSpy = vi.fn();
+    class FakeWebTorrent {
+      constructor() {
+        ctorSpy();
+      }
+
+      createServer = createServer;
+      add = (() => {
+        throw new Error("test should not call add");
+      }) as WebTorrent浏览器客户端["add"];
+    }
+    const fakeCtor = FakeWebTorrent as unknown as new () => WebTorrent浏览器客户端;
+    let firstAttempt = true;
+    const readRegistration = vi.fn(async () => {
+      if (firstAttempt) {
+        firstAttempt = false;
+        throw new Error("sw not ready");
+      }
+      return registration;
+    });
+
+    await expect(
+      获取或创建协作分发浏览器运行时(async () => fakeCtor, readRegistration)
+    ).rejects.toThrow("sw not ready");
+
+    const runtime = await 获取或创建协作分发浏览器运行时(
+      async () => fakeCtor,
+      readRegistration
+    );
+
+    expect(runtime).toBeDefined();
+    expect(readRegistration).toHaveBeenCalledTimes(2);
+    expect(ctorSpy).toHaveBeenCalledTimes(1);
+    expect(createServer).toHaveBeenCalledTimes(1);
+  });
+
   it("join_ticket 存在时会通过 getAnnounceOpts 传给 tracker，而不是前端自己拼第二套 announce URL", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-ticket-opts");
@@ -295,8 +339,80 @@ describe("媒体协作分发", () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 
-  it("当前页还没被根 service worker 接管时，不会提前启动 WebTorrent browser server 去打 /webtorrent/* 404", async () => {
+  it("当前页还没被根 service worker 接管时，会先请求 active worker 主动 claim 再继续初始化", async () => {
     vi.resetModules();
+    let controllerAttached = false;
+    const registration = {
+      active: {
+        state: "activated",
+        postMessage: vi.fn((payload: unknown) => {
+          if (
+            typeof payload === "object" &&
+            payload !== null &&
+            "type" in payload &&
+            (payload as { type?: unknown }).type === "CLAIM_CLIENTS"
+          ) {
+            controllerAttached = true;
+          }
+        }),
+      },
+    };
+    const platform = {
+      启动: vi.fn(async () => undefined),
+      snapshot: () => ({
+        serviceWorker: {
+          controllerAttached,
+        },
+      }),
+      serviceWorker: {
+        读取注册: () => registration,
+      },
+    };
+    vi.doMock("../平台/index.js", () => ({
+      获取默认浏览器应用平台: () => platform,
+    }));
+    const ctorSpy = vi.fn();
+    const createServer = vi.fn(() => ({
+      close: vi.fn(),
+    }));
+    class FakeWebTorrent {
+      constructor() {
+        ctorSpy();
+      }
+
+      createServer = createServer;
+      add = vi.fn();
+      destroy = vi.fn();
+      remove = vi.fn();
+    }
+    const mod = await import("../媒体/媒体协作分发");
+
+    const runtime = await mod.获取或创建协作分发浏览器运行时(
+      async () => FakeWebTorrent as never
+    );
+
+    expect(platform.启动).toHaveBeenCalledTimes(1);
+    expect(runtime).toBeDefined();
+    expect(ctorSpy).toHaveBeenCalledTimes(1);
+    expect(registration.active.postMessage).toHaveBeenCalledWith({
+      type: "CLAIM_CLIENTS",
+    });
+    expect(createServer).toHaveBeenCalledWith({
+      controller: registration,
+    });
+
+    mod.重置协作分发浏览器运行时();
+    vi.doUnmock("../平台/index.js");
+  });
+
+  it("active worker 请求 claim 后仍未接管页面时，会中止 browser server 初始化并返回明确错误", async () => {
+    vi.resetModules();
+    const registration = {
+      active: {
+        state: "activated",
+        postMessage: vi.fn(),
+      },
+    };
     const platform = {
       启动: vi.fn(async () => undefined),
       snapshot: () => ({
@@ -305,11 +421,7 @@ describe("媒体协作分发", () => {
         },
       }),
       serviceWorker: {
-        读取注册: () => ({
-          active: {
-            state: "activated",
-          },
-        }),
+        读取注册: () => registration,
       },
     };
     vi.doMock("../平台/index.js", () => ({
@@ -333,10 +445,11 @@ describe("媒体协作分发", () => {
       mod.获取或创建协作分发浏览器运行时(async () => FakeWebTorrent as never)
     ).rejects.toThrow("service worker 尚未接管当前页面");
 
-    expect(platform.启动).toHaveBeenCalledTimes(1);
+    expect(registration.active.postMessage).toHaveBeenCalledWith({
+      type: "CLAIM_CLIENTS",
+    });
     expect(ctorSpy).not.toHaveBeenCalled();
     expect(createServer).not.toHaveBeenCalled();
-
     mod.重置协作分发浏览器运行时();
     vi.doUnmock("../平台/index.js");
   });
@@ -725,6 +838,120 @@ describe("媒体协作分发", () => {
     expect(读取协作分发会话状态("swarm-att-stream-probe-retry-1")).toMatchObject({
       refs: 1,
     });
+  });
+
+  it("streamURL 挂载窗口较长时，会在预算内持续重试而不是过早回退锚点", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    let probeCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-stream-probe-retry-long-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/stream-probe-retry-long-1.mp4")) {
+          probeCount += 1;
+          if (probeCount <= 10) {
+            return {
+              ok: false,
+              status: 404,
+            };
+          }
+          return {
+            ok: true,
+            status: 206,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const { torrent } = 创建可观测假Torrent("/webtorrent/stream-probe-retry-long-1.mp4");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-stream-probe-retry-long-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-stream-probe-retry-long-1"),
+    });
+
+    expect(source).toEqual({
+      src: "/webtorrent/stream-probe-retry-long-1.mp4",
+      hint: "正在协作分发",
+      locallyComplete: false,
+    });
+    expect(probeCount).toBe(11);
+    expect(读取协作分发会话状态("swarm-att-stream-probe-retry-long-1")).toMatchObject({
+      refs: 1,
+    });
+  });
+
+  it("streamURL 探测期间收到 join_ticket_invalid 时，会优先抛出 ticket 失效语义而不是 404", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    let emittedTicketInvalid = false;
+    const { torrent, emit } = 创建可观测假Torrent(
+      "/webtorrent/stream-probe-ticket-invalid-1.mp4"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-stream-probe-ticket-invalid-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/stream-probe-ticket-invalid-1.mp4")) {
+          if (!emittedTicketInvalid) {
+            emittedTicketInvalid = true;
+            emit("error", new Error("join_ticket_invalid"));
+          }
+          return {
+            ok: false,
+            status: 404,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await expect(
+      解析协作分发源({
+        attachmentId: "att-stream-probe-ticket-invalid-1",
+        kind: "video",
+        locator: 准备好的定位结果("att-stream-probe-ticket-invalid-1"),
+      })
+    ).rejects.toBeInstanceOf(协作分发JoinTicket失效错误);
+    expect(读取协作分发会话状态("swarm-att-stream-probe-ticket-invalid-1")).toBeNull();
   });
 
   it("受控 torrent 首次拉到后会缓存元数据，后端临时离线重开时仍能复用本地 swarm 描述", async () => {

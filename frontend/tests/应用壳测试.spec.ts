@@ -31,6 +31,7 @@ describe("应用壳缓存边界", () => {
     const source = 读取前端文件("app-sw.ts");
 
     expect(source).toContain('if (payload?.type === "SKIP_WAITING")');
+    expect(source).toContain('if (payload?.type === "CLAIM_CLIENTS")');
     expect(source.match(/void self\.skipWaiting\(\);/g)?.length ?? 0).toBe(2);
   });
 

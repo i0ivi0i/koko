@@ -93,6 +93,15 @@ self.addEventListener("message", (event) => {
     void self.skipWaiting();
     return;
   }
+  if (payload?.type === "CLAIM_CLIENTS") {
+    const claimClients = (
+      self.clients as typeof self.clients & { claim?: () => Promise<void> }
+    ).claim;
+    if (typeof claimClients === "function") {
+      void claimClients.call(self.clients);
+    }
+    return;
+  }
   if (payload?.type === "REQUEST_BACKGROUND_DRAIN") {
     void 向受控页面广播后台补发请求();
   }
