@@ -866,10 +866,11 @@ describe("媒体播放器", () => {
     expect(调用参数?.onSessionEvent).toEqual(expect.any(Function));
   });
 
-  it("inline_autoplay surface 会先尝试复用已热 swarm/web seed，而不是直接 probe anchor", async () => {
+  it("inline_autoplay surface 只有在 swarm 已本地完整时才直接复用文件源，而不是把半成品 blob 塞给消息卡片", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-inline-hls",
       hint: "正在协作分发" as const,
+      locallyComplete: true,
     }));
     const probeAnchor = vi.fn();
     const 播放器 = 创建媒体播放器({
@@ -948,6 +949,88 @@ describe("媒体播放器", () => {
       })
     );
     expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("inline_autoplay 命中未补齐完成的 swarm 文件源时，会回退锚点冷源以避免消息卡片出现残缺画面", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-video-inline-partial",
+      hint: "正在协作分发" as const,
+      locallyComplete: false,
+    }));
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-inline-partial",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/legacy-original-inline-partial",
+        thumbnail_url: "http://media.local/poster-inline-partial",
+        distribution: {
+          content_id: "content_att-video-inline-partial",
+          content_hash: "hash-video-inline-partial",
+          swarm_id: "swarm-hash-video-inline-partial",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-inline-partial",
+          torrent_info_hash: "torrent-info-hash-inline-partial",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-inline-partial",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        streaming_asset: {
+          asset_id: "att-video-inline-partial",
+          content_hash: "hash-video-inline-partial",
+          kind: "streaming_video" as const,
+          manifest: {
+            hls_master_url: "http://media.local/stream/att-video-inline-partial/master.m3u8",
+            dash_mpd_url: "http://media.local/stream/att-video-inline-partial/stream.mpd",
+          },
+          lifecycle: {
+            streaming_expires_at: "1775942400",
+            streaming_deleted_at: null,
+          },
+          distribution: {
+            swarm_id: "swarm-hash-video-inline-partial",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-inline-partial",
+            join_ticket: null,
+            survival_mode: "server_assisted" as const,
+          },
+          origin: {
+            original_url: "http://media.local/cold-origin-inline-partial",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-inline-partial",
+      kind: "video",
+      surface: "inline_autoplay",
+      consumerId: "inline_autoplay:att-video-inline-partial",
+    });
+
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-inline-partial",
+        consumerId: "inline_autoplay:att-video-inline-partial",
+        reuseOnly: true,
+      })
+    );
+    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-inline-partial");
+    expect(result).toMatchObject({
+      mode: "anchor",
+      src: "http://media.local/cold-origin-inline-partial",
+      thumbnailUrl: "http://media.local/poster-inline-partial",
+    });
   });
 
   it("inline_autoplay 在没有可复用 swarm 时，才会回退到锚点冷源", async () => {

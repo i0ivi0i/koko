@@ -768,6 +768,7 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
       return {
         src: source.src,
         hint: 推导协作分发提示(session),
+        locallyComplete: session.locallyComplete,
       };
     },
 

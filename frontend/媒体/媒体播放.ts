@@ -55,7 +55,9 @@ type 媒体播放器依赖 = {
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
     reuseOnly?: boolean;
-  }): Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>;
+  }): Promise<
+    { src: string; hint: "正在协作分发" | "正在补块" | null; locallyComplete?: boolean } | null
+  >;
   releaseSwarmSource?(input: {
     attachmentId: string;
     consumerId?: string;
@@ -309,7 +311,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 尝试协作分发主链 = async (
     input: 媒体播放输入,
     locator: 媒体定位结果,
-    options: { eagerCompleting?: boolean; reuseOnly?: boolean } = {}
+    options: { eagerCompleting?: boolean; reuseOnly?: boolean; requireLocallyComplete?: boolean } = {}
   ): Promise<媒体播放结果 | null> => {
     const distribution = 读取协作分发定位片段(locator);
     if (distribution?.availability === "expired") {
@@ -337,6 +339,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         ...(options.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!swarmSource) {
+        return null;
+      }
+      /**
+       * 消息流自动播的 `<video>` 只应该吃“已经完整落到本机”的 whole-file 资源：
+       * 1. `file.streamURL` 只保证当前可读，不保证整文件已经补齐；
+       * 2. 半成品 whole-file 丢给原生 `<video>` 时，浏览器可能出现局部黑块/残帧；
+       * 3. 这里一旦发现只是未补齐会话，立刻释放这次自动播占用，回到稳定锚点冷源。
+       */
+      if (options.requireLocallyComplete && swarmSource.locallyComplete !== true) {
+        释放协作分发占用(input);
         return null;
       }
       /**
@@ -500,6 +512,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
        */
       const swarmPlayback = await 尝试协作分发主链(input, locator, {
         reuseOnly: true,
+        requireLocallyComplete: true,
       });
       if (swarmPlayback) {
         return swarmPlayback;

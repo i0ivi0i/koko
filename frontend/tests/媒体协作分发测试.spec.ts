@@ -502,6 +502,7 @@ describe("媒体协作分发", () => {
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-image-1",
       hint: "正在协作分发",
+      locallyComplete: false,
     });
     expect(select).not.toHaveBeenCalled();
     expect(读取协作分发会话状态("swarm-att-image-1")).toMatchObject({
@@ -534,6 +535,7 @@ describe("媒体协作分发", () => {
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-2",
       hint: "正在补块",
+      locallyComplete: false,
     });
     expect(select).toHaveBeenCalledWith(1);
     expect(读取协作分发会话状态("swarm-att-2")).toMatchObject({
@@ -575,6 +577,7 @@ describe("媒体协作分发", () => {
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-lazy-backfill-1",
       hint: "正在协作分发",
+      locallyComplete: false,
     });
     expect(select).not.toHaveBeenCalled();
     expect(读取协作分发会话状态("swarm-att-lazy-backfill-1")).toMatchObject({
@@ -682,6 +685,7 @@ describe("媒体协作分发", () => {
     expect(firstSource).toEqual({
       src: "/webtorrent/offline-reopen.mp4",
       hint: "正在协作分发",
+      locallyComplete: false,
     });
     expect(firstAdd).toHaveBeenCalledWith(
       new Uint8Array([7, 8, 9]),
@@ -714,6 +718,7 @@ describe("媒体协作分发", () => {
     expect(reopenedSource).toEqual({
       src: "/webtorrent/offline-reopen.mp4",
       hint: "正在协作分发",
+      locallyComplete: false,
     });
     expect(secondAdd).toHaveBeenCalledWith(
       new Uint8Array([7, 8, 9]),
@@ -750,6 +755,7 @@ describe("媒体协作分发", () => {
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-persist",
       hint: "正在协作分发",
+      locallyComplete: false,
     });
     expect(add).toHaveBeenCalledTimes(1);
     expect(persist).toHaveBeenCalledTimes(1);

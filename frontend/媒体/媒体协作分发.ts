@@ -55,6 +55,7 @@ export interface 协作分发浏览器运行时 {
 export interface 协作分发媒体源 {
   src: string;
   hint: "正在协作分发" | "正在补块";
+  locallyComplete: boolean;
 }
 
 export type 协作分发会话事件 =
