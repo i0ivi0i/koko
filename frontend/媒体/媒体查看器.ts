@@ -101,6 +101,9 @@ type 可原生全屏容器元素 = HTMLElement & {
   requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
 };
 type 媒体方向锁 = "portrait" | "landscape";
+type 同会话全屏策略控制器 = {
+  清理(): void;
+};
 type 可锁定屏幕方向 = ScreenOrientation & {
   lock?: (orientation: 媒体方向锁) => Promise<void>;
   unlock?: () => void;
@@ -144,6 +147,13 @@ const 读取宽高方向锁 = (width: number, height: number): 媒体方向锁 |
 
 const 读取视频方向锁 = (item: 媒体查看器视频项目): 媒体方向锁 | null =>
   读取宽高方向锁(item.width, item.height);
+
+/**
+ * 显式关闭旧查看器后，浏览器的系统全屏退场可能会晚于壳层 owner 收尾。
+ * 在这段窗口里，新会话必须先保证应用内沉浸布局可用，而不是继续把“马上再拿到系统全屏”
+ * 当成唯一真相，否则移动端就会出现首击像没进全屏、等一会再点一次才恢复的错觉。
+ */
+let 存在待结算的系统全屏退出 = false;
 
 const 读取视频元素方向锁 = (video: HTMLVideoElement): 媒体方向锁 | null => {
   if (video.videoWidth <= 0 || video.videoHeight <= 0) {
@@ -211,7 +221,7 @@ const 启动同会话全屏策略 = (
   video: 可原生全屏视频元素,
   请求关闭查看器: () => void,
   options: { 已预请求系统全屏?: boolean } = {}
-): (() => void) => {
+): 同会话全屏策略控制器 => {
   const sessionId = `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let cleaned = false;
   let 本会话已接管系统全屏 = document.fullscreenElement === fullscreenTarget;
@@ -307,6 +317,9 @@ const 启动同会话全屏策略 = (
       本会话已接管系统全屏 = true;
       return;
     }
+    if (存在待结算的系统全屏退出 && !document.fullscreenElement) {
+      return;
+    }
     /**
      * 移动端第一次申请系统全屏、或上一会话迟到的退出事件，都可能抛出
      * `fullscreenchange` 但当前会话其实还没真正接管系统全屏。
@@ -356,7 +369,10 @@ const 启动同会话全屏策略 = (
   startPlayback();
   if (options.已预请求系统全屏) {
     lockScreenOrientation();
-  } else if (typeof fullscreenTarget.requestFullscreen === "function") {
+  } else if (
+    !存在待结算的系统全屏退出 &&
+    typeof fullscreenTarget.requestFullscreen === "function"
+  ) {
     void fullscreenTarget
       .requestFullscreen({ navigationUI: "hide" })
       .then(() => {
@@ -369,7 +385,9 @@ const 启动同会话全屏策略 = (
     lockScreenOrientation();
   }
 
-  return cleanup;
+  return {
+    清理: cleanup,
+  };
 };
 
 const 创建默认VideoJs播放器层 = async (
@@ -385,21 +403,27 @@ const 创建默认VideoJs播放器层 = async (
   const overlay = document.createElement("div") as 可原生全屏容器元素;
   const mount = document.createElement("div");
   const closeButton = document.createElement("button");
+  const 使用沉浸查看器布局 = options.shouldAutoEnterFullscreen;
 
   overlay.dataset.mediaViewerMode = "video";
+  overlay.dataset.mediaViewerPresentation = 使用沉浸查看器布局 ? "immersive" : "dialog";
   mount.dataset.mediaViewerMount = "video";
+  mount.dataset.mediaViewerImmersive = 使用沉浸查看器布局 ? "true" : "false";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "视频查看器");
-  overlay.style.cssText =
-    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+  overlay.style.cssText = 使用沉浸查看器布局
+    ? "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:0;"
+    : "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
   /**
    * 查看器必须先给播放器壳一个明确的挂载盒子：
    * 1. 尺寸上限属于查看器 overlay，本身就是 shell 的职责；
    * 2. provider/container/video 之后都只跟这一个盒子算宽高；
    * 3. 避免父盒子是 auto/0 宽时，下面一整串媒体节点一起塌成 0x0。
    */
-  mount.style.cssText = "display:block;width:100%;max-width:1120px;min-width:0;";
+  mount.style.cssText = 使用沉浸查看器布局
+    ? "display:grid;place-items:center;width:100%;height:100%;max-width:100%;min-width:0;"
+    : "display:block;width:100%;max-width:1120px;min-width:0;";
 
   closeButton.type = "button";
   closeButton.textContent = "关闭";
@@ -411,7 +435,11 @@ const 创建默认VideoJs播放器层 = async (
   document.body.append(overlay);
   lifecycle.开始视口占用();
   let 已在查看器表面预请求系统全屏 = false;
-  if (options.shouldAutoEnterFullscreen && typeof overlay.requestFullscreen === "function") {
+  if (
+    options.shouldAutoEnterFullscreen &&
+    !存在待结算的系统全屏退出 &&
+    typeof overlay.requestFullscreen === "function"
+  ) {
     /**
      * Fullscreen API 需要 transient user activation。
      * 移动端从消息卡片点击进入时，Video.js 壳注册和挂载往往已经跨出这次手势窗口；
@@ -424,7 +452,9 @@ const 创建默认VideoJs播放器层 = async (
   let 当前视频项目 = item;
   let cleaned = false;
   let 解绑媒体运行时信号: () => void = () => undefined;
-  let 清理全屏策略: () => void = () => undefined;
+  let 清理全屏策略: 同会话全屏策略控制器 = {
+    清理: () => undefined,
+  };
   const 挂接P2PHls增强层 = async ({ hls }: 壳外P2PHls增强层输入): Promise<void> => {
     /**
      * `p2p-media-loader-hlsjs` 在这里始终只是 HLS 支路的外挂增强：
@@ -470,32 +500,41 @@ const 创建默认VideoJs播放器层 = async (
         return;
       }
       cleaned = true;
-      if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
-        void document.exitFullscreen().catch(() => undefined);
-      }
-      closeButton.removeEventListener("click", cleanup);
+      /**
+       * 先回收外层 owner，再做浏览器和播放器收尾。
+       * 这样即便系统全屏、history 或自定义元素销毁还在晚一拍结算，
+       * 新会话也不会再误复用这颗已经进入退场链路的旧实例。
+       */
+      hooks.通知查看器已关闭?.();
+      closeButton.removeEventListener("click", 请求关闭);
       overlay.removeEventListener("click", closeWhenClickingBackdrop);
       document.removeEventListener("keydown", closeWhenPressingEscape);
       解绑媒体运行时信号();
-      清理全屏策略();
+      清理全屏策略.清理();
       video.pause();
       shell.destroy();
       overlay.remove();
       lifecycle.结束视口占用();
-      /**
-       * 查看器是可以被内部按钮、背景点击、全屏退场直接关掉的。
-       * 这里必须把“实例已死”同步回外层 owner，避免外层继续拿着已销毁实例走同会话复用分支。
-       */
-      hooks.通知查看器已关闭?.();
+    };
+    const 请求关闭 = (): void => {
+      if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
+        存在待结算的系统全屏退出 = true;
+        void document.exitFullscreen()
+          .catch(() => undefined)
+          .finally(() => {
+            存在待结算的系统全屏退出 = false;
+          });
+      }
+      cleanup();
     };
     const closeWhenClickingBackdrop = (event: MouseEvent): void => {
       if (event.target === overlay) {
-        cleanup();
+        请求关闭();
       }
     };
     const closeWhenPressingEscape = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
-        cleanup();
+        请求关闭();
       }
     };
 
@@ -509,14 +548,14 @@ const 创建默认VideoJs播放器层 = async (
         overlay,
         container,
         video,
-        cleanup,
+        请求关闭,
         {
           已预请求系统全屏: 已在查看器表面预请求系统全屏,
         }
       );
     }
 
-    closeButton.addEventListener("click", cleanup);
+    closeButton.addEventListener("click", 请求关闭);
     overlay.addEventListener("click", closeWhenClickingBackdrop);
     document.addEventListener("keydown", closeWhenPressingEscape);
     closeButton.focus();
@@ -536,7 +575,7 @@ const 创建默认VideoJs播放器层 = async (
     };
   } catch (error) {
     解绑媒体运行时信号();
-    清理全屏策略();
+    清理全屏策略.清理();
     overlay.remove();
     lifecycle.结束视口占用();
     throw error;

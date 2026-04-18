@@ -98,6 +98,44 @@ const 安装严格瞬时激活全屏模拟 = () => {
   };
 };
 
+const 安装延迟退出全屏模拟 = () => {
+  let fullscreenElement: Element | null = null;
+  let 待完成退出: (() => void) | null = null;
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    fullscreenElement = this;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  const exitFullscreen = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        待完成退出 = resolve;
+      })
+  );
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  return {
+    requestFullscreen,
+    exitFullscreen,
+    完成退出(): void {
+      fullscreenElement = null;
+      待完成退出?.();
+      待完成退出 = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    },
+  };
+};
+
 const 读取VideoJs媒体容器 = (): HTMLElement | null => {
   const skin = document.body.querySelector("video-skin");
   return skin?.shadowRoot?.querySelector("media-container") ?? null;
@@ -726,6 +764,34 @@ describe("媒体查看器适配器", () => {
     );
   });
 
+  it("移动端沉浸查看器会占满应用视口，不再保留桌面模态内边距", async () => {
+    安装全屏DOM模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-immersive-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-immersive-1",
+          src: "blob:http://media.local/mobile-immersive-video-1",
+          posterSrc: "http://media.local/poster-mobile-immersive-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+
+    const overlay = await 等待查询元素<HTMLElement>('[aria-label="视频查看器"]');
+    const mount = document.body.querySelector<HTMLElement>('[data-media-viewer-mount="video"]');
+
+    expect(overlay?.style.padding).toBe("0px");
+    expect(mount?.dataset.mediaViewerImmersive).toBe("true");
+    expect(mount?.style.height).toBe("100%");
+  });
+
   it("移动端首击打开时，会在异步 Video.js 壳就绪前先请求系统全屏，避免丢失用户激活", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
@@ -987,6 +1053,81 @@ describe("媒体查看器适配器", () => {
     延迟壳解析器.at(1)?.();
     await Promise.resolve();
     await Promise.resolve();
+    expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
+  });
+
+  it("移动端上一条视频仍在退出系统全屏时，下一条视频首击也不会退化成等待后二次点击", async () => {
+    vi.resetModules();
+    const 创建VideoJs播放器壳 = vi.fn(
+      (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) => {
+        const video = document.createElement("video");
+        Object.assign(video, {
+          play: vi.fn(() => Promise.resolve()),
+          pause: vi.fn(),
+        });
+        const container = document.createElement("div");
+        container.className = "fake-mobile-container";
+        (deps?.mountTarget ?? document.body).append(container, video);
+        return Promise.resolve({
+          destroy: vi.fn(),
+          同步: vi.fn(),
+          读取视频元素: () => video,
+          读取容器元素: () => container,
+        });
+      }
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+    }));
+    const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
+    const { requestFullscreen, exitFullscreen, 完成退出 } = 安装延迟退出全屏模拟();
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => true,
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-close-pending-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-close-pending-1",
+          src: "blob:http://media.local/mobile-close-pending-video-1",
+          posterSrc: "http://media.local/poster-mobile-close-pending-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    document.body
+      .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
+      ?.click();
+    expect(exitFullscreen).toHaveBeenCalled();
+
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-close-pending-2",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-close-pending-2",
+          src: "blob:http://media.local/mobile-close-pending-video-2",
+          posterSrc: "http://media.local/poster-mobile-close-pending-2",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(2);
+    expect(document.body.querySelectorAll('[aria-label="视频查看器"]')).toHaveLength(1);
+
+    完成退出();
+    await Promise.resolve();
+
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
   });
 
