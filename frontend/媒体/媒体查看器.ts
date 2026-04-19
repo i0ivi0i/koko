@@ -282,6 +282,7 @@ const 启动同会话全屏策略 = (
   options: {
     已预请求系统全屏?: boolean;
     备用全屏目标?: 可原生全屏容器元素 | null;
+    同步沉浸查看器显示阶段?: (phase: "pending" | "active") => void;
   } = {}
 ): 同会话全屏策略控制器 => {
   const sessionId = `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -326,6 +327,9 @@ const 启动同会话全屏策略 = (
     元素落在Owner链里(element, 备用目标Owner集合);
   const 是本会话全屏元素 = (element: Element | null): boolean =>
     是主全屏目标(element) || 是备用全屏目标(element);
+  const 同步沉浸查看器显示阶段 = (phase: "pending" | "active"): void => {
+    options.同步沉浸查看器显示阶段?.(phase);
+  };
   let cleaned = false;
   let 本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
   let 主全屏目标已接管 = 是主全屏目标(document.fullscreenElement);
@@ -374,6 +378,7 @@ const 启动同会话全屏策略 = (
   const handleNativeVideoFullscreenStart = (): void => {
     本会话已接管系统全屏 = true;
     本会话正在原生视频全屏 = true;
+    同步沉浸查看器显示阶段("active");
     lockScreenOrientation();
   };
   const handleNativeVideoFullscreenEnd = (): void => {
@@ -452,6 +457,7 @@ const 启动同会话全屏策略 = (
     if (是主全屏目标(document.fullscreenElement)) {
       本会话已接管系统全屏 = true;
       主全屏目标已接管 = true;
+      同步沉浸查看器显示阶段("active");
       return;
     }
     if (是备用全屏目标(document.fullscreenElement)) {
@@ -465,6 +471,7 @@ const 启动同会话全屏策略 = (
         return;
       }
       本会话已接管系统全屏 = true;
+      同步沉浸查看器显示阶段("pending");
       return;
     }
     if (存在待结算的系统全屏退出 && !document.fullscreenElement) {
@@ -523,6 +530,9 @@ const 启动同会话全屏策略 = (
    */
   startPlayback();
   if (options.已预请求系统全屏) {
+    同步沉浸查看器显示阶段(
+      主全屏目标已接管 || 本会话正在原生视频全屏 ? "active" : "pending"
+    );
     lockScreenOrientation();
   } else if (
     !存在待结算的系统全屏退出 &&
@@ -532,15 +542,22 @@ const 启动同会话全屏策略 = (
       .requestFullscreen({ navigationUI: "hide" })
       .then(() => {
         本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
+        同步沉浸查看器显示阶段(
+          主全屏目标已接管 || 本会话正在原生视频全屏 ? "active" : "pending"
+        );
         lockScreenOrientation();
         startPlayback();
       })
-      .catch(() => undefined);
+      .catch(() => {
+        同步沉浸查看器显示阶段("active");
+      });
   } else if (!存在待结算的系统全屏退出 && 请求原生视频真全屏(video)) {
     本会话已接管系统全屏 = true;
     本会话正在原生视频全屏 = true;
+    同步沉浸查看器显示阶段("active");
     lockScreenOrientation();
   } else {
+    同步沉浸查看器显示阶段("active");
     lockScreenOrientation();
   }
 
@@ -567,6 +584,36 @@ const 创建默认VideoJs播放器层 = async (
   const mount = document.createElement("div");
   const closeButton = document.createElement("button");
   const 使用沉浸查看器布局 = options.shouldAutoEnterFullscreen;
+  const 沉浸查看器可见样式 =
+    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:0;opacity:1;pointer-events:auto;";
+  const 沉浸查看器待接管样式 =
+    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:transparent;padding:0;opacity:0;pointer-events:none;";
+  const 对话查看器样式 =
+    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+  const 同步沉浸查看器显示阶段 = (phase: "pending" | "active"): void => {
+    if (!使用沉浸查看器布局) {
+      overlay.dataset.mediaViewerFullscreenPhase = "active";
+      overlay.removeAttribute("aria-hidden");
+      closeButton.style.opacity = "1";
+      closeButton.style.pointerEvents = "auto";
+      return;
+    }
+    /**
+     * overlay 可以先被插进 DOM 给全屏 API 当宿主，但在系统 fullscreen 真正接管前，
+     * 不能先把这层沉浸表面亮给用户，否则肉眼看到的就是“先放大一下再真全屏”。
+     */
+    overlay.dataset.mediaViewerFullscreenPhase = phase;
+    overlay.style.cssText = phase === "active" ? 沉浸查看器可见样式 : 沉浸查看器待接管样式;
+    if (phase === "active") {
+      overlay.removeAttribute("aria-hidden");
+      closeButton.style.opacity = "1";
+      closeButton.style.pointerEvents = "auto";
+      return;
+    }
+    overlay.setAttribute("aria-hidden", "true");
+    closeButton.style.opacity = "0";
+    closeButton.style.pointerEvents = "none";
+  };
 
   overlay.dataset.mediaViewerMode = "video";
   overlay.dataset.mediaViewerPresentation = 使用沉浸查看器布局 ? "immersive" : "dialog";
@@ -575,9 +622,7 @@ const 创建默认VideoJs播放器层 = async (
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "视频查看器");
-  overlay.style.cssText = 使用沉浸查看器布局
-    ? "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:0;"
-    : "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+  overlay.style.cssText = 使用沉浸查看器布局 ? 沉浸查看器待接管样式 : 对话查看器样式;
   /**
    * 查看器必须先给播放器壳一个明确的挂载盒子：
    * 1. 尺寸上限属于查看器 overlay，本身就是 shell 的职责；
@@ -593,6 +638,7 @@ const 创建默认VideoJs播放器层 = async (
   closeButton.setAttribute("aria-label", "关闭视频查看器");
   closeButton.style.cssText =
     "position:fixed;top:16px;right:16px;z-index:1;border:1px solid rgb(255 255 255 / 0.35);border-radius:8px;background:rgb(0 0 0 / 0.7);color:white;padding:8px 12px;font:inherit;";
+  同步沉浸查看器显示阶段(使用沉浸查看器布局 ? "pending" : "active");
 
   overlay.append(mount, closeButton);
   document.body.append(overlay);
@@ -784,6 +830,7 @@ const 创建默认VideoJs播放器层 = async (
         {
           已预请求系统全屏: 已在查看器表面预请求系统全屏,
           备用全屏目标: 全屏真相目标 === container ? overlay : null,
+          同步沉浸查看器显示阶段,
         }
       );
     }

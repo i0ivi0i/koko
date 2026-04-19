@@ -136,6 +136,72 @@ const 安装延迟退出全屏模拟 = () => {
   };
 };
 
+const 安装手动进入全屏模拟 = () => {
+  let fullscreenElement: Element | null = null;
+  const 待完成进入请求: Array<{
+    target: Element;
+    resolve: () => void;
+    reject: (error?: unknown) => void;
+  }> = [];
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    return new Promise<void>((resolve, reject) => {
+      待完成进入请求.push({
+        target: this,
+        resolve: () => {
+          fullscreenElement = this;
+          document.dispatchEvent(new Event("fullscreenchange"));
+          resolve();
+        },
+        reject: (error?: unknown) => {
+          reject(error);
+        },
+      });
+    });
+  });
+  const exitFullscreen = vi.fn(() => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  const play = vi.fn(() => Promise.resolve());
+  const pause = vi.fn();
+  const createElement = document.createElement.bind(document);
+  vi.spyOn(document, "createElement").mockImplementation(
+    ((tagName: string, options?: ElementCreationOptions) => {
+      const element = createElement(tagName, options);
+      if (tagName.toLowerCase() === "video") {
+        Object.assign(element, { play, pause });
+      }
+      return element;
+    }) as typeof document.createElement
+  );
+  return {
+    requestFullscreen,
+    exitFullscreen,
+    play,
+    pause,
+    待完成进入请求,
+    完成进入(index = 0): void {
+      待完成进入请求[index]?.resolve();
+    },
+    拒绝进入(index = 0, error: unknown = new Error("Fullscreen request rejected")): void {
+      待完成进入请求[index]?.reject(error);
+    },
+  };
+};
+
 const 安装可回退全屏堆栈模拟 = () => {
   const stack: Element[] = [];
   Object.defineProperty(document, "fullscreenElement", {
@@ -488,6 +554,78 @@ describe("媒体查看器适配器", () => {
       1
     );
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
+  });
+
+  it("标准系统全屏真正接管前，不会先把沉浸查看器亮出来造成假放大动作", async () => {
+    vi.resetModules();
+    const 创建VideoJs播放器壳 = vi.fn(
+      (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) => {
+        const video = document.createElement("video");
+        Object.assign(video, {
+          play: vi.fn(() => Promise.resolve()),
+          pause: vi.fn(),
+        });
+        const container = document.createElement("div");
+        container.className = "fake-desktop-container";
+        (deps?.mountTarget ?? document.body).append(container, video);
+        return {
+          destroy: vi.fn(),
+          同步: vi.fn(),
+          读取视频元素: () => video,
+          读取容器元素: () => container,
+        };
+      }
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
+    }));
+
+    try {
+      const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
+      const { 待完成进入请求, 完成进入 } = 安装手动进入全屏模拟();
+      const viewer = 创建媒体查看器({
+        isMobileViewport: () => false,
+      });
+
+      viewer.打开({
+        startAttachmentId: "att-video-fullscreen-pending-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-fullscreen-pending-1",
+            src: "blob:http://media.local/video-fullscreen-pending-1",
+            posterSrc: "http://media.local/poster-fullscreen-pending-1",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      });
+
+      const overlay = await 等待查询元素<HTMLElement>('[aria-label="视频查看器"]');
+      const container = await 等待查询元素<HTMLElement>(".fake-desktop-container");
+
+      expect(container).not.toBeNull();
+      expect(待完成进入请求).toHaveLength(1);
+      expect(待完成进入请求[0]?.target).toBe(container);
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
+      expect(overlay?.style.opacity).toBe("0");
+      expect(overlay?.style.pointerEvents).toBe("none");
+      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+
+      完成进入(0);
+      await Promise.resolve();
+
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
+      expect(overlay?.style.opacity).toBe("1");
+      expect(overlay?.style.pointerEvents).toBe("auto");
+      expect(overlay?.getAttribute("aria-hidden")).toBeNull();
+
+      viewer.销毁();
+    } finally {
+      vi.doUnmock("../媒体/videojs播放器壳");
+      vi.resetModules();
+    }
   });
 
   it("正式视频查看器里的唯一 video 默认循环播放", async () => {
@@ -935,6 +1073,94 @@ describe("媒体查看器适配器", () => {
     await Promise.resolve();
 
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
+  });
+
+  it("异步壳需要先借 overlay 保住全屏激活时，也不会先把 overlay 亮给用户", async () => {
+    vi.resetModules();
+    const 延迟壳解析器: Array<() => void> = [];
+    const 创建VideoJs播放器壳 = vi.fn(
+      (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) =>
+        new Promise((resolve) => {
+          延迟壳解析器.push(() => {
+            const video = document.createElement("video");
+            Object.assign(video, {
+              play: vi.fn(() => Promise.resolve()),
+              pause: vi.fn(),
+            });
+            const container = document.createElement("div");
+            container.className = "fake-mobile-container";
+            (deps?.mountTarget ?? document.body).append(container, video);
+            resolve({
+              destroy: vi.fn(),
+              同步: vi.fn(),
+              读取视频元素: () => video,
+              读取容器元素: () => container,
+            });
+          });
+        })
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
+    }));
+
+    try {
+      const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
+      const { 待完成进入请求, 完成进入 } = 安装手动进入全屏模拟();
+      const viewer = 创建媒体查看器({
+        isMobileViewport: () => true,
+      });
+
+      viewer.打开({
+        startAttachmentId: "att-video-mobile-overlay-hidden-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-mobile-overlay-hidden-1",
+            src: "blob:http://media.local/mobile-overlay-hidden-video-1",
+            posterSrc: "http://media.local/poster-mobile-overlay-hidden-1",
+            width: 720,
+            height: 1280,
+          },
+        ],
+      });
+
+      const overlay = await 等待查询元素<HTMLElement>('[aria-label="视频查看器"]');
+      expect(待完成进入请求).toHaveLength(1);
+      expect(待完成进入请求[0]?.target).toBe(overlay);
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
+      expect(overlay?.style.opacity).toBe("0");
+      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+
+      延迟壳解析器.at(0)?.();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const container = document.body.querySelector<HTMLElement>(".fake-mobile-container");
+      expect(container).not.toBeNull();
+
+      完成进入(0);
+      await Promise.resolve();
+
+      expect(待完成进入请求).toHaveLength(2);
+      expect(待完成进入请求[1]?.target).toBe(container);
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
+      expect(overlay?.style.opacity).toBe("0");
+
+      完成进入(1);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
+      expect(overlay?.style.opacity).toBe("1");
+      expect(overlay?.style.pointerEvents).toBe("auto");
+      expect(overlay?.getAttribute("aria-hidden")).toBeNull();
+
+      viewer.销毁();
+    } finally {
+      vi.doUnmock("../媒体/videojs播放器壳");
+      vi.resetModules();
+    }
   });
 
   it("移动端缺少标准 Fullscreen API 时，会退回 video 原生 webkit fullscreen 真全屏", async () => {
