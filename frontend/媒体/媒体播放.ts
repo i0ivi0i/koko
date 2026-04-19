@@ -246,6 +246,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     hint: "附件当前不可获取",
   });
 
+  const 应坚持协作分发唯一主链 = (locator: 媒体定位结果): boolean =>
+    locator.distribution?.survival_mode === "peer_only_after_expiry" &&
+    locator.distribution?.availability === "available";
+
   const 尝试锚点 = async (
     input: 媒体播放输入,
     locator: 媒体定位结果,
@@ -497,6 +501,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator = swarmAttempt.locator;
     if (swarmAttempt.playback) {
       return swarmAttempt.playback;
+    }
+    /**
+     * `peer_only_after_expiry` 是“协作分发主链唯一真相”语义：
+     * - swarm 暂时不可用时，不允许再悄悄回到冷源锚点；
+     * - 这样自动播/查看器都只走同一条链路，便于定位真实故障归属；
+     * - 会话恢复继续依赖 runtime 的 noPeers / ticket 刷新事件驱动。
+     */
+    if (应坚持协作分发唯一主链(locator)) {
+      释放协作分发占用(input);
+      return 创建降级结果(input, locator, "anchor_unavailable");
     }
     return 尝试锚点(input, locator, true);
   };

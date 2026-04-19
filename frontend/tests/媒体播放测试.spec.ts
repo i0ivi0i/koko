@@ -1650,6 +1650,132 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
+  it("peer_only_after_expiry 且 swarm 暂不可用时，viewer 不会回退锚点冷源，而是保持协作分发唯一主链语义", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-peer-only-viewer",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-peer-only-viewer",
+      thumbnail_url: "http://media.local/poster-video-peer-only-viewer",
+      distribution: {
+        content_id: "content_att-video-peer-only-viewer",
+        content_hash: "hash-video-peer-only-viewer",
+        swarm_id: "swarm-hash-video-peer-only-viewer",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-peer-only-viewer",
+        torrent_info_hash: "torrent-info-hash-video-peer-only-viewer",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+      streaming_asset: null,
+      blob_asset: null,
+    }));
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const releaseSwarmSource = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+      releaseSwarmSource,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-peer-only-viewer",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-peer-only-viewer",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-peer-only-viewer",
+      kind: "video",
+      src: "",
+      thumbnailUrl: "http://media.local/poster-video-peer-only-viewer",
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-peer-only-viewer",
+        consumerId: "session:att-video-peer-only-viewer",
+      })
+    );
+    expect(probeAnchor).not.toHaveBeenCalled();
+    expect(releaseSwarmSource).toHaveBeenCalledWith({
+      attachmentId: "att-video-peer-only-viewer",
+      consumerId: "session:att-video-peer-only-viewer",
+    });
+  });
+
+  it("peer_only_after_expiry 且 swarm 暂不可用时，inline_autoplay 也不会偷偷回退锚点", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-peer-only-inline",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-peer-only-inline",
+      thumbnail_url: "http://media.local/poster-video-peer-only-inline",
+      distribution: {
+        content_id: "content_att-video-peer-only-inline",
+        content_hash: "hash-video-peer-only-inline",
+        swarm_id: "swarm-hash-video-peer-only-inline",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-peer-only-inline",
+        torrent_info_hash: "torrent-info-hash-video-peer-only-inline",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+      streaming_asset: null,
+      blob_asset: null,
+    }));
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const releaseSwarmSource = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+      releaseSwarmSource,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-peer-only-inline",
+      kind: "video",
+      surface: "inline_autoplay",
+      consumerId: "inline_autoplay:att-video-peer-only-inline",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-peer-only-inline",
+      kind: "video",
+      src: "",
+      thumbnailUrl: "http://media.local/poster-video-peer-only-inline",
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-peer-only-inline",
+        consumerId: "inline_autoplay:att-video-peer-only-inline",
+      })
+    );
+    expect(probeAnchor).not.toHaveBeenCalled();
+    expect(releaseSwarmSource).toHaveBeenCalledWith({
+      attachmentId: "att-video-peer-only-inline",
+      consumerId: "inline_autoplay:att-video-peer-only-inline",
+    });
+  });
+
   it("locator 过期时会强制重签后再回退锚点", async () => {
     const locate = vi
       .fn()
