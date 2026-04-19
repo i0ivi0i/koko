@@ -718,6 +718,7 @@ pub(super) async fn load_media_locator(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
     Query(raw_query): Query<HashMap<String, String>>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     let query = match parse_attachment_content_query(raw_query) {
         Ok(query) => query,
@@ -760,6 +761,11 @@ pub(super) async fn load_media_locator(
         Some(query.session_id.as_str()),
         locator.允许缩略图,
     );
+    let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
+        state.swarm_tracker_public_url.as_str(),
+        state.swarm_tracker_port,
+        &headers,
+    );
     let now_epoch秒 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
@@ -776,7 +782,7 @@ pub(super) async fn load_media_locator(
             media_distribution::协作分发响应上下文 {
                 attachment_id: attachment_id.as_str(),
                 session_id: query.session_id.as_str(),
-                tracker_public_url: state.swarm_tracker_public_url.as_str(),
+                tracker_public_url: tracker_public_url.as_str(),
                 web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
                 ticket_secret: state.swarm_ticket_secret.as_deref(),
                 ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,

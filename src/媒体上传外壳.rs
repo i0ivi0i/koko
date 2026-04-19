@@ -292,12 +292,18 @@ pub(super) async fn prepare_media_upload(
 pub(super) async fn complete_media_upload(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
+    headers: HeaderMap,
     Json(body): Json<CompleteMediaUploadBody>,
 ) -> impl IntoResponse {
     let session_id = match super::读取非空会话标识(body.session_id) {
         Ok(session_id) => session_id,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
+    let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
+        state.swarm_tracker_public_url.as_str(),
+        state.swarm_tracker_port,
+        &headers,
+    );
     let state_for_usecase = state.clone();
     let attachment_id_for_usecase = attachment_id.clone();
     let session_id_for_usecase = session_id.clone();
@@ -966,7 +972,7 @@ pub(super) async fn complete_media_upload(
                 media_distribution::协作分发响应上下文 {
                     attachment_id: attachment_id.as_str(),
                     session_id: session_id.as_str(),
-                    tracker_public_url: state.swarm_tracker_public_url.as_str(),
+                    tracker_public_url: tracker_public_url.as_str(),
                     web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
                     ticket_secret: state.swarm_ticket_secret.as_deref(),
                     ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,

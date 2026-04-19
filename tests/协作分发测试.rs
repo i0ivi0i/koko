@@ -847,3 +847,121 @@ async fn locator会返回announce_web_seed与短时join_ticket() {
         Some("available")
     );
 }
+
+#[tokio::test]
+#[serial]
+async fn 未显式配置tracker公网地址时locator会按请求host推导可达announce地址() {
+    let backup = 备份并清空环境变量(&[
+        "SWARM_TRACKER_PUBLIC_URL",
+        "SWARM_TRACKER_PORT",
+        "SWARM_WEB_SEED_PUBLIC_ENDPOINT",
+        "SWARM_PEER_PRESENCE_STALE_SECONDS",
+        "SWARM_TICKET_SECRET",
+        "SWARM_TICKET_TTL_SECONDS",
+    ]);
+    env::set_var("SWARM_TRACKER_PORT", "7072");
+    env::set_var("SWARM_PEER_PRESENCE_STALE_SECONDS", "180");
+    env::set_var("SWARM_TICKET_SECRET", "derive-tracker-public-url-ticket-secret");
+    env::set_var("SWARM_TICKET_TTL_SECONDS", "120");
+
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("DH{:010}", uniq % 10_000_000_000);
+    let device_token = format!("derive-tracker-public-url-device-{uniq}");
+    let attachment_id = format!("att-derive-tracker-public-url-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let session_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入附件");
+            插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("derive-tracker-public-url-message-{uniq}"),
+            "",
+            std::slice::from_ref(&attachment_id_for_worker),
+        )
+        .expect("应能创建带视频附件的消息");
+
+        identity.会话标识
+    })
+    .await
+    .expect("阻塞 locator 任务应完成");
+
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (lan_status, lan_body) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[("host", "192.168.31.50:8080")],
+    )
+    .await;
+    let (proxy_status, proxy_body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[
+            ("host", "10.0.0.8:8080"),
+            ("x-forwarded-host", "im.example.com"),
+            ("x-forwarded-proto", "https"),
+            ("x-forwarded-port", "443"),
+        ],
+    )
+    .await;
+
+    恢复环境变量(backup);
+
+    assert_eq!(lan_status, StatusCode::OK);
+    assert_eq!(
+        lan_body["distribution"]["announce_urls"][0].as_str(),
+        Some("ws://192.168.31.50:7072"),
+        "未显式配置 SWARM_TRACKER_PUBLIC_URL 时，应按请求 Host 推导 LAN 可达 tracker 地址"
+    );
+    assert_eq!(proxy_status, StatusCode::OK);
+    assert_eq!(
+        proxy_body["distribution"]["announce_urls"][0].as_str(),
+        Some("wss://im.example.com"),
+        "反向代理透传 https host 时，应回推 wss 公网 announce，而不是继续泄漏 ws://127.0.0.1"
+    );
+}

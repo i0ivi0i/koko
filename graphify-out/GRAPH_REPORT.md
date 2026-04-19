@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-19)
 
 ## Corpus Check
-- 195 files · ~232,459 words
+- 195 files · ~232,948 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 452 nodes · 565 edges · 31 communities detected
+- 454 nodes · 569 edges · 31 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -58,7 +58,7 @@
 - `abandon_media_upload()` --calls--> `提取媒体上传授权头()`  [EXTRACTED]
   src\媒体上传外壳.rs → tests\测试支撑\媒体\tus.rs
 - `提取媒体上传授权头()` --calls--> `包装url主机()`  [EXTRACTED]
-  tests\测试支撑\媒体\tus.rs → src\媒体上传外壳.rs
+  tests\测试支撑\媒体\tus.rs → src\媒体协作分发.rs
 - `返回tus_hook拒绝termination响应()` --calls--> `内部tus_hook入口应使用协议命名而不是供应商命名()`  [EXTRACTED]
   src\tus_hook外壳.rs → tests\媒体上传测试\tus_hook.rs
 - `prepare_media_upload()` --calls--> `旧图片上传路由已移除()`  [EXTRACTED]
@@ -70,7 +70,7 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.03
-Nodes (48): abandon_media_upload(), AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 打包产物上传会并发执行而不是串行阻塞complete热路径(), complete_media_upload(), CompleteMediaUploadBody (+40 more)
+Nodes (49): abandon_media_upload(), AbandonMediaUploadBody, ApiError, Blob媒体资产响应参数, BootstrapBody, 打包产物上传会并发执行而不是串行阻塞complete热路径(), complete_media_upload(), CompleteMediaUploadBody (+41 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.04
@@ -195,9 +195,9 @@ Nodes (0):
 ## Knowledge Gaps
 - **28 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+23 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 21`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 21`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 22`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 23`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -222,9 +222,9 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `HttpRealtime传输` connect `Community 7` to `Community 2`?**
   _High betweenness centrality (0.072) - this node is a cross-community bridge._
 - **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 16`, `Community 1`, `Community 2`, `Community 4`?**
-  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+  _High betweenness centrality (0.060) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`, `Community 9`?**
-  _High betweenness centrality (0.056) - this node is a cross-community bridge._
+  _High betweenness centrality (0.057) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**

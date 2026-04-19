@@ -1,4 +1,5 @@
 use crate::usecase;
+use axum::http::{uri::Authority, HeaderMap, Uri};
 use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sha2::{Digest, Sha256};
@@ -71,6 +72,95 @@ fn 拼接公开地址(public_endpoint: Option<&str>, path: &str) -> String {
     public_endpoint
         .map(|value| format!("{}{}", value.trim_end_matches('/'), path))
         .unwrap_or_else(|| path.to_string())
+}
+
+fn 读取首个非空请求头(headers: &HeaderMap, name: &'static str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .find(|part| !part.is_empty())
+                .map(|part| part.to_string())
+        })
+}
+
+fn 包装url主机(host: &str) -> String {
+    if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
+fn 推导协作分发tracker对外地址(headers: &HeaderMap, tracker_port: u16) -> Option<String> {
+    let forwarded_host = 读取首个非空请求头(headers, "x-forwarded-host");
+    let raw_host = forwarded_host
+        .clone()
+        .or_else(|| 读取首个非空请求头(headers, "host"))?;
+    let authority = raw_host.parse::<Authority>().ok()?;
+    let forwarded_proto = 读取首个非空请求头(headers, "x-forwarded-proto")
+        .or_else(|| 读取首个非空请求头(headers, "x-forwarded-scheme"));
+    let forwarded_port =
+        读取首个非空请求头(headers, "x-forwarded-port").and_then(|value| value.parse::<u16>().ok());
+    let ws_scheme = match forwarded_proto.as_deref() {
+        Some("https") => "wss",
+        _ => "ws",
+    };
+    let host_for_url = 包装url主机(authority.host());
+    let should_trust_authority_port =
+        forwarded_host.is_some() || forwarded_proto.is_some() || forwarded_port.is_some();
+    let inferred_proxy_default_port = if should_trust_authority_port {
+        match ws_scheme {
+            "wss" => Some(443),
+            "ws" => Some(80),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let public_port = forwarded_port
+        .or_else(|| {
+            should_trust_authority_port
+                .then(|| authority.port_u16())
+                .flatten()
+        })
+        .or(inferred_proxy_default_port)
+        .unwrap_or(tracker_port);
+    let should_omit_port =
+        (ws_scheme == "ws" && public_port == 80) || (ws_scheme == "wss" && public_port == 443);
+    let authority_for_url = if should_omit_port {
+        host_for_url
+    } else {
+        format!("{host_for_url}:{public_port}")
+    };
+    Some(format!("{ws_scheme}://{authority_for_url}"))
+}
+
+fn 是回环tracker公开地址(url: &str) -> bool {
+    let Ok(uri) = url.parse::<Uri>() else {
+        return false;
+    };
+    let Some(authority) = uri.authority() else {
+        return false;
+    };
+    matches!(authority.host(), "127.0.0.1" | "localhost" | "::1")
+}
+
+/// tracker 公网地址显式配置时永远优先；只有沿用本机回环默认值时，
+/// 才按本次请求头推导一个 LAN/反向代理可达的 announce 地址。
+pub(crate) fn 读取协作分发tracker对外地址(
+    configured_tracker_public_url: &str,
+    tracker_port: u16,
+    headers: &HeaderMap,
+) -> String {
+    if !是回环tracker公开地址(configured_tracker_public_url) {
+        return configured_tracker_public_url.to_string();
+    }
+    推导协作分发tracker对外地址(headers, tracker_port)
+        .unwrap_or_else(|| configured_tracker_public_url.to_string())
 }
 
 pub(crate) fn 裁决协作分发可用性(
