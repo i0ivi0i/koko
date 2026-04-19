@@ -1,5 +1,6 @@
 param(
-    [switch]$UpgradeDependencies
+    [switch]$UpgradeDependencies,
+    [switch]$DisableCloudflareTunnel
 )
 
 $ErrorActionPreference = "Stop"
@@ -98,6 +99,76 @@ function New-ManagedProcess {
     }
 }
 
+function Parse-CloudflareTunnelPublicUrlFromLogLine {
+    param([string]$Line)
+
+    if ([string]::IsNullOrWhiteSpace($Line)) {
+        return $null
+    }
+
+    $match = [Regex]::Match($Line, '(https://[a-z0-9-]+\.trycloudflare\.com)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $match.Success) {
+        return $null
+    }
+    return $match.Groups[1].Value
+}
+
+function Resolve-CloudflaredBinaryPath {
+    $command = Get-Command cloudflared.exe -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        $command = Get-Command cloudflared -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $runtimeRoot = Join-Path $env:LOCALAPPDATA "koko\\tools\\cloudflared"
+    $cloudflaredPath = Join-Path $runtimeRoot "cloudflared.exe"
+    if (Test-Path -LiteralPath $cloudflaredPath) {
+        return $cloudflaredPath
+    }
+
+    New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
+    $downloadUrl = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+    Write-Host "未检测到 cloudflared，开始自动下载：$downloadUrl"
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $cloudflaredPath -UseBasicParsing
+
+    if (-not (Test-Path -LiteralPath $cloudflaredPath)) {
+        throw "下载 cloudflared 失败：$cloudflaredPath"
+    }
+
+    return $cloudflaredPath
+}
+
+function Resolve-CloudflareEdgeBindAddress {
+    $override = [Environment]::GetEnvironmentVariable("CLOUDFLARE_TUNNEL_EDGE_BIND_ADDRESS")
+    if (-not [string]::IsNullOrWhiteSpace($override)) {
+        return $override.Trim()
+    }
+
+    $physicalAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object {
+            $_.Status -eq "Up" -and $_.HardwareInterface
+        })
+    if ($physicalAdapters.Count -eq 0) {
+        return $null
+    }
+
+    $physicalAdapterIndexes = @($physicalAdapters | ForEach-Object { $_.InterfaceIndex })
+    $candidateIps = @(
+        Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+            $_.InterfaceIndex -in $physicalAdapterIndexes -and
+            $_.IPAddress -notlike "127.*" -and
+            $_.IPAddress -notlike "169.254.*"
+        } | Sort-Object InterfaceMetric, SkipAsSource
+    )
+
+    if ($candidateIps.Count -eq 0) {
+        return $null
+    }
+
+    return $candidateIps[0].IPAddress
+}
+
 function Read-NewLogLines {
     param($StreamState)
 
@@ -172,6 +243,25 @@ function Write-ManagedProcessLogs {
             continue
         }
         [Console]::Out.WriteLine(("[{0}] {1}" -f $ManagedProcess.Name, $line))
+        if ($ManagedProcess.Name -eq "tunnel") {
+            $publicUrl = Parse-CloudflareTunnelPublicUrlFromLogLine -Line $line
+            if (-not [string]::IsNullOrWhiteSpace($publicUrl)) {
+                $script:CloudflareTunnelPublicUrl = $publicUrl
+            }
+            if ($line -match "Registered tunnel connection") {
+                $script:CloudflareTunnelConnected = $true
+            }
+            if (
+                -not $script:CloudflareTunnelFailureAnnounced -and
+                (
+                    $line -match "TLS handshake with edge error" -or
+                    $line -match "failed to verify certificate"
+                )
+            ) {
+                Write-Warning "Cloudflare Tunnel 未连通：TLS 握手失败。请检查本机时间、网络 HTTPS 检查策略，或尝试关闭代理后重试。"
+                $script:CloudflareTunnelFailureAnnounced = $true
+            }
+        }
     }
 
     foreach ($line in (Read-NewLogLines -StreamState $ManagedProcess.Stderr)) {
@@ -179,6 +269,34 @@ function Write-ManagedProcessLogs {
             continue
         }
         [Console]::Error.WriteLine(("[{0}] {1}" -f $ManagedProcess.Name, $line))
+        if ($ManagedProcess.Name -eq "tunnel") {
+            $publicUrl = Parse-CloudflareTunnelPublicUrlFromLogLine -Line $line
+            if (-not [string]::IsNullOrWhiteSpace($publicUrl)) {
+                $script:CloudflareTunnelPublicUrl = $publicUrl
+            }
+            if ($line -match "Registered tunnel connection") {
+                $script:CloudflareTunnelConnected = $true
+            }
+            if (
+                -not $script:CloudflareTunnelFailureAnnounced -and
+                (
+                    $line -match "TLS handshake with edge error" -or
+                    $line -match "failed to verify certificate"
+                )
+            ) {
+                Write-Warning "Cloudflare Tunnel 未连通：TLS 握手失败。请检查本机时间、网络 HTTPS 检查策略，或尝试关闭代理后重试。"
+                $script:CloudflareTunnelFailureAnnounced = $true
+            }
+        }
+    }
+
+    if (
+        -not $script:CloudflareTunnelPublicUrlAnnounced -and
+        $script:CloudflareTunnelConnected -and
+        -not [string]::IsNullOrWhiteSpace($script:CloudflareTunnelPublicUrl)
+    ) {
+        Write-Host "Cloudflare Tunnel HTTPS 地址: $($script:CloudflareTunnelPublicUrl)"
+        $script:CloudflareTunnelPublicUrlAnnounced = $true
     }
 }
 
@@ -386,11 +504,13 @@ function Invoke-LauncherCleanup {
     Write-ManagedProcessLogs $trackerProcess
     Write-ManagedProcessLogs $tusdProcess
     Write-ManagedProcessLogs $backendProcess
+    Write-ManagedProcessLogs $cloudflareTunnelProcess
     Write-ManagedProcessLogs $frontendTypeWatch
     Write-ManagedProcessLogs $frontendWatch
     Stop-ManagedProcess $trackerProcess
     Stop-ManagedProcess $tusdProcess
     Stop-ManagedProcess $backendProcess
+    Stop-ManagedProcess $cloudflareTunnelProcess
     Stop-ManagedProcess $frontendTypeWatch
     Stop-ManagedProcess $frontendWatch
 }
@@ -415,6 +535,11 @@ $frontendTypeWatch = $null
 $backendProcess = $null
 $tusdProcess = $null
 $trackerProcess = $null
+$cloudflareTunnelProcess = $null
+$script:CloudflareTunnelPublicUrl = $null
+$script:CloudflareTunnelPublicUrlAnnounced = $false
+$script:CloudflareTunnelConnected = $false
+$script:CloudflareTunnelFailureAnnounced = $false
 $script:LauncherCleanupStarted = $false
 $launcherCleanupSubscription = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -SupportEvent -Action {
     Invoke-LauncherCleanup -Reason "PowerShell.Exiting"
@@ -602,12 +727,38 @@ try {
         -WorkingDirectory $frontendRoot `
         -LogDirectory $logDirectory
 
+    if (-not $DisableCloudflareTunnel) {
+        try {
+            $cloudflaredPath = Resolve-CloudflaredBinaryPath
+            $cloudflareEdgeBindAddress = Resolve-CloudflareEdgeBindAddress
+            $tunnelArgumentList = @("tunnel", "--url", "http://127.0.0.1:$appPort", "--protocol", "http2", "--no-autoupdate")
+            if (-not [string]::IsNullOrWhiteSpace($cloudflareEdgeBindAddress)) {
+                $tunnelArgumentList += @("--edge-bind-address", $cloudflareEdgeBindAddress)
+                Write-Host "Cloudflare Tunnel 出站绑定地址: $cloudflareEdgeBindAddress"
+            }
+            Write-Host "启动 Cloudflare Tunnel: cloudflared tunnel --url http://127.0.0.1:$appPort"
+            $cloudflareTunnelProcess = New-ManagedProcess `
+                -Name "tunnel" `
+                -FilePath $cloudflaredPath `
+                -ArgumentList $tunnelArgumentList `
+                -WorkingDirectory $repoRoot `
+                -LogDirectory $logDirectory
+            Write-Host "Cloudflare Tunnel 正在建立中，连通后会打印 https://*.trycloudflare.com"
+        }
+        catch {
+            Write-Warning "Cloudflare Tunnel 启动失败：$($_.Exception.Message)"
+            Write-Warning "本地开发主链继续运行；如需禁用该提示，可用 ./run.ps1 -DisableCloudflareTunnel"
+            $cloudflareTunnelProcess = $null
+        }
+    }
+
     while ($true) {
         Write-ManagedProcessLogs $frontendWatch
         Write-ManagedProcessLogs $frontendTypeWatch
         Write-ManagedProcessLogs $backendProcess
         Write-ManagedProcessLogs $tusdProcess
         Write-ManagedProcessLogs $trackerProcess
+        Write-ManagedProcessLogs $cloudflareTunnelProcess
 
         if ($frontendWatch.Process.HasExited) {
             Write-ManagedProcessLogs $frontendWatch
@@ -638,6 +789,11 @@ try {
         if ($trackerProcess.Process.HasExited) {
             Write-ManagedProcessLogs $trackerProcess
             throw "tracker 进程异常退出，退出码: $($trackerProcess.Process.ExitCode)"
+        }
+        if ($null -ne $cloudflareTunnelProcess -and $cloudflareTunnelProcess.Process.HasExited) {
+            Write-ManagedProcessLogs $cloudflareTunnelProcess
+            Write-Warning "Cloudflare Tunnel 已退出，退出码: $($cloudflareTunnelProcess.Process.ExitCode)"
+            $cloudflareTunnelProcess = $null
         }
 
         Start-Sleep -Milliseconds 200
