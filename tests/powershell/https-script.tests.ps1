@@ -59,36 +59,22 @@ RUST_LOG=info
 "@
 Assert-Equal -Actual $fallbackPort -Expected 8080 -Message "缺少 APP_PORT 时应回退到默认端口。"
 
-# 用例3：Quick Tunnel 参数应指向本机后端端口。
-$args = Build-QuickTunnelArgumentList -AppPort 19090
-Assert-Equal -Actual $args[0] -Expected "tunnel" -Message "cloudflared 命令应从 tunnel 子命令开始。"
-Assert-Equal -Actual $args[1] -Expected "--url" -Message "cloudflared 参数应包含 --url。"
-Assert-Equal -Actual $args[2] -Expected "http://127.0.0.1:19090" -Message "Quick Tunnel 应转发到本机后端端口。"
-Assert-True -Condition ($args -contains "--loglevel") -Message "Quick Tunnel 参数应显式开启 loglevel。"
+# 用例3：Caddyfile 必须包含 tls internal 和反代目标端口。
+$caddyfile = Build-CaddyfileContent -AppPort 28080 -LanIPv4Addresses @("192.168.3.10")
+Assert-True -Condition $caddyfile.Contains("tls internal") -Message "Caddyfile 应启用 tls internal。"
+Assert-True -Condition $caddyfile.Contains("reverse_proxy 127.0.0.1:28080") -Message "Caddyfile 应反代到后端端口。"
+Assert-True -Condition $caddyfile.Contains("https://192.168.3.10") -Message "Caddyfile 应包含局域网地址。"
 
-# 用例4：下载地址应为官方 release 通道。
-$downloadUrl = Resolve-CloudflaredDownloadUrl
-Assert-True -Condition $downloadUrl.StartsWith("https://github.com/cloudflare/cloudflared/releases/latest/download/") -Message "cloudflared 下载地址应来自官方 release。"
+# 用例4：开机自启命令必须使用 caddy start 并带 config。
+$cmd = Build-CaddyAutoStartCommand -CaddyPath "C:\tools\caddy.exe" -CaddyfilePath "C:\tmp\Caddyfile"
+Assert-True -Condition $cmd.Contains(" start ") -Message "开机自启命令应使用 caddy start。"
+Assert-True -Condition $cmd.Contains("--config") -Message "开机自启命令应包含 --config。"
+Assert-True -Condition $cmd.Contains("--adapter caddyfile") -Message "开机自启命令应包含 caddyfile adapter。"
 
-# 用例5：安装目录可被环境变量覆盖，且不必落在仓库。
-$oldCloudflaredHome = $env:KOKO_CLOUDFLARED_HOME
-try {
-    $env:KOKO_CLOUDFLARED_HOME = "D:\temp\koko-cloudflared-home"
-    $overrideDir = Resolve-CloudflaredInstallDirectory -RepoRoot $repoRoot
-    Assert-Equal -Actual $overrideDir -Expected ([System.IO.Path]::GetFullPath("D:\temp\koko-cloudflared-home")) -Message "应优先使用 KOKO_CLOUDFLARED_HOME。"
-}
-finally {
-    $env:KOKO_CLOUDFLARED_HOME = $oldCloudflaredHome
-}
-
-# 用例6：默认安装目录不应位于仓库内。
-$defaultInstallDir = Resolve-CloudflaredInstallDirectory -RepoRoot $repoRoot
-$normalizedInstallDir = $defaultInstallDir.TrimEnd('\').ToLowerInvariant()
+# 用例5：HTTPS 运行时目录默认不应在仓库内。
+$runtimeDir = Resolve-HttpsRuntimeDirectory
+$normalizedRuntimeDir = $runtimeDir.TrimEnd('\').ToLowerInvariant()
 $normalizedRepoRoot = $repoRoot.TrimEnd('\').ToLowerInvariant()
-Assert-False -Condition $normalizedInstallDir.StartsWith($normalizedRepoRoot) -Message "默认 cloudflared 安装目录不应落在仓库里。"
-
-# 用例7：能从 cloudflared 日志行里提取可访问 HTTPS 地址。
-$url = TryExtract-TryCloudflareUrlFromLine -Line "INF | Visit it at https://bright-river-abc.trycloudflare.com"
-Assert-Equal -Actual $url -Expected "https://bright-river-abc.trycloudflare.com" -Message "应能提取 trycloudflare HTTPS 地址。"
+Assert-False -Condition $normalizedRuntimeDir.StartsWith($normalizedRepoRoot) -Message "运行时目录不应落在仓库里。"
 
 Write-Host "https.ps1 测试通过"

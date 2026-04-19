@@ -1,7 +1,6 @@
 param(
     [int]$Port = 0,
     [switch]$SkipAppBootstrap,
-    [switch]$NoAutoInstall,
     [switch]$DryRun
 )
 
@@ -51,6 +50,20 @@ function Resolve-AppPortFromEnvFile {
     return (Resolve-AppPortFromEnvContent -EnvContent $content -DefaultPort $DefaultPort)
 }
 
+function Resolve-PwshPath {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($pwsh) {
+        return $pwsh.Source
+    }
+
+    $windowsPowerShell = Get-Command powershell.exe -ErrorAction SilentlyContinue
+    if ($windowsPowerShell) {
+        return $windowsPowerShell.Source
+    }
+
+    throw "未找到可用 PowerShell（pwsh / powershell.exe）。"
+}
+
 function Test-LoopbackPortOpen {
     param(
         [Parameter(Mandatory = $true)][int]$TargetPort,
@@ -89,122 +102,6 @@ function Wait-LoopbackPortOpen {
     return $false
 }
 
-function Resolve-PwshPath {
-    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
-    if ($pwsh) {
-        return $pwsh.Source
-    }
-
-    $windowsPowerShell = Get-Command powershell.exe -ErrorAction SilentlyContinue
-    if ($windowsPowerShell) {
-        return $windowsPowerShell.Source
-    }
-
-    throw "未找到可用 PowerShell 解释器（pwsh / powershell.exe）。"
-}
-
-function Resolve-CloudflaredDownloadUrl {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-    $fileName = switch ($arch) {
-        "x64" { "cloudflared-windows-amd64.exe"; break }
-        "arm64" { "cloudflared-windows-arm64.exe"; break }
-        "x86" { "cloudflared-windows-386.exe"; break }
-        default { throw "当前架构暂不支持自动下载 cloudflared：$arch" }
-    }
-
-    return "https://github.com/cloudflare/cloudflared/releases/latest/download/$fileName"
-}
-
-function Resolve-CloudflaredInstallDirectory {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot
-    )
-
-    $override = [Environment]::GetEnvironmentVariable("KOKO_CLOUDFLARED_HOME")
-    if (-not [string]::IsNullOrWhiteSpace($override)) {
-        return [System.IO.Path]::GetFullPath($override)
-    }
-
-    $localAppData = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
-    if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
-        return [System.IO.Path]::GetFullPath((Join-Path $localAppData "koko\\cloudflared"))
-    }
-
-    $tempDir = [Environment]::GetEnvironmentVariable("TEMP")
-    if (-not [string]::IsNullOrWhiteSpace($tempDir)) {
-        return [System.IO.Path]::GetFullPath((Join-Path $tempDir "koko\\cloudflared"))
-    }
-
-    throw "无法解析 cloudflared 安装目录。请设置环境变量 KOKO_CLOUDFLARED_HOME。"
-}
-
-function Ensure-CloudflaredBinary {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [switch]$DisallowInstall
-    )
-
-    $existing = Get-Command cloudflared -ErrorAction SilentlyContinue
-    if ($existing) {
-        return $existing.Source
-    }
-
-    if ($DisallowInstall) {
-        throw "未找到 cloudflared，且当前禁止自动安装。请先手动安装 cloudflared。"
-    }
-
-    $toolsDir = Resolve-CloudflaredInstallDirectory -RepoRoot $RepoRoot
-    New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
-
-    $targetPath = Join-Path $toolsDir "cloudflared.exe"
-    if (Test-Path -LiteralPath $targetPath) {
-        return $targetPath
-    }
-    $downloadUrl = Resolve-CloudflaredDownloadUrl
-
-    Write-Host "下载 cloudflared: $downloadUrl"
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $targetPath
-
-    if (-not (Test-Path -LiteralPath $targetPath)) {
-        throw "cloudflared 下载失败，文件不存在：$targetPath"
-    }
-
-    return $targetPath
-}
-
-function Build-QuickTunnelArgumentList {
-    param(
-        [Parameter(Mandatory = $true)][int]$AppPort
-    )
-
-    return @(
-        "tunnel",
-        "--url", "http://127.0.0.1:$AppPort",
-        "--no-autoupdate",
-        "--protocol", "http2",
-        "--loglevel", "info"
-    )
-}
-
-function TryExtract-TryCloudflareUrlFromLine {
-    param([string]$Line)
-
-    if ([string]::IsNullOrWhiteSpace($Line)) {
-        return $null
-    }
-
-    $match = [System.Text.RegularExpressions.Regex]::Match(
-        $Line,
-        "https://[a-z0-9-]+\.trycloudflare\.com",
-        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
-    )
-    if ($match.Success) {
-        return $match.Value
-    }
-
-    return $null
-}
-
 function Start-AppViaRunScriptIfNeeded {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -213,7 +110,7 @@ function Start-AppViaRunScriptIfNeeded {
 
     if (Test-LoopbackPortOpen -TargetPort $AppPort) {
         Write-Host "检测到后端已在 127.0.0.1:$AppPort 监听，跳过 run.ps1 启动。"
-        return $null
+        return
     }
 
     $runScriptPath = Join-Path $RepoRoot "run.ps1"
@@ -229,7 +126,7 @@ function Start-AppViaRunScriptIfNeeded {
     $stderrPath = Join-Path $logRoot ("run-$sessionId.stderr.log")
 
     Write-Host "run.ps1 未启动，自动拉起开发链路..."
-    $process = Start-Process `
+    $null = Start-Process `
         -FilePath $pwshPath `
         -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $runScriptPath) `
         -WorkingDirectory $RepoRoot `
@@ -243,112 +140,202 @@ function Start-AppViaRunScriptIfNeeded {
     }
 
     Write-Host "run.ps1 启动完成，日志：$stdoutPath"
-    return $process
 }
 
-function Invoke-CloudflareQuickTunnel {
+function Ensure-CaddyBinary {
+    $existing = Get-Command caddy -ErrorAction SilentlyContinue
+    if ($existing) {
+        return $existing.Source
+    }
+
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if (-not $winget) {
+        throw "未找到 Caddy 且本机缺少 winget。请先安装 Caddy。"
+    }
+
+    Write-Host "未检测到 Caddy，开始自动安装..."
+    & $winget.Source install --id CaddyServer.Caddy -e --accept-source-agreements --accept-package-agreements --silent
+    if ($LASTEXITCODE -ne 0) {
+        throw "winget 安装 Caddy 失败，退出码: $LASTEXITCODE"
+    }
+
+    $existing = Get-Command caddy -ErrorAction SilentlyContinue
+    if ($existing) {
+        return $existing.Source
+    }
+
+    $wingetLink = Join-Path ([Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)) "Microsoft\\WinGet\\Links\\caddy.exe"
+    if (Test-Path -LiteralPath $wingetLink) {
+        return $wingetLink
+    }
+
+    throw "Caddy 安装后仍未找到可执行文件。"
+}
+
+function Get-LanIPv4Addresses {
+    $all = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+            $_.IPAddress -notlike "169.254.*" -and
+            $_.IPAddress -ne "127.0.0.1" -and
+            $_.ValidLifetime -gt [TimeSpan]::Zero
+        } | Select-Object -ExpandProperty IPAddress -Unique)
+    return @($all | Sort-Object)
+}
+
+function Build-CaddyfileContent {
     param(
-        [Parameter(Mandatory = $true)][string]$CloudflaredPath,
         [Parameter(Mandatory = $true)][int]$AppPort,
-        [Parameter(Mandatory = $true)][string]$RepoRoot
+        [string[]]$LanIPv4Addresses = @()
     )
 
-    $args = Build-QuickTunnelArgumentList -AppPort $AppPort
-
-    # Quick Tunnel 在用户主目录存在 config.yaml 时会报不支持。
-    # 这里把 cloudflared 的 HOME/USERPROFILE 临时指向独立目录，避免和本机已有 named tunnel 配置互相影响。
-    $isolatedHome = Join-Path $RepoRoot "tmp\\cloudflared-quick-home"
-    New-Item -ItemType Directory -Path $isolatedHome -Force | Out-Null
-
-    $oldHome = $env:HOME
-    $oldUserProfile = $env:USERPROFILE
-    $oldAppData = $env:APPDATA
-    $oldLocalAppData = $env:LOCALAPPDATA
-
-    try {
-        $env:HOME = $isolatedHome
-        $env:USERPROFILE = $isolatedHome
-        $env:APPDATA = (Join-Path $isolatedHome "AppData\\Roaming")
-        $env:LOCALAPPDATA = (Join-Path $isolatedHome "AppData\\Local")
-
-        New-Item -ItemType Directory -Path $env:APPDATA -Force | Out-Null
-        New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
-
-        Write-Host "启动 HTTPS 隧道（按 Ctrl+C 可停止）..."
-        Write-Host "cloudflared $($args -join ' ')"
-
-        $announcedUrl = $null
-        & $CloudflaredPath @args 2>&1 | ForEach-Object {
-            $line = $_.ToString()
-            if ([string]::IsNullOrWhiteSpace($line)) {
-                return
-            }
-
-            Write-Host "[cloudflared] $line"
-
-            if ($null -eq $announcedUrl) {
-                $candidate = TryExtract-TryCloudflareUrlFromLine -Line $line
-                if (-not [string]::IsNullOrWhiteSpace($candidate)) {
-                    $announcedUrl = $candidate
-                    Write-Host "HTTPS 入口: $announcedUrl"
-                }
-            }
-        }
-
-        if ($null -eq $announcedUrl) {
-            Write-Warning "cloudflared 已启动但未识别到 trycloudflare 地址，请检查上面日志。"
-        }
-
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -ne 0) {
-            throw "cloudflared 退出码异常：$exitCode"
+    $hosts = @("https://localhost", "https://127.0.0.1")
+    foreach ($ip in $LanIPv4Addresses) {
+        if (-not [string]::IsNullOrWhiteSpace($ip)) {
+            $hosts += "https://$ip"
         }
     }
-    finally {
-        $env:HOME = $oldHome
-        $env:USERPROFILE = $oldUserProfile
-        $env:APPDATA = $oldAppData
-        $env:LOCALAPPDATA = $oldLocalAppData
+    $siteAddressLine = ($hosts | Select-Object -Unique) -join ", "
+
+    return @"
+{
+    auto_https disable_redirects
+}
+
+$siteAddressLine {
+    tls internal
+    reverse_proxy 127.0.0.1:$AppPort
+}
+"@
+}
+
+function Resolve-HttpsRuntimeDirectory {
+    $override = [Environment]::GetEnvironmentVariable("KOKO_HTTPS_RUNTIME_HOME")
+    if (-not [string]::IsNullOrWhiteSpace($override)) {
+        return [System.IO.Path]::GetFullPath($override)
     }
+
+    $localAppData = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
+    if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
+        return [System.IO.Path]::GetFullPath((Join-Path $localAppData "koko\\https-runtime"))
+    }
+
+    throw "无法解析 HTTPS 运行时目录。"
+}
+
+function Build-CaddyAutoStartCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$CaddyPath,
+        [Parameter(Mandatory = $true)][string]$CaddyfilePath
+    )
+
+    return "`"$CaddyPath`" start --config `"$CaddyfilePath`" --adapter caddyfile"
+}
+
+function Start-OrReload-Caddy {
+    param(
+        [Parameter(Mandatory = $true)][string]$CaddyPath,
+        [Parameter(Mandatory = $true)][string]$CaddyfilePath
+    )
+
+    & $CaddyPath validate --config $CaddyfilePath --adapter caddyfile *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Caddyfile 校验失败，退出码: $LASTEXITCODE"
+    }
+
+    & $CaddyPath reload --config $CaddyfilePath --adapter caddyfile *> $null
+    if ($LASTEXITCODE -eq 0) {
+        return "reloaded"
+    }
+
+    & $CaddyPath start --config $CaddyfilePath --adapter caddyfile *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Caddy 启动失败，退出码: $LASTEXITCODE"
+    }
+    return "started"
+}
+
+function Ensure-CaddyAutoStartTask {
+    param(
+        [Parameter(Mandatory = $true)][string]$CaddyPath,
+        [Parameter(Mandatory = $true)][string]$CaddyfilePath
+    )
+
+    $taskName = "koko-caddy-https-autostart"
+    $taskCommand = Build-CaddyAutoStartCommand -CaddyPath $CaddyPath -CaddyfilePath $CaddyfilePath
+
+    & schtasks.exe /Query /TN $taskName *> $null
+    $exists = ($LASTEXITCODE -eq 0)
+    if ($exists) {
+        & schtasks.exe /Delete /TN $taskName /F *> $null
+    }
+
+    & schtasks.exe /Create /TN $taskName /SC ONLOGON /TR $taskCommand /F *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "创建开机自启任务失败：$taskName"
+    }
+
+    return $taskName
 }
 
 function Invoke-HttpsBootstrap {
     param(
         [int]$RequestedPort = 0,
         [switch]$SkipApp,
-        [switch]$DisallowInstall,
         [switch]$PreviewOnly
     )
 
     $repoRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
     $envPath = Join-Path $repoRoot ".env"
     $appPort = if ($RequestedPort -gt 0) { $RequestedPort } else { Resolve-AppPortFromEnvFile -EnvFilePath $envPath }
-    $quickTunnelArgs = Build-QuickTunnelArgumentList -AppPort $appPort
 
-    Write-Host "目标后端端口: $appPort"
-    Write-Host "Quick Tunnel 命令: cloudflared $($quickTunnelArgs -join ' ')"
+    if (-not $SkipApp -and -not $PreviewOnly) {
+        Start-AppViaRunScriptIfNeeded -RepoRoot $repoRoot -AppPort $appPort
+    }
+    elseif ($SkipApp) {
+        Write-Host "已跳过 run.ps1 自动启动。"
+    }
+
+    $runtimeDir = Resolve-HttpsRuntimeDirectory
+    New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
+    $caddyfilePath = Join-Path $runtimeDir "Caddyfile"
+
+    $lanIps = Get-LanIPv4Addresses
+    $content = Build-CaddyfileContent -AppPort $appPort -LanIPv4Addresses $lanIps
+    Set-Content -LiteralPath $caddyfilePath -Value $content -Encoding UTF8
+
+    $displayUrls = @("https://localhost", "https://127.0.0.1") + ($lanIps | ForEach-Object { "https://$_" })
+    $displayUrls = @($displayUrls | Select-Object -Unique)
+
+    Write-Host "后端端口: $appPort"
+    Write-Host "Caddyfile: $caddyfilePath"
+    Write-Host "HTTPS 地址："
+    foreach ($url in $displayUrls) {
+        Write-Host "  - $url"
+    }
 
     if ($PreviewOnly) {
         Write-Host "DryRun 模式：仅展示动作，不执行。"
         return
     }
 
-    if (-not $SkipApp) {
-        $null = Start-AppViaRunScriptIfNeeded -RepoRoot $repoRoot -AppPort $appPort
-    }
-    else {
-        Write-Host "已跳过 run.ps1 自动启动。"
+    $caddyPath = Ensure-CaddyBinary
+    Write-Host "使用 Caddy: $caddyPath"
+
+    $result = Start-OrReload-Caddy -CaddyPath $caddyPath -CaddyfilePath $caddyfilePath
+    Write-Host "Caddy 已$result。"
+
+    # 证书信任是 best-effort，不阻断主链。
+    & $caddyPath trust --config $caddyfilePath --adapter caddyfile *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "自动写入本机证书信任失败（常见于权限不足）。"
     }
 
-    $cloudflaredPath = Ensure-CloudflaredBinary -RepoRoot $repoRoot -DisallowInstall:$DisallowInstall
-    Write-Host "使用 cloudflared: $cloudflaredPath"
-    Invoke-CloudflareQuickTunnel -CloudflaredPath $cloudflaredPath -AppPort $appPort -RepoRoot $repoRoot
+    $taskName = Ensure-CaddyAutoStartTask -CaddyPath $caddyPath -CaddyfilePath $caddyfilePath
+    Write-Host "已写入开机自启任务: $taskName"
 }
 
 if ($MyInvocation.InvocationName -ne ".") {
     Invoke-HttpsBootstrap `
         -RequestedPort $Port `
         -SkipApp:$SkipAppBootstrap `
-        -DisallowInstall:$NoAutoInstall `
         -PreviewOnly:$DryRun
 }
