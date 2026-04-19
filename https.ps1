@@ -276,6 +276,22 @@ function Ensure-CaddyAutoStartTask {
     return $taskName
 }
 
+function Resolve-CaddyRootCertificatePath {
+    $candidates = @(
+        (Join-Path $env:APPDATA "Caddy\\pki\\authorities\\local\\root.crt"),
+        (Join-Path $env:LOCALAPPDATA "Caddy\\pki\\authorities\\local\\root.crt"),
+        (Join-Path $env:PROGRAMDATA "Caddy\\pki\\authorities\\local\\root.crt")
+    )
+
+    foreach ($path in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
+            return $path
+        }
+    }
+
+    return $null
+}
+
 function Invoke-HttpsBootstrap {
     param(
         [int]$RequestedPort = 0,
@@ -311,6 +327,8 @@ function Invoke-HttpsBootstrap {
     foreach ($url in $displayUrls) {
         Write-Host "  - $url"
     }
+    Write-Host "注意：不要访问 https://127.0.0.1:$appPort/ （该端口是后端明文 HTTP 端口）。"
+    Write-Host "注意：不要访问 https://0.0.0.0:$appPort/ （0.0.0.0 仅用于监听绑定，不是可访问主机名）。"
 
     if ($PreviewOnly) {
         Write-Host "DryRun 模式：仅展示动作，不执行。"
@@ -331,6 +349,11 @@ function Invoke-HttpsBootstrap {
 
     $taskName = Ensure-CaddyAutoStartTask -CaddyPath $caddyPath -CaddyfilePath $caddyfilePath
     Write-Host "已写入开机自启任务: $taskName"
+
+    $rootCertPath = Resolve-CaddyRootCertificatePath
+    if (-not [string]::IsNullOrWhiteSpace($rootCertPath)) {
+        Write-Host "局域网设备若提示证书不受信任，请导入此根证书: $rootCertPath"
+    }
 }
 
 if ($MyInvocation.InvocationName -ne ".") {

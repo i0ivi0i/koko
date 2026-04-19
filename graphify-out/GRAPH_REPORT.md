@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-19)
 
 ## Corpus Check
-- 197 files · ~235,122 words
+- 197 files · ~235,180 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 473 nodes · 600 edges · 33 communities detected
+- 474 nodes · 602 edges · 33 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -46,7 +46,7 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 25 edges
-2. `Invoke-HttpsBootstrap()` - 9 edges
+2. `Invoke-HttpsBootstrap()` - 10 edges
 3. `单连接发送到已关闭socket时降级为正常断开()` - 8 edges
 4. `假Hls构造器` - 7 edges
 5. `提取媒体上传授权头()` - 7 edges
@@ -111,12 +111,12 @@ Cohesion: 0.22
 Nodes (15): collect_result(), ensure_http_url(), find_command(), 读取JSON(), LauncherHandle, now_iso(), parse_concurrency_levels(), round_or_none() (+7 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.17
-Nodes (9): Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Resolve-StaleLauncherSidecar(), Stop-ManagedProcess(), Stop-StaleLauncherSidecars() (+1 more)
+Cohesion: 0.25
+Nodes (15): Build-CaddyAutoStartCommand(), Build-CaddyfileContent(), Ensure-CaddyAutoStartTask(), Ensure-CaddyBinary(), Get-LanIPv4Addresses(), Invoke-HttpsBootstrap(), Resolve-AppPortFromEnvContent(), Resolve-AppPortFromEnvFile() (+7 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.27
-Nodes (14): Build-CaddyAutoStartCommand(), Build-CaddyfileContent(), Ensure-CaddyAutoStartTask(), Ensure-CaddyBinary(), Get-LanIPv4Addresses(), Invoke-HttpsBootstrap(), Resolve-AppPortFromEnvContent(), Resolve-AppPortFromEnvFile() (+6 more)
+Cohesion: 0.17
+Nodes (9): Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Resolve-StaleLauncherSidecar(), Stop-ManagedProcess(), Stop-StaleLauncherSidecars() (+1 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.19
@@ -207,9 +207,9 @@ Nodes (0):
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 23`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 25`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 26`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
