@@ -115,6 +115,29 @@ function Resolve-CloudflaredDownloadUrl {
     return "https://github.com/cloudflare/cloudflared/releases/latest/download/$fileName"
 }
 
+function Resolve-CloudflaredInstallDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $override = [Environment]::GetEnvironmentVariable("KOKO_CLOUDFLARED_HOME")
+    if (-not [string]::IsNullOrWhiteSpace($override)) {
+        return [System.IO.Path]::GetFullPath($override)
+    }
+
+    $localAppData = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
+    if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
+        return [System.IO.Path]::GetFullPath((Join-Path $localAppData "koko\\cloudflared"))
+    }
+
+    $tempDir = [Environment]::GetEnvironmentVariable("TEMP")
+    if (-not [string]::IsNullOrWhiteSpace($tempDir)) {
+        return [System.IO.Path]::GetFullPath((Join-Path $tempDir "koko\\cloudflared"))
+    }
+
+    throw "无法解析 cloudflared 安装目录。请设置环境变量 KOKO_CLOUDFLARED_HOME。"
+}
+
 function Ensure-CloudflaredBinary {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -130,10 +153,13 @@ function Ensure-CloudflaredBinary {
         throw "未找到 cloudflared，且当前禁止自动安装。请先手动安装 cloudflared。"
     }
 
-    $toolsDir = Join-Path $RepoRoot ".tools\\cloudflared"
+    $toolsDir = Resolve-CloudflaredInstallDirectory -RepoRoot $RepoRoot
     New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
 
     $targetPath = Join-Path $toolsDir "cloudflared.exe"
+    if (Test-Path -LiteralPath $targetPath) {
+        return $targetPath
+    }
     $downloadUrl = Resolve-CloudflaredDownloadUrl
 
     Write-Host "下载 cloudflared: $downloadUrl"

@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-19)
 
 ## Corpus Check
-- 197 files · ~234,895 words
+- 197 files · ~235,019 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 469 nodes · 594 edges · 33 communities detected
+- 471 nodes · 597 edges · 33 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -115,16 +115,16 @@ Cohesion: 0.17
 Nodes (9): Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Resolve-StaleLauncherSidecar(), Stop-ManagedProcess(), Stop-StaleLauncherSidecars() (+1 more)
 
 ### Community 11 - "Community 11"
+Cohesion: 0.32
+Nodes (12): Build-QuickTunnelArgumentList(), Ensure-CloudflaredBinary(), Invoke-CloudflareQuickTunnel(), Invoke-HttpsBootstrap(), Resolve-AppPortFromEnvContent(), Resolve-AppPortFromEnvFile(), Resolve-CloudflaredDownloadUrl(), Resolve-CloudflaredInstallDirectory() (+4 more)
+
+### Community 12 - "Community 12"
 Cohesion: 0.19
 Nodes (5): Assert-ServicesStopped(), Get-ListeningPortProcessRecords(), Resolve-RecognizedProjectService(), Stop-RecognizedProjectServices(), Test-TcpPortOpen()
 
-### Community 12 - "Community 12"
+### Community 13 - "Community 13"
 Cohesion: 0.2
 Nodes (2): handleSummary(), summarizeTrend()
-
-### Community 13 - "Community 13"
-Cohesion: 0.35
-Nodes (11): Build-QuickTunnelArgumentList(), Ensure-CloudflaredBinary(), Invoke-CloudflareQuickTunnel(), Invoke-HttpsBootstrap(), Resolve-AppPortFromEnvContent(), Resolve-AppPortFromEnvFile(), Resolve-CloudflaredDownloadUrl(), Resolve-PwshPath() (+3 more)
 
 ### Community 14 - "Community 14"
 Cohesion: 0.22
@@ -155,7 +155,7 @@ Cohesion: 0.5
 Nodes (0): 
 
 ### Community 21 - "Community 21"
-Cohesion: 0.67
+Cohesion: 0.5
 Nodes (0): 
 
 ### Community 22 - "Community 22"
@@ -230,11 +230,11 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 7` to `Community 2`?**
-  _High betweenness centrality (0.068) - this node is a cross-community bridge._
+  _High betweenness centrality (0.067) - this node is a cross-community bridge._
 - **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 17`?**
   _High betweenness centrality (0.056) - this node is a cross-community bridge._
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`, `Community 9`?**
-  _High betweenness centrality (0.054) - this node is a cross-community bridge._
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**

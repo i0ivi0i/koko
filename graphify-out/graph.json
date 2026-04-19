@@ -9,7 +9,7 @@
       "source_file": "https.ps1",
       "source_location": "L1",
       "id": "https_ps1",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Resolve-AppPortFromEnvContent()",
@@ -17,7 +17,7 @@
       "source_file": "https.ps1",
       "source_location": "L10",
       "id": "https_resolve_appportfromenvcontent",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Resolve-AppPortFromEnvFile()",
@@ -25,7 +25,7 @@
       "source_file": "https.ps1",
       "source_location": "L40",
       "id": "https_resolve_appportfromenvfile",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Test-LoopbackPortOpen()",
@@ -33,7 +33,7 @@
       "source_file": "https.ps1",
       "source_location": "L54",
       "id": "https_test_loopbackportopen",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Wait-LoopbackPortOpen()",
@@ -41,7 +41,7 @@
       "source_file": "https.ps1",
       "source_location": "L76",
       "id": "https_wait_loopbackportopen",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Resolve-PwshPath()",
@@ -49,7 +49,7 @@
       "source_file": "https.ps1",
       "source_location": "L92",
       "id": "https_resolve_pwshpath",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Resolve-CloudflaredDownloadUrl()",
@@ -57,47 +57,55 @@
       "source_file": "https.ps1",
       "source_location": "L106",
       "id": "https_resolve_cloudflareddownloadurl",
-      "community": 13
+      "community": 11
+    },
+    {
+      "label": "Resolve-CloudflaredInstallDirectory()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L118",
+      "id": "https_resolve_cloudflaredinstalldirectory",
+      "community": 11
     },
     {
       "label": "Ensure-CloudflaredBinary()",
       "file_type": "code",
       "source_file": "https.ps1",
-      "source_location": "L118",
+      "source_location": "L141",
       "id": "https_ensure_cloudflaredbinary",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Build-QuickTunnelArgumentList()",
       "file_type": "code",
       "source_file": "https.ps1",
-      "source_location": "L149",
+      "source_location": "L175",
       "id": "https_build_quicktunnelargumentlist",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Start-AppViaRunScriptIfNeeded()",
       "file_type": "code",
       "source_file": "https.ps1",
-      "source_location": "L162",
+      "source_location": "L188",
       "id": "https_start_appviarunscriptifneeded",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Invoke-CloudflareQuickTunnel()",
       "file_type": "code",
       "source_file": "https.ps1",
-      "source_location": "L203",
+      "source_location": "L229",
       "id": "https_invoke_cloudflarequicktunnel",
-      "community": 13
+      "community": 11
     },
     {
       "label": "Invoke-HttpsBootstrap()",
       "file_type": "code",
       "source_file": "https.ps1",
-      "source_location": "L247",
+      "source_location": "L273",
       "id": "https_invoke_httpsbootstrap",
-      "community": 13
+      "community": 11
     },
     {
       "label": "qingli.ps1",
@@ -105,7 +113,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L1",
       "id": "qingli_ps1",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Read-DotEnvMap()",
@@ -113,7 +121,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L20",
       "id": "qingli_read_dotenvmap",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Get-ConfigValue()",
@@ -121,7 +129,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L43",
       "id": "qingli_get_configvalue",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Resolve-ManagedPath()",
@@ -129,7 +137,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L56",
       "id": "qingli_resolve_managedpath",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Get-SafeDatabaseTargetDisplay()",
@@ -137,7 +145,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L81",
       "id": "qingli_get_safedatabasetargetdisplay",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Get-DirectorySummary()",
@@ -145,7 +153,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L94",
       "id": "qingli_get_directorysummary",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Test-TcpPortOpen()",
@@ -153,7 +161,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L116",
       "id": "qingli_test_tcpportopen",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Assert-ServicesStopped()",
@@ -161,7 +169,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L140",
       "id": "qingli_assert_servicesstopped",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Get-ListeningPortProcessRecords()",
@@ -169,7 +177,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L149",
       "id": "qingli_get_listeningportprocessrecords",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Resolve-RecognizedProjectService()",
@@ -177,7 +185,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L180",
       "id": "qingli_resolve_recognizedprojectservice",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Stop-RecognizedProjectServices()",
@@ -185,7 +193,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L248",
       "id": "qingli_stop_recognizedprojectservices",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Invoke-DatabaseCleanup()",
@@ -193,7 +201,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L286",
       "id": "qingli_invoke_databasecleanup",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Clear-DirectoryContents()",
@@ -201,7 +209,7 @@
       "source_file": "qingli.ps1",
       "source_location": "L330",
       "id": "qingli_clear_directorycontents",
-      "community": 11
+      "community": 12
     },
     {
       "label": "run.ps1",
@@ -417,7 +425,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L1",
       "id": "http",
-      "community": 12
+      "community": 13
     },
     {
       "label": ".constructor()",
@@ -425,7 +433,7 @@
       "source_file": "frontend\\\u4f20\u8f93.ts",
       "source_location": "L36",
       "id": "http_constructor",
-      "community": 12
+      "community": 13
     },
     {
       "label": "HttpRealtime\u4f20\u8f93",
@@ -1849,7 +1857,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L1",
       "id": "scripts_js",
-      "community": 12
+      "community": 13
     },
     {
       "label": "jsonHeaders()",
@@ -1857,7 +1865,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L50",
       "id": "jsonheaders",
-      "community": 12
+      "community": 13
     },
     {
       "label": "buildTusMetadata()",
@@ -1865,7 +1873,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L60",
       "id": "buildtusmetadata",
-      "community": 12
+      "community": 13
     },
     {
       "label": "resolveTusLocation()",
@@ -1873,7 +1881,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L66",
       "id": "resolvetuslocation",
-      "community": 12
+      "community": 13
     },
     {
       "label": "mustParseJson()",
@@ -1881,7 +1889,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L77",
       "id": "mustparsejson",
-      "community": 12
+      "community": 13
     },
     {
       "label": "summarizeTrend()",
@@ -1889,7 +1897,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L85",
       "id": "summarizetrend",
-      "community": 12
+      "community": 13
     },
     {
       "label": "handleSummary()",
@@ -1897,7 +1905,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.js",
       "source_location": "L185",
       "id": "handlesummary",
-      "community": 12
+      "community": 13
     },
     {
       "label": "\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
@@ -3209,7 +3217,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L1",
       "id": "tests_powershell_https_script_tests_ps1",
-      "community": 21
+      "community": 20
     },
     {
       "label": "Assert-Equal()",
@@ -3217,7 +3225,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L13",
       "id": "https_script_tests_assert_equal",
-      "community": 21
+      "community": 20
     },
     {
       "label": "Assert-True()",
@@ -3225,7 +3233,15 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L25",
       "id": "https_script_tests_assert_true",
-      "community": 21
+      "community": 20
+    },
+    {
+      "label": "Assert-False()",
+      "file_type": "code",
+      "source_file": "tests\\powershell\\https-script.tests.ps1",
+      "source_location": "L36",
+      "id": "https_script_tests_assert_false",
+      "community": 20
     },
     {
       "label": "\u539f\u56fe\u5185\u5bb9\u63a5\u53e3\u652f\u6301\u6807\u51c6range\u8bfb\u53d6()",
@@ -3401,7 +3417,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L1",
       "id": "tests_prepare_rs",
-      "community": 19
+      "community": 21
     },
     {
       "label": "prepare\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deTus\u5951\u7ea6()",
@@ -3409,7 +3425,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L52",
       "id": "prepare_prepare_tus",
-      "community": 19
+      "community": 21
     },
     {
       "label": "prepare\u89c6\u9891\u4e0a\u4f20\u4f1a\u62d2\u7edd\u8d85\u8fc7200mb\u7684\u8bf7\u6c42\u5e76\u5141\u8bb8200mb\u8fb9\u754c\u503c()",
@@ -3417,7 +3433,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L146",
       "id": "prepare_prepare_200mb_200mb",
-      "community": 19
+      "community": 21
     },
     {
       "label": "prepare\u8fd0\u8f93\u6388\u6743\u5199\u5165\u5931\u8d25\u65f6\u4e0d\u4f1a\u7559\u4e0b\u5b64\u513fprepared\u9644\u4ef6()",
@@ -3425,7 +3441,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L277",
       "id": "prepare_prepare_prepared",
-      "community": 19
+      "community": 21
     },
     {
       "label": "tus_hook.rs",
@@ -3633,7 +3649,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L14",
       "id": "http_send_json",
-      "community": 12
+      "community": 13
     },
     {
       "label": "send_bytes()",
@@ -3641,7 +3657,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L51",
       "id": "http_send_bytes",
-      "community": 12
+      "community": 13
     },
     {
       "label": "send_multipart_response()",
@@ -3649,7 +3665,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\http.rs",
       "source_location": "L77",
       "id": "http_send_multipart_response",
-      "community": 12
+      "community": 13
     },
     {
       "label": "fixture.rs",
@@ -3657,7 +3673,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L1",
       "id": "tests_fixture_rs",
-      "community": 20
+      "community": 19
     },
     {
       "label": "\u5199\u5165tus\u6d4b\u8bd5\u6587\u4ef6()",
@@ -3665,7 +3681,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L6",
       "id": "fixture_tus",
-      "community": 20
+      "community": 19
     },
     {
       "label": "\u6700\u5c0fpng\u5b57\u8282()",
@@ -3673,7 +3689,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L21",
       "id": "fixture_png",
-      "community": 20
+      "community": 19
     },
     {
       "label": "\u6700\u5c0fmp4\u5b57\u8282()",
@@ -3681,7 +3697,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L33",
       "id": "fixture_mp4",
-      "community": 20
+      "community": 19
     },
     {
       "label": "seed.rs",
@@ -3844,6 +3860,18 @@
       "source_location": "L118",
       "weight": 1.0,
       "_src": "https_ps1",
+      "_tgt": "https_resolve_cloudflaredinstalldirectory",
+      "source": "https_ps1",
+      "target": "https_resolve_cloudflaredinstalldirectory",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L141",
+      "weight": 1.0,
+      "_src": "https_ps1",
       "_tgt": "https_ensure_cloudflaredbinary",
       "source": "https_ps1",
       "target": "https_ensure_cloudflaredbinary",
@@ -3853,7 +3881,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L149",
+      "source_location": "L175",
       "weight": 1.0,
       "_src": "https_ps1",
       "_tgt": "https_build_quicktunnelargumentlist",
@@ -3865,7 +3893,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L162",
+      "source_location": "L188",
       "weight": 1.0,
       "_src": "https_ps1",
       "_tgt": "https_start_appviarunscriptifneeded",
@@ -3877,7 +3905,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L203",
+      "source_location": "L229",
       "weight": 1.0,
       "_src": "https_ps1",
       "_tgt": "https_invoke_cloudflarequicktunnel",
@@ -3889,7 +3917,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L247",
+      "source_location": "L273",
       "weight": 1.0,
       "_src": "https_ps1",
       "_tgt": "https_invoke_httpsbootstrap",
@@ -3913,7 +3941,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L257",
+      "source_location": "L283",
       "weight": 1.0,
       "_src": "https_invoke_httpsbootstrap",
       "_tgt": "https_resolve_appportfromenvfile",
@@ -3937,7 +3965,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L168",
+      "source_location": "L194",
       "weight": 1.0,
       "_src": "https_start_appviarunscriptifneeded",
       "_tgt": "https_test_loopbackportopen",
@@ -3949,7 +3977,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L195",
+      "source_location": "L221",
       "weight": 1.0,
       "_src": "https_start_appviarunscriptifneeded",
       "_tgt": "https_wait_loopbackportopen",
@@ -3961,7 +3989,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L178",
+      "source_location": "L204",
       "weight": 1.0,
       "_src": "https_start_appviarunscriptifneeded",
       "_tgt": "https_resolve_pwshpath",
@@ -3973,7 +4001,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L137",
+      "source_location": "L163",
       "weight": 1.0,
       "_src": "https_ensure_cloudflaredbinary",
       "_tgt": "https_resolve_cloudflareddownloadurl",
@@ -3985,7 +4013,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L275",
+      "source_location": "L156",
+      "weight": 1.0,
+      "_src": "https_ensure_cloudflaredbinary",
+      "_tgt": "https_resolve_cloudflaredinstalldirectory",
+      "source": "https_resolve_cloudflaredinstalldirectory",
+      "target": "https_ensure_cloudflaredbinary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L301",
       "weight": 1.0,
       "_src": "https_invoke_httpsbootstrap",
       "_tgt": "https_ensure_cloudflaredbinary",
@@ -3997,7 +4037,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L210",
+      "source_location": "L236",
       "weight": 1.0,
       "_src": "https_invoke_cloudflarequicktunnel",
       "_tgt": "https_build_quicktunnelargumentlist",
@@ -4009,7 +4049,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L258",
+      "source_location": "L284",
       "weight": 1.0,
       "_src": "https_invoke_httpsbootstrap",
       "_tgt": "https_build_quicktunnelargumentlist",
@@ -4021,7 +4061,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L269",
+      "source_location": "L295",
       "weight": 1.0,
       "_src": "https_invoke_httpsbootstrap",
       "_tgt": "https_start_appviarunscriptifneeded",
@@ -4033,7 +4073,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "https.ps1",
-      "source_location": "L277",
+      "source_location": "L303",
       "weight": 1.0,
       "_src": "https_invoke_httpsbootstrap",
       "_tgt": "https_invoke_cloudflarequicktunnel",
@@ -10483,6 +10523,18 @@
       "_tgt": "https_script_tests_assert_true",
       "source": "tests_powershell_https_script_tests_ps1",
       "target": "https_script_tests_assert_true",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\powershell\\https-script.tests.ps1",
+      "source_location": "L36",
+      "weight": 1.0,
+      "_src": "tests_powershell_https_script_tests_ps1",
+      "_tgt": "https_script_tests_assert_false",
+      "source": "tests_powershell_https_script_tests_ps1",
+      "target": "https_script_tests_assert_false",
       "confidence_score": 1.0
     },
     {
