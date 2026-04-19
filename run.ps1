@@ -113,6 +113,64 @@ function Parse-CloudflareTunnelPublicUrlFromLogLine {
     return $match.Groups[1].Value
 }
 
+function Test-AnsiOutputEnabled {
+    try {
+        if ($null -ne $Host.UI -and $Host.UI.SupportsVirtualTerminal) {
+            return $true
+        }
+    }
+    catch {
+        # Windows PowerShell 5.1 没有 SupportsVirtualTerminal 属性，按降级路径继续。
+    }
+
+    try {
+        if ($null -ne $PSStyle -and $PSStyle.OutputRendering -ne "PlainText") {
+            return $true
+        }
+    }
+    catch {
+        # 某些 host 不支持 PSStyle，按降级路径继续。
+    }
+
+    return $false
+}
+
+function Write-HighlightedAccessBlock {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Title,
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        return
+    }
+
+    $titleLine = " $Title "
+    $urlLine = " $Url "
+    $innerWidth = [Math]::Max([Math]::Max($titleLine.Length, $urlLine.Length), 72)
+    $frame = ("=" * $innerWidth)
+    $titleContent = $titleLine.PadRight($innerWidth)
+    $urlContent = $urlLine.PadRight($innerWidth)
+
+    if (Test-AnsiOutputEnabled) {
+        $orange = [char]27 + "[38;5;208m"
+        $orangeBold = [char]27 + "[1;38;5;208m"
+        $reset = [char]27 + "[0m"
+        [Console]::Out.WriteLine("$orange+$frame+$reset")
+        [Console]::Out.WriteLine("$orangeBold|$titleContent|$reset")
+        [Console]::Out.WriteLine("$orange|$urlContent|$reset")
+        [Console]::Out.WriteLine("$orange+$frame+$reset")
+        return
+    }
+
+    Write-Host ("+" + $frame + "+") -ForegroundColor DarkYellow
+    Write-Host ("|" + $titleContent + "|") -ForegroundColor DarkYellow
+    Write-Host ("|" + $urlContent + "|") -ForegroundColor Yellow
+    Write-Host ("+" + $frame + "+") -ForegroundColor DarkYellow
+}
+
 function Resolve-CloudflaredBinaryPath {
     $command = Get-Command cloudflared.exe -ErrorAction SilentlyContinue
     if ($null -eq $command) {
@@ -295,7 +353,9 @@ function Write-ManagedProcessLogs {
         $script:CloudflareTunnelConnected -and
         -not [string]::IsNullOrWhiteSpace($script:CloudflareTunnelPublicUrl)
     ) {
-        Write-Host "Cloudflare Tunnel HTTPS 地址: $($script:CloudflareTunnelPublicUrl)"
+        Write-HighlightedAccessBlock `
+            -Title "Cloudflare Tunnel HTTPS 地址（复制到手机或其他设备）" `
+            -Url $script:CloudflareTunnelPublicUrl
         $script:CloudflareTunnelPublicUrlAnnounced = $true
     }
 }
@@ -671,7 +731,11 @@ try {
         -TrackerPort ([int]$trackerPort) `
         -TusPort ([int]$tusdPort) `
         -TusUploadDir $resolvedTusUploadDir
-    Write-Host "访问入口: http://127.0.0.1:$appPort/"
+    $localAccessUrl = "http://127.0.0.1:$appPort/"
+    Write-HighlightedAccessBlock `
+        -Title "本机访问入口（日志再多也先看这里）" `
+        -Url $localAccessUrl
+    Write-Host "访问入口: $localAccessUrl"
     Write-Host "tusd 监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
     Write-Host "WebTorrent tracker 对外 announce: $trackerPublicUrl"
     Write-Host "子进程日志目录: $logDirectory"

@@ -1,11 +1,11 @@
-# Graph Report - .  (2026-04-19)
+# Graph Report - .  (2026-04-20)
 
 ## Corpus Check
-- 197 files · ~235,732 words
+- 197 files · ~235,899 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 476 nodes · 604 edges · 34 communities detected
+- 478 nodes · 608 edges · 33 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -43,7 +43,6 @@
 - [[_COMMUNITY_Community 30|Community 30]]
 - [[_COMMUNITY_Community 31|Community 31]]
 - [[_COMMUNITY_Community 32|Community 32]]
-- [[_COMMUNITY_Community 33|Community 33]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `HttpRealtime传输` - 25 edges
@@ -104,16 +103,16 @@ Cohesion: 0.12
 Nodes (1): HttpRealtime传输
 
 ### Community 8 - "Community 8"
+Cohesion: 0.14
+Nodes (11): Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Parse-CloudflareTunnelPublicUrlFromLogLine(), Resolve-StaleLauncherSidecar(), Stop-ManagedProcess(), Stop-StaleLauncherSidecars() (+3 more)
+
+### Community 9 - "Community 9"
 Cohesion: 0.11
 Nodes (2): FakeWebTorrent, 假Socket
 
-### Community 9 - "Community 9"
+### Community 10 - "Community 10"
 Cohesion: 0.22
 Nodes (15): collect_result(), ensure_http_url(), find_command(), 读取JSON(), LauncherHandle, now_iso(), parse_concurrency_levels(), round_or_none() (+7 more)
-
-### Community 10 - "Community 10"
-Cohesion: 0.15
-Nodes (9): Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Parse-CloudflareTunnelPublicUrlFromLogLine(), Resolve-StaleLauncherSidecar(), Stop-ManagedProcess(), Stop-StaleLauncherSidecars() (+1 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.25
@@ -156,16 +155,16 @@ Cohesion: 0.5
 Nodes (0): 
 
 ### Community 21 - "Community 21"
-Cohesion: 0.5
-Nodes (0): 
-
-### Community 22 - "Community 22"
 Cohesion: 0.67
 Nodes (0): 
 
-### Community 23 - "Community 23"
+### Community 22 - "Community 22"
 Cohesion: 1.0
 Nodes (1): Pg仓储
+
+### Community 23 - "Community 23"
+Cohesion: 1.0
+Nodes (0): 
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
@@ -177,11 +176,11 @@ Nodes (0):
 
 ### Community 26 - "Community 26"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): 文本布局, 文本布局测试
 
 ### Community 27 - "Community 27"
 Cohesion: 1.0
-Nodes (2): 文本布局, 文本布局测试
+Nodes (0): 
 
 ### Community 28 - "Community 28"
 Cohesion: 1.0
@@ -203,42 +202,38 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 33 - "Community 33"
-Cohesion: 1.0
-Nodes (0): 
-
 ## Knowledge Gaps
 - **28 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+23 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 24`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 23`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 24`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 26`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 25`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 27`** (2 nodes): `文本布局`, `文本布局测试`
+- **Thin community `Community 26`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 28`** (1 nodes): `css.d.ts`
+- **Thin community `Community 27`** (1 nodes): `css.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 29`** (1 nodes): `blob媒体资产测试.spec.ts`
+- **Thin community `Community 28`** (1 nodes): `blob媒体资产测试.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 30`** (1 nodes): `vitest.config.ts`
+- **Thin community `Community 29`** (1 nodes): `vitest.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 31`** (1 nodes): `lib.rs`
+- **Thin community `Community 30`** (1 nodes): `lib.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 32`** (1 nodes): `up.ps1`
+- **Thin community `Community 31`** (1 nodes): `up.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 33`** (1 nodes): `webtorrent.d.ts`
+- **Thin community `Community 32`** (1 nodes): `webtorrent.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HttpRealtime传输` connect `Community 7` to `Community 2`?**
-  _High betweenness centrality (0.066) - this node is a cross-community bridge._
+  _High betweenness centrality (0.065) - this node is a cross-community bridge._
 - **Why does `提取媒体上传授权头()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 17`?**
-  _High betweenness centrality (0.055) - this node is a cross-community bridge._
-- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`, `Community 9`?**
+  _High betweenness centrality (0.054) - this node is a cross-community bridge._
+- **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 5` to `Community 0`, `Community 10`?**
   _High betweenness centrality (0.052) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._

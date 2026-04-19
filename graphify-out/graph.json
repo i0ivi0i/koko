@@ -241,7 +241,7 @@
       "source_file": "run.ps1",
       "source_location": "L1",
       "id": "run_ps1",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Assert-PowerShellVersion()",
@@ -249,7 +249,7 @@
       "source_file": "run.ps1",
       "source_location": "L8",
       "id": "run_assert_powershellversion",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Import-DotEnv()",
@@ -257,7 +257,7 @@
       "source_file": "run.ps1",
       "source_location": "L15",
       "id": "run_import_dotenv",
-      "community": 10
+      "community": 8
     },
     {
       "label": "New-LauncherLogDirectory()",
@@ -265,7 +265,7 @@
       "source_file": "run.ps1",
       "source_location": "L34",
       "id": "run_new_launcherlogdirectory",
-      "community": 10
+      "community": 8
     },
     {
       "label": "New-StreamState()",
@@ -273,7 +273,7 @@
       "source_file": "run.ps1",
       "source_location": "L53",
       "id": "run_new_streamstate",
-      "community": 10
+      "community": 8
     },
     {
       "label": "New-ManagedProcess()",
@@ -281,7 +281,7 @@
       "source_file": "run.ps1",
       "source_location": "L67",
       "id": "run_new_managedprocess",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Parse-CloudflareTunnelPublicUrlFromLogLine()",
@@ -289,95 +289,111 @@
       "source_file": "run.ps1",
       "source_location": "L102",
       "id": "run_parse_cloudflaretunnelpublicurlfromlogline",
-      "community": 10
+      "community": 8
+    },
+    {
+      "label": "Test-AnsiOutputEnabled()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L116",
+      "id": "run_test_ansioutputenabled",
+      "community": 8
+    },
+    {
+      "label": "Write-HighlightedAccessBlock()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L138",
+      "id": "run_write_highlightedaccessblock",
+      "community": 8
     },
     {
       "label": "Resolve-CloudflaredBinaryPath()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L116",
+      "source_location": "L174",
       "id": "run_resolve_cloudflaredbinarypath",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Resolve-CloudflareEdgeBindAddress()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L143",
+      "source_location": "L201",
       "id": "run_resolve_cloudflareedgebindaddress",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Write-ManagedProcessLogs()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L232",
+      "source_location": "L290",
       "id": "run_write_managedprocesslogs",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Stop-StaleLauncherBackend()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L303",
+      "source_location": "L363",
       "id": "run_stop_stalelauncherbackend",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Get-ListeningPortProcessRecords()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L329",
+      "source_location": "L389",
       "id": "run_get_listeningportprocessrecords",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Resolve-StaleLauncherSidecar()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L360",
+      "source_location": "L420",
       "id": "run_resolve_stalelaunchersidecar",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Stop-StaleLauncherSidecars()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L406",
+      "source_location": "L466",
       "id": "run_stop_stalelaunchersidecars",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Resolve-TusdBinaryPath()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L446",
+      "source_location": "L506",
       "id": "run_resolve_tusdbinarypath",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Test-TruthyEnvironmentFlag()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L456",
+      "source_location": "L516",
       "id": "run_test_truthyenvironmentflag",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Stop-ManagedProcess()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L469",
+      "source_location": "L529",
       "id": "run_stop_managedprocess",
-      "community": 10
+      "community": 8
     },
     {
       "label": "Invoke-LauncherCleanup()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L492",
+      "source_location": "L552",
       "id": "run_invoke_launchercleanup",
-      "community": 10
+      "community": 8
     },
     {
       "label": "up.ps1",
@@ -385,7 +401,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 32
+      "community": 31
     },
     {
       "label": "app-sw.ts",
@@ -393,7 +409,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 25
+      "community": 24
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -401,7 +417,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L42",
       "id": "app_sw",
-      "community": 25
+      "community": 24
     },
     {
       "label": "css.d.ts",
@@ -409,7 +425,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 28
+      "community": 27
     },
     {
       "label": "media-sw.ts",
@@ -417,7 +433,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L1",
       "id": "frontend_media_sw_ts",
-      "community": 22
+      "community": 21
     },
     {
       "label": "\u662f\u56fe\u7247Blob\u8d44\u4ea7\u8bf7\u6c42()",
@@ -425,7 +441,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L19",
       "id": "media_sw_blob",
-      "community": 22
+      "community": 21
     },
     {
       "label": "\u547d\u4e2d\u6216\u56de\u586b\u56fe\u7247\u8d44\u4ea7\u7f13\u5b58()",
@@ -433,7 +449,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L30",
       "id": "media_sw",
-      "community": 22
+      "community": 21
     },
     {
       "label": "vitest.config.ts",
@@ -441,7 +457,7 @@
       "source_file": "frontend\\vitest.config.ts",
       "source_location": "L1",
       "id": "frontend_vitest_config_ts",
-      "community": 30
+      "community": 29
     },
     {
       "label": "webtorrent.d.ts",
@@ -449,7 +465,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 33
+      "community": 32
     },
     {
       "label": "\u901a\u77e5\u8fd0\u884c\u65f6.ts",
@@ -753,7 +769,7 @@
       "source_file": "frontend\\\u5b58\u50a8.ts",
       "source_location": "L75",
       "id": "json",
-      "community": 9
+      "community": 10
     },
     {
       "label": "createRenderRoot()",
@@ -853,7 +869,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 27
+      "community": 26
     },
     {
       "label": "revokeDraftPreviewUrl()",
@@ -965,7 +981,7 @@
       "source_file": "frontend\\tests\\blob\u5a92\u4f53\u8d44\u4ea7\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_blob_spec_ts",
-      "community": 29
+      "community": 28
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -1117,7 +1133,7 @@
       "source_file": "frontend\\tests\\\u9875\u9762\u9aa8\u67b6\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_spec_ts",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u9644\u4ef6\u80fd\u529b\u6ce8\u518c\u6d4b\u8bd5.spec.ts",
@@ -1261,7 +1277,7 @@
       "source_file": "frontend\\tests\\\u56fe\u7247\u4e0a\u4f20\u8bca\u65ad\u6d4b\u8bd5.spec.ts",
       "source_location": "L94",
       "id": "spec_getresponseheader",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u521b\u5efa\u5047Storage()",
@@ -1269,7 +1285,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
       "source_location": "L38",
       "id": "spec_storage",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u51c6\u5907\u5df2\u6fc0\u6d3b\u5a92\u4f53ServiceWorker\u6ce8\u518c()",
@@ -1277,7 +1293,7 @@
       "source_file": "frontend\\tests\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
       "source_location": "L70",
       "id": "spec_serviceworker",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u521b\u5efa\u53ef\u89c2\u6d4b\u5047Torrent()",
@@ -1285,7 +1301,7 @@
       "source_file": "frontend\\tests\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
       "source_location": "L86",
       "id": "spec_torrent",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u521b\u5efa\u5047WebTorrent\u6784\u9020\u5668()",
@@ -1293,7 +1309,7 @@
       "source_file": "frontend\\tests\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
       "source_location": "L123",
       "id": "spec_webtorrent",
-      "community": 8
+      "community": 9
     },
     {
       "label": "FakeWebTorrent",
@@ -1301,7 +1317,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
       "source_location": "L241",
       "id": "spec_fakewebtorrent",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".constructor()",
@@ -1309,7 +1325,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
       "source_location": "L242",
       "id": "spec_fakewebtorrent_constructor",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".on()",
@@ -1381,7 +1397,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L16",
       "id": "spec_dom",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u5b89\u88c5ShadowHost\u5168\u5c4fDOM\u6a21\u62df()",
@@ -1389,7 +1405,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L232",
       "id": "spec_shadowhost_dom",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u8bfb\u53d6VideoJs\u5a92\u4f53\u5bb9\u5668()",
@@ -1397,7 +1413,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L276",
       "id": "spec_videojs",
-      "community": 8
+      "community": 9
     },
     {
       "label": "flushAnimationFrame()",
@@ -1405,7 +1421,7 @@
       "source_file": "frontend\\tests\\\u623f\u95f4\u6eda\u52a8\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L377",
       "id": "spec_flushanimationframe",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".constructor()",
@@ -1457,7 +1473,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 27
+      "community": 26
     },
     {
       "label": ".addEventListener()",
@@ -1473,7 +1489,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L59",
       "id": "spec_socket",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".on()",
@@ -1481,7 +1497,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L62",
       "id": "spec_socket_on",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".emit()",
@@ -1489,7 +1505,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L69",
       "id": "spec_socket_emit",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".disconnect()",
@@ -1497,7 +1513,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L100",
       "id": "spec_socket_disconnect",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".fire()",
@@ -1505,7 +1521,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L102",
       "id": "spec_socket_fire",
-      "community": 8
+      "community": 9
     },
     {
       "label": ".buildStreamingAssetUrl()",
@@ -1521,7 +1537,7 @@
       "source_file": "frontend\\tests\\\u89c6\u9891\u5143\u6570\u636e\u6d4b\u8bd5.spec.ts",
       "source_location": "L137",
       "id": "spec_get",
-      "community": 8
+      "community": 9
     },
     {
       "label": "set()",
@@ -1529,7 +1545,7 @@
       "source_file": "frontend\\tests\\\u89c6\u9891\u5143\u6570\u636e\u6d4b\u8bd5.spec.ts",
       "source_location": "L140",
       "id": "spec_set",
-      "community": 8
+      "community": 9
     },
     {
       "label": "\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
@@ -1953,7 +1969,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L1",
       "id": "scripts_py",
-      "community": 9
+      "community": 10
     },
     {
       "label": "LauncherHandle",
@@ -1961,7 +1977,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L24",
       "id": "launcherhandle",
-      "community": 9
+      "community": 10
     },
     {
       "label": "now_iso()",
@@ -1969,7 +1985,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L30",
       "id": "now_iso",
-      "community": 9
+      "community": 10
     },
     {
       "label": "parse_concurrency_levels()",
@@ -1977,7 +1993,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L34",
       "id": "parse_concurrency_levels",
-      "community": 9
+      "community": 10
     },
     {
       "label": "ensure_http_url()",
@@ -1985,7 +2001,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L49",
       "id": "ensure_http_url",
-      "community": 9
+      "community": 10
     },
     {
       "label": "find_command()",
@@ -1993,7 +2009,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L56",
       "id": "find_command",
-      "community": 9
+      "community": 10
     },
     {
       "label": "write_json()",
@@ -2001,7 +2017,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L73",
       "id": "write_json",
-      "community": 9
+      "community": 10
     },
     {
       "label": "wait_tcp_port()",
@@ -2009,7 +2025,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L77",
       "id": "wait_tcp_port",
-      "community": 9
+      "community": 10
     },
     {
       "label": "start_launcher()",
@@ -2017,7 +2033,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L88",
       "id": "start_launcher",
-      "community": 9
+      "community": 10
     },
     {
       "label": "stop_process_tree()",
@@ -2025,7 +2041,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L127",
       "id": "stop_process_tree",
-      "community": 9
+      "community": 10
     },
     {
       "label": "summarize_launcher()",
@@ -2033,7 +2049,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L138",
       "id": "summarize_launcher",
-      "community": 9
+      "community": 10
     },
     {
       "label": "round_or_none()",
@@ -2041,7 +2057,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L157",
       "id": "round_or_none",
-      "community": 9
+      "community": 10
     },
     {
       "label": "collect_result()",
@@ -2049,7 +2065,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L163",
       "id": "collect_result",
-      "community": 9
+      "community": 10
     },
     {
       "label": "update_status()",
@@ -2057,7 +2073,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L185",
       "id": "update_status",
-      "community": 9
+      "community": 10
     },
     {
       "label": "run_k6_level()",
@@ -2065,7 +2081,7 @@
       "source_file": "scripts\\\u5a92\u4f53\u4e0a\u4f20\u5e76\u53d1\u538b\u6d4b.py",
       "source_location": "L229",
       "id": "run_k6_level",
-      "community": 9
+      "community": 10
     },
     {
       "label": "main.rs",
@@ -2073,7 +2089,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L1",
       "id": "main",
-      "community": 9
+      "community": 10
     },
     {
       "label": "lib.rs",
@@ -2081,7 +2097,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "src_lib_rs",
-      "community": 31
+      "community": 30
     },
     {
       "label": "main()",
@@ -2089,7 +2105,7 @@
       "source_file": "E:\\koko\\src\\main.rs",
       "source_location": "L7",
       "id": "main_main",
-      "community": 9
+      "community": 10
     },
     {
       "label": "tus_hook\u5916\u58f3.rs",
@@ -2937,7 +2953,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L25",
       "id": "pg",
-      "community": 23
+      "community": 22
     },
     {
       "label": "as_str()",
@@ -2961,7 +2977,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L555",
       "id": "pg_peer",
-      "community": 23
+      "community": 22
     },
     {
       "label": ".\u67e5\u8be2\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f()",
@@ -2969,7 +2985,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L567",
       "id": "pg_torrent",
-      "community": 23
+      "community": 22
     },
     {
       "label": "mod.rs",
@@ -2985,7 +3001,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 24
+      "community": 23
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2993,7 +3009,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 24
+      "community": 23
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3113,7 +3129,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 26
+      "community": 25
     },
     {
       "label": "Assert-True()",
@@ -3121,7 +3137,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 26
+      "community": 25
     },
     {
       "label": "\u89c6\u9891locator\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3457,7 +3473,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L1",
       "id": "tests_prepare_rs",
-      "community": 21
+      "community": 0
     },
     {
       "label": "prepare\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deTus\u5951\u7ea6()",
@@ -3465,7 +3481,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L52",
       "id": "prepare_prepare_tus",
-      "community": 21
+      "community": 0
     },
     {
       "label": "prepare\u89c6\u9891\u4e0a\u4f20\u4f1a\u62d2\u7edd\u8d85\u8fc7200mb\u7684\u8bf7\u6c42\u5e76\u5141\u8bb8200mb\u8fb9\u754c\u503c()",
@@ -3473,7 +3489,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L146",
       "id": "prepare_prepare_200mb_200mb",
-      "community": 21
+      "community": 0
     },
     {
       "label": "prepare\u8fd0\u8f93\u6388\u6743\u5199\u5165\u5931\u8d25\u65f6\u4e0d\u4f1a\u7559\u4e0b\u5b64\u513fprepared\u9644\u4ef6()",
@@ -3481,7 +3497,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L277",
       "id": "prepare_prepare_prepared",
-      "community": 21
+      "community": 0
     },
     {
       "label": "tus_hook.rs",
@@ -4440,6 +4456,30 @@
       "source_location": "L116",
       "weight": 1.0,
       "_src": "run_ps1",
+      "_tgt": "run_test_ansioutputenabled",
+      "source": "run_ps1",
+      "target": "run_test_ansioutputenabled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L138",
+      "weight": 1.0,
+      "_src": "run_ps1",
+      "_tgt": "run_write_highlightedaccessblock",
+      "source": "run_ps1",
+      "target": "run_write_highlightedaccessblock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L174",
+      "weight": 1.0,
+      "_src": "run_ps1",
       "_tgt": "run_resolve_cloudflaredbinarypath",
       "source": "run_ps1",
       "target": "run_resolve_cloudflaredbinarypath",
@@ -4449,7 +4489,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L143",
+      "source_location": "L201",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_cloudflareedgebindaddress",
@@ -4461,7 +4501,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L232",
+      "source_location": "L290",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_write_managedprocesslogs",
@@ -4473,7 +4513,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L303",
+      "source_location": "L363",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_stop_stalelauncherbackend",
@@ -4485,7 +4525,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L329",
+      "source_location": "L389",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_get_listeningportprocessrecords",
@@ -4497,7 +4537,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L360",
+      "source_location": "L420",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_stalelaunchersidecar",
@@ -4509,7 +4549,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L406",
+      "source_location": "L466",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_stop_stalelaunchersidecars",
@@ -4521,7 +4561,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L446",
+      "source_location": "L506",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_tusdbinarypath",
@@ -4533,7 +4573,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L456",
+      "source_location": "L516",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_test_truthyenvironmentflag",
@@ -4545,7 +4585,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L469",
+      "source_location": "L529",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_stop_managedprocess",
@@ -4557,7 +4597,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L492",
+      "source_location": "L552",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_invoke_launchercleanup",
@@ -4581,7 +4621,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L247",
+      "source_location": "L305",
       "weight": 1.0,
       "_src": "run_write_managedprocesslogs",
       "_tgt": "run_parse_cloudflaretunnelpublicurlfromlogline",
@@ -4593,7 +4633,31 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L504",
+      "source_location": "L157",
+      "weight": 1.0,
+      "_src": "run_write_highlightedaccessblock",
+      "_tgt": "run_test_ansioutputenabled",
+      "source": "run_test_ansioutputenabled",
+      "target": "run_write_highlightedaccessblock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L356",
+      "weight": 1.0,
+      "_src": "run_write_managedprocesslogs",
+      "_tgt": "run_write_highlightedaccessblock",
+      "source": "run_write_highlightedaccessblock",
+      "target": "run_write_managedprocesslogs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L564",
       "weight": 1.0,
       "_src": "run_invoke_launchercleanup",
       "_tgt": "run_write_managedprocesslogs",
@@ -4605,7 +4669,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L414",
+      "source_location": "L474",
       "weight": 1.0,
       "_src": "run_stop_stalelaunchersidecars",
       "_tgt": "run_get_listeningportprocessrecords",
@@ -4617,7 +4681,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L421",
+      "source_location": "L481",
       "weight": 1.0,
       "_src": "run_stop_stalelaunchersidecars",
       "_tgt": "run_resolve_stalelaunchersidecar",
@@ -4629,7 +4693,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L510",
+      "source_location": "L570",
       "weight": 1.0,
       "_src": "run_invoke_launchercleanup",
       "_tgt": "run_stop_managedprocess",
