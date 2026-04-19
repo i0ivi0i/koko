@@ -551,6 +551,7 @@ const 创建默认VideoJs播放器层 = async (
   const overlay = document.createElement("div") as 可原生全屏容器元素;
   const mount = document.createElement("div");
   const closeButton = document.createElement("button");
+  let 关闭按钮已挂载 = false;
   const 使用沉浸查看器布局 = options.shouldAutoEnterFullscreen;
   const 沉浸查看器可见样式 =
     "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:0;opacity:1;pointer-events:auto;";
@@ -558,11 +559,26 @@ const 创建默认VideoJs播放器层 = async (
     "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:transparent;padding:0;opacity:0;pointer-events:none;";
   const 对话查看器样式 =
     "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
+  const 挂载关闭按钮 = (): void => {
+    if (关闭按钮已挂载) {
+      return;
+    }
+    overlay.append(closeButton);
+    关闭按钮已挂载 = true;
+  };
+  const 卸载关闭按钮 = (): void => {
+    if (!关闭按钮已挂载) {
+      return;
+    }
+    closeButton.remove();
+    关闭按钮已挂载 = false;
+  };
   const 同步沉浸查看器显示阶段 = (phase: "pending" | "active"): void => {
     if (!使用沉浸查看器布局) {
       overlay.dataset.mediaViewerFullscreenPhase = "active";
       overlay.style.cssText = 对话查看器样式;
       overlay.removeAttribute("aria-hidden");
+      挂载关闭按钮();
       closeButton.style.opacity = "1";
       closeButton.style.pointerEvents = "auto";
       return;
@@ -575,13 +591,16 @@ const 创建默认VideoJs播放器层 = async (
     overlay.style.cssText = phase === "active" ? 沉浸查看器可见样式 : 沉浸查看器待接管样式;
     if (phase === "active") {
       overlay.removeAttribute("aria-hidden");
+      挂载关闭按钮();
       closeButton.style.opacity = "1";
       closeButton.style.pointerEvents = "auto";
+      if (closeButton.isConnected && document.activeElement !== closeButton) {
+        closeButton.focus();
+      }
       return;
     }
     overlay.setAttribute("aria-hidden", "true");
-    closeButton.style.opacity = "0";
-    closeButton.style.pointerEvents = "none";
+    卸载关闭按钮();
   };
 
   overlay.dataset.mediaViewerMode = "video";
@@ -609,7 +628,7 @@ const 创建默认VideoJs播放器层 = async (
     "position:fixed;top:16px;right:16px;z-index:1;border:1px solid rgb(255 255 255 / 0.35);border-radius:8px;background:rgb(0 0 0 / 0.7);color:white;padding:8px 12px;font:inherit;";
   同步沉浸查看器显示阶段(使用沉浸查看器布局 ? "pending" : "active");
 
-  overlay.append(mount, closeButton);
+  overlay.append(mount);
   document.body.append(overlay);
   lifecycle.开始视口占用();
 
@@ -724,7 +743,9 @@ const 创建默认VideoJs播放器层 = async (
     closeButton.addEventListener("click", 请求关闭);
     overlay.addEventListener("click", closeWhenClickingBackdrop);
     document.addEventListener("keydown", closeWhenPressingEscape);
-    closeButton.focus();
+    if (closeButton.isConnected) {
+      closeButton.focus();
+    }
 
     return {
       同步(nextItem) {

@@ -615,18 +615,21 @@ describe("媒体查看器适配器", () => {
       expect(overlay?.style.opacity).toBe("0");
       expect(overlay?.style.pointerEvents).toBe("none");
       expect(overlay?.getAttribute("aria-hidden")).toBe("true");
-      expect(closeButton?.style.opacity).toBe("0");
-      expect(closeButton?.style.pointerEvents).toBe("none");
+      expect(closeButton).toBeNull();
 
       完成进入(0);
       await Promise.resolve();
 
+      const activeCloseButton = overlay?.querySelector<HTMLButtonElement>(
+        'button[aria-label="关闭视频查看器"]'
+      );
       expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
       expect(overlay?.style.opacity).toBe("1");
       expect(overlay?.style.pointerEvents).toBe("auto");
       expect(overlay?.getAttribute("aria-hidden")).toBeNull();
-      expect(closeButton?.style.opacity).toBe("1");
-      expect(closeButton?.style.pointerEvents).toBe("auto");
+      expect(activeCloseButton).not.toBeNull();
+      expect(activeCloseButton?.style.opacity).toBe("1");
+      expect(activeCloseButton?.style.pointerEvents).toBe("auto");
 
       viewer.销毁();
     } finally {
@@ -1145,6 +1148,9 @@ describe("媒体查看器适配器", () => {
       expect(overlay?.style.opacity).toBe("0");
       expect(overlay?.style.pointerEvents).toBe("none");
       expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+      expect(
+        overlay?.querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
+      ).toBeNull();
 
       延迟壳解析器.at(0)?.();
       await Promise.resolve();
@@ -1159,6 +1165,9 @@ describe("媒体查看器适配器", () => {
       expect(overlay?.style.opacity).toBe("0");
       expect(overlay?.style.pointerEvents).toBe("none");
       expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+      expect(
+        overlay?.querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
+      ).toBeNull();
 
       完成进入(0);
       await Promise.resolve();
@@ -1168,6 +1177,9 @@ describe("媒体查看器适配器", () => {
       expect(overlay?.style.opacity).toBe("1");
       expect(overlay?.style.pointerEvents).toBe("auto");
       expect(overlay?.getAttribute("aria-hidden")).toBeNull();
+      expect(
+        overlay?.querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
+      ).not.toBeNull();
 
       viewer.销毁();
     } finally {
