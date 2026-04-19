@@ -181,8 +181,28 @@ function Build-QuickTunnelArgumentList {
         "tunnel",
         "--url", "http://127.0.0.1:$AppPort",
         "--no-autoupdate",
-        "--protocol", "http2"
+        "--protocol", "http2",
+        "--loglevel", "info"
     )
+}
+
+function TryExtract-TryCloudflareUrlFromLine {
+    param([string]$Line)
+
+    if ([string]::IsNullOrWhiteSpace($Line)) {
+        return $null
+    }
+
+    $match = [System.Text.RegularExpressions.Regex]::Match(
+        $Line,
+        "https://[a-z0-9-]+\.trycloudflare\.com",
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    if ($match.Success) {
+        return $match.Value
+    }
+
+    return $null
 }
 
 function Start-AppViaRunScriptIfNeeded {
@@ -256,7 +276,29 @@ function Invoke-CloudflareQuickTunnel {
 
         Write-Host "启动 HTTPS 隧道（按 Ctrl+C 可停止）..."
         Write-Host "cloudflared $($args -join ' ')"
-        & $CloudflaredPath @args
+
+        $announcedUrl = $null
+        & $CloudflaredPath @args 2>&1 | ForEach-Object {
+            $line = $_.ToString()
+            if ([string]::IsNullOrWhiteSpace($line)) {
+                return
+            }
+
+            Write-Host "[cloudflared] $line"
+
+            if ($null -eq $announcedUrl) {
+                $candidate = TryExtract-TryCloudflareUrlFromLine -Line $line
+                if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+                    $announcedUrl = $candidate
+                    Write-Host "HTTPS 入口: $announcedUrl"
+                }
+            }
+        }
+
+        if ($null -eq $announcedUrl) {
+            Write-Warning "cloudflared 已启动但未识别到 trycloudflare 地址，请检查上面日志。"
+        }
+
         $exitCode = $LASTEXITCODE
         if ($exitCode -ne 0) {
             throw "cloudflared 退出码异常：$exitCode"

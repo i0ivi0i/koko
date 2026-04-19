@@ -64,6 +64,7 @@ $args = Build-QuickTunnelArgumentList -AppPort 19090
 Assert-Equal -Actual $args[0] -Expected "tunnel" -Message "cloudflared 命令应从 tunnel 子命令开始。"
 Assert-Equal -Actual $args[1] -Expected "--url" -Message "cloudflared 参数应包含 --url。"
 Assert-Equal -Actual $args[2] -Expected "http://127.0.0.1:19090" -Message "Quick Tunnel 应转发到本机后端端口。"
+Assert-True -Condition ($args -contains "--loglevel") -Message "Quick Tunnel 参数应显式开启 loglevel。"
 
 # 用例4：下载地址应为官方 release 通道。
 $downloadUrl = Resolve-CloudflaredDownloadUrl
@@ -85,5 +86,9 @@ $defaultInstallDir = Resolve-CloudflaredInstallDirectory -RepoRoot $repoRoot
 $normalizedInstallDir = $defaultInstallDir.TrimEnd('\').ToLowerInvariant()
 $normalizedRepoRoot = $repoRoot.TrimEnd('\').ToLowerInvariant()
 Assert-False -Condition $normalizedInstallDir.StartsWith($normalizedRepoRoot) -Message "默认 cloudflared 安装目录不应落在仓库里。"
+
+# 用例7：能从 cloudflared 日志行里提取可访问 HTTPS 地址。
+$url = TryExtract-TryCloudflareUrlFromLine -Line "INF | Visit it at https://bright-river-abc.trycloudflare.com"
+Assert-Equal -Actual $url -Expected "https://bright-river-abc.trycloudflare.com" -Message "应能提取 trycloudflare HTTPS 地址。"
 
 Write-Host "https.ps1 测试通过"

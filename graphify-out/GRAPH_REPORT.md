@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-19)
 
 ## Corpus Check
-- 197 files · ~235,019 words
+- 197 files · ~235,136 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 471 nodes · 597 edges · 33 communities detected
+- 472 nodes · 599 edges · 33 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -115,8 +115,8 @@ Cohesion: 0.17
 Nodes (9): Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Read-NewLogLines(), Resolve-StaleLauncherSidecar(), Stop-ManagedProcess(), Stop-StaleLauncherSidecars() (+1 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.32
-Nodes (12): Build-QuickTunnelArgumentList(), Ensure-CloudflaredBinary(), Invoke-CloudflareQuickTunnel(), Invoke-HttpsBootstrap(), Resolve-AppPortFromEnvContent(), Resolve-AppPortFromEnvFile(), Resolve-CloudflaredDownloadUrl(), Resolve-CloudflaredInstallDirectory() (+4 more)
+Cohesion: 0.3
+Nodes (13): Build-QuickTunnelArgumentList(), Ensure-CloudflaredBinary(), Invoke-CloudflareQuickTunnel(), Invoke-HttpsBootstrap(), Resolve-AppPortFromEnvContent(), Resolve-AppPortFromEnvFile(), Resolve-CloudflaredDownloadUrl(), Resolve-CloudflaredInstallDirectory() (+5 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.19
@@ -205,11 +205,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **28 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+23 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 23`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 23`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 25`** (2 nodes): `图片资产描述包含_preview_full_original_而不是普通附件直链()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 26`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
