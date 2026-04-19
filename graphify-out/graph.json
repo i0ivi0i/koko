@@ -566,8 +566,8 @@
     {
       "label": "constructor()",
       "file_type": "code",
-      "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L272",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
+      "source_location": "L102",
       "id": "constructor",
       "community": 2
     },
@@ -1123,7 +1123,7 @@
       "label": "\u521b\u5efa\u5047Storage()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L37",
+      "source_location": "L38",
       "id": "spec_storage",
       "community": 8
     },
@@ -1155,7 +1155,7 @@
       "label": "FakeWebTorrent",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L240",
+      "source_location": "L241",
       "id": "spec_fakewebtorrent",
       "community": 8
     },
@@ -1163,7 +1163,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L241",
+      "source_location": "L242",
       "id": "spec_fakewebtorrent_constructor",
       "community": 8
     },
@@ -1655,7 +1655,7 @@
       "label": "\u534f\u4f5c\u5206\u53d1JoinTicket\u5931\u6548\u9519\u8bef",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L81",
+      "source_location": "L83",
       "id": "jointicket",
       "community": 2
     },
@@ -1663,7 +1663,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L84",
+      "source_location": "L86",
       "id": "jointicket_constructor",
       "community": 2
     },
@@ -1679,7 +1679,7 @@
       "label": "\u9ed8\u8ba4\u52a0\u8f7dWebTorrent\u6d4f\u89c8\u5668\u6784\u9020\u5668()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L197",
+      "source_location": "L232",
       "id": "webtorrent",
       "community": 2
     },
@@ -1687,7 +1687,7 @@
       "label": "\u9ed8\u8ba4\u8bfb\u53d6\u5a92\u4f53ServiceWorker\u6ce8\u518c()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L208",
+      "source_location": "L243",
       "id": "serviceworker",
       "community": 2
     },
@@ -2841,7 +2841,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2849,7 +2849,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -2969,7 +2969,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 23
+      "community": 22
     },
     {
       "label": "Assert-True()",
@@ -2977,7 +2977,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 23
+      "community": 22
     },
     {
       "label": "\u89c6\u9891locator\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -4236,8 +4236,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
-      "source_location": "L272",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
+      "source_location": "L102",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "constructor",
@@ -4609,7 +4609,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L105",
+      "source_location": "L123",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "jointicket",
@@ -4633,7 +4633,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L197",
+      "source_location": "L232",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "webtorrent",
@@ -4645,7 +4645,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L208",
+      "source_location": "L243",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "serviceworker",
@@ -6049,7 +6049,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L37",
+      "source_location": "L38",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec_storage",
@@ -6097,7 +6097,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L433",
+      "source_location": "L478",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec_fakewebtorrent",
@@ -6601,7 +6601,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L434",
+      "source_location": "L479",
       "weight": 1.0,
       "_src": "spec_fakewebtorrent",
       "_tgt": "spec_fakewebtorrent_constructor",
@@ -7153,7 +7153,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L84",
+      "source_location": "L86",
       "weight": 1.0,
       "_src": "jointicket",
       "_tgt": "jointicket_constructor",

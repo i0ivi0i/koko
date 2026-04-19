@@ -1,6 +1,7 @@
 import type { 媒体定位结果, 媒体种类, 媒体资产分发表面 } from "../契约.js";
 import {
   是否为协作分发JoinTicket失效错误,
+  是否为协作分发运行时环境不支持错误,
   读取协作分发定位片段,
   type 协作分发会话事件,
 } from "./媒体协作分发.js";
@@ -43,8 +44,12 @@ type 媒体播放结果 =
       kind: 媒体种类;
       src: "";
       thumbnailUrl: string | null;
-      reason: "locator_unavailable" | "attachment_not_ready" | "anchor_unavailable";
-      hint: "附件当前不可获取";
+      reason:
+        | "locator_unavailable"
+        | "attachment_not_ready"
+        | "anchor_unavailable"
+        | "swarm_runtime_unsupported";
+      hint: "附件当前不可获取" | "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）";
     };
 
 type 媒体播放器依赖 = {
@@ -71,7 +76,10 @@ type 媒体播放器依赖 = {
 type 协作分发尝试结果 = {
   playback: 媒体播放结果 | null;
   locator: 媒体定位结果;
+  failureReason: "runtime_unsupported" | null;
 };
+
+const 协作分发运行时不支持提示 = "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）";
 
 const 过滤可播放媒体提示 = (
   hint: "正在协作分发" | "正在补块" | null
@@ -235,7 +243,12 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   const 创建降级结果 = (
     input: 媒体播放输入,
     locator: 媒体定位结果 | null,
-    reason: "locator_unavailable" | "attachment_not_ready" | "anchor_unavailable"
+    reason:
+      | "locator_unavailable"
+      | "attachment_not_ready"
+      | "anchor_unavailable"
+      | "swarm_runtime_unsupported",
+    hint: "附件当前不可获取" | "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）" = "附件当前不可获取"
   ): 媒体播放结果 => ({
     mode: "degraded",
     attachmentId: input.attachmentId,
@@ -243,7 +256,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     src: "",
     thumbnailUrl: locator ? 读取预览缩略图地址(locator) : null,
     reason,
-    hint: "附件当前不可获取",
+    hint,
   });
 
   const 应坚持协作分发唯一主链 = (locator: 媒体定位结果): boolean =>
@@ -315,12 +328,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           thumbnailUrl: 读取预览缩略图地址(locator),
           hint: "内容已过期",
         },
+        failureReason: null,
       };
     }
     if (!distribution) {
       return {
         locator,
         playback: null,
+        failureReason: null,
       };
     }
     try {
@@ -337,6 +352,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         return {
           locator,
           playback: null,
+          failureReason: null,
         };
       }
       /**
@@ -350,6 +366,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         return {
           locator,
           playback: null,
+          failureReason: null,
         };
       }
       /**
@@ -368,6 +385,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           thumbnailUrl: 读取预览缩略图地址(locator),
           hint: 过滤可播放媒体提示(swarmSource.hint),
         },
+        failureReason: null,
       };
     } catch (error) {
       if (options.allowTicketRefresh !== false && 是否为协作分发JoinTicket失效错误(error)) {
@@ -383,10 +401,18 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           // forceRefresh 失败时继续按旧 locator 走后续主链降级，不把恢复动作放大成新故障。
         }
       }
+      if (是否为协作分发运行时环境不支持错误(error)) {
+        return {
+          locator,
+          playback: null,
+          failureReason: "runtime_unsupported",
+        };
+      }
       // swarm 只是热分发层；失败后必须回到锚点，不允许把热路径波动升级成业务失败。
       return {
         locator,
         playback: null,
+        failureReason: null,
       };
     }
   };
@@ -510,6 +536,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
      */
     if (应坚持协作分发唯一主链(locator)) {
       释放协作分发占用(input);
+      if (swarmAttempt.failureReason === "runtime_unsupported") {
+        return 创建降级结果(
+          input,
+          locator,
+          "swarm_runtime_unsupported",
+          协作分发运行时不支持提示
+        );
+      }
       return 创建降级结果(input, locator, "anchor_unavailable");
     }
     return 尝试锚点(input, locator, true);

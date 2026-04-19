@@ -71,6 +71,8 @@ const 协作分发媒体源探测重试间隔毫秒 = 80;
 const 服务工作线程接管等待超时毫秒 = 1_200;
 const 服务工作线程接管轮询间隔毫秒 = 50;
 export const 协作分发JoinTicket失效原因 = "join_ticket_invalid";
+export const 协作分发运行时环境不支持原因 = "swarm_runtime_unsupported";
+const 协作分发运行时环境不安全上下文细因 = "insecure_context";
 
 /**
  * join ticket 失效需要一条稳定、可跨层识别的错误语义：
@@ -84,6 +86,22 @@ export class 协作分发JoinTicket失效错误 extends Error {
   constructor(message = 协作分发JoinTicket失效原因) {
     super(message);
     this.name = "协作分发JoinTicket失效错误";
+  }
+}
+
+/**
+ * WebTorrent 浏览器流媒体运行时依赖 service worker + secure context：
+ * 1. `http://localhost` 可用是因为浏览器把它视为可信来源；
+ * 2. `http://局域网IP` 在移动端通常不是 secure context，无法注册/接管 service worker；
+ * 3. 这里必须给出稳定错误语义，避免上层把“环境不支持”误判成“资源不可获取”。
+ */
+export class 协作分发运行时环境不支持错误 extends Error {
+  readonly code = 协作分发运行时环境不支持原因;
+  readonly reason = 协作分发运行时环境不安全上下文细因;
+
+  constructor(message = 协作分发运行时环境不支持原因) {
+    super(message);
+    this.name = "协作分发运行时环境不支持错误";
   }
 }
 
@@ -117,10 +135,27 @@ export const 是否为协作分发JoinTicket失效错误 = (error: unknown): boo
   return 读取协作分发错误消息(error) === 协作分发JoinTicket失效原因;
 };
 
+export const 是否为协作分发运行时环境不支持错误 = (error: unknown): boolean => {
+  if (error instanceof 协作分发运行时环境不支持错误) {
+    return true;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 协作分发运行时环境不支持原因
+  ) {
+    return true;
+  }
+  return 读取协作分发错误消息(error) === 协作分发运行时环境不支持原因;
+};
+
 const 归一化协作分发错误 = (error: unknown): unknown =>
   是否为协作分发JoinTicket失效错误(error)
     ? new 协作分发JoinTicket失效错误()
-    : error;
+    : 是否为协作分发运行时环境不支持错误(error)
+      ? new 协作分发运行时环境不支持错误()
+      : error;
 
 type 协作分发媒体源探测选项 = {
   读取终止错误?: () => unknown | null;
@@ -206,6 +241,11 @@ async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏
  * 3. 这里只有“我要一个已经可用的 media worker”这一个需求。
  */
 async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
+  const 是安全上下文 =
+    typeof globalThis.isSecureContext === "boolean" ? globalThis.isSecureContext : true;
+  if (!是安全上下文) {
+    throw new 协作分发运行时环境不支持错误();
+  }
   const platform = 获取默认浏览器应用平台();
   await platform.启动();
   const registration = platform.serviceWorker.读取注册("media");

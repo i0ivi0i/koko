@@ -6,6 +6,7 @@ import {
   重置协作分发浏览器运行时,
   清理协作分发底层会话,
   协作分发JoinTicket失效错误,
+  协作分发运行时环境不支持错误,
   type WebTorrent浏览器客户端,
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
@@ -449,6 +450,53 @@ describe("媒体协作分发", () => {
     expect(registration.active.postMessage).toHaveBeenCalledWith({
       type: "CLAIM_CLIENTS",
     });
+    expect(ctorSpy).not.toHaveBeenCalled();
+    expect(createServer).not.toHaveBeenCalled();
+    mod.重置协作分发浏览器运行时();
+    vi.doUnmock("../平台/index.js");
+  });
+
+  it("非安全上下文会直接拒绝协作分发运行时初始化，并返回稳定语义错误", async () => {
+    vi.resetModules();
+    vi.stubGlobal("isSecureContext", false);
+    const platform = {
+      启动: vi.fn(async () => undefined),
+      snapshot: () => ({
+        serviceWorker: {
+          controllerAttached: true,
+        },
+      }),
+      serviceWorker: {
+        读取注册: vi.fn(),
+      },
+    };
+    vi.doMock("../平台/index.js", () => ({
+      获取默认浏览器应用平台: () => platform,
+    }));
+    const ctorSpy = vi.fn();
+    const createServer = vi.fn();
+    class FakeWebTorrent {
+      constructor() {
+        ctorSpy();
+      }
+
+      createServer = createServer;
+      add = vi.fn();
+      destroy = vi.fn();
+      remove = vi.fn();
+    }
+    const mod = await import("../媒体/媒体协作分发");
+
+    await expect(
+      mod.获取或创建协作分发浏览器运行时(async () => FakeWebTorrent as never)
+    ).rejects.toMatchObject({
+      name: "协作分发运行时环境不支持错误",
+      code: "swarm_runtime_unsupported",
+      reason: "insecure_context",
+    } satisfies Pick<协作分发运行时环境不支持错误, "name" | "code" | "reason">);
+
+    expect(platform.启动).not.toHaveBeenCalled();
+    expect(platform.serviceWorker.读取注册).not.toHaveBeenCalled();
     expect(ctorSpy).not.toHaveBeenCalled();
     expect(createServer).not.toHaveBeenCalled();
     mod.重置协作分发浏览器运行时();

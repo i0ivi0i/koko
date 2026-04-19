@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放器, 媒体是否默认循环播放 } from "../媒体/媒体播放";
-import { 协作分发JoinTicket失效错误 } from "../媒体/媒体协作分发";
+import {
+  协作分发JoinTicket失效错误,
+  协作分发运行时环境不支持错误,
+} from "../媒体/媒体协作分发";
 
 describe("媒体播放器", () => {
   it("视频默认启用循环播放，而图片不会被纳入这条策略", () => {
@@ -1710,6 +1713,71 @@ describe("媒体播放器", () => {
     expect(releaseSwarmSource).toHaveBeenCalledWith({
       attachmentId: "att-video-peer-only-viewer",
       consumerId: "session:att-video-peer-only-viewer",
+    });
+  });
+
+  it("peer_only_after_expiry 在非安全上下文触发 runtime 不支持时，会返回明确诊断而不是笼统不可获取", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-peer-only-insecure-context",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-peer-only-insecure-context",
+      thumbnail_url: "http://media.local/poster-video-peer-only-insecure-context",
+      distribution: {
+        content_id: "content_att-video-peer-only-insecure-context",
+        content_hash: "hash-video-peer-only-insecure-context",
+        swarm_id: "swarm-hash-video-peer-only-insecure-context",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-peer-only-insecure-context",
+        torrent_info_hash: "torrent-info-hash-video-peer-only-insecure-context",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+      streaming_asset: null,
+      blob_asset: null,
+    }));
+    const resolveSwarmSource = vi.fn(async () => {
+      throw new 协作分发运行时环境不支持错误();
+    });
+    const probeAnchor = vi.fn(async () => undefined);
+    const releaseSwarmSource = vi.fn();
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+      releaseSwarmSource,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-peer-only-insecure-context",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-peer-only-insecure-context",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-peer-only-insecure-context",
+      kind: "video",
+      src: "",
+      thumbnailUrl: "http://media.local/poster-video-peer-only-insecure-context",
+      reason: "swarm_runtime_unsupported",
+      hint: "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）",
+    });
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-peer-only-insecure-context",
+        consumerId: "session:att-video-peer-only-insecure-context",
+      })
+    );
+    expect(probeAnchor).not.toHaveBeenCalled();
+    expect(releaseSwarmSource).toHaveBeenCalledWith({
+      attachmentId: "att-video-peer-only-insecure-context",
+      consumerId: "session:att-video-peer-only-insecure-context",
     });
   });
 
