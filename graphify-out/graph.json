@@ -3225,7 +3225,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L1",
       "id": "tests_powershell_https_script_tests_ps1",
-      "community": 20
+      "community": 21
     },
     {
       "label": "Assert-Equal()",
@@ -3233,7 +3233,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L13",
       "id": "https_script_tests_assert_equal",
-      "community": 20
+      "community": 21
     },
     {
       "label": "Assert-True()",
@@ -3241,7 +3241,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L25",
       "id": "https_script_tests_assert_true",
-      "community": 20
+      "community": 21
     },
     {
       "label": "Assert-False()",
@@ -3249,7 +3249,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L36",
       "id": "https_script_tests_assert_false",
-      "community": 20
+      "community": 21
     },
     {
       "label": "\u539f\u56fe\u5185\u5bb9\u63a5\u53e3\u652f\u6301\u6807\u51c6range\u8bfb\u53d6()",
@@ -3425,7 +3425,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L1",
       "id": "tests_prepare_rs",
-      "community": 21
+      "community": 20
     },
     {
       "label": "prepare\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deTus\u5951\u7ea6()",
@@ -3433,7 +3433,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L52",
       "id": "prepare_prepare_tus",
-      "community": 21
+      "community": 20
     },
     {
       "label": "prepare\u89c6\u9891\u4e0a\u4f20\u4f1a\u62d2\u7edd\u8d85\u8fc7200mb\u7684\u8bf7\u6c42\u5e76\u5141\u8bb8200mb\u8fb9\u754c\u503c()",
@@ -3441,7 +3441,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L146",
       "id": "prepare_prepare_200mb_200mb",
-      "community": 21
+      "community": 20
     },
     {
       "label": "prepare\u8fd0\u8f93\u6388\u6743\u5199\u5165\u5931\u8d25\u65f6\u4e0d\u4f1a\u7559\u4e0b\u5b64\u513fprepared\u9644\u4ef6()",
@@ -3449,7 +3449,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L277",
       "id": "prepare_prepare_prepared",
-      "community": 21
+      "community": 20
     },
     {
       "label": "tus_hook.rs",
