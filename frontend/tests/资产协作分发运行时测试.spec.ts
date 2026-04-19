@@ -86,6 +86,7 @@ function 准备已激活媒体ServiceWorker注册() {
 function 创建可观测假Torrent(streamURL: string) {
   const handlers: Record<string, Array<(...args: unknown[]) => void>> = {
     error: [],
+    warning: [],
     wire: [],
     noPeers: [],
     done: [],
@@ -110,7 +111,7 @@ function 创建可观测假Torrent(streamURL: string) {
     torrent,
     select,
     destroy,
-    emit(event: "error" | "wire" | "noPeers" | "done", ...args: unknown[]) {
+    emit(event: "error" | "warning" | "wire" | "noPeers" | "done", ...args: unknown[]) {
       const eventHandlers = handlers[event] ?? [];
       for (const handler of eventHandlers) {
         handler(...args);
@@ -289,7 +290,7 @@ describe("资产协作分发运行时", () => {
       locallyComplete: false,
     });
 
-    emit("error", new Error("join_ticket_invalid"));
+    emit("warning", new Error("join_ticket_invalid"));
     await Promise.resolve();
     await Promise.resolve();
 

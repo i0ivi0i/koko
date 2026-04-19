@@ -249,7 +249,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 22
+      "community": 21
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -257,7 +257,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L42",
       "id": "app_sw",
-      "community": 22
+      "community": 21
     },
     {
       "label": "css.d.ts",
@@ -1147,7 +1147,7 @@
       "label": "\u521b\u5efa\u5047WebTorrent\u6784\u9020\u5668()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
-      "source_location": "L122",
+      "source_location": "L123",
       "id": "spec_webtorrent",
       "community": 8
     },
@@ -1155,7 +1155,7 @@
       "label": "FakeWebTorrent",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L239",
+      "source_location": "L240",
       "id": "spec_fakewebtorrent",
       "community": 8
     },
@@ -1163,7 +1163,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L240",
+      "source_location": "L241",
       "id": "spec_fakewebtorrent_constructor",
       "community": 8
     },
@@ -1655,7 +1655,7 @@
       "label": "\u534f\u4f5c\u5206\u53d1JoinTicket\u5931\u6548\u9519\u8bef",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L80",
+      "source_location": "L81",
       "id": "jointicket",
       "community": 2
     },
@@ -1663,7 +1663,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L83",
+      "source_location": "L84",
       "id": "jointicket_constructor",
       "community": 2
     },
@@ -1679,7 +1679,7 @@
       "label": "\u9ed8\u8ba4\u52a0\u8f7dWebTorrent\u6d4f\u89c8\u5668\u6784\u9020\u5668()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L196",
+      "source_location": "L197",
       "id": "webtorrent",
       "community": 2
     },
@@ -1687,7 +1687,7 @@
       "label": "\u9ed8\u8ba4\u8bfb\u53d6\u5a92\u4f53ServiceWorker\u6ce8\u518c()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L207",
+      "source_location": "L208",
       "id": "serviceworker",
       "community": 2
     },
@@ -2841,7 +2841,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 21
+      "community": 22
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2849,7 +2849,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 21
+      "community": 22
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -4609,7 +4609,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L104",
+      "source_location": "L105",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "jointicket",
@@ -4633,7 +4633,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L196",
+      "source_location": "L197",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "webtorrent",
@@ -4645,7 +4645,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L207",
+      "source_location": "L208",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "serviceworker",
@@ -5329,7 +5329,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6.ts",
-      "source_location": "L756",
+      "source_location": "L763",
       "weight": 1.0,
       "_src": "",
       "_tgt": "actor",
@@ -6085,7 +6085,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
-      "source_location": "L122",
+      "source_location": "L123",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec_webtorrent",
@@ -6097,7 +6097,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L432",
+      "source_location": "L433",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec_fakewebtorrent",
@@ -6601,7 +6601,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.spec.ts",
-      "source_location": "L433",
+      "source_location": "L434",
       "weight": 1.0,
       "_src": "spec_fakewebtorrent",
       "_tgt": "spec_fakewebtorrent_constructor",
@@ -7153,7 +7153,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L83",
+      "source_location": "L84",
       "weight": 1.0,
       "_src": "jointicket",
       "_tgt": "jointicket_constructor",

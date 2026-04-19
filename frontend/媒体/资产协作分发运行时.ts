@@ -507,6 +507,32 @@ function 绑定协作分发会话事件(
   torrent: WebTorrent种子,
   browserRuntime: Awaited<ReturnType<typeof 获取或创建协作分发浏览器运行时>>
 ) {
+  const 处理JoinTicket失效 = (error: unknown) => {
+    if (!是否为协作分发JoinTicket失效错误(error)) {
+      return;
+    }
+    /**
+     * join ticket 失效属于“这条 swarm 会话已经不可信”：
+     * 1. 旧会话必须立刻退场，避免 reuseOnly 继续命中脏 runtime；
+     * 2. 这里只发布稳定的 ticket invalid 语义，不把 tracker 私有报错直接扩散给壳层；
+     * 3. 真正怎么刷新 locator、怎么恢复播放，继续交回播放器/媒体会话 owner。
+     */
+    if (runtime.底层会话表.get(session.swarmId) !== session) {
+      return;
+    }
+    停止协作分发存活上报(session);
+    session.terminalError = error;
+    session.hint = null;
+    发布协作分发会话事件(session, "SWARM_TICKET_INVALID");
+    删除底层协作分发会话(runtime, session.swarmId, session);
+    if (!runtime.已销毁) {
+      runtime.actor.send({
+        type: "SESSION_DROPPED",
+        swarmId: session.swarmId,
+      });
+    }
+  };
+
   torrent.on("wire", (wire) => {
     session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
     发送事件(runtime, {
@@ -536,29 +562,10 @@ function 绑定协作分发会话事件(
     发布协作分发会话事件(session, "ASSET_COMPLETE");
   });
   torrent.on("error", (error) => {
-    if (!是否为协作分发JoinTicket失效错误(error)) {
-      return;
-    }
-    /**
-     * join ticket 失效属于“这条 swarm 会话已经不可信”：
-     * 1. 旧会话必须立刻退场，避免 reuseOnly 继续命中脏 runtime；
-     * 2. 这里只发布稳定的 ticket invalid 语义，不把 tracker 私有报错直接扩散给壳层；
-     * 3. 真正怎么刷新 locator、怎么恢复播放，继续交回播放器/媒体会话 owner。
-     */
-    if (runtime.底层会话表.get(session.swarmId) !== session) {
-      return;
-    }
-    停止协作分发存活上报(session);
-    session.terminalError = error;
-    session.hint = null;
-    发布协作分发会话事件(session, "SWARM_TICKET_INVALID");
-    删除底层协作分发会话(runtime, session.swarmId, session);
-    if (!runtime.已销毁) {
-      runtime.actor.send({
-        type: "SESSION_DROPPED",
-        swarmId: session.swarmId,
-      });
-    }
+    处理JoinTicket失效(error);
+  });
+  torrent.on("warning", (warning) => {
+    处理JoinTicket失效(warning);
   });
 }
 

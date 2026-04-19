@@ -14,6 +14,7 @@ export interface WebTorrent连接 {
 export interface WebTorrent种子 {
   files: WebTorrent文件[];
   on(event: "error", handler: (error: unknown) => void): void;
+  on(event: "warning", handler: (warning: unknown) => void): void;
   on(event: "wire", handler: (wire: WebTorrent连接) => void): void;
   on(event: "noPeers", handler: () => void): void;
   on(event: "done", handler: () => void): void;
@@ -386,6 +387,21 @@ export async function 接入协作分发种子(
 ): Promise<WebTorrent种子> {
   const torrentBytes = await 拉取受控Torrent字节(distribution);
   return await new Promise<WebTorrent种子>((resolve, reject) => {
+    let 已结束 = false;
+    const 收口resolve = (torrent: WebTorrent种子) => {
+      if (已结束) {
+        return;
+      }
+      已结束 = true;
+      resolve(torrent);
+    };
+    const 收口reject = (error: unknown) => {
+      if (已结束) {
+        return;
+      }
+      已结束 = true;
+      reject(归一化协作分发错误(error));
+    };
     const torrent = runtime.client.add(
       torrentBytes,
       {
@@ -403,10 +419,16 @@ export async function 接入协作分发种子(
           };
         },
       },
-      resolve
+      收口resolve
     );
     torrent.on("error", (error) => {
-      reject(归一化协作分发错误(error));
+      收口reject(error);
+    });
+    torrent.on("warning", (warning) => {
+      if (!是否为协作分发JoinTicket失效错误(warning)) {
+        return;
+      }
+      收口reject(warning);
     });
   });
 }

@@ -104,6 +104,7 @@ function 准备已激活媒体ServiceWorker注册() {
 function 创建可观测假Torrent(streamURL: string) {
   const handlers: Record<string, Array<(...args: unknown[]) => void>> = {
     error: [],
+    warning: [],
     wire: [],
     noPeers: [],
     done: [],
@@ -125,7 +126,7 @@ function 创建可观测假Torrent(streamURL: string) {
   return {
     torrent,
     select,
-    emit(event: "error" | "wire" | "noPeers" | "done", ...args: unknown[]) {
+    emit(event: "error" | "warning" | "wire" | "noPeers" | "done", ...args: unknown[]) {
       const eventHandlers = handlers[event] ?? [];
       for (const handler of eventHandlers) {
         handler(...args);
@@ -952,6 +953,59 @@ describe("媒体协作分发", () => {
       })
     ).rejects.toBeInstanceOf(协作分发JoinTicket失效错误);
     expect(读取协作分发会话状态("swarm-att-stream-probe-ticket-invalid-1")).toBeNull();
+  });
+
+  it("streamURL 探测期间若 tracker 通过 warning 返回 join_ticket_invalid，也会抛出 ticket 失效语义", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    let emittedTicketInvalid = false;
+    const { torrent, emit } = 创建可观测假Torrent(
+      "/webtorrent/stream-probe-ticket-warning-invalid-1.mp4"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-stream-probe-ticket-warning-invalid-1")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/stream-probe-ticket-warning-invalid-1.mp4")) {
+          if (!emittedTicketInvalid) {
+            emittedTicketInvalid = true;
+            emit("warning", new Error("join_ticket_invalid"));
+          }
+          return {
+            ok: false,
+            status: 404,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await expect(
+      解析协作分发源({
+        attachmentId: "att-stream-probe-ticket-warning-invalid-1",
+        kind: "video",
+        locator: 准备好的定位结果("att-stream-probe-ticket-warning-invalid-1"),
+      })
+    ).rejects.toBeInstanceOf(协作分发JoinTicket失效错误);
+    expect(读取协作分发会话状态("swarm-att-stream-probe-ticket-warning-invalid-1")).toBeNull();
   });
 
   it("受控 torrent 首次拉到后会缓存元数据，后端临时离线重开时仍能复用本地 swarm 描述", async () => {
