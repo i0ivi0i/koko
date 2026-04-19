@@ -4,6 +4,102 @@
   "graph": {},
   "nodes": [
     {
+      "label": "https.ps1",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L1",
+      "id": "https_ps1",
+      "community": 13
+    },
+    {
+      "label": "Resolve-AppPortFromEnvContent()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L10",
+      "id": "https_resolve_appportfromenvcontent",
+      "community": 13
+    },
+    {
+      "label": "Resolve-AppPortFromEnvFile()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L40",
+      "id": "https_resolve_appportfromenvfile",
+      "community": 13
+    },
+    {
+      "label": "Test-LoopbackPortOpen()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L54",
+      "id": "https_test_loopbackportopen",
+      "community": 13
+    },
+    {
+      "label": "Wait-LoopbackPortOpen()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L76",
+      "id": "https_wait_loopbackportopen",
+      "community": 13
+    },
+    {
+      "label": "Resolve-PwshPath()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L92",
+      "id": "https_resolve_pwshpath",
+      "community": 13
+    },
+    {
+      "label": "Resolve-CloudflaredDownloadUrl()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L106",
+      "id": "https_resolve_cloudflareddownloadurl",
+      "community": 13
+    },
+    {
+      "label": "Ensure-CloudflaredBinary()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L118",
+      "id": "https_ensure_cloudflaredbinary",
+      "community": 13
+    },
+    {
+      "label": "Build-QuickTunnelArgumentList()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L149",
+      "id": "https_build_quicktunnelargumentlist",
+      "community": 13
+    },
+    {
+      "label": "Start-AppViaRunScriptIfNeeded()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L162",
+      "id": "https_start_appviarunscriptifneeded",
+      "community": 13
+    },
+    {
+      "label": "Invoke-CloudflareQuickTunnel()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L203",
+      "id": "https_invoke_cloudflarequicktunnel",
+      "community": 13
+    },
+    {
+      "label": "Invoke-HttpsBootstrap()",
+      "file_type": "code",
+      "source_file": "https.ps1",
+      "source_location": "L247",
+      "id": "https_invoke_httpsbootstrap",
+      "community": 13
+    },
+    {
       "label": "qingli.ps1",
       "file_type": "code",
       "source_file": "qingli.ps1",
@@ -241,7 +337,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 29
+      "community": 31
     },
     {
       "label": "app-sw.ts",
@@ -265,7 +361,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 25
+      "community": 27
     },
     {
       "label": "media-sw.ts",
@@ -273,7 +369,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L1",
       "id": "frontend_media_sw_ts",
-      "community": 20
+      "community": 22
     },
     {
       "label": "\u662f\u56fe\u7247Blob\u8d44\u4ea7\u8bf7\u6c42()",
@@ -281,7 +377,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L19",
       "id": "media_sw_blob",
-      "community": 20
+      "community": 22
     },
     {
       "label": "\u547d\u4e2d\u6216\u56de\u586b\u56fe\u7247\u8d44\u4ea7\u7f13\u5b58()",
@@ -289,7 +385,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L30",
       "id": "media_sw",
-      "community": 20
+      "community": 22
     },
     {
       "label": "vitest.config.ts",
@@ -297,7 +393,7 @@
       "source_file": "frontend\\vitest.config.ts",
       "source_location": "L1",
       "id": "frontend_vitest_config_ts",
-      "community": 27
+      "community": 29
     },
     {
       "label": "webtorrent.d.ts",
@@ -305,7 +401,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 30
+      "community": 32
     },
     {
       "label": "\u901a\u77e5\u8fd0\u884c\u65f6.ts",
@@ -709,7 +805,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 24
+      "community": 26
     },
     {
       "label": "revokeDraftPreviewUrl()",
@@ -821,7 +917,7 @@
       "source_file": "frontend\\tests\\blob\u5a92\u4f53\u8d44\u4ea7\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_blob_spec_ts",
-      "community": 26
+      "community": 28
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -829,7 +925,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_realtime_spec_ts",
-      "community": 13
+      "community": 14
     },
     {
       "label": "startBackend()",
@@ -837,7 +933,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L534",
       "id": "realtime_spec_startbackend",
-      "community": 13
+      "community": 14
     },
     {
       "label": "ensureBackendBinaryPrepared()",
@@ -845,7 +941,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L549",
       "id": "realtime_spec_ensurebackendbinaryprepared",
-      "community": 13
+      "community": 14
     },
     {
       "label": "allocatePort()",
@@ -853,7 +949,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L576",
       "id": "realtime_spec_allocateport",
-      "community": 13
+      "community": 14
     },
     {
       "label": "waitForServer()",
@@ -861,7 +957,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L595",
       "id": "realtime_spec_waitforserver",
-      "community": 13
+      "community": 14
     },
     {
       "label": "getJson()",
@@ -869,7 +965,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L606",
       "id": "realtime_spec_getjson",
-      "community": 13
+      "community": 14
     },
     {
       "label": "postJson()",
@@ -877,7 +973,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L614",
       "id": "realtime_spec_postjson",
-      "community": 13
+      "community": 14
     },
     {
       "label": "once()",
@@ -885,7 +981,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L626",
       "id": "realtime_spec_once",
-      "community": 13
+      "community": 14
     },
     {
       "label": "expectNoEvent()",
@@ -893,7 +989,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L638",
       "id": "realtime_spec_expectnoevent",
-      "community": 13
+      "community": 14
     },
     {
       "label": "uniqueRoomCode()",
@@ -901,7 +997,7 @@
       "source_file": "frontend\\tests\\realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
       "source_location": "L653",
       "id": "realtime_spec_uniqueroomcode",
-      "community": 13
+      "community": 14
     },
     {
       "label": "videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
@@ -909,7 +1005,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_videojs_spec_ts",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u521b\u5efa\u5047\u64ad\u653e\u5668\u6839()",
@@ -917,7 +1013,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L6",
       "id": "videojs_spec",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u5047Hls\u6784\u9020\u5668",
@@ -925,7 +1021,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L66",
       "id": "videojs_spec_hls",
-      "community": 15
+      "community": 16
     },
     {
       "label": ".isSupported()",
@@ -933,7 +1029,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L67",
       "id": "videojs_spec_hls_issupported",
-      "community": 15
+      "community": 16
     },
     {
       "label": ".constructor()",
@@ -941,7 +1037,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L197",
       "id": "videojs_spec_hls_constructor",
-      "community": 15
+      "community": 16
     },
     {
       "label": ".on()",
@@ -949,7 +1045,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L201",
       "id": "videojs_spec_hls_on",
-      "community": 15
+      "community": 16
     },
     {
       "label": "get()",
@@ -957,7 +1053,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L262",
       "id": "videojs_spec_get",
-      "community": 15
+      "community": 16
     },
     {
       "label": "set()",
@@ -965,7 +1061,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L267",
       "id": "videojs_spec_set",
-      "community": 15
+      "community": 16
     },
     {
       "label": "\u9875\u9762\u9aa8\u67b6\u6d4b\u8bd5.spec.ts",
@@ -1313,7 +1409,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 24
+      "community": 26
     },
     {
       "label": ".addEventListener()",
@@ -1937,7 +2033,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "src_lib_rs",
-      "community": 28
+      "community": 30
     },
     {
       "label": "main()",
@@ -2841,7 +2937,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 22
+      "community": 24
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u5305\u542b_preview_full_original_\u800c\u4e0d\u662f\u666e\u901a\u9644\u4ef6\u76f4\u94fe()",
@@ -2849,7 +2945,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_preview_full_original",
-      "community": 22
+      "community": 24
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -2969,7 +3065,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 21
+      "community": 25
     },
     {
       "label": "Assert-True()",
@@ -2977,7 +3073,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 21
+      "community": 25
     },
     {
       "label": "\u89c6\u9891locator\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3108,6 +3204,30 @@
       "community": 1
     },
     {
+      "label": "https-script.tests.ps1",
+      "file_type": "code",
+      "source_file": "tests\\powershell\\https-script.tests.ps1",
+      "source_location": "L1",
+      "id": "tests_powershell_https_script_tests_ps1",
+      "community": 21
+    },
+    {
+      "label": "Assert-Equal()",
+      "file_type": "code",
+      "source_file": "tests\\powershell\\https-script.tests.ps1",
+      "source_location": "L13",
+      "id": "https_script_tests_assert_equal",
+      "community": 21
+    },
+    {
+      "label": "Assert-True()",
+      "file_type": "code",
+      "source_file": "tests\\powershell\\https-script.tests.ps1",
+      "source_location": "L25",
+      "id": "https_script_tests_assert_true",
+      "community": 21
+    },
+    {
       "label": "\u539f\u56fe\u5185\u5bb9\u63a5\u53e3\u652f\u6301\u6807\u51c6range\u8bfb\u53d6()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u5185\u5bb9\u8bfb\u53d6.rs",
@@ -3177,7 +3297,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L1",
       "id": "tests_abandon_rs",
-      "community": 17
+      "community": 18
     },
     {
       "label": "\u542f\u52a8\u5047tus_termination\u4fa7\u8f66()",
@@ -3185,7 +3305,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L18",
       "id": "abandon_tus_termination",
-      "community": 17
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u540c\u65f6\u6807\u8bb0\u9644\u4ef6\u4e0etransport\u4e3aabandoned\u5e76\u6e05\u6389\u5df2\u767b\u8bb0\u7684\u4e34\u65f6\u6587\u4ef6()",
@@ -3193,7 +3313,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L61",
       "id": "abandon_transport_abandoned",
-      "community": 17
+      "community": 18
     },
     {
       "label": "abandon\u4f1a\u5148\u5199\u4e1a\u52a1abandoned\u518d\u534f\u8c03\u5b98\u65b9termination()",
@@ -3201,7 +3321,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L207",
       "id": "abandon_abandon_abandoned_termination",
-      "community": 17
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u6e05\u6389\u5f53\u524d\u4f1a\u8bdd\u4e0b\u6240\u6709partial\u4e34\u65f6\u6587\u4ef6()",
@@ -3209,7 +3329,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L321",
       "id": "abandon_partial",
-      "community": 17
+      "community": 18
     },
     {
       "label": "complete.rs",
@@ -3217,7 +3337,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L1",
       "id": "tests_complete_rs",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u4f1a\u628aprepared\u9644\u4ef6\u5347\u7ea7\u6210ready\u5e76\u5199\u5165\u7f29\u7565\u56fe()",
@@ -3225,7 +3345,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L9",
       "id": "complete_complete_prepared_ready",
-      "community": 14
+      "community": 15
     },
     {
       "label": "\u6ca1\u6709\u4e0a\u4f20\u56de\u6267\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deattachment_not_ready()",
@@ -3233,7 +3353,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L223",
       "id": "complete_complete_attachment_not_ready",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u5728\u53ea\u6709partial\u6ca1\u6709final\u65f6\u4f1a\u8fd4\u56deattachment_not_ready()",
@@ -3241,7 +3361,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L285",
       "id": "complete_complete_partial_final_attachment_not_ready",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u4f1a\u4f18\u5148\u6d88\u8d39\u5f53\u524d\u4f1a\u8bdd\u7684final\u56de\u6267\u800c\u4e0d\u662fsingle\u56de\u6267()",
@@ -3249,7 +3369,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L385",
       "id": "complete_complete_final_single",
-      "community": 14
+      "community": 15
     },
     {
       "label": "post_finish\u7a0d\u540e\u5230\u8fbe\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u7b49\u5f85\u56de\u6267\u5e76\u6210\u529f()",
@@ -3257,7 +3377,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L513",
       "id": "complete_post_finish_complete",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u89c6\u9891\u4e0a\u4f20\u4f1a\u5199\u5165\u9759\u6001\u5c01\u9762\u5e76\u8fd4\u56depreview_asset()",
@@ -3265,7 +3385,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L623",
       "id": "complete_complete_preview_asset",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u9047\u5230\u975e\u56fe\u7247\u539f\u56fe\u4f1a\u8fd4\u56deattachment_type_not_allowed()",
@@ -3273,7 +3393,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L1111",
       "id": "complete_complete_attachment_type_not_allowed",
-      "community": 14
+      "community": 15
     },
     {
       "label": "prepare.rs",
@@ -3281,7 +3401,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L1",
       "id": "tests_prepare_rs",
-      "community": 19
+      "community": 20
     },
     {
       "label": "prepare\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deTus\u5951\u7ea6()",
@@ -3289,7 +3409,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L52",
       "id": "prepare_prepare_tus",
-      "community": 19
+      "community": 20
     },
     {
       "label": "prepare\u89c6\u9891\u4e0a\u4f20\u4f1a\u62d2\u7edd\u8d85\u8fc7200mb\u7684\u8bf7\u6c42\u5e76\u5141\u8bb8200mb\u8fb9\u754c\u503c()",
@@ -3297,7 +3417,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L146",
       "id": "prepare_prepare_200mb_200mb",
-      "community": 19
+      "community": 20
     },
     {
       "label": "prepare\u8fd0\u8f93\u6388\u6743\u5199\u5165\u5931\u8d25\u65f6\u4e0d\u4f1a\u7559\u4e0b\u5b64\u513fprepared\u9644\u4ef6()",
@@ -3305,7 +3425,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\prepare.rs",
       "source_location": "L277",
       "id": "prepare_prepare_prepared",
-      "community": 19
+      "community": 20
     },
     {
       "label": "tus_hook.rs",
@@ -3537,7 +3657,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L1",
       "id": "tests_fixture_rs",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u5199\u5165tus\u6d4b\u8bd5\u6587\u4ef6()",
@@ -3545,7 +3665,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L6",
       "id": "fixture_tus",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u6700\u5c0fpng\u5b57\u8282()",
@@ -3553,7 +3673,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L21",
       "id": "fixture_png",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u6700\u5c0fmp4\u5b57\u8282()",
@@ -3561,7 +3681,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L33",
       "id": "fixture_mp4",
-      "community": 18
+      "community": 19
     },
     {
       "label": "seed.rs",
@@ -3593,7 +3713,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\tus.rs",
       "source_location": "L1",
       "id": "tests_tus_rs",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u65ad\u8a00TusHook\u5df2\u63a5\u53d7()",
@@ -3601,7 +3721,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\tus.rs",
       "source_location": "L16",
       "id": "tus_tushook",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u89e3\u6790_tus_hook\u56de\u4f20_http\u54cd\u5e94\u4f53()",
@@ -3609,7 +3729,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\tus.rs",
       "source_location": "L21",
       "id": "tus_tus_hook_http",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u65ad\u8a00TusHook\u62d2\u7eddTermination()",
@@ -3617,7 +3737,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\tus.rs",
       "source_location": "L52",
       "id": "tus_tushook_termination",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u6784\u9020tus_hook\u8bf7\u6c42\u4f53()",
@@ -3625,7 +3745,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\tus.rs",
       "source_location": "L79",
       "id": "tus_tus_hook",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u6784\u9020tus_concatenation_hook\u8bf7\u6c42\u4f53()",
@@ -3633,7 +3753,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\tus.rs",
       "source_location": "L153",
       "id": "tus_tus_concatenation_hook",
-      "community": 16
+      "community": 17
     },
     {
       "label": "\u65ad\u8a00\u5a92\u4f53\u51c6\u5907\u7ed3\u679c\u662fTus\u5951\u7ea6()",
@@ -3641,10 +3761,286 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\tus.rs",
       "source_location": "L199",
       "id": "tus_tus",
-      "community": 16
+      "community": 17
     }
   ],
   "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L10",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_resolve_appportfromenvcontent",
+      "source": "https_ps1",
+      "target": "https_resolve_appportfromenvcontent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L40",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_resolve_appportfromenvfile",
+      "source": "https_ps1",
+      "target": "https_resolve_appportfromenvfile",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L54",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_test_loopbackportopen",
+      "source": "https_ps1",
+      "target": "https_test_loopbackportopen",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L76",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_wait_loopbackportopen",
+      "source": "https_ps1",
+      "target": "https_wait_loopbackportopen",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L92",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_resolve_pwshpath",
+      "source": "https_ps1",
+      "target": "https_resolve_pwshpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L106",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_resolve_cloudflareddownloadurl",
+      "source": "https_ps1",
+      "target": "https_resolve_cloudflareddownloadurl",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L118",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_ensure_cloudflaredbinary",
+      "source": "https_ps1",
+      "target": "https_ensure_cloudflaredbinary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L149",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_build_quicktunnelargumentlist",
+      "source": "https_ps1",
+      "target": "https_build_quicktunnelargumentlist",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L162",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_start_appviarunscriptifneeded",
+      "source": "https_ps1",
+      "target": "https_start_appviarunscriptifneeded",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L203",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_invoke_cloudflarequicktunnel",
+      "source": "https_ps1",
+      "target": "https_invoke_cloudflarequicktunnel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L247",
+      "weight": 1.0,
+      "_src": "https_ps1",
+      "_tgt": "https_invoke_httpsbootstrap",
+      "source": "https_ps1",
+      "target": "https_invoke_httpsbootstrap",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_src": "https_resolve_appportfromenvfile",
+      "_tgt": "https_resolve_appportfromenvcontent",
+      "source": "https_resolve_appportfromenvcontent",
+      "target": "https_resolve_appportfromenvfile",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L257",
+      "weight": 1.0,
+      "_src": "https_invoke_httpsbootstrap",
+      "_tgt": "https_resolve_appportfromenvfile",
+      "source": "https_resolve_appportfromenvfile",
+      "target": "https_invoke_httpsbootstrap",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L84",
+      "weight": 1.0,
+      "_src": "https_wait_loopbackportopen",
+      "_tgt": "https_test_loopbackportopen",
+      "source": "https_test_loopbackportopen",
+      "target": "https_wait_loopbackportopen",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L168",
+      "weight": 1.0,
+      "_src": "https_start_appviarunscriptifneeded",
+      "_tgt": "https_test_loopbackportopen",
+      "source": "https_test_loopbackportopen",
+      "target": "https_start_appviarunscriptifneeded",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L195",
+      "weight": 1.0,
+      "_src": "https_start_appviarunscriptifneeded",
+      "_tgt": "https_wait_loopbackportopen",
+      "source": "https_wait_loopbackportopen",
+      "target": "https_start_appviarunscriptifneeded",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L178",
+      "weight": 1.0,
+      "_src": "https_start_appviarunscriptifneeded",
+      "_tgt": "https_resolve_pwshpath",
+      "source": "https_resolve_pwshpath",
+      "target": "https_start_appviarunscriptifneeded",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L137",
+      "weight": 1.0,
+      "_src": "https_ensure_cloudflaredbinary",
+      "_tgt": "https_resolve_cloudflareddownloadurl",
+      "source": "https_resolve_cloudflareddownloadurl",
+      "target": "https_ensure_cloudflaredbinary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L275",
+      "weight": 1.0,
+      "_src": "https_invoke_httpsbootstrap",
+      "_tgt": "https_ensure_cloudflaredbinary",
+      "source": "https_ensure_cloudflaredbinary",
+      "target": "https_invoke_httpsbootstrap",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L210",
+      "weight": 1.0,
+      "_src": "https_invoke_cloudflarequicktunnel",
+      "_tgt": "https_build_quicktunnelargumentlist",
+      "source": "https_build_quicktunnelargumentlist",
+      "target": "https_invoke_cloudflarequicktunnel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L258",
+      "weight": 1.0,
+      "_src": "https_invoke_httpsbootstrap",
+      "_tgt": "https_build_quicktunnelargumentlist",
+      "source": "https_build_quicktunnelargumentlist",
+      "target": "https_invoke_httpsbootstrap",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L269",
+      "weight": 1.0,
+      "_src": "https_invoke_httpsbootstrap",
+      "_tgt": "https_start_appviarunscriptifneeded",
+      "source": "https_start_appviarunscriptifneeded",
+      "target": "https_invoke_httpsbootstrap",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "https.ps1",
+      "source_location": "L277",
+      "weight": 1.0,
+      "_src": "https_invoke_httpsbootstrap",
+      "_tgt": "https_invoke_cloudflarequicktunnel",
+      "source": "https_invoke_cloudflarequicktunnel",
+      "target": "https_invoke_httpsbootstrap",
+      "confidence_score": 1.0
+    },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
@@ -10063,6 +10459,30 @@
       "_tgt": "assert_true",
       "source": "tests_ps1",
       "target": "assert_true",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\powershell\\https-script.tests.ps1",
+      "source_location": "L13",
+      "weight": 1.0,
+      "_src": "tests_powershell_https_script_tests_ps1",
+      "_tgt": "https_script_tests_assert_equal",
+      "source": "tests_powershell_https_script_tests_ps1",
+      "target": "https_script_tests_assert_equal",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\powershell\\https-script.tests.ps1",
+      "source_location": "L25",
+      "weight": 1.0,
+      "_src": "tests_powershell_https_script_tests_ps1",
+      "_tgt": "https_script_tests_assert_true",
+      "source": "tests_powershell_https_script_tests_ps1",
+      "target": "https_script_tests_assert_true",
       "confidence_score": 1.0
     },
     {
