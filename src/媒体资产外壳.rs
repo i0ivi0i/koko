@@ -763,7 +763,6 @@ pub(super) async fn load_media_locator(
     );
     let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
         state.swarm_tracker_public_url.as_str(),
-        state.swarm_tracker_port,
         &headers,
     );
     let now_epoch秒 = SystemTime::now()

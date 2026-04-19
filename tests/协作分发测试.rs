@@ -955,13 +955,43 @@ async fn 未显式配置tracker公网地址时locator会按请求host推导可�
     assert_eq!(lan_status, StatusCode::OK);
     assert_eq!(
         lan_body["distribution"]["announce_urls"][0].as_str(),
-        Some("ws://192.168.31.50:7072"),
-        "未显式配置 SWARM_TRACKER_PUBLIC_URL 时，应按请求 Host 推导 LAN 可达 tracker 地址"
+        Some("ws://192.168.31.50:8080/api/swarm/announce"),
+        "未显式配置 SWARM_TRACKER_PUBLIC_URL 时，应回推同源 announce 代理入口，不能继续把侧车端口裸露给浏览器"
     );
     assert_eq!(proxy_status, StatusCode::OK);
     assert_eq!(
         proxy_body["distribution"]["announce_urls"][0].as_str(),
-        Some("wss://im.example.com"),
-        "反向代理透传 https host 时，应回推 wss 公网 announce，而不是继续泄漏 ws://127.0.0.1"
+        Some("wss://im.example.com/api/swarm/announce"),
+        "反向代理透传 https host 时，应回推同源 wss announce 代理入口，而不是继续返回裸域名"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 同源tracker代理入口会响应websocket握手而不是404() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url, cfg.admin_password)
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, _headers, _body) = send_bytes(
+        app,
+        Method::GET,
+        "/api/swarm/announce?info_hash=fake&peer_id=fake&port=6881",
+        &[
+            ("connection", "Upgrade"),
+            ("upgrade", "websocket"),
+            ("sec-websocket-version", "13"),
+            ("sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ=="),
+        ],
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::UPGRADE_REQUIRED,
+        "同源 tracker announce 入口必须被路由识别；即使测试请求未完整升级，也不应返回 404"
     );
 }

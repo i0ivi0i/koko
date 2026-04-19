@@ -8,7 +8,8 @@ use crate::{
     usecase::仓储端口,
 };
 use axum::{
-    extract::{Path, State},
+    body::Body,
+    extract::{Path, Request, State},
     http::{uri::Authority, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -301,7 +302,6 @@ pub(super) async fn complete_media_upload(
     };
     let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
         state.swarm_tracker_public_url.as_str(),
-        state.swarm_tracker_port,
         &headers,
     );
     let state_for_usecase = state.clone();
@@ -1163,6 +1163,101 @@ pub(super) async fn abandon_media_upload(
 /// 1. 只有 business abandon 已经成功之后，shell 才会来协调它；
 /// 2. 没配置内部 guard 时，继续退回本地残留清理兜底，不让取消主链直接失败；
 /// 3. DELETE 失败只记日志，不回滚已经成立的 abandoned 真相。
+///
+/// 同源 Tus 上传透传入口：
+/// 1. 只负责把 `/files...` 协议流量转发给 sidecar，不承载业务裁决；
+/// 2. sidecar 不可达时显式返回 502 + 稳定错误码，避免前端停在“上传中”无诊断信号；
+/// 3. 保持请求方法与关键头语义，避免再出现“prepare 给了地址但入口不存在”的双真相。
+pub(super) async fn proxy_tus_upload_transport(
+    State(state): State<应用状态>,
+    request: Request,
+) -> Response {
+    let (parts, body) = request.into_parts();
+    let normalized_tus_base_path = 标准化媒体_tus基础路径(state.tus_base_path.as_str());
+    let request_path = parts.uri.path();
+    let tus_resource_tail = request_path
+        .strip_prefix(normalized_tus_base_path.as_str())
+        .unwrap_or(request_path);
+    let internal_upload_endpoint = 读取媒体_tus内部上传入口(&state);
+    let mut upstream_url = format!(
+        "{}{}",
+        internal_upload_endpoint.trim_end_matches('/'),
+        tus_resource_tail
+    );
+    if let Some(query) = parts.uri.query() {
+        upstream_url.push('?');
+        upstream_url.push_str(query);
+    }
+
+    let upstream_method = match reqwest::Method::from_bytes(parts.method.as_str().as_bytes()) {
+        Ok(method) => method,
+        Err(err) => {
+            return err_resp(
+                StatusCode::BAD_REQUEST,
+                "invalid_argument",
+                format!("不支持的 Tus 上传方法: {err}"),
+            )
+        }
+    };
+    let mut upstream_request = reqwest::Client::new().request(upstream_method, &upstream_url);
+    for (name, value) in &parts.headers {
+        if name.as_str().eq_ignore_ascii_case("host") {
+            continue;
+        }
+        upstream_request = upstream_request.header(name, value);
+    }
+    let upstream_response = match upstream_request
+        .body(reqwest::Body::wrap_stream(body.into_data_stream()))
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            return err_resp(
+                StatusCode::BAD_GATEWAY,
+                "media_tus_upstream_unreachable",
+                format!("Tus sidecar 不可达: {err}"),
+            )
+        }
+    };
+
+    let status = StatusCode::from_u16(upstream_response.status().as_u16())
+        .unwrap_or(StatusCode::BAD_GATEWAY);
+    let mut response_builder = Response::builder().status(status);
+    for (name, value) in upstream_response.headers() {
+        if name.as_str().eq_ignore_ascii_case("connection")
+            || name.as_str().eq_ignore_ascii_case("keep-alive")
+            || name.as_str().eq_ignore_ascii_case("proxy-authenticate")
+            || name.as_str().eq_ignore_ascii_case("proxy-authorization")
+            || name.as_str().eq_ignore_ascii_case("te")
+            || name.as_str().eq_ignore_ascii_case("trailers")
+            || name.as_str().eq_ignore_ascii_case("transfer-encoding")
+            || name.as_str().eq_ignore_ascii_case("upgrade")
+        {
+            continue;
+        }
+        response_builder = response_builder.header(name, value);
+    }
+    let body = match upstream_response.bytes().await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return err_resp(
+                StatusCode::BAD_GATEWAY,
+                "media_tus_upstream_invalid_response",
+                format!("读取 Tus sidecar 响应失败: {err}"),
+            )
+        }
+    };
+    match response_builder.body(Body::from(body)) {
+        Ok(response) => response,
+        Err(err) => err_resp(
+            StatusCode::BAD_GATEWAY,
+            "media_tus_proxy_response_build_failed",
+            format!("组装 Tus 代理响应失败: {err}"),
+        ),
+    }
+}
+
 async fn 尝试终止媒体_tus上传(
     state: &应用状态,
     upload_id: &str,
@@ -1176,27 +1271,7 @@ async fn 尝试终止媒体_tus上传(
     else {
         return Ok(());
     };
-    let raw_internal_base_url = state
-        .tus_internal_base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| format!("http://127.0.0.1:{}", state.tus_server_port));
-    // `MEDIA_TUS_INTERNAL_BASE_URL` 既兼容“只给 sidecar origin”，也兼容“直接给到 /files endpoint”。
-    // 这里统一归一成真正的上传资源前缀，避免测试、脚本和部署配置各猜各的。
-    let internal_delete_endpoint = if raw_internal_base_url
-        .trim_end_matches('/')
-        .ends_with(state.tus_base_path.as_str())
-    {
-        raw_internal_base_url.trim_end_matches('/').to_string()
-    } else {
-        format!(
-            "{}{}",
-            raw_internal_base_url.trim_end_matches('/'),
-            state.tus_base_path
-        )
-    };
+    let internal_delete_endpoint = 读取媒体_tus内部上传入口(state);
     let delete_url = format!(
         "{}/{}",
         internal_delete_endpoint.trim_end_matches('/'),
@@ -1243,6 +1318,39 @@ fn 生成媒体上传会话标识() -> String {
 fn 生成媒体上传令牌() -> String {
     let raw = Uuid::new_v4().simple().to_string();
     format!("tus-{}", raw)
+}
+
+pub(super) fn 标准化媒体_tus基础路径(raw_path: &str) -> String {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() || trimmed == "/" {
+        return "/files".to_string();
+    }
+    format!("/{}", trimmed.trim_matches('/'))
+}
+
+fn 读取媒体_tus内部上传入口(state: &应用状态) -> String {
+    let normalized_tus_base_path = 标准化媒体_tus基础路径(state.tus_base_path.as_str());
+    let raw_internal_base_url = state
+        .tus_internal_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("http://127.0.0.1:{}", state.tus_server_port));
+    // `MEDIA_TUS_INTERNAL_BASE_URL` 既兼容“只给 sidecar origin”，也兼容“直接给到 /files endpoint”。
+    // 这里统一归一成真正的上传资源前缀，避免测试、脚本和部署配置各猜各的。
+    if raw_internal_base_url
+        .trim_end_matches('/')
+        .ends_with(normalized_tus_base_path.as_str())
+    {
+        raw_internal_base_url.trim_end_matches('/').to_string()
+    } else {
+        format!(
+            "{}{}",
+            raw_internal_base_url.trim_end_matches('/'),
+            normalized_tus_base_path
+        )
+    }
 }
 
 fn 解析媒体类型(
@@ -1391,16 +1499,21 @@ fn 推导媒体tus对外入口(
 }
 
 fn 读取媒体_tus对外地址(state: &应用状态, headers: &HeaderMap) -> String {
+    let normalized_tus_base_path = 标准化媒体_tus基础路径(state.tus_base_path.as_str());
     state
         .tus_public_endpoint
         .clone()
         .or_else(|| {
-            推导媒体tus对外入口(headers, state.tus_server_port, &state.tus_base_path)
+            推导媒体tus对外入口(
+                headers,
+                state.tus_server_port,
+                normalized_tus_base_path.as_str(),
+            )
         })
         .unwrap_or_else(|| {
             format!(
                 "http://127.0.0.1:{}{}",
-                state.tus_server_port, state.tus_base_path
+                state.tus_server_port, normalized_tus_base_path
             )
         })
 }

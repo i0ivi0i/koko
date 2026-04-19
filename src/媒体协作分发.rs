@@ -8,6 +8,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 /// 第一版保底窗口固定 24 小时。
 /// 这里故意收口成常量，避免 shell、adapter、前端各自写一份“24 * 60 * 60”。
 pub(crate) const WEB_SEED_TTL秒: i64 = 24 * 60 * 60;
+pub(crate) const 同源协作分发ANNOUNCE路径: &str = "/api/swarm/announce";
 
 /// 协作分发的内容哈希只认 canonical 共享载荷字节。
 /// 这样 Phase 1 就能稳定得到：
@@ -95,7 +96,7 @@ fn 包装url主机(host: &str) -> String {
     }
 }
 
-fn 推导协作分发tracker对外地址(headers: &HeaderMap, tracker_port: u16) -> Option<String> {
+fn 推导协作分发tracker对外地址(headers: &HeaderMap) -> Option<String> {
     let forwarded_host = 读取首个非空请求头(headers, "x-forwarded-host");
     let raw_host = forwarded_host
         .clone()
@@ -110,9 +111,8 @@ fn 推导协作分发tracker对外地址(headers: &HeaderMap, tracker_port: u16)
         _ => "ws",
     };
     let host_for_url = 包装url主机(authority.host());
-    let should_trust_authority_port =
-        forwarded_host.is_some() || forwarded_proto.is_some() || forwarded_port.is_some();
-    let inferred_proxy_default_port = if should_trust_authority_port {
+    let should_trust_forwarded = forwarded_host.is_some() || forwarded_proto.is_some();
+    let inferred_proxy_default_port = if should_trust_forwarded {
         match ws_scheme {
             "wss" => Some(443),
             "ws" => Some(80),
@@ -122,21 +122,21 @@ fn 推导协作分发tracker对外地址(headers: &HeaderMap, tracker_port: u16)
         None
     };
     let public_port = forwarded_port
-        .or_else(|| {
-            should_trust_authority_port
-                .then(|| authority.port_u16())
-                .flatten()
-        })
-        .or(inferred_proxy_default_port)
-        .unwrap_or(tracker_port);
+        .or_else(|| authority.port_u16())
+        .or(inferred_proxy_default_port);
     let should_omit_port =
-        (ws_scheme == "ws" && public_port == 80) || (ws_scheme == "wss" && public_port == 443);
+        public_port.is_none()
+            || (ws_scheme == "ws" && public_port == Some(80))
+            || (ws_scheme == "wss" && public_port == Some(443));
     let authority_for_url = if should_omit_port {
         host_for_url
     } else {
-        format!("{host_for_url}:{public_port}")
+        format!("{host_for_url}:{}", public_port.unwrap_or_default())
     };
-    Some(format!("{ws_scheme}://{authority_for_url}"))
+    Some(format!(
+        "{ws_scheme}://{authority_for_url}{}",
+        同源协作分发ANNOUNCE路径
+    ))
 }
 
 fn 是回环tracker公开地址(url: &str) -> bool {
@@ -153,13 +153,12 @@ fn 是回环tracker公开地址(url: &str) -> bool {
 /// 才按本次请求头推导一个 LAN/反向代理可达的 announce 地址。
 pub(crate) fn 读取协作分发tracker对外地址(
     configured_tracker_public_url: &str,
-    tracker_port: u16,
     headers: &HeaderMap,
 ) -> String {
     if !是回环tracker公开地址(configured_tracker_public_url) {
         return configured_tracker_public_url.to_string();
     }
-    推导协作分发tracker对外地址(headers, tracker_port)
+    推导协作分发tracker对外地址(headers)
         .unwrap_or_else(|| configured_tracker_public_url.to_string())
 }
 

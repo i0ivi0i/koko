@@ -1,10 +1,14 @@
 use axum::{
-    extract::DefaultBodyLimit,
+    extract::{
+        ws::{CloseFrame as AxumCloseFrame, Message as AxumWsMessage, WebSocket, WebSocketUpgrade},
+        DefaultBodyLimit, OriginalUri, State,
+    },
     http::{header, HeaderValue, StatusCode},
     response::{Html, IntoResponse},
-    routing::{get, post},
+    routing::{any, get, post},
     Json, Router,
 };
+use futures_util::{SinkExt, StreamExt};
 use object_store::{
     aws::{AmazonS3, AmazonS3Builder},
     local::LocalFileSystem,
@@ -28,8 +32,9 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     set_header::response::SetResponseHeaderLayer,
 };
+use tokio_tungstenite::tungstenite;
 
-use crate::{adapter::Pg仓储, contract};
+use crate::{adapter::Pg仓储, contract, media_distribution};
 
 // 这三个私有子模块是 shell 内部的职责收口点。
 // 总壳只保留装配与公共转码，具体协议逻辑分别沉到对应子模块。
@@ -579,11 +584,118 @@ fn 构建_s3客户端(
         .map_err(|err| std::io::Error::other(format!("初始化 S3 兼容对象存储失败: {err}")))
 }
 
+/// 协作分发 tracker 同源代理：
+/// 1. 浏览器永远连当前应用域名下的 `/api/swarm/announce`，不再直连侧车私有端口；
+/// 2. 壳层只做 websocket 字节转发，不承载门禁和业务裁决；
+/// 3. query 全量透传给 tracker，保证 info_hash/peer_id/ticket 语义不漂移。
+async fn proxy_swarm_tracker_announce(
+    State(state): State<应用状态>,
+    original_uri: OriginalUri,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    let announce_query = original_uri.0.query().unwrap_or_default();
+    let upstream_url = if announce_query.is_empty() {
+        format!("ws://127.0.0.1:{}/", state.swarm_tracker_port)
+    } else {
+        format!("ws://127.0.0.1:{}/?{announce_query}", state.swarm_tracker_port)
+    };
+    ws.on_upgrade(move |socket| async move {
+        if let Err(error) = relay_swarm_tracker_socket(socket, upstream_url).await {
+            tracing::warn!(
+                usecase = "协作分发tracker代理",
+                adapter = "http",
+                outcome = "failed",
+                error_code = "swarm_tracker_proxy_failed",
+                detail = %error,
+                "同源 tracker 代理转发失败"
+            );
+        }
+    })
+}
+
+async fn relay_swarm_tracker_socket(
+    socket: WebSocket,
+    upstream_url: String,
+) -> Result<(), String> {
+    let (upstream_socket, _) = tokio_tungstenite::connect_async(upstream_url.as_str())
+        .await
+        .map_err(|error| format!("连接 tracker sidecar 失败: {error}"))?;
+    let (mut client_writer, mut client_reader) = socket.split();
+    let (mut upstream_writer, mut upstream_reader) = upstream_socket.split();
+
+    let client_to_upstream = async {
+        while let Some(message_result) = client_reader.next().await {
+            let message = message_result.map_err(|error| format!("读取客户端 websocket 失败: {error}"))?;
+            let Some(upstream_message) = axum_ws_message_to_tungstenite(message) else {
+                continue;
+            };
+            upstream_writer
+                .send(upstream_message)
+                .await
+                .map_err(|error| format!("写入 tracker sidecar websocket 失败: {error}"))?;
+        }
+        Ok::<(), String>(())
+    };
+
+    let upstream_to_client = async {
+        while let Some(message_result) = upstream_reader.next().await {
+            let message =
+                message_result.map_err(|error| format!("读取 tracker sidecar websocket 失败: {error}"))?;
+            let Some(client_message) = tungstenite_message_to_axum_ws(message) else {
+                continue;
+            };
+            client_writer
+                .send(client_message)
+                .await
+                .map_err(|error| format!("写入客户端 websocket 失败: {error}"))?;
+        }
+        Ok::<(), String>(())
+    };
+
+    tokio::select! {
+        forward_result = client_to_upstream => forward_result?,
+        backward_result = upstream_to_client => backward_result?,
+    }
+    Ok(())
+}
+
+fn axum_ws_message_to_tungstenite(message: AxumWsMessage) -> Option<tungstenite::Message> {
+    match message {
+        AxumWsMessage::Text(text) => Some(tungstenite::Message::Text(text.to_string().into())),
+        AxumWsMessage::Binary(bytes) => Some(tungstenite::Message::Binary(bytes)),
+        AxumWsMessage::Ping(bytes) => Some(tungstenite::Message::Ping(bytes)),
+        AxumWsMessage::Pong(bytes) => Some(tungstenite::Message::Pong(bytes)),
+        AxumWsMessage::Close(_) => Some(tungstenite::Message::Close(None)),
+    }
+}
+
+fn tungstenite_message_to_axum_ws(message: tungstenite::Message) -> Option<AxumWsMessage> {
+    match message {
+        tungstenite::Message::Text(text) => Some(AxumWsMessage::Text(text.to_string().into())),
+        tungstenite::Message::Binary(bytes) => Some(AxumWsMessage::Binary(bytes)),
+        tungstenite::Message::Ping(bytes) => Some(AxumWsMessage::Ping(bytes)),
+        tungstenite::Message::Pong(bytes) => Some(AxumWsMessage::Pong(bytes)),
+        tungstenite::Message::Close(_) => Some(AxumWsMessage::Close(None::<AxumCloseFrame>)),
+        tungstenite::Message::Frame(_) => None,
+    }
+}
+
 pub fn 构建路由(state: 应用状态) -> Router {
     let (socket_layer, io) = SocketIo::new_layer();
     注册realtime命名空间(&io, state.clone());
+    let normalized_tus_base_path =
+        媒体上传外壳::标准化媒体_tus基础路径(state.tus_base_path.as_str());
+    let tus_resource_proxy_path = format!("{normalized_tus_base_path}/{{*tus_upload_tail}}");
 
     Router::new()
+        .route(
+            normalized_tus_base_path.as_str(),
+            any(媒体上传外壳::proxy_tus_upload_transport),
+        )
+        .route(
+            tus_resource_proxy_path.as_str(),
+            any(媒体上传外壳::proxy_tus_upload_transport),
+        )
         .route("/api/session/bootstrap", post(房间外壳::bootstrap_session))
         .route(
             "/api/rooms/join-or-create",
@@ -617,6 +729,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route(
             "/api/media/{attachment_id}/torrent",
             get(媒体资产外壳::load_media_torrent),
+        )
+        .route(
+            media_distribution::同源协作分发ANNOUNCE路径,
+            get(proxy_swarm_tracker_announce),
         )
         .route(
             "/api/media/{attachment_id}/presence",

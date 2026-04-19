@@ -15,7 +15,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["e
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"] }
 # 当前 HTTP 冷路径只需要 JSON、查询解析、Tokio runtime 和 HTTP/1 服务能力，
 # 不需要 axum 默认附带的表单、额外追踪胶水等默认特性。
-axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1", "multipart"] }
+axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1", "multipart", "ws", "original-uri"] }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = "1"
 # 外部可见的公开句柄暂不设计，但内部身份已经需要时间有序 UUID 作为真锚点；
@@ -53,6 +53,8 @@ time = { version = "0.3.47", features = ["formatting"] }
 # 后端现在只需要极薄地向 tusd 发官方 DELETE；
 # 这里显式收一层成熟 HTTP client，避免再手搓 transport 删除调用。
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
 # 标准 HTTP 缓存验证器需要稳定的 IMF-fixdate 解析/格式化；
 # 这里直接复用成熟小轮子，避免自己手搓 Last-Modified / If-Modified-Since 细节。
 httpdate = "1"

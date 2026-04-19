@@ -299,3 +299,48 @@ async fn prepare媒体上传在仅有forwarded_proto时会按协议默认端口�
     );
     恢复环境变量(backup);
 }
+
+#[tokio::test]
+#[serial]
+#[allow(non_snake_case)]
+async fn 媒体上传同源Tus入口在未连通sidecar时应返回502而不是404() {
+    let backup = 备份并清空环境变量(&[
+        "MEDIA_TUS_PUBLIC_ENDPOINT",
+        "MEDIA_TUS_SERVER_PORT",
+        "MEDIA_TUS_BASE_PATH",
+        "MEDIA_TUS_INTERNAL_BASE_URL",
+    ]);
+    env::set_var("MEDIA_TUS_SERVER_PORT", "1081");
+    env::set_var("MEDIA_TUS_BASE_PATH", "/files");
+    env::set_var("MEDIA_TUS_INTERNAL_BASE_URL", "http://127.0.0.1:65534");
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, body) = send_json(
+        app,
+        Method::OPTIONS,
+        "/files",
+        None,
+        &[("tus-resumable", "1.0.0")],
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::BAD_GATEWAY,
+        "同源 Tus 入口必须先进入转发链路；即使 sidecar 暂时不可达也应返回 502，而不是路由缺失 404"
+    );
+    assert_eq!(
+        body["code"].as_str(),
+        Some("media_tus_upstream_unreachable"),
+        "上传入口不可达时应返回可诊断错误码，避免前端只能看到永久上传中"
+    );
+    恢复环境变量(backup);
+}
