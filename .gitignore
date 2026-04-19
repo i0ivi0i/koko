@@ -31,6 +31,7 @@ __pycache__/
 
 # Local runtime data stays out of version control.
 /data/
+tmp/
 
 # Graphify output is local generated state and should not participate in version control.
 graphify-out/
