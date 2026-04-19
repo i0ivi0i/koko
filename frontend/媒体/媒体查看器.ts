@@ -280,9 +280,7 @@ const 启动同会话全屏策略 = (
   video: 可原生全屏视频元素,
   回收查看器: () => void,
   options: {
-    已预请求系统全屏?: boolean;
-    备用全屏目标?: 可原生全屏容器元素 | null;
-    同步沉浸查看器显示阶段?: (phase: "pending" | "active") => void;
+    同步沉浸查看器显示阶段?: () => void;
   } = {}
 ): 同会话全屏策略控制器 => {
   const sessionId = `media-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -312,9 +310,7 @@ const 启动同会话全屏策略 = (
     return owners;
   };
   const 主目标Owner链 = 读取全屏Owner链(fullscreenTarget);
-  const 备用目标Owner链 = 读取全屏Owner链(options.备用全屏目标 ?? null);
   const 主目标Owner集合 = new Set<Element>(主目标Owner链);
-  const 备用目标Owner集合 = new Set<Element>(备用目标Owner链);
   const 元素落在Owner链里 = (element: Element | null, owners: Set<Element>): boolean => {
     if (!element || owners.size === 0) {
       return false;
@@ -323,16 +319,12 @@ const 启动同会话全屏策略 = (
   };
   const 是主全屏目标 = (element: Element | null): boolean =>
     元素落在Owner链里(element, 主目标Owner集合);
-  const 是备用全屏目标 = (element: Element | null): boolean =>
-    元素落在Owner链里(element, 备用目标Owner集合);
-  const 是本会话全屏元素 = (element: Element | null): boolean =>
-    是主全屏目标(element) || 是备用全屏目标(element);
-  const 同步沉浸查看器显示阶段 = (phase: "pending" | "active"): void => {
-    options.同步沉浸查看器显示阶段?.(phase);
+  const 是本会话全屏元素 = (element: Element | null): boolean => 是主全屏目标(element);
+  const 同步沉浸查看器显示阶段 = (): void => {
+    options.同步沉浸查看器显示阶段?.();
   };
   let cleaned = false;
   let 本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
-  let 主全屏目标已接管 = 是主全屏目标(document.fullscreenElement);
   let 本会话正在原生视频全屏 = false;
   let historyPushed = false;
   let historyConsumedByUser = false;
@@ -378,7 +370,7 @@ const 启动同会话全屏策略 = (
   const handleNativeVideoFullscreenStart = (): void => {
     本会话已接管系统全屏 = true;
     本会话正在原生视频全屏 = true;
-    同步沉浸查看器显示阶段("active");
+    同步沉浸查看器显示阶段();
     lockScreenOrientation();
   };
   const handleNativeVideoFullscreenEnd = (): void => {
@@ -456,22 +448,7 @@ const 启动同会话全屏策略 = (
   const handleFullscreenChange = (): void => {
     if (是主全屏目标(document.fullscreenElement)) {
       本会话已接管系统全屏 = true;
-      主全屏目标已接管 = true;
-      同步沉浸查看器显示阶段("active");
-      return;
-    }
-    if (是备用全屏目标(document.fullscreenElement)) {
-      if (主全屏目标已接管) {
-        /**
-         * 当主目标（container/skin）已经接管过后，回落到备用 overlay 代表用户触发了
-         * 一次“退出全屏”。这个时刻必须沿同一条关闭 owner 链一次性退场，
-         * 不能把 overlay 留在系统全屏里，避免出现“还要再返回一次”的双阶段体验。
-         */
-        closeFullscreen();
-        return;
-      }
-      本会话已接管系统全屏 = true;
-      同步沉浸查看器显示阶段("pending");
+      同步沉浸查看器显示阶段();
       return;
     }
     if (存在待结算的系统全屏退出 && !document.fullscreenElement) {
@@ -523,41 +500,26 @@ const 启动同会话全屏策略 = (
   video.addEventListener("webkitendfullscreen", handleNativeVideoFullscreenEnd);
   pushMediaHistoryEntry();
 
-  /**
-   * 真正需要保住用户激活的是“进入系统全屏”这一拍，而不是播放器壳何时异步装好。
-   * 所以这里允许外层先在查看器表面预请求系统全屏；等真实 video 就绪后，再接回同一条
-   * 历史/方向锁/关闭 owner 链，避免移动端首击被异步壳注册吃掉。
-   */
   startPlayback();
-  if (options.已预请求系统全屏) {
-    同步沉浸查看器显示阶段(
-      主全屏目标已接管 || 本会话正在原生视频全屏 ? "active" : "pending"
-    );
-    lockScreenOrientation();
-  } else if (
-    !存在待结算的系统全屏退出 &&
-    typeof fullscreenTarget.requestFullscreen === "function"
-  ) {
+  if (!存在待结算的系统全屏退出 && typeof fullscreenTarget.requestFullscreen === "function") {
     void fullscreenTarget
       .requestFullscreen({ navigationUI: "hide" })
       .then(() => {
         本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
-        同步沉浸查看器显示阶段(
-          主全屏目标已接管 || 本会话正在原生视频全屏 ? "active" : "pending"
-        );
+        同步沉浸查看器显示阶段();
         lockScreenOrientation();
         startPlayback();
       })
       .catch(() => {
-        同步沉浸查看器显示阶段("active");
+        同步沉浸查看器显示阶段();
       });
   } else if (!存在待结算的系统全屏退出 && 请求原生视频真全屏(video)) {
     本会话已接管系统全屏 = true;
     本会话正在原生视频全屏 = true;
-    同步沉浸查看器显示阶段("active");
+    同步沉浸查看器显示阶段();
     lockScreenOrientation();
   } else {
-    同步沉浸查看器显示阶段("active");
+    同步沉浸查看器显示阶段();
     lockScreenOrientation();
   }
 
@@ -573,7 +535,6 @@ const 创建默认VideoJs播放器层 = async (
   hooks: 媒体查看器运行时钩子,
   options: {
     shouldAutoEnterFullscreen: boolean;
-    preferPlayerContainerFullscreenOwner?: boolean;
   }
 ): Promise<媒体查看器实例> => {
   if (typeof document === "undefined" || !document.body) {
@@ -586,33 +547,14 @@ const 创建默认VideoJs播放器层 = async (
   const 使用沉浸查看器布局 = options.shouldAutoEnterFullscreen;
   const 沉浸查看器可见样式 =
     "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:0;opacity:1;pointer-events:auto;";
-  const 沉浸查看器待接管样式 =
-    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:transparent;padding:0;opacity:0;pointer-events:none;";
   const 对话查看器样式 =
     "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgb(0 0 0 / 0.92);padding:20px;";
-  const 同步沉浸查看器显示阶段 = (phase: "pending" | "active"): void => {
-    if (!使用沉浸查看器布局) {
-      overlay.dataset.mediaViewerFullscreenPhase = "active";
-      overlay.removeAttribute("aria-hidden");
-      closeButton.style.opacity = "1";
-      closeButton.style.pointerEvents = "auto";
-      return;
-    }
-    /**
-     * overlay 可以先被插进 DOM 给全屏 API 当宿主，但在系统 fullscreen 真正接管前，
-     * 不能先把这层沉浸表面亮给用户，否则肉眼看到的就是“先放大一下再真全屏”。
-     */
-    overlay.dataset.mediaViewerFullscreenPhase = phase;
-    overlay.style.cssText = phase === "active" ? 沉浸查看器可见样式 : 沉浸查看器待接管样式;
-    if (phase === "active") {
-      overlay.removeAttribute("aria-hidden");
-      closeButton.style.opacity = "1";
-      closeButton.style.pointerEvents = "auto";
-      return;
-    }
-    overlay.setAttribute("aria-hidden", "true");
-    closeButton.style.opacity = "0";
-    closeButton.style.pointerEvents = "none";
+  const 同步沉浸查看器显示阶段 = (): void => {
+    overlay.dataset.mediaViewerFullscreenPhase = "active";
+    overlay.style.cssText = 使用沉浸查看器布局 ? 沉浸查看器可见样式 : 对话查看器样式;
+    overlay.removeAttribute("aria-hidden");
+    closeButton.style.opacity = "1";
+    closeButton.style.pointerEvents = "auto";
   };
 
   overlay.dataset.mediaViewerMode = "video";
@@ -622,7 +564,7 @@ const 创建默认VideoJs播放器层 = async (
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "视频查看器");
-  overlay.style.cssText = 使用沉浸查看器布局 ? 沉浸查看器待接管样式 : 对话查看器样式;
+  overlay.style.cssText = 使用沉浸查看器布局 ? 沉浸查看器可见样式 : 对话查看器样式;
   /**
    * 查看器必须先给播放器壳一个明确的挂载盒子：
    * 1. 尺寸上限属于查看器 overlay，本身就是 shell 的职责；
@@ -638,20 +580,19 @@ const 创建默认VideoJs播放器层 = async (
   closeButton.setAttribute("aria-label", "关闭视频查看器");
   closeButton.style.cssText =
     "position:fixed;top:16px;right:16px;z-index:1;border:1px solid rgb(255 255 255 / 0.35);border-radius:8px;background:rgb(0 0 0 / 0.7);color:white;padding:8px 12px;font:inherit;";
-  同步沉浸查看器显示阶段(使用沉浸查看器布局 ? "pending" : "active");
+  同步沉浸查看器显示阶段();
 
   overlay.append(mount, closeButton);
   document.body.append(overlay);
   lifecycle.开始视口占用();
-  let 已在查看器表面预请求系统全屏 = false;
 
-    let 当前视频项目 = item;
-    let cleaned = false;
-    let 解绑媒体运行时信号: () => void = () => undefined;
-    let 清理全屏策略: 同会话全屏策略控制器 = {
-      清理: () => undefined,
-      请求关闭: () => undefined,
-    };
+  let 当前视频项目 = item;
+  let cleaned = false;
+  let 解绑媒体运行时信号: () => void = () => undefined;
+  let 清理全屏策略: 同会话全屏策略控制器 = {
+    清理: () => undefined,
+    请求关闭: () => undefined,
+  };
   const 挂接P2PHls增强层 = async ({ hls }: 壳外P2PHls增强层输入): Promise<void> => {
     /**
      * `p2p-media-loader-hlsjs` 在这里始终只是 HLS 支路的外挂增强：
@@ -684,90 +625,11 @@ const 创建默认VideoJs播放器层 = async (
       mountTarget: mount,
       挂接P2PHls增强层,
     });
-    const 壳创建是异步 = 看起来像Promise(shell结果);
-    if (
-      options.shouldAutoEnterFullscreen &&
-      壳创建是异步 &&
-      !存在待结算的系统全屏退出 &&
-      typeof overlay.requestFullscreen === "function"
-    ) {
-      /**
-       * 只有壳创建会跨出当前手势窗口时，才允许先用 overlay 保住系统全屏激活。
-       * 若壳本身可同栈创建，就应直接把第一次 requestFullscreen 打到最终 owner（container）。
-       */
-      已在查看器表面预请求系统全屏 = true;
-      void overlay.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
-    }
     const shell: VideoJs播放器壳实例 = 看起来像Promise(shell结果)
       ? await shell结果
       : shell结果;
     const video = shell.读取视频元素();
     const container = shell.读取容器元素();
-    const 全屏真相目标 =
-      options.preferPlayerContainerFullscreenOwner === true ? container : overlay;
-    let 取消容器全屏接管监听 = (): void => undefined;
-    if (
-      options.shouldAutoEnterFullscreen &&
-      全屏真相目标 === container &&
-      container !== overlay &&
-      typeof container.requestFullscreen === "function"
-    ) {
-      let 容器接管重试计时器: ReturnType<typeof globalThis.setTimeout> | null = null;
-      let 剩余容器接管重试次数 = 8;
-      const 看起来像激活约束错误 = (error: unknown): boolean => {
-        if (!(error instanceof Error)) {
-          return false;
-        }
-        const message = error.message.toLowerCase();
-        return message.includes("activation") || message.includes("gesture");
-      };
-      const 安排下一次容器接管重试 = (): void => {
-        if (
-          剩余容器接管重试次数 <= 0 ||
-          容器接管重试计时器 != null ||
-          document.fullscreenElement !== overlay
-        ) {
-          return;
-        }
-        容器接管重试计时器 = globalThis.setTimeout(() => {
-          容器接管重试计时器 = null;
-          尝试容器接管系统全屏();
-        }, 50);
-      };
-      /**
-       * 查看器表面负责抢占用户激活，播放器容器负责承载“正在全屏”的最终语义。
-       * 这里把已拿到的全屏会话转交给 Video.js 的真实 media-container，
-       * 避免控件还显示 Enter fullscreen 的“假全屏”错觉。
-       */
-      const 尝试容器接管系统全屏 = (): void => {
-        if (document.fullscreenElement !== overlay || 剩余容器接管重试次数 <= 0) {
-          return;
-        }
-        剩余容器接管重试次数 -= 1;
-        void container.requestFullscreen({ navigationUI: "hide" }).catch((error: unknown) => {
-          if (看起来像激活约束错误(error)) {
-            return;
-          }
-          安排下一次容器接管重试();
-        });
-      };
-      const 监听全屏变化接管 = (): void => {
-        if (document.fullscreenElement === overlay) {
-          尝试容器接管系统全屏();
-          return;
-        }
-        取消容器全屏接管监听();
-      };
-      取消容器全屏接管监听 = (): void => {
-        if (容器接管重试计时器 != null) {
-          globalThis.clearTimeout(容器接管重试计时器);
-          容器接管重试计时器 = null;
-        }
-        document.removeEventListener("fullscreenchange", 监听全屏变化接管);
-      };
-      document.addEventListener("fullscreenchange", 监听全屏变化接管);
-      尝试容器接管系统全屏();
-    }
     const 重新绑定媒体运行时信号 = (attachmentId: string): void => {
       解绑媒体运行时信号();
       解绑媒体运行时信号 = 绑定媒体运行时信号(video, attachmentId, hooks);
@@ -788,7 +650,6 @@ const 创建默认VideoJs播放器层 = async (
       closeButton.removeEventListener("click", 请求关闭);
       overlay.removeEventListener("click", closeWhenClickingBackdrop);
       document.removeEventListener("keydown", closeWhenPressingEscape);
-      取消容器全屏接管监听();
       解绑媒体运行时信号();
       清理全屏策略.清理();
       video.pause();
@@ -823,13 +684,11 @@ const 创建默认VideoJs播放器层 = async (
        */
       清理全屏策略 = 启动同会话全屏策略(
         () => 当前视频项目,
-        全屏真相目标,
+        container,
         container,
         video,
         cleanup,
         {
-          已预请求系统全屏: 已在查看器表面预请求系统全屏,
-          备用全屏目标: 全屏真相目标 === container ? overlay : null,
           同步沉浸查看器显示阶段,
         }
       );
@@ -878,13 +737,10 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
       创建默认VideoJs播放器层(item, lifecycle, hooks, {
         /**
          * 从消息流显式打开正式视频查看器，本身就是“进入沉浸观看”的明确用户意图。
-         * 真全屏不该只在移动端成立；桌面端也要沿同一条 overlay/fullscreen owner 链
-         * 先尝试系统 fullscreen，失败时再自然回落到同一个查看器表面，而不是另起
-         * 一套“桌面放大卡片”的假全屏分支。
+         * 真全屏不该只在移动端成立；桌面端也沿同一条容器 owner 链尝试系统 fullscreen，
+         * 失败时再自然回落到同一个查看器表面，而不是另起一套“桌面放大卡片”的假分支。
          */
         shouldAutoEnterFullscreen: true,
-        // 不再按触屏能力分叉 owner：同一播放器会话统一把全屏真相收口到 media-container。
-        preferPlayerContainerFullscreenOwner: true,
       }));
   let current: 媒体查看器实例 | null = null;
   let openGeneration = 0;

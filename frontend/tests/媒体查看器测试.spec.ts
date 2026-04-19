@@ -541,8 +541,8 @@ describe("媒体查看器适配器", () => {
     expect(mediaContainer).not.toBeNull();
     expect(document.fullscreenElement).toBe(mediaContainer);
     expect(document.fullscreenElement).not.toBe(overlay);
-    expect(requestFullscreen).toHaveBeenCalledTimes(2);
-    expect(requestFullscreen.mock.instances.at(-1)).toBe(mediaContainer);
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(requestFullscreen.mock.instances.at(0)).toBe(mediaContainer);
     expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
     expect(mount).not.toBeNull();
     expect(mount?.style.width).toBe("100%");
@@ -556,7 +556,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
-  it("标准系统全屏真正接管前，不会先把沉浸查看器亮出来造成假放大动作", async () => {
+  it("标准系统全屏请求挂起时，查看器不会切到额外的 pending 伪状态", async () => {
     vi.resetModules();
     const 创建VideoJs播放器壳 = vi.fn(
       (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) => {
@@ -608,10 +608,10 @@ describe("媒体查看器适配器", () => {
       expect(container).not.toBeNull();
       expect(待完成进入请求).toHaveLength(1);
       expect(待完成进入请求[0]?.target).toBe(container);
-      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
-      expect(overlay?.style.opacity).toBe("0");
-      expect(overlay?.style.pointerEvents).toBe("none");
-      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
+      expect(overlay?.style.opacity).toBe("1");
+      expect(overlay?.style.pointerEvents).toBe("auto");
+      expect(overlay?.getAttribute("aria-hidden")).toBeNull();
 
       完成进入(0);
       await Promise.resolve();
@@ -1013,7 +1013,7 @@ describe("媒体查看器适配器", () => {
     expect(mount?.style.height).toBe("100%");
   });
 
-  it("移动端首击打开时，会在异步 Video.js 壳就绪前先请求系统全屏，避免丢失用户激活", async () => {
+  it("移动端异步壳场景下，全屏请求只会在容器就绪后触发一次", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -1063,8 +1063,8 @@ describe("媒体查看器适配器", () => {
       })
     );
 
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(激活快照).toEqual([true]);
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
+    expect(激活快照).toEqual([]);
     expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(1);
     expect(document.body.querySelector("[data-media-viewer-mount='video']")).not.toBeNull();
 
@@ -1072,10 +1072,16 @@ describe("媒体查看器适配器", () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    const container = document.body.querySelector<HTMLElement>(".fake-mobile-container");
+    expect(container).not.toBeNull();
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(requestFullscreen.mock.instances.at(0)).toBe(container);
+    expect(激活快照).toEqual([false]);
+
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
   });
 
-  it("异步壳需要先借 overlay 保住全屏激活时，也不会先把 overlay 亮给用户", async () => {
+  it("异步壳就绪前不会触发 overlay 预请求，且就绪后只会对容器发起一次全屏请求", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -1126,11 +1132,8 @@ describe("媒体查看器适配器", () => {
       });
 
       const overlay = await 等待查询元素<HTMLElement>('[aria-label="视频查看器"]');
-      expect(待完成进入请求).toHaveLength(1);
-      expect(待完成进入请求[0]?.target).toBe(overlay);
-      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
-      expect(overlay?.style.opacity).toBe("0");
-      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+      expect(overlay).not.toBeNull();
+      expect(待完成进入请求).toHaveLength(0);
 
       延迟壳解析器.at(0)?.();
       await Promise.resolve();
@@ -1139,22 +1142,13 @@ describe("媒体查看器适配器", () => {
       const container = document.body.querySelector<HTMLElement>(".fake-mobile-container");
       expect(container).not.toBeNull();
 
+      expect(待完成进入请求).toHaveLength(1);
+      expect(待完成进入请求[0]?.target).toBe(container);
+
       完成进入(0);
       await Promise.resolve();
-
-      expect(待完成进入请求).toHaveLength(2);
-      expect(待完成进入请求[1]?.target).toBe(container);
-      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
-      expect(overlay?.style.opacity).toBe("0");
-
-      完成进入(1);
       await Promise.resolve();
-      await Promise.resolve();
-
-      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
-      expect(overlay?.style.opacity).toBe("1");
-      expect(overlay?.style.pointerEvents).toBe("auto");
-      expect(overlay?.getAttribute("aria-hidden")).toBeNull();
+      expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
 
       viewer.销毁();
     } finally {
@@ -1422,7 +1416,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelector("video")).toBeNull();
   });
 
-  it("移动端关闭上一条视频后，下一条视频的首击仍会立即请求系统全屏，不需要等第二次点击", async () => {
+  it("移动端关闭上一条视频后，下一条视频仍沿同一容器链一次触发全屏请求", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -1451,30 +1445,29 @@ describe("媒体查看器适配器", () => {
       预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
     }));
     const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
-    const { requestFullscreen, 激活快照, 以瞬时激活执行 } = 安装严格瞬时激活全屏模拟();
+    const { requestFullscreen } = 安装全屏DOM模拟();
     const viewer = 创建媒体查看器({
       isMobileViewport: () => true,
     });
 
-    以瞬时激活执行(() =>
-      viewer.打开({
-        startAttachmentId: "att-video-mobile-reopen-1",
-        items: [
-          {
-            kind: "video",
-            attachmentId: "att-video-mobile-reopen-1",
-            src: "blob:http://media.local/mobile-reopen-video-1",
-            posterSrc: "http://media.local/poster-mobile-reopen-1",
-            width: 720,
-            height: 1280,
-          },
-        ],
-      })
-    );
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-reopen-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-reopen-1",
+          src: "blob:http://media.local/mobile-reopen-video-1",
+          posterSrc: "http://media.local/poster-mobile-reopen-1",
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
     延迟壳解析器.at(0)?.();
     await Promise.resolve();
     await Promise.resolve();
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
     document.body
       .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
@@ -1482,28 +1475,26 @@ describe("媒体查看器适配器", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    以瞬时激活执行(() =>
-      viewer.打开({
-        startAttachmentId: "att-video-mobile-reopen-2",
-        items: [
-          {
-            kind: "video",
-            attachmentId: "att-video-mobile-reopen-2",
-            src: "blob:http://media.local/mobile-reopen-video-2",
-            posterSrc: "http://media.local/poster-mobile-reopen-2",
-            width: 1280,
-            height: 720,
-          },
-        ],
-      })
-    );
+    viewer.打开({
+      startAttachmentId: "att-video-mobile-reopen-2",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-mobile-reopen-2",
+          src: "blob:http://media.local/mobile-reopen-video-2",
+          posterSrc: "http://media.local/poster-mobile-reopen-2",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
 
-    expect(requestFullscreen).toHaveBeenCalledTimes(3);
-    expect(激活快照.filter(Boolean)).toEqual([true, true]);
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
     延迟壳解析器.at(1)?.();
     await Promise.resolve();
     await Promise.resolve();
+    expect(requestFullscreen).toHaveBeenCalledTimes(2);
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
   });
 
@@ -1635,7 +1626,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelector("video")).toBeInstanceOf(HTMLVideoElement);
   });
 
-  it("移动端主全屏退出若回落到预请求 overlay，也会在同次返回里直接回到群聊", async () => {
+  it("异步壳路径不会形成 overlay/container 双层全屏栈，一次退出就直接回到群聊", async () => {
     vi.resetModules();
     const 延迟壳解析器: Array<() => void> = [];
     const 创建VideoJs播放器壳 = vi.fn(
@@ -1682,16 +1673,17 @@ describe("媒体查看器适配器", () => {
         },
       ],
     });
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(requestFullscreen).toHaveBeenCalledTimes(0);
     延迟壳解析器.at(0)?.();
     await Promise.resolve();
     await Promise.resolve();
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
-    // 模拟用户按一次返回/Esc：浏览器先退出最上层 container，全屏会回落到预请求 overlay。
+    // 单 owner 下只会退出一次 container，全屏不会回落到第二层 overlay。
     await document.exitFullscreen?.();
     await Promise.resolve();
 
-    expect(exitFullscreen).toHaveBeenCalledTimes(2);
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
     expect(document.fullscreenElement).toBeNull();
     expect(document.body.querySelector('[aria-label="视频查看器"]')).toBeNull();
     expect(document.body.querySelector("video")).toBeNull();
