@@ -556,7 +556,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
-  it("标准系统全屏请求挂起时，查看器不会切到额外的 pending 伪状态", async () => {
+  it("标准系统全屏请求挂起时，沉浸查看器不会提前亮起或暴露关闭按钮", async () => {
     vi.resetModules();
     const 创建VideoJs播放器壳 = vi.fn(
       (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) => {
@@ -608,10 +608,15 @@ describe("媒体查看器适配器", () => {
       expect(container).not.toBeNull();
       expect(待完成进入请求).toHaveLength(1);
       expect(待完成进入请求[0]?.target).toBe(container);
-      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
-      expect(overlay?.style.opacity).toBe("1");
-      expect(overlay?.style.pointerEvents).toBe("auto");
-      expect(overlay?.getAttribute("aria-hidden")).toBeNull();
+      const closeButton = overlay?.querySelector<HTMLButtonElement>(
+        'button[aria-label="关闭视频查看器"]'
+      );
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
+      expect(overlay?.style.opacity).toBe("0");
+      expect(overlay?.style.pointerEvents).toBe("none");
+      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+      expect(closeButton?.style.opacity).toBe("0");
+      expect(closeButton?.style.pointerEvents).toBe("none");
 
       完成进入(0);
       await Promise.resolve();
@@ -620,6 +625,8 @@ describe("媒体查看器适配器", () => {
       expect(overlay?.style.opacity).toBe("1");
       expect(overlay?.style.pointerEvents).toBe("auto");
       expect(overlay?.getAttribute("aria-hidden")).toBeNull();
+      expect(closeButton?.style.opacity).toBe("1");
+      expect(closeButton?.style.pointerEvents).toBe("auto");
 
       viewer.销毁();
     } finally {
@@ -1134,6 +1141,10 @@ describe("媒体查看器适配器", () => {
       const overlay = await 等待查询元素<HTMLElement>('[aria-label="视频查看器"]');
       expect(overlay).not.toBeNull();
       expect(待完成进入请求).toHaveLength(0);
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
+      expect(overlay?.style.opacity).toBe("0");
+      expect(overlay?.style.pointerEvents).toBe("none");
+      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
 
       延迟壳解析器.at(0)?.();
       await Promise.resolve();
@@ -1144,11 +1155,19 @@ describe("媒体查看器适配器", () => {
 
       expect(待完成进入请求).toHaveLength(1);
       expect(待完成进入请求[0]?.target).toBe(container);
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("pending");
+      expect(overlay?.style.opacity).toBe("0");
+      expect(overlay?.style.pointerEvents).toBe("none");
+      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
 
       完成进入(0);
       await Promise.resolve();
       await Promise.resolve();
       expect(overlay?.dataset.mediaViewerPresentation).toBe("immersive");
+      expect(overlay?.dataset.mediaViewerFullscreenPhase).toBe("active");
+      expect(overlay?.style.opacity).toBe("1");
+      expect(overlay?.style.pointerEvents).toBe("auto");
+      expect(overlay?.getAttribute("aria-hidden")).toBeNull();
 
       viewer.销毁();
     } finally {
@@ -1567,6 +1586,11 @@ describe("媒体查看器适配器", () => {
 
     expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(2);
     expect(document.body.querySelectorAll('[aria-label="视频查看器"]')).toHaveLength(1);
+    /**
+     * 即使上一会话 exitFullscreen 仍在 pending，新会话首击也必须继续尝试系统全屏。
+     * 否则移动端就会退化成“第一次点只进假全屏，第二次再点才真全屏”。
+     */
+    expect(requestFullscreen).toHaveBeenCalledTimes(2);
 
     完成退出();
     await Promise.resolve();
