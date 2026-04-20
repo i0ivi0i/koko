@@ -159,6 +159,7 @@ export class 房间消息窗 extends LitElement {
     if (changedProperties.has("items")) {
       this.同步无封面视频稳定预览缓存();
     }
+    this.同步时间线自动播播放状态(changedProperties);
     const scrollContainer = this.messageScrollRef.value;
     if (!scrollContainer) {
       return;
@@ -171,6 +172,44 @@ export class 房间消息窗 extends LitElement {
     }
     this.同步自动播候选观察(scrollContainer);
     this.调度自动播候选(scrollContainer);
+  }
+
+  private 同步时间线自动播播放状态(changedProperties: PropertyValues<this>): void {
+    if (
+      !changedProperties.has("items") &&
+      !changedProperties.has("mediaPlaybackByAttachmentId") &&
+      !changedProperties.has("inlineAutoplayOwnerAttachmentId") &&
+      !changedProperties.has("inlineAutoplayPlaybackByAttachmentId")
+    ) {
+      return;
+    }
+    /**
+     * 关键约束：
+     * 时间线视频在“同一 src”下从静态预览切到自动播时，仅把 `autoplay=false -> true`
+     * 并不保证浏览器一定会立刻开始播放（尤其是节点已存在且处于 paused 状态时）。
+     * 因此这里显式补一次 `play()`，并在 owner 退场时显式 `pause()`，
+     * 让自动播行为稳定且可预期，避免“看起来是自动播 owner 但画面不动”的回归。
+     */
+    const previewVideos = this.querySelectorAll<HTMLVideoElement>(
+      "video.message-video-preview[data-attachment-id]"
+    );
+    for (const video of previewVideos) {
+      const attachmentId = video.getAttribute("data-attachment-id");
+      if (!attachmentId) {
+        continue;
+      }
+      const shouldAutoplay =
+        this.inlineAutoplayOwnerAttachmentId === attachmentId && video.autoplay;
+      if (shouldAutoplay) {
+        if (video.paused) {
+          void video.play().catch(() => undefined);
+        }
+        continue;
+      }
+      if (!video.paused) {
+        video.pause();
+      }
+    }
   }
 
   private 同步无封面视频稳定预览缓存(): void {
