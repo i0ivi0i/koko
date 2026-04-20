@@ -3,7 +3,7 @@ use super::{
     TUS_INTERNAL_TERMINATION_GUARD_HEADER,
 };
 use crate::{
-    adapter::媒体上传运输角色,
+    adapter::{媒体上传运输回执写入参数, 媒体上传运输角色},
     usecase::{self, 仓储端口},
 };
 use axum::{
@@ -474,16 +474,16 @@ async fn handle_tus_hook_post_finish(state: 应用状态, body: TusHookBody) -> 
             ));
         }
         解析tus临时文件路径(&state_for_repo.tus_upload_dir, &storage_locator_for_repo)?;
-        repo.登记媒体上传运输回执(
-            &upload_session.上传会话标识,
-            &upload_session.附件标识,
-            &upload_session.运输方式,
-            transport_role,
-            None,
-            &upload_id_for_repo,
-            &storage_locator_for_repo,
-            upload_size,
-        )
+        repo.登记媒体上传运输回执(&媒体上传运输回执写入参数 {
+            上传会话标识: upload_session.上传会话标识.clone(),
+            附件标识: upload_session.附件标识.clone(),
+            运输方式: upload_session.运输方式.clone(),
+            运输角色: transport_role,
+            concat_order: None,
+            transport_upload_id: upload_id_for_repo.clone(),
+            storage_locator: storage_locator_for_repo.clone(),
+            byte_size: upload_size,
+        })
         .map_err(map_domain_err_tuple)?;
         Ok::<_, (StatusCode, &'static str, String)>(())
     })
@@ -795,25 +795,6 @@ pub(super) fn 解析tus残留清理目标(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{TusHttpRequestBody, 读取可选请求标识};
-    use std::collections::HashMap;
-
-    #[test]
-    fn 读取可选请求标识会返回非空x_request_id() {
-        let mut headers = HashMap::new();
-        headers.insert("X-Request-Id".to_string(), vec!["req-123".to_string()]);
-        let http_request = TusHttpRequestBody {
-            _method: None,
-            _uri: None,
-            headers,
-        };
-
-        assert_eq!(读取可选请求标识(&http_request).as_deref(), Some("req-123"));
-    }
-}
-
 async fn handle_tus_hook_pre_terminate(state: 应用状态, body: TusHookBody) -> Response {
     let request_id = 读取可选请求标识(&body.event.http_request);
     let upload_id = match 读取tus上传标识(&body.event.upload, "pre-terminate") {
@@ -897,4 +878,23 @@ async fn handle_tus_hook_post_terminate(_state: 应用状态, body: TusHookBody)
         "Tus post-terminate 已记录 transport 删除事实"
     );
     返回tus_hook成功响应()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TusHttpRequestBody, 读取可选请求标识};
+    use std::collections::HashMap;
+
+    #[test]
+    fn 读取可选请求标识会返回非空x_request_id() {
+        let mut headers = HashMap::new();
+        headers.insert("X-Request-Id".to_string(), vec!["req-123".to_string()]);
+        let http_request = TusHttpRequestBody {
+            _method: None,
+            _uri: None,
+            headers,
+        };
+
+        assert_eq!(读取可选请求标识(&http_request).as_deref(), Some("req-123"));
+    }
 }

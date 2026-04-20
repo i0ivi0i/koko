@@ -287,12 +287,17 @@ fn 执行外部命令(
 }
 
 #[cfg(test)]
+type 无损归一化打包输入 = (PathBuf, Option<PathBuf>, PathBuf);
+#[cfg(test)]
+type 打包失败响应 = (StatusCode, &'static str, String);
+
+#[cfg(test)]
 fn 生成无损归一化打包输入(
     ffmpeg_bin: &str,
     输入文件: &StdPath,
     workdir: &StdPath,
     有音轨: bool,
-) -> Result<(PathBuf, Option<PathBuf>, PathBuf), (StatusCode, &'static str, String)> {
+) -> Result<无损归一化打包输入, 打包失败响应> {
     let 归一化文件 = workdir.join("normalized.mp4");
     let mut 归一化容器 = Command::new(ffmpeg_bin);
     归一化容器.args(["-y", "-i"]);

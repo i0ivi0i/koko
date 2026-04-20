@@ -76,6 +76,7 @@ pub fn 断言TusHook拒绝Termination(
 /// - `Upload.MetaData` 继续把 attachment_id 作为业务锚点传回来；
 /// - `HTTPRequest.Header.Authorization` 代表客户端最初打给 sidecar 的上传令牌；
 /// - 其余字段即便 tusd 还会发，也不应该成为我们判断业务真相的依赖。
+#[allow(clippy::too_many_arguments)]
 pub fn 构造tus_hook请求体(
     hook_type: &str,
     authorization: Option<&str>,
@@ -153,6 +154,7 @@ pub fn 构造tus_hook请求体(
 /// 1. 默认仍沿用基础 hook 负载，避免和真实 shell 判断脱节；
 /// 2. 只有角色布尔位、parts 和 upload_session_id 这些 Concatenation 必需字段才额外注入；
 /// 3. fixture 负责表达协议事实，不替业务层做任何裁决。
+#[allow(clippy::too_many_arguments)]
 pub fn 构造tus_concatenation_hook请求体(
     hook_type: &str,
     authorization: Option<&str>,

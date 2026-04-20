@@ -430,6 +430,12 @@ pub(super) async fn complete_media_upload(
             }
         };
     let complete_heavy_work_started_at = Instant::now();
+    let complete失败上下文 = Complete重活失败上下文 {
+        attachment_id: attachment_id.as_str(),
+        attachment_kind,
+        byte_size: attachment_byte_size,
+        started_at: complete_heavy_work_started_at,
+    };
     tracing::info!(
         usecase = "完成媒体上传",
         phase = "complete_heavy_work_enter",
@@ -467,10 +473,7 @@ pub(super) async fn complete_media_upload(
                 Ok(bytes) => bytes,
                 Err(err) => {
                     return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
+                        &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
                         "读取原图临时文件失败",
@@ -484,10 +487,7 @@ pub(super) async fn complete_media_upload(
                     Ok(parsed) => parsed,
                     Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
                         return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
+                            &complete失败上下文,
                             StatusCode::BAD_REQUEST,
                             "attachment_type_not_allowed",
                             message,
@@ -497,10 +497,7 @@ pub(super) async fn complete_media_upload(
                     }
                     Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
                         return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
+                            &complete失败上下文,
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "system_error",
                             message,
@@ -517,10 +514,7 @@ pub(super) async fn complete_media_upload(
                 .await
             {
                 return 记录并返回complete重活失败(
-                    attachment_id.as_str(),
-                    attachment_kind,
-                    attachment_byte_size,
-                    complete_heavy_work_started_at,
+                    &complete失败上下文,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
                     "写入 canonical 图片对象失败",
@@ -548,10 +542,7 @@ pub(super) async fn complete_media_upload(
                 Ok(torrent) => torrent,
                 Err(message) => {
                     return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
+                        &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
                         message.clone(),
@@ -593,10 +584,7 @@ pub(super) async fn complete_media_upload(
                 Ok(parsed) => parsed,
                 Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
                     return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
+                        &complete失败上下文,
                         StatusCode::BAD_REQUEST,
                         "attachment_type_not_allowed",
                         message,
@@ -606,10 +594,7 @@ pub(super) async fn complete_media_upload(
                 }
                 Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
                     return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
+                        &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
                         message,
@@ -626,10 +611,7 @@ pub(super) async fn complete_media_upload(
                     Ok(mapped) => mapped,
                     Err(err) => {
                         return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
+                            &complete失败上下文,
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "system_error",
                             "映射 canonical 视频临时文件失败",
@@ -648,10 +630,7 @@ pub(super) async fn complete_media_upload(
                 .await
             {
                 return 记录并返回complete重活失败(
-                    attachment_id.as_str(),
-                    attachment_kind,
-                    attachment_byte_size,
-                    complete_heavy_work_started_at,
+                    &complete失败上下文,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
                     "写入 canonical 视频对象失败",
@@ -670,10 +649,7 @@ pub(super) async fn complete_media_upload(
                 Ok(payload) => payload,
                 Err(message) => {
                     return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
+                        &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
                         message,
@@ -697,10 +673,7 @@ pub(super) async fn complete_media_upload(
                 Ok(torrent) => torrent,
                 Err(message) => {
                     return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
+                        &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
                         message.clone(),
@@ -767,10 +740,7 @@ pub(super) async fn complete_media_upload(
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(err) => {
                     return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
+                        &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
                         "删除上传临时文件失败",
@@ -873,10 +843,7 @@ pub(super) async fn complete_media_upload(
                 .into_response()
         }
         Ok(Err((status, code, message))) => 记录并返回complete重活失败(
-            attachment_id.as_str(),
-            attachment_kind,
-            attachment_byte_size,
-            complete_heavy_work_started_at,
+            &complete失败上下文,
             status,
             code,
             message.clone(),
@@ -884,10 +851,7 @@ pub(super) async fn complete_media_upload(
             message,
         ),
         Err(err) => 记录并返回complete重活失败(
-            attachment_id.as_str(),
-            attachment_kind,
-            attachment_byte_size,
-            complete_heavy_work_started_at,
+            &complete失败上下文,
             StatusCode::INTERNAL_SERVER_ERROR,
             "system_error",
             format!("complete 任务执行失败: {err}"),
@@ -1471,11 +1435,15 @@ async fn 获取媒体上传完成重活许可(
     gate.acquire_owned().await
 }
 
-fn 记录并返回complete重活失败(
-    attachment_id: &str,
-    attachment_kind: &str,
+struct Complete重活失败上下文<'a> {
+    attachment_id: &'a str,
+    attachment_kind: &'a str,
     byte_size: i64,
     started_at: Instant,
+}
+
+fn 记录并返回complete重活失败(
+    上下文: &Complete重活失败上下文<'_>,
     status: StatusCode,
     code: &'static str,
     response_message: impl Into<String>,
@@ -1484,14 +1452,14 @@ fn 记录并返回complete重活失败(
 ) -> Response {
     let response_message = response_message.into();
     let log_detail = log_detail.into();
-    let duration_ms = started_at.elapsed().as_millis() as u64;
+    let duration_ms = 上下文.started_at.elapsed().as_millis() as u64;
     if status.is_server_error() {
         tracing::error!(
             usecase = "完成媒体上传",
             phase = "complete_heavy_work_failed",
-            attachment_id,
-            kind = attachment_kind,
-            byte_size,
+            attachment_id = 上下文.attachment_id,
+            kind = 上下文.attachment_kind,
+            byte_size = 上下文.byte_size,
             duration_ms,
             failure_reason,
             error_code = code,
@@ -1502,9 +1470,9 @@ fn 记录并返回complete重活失败(
         tracing::warn!(
             usecase = "完成媒体上传",
             phase = "complete_heavy_work_failed",
-            attachment_id,
-            kind = attachment_kind,
-            byte_size,
+            attachment_id = 上下文.attachment_id,
+            kind = 上下文.attachment_kind,
+            byte_size = 上下文.byte_size,
             duration_ms,
             failure_reason,
             error_code = code,

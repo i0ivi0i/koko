@@ -3,7 +3,8 @@ use sqlx::{postgres::PgRow, PgPool, Row};
 use crate::{contract, usecase};
 
 use super::{
-    Pg仓储, 媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输角色, 媒体上传运输记录,
+    Pg仓储, 媒体上传会话授权写入请求, 媒体上传会话记录, 媒体上传运输回执写入参数,
+    媒体上传运输角色, 媒体上传运输记录,
 };
 
 // 媒体附件适配 owner 只负责回答三类问题：
@@ -971,14 +972,7 @@ pub(super) fn 列出上传会话运输上传标识(
 /// 注意现在的主键已经换成“上传会话 + transport 角色/上传资源”，而不是 attachment 自己。
 async fn 登记媒体上传运输回执_异步(
     pool: &PgPool,
-    上传会话标识: &str,
-    附件标识: &str,
-    运输方式: &str,
-    运输角色: 媒体上传运输角色,
-    concat_order: Option<i32>,
-    transport_upload_id: &str,
-    storage_locator: &str,
-    byte_size: i64,
+    参数: &媒体上传运输回执写入参数,
 ) -> Result<(), contract::错误码> {
     /*
      * 这里必须把 `ON CONFLICT` 的谓词写全：
@@ -996,14 +990,14 @@ async fn 登记媒体上传运输回执_异步(
             finished_at = EXCLUDED.finished_at, \
             abandoned_at = NULL",
     )
-    .bind(附件标识)
-    .bind(上传会话标识)
-    .bind(运输方式)
-    .bind(运输角色.as_str())
-    .bind(concat_order)
-    .bind(transport_upload_id)
-    .bind(storage_locator)
-    .bind(byte_size)
+    .bind(参数.附件标识.as_str())
+    .bind(参数.上传会话标识.as_str())
+    .bind(参数.运输方式.as_str())
+    .bind(参数.运输角色.as_str())
+    .bind(参数.concat_order)
+    .bind(参数.transport_upload_id.as_str())
+    .bind(参数.storage_locator.as_str())
+    .bind(参数.byte_size)
     .execute(pool)
     .await
     .map_err(|_| contract::错误码::系统错误)?;
@@ -1013,26 +1007,9 @@ async fn 登记媒体上传运输回执_异步(
 
 pub(super) fn 登记媒体上传运输回执(
     repo: &mut Pg仓储,
-    上传会话标识: &str,
-    附件标识: &str,
-    运输方式: &str,
-    运输角色: 媒体上传运输角色,
-    concat_order: Option<i32>,
-    transport_upload_id: &str,
-    storage_locator: &str,
-    byte_size: i64,
+    参数: &媒体上传运输回执写入参数,
 ) -> Result<(), contract::错误码> {
-    repo.在运行时执行(登记媒体上传运输回执_异步(
-        &repo.pool,
-        上传会话标识,
-        附件标识,
-        运输方式,
-        运输角色,
-        concat_order,
-        transport_upload_id,
-        storage_locator,
-        byte_size,
-    ))
+    repo.在运行时执行(登记媒体上传运输回执_异步(&repo.pool, 参数))
 }
 
 /// 冷源清理是媒体 owner 的“尾处理”，只回答谁到了 TTL、谁已经删掉。

@@ -87,8 +87,8 @@ describe("媒体服务工作线程", () => {
     vi.unstubAllGlobals();
   });
 
-  it("仍会继续命中图片 blob 资产缓存", async () => {
-    const url = "http://media.local/api/media/att-image-1/blob/full";
+  it("仍会继续命中图片 canonical blob 资产缓存", async () => {
+    const url = "http://media.local/api/media/att-image-1/blob/canonical";
     const cache = 创建假缓存([[url, new Response("cached-image", { status: 200 })]]);
     const runtime = await 准备媒体服务工作线程({ 缓存: cache });
 

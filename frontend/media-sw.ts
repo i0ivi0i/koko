@@ -8,7 +8,7 @@ type 媒体Fetch事件 = {
 };
 
 const 图片Blob资产缓存名 = "koko-image-blob-assets";
-const 图片Blob资产路径模式 = /^\/api\/media\/[^/]+\/blob\/(preview|full|original)$/;
+const 图片Blob资产路径模式 = /^\/api\/media\/[^/]+\/blob\/canonical$/;
 const 流媒体清单缓存名 = "koko-streaming-manifests";
 const 流媒体分段缓存名 = "koko-streaming-segments";
 const 流媒体资产路径模式 = /^\/api\/media\/[^/]+\/stream\/.+$/;

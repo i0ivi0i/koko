@@ -55,6 +55,20 @@ pub(crate) struct 媒体上传会话记录 {
     pub 废弃时间戳秒: Option<i64>,
 }
 
+/// 单条上传运输回执在 adapter 边界上的最小输入。
+/// 把上传链八个字段收口成一个结构体，避免跨层函数长期维持高参数噪音。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct 媒体上传运输回执写入参数 {
+    pub 上传会话标识: String,
+    pub 附件标识: String,
+    pub 运输方式: String,
+    pub 运输角色: 媒体上传运输角色,
+    pub concat_order: Option<i32>,
+    pub transport_upload_id: String,
+    pub storage_locator: String,
+    pub byte_size: i64,
+}
+
 /// partial / final / single 只在 adapter 停留，用来翻译 Tus Concatenation 协议负载。
 /// 业务层依然只认“transport finished != attachment ready”这一条稳定原则。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,26 +267,9 @@ impl Pg仓储 {
     /// prepared -> ready 仍由 complete 主链完成。
     pub(crate) fn 登记媒体上传运输回执(
         &mut self,
-        上传会话标识: &str,
-        附件标识: &str,
-        运输方式: &str,
-        运输角色: 媒体上传运输角色,
-        concat_order: Option<i32>,
-        transport_upload_id: &str,
-        storage_locator: &str,
-        byte_size: i64,
+        参数: &媒体上传运输回执写入参数,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::登记媒体上传运输回执(
-            self,
-            上传会话标识,
-            附件标识,
-            运输方式,
-            运输角色,
-            concat_order,
-            transport_upload_id,
-            storage_locator,
-            byte_size,
-        )
+        媒体附件适配::登记媒体上传运输回执(self, 参数)
     }
 
     /// 连接数据库并追平迁移。
