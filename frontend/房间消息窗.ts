@@ -73,6 +73,7 @@ export class 房间消息窗 extends LitElement {
   private readonly 自动播候选观察目标 = new Map<HTMLButtonElement, string>();
   private readonly 自动播候选可见条目 = new Map<string, 消息视频自动播候选>();
   private readonly 失效视频封面地址 = new Map<string, string>();
+  private readonly 无封面视频稳定预览源 = new Map<string, string>();
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -110,6 +111,7 @@ export class 房间消息窗 extends LitElement {
     this.取消自动播候选调度();
     this.清理自动播候选观察();
     this.失效视频封面地址.clear();
+    this.无封面视频稳定预览源.clear();
     super.disconnectedCallback();
   }
 
@@ -154,6 +156,9 @@ export class 房间消息窗 extends LitElement {
   }
 
   override updated(changedProperties: PropertyValues<this>): void {
+    if (changedProperties.has("items")) {
+      this.同步无封面视频稳定预览缓存();
+    }
     const scrollContainer = this.messageScrollRef.value;
     if (!scrollContainer) {
       return;
@@ -166,6 +171,25 @@ export class 房间消息窗 extends LitElement {
     }
     this.同步自动播候选观察(scrollContainer);
     this.调度自动播候选(scrollContainer);
+  }
+
+  private 同步无封面视频稳定预览缓存(): void {
+    const 活跃视频附件 = new Set<string>();
+    for (const item of this.items) {
+      if (item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        if (attachment.kind === "video") {
+          活跃视频附件.add(attachment.attachmentId);
+        }
+      }
+    }
+    for (const attachmentId of this.无封面视频稳定预览源.keys()) {
+      if (!活跃视频附件.has(attachmentId)) {
+        this.无封面视频稳定预览源.delete(attachmentId);
+      }
+    }
   }
 
   private dispatch自动播候选(scrollContainer: HTMLElement): void {
@@ -506,6 +530,26 @@ export class 房间消息窗 extends LitElement {
     return attachment.originalSrc;
   }
 
+  private 读取时间线视频稳定预览源(
+    attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
+    playback: 媒体播放结果 | null,
+    inlineAutoplayPreviewSrc: string | null
+  ): string | null {
+    const cachedPreviewSrc = this.无封面视频稳定预览源.get(attachment.attachmentId) ?? null;
+    if (cachedPreviewSrc) {
+      return cachedPreviewSrc;
+    }
+    if (inlineAutoplayPreviewSrc) {
+      this.无封面视频稳定预览源.set(attachment.attachmentId, inlineAutoplayPreviewSrc);
+      return inlineAutoplayPreviewSrc;
+    }
+    const directPreviewSrc = this.读取时间线视频首帧预览源(attachment, playback);
+    if (directPreviewSrc) {
+      this.无封面视频稳定预览源.set(attachment.attachmentId, directPreviewSrc);
+    }
+    return directPreviewSrc;
+  }
+
   private 标记视频封面加载失败(attachmentId: string, event: Event): void {
     const target = event.currentTarget;
     if (!(target instanceof HTMLImageElement)) {
@@ -715,20 +759,30 @@ export class 房间消息窗 extends LitElement {
             const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
             const inlineAutoplayPlayback =
               this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+            const inlineAutoplayPreviewSrc =
+              inlineAutoplayPlayback &&
+              (inlineAutoplayPlayback.mode === "anchor" ||
+                inlineAutoplayPlayback.mode === "swarm" ||
+                inlineAutoplayPlayback.mode === "blob")
+                ? inlineAutoplayPlayback.src
+                : null;
             const shouldRenderInlineVideo =
               this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
-              Boolean(inlineAutoplayPlayback?.src) &&
-              (inlineAutoplayPlayback?.mode === "anchor" ||
-                inlineAutoplayPlayback?.mode === "swarm" ||
-                inlineAutoplayPlayback?.mode === "blob");
-            const fallbackFramePreviewSrc =
-              !shouldRenderInlineVideo && !hasSourcePoster
-                ? this.读取时间线视频首帧预览源(attachment, playback)
+              Boolean(inlineAutoplayPreviewSrc);
+            const stableFramePreviewSrc =
+              shouldRenderInlineVideo || !hasSourcePoster
+                ? this.读取时间线视频稳定预览源(
+                    attachment,
+                    playback,
+                    inlineAutoplayPreviewSrc
+                  )
                 : null;
             const previewVideoSrc =
-              shouldRenderInlineVideo && inlineAutoplayPlayback
-                ? inlineAutoplayPlayback.src
-                : fallbackFramePreviewSrc;
+              shouldRenderInlineVideo
+                ? stableFramePreviewSrc
+                : !hasSourcePoster
+                  ? stableFramePreviewSrc
+                  : null;
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
             const previewVideoPoster = hasSourcePoster ? previewPosterSrc : undefined;
             /**
@@ -801,9 +855,13 @@ export class 房间消息窗 extends LitElement {
                             });
                           }}
                           @error=${() =>
-                            this.广播媒体会话信号(attachment.attachmentId, {
-                              type: "PLAYER_ERROR",
-                            })}
+                            (() => {
+                              // 当前预览源已经不可用时，允许下次渲染切到新的解析结果。
+                              this.无封面视频稳定预览源.delete(attachment.attachmentId);
+                              this.广播媒体会话信号(attachment.attachmentId, {
+                                type: "PLAYER_ERROR",
+                              });
+                            })()}
                         ></video>
                         ${shouldRenderInlineVideo
                           ? null
