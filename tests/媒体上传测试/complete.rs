@@ -6,7 +6,7 @@ use super::*;
 /// 3. 图片与视频 complete 后投影给壳层的资产面是否稳定。
 #[tokio::test]
 #[serial]
-async fn complete图片上传会把prepared附件升级成ready并写入缩略图() {
+async fn complete图片上传会把prepared附件升级成ready并写入canonical资产() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -17,6 +17,8 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
     let tus_upload_dir = state.tus_upload_dir.clone();
+    let image_bytes = 最小webp字节();
+    let image_byte_size = image_bytes.len() as i64;
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -38,9 +40,9 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
         "/api/media/image/prepare",
         Some(serde_json::json!({
             "session_id": session_id,
-            "file_name": "complete.png",
-            "mime_type": "image/png",
-            "byte_size": 68
+            "file_name": "canonical.webp",
+            "mime_type": "image/webp",
+            "byte_size": image_byte_size
         })),
         &[],
     )
@@ -61,8 +63,8 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     let temp_file = 写入tus测试文件(
         &tus_upload_dir,
         &attachment_id,
-        "complete.png",
-        &最小png字节(),
+        "canonical.webp",
+        &image_bytes,
     )
     .expect("应能写入 tus 原图文件");
     let (hook_status, hook_body) = send_json(
@@ -74,10 +76,10 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
             Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
-            "complete.png",
-            "image/png",
-            68,
-            68,
+            "canonical.webp",
+            "image/webp",
+            image_byte_size,
+            image_byte_size,
             Some(temp_file.as_str()),
         )),
         &[],
@@ -99,7 +101,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     assert_eq!(
         complete_status,
         StatusCode::OK,
-        "视频 complete 当前返回: {complete_body:?}"
+        "图片 complete 当前返回: {complete_body:?}"
     );
     assert_eq!(complete_body["status"].as_str(), Some("ready"));
     assert_eq!(complete_body["width"].as_i64(), Some(1));
@@ -107,51 +109,31 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     let media_asset = complete_body["media_asset"]
         .as_object()
         .expect("图片 complete 后必须返回共享 blob media_asset");
-    let preview_url = media_asset["preview"]["url"]
+    let canonical_url = media_asset["variants"]["canonical"]["url"]
         .as_str()
-        .expect("图片 complete 后必须返回 preview 主链");
-    let full_url = media_asset["full"]["url"]
-        .as_str()
-        .expect("图片 complete 后必须返回 full 主链");
-    let original_url = media_asset["original"]["url"]
-        .as_str()
-        .expect("图片 complete 后必须返回 original 主链");
+        .expect("图片 complete 后必须返回 canonical 主链");
     let legacy_original_url = format!(
         "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
     );
-    // 图片资产面一旦成立，preview/full/original 都必须切到稳定的 media asset 路由，
-    // 这样前端才能改吃 asset-first 主链，而不是继续把旧附件内容地址当正式真相。
     assert_eq!(media_asset["kind"].as_str(), Some("blob_image"));
     assert_eq!(
-        preview_url,
-        format!("/api/media/{attachment_id}/blob/preview?session_id={session_id}")
+        canonical_url,
+        format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}")
     );
-    assert_eq!(
-        full_url,
-        format!("/api/media/{attachment_id}/blob/full?session_id={session_id}")
-    );
-    assert_eq!(
-        original_url,
-        format!("/api/media/{attachment_id}/blob/original?session_id={session_id}")
-    );
-    assert_ne!(
-        full_url, original_url,
-        "full 和 original 至少要有稳定可区分的资产地址，不能继续共用一条旧 original_url"
-    );
-    assert!(
-        !full_url.contains("/api/attachments/") && !original_url.contains("/api/attachments/"),
-        "图片正式资产主链不能继续暴露旧附件内容直链"
-    );
+    assert!(media_asset["preview"].is_null());
+    assert!(media_asset["full"].is_null());
+    assert!(media_asset["original"].is_null());
     assert_eq!(
         media_asset["origin"]["original_url"].as_str(),
         Some(legacy_original_url.as_str()),
-        "旧附件内容地址只能退到冷备 origin 描述里，不能继续当 full/original 主链"
+        "旧附件内容地址只能退到冷备 origin 描述里，不能继续当正式图片主链"
     );
 
     let row = sqlx::query(
         "SELECT status,
                 width,
                 height,
+                storage_key,
                 thumbnail_storage_key,
                 full_storage_key,
                 asset_original_storage_key,
@@ -166,6 +148,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     let status_in_db: String = row.get("status");
     let width_in_db: Option<i32> = row.get("width");
     let height_in_db: Option<i32> = row.get("height");
+    let storage_key: String = row.get("storage_key");
     let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
     let full_storage_key: Option<String> = row.get("full_storage_key");
     let asset_original_storage_key: Option<String> = row.get("asset_original_storage_key");
@@ -173,45 +156,28 @@ async fn complete图片上传会把prepared附件升级成ready并写入缩略�
     assert_eq!(status_in_db, "ready");
     assert_eq!(width_in_db, Some(1));
     assert_eq!(height_in_db, Some(1));
-    assert!(thumbnail_storage_key.is_some());
     assert_eq!(
-        full_storage_key.as_deref(),
-        Some(format!("images/{attachment_id}/full.webp").as_str()),
-        "图片 ready 真相必须把 full 资产键落库，不能继续只剩 thumbnail/original 两层"
+        storage_key,
+        format!("images/{attachment_id}/canonical.webp")
     );
-    assert_eq!(
-        asset_original_storage_key.as_deref(),
-        Some(format!("images/{attachment_id}/asset-original.png").as_str()),
-        "图片 ready 真相必须把长期保留的资产原图键落库，不能继续只拿原始冷源凑数"
-    );
+    assert!(thumbnail_storage_key.is_none());
+    assert!(full_storage_key.is_none());
+    assert!(asset_original_storage_key.is_none());
     assert!(
         origin_expires_at_epoch.is_some(),
         "原始冷源必须在 complete 时写入明确到期时间，后续 24 小时清理才能有权威锚点"
     );
 
-    let (full_status, full_headers, full_body) =
-        send_bytes(app.clone(), Method::GET, full_url, &[]).await;
-    let (original_status, original_headers, original_body) =
-        send_bytes(app, Method::GET, original_url, &[]).await;
-    assert_eq!(full_status, StatusCode::OK);
-    assert_eq!(original_status, StatusCode::OK);
+    let (canonical_status, canonical_headers, canonical_body) =
+        send_bytes(app, Method::GET, canonical_url, &[]).await;
+    assert_eq!(canonical_status, StatusCode::OK);
     assert_eq!(
-        full_headers
+        canonical_headers
             .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok()),
-        Some("image/webp"),
-        "full 资产现在应返回真实完整图 MIME，而不是继续冒充原图类型"
+        Some("image/webp")
     );
-    assert_eq!(
-        original_headers
-            .get(header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok()),
-        Some("image/png")
-    );
-    assert_ne!(
-        full_body, original_body,
-        "blob/full 和 blob/original 必须读取不同对象，不能继续都走同一份原始冷源字节"
-    );
+    assert_eq!(canonical_body, image_bytes);
     assert!(
         !std::path::Path::new(temp_file.as_str()).exists(),
         "图片 complete 成功后必须同步删掉 Tus 临时原图，不能把 happy path 残留丢给后台慢慢积灰"
@@ -393,6 +359,8 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
     let tus_upload_dir = state.tus_upload_dir.clone();
+    let image_bytes = 最小webp字节();
+    let image_byte_size = image_bytes.len() as i64;
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -414,9 +382,9 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
         "/api/media/image/prepare",
         Some(serde_json::json!({
             "session_id": session_id,
-            "file_name": "final-preferred.png",
-            "mime_type": "image/png",
-            "byte_size": 68
+            "file_name": "canonical.webp",
+            "mime_type": "image/webp",
+            "byte_size": image_byte_size
         })),
         &[],
     )
@@ -438,13 +406,13 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
         b"not-an-image",
     )
     .expect("应能写入 single 假文件");
-    let final_png_file = 写入tus测试文件(
+    let final_webp_file = 写入tus测试文件(
         &tus_upload_dir,
         &attachment_id,
-        "final-preferred-final.png",
-        &最小png字节(),
+        "final-preferred-final.webp",
+        &image_bytes,
     )
-    .expect("应能写入 final png 文件");
+    .expect("应能写入 final webp 文件");
 
     let (single_hook_status, single_hook_body) = send_json(
         app.clone(),
@@ -455,10 +423,10 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
             Some(authorization.as_str()),
             &format!("single-{attachment_id}"),
             &attachment_id,
-            "final-preferred.png",
-            "image/png",
-            68,
-            68,
+            "canonical.webp",
+            "image/webp",
+            image_byte_size,
+            image_byte_size,
             Some(wrong_single_file.as_str()),
         )),
         &[],
@@ -476,11 +444,11 @@ async fn complete会优先消费当前会话的final回执而不是single回执(
             &format!("final-{attachment_id}"),
             &attachment_id,
             &upload_session_id,
-            "final-preferred.png",
-            "image/png",
-            68,
-            68,
-            Some(final_png_file.as_str()),
+            "canonical.webp",
+            "image/webp",
+            image_byte_size,
+            image_byte_size,
+            Some(final_webp_file.as_str()),
             false,
             true,
             Some(vec![
@@ -521,6 +489,8 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
             .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
     let tus_upload_dir = state.tus_upload_dir.clone();
+    let image_bytes = 最小webp字节();
+    let image_byte_size = image_bytes.len() as i64;
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -545,9 +515,9 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
         "/api/media/image/prepare",
         Some(serde_json::json!({
             "session_id": session_id,
-            "file_name": "complete-race.png",
-            "mime_type": "image/png",
-            "byte_size": 68
+            "file_name": "canonical.webp",
+            "mime_type": "image/webp",
+            "byte_size": image_byte_size
         })),
         &[],
     )
@@ -561,8 +531,8 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
     let temp_file = 写入tus测试文件(
         &tus_upload_dir,
         &attachment_id,
-        "complete-race.png",
-        &最小png字节(),
+        "complete-race.webp",
+        &image_bytes,
     )
     .expect("应能写入 tus 临时图片文件");
     let upload_id = format!("upload-complete-race-{attachment_id}");
@@ -586,10 +556,10 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
                 Some(authorization_for_hook.as_str()),
                 &upload_id_for_hook,
                 &attachment_id_for_hook,
-                "complete-race.png",
-                "image/png",
-                68,
-                68,
+                "canonical.webp",
+                "image/webp",
+                image_byte_size,
+                image_byte_size,
                 Some(temp_file_for_hook.as_str()),
             )),
             &[],
@@ -620,7 +590,7 @@ async fn post_finish稍后到达时complete媒体上传会等待回执并成功(
 
 #[tokio::test]
 #[serial]
-async fn complete视频上传会写入静态封面并返回preview_asset() {
+async fn complete视频上传会写入canonical并返回file_asset() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -719,72 +689,58 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     );
     assert_eq!(complete_body["status"].as_str(), Some("ready"));
     assert_eq!(complete_body["kind"].as_str(), Some("video"));
+    let media_asset = complete_body["media_asset"]
+        .as_object()
+        .expect("视频 complete 后必须返回单文件 media_asset");
     assert_eq!(
-        complete_body["media_asset"]["kind"].as_str(),
-        Some("streaming_video"),
-        "视频 complete 后应返回流媒体资产过渡面，而不是只剩原始附件字段"
+        media_asset["kind"].as_str(),
+        Some("file_video"),
+        "客户端已经预制 canonical.mp4 后，后端不再生成 HLS/DASH 流媒体资产"
     );
     assert_eq!(
-        complete_body["media_asset"]["asset_id"].as_str(),
+        media_asset["asset_id"].as_str(),
         Some(attachment_id.as_str()),
-        "当前过渡阶段先以 attachment_id 作为稳定资产锚点，避免再造第二个临时主键"
+        "单文件视频仍以 attachment_id 作为稳定资产锚点，避免再造第二个临时主键"
     );
+    let canonical_url = media_asset["variants"]["canonical"]["url"]
+        .as_str()
+        .expect("视频 complete 后必须返回 canonical 单文件读取入口");
     assert_eq!(
-        complete_body["preview_asset"]["still_url"].as_str(),
-        Some(
-            format!(
-                "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=thumbnail"
-            )
-            .as_str()
+        canonical_url,
+        format!(
+            "/api/attachments/{attachment_id}/content?session_id={session_id}&variant=original"
         ),
-        "视频 complete 后必须直接把静态封面真相投影出来，不能再让消息流自己脑补首帧"
+        "canonical 视频读取入口必须收口到既有受控附件内容路由，不能再下发裸对象地址"
     );
-    let hls_master_url = complete_body["media_asset"]["manifest"]["hls_master_url"]
-        .as_str()
-        .expect("视频 complete 后必须返回 HLS 主清单入口");
-    let dash_mpd_url = complete_body["media_asset"]["manifest"]["dash_mpd_url"]
-        .as_str()
-        .expect("视频 complete 后必须返回 DASH 主清单入口");
+    assert!(complete_body["preview_asset"].is_null());
+    assert!(media_asset["manifest"].is_null());
     assert!(
-        hls_master_url.contains("/api/media/") && hls_master_url.contains("session_id="),
-        "HLS 主清单必须走受控媒体路由，而不是裸对象地址"
-    );
-    assert!(
-        dash_mpd_url.contains("/api/media/") && dash_mpd_url.contains("session_id="),
-        "DASH 主清单也必须走受控媒体路由"
+        media_asset["lifecycle"].is_null(),
+        "新视频主链没有服务端流媒体窗口，生命周期只能由 origin 冷备窗口表达"
     );
     assert_eq!(
-        complete_body["media_asset"]["origin"]["role"].as_str(),
+        media_asset["origin"]["role"].as_str(),
         Some("cold_backup_only"),
-        "原始附件在协议里只能退到冷备引导角色"
+        "canonical 单文件在协议面仍只作为冷备和 web seed 引导，不回到服务端重加工主链"
     );
     assert_eq!(
-        complete_body["media_asset"]["origin"]["available"].as_bool(),
+        media_asset["origin"]["available"].as_bool(),
         Some(true),
-        "视频 complete 后应切到 24 小时 mezzanine 回退层，协议面仍要把 original 描述成可用冷备入口"
+        "视频 complete 后应保留 24 小时受控 canonical 冷备窗口，给弱网和冷启动兜底"
     );
-    let original_url = complete_body["media_asset"]["origin"]["original_url"]
+    let original_url = media_asset["origin"]["original_url"]
         .as_str()
-        .expect("即使视频主链已经切到流媒体分发，仍必须保留稳定的冷备 original 描述");
-    assert!(complete_body["media_asset"]["distribution"]["swarm_id"].is_string());
+        .expect("单文件视频必须保留稳定冷备 original 描述，供 web seed 和 Range 读取复用");
+    assert_eq!(original_url, canonical_url);
+    assert!(media_asset["distribution"]["swarm_id"].is_string());
     assert!(
-        complete_body["media_asset"]["distribution"]["announce_urls"].is_array(),
-        "即使真正的流媒体主链还没切完，过渡资产面也必须提前暴露稳定 swarm 线索"
+        media_asset["distribution"]["announce_urls"].is_array(),
+        "单文件主链仍必须暴露稳定 swarm 线索，后端只做轻量引导"
     );
     assert_eq!(
-        complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
+        media_asset["distribution"]["survival_mode"].as_str(),
         Some("peer_only_after_expiry"),
         "视频分发表面必须明确表达：24 小时窗口结束后，只剩 peer 平面继续承担长期存活"
-    );
-    assert!(
-        complete_body["media_asset"]["lifecycle"]["streaming_expires_at"]
-            .as_str()
-            .is_some(),
-        "视频 complete 后必须直接投影 streaming_expires_at，避免前端再去猜标准流媒体窗口什么时候结束"
-    );
-    assert!(
-        complete_body["media_asset"]["lifecycle"]["streaming_deleted_at"].is_null(),
-        "刚 complete 完的流媒体资产还没删，不允许提前伪造 streaming_deleted_at"
     );
     assert_eq!(
         complete_body["width"].as_i64(),
@@ -797,232 +753,45 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
         "竖拍 MP4 complete 后必须写入展示高度，而不是编码高度"
     );
 
-    let (master_status, master_headers, master_bytes) =
-        send_bytes(app.clone(), Method::GET, hls_master_url, &[]).await;
-    assert_eq!(master_status, StatusCode::OK);
+    let (canonical_status, canonical_headers, canonical_bytes) =
+        send_bytes(app.clone(), Method::GET, canonical_url, &[]).await;
+    assert_eq!(canonical_status, StatusCode::OK);
     assert_eq!(
-        master_headers
-            .get("content-type")
-            .and_then(|value| value.to_str().ok()),
-        Some("application/vnd.apple.mpegurl")
-    );
-    assert_eq!(
-        master_headers
-            .get(header::CACHE_CONTROL)
-            .and_then(|value| value.to_str().ok()),
-        Some("private, no-cache"),
-        "HLS master manifest 必须显式要求浏览器每次重验证，不能把播放入口缓存成陈旧真相"
-    );
-    let master_etag = master_headers
-        .get(header::ETAG)
-        .and_then(|value| value.to_str().ok())
-        .expect("HLS master manifest 必须带稳定 ETag，重复观看时才有轻量 304 可用")
-        .to_string();
-    let master_last_modified = master_headers
-        .get(header::LAST_MODIFIED)
-        .and_then(|value| value.to_str().ok())
-        .expect("HLS master manifest 也必须带 Last-Modified，标准 HTTP 缓存链路才能自然复用")
-        .to_string();
-    let master_text = String::from_utf8(master_bytes).expect("HLS master 应是 UTF-8 文本");
-    assert!(
-        master_text.contains("/api/media/")
-            && master_text.contains("session_id=")
-            && master_text.contains("video/main.m3u8"),
-        "master playlist 必须把子播放列表重写成受控 URL"
-    );
-    // master playlist 里可能同时出现 `#EXT-X-MEDIA:...URI=\"...\"` 和真正的子播放列表 URL。
-    // 这里必须只抓非注释行，否则会把整条标签行误当成请求地址，掩盖真正的清单重写问题。
-    let child_url = master_text
-        .lines()
-        .find(|line| !line.trim_start().starts_with('#') && line.contains("/api/media/"))
-        .expect("master playlist 应包含受控子播放列表 URL")
-        .trim()
-        .to_string();
-    let (master_not_modified_status, master_not_modified_headers, master_not_modified_bytes) =
-        send_bytes(
-            app.clone(),
-            Method::GET,
-            hls_master_url,
-            &[("if-none-match", master_etag.as_str())],
-        )
-        .await;
-    assert_eq!(master_not_modified_status, StatusCode::NOT_MODIFIED);
-    assert_eq!(
-        master_not_modified_headers
-            .get(header::CACHE_CONTROL)
-            .and_then(|value| value.to_str().ok()),
-        Some("private, no-cache"),
-        "manifest 走 304 时也必须保持同样的重验证缓存语义"
-    );
-    assert_eq!(
-        master_not_modified_headers
-            .get(header::ETAG)
-            .and_then(|value| value.to_str().ok()),
-        Some(master_etag.as_str()),
-        "304 响应必须回显同一个 ETag，浏览器才能稳定复用条件请求结果"
-    );
-    assert!(
-        master_not_modified_bytes.is_empty(),
-        "304 响应不应再回正文，避免 manifest 重验证继续传无意义字节"
-    );
-    let (master_since_not_modified_status, master_since_not_modified_headers, master_since_not_modified_bytes) =
-        send_bytes(
-            app.clone(),
-            Method::GET,
-            hls_master_url,
-            &[("if-modified-since", master_last_modified.as_str())],
-        )
-        .await;
-    assert_eq!(
-        master_since_not_modified_status,
-        StatusCode::NOT_MODIFIED,
-        "浏览器只带 If-Modified-Since 时，master manifest 也应能轻量返回 304"
-    );
-    assert_eq!(
-        master_since_not_modified_headers
-            .get(header::LAST_MODIFIED)
-            .and_then(|value| value.to_str().ok()),
-        Some(master_last_modified.as_str()),
-        "304 响应必须回显同一个 Last-Modified，标准缓存验证器才能稳定收敛"
-    );
-    assert!(
-        master_since_not_modified_bytes.is_empty(),
-        "If-Modified-Since 命中时也不应继续回传正文"
-    );
-
-    let (child_status, child_headers, child_bytes) =
-        send_bytes(app.clone(), Method::GET, child_url.as_str(), &[]).await;
-    assert_eq!(child_status, StatusCode::OK);
-    assert_eq!(
-        child_headers
-            .get(header::CACHE_CONTROL)
-            .and_then(|value| value.to_str().ok()),
-        Some("private, no-cache"),
-        "HLS 子清单和 master 一样必须走重验证，不能把旧 segment 目录结构长时间缓存住"
-    );
-    let child_text = String::from_utf8(child_bytes).expect("HLS media playlist 应是 UTF-8 文本");
-    assert!(
-        child_text.contains("init.mp4?session_id=") && child_text.contains(".m4s?session_id="),
-        "媒体子清单必须把 init 段和 media 段都重写成带 session_id 的受控 URL"
-    );
-    let segment_url = child_text
-        .lines()
-        .find(|line| line.contains(".m4s?session_id="))
-        .expect("子清单应至少包含一条受控 media segment URL")
-        .trim()
-        .to_string();
-
-    let (original_status, original_headers, original_bytes) =
-        send_bytes(app.clone(), Method::GET, original_url, &[]).await;
-    assert_eq!(
-        original_status,
-        StatusCode::OK,
-        "视频 complete 后，original_url 应该回退到 mezzanine，而不是继续 404"
-    );
-    assert_eq!(
-        original_headers
+        canonical_headers
             .get("content-type")
             .and_then(|value| value.to_str().ok()),
         Some("video/mp4"),
-        "mezzanine 回退层应继续暴露稳定的 MP4 内容类型"
+        "canonical 单文件读取应继续暴露稳定 MP4 内容类型"
     );
-    assert!(
-        !original_bytes.is_empty(),
-        "mezzanine 回退层必须真的能读到字节，不能只回一个空壳 200"
-    );
-    let (segment_status, segment_headers, segment_bytes) =
-        send_bytes(app.clone(), Method::GET, segment_url.as_str(), &[]).await;
-    assert_eq!(segment_status, StatusCode::OK);
     assert_eq!(
-        segment_headers
-            .get("accept-ranges")
+        canonical_headers
+            .get(header::ACCEPT_RANGES)
             .and_then(|value| value.to_str().ok()),
         Some("bytes")
     );
-    assert_eq!(
-        segment_headers
-            .get(header::CACHE_CONTROL)
-            .and_then(|value| value.to_str().ok()),
-        Some("private, max-age=86400, immutable"),
-        "稳定 segment 在 24 小时标准流媒体窗口内应允许浏览器强复用，避免重复观看继续打源站"
-    );
-    let segment_last_modified = segment_headers
-        .get(header::LAST_MODIFIED)
-        .and_then(|value| value.to_str().ok())
-        .expect("segment 也必须带 Last-Modified，超过缓存窗口后浏览器才能标准重验证")
-        .to_string();
-    assert!(
-        !segment_bytes.is_empty(),
-        "媒体 segment 必须能通过受控流媒体路由读取到真实字节"
-    );
-    let (segment_range_status, segment_range_headers, segment_range_bytes) = send_bytes(
+    assert_eq!(canonical_bytes, video_bytes);
+
+    let (range_status, range_headers, range_bytes) = send_bytes(
         app.clone(),
         Method::GET,
-        segment_url.as_str(),
+        canonical_url,
         &[("range", "bytes=0-15")],
     )
     .await;
-    assert_eq!(segment_range_status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(range_status, StatusCode::PARTIAL_CONTENT);
     assert_eq!(
-        segment_range_headers
-            .get(header::CACHE_CONTROL)
-            .and_then(|value| value.to_str().ok()),
-        Some("private, max-age=86400, immutable"),
-        "segment 走 Range 时也必须保持同样的缓存策略，不能退回成未声明的部分响应"
-    );
-    assert_eq!(
-        segment_range_headers
+        range_headers
             .get(header::ACCEPT_RANGES)
             .and_then(|value| value.to_str().ok()),
         Some("bytes")
     );
     assert_eq!(
-        segment_range_headers
+        range_headers
             .get(header::CONTENT_RANGE)
             .and_then(|value| value.to_str().ok()),
-        Some(format!("bytes 0-15/{}", segment_bytes.len()).as_str())
+        Some(format!("bytes 0-15/{}", video_bytes.len()).as_str())
     );
-    assert_eq!(
-        segment_range_headers
-            .get(header::LAST_MODIFIED)
-            .and_then(|value| value.to_str().ok()),
-        Some(segment_last_modified.as_str()),
-        "segment 走 Range 时也必须回显同一个 Last-Modified，避免条件请求语义被部分响应打散"
-    );
-    assert_eq!(
-        segment_range_bytes.len(),
-        16,
-        "segment range 读取必须返回请求到的真实字节长度"
-    );
-    let (dash_status, dash_headers, dash_bytes) =
-        send_bytes(app.clone(), Method::GET, dash_mpd_url, &[]).await;
-    assert_eq!(dash_status, StatusCode::OK);
-    assert_eq!(
-        dash_headers
-            .get("content-type")
-            .and_then(|value| value.to_str().ok()),
-        Some("application/dash+xml")
-    );
-    assert_eq!(
-        dash_headers
-            .get(header::CACHE_CONTROL)
-            .and_then(|value| value.to_str().ok()),
-        Some("private, no-cache"),
-        "DASH MPD 也必须显式重验证，避免播放器继续沿用已退场的清单"
-    );
-    assert!(
-        dash_headers.get(header::ETAG).is_some(),
-        "DASH MPD 也必须带 ETag，避免只有 HLS 能享受轻量条件请求"
-    );
-    assert!(
-        dash_headers.get(header::LAST_MODIFIED).is_some(),
-        "DASH MPD 也必须带 Last-Modified，标准缓存验证器不能只覆盖 HLS"
-    );
-    let dash_text = String::from_utf8(dash_bytes).expect("MPD 应是 UTF-8 文本");
-    assert!(
-        dash_text.contains("/api/media/") && dash_text.contains("session_id="),
-        "MPD 里的 initialization/media 模板也必须被重写成受控 URL"
-    );
+    assert_eq!(range_bytes, video_bytes[..16]);
 
     let row = sqlx::query(
         "SELECT kind,
@@ -1032,7 +801,7 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
                 thumbnail_storage_key,
                 storage_key,
                 mezzanine_storage_key,
-                EXTRACT(EPOCH FROM mezzanine_expires_at)::BIGINT AS mezzanine_expires_at_epoch,
+                EXTRACT(EPOCH FROM origin_expires_at)::BIGINT AS origin_expires_at_epoch,
                 EXTRACT(EPOCH FROM origin_deleted_at)::BIGINT AS origin_deleted_at_epoch
          FROM attachments
          WHERE attachment_id = $1",
@@ -1048,61 +817,49 @@ async fn complete视频上传会写入静态封面并返回preview_asset() {
     let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
     let storage_key: String = row.get("storage_key");
     let mezzanine_storage_key: Option<String> = row.get("mezzanine_storage_key");
-    let mezzanine_expires_at_epoch: Option<i64> = row.get("mezzanine_expires_at_epoch");
+    let origin_expires_at_epoch: Option<i64> = row.get("origin_expires_at_epoch");
     let origin_deleted_at_epoch: Option<i64> = row.get("origin_deleted_at_epoch");
     assert_eq!(kind_in_db, "video");
     assert_eq!(status_in_db, "ready");
     assert_eq!(width_in_db, Some(1080));
     assert_eq!(height_in_db, Some(1920));
     assert!(
-        thumbnail_storage_key.is_some(),
-        "视频 complete 后必须把静态封面落到既有 thumbnail_storage_key，而不是继续留空"
+        thumbnail_storage_key.is_none(),
+        "后端不再为视频抽取静态封面，避免把上传热路径重新压回服务器"
     );
     assert_eq!(
-        mezzanine_storage_key.as_deref(),
-        Some(storage_key.as_str()),
-        "视频附件的 storage_key 应直接收口到 mezzanine，避免 original 读取链再认已经秒删的原片"
+        storage_key,
+        format!("videos/{attachment_id}/canonical.mp4"),
+        "视频附件只保留客户端预制后的 canonical 单文件"
     );
     assert!(
-        storage_key.contains("/mezzanine.")
-            || storage_key.contains("\\mezzanine.")
-            || storage_key.ends_with("mezzanine.mp4"),
-        "视频 mezzanine 应落到明确可读的稳定对象键，而不是继续复用语义含混的 original 键"
+        mezzanine_storage_key.is_none(),
+        "后端不再生成 mezzanine 回退母本"
     );
     assert!(
-        mezzanine_expires_at_epoch.is_some(),
-        "视频 complete 后必须写入 24 小时 mezzanine 回退窗口"
+        origin_expires_at_epoch.is_some(),
+        "视频 complete 后必须写入 24 小时 canonical 冷备窗口，供清理任务按权威时间退场"
     );
     assert!(
-        origin_deleted_at_epoch.is_some(),
-        "用户原片上传成功后应立即从临时冷源退场，并回写 origin_deleted_at 事实"
+        origin_deleted_at_epoch.is_none(),
+        "刚 complete 完的 canonical 冷备还在 24 小时窗口内，不能提前伪造已删除事实"
     );
-    let manifest_row = sqlx::query(
-        "SELECT EXTRACT(EPOCH FROM streaming_expires_at)::BIGINT AS streaming_expires_at_epoch,
-                EXTRACT(EPOCH FROM streaming_deleted_at)::BIGINT AS streaming_deleted_at_epoch
+    let manifest_exists: Option<i64> = sqlx::query_scalar(
+        "SELECT 1::BIGINT
          FROM attachment_streaming_manifests
          WHERE attachment_id = $1",
     )
     .bind(&attachment_id)
-    .fetch_one(&pool)
+    .fetch_optional(&pool)
     .await
-    .expect("应能查询 complete 后的流媒体清单生命周期");
-    let streaming_expires_at_epoch: Option<i64> = manifest_row.get("streaming_expires_at_epoch");
-    let streaming_deleted_at_epoch: Option<i64> = manifest_row.get("streaming_deleted_at_epoch");
-    let expected_streaming_expires_at = streaming_expires_at_epoch.map(|value| value.to_string());
-    assert_eq!(
-        complete_body["media_asset"]["lifecycle"]["streaming_expires_at"].as_str(),
-        expected_streaming_expires_at.as_deref(),
-        "视频 complete 返回的 streaming 生命周期必须和 manifest 真相保持一致"
-    );
-    assert_eq!(
-        complete_body["media_asset"]["lifecycle"]["streaming_deleted_at"].as_str(),
-        streaming_deleted_at_epoch.map(|value| value.to_string()).as_deref(),
-        "视频 complete 返回的 streaming_deleted_at 必须直接投影权威真相"
+    .expect("应能查询视频流媒体清单记录");
+    assert!(
+        manifest_exists.is_none(),
+        "新视频附件不再写 HLS/DASH 清单记录"
     );
     assert!(
         !std::path::Path::new(temp_file.as_str()).exists(),
-        "视频 complete 成功后应立即删掉 Tus 临时原片，避免源文件在服务器上继续滞留"
+        "视频 complete 成功后应立即删掉 Tus 临时 canonical，避免临时目录继续滞留同一份文件"
     );
 }
 

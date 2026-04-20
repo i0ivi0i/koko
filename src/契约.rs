@@ -175,11 +175,13 @@ pub enum 附件快照 {
 
 /// 统一媒体资产种类：
 /// 1. 图片走 blob 资产主链；
-/// 2. 视频/音频走流媒体资产主链；
-/// 3. 这里只描述稳定共享语义，不携带某个壳专属的播放器状态。
+/// 2. 新视频走单文件 canonical 主链；
+/// 3. 旧流媒体视频/音频只作为迁移期兼容表面；
+/// 4. 这里只描述稳定共享语义，不携带某个壳专属的播放器状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum 媒体资产种类 {
     图片Blob,
+    单文件视频,
     流媒体视频,
     流媒体音频,
 }
@@ -266,12 +268,14 @@ pub struct 流媒体资产描述 {
 }
 
 /// Blob 资产描述是图片/GIF/静态大图的统一表面。
-/// preview/full/original 是稳定资产层级，不是壳层自己拼出来的三个 URL。
+/// canonical 是客户端预制后的唯一正式对象；preview/full/original 只保留为旧协议字段，
+/// 响应投影必须显式退成空值，避免壳层继续把服务端派生图当作主链真相。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Blob媒体资产描述 {
     pub 资产标识: String,
     pub 内容哈希: String,
     pub 种类: 媒体资产种类,
+    pub canonical: Option<变体描述>,
     pub preview: Option<变体描述>,
     pub full: Option<变体描述>,
     pub original: Option<变体描述>,

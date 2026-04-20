@@ -14,11 +14,7 @@ fn 空消息不成立() {
 
 #[test]
 fn 纯空文本且无附件时统一消息不成立() {
-    let result = koko::domain::message::创建消息(
-        true,
-        "",
-        &[],
-    );
+    let result = koko::domain::message::创建消息(true, "", &[]);
     assert_eq!(result, Err(koko::domain::领域错误::消息内容为空));
 }
 

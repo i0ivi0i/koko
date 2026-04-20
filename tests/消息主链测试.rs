@@ -52,9 +52,10 @@ fn 会话所属匿名身份返回内部uuid而不是兼容旧串() {
         "内部 identity_uuid 和兼容旧串必须分开，测试前置条件才成立"
     );
 
-    let resolved_identity = koko::usecase::仓储端口::查询会话所属匿名身份(&repo, &session_id)
-        .expect("查询会话所属匿名身份不应报错")
-        .expect("应能解析出内部身份");
+    let resolved_identity =
+        koko::usecase::仓储端口::查询会话所属匿名身份(&repo, &session_id)
+            .expect("查询会话所属匿名身份不应报错")
+            .expect("应能解析出内部身份");
     assert_eq!(
         resolved_identity, expected_identity_uuid,
         "应用层以后只能消费内部 identity_uuid，不能继续把兼容旧串当身份真相"

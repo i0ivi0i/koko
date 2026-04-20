@@ -10,7 +10,7 @@ mod tus;
 // - `seed` 负责数据库建数
 // - `fixture` 负责本地样本与临时文件
 #[allow(unused_imports)]
-pub use fixture::{写入tus测试文件, 最小mp4字节, 最小png字节};
+pub use fixture::{写入tus测试文件, 最小mp4字节, 最小png字节, 最小webp字节};
 #[allow(unused_imports)]
 pub use seed::{
     插入ready图片附件记录, 插入ready视频附件记录, 插入流媒体清单元数据记录,

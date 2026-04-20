@@ -233,6 +233,19 @@ export interface 流媒体资产描述 {
   origin: 媒体冷源描述;
 }
 
+export interface 单文件视频资产描述 {
+  asset_id: string;
+  content_hash: string;
+  kind: "file_video";
+  variants: {
+    canonical: Blob媒体变体描述 | null;
+  };
+  manifest: null;
+  lifecycle: null;
+  distribution: 媒体资产分发表面;
+  origin: 媒体冷源描述;
+}
+
 export interface Blob媒体变体描述 {
   id: string;
   mime_type: string;
@@ -245,6 +258,9 @@ export interface Blob媒体资产描述 {
   asset_id: string;
   content_hash: string;
   kind: "blob_image";
+  variants?: {
+    canonical: Blob媒体变体描述 | null;
+  };
   preview: Blob媒体变体描述 | null;
   full: Blob媒体变体描述 | null;
   original: Blob媒体变体描述 | null;
@@ -261,6 +277,7 @@ export interface 媒体定位结果 {
   thumbnail_url: string | null;
   distribution: 媒体协作分发定位片段 | null;
   streaming_asset?: 流媒体资产描述 | null;
+  file_asset?: 单文件视频资产描述 | null;
   blob_asset?: Blob媒体资产描述 | null;
 }
 

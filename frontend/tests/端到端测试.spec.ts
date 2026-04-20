@@ -387,7 +387,7 @@ describe("前后台壳端到端冒烟", () => {
     admin.remove();
   });
 
-  it("视频主链已经切到 manifest 且没有 poster 时，时间线不会再把 m3u8 塞给原生 video，查看器仍能拿到正式主链", async () => {
+  it("视频没有 poster 时，时间线不会把播放源塞给原生 video，查看器仍能拿到受控冷源", async () => {
     const transport = new 端到端假传输();
     transport.roomSnapshot = 创建房间快照("r-e2e", 1, {
       snapshot_messages: [
@@ -466,7 +466,7 @@ describe("前后台壳端到端冒烟", () => {
           expect.objectContaining({
             attachmentId: "att-video-e2e",
             kind: "video",
-            src: "http://test.local/api/media/att-video-e2e/stream/hls/master.m3u8?session_id=s-e2e",
+            src: "http://test.local/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=original",
             posterSrc:
               "/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=thumbnail",
           }),

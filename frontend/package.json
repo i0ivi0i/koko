@@ -30,6 +30,7 @@
     "hls.js": "^1.6.16",
     "idb": "^8.0.3",
     "lit": "^3.3.2",
+    "mediabunny": "1.40.1",
     "p2p-media-loader-hlsjs": "^2.2.2",
     "photoswipe": "^5.4.4",
     "socket.io-client": "^4.8.3",

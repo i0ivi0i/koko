@@ -191,7 +191,9 @@ async fn 流媒体清单删除后hls和dash受控内容读取会返回not_found(
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("streaming-deleted-read-{uniq}")})),
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("streaming-deleted-read-{uniq}")}),
+        ),
         &[],
     )
     .await;

@@ -1,24 +1,13 @@
-use image::{DynamicImage, ImageFormat};
 use memmap2::{Mmap, MmapOptions};
 use nom_exif::{MediaParser, MediaSource, TrackInfo, TrackInfoTag};
 use std::{fs::File as StdFile, io::Cursor, path::Path};
 
-/// 图片字节被权威解析后的稳定结果。
-///
-/// 这里故意只保留 complete 链路真正需要的事实：
-/// 1. 真 MIME；
-/// 2. 展示宽高；
-/// 3. 缩略图字节；
-/// 4. full 资产字节。
-///
-/// 这样房间壳只消费“已解析事实”，不再自己理解图片细节。
+/// 单文件图片主链只需要校验 canonical.webp 的展示事实。
 #[derive(Debug)]
-pub(super) struct 图片内容解析结果 {
+pub(super) struct Canonical图片校验结果 {
     pub(super) mime_type: String,
     pub(super) 宽: i32,
     pub(super) 高: i32,
-    pub(super) 缩略图字节: Vec<u8>,
-    pub(super) 完整图字节: Vec<u8>,
 }
 
 /// 视频字节被权威解析后的最小稳定结果。
@@ -36,78 +25,27 @@ pub(super) enum 媒体内容解析错误 {
     系统错误(&'static str),
 }
 
-fn 读取exif方向(bytes: &[u8]) -> u32 {
-    let mut cursor = Cursor::new(bytes);
-    exif::Reader::new()
-        .read_from_container(&mut cursor)
-        .ok()
-        .and_then(|reader| {
-            reader
-                .get_field(exif::Tag::Orientation, exif::In::PRIMARY)
-                .and_then(|field| field.value.get_uint(0))
-        })
-        .unwrap_or(1)
-}
-
-fn 应用exif方向(image: DynamicImage, orientation: u32) -> DynamicImage {
-    match orientation {
-        2 => image.fliph(),
-        3 => image.rotate180(),
-        4 => image.flipv(),
-        5 => image.rotate90().fliph(),
-        6 => image.rotate90(),
-        7 => image.rotate270().fliph(),
-        8 => image.rotate270(),
-        _ => image,
-    }
-}
-
-fn 生成缩略图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageError> {
-    let thumbnail = image.thumbnail(512, 512);
-    let mut cursor = Cursor::new(Vec::new());
-    thumbnail.write_to(&mut cursor, ImageFormat::Png)?;
-    Ok(cursor.into_inner())
-}
-
-fn 生成完整图字节(image: &DynamicImage) -> Result<Vec<u8>, image::ImageError> {
-    // full 资产仍然是完整查看主链，但不再等同于冷源原图：
-    // 它会被统一压到更适合查看器的 WebP 形态，同时给超大图一个稳定上限。
-    let full = if image.width() > 2048 || image.height() > 2048 {
-        image.thumbnail(2048, 2048)
-    } else {
-        image.clone()
-    };
-    let mut cursor = Cursor::new(Vec::new());
-    full.write_to(&mut cursor, ImageFormat::WebP)?;
-    Ok(cursor.into_inner())
-}
-
-/// 旧直传和新 complete 都必须走同一条图片解析链：
-/// 1. 真 MIME 以后端探测为准；
-/// 2. 宽高和缩略图以后端解码结果为准；
-/// 3. 不把“文件后缀/前端 mime”冒充成权威事实。
-pub(super) fn 解析图片内容(
+/// 后端只验证客户端已经预制好的 canonical WebP。
+/// 不在这里生成缩略图、完整图或长期原图派生，避免服务器重新成为图片加工 owner。
+pub(super) fn 校验canonical图片内容(
     bytes: &[u8],
-) -> Result<图片内容解析结果, 媒体内容解析错误> {
+) -> Result<Canonical图片校验结果, 媒体内容解析错误> {
     let Some(kind) = infer::get(bytes) else {
-        return Err(媒体内容解析错误::类型不允许("只允许上传图片"));
+        return Err(媒体内容解析错误::类型不允许(
+            "只允许上传 canonical WebP 图片",
+        ));
     };
-    if !kind.mime_type().starts_with("image/") {
-        return Err(媒体内容解析错误::类型不允许("只允许上传图片"));
+    if kind.mime_type() != "image/webp" {
+        return Err(媒体内容解析错误::类型不允许(
+            "图片必须先在客户端预制成 canonical.webp",
+        ));
     }
     let decoded = image::load_from_memory(bytes)
-        .map_err(|_| 媒体内容解析错误::类型不允许("图片内容非法"))?;
-    let normalized_image = 应用exif方向(decoded, 读取exif方向(bytes));
-    let 缩略图字节 = 生成缩略图字节(&normalized_image)
-        .map_err(|_| 媒体内容解析错误::系统错误("生成图片缩略图失败"))?;
-    let 完整图字节 = 生成完整图字节(&normalized_image)
-        .map_err(|_| 媒体内容解析错误::系统错误("生成图片完整图失败"))?;
-    Ok(图片内容解析结果 {
-        mime_type: kind.mime_type().to_string(),
-        宽: normalized_image.width() as i32,
-        高: normalized_image.height() as i32,
-        缩略图字节,
-        完整图字节,
+        .map_err(|_| 媒体内容解析错误::类型不允许("canonical.webp 内容非法"))?;
+    Ok(Canonical图片校验结果 {
+        mime_type: "image/webp".to_string(),
+        宽: decoded.width() as i32,
+        高: decoded.height() as i32,
     })
 }
 
@@ -171,6 +109,20 @@ pub(super) fn 解析视频文件内容(
 ) -> Result<视频内容解析结果, 媒体内容解析错误> {
     let mapped = 映射只读视频文件(path)?;
     解析视频内容(mapped.as_ref())
+}
+
+/// 单文件视频主链只接收客户端已经预制好的 canonical.mp4。
+/// 后端继续负责轻量探测和拒绝非法输入，但不再做 faststart、remux、转码或 HLS/DASH 打包补偿。
+pub(super) fn 校验canonical视频文件内容(
+    path: &Path,
+) -> Result<视频内容解析结果, 媒体内容解析错误> {
+    let parsed = 解析视频文件内容(path)?;
+    if parsed.mime_type != "video/mp4" {
+        return Err(媒体内容解析错误::类型不允许(
+            "视频必须先在客户端预制成 canonical.mp4",
+        ));
+    }
+    Ok(parsed)
 }
 
 fn 解析视频轨道整数(value: &nom_exif::EntryValue) -> Option<u64> {

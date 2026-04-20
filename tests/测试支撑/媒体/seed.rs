@@ -1,12 +1,12 @@
 use sqlx::PgPool;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::fixture::最小mp4字节;
+use super::fixture::{最小mp4字节, 最小webp字节};
 
 /// 直接往数据库写入一条 ready 图片附件真相。
 /// 这个 helper 只服务集成测试建数，避免为了某个房间/消息场景倒逼上传 HTTP 主链参与。
-/// 说明：随着图片资产协议收口，测试建数也要跟着落三层资产键和原始冷源到期时间，
-/// 避免 locator/查看器测试继续吃“只有 original + thumbnail 两列”的过期夹具。
+/// 说明：图片资产协议已经收口成一份 canonical.webp，测试建数也必须跟着收口；
+/// 否则 locator/查看器测试会继续吃 preview/full/original 派生列，掩盖真实主链。
 pub async fn 插入ready图片附件记录(pool: &PgPool, 会话标识: &str, 附件标识: &str) {
     let owner_identity_db_id = sqlx::query_scalar::<_, Option<i64>>(
         "SELECT anonymous_identity_id FROM sessions WHERE session_id = $1",
@@ -33,15 +33,13 @@ pub async fn 插入ready图片附件记录(pool: &PgPool, 会话标识: &str, �
             origin_expires_at,
             status
          ) VALUES (
-            $1, $2, 'image', 'image/png', 68, 1, 1, $3, $4, $5, $6, TO_TIMESTAMP($7), 'ready'
+            $1, $2, 'image', 'image/webp', $3, 1, 1, $4, NULL, NULL, NULL, TO_TIMESTAMP($5), 'ready'
          )",
     )
     .bind(附件标识)
     .bind(owner_identity_db_id)
-    .bind(format!("original/{附件标识}.png"))
-    .bind(format!("thumbnail/{附件标识}.png"))
-    .bind(format!("asset-original/{附件标识}.png"))
-    .bind(format!("full/{附件标识}.webp"))
+    .bind(最小webp字节().len() as i64)
+    .bind(format!("images/{附件标识}/canonical.webp"))
     .bind(未来冷源到期时间戳秒())
     .execute(pool)
     .await

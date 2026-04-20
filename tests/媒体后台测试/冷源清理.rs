@@ -63,8 +63,8 @@ async fn 原始冷源超过24小时后会被后台清理并写入删除时间() 
     .expect("应能把原始冷源挪到 24 小时外");
     pool.close().await;
 
-    let origin_storage_key = format!("original/{attachment_id_for_worker}.png");
-    写入测试对象(&state, &origin_storage_key, 最小png字节()).await;
+    let origin_storage_key = format!("images/{attachment_id_for_worker}/canonical.webp");
+    写入测试对象(&state, &origin_storage_key, 最小webp字节()).await;
 
     koko::shell::执行一次媒体冷源清理(state.clone())
         .await
@@ -237,10 +237,13 @@ async fn 视频流媒体清单超过24小时后会被后台清理并写入删除
 
     // 这里故意同时放入主清单和子清单/分片，防止后续实现只删顶层文件，留下实际仍可读取的段资源。
     let hls_master_storage_key = format!("streams/{attachment_id_for_worker}/hls/master.m3u8");
-    let hls_child_playlist_storage_key = format!("streams/{attachment_id_for_worker}/hls/video-720p.m3u8");
-    let hls_segment_storage_key = format!("streams/{attachment_id_for_worker}/hls/video-720p-00001.ts");
+    let hls_child_playlist_storage_key =
+        format!("streams/{attachment_id_for_worker}/hls/video-720p.m3u8");
+    let hls_segment_storage_key =
+        format!("streams/{attachment_id_for_worker}/hls/video-720p-00001.ts");
     let dash_mpd_storage_key = format!("streams/{attachment_id_for_worker}/dash/stream.mpd");
-    let dash_segment_storage_key = format!("streams/{attachment_id_for_worker}/dash/video-00001.m4s");
+    let dash_segment_storage_key =
+        format!("streams/{attachment_id_for_worker}/dash/video-00001.m4s");
     写入测试对象(&state, &hls_master_storage_key, b"#EXTM3U\n".to_vec()).await;
     写入测试对象(
         &state,
@@ -435,7 +438,7 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
 
 #[tokio::test]
 #[serial]
-async fn 冷源删除后locator顶层original失效但blob_original仍可读() {
+async fn 冷源删除后locator顶层original和blob_canonical都会失效() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -509,20 +512,8 @@ async fn 冷源删除后locator顶层original失效但blob_original仍可读() {
             .expect("应能构建共享应用状态");
     写入测试对象(
         &state,
-        format!("original/{attachment_id}.png").as_str(),
-        最小png字节(),
-    )
-    .await;
-    写入测试对象(
-        &state,
-        format!("asset-original/{attachment_id}.png").as_str(),
-        最小png字节(),
-    )
-    .await;
-    写入测试对象(
-        &state,
-        format!("full/{attachment_id}.webp").as_str(),
-        最小png字节(),
+        format!("images/{attachment_id}/canonical.webp").as_str(),
+        最小webp字节(),
     )
     .await;
     let app = koko::shell::构建路由(state.clone());
@@ -561,17 +552,16 @@ async fn 冷源删除后locator顶层original失效但blob_original仍可读() {
         "旧 original 冷源路由在物理删除后必须失效，避免 Web 继续偷偷依赖已经退场的原始附件主链"
     );
 
-    let (blob_origin_status, _, blob_origin_body) = send_bytes(
+    let (blob_canonical_status, _, _) = send_bytes(
         app,
         Method::GET,
-        &format!("/api/media/{attachment_id}/blob/original?session_id={session_id}"),
+        &format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}"),
         &[],
     )
     .await;
-    assert_eq!(blob_origin_status, StatusCode::OK);
     assert_eq!(
-        blob_origin_body,
-        最小png字节(),
-        "图片长期原图资产必须继续可读，证明冷源退场后查看器仍依赖资产主链而不是 legacy original"
+        blob_canonical_status,
+        StatusCode::NOT_FOUND,
+        "canonical 图片只有一份正式对象；24 小时冷源退场后不能继续让 blob 路由伪造长期可读资产"
     );
 }

@@ -293,7 +293,9 @@ async fn prepare运输授权写入失败时不会留下孤儿prepared附件() {
         app.clone(),
         Method::POST,
         "/api/session/bootstrap",
-        Some(serde_json::json!({"device_anonymous_token": format!("prepare-transport-fail-{uniq}")})),
+        Some(
+            serde_json::json!({"device_anonymous_token": format!("prepare-transport-fail-{uniq}")}),
+        ),
         &[],
     )
     .await;

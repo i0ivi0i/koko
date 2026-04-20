@@ -481,6 +481,8 @@ async fn 非成员不能读取房间消息里的图片内容() {
     )
     .await;
     let room_id = room_body["room_id"].as_str().expect("room_id").to_string();
+    let image_bytes = 最小webp字节();
+    let image_byte_size = image_bytes.len() as i64;
 
     let (prepare_status, prepare_body) = send_json(
         app.clone(),
@@ -488,9 +490,9 @@ async fn 非成员不能读取房间消息里的图片内容() {
         "/api/media/image/prepare",
         Some(serde_json::json!({
             "session_id": owner_session_id,
-            "file_name": "owner.png",
-            "mime_type": "image/png",
-            "byte_size": 68
+            "file_name": "canonical.webp",
+            "mime_type": "image/webp",
+            "byte_size": image_byte_size
         })),
         &[],
     )
@@ -505,10 +507,10 @@ async fn 非成员不能读取房间消息里的图片内容() {
     let temp_file = 写入tus测试文件(
         &state.tus_upload_dir,
         &attachment_id,
-        "owner.png",
-        &最小png字节(),
+        "canonical.webp",
+        &image_bytes,
     )
-    .expect("应能写入 tus 原图文件");
+    .expect("应能写入 tus canonical 图片文件");
     let (hook_status, hook_body) = send_json(
         app.clone(),
         Method::POST,
@@ -518,10 +520,10 @@ async fn 非成员不能读取房间消息里的图片内容() {
             Some(authorization.as_str()),
             &upload_id,
             &attachment_id,
-            "owner.png",
-            "image/png",
-            68,
-            68,
+            "canonical.webp",
+            "image/webp",
+            image_byte_size,
+            image_byte_size,
             Some(temp_file.as_str()),
         )),
         &[],

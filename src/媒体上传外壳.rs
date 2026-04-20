@@ -1,6 +1,6 @@
 use super::{
     err_resp, map_domain_err_tuple, tus_hook外壳, 媒体上传运输方式_TUS, 媒体内容解析, 应用状态,
-    构建共享仓储, 流媒体打包,
+    构建共享仓储,
 };
 use crate::{
     adapter::{媒体上传会话授权写入请求, 媒体上传运输记录},
@@ -460,7 +460,7 @@ pub(super) async fn complete_media_upload(
         .map(|value| value.as_secs() as i64)
         .unwrap_or(0);
     let 原始冷源到期时间戳秒 = ready_epoch秒 + usecase::媒体原始冷源保留秒数;
-    let mut streaming_manifest_request = None;
+    let streaming_manifest_request = None;
     let (ready_request, distribution_request, torrent_request) = match &prepared.种类 {
         usecase::媒体附件类型::图片 => {
             let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
@@ -479,39 +479,41 @@ pub(super) async fn complete_media_upload(
                     );
                 }
             };
-            let parsed = match 媒体内容解析::解析图片内容(original_bytes.as_ref()) {
-                Ok(parsed) => parsed,
-                Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::BAD_REQUEST,
-                        "attachment_type_not_allowed",
-                        message,
-                        "parse_image_kind_not_allowed",
-                        message,
-                    )
-                }
-                Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message,
-                        "parse_image_system_error",
-                        message,
-                    )
-                }
-            };
-            let original_path = ObjectPath::from(prepared.原始内容存储键.clone());
+            let parsed =
+                match 媒体内容解析::校验canonical图片内容(original_bytes.as_ref()) {
+                    Ok(parsed) => parsed,
+                    Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::BAD_REQUEST,
+                            "attachment_type_not_allowed",
+                            message,
+                            "parse_image_kind_not_allowed",
+                            message,
+                        )
+                    }
+                    Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
+                        return 记录并返回complete重活失败(
+                            attachment_id.as_str(),
+                            attachment_kind,
+                            attachment_byte_size,
+                            complete_heavy_work_started_at,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            message,
+                            "parse_image_system_error",
+                            message,
+                        )
+                    }
+                };
+            let canonical_storage_key = format!("images/{attachment_id}/canonical.webp");
+            let canonical_path = ObjectPath::from(canonical_storage_key.clone());
             if let Err(err) = state
                 .attachment_store
-                .put(&original_path, original_bytes.clone().into())
+                .put(&canonical_path, original_bytes.clone().into())
                 .await
             {
                 return 记录并返回complete重活失败(
@@ -521,69 +523,9 @@ pub(super) async fn complete_media_upload(
                     complete_heavy_work_started_at,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
-                    "写入原图对象失败",
-                    "put_original_object_failed",
-                    format!("写入 canonical 原图对象失败: {err}"),
-                );
-            }
-            let thumbnail_storage_key = format!("images/{attachment_id}/thumbnail.png");
-            let thumbnail_path = ObjectPath::from(thumbnail_storage_key.clone());
-            let asset_original_storage_key = format!(
-                "images/{attachment_id}/asset-original{}",
-                推导原始内容扩展名(&prepared.种类, parsed.mime_type.as_str())
-            );
-            let asset_original_path = ObjectPath::from(asset_original_storage_key.clone());
-            let full_storage_key = format!("images/{attachment_id}/full.webp");
-            let full_path = ObjectPath::from(full_storage_key.clone());
-            if let Err(err) = state
-                .attachment_store
-                .put(&thumbnail_path, parsed.缩略图字节.into())
-                .await
-            {
-                return 记录并返回complete重活失败(
-                    attachment_id.as_str(),
-                    attachment_kind,
-                    attachment_byte_size,
-                    complete_heavy_work_started_at,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "写入图片缩略图对象失败",
-                    "put_image_thumbnail_failed",
-                    format!("写入图片缩略图对象失败: {err}"),
-                );
-            }
-            if let Err(err) = state
-                .attachment_store
-                .put(&asset_original_path, original_bytes.clone().into())
-                .await
-            {
-                return 记录并返回complete重活失败(
-                    attachment_id.as_str(),
-                    attachment_kind,
-                    attachment_byte_size,
-                    complete_heavy_work_started_at,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "写入图片长期原图资产失败",
-                    "put_image_asset_original_failed",
-                    format!("写入图片长期原图资产失败: {err}"),
-                );
-            }
-            if let Err(err) = state
-                .attachment_store
-                .put(&full_path, parsed.完整图字节.into())
-                .await
-            {
-                return 记录并返回complete重活失败(
-                    attachment_id.as_str(),
-                    attachment_kind,
-                    attachment_byte_size,
-                    complete_heavy_work_started_at,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "写入图片完整图对象失败",
-                    "put_image_full_failed",
-                    format!("写入图片完整图对象失败: {err}"),
+                    "写入 canonical 图片对象失败",
+                    "put_image_canonical_failed",
+                    format!("写入 canonical 图片对象失败: {err}"),
                 );
             }
             let 协作分发共享载荷 = 选择协作分发共享载荷(
@@ -625,10 +567,12 @@ pub(super) async fn complete_media_upload(
                 字节大小: original_bytes.len() as i64,
                 宽: parsed.宽,
                 高: parsed.高,
-                原始内容存储键: prepared.原始内容存储键.clone(),
-                缩略图存储键: Some(thumbnail_storage_key),
-                资产原图存储键: Some(asset_original_storage_key),
-                完整图存储键: Some(full_storage_key),
+                // 图片主链已前移到客户端预制；后端只保存一份 canonical.webp。
+                // 缩略图、full、asset-original 派生对象全部退场，避免服务器继续吃 CPU/IO 重活。
+                原始内容存储键: canonical_storage_key,
+                缩略图存储键: None,
+                资产原图存储键: None,
+                完整图存储键: None,
                 原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
                 回退母本存储键: None,
                 回退母本到期时间戳秒: None,
@@ -643,23 +587,44 @@ pub(super) async fn complete_media_upload(
         }
         usecase::媒体附件类型::视频 => {
             let 视频解析开始 = Instant::now();
-            let parsed =
-                match 媒体内容解析::解析视频文件内容(temp_file_path.as_path()) {
-                    Ok(parsed) => parsed,
-                    Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
-                        return 记录并返回complete重活失败(
-                            attachment_id.as_str(),
-                            attachment_kind,
-                            attachment_byte_size,
-                            complete_heavy_work_started_at,
-                            StatusCode::BAD_REQUEST,
-                            "attachment_type_not_allowed",
-                            message,
-                            "parse_video_kind_not_allowed",
-                            message,
-                        )
-                    }
-                    Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
+            let parsed = match 媒体内容解析::校验canonical视频文件内容(
+                temp_file_path.as_path(),
+            ) {
+                Ok(parsed) => parsed,
+                Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::BAD_REQUEST,
+                        "attachment_type_not_allowed",
+                        message,
+                        "parse_video_kind_not_allowed",
+                        message,
+                    )
+                }
+                Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
+                    return 记录并返回complete重活失败(
+                        attachment_id.as_str(),
+                        attachment_kind,
+                        attachment_byte_size,
+                        complete_heavy_work_started_at,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        message,
+                        "parse_video_system_error",
+                        message,
+                    )
+                }
+            };
+            记录complete阶段耗时("parse_video", 视频解析开始);
+            let canonical_video_storage_key = format!("videos/{attachment_id}/canonical.mp4");
+            let canonical_video_path = ObjectPath::from(canonical_video_storage_key.clone());
+            let canonical_video_mapping =
+                match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
+                    Ok(mapped) => mapped,
+                    Err(err) => {
                         return 记录并返回complete重活失败(
                             attachment_id.as_str(),
                             attachment_kind,
@@ -667,85 +632,40 @@ pub(super) async fn complete_media_upload(
                             complete_heavy_work_started_at,
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "system_error",
-                            message,
-                            "parse_video_system_error",
-                            message,
-                        )
+                            "映射 canonical 视频临时文件失败",
+                            "map_canonical_video_failed",
+                            format!("映射 canonical 视频失败: {err}"),
+                        );
                     }
                 };
-            记录complete阶段耗时("parse_video", 视频解析开始);
-            let 流媒体打包开始 = Instant::now();
-            let 打包结果 = match task::spawn_blocking({
-                let ffmpeg_bin = state.ffmpeg_bin.clone();
-                let ffprobe_bin = state.ffprobe_bin.clone();
-                let shaka_packager_bin = state.shaka_packager_bin.clone();
-                let attachment_id = attachment_id.clone();
-                let temp_file_path = temp_file_path.clone();
-                move || {
-                    流媒体打包::生成流媒体打包产物(
-                        ffmpeg_bin.as_str(),
-                        ffprobe_bin.as_str(),
-                        shaka_packager_bin.as_str(),
-                        attachment_id.as_str(),
-                        temp_file_path.as_path(),
-                    )
-                }
-            })
-            .await
+            let 视频canonical写入开始 = Instant::now();
+            if let Err(err) = state
+                .attachment_store
+                .put(
+                    &canonical_video_path,
+                    canonical_video_mapping.as_ref().to_vec().into(),
+                )
+                .await
             {
-                Ok(Ok(result)) => result,
-                Ok(Err((status, code, message))) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        status,
-                        code,
-                        message.clone(),
-                        "stream_packaging_failed",
-                        message,
-                    )
-                }
-                Err(err) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        format!("流媒体打包任务执行失败: {err}"),
-                        "stream_packaging_task_failed",
-                        format!("流媒体打包任务执行失败: {err}"),
-                    )
-                }
-            };
-            记录complete阶段耗时("package_streaming_assets", 流媒体打包开始);
+                return 记录并返回complete重活失败(
+                    attachment_id.as_str(),
+                    attachment_kind,
+                    attachment_byte_size,
+                    complete_heavy_work_started_at,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "system_error",
+                    "写入 canonical 视频对象失败",
+                    "put_video_canonical_failed",
+                    format!("写入 canonical 视频对象失败: {err}"),
+                );
+            }
+            记录complete阶段耗时("put_canonical_video", 视频canonical写入开始);
             let 分发元数据构造开始 = Instant::now();
-            let 回退母本映射 = match 映射只读完成媒体临时文件(
-                打包结果.高质量回退母本本地路径.as_path(),
-            ) {
-                Ok(mapped) => mapped,
-                Err(err) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        "映射视频 mezzanine 回退母本失败",
-                        "map_mezzanine_video_failed",
-                        format!("映射视频 canonical mezzanine 失败: {err}"),
-                    );
-                }
-            };
             let 协作分发共享载荷 = match 选择协作分发共享载荷(
                 &prepared.种类,
                 parsed.mime_type.as_str(),
                 &[],
-                Some(回退母本映射.as_ref()),
+                Some(canonical_video_mapping.as_ref()),
             ) {
                 Ok(payload) => payload,
                 Err(message) => {
@@ -790,38 +710,7 @@ pub(super) async fn complete_media_upload(
                 }
             };
             记录complete阶段耗时("generate_torrent", torrent生成开始);
-            drop(回退母本映射);
-            let 流媒体产物上传开始 = Instant::now();
-            let uploaded = match 流媒体打包::上传流媒体打包产物(
-                &state,
-                &attachment_id,
-                原始冷源到期时间戳秒,
-                打包结果,
-            )
-            .await
-            {
-                Ok(uploaded) => uploaded,
-                Err((status, code, message)) => {
-                    return 记录并返回complete重活失败(
-                        attachment_id.as_str(),
-                        attachment_kind,
-                        attachment_byte_size,
-                        complete_heavy_work_started_at,
-                        status,
-                        code,
-                        message.clone(),
-                        "upload_streaming_assets_failed",
-                        message,
-                    )
-                }
-            };
-            记录complete阶段耗时("upload_streaming_assets", 流媒体产物上传开始);
-            let 流媒体打包::流媒体打包上传结果 {
-                清单写入请求,
-                静态封面存储键,
-                回退母本存储键,
-            } = uploaded;
-            streaming_manifest_request = Some(清单写入请求);
+            drop(canonical_video_mapping);
             let ready_request = usecase::媒体附件写入请求 {
                 附件标识: attachment_id.clone(),
                 种类: prepared.种类.clone(),
@@ -829,15 +718,15 @@ pub(super) async fn complete_media_upload(
                 字节大小: attachment_byte_size,
                 宽: parsed.宽,
                 高: parsed.高,
-                // 视频 ready 后的 original 变体不再指向用户原片，而是指向 24h 的高质量 mezzanine。
-                // 这样 original_url / web_seed / range 读取链都继续走同一个稳定入口，不必再为“原片已删”额外分叉。
-                原始内容存储键: 回退母本存储键.clone(),
-                缩略图存储键: Some(静态封面存储键),
+                // 视频主链已前移到客户端预制；后端只保存一份 canonical.mp4。
+                // HLS/DASH、mezzanine 和静态封面都不在 complete 阶段生成，避免服务端继续承担加工 owner。
+                原始内容存储键: canonical_video_storage_key,
+                缩略图存储键: None,
                 资产原图存储键: None,
                 完整图存储键: None,
-                原始冷源到期时间戳秒: None,
-                回退母本存储键: Some(回退母本存储键),
-                回退母本到期时间戳秒: Some(原始冷源到期时间戳秒),
+                原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
+                回退母本存储键: None,
+                回退母本到期时间戳秒: None,
             };
             let torrent_request = usecase::协作分发torrent元信息写入请求 {
                 附件标识: attachment_id.clone(),
@@ -891,58 +780,13 @@ pub(super) async fn complete_media_upload(
                 }
             }
             记录complete阶段耗时("delete_upload_temp_file", 上传临时文件退场开始);
-            let (_原片删除时间戳秒, 冷备层到期时间戳秒, 冷备层删除时间戳秒) =
-                if matches!(prepared.种类, usecase::媒体附件类型::视频) {
-                    let 原始冷源退场开始 = Instant::now();
-                    // 视频原片删除记录的是“用户上传母本已退场”，
-                    // 但对外暴露的 original 冷备入口此时已经切成 mezzanine，不能把这两个事实混成一个删除位。
-                    let 原片删除时间戳秒 = ready_epoch秒;
-                    let state_for_mark = state.clone();
-                    let attachment_id_for_mark = attachment_id.clone();
-                    let 原始冷源退场结果 = match task::spawn_blocking(move || {
-                        let mut repo = 构建共享仓储(&state_for_mark);
-                        usecase::标记媒体冷源已删除(
-                            &mut repo,
-                            &attachment_id_for_mark,
-                            原片删除时间戳秒,
-                        )
-                        .map_err(map_domain_err_tuple)
-                    })
-                    .await
-                    {
-                        Ok(Ok(())) => (Some(原片删除时间戳秒), Some(原始冷源到期时间戳秒), None),
-                        Ok(Err((status, code, message))) => {
-                            return 记录并返回complete重活失败(
-                                attachment_id.as_str(),
-                                attachment_kind,
-                                attachment_byte_size,
-                                complete_heavy_work_started_at,
-                                status,
-                                code,
-                                message.clone(),
-                                "mark_original_cold_source_deleted_failed",
-                                message,
-                            )
-                        }
-                        Err(err) => {
-                            return 记录并返回complete重活失败(
-                                attachment_id.as_str(),
-                                attachment_kind,
-                                attachment_byte_size,
-                                complete_heavy_work_started_at,
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "system_error",
-                                format!("标记原始上传冷源已删除任务失败: {err}"),
-                                "mark_original_cold_source_deleted_task_failed",
-                                format!("标记原始上传冷源已删除任务失败: {err}"),
-                            )
-                        }
-                    };
-                    记录complete阶段耗时("retire_original_upload_source", 原始冷源退场开始);
-                    原始冷源退场结果
-                } else {
-                    (None, Some(原始冷源到期时间戳秒), None)
-                };
+            // 图片和视频现在都只有一份 canonical 文件；complete 成功后只给它 24 小时服务器辅助窗口，
+            // 不再把“上传母本已删”和“对外 canonical 冷源仍可用”拆成两套互相打架的删除事实。
+            let (_原片删除时间戳秒, 冷备层到期时间戳秒, 冷备层删除时间戳秒): (
+                Option<i64>,
+                Option<i64>,
+                Option<i64>,
+            ) = (None, Some(原始冷源到期时间戳秒), None);
             let distribution_snapshot = usecase::协作分发元数据快照 {
                 附件标识: attachment_id.clone(),
                 content_id: distribution_request.content_id.clone(),
@@ -1397,21 +1241,21 @@ fn 选择协作分发共享载荷<'a>(
     kind: &usecase::媒体附件类型,
     原始mime_type: &str,
     原始字节: &'a [u8],
-    视频回退母本字节: Option<&'a [u8]>,
+    canonical视频字节: Option<&'a [u8]>,
 ) -> Result<协作分发共享载荷<'a>, &'static str> {
     match kind {
         usecase::媒体附件类型::图片 => Ok(协作分发共享载荷 {
             字节: 原始字节,
             稳定扩展名: 推导原始内容扩展名(kind, 原始mime_type),
         }),
-        // 视频对外长期可播放的 canonical 冷备已经收口到 mezzanine.mp4；
-        // swarm 也必须复用同一份字节与扩展，不能继续认上传原片的容器类型。
+        // 视频对外长期可播放的 canonical 已经由客户端预制成 mp4；
+        // swarm 也必须复用同一份字节与扩展，不能再等待后端 mezzanine 或分段产物。
         usecase::媒体附件类型::视频 => {
-            let Some(视频回退母本字节) = 视频回退母本字节 else {
-                return Err("视频协作分发缺少 canonical mezzanine 载荷");
+            let Some(canonical视频字节) = canonical视频字节 else {
+                return Err("视频协作分发缺少 canonical 视频载荷");
             };
             Ok(协作分发共享载荷 {
-                字节: 视频回退母本字节,
+                字节: canonical视频字节,
                 稳定扩展名: ".mp4",
             })
         }
@@ -1677,24 +1521,24 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn 视频协作分发共享载荷会收口到mezzanine_mp4而不是继续沿用原片mime() {
+    fn 视频协作分发共享载荷会收口到canonical_mp4而不是继续沿用原片mime() {
         let 共享载荷 = 选择协作分发共享载荷(
             &usecase::媒体附件类型::视频,
             "video/quicktime",
             b"original-mov",
-            Some(b"mezzanine-mp4"),
+            Some(b"canonical-mp4"),
         )
-        .expect("视频协作分发应能拿到 canonical mezzanine 载荷");
+        .expect("视频协作分发应能拿到 canonical mp4 载荷");
 
         assert_eq!(
             共享载荷.稳定扩展名,
             ".mp4",
-            "视频协作分发 torrent 内文件名必须跟随长期可播放的 mezzanine，而不是继续沿用上传原片后缀"
+            "视频协作分发 torrent 内文件名必须跟随长期可播放的 canonical mp4，而不是继续沿用上传原片后缀"
         );
         assert_eq!(
             共享载荷.字节,
-            b"mezzanine-mp4",
-            "视频协作分发的 content_hash / swarm payload 必须认 canonical mezzanine 字节，而不是认已退场原片"
+            b"canonical-mp4",
+            "视频协作分发的 content_hash / swarm payload 必须认 canonical mp4 字节，而不是认已退场原片"
         );
     }
 

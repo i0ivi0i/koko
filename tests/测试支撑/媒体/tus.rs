@@ -111,7 +111,10 @@ pub fn 构造tus_hook请求体(
         })
         .unwrap_or(Value::Null);
     let mut request_headers = serde_json::Map::new();
-    if let Some(value) = authorization.map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(value) = authorization
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         request_headers.insert(
             "Authorization".to_string(),
             Value::Array(vec![Value::String(value.to_string())]),
@@ -215,8 +218,14 @@ pub fn 断言媒体准备结果是Tus契约(
         body["tus_endpoint"].as_str().is_some(),
         "媒体 prepare 必须返回 Tus endpoint"
     );
-    assert!(body["tus_headers"].is_object(), "媒体 prepare 必须返回 Tus 头集合");
-    assert!(body["tus_metadata"].is_object(), "媒体 prepare 必须返回 Tus metadata");
+    assert!(
+        body["tus_headers"].is_object(),
+        "媒体 prepare 必须返回 Tus 头集合"
+    );
+    assert!(
+        body["tus_metadata"].is_object(),
+        "媒体 prepare 必须返回 Tus metadata"
+    );
     assert!(
         body["expires_at"].as_str().is_some(),
         "媒体 prepare 必须返回过期时间"
@@ -230,7 +239,9 @@ pub fn 断言媒体准备结果是Tus契约(
         "切到 Tus 后不应继续暴露旧 upload_headers"
     );
 
-    let tus_metadata = body["tus_metadata"].as_object().expect("tus_metadata 必须是对象");
+    let tus_metadata = body["tus_metadata"]
+        .as_object()
+        .expect("tus_metadata 必须是对象");
     assert_eq!(
         tus_metadata.get("attachment_id").and_then(Value::as_str),
         Some(attachment_id)
@@ -250,9 +261,9 @@ pub fn 断言媒体准备结果是Tus契约(
         Some(expected_mime_type)
     );
     assert_eq!(
-        tus_metadata
-            .get("byte_size")
-            .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse::<i64>().ok())),
+        tus_metadata.get("byte_size").and_then(|value| value
+            .as_i64()
+            .or_else(|| value.as_str()?.parse::<i64>().ok())),
         Some(expected_byte_size)
     );
 }

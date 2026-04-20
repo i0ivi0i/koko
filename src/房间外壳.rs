@@ -894,12 +894,21 @@ mod 拒绝日志级别测试 {
 #[cfg(test)]
 mod 媒体内容解析迁移测试 {
     use crate::shell::媒体内容解析;
-    use image::{DynamicImage, ImageFormat};
-    use std::io::Cursor;
+
+    fn 最小webp字节() -> Vec<u8> {
+        // canonical 图片主链只接受客户端预制好的 WebP；这里内嵌 1x1 fixture，
+        // 避免测试再用 PNG 编码路径误导后端重新承担图片加工职责。
+        vec![
+            0x52, 0x49, 0x46, 0x46, 0x22, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50,
+            0x38, 0x20, 0x16, 0x00, 0x00, 0x00, 0x30, 0x01, 0x00, 0x9d, 0x01, 0x2a, 0x01, 0x00,
+            0x01, 0x00, 0x0e, 0xc0, 0xfe, 0x25, 0xa4, 0x00, 0x03, 0x70, 0x00, 0x00, 0x00, 0x00,
+        ]
+    }
 
     #[test]
-    fn 新模块会拒绝非图片字节() {
-        let err = 媒体内容解析::解析图片内容(b"not an image").expect_err("非图片字节必须被拒绝");
+    fn 新模块会拒绝非canonical_webp字节() {
+        let err = 媒体内容解析::校验canonical图片内容(b"not an image")
+            .expect_err("非 canonical WebP 字节必须被拒绝");
         assert!(
             matches!(err, 媒体内容解析::媒体内容解析错误::类型不允许(_)),
             "错误类型必须继续表达成类型不允许，而不是被吞成系统错误"
@@ -907,13 +916,9 @@ mod 媒体内容解析迁移测试 {
     }
 
     #[test]
-    fn 新模块会从图片字节里读出稳定宽高() {
-        let mut cursor = Cursor::new(Vec::new());
-        DynamicImage::new_rgba8(1, 1)
-            .write_to(&mut cursor, ImageFormat::Png)
-            .expect("应能编码 1x1 png");
-        let parsed =
-            媒体内容解析::解析图片内容(cursor.get_ref()).expect("最小 png 应该能被新模块解析");
+    fn 新模块会从canonical_webp里读出稳定宽高() {
+        let parsed = 媒体内容解析::校验canonical图片内容(&最小webp字节())
+            .expect("最小 canonical WebP 应该能被新模块解析");
         assert_eq!(parsed.宽, 1);
         assert_eq!(parsed.高, 1);
     }

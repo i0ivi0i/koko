@@ -11,6 +11,84 @@ describe("媒体播放器", () => {
     expect(媒体是否默认循环播放("image")).toBe(false);
   });
 
+  it("同一附件在 inline_autoplay 与 viewer 使用同一 content_hash", async () => {
+    const locator = {
+      attachment_id: "att-file-video-1",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/api/attachments/att-file-video-1/content?variant=original",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-file-video-1",
+        content_hash: "hash-file-video-1",
+        swarm_id: "swarm-hash-file-video-1",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-file-video-1",
+        torrent_info_hash: "torrent-info-hash-file-video-1",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-file-video-1",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+        survival_mode: "server_assisted" as const,
+      },
+      preview_asset: null,
+      file_asset: {
+        asset_id: "att-file-video-1",
+        content_hash: "hash-file-video-1",
+        kind: "file_video" as const,
+        variants: {
+          canonical: {
+            id: "canonical",
+            url: "http://media.local/api/attachments/att-file-video-1/content?variant=original",
+            mime_type: "video/mp4",
+            width: 1280,
+            height: 720,
+          },
+        },
+        manifest: null,
+        lifecycle: null,
+        distribution: {
+          swarm_id: "swarm-hash-file-video-1",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-file-video-1",
+          join_ticket: null,
+          survival_mode: "server_assisted" as const,
+        },
+        origin: {
+          original_url: "http://media.local/api/attachments/att-file-video-1/content?variant=original",
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only" as const,
+        },
+      },
+      blob_asset: null,
+      streaming_asset: null,
+    };
+    const 播放器 = 创建媒体播放器({
+      locate: async () => locator,
+      probeAnchor: vi.fn(async () => undefined),
+    });
+
+    const auto = await 播放器.解析播放结果({
+      attachmentId: "att-file-video-1",
+      kind: "video",
+      surface: "inline_autoplay",
+    });
+    const view = await 播放器.解析播放结果({
+      attachmentId: "att-file-video-1",
+      kind: "video",
+      surface: "viewer",
+    });
+
+    if (auto.mode === "expired" || auto.mode === "degraded" || view.mode === "expired" || view.mode === "degraded") {
+      throw new Error("单文件视频 locator 应该解析成可播放结果");
+    }
+    expect(auto.contentHash).toBe("hash-file-video-1");
+    expect(view.contentHash).toBe("hash-file-video-1");
+    expect(auto.src).toBe(view.src);
+  });
+
   it("图片首开仍优先 preview/full blob 主链，不会因为多消费者改造而强行切到 WebTorrent", async () => {
     const resolveSwarmSource = vi.fn();
     const probeAnchor = vi.fn();

@@ -130,7 +130,7 @@ async fn 视频locator与房间快照会共享同一套preview_asset() {
 
 #[tokio::test]
 #[serial]
-async fn 视频complete与locator会共享同一套streaming生命周期与peer_only生存字段() {
+async fn 视频complete与locator会共享同一套file_asset与peer_only生存字段() {
     let backup = 备份并清空环境变量(&["SWARM_TICKET_SECRET", "SWARM_TICKET_TTL_SECONDS"]);
     std::env::set_var("SWARM_TICKET_SECRET", "projection-ticket-secret-for-tests");
     std::env::set_var("SWARM_TICKET_TTL_SECONDS", "180");
@@ -231,14 +231,23 @@ async fn 视频complete与locator会共享同一套streaming生命周期与peer_
     assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
     assert_eq!(locator_status, StatusCode::OK, "{locator_body:?}");
     assert_eq!(
-        complete_body["media_asset"]["lifecycle"]["streaming_expires_at"].as_str(),
-        locator_body["streaming_asset"]["lifecycle"]["streaming_expires_at"].as_str(),
-        "complete 和 locator 必须共享同一条 streaming_expires_at 真相"
+        complete_body["media_asset"]["kind"].as_str(),
+        Some("file_video"),
+        "complete 必须返回单文件视频资产，而不是重新长出 streaming_video"
     );
     assert_eq!(
-        complete_body["media_asset"]["lifecycle"]["streaming_deleted_at"].as_str(),
-        locator_body["streaming_asset"]["lifecycle"]["streaming_deleted_at"].as_str(),
-        "complete 和 locator 不能各自脑补 streaming_deleted_at"
+        locator_body["file_asset"]["kind"].as_str(),
+        Some("file_video"),
+        "locator 也必须投影同一份 file_asset 真相"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["variants"]["canonical"]["url"].as_str(),
+        locator_body["file_asset"]["variants"]["canonical"]["url"].as_str(),
+        "complete 与 locator 必须共享同一条 canonical 受控读取入口"
+    );
+    assert_eq!(
+        complete_body["media_asset"]["lifecycle"], locator_body["file_asset"]["lifecycle"],
+        "单文件视频没有 streaming 生命周期，complete 和 locator 都不能各自脑补"
     );
     assert_eq!(
         complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
@@ -252,8 +261,8 @@ async fn 视频complete与locator会共享同一套streaming生命周期与peer_
     );
     assert_eq!(
         complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
-        locator_body["streaming_asset"]["distribution"]["survival_mode"].as_str(),
-        "complete.media_asset 与 locator.streaming_asset 不能把 survival_mode 投影成两套不同语义"
+        locator_body["file_asset"]["distribution"]["survival_mode"].as_str(),
+        "complete.media_asset 与 locator.file_asset 不能把 survival_mode 投影成两套不同语义"
     );
     assert!(
         complete_body["media_asset"]["distribution"]["join_ticket"]

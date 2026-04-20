@@ -83,6 +83,52 @@ function 补全图片文件Mime类型(file: File): File {
   });
 }
 
+async function 浏览器转码图片为Webp(file: File): Promise<Blob> {
+  if (typeof createImageBitmap !== "function") {
+    throw new Error("attachment_upload_failed");
+  }
+  const bitmap = await createImageBitmap(file);
+  try {
+    // 图片 canonical 归一化只依赖浏览器原生解码/编码能力：
+    // 这里不在发布器里手搓图片编码，也不把服务器变成补偿转码链。
+    if (typeof OffscreenCanvas === "function") {
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("attachment_upload_failed");
+      }
+      context.drawImage(bitmap, 0, 0);
+      return await canvas.convertToBlob({
+        type: "image/webp",
+        quality: 0.95,
+      });
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("attachment_upload_failed");
+    }
+    context.drawImage(bitmap, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("attachment_upload_failed"));
+          }
+        },
+        "image/webp",
+        0.95
+      );
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
 async function 转码手机图片为标准Jpeg(file: File): Promise<File> {
   const { default: heic2any } = await import("heic2any");
   const result = await heic2any({
@@ -99,23 +145,36 @@ async function 转码手机图片为标准Jpeg(file: File): Promise<File> {
   });
 }
 
+async function 预制图片为CanonicalWebp(file: File): Promise<File> {
+  const normalizedSource = 是需要前端转码的手机图片(file)
+    ? await 转码手机图片为标准Jpeg(file)
+    : 补全图片文件Mime类型(file);
+  const sourceMimeType = 推导图片Mime类型(normalizedSource);
+  const canonicalBlob =
+    sourceMimeType === "image/webp"
+      ? normalizedSource
+      : await 浏览器转码图片为Webp(normalizedSource);
+  return new File([canonicalBlob], "canonical.webp", {
+    type: "image/webp",
+    lastModified: file.lastModified,
+  });
+}
+
 /**
  * 输入区文件规范化只回答一件事：
  * “浏览器刚选中的这个文件，能不能被当成待上传图片继续进入主链？”
  *
  * 它不做草稿状态推进，也不做上传，只负责：
  * 1. 类型校验；
- * 2. HEIC/HEIF 转码；
- * 3. MIME 兜底补全。
+ * 2. HEIC/HEIF 先交给成熟库转成浏览器可读中间态；
+ * 3. 最终统一产出客户端 canonical.webp，后端只做轻校验。
  */
 export async function 准备待上传图片文件(file: File): Promise<File> {
   if (!是图片文件(file)) {
     throw new Error("attachment_type_not_allowed");
   }
   try {
-    return 是需要前端转码的手机图片(file)
-      ? await 转码手机图片为标准Jpeg(file)
-      : 补全图片文件Mime类型(file);
+    return await 预制图片为CanonicalWebp(file);
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "attachment_type_not_allowed") {
       throw error;

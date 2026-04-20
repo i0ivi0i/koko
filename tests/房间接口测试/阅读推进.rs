@@ -22,12 +22,10 @@ async fn 阅读锚点会写入当前匿名身份与房间的唯一记录() {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
             koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
-        let identity_id = koko::usecase::仓储端口::查询会话所属匿名身份(
-            &repo,
-            &identity.会话标识,
-        )
-            .expect("应能通过会话回查内部身份")
-            .expect("bootstrap 后会话必须能解析到内部身份");
+        let identity_id =
+            koko::usecase::仓储端口::查询会话所属匿名身份(&repo, &identity.会话标识)
+                .expect("应能通过会话回查内部身份")
+                .expect("bootstrap 后会话必须能解析到内部身份");
         let room =
             koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
                 .expect("应能进房");

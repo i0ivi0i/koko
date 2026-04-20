@@ -31,7 +31,7 @@ fn 断言对象不包含壳层私货(
 
 #[tokio::test]
 #[serial]
-async fn 视频locator共享契约不包含_web_页面流程和展示文案字段() {
+async fn 视频complete共享契约不包含_web_页面流程和展示文案字段() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -124,21 +124,29 @@ async fn 视频locator共享契约不包含_web_页面流程和展示文案字�
     let media_asset = complete_body["media_asset"]
         .as_object()
         .expect("complete 应返回共享 media_asset");
-    let streaming_asset = media_asset;
-    let distribution = streaming_asset["distribution"]
+    let distribution = media_asset["distribution"]
         .as_object()
-        .expect("流媒体资产必须返回共享分发表面");
-    let origin = streaming_asset["origin"]
+        .expect("单文件视频资产必须返回共享分发表面");
+    let origin = media_asset["origin"]
         .as_object()
-        .expect("流媒体资产必须返回冷源描述");
-    let manifest = streaming_asset["manifest"]
+        .expect("单文件视频资产必须返回冷源描述");
+    let canonical = media_asset["variants"]["canonical"]
         .as_object()
-        .expect("流媒体资产必须返回 manifest 描述");
+        .expect("单文件视频资产必须返回 canonical 变体描述");
 
     断言对象不包含壳层私货(media_asset, "video media_asset");
+    断言对象不包含壳层私货(canonical, "video canonical");
     断言对象不包含壳层私货(distribution, "video distribution");
     断言对象不包含壳层私货(origin, "video origin");
-    断言对象不包含壳层私货(manifest, "video manifest");
+    assert_eq!(media_asset["kind"].as_str(), Some("file_video"));
+    assert!(
+        media_asset["manifest"].is_null(),
+        "单文件视频不再暴露 HLS/DASH manifest"
+    );
+    assert!(
+        media_asset["lifecycle"].is_null(),
+        "单文件视频不再暴露 streaming lifecycle"
+    );
     assert!(
         distribution.get("presence_url").is_none(),
         "共享分发表面不能夹带 Web 页面 presence URL"
@@ -180,6 +188,8 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         .as_str()
         .expect("session_id")
         .to_string();
+    let image_bytes = 最小webp字节();
+    let image_byte_size = image_bytes.len() as i64;
 
     let (prepare_status, prepare_body) = send_json(
         app.clone(),
@@ -187,9 +197,9 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         "/api/media/image/prepare",
         Some(serde_json::json!({
             "session_id": session_id,
-            "file_name": "shared-contract-image.png",
-            "mime_type": "image/png",
-            "byte_size": 最小png字节().len()
+            "file_name": "canonical.webp",
+            "mime_type": "image/webp",
+            "byte_size": image_byte_size
         })),
         &[],
     )
@@ -203,10 +213,10 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
     let temp_file = 写入tus测试文件(
         &tus_upload_dir,
         &attachment_id,
-        "shared-contract-image.png",
-        &最小png字节(),
+        "canonical.webp",
+        &image_bytes,
     )
-    .expect("应能写入 tus 临时图片文件");
+    .expect("应能写入 tus canonical 图片文件");
 
     let (hook_status, hook_body) = send_json(
         app.clone(),
@@ -217,10 +227,10 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
             Some(authorization.as_str()),
             &format!("upload-shared-contract-image-{attachment_id}"),
             &attachment_id,
-            "shared-contract-image.png",
-            "image/png",
-            最小png字节().len() as i64,
-            最小png字节().len() as i64,
+            "canonical.webp",
+            "image/webp",
+            image_byte_size,
+            image_byte_size,
             Some(temp_file.as_str()),
         )),
         &[],
@@ -244,15 +254,9 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
     let media_asset = complete_body["media_asset"]
         .as_object()
         .expect("complete 应返回共享 media_asset");
-    let preview = media_asset["preview"]
+    let canonical = media_asset["variants"]["canonical"]
         .as_object()
-        .expect("Blob 资产必须返回 preview");
-    let full = media_asset["full"]
-        .as_object()
-        .expect("Blob 资产必须返回 full");
-    let original = media_asset["original"]
-        .as_object()
-        .expect("Blob 资产必须返回 original");
+        .expect("Blob 资产必须返回 canonical");
     let distribution = media_asset["distribution"]
         .as_object()
         .expect("Blob 资产必须返回共享分发表面");
@@ -262,32 +266,14 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
 
     // 共享 contract 既不能混入 Web presenter 私货，也不能继续把旧附件内容地址当正式 blob 主链。
     assert_eq!(
-        preview.get("url").and_then(serde_json::Value::as_str),
-        Some(format!("/api/media/{attachment_id}/blob/preview?session_id={session_id}").as_str())
+        canonical.get("url").and_then(serde_json::Value::as_str),
+        Some(format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}").as_str())
     );
-    assert_eq!(
-        full.get("url").and_then(serde_json::Value::as_str),
-        Some(format!("/api/media/{attachment_id}/blob/full?session_id={session_id}").as_str())
-    );
-    assert_eq!(
-        original.get("url").and_then(serde_json::Value::as_str),
-        Some(format!("/api/media/{attachment_id}/blob/original?session_id={session_id}").as_str())
-    );
-    assert!(
-        full.get("url")
-            .and_then(serde_json::Value::as_str)
-            .zip(original.get("url").and_then(serde_json::Value::as_str))
-            .is_some_and(|(full_url, original_url)| {
-                full_url != original_url
-                    && !full_url.contains("/api/attachments/")
-                    && !original_url.contains("/api/attachments/")
-            }),
-        "full/original 必须是稳定可区分的 blob 主链地址，不能继续退回旧附件内容直链"
-    );
+    assert!(media_asset["preview"].is_null());
+    assert!(media_asset["full"].is_null());
+    assert!(media_asset["original"].is_null());
     断言对象不包含壳层私货(media_asset, "blob media_asset");
-    断言对象不包含壳层私货(preview, "blob preview");
-    断言对象不包含壳层私货(full, "blob full");
-    断言对象不包含壳层私货(original, "blob original");
+    断言对象不包含壳层私货(canonical, "blob canonical");
     断言对象不包含壳层私货(distribution, "blob distribution");
     断言对象不包含壳层私货(origin, "blob origin");
     assert!(

@@ -1,40 +1,53 @@
+#[cfg(test)]
 use super::应用状态;
+#[cfg(test)]
 use crate::usecase;
+#[cfg(test)]
 use axum::http::StatusCode;
+#[cfg(test)]
 use object_store::{buffered::BufWriter, path::Path as ObjectPath, ObjectStore};
+#[cfg(test)]
 use serde::Deserialize;
-use std::{
-    path::{Path as StdPath, PathBuf},
-    process::Command,
-    sync::Arc,
-};
+use std::path::Path as StdPath;
+#[cfg(test)]
+use std::{path::PathBuf, process::Command, sync::Arc};
+#[cfg(test)]
 use tokio::{
     fs,
     io::{AsyncWriteExt, BufReader},
     task::JoinSet,
 };
+#[cfg(test)]
 use uuid::Uuid;
 
 /// `BufWriter` 小于这个阈值会退回单次 put，大于它会自动走 multipart。
 /// 这里故意选 8MiB，让 10MB+ 的视频主链和打包产物都尽早进入流式上传，而不是继续整块驻留内存。
+#[cfg(test)]
 const 附件对象流式写入缓冲字节数: usize = 8 * 1024 * 1024;
 /// object_store 自带 writer 已经内建 part 并发；这里显式钉住上限，避免吞吐策略继续藏在上游默认值里。
+#[cfg(test)]
 const 附件对象流式写入最大并发: usize = 8;
 /// 本地磁盘读取也走一层小缓冲，减少大文件 copy 时的 syscall 抖动。
+#[cfg(test)]
 const 附件对象流式读取缓冲字节数: usize = 1024 * 1024;
 /// 打包文件、静态封面和 mezzanine 回退母本彼此独立，应该在 complete 热路径里并发上传，
 /// 否则会把本可并行的 object_store 写入白白串成一条长链。
+#[cfg(test)]
 const 流媒体打包产物上传最大并发: usize = 4;
 
 /// 打包阶段先把本地产物清单和最终入库键分开：
 /// 1. 本地产物路径只活在当前 complete 调度里；
 /// 2. object_store 存储键才是后续 locator/stream 路由共享的稳定真相。
+#[cfg(test)]
+#[allow(dead_code)]
 struct 流媒体打包文件 {
     相对路径: String,
     本地路径: PathBuf,
 }
 
 /// `complete` 只关心打包完产生了哪些文件，以及主清单相对路径是什么。
+#[cfg(test)]
+#[allow(dead_code)]
 pub(super) struct 流媒体打包结果 {
     hls主清单相对路径: String,
     dash主清单相对路径: String,
@@ -46,6 +59,8 @@ pub(super) struct 流媒体打包结果 {
 /// 视频打包上传返回两类稳定事实：
 /// 1. 正式流媒体清单写入请求；
 /// 2. 与附件同锚点的静态封面与 24 小时 mezzanine 回退层存储键。
+#[cfg(test)]
+#[allow(dead_code)]
 pub(super) struct 流媒体打包上传结果 {
     pub 清单写入请求: usecase::流媒体清单写入请求,
     pub 静态封面存储键: String,
@@ -53,6 +68,7 @@ pub(super) struct 流媒体打包上传结果 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(test)]
 enum 视频打包策略 {
     直接包装原始文件 { 有音轨: bool },
     无损归一化后打包 { 有音轨: bool },
@@ -60,6 +76,7 @@ enum 视频打包策略 {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg(test)]
 struct Ffprobe流信息 {
     codec_type: Option<String>,
     codec_name: Option<String>,
@@ -67,18 +84,21 @@ struct Ffprobe流信息 {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg(test)]
 struct Ffprobe格式信息 {
     format_name: Option<String>,
     tags: Option<Ffprobe格式标签>,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg(test)]
 struct Ffprobe格式标签 {
     major_brand: Option<String>,
     compatible_brands: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg(test)]
 struct Ffprobe探测结果 {
     streams: Vec<Ffprobe流信息>,
     format: Option<Ffprobe格式信息>,
@@ -86,6 +106,7 @@ struct Ffprobe探测结果 {
 
 /// 这里的上传任务只描述“哪一个本地文件写到哪个稳定键”，
 /// 不承载任何业务真相，避免 complete 热路径继续散落 tuple 胶水。
+#[cfg(test)]
 struct 待上传本地资产 {
     本地路径: PathBuf,
     存储键: String,
@@ -134,6 +155,7 @@ pub(super) fn 推导流媒体内容类型(asset_path: &str) -> &'static str {
 
 /// Shell 层统一负责“本地文件 -> 附件对象存储”的 IO 搬运，
 /// 这样 complete 原视频和流媒体打包产物都能复用同一套高吞吐写入策略。
+#[cfg(test)]
 pub(super) async fn 上传本地文件到附件对象存储(
     store: Arc<dyn ObjectStore>,
     local_path: &StdPath,
@@ -175,6 +197,7 @@ pub(super) async fn 上传本地文件到附件对象存储(
 
 /// 打包产物上传如果串行执行，会把 HLS/DASH 分片、静态封面和 mezzanine 的 object_store 写入
 /// 变成 complete 热路径里的纯等待；这里显式限流并发上传，既缩短总耗时，也避免一次性放飞过多任务。
+#[cfg(test)]
 async fn 并发上传本地资产到附件对象存储(
     store: Arc<dyn ObjectStore>,
     待上传资产: Vec<待上传本地资产>,
@@ -237,6 +260,7 @@ async fn 并发上传本地资产到附件对象存储(
     Ok(())
 }
 
+#[cfg(test)]
 fn 执行外部命令(
     command: &mut Command,
     step: &str,
@@ -262,6 +286,7 @@ fn 执行外部命令(
     ))
 }
 
+#[cfg(test)]
 fn 生成无损归一化打包输入(
     ffmpeg_bin: &str,
     输入文件: &StdPath,
@@ -288,6 +313,7 @@ fn 生成无损归一化打包输入(
     ))
 }
 
+#[cfg(test)]
 fn 执行shaka打包(
     shaka_packager_bin: &str,
     workdir: &StdPath,
@@ -321,10 +347,12 @@ fn 执行shaka打包(
     执行外部命令(&mut 打包命令, "Shaka Packager 打包")
 }
 
+#[cfg(test)]
 fn 是shaka解析失败(message: &str) -> bool {
     message.contains("PARSER_FAILURE") || message.contains("Cannot parse media file")
 }
 
+#[cfg(test)]
 fn 解析ffprobe视频打包策略(
     输入文件: &StdPath,
     stdout: &[u8],
@@ -376,14 +404,11 @@ fn 解析ffprobe视频打包策略(
                 .major_brand
                 .as_deref()
                 .is_some_and(|brand| brand.trim().eq_ignore_ascii_case("qt"));
-            let compatible_brands包含qt = tags
-                .compatible_brands
-                .as_deref()
-                .is_some_and(|brands| {
-                    brands
-                        .split_whitespace()
-                        .any(|brand| brand.trim().eq_ignore_ascii_case("qt"))
-                });
+            let compatible_brands包含qt = tags.compatible_brands.as_deref().is_some_and(|brands| {
+                brands
+                    .split_whitespace()
+                    .any(|brand| brand.trim().eq_ignore_ascii_case("qt"))
+            });
             major_brand是qt || compatible_brands包含qt
         });
     let 编码层允许直包 = (ffprobe格式允许直包 || 扩展名允许直包)
@@ -406,6 +431,7 @@ fn 解析ffprobe视频打包策略(
     })
 }
 
+#[cfg(test)]
 fn ffprobe检测视频打包策略(
     ffprobe_bin: &str,
     输入文件: &StdPath,
@@ -444,6 +470,7 @@ fn ffprobe检测视频打包策略(
     解析ffprobe视频打包策略(输入文件, &output.stdout)
 }
 
+#[cfg(test)]
 fn 收集目录文件(
     root: &StdPath,
     prefix: &str,
@@ -485,6 +512,7 @@ fn 收集目录文件(
 
 /// 这里继续复用 ffmpeg / ffprobe / shaka-packager 三个成熟轮子；
 /// 模块自己只负责组织输入输出，不再让房间壳知道打包细节。
+#[cfg(test)]
 pub(super) fn 生成流媒体打包产物(
     ffmpeg_bin: &str,
     ffprobe_bin: &str,
@@ -523,74 +551,74 @@ pub(super) fn 生成流媒体打包产物(
     let 打包策略 = ffprobe检测视频打包策略(ffprobe_bin, 输入文件)?;
     let (mut 视频打包输入文件, mut 音频打包输入文件, mut 高质量回退母本本地路径, 有音轨) =
         match 打包策略 {
-        视频打包策略::直接包装原始文件 { 有音轨 } => (
-            输入文件.to_path_buf(),
-            有音轨.then(|| 输入文件.to_path_buf()),
-            输入文件.to_path_buf(),
-            有音轨,
-        ),
-        视频打包策略::无损归一化后打包 { 有音轨 } => {
-            let (视频打包输入文件, 音频打包输入文件, 高质量回退母本本地路径) =
-                生成无损归一化打包输入(ffmpeg_bin, 输入文件, workdir.as_path(), 有音轨)?;
-            (
-                视频打包输入文件,
-                音频打包输入文件,
-                高质量回退母本本地路径,
+            视频打包策略::直接包装原始文件 { 有音轨 } => (
+                输入文件.to_path_buf(),
+                有音轨.then(|| 输入文件.to_path_buf()),
+                输入文件.to_path_buf(),
                 有音轨,
-            )
-        }
-        视频打包策略::转码后打包 { 有音轨 } => {
-            let 视频轨道文件 = workdir.join("video.mp4");
-            let mut 转码视频 = Command::new(ffmpeg_bin);
-            转码视频.args(["-y", "-i"]);
-            转码视频.arg(输入文件);
-            转码视频.args([
-                "-map",
-                "0:v:0",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-g",
-                "48",
-                "-keyint_min",
-                "48",
-                "-sc_threshold",
-                "0",
-                "-pix_fmt",
-                "yuv420p",
-                "-an",
-            ]);
-            转码视频.arg(视频轨道文件.as_os_str());
-            执行外部命令(&mut 转码视频, "FFmpeg 视频转码")?;
+            ),
+            视频打包策略::无损归一化后打包 { 有音轨 } => {
+                let (视频打包输入文件, 音频打包输入文件, 高质量回退母本本地路径) =
+                    生成无损归一化打包输入(
+                        ffmpeg_bin,
+                        输入文件,
+                        workdir.as_path(),
+                        有音轨,
+                    )?;
+                (
+                    视频打包输入文件,
+                    音频打包输入文件,
+                    高质量回退母本本地路径,
+                    有音轨,
+                )
+            }
+            视频打包策略::转码后打包 { 有音轨 } => {
+                let 视频轨道文件 = workdir.join("video.mp4");
+                let mut 转码视频 = Command::new(ffmpeg_bin);
+                转码视频.args(["-y", "-i"]);
+                转码视频.arg(输入文件);
+                转码视频.args([
+                    "-map",
+                    "0:v:0",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "veryfast",
+                    "-g",
+                    "48",
+                    "-keyint_min",
+                    "48",
+                    "-sc_threshold",
+                    "0",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-an",
+                ]);
+                转码视频.arg(视频轨道文件.as_os_str());
+                执行外部命令(&mut 转码视频, "FFmpeg 视频转码")?;
 
-            let 音频打包输入文件 = if 有音轨 {
-                std::fs::create_dir_all(hls_audio_dir.as_path()).map_err(|err| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        format!("创建 HLS 音频目录失败: {err}"),
-                    )
-                })?;
-                let 音频轨道文件 = workdir.join("audio.mp4");
-                let mut 转码音频 = Command::new(ffmpeg_bin);
-                转码音频.args(["-y", "-i"]);
-                转码音频.arg(输入文件);
-                转码音频.args(["-map", "0:a:0", "-c:a", "aac", "-b:a", "128k", "-vn"]);
-                转码音频.arg(音频轨道文件.as_os_str());
-                执行外部命令(&mut 转码音频, "FFmpeg 音频转码")?;
-                Some(音频轨道文件)
-            } else {
-                None
-            };
-            (
-                视频轨道文件.clone(),
-                音频打包输入文件,
-                视频轨道文件,
-                有音轨,
-            )
-        }
-    };
+                let 音频打包输入文件 = if 有音轨 {
+                    std::fs::create_dir_all(hls_audio_dir.as_path()).map_err(|err| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            format!("创建 HLS 音频目录失败: {err}"),
+                        )
+                    })?;
+                    let 音频轨道文件 = workdir.join("audio.mp4");
+                    let mut 转码音频 = Command::new(ffmpeg_bin);
+                    转码音频.args(["-y", "-i"]);
+                    转码音频.arg(输入文件);
+                    转码音频.args(["-map", "0:a:0", "-c:a", "aac", "-b:a", "128k", "-vn"]);
+                    转码音频.arg(音频轨道文件.as_os_str());
+                    执行外部命令(&mut 转码音频, "FFmpeg 音频转码")?;
+                    Some(音频轨道文件)
+                } else {
+                    None
+                };
+                (视频轨道文件.clone(), 音频打包输入文件, 视频轨道文件, 有音轨)
+            }
+        };
 
     let mut 抽帧命令 = Command::new(ffmpeg_bin);
     抽帧命令.args(["-y", "-ss", "1", "-i"]);
@@ -653,6 +681,8 @@ pub(super) fn 生成流媒体打包产物(
 }
 
 /// 打包产物上传也放在这一层，保证“本地产物 -> object_store 稳定键”的责任只有一个 owner。
+#[cfg(test)]
+#[allow(dead_code)]
 pub(super) async fn 上传流媒体打包产物(
     state: &应用状态,
     attachment_id: &str,
@@ -811,8 +841,8 @@ pub(super) fn 重写_dash清单内容(
 #[cfg(test)]
 mod tests {
     use super::{
-        上传本地文件到附件对象存储, 并发上传本地资产到附件对象存储,
-        生成流媒体打包产物, 解析ffprobe视频打包策略, 待上传本地资产, 视频打包策略,
+        上传本地文件到附件对象存储, 并发上传本地资产到附件对象存储, 待上传本地资产,
+        生成流媒体打包产物, 视频打包策略, 解析ffprobe视频打包策略,
     };
     use object_store::{
         memory::InMemory, path::Path as ObjectPath, throttle::ThrottleConfig,
@@ -891,7 +921,9 @@ mod tests {
 
         for index in 0..6 {
             let 已写入字节 = store
-                .get(&ObjectPath::from(format!("tests/concurrent-upload-{index}.bin")))
+                .get(&ObjectPath::from(format!(
+                    "tests/concurrent-upload-{index}.bin"
+                )))
                 .await
                 .expect("应能读取已写入对象")
                 .bytes()
@@ -915,8 +947,7 @@ mod tests {
   ]
 }"#;
 
-        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
-            .expect("应能解析 ffprobe 探测结果");
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout).expect("应能解析 ffprobe 探测结果");
         assert_eq!(策略, 视频打包策略::直接包装原始文件 { 有音轨: true });
     }
 
@@ -931,8 +962,7 @@ mod tests {
   ]
 }"#;
 
-        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
-            .expect("应能解析 ffprobe 探测结果");
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout).expect("应能解析 ffprobe 探测结果");
         assert_eq!(策略, 视频打包策略::直接包装原始文件 { 有音轨: true });
     }
 
@@ -953,8 +983,7 @@ mod tests {
   ]
 }"#;
 
-        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
-            .expect("应能解析 ffprobe 探测结果");
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout).expect("应能解析 ffprobe 探测结果");
         assert_eq!(策略, 视频打包策略::无损归一化后打包 { 有音轨: true });
     }
 
@@ -969,8 +998,7 @@ mod tests {
   ]
 }"#;
 
-        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout)
-            .expect("应能解析 ffprobe 探测结果");
+        let 策略 = 解析ffprobe视频打包策略(输入文件, stdout).expect("应能解析 ffprobe 探测结果");
         assert_eq!(策略, 视频打包策略::转码后打包 { 有音轨: true });
     }
 
@@ -1078,24 +1106,27 @@ for index, arg in enumerate(args):
         .expect("应能写入 shaka wrapper");
 
         let 结果 = 生成流媒体打包产物(
-            ffmpeg_cmd.to_str().expect("ffmpeg wrapper 路径应可转字符串"),
-            ffprobe_cmd.to_str().expect("ffprobe wrapper 路径应可转字符串"),
+            ffmpeg_cmd
+                .to_str()
+                .expect("ffmpeg wrapper 路径应可转字符串"),
+            ffprobe_cmd
+                .to_str()
+                .expect("ffprobe wrapper 路径应可转字符串"),
             shaka_cmd.to_str().expect("shaka wrapper 路径应可转字符串"),
             "att-direct-pack",
             输入文件.as_path(),
         )
         .expect("直包策略应能生成流媒体打包结果");
 
-        let ffmpeg_log = std::fs::read_to_string(临时目录.join("ffmpeg.log"))
-            .expect("应能读取 ffmpeg 调用日志");
+        let ffmpeg_log =
+            std::fs::read_to_string(临时目录.join("ffmpeg.log")).expect("应能读取 ffmpeg 调用日志");
         assert_eq!(
             ffmpeg_log.lines().count(),
             1,
             "可直包的 H264/AAC MP4 不应再额外触发视频/音频重转码"
         );
         assert_eq!(
-            结果.高质量回退母本本地路径,
-            输入文件,
+            结果.高质量回退母本本地路径, 输入文件,
             "可直包视频应直接复用原始上传文件作为 mezzanine 回退层"
         );
 
@@ -1104,8 +1135,10 @@ for index, arg in enumerate(args):
 
     #[test]
     fn 直包文件若被shaka判定为解析失败会回退到无损归一化后重试() {
-        let 临时目录 =
-            std::env::temp_dir().join(format!("koko-stream-direct-pack-fallback-{}", Uuid::new_v4()));
+        let 临时目录 = std::env::temp_dir().join(format!(
+            "koko-stream-direct-pack-fallback-{}",
+            Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&临时目录).expect("应能创建测试目录");
         let 输入文件 = 临时目录.join("input");
         std::fs::write(&输入文件, b"fake mp4 bytes").expect("应能写入输入文件");
@@ -1221,16 +1254,20 @@ for index, arg in enumerate(args):
         .expect("应能写入 shaka wrapper");
 
         let 结果 = 生成流媒体打包产物(
-            ffmpeg_cmd.to_str().expect("ffmpeg wrapper 路径应可转字符串"),
-            ffprobe_cmd.to_str().expect("ffprobe wrapper 路径应可转字符串"),
+            ffmpeg_cmd
+                .to_str()
+                .expect("ffmpeg wrapper 路径应可转字符串"),
+            ffprobe_cmd
+                .to_str()
+                .expect("ffprobe wrapper 路径应可转字符串"),
             shaka_cmd.to_str().expect("shaka wrapper 路径应可转字符串"),
             "att-direct-pack-fallback",
             输入文件.as_path(),
         )
         .expect("直包 parser failure 应回退到无损归一化并重新生成流媒体打包结果");
 
-        let ffmpeg_log = std::fs::read_to_string(临时目录.join("ffmpeg.log"))
-            .expect("应能读取 ffmpeg 调用日志");
+        let ffmpeg_log =
+            std::fs::read_to_string(临时目录.join("ffmpeg.log")).expect("应能读取 ffmpeg 调用日志");
         assert_eq!(
             ffmpeg_log.lines().count(),
             2,
@@ -1253,12 +1290,11 @@ for index, arg in enumerate(args):
             "回退成功后应把归一化后的标准 MP4 作为 mezzanine 回退层"
         );
         assert_ne!(
-            结果.高质量回退母本本地路径,
-            输入文件,
+            结果.高质量回退母本本地路径, 输入文件,
             "parser failure 后的 mezzanine 不应继续指回会打爆 packager 的原始上传文件"
         );
-        let shaka_log = std::fs::read_to_string(临时目录.join("shaka.log"))
-            .expect("应能读取 shaka 调用日志");
+        let shaka_log =
+            std::fs::read_to_string(临时目录.join("shaka.log")).expect("应能读取 shaka 调用日志");
         assert_eq!(
             shaka_log.lines().count(),
             2,
@@ -1392,16 +1428,20 @@ for index, arg in enumerate(args):
         .expect("应能写入 shaka wrapper");
 
         let 结果 = 生成流媒体打包产物(
-            ffmpeg_cmd.to_str().expect("ffmpeg wrapper 路径应可转字符串"),
-            ffprobe_cmd.to_str().expect("ffprobe wrapper 路径应可转字符串"),
+            ffmpeg_cmd
+                .to_str()
+                .expect("ffmpeg wrapper 路径应可转字符串"),
+            ffprobe_cmd
+                .to_str()
+                .expect("ffprobe wrapper 路径应可转字符串"),
             shaka_cmd.to_str().expect("shaka wrapper 路径应可转字符串"),
             "att-qt-remux",
             输入文件.as_path(),
         )
         .expect("qt 品牌 MP4 应能通过无损归一化链路生成流媒体打包结果");
 
-        let ffmpeg_log = std::fs::read_to_string(临时目录.join("ffmpeg.log"))
-            .expect("应能读取 ffmpeg 调用日志");
+        let ffmpeg_log =
+            std::fs::read_to_string(临时目录.join("ffmpeg.log")).expect("应能读取 ffmpeg 调用日志");
         assert_eq!(
             ffmpeg_log.lines().count(),
             2,
@@ -1424,8 +1464,7 @@ for index, arg in enumerate(args):
             "无损归一化后的标准 MP4 应成为 mezzanine 回退层，而不是继续回退到原始 qt 容器"
         );
         assert_ne!(
-            结果.高质量回退母本本地路径,
-            输入文件,
+            结果.高质量回退母本本地路径, 输入文件,
             "qt 品牌 MP4 的 mezzanine 不应继续指回原始上传文件"
         );
         let ffprobe_log = std::fs::read_to_string(临时目录.join("ffprobe.log"))

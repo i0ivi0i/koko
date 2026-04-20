@@ -14,6 +14,7 @@ import {
   读取视频文件元数据,
   视频附件上传上限字节数,
 } from "./视频元数据.js";
+import { 预处理待上传视频文件, type 视频预处理结果 } from "./视频预处理.js";
 import {
   记录媒体上传失败诊断,
   解析媒体上传失败代码,
@@ -150,6 +151,13 @@ type 媒体发布器依赖 = {
     height: number;
     previewUrl?: string | null;
   }>;
+  preprocessVideo?(file: File): Promise<
+    视频预处理结果 & {
+      width?: number;
+      height?: number;
+      previewUrl?: string | null;
+    }
+  >;
   createPreviewUrl?(file: Blob | null): string;
   yieldToMainThread?(): Promise<void>;
 };
@@ -380,6 +388,7 @@ function 构造媒体上传Meta(input: {
 export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const createUploader = deps.createUploader ?? 创建默认媒体上传器;
   const readVideoMetadata = deps.readVideoMetadata ?? 读取视频文件元数据;
+  const preprocessVideo = deps.preprocessVideo ?? 预处理待上传视频文件;
   const createPreviewUrl = deps.createPreviewUrl ?? 创建本地媒体预览地址;
   const yieldToMainThread = deps.yieldToMainThread ?? 默认让出主线程;
   const 上传器表 = new Map<string, 媒体上传器>();
@@ -577,9 +586,17 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     sourceFile: File
   ): Promise<{ file: File; width: number; height: number; previewUrl?: string | null }> => {
     if (kind === "video") {
-      const metadata = await readVideoMetadata(sourceFile);
+      const preprocessed = await preprocessVideo(sourceFile);
+      const metadata =
+        typeof preprocessed.width === "number" && typeof preprocessed.height === "number"
+          ? {
+              width: preprocessed.width,
+              height: preprocessed.height,
+              previewUrl: preprocessed.previewUrl ?? null,
+            }
+          : await readVideoMetadata(preprocessed.file);
       return {
-        file: sourceFile,
+        file: preprocessed.file,
         width: metadata.width,
         height: metadata.height,
         previewUrl: metadata.previewUrl ?? null,
@@ -608,6 +625,23 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     });
   };
 
+  const 写入视频预制等待草稿 = (file: File): string => {
+    const localId = 创建失败草稿标识("video", "preprocessing", file);
+    deps.writeDraft({
+      localId,
+      kind: "video",
+      attachmentId: "",
+      previewUrl: createPreviewUrl(file),
+      width: 0,
+      height: 0,
+      status: "processing",
+      fileName: file.name,
+      errorCode: "",
+      sourceFile: file,
+    });
+    return localId;
+  };
+
   const 处理选择同类媒体文件 = async (
     kind: 媒体种类,
     files: Iterable<File>
@@ -622,10 +656,34 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
         写入超限失败草稿(kind, sourceFile);
         continue;
       }
+      const preprocessingDraftId =
+        kind === "video" ? 写入视频预制等待草稿(sourceFile) : "";
+      const preprocessingWaitTimer =
+        kind === "video"
+          ? globalThis.setTimeout(() => {
+              // 超过 15 分钟只是提醒用户仍在本地预制；它不是失败，也绝不能触发 prepare。
+              deps.updateDraft(preprocessingDraftId, {
+                status: "processing",
+                errorCode: "media_preprocess_waiting",
+              });
+            }, 15 * 60 * 1000)
+          : null;
       try {
         const preparedFile = await 准备待上传媒体文件(kind, sourceFile);
+        if (preprocessingWaitTimer) {
+          globalThis.clearTimeout(preprocessingWaitTimer);
+        }
         if (preparedFile.file.size > maxFileSize) {
-          写入超限失败草稿(kind, preparedFile.file);
+          if (preprocessingDraftId) {
+            deps.updateDraft(preprocessingDraftId, {
+              status: "failed",
+              errorCode: "attachment_too_large",
+              sourceFile: preparedFile.file,
+              fileName: preparedFile.file.name,
+            });
+          } else {
+            写入超限失败草稿(kind, preparedFile.file);
+          }
           continue;
         }
         const prepared = await deps.prepareMediaUpload(kind, deps.getSessionId(), preparedFile.file);
@@ -653,19 +711,32 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           }),
         });
         草稿上传器键表.set(nextLocalId, uploaderKey);
+        if (preprocessingDraftId) {
+          deps.removeDraft(preprocessingDraftId);
+        }
       } catch (error: unknown) {
-        deps.writeDraft({
-          localId: 创建失败草稿标识(kind, "rejected", sourceFile),
+        if (preprocessingWaitTimer) {
+          globalThis.clearTimeout(preprocessingWaitTimer);
+        }
+        const failedPatch = {
           kind,
           attachmentId: "",
           previewUrl: createPreviewUrl(sourceFile),
           width: 0,
           height: 0,
-          status: "failed",
+          status: "failed" as const,
           fileName: sourceFile.name,
           errorCode: 解析传输错误代码(error),
           sourceFile,
-        });
+        };
+        if (preprocessingDraftId) {
+          deps.updateDraft(preprocessingDraftId, failedPatch);
+        } else {
+          deps.writeDraft({
+            localId: 创建失败草稿标识(kind, "rejected", sourceFile),
+            ...failedPatch,
+          });
+        }
       }
     }
   };

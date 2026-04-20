@@ -98,6 +98,8 @@ pub(super) async fn 查询附件快照_异步(
     pool: &PgPool,
     附件标识: &str,
 ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
+    // 单文件视频主链不再生成 mezzanine，冷备生命周期回到 origin_*；
+    // 旧记录仍可能只写了 mezzanine_*，因此查询层只做兼容回退，不再把旧字段当成新视频真相 owner。
     let row = sqlx::query(
         "SELECT a.attachment_id,
                 COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) AS owner_identity_text,
@@ -111,13 +113,13 @@ pub(super) async fn 查询附件快照_异步(
                 a.full_storage_key,
                 EXTRACT(
                     EPOCH FROM CASE
-                        WHEN a.kind = 'video' THEN a.mezzanine_expires_at
+                        WHEN a.kind = 'video' THEN COALESCE(a.origin_expires_at, a.mezzanine_expires_at)
                         ELSE a.origin_expires_at
                     END
                 )::BIGINT AS origin_expires_at_epoch,
                 EXTRACT(
                     EPOCH FROM CASE
-                        WHEN a.kind = 'video' THEN a.mezzanine_deleted_at
+                        WHEN a.kind = 'video' THEN COALESCE(a.origin_deleted_at, a.mezzanine_deleted_at)
                         ELSE a.origin_deleted_at
                     END
                 )::BIGINT AS origin_deleted_at_epoch \

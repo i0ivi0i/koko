@@ -160,17 +160,23 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
    * 3. 仍保留旧字段兜底，保证第一批后端过渡面上线时不打爆旧 locator。
    */
   const 读取锚点地址 = (locator: 媒体定位结果): string =>
-    locator.streaming_asset?.origin.original_url ?? locator.original_url;
+    locator.file_asset?.variants.canonical?.url ??
+    locator.file_asset?.origin.original_url ??
+    locator.streaming_asset?.origin.original_url ??
+    locator.blob_asset?.variants?.canonical?.url ??
+    locator.original_url;
+
+  const 读取播放内容哈希 = (locator: 媒体定位结果): string | null =>
+    locator.file_asset?.content_hash ??
+    locator.blob_asset?.content_hash ??
+    null;
 
   const 读取预览缩略图地址 = (locator: 媒体定位结果): string | null =>
     locator.preview_asset?.still_url ?? locator.thumbnail_url;
 
   /**
-   * 视频一旦拿到正式 HLS manifest，就不应该继续把原始附件冷源当主播放链。
-   * 当前阶段先统一优先消费 HLS：
-   * 1. 它已经是标准流媒体入口，后续接播放器/provider 不用再倒回 file URL；
-   * 2. DASH 先保留作契约冗余与后续多端适配，不在浏览器主链里同时搞双入口；
-   * 3. 没有 manifest 时才继续走旧的 swarm/file 过渡路径。
+   * 旧 streaming_asset 只继续作为“服务端冷备窗口还没退场”的信号。
+   * 播放裁决不再直接返回 HLS/DASH 主链；新单文件视频走 file_asset，旧资产命不中 swarm 时回到受控冷源。
    */
   const 读取流媒体主链地址 = (locator: 媒体定位结果): string | null => {
     if (locator.kind !== "video" || 流媒体冷备窗口已退场(locator)) {
@@ -189,12 +195,15 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (locator.kind !== "image" || !locator.blob_asset) {
       return null;
     }
+    const canonicalSrc = locator.blob_asset.variants?.canonical?.url ?? null;
     const previewSrc =
+      canonicalSrc ??
       locator.blob_asset.preview?.url ??
       locator.blob_asset.full?.url ??
       locator.blob_asset.original?.url ??
       null;
     const viewerSrc =
+      canonicalSrc ??
       locator.blob_asset.full?.url ??
       locator.blob_asset.original?.url ??
       previewSrc;
@@ -204,7 +213,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     return {
       src: previewSrc,
       viewerSrc,
-      thumbnailUrl: locator.blob_asset.preview?.url ?? 读取预览缩略图地址(locator),
+      thumbnailUrl: canonicalSrc ?? locator.blob_asset.preview?.url ?? 读取预览缩略图地址(locator),
     };
   };
 
@@ -272,12 +281,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     const anchorUrl = 读取锚点地址(locator);
     try {
       await probeAnchor(anchorUrl);
+      const contentHash = 读取播放内容哈希(locator);
+      const distribution = locator.file_asset?.distribution ?? locator.blob_asset?.distribution ?? null;
       return {
         mode: "anchor",
         attachmentId: input.attachmentId,
         kind: input.kind,
         src: anchorUrl,
         thumbnailUrl: 读取预览缩略图地址(locator),
+        ...(contentHash ? { contentHash } : {}),
+        ...(distribution ? { distribution } : {}),
         hint: null,
       };
     } catch {
@@ -291,12 +304,17 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       const refreshedAnchorUrl = 读取锚点地址(refreshedLocator);
       try {
         await probeAnchor(refreshedAnchorUrl);
+        const contentHash = 读取播放内容哈希(refreshedLocator);
+        const distribution =
+          refreshedLocator.file_asset?.distribution ?? refreshedLocator.blob_asset?.distribution ?? null;
         return {
           mode: "anchor",
           attachmentId: input.attachmentId,
           kind: input.kind,
           src: refreshedAnchorUrl,
           thumbnailUrl: 读取预览缩略图地址(refreshedLocator),
+          ...(contentHash ? { contentHash } : {}),
+          ...(distribution ? { distribution } : {}),
           hint: null,
         };
       } catch {
@@ -383,6 +401,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           kind: input.kind,
           src: swarmSource.src,
           thumbnailUrl: 读取预览缩略图地址(locator),
+          ...(读取播放内容哈希(locator) ? { contentHash: 读取播放内容哈希(locator) } : {}),
+          ...(locator.file_asset?.distribution || locator.blob_asset?.distribution
+            ? { distribution: locator.file_asset?.distribution ?? locator.blob_asset?.distribution ?? null }
+            : {}),
           hint: 过滤可播放媒体提示(swarmSource.hint),
         },
         failureReason: null,
@@ -438,9 +460,9 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return;
     }
     /**
-     * HLS 已经赢下本次会话时，后台补齐只能升级“已经预热过的同一条 swarm 会话”，
-     * 不能再冷启动第二条 raw whole-file 主链：
-     * 1. 正式播放继续留在 HLS，不引入中途切源；
+     * 旧 streaming_asset 仍存在时，后台补齐只能升级“已经预热过的同一条 swarm 会话”，
+     * 不能再冷启动第二条 whole-file 重链路：
+     * 1. 正式播放裁决由解析流程统一决定，不在补齐阶段偷偷切源；
      * 2. 已存在的 swarm 会话可以进入 eagerCompleting，继续补齐完整资产；
      * 3. 如果前面根本没预热 swarm，这里就保持静默，不为了补齐再新开重链路。
      */

@@ -1,5 +1,5 @@
 import Uppy from "@uppy/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建传输错误 } from "./common/聊天测试支架";
 import {
   写入媒体草稿,
@@ -161,7 +161,38 @@ function 创建草稿仓库() {
   };
 }
 
-function 创建场景() {
+function 模拟浏览器Webp编码(): void {
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn(async () => ({
+      width: 1,
+      height: 1,
+      close: vi.fn(),
+    }))
+  );
+  vi.stubGlobal(
+    "OffscreenCanvas",
+    class {
+      constructor(
+        readonly width: number,
+        readonly height: number
+      ) {}
+
+      getContext(type: string) {
+        return type === "2d" ? { drawImage: vi.fn() } : null;
+      }
+
+      async convertToBlob(options: { type: string }) {
+        return new Blob([new Uint8Array([9, 8, 7])], { type: options.type });
+      }
+    }
+  );
+}
+
+function 创建场景(overrides: {
+  preprocessVideo?: (file: File) => Promise<{ file: File; width?: number; height?: number; previewUrl?: string | null }>;
+  readVideoMetadata?: (file: File) => Promise<{ width: number; height: number; previewUrl?: string | null }>;
+} = {}) {
   const 默认上传器 = new 假媒体上传器();
   const 大视频上传器 = new 假媒体上传器();
   const drafts = 创建草稿仓库();
@@ -220,14 +251,19 @@ function 创建场景() {
       createUploaderCalls.push(normalized);
       return normalized.profile === "large-video" ? 大视频上传器 : 默认上传器;
     },
-    readVideoMetadata: async (file) => ({
+    readVideoMetadata: overrides.readVideoMetadata ?? (async (file) => ({
       width: 1280,
       height: 720,
       previewUrl: `blob:poster-${file.name}`,
-    }),
-    createPreviewUrl: (file) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
+    })),
+    /**
+     * 这是一条面向新视频预制 owner 的测试注入 seam。
+     * 当前实现尚未消费它，红测会证明发布器仍会把原始视频直接送进 prepare。
+     */
+    preprocessVideo: overrides.preprocessVideo,
+    createPreviewUrl: (file: Blob | null) => (file instanceof File ? `blob:${file.name}` : file ? "blob:memory" : ""),
     yieldToMainThread,
-  });
+  } as any);
   return {
     发布器,
     默认上传器,
@@ -244,6 +280,11 @@ function 创建场景() {
 describe("媒体发布器", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    模拟浏览器Webp编码();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("默认 Tus 参数保持显式并发与重试策略", () => {
@@ -332,12 +373,12 @@ describe("媒体发布器", () => {
     await 场景.发布器.处理选择媒体文件([imageFile, videoFile]);
 
     expect(场景.prepareMediaUpload.mock.calls).toEqual([
-      ["image", "s-test", expect.objectContaining({ name: "mixed.jpg" })],
+      ["image", "s-test", expect.objectContaining({ name: "canonical.webp", type: "image/webp" })],
       ["video", "s-test", videoFile],
     ]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
-        localId: "att-mixed.jpg",
+        localId: "att-canonical.webp",
         kind: "image",
         status: "transporting",
       }),
@@ -384,19 +425,23 @@ describe("媒体发布器", () => {
 
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
-    expect(场景.prepareMediaUpload).toHaveBeenCalledWith("image", "s-test", sourceFile);
+    expect(场景.prepareMediaUpload).toHaveBeenCalledWith(
+      "image",
+      "s-test",
+      expect.objectContaining({ name: "canonical.webp", type: "image/webp" })
+    );
     expect(场景.默认上传器.addFileCalls).toEqual([
       expect.objectContaining({
-        id: "att-picked.jpg",
-        name: "picked.jpg",
+        id: "att-canonical.webp",
+        name: "canonical.webp",
         meta: expect.objectContaining({
           upload_method: "tus",
           tus_endpoint: "http://storage.local/files",
-          attachment_id: "att-picked.jpg",
-          upload_session_id: "upl-picked.jpg",
-          relativePath: "att-picked.jpg",
-          file_name: "picked.jpg",
-          mime_type: "image/jpeg",
+          attachment_id: "att-canonical.webp",
+          upload_session_id: "upl-canonical.webp",
+          relativePath: "att-canonical.webp",
+          file_name: "canonical.webp",
+          mime_type: "image/webp",
           byte_size: "3",
         }),
       }),
@@ -405,15 +450,15 @@ describe("媒体发布器", () => {
       {
         tusEndpoint: "http://storage.local/files",
         profile: "default",
-        attachmentId: "att-picked.jpg",
-        uploadSessionId: "upl-picked.jpg",
+        attachmentId: "att-canonical.webp",
+        uploadSessionId: "upl-canonical.webp",
       },
     ]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
-        localId: "att-picked.jpg",
+        localId: "att-canonical.webp",
         kind: "image",
-        attachmentId: "att-picked.jpg",
+        attachmentId: "att-canonical.webp",
         status: "transporting",
       }),
     ]);
@@ -433,19 +478,19 @@ describe("媒体发布器", () => {
         })
     );
 
-    const 上传成功任务 = 场景.默认上传器.触发上传成功("att-complete-ok.jpg");
+    const 上传成功任务 = 场景.默认上传器.触发上传成功("att-canonical.webp");
 
     await vi.waitFor(() => {
       expect(场景.drafts.readDrafts()).toEqual([
         expect.objectContaining({
-          localId: "att-complete-ok.jpg",
+          localId: "att-canonical.webp",
           status: "processing",
         }),
       ]);
     });
 
     完成上传({
-      attachment_id: "att-complete-ok.jpg",
+      attachment_id: "att-canonical.webp",
       kind: "image",
       mime_type: "image/jpeg",
       byte_size: 3,
@@ -455,12 +500,12 @@ describe("媒体发布器", () => {
     });
     await 上传成功任务;
 
-    expect(场景.completeMediaUpload).toHaveBeenCalledWith("s-test", "att-complete-ok.jpg");
+    expect(场景.completeMediaUpload).toHaveBeenCalledWith("s-test", "att-canonical.webp");
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
-        localId: "att-complete-ok.jpg",
+        localId: "att-canonical.webp",
         kind: "image",
-        attachmentId: "att-complete-ok.jpg",
+        attachmentId: "att-canonical.webp",
         status: "ready",
         width: 120,
         height: 90,
@@ -478,11 +523,11 @@ describe("媒体发布器", () => {
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
-    await 场景.默认上传器.触发上传成功("att-complete-failed.jpg");
+    await 场景.默认上传器.触发上传成功("att-canonical.webp");
 
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
-        localId: "att-complete-failed.jpg",
+        localId: "att-canonical.webp",
         status: "failed",
         errorCode: "system_error",
       }),
@@ -497,7 +542,7 @@ describe("媒体发布器", () => {
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
     await 场景.默认上传器.触发上传错误(
-      "att-xhr-error.jpg",
+      "att-canonical.webp",
       { message: "Upload error" },
       {
         status: 401,
@@ -512,8 +557,8 @@ describe("媒体发布器", () => {
 
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
-        localId: "att-xhr-error.jpg",
-        attachmentId: "att-xhr-error.jpg",
+        localId: "att-canonical.webp",
+        attachmentId: "att-canonical.webp",
         status: "failed",
         errorCode: "invalid_session",
       }),
@@ -542,6 +587,38 @@ describe("媒体发布器", () => {
     ]);
   });
 
+  it("视频预制失败时不会触发 prepareMediaUpload", async () => {
+    const 场景 = 创建场景({
+      preprocessVideo: vi.fn(async () => {
+        throw new Error("media_preprocess_failed");
+      }),
+    });
+    const source = 创建指定大小文件("bad.mov", "video/quicktime", 1024);
+
+    await 场景.发布器.处理选择媒体文件([source]);
+
+    expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
+    expect(场景.drafts.readDrafts()[0]?.status).toBe("failed");
+    expect(场景.drafts.readDrafts()[0]?.errorCode).toBe("media_preprocess_failed");
+  });
+
+  it("预制超过15分钟仅进入提醒态，不自动发送半成品", async () => {
+    vi.useFakeTimers();
+    const 场景 = 创建场景({
+      preprocessVideo: vi.fn(() => new Promise<{ file: File }>(() => {})),
+    });
+    const source = 创建指定大小文件("long.mp4", "video/mp4", 1024);
+
+    const pending = 场景.发布器.处理选择媒体文件([source]);
+    await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+
+    expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
+    expect(场景.drafts.readDrafts()[0]?.status).toBe("processing");
+    expect(场景.drafts.readDrafts()[0]?.errorCode).toBe("media_preprocess_waiting");
+    void pending;
+    vi.useRealTimers();
+  });
+
   it("大视频会走高吞吐 uploader profile，小文件继续走默认 profile", async () => {
     const 场景 = 创建场景();
     const imageFile = new File([new Uint8Array([1, 2, 3])], "small.jpg", {
@@ -562,8 +639,8 @@ describe("媒体发布器", () => {
       {
         tusEndpoint: "http://storage.local/files",
         profile: "default",
-        attachmentId: "att-small.jpg",
-        uploadSessionId: "upl-small.jpg",
+        attachmentId: "att-canonical.webp",
+        uploadSessionId: "upl-canonical.webp",
       },
       {
         tusEndpoint: "http://storage.local/files",
@@ -573,7 +650,7 @@ describe("媒体发布器", () => {
       },
     ]);
     expect(场景.默认上传器.addFileCalls.map((item) => item.id)).toEqual([
-      "att-small.jpg",
+      "att-canonical.webp",
       "att-small.mp4",
     ]);
     expect(场景.大视频上传器.addFileCalls.map((item) => item.id)).toEqual([
@@ -610,12 +687,12 @@ describe("媒体发布器", () => {
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
-    await 场景.默认上传器.触发上传停滞("att-stalled.jpg");
+    await 场景.默认上传器.触发上传停滞("att-canonical.webp");
 
-    expect(场景.默认上传器.removeFileCalls).toEqual(["att-stalled.jpg"]);
+    expect(场景.默认上传器.removeFileCalls).toEqual(["att-canonical.webp"]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
-        localId: "att-stalled.jpg",
+        localId: "att-canonical.webp",
         status: "failed",
         errorCode: "attachment_upload_stalled",
       }),
@@ -650,11 +727,11 @@ describe("媒体发布器", () => {
       type: "image/jpeg",
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
-    场景.drafts.updateDraft("att-retry.jpg", {
+    场景.drafts.updateDraft("att-canonical.webp", {
       status: "failed",
       errorCode: "attachment_upload_failed",
     });
-    场景.默认上传器.静默丢弃文件("att-retry.jpg");
+    场景.默认上传器.静默丢弃文件("att-canonical.webp");
     场景.prepareMediaUpload.mockResolvedValueOnce({
       attachment_id: "att-retry-second",
       upload_session_id: "upl-retry-second",
@@ -676,7 +753,7 @@ describe("媒体发布器", () => {
       场景.发布器 as unknown as {
         重新上传草稿(localId: string): Promise<void>;
       }
-    ).重新上传草稿("att-retry.jpg");
+    ).重新上传草稿("att-canonical.webp");
 
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
@@ -694,7 +771,7 @@ describe("媒体发布器", () => {
       type: "image/jpeg",
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
-    场景.drafts.updateDraft("att-resume.jpg", {
+    场景.drafts.updateDraft("att-canonical.webp", {
       status: "failed",
       errorCode: "attachment_upload_failed",
     });
@@ -703,14 +780,14 @@ describe("媒体发布器", () => {
       场景.发布器 as unknown as {
         继续上传草稿(localId: string): Promise<void>;
       }
-    ).继续上传草稿("att-resume.jpg");
+    ).继续上传草稿("att-canonical.webp");
 
     expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(1);
-    expect(场景.默认上传器.retryUploadCalls).toEqual(["att-resume.jpg"]);
+    expect(场景.默认上传器.retryUploadCalls).toEqual(["att-canonical.webp"]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
-        localId: "att-resume.jpg",
-        attachmentId: "att-resume.jpg",
+        localId: "att-canonical.webp",
+        attachmentId: "att-canonical.webp",
         status: "transporting",
       }),
     ]);
@@ -722,11 +799,11 @@ describe("媒体发布器", () => {
       type: "image/jpeg",
     });
     await 场景.发布器.处理选择媒体文件([sourceFile]);
-    场景.drafts.updateDraft("att-restart.jpg", {
+    场景.drafts.updateDraft("att-canonical.webp", {
       status: "failed",
       errorCode: "attachment_upload_failed",
     });
-    场景.默认上传器.静默丢弃文件("att-restart.jpg");
+    场景.默认上传器.静默丢弃文件("att-canonical.webp");
     场景.prepareMediaUpload.mockResolvedValueOnce({
       attachment_id: "att-restart-second",
       upload_session_id: "upl-restart-second",
@@ -747,9 +824,9 @@ describe("媒体发布器", () => {
       场景.发布器 as unknown as {
         重新上传草稿(localId: string): Promise<void>;
       }
-    ).重新上传草稿("att-restart.jpg");
+    ).重新上传草稿("att-canonical.webp");
 
-    expect(场景.abandonMediaUpload).toHaveBeenCalledWith("s-test", "att-restart.jpg");
+    expect(场景.abandonMediaUpload).toHaveBeenCalledWith("s-test", "att-canonical.webp");
     expect(场景.prepareMediaUpload).toHaveBeenCalledTimes(2);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({

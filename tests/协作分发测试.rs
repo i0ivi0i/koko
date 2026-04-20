@@ -429,25 +429,15 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
         Some(attachment_id.as_str())
     );
     assert_eq!(
-        body["blob_asset"]["preview"]["id"].as_str(),
-        Some("preview")
+        body["blob_asset"]["variants"]["canonical"]["id"].as_str(),
+        Some("canonical")
     );
-    assert_eq!(body["blob_asset"]["full"]["id"].as_str(), Some("full"));
+    assert!(body["blob_asset"]["preview"].is_null());
+    assert!(body["blob_asset"]["full"].is_null());
+    assert!(body["blob_asset"]["original"].is_null());
     assert_eq!(
-        body["blob_asset"]["original"]["id"].as_str(),
-        Some("original")
-    );
-    assert_eq!(
-        body["blob_asset"]["preview"]["url"].as_str(),
-        Some(format!("/api/media/{attachment_id}/blob/preview?session_id={session_id}").as_str())
-    );
-    assert_eq!(
-        body["blob_asset"]["full"]["url"].as_str(),
-        Some(format!("/api/media/{attachment_id}/blob/full?session_id={session_id}").as_str())
-    );
-    assert_eq!(
-        body["blob_asset"]["original"]["url"].as_str(),
-        Some(format!("/api/media/{attachment_id}/blob/original?session_id={session_id}").as_str())
+        body["blob_asset"]["variants"]["canonical"]["url"].as_str(),
+        Some(format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}").as_str())
     );
     assert_eq!(
         body["blob_asset"]["origin"]["role"].as_str(),
@@ -464,8 +454,8 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
         "blob_asset 和顶层 distribution 在兼容期内必须引用同一份 swarm 真相"
     );
     assert!(
-        body["thumbnail_url"].as_str().is_some(),
-        "过渡期 locator 仍应保留顶层 thumbnail_url 兼容旧调用方"
+        body["thumbnail_url"].is_null(),
+        "canonical 图片不再生成缩略图派生，locator 不能继续伪造顶层 thumbnail_url"
     );
     assert!(
         body.get("storage_key").is_none()
@@ -861,7 +851,10 @@ async fn 未显式配置tracker公网地址时locator会按请求host推导可�
     ]);
     env::set_var("SWARM_TRACKER_PORT", "7072");
     env::set_var("SWARM_PEER_PRESENCE_STALE_SECONDS", "180");
-    env::set_var("SWARM_TICKET_SECRET", "derive-tracker-public-url-ticket-secret");
+    env::set_var(
+        "SWARM_TICKET_SECRET",
+        "derive-tracker-public-url-ticket-secret",
+    );
     env::set_var("SWARM_TICKET_TTL_SECONDS", "120");
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
@@ -970,10 +963,9 @@ async fn 未显式配置tracker公网地址时locator会按请求host推导可�
 #[serial]
 async fn 同源tracker代理入口会响应websocket握手而不是404() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
-    let state =
-        koko::shell::构建应用状态(cfg.database_url, cfg.admin_password)
-            .await
-            .expect("应能构建共享应用状态");
+    let state = koko::shell::构建应用状态(cfg.database_url, cfg.admin_password)
+        .await
+        .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state);
 
     let (status, _headers, _body) = send_bytes(
