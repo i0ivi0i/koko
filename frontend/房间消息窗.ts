@@ -1,5 +1,6 @@
 import { html, LitElement, type PropertyValues } from "lit";
 import { VirtualizerController } from "@tanstack/lit-virtual";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import { 媒体是否默认循环播放, type 媒体播放结果 } from "./媒体/媒体播放.js";
@@ -724,12 +725,18 @@ export class 房间消息窗 extends LitElement {
               !shouldRenderInlineVideo && !hasSourcePoster
                 ? this.读取时间线视频首帧预览源(attachment, playback)
                 : null;
+            const previewVideoSrc =
+              shouldRenderInlineVideo && inlineAutoplayPlayback
+                ? inlineAutoplayPlayback.src
+                : fallbackFramePreviewSrc;
+            const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
+            const previewVideoPoster = hasSourcePoster ? previewPosterSrc : undefined;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
              * 1. 有 poster 就继续走静态封面，避免列表层变成第二播放器；
              * 2. 无 poster 且当前是可直播文件源时，回退到非自动播首帧预览，避免大面积空卡片；
              * 3. manifest 无 poster 时仍坚持静态占位，避免把 m3u8 塞给原生 `<video>`；
-             * 4. 真正自动播 owner 仍由外层编排裁决，这里只负责投影。
+             * 4. 自动播前后复用同一 `<video>` 节点，只切属性，避免切 owner 时重建闪烁。
              */
             return html`
               <div
@@ -750,17 +757,17 @@ export class 房间消息窗 extends LitElement {
                   @click=${(event: Event) =>
                     this.打开媒体查看器(event, attachment.attachmentId)}
                 >
-                  ${shouldRenderInlineVideo && inlineAutoplayPlayback
+                  ${shouldRenderPreviewVideo
                     ? html`
                         <video
                           class="message-video-preview"
                           data-attachment-id=${attachment.attachmentId}
-                          src=${inlineAutoplayPlayback.src}
+                          src=${previewVideoSrc ?? ""}
                           width=${attachment.displayWidth}
                           height=${attachment.displayHeight}
                           muted
-                          autoplay
-                          ?loop=${媒体是否默认循环播放("video")}
+                          ?autoplay=${shouldRenderInlineVideo}
+                          ?loop=${shouldRenderInlineVideo && 媒体是否默认循环播放("video")}
                           playsinline
                           preload="metadata"
                           disablepictureinpicture
@@ -768,47 +775,41 @@ export class 房间消息窗 extends LitElement {
                           controlslist="nodownload nofullscreen noremoteplayback"
                           tabindex="-1"
                           aria-hidden="true"
-                          poster=${previewPosterSrc}
-                          @playing=${() =>
+                          poster=${ifDefined(previewVideoPoster)}
+                          @playing=${() => {
+                            if (!shouldRenderInlineVideo) {
+                              return;
+                            }
                             this.广播媒体会话信号(attachment.attachmentId, {
                               type: "PLAYER_PLAYING",
-                            })}
-                          @waiting=${() =>
+                            });
+                          }}
+                          @waiting=${() => {
+                            if (!shouldRenderInlineVideo) {
+                              return;
+                            }
                             this.广播媒体会话信号(attachment.attachmentId, {
                               type: "PLAYER_WAITING",
-                            })}
-                          @stalled=${() =>
+                            });
+                          }}
+                          @stalled=${() => {
+                            if (!shouldRenderInlineVideo) {
+                              return;
+                            }
                             this.广播媒体会话信号(attachment.attachmentId, {
                               type: "PLAYER_STALLED",
-                            })}
+                            });
+                          }}
                           @error=${() =>
                             this.广播媒体会话信号(attachment.attachmentId, {
                               type: "PLAYER_ERROR",
                             })}
                         ></video>
-                      `
-                    : fallbackFramePreviewSrc
-                    ? html`
-                        <video
-                          class="message-video-preview"
-                          data-attachment-id=${attachment.attachmentId}
-                          src=${fallbackFramePreviewSrc}
-                          width=${attachment.displayWidth}
-                          height=${attachment.displayHeight}
-                          muted
-                          playsinline
-                          preload="metadata"
-                          disablepictureinpicture
-                          disableremoteplayback
-                          controlslist="nodownload nofullscreen noremoteplayback"
-                          tabindex="-1"
-                          aria-hidden="true"
-                          @error=${() =>
-                            this.广播媒体会话信号(attachment.attachmentId, {
-                              type: "PLAYER_ERROR",
-                            })}
-                        ></video>
-                        <span class="message-video-play-indicator" aria-hidden="true">▶</span>
+                        ${shouldRenderInlineVideo
+                          ? null
+                          : html`
+                              <span class="message-video-play-indicator" aria-hidden="true">▶</span>
+                            `}
                       `
                     : html`
                         <img

@@ -629,6 +629,76 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("无 poster 视频从首帧预览切到自动播 owner 时应复用同一 video 节点，避免闪烁重建", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const beforeOwnerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(beforeOwnerVideo).not.toBeNull();
+    expect(beforeOwnerVideo?.autoplay).toBe(false);
+    expect(beforeOwnerVideo?.getAttribute("poster")).toBeNull();
+    expect(pane.querySelector(".message-video-play-indicator")).not.toBeNull();
+
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayOwnerAttachmentId = "att-video-1";
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    await pane.updateComplete;
+
+    const ownerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(ownerVideo).toBe(beforeOwnerVideo);
+    expect(ownerVideo?.autoplay).toBe(true);
+    expect(ownerVideo?.getAttribute("poster")).toBeNull();
+    expect(pane.querySelector(".message-video-play-indicator")).toBeNull();
+
+    pane.remove();
+  });
+
   it("时间线自动播 video 只承载查看器入口，不暴露原生媒体右键菜单", async () => {
     const pane = 创建媒体消息窗();
     (pane as 房间消息窗 & {
