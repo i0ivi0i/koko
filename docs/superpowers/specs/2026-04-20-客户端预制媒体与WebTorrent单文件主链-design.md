@@ -50,12 +50,21 @@
 
 - 客户端先探测原始文件是否已经适合浏览器播放。
 - 原始视频已经适合播放时，只做必要的无损封装或 faststart 处理。
-- 原始视频不适合播放时，客户端用浏览器能力、Rust/WASM 高性能轮子或成熟现成转码轮子预制成可播放视频。
+- 原始视频不适合播放时，客户端优先用 Mediabunny 这类 web-native 成熟轮子完成 demux / mux / remux / transmux / 转码编排，用 WebCodecs 承担浏览器原生编解码。
 - 默认不降分辨率、不降帧率，不把高清视频压成低清。
 - 音频默认保留高质量；只有兼容性需要时才转成通用音频编码。
 - 加工超过 15 分钟时，只提醒用户“仍在处理，可继续等待或取消”，不自动把半成品发出去。
 
 这里的无损封装、faststart、转码和封面抽取都属于客户端预制职责。后端不再生成 HLS/DASH、mezzanine、视频封面多副本。需要封面时，客户端可以从 canonical 视频抽一张轻量封面作为同一发布流程的展示派生，但媒体分发真相仍只有 canonical 视频文件。
+
+客户端视频预制轮子裁决：
+
+- 第一优先级是直通：原始文件已经是浏览器可播放、WebTorrent 可分发的 canonical 单文件时，不重编码。
+- 第二优先级是 Mediabunny 的无损 remux / faststart / transmux：能只改容器和元数据位置，就不改编码位流。
+- 第三优先级是 Mediabunny + WebCodecs 转码：先用 `canEncode` / `VideoEncoder.isConfigSupported` 做能力探测，通过后才执行。
+- `web-demuxer` 只作为特定格式 demux 候选或 benchmark 对照，不升级为完整视频预制主链，除非它能补上 Mediabunny 不满足的明确边界。
+- WebGPU 不作为视频编码器或容器处理器；它只允许在真实 benchmark 证明帧级处理成为瓶颈后，用于缩放、旋转、滤镜、水印、色彩变换等 GPU compute / render 支路。
+- ffmpeg.wasm 只能作为最后兜底，受文件大小、内存、耗时和设备能力限制，不承诺所有设备成功。
 
 ## 5. 后端职责
 
@@ -147,6 +156,9 @@ WebTorrent 的 payload 就是唯一 canonical 文件。
 ## 10. 官方依据
 
 - Uppy 支持上传前客户端处理图片，适合把图片预制前移。
-- WebCodecs 提供浏览器侧视频编码能力，但需要 HTTPS，且不是所有浏览器都支持，所以必须做能力探测。
+- Mediabunny 提供浏览器内媒体读取、写入、转换、demux、mux、remux、transmux、转码编排，并能利用 WebCodecs 做硬件加速编解码，适合作为客户端视频 canonical 预制主轮子。
+- WebCodecs 提供浏览器侧视频编解码能力，但需要 HTTPS，且不是所有浏览器都支持；它输出的是 encoded chunk，不负责 MP4/WebM 这类容器，所以必须搭配成熟 demux/mux 工具并做能力探测。
+- WebGPU 是浏览器 GPU compute / render API，不是视频编码器、转码器或容器工具；它只能作为帧级处理优化支路，不能替代 WebCodecs / Mediabunny。
+- web-demuxer 是 WebCodecs-first demux 工具，适合作为格式覆盖补充或对照，不应在没有 mux/remux/transcode 完整方案前成为主链。
 - ffmpeg.wasm 可以作为浏览器内转码补充，但官方说明它比原生 FFmpeg 慢，且输入文件有 WebAssembly 大小限制，所以不能把它写成无条件成功的唯一依赖。
 - WebTorrent 支持 web seed、piece 选择和浏览器流式播放，适合作为 canonical 单文件的秒开与长期互助分发平面。

@@ -6,7 +6,7 @@
 
 **Architecture:** 采用“先门禁、再迁移、最后删旧入口”的硬切思路。前端在 `媒体发布` 前完成图片/视频预制，失败即阻断发布；后端 complete 只读已上传 canonical 字节，做轻校验与单文件入库，不再生成 canonical、不再补偿转码、不再生成多副本或流媒体分段。播放面把查看器与自动播统一到同一 canonical `content_hash/info_hash`，后端只保留 24h 初始做种窗口。
 
-**Tech Stack:** Rust、Axum、SQLx、Vitest、Uppy + Tus、客户端图片预处理成熟库、WebTorrent、WebCodecs（能力探测）、ffmpeg.wasm（兜底但不承诺成功）、Video.js v10（壳层不变）。
+**Tech Stack:** Rust、Axum、SQLx、Vitest、Uppy + Tus、客户端图片预处理成熟库、Mediabunny（客户端视频 canonical 预制主轮子）、WebCodecs（能力探测后承责编解码）、WebTorrent、web-demuxer（格式 demux 候选/对照，不默认主链）、WebGPU（benchmark 通过后的帧级处理优化支路）、ffmpeg.wasm（最后兜底但不承诺成功）、Video.js v10（壳层不变）。
 
 ---
 
@@ -15,6 +15,8 @@
 - Create: `tests/媒体上传测试/单文件主链.rs`
 - Create: `frontend/媒体/视频预处理.ts`
 - Create: `frontend/tests/视频预处理测试.spec.ts`
+- Modify: `frontend/package.json`
+- Modify: `frontend/pnpm-lock.yaml`
 - Modify: `tests/媒体上传测试.rs`
 - Modify: `tests/媒体上传测试/complete.rs`
 - Modify: `tests/流媒体资产契约测试.rs`
@@ -50,6 +52,8 @@
 - `Video.js v10` 仍是唯一播放器壳，不引入第二套播放器。
 - 后端不再承担图片 canonical 生成、多副本、视频 faststart/remux/转码/打包重活；失败不许降级回旧链路。
 - 后端只能校验 canonical、存储 canonical、写 ready/torrent/web seed；不能把客户端失败补偿成服务端加工。
+- 视频预制主链优先 Mediabunny + WebCodecs；WebGPU 不得被当成视频编码器、转码器或容器处理器，只能在 benchmark 证明需要后承担帧级处理优化。
+- `web-demuxer` 只作为特定格式 demux 候选或对照，不得在缺少 mux/remux/transcode 完整闭环时替代 Mediabunny 主链。
 - 预制失败禁止发送；超过 15 分钟只提醒用户继续等待或取消，不自动放行。
 - 同一附件的自动播、查看器、协作分发必须共享同一 `content_hash/info_hash`。
 - 所有行为变更先写失败测试，本地确认红测原因，再实现最小代码，转绿后一起提交；不把红测基线单独提交到 `main`。
@@ -292,18 +296,34 @@ git commit -m "视频complete主链改为单canonical轻校验入库"
 
 **Files:**
 - Create: `frontend/媒体/视频预处理.ts`
+- Modify: `frontend/package.json`
+- Modify: `frontend/pnpm-lock.yaml`
 - Modify: `frontend/媒体/媒体发布.ts`
 - Modify: `frontend/媒体/视频元数据.ts`
 - Modify: `frontend/媒体/媒体草稿.ts`
 - Modify: `frontend/tests/视频预处理测试.spec.ts`
 - Modify: `frontend/tests/媒体发布测试.spec.ts`
 
-- [ ] **Step 1: 写 `视频预处理` 模块（不把逻辑塞进发布器）**
+- [ ] **Step 1: 引入并锁定客户端视频预制主轮子**
+
+```bash
+pnpm --dir frontend add mediabunny
+```
+
+要求：
+- 先引入 `mediabunny`，让 demux / mux / remux / transmux / conversion 归成熟库负责。
+- 不把 `web-demuxer` 默认加入主链；只有 Mediabunny 在明确格式边界上不满足、且 benchmark 或失败样本证明需要时，才作为特定 demux 候选加入。
+- 不引入 WebGPU 依赖；先用 `navigator.gpu` 能力探测和 benchmark 设计保留优化口，不在本阶段写成主链前提。
+- 若后续必须加入 ffmpeg.wasm，必须有文件大小、内存、耗时和用户等待语义门禁，不能让它成为默认成功路径。
+
+- [ ] **Step 2: 写 `视频预处理` 模块（不把逻辑塞进发布器）**
 
 ```ts
 export async function 预处理待上传视频文件(file: File, deps: 视频预处理依赖): Promise<预处理结果> {
   if (await deps.可直通(file)) return { file, strategy: "passthrough" };
-  if (await deps.WebCodecs可用()) return await deps.使用WebCodecs预处理(file);
+  if (await deps.Mediabunny可无损整理(file)) return await deps.使用Mediabunny无损整理(file);
+  if (await deps.Mediabunny与WebCodecs可转码(file)) return await deps.使用Mediabunny与WebCodecs转码(file);
+  if (await deps.WebDemuxer可补足特定格式(file)) return await deps.使用WebDemuxer候选链路(file);
   if (await deps.FfmpegWasm可用(file)) return await deps.使用FfmpegWasm预处理(file);
   throw new Error("media_preprocess_failed");
 }
@@ -311,10 +331,12 @@ export async function 预处理待上传视频文件(file: File, deps: 视频预
 
 要求：
 - 直通/faststart/remux/转码都发生在客户端预制层，不能把失败交给后端 complete 兜底。
-- WebCodecs 必须能力探测；ffmpeg.wasm 只是兼容兜底，受性能和文件大小限制，不承诺所有设备成功。
+- Mediabunny 负责容器读写、无损整理和转换编排；WebCodecs 必须能力探测后才承担实际编解码。
+- WebGPU 不进入上述主链；只有缩放、旋转、滤镜、水印、色彩变换等帧处理被 benchmark 证明是瓶颈时，才新增独立优化支路。
+- ffmpeg.wasm 只是兼容兜底，受性能和文件大小限制，不承诺所有设备成功。
 - 超过 15 分钟只进入等待提醒态，预处理 Promise 仍由用户继续等待或取消，不自动发布。
 
-- [ ] **Step 2: `媒体发布.ts` 在 `prepareMediaUpload` 之前强制执行预处理**
+- [ ] **Step 3: `媒体发布.ts` 在 `prepareMediaUpload` 之前强制执行预处理**
 
 ```ts
 if (kind === "video") {
@@ -328,7 +350,7 @@ if (kind === "video") {
 - 超过 15 分钟 -> 草稿保留 `processing/media_preprocess_waiting`，不调用 prepare。
 - 所有预处理路径失败 -> 不触发 prepare/upload/complete，不把原始文件送到后端修。
 
-- [ ] **Step 3: 跑前端测试**
+- [ ] **Step 4: 跑前端测试**
 
 Run: `pnpm --dir frontend test -- tests/视频预处理测试.spec.ts tests/媒体发布测试.spec.ts`  
 Expected: PASS
@@ -336,10 +358,10 @@ Expected: PASS
 Run: `pnpm --dir frontend typecheck`  
 Expected: PASS
 
-- [ ] **Step 4: 提交前端预处理门禁**
+- [ ] **Step 5: 提交前端预处理门禁**
 
 ```bash
-git add frontend/媒体/视频预处理.ts frontend/媒体/媒体发布.ts frontend/媒体/视频元数据.ts frontend/媒体/媒体草稿.ts frontend/tests/视频预处理测试.spec.ts frontend/tests/媒体发布测试.spec.ts
+git add frontend/package.json frontend/pnpm-lock.yaml frontend/媒体/视频预处理.ts frontend/媒体/媒体发布.ts frontend/媒体/视频元数据.ts frontend/媒体/媒体草稿.ts frontend/tests/视频预处理测试.spec.ts frontend/tests/媒体发布测试.spec.ts
 git commit -m "前端接入视频预处理门禁并阻断失败发布"
 ```
 
