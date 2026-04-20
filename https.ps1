@@ -1,6 +1,7 @@
 param(
     [int]$Port = 0,
     [switch]$SkipAppBootstrap,
+    [switch]$LauncherMode,
     [switch]$DryRun
 )
 
@@ -250,19 +251,26 @@ function Start-OrReload-Caddy {
         [Parameter(Mandatory = $true)][string]$CaddyfilePath
     )
 
-    & $CaddyPath validate --config $CaddyfilePath --adapter caddyfile *> $null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Caddyfile 校验失败，退出码: $LASTEXITCODE"
-    }
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $CaddyPath validate --config $CaddyfilePath --adapter caddyfile 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Caddyfile 校验失败，退出码: $LASTEXITCODE"
+        }
 
-    & $CaddyPath reload --config $CaddyfilePath --adapter caddyfile *> $null
-    if ($LASTEXITCODE -eq 0) {
-        return "reloaded"
-    }
+        & $CaddyPath reload --config $CaddyfilePath --adapter caddyfile 1>$null 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return "reloaded"
+        }
 
-    & $CaddyPath start --config $CaddyfilePath --adapter caddyfile *> $null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Caddy 启动失败，退出码: $LASTEXITCODE"
+        & $CaddyPath start --config $CaddyfilePath --adapter caddyfile 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Caddy 启动失败，退出码: $LASTEXITCODE"
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
     return "started"
 }
@@ -310,6 +318,7 @@ function Invoke-HttpsBootstrap {
     param(
         [int]$RequestedPort = 0,
         [switch]$SkipApp,
+        [switch]$IsLauncherMode,
         [switch]$PreviewOnly
     )
 
@@ -355,10 +364,22 @@ function Invoke-HttpsBootstrap {
     $result = Start-OrReload-Caddy -CaddyPath $caddyPath -CaddyfilePath $caddyfilePath
     Write-Host "Caddy 已$result。"
 
+    if ($IsLauncherMode) {
+        Write-Host "Launcher 模式：跳过 caddy trust 与开机自启任务。"
+        return
+    }
+
     # 证书信任是 best-effort，不阻断主链。
-    & $caddyPath trust --config $caddyfilePath --adapter caddyfile *> $null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "自动写入本机证书信任失败（常见于权限不足）。"
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $caddyPath trust --config $caddyfilePath --adapter caddyfile 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "自动写入本机证书信任失败（常见于权限不足）。"
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 
     $taskName = Ensure-CaddyAutoStartTask -CaddyPath $caddyPath -CaddyfilePath $caddyfilePath
@@ -374,5 +395,6 @@ if ($MyInvocation.InvocationName -ne ".") {
     Invoke-HttpsBootstrap `
         -RequestedPort $Port `
         -SkipApp:$SkipAppBootstrap `
+        -IsLauncherMode:$LauncherMode `
         -PreviewOnly:$DryRun
 }

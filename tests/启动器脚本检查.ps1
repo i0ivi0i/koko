@@ -48,7 +48,11 @@ Assert-True ($runScriptParseErrors.Count -eq 0) "run.ps1 必须先通过 PowerSh
 Assert-True ($cleanScriptParseErrors.Count -eq 0) "qingli.ps1 必须先通过 PowerShell 语法解析，不能连清理前都在参数或插值阶段炸掉。"
 
 Assert-True ($runScript -match '\[switch\]\$UpgradeDependencies') "run.ps1 应该显式接受 UpgradeDependencies 开关。"
+Assert-True ($runScript -match '\[switch\]\$DisableLocalHttpsBootstrap') "run.ps1 应允许显式关闭本地 HTTPS 引导，避免调试特殊场景时只能改脚本。"
 Assert-True ($runScript -match 'if \(\$UpgradeDependencies\)') "run.ps1 应该只在显式升级模式下刷新依赖。"
+Assert-True ($runScript -match 'https\.ps1') "run.ps1 应该衔接 https.ps1，让一键启动默认包含本地 HTTPS 主链。"
+Assert-True ($runScript -match '-SkipAppBootstrap') "run.ps1 调用 https.ps1 时应显式跳过二次拉起 run.ps1，避免启动递归。"
+Assert-True ($runScript -match '-LauncherMode') "run.ps1 调用 https.ps1 时应使用 launcher 模式，避免把证书安装/开机任务交互阻塞主链。"
 Assert-True ($runScript -match 'Stop-StaleLauncherBackend') "run.ps1 应该只清理自己 launcher-run 留下的开发态后端残进程，而不是发明项目级退出真相。"
 Assert-True ($runScript -match 'launcher-run') "run.ps1 应该把开发启动器产物隔离在 launcher-run 目录下，避免跟源码主产物争抢。"
 Assert-True ($runScript -match 'Get-Command tusd(?:\.exe)?') "run.ps1 应该显式检查 tusd 可执行文件是否存在。"

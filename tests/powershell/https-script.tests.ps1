@@ -76,6 +76,15 @@ Assert-True -Condition $cmd.Contains(" start ") -Message "开机自启命令应�
 Assert-True -Condition $cmd.Contains("--config") -Message "开机自启命令应包含 --config。"
 Assert-True -Condition $cmd.Contains("--adapter caddyfile") -Message "开机自启命令应包含 caddyfile adapter。"
 
+# 用例5：Caddy 原生命令必须显式重定向 stdout/stderr，避免 WinPS NativeCommandError 打断 HTTPS 启动。
+$scriptContent = Get-Content -LiteralPath $scriptPath -Raw
+Assert-True -Condition ($scriptContent -match 'validate[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy validate 应显式重定向 stdout/stderr。"
+Assert-True -Condition ($scriptContent -match 'reload[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy reload 应显式重定向 stdout/stderr。"
+Assert-True -Condition ($scriptContent -match 'start --config[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy start 应显式重定向 stdout/stderr。"
+Assert-True -Condition ($scriptContent -match 'trust --config[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy trust 应显式重定向 stdout/stderr。"
+Assert-True -Condition ($scriptContent -match '\[switch\]\$LauncherMode') -Message "https.ps1 应支持 launcher 模式。"
+Assert-True -Condition ($scriptContent -match 'if \(\$IsLauncherMode\)') -Message "launcher 模式应跳过 caddy trust 与开机自启任务。"
+
 # 用例5：HTTPS 运行时目录默认不应在仓库内。
 $runtimeDir = Resolve-HttpsRuntimeDirectory
 $normalizedRuntimeDir = $runtimeDir.TrimEnd('\').ToLowerInvariant()

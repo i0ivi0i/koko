@@ -1,6 +1,7 @@
 param(
     [switch]$UpgradeDependencies,
-    [switch]$DisableCloudflareTunnel
+    [switch]$DisableCloudflareTunnel,
+    [switch]$DisableLocalHttpsBootstrap
 )
 
 $ErrorActionPreference = "Stop"
@@ -225,6 +226,52 @@ function Resolve-CloudflareEdgeBindAddress {
     }
 
     return $candidateIps[0].IPAddress
+}
+
+function Resolve-PwshPath {
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($pwsh) {
+        return $pwsh.Source
+    }
+
+    $windowsPowerShell = Get-Command powershell.exe -ErrorAction SilentlyContinue
+    if ($windowsPowerShell) {
+        return $windowsPowerShell.Source
+    }
+
+    throw "未找到可用 PowerShell（pwsh / powershell.exe）。"
+}
+
+function Start-LocalHttpsBootstrap {
+    param(
+        [string]$RepoRoot,
+        [int]$AppPort,
+        [string]$LauncherLogDirectory,
+        [switch]$DisableBootstrap
+    )
+
+    if ($DisableBootstrap) {
+        Write-Host "已禁用本地 HTTPS 引导（DisableLocalHttpsBootstrap）。"
+        return $null
+    }
+
+    $httpsScriptPath = Join-Path $RepoRoot "https.ps1"
+    if (-not (Test-Path -LiteralPath $httpsScriptPath)) {
+        Write-Warning "未找到 https.ps1，跳过本地 HTTPS 引导。"
+        return $null
+    }
+
+    $pwshPath = Resolve-PwshPath
+    Write-Host "启动本地 HTTPS 引导: https.ps1 -SkipAppBootstrap -Port $AppPort"
+    $managedProcess = New-ManagedProcess `
+        -Name "https-bootstrap" `
+        -FilePath $pwshPath `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $httpsScriptPath, "-SkipAppBootstrap", "-LauncherMode", "-Port", $AppPort) `
+        -WorkingDirectory $RepoRoot `
+        -LogDirectory $LauncherLogDirectory
+    $managedProcess | Add-Member -NotePropertyName StartedAt -NotePropertyValue (Get-Date)
+    $managedProcess | Add-Member -NotePropertyName TimeoutSeconds -NotePropertyValue 25
+    return $managedProcess
 }
 
 function Read-NewLogLines {
@@ -564,12 +611,14 @@ function Invoke-LauncherCleanup {
     Write-ManagedProcessLogs $trackerProcess
     Write-ManagedProcessLogs $tusdProcess
     Write-ManagedProcessLogs $backendProcess
+    Write-ManagedProcessLogs $httpsBootstrapProcess
     Write-ManagedProcessLogs $cloudflareTunnelProcess
     Write-ManagedProcessLogs $frontendTypeWatch
     Write-ManagedProcessLogs $frontendWatch
     Stop-ManagedProcess $trackerProcess
     Stop-ManagedProcess $tusdProcess
     Stop-ManagedProcess $backendProcess
+    Stop-ManagedProcess $httpsBootstrapProcess
     Stop-ManagedProcess $cloudflareTunnelProcess
     Stop-ManagedProcess $frontendTypeWatch
     Stop-ManagedProcess $frontendWatch
@@ -595,6 +644,7 @@ $frontendTypeWatch = $null
 $backendProcess = $null
 $tusdProcess = $null
 $trackerProcess = $null
+$httpsBootstrapProcess = $null
 $cloudflareTunnelProcess = $null
 $script:CloudflareTunnelPublicUrl = $null
 $script:CloudflareTunnelPublicUrlAnnounced = $false
@@ -816,12 +866,19 @@ try {
         }
     }
 
+    $httpsBootstrapProcess = Start-LocalHttpsBootstrap `
+        -RepoRoot $repoRoot `
+        -AppPort ([int]$appPort) `
+        -LauncherLogDirectory $logDirectory `
+        -DisableBootstrap:$DisableLocalHttpsBootstrap
+
     while ($true) {
         Write-ManagedProcessLogs $frontendWatch
         Write-ManagedProcessLogs $frontendTypeWatch
         Write-ManagedProcessLogs $backendProcess
         Write-ManagedProcessLogs $tusdProcess
         Write-ManagedProcessLogs $trackerProcess
+        Write-ManagedProcessLogs $httpsBootstrapProcess
         Write-ManagedProcessLogs $cloudflareTunnelProcess
 
         if ($frontendWatch.Process.HasExited) {
@@ -858,6 +915,23 @@ try {
             Write-ManagedProcessLogs $cloudflareTunnelProcess
             Write-Warning "Cloudflare Tunnel 已退出，退出码: $($cloudflareTunnelProcess.Process.ExitCode)"
             $cloudflareTunnelProcess = $null
+        }
+        if ($null -ne $httpsBootstrapProcess -and $httpsBootstrapProcess.Process.HasExited) {
+            Write-ManagedProcessLogs $httpsBootstrapProcess
+            if ($httpsBootstrapProcess.Process.ExitCode -ne 0) {
+                Write-Warning "本地 HTTPS 引导进程异常退出，退出码: $($httpsBootstrapProcess.Process.ExitCode)"
+            }
+            $httpsBootstrapProcess = $null
+        }
+        if (
+            $null -ne $httpsBootstrapProcess -and
+            -not $httpsBootstrapProcess.Process.HasExited -and
+            ($null -ne $httpsBootstrapProcess.StartedAt) -and
+            (((Get-Date) - $httpsBootstrapProcess.StartedAt).TotalSeconds -gt $httpsBootstrapProcess.TimeoutSeconds)
+        ) {
+            Write-Warning "本地 HTTPS 引导超时（$($httpsBootstrapProcess.TimeoutSeconds) 秒），已中断该引导进程。"
+            Stop-ManagedProcess $httpsBootstrapProcess
+            $httpsBootstrapProcess = $null
         }
 
         Start-Sleep -Milliseconds 200
