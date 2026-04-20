@@ -108,7 +108,7 @@ async fn 查询消息附件映射_异步(
                 高: row
                     .get::<Option<i32>, _>("height")
                     .ok_or(contract::错误码::系统错误)?,
-                有预览图: row.get("has_preview_asset"),
+                有预览图: false,
             }),
             "video" => contract::附件快照::视频(contract::视频附件快照 {
                 附件标识: row.get("attachment_id"),

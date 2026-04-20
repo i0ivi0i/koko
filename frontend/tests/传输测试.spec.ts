@@ -341,7 +341,7 @@ describe("传输", () => {
     });
   });
 
-  it("completeMediaUpload 会调用新的 complete 路由并返回 ready 附件快照", async () => {
+  it("completeMediaUpload 会按 file_video 解析新单文件视频主链", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -355,17 +355,25 @@ describe("传输", () => {
           media_asset: {
             asset_id: "att-ready-1",
             content_hash: "hash-att-ready-1",
-            kind: "streaming_video",
-            manifest: {
-              hls_master_url: null,
-              dash_mpd_url: null,
+            kind: "file_video",
+            variants: {
+              canonical: {
+                id: "canonical",
+                mime_type: "video/mp4",
+                url: "/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
+                width: 1080,
+                height: 1920,
+              },
             },
+            manifest: null,
+            lifecycle: null,
             distribution: {
               swarm_id: "swarm-hash-att-ready-1",
               announce_urls: ["/api/swarm/announce"],
               web_seed_url:
                 "/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
               join_ticket: null,
+              survival_mode: "server_assisted",
             },
             origin: {
               original_url:
@@ -395,17 +403,25 @@ describe("传输", () => {
     expect(result.media_asset).toEqual({
       asset_id: "att-ready-1",
       content_hash: "hash-att-ready-1",
-      kind: "streaming_video",
-      manifest: {
-        hls_master_url: null,
-        dash_mpd_url: null,
+      kind: "file_video",
+      variants: {
+        canonical: {
+          id: "canonical",
+          mime_type: "video/mp4",
+          url: "http://localhost:3000/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
+          width: 1080,
+          height: 1920,
+        },
       },
+      manifest: null,
+      lifecycle: null,
       distribution: {
         swarm_id: "swarm-hash-att-ready-1",
         announce_urls: ["http://localhost:3000/api/swarm/announce"],
         web_seed_url:
           "http://localhost:3000/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
         join_ticket: null,
+        survival_mode: "server_assisted",
       },
       origin: {
         original_url:
@@ -527,6 +543,7 @@ describe("传输", () => {
         ticket_expires_at: null,
         availability: "available" as const,
       },
+      file_asset: null,
       streaming_asset: {
         asset_id: "att-locator-1",
         content_hash: "hash-att-locator-1",

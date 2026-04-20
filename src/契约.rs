@@ -276,9 +276,6 @@ pub struct Blob媒体资产描述 {
     pub 内容哈希: String,
     pub 种类: 媒体资产种类,
     pub canonical: Option<变体描述>,
-    pub preview: Option<变体描述>,
-    pub full: Option<变体描述>,
-    pub original: Option<变体描述>,
     pub 分发: Option<媒体分发描述>,
     pub 冷源: 媒体冷源描述,
 }

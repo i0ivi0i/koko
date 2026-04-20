@@ -925,21 +925,13 @@ fn attachments_to_json(
         .iter()
         .map(|attachment| match attachment {
             contract::附件快照::图片(image) => {
-                let mut payload = serde_json::json!({
+                serde_json::json!({
                     "kind": "image",
                     "attachment_id": image.附件标识,
                     "width": image.宽,
                     "height": image.高,
-                    "has_preview_asset": image.有预览图
-                });
-                if let Some(preview_asset) = 媒体资产外壳::构造预览资源响应体(
-                    image.附件标识.as_str(),
-                    session_id,
-                    image.有预览图,
-                ) {
-                    payload["preview_asset"] = preview_asset;
-                }
-                payload
+                    "has_preview_asset": false
+                })
             }
             contract::附件快照::视频(video) => {
                 let mut payload = serde_json::json!({

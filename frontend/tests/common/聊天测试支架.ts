@@ -160,7 +160,7 @@ export class 假Socket {
           attachment_id: String(attachmentId),
           width: String(attachmentId).includes("video") ? 1280 : 120,
           height: String(attachmentId).includes("video") ? 720 : 90,
-          has_preview_asset: true,
+          has_preview_asset: String(attachmentId).includes("video"),
         })),
         event_position: 1,
       });
@@ -311,38 +311,25 @@ export class 假传输 implements 前端传输端口 {
     if (!attachmentId.includes("video")) {
       const sessionId = "s-test";
       const originalUrl = this.buildAttachmentContentUrl(attachmentId, sessionId);
-      const previewUrl = this.buildBlobAssetUrl(attachmentId, sessionId, "preview");
       return {
         attachment_id: attachmentId,
         kind: "image",
         status: "ready",
         original_url: originalUrl,
-        thumbnail_url: this.buildAttachmentContentUrl(attachmentId, sessionId, "thumbnail"),
+        thumbnail_url: null,
         distribution: null,
         blob_asset: {
           asset_id: attachmentId,
           content_hash: `hash-${attachmentId}`,
           kind: "blob_image",
-          preview: {
-            id: "preview",
-            mime_type: "image/png",
-            url: previewUrl,
-            width: 1,
-            height: 1,
-          },
-          full: {
-            id: "full",
-            mime_type: "image/png",
-            url: this.buildBlobAssetUrl(attachmentId, sessionId, "full"),
-            width: 1,
-            height: 1,
-          },
-          original: {
-            id: "original",
-            mime_type: "image/png",
-            url: this.buildBlobAssetUrl(attachmentId, sessionId, "original"),
-            width: 1,
-            height: 1,
+          variants: {
+            canonical: {
+              id: "canonical",
+              mime_type: "image/png",
+              url: originalUrl,
+              width: 1,
+              height: 1,
+            },
           },
           distribution: null,
           // 测试支架也要显式保留冷备 origin，确保前端不会把它误用成正式 blob 主链。

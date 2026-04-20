@@ -432,9 +432,9 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
         body["blob_asset"]["variants"]["canonical"]["id"].as_str(),
         Some("canonical")
     );
-    assert!(body["blob_asset"]["preview"].is_null());
-    assert!(body["blob_asset"]["full"].is_null());
-    assert!(body["blob_asset"]["original"].is_null());
+    assert!(body["blob_asset"].get("preview").is_none());
+    assert!(body["blob_asset"].get("full").is_none());
+    assert!(body["blob_asset"].get("original").is_none());
     assert_eq!(
         body["blob_asset"]["variants"]["canonical"]["url"].as_str(),
         Some(format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}").as_str())

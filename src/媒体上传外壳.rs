@@ -851,7 +851,7 @@ pub(super) async fn complete_media_upload(
             let preview_asset = super::媒体资产外壳::构造预览资源响应体(
                 snapshot.附件标识.as_str(),
                 Some(session_id.as_str()),
-                snapshot.允许缩略图,
+                matches!(snapshot.种类, usecase::媒体附件类型::视频) && snapshot.允许缩略图,
             );
             tracing::info!(
                 usecase = "完成媒体上传",

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放器 } from "../媒体/媒体播放";
 
 describe("Blob 媒体资产", () => {
-  it("图片定位结果返回 blob_asset 时，会先给 preview，再把查看器主链指向 full", async () => {
+  it("图片定位结果返回 blob_asset 时，会直接使用 canonical 作为唯一主链", async () => {
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -17,26 +17,14 @@ describe("Blob 媒体资产", () => {
           asset_id: "att-image-blob-1",
           content_hash: "hash-image-blob-1",
           kind: "blob_image" as const,
-          preview: {
-            id: "preview",
-            mime_type: "image/webp",
-            url: "http://media.local/api/media/att-image-blob-1/blob/preview?session_id=s-1",
-            width: 320,
-            height: 213,
-          },
-          full: {
-            id: "full",
-            mime_type: "image/webp",
-            url: "http://media.local/api/media/att-image-blob-1/blob/full?session_id=s-1",
-            width: 1200,
-            height: 800,
-          },
-          original: {
-            id: "original",
-            mime_type: "image/png",
-            url: "http://media.local/api/media/att-image-blob-1/blob/original?session_id=s-1",
-            width: 1200,
-            height: 800,
+          variants: {
+            canonical: {
+              id: "canonical",
+              mime_type: "image/webp",
+              url: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
+              width: 1200,
+              height: 800,
+            },
           },
           distribution: {
             swarm_id: "swarm-hash-image-blob-1",
@@ -66,9 +54,9 @@ describe("Blob 媒体资产", () => {
       mode: "blob",
       attachmentId: "att-image-blob-1",
       kind: "image",
-      src: "http://media.local/api/media/att-image-blob-1/blob/preview?session_id=s-1",
-      viewerSrc: "http://media.local/api/media/att-image-blob-1/blob/full?session_id=s-1",
-      thumbnailUrl: "http://media.local/api/media/att-image-blob-1/blob/preview?session_id=s-1",
+      src: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
+      viewerSrc: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
+      thumbnailUrl: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
       contentHash: "hash-image-blob-1",
       distribution: {
         swarm_id: "swarm-hash-image-blob-1",
@@ -108,26 +96,14 @@ describe("Blob 媒体资产", () => {
         asset_id: "att-image-blob-2",
         content_hash: "hash-image-blob-2",
         kind: "blob_image" as const,
-        preview: {
-          id: "preview",
-          mime_type: "image/webp",
-          url: "http://media.local/api/media/att-image-blob-2/blob/preview?session_id=s-1",
-          width: 320,
-          height: 213,
-        },
-        full: {
-          id: "full",
-          mime_type: "image/webp",
-          url: "http://media.local/api/media/att-image-blob-2/blob/full?session_id=s-1",
-          width: 1200,
-          height: 800,
-        },
-        original: {
-          id: "original",
-          mime_type: "image/png",
-          url: "http://media.local/api/media/att-image-blob-2/blob/original?session_id=s-1",
-          width: 1200,
-          height: 800,
+        variants: {
+          canonical: {
+            id: "canonical",
+            mime_type: "image/webp",
+            url: "http://media.local/api/media/att-image-blob-2/blob/canonical?session_id=s-1",
+            width: 1200,
+            height: 800,
+          },
         },
         distribution: {
           swarm_id: "swarm-hash-image-blob-2",

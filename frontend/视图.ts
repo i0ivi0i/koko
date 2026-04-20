@@ -352,7 +352,13 @@ function 派生媒体附件展示结果(
         gridRowSpan: slot.rowSpan,
         displayWidth,
         displayHeight,
-        thumbnailSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "thumbnail"),
+        /**
+         * canonical 图片已经不再存在服务端 thumbnail 派生：
+         * 1. 时间线卡片和查看器都直接围绕同一份受控 original/canonical 入口；
+         * 2. 这样 presenter 不会继续猜一条已经退场的 thumbnail 支路；
+         * 3. 真要展示更轻量的静态封面，必须来自后端显式给出的 preview 真相，而不是这里脑补。
+         */
+        thumbnailSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
         originalSrc: 读取附件内容地址(附件内容地址表, attachment.attachment_id, "original"),
       };
     });

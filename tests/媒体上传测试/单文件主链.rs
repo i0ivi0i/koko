@@ -145,12 +145,9 @@ async fn 图片complete后只保留一份canonical对象() {
     assert!(variants.get("preview").is_none() || variants["preview"].is_null());
     assert!(variants.get("full").is_none() || variants["full"].is_null());
     assert!(variants.get("original").is_none() || variants["original"].is_null());
-    assert!(media_asset["preview"].is_null(), "旧 preview 变体必须退场");
-    assert!(media_asset["full"].is_null(), "旧 full 变体必须退场");
-    assert!(
-        media_asset["original"].is_null(),
-        "旧 original 变体必须退场"
-    );
+    assert!(media_asset.get("preview").is_none(), "旧 preview 变体必须退场");
+    assert!(media_asset.get("full").is_none(), "旧 full 变体必须退场");
+    assert!(media_asset.get("original").is_none(), "旧 original 变体必须退场");
 
     let pool = PgPoolOptions::new()
         .max_connections(1)

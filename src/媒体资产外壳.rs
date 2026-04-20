@@ -471,6 +471,10 @@ pub(super) fn 构造预览资源响应体(
     }))
 }
 
+fn 媒体允许投影静态预览(kind: &usecase::媒体附件类型, 有预览图: bool) -> bool {
+    matches!(kind, usecase::媒体附件类型::视频) && 有预览图
+}
+
 /// 图片 blob 主链统一收口到 `/api/media/{id}/blob/*`，
 /// 避免前端继续把旧附件内容地址误认成正式资产地址。
 fn 构造blob受控地址(attachment_id: &str, session_id: &str, variant: &str) -> String {
@@ -499,9 +503,6 @@ fn blob媒体资产描述转响应体(
         "variants": {
             "canonical": asset.canonical.as_ref().map(变体描述转响应体),
         },
-        "preview": asset.preview.as_ref().map(变体描述转响应体),
-        "full": asset.full.as_ref().map(变体描述转响应体),
-        "original": asset.original.as_ref().map(变体描述转响应体),
         "distribution": asset.分发.as_ref().map(媒体分发描述转响应体),
         "origin": 媒体冷源描述转响应体(&asset.冷源),
     })
@@ -627,9 +628,6 @@ fn 构造blob媒体资产响应体(参数: Blob媒体资产响应参数<'_>) -> 
             宽: 参数.宽,
             高: 参数.高,
         }),
-        preview: None,
-        full: None,
-        original: None,
         分发: 参数.分发快照.and_then(|snapshot| {
             参数.运行态分发.map(|runtime| {
                 从运行态协作分发响应提取共享分发表面(snapshot, runtime)
@@ -817,7 +815,8 @@ pub(super) async fn load_media_locator(
         query.session_id.as_str(),
         "original",
     );
-    let thumbnail_url = locator.允许缩略图.then(|| {
+    let 允许静态预览 = 媒体允许投影静态预览(&locator.种类, locator.允许缩略图);
+    let thumbnail_url = 允许静态预览.then(|| {
         构造附件受控地址(
             attachment_id.as_str(),
             query.session_id.as_str(),
@@ -827,7 +826,7 @@ pub(super) async fn load_media_locator(
     let preview_asset = 构造预览资源响应体(
         attachment_id.as_str(),
         Some(query.session_id.as_str()),
-        locator.允许缩略图,
+        允许静态预览,
     );
     let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
         state.swarm_tracker_public_url.as_str(),

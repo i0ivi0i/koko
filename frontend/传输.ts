@@ -2,6 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import type {
   Blob媒体资产描述,
   Blob媒体变体描述,
+  单文件视频资产描述,
   附件快照,
   匿名身份引导结果,
   增量事件快照,
@@ -209,12 +210,27 @@ export class HttpRealtime传输 implements 前端传输端口 {
     };
   }
 
+  private 解析单文件视频资产(asset: 单文件视频资产描述): 单文件视频资产描述 {
+    return {
+      ...asset,
+      variants: {
+        canonical: asset.variants.canonical
+          ? this.解析Blob媒体变体(asset.variants.canonical)
+          : null,
+      },
+      distribution: this.解析媒体资产分发表面(asset.distribution),
+      origin: this.解析媒体冷源描述(asset.origin),
+    };
+  }
+
   private 解析Blob媒体资产(asset: Blob媒体资产描述): Blob媒体资产描述 {
     return {
       ...asset,
-      preview: asset.preview ? this.解析Blob媒体变体(asset.preview) : null,
-      full: asset.full ? this.解析Blob媒体变体(asset.full) : null,
-      original: asset.original ? this.解析Blob媒体变体(asset.original) : null,
+      variants: {
+        canonical: asset.variants.canonical
+          ? this.解析Blob媒体变体(asset.variants.canonical)
+          : null,
+      },
       distribution: asset.distribution
         ? this.解析媒体资产分发表面(asset.distribution)
         : null,
@@ -235,6 +251,13 @@ export class HttpRealtime传输 implements 前端传输端口 {
         ...result,
         preview_asset,
         media_asset: this.解析Blob媒体资产(result.media_asset),
+      };
+    }
+    if (result.media_asset.kind === "file_video") {
+      return {
+        ...result,
+        preview_asset,
+        media_asset: this.解析单文件视频资产(result.media_asset),
       };
     }
     return {
@@ -340,6 +363,9 @@ export class HttpRealtime传输 implements 前端传输端口 {
         : null,
       streaming_asset: locator.streaming_asset
         ? this.解析流媒体资产(locator.streaming_asset)
+        : null,
+      file_asset: locator.file_asset
+        ? this.解析单文件视频资产(locator.file_asset)
         : null,
       blob_asset: locator.blob_asset
         ? this.解析Blob媒体资产(locator.blob_asset)

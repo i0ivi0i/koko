@@ -171,8 +171,14 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator.blob_asset?.content_hash ??
     null;
 
+  /**
+   * 顶层 `thumbnail_url` 只继续服务视频静态封面：
+   * 1. 图片 canonical 主链已经收口，不再让旧缩略图地址重新混进来；
+   * 2. 图片如果真有额外 preview，只能来自显式 `preview_asset`；
+   * 3. 视频仍可继续复用既有 thumbnail 路由作为 poster。
+   */
   const 读取预览缩略图地址 = (locator: 媒体定位结果): string | null =>
-    locator.preview_asset?.still_url ?? locator.thumbnail_url;
+    locator.preview_asset?.still_url ?? (locator.kind === "video" ? locator.thumbnail_url : null);
 
   /**
    * 旧 streaming_asset 只继续作为“服务端冷备窗口还没退场”的信号。
@@ -187,8 +193,8 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
 
   /**
    * 图片资产不再默认回到原始附件直链：
-   * 1. 列表卡片优先吃 preview，降低首开成本；
-   * 2. 查看器优先吃 full/original，避免继续把 preview 放大冒充原图；
+   * 1. canonical 是唯一正式图片对象，列表卡片和查看器共用同一份真相；
+   * 2. 缩略图只允许退回 message/locator 明确给出的 preview_asset；
    * 3. 只有 blob 资产根本不存在时，才退回旧冷源锚点。
    */
   const 读取图片Blob主链 = (locator: 媒体定位结果) => {
@@ -196,24 +202,13 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return null;
     }
     const canonicalSrc = locator.blob_asset.variants?.canonical?.url ?? null;
-    const previewSrc =
-      canonicalSrc ??
-      locator.blob_asset.preview?.url ??
-      locator.blob_asset.full?.url ??
-      locator.blob_asset.original?.url ??
-      null;
-    const viewerSrc =
-      canonicalSrc ??
-      locator.blob_asset.full?.url ??
-      locator.blob_asset.original?.url ??
-      previewSrc;
-    if (!previewSrc || !viewerSrc) {
+    if (!canonicalSrc) {
       return null;
     }
     return {
-      src: previewSrc,
-      viewerSrc,
-      thumbnailUrl: canonicalSrc ?? locator.blob_asset.preview?.url ?? 读取预览缩略图地址(locator),
+      src: canonicalSrc,
+      viewerSrc: canonicalSrc,
+      thumbnailUrl: 读取预览缩略图地址(locator) ?? canonicalSrc,
     };
   };
 

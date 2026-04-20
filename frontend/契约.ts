@@ -128,7 +128,7 @@ export interface 媒体附件上传结果 {
   height: number;
   status: "ready";
   preview_asset?: 预览资源描述 | null;
-  media_asset?: 流媒体资产描述 | Blob媒体资产描述 | null;
+  media_asset?: 流媒体资产描述 | 单文件视频资产描述 | Blob媒体资产描述 | null;
 }
 
 export type 图片附件上传结果 = 媒体附件上传结果;
@@ -258,12 +258,9 @@ export interface Blob媒体资产描述 {
   asset_id: string;
   content_hash: string;
   kind: "blob_image";
-  variants?: {
+  variants: {
     canonical: Blob媒体变体描述 | null;
   };
-  preview: Blob媒体变体描述 | null;
-  full: Blob媒体变体描述 | null;
-  original: Blob媒体变体描述 | null;
   distribution: 媒体资产分发表面 | null;
   origin: 媒体冷源描述;
 }

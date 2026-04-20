@@ -435,7 +435,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     const mediaSurface = el.shadowRoot!.querySelector(".message-surface.media-message") as HTMLElement | null;
     expect(image).not.toBeNull();
     expect(image?.src).toContain(
-      "/api/media/att-1/blob/preview?session_id=s-test"
+      "/api/attachments/att-1/content?session_id=s-test&variant=original"
     );
     expect(el.shadowRoot!.querySelector(".message-body")).toBeNull();
     expect(mediaSurface).not.toBeNull();
@@ -455,7 +455,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
             attachmentId: "att-1",
             kind: "image",
             src: expect.stringContaining(
-              "/api/media/att-1/blob/full?session_id=s-test"
+              "/api/attachments/att-1/content?session_id=s-test&variant=original"
             ),
           }),
         ],

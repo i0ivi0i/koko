@@ -119,31 +119,20 @@ describe("媒体共享契约", () => {
             asset_id: "att-shared-image-1",
             content_hash: "hash-att-shared-image-1",
             kind: "blob_image",
-            preview: {
-              id: "preview",
-              mime_type: "image/webp",
-              url: "/api/media/att-shared-image-1/blob/preview.webp",
-              width: 320,
-              height: 213,
-            },
-            full: {
-              id: "full",
-              mime_type: "image/webp",
-              url: "/api/media/att-shared-image-1/blob/full.webp",
-              width: 1200,
-              height: 800,
-            },
-            original: {
-              id: "original",
-              mime_type: "image/png",
-              url: "/api/media/att-shared-image-1/blob/original.png",
-              width: 1200,
-              height: 800,
+            variants: {
+              canonical: {
+                id: "canonical",
+                mime_type: "image/webp",
+                url: "/api/attachments/att-shared-image-1/content?session_id=s-1&variant=original",
+                width: 1200,
+                height: 800,
+              },
             },
             distribution: {
               swarm_id: "swarm-hash-att-shared-image-1",
               announce_urls: ["/api/swarm/announce"],
-              web_seed_url: "/api/media/att-shared-image-1/blob/original.png",
+              web_seed_url:
+                "/api/attachments/att-shared-image-1/content?session_id=s-1&variant=original",
               join_ticket: null,
             },
             origin: {
@@ -176,31 +165,20 @@ describe("媒体共享契约", () => {
       asset_id: "att-shared-image-1",
       content_hash: "hash-att-shared-image-1",
       kind: "blob_image",
-      preview: {
-        id: "preview",
-        mime_type: "image/webp",
-        url: "http://localhost:3000/api/media/att-shared-image-1/blob/preview.webp",
-        width: 320,
-        height: 213,
-      },
-      full: {
-        id: "full",
-        mime_type: "image/webp",
-        url: "http://localhost:3000/api/media/att-shared-image-1/blob/full.webp",
-        width: 1200,
-        height: 800,
-      },
-      original: {
-        id: "original",
-        mime_type: "image/png",
-        url: "http://localhost:3000/api/media/att-shared-image-1/blob/original.png",
-        width: 1200,
-        height: 800,
+      variants: {
+        canonical: {
+          id: "canonical",
+          mime_type: "image/webp",
+          url: "http://localhost:3000/api/attachments/att-shared-image-1/content?session_id=s-1&variant=original",
+          width: 1200,
+          height: 800,
+        },
       },
       distribution: {
         swarm_id: "swarm-hash-att-shared-image-1",
         announce_urls: ["http://localhost:3000/api/swarm/announce"],
-        web_seed_url: "http://localhost:3000/api/media/att-shared-image-1/blob/original.png",
+        web_seed_url:
+          "http://localhost:3000/api/attachments/att-shared-image-1/content?session_id=s-1&variant=original",
         join_ticket: null,
       },
       origin: {
@@ -211,5 +189,8 @@ describe("媒体共享契约", () => {
         role: "cold_backup_only",
       },
     });
+    expect("preview" in ((result.media_asset ?? {}) as Record<string, unknown>)).toBe(false);
+    expect("full" in ((result.media_asset ?? {}) as Record<string, unknown>)).toBe(false);
+    expect("original" in ((result.media_asset ?? {}) as Record<string, unknown>)).toBe(false);
   });
 });

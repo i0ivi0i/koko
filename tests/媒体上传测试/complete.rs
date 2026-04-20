@@ -120,9 +120,9 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
         canonical_url,
         format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}")
     );
-    assert!(media_asset["preview"].is_null());
-    assert!(media_asset["full"].is_null());
-    assert!(media_asset["original"].is_null());
+    assert!(media_asset.get("preview").is_none());
+    assert!(media_asset.get("full").is_none());
+    assert!(media_asset.get("original").is_none());
     assert_eq!(
         media_asset["origin"]["original_url"].as_str(),
         Some(legacy_original_url.as_str()),

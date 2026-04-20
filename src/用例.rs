@@ -1026,7 +1026,7 @@ pub fn 创建消息(
                     种类: domain::message::附件种类::图片,
                     宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
                     高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: snapshot.允许缩略图,
+                    有预览图: false,
                 },
                 附件种类读取结果::视频 => domain::message::待发送附件 {
                     附件标识: snapshot.附件标识,
@@ -1091,7 +1091,7 @@ pub async fn 创建消息_异步<R: Realtime仓储端口 + ?Sized>(
                     种类: domain::message::附件种类::图片,
                     宽: snapshot.宽.ok_or(contract::错误码::附件未就绪)?,
                     高: snapshot.高.ok_or(contract::错误码::附件未就绪)?,
-                    有预览图: snapshot.允许缩略图,
+                    有预览图: false,
                 },
                 附件种类读取结果::视频 => domain::message::待发送附件 {
                     附件标识: snapshot.附件标识,

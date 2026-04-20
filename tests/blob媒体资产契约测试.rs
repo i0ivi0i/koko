@@ -16,9 +16,6 @@ fn 图片资产描述只暴露canonical而不是服务端派生多版本() {
             宽: Some(1920),
             高: Some(1280),
         }),
-        preview: None,
-        full: None,
-        original: None,
         分发: Some(媒体分发描述 {
             swarm_id: "swarm_hash-image-1".into(),
             announce_urls: vec!["wss://swarm.example.com/announce".into()],
@@ -42,9 +39,6 @@ fn 图片资产描述只暴露canonical而不是服务端派生多版本() {
         asset.canonical.as_ref().map(|value| value.标识.as_str()),
         Some("canonical")
     );
-    assert!(asset.preview.is_none());
-    assert!(asset.full.is_none());
-    assert!(asset.original.is_none());
     assert!(
         asset
             .canonical

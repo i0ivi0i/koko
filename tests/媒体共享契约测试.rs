@@ -269,9 +269,18 @@ async fn 图片complete共享契约不包含_web_页面流程和展示文案字�
         canonical.get("url").and_then(serde_json::Value::as_str),
         Some(format!("/api/media/{attachment_id}/blob/canonical?session_id={session_id}").as_str())
     );
-    assert!(media_asset["preview"].is_null());
-    assert!(media_asset["full"].is_null());
-    assert!(media_asset["original"].is_null());
+    assert!(
+        media_asset.get("preview").is_none(),
+        "Blob 共享契约不再保留旧 preview 变体占位"
+    );
+    assert!(
+        media_asset.get("full").is_none(),
+        "Blob 共享契约不再保留旧 full 变体占位"
+    );
+    assert!(
+        media_asset.get("original").is_none(),
+        "Blob 共享契约不再保留旧 original 变体占位"
+    );
     断言对象不包含壳层私货(media_asset, "blob media_asset");
     断言对象不包含壳层私货(canonical, "blob canonical");
     断言对象不包含壳层私货(distribution, "blob distribution");

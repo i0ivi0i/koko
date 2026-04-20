@@ -473,11 +473,24 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           sessionId,
           "original"
         ),
-        thumbnailSrc: deps.transport().buildAttachmentContentUrl(
-          attachment.attachmentId,
-          sessionId,
-          "thumbnail"
-        ),
+        /**
+         * 图片时间线已经不再存在独立 thumbnail 主链：
+         * 1. 图片卡片 fallback 直接回 canonical/original；
+         * 2. 只有视频 poster 继续保留 thumbnail 入口；
+         * 3. 这样壳层不会平白再构造一条已退场的图片 URL。
+         */
+        thumbnailSrc:
+          attachment.kind === "video"
+            ? deps.transport().buildAttachmentContentUrl(
+                attachment.attachmentId,
+                sessionId,
+                "thumbnail"
+              )
+            : deps.transport().buildAttachmentContentUrl(
+                attachment.attachmentId,
+                sessionId,
+                "original"
+              ),
       };
     }
     return urlsByAttachmentId;

@@ -122,29 +122,15 @@ describe("媒体播放器", () => {
           asset_id: "att-image-blob-1",
           content_hash: "hash-image-blob-1",
           kind: "blob_image" as const,
-          preview: {
-            id: "att-image-blob-1:preview",
-            url: "http://media.local/blob/att-image-blob-1/preview.webp",
-            mime_type: "image/webp",
-            width: 480,
-            height: 320,
-            bytes: 1024,
-          },
-          full: {
-            id: "att-image-blob-1:full",
-            url: "http://media.local/blob/att-image-blob-1/full.webp",
-            mime_type: "image/webp",
-            width: 1200,
-            height: 800,
-            bytes: 2048,
-          },
-          original: {
-            id: "att-image-blob-1:original",
-            url: "http://media.local/blob/att-image-blob-1/original.png",
-            mime_type: "image/png",
-            width: 1200,
-            height: 800,
-            bytes: 4096,
+          variants: {
+            canonical: {
+              id: "att-image-blob-1:canonical",
+              url: "http://media.local/blob/att-image-blob-1/canonical.webp",
+              mime_type: "image/webp",
+              width: 1200,
+              height: 800,
+              bytes: 2048,
+            },
           },
           distribution: {
             swarm_id: "swarm-hash-image-blob-1",
@@ -176,9 +162,9 @@ describe("媒体播放器", () => {
       mode: "blob",
       attachmentId: "att-image-blob-1",
       kind: "image",
-      src: "http://media.local/blob/att-image-blob-1/preview.webp",
-      viewerSrc: "http://media.local/blob/att-image-blob-1/full.webp",
-      thumbnailUrl: "http://media.local/blob/att-image-blob-1/preview.webp",
+      src: "http://media.local/blob/att-image-blob-1/canonical.webp",
+      viewerSrc: "http://media.local/blob/att-image-blob-1/canonical.webp",
+      thumbnailUrl: "http://media.local/preview-image-blob-1.jpg",
       contentHash: "hash-image-blob-1",
       distribution: {
         swarm_id: "swarm-hash-image-blob-1",
@@ -228,29 +214,15 @@ describe("媒体播放器", () => {
           asset_id: "att-image-backfill-1",
           content_hash: "hash-image-backfill-1",
           kind: "blob_image" as const,
-          preview: {
-            id: "att-image-backfill-1:preview",
-            url: "http://media.local/blob/att-image-backfill-1/preview.webp",
-            mime_type: "image/webp",
-            width: 480,
-            height: 320,
-            bytes: 1024,
-          },
-          full: {
-            id: "att-image-backfill-1:full",
-            url: "http://media.local/blob/att-image-backfill-1/full.webp",
-            mime_type: "image/webp",
-            width: 1200,
-            height: 800,
-            bytes: 2048,
-          },
-          original: {
-            id: "att-image-backfill-1:original",
-            url: "http://media.local/blob/att-image-backfill-1/original.png",
-            mime_type: "image/png",
-            width: 1200,
-            height: 800,
-            bytes: 4096,
+          variants: {
+            canonical: {
+              id: "att-image-backfill-1:canonical",
+              url: "http://media.local/blob/att-image-backfill-1/canonical.webp",
+              mime_type: "image/webp",
+              width: 1200,
+              height: 800,
+              bytes: 2048,
+            },
           },
           distribution: {
             swarm_id: "swarm-hash-image-backfill-1",
@@ -1930,7 +1902,7 @@ describe("媒体播放器", () => {
         kind: "image" as const,
         status: "ready" as const,
         original_url: "http://media.local/original-stale",
-        thumbnail_url: "http://media.local/thumb-stale",
+        thumbnail_url: null,
         distribution: null,
       })
       .mockResolvedValueOnce({
@@ -1938,7 +1910,7 @@ describe("媒体播放器", () => {
         kind: "image" as const,
         status: "ready" as const,
         original_url: "http://media.local/original-refresh",
-        thumbnail_url: "http://media.local/thumb-refresh",
+        thumbnail_url: null,
         distribution: null,
       });
     const probeAnchor = vi
@@ -1963,7 +1935,7 @@ describe("媒体播放器", () => {
       attachmentId: "att-image-1",
       kind: "image",
       src: "http://media.local/original-refresh",
-      thumbnailUrl: "http://media.local/thumb-refresh",
+      thumbnailUrl: null,
       hint: null,
     });
   });

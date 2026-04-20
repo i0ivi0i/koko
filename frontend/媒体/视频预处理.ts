@@ -13,9 +13,7 @@ import {
 export type 视频预处理策略 =
   | "passthrough"
   | "mediabunny_remux"
-  | "mediabunny_webcodecs_transcode"
-  | "web_demuxer_candidate"
-  | "ffmpeg_wasm_fallback";
+  | "mediabunny_webcodecs_transcode";
 
 export type 视频预处理结果 = {
   file: File;
@@ -32,15 +30,11 @@ export type 视频预处理依赖 = {
   使用Mediabunny无损整理(file: File): Promise<视频预处理结果>;
   Mediabunny与WebCodecs可转码(file: File): Promise<boolean>;
   使用Mediabunny与WebCodecs转码(file: File): Promise<视频预处理结果>;
-  WebDemuxer可补足特定格式(file: File): Promise<boolean>;
-  使用WebDemuxer候选链路(file: File): Promise<视频预处理结果>;
-  FfmpegWasm可用(file: File): Promise<boolean>;
-  使用FfmpegWasm预处理(file: File): Promise<视频预处理结果>;
 };
 
 type Mediabunny转换选项 = {
   forceTranscode: boolean;
-  strategy: Exclude<视频预处理策略, "passthrough" | "web_demuxer_candidate" | "ffmpeg_wasm_fallback">;
+  strategy: Exclude<视频预处理策略, "passthrough">;
 };
 
 function 文件看起来是Mp4(file: File): boolean {
@@ -141,16 +135,6 @@ function 默认视频预处理依赖(): 视频预处理依赖 {
         forceTranscode: true,
         strategy: "mediabunny_webcodecs_transcode",
       }),
-    // web-demuxer 只保留为候选/benchmark 对照，不默认抢 Mediabunny 的主链 owner。
-    WebDemuxer可补足特定格式: async () => false,
-    使用WebDemuxer候选链路: async () => {
-      throw new Error("media_preprocess_failed");
-    },
-    // ffmpeg.wasm 是最后兜底，默认不承诺存在，也不让它掩盖客户端主链能力不足。
-    FfmpegWasm可用: async () => false,
-    使用FfmpegWasm预处理: async () => {
-      throw new Error("media_preprocess_failed");
-    },
   };
 }
 
@@ -167,12 +151,6 @@ export async function 预处理待上传视频文件(
   }
   if (await deps.Mediabunny与WebCodecs可转码(file)) {
     return deps.使用Mediabunny与WebCodecs转码(file);
-  }
-  if (await deps.WebDemuxer可补足特定格式(file)) {
-    return deps.使用WebDemuxer候选链路(file);
-  }
-  if (await deps.FfmpegWasm可用(file)) {
-    return deps.使用FfmpegWasm预处理(file);
   }
   throw new Error("media_preprocess_failed");
 }

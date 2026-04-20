@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-20)
 
 ## Corpus Check
-- 200 files · ~235,338 words
+- 200 files · ~235,233 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 497 nodes · 641 edges · 34 communities detected
+- 497 nodes · 640 edges · 34 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -89,7 +89,7 @@ Nodes (0):
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
-Nodes (5): buildAttachmentContentUrl(), buildBlobAssetUrl(), createFakeStorage(), loadMediaLocator(), 单连接发送到已关闭socket时降级为正常断开()
+Nodes (4): buildAttachmentContentUrl(), createFakeStorage(), loadMediaLocator(), 单连接发送到已关闭socket时降级为正常断开()
 
 ### Community 5 - "Community 5"
 Cohesion: 0.12
@@ -210,11 +210,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **29 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+24 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 24`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 25`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 26`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 26`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 27`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
