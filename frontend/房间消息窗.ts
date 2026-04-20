@@ -491,14 +491,18 @@ export class 房间消息窗 extends LitElement {
     return candidatePosterSrc;
   }
 
-  private 读取时间线视频首帧预览源(playback: 媒体播放结果 | null): string | null {
-    if (!playback?.src) {
+  private 读取时间线视频首帧预览源(
+    attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
+    playback: 媒体播放结果 | null
+  ): string | null {
+    if (playback?.src) {
+      if (playback.mode === "anchor" || playback.mode === "swarm" || playback.mode === "blob") {
+        return playback.src;
+      }
       return null;
     }
-    if (playback.mode === "anchor" || playback.mode === "swarm" || playback.mode === "blob") {
-      return playback.src;
-    }
-    return null;
+    // 非自动播视频常常还没拿到 playback 投影；这时回退到附件 canonical 原始地址即可拿首帧。
+    return attachment.originalSrc;
   }
 
   private 标记视频封面加载失败(attachmentId: string, event: Event): void {
@@ -718,7 +722,7 @@ export class 房间消息窗 extends LitElement {
                 inlineAutoplayPlayback?.mode === "blob");
             const fallbackFramePreviewSrc =
               !shouldRenderInlineVideo && !hasSourcePoster
-                ? this.读取时间线视频首帧预览源(playback)
+                ? this.读取时间线视频首帧预览源(attachment, playback)
                 : null;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
@@ -799,7 +803,6 @@ export class 房间消息窗 extends LitElement {
                           controlslist="nodownload nofullscreen noremoteplayback"
                           tabindex="-1"
                           aria-hidden="true"
-                          poster=${previewPosterSrc}
                           @error=${() =>
                             this.广播媒体会话信号(attachment.attachmentId, {
                               type: "PLAYER_ERROR",

@@ -1152,48 +1152,50 @@ describe("聊天壳集成 / 首页与控制台", () => {
     await 等待组件稳定(el);
     await 等待组件稳定(el);
     vi.useFakeTimers();
+    try {
+      const kernel = (el as unknown as {
+        kernel: {
+          dispatch(command: {
+            type: "MEDIA_INLINE_AUTOPLAY_OBSERVED";
+            candidates: Array<{
+              attachmentId: string;
+              visibilityRatio: number;
+              distanceToViewportCenter: number;
+            }>;
+          }): Promise<void>;
+        };
+      }).kernel;
 
-    const kernel = (el as unknown as {
-      kernel: {
-        dispatch(command: {
-          type: "MEDIA_INLINE_AUTOPLAY_OBSERVED";
-          candidates: Array<{
-            attachmentId: string;
-            visibilityRatio: number;
-            distanceToViewportCenter: number;
-          }>;
-        }): Promise<void>;
-      };
-    }).kernel;
+      await kernel.dispatch({
+        type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
+        candidates: [
+          {
+            attachmentId: "att-video-inline-shell",
+            visibilityRatio: 1,
+            distanceToViewportCenter: 0,
+          },
+        ],
+      });
 
-    await kernel.dispatch({
-      type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
-      candidates: [
-        {
-          attachmentId: "att-video-inline-shell",
-          visibilityRatio: 1,
-          distanceToViewportCenter: 0,
-        },
-      ],
-    });
-
-    expect(
-      el.shadowRoot!.querySelector(
+      const beforeOwnerVideo = el.shadowRoot!.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
-      )
-    ).toBeNull();
+      );
+      expect(beforeOwnerVideo).not.toBeNull();
+      expect(beforeOwnerVideo?.autoplay).toBe(false);
 
-    await vi.advanceTimersByTimeAsync(81);
-    await Promise.resolve();
-    await el.updateComplete;
+      await vi.advanceTimersByTimeAsync(81);
+      await Promise.resolve();
+      await el.updateComplete;
 
-    expect(
-      el.shadowRoot!.querySelector(
+      const ownerVideo = el.shadowRoot!.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
-      )
-    ).not.toBeNull();
-    el.remove();
-    vi.useRealTimers();
+      );
+      expect(ownerVideo).not.toBeNull();
+      expect(ownerVideo?.autoplay).toBe(true);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
   });
 
   it("进入房间后发送区会显示统一附件入口和统一媒体文件输入", async () => {
