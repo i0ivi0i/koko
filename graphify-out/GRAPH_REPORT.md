@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-21)
 
 ## Corpus Check
-- 200 files · ~235,913 words
+- 200 files · ~236,087 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -140,12 +140,12 @@ Cohesion: 0.43
 Nodes (5): 构造tus_concatenation_hook请求体(), 构造tus_hook请求体(), 解析_tus_hook回传_http响应体(), 断言TusHook已接受(), 断言TusHook拒绝Termination()
 
 ### Community 17 - "Community 17"
-Cohesion: 0.5
-Nodes (2): abandon会先写业务abandoned再协调官方termination(), 启动假tus_termination侧车()
-
-### Community 18 - "Community 18"
 Cohesion: 0.4
 Nodes (0): 
+
+### Community 18 - "Community 18"
+Cohesion: 0.5
+Nodes (2): abandon会先写业务abandoned再协调官方termination(), 启动假tus_termination侧车()
 
 ### Community 19 - "Community 19"
 Cohesion: 0.5

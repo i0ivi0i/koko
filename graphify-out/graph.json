@@ -855,7 +855,7 @@
       "label": "renderMessageBody()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L609",
+      "source_location": "L619",
       "id": "rendermessagebody",
       "community": 1
     },
@@ -863,7 +863,7 @@
       "label": "renderMessageAttachments()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L626",
+      "source_location": "L636",
       "id": "rendermessageattachments",
       "community": 1
     },
@@ -871,7 +871,7 @@
       "label": "renderVirtualMessageItem()",
       "file_type": "code",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L844",
+      "source_location": "L883",
       "id": "rendervirtualmessageitem",
       "community": 1
     },
@@ -3489,7 +3489,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L1",
       "id": "tests_abandon_rs",
-      "community": 17
+      "community": 18
     },
     {
       "label": "\u542f\u52a8\u5047tus_termination\u4fa7\u8f66()",
@@ -3497,7 +3497,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L18",
       "id": "abandon_tus_termination",
-      "community": 17
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u540c\u65f6\u6807\u8bb0\u9644\u4ef6\u4e0etransport\u4e3aabandoned\u5e76\u6e05\u6389\u5df2\u767b\u8bb0\u7684\u4e34\u65f6\u6587\u4ef6()",
@@ -3505,7 +3505,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L61",
       "id": "abandon_transport_abandoned",
-      "community": 17
+      "community": 18
     },
     {
       "label": "abandon\u4f1a\u5148\u5199\u4e1a\u52a1abandoned\u518d\u534f\u8c03\u5b98\u65b9termination()",
@@ -3513,7 +3513,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L207",
       "id": "abandon_abandon_abandoned_termination",
-      "community": 17
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u6e05\u6389\u5f53\u524d\u4f1a\u8bdd\u4e0b\u6240\u6709partial\u4e34\u65f6\u6587\u4ef6()",
@@ -3521,7 +3521,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L321",
       "id": "abandon_partial",
-      "community": 17
+      "community": 18
     },
     {
       "label": "complete.rs",
@@ -3873,7 +3873,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L1",
       "id": "tests_fixture_rs",
-      "community": 18
+      "community": 17
     },
     {
       "label": "\u5199\u5165tus\u6d4b\u8bd5\u6587\u4ef6()",
@@ -3881,7 +3881,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L6",
       "id": "fixture_tus",
-      "community": 18
+      "community": 17
     },
     {
       "label": "\u6700\u5c0fpng\u5b57\u8282()",
@@ -3889,7 +3889,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L21",
       "id": "fixture_png",
-      "community": 18
+      "community": 17
     },
     {
       "label": "\u6700\u5c0fwebp\u5b57\u8282()",
@@ -3897,7 +3897,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L33",
       "id": "fixture_webp",
-      "community": 18
+      "community": 17
     },
     {
       "label": "\u6700\u5c0fmp4\u5b57\u8282()",
@@ -3905,7 +3905,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\fixture.rs",
       "source_location": "L43",
       "id": "fixture_mp4",
-      "community": 18
+      "community": 17
     },
     {
       "label": "seed.rs",
@@ -5241,7 +5241,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L609",
+      "source_location": "L619",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendermessagebody",
@@ -5253,7 +5253,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L626",
+      "source_location": "L636",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendermessageattachments",
@@ -5265,7 +5265,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L844",
+      "source_location": "L883",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "rendervirtualmessageitem",
@@ -6645,7 +6645,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L893",
+      "source_location": "L932",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessagebody",
@@ -6657,7 +6657,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
-      "source_location": "L894",
+      "source_location": "L933",
       "weight": 1.0,
       "_src": "rendervirtualmessageitem",
       "_tgt": "rendermessageattachments",
@@ -7437,7 +7437,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
-      "source_location": "L716",
+      "source_location": "L764",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_constructor",
@@ -7485,7 +7485,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
-      "source_location": "L722",
+      "source_location": "L770",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_takerecords",

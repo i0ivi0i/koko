@@ -491,6 +491,16 @@ export class 房间消息窗 extends LitElement {
     return candidatePosterSrc;
   }
 
+  private 读取时间线视频首帧预览源(playback: 媒体播放结果 | null): string | null {
+    if (!playback?.src) {
+      return null;
+    }
+    if (playback.mode === "anchor" || playback.mode === "swarm" || playback.mode === "blob") {
+      return playback.src;
+    }
+    return null;
+  }
+
   private 标记视频封面加载失败(attachmentId: string, event: Event): void {
     const target = event.currentTarget;
     if (!(target instanceof HTMLImageElement)) {
@@ -697,6 +707,7 @@ export class 房间消息窗 extends LitElement {
           }
           if (attachment.kind === "video") {
             const previewPosterSrc = this.读取时间线视频封面地址(attachment, playback);
+            const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
             const inlineAutoplayPlayback =
               this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
             const shouldRenderInlineVideo =
@@ -705,12 +716,16 @@ export class 房间消息窗 extends LitElement {
               (inlineAutoplayPlayback?.mode === "anchor" ||
                 inlineAutoplayPlayback?.mode === "swarm" ||
                 inlineAutoplayPlayback?.mode === "blob");
+            const fallbackFramePreviewSrc =
+              !shouldRenderInlineVideo && !hasSourcePoster
+                ? this.读取时间线视频首帧预览源(playback)
+                : null;
             /**
-             * 时间线默认态现在只承载“静态可点封面”：
-             * 1. 不再在消息流里常驻真实 `<video>`，彻底关掉第二套首帧预览链；
-             * 2. 视频封面优先吃播放会话给出的最新 thumbnail，再回退消息快照里的 preview；
-             * 3. 当前若进入自动播态，也只是投影统一播放策略，不在这里再发明第二套 loop/恢复规则；
-             * 4. 真正播放统一交给查看器，避免列表卡片和正式播放器同时长真相。
+             * 时间线视频卡片保持单入口（点击后统一进查看器）：
+             * 1. 有 poster 就继续走静态封面，避免列表层变成第二播放器；
+             * 2. 无 poster 且当前是可直播文件源时，回退到非自动播首帧预览，避免大面积空卡片；
+             * 3. manifest 无 poster 时仍坚持静态占位，避免把 m3u8 塞给原生 `<video>`；
+             * 4. 真正自动播 owner 仍由外层编排裁决，这里只负责投影。
              */
             return html`
               <div
@@ -767,6 +782,30 @@ export class 房间消息窗 extends LitElement {
                               type: "PLAYER_ERROR",
                             })}
                         ></video>
+                      `
+                    : fallbackFramePreviewSrc
+                    ? html`
+                        <video
+                          class="message-video-preview"
+                          data-attachment-id=${attachment.attachmentId}
+                          src=${fallbackFramePreviewSrc}
+                          width=${attachment.displayWidth}
+                          height=${attachment.displayHeight}
+                          muted
+                          playsinline
+                          preload="metadata"
+                          disablepictureinpicture
+                          disableremoteplayback
+                          controlslist="nodownload nofullscreen noremoteplayback"
+                          tabindex="-1"
+                          aria-hidden="true"
+                          poster=${previewPosterSrc}
+                          @error=${() =>
+                            this.广播媒体会话信号(attachment.attachmentId, {
+                              type: "PLAYER_ERROR",
+                            })}
+                        ></video>
+                        <span class="message-video-play-indicator" aria-hidden="true">▶</span>
                       `
                     : html`
                         <img

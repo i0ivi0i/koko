@@ -477,6 +477,54 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("非自动播视频在没有 poster 但已有可直播源时，应回退到首帧预览而不是静态占位图", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.getAttribute("src")).toBe("http://media.local/original-video-1");
+    expect(previewVideo?.hasAttribute("autoplay")).toBe(false);
+    expect(previewVideo?.getAttribute("preload")).toBe("metadata");
+    expect(previewPoster).toBeNull();
+    expect(pane.querySelector(".message-video-play-indicator")).not.toBeNull();
+
+    pane.remove();
+  });
+
   it("同屏多个视频时，只会给当前自动播 owner 渲染一颗轻量 video", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
