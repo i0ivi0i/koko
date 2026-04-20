@@ -196,6 +196,15 @@ function 创建场景(overrides: {
   const 默认上传器 = new 假媒体上传器();
   const 大视频上传器 = new 假媒体上传器();
   const drafts = 创建草稿仓库();
+  const writeDraft = vi.fn((draft: 媒体附件草稿) => {
+    drafts.writeDraft(draft);
+  });
+  const updateDraft = vi.fn((localId: string, patch: 媒体草稿状态补丁) => {
+    drafts.updateDraft(localId, patch);
+  });
+  const removeDraft = vi.fn((localId: string) => {
+    drafts.removeDraft(localId);
+  });
   const createUploaderCalls: Array<{
     tusEndpoint?: string;
     profile?: string;
@@ -234,9 +243,9 @@ function 创建场景(overrides: {
     abandonMediaUpload,
     completeMediaUpload,
     readDrafts: drafts.readDrafts,
-    writeDraft: drafts.writeDraft,
-    updateDraft: drafts.updateDraft,
-    removeDraft: drafts.removeDraft,
+    writeDraft,
+    updateDraft,
+    removeDraft,
     clearDrafts: drafts.clearDrafts,
     createUploader: (input: unknown) => {
       const normalized =
@@ -272,6 +281,9 @@ function 创建场景(overrides: {
     prepareMediaUpload,
     abandonMediaUpload,
     completeMediaUpload,
+    writeDraft,
+    updateDraft,
+    removeDraft,
     createUploaderCalls,
     yieldToMainThread,
   };
@@ -585,6 +597,20 @@ describe("媒体发布器", () => {
         height: 720,
       }),
     ]);
+  });
+
+  it("视频预制很快完成时不会写入瞬时预制占位草稿", async () => {
+    const 场景 = 创建场景();
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "quick.mp4", {
+      type: "video/mp4",
+    });
+
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
+
+    const preprocessingDraft = 场景.writeDraft.mock.calls
+      .map(([draft]) => draft as 媒体附件草稿)
+      .find((draft) => draft.localId.startsWith("preprocessing-video-"));
+    expect(preprocessingDraft).toBeUndefined();
   });
 
   it("视频预制失败时不会触发 prepareMediaUpload", async () => {

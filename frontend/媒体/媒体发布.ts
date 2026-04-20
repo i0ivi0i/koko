@@ -112,6 +112,12 @@ export const 大视频单文件并行分片数 = 4;
  */
 export const 媒体Tus重试延迟毫秒数组 = [0, 1000, 3000, 5000] as const;
 
+/**
+ * 视频本地预制通常会在极短时间内结束。
+ * 这里给“处理中草稿”加一个很短的显示门槛，避免快路径里出现一闪而过的临时方框。
+ */
+const 视频预制草稿显示延迟毫秒 = 180;
+
 type 媒体Tus上传档位 = "default" | "large-video";
 
 type 媒体上传器创建参数 = {
@@ -631,7 +637,8 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       localId,
       kind: "video",
       attachmentId: "",
-      previewUrl: createPreviewUrl(file),
+      // 预制等待态不使用视频 Blob 直连 `<img>`，避免无效解码导致的草稿闪烁占位。
+      previewUrl: "",
       width: 0,
       height: 0,
       status: "processing",
@@ -656,13 +663,24 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
         写入超限失败草稿(kind, sourceFile);
         continue;
       }
-      const preprocessingDraftId =
-        kind === "video" ? 写入视频预制等待草稿(sourceFile) : "";
+      let preprocessingDraftId = "";
+      const 确保视频预制草稿 = (): string => {
+        if (!preprocessingDraftId) {
+          preprocessingDraftId = 写入视频预制等待草稿(sourceFile);
+        }
+        return preprocessingDraftId;
+      };
+      const preprocessingDraftDelayTimer =
+        kind === "video"
+          ? globalThis.setTimeout(() => {
+              确保视频预制草稿();
+            }, 视频预制草稿显示延迟毫秒)
+          : null;
       const preprocessingWaitTimer =
         kind === "video"
           ? globalThis.setTimeout(() => {
               // 超过 15 分钟只是提醒用户仍在本地预制；它不是失败，也绝不能触发 prepare。
-              deps.updateDraft(preprocessingDraftId, {
+              deps.updateDraft(确保视频预制草稿(), {
                 status: "processing",
                 errorCode: "media_preprocess_waiting",
               });
@@ -670,6 +688,9 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           : null;
       try {
         const preparedFile = await 准备待上传媒体文件(kind, sourceFile);
+        if (preprocessingDraftDelayTimer) {
+          globalThis.clearTimeout(preprocessingDraftDelayTimer);
+        }
         if (preprocessingWaitTimer) {
           globalThis.clearTimeout(preprocessingWaitTimer);
         }
@@ -715,6 +736,9 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           deps.removeDraft(preprocessingDraftId);
         }
       } catch (error: unknown) {
+        if (preprocessingDraftDelayTimer) {
+          globalThis.clearTimeout(preprocessingDraftDelayTimer);
+        }
         if (preprocessingWaitTimer) {
           globalThis.clearTimeout(preprocessingWaitTimer);
         }
