@@ -8,6 +8,7 @@ import type {
 import { 选择消息视频自动播Owner } from "./媒体/index.js";
 
 const 长任务阈值毫秒 = 100;
+const 自动播空观测释放阈值 = 2;
 
 export interface 媒体运行时上下文 {
   currentViewerRequest: 媒体查看器打开请求 | null;
@@ -15,6 +16,7 @@ export interface 媒体运行时上下文 {
   inlineAutoplayOwnerAttachmentId: string | null;
   inlineAutoplayPendingAttachmentId: string | null;
   inlineAutoplayPlayback: 媒体播放结果 | null;
+  inlineAutoplayConsecutiveEmptyObservedCount: number;
   lastInlineAutoplayCandidates: 消息视频自动播候选[];
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
   inflightLocatorCount: number;
@@ -90,6 +92,7 @@ const 初始媒体运行时上下文: 媒体运行时上下文 = {
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
   inlineAutoplayPlayback: null,
+  inlineAutoplayConsecutiveEmptyObservedCount: 0,
   lastInlineAutoplayCandidates: [],
   heavyWorkPolicy: "normal",
   inflightLocatorCount: 0,
@@ -106,6 +109,7 @@ const 清空自动播Owner补丁 = () => ({
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
   inlineAutoplayPlayback: null,
+  inlineAutoplayConsecutiveEmptyObservedCount: 0,
 });
 
 /**
@@ -121,14 +125,20 @@ const 重算自动播候选补丁 = (
     媒体运行时上下文,
     | "currentViewerRequest"
     | "heavyWorkPolicy"
+    | "inlineAutoplayConsecutiveEmptyObservedCount"
     | "inlineAutoplayOwnerAttachmentId"
     | "inlineAutoplayPendingAttachmentId"
   >,
   candidates: 消息视频自动播候选[]
-):
-  | ReturnType<typeof 清空自动播Owner补丁>
-  | Pick<媒体运行时上下文, "inlineAutoplayPendingAttachmentId">
-  | Record<string, never> => {
+): Partial<
+  Pick<
+    媒体运行时上下文,
+    | "inlineAutoplayOwnerAttachmentId"
+    | "inlineAutoplayPendingAttachmentId"
+    | "inlineAutoplayPlayback"
+    | "inlineAutoplayConsecutiveEmptyObservedCount"
+  >
+> => {
   if (context.heavyWorkPolicy !== "normal" || context.currentViewerRequest !== null) {
     return 清空自动播Owner补丁();
   }
@@ -138,18 +148,38 @@ const 重算自动播候选补丁 = (
     context.inlineAutoplayPendingAttachmentId ?? context.inlineAutoplayOwnerAttachmentId
   );
   if (!nextOwnerAttachmentId) {
+    /**
+     * IntersectionObserver 与虚拟列表重排会偶发一帧“候选暂时清空”。
+     * 这里直接清 owner 会让时间线在 `<video>/<img poster>` 之间抖动闪烁，
+     * 同时触发无意义的播放源重解析。连续空观测达到阈值才真正释放。
+     */
+    if (
+      context.inlineAutoplayOwnerAttachmentId &&
+      context.inlineAutoplayPendingAttachmentId === null
+    ) {
+      const nextEmptyObservedCount = context.inlineAutoplayConsecutiveEmptyObservedCount + 1;
+      if (nextEmptyObservedCount < 自动播空观测释放阈值) {
+        return {
+          inlineAutoplayConsecutiveEmptyObservedCount: nextEmptyObservedCount,
+        };
+      }
+    }
     return 清空自动播Owner补丁();
   }
   if (nextOwnerAttachmentId === context.inlineAutoplayOwnerAttachmentId) {
     return {
       inlineAutoplayPendingAttachmentId: null,
+      inlineAutoplayConsecutiveEmptyObservedCount: 0,
     };
   }
   if (nextOwnerAttachmentId === context.inlineAutoplayPendingAttachmentId) {
-    return {};
+    return {
+      inlineAutoplayConsecutiveEmptyObservedCount: 0,
+    };
   }
   return {
     inlineAutoplayPendingAttachmentId: nextOwnerAttachmentId,
+    inlineAutoplayConsecutiveEmptyObservedCount: 0,
   };
 };
 

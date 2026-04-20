@@ -71,6 +71,7 @@ export class 房间消息窗 extends LitElement {
   private 自动播候选观察器: IntersectionObserver | null = null;
   private readonly 自动播候选观察目标 = new Map<HTMLButtonElement, string>();
   private readonly 自动播候选可见条目 = new Map<string, 消息视频自动播候选>();
+  private readonly 失效视频封面地址 = new Map<string, string>();
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -107,6 +108,7 @@ export class 房间消息窗 extends LitElement {
   override disconnectedCallback(): void {
     this.取消自动播候选调度();
     this.清理自动播候选观察();
+    this.失效视频封面地址.clear();
     super.disconnectedCallback();
   }
 
@@ -471,6 +473,40 @@ export class 房间消息窗 extends LitElement {
     return playback?.mode === "blob" ? playback.viewerSrc ?? playback.src : this.读取附件播放源(attachmentId, originalSrc);
   }
 
+  private 读取时间线视频封面地址(
+    attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
+    playback: 媒体播放结果 | null
+  ): string {
+    const candidatePosterSrc =
+      playback?.thumbnailUrl ?? attachment.posterSrc ?? 默认视频清单占位Poster;
+    const failedPosterSrc = this.失效视频封面地址.get(attachment.attachmentId);
+    if (failedPosterSrc && failedPosterSrc !== candidatePosterSrc) {
+      // 新缩略图来源已到达，撤销旧失败记录，恢复正常封面展示。
+      this.失效视频封面地址.delete(attachment.attachmentId);
+      return candidatePosterSrc;
+    }
+    if (failedPosterSrc && failedPosterSrc === candidatePosterSrc) {
+      return 默认视频清单占位Poster;
+    }
+    return candidatePosterSrc;
+  }
+
+  private 标记视频封面加载失败(attachmentId: string, event: Event): void {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLImageElement)) {
+      return;
+    }
+    const failedPosterSrc = target.currentSrc || target.getAttribute("src");
+    if (!failedPosterSrc) {
+      return;
+    }
+    this.失效视频封面地址.set(attachmentId, failedPosterSrc);
+    this.广播媒体会话信号(attachmentId, {
+      type: "PLAYER_ERROR",
+    });
+    this.requestUpdate();
+  }
+
   private 读取媒体查看器项目(): 媒体查看器项目[] {
     const items: 媒体查看器项目[] = [];
     for (const item of this.items) {
@@ -508,7 +544,8 @@ export class 房间消息窗 extends LitElement {
                 fallbackSrc: playback.fallbackSrc,
               }
             : {}),
-          posterSrc: attachment.posterSrc,
+          // 播放链拿到的新 thumbnail 可能已经完成重签；应优先覆盖消息快照里可能失效的旧 poster。
+          posterSrc: playback?.thumbnailUrl ?? attachment.posterSrc ?? null,
           ...(playback?.mode === "manifest" && playback.streamingDistribution
             ? {
                 streamingDistribution: playback.streamingDistribution,
@@ -659,10 +696,7 @@ export class 房间消息窗 extends LitElement {
             `;
           }
           if (attachment.kind === "video") {
-            const previewPosterSrc =
-              attachment.posterSrc ??
-              playback?.thumbnailUrl ??
-              默认视频清单占位Poster;
+            const previewPosterSrc = this.读取时间线视频封面地址(attachment, playback);
             const inlineAutoplayPlayback =
               this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
             const shouldRenderInlineVideo =
@@ -674,7 +708,7 @@ export class 房间消息窗 extends LitElement {
             /**
              * 时间线默认态现在只承载“静态可点封面”：
              * 1. 不再在消息流里常驻真实 `<video>`，彻底关掉第二套首帧预览链；
-             * 2. 视频封面优先吃消息快照里的权威 preview，其次才吃播放会话补回来的同源封面；
+             * 2. 视频封面优先吃播放会话给出的最新 thumbnail，再回退消息快照里的 preview；
              * 3. 当前若进入自动播态，也只是投影统一播放策略，不在这里再发明第二套 loop/恢复规则；
              * 4. 真正播放统一交给查看器，避免列表卡片和正式播放器同时长真相。
              */
@@ -744,6 +778,8 @@ export class 房间消息窗 extends LitElement {
                           height=${attachment.displayHeight}
                           loading="lazy"
                           aria-hidden="true"
+                          @error=${(event: Event) =>
+                            this.标记视频封面加载失败(attachment.attachmentId, event)}
                         />
                         <span class="message-video-play-indicator" aria-hidden="true">▶</span>
                       `}

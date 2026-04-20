@@ -886,6 +886,70 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("消息快照里的旧 poster 失效时，时间线和查看器都应优先使用最新 playback.thumbnailUrl", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1-stale",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: "http://media.local/poster-video-1-fresh",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(previewPoster?.getAttribute("src")).toBe("http://media.local/poster-video-1-fresh");
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]?.items).toEqual([
+      {
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        posterSrc: "http://media.local/poster-video-1-fresh",
+        width: 1280,
+        height: 720,
+      },
+    ]);
+
+    pane.remove();
+  });
+
   it("视频已经切到 HLS manifest 主链且没有 poster 时，消息卡片会退到静态占位，而不是把 m3u8 塞给原生 video", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
@@ -993,6 +1057,83 @@ describe("房间消息窗媒体查看器", () => {
         signal: { type: "PLAYER_ERROR" },
       },
     ]);
+
+    pane.remove();
+  });
+
+  it("视频封面加载失败时会回抛恢复信号并退回静态占位，新 thumbnail 到达后应恢复展示", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: "http://media.local/poster-video-1-stale",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];
+    pane.addEventListener("room-media-session-signal", (event) => {
+      信号记录.push(
+        (event as CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>).detail
+      );
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const stalePoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(stalePoster?.getAttribute("src")).toBe("http://media.local/poster-video-1-stale");
+
+    stalePoster?.dispatchEvent(new Event("error"));
+    await pane.updateComplete;
+
+    const placeholderPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(placeholderPoster?.getAttribute("src")).toContain("data:image/svg+xml");
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-video-1",
+        signal: { type: "PLAYER_ERROR" },
+      },
+    ]);
+
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "anchor",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/original-video-1",
+        thumbnailUrl: "http://media.local/poster-video-1-fresh",
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    await pane.updateComplete;
+
+    const refreshedPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(refreshedPoster?.getAttribute("src")).toBe("http://media.local/poster-video-1-fresh");
 
     pane.remove();
   });

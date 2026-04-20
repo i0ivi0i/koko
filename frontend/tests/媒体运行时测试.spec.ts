@@ -203,6 +203,60 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
   });
 
+  it("自动播候选出现单帧空观测时，不会立刻释放 owner 与已裁决播放结果", () => {
+    const actor = 创建媒体运行时Actor();
+    const playback: 媒体播放结果 = {
+      mode: "anchor",
+      attachmentId: "att-video-inline-jitter-1",
+      kind: "video",
+      src: "http://media.local/original-att-video-inline-jitter-1",
+      thumbnailUrl: "http://media.local/poster-att-video-inline-jitter-1",
+      hint: null,
+    };
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-jitter-1",
+          visibilityRatio: 0.9,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+      attachmentId: "att-video-inline-jitter-1",
+      playback,
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-inline-jitter-1"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [],
+    });
+
+    // 单帧空观测通常来自虚拟列表重排/观察器抖动；不应立刻把消息卡片从 video 切回 poster。
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-inline-jitter-1"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [],
+    });
+
+    // 连续空观测仍需释放 owner，避免离屏附件长期占用预算。
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
+  });
+
   it("正式查看器关闭后，会根据最后一次可见候选重新挂起自动播 owner", () => {
     const actor = 创建媒体运行时Actor();
 
