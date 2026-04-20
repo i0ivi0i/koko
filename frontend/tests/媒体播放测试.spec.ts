@@ -1292,6 +1292,81 @@ describe("媒体播放器", () => {
     expect(调用参数?.onSessionEvent).toEqual(expect.any(Function));
   });
 
+  it("单文件 canonical 视频进入查看器后，激活协作补齐只允许复用已热 swarm，会话不存在时不得冷启动", async () => {
+    const resolveSwarmSource = vi.fn<
+      (input: {
+        attachmentId: string;
+        kind: "image" | "video";
+        locator: unknown;
+        consumerId?: string;
+        onSessionEvent?: unknown;
+        eagerCompleting?: boolean;
+        reuseOnly?: boolean;
+      }) => Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>
+    >(async () => ({
+      src: "blob:http://media.local/swarm-video-canonical-backfill",
+      hint: "正在补块" as const,
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate: async () => ({
+        attachment_id: "att-video-canonical-backfill",
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: "http://media.local/cold-origin-video-canonical-backfill",
+        thumbnail_url: "http://media.local/poster-video-canonical-backfill",
+        distribution: {
+          content_id: "content_att-video-canonical-backfill",
+          content_hash: "hash-video-canonical-backfill",
+          swarm_id: "swarm-hash-video-canonical-backfill",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-video-canonical-backfill",
+          torrent_info_hash: "torrent-info-hash-video-canonical-backfill",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-video-canonical-backfill",
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          survival_mode: "server_assisted" as const,
+        },
+        // 单文件主链场景不再提供 streaming_asset manifest。
+        streaming_asset: null,
+        blob_asset: null,
+      }),
+      resolveSwarmSource,
+    });
+
+    await 播放器.激活协作补齐({
+      attachmentId: "att-video-canonical-backfill",
+      kind: "video",
+      consumerId: "session:att-video-canonical-backfill",
+      onSessionEvent: vi.fn(),
+    });
+
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
+    const 调用参数 = resolveSwarmSource.mock.calls[0]![0] as {
+      attachmentId: string;
+      kind: "video";
+      consumerId?: string;
+      eagerCompleting?: boolean;
+      reuseOnly?: boolean;
+      locator: {
+        attachment_id: string;
+      };
+      onSessionEvent?: unknown;
+    };
+    expect(调用参数).toMatchObject({
+      attachmentId: "att-video-canonical-backfill",
+      kind: "video",
+      consumerId: "session:att-video-canonical-backfill",
+      eagerCompleting: true,
+      reuseOnly: true,
+    });
+    expect(调用参数?.locator).toMatchObject({
+      attachment_id: "att-video-canonical-backfill",
+    });
+    expect(调用参数?.onSessionEvent).toEqual(expect.any(Function));
+  });
+
   it("inline_autoplay surface 只有在 swarm 已本地完整时才直接复用文件源，而不是把半成品 blob 塞给消息卡片", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-inline-hls",

@@ -455,13 +455,12 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return;
     }
     /**
-     * 旧 streaming_asset 仍存在时，后台补齐只能升级“已经预热过的同一条 swarm 会话”，
-     * 不能再冷启动第二条 whole-file 重链路：
-     * 1. 正式播放裁决由解析流程统一决定，不在补齐阶段偷偷切源；
-     * 2. 已存在的 swarm 会话可以进入 eagerCompleting，继续补齐完整资产；
-     * 3. 如果前面根本没预热 swarm，这里就保持静默，不为了补齐再新开重链路。
+     * 视频补齐必须遵守“服务器轻负担”裁决：只升级已热会话，不冷启动 whole-file 下载。
+     * 1. single-file 主链下，PLAYER_PLAYING 是“可以补齐”的信号，不是“必须新开 swarm”的指令；
+     * 2. whether 有无旧 streaming_asset，都只能在已存在会话上升级 eagerCompleting；
+     * 3. 会话不存在时静默返回，避免把后台补齐放大成对 web seed 的持续重读压力。
      */
-    if (locator.kind === "video" && 读取流媒体主链地址(locator)) {
+    if (locator.kind === "video") {
       try {
         await resolveSwarmSource({
           attachmentId: input.attachmentId,
