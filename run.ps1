@@ -929,7 +929,7 @@ try {
             ($null -ne $httpsBootstrapProcess.StartedAt) -and
             (((Get-Date) - $httpsBootstrapProcess.StartedAt).TotalSeconds -gt $httpsBootstrapProcess.TimeoutSeconds)
         ) {
-            Write-Warning "本地 HTTPS 引导超时（$($httpsBootstrapProcess.TimeoutSeconds) 秒），已中断该引导进程。"
+            Write-Host "本地 HTTPS 引导进程超过 $($httpsBootstrapProcess.TimeoutSeconds) 秒未退出，已结束该引导进程；HTTPS 主服务不受影响。"
             Stop-ManagedProcess $httpsBootstrapProcess
             $httpsBootstrapProcess = $null
         }
