@@ -70,6 +70,31 @@ describe("媒体会话", () => {
     expect(会话.snapshot().status).toBe("recovering");
   });
 
+  it("已进入恢复链路后重复收到 PLAYER_WAITING，不会反复重跑恢复解析", async () => {
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建锚点播放结果("att-video-storm-1"));
+    const 会话 = 创建媒体会话({
+      attachmentId: "att-video-storm-1",
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    解析播放结果.mockClear();
+    会话.send({ type: "PLAYER_PLAYING" });
+
+    会话.send({ type: "PLAYER_WAITING" });
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(解析播放结果).toHaveBeenCalledTimes(1);
+
+    // 第一次恢复结束后快照通常会回到 bootstrapping；这里模拟播放器持续抖动重复上报 waiting。
+    会话.send({ type: "PLAYER_WAITING" });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(解析播放结果).toHaveBeenCalledTimes(1);
+  });
+
   it("recovering 期间没有 peer 和冷源时进入 waiting_for_peer_or_network", async () => {
     const 会话 = 创建媒体会话({
       attachmentId: "att-video-2",

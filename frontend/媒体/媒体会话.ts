@@ -65,6 +65,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
   let 正在恢复 = false;
   let 缺少群友 = false;
   let 冷源不可用 = false;
+  let 播放器恢复窗口已触发 = false;
   const 会话ConsumerId = `session:${deps.attachmentId}`;
 
   let current: 媒体会话快照 = {
@@ -97,6 +98,11 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       status: "waiting_for_peer_or_network",
     });
   };
+
+  const 应忽略播放器恢复信号 = (): boolean =>
+    播放器恢复窗口已触发 ||
+    current.status === "recovering" ||
+    current.status === "waiting_for_peer_or_network";
 
   const 应用播放结果 = (playback: 媒体播放结果): void => {
     const 下一状态: 媒体会话状态 =
@@ -186,11 +192,13 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
         case "BOOTSTRAP_REQUESTED":
           缺少群友 = false;
           冷源不可用 = false;
+          播放器恢复窗口已触发 = false;
           写入快照({
             status: "bootstrapping",
           });
           return;
         case "PLAYER_PLAYING":
+          播放器恢复窗口已触发 = false;
           写入快照({
             status: current.locallyComplete ? "locally_complete" : "playing",
           });
@@ -217,6 +225,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           return;
         case "SWARM_ACTIVE":
           缺少群友 = false;
+          播放器恢复窗口已触发 = false;
           if (current.status === "waiting_for_peer_or_network") {
             写入快照({
               status: current.locallyComplete ? "locally_complete" : "recovering",
@@ -235,6 +244,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
            * 2. 如果此刻还在首轮 bootstrapping，恢复动作交给当前那次解析自己完成，避免并发双解析打架；
            * 3. 一旦会话已经稳定下来，再收到这个信号就立即进入 recovering。
            */
+          播放器恢复窗口已触发 = false;
           if (current.status === "bootstrapping") {
             发布快照();
             return;
@@ -246,6 +256,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           return;
         case "ORIGIN_AVAILABLE":
           冷源不可用 = false;
+          播放器恢复窗口已触发 = false;
           if (current.status === "waiting_for_peer_or_network") {
             写入快照({
               status: "recovering",
@@ -258,9 +269,25 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           标记等待恢复();
           return;
         case "ENTER_RECOVERING":
+          播放器恢复窗口已触发 = true;
+          写入快照({
+            status: "recovering",
+          });
+          触发恢复解析();
+          return;
         case "PLAYER_WAITING":
         case "PLAYER_STALLED":
         case "PLAYER_ERROR":
+          /**
+           * 播放器抖动信号只用于“从稳定态切进恢复态”：
+           * 1. 会话已经在 bootstrapping/recovering/waiting 阶段时，再次 waiting 不提供新信息；
+           * 2. 这里必须抑制重复恢复，避免 locator / swarm 重签在同一故障窗口被放大；
+           * 3. 真正可恢复的转机仍由 SWARM_ACTIVE / ORIGIN_AVAILABLE / TICKET_INVALID 驱动。
+           */
+          if (应忽略播放器恢复信号()) {
+            return;
+          }
+          播放器恢复窗口已触发 = true;
           写入快照({
             status: "recovering",
           });

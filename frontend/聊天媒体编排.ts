@@ -75,6 +75,7 @@ type 聊天媒体编排依赖 = {
   回收媒体草稿预览地址(previewUrls: string[]): void;
   登记程序滚动来源(source: 程序滚动来源): void;
   清除程序滚动来源(source: 程序滚动来源): void;
+  抓取视频预览?: typeof 从媒体源抓取视频预览;
 };
 
 export interface 聊天媒体编排端口 {
@@ -415,6 +416,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 媒体缓存 = 创建媒体缓存({
     repo: deps.媒体缓存仓库 ?? 创建内存媒体缓存仓库(),
   });
+  const 抓取视频预览 = deps.抓取视频预览 ?? 从媒体源抓取视频预览;
   /**
    * 预览缓存默认只退回内存仓库：
    * - 生产环境由平台存储运行时显式注入浏览器仓库；
@@ -424,6 +426,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 预览缓存 = deps.预览缓存 ?? 创建内存预览缓存();
   const 视频预览状态表 = new Map<string, 视频预览状态>();
   const 视频预览解析代次表 = new Map<string, number>();
+  const 视频预览缺源阻断版本表 = new Map<string, number>();
 
   const 读取视频预览状态表 = (): Record<string, 视频预览状态> =>
     Object.fromEntries(视频预览状态表);
@@ -442,11 +445,25 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   const 删除视频预览状态 = (attachmentId: string): void => {
+    视频预览缺源阻断版本表.delete(attachmentId);
     if (!视频预览状态表.delete(attachmentId)) {
       return;
     }
     deps.请求重渲染();
     同步当前查看器请求();
+  };
+
+  const 读取会话播放源版本 = (attachmentId: string): number =>
+    媒体会话表.get(attachmentId)?.snapshot().sourceVersion ?? 0;
+
+  const 标记视频预览缺源 = (attachmentId: string): void => {
+    // missing_source 只在“当前 sourceVersion”上阻断；一旦会话重裁决出新版本，会允许重试一次。
+    视频预览缺源阻断版本表.set(attachmentId, 读取会话播放源版本(attachmentId));
+    写入视频预览状态(attachmentId, { phase: "missing_source" });
+  };
+
+  const 清除视频预览缺源阻断 = (attachmentId: string): void => {
+    视频预览缺源阻断版本表.delete(attachmentId);
   };
 
   const 写入草稿列表 = (
@@ -551,11 +568,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 解析视频预览 = (attachmentId: string): void => {
     const attachment = 读取附件条目(attachmentId);
     const currentPreview = 视频预览状态表.get(attachmentId) ?? { phase: "idle" as const };
+    const 当前会话源版本 = 读取会话播放源版本(attachmentId);
+    const 缺源阻断版本 = 视频预览缺源阻断版本表.get(attachmentId);
     if (
       !attachment ||
       attachment.kind !== "video" ||
       currentPreview.phase === "loading" ||
-      currentPreview.phase === "ready"
+      currentPreview.phase === "ready" ||
+      (currentPreview.phase === "missing_source" && 缺源阻断版本 === 当前会话源版本)
     ) {
       return;
     }
@@ -574,6 +594,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
             if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
               return;
             }
+            清除视频预览缺源阻断(attachmentId);
             写入视频预览状态(attachmentId, {
               phase: "ready",
               src: cachedPreview.objectUrl,
@@ -600,7 +621,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
             if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
               return;
             }
-            写入视频预览状态(attachmentId, { phase: "missing_source" });
+            标记视频预览缺源(attachmentId);
             return;
           }
           contentHash = locator.file_asset?.content_hash ?? locator.distribution?.content_hash ?? null;
@@ -611,6 +632,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
               if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
                 return;
               }
+              清除视频预览缺源阻断(attachmentId);
               写入视频预览状态(attachmentId, {
                 phase: "ready",
                 src: cachedPreview.objectUrl,
@@ -638,11 +660,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
             return;
           }
-          写入视频预览状态(attachmentId, { phase: "missing_source" });
+          标记视频预览缺源(attachmentId);
           return;
         }
 
-        const preview = await 从媒体源抓取视频预览({
+        const preview = await 抓取视频预览({
           src: previewSource,
         });
         if (shouldReleasePreviewConsumer) {
@@ -657,7 +679,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           !preview.objectUrl
         ) {
           if (视频预览解析代次表.get(attachmentId) === 当前代次) {
-            写入视频预览状态(attachmentId, { phase: "missing_source" });
+            标记视频预览缺源(attachmentId);
           }
           return;
         }
@@ -672,6 +694,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
             updatedAt: Date.now(),
           });
         }
+        清除视频预览缺源阻断(attachmentId);
         写入视频预览状态(attachmentId, {
           phase: "ready",
           src: preview.objectUrl,
@@ -687,7 +710,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
           return;
         }
-        写入视频预览状态(attachmentId, { phase: "missing_source" });
+        标记视频预览缺源(attachmentId);
       }
     })();
   };
@@ -1045,6 +1068,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     媒体会话表.clear();
     视频预览状态表.clear();
     视频预览解析代次表.clear();
+    视频预览缺源阻断版本表.clear();
     媒体定位器.清空();
   };
 
@@ -1164,7 +1188,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       for (const attachment of attachments) {
         if (媒体会话表.has(attachment.attachmentId)) {
           if (attachment.kind === "video") {
-            解析视频预览(attachment.attachmentId);
+            const previewPhase = 视频预览状态表.get(attachment.attachmentId)?.phase;
+            if (!previewPhase || previewPhase === "idle") {
+              解析视频预览(attachment.attachmentId);
+            }
           }
           continue;
         }
