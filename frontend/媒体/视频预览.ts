@@ -53,6 +53,7 @@ type 媒体源视频预览输入 = {
 };
 
 const 默认视频预览超时毫秒 = 10_000;
+const 默认RVFC兜底等待毫秒 = 160;
 const 最小元数据ReadyState =
   typeof HTMLMediaElement === "undefined" ? 1 : HTMLMediaElement.HAVE_METADATA;
 const 最小当前帧ReadyState =
@@ -129,12 +130,23 @@ export async function 从媒体源抓取视频预览(
     let settled = false;
     let 等待Seek完成 = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    let rvfc兜底定时器: ReturnType<typeof setTimeout> | null = null;
+    let rvfc请求序号 = 0;
+
+    const 取消RVFC兜底 = (): void => {
+      if (!rvfc兜底定时器) {
+        return;
+      }
+      cancelTimeout(rvfc兜底定时器);
+      rvfc兜底定时器 = null;
+    };
 
     const cleanup = (): void => {
       if (timeoutHandle) {
         cancelTimeout(timeoutHandle);
         timeoutHandle = null;
       }
+      取消RVFC兜底();
       probe.onloadedmetadata = null;
       probe.onloadeddata = null;
       probe.onseeked = null;
@@ -182,7 +194,29 @@ export async function 从媒体源抓取视频预览(
         typeof probe.readyState === "number" &&
         probe.readyState >= 最小当前帧ReadyState
       ) {
+        const 当前请求序号 = ++rvfc请求序号;
+        /**
+         * 某些设备/浏览器会出现这种状态：
+         * 1. 已经 loadeddata，当前帧可画；
+         * 2. requestVideoFrameCallback 注册成功，但在暂停态长期不回调；
+         * 3. 旧逻辑会一直等到总超时，最后误判为 missing_source。
+         *
+         * 这里增加一个短兜底窗口：若 RVFC 迟迟不回调，就直接抓当前帧，
+         * 保证“有字节即可出预览”，避免时间线黑框。
+         */
+        取消RVFC兜底();
+        rvfc兜底定时器 = scheduleTimeout(() => {
+          if (settled || 当前请求序号 !== rvfc请求序号) {
+            return;
+          }
+          rvfc兜底定时器 = null;
+          导出当前帧("early_frame");
+        }, Math.min(默认RVFC兜底等待毫秒, Math.max(32, Math.floor(timeoutMs / 3))));
         probe.requestVideoFrameCallback(() => {
+          if (settled || 当前请求序号 !== rvfc请求序号) {
+            return;
+          }
+          取消RVFC兜底();
           导出当前帧("rvfc");
         });
         return;

@@ -1,5 +1,66 @@
 import { describe, expect, it, vi } from "vitest";
-import { 派生视频预览 } from "../媒体/视频预览.js";
+import { 从媒体源抓取视频预览, 派生视频预览 } from "../媒体/视频预览.js";
+
+type 视频探针桩配置 = {
+  // true 时模拟 RVFC 挂起（已注册但永不回调），用于复现黑框超时问题。
+  rvfc永不回调?: boolean;
+  // true 时模拟 RVFC 正常回调，用来验证修复后不会误伤原有快路径。
+  rvfc立即回调?: boolean;
+};
+
+const 创建视频探针桩 = (配置: 视频探针桩配置 = {}): HTMLVideoElement => {
+  let currentTime = 0;
+  const probe = {
+    preload: "",
+    muted: false,
+    playsInline: false,
+    readyState: 4,
+    duration: 8,
+    videoWidth: 1280,
+    videoHeight: 720,
+    onloadedmetadata: null as (() => void) | null,
+    onloadeddata: null as (() => void) | null,
+    onseeked: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    src: "",
+    load: () => {
+      setTimeout(() => {
+        probe.onloadedmetadata?.();
+        probe.onloadeddata?.();
+      }, 0);
+    },
+    requestVideoFrameCallback: ((callback: () => void) => {
+      if (配置.rvfc立即回调) {
+        setTimeout(() => callback(), 0);
+      }
+      return 1;
+    }) as unknown as HTMLVideoElement["requestVideoFrameCallback"],
+  };
+
+  Object.defineProperty(probe, "currentTime", {
+    get: () => currentTime,
+    set: (value: number) => {
+      currentTime = value;
+      setTimeout(() => {
+        probe.onseeked?.();
+      }, 0);
+    },
+    configurable: true,
+  });
+
+  return probe as unknown as HTMLVideoElement;
+};
+
+const 创建画布桩 = (): HTMLCanvasElement =>
+  ({
+    width: 0,
+    height: 0,
+    getContext: () =>
+      ({
+        drawImage: () => undefined,
+      }) as unknown as CanvasRenderingContext2D,
+    toDataURL: () => "data:image/webp;base64,preview",
+  }) as unknown as HTMLCanvasElement;
 
 describe("视频预览", () => {
   it("命中 embedded hint 时会立刻返回 preview，不再等待 playback owner", async () => {
@@ -43,5 +104,29 @@ describe("视频预览", () => {
       source: "none",
       objectUrl: null,
     });
+  });
+
+  it("RVFC 不回调时会自动降级为 early_frame，而不是超时返回 none", async () => {
+    const result = await 从媒体源抓取视频预览({
+      src: "blob:video-preview-fallback",
+      timeoutMs: 500,
+      createProbeElement: () => 创建视频探针桩({ rvfc永不回调: true }),
+      createCanvasElement: 创建画布桩,
+    });
+
+    expect(result.source).toBe("early_frame");
+    expect(result.objectUrl).toContain("data:image/webp");
+  });
+
+  it("RVFC 正常回调时仍优先走 rvfc 路径", async () => {
+    const result = await 从媒体源抓取视频预览({
+      src: "blob:video-preview-rvfc",
+      timeoutMs: 500,
+      createProbeElement: () => 创建视频探针桩({ rvfc立即回调: true }),
+      createCanvasElement: 创建画布桩,
+    });
+
+    expect(result.source).toBe("rvfc");
+    expect(result.objectUrl).toContain("data:image/webp");
   });
 });
