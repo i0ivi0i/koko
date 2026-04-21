@@ -61,7 +61,7 @@ export interface 媒体会话端口 {
  */
 export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口 {
   let 已销毁 = false;
-  let 恢复代次 = 0;
+  let 解析代次 = 0;
   let 正在恢复 = false;
   let 缺少群友 = false;
   let 冷源不可用 = false;
@@ -104,6 +104,32 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
     current.status === "recovering" ||
     current.status === "waiting_for_peer_or_network";
 
+  const 当前存在可恢复播放源 = (): boolean =>
+    Boolean(current.playback) &&
+    current.playback?.mode !== "degraded" &&
+    current.playback?.mode !== "expired";
+
+  const 当前是协作分发视频播放 = (): boolean =>
+    current.playback?.kind === "video" && current.playback?.mode === "swarm";
+
+  const 读取播放源版本键 = (playback: 媒体播放结果 | null): string => {
+    if (!playback) {
+      return "none";
+    }
+    const viewerSrc = "viewerSrc" in playback ? playback.viewerSrc ?? "" : "";
+    const fallbackSrc = "fallbackSrc" in playback ? playback.fallbackSrc ?? "" : "";
+    const contentHash = "contentHash" in playback ? playback.contentHash ?? "" : "";
+    return [
+      playback.mode,
+      playback.kind,
+      playback.attachmentId,
+      playback.src,
+      viewerSrc,
+      fallbackSrc,
+      contentHash,
+    ].join("|");
+  };
+
   const 应用播放结果 = (playback: 媒体播放结果): void => {
     const 下一状态: 媒体会话状态 =
       playback.mode === "degraded" || playback.mode === "expired"
@@ -113,10 +139,19 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           : current.locallyComplete
             ? "locally_complete"
             : "bootstrapping";
+    /**
+     * `sourceVersion` 只表示“播放源真相发生变化”：
+     * 1. 同一 src 的重复恢复不该触发新版本，否则会把 missing_source 预览重试放大成循环；
+     * 2. mode/src/contentHash 任一变化时才递增，保证预览重试与真实来源变更对齐；
+     * 3. 这样既保留恢复能力，也避免会话抖动造成的无意义重解析。
+     */
+    const 当前版本键 = 读取播放源版本键(current.playback);
+    const 下一个版本键 = 读取播放源版本键(playback);
     写入快照({
       playback,
       status: 下一状态,
-      sourceVersion: current.sourceVersion + 1,
+      sourceVersion:
+        当前版本键 === 下一个版本键 ? current.sourceVersion : current.sourceVersion + 1,
     });
   };
 
@@ -125,7 +160,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       return;
     }
     正在恢复 = true;
-    const 当前代次 = ++恢复代次;
+    const 当前代次 = ++解析代次;
 
     void (async () => {
       const playback = await deps.解析播放结果({
@@ -139,7 +174,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
          */
         consumerId: 会话ConsumerId,
       });
-      if (已销毁 || 当前代次 !== 恢复代次) {
+      if (已销毁 || 当前代次 !== 解析代次) {
         return;
       }
 
@@ -150,14 +185,14 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       应用播放结果(playback);
     })()
       .catch(() => {
-        if (已销毁 || 当前代次 !== 恢复代次) {
+        if (已销毁 || 当前代次 !== 解析代次) {
           return;
         }
         冷源不可用 = true;
         标记等待恢复();
       })
       .finally(() => {
-        if (当前代次 === 恢复代次) {
+        if (当前代次 === 解析代次) {
           正在恢复 = false;
         }
       });
@@ -166,12 +201,13 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
   return {
     async 启动(): Promise<void> {
       this.send({ type: "BOOTSTRAP_REQUESTED" });
+      const 当前代次 = ++解析代次;
       const playback = await deps.解析播放结果({
         attachmentId: deps.attachmentId,
         kind: deps.kind,
         consumerId: 会话ConsumerId,
       });
-      if (已销毁) {
+      if (已销毁 || 当前代次 !== 解析代次) {
         return;
       }
       冷源不可用 = playback.mode === "degraded" || playback.mode === "expired";
@@ -198,6 +234,19 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           });
           return;
         case "PLAYER_PLAYING":
+          if (
+            !current.playback ||
+            current.playback.mode === "degraded" ||
+            current.playback.mode === "expired"
+          ) {
+            /**
+             * 仅凭原生 `<video>` 事件不能反推业务层“播放源已恢复”：
+             * 1. degraded/expired 阶段里，旧元素残留事件会误报 `playing`；
+             * 2. 如果这里放行，会把恢复门禁提前打开，下一次 waiting 又触发新一轮重解析；
+             * 3. 只有会话里已经持有可播放结果时，`PLAYER_PLAYING` 才能真正推进状态。
+             */
+            return;
+          }
           播放器恢复窗口已触发 = false;
           写入快照({
             status: current.locallyComplete ? "locally_complete" : "playing",
@@ -282,9 +331,22 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
            * 播放器抖动信号只用于“从稳定态切进恢复态”：
            * 1. 会话已经在 bootstrapping/recovering/waiting 阶段时，再次 waiting 不提供新信息；
            * 2. 这里必须抑制重复恢复，避免 locator / swarm 重签在同一故障窗口被放大；
-           * 3. 真正可恢复的转机仍由 SWARM_ACTIVE / ORIGIN_AVAILABLE / TICKET_INVALID 驱动。
+           * 3. degraded/expired 或尚未持有播放源时，waiting 只可能来自旧元素残留信号，不能拿来重试；
+           * 4. 真正可恢复的转机仍由 SWARM_ACTIVE / ORIGIN_AVAILABLE / TICKET_INVALID 驱动。
            */
-          if (应忽略播放器恢复信号()) {
+          /**
+           * swarm 视频在补块阶段天然会反复触发 waiting/stalled：
+           * 1. 这类信号是“正在补块”的正常过程，不代表 locator / ticket 已失效；
+           * 2. 如果把它当恢复触发器，会把会话抖动放大成 locator 风暴；
+           * 3. 对 swarm 主链只保留 PLAYER_ERROR 作为兜底恢复入口。
+           */
+          if (
+            当前是协作分发视频播放() &&
+            (signal.type === "PLAYER_WAITING" || signal.type === "PLAYER_STALLED")
+          ) {
+            return;
+          }
+          if (!当前存在可恢复播放源() || 应忽略播放器恢复信号()) {
             return;
           }
           播放器恢复窗口已触发 = true;
@@ -302,7 +364,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
 
     销毁(): void {
       已销毁 = true;
-      恢复代次 += 1;
+      解析代次 += 1;
     },
   };
 }

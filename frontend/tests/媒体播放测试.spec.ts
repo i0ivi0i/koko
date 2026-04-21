@@ -708,6 +708,85 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
+  it("viewer 短时间内重复打开同一视频时，不会每次都 forceRefresh locator", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-viewer-refresh-budget",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/legacy-original-viewer-refresh-budget",
+      thumbnail_url: "http://media.local/poster-viewer-refresh-budget",
+      distribution: {
+        content_id: "content_att-video-viewer-refresh-budget",
+        content_hash: "hash-video-viewer-refresh-budget",
+        swarm_id: "swarm-hash-video-viewer-refresh-budget",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-viewer-refresh-budget",
+        torrent_info_hash: "torrent-info-hash-viewer-refresh-budget",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: "http://media.local/web-seed-viewer-refresh-budget",
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "available" as const,
+        survival_mode: "server_assisted" as const,
+      },
+      streaming_asset: {
+        asset_id: "att-video-viewer-refresh-budget",
+        content_hash: "hash-video-viewer-refresh-budget",
+        kind: "streaming_video" as const,
+        manifest: {
+          hls_master_url: null,
+          dash_mpd_url: null,
+        },
+        lifecycle: {
+          streaming_expires_at: "1775942400",
+          streaming_deleted_at: null,
+        },
+        distribution: {
+          swarm_id: "swarm-hash-video-viewer-refresh-budget",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-viewer-refresh-budget",
+          join_ticket: null,
+          survival_mode: "server_assisted" as const,
+        },
+        origin: {
+          original_url: "http://media.local/cold-origin-viewer-refresh-budget",
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only" as const,
+        },
+      },
+      file_asset: null,
+      blob_asset: null,
+      preview_asset: null,
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource: async () => null,
+      probeAnchor: vi.fn(async () => undefined),
+    });
+
+    await 播放器.解析播放结果({
+      attachmentId: "att-video-viewer-refresh-budget",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-viewer-refresh-budget",
+    });
+    await 播放器.解析播放结果({
+      attachmentId: "att-video-viewer-refresh-budget",
+      kind: "video",
+      surface: "viewer",
+      consumerId: "session:att-video-viewer-refresh-budget",
+    });
+
+    const forceRefreshCalls = (
+      locate.mock.calls as unknown as Array<[string, { forceRefresh?: boolean }?]>
+    ).reduce((count, [, options]) => {
+      return count + (options?.forceRefresh ? 1 : 0);
+    }, 0);
+    expect(locate).toHaveBeenCalledTimes(3);
+    expect(forceRefreshCalls).toBe(1);
+  });
+
   it("0-24 小时内 viewer 打开时命中已热完整 swarm，会直接复用 swarm 主链", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-fast",

@@ -27,6 +27,25 @@ const 创建流媒体播放结果 = (attachmentId: string): 媒体播放结果 =
   hint: null,
 });
 
+const 创建协作分发播放结果 = (attachmentId: string): 媒体播放结果 => ({
+  mode: "swarm",
+  attachmentId,
+  kind: "video",
+  src: `blob:https://localhost/swarm-${attachmentId}`,
+  thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+  hint: "正在协作分发",
+});
+
+const 创建降级播放结果 = (attachmentId: string): 媒体播放结果 => ({
+  mode: "degraded",
+  attachmentId,
+  kind: "video",
+  src: "",
+  thumbnailUrl: null,
+  reason: "anchor_unavailable",
+  hint: "附件当前不可获取",
+});
+
 describe("媒体会话", () => {
   it("启动与恢复解析时，会携带稳定的 session consumerId", async () => {
     const 解析播放结果 = vi.fn().mockResolvedValue(创建锚点播放结果("att-video-session-1"));
@@ -93,6 +112,76 @@ describe("媒体会话", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(解析播放结果).toHaveBeenCalledTimes(1);
+  });
+
+  it("swarm 视频收到 PLAYER_WAITING/PLAYER_STALLED 时不会误触发 locator 恢复链路", async () => {
+    const attachmentId = "att-video-swarm-waiting-gate-1";
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建协作分发播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    会话.send({ type: "PLAYER_PLAYING" });
+    解析播放结果.mockClear();
+
+    会话.send({ type: "PLAYER_WAITING" });
+    会话.send({ type: "PLAYER_STALLED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).not.toHaveBeenCalled();
+    expect(会话.snapshot().status).toBe("playing");
+  });
+
+  it("恢复后仍是 degraded 时，误报 PLAYER_PLAYING 不会重置恢复门禁并触发重试", async () => {
+    const attachmentId = "att-video-degraded-no-fake-playing-1";
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建降级播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    解析播放结果.mockClear();
+
+    会话.send({ type: "PLAYER_WAITING" });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(解析播放结果).not.toHaveBeenCalled();
+
+    会话.send({ type: "PLAYER_PLAYING" });
+    会话.send({ type: "PLAYER_WAITING" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).not.toHaveBeenCalled();
+    expect(会话.snapshot().status).toBe("degraded");
+  });
+
+  it("degraded 阶段即使收到 SWARM_ACTIVE 后再来 PLAYER_WAITING，也不会盲目重跑恢复解析", async () => {
+    const attachmentId = "att-video-degraded-waiting-gate-1";
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建降级播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    解析播放结果.mockClear();
+    expect(会话.snapshot().status).toBe("degraded");
+
+    会话.send({ type: "SWARM_ACTIVE" });
+    会话.send({ type: "PLAYER_WAITING" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(解析播放结果).not.toHaveBeenCalled();
+    expect(会话.snapshot().status).toBe("degraded");
   });
 
   it("recovering 期间没有 peer 和冷源时进入 waiting_for_peer_or_network", async () => {
@@ -179,5 +268,74 @@ describe("媒体会话", () => {
       consumerId: "session:att-video-ticket-1",
     });
     expect(会话.snapshot().lastSignal).toBe("SWARM_TICKET_INVALID");
+  });
+
+  it("恢复解析返回同一播放源时，不会把 sourceVersion 无意义地持续递增", async () => {
+    const attachmentId = "att-video-source-version-stable-1";
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建锚点播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    const 启动后版本 = 会话.snapshot().sourceVersion;
+
+    会话.send({ type: "ENTER_RECOVERING" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(会话.snapshot().sourceVersion).toBe(启动后版本);
+    expect(解析播放结果).toHaveBeenCalledTimes(2);
+  });
+
+  it("启动解析晚到时不会覆盖更晚代次的恢复结果", async () => {
+    const attachmentId = "att-video-startup-race-1";
+    let 第一次解析完成: ((value: 媒体播放结果) => void) | null = null;
+    let 第二次解析完成: ((value: 媒体播放结果) => void) | null = null;
+    let 调用次数 = 0;
+    const 解析播放结果 = vi.fn(() => {
+      调用次数 += 1;
+      if (调用次数 === 1) {
+        return new Promise<媒体播放结果>((resolve) => {
+          第一次解析完成 = resolve;
+        });
+      }
+      return new Promise<媒体播放结果>((resolve) => {
+        第二次解析完成 = resolve;
+      });
+    });
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    const 启动任务 = 会话.启动();
+    会话.send({ type: "SWARM_NO_PEERS" });
+    会话.send({ type: "ORIGIN_UNAVAILABLE" });
+    会话.send({ type: "ORIGIN_AVAILABLE" });
+
+    expect(第二次解析完成).toBeTypeOf("function");
+    第二次解析完成!(创建流媒体播放结果(attachmentId));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(会话.snapshot().playback).toMatchObject({
+      mode: "manifest",
+      src: `http://media.local/stream/${attachmentId}/master.m3u8`,
+    });
+
+    expect(第一次解析完成).toBeTypeOf("function");
+    第一次解析完成!(创建锚点播放结果(attachmentId));
+    await 启动任务;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(会话.snapshot().playback).toMatchObject({
+      mode: "manifest",
+      src: `http://media.local/stream/${attachmentId}/master.m3u8`,
+    });
   });
 });

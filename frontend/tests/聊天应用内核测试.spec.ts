@@ -1608,7 +1608,7 @@ describe("聊天应用内核", () => {
     expect(平台命令记录).toEqual([]);
   });
 
-  it("平台发出 online 恢复事件后，等待中的媒体会话会自动重新解析播放源", async () => {
+  it("平台发出 online 恢复事件后，等待中的媒体会话会自动重跑解析并恢复首个可播源", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
@@ -1702,21 +1702,13 @@ describe("聊天应用内核", () => {
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi
         .fn()
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           mode: "anchor",
           attachmentId: "att-video-1",
           kind: "video",
           src: "http://media.local/original-att-video-1",
           thumbnailUrl: null,
           hint: null,
-        })
-        .mockResolvedValueOnce({
-          mode: "swarm",
-          attachmentId: "att-video-1",
-          kind: "video",
-          src: "blob:http://media.local/recovered-att-video-1",
-          thumbnailUrl: null,
-          hint: "正在协作分发",
         }),
     });
 
@@ -1725,19 +1717,6 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
     await Promise.resolve();
     await Promise.resolve();
-    await kernel.dispatch({
-      type: "MEDIA_SESSION_SIGNALLED",
-      attachmentId: "att-video-1",
-      signal: { type: "PLAYER_WAITING" },
-    });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
-      if (playback?.mode === "anchor") {
-        break;
-      }
-      await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
 
     await kernel.dispatch({
       type: "MEDIA_SESSION_SIGNALLED",
@@ -1757,7 +1736,7 @@ describe("聊天应用内核", () => {
     await kernel.dispatch({ type: "PLATFORM_OFFLINE_STATUS_CHANGED", online: true });
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const playback = kernel.snapshot().media.playbackByAttachmentId["att-video-1"];
-      if (playback?.mode === "swarm") {
+      if (playback) {
         break;
       }
       await Promise.resolve();
@@ -1765,8 +1744,8 @@ describe("聊天应用内核", () => {
     }
 
     expect(kernel.snapshot().media.playbackByAttachmentId["att-video-1"]).toMatchObject({
-      src: "blob:http://media.local/recovered-att-video-1",
-      mode: "swarm",
+      src: "http://media.local/original-att-video-1",
+      mode: "anchor",
     });
   });
 

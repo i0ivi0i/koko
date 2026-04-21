@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-21)
 
 ## Corpus Check
-- 205 files · ~242,298 words
+- 205 files · ~243,044 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -200,9 +200,9 @@ Nodes (0):
 ## Knowledge Gaps
 - **29 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+24 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 22`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
+- **Thin community `Community 22`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 23`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

@@ -433,7 +433,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 22
+      "community": 23
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -441,7 +441,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L42",
       "id": "app_sw",
-      "community": 22
+      "community": 23
     },
     {
       "label": "css.d.ts",
@@ -3121,7 +3121,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 23
+      "community": 22
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u53ea\u66b4\u9732canonical\u800c\u4e0d\u662f\u670d\u52a1\u7aef\u6d3e\u751f\u591a\u7248\u672c()",
@@ -3129,7 +3129,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_canonical",
-      "community": 23
+      "community": 22
     },
     {
       "label": "\u5a92\u4f53.rs",

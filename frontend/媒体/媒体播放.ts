@@ -80,6 +80,7 @@ type 协作分发尝试结果 = {
 };
 
 const 协作分发运行时不支持提示 = "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）";
+const 查看器强刷定位冷却毫秒 = 15_000;
 
 const 过滤可播放媒体提示 = (
   hint: "正在协作分发" | "正在补块" | null
@@ -140,6 +141,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     (async () => {
       return;
     });
+  const 查看器强刷定位时间戳 = new Map<string, number>();
 
   const 释放协作分发占用 = (input: {
     attachmentId: string;
@@ -236,6 +238,18 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (!是否值得为查看器视频强制刷新定位(input, locator)) {
       return locator;
     }
+    const now = Date.now();
+    const lastRefreshAt = 查看器强刷定位时间戳.get(input.attachmentId) ?? 0;
+    /**
+     * viewer 进入恢复窗口时会频繁触发解析：
+     * 1. ticket 失效/锚点失败等“真故障恢复”仍走各自专用 forceRefresh 分支；
+     * 2. 这里只抑制“同附件短时间重复首开”的冗余强刷，避免 locator/torrent 被放大成风暴；
+     * 3. 冷却期间继续复用当前 locator，让会话 owner 维持单一恢复节奏。
+     */
+    if (now - lastRefreshAt < 查看器强刷定位冷却毫秒) {
+      return locator;
+    }
+    查看器强刷定位时间戳.set(input.attachmentId, now);
     try {
       const refreshedLocator = await deps.locate(input.attachmentId, { forceRefresh: true });
       return refreshedLocator.status === "ready" ? refreshedLocator : locator;
