@@ -549,6 +549,17 @@ describe("聊天壳集成 / 首页与控制台", () => {
     };
     el.setTransportForTest(transport);
     注入媒体查看器供测试(el, viewer);
+    注入媒体播放器供测试(el, {
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/webtorrent-video-1",
+        thumbnailUrl:
+          "/api/attachments/att-video-1/content?session_id=s-test&variant=thumbnail",
+        hint: "正在协作分发",
+      }),
+    });
     document.body.appendChild(el);
     await 等待组件稳定(el);
 
@@ -576,6 +587,9 @@ describe("聊天壳集成 / 首页与控制台", () => {
 
     previewTrigger!.click();
     await 等待组件稳定(el);
+    await vi.waitFor(() => {
+      expect(viewer.打开).toHaveBeenCalled();
+    });
 
     expect(viewer.打开).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -584,9 +598,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
           expect.objectContaining({
             attachmentId: "att-video-1",
             kind: "video",
-            src: expect.stringContaining(
-              "/api/attachments/att-video-1/content?session_id=s-test&variant=original"
-            ),
+            src: "blob:http://media.local/webtorrent-video-1",
           }),
         ],
       })
@@ -1135,11 +1147,11 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.setTransportForTest(transport);
     注入媒体播放器供测试(el, {
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "anchor",
+        mode: "swarm",
         attachmentId: "att-video-inline-shell",
         kind: "video",
-        src: "http://media.local/original-att-video-inline-shell",
-        thumbnailUrl: "http://media.local/poster-att-video-inline-shell",
+        src: "blob:http://media.local/swarm-att-video-inline-shell",
+        thumbnailUrl: null,
         hint: null,
       }),
       释放附件播放资源: vi.fn(),
@@ -1180,8 +1192,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
       const beforeOwnerVideo = el.shadowRoot!.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
       );
-      expect(beforeOwnerVideo).not.toBeNull();
-      expect(beforeOwnerVideo?.autoplay).toBe(false);
+      expect(beforeOwnerVideo).toBeNull();
 
       await vi.advanceTimersByTimeAsync(81);
       await Promise.resolve();

@@ -8,6 +8,7 @@ import { 后台壳 } from "../后台壳";
 import {
   安装测试文本测量画布,
   createFakeStorage,
+  注入媒体播放器供测试,
   注入媒体查看器供测试,
   等待组件稳定,
 } from "./common/聊天测试支架";
@@ -387,7 +388,7 @@ describe("前后台壳端到端冒烟", () => {
     admin.remove();
   });
 
-  it("视频没有 poster 时，时间线不会把播放源塞给原生 video，查看器仍能拿到受控冷源", async () => {
+  it("视频没有 poster 时，时间线不会把播放源塞给原生 video，查看器仍能拿到受控 WebTorrent 主链", async () => {
     const transport = new 端到端假传输();
     transport.roomSnapshot = 创建房间快照("r-e2e", 1, {
       snapshot_messages: [
@@ -424,6 +425,17 @@ describe("前后台壳端到端冒烟", () => {
     const chat = document.createElement("koko-chat-shell") as 聊天壳;
     chat.setTransportForTest(transport);
     注入媒体查看器供测试(chat, viewer);
+    注入媒体播放器供测试(chat, {
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "swarm",
+        attachmentId: "att-video-e2e",
+        kind: "video",
+        src: "blob:http://test.local/webtorrent-att-video-e2e",
+        thumbnailUrl:
+          "/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=thumbnail",
+        hint: "正在协作分发",
+      }),
+    });
     document.body.appendChild(chat);
     await 等待组件稳定(chat);
 
@@ -466,7 +478,7 @@ describe("前后台壳端到端冒烟", () => {
           expect.objectContaining({
             attachmentId: "att-video-e2e",
             kind: "video",
-            src: "http://test.local/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=original",
+            src: "blob:http://test.local/webtorrent-att-video-e2e",
             posterSrc:
               "/api/attachments/att-video-e2e/content?session_id=s-e2e&variant=thumbnail",
           }),

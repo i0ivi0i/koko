@@ -522,19 +522,25 @@ export class 房间消息窗 extends LitElement {
     }));
   }
 
-  private 读取附件播放源(attachmentId: string, originalSrc: string): string {
-    const playback = this.mediaPlaybackByAttachmentId[attachmentId];
+  private 读取附件播放源(attachment: 消息展示项["attachments"][number]): string {
+    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
     return playback?.mode === "blob" ||
       playback?.mode === "swarm" ||
       playback?.mode === "anchor" ||
       playback?.mode === "manifest"
       ? playback.src
-      : originalSrc;
+      : attachment.kind === "image"
+        ? attachment.originalSrc
+        : "";
   }
 
-  private 读取图片查看器播放源(attachmentId: string, originalSrc: string): string {
-    const playback = this.mediaPlaybackByAttachmentId[attachmentId];
-    return playback?.mode === "blob" ? playback.viewerSrc ?? playback.src : this.读取附件播放源(attachmentId, originalSrc);
+  private 读取图片查看器播放源(
+    attachment: Extract<消息展示项["attachments"][number], { kind: "image" }>
+  ): string {
+    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
+    return playback?.mode === "blob"
+      ? playback.viewerSrc ?? playback.src
+      : this.读取附件播放源(attachment);
   }
 
   private 读取时间线视频封面地址(
@@ -559,11 +565,8 @@ export class 房间消息窗 extends LitElement {
     attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
     playback: 媒体播放结果 | null
   ): string | null {
-    if (playback?.src) {
-      if (playback.mode === "anchor" || playback.mode === "swarm" || playback.mode === "blob") {
-        return playback.src;
-      }
-      return null;
+    if (playback?.src && playback.mode === "swarm") {
+      return playback.src;
     }
     /**
      * 禁止时间线预览直接读取原始视频地址：
@@ -594,15 +597,11 @@ export class 房间消息窗 extends LitElement {
     const directPreviewSrc = this.读取时间线视频首帧预览源(attachment, playback);
     if (cachedPreviewSrc) {
       /**
-       * 无封面视频首次渲染常常只能先拿到 `attachment.originalSrc`。
-       * 后续 playback 如果升级到 `swarm/blob`，这里必须允许缓存“向上升级”，
-       * 否则时间线会长期钉在旧冷源，看起来像“协作分发已激活但实际没吃到”。
+       * 无封面视频首开时通常只能先显示静态占位；
+       * 一旦 playback 解析到正式 swarm 首帧，这里必须允许缓存“向上升级”，
+       * 否则时间线会长期停在占位层，看起来像“协作分发已激活但实际没吃到”。
        */
-      if (
-        directPreviewSrc &&
-        cachedPreviewSrc !== directPreviewSrc &&
-        (playback?.mode === "swarm" || playback?.mode === "blob")
-      ) {
+      if (directPreviewSrc && cachedPreviewSrc !== directPreviewSrc && playback?.mode === "swarm") {
         this.无封面视频稳定预览源.set(attachment.attachmentId, directPreviewSrc);
         return directPreviewSrc;
       }
@@ -645,7 +644,7 @@ export class 房间消息窗 extends LitElement {
           items.push({
             kind: "image",
             attachmentId: attachment.attachmentId,
-            src: this.读取图片查看器播放源(attachment.attachmentId, attachment.originalSrc),
+            src: this.读取图片查看器播放源(attachment),
             ...(playback?.mode === "blob"
               ? {
                   contentHash: playback.contentHash ?? null,
@@ -661,7 +660,7 @@ export class 房间消息窗 extends LitElement {
         items.push({
           kind: "video",
           attachmentId: attachment.attachmentId,
-          src: this.读取附件播放源(attachment.attachmentId, attachment.originalSrc),
+          src: this.读取附件播放源(attachment),
           ...(playback?.mode === "manifest" && playback.fallbackSrc
             ? {
                 fallbackSrc: playback.fallbackSrc,
@@ -824,10 +823,7 @@ export class 房间消息窗 extends LitElement {
             const inlineAutoplayPlayback =
               this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
             const inlineAutoplayPreviewSrc =
-              inlineAutoplayPlayback &&
-              (inlineAutoplayPlayback.mode === "anchor" ||
-                inlineAutoplayPlayback.mode === "swarm" ||
-                inlineAutoplayPlayback.mode === "blob")
+              inlineAutoplayPlayback && inlineAutoplayPlayback.mode === "swarm"
                 ? inlineAutoplayPlayback.src
                 : null;
             const shouldRenderInlineVideo =

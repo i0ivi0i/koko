@@ -477,7 +477,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("非自动播视频在没有 poster 但已有可直播源时，应回退到首帧预览而不是静态占位图", async () => {
+  it("非自动播视频在没有 poster 但已有 swarm 可播源时，应回退到首帧预览而不是静态占位图", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
       {
@@ -498,10 +498,10 @@ describe("房间消息窗媒体查看器", () => {
     ];
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "swarm",
         attachmentId: "att-video-1",
         kind: "video",
-        src: "http://media.local/original-video-1",
+        src: "http://media.local/swarm-video-1",
         thumbnailUrl: null,
         hint: null,
       } satisfies 媒体播放结果,
@@ -516,7 +516,7 @@ describe("房间消息窗媒体查看器", () => {
       'img.message-video-poster[data-attachment-id="att-video-1"]'
     );
     expect(previewVideo).not.toBeNull();
-    expect(previewVideo?.getAttribute("src")).toBe("http://media.local/original-video-1");
+    expect(previewVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(previewVideo?.hasAttribute("autoplay")).toBe(false);
     expect(previewVideo?.getAttribute("preload")).toBe("metadata");
     expect(previewVideo?.getAttribute("poster")).toBeNull();
@@ -526,7 +526,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("非自动播视频在没有 poster 且尚未注入 playback 时，也应使用附件 originalSrc 回退首帧预览", async () => {
+  it("非自动播视频在没有 poster 且尚未注入 playback 时，会保持静态占位而不是读取 originalSrc", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
       {
@@ -555,18 +555,15 @@ describe("房间消息窗媒体查看器", () => {
     const previewPoster = pane.querySelector<HTMLImageElement>(
       'img.message-video-poster[data-attachment-id="att-video-1"]'
     );
-    expect(previewVideo).not.toBeNull();
-    expect(previewVideo?.getAttribute("src")).toBe("http://media.local/original-video-1");
-    expect(previewVideo?.hasAttribute("autoplay")).toBe(false);
-    expect(previewVideo?.getAttribute("preload")).toBe("metadata");
-    expect(previewVideo?.getAttribute("poster")).toBeNull();
-    expect(previewPoster).toBeNull();
+    expect(previewVideo).toBeNull();
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toContain("data:image/svg+xml");
     expect(pane.querySelector(".message-video-play-indicator")).not.toBeNull();
 
     pane.remove();
   });
 
-  it("无 poster 视频在 playback 从 original 回填到 swarm 后，应把稳定预览源升级为 swarm", async () => {
+  it("无 poster 视频在 playback 首次解析到 swarm 后，会从静态占位升级为 swarm 首帧预览", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
       {
@@ -592,8 +589,11 @@ describe("房间消息窗媒体查看器", () => {
     const previewBeforeUpgrade = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(previewBeforeUpgrade?.getAttribute("src")).toBe("http://media.local/original-video-1");
-    expect(previewBeforeUpgrade?.autoplay).toBe(false);
+    const posterBeforeUpgrade = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(previewBeforeUpgrade).toBeNull();
+    expect(posterBeforeUpgrade).not.toBeNull();
 
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
@@ -610,9 +610,61 @@ describe("房间消息窗媒体查看器", () => {
     const previewAfterUpgrade = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(previewAfterUpgrade).toBe(previewBeforeUpgrade);
+    expect(previewAfterUpgrade).not.toBeNull();
     expect(previewAfterUpgrade?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(previewAfterUpgrade?.autoplay).toBe(false);
+
+    pane.remove();
+  });
+
+  it("视频在没有 playback 真相时，抛出的 viewer request 不会偷带 originalSrc", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {};
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    pane
+      .querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      )
+      ?.click();
+    await pane.updateComplete;
+
+    expect(details).toHaveLength(1);
+    expect(details[0]).toEqual({
+      startAttachmentId: "att-video-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-1",
+          src: "",
+          posterSrc: null,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
 
     pane.remove();
   });
@@ -648,10 +700,10 @@ describe("房间消息窗媒体查看器", () => {
       inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
     }).inlineAutoplayPlaybackByAttachmentId = {
       "att-video-2": {
-        mode: "anchor",
+        mode: "swarm",
         attachmentId: "att-video-2",
         kind: "video",
-        src: "http://media.local/original-video-2",
+        src: "http://media.local/swarm-video-2",
         thumbnailUrl: "http://media.local/poster-video-2",
         hint: null,
       } satisfies 媒体播放结果,
@@ -701,10 +753,10 @@ describe("房间消息窗媒体查看器", () => {
     ];
     pane.mediaPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "swarm",
         attachmentId: "att-video-1",
         kind: "video",
-        src: "http://media.local/original-video-1",
+        src: "http://media.local/swarm-video-1",
         thumbnailUrl: null,
         hint: null,
       } satisfies 媒体播放结果,
@@ -729,10 +781,10 @@ describe("房间消息窗媒体查看器", () => {
       inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
     }).inlineAutoplayPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "swarm",
         attachmentId: "att-video-1",
         kind: "video",
-        src: "http://media.local/original-video-1",
+        src: "http://media.local/swarm-video-1",
         thumbnailUrl: null,
         hint: null,
       } satisfies 媒体播放结果,
@@ -832,7 +884,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("无 poster 视频进入自动播 owner 时应优先复用当前预览源，避免切源闪烁", async () => {
+  it("无 poster 视频进入自动播 owner 时应优先复用当前 swarm 预览源，避免切源闪烁", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
       {
@@ -851,7 +903,16 @@ describe("房间消息窗媒体查看器", () => {
         ],
       },
     ];
-    pane.mediaPlaybackByAttachmentId = {};
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
     document.body.appendChild(pane);
     await pane.updateComplete;
 
@@ -859,7 +920,7 @@ describe("房间消息窗媒体查看器", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(beforeOwnerVideo).not.toBeNull();
-    expect(beforeOwnerVideo?.getAttribute("src")).toBe("http://media.local/original-video-1");
+    expect(beforeOwnerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(beforeOwnerVideo?.autoplay).toBe(false);
 
     (pane as 房间消息窗 & {
@@ -885,13 +946,13 @@ describe("房间消息窗媒体查看器", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(ownerVideo).toBe(beforeOwnerVideo);
-    expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/original-video-1");
+    expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
 
     pane.remove();
   });
 
-  it("无 poster 视频切到自动播 owner 且沿用同一预览源时，会显式触发 play 以避免 autoplay 失效", async () => {
+  it("无 poster 视频切到自动播 owner 且沿用同一条 swarm 预览源时，会显式触发 play 以避免 autoplay 失效", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [
       {
@@ -910,7 +971,16 @@ describe("房间消息窗媒体查看器", () => {
         ],
       },
     ];
-    pane.mediaPlaybackByAttachmentId = {};
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
     document.body.appendChild(pane);
     await pane.updateComplete;
 
@@ -918,7 +988,7 @@ describe("房间消息窗媒体查看器", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(beforeOwnerVideo).not.toBeNull();
-    expect(beforeOwnerVideo?.getAttribute("src")).toBe("http://media.local/original-video-1");
+    expect(beforeOwnerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(beforeOwnerVideo?.autoplay).toBe(false);
 
     const playSpy = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
@@ -950,7 +1020,7 @@ describe("房间消息窗媒体查看器", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(ownerVideo).toBe(beforeOwnerVideo);
-    expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/original-video-1");
+    expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
     expect(playSpy).toHaveBeenCalledTimes(1);
 
@@ -968,10 +1038,10 @@ describe("房间消息窗媒体查看器", () => {
       inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
     }).inlineAutoplayPlaybackByAttachmentId = {
       "att-video-1": {
-        mode: "anchor",
+        mode: "swarm",
         attachmentId: "att-video-1",
         kind: "video",
-        src: "http://media.local/original-video-1",
+        src: "http://media.local/swarm-video-1",
         thumbnailUrl: "http://media.local/poster-video-1",
         hint: null,
       } satisfies 媒体播放结果,

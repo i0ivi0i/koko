@@ -198,6 +198,17 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
             src: playback.mode === "blob" ? playback.viewerSrc ?? playback.src : playback.src,
           };
         }
+        if (item.kind === "video") {
+          /**
+           * 查看器 request 的视频 `src` 不允许继续携带旧静态地址。
+           * 当会话 playback 尚未裁决完成时，这里明确清空旧值，
+           * 让查看器只等待 owner 后续同步出来的正式播放源。
+           */
+          return {
+            ...item,
+            src: "",
+          };
+        }
         return item;
       }),
     };
