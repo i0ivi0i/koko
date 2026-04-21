@@ -575,6 +575,89 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("无 poster 视频已命中 runtime preview 且 playback 可用时，切到自动播 owner 应复用同一 video 节点避免闪烁", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    (
+      pane as 房间消息窗 & {
+        mediaPreviewByAttachmentId: Record<
+          string,
+          { phase: "ready"; src: string; source: "cache" | "embedded_hint" | "early_frame" | "rvfc" }
+        >;
+      }
+    ).mediaPreviewByAttachmentId = {
+      "att-video-1": {
+        phase: "ready",
+        src: "blob:preview-att-video-1",
+        source: "early_frame",
+      },
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const beforeOwnerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(beforeOwnerVideo).not.toBeNull();
+    expect(beforeOwnerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
+    expect(beforeOwnerVideo?.getAttribute("poster")).toBe("blob:preview-att-video-1");
+    expect(beforeOwnerVideo?.autoplay).toBe(false);
+
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayOwnerAttachmentId = "att-video-1";
+    (pane as 房间消息窗 & {
+      inlineAutoplayOwnerAttachmentId: string | null;
+      inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+    }).inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    await pane.updateComplete;
+
+    const ownerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(ownerVideo).toBe(beforeOwnerVideo);
+    expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
+    expect(ownerVideo?.autoplay).toBe(true);
+
+    pane.remove();
+  });
+
   it("非自动播视频在没有 poster 且尚未注入 playback 时，会保持静态占位而不是读取 originalSrc", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [

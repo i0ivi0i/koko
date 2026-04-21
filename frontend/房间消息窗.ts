@@ -776,6 +776,7 @@ export class 房间消息窗 extends LitElement {
           if (attachment.kind === "video") {
             const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
             const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
+            const hasRuntimePreview = Boolean(runtimePreview);
             const previewPosterSrc =
               !hasSourcePoster && runtimePreview
                 ? runtimePreview.src
@@ -789,20 +790,20 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderInlineVideo =
               this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
               Boolean(inlineAutoplayPreviewSrc);
+            const timelinePreviewVideoSrc = !hasSourcePoster
+              ? this.读取时间线视频首帧预览源(attachment, playback)
+              : null;
             const previewVideoSrc =
-              shouldRenderInlineVideo
-                ? inlineAutoplayPreviewSrc
-                : !hasSourcePoster && !runtimePreview
-                  ? this.读取时间线视频首帧预览源(attachment, playback)
-                  : null;
+              timelinePreviewVideoSrc ?? (shouldRenderInlineVideo ? inlineAutoplayPreviewSrc : null);
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
-            const previewVideoPoster = hasSourcePoster ? previewPosterSrc : undefined;
+            const previewVideoPoster =
+              hasSourcePoster || hasRuntimePreview ? previewPosterSrc : undefined;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
-             * 1. runtime preview ready 时优先显示同文件派生出的静态预览，不再等 autoplay owner；
-             * 2. 没命中 runtime preview、且当前已拿到 swarm 播放源时，才退回轻量 `<video>` 首帧预览；
-             * 3. manifest 无 poster 时仍坚持静态占位，避免把 m3u8 塞给原生 `<video>`；
-             * 4. 自动播 owner 仍直接吃正式视频主链，不把 preview 状态和播放状态混成一套。
+             * 1. 只要拿到同文件可播源（swarm/blob），就保持同一颗 `<video>` 作为时间线预览容器；
+             * 2. runtime preview 作为该 `<video>` 的 poster，而不是另起一颗 `<img>` 与 autoplay 互切；
+             * 3. 这样从非 owner 切到 owner 只改 autoplay/loop，避免节点重建闪烁；
+             * 4. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
              */
             return html`
               <div
