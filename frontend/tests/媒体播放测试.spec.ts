@@ -67,6 +67,10 @@ describe("媒体播放器", () => {
     };
     const 播放器 = 创建媒体播放器({
       locate: async () => locator,
+      resolveSwarmSource: async () => ({
+        src: "blob:http://media.local/swarm-file-video-1",
+        hint: null,
+      }),
       probeAnchor: vi.fn(async () => undefined),
     });
 
@@ -259,7 +263,7 @@ describe("媒体播放器", () => {
     );
   });
 
-  it("swarm 不足时会回退到锚点地址", async () => {
+  it("swarm 不足时会返回不可用降级态，不再回退原始锚点", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-1",
       kind: "video" as const,
@@ -293,12 +297,13 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "degraded",
       attachmentId: "att-video-1",
       kind: "video",
-      src: "http://media.local/original-video-1",
+      src: "",
       thumbnailUrl: null,
-      hint: null,
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
   });
 
@@ -500,8 +505,9 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toMatchObject({
-      mode: "anchor",
-      src: "http://media.local/original-video-release-1",
+      mode: "degraded",
+      src: "",
+      reason: "anchor_unavailable",
     });
     expect(释放协作分发源).toHaveBeenCalledWith({
       attachmentId: "att-video-release-1",
@@ -509,7 +515,7 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("streaming_asset 只有冷源过渡面时，会优先读取共享资产里的 origin", async () => {
+  it("streaming_asset 只有冷源过渡面时，若 swarm 不可用则保持降级态，不回退 origin", async () => {
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -556,16 +562,15 @@ describe("媒体播放器", () => {
       kind: "video",
     });
 
-    expect(probeAnchor).toHaveBeenCalledWith(
-      "http://media.local/cold-origin-transition"
-    );
+    expect(probeAnchor).not.toHaveBeenCalled();
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "degraded",
       attachmentId: "att-video-transition",
       kind: "video",
-      src: "http://media.local/cold-origin-transition",
+      src: "",
       thumbnailUrl: null,
-      hint: null,
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
   });
 
@@ -686,12 +691,13 @@ describe("媒体播放器", () => {
     expect(locate).toHaveBeenNthCalledWith(1, "att-video-viewer-race");
     expect(locate).toHaveBeenNthCalledWith(2, "att-video-viewer-race", { forceRefresh: true });
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "degraded",
       attachmentId: "att-video-viewer-race",
       kind: "video",
-      src: "http://media.local/cold-origin-viewer-race",
+      src: "",
       thumbnailUrl: "http://media.local/poster-viewer-race",
-      hint: null,
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -699,7 +705,7 @@ describe("媒体播放器", () => {
         consumerId: "session:att-video-viewer-race",
       })
     );
-    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-viewer-race");
+    expect(probeAnchor).not.toHaveBeenCalled();
   });
 
   it("0-24 小时内 viewer 打开时命中已热完整 swarm，会直接复用 swarm 主链", async () => {
@@ -996,7 +1002,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("0-24 小时内 viewer 打开时没有可用 swarm 就回退锚点冷源，不再返回 manifest", async () => {
+  it("0-24 小时内 viewer 打开时没有可用 swarm 会直接降级，不再回退锚点冷源", async () => {
     const resolveSwarmSource = vi.fn(
       () =>
         new Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>(
@@ -1065,12 +1071,13 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "degraded",
       attachmentId: "att-video-hls",
       kind: "video",
-      src: "http://media.local/cold-origin-video-hls",
+      src: "",
       thumbnailUrl: "http://media.local/poster-video-hls",
-      hint: null,
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
     expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
     expect(resolveSwarmSource).toHaveBeenCalledWith(
@@ -1078,7 +1085,7 @@ describe("媒体播放器", () => {
         attachmentId: "att-video-hls",
       })
     );
-    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-video-hls");
+    expect(probeAnchor).not.toHaveBeenCalled();
   });
 
   it("viewer 与 inline_autoplay 在同一定位输入下，会裁决到同一条 swarm 首播真相", async () => {
@@ -1530,7 +1537,7 @@ describe("媒体播放器", () => {
     });
   });
 
-  it("inline_autoplay 在没有可复用 swarm 时，才会回退到锚点冷源", async () => {
+  it("inline_autoplay 在没有可复用 swarm 时，会保持降级态而不是回退锚点冷源", async () => {
     const resolveSwarmSource = vi.fn(async () => null);
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({
@@ -1599,11 +1606,13 @@ describe("媒体播放器", () => {
         consumerId: "inline_autoplay:att-video-inline-fallback",
       })
     );
-    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-inline-fallback");
+    expect(probeAnchor).not.toHaveBeenCalled();
     expect(result).toMatchObject({
-      mode: "anchor",
-      src: "http://media.local/cold-origin-inline-fallback",
+      mode: "degraded",
+      src: "",
+      reason: "anchor_unavailable",
       thumbnailUrl: "http://media.local/poster-inline-fallback",
+      hint: "附件当前不可获取",
     });
   });
 

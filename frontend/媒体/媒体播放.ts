@@ -532,16 +532,26 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
      * - 这样自动播/查看器都只走同一条链路，便于定位真实故障归属；
      * - 会话恢复继续依赖 runtime 的 noPeers / ticket 刷新事件驱动。
      */
+    if (swarmAttempt.failureReason === "runtime_unsupported") {
+      释放协作分发占用(input);
+      return 创建降级结果(
+        input,
+        locator,
+        "swarm_runtime_unsupported",
+        协作分发运行时不支持提示
+      );
+    }
+    /**
+     * 单文件主链裁决：视频播放不再回退到原始锚点冷源。
+     * 只要协作分发链路当前不可得，就保持不可用态并等待 swarm 会话恢复，
+     * 避免任何“自动播/全屏偷偷改走 original”的第二真相。
+     */
+    if (input.kind === "video") {
+      释放协作分发占用(input);
+      return 创建降级结果(input, locator, "anchor_unavailable");
+    }
     if (应坚持协作分发唯一主链(locator)) {
       释放协作分发占用(input);
-      if (swarmAttempt.failureReason === "runtime_unsupported") {
-        return 创建降级结果(
-          input,
-          locator,
-          "swarm_runtime_unsupported",
-          协作分发运行时不支持提示
-        );
-      }
       return 创建降级结果(input, locator, "anchor_unavailable");
     }
     return 尝试锚点(input, locator, true);

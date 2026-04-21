@@ -565,8 +565,13 @@ export class 房间消息窗 extends LitElement {
       }
       return null;
     }
-    // 非自动播视频常常还没拿到 playback 投影；这时回退到附件 canonical 原始地址即可拿首帧。
-    return attachment.originalSrc;
+    /**
+     * 禁止时间线预览直接读取原始视频地址：
+     * 1. 自动播/查看器都必须由媒体主链解析出的 playback owner 驱动；
+     * 2. 未拿到 playback 时保持静态占位，避免列表层偷偷走第二条 original 读取链路；
+     * 3. 这样可确保“要播就吃 WebTorrent 真相，不播就占位”，不混跑。
+     */
+    return null;
   }
 
   private 读取时间线视频稳定预览源(
