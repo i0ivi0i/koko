@@ -5,7 +5,8 @@
   "type": "module",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "node-datachannel"
     ]
   },
   "scripts": {

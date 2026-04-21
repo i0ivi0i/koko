@@ -251,6 +251,23 @@ describe("媒体协作分发", () => {
     expect(distribution).toBeNull();
   });
 
+  it("media_state 显示连接群友时，仍允许继续进入同一 swarm 会话", () => {
+    const locator = 准备好的定位结果("att-connecting");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.availability = "expired";
+    locator.distribution.media_state = {
+      code: "MEDIA_CONNECTING_TO_PEERS",
+      retry_after_ms: 2000,
+    };
+
+    const distribution = 读取可用协作分发片段(locator);
+
+    expect(distribution).not.toBeNull();
+    expect(distribution?.torrent_info_hash).toBe("torrent-info-hash-att-connecting");
+  });
+
   it("浏览器协作分发运行时会复用同一个 WebTorrent client，并把已激活的 service worker registration 传给 createServer", async () => {
     const registration = {
       active: {

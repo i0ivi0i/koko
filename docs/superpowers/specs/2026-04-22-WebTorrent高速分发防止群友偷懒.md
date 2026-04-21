@@ -1,7 +1,7 @@
 # WebTorrent 高速分发防止群友偷懒
 
 日期：2026-04-22  
-状态：Approved（2026-04-22，待 implementation plan）  
+状态：Implemented（2026-04-22，已完成并验收）  
 适用范围：`koko` 的图片、视频、时间线媒体预览、自动播放、查看器、全屏、`WebTorrent` 协作分发、后端冷启动强 seed、`24 小时` 字节退场。  
 替代文档：`docs/superpowers/specs/2026-04-21-高清视频自动播放加速.md`
 
@@ -680,3 +680,31 @@
 7. 禁止牺牲画质伪造顺滑。
 
 后续 implementation plan 和代码改动，都只能在这套真相边界内工作；凡是离开这条边界去“临时兜一下”的，都应直接视为漂移，必须禁止。
+
+---
+
+## 14. 执行验收记录（2026-04-22）
+
+本 spec 已按 `docs/superpowers/plans/2026-04-22-WebTorrent高速分发防止群友偷懒.md` 连续执行完成，关键验收证据如下：
+
+1. 代码与测试：
+   - Rust 协作分发状态机已落 `MEDIA_READY / MEDIA_CONNECTING_TO_PEERS / MEDIA_NO_ONLINE_SEED / MEDIA_DELETED`，并带统一重试节奏；
+   - 前端时间线/查看器已统一消费 `media_state.code`，不再把新附件回退到第二正式播放链；
+   - 新增并通过对应回归测试（连接群友态、无在线种子态、删除终态、协作分发片段可用性）。
+2. 自动化验证全绿：
+   - `cargo test` 通过；
+   - `pnpm --dir frontend test` 通过（63 files / 606 tests）；
+   - `pnpm --dir frontend typecheck` 与 `pnpm --dir frontend build` 通过；
+   - `pwsh -File tests/启动器脚本检查.ps1` 通过；
+   - `https.ps1` 输出 `https://localhost` 正常。
+3. 双会话真实烟测（房间 `1234b`）：
+   - sender/viewer 双隔离上下文发送并观看本地 MP4；
+   - viewer 正式播放命中 `GET /webtorrent/{infohash}/content-*.mp4 [206]`；
+   - 同时可见 locator/torrent/presence 控制面请求，符合“控制面走 HTTPS，正式字节走 WebTorrent”的裁决。
+4. 已定位并修复的关键根因：
+   - 播放初段偶发 `GET /webtorrent/... [404]` 后立刻恢复 `206`；
+   - 根因是媒体刚从后端窗口切到 peer 发现阶段时的短暂抖动窗口；
+   - 修复策略是后端先返回 `MEDIA_CONNECTING_TO_PEERS`（短重试节奏），并允许同一 swarm 会话持续探测恢复，避免直接误判成“无在线种子”或回退第二链。
+5. seeder 能力核验：
+   - `frontend/dev-seeder.mjs` 受管控制面已落地（`/seed/start` `/seed/stop` `/seed/reconcile`）；
+   - 通过修复 `node-datachannel` 依赖构建，sidecar 健康检查已从 `mock` 切换为 `capability=webtorrent`。

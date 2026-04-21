@@ -312,12 +312,14 @@ export function 读取可用协作分发片段(
    * 可用性裁决优先级：
    * 1. 新后端优先看 `media_state.code`（稳定跨端真相）；
    * 2. 灰度期里缺失 `media_state` 时，退回旧 availability 字段；
-   * 3. 任何“无在线种子/已删除/连接中”都不能被误判成可用分发源。
+   * 3. READY / CONNECTING 允许进入同一 swarm 会话；
+   * 4. NO_ONLINE_SEED / DELETED 直接判为当前不可用。
    */
   const mediaStateCode = distribution?.media_state?.code ?? null;
   const distribution可用 =
     mediaStateCode !== null
-      ? mediaStateCode === "MEDIA_READY"
+      ? mediaStateCode === "MEDIA_READY" ||
+        mediaStateCode === "MEDIA_CONNECTING_TO_PEERS"
       : distribution?.availability !== "expired";
   if (
     !distribution ||

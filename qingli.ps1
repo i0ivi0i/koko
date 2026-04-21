@@ -183,6 +183,7 @@ function Resolve-RecognizedProjectService {
         [string]$RepoRoot,
         [int]$AppPort,
         [int]$TrackerPort,
+        [int]$SeederPort,
         [int]$TusPort,
         [string]$TusUploadDir
     )
@@ -225,6 +226,21 @@ function Resolve-RecognizedProjectService {
     }
 
     if (
+        $PortRecord.Port -eq $SeederPort -and
+        $PortRecord.Name -match '^node(?:\.exe)?$' -and
+        $PortRecord.CommandLine -match 'dev-seeder\.mjs' -and
+        $PortRecord.CommandLine -match ("--port\s+$SeederPort(\s|$)")
+    ) {
+        return [pscustomobject]@{
+            Role      = "webtorrent-seeder"
+            Port      = $PortRecord.Port
+            ProcessId = $PortRecord.ProcessId
+            Name      = $PortRecord.Name
+            CommandLine = $PortRecord.CommandLine
+        }
+    }
+
+    if (
         $PortRecord.Port -eq $TusPort -and
         $PortRecord.Name -match '^tusd(?:\.exe)?$' -and
         $PortRecord.CommandLine -match ("-port\s+$TusPort(\s|$)") -and
@@ -251,6 +267,7 @@ function Stop-RecognizedProjectServices {
         [string]$RepoRoot,
         [int]$AppPort,
         [int]$TrackerPort,
+        [int]$SeederPort,
         [int]$TusPort,
         [string]$TusUploadDir
     )
@@ -267,6 +284,7 @@ function Stop-RecognizedProjectServices {
             -RepoRoot $RepoRoot `
             -AppPort $AppPort `
             -TrackerPort $TrackerPort `
+            -SeederPort $SeederPort `
             -TusPort $TusPort `
             -TusUploadDir $TusUploadDir
         if ($null -ne $recognized) {
@@ -391,6 +409,7 @@ else {
 
 $AppPort = [int](Get-ConfigValue -DotEnv $dotEnv -Key "APP_PORT" -Fallback "8080")
 $TrackerPort = [int](Get-ConfigValue -DotEnv $dotEnv -Key "SWARM_TRACKER_PORT" -Fallback "7072")
+$SeederPort = [int](Get-ConfigValue -DotEnv $dotEnv -Key "SWARM_SEEDER_PORT" -Fallback "7073")
 $TusPort = [int](Get-ConfigValue `
     -DotEnv $dotEnv `
     -Key "TUSD_PORT" `
@@ -455,7 +474,7 @@ if ($Preview) {
     return
 }
 
-$servicePorts = @($AppPort, $TrackerPort, $TusPort)
+$servicePorts = @($AppPort, $TrackerPort, $SeederPort, $TusPort)
 if ($Force) {
     Write-Host ""
     Write-Host "Force 模式：尝试自动停止已识别的项目开发服务..."
@@ -464,6 +483,7 @@ if ($Force) {
         -RepoRoot $RepoRoot `
         -AppPort $AppPort `
         -TrackerPort $TrackerPort `
+        -SeederPort $SeederPort `
         -TusPort $TusPort `
         -TusUploadDir (Resolve-ManagedPath -RawPath $TusUploadDir)
     if ($stoppedServices.Count -eq 0) {

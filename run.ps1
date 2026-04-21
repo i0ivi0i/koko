@@ -469,6 +469,7 @@ function Resolve-StaleLauncherSidecar {
         $PortRecord,
         [int]$AppPort,
         [int]$TrackerPort,
+        [int]$SeederPort,
         [int]$TusPort,
         [string]$TusUploadDir
     )
@@ -484,6 +485,20 @@ function Resolve-StaleLauncherSidecar {
     ) {
         return [pscustomobject]@{
             Role      = "tracker"
+            Port      = $PortRecord.Port
+            ProcessId = $PortRecord.ProcessId
+            Name      = $PortRecord.Name
+        }
+    }
+
+    if (
+        $PortRecord.Port -eq $SeederPort -and
+        $PortRecord.Name -match '^node(?:\.exe)?$' -and
+        $PortRecord.CommandLine -match 'dev-seeder\.mjs' -and
+        $PortRecord.CommandLine -match ("--port\s+$SeederPort(\s|$)")
+    ) {
+        return [pscustomobject]@{
+            Role      = "webtorrent-seeder"
             Port      = $PortRecord.Port
             ProcessId = $PortRecord.ProcessId
             Name      = $PortRecord.Name
@@ -514,11 +529,12 @@ function Stop-StaleLauncherSidecars {
     param(
         [int]$AppPort,
         [int]$TrackerPort,
+        [int]$SeederPort,
         [int]$TusPort,
         [string]$TusUploadDir
     )
 
-    $listeningRecords = Get-ListeningPortProcessRecords -Ports @($TrackerPort, $TusPort)
+    $listeningRecords = Get-ListeningPortProcessRecords -Ports @($TrackerPort, $SeederPort, $TusPort)
     if ($listeningRecords.Count -eq 0) {
         return
     }
@@ -529,6 +545,7 @@ function Stop-StaleLauncherSidecars {
             -PortRecord $record `
             -AppPort $AppPort `
             -TrackerPort $TrackerPort `
+            -SeederPort $SeederPort `
             -TusPort $TusPort `
             -TusUploadDir $TusUploadDir
         if ($null -eq $recognized) {
@@ -609,6 +626,7 @@ function Invoke-LauncherCleanup {
     }
 
     Write-ManagedProcessLogs $trackerProcess
+    Write-ManagedProcessLogs $seederProcess
     Write-ManagedProcessLogs $tusdProcess
     Write-ManagedProcessLogs $backendProcess
     Write-ManagedProcessLogs $httpsBootstrapProcess
@@ -616,6 +634,7 @@ function Invoke-LauncherCleanup {
     Write-ManagedProcessLogs $frontendTypeWatch
     Write-ManagedProcessLogs $frontendWatch
     Stop-ManagedProcess $trackerProcess
+    Stop-ManagedProcess $seederProcess
     Stop-ManagedProcess $tusdProcess
     Stop-ManagedProcess $backendProcess
     Stop-ManagedProcess $httpsBootstrapProcess
@@ -644,6 +663,7 @@ $frontendTypeWatch = $null
 $backendProcess = $null
 $tusdProcess = $null
 $trackerProcess = $null
+$seederProcess = $null
 $httpsBootstrapProcess = $null
 $cloudflareTunnelProcess = $null
 $script:CloudflareTunnelPublicUrl = $null
@@ -760,6 +780,10 @@ try {
     if ([string]::IsNullOrWhiteSpace($trackerPort)) {
         $trackerPort = "7072"
     }
+    $seederPort = [Environment]::GetEnvironmentVariable("SWARM_SEEDER_PORT")
+    if ([string]::IsNullOrWhiteSpace($seederPort)) {
+        $seederPort = "7073"
+    }
     $trackerPublicUrl = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL")
     if ([string]::IsNullOrWhiteSpace($trackerPublicUrl)) {
         $trackerPublicUrl = "ws://127.0.0.1:$trackerPort"
@@ -774,11 +798,13 @@ try {
     $resolvedTusUploadDir = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $mediaTusUploadDir))
     New-Item -ItemType Directory -Path $resolvedTusUploadDir -Force | Out-Null
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PORT", $trackerPort)
+    [Environment]::SetEnvironmentVariable("SWARM_SEEDER_PORT", $seederPort)
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL", $trackerPublicUrl)
     [Environment]::SetEnvironmentVariable("SWARM_TICKET_SECRET", $swarmTicketSecret)
     Stop-StaleLauncherSidecars `
         -AppPort ([int]$appPort) `
         -TrackerPort ([int]$trackerPort) `
+        -SeederPort ([int]$seederPort) `
         -TusPort ([int]$tusdPort) `
         -TusUploadDir $resolvedTusUploadDir
     $localAccessUrl = "http://127.0.0.1:$appPort/"
@@ -788,6 +814,7 @@ try {
     Write-Host "访问入口: $localAccessUrl"
     Write-Host "tusd 监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
     Write-Host "WebTorrent tracker 对外 announce: $trackerPublicUrl"
+    Write-Host "WebTorrent seeder 控制面: http://127.0.0.1:$seederPort/health"
     Write-Host "子进程日志目录: $logDirectory"
     # 启动器使用独立 target 目录：
     # 1. 不再和开发者手动执行的 `cargo run` 争抢默认 target\\debug\\koko.exe；
@@ -841,6 +868,18 @@ try {
         -WorkingDirectory $frontendRoot `
         -LogDirectory $logDirectory
 
+    # seeder sidecar 只承接协议执行：
+    # 1. 后端继续做业务 owner，决定谁该 start/stop/reconcile；
+    # 2. sidecar 只暴露本地控制面，不参与业务裁决；
+    # 3. 进程由 launcher 托管，避免“另开一个终端手工跑”导致真相漂移。
+    Write-Host "启动 WebTorrent seeder: node dev-seeder.mjs --port $seederPort"
+    $seederProcess = New-ManagedProcess `
+        -Name "webtorrent-seeder" `
+        -FilePath $nodePath `
+        -ArgumentList @("dev-seeder.mjs", "--port", $seederPort) `
+        -WorkingDirectory $frontendRoot `
+        -LogDirectory $logDirectory
+
     if (-not $DisableCloudflareTunnel) {
         try {
             $cloudflaredPath = Resolve-CloudflaredBinaryPath
@@ -878,6 +917,7 @@ try {
         Write-ManagedProcessLogs $backendProcess
         Write-ManagedProcessLogs $tusdProcess
         Write-ManagedProcessLogs $trackerProcess
+        Write-ManagedProcessLogs $seederProcess
         Write-ManagedProcessLogs $httpsBootstrapProcess
         Write-ManagedProcessLogs $cloudflareTunnelProcess
 
@@ -910,6 +950,10 @@ try {
         if ($trackerProcess.Process.HasExited) {
             Write-ManagedProcessLogs $trackerProcess
             throw "tracker 进程异常退出，退出码: $($trackerProcess.Process.ExitCode)"
+        }
+        if ($seederProcess.Process.HasExited) {
+            Write-ManagedProcessLogs $seederProcess
+            throw "webtorrent-seeder 进程异常退出，退出码: $($seederProcess.Process.ExitCode)"
         }
         if ($null -ne $cloudflareTunnelProcess -and $cloudflareTunnelProcess.Process.HasExited) {
             Write-ManagedProcessLogs $cloudflareTunnelProcess

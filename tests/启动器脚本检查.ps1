@@ -16,6 +16,7 @@ $runScriptPath = Join-Path $repoRoot "run.ps1"
 $upScriptPath = Join-Path $repoRoot "up.ps1"
 $cleanScriptPath = Join-Path $repoRoot "qingli.ps1"
 $trackerScriptPath = Join-Path $repoRoot "frontend\\dev-tracker.mjs"
+$seederScriptPath = Join-Path $repoRoot "frontend\\dev-seeder.mjs"
 
 Assert-True (Test-Path -LiteralPath $runScriptPath) "缺少 run.ps1。"
 Assert-True (Test-Path -LiteralPath $upScriptPath) "缺少 up.ps1；应该提供显式升级入口，而不是让 run.ps1 偷偷升级依赖。"
@@ -26,6 +27,11 @@ $upScript = Get-Content -LiteralPath $upScriptPath -Raw
 $cleanScript = Get-Content -LiteralPath $cleanScriptPath -Raw
 $trackerScript = if (Test-Path -LiteralPath $trackerScriptPath) {
     Get-Content -LiteralPath $trackerScriptPath -Raw
+} else {
+    ""
+}
+$seederScript = if (Test-Path -LiteralPath $seederScriptPath) {
+    Get-Content -LiteralPath $seederScriptPath -Raw
 } else {
     ""
 }
@@ -83,15 +89,23 @@ Assert-True (-not ($runScript -match '--remove-parts')) "tusd 不支持 Rustus �
 Assert-True (-not ($runScript -match '-disable-termination')) "当前阶段要站在 tusd 官方 termination 能力上，run.ps1 不应禁用 termination。"
 Assert-True ($runScript -match 'bittorrent-tracker') "run.ps1 应该启动 bittorrent-tracker 开发进程，避免 Phase 2 还要靠手工另开一个窗口。"
 Assert-True ($runScript -match 'SWARM_TRACKER_PORT') "run.ps1 应该允许显式覆写 tracker 端口。"
+Assert-True ($runScript -match 'SWARM_SEEDER_PORT') "run.ps1 应该允许显式覆写 seeder 控制面端口。"
 Assert-True ($runScript -match 'SWARM_TRACKER_PUBLIC_URL') "run.ps1 应该允许显式覆写前端 announce 用的 tracker 公网地址。"
 Assert-True ($runScript -match 'SWARM_TICKET_SECRET') "run.ps1 应该为后端和 tracker 协调同一份 swarm join ticket secret。"
 Assert-True ($runScript -match '--ticket-secret') "run.ps1 应该把 ticket secret 传给 tracker 进程，而不是让 tracker 自己猜。"
 Assert-True ($runScript -match '-Name "tracker"') "run.ps1 应该把 tracker 当成独立受管进程拉起。"
+Assert-True ($runScript -match '-Name "webtorrent-seeder"') "run.ps1 应该把 webtorrent-seeder 当成独立受管进程拉起。"
+Assert-True ($runScript -match 'dev-seeder\.mjs') "run.ps1 应该显式拉起 dev-seeder.mjs，避免 seeder 仍靠人工另开窗口。"
 Assert-True (Test-Path -LiteralPath $trackerScriptPath) "应该提供 frontend/dev-tracker.mjs，把官方 tracker server 子入口收口成可复用开发脚本。"
+Assert-True (Test-Path -LiteralPath $seederScriptPath) "应该提供 frontend/dev-seeder.mjs，把 WebRTC seeder sidecar 收口成可复用开发脚本。"
 Assert-True ($trackerScript -match 'bittorrent-tracker/server') "frontend/dev-tracker.mjs 应该直接复用官方 bittorrent-tracker/server 子入口，而不是手搓 tracker。"
 Assert-True ($trackerScript -match 'jsonwebtoken') "frontend/dev-tracker.mjs 应该直接复用成熟 JWT 库校验 join_ticket，而不是手搓签名解析。"
 Assert-True ($trackerScript -match 'params\.ticket') "frontend/dev-tracker.mjs 应该从 tracker 参数里读取 join_ticket。"
 Assert-True ($trackerScript -match 'join_ticket_invalid') "frontend/dev-tracker.mjs 应该对外返回稳定的 invalid ticket 原因，方便前端恢复。"
+Assert-True ($seederScript -match 'webtorrent-hybrid|webtorrent') "frontend/dev-seeder.mjs 应该复用成熟 WebTorrent 实现，而不是手搓协议栈。"
+Assert-True ($seederScript -match '/seed/start') "frontend/dev-seeder.mjs 应该暴露 start 控制面。"
+Assert-True ($seederScript -match '/seed/stop') "frontend/dev-seeder.mjs 应该暴露 stop 控制面。"
+Assert-True ($seederScript -match '/seed/reconcile') "frontend/dev-seeder.mjs 应该暴露 reconcile 控制面。"
 Assert-True ($runScript -match 'Get-ListeningPortProcessRecords') "run.ps1 应该在启动前识别端口占用归属，而不是等 sidecar 启动失败后才把残留暴露给开发者。"
 Assert-True ($runScript -match 'Stop-StaleLauncherSidecars') "run.ps1 应该在启动前自动回收自己留下的 tusd / tracker 残留。"
 Assert-True ($runScript -match 'Invoke-LauncherCleanup') "run.ps1 应该把退出清理收口成统一入口，避免 finally / 退出事件各清各的。"
@@ -106,6 +120,7 @@ Assert-True ($upScript -match 'run\.ps1') "up.ps1 应该复用 run.ps1，而不�
 Assert-True ($cleanScript -match '\[switch\]\$Apply') "qingli.ps1 应该显式接受 Apply 开关，避免无人值守调用把 -Apply 误解析成别的参数。"
 Assert-True ($cleanScript -match 'MEDIA_TUS_UPLOAD_DIR') "qingli.ps1 应该跟随 tusd 主链清理 MEDIA_TUS_UPLOAD_DIR，而不是继续只盯着旧的 Rustus 目录。"
 Assert-True ($cleanScript -match 'TUSD_PORT' -or $cleanScript -match 'MEDIA_TUS_SERVER_PORT') "qingli.ps1 应该优先读取当前 tusd 端口配置，而不是只看旧的 RUSTUS_SERVER_PORT。"
+Assert-True ($cleanScript -match 'SWARM_SEEDER_PORT') "qingli.ps1 应该把 webtorrent-seeder 也纳入已识别服务停服范围。"
 Assert-True ($cleanScript -match 'Get-NetTCPConnection') "qingli.ps1 的停服判断应该直接查看端口归属，而不是只做盲猜。"
 Assert-True ($cleanScript -match 'taskkill\.exe /PID \$processId /T /F') "qingli.ps1 在 Force 模式下应该能强制结束已识别的项目开发进程。"
 Assert-True ($cleanScript -match 'if \(\$Force\) \{[\s\S]*Stop-RecognizedProjectServices') "qingli.ps1 应该只在 Force 无人值守模式下自动停掉已识别项目服务。"

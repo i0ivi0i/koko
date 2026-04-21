@@ -48,8 +48,16 @@ type 媒体播放结果 =
         | "locator_unavailable"
         | "attachment_not_ready"
         | "anchor_unavailable"
-        | "swarm_runtime_unsupported";
-      hint: "附件当前不可获取" | "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）";
+        | "swarm_runtime_unsupported"
+        | "connecting_to_peers"
+        | "no_online_seed"
+        | "media_deleted";
+      hint:
+        | "附件当前不可获取"
+        | "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）"
+        | "正在尝试连接群友"
+        | "当前没有在线种子，等待群友上线"
+        | "内容已删除";
     };
 
 type 媒体播放器依赖 = {
@@ -265,8 +273,16 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       | "locator_unavailable"
       | "attachment_not_ready"
       | "anchor_unavailable"
-      | "swarm_runtime_unsupported",
-    hint: "附件当前不可获取" | "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）" = "附件当前不可获取"
+      | "swarm_runtime_unsupported"
+      | "connecting_to_peers"
+      | "no_online_seed"
+      | "media_deleted",
+    hint:
+      | "附件当前不可获取"
+      | "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）"
+      | "正在尝试连接群友"
+      | "当前没有在线种子，等待群友上线"
+      | "内容已删除" = "附件当前不可获取"
   ): 媒体播放结果 => ({
     mode: "degraded",
     attachmentId: input.attachmentId,
@@ -342,7 +358,29 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     } = {}
   ): Promise<协作分发尝试结果> => {
     const distribution = 读取协作分发定位片段(locator);
-    if (distribution?.availability === "expired") {
+    const mediaStateCode = distribution?.media_state?.code ?? null;
+    if (mediaStateCode === "MEDIA_DELETED") {
+      释放协作分发占用(input);
+      return {
+        locator,
+        playback: 创建降级结果(input, locator, "media_deleted", "内容已删除"),
+        failureReason: null,
+      };
+    }
+    if (mediaStateCode === "MEDIA_NO_ONLINE_SEED") {
+      释放协作分发占用(input);
+      return {
+        locator,
+        playback: 创建降级结果(
+          input,
+          locator,
+          "no_online_seed",
+          "当前没有在线种子，等待群友上线"
+        ),
+        failureReason: null,
+      };
+    }
+    if (distribution?.availability === "expired" && mediaStateCode === null) {
       释放协作分发占用(input);
       return {
         locator,
@@ -364,6 +402,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         failureReason: null,
       };
     }
+    const 处于连接群友态 = mediaStateCode === "MEDIA_CONNECTING_TO_PEERS";
     try {
       const swarmSource = await resolveSwarmSource({
         attachmentId: input.attachmentId,
@@ -375,6 +414,19 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         ...(options.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!swarmSource) {
+        if (处于连接群友态) {
+          释放协作分发占用(input);
+          return {
+            locator,
+            playback: 创建降级结果(
+              input,
+              locator,
+              "connecting_to_peers",
+              "正在尝试连接群友"
+            ),
+            failureReason: null,
+          };
+        }
         return {
           locator,
           playback: null,
@@ -422,6 +474,19 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           locator,
           playback: null,
           failureReason: "runtime_unsupported",
+        };
+      }
+      if (处于连接群友态) {
+        释放协作分发占用(input);
+        return {
+          locator,
+          playback: 创建降级结果(
+            input,
+            locator,
+            "connecting_to_peers",
+            "正在尝试连接群友"
+          ),
+          failureReason: null,
         };
       }
       // swarm 只是热分发层；失败后必须回到锚点，不允许把热路径波动升级成业务失败。
@@ -482,7 +547,13 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (locator.kind === "image" && (!读取图片Blob主链(locator) || !locator.blob_asset?.distribution)) {
       return;
     }
-    if (!distribution || distribution.availability === "expired") {
+    const mediaStateCode = distribution?.media_state?.code ?? null;
+    if (
+      !distribution ||
+      mediaStateCode === "MEDIA_DELETED" ||
+      mediaStateCode === "MEDIA_NO_ONLINE_SEED" ||
+      (mediaStateCode === null && distribution.availability === "expired")
+    ) {
       return;
     }
     try {

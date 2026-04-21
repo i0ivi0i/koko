@@ -11,9 +11,15 @@ pub(crate) const WEB_SEED_TTL秒: i64 = 24 * 60 * 60;
 pub(crate) const 同源协作分发ANNOUNCE路径: &str = "/api/swarm/announce";
 /// `media_state` 是跨壳稳定状态码，前端文案只能从这里派生，不能各端自造状态机。
 pub(crate) const 媒体状态已就绪: &str = "MEDIA_READY";
+pub(crate) const 媒体状态连接群友中: &str = "MEDIA_CONNECTING_TO_PEERS";
 pub(crate) const 媒体状态无在线种子: &str = "MEDIA_NO_ONLINE_SEED";
+pub(crate) const 媒体状态已删除: &str = "MEDIA_DELETED";
+/// `MEDIA_CONNECTING_TO_PEERS` 的重试节奏必须更激进，避免刚过期窗口里等待过久。
+pub(crate) const 连接群友默认重试毫秒: i64 = 2_000;
 /// `MEDIA_NO_ONLINE_SEED` 默认重试节奏：让各端共享同一把尺子，避免“有人 3 秒重试，有人 60 秒重试”。
 pub(crate) const 无在线种子默认重试毫秒: i64 = 15_000;
+/// web_seed 刚过期时先给一次“连接群友”窗口，避免直接从 READY 突兀跳到 NO_ONLINE_SEED。
+pub(crate) const 连接群友窗口秒: i64 = 8;
 
 /// 协作分发的内容哈希只认 canonical 共享载荷字节。
 /// 这样 Phase 1 就能稳定得到：
@@ -188,7 +194,7 @@ pub(crate) fn 裁决协作分发可用性(
 /// `media_state` 是比 availability 更稳定的跨端真相：
 /// 1. availability 先保留给旧前端兼容；
 /// 2. 新前端统一消费 media_state.code；
-/// 3. 这里先把“有可用来源 / 无可用来源”裁成 READY 与 NO_ONLINE_SEED。
+/// 3. 无可用来源时先给短连接窗口，再进入无在线种子。
 fn 裁决协作分发媒体状态码(
     snapshot: &usecase::协作分发元数据快照,
     web_seed仍可用: bool,
@@ -197,20 +203,24 @@ fn 裁决协作分发媒体状态码(
 ) -> &'static str {
     let availability = 裁决协作分发可用性(snapshot, web_seed仍可用, now_epoch秒, stale_seconds);
     if availability == "available" {
-        媒体状态已就绪
-    } else {
-        媒体状态无在线种子
+        return 媒体状态已就绪;
     }
+
+    if now_epoch秒 <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒) {
+        return 媒体状态连接群友中;
+    }
+    媒体状态无在线种子
 }
 
 /// 统一构造 `media_state` 响应面：
-/// - READY 不附带重试间隔；
+/// - READY / DELETED 不附带重试间隔；
+/// - CONNECTING_TO_PEERS 给短周期探测节奏；
 /// - NO_ONLINE_SEED 强制附带 retry_after_ms，避免前端自行拍脑袋重试。
 fn 构造媒体状态响应(code: &'static str) -> serde_json::Value {
-    let retry_after_ms = if code == 媒体状态无在线种子 {
-        Some(无在线种子默认重试毫秒)
-    } else {
-        None
+    let retry_after_ms = match code {
+        媒体状态连接群友中 => Some(连接群友默认重试毫秒),
+        媒体状态无在线种子 => Some(无在线种子默认重试毫秒),
+        _ => None,
     };
     serde_json::json!({
         "code": code,
@@ -259,14 +269,15 @@ struct 协作分发入群票据签发结果 {
 
 /// tracker ticket 只在“当前 swarm 仍值得接入”时签发：
 /// 1. secret 没配时直接停签，避免假装有门禁；
-/// 2. availability 已经过期时不再给浏览器错误希望；
-/// 3. info hash 缺失时也不签，避免发出 tracker 根本无法校验的票。
+/// 2. DELETED/NO_ONLINE_SEED 不签票，避免给已终态或明确无源状态发错误希望；
+/// 3. READY/CONNECTING_TO_PEERS 允许签票，便于前端在短窗口里快速探测恢复；
+/// 4. info hash 缺失时也不签，避免发出 tracker 根本无法校验的票。
 fn 签发协作分发join_ticket(
     snapshot: &usecase::协作分发元数据快照,
     上下文: &协作分发响应上下文<'_>,
     media_state_code: &str,
 ) -> Option<协作分发入群票据签发结果> {
-    if media_state_code != 媒体状态已就绪 {
+    if matches!(media_state_code, 媒体状态已删除 | 媒体状态无在线种子) {
         return None;
     }
     let secret = 上下文.ticket_secret?;

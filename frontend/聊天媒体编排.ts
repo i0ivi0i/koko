@@ -284,23 +284,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const playback = 媒体会话表.get(startItem.attachmentId)?.snapshot().playback;
     return playback?.mode === "expired" || playback?.mode === "degraded";
   };
-  const 起始视频请求可直接用正式流媒体主链打开 = (
-    request: 媒体查看器打开请求
-  ): boolean => {
-    const startItem = request.items.find(
-      (item) => item.attachmentId === request.startAttachmentId
-    );
-    if (
-      !startItem ||
-      startItem.kind !== "video" ||
-      !/\.m3u8(?:$|\?)/.test(startItem.src)
-    ) {
-      return false;
-    }
-    const sessionSnapshot = 媒体会话表.get(startItem.attachmentId)?.snapshot();
-    // request 已携带 HLS 时，只在没有更强 playback 和本地完整度真相的窄窗口直开。
-    return !sessionSnapshot?.playback && !sessionSnapshot?.locallyComplete;
-  };
   const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
     const before = 媒体运行时.getSnapshot();
     媒体运行时.send(event);
@@ -321,10 +304,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }
     if (!读取媒体运行时上下文().viewerOpen) {
       if (起始视频会话当前不可打开(nextRequest)) {
-        return;
-      }
-      if (起始视频请求可直接用正式流媒体主链打开(nextRequest)) {
-        正式打开查看器(nextRequest);
         return;
       }
       if (是否应等待本地完整视频会话真相(nextRequest)) {

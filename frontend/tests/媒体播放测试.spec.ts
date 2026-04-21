@@ -1742,6 +1742,162 @@ describe("媒体播放器", () => {
     });
   });
 
+  it("media_state=MEDIA_CONNECTING_TO_PEERS 且 swarm 暂不可用时，会给出连接群友提示而不是回退锚点", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-connecting",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-connecting",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-connecting",
+        content_hash: "hash-video-connecting",
+        swarm_id: "swarm-hash-video-connecting",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-connecting",
+        torrent_info_hash: "torrent-info-hash-video-connecting",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "expired" as const,
+        media_state: {
+          code: "MEDIA_CONNECTING_TO_PEERS" as const,
+          retry_after_ms: 2000,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+    }));
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-connecting",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-connecting",
+      kind: "video",
+      src: "",
+      thumbnailUrl: null,
+      reason: "connecting_to_peers",
+      hint: "正在尝试连接群友",
+    });
+    expect(resolveSwarmSource).toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("media_state=MEDIA_NO_ONLINE_SEED 时会直接给出无在线种子提示", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-no-seed",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-no-seed",
+      thumbnail_url: "http://media.local/poster-video-no-seed",
+      distribution: {
+        content_id: "content_att-video-no-seed",
+        content_hash: "hash-video-no-seed",
+        swarm_id: "swarm-hash-video-no-seed",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-no-seed",
+        torrent_info_hash: "torrent-info-hash-video-no-seed",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "expired" as const,
+        media_state: {
+          code: "MEDIA_NO_ONLINE_SEED" as const,
+          retry_after_ms: 15000,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+    }));
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-no-seed",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-no-seed",
+      kind: "video",
+      src: "",
+      thumbnailUrl: "http://media.local/poster-video-no-seed",
+      reason: "no_online_seed",
+      hint: "当前没有在线种子，等待群友上线",
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("media_state=MEDIA_DELETED 时会直接落删除终态提示", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-deleted",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-deleted",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-deleted",
+        content_hash: "hash-video-deleted",
+        swarm_id: "swarm-hash-video-deleted",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-deleted",
+        torrent_info_hash: "torrent-info-hash-video-deleted",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "expired" as const,
+        media_state: {
+          code: "MEDIA_DELETED" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+    }));
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-deleted",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-deleted",
+      kind: "video",
+      src: "",
+      thumbnailUrl: null,
+      reason: "media_deleted",
+      hint: "内容已删除",
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
   it("后端裁决 expired 时会直接返回内容已过期", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-expired",

@@ -241,6 +241,110 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
 
 #[tokio::test]
 #[serial]
+async fn web_seed刚过期且最近没有peer存活时locator会先进入连接群友态() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("MC{:010}", uniq % 10_000_000_000);
+    let device_token = format!("media-connecting-device-{uniq}");
+    let attachment_id = format!("att-connecting-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let session_id = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room = koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+            .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入附件");
+            插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
+            sqlx::query(
+                "UPDATE attachment_distribution_metadata \
+                 SET web_seed_until = NOW() - INTERVAL '3 seconds', \
+                     last_peer_seen_at = NULL, \
+                     torrent_info_hash = '1111111111111111111111111111111111111111' \
+                 WHERE attachment_id = $1",
+            )
+            .bind(&attachment_id_for_worker)
+            .execute(&pool)
+            .await
+            .expect("应能把 web seed 调整到刚过期窗口");
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("connecting-client-{uniq}"),
+            "",
+            &[attachment_id_for_worker],
+        )
+        .expect("应能先创建带视频附件的消息");
+
+        identity.会话标识
+    })
+    .await
+    .expect("阻塞 connecting 建数任务应完成");
+
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    assert_eq!(
+        body["distribution"]["availability"].as_str(),
+        Some("expired"),
+        "兼容字段 availability 仍保持旧语义：当前没有可用来源时继续是 expired"
+    );
+    assert_eq!(
+        body["distribution"]["media_state"]["code"].as_str(),
+        Some("MEDIA_CONNECTING_TO_PEERS"),
+        "web_seed 刚过期且仍在连接预算内时，应先进入连接群友态，而不是直接跳到无在线种子"
+    );
+    assert_eq!(
+        body["distribution"]["media_state"]["retry_after_ms"].as_i64(),
+        Some(2_000),
+        "连接群友态应给出短周期重试提示，驱动前端快速探测 peer 恢复"
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn web_seed过期且streaming已删除但最近peer仍存活时locator会进入peer_only可用态() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
