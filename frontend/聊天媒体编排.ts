@@ -9,12 +9,14 @@ import {
 import {
   创建媒体定位器,
   创建媒体缓存,
+  创建内存预览缓存,
   创建内存媒体定位缓存仓库,
   创建内存媒体缓存仓库,
   创建媒体播放器,
   创建媒体发布器,
   创建媒体会话,
   创建媒体查看器,
+  从媒体源抓取视频预览,
   写入媒体草稿 as 写入媒体草稿状态,
   更新媒体草稿状态 as 更新媒体草稿状态值,
   移除媒体草稿 as 移除媒体草稿状态,
@@ -29,6 +31,8 @@ import {
   type 媒体会话快照,
   type 媒体会话端口,
   type 媒体播放结果,
+  type 预览缓存端口,
+  type 视频预览状态,
 } from "./媒体/index.js";
 
 type 程序滚动来源 = "media_viewer_open";
@@ -40,6 +44,7 @@ export type 附件内容地址快照 = {
 
 export type 聊天媒体快照 = {
   playbackByAttachmentId: Record<string, 媒体播放结果>;
+  previewByAttachmentId: Record<string, 视频预览状态>;
   sessionByAttachmentId: Record<string, 媒体会话快照>;
   contentUrlByAttachmentId: Record<string, 附件内容地址快照>;
   inlineAutoplayOwnerAttachmentId: string | null;
@@ -64,6 +69,7 @@ type 聊天媒体编排依赖 = {
   读取草稿(): 媒体附件草稿[];
   媒体缓存仓库?: 媒体缓存仓库;
   媒体定位仓库?: 媒体定位缓存仓库;
+  预览缓存?: 预览缓存端口;
   写入草稿列表(next: 媒体附件草稿[]): void;
   请求重渲染(): void;
   回收媒体草稿预览地址(previewUrls: string[]): void;
@@ -131,6 +137,7 @@ type 媒体播放释放请求 = { attachmentId: string; consumerId?: string; 丢
 
 const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
+const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`;
 // 自动播保留轻微迟滞防抖，但不能继续维持旧的 120ms 网页式空窗。
 const 自动播候选稳定等待毫秒 = 80;
 
@@ -199,6 +206,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           };
         }
         if (item.kind === "video") {
+          const preview = 视频预览状态表.get(item.attachmentId) ?? null;
           /**
            * 查看器 request 的视频 `src` 不允许继续携带旧静态地址。
            * 当会话 playback 尚未裁决完成时，这里明确清空旧值，
@@ -207,6 +215,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           return {
             ...item,
             src: "",
+            posterSrc:
+              preview?.phase === "ready"
+                ? preview.src
+                : item.posterSrc,
           };
         }
         return item;
@@ -403,6 +415,39 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 媒体缓存 = 创建媒体缓存({
     repo: deps.媒体缓存仓库 ?? 创建内存媒体缓存仓库(),
   });
+  /**
+   * 预览缓存默认只退回内存仓库：
+   * - 生产环境由平台存储运行时显式注入浏览器仓库；
+   * - 这里不允许再直接猜 `localStorage`，避免 owner 越层双活；
+   * - 测试未注入时，内存仓库也足够覆盖编排行为。
+   */
+  const 预览缓存 = deps.预览缓存 ?? 创建内存预览缓存();
+  const 视频预览状态表 = new Map<string, 视频预览状态>();
+  const 视频预览解析代次表 = new Map<string, number>();
+
+  const 读取视频预览状态表 = (): Record<string, 视频预览状态> =>
+    Object.fromEntries(视频预览状态表);
+
+  const 写入视频预览状态 = (
+    attachmentId: string,
+    nextState: 视频预览状态
+  ): void => {
+    const previous = 视频预览状态表.get(attachmentId);
+    if (JSON.stringify(previous ?? null) === JSON.stringify(nextState)) {
+      return;
+    }
+    视频预览状态表.set(attachmentId, nextState);
+    deps.请求重渲染();
+    同步当前查看器请求();
+  };
+
+  const 删除视频预览状态 = (attachmentId: string): void => {
+    if (!视频预览状态表.delete(attachmentId)) {
+      return;
+    }
+    deps.请求重渲染();
+    同步当前查看器请求();
+  };
 
   const 写入草稿列表 = (
     nextDrafts: 媒体附件草稿[],
@@ -467,6 +512,185 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   const 读取附件条目 = (attachmentId: string): 媒体附件条目 | null =>
     读取当前房间媒体附件().find((attachment) => attachment.attachmentId === attachmentId) ?? null;
+
+  const 读取当前视频预览播放源 = (
+    attachmentId: string
+  ): { src: string; contentHash: string | null } | null => {
+    const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
+    if (
+      !playback ||
+      playback.kind !== "video" ||
+      (playback.mode !== "anchor" &&
+        playback.mode !== "blob" &&
+        playback.mode !== "swarm")
+    ) {
+      return null;
+    }
+    return {
+      src: playback.src,
+      contentHash: playback.contentHash ?? null,
+    };
+  };
+
+  const 读取视频canonical冷源地址 = (
+    locator: Awaited<ReturnType<typeof 媒体定位器.获取定位>>
+  ): string | null => {
+    if (locator.status !== "ready" || locator.kind !== "video") {
+      return null;
+    }
+    if (locator.file_asset?.origin.available === false) {
+      return null;
+    }
+    return (
+      locator.file_asset?.variants.canonical?.url ??
+      locator.file_asset?.origin.original_url ??
+      null
+    );
+  };
+
+  const 解析视频预览 = (attachmentId: string): void => {
+    const attachment = 读取附件条目(attachmentId);
+    const currentPreview = 视频预览状态表.get(attachmentId) ?? { phase: "idle" as const };
+    if (
+      !attachment ||
+      attachment.kind !== "video" ||
+      currentPreview.phase === "loading" ||
+      currentPreview.phase === "ready"
+    ) {
+      return;
+    }
+    const 当前代次 = (视频预览解析代次表.get(attachmentId) ?? 0) + 1;
+    视频预览解析代次表.set(attachmentId, 当前代次);
+    写入视频预览状态(attachmentId, { phase: "loading" });
+
+    void (async () => {
+      let shouldReleasePreviewConsumer = false;
+      try {
+        let contentHash = 读取当前视频预览播放源(attachmentId)?.contentHash ?? null;
+        if (contentHash) {
+          await 预览缓存.写入附件索引(attachmentId, contentHash);
+          const cachedPreview = await 预览缓存.按内容读取(contentHash);
+          if (cachedPreview?.objectUrl) {
+            if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
+              return;
+            }
+            写入视频预览状态(attachmentId, {
+              phase: "ready",
+              src: cachedPreview.objectUrl,
+              source: "cache",
+            });
+            return;
+          }
+        }
+
+        let previewSource = 读取当前视频预览播放源(attachmentId)?.src ?? null;
+        if (!previewSource) {
+          const startedAt = performance.now();
+          接收媒体运行时事实({ type: "LOCATOR_REQUEST_STARTED" });
+          let locator: Awaited<ReturnType<typeof 媒体定位器.获取定位>>;
+          try {
+            locator = await 媒体定位器.获取定位(attachmentId);
+          } finally {
+            接收媒体运行时事实({
+              type: "LOCATOR_REQUEST_FINISHED",
+              durationMs: performance.now() - startedAt,
+            });
+          }
+          if (locator.status !== "ready" || locator.kind !== "video") {
+            if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
+              return;
+            }
+            写入视频预览状态(attachmentId, { phase: "missing_source" });
+            return;
+          }
+          contentHash = locator.file_asset?.content_hash ?? locator.distribution?.content_hash ?? null;
+          if (contentHash) {
+            await 预览缓存.写入附件索引(attachmentId, contentHash);
+            const cachedPreview = await 预览缓存.按内容读取(contentHash);
+            if (cachedPreview?.objectUrl) {
+              if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
+                return;
+              }
+              写入视频预览状态(attachmentId, {
+                phase: "ready",
+                src: cachedPreview.objectUrl,
+                source: "cache",
+              });
+              return;
+            }
+          }
+          previewSource = 读取视频canonical冷源地址(locator);
+          if (!previewSource && locator.distribution) {
+            const swarmSource = await 协作分发运行时.解析协作分发源({
+              attachmentId,
+              kind: "video",
+              locator,
+              consumerId: 构造预览ConsumerId(attachmentId),
+            });
+            if (swarmSource?.src) {
+              previewSource = swarmSource.src;
+              shouldReleasePreviewConsumer = true;
+            }
+          }
+        }
+
+        if (!previewSource) {
+          if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
+            return;
+          }
+          写入视频预览状态(attachmentId, { phase: "missing_source" });
+          return;
+        }
+
+        const preview = await 从媒体源抓取视频预览({
+          src: previewSource,
+        });
+        if (shouldReleasePreviewConsumer) {
+          协作分发运行时.释放协作分发消费者({
+            attachmentId,
+            consumerId: 构造预览ConsumerId(attachmentId),
+          });
+        }
+        if (
+          视频预览解析代次表.get(attachmentId) !== 当前代次 ||
+          preview.source === "none" ||
+          !preview.objectUrl
+        ) {
+          if (视频预览解析代次表.get(attachmentId) === 当前代次) {
+            写入视频预览状态(attachmentId, { phase: "missing_source" });
+          }
+          return;
+        }
+        if (contentHash) {
+          await 预览缓存.写入附件索引(attachmentId, contentHash);
+          await 预览缓存.保存({
+            contentHash,
+            objectUrl: preview.objectUrl,
+            source: preview.source,
+            width: preview.width,
+            height: preview.height,
+            updatedAt: Date.now(),
+          });
+        }
+        写入视频预览状态(attachmentId, {
+          phase: "ready",
+          src: preview.objectUrl,
+          source: preview.source,
+        });
+      } catch {
+        if (shouldReleasePreviewConsumer) {
+          协作分发运行时.释放协作分发消费者({
+            attachmentId,
+            consumerId: 构造预览ConsumerId(attachmentId),
+          });
+        }
+        if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
+          return;
+        }
+        写入视频预览状态(attachmentId, { phase: "missing_source" });
+      }
+    })();
+  };
 
   /**
    * 附件内容地址属于“当前会话下可访问的媒体资源定位结果”。
@@ -769,6 +993,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       onSnapshotChange: () => {
         deps.请求重渲染();
         同步当前查看器请求();
+        if (
+          attachment.kind === "video" &&
+          (视频预览状态表.get(attachment.attachmentId)?.phase === "missing_source" ||
+            视频预览状态表.get(attachment.attachmentId)?.phase === "idle" ||
+            !视频预览状态表.has(attachment.attachmentId))
+        ) {
+          解析视频预览(attachment.attachmentId);
+        }
       },
     });
     应用缓存完整度到会话(attachment.attachmentId, session);
@@ -803,9 +1035,16 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         attachmentId,
         consumerId: 构造媒体会话ConsumerId(attachmentId),
       });
+      协作分发运行时.释放协作分发消费者({
+        attachmentId,
+        consumerId: 构造预览ConsumerId(attachmentId),
+        丢弃未完成补齐: true,
+      });
       session.销毁();
     }
     媒体会话表.clear();
+    视频预览状态表.clear();
+    视频预览解析代次表.clear();
     媒体定位器.清空();
   };
 
@@ -820,6 +1059,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     snapshot(): 聊天媒体快照 {
       return {
         playbackByAttachmentId: 读取媒体播放结果表(),
+        previewByAttachmentId: 读取视频预览状态表(),
         sessionByAttachmentId: 读取媒体会话快照表(),
         contentUrlByAttachmentId: 读取附件内容地址表(),
         inlineAutoplayOwnerAttachmentId:
@@ -861,6 +1101,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         items: request.items.map((item) => ({ ...item })),
       });
       启动查看器起始附件会话(nextRequest);
+      if (读取附件条目(request.startAttachmentId)?.kind === "video") {
+        解析视频预览(request.startAttachmentId);
+      }
       接收媒体运行时事实({
         type: "VIEWER_OPEN_REQUESTED",
         request: nextRequest,
@@ -898,8 +1141,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           attachmentId,
           consumerId: 构造媒体会话ConsumerId(attachmentId),
         });
+        协作分发运行时.释放协作分发消费者({
+          attachmentId,
+          consumerId: 构造预览ConsumerId(attachmentId),
+          丢弃未完成补齐: true,
+        });
         session.销毁();
         媒体会话表.delete(attachmentId);
+        视频预览解析代次表.delete(attachmentId);
+        删除视频预览状态(attachmentId);
         hasSessionSetChanged = true;
       }
 
@@ -913,6 +1163,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
       for (const attachment of attachments) {
         if (媒体会话表.has(attachment.attachmentId)) {
+          if (attachment.kind === "video") {
+            解析视频预览(attachment.attachmentId);
+          }
           continue;
         }
         hasSessionSetChanged = true;
@@ -920,7 +1173,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         媒体会话表.set(attachment.attachmentId, session);
         if (attachment.kind === "image") {
           void session.启动();
+          continue;
         }
+        解析视频预览(attachment.attachmentId);
       }
 
       if (hasSessionSetChanged) {

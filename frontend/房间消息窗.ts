@@ -4,6 +4,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import { 媒体是否默认循环播放, type 媒体播放结果 } from "./媒体/媒体播放.js";
+import type { 视频预览状态 } from "./媒体/视频预览.js";
 import type { 消息视频自动播候选 } from "./媒体/消息视频自动播编排.js";
 import type { 媒体会话信号 } from "./媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
@@ -54,6 +55,7 @@ export class 房间消息窗 extends LitElement {
     historyHint: { type: String },
     jumpToLatestLabel: { type: String },
     mediaPlaybackByAttachmentId: { attribute: false },
+    mediaPreviewByAttachmentId: { attribute: false },
     inlineAutoplayOwnerAttachmentId: { type: String },
     inlineAutoplayPlaybackByAttachmentId: { attribute: false },
   };
@@ -62,6 +64,7 @@ export class 房间消息窗 extends LitElement {
   declare historyHint: string;
   declare jumpToLatestLabel: string;
   declare mediaPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+  declare mediaPreviewByAttachmentId: Record<string, 视频预览状态>;
   declare inlineAutoplayOwnerAttachmentId: string | null;
   declare inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
 
@@ -73,7 +76,6 @@ export class 房间消息窗 extends LitElement {
   private readonly 自动播候选观察目标 = new Map<HTMLButtonElement, string>();
   private readonly 自动播候选可见条目 = new Map<string, 消息视频自动播候选>();
   private readonly 失效视频封面地址 = new Map<string, string>();
-  private readonly 无封面视频稳定预览源 = new Map<string, string>();
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -94,6 +96,7 @@ export class 房间消息窗 extends LitElement {
     this.historyHint = "";
     this.jumpToLatestLabel = "";
     this.mediaPlaybackByAttachmentId = {};
+    this.mediaPreviewByAttachmentId = {};
     this.inlineAutoplayOwnerAttachmentId = null;
     this.inlineAutoplayPlaybackByAttachmentId = {};
   }
@@ -111,7 +114,6 @@ export class 房间消息窗 extends LitElement {
     this.取消自动播候选调度();
     this.清理自动播候选观察();
     this.失效视频封面地址.clear();
-    this.无封面视频稳定预览源.clear();
     super.disconnectedCallback();
   }
 
@@ -156,9 +158,6 @@ export class 房间消息窗 extends LitElement {
   }
 
   override updated(changedProperties: PropertyValues<this>): void {
-    if (changedProperties.has("items")) {
-      this.同步无封面视频稳定预览缓存();
-    }
     this.同步时间线自动播播放状态(changedProperties);
     const scrollContainer = this.messageScrollRef.value;
     if (!scrollContainer) {
@@ -166,7 +165,8 @@ export class 房间消息窗 extends LitElement {
     }
     if (
       !changedProperties.has("items") &&
-      !changedProperties.has("mediaPlaybackByAttachmentId")
+      !changedProperties.has("mediaPlaybackByAttachmentId") &&
+      !changedProperties.has("mediaPreviewByAttachmentId")
     ) {
       return;
     }
@@ -208,25 +208,6 @@ export class 房间消息窗 extends LitElement {
       }
       if (!video.paused) {
         video.pause();
-      }
-    }
-  }
-
-  private 同步无封面视频稳定预览缓存(): void {
-    const 活跃视频附件 = new Set<string>();
-    for (const item of this.items) {
-      if (item.kind !== "message") {
-        continue;
-      }
-      for (const attachment of item.attachments) {
-        if (attachment.kind === "video") {
-          活跃视频附件.add(attachment.attachmentId);
-        }
-      }
-    }
-    for (const attachmentId of this.无封面视频稳定预览源.keys()) {
-      if (!活跃视频附件.has(attachmentId)) {
-        this.无封面视频稳定预览源.delete(attachmentId);
       }
     }
   }
@@ -577,40 +558,11 @@ export class 房间消息窗 extends LitElement {
     return null;
   }
 
-  private 读取时间线视频稳定预览源(
-    attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
-    playback: 媒体播放结果 | null,
-    inlineAutoplayPreviewSrc: string | null
-  ): string | null {
-    const cachedPreviewSrc = this.无封面视频稳定预览源.get(attachment.attachmentId) ?? null;
-    if (inlineAutoplayPreviewSrc) {
-      /**
-       * 自动播 owner 切入时，若已存在稳定预览缓存（通常是切入前的同一颗 `<video>` 首帧源），
-       * 优先复用缓存，避免在 autoplay 边界那一帧切 src 造成闪烁或抽搐。
-       */
-      if (cachedPreviewSrc) {
-        return cachedPreviewSrc;
-      }
-      this.无封面视频稳定预览源.set(attachment.attachmentId, inlineAutoplayPreviewSrc);
-      return inlineAutoplayPreviewSrc;
-    }
-    const directPreviewSrc = this.读取时间线视频首帧预览源(attachment, playback);
-    if (cachedPreviewSrc) {
-      /**
-       * 无封面视频首开时通常只能先显示静态占位；
-       * 一旦 playback 解析到正式 swarm 首帧，这里必须允许缓存“向上升级”，
-       * 否则时间线会长期停在占位层，看起来像“协作分发已激活但实际没吃到”。
-       */
-      if (directPreviewSrc && cachedPreviewSrc !== directPreviewSrc && playback?.mode === "swarm") {
-        this.无封面视频稳定预览源.set(attachment.attachmentId, directPreviewSrc);
-        return directPreviewSrc;
-      }
-      return cachedPreviewSrc;
-    }
-    if (directPreviewSrc) {
-      this.无封面视频稳定预览源.set(attachment.attachmentId, directPreviewSrc);
-    }
-    return directPreviewSrc;
+  private 读取时间线视频运行时预览(
+    attachmentId: string
+  ): Extract<视频预览状态, { phase: "ready" }> | null {
+    const preview = this.mediaPreviewByAttachmentId[attachmentId] ?? null;
+    return preview?.phase === "ready" ? preview : null;
   }
 
   private 标记视频封面加载失败(attachmentId: string, event: Event): void {
@@ -667,7 +619,11 @@ export class 房间消息窗 extends LitElement {
               }
             : {}),
           // 播放链拿到的新 thumbnail 可能已经完成重签；应优先覆盖消息快照里可能失效的旧 poster。
-          posterSrc: playback?.thumbnailUrl ?? attachment.posterSrc ?? null,
+          posterSrc:
+            playback?.thumbnailUrl ??
+            this.读取时间线视频运行时预览(attachment.attachmentId)?.src ??
+            attachment.posterSrc ??
+            null,
           ...(playback?.mode === "manifest" && playback.streamingDistribution
             ? {
                 streamingDistribution: playback.streamingDistribution,
@@ -818,8 +774,12 @@ export class 房间消息窗 extends LitElement {
             `;
           }
           if (attachment.kind === "video") {
-            const previewPosterSrc = this.读取时间线视频封面地址(attachment, playback);
+            const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
             const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
+            const previewPosterSrc =
+              !hasSourcePoster && runtimePreview
+                ? runtimePreview.src
+                : this.读取时间线视频封面地址(attachment, playback);
             const inlineAutoplayPlayback =
               this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
             const inlineAutoplayPreviewSrc =
@@ -829,28 +789,20 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderInlineVideo =
               this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
               Boolean(inlineAutoplayPreviewSrc);
-            const stableFramePreviewSrc =
-              shouldRenderInlineVideo || !hasSourcePoster
-                ? this.读取时间线视频稳定预览源(
-                    attachment,
-                    playback,
-                    inlineAutoplayPreviewSrc
-                  )
-                : null;
             const previewVideoSrc =
               shouldRenderInlineVideo
-                ? stableFramePreviewSrc
-                : !hasSourcePoster
-                  ? stableFramePreviewSrc
+                ? inlineAutoplayPreviewSrc
+                : !hasSourcePoster && !runtimePreview
+                  ? this.读取时间线视频首帧预览源(attachment, playback)
                   : null;
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
             const previewVideoPoster = hasSourcePoster ? previewPosterSrc : undefined;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
-             * 1. 有 poster 就继续走静态封面，避免列表层变成第二播放器；
-             * 2. 无 poster 且当前是可直播文件源时，回退到非自动播首帧预览，避免大面积空卡片；
+             * 1. runtime preview ready 时优先显示同文件派生出的静态预览，不再等 autoplay owner；
+             * 2. 没命中 runtime preview、且当前已拿到 swarm 播放源时，才退回轻量 `<video>` 首帧预览；
              * 3. manifest 无 poster 时仍坚持静态占位，避免把 m3u8 塞给原生 `<video>`；
-             * 4. 自动播前后复用同一 `<video>` 节点，只切属性，避免切 owner 时重建闪烁。
+             * 4. 自动播 owner 仍直接吃正式视频主链，不把 preview 状态和播放状态混成一套。
              */
             return html`
               <div
@@ -916,8 +868,6 @@ export class 房间消息窗 extends LitElement {
                           }}
                           @error=${() =>
                             (() => {
-                              // 当前预览源已经不可用时，允许下次渲染切到新的解析结果。
-                              this.无封面视频稳定预览源.delete(attachment.attachmentId);
                               this.广播媒体会话信号(attachment.attachmentId, {
                                 type: "PLAYER_ERROR",
                               });

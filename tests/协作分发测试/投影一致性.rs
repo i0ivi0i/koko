@@ -1,11 +1,12 @@
 use super::*;
 
 /// 投影一致性测试只守“同一媒体事实投影到不同读模型时不能漂移”：
-/// 1. locator 与房间快照要共享同一份 preview_asset；
-/// 2. 附件快照必须直接带出图片真实资产与冷源生命周期字段。
+/// 1. 历史 still 资产在 locator 与房间快照里仍要共享同一份 legacy preview_asset；
+/// 2. 新单文件视频默认不能被投影层偷偷伪造出 still；
+/// 3. 附件快照必须直接带出图片真实资产与冷源生命周期字段。
 #[tokio::test]
 #[serial]
-async fn 视频locator与房间快照会共享同一套preview_asset() {
+async fn 历史带thumbnail_storage_key的视频locator与房间快照仍共享同一套preview_asset() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -125,6 +126,115 @@ async fn 视频locator与房间快照会共享同一套preview_asset() {
         snapshot_video["preview_asset"]["still_url"].as_str(),
         Some(expected_preview_url.as_str()),
         "房间快照里的视频附件也必须直接带出同一份静态封面真相"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 新单文件视频locator与房间快照默认不会投影preview_asset() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("VN{:010}", uniq % 10_000_000_000);
+    let device_token = format!("video-snapshot-no-preview-device-{uniq}");
+    let attachment_id = format!("att-video-no-preview-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入 ready 视频附件");
+            插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_for_worker).await;
+            插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("video-no-preview-{uniq}"),
+            "",
+            std::slice::from_ref(&attachment_id_for_worker),
+        )
+        .expect("应能创建带视频附件的消息");
+
+        (identity.会话标识, room_id)
+    })
+    .await
+    .expect("阻塞无 still 投影任务应完成");
+
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let (locator_status, locator_body) = send_json(
+        app.clone(),
+        Method::GET,
+        &format!("/api/media/{attachment_id}/locator?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+    let (snapshot_status, snapshot_body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/{room_id}/snapshot?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(locator_status, StatusCode::OK);
+    assert_eq!(snapshot_status, StatusCode::OK);
+    let snapshot_video = snapshot_body["snapshot_messages"]
+        .as_array()
+        .expect("房间快照必须直接返回首屏消息")
+        .iter()
+        .find_map(|message| {
+            message["attachments"]
+                .as_array()?
+                .iter()
+                .find(|attachment| {
+                    attachment["kind"].as_str() == Some("video")
+                        && attachment["attachment_id"].as_str() == Some(attachment_id.as_str())
+                })
+        })
+        .expect("房间快照里必须能找到刚发送的视频附件");
+
+    assert!(
+        locator_body["preview_asset"].is_null(),
+        "新单文件视频 locator 默认不该继续脑补 still；有没有预览改由客户端 runtime 根据 source bytes 自己裁决"
+    );
+    assert!(
+        snapshot_video["preview_asset"].is_null(),
+        "晚进群快照对新视频也不应伪造 still，否则前端会继续被旧字段绑死"
     );
 }
 

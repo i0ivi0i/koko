@@ -13,6 +13,8 @@ export interface WebTorrent连接 {
 
 export interface WebTorrent种子 {
   files: WebTorrent文件[];
+  critical?(start: number, end: number): void;
+  select?(start: number, end: number, priority?: number): void;
   on(event: "error", handler: (error: unknown) => void): void;
   on(event: "warning", handler: (warning: unknown) => void): void;
   on(event: "wire", handler: (wire: WebTorrent连接) => void): void;

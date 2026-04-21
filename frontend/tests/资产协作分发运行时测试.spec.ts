@@ -92,6 +92,8 @@ function 创建可观测假Torrent(streamURL: string) {
     done: [],
   };
   const select = vi.fn();
+  const critical = vi.fn();
+  const selectPieces = vi.fn();
   const destroy = vi.fn();
   const torrent = {
     files: [
@@ -100,6 +102,8 @@ function 创建可观测假Torrent(streamURL: string) {
         select,
       },
     ],
+    critical,
+    select: selectPieces,
     on(event: string, handler: (...args: unknown[]) => void) {
       handlers[event] ??= [];
       handlers[event].push(handler);
@@ -110,6 +114,8 @@ function 创建可观测假Torrent(streamURL: string) {
   return {
     torrent,
     select,
+    critical,
+    selectPieces,
     destroy,
     emit(event: "error" | "warning" | "wire" | "noPeers" | "done", ...args: unknown[]) {
       const eventHandlers = handlers[event] ?? [];
@@ -179,6 +185,30 @@ describe("资产协作分发运行时", () => {
     expect(source).toBeNull();
     expect(add).not.toHaveBeenCalled();
     expect(读取协作分发会话状态("swarm-att-inline-cold-1")).toBeNull();
+  });
+
+  it("视频进入 backfill 时应先请求预览关键片段，而不是立刻整附件补齐", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const torrentHandle = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-preview-priority-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrentHandle.torrent);
+      return torrentHandle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-preview-priority-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-preview-priority-1"),
+      consumerId: "session:att-preview-priority-1",
+      eagerCompleting: true,
+    });
+
+    expect(torrentHandle.critical).toHaveBeenCalled();
+    expect(torrentHandle.select).not.toHaveBeenCalledWith(1);
   });
 
   it("最后一个 consumer 释放后，未补齐且未完成的冷 swarm 会立即从运行时摘除，并交给 client.remove 清理", async () => {

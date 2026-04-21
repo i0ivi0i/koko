@@ -526,6 +526,55 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("非自动播视频在没有 poster 但已解析 runtime preview 时，应直接显示 preview 图而不是继续等待 autoplay owner", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {};
+    (
+      pane as 房间消息窗 & {
+        mediaPreviewByAttachmentId: Record<
+          string,
+          { phase: "ready"; src: string; source: "cache" | "embedded_hint" | "early_frame" | "rvfc" }
+        >;
+      }
+    ).mediaPreviewByAttachmentId = {
+      "att-video-1": {
+        phase: "ready",
+        src: "blob:preview-att-video-1",
+        source: "early_frame",
+      },
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewPoster = pane.querySelector<HTMLImageElement>(
+      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    );
+    expect(
+      pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+    expect(previewPoster).not.toBeNull();
+    expect(previewPoster?.getAttribute("src")).toBe("blob:preview-att-video-1");
+
+    pane.remove();
+  });
+
   it("非自动播视频在没有 poster 且尚未注入 playback 时，会保持静态占位而不是读取 originalSrc", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [

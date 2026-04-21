@@ -198,6 +198,10 @@ async fn 视频complete后不再返回hls_dash_manifest() {
         .expect("视频 complete 后必须返回 media_asset");
     assert_eq!(media_asset["kind"].as_str(), Some("file_video"));
     assert!(
+        complete_body["preview_asset"].is_null(),
+        "新单文件视频 complete 后不再长期承诺 preview_asset；首屏预览改由客户端运行时自己派生"
+    );
+    assert!(
         media_asset["manifest"].is_null(),
         "新视频附件不再返回 HLS/DASH manifest"
     );

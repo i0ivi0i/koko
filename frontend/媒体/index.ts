@@ -11,4 +11,6 @@ export * from "./媒体播放.js";
 export * from "./videojs播放器壳.js";
 export * from "./媒体查看器.js";
 export * from "./图片预处理.js";
+export * from "./预览缓存.js";
+export * from "./视频预览.js";
 export * from "./视频元数据.js";

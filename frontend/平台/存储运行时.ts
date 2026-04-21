@@ -14,6 +14,10 @@ import {
   创建浏览器协作分发Torrent缓存仓库,
   type 协作分发Torrent缓存仓库,
 } from "../媒体/媒体协作分发缓存.js";
+import {
+  创建浏览器预览缓存,
+  type 预览缓存端口,
+} from "../媒体/预览缓存.js";
 
 type 可持久化导航器 = {
   storage?: {
@@ -36,6 +40,7 @@ export interface 存储运行时 {
   壳层记忆(): 前端存储端口;
   媒体资产仓库?(): 媒体缓存仓库;
   媒体定位仓库?(): 媒体定位缓存仓库;
+  视频预览仓库?(): 预览缓存端口;
   协作分发缓存仓库?(): 协作分发Torrent缓存仓库;
   订阅事件?(listener: (event: 存储运行时事件) => void): () => void;
   请求持久化存储?(): Promise<boolean>;
@@ -132,6 +137,18 @@ export function 创建存储运行时(
        * - 页面重开后由媒体 owner 决定是否继续复用或重签。
        */
       return 创建浏览器媒体定位缓存仓库(读取当前存储源());
+    },
+
+    视频预览仓库(): 预览缓存端口 {
+      /**
+       * 视频预览缓存只保存“同一 canonical video 已经派生过什么 preview”的本地投影：
+       * - 它服务恢复体验，不是后端正式 poster 真相；
+       * - 预览 owner 只能通过平台存储入口拿仓库，不能自己越层去碰浏览器全局；
+       * - 这样后续换成 OPFS / IndexedDB 时，媒体编排仍然只认这一条稳定端口。
+       */
+      return 创建浏览器预览缓存(
+        读取当前存储源() as Pick<Storage, "getItem" | "setItem"> | undefined
+      );
     },
 
     协作分发缓存仓库(): 协作分发Torrent缓存仓库 {

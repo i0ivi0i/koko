@@ -63,6 +63,31 @@ describe("存储运行时", () => {
     });
   });
 
+  it("视频预览缓存也通过平台存储运行时统一暴露，避免 preview owner 越层直摸浏览器全局存储", async () => {
+    const storage = createFakeStorage();
+    const runtime = 创建存储运行时({ storage });
+    const repo = runtime.视频预览仓库?.();
+
+    await repo?.写入附件索引("att-video-1", "hash-preview-1");
+    await repo?.保存({
+      contentHash: "hash-preview-1",
+      objectUrl: "blob:preview-1",
+      source: "embedded_hint",
+      width: 640,
+      height: 360,
+      updatedAt: 1_775_942_600_000,
+    });
+
+    expect(await repo?.按附件读取("att-video-1")).toMatchObject({
+      contentHash: "hash-preview-1",
+      objectUrl: "blob:preview-1",
+      source: "embedded_hint",
+      width: 640,
+      height: 360,
+      updatedAt: 1_775_942_600_000,
+    });
+  });
+
   it("平台存储运行时会暴露协作分发缓存仓库与 best-effort 持久化申请", async () => {
     const storage = createFakeStorage();
     const persist = vi.fn().mockResolvedValue(true);

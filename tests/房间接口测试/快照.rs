@@ -227,7 +227,7 @@ async fn 无阅读锚点时房间快照回退到最近一屏消息() {
 
 #[tokio::test]
 #[serial]
-async fn 晚进群视频消息快照会直接带preview_asset() {
+async fn 晚进群历史视频消息快照仍会带legacy_preview_asset() {
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
@@ -336,5 +336,105 @@ async fn 晚进群视频消息快照会直接带preview_asset() {
             .as_str()
         ),
         "晚进群恢复时，视频消息必须直接带静态封面真相，不能再等 locator 二次补图"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 晚进群新单文件视频消息快照默认不带preview_asset() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    koko::assembly::自动追平迁移(&cfg.database_url)
+        .await
+        .expect("应先追平附件迁移");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
+    let app = koko::shell::构建路由(state);
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let room_code = format!("SN{:010}", uniq % 10_000_000_000);
+    let device_token = format!("snapshot-video-no-preview-device-{uniq}");
+    let attachment_id = format!("att-snapshot-video-no-preview-{uniq}");
+    let database_url = cfg.database_url.clone();
+    let attachment_id_for_worker = attachment_id.clone();
+
+    let (session_id, room_id) = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库并迁移");
+        let identity =
+            koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
+        let room_id = match room {
+            koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+            _ => panic!("进房应返回房间快照"),
+        };
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("应能创建局部运行时");
+        let database_url_for_attachment = database_url.clone();
+        rt.block_on(async {
+            let pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&database_url_for_attachment)
+                .await
+                .expect("应能直连数据库插入视频附件");
+            super::test_support::media::插入ready视频附件记录(
+                &pool,
+                &identity.会话标识,
+                &attachment_id_for_worker,
+            )
+            .await;
+            pool.close().await;
+        });
+
+        koko::usecase::创建消息(
+            &mut repo,
+            &room_id,
+            &identity.会话标识,
+            &format!("snapshot-video-no-preview-message-{uniq}"),
+            "",
+            std::slice::from_ref(&attachment_id_for_worker),
+        )
+        .expect("应能创建纯视频消息");
+
+        (identity.会话标识, room_id)
+    })
+    .await
+    .expect("阻塞建数任务应完成");
+
+    let (status, body) = send_json(
+        app,
+        Method::GET,
+        &format!("/api/rooms/{room_id}/snapshot?session_id={session_id}"),
+        None,
+        &[],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let snapshot_video = body["snapshot_messages"]
+        .as_array()
+        .expect("snapshot 必须直接带 snapshot_messages")
+        .iter()
+        .find_map(|message| {
+            message["attachments"]
+                .as_array()?
+                .iter()
+                .find(|attachment| {
+                    attachment["kind"].as_str() == Some("video")
+                        && attachment["attachment_id"].as_str() == Some(attachment_id.as_str())
+                })
+        })
+        .expect("晚进群时首屏快照里必须能找到视频附件");
+    assert!(
+        snapshot_video["preview_asset"].is_null(),
+        "新单文件视频晚进群恢复时不应再靠后端 still 撑首屏；客户端应根据拿到的 source bytes 自己派生 preview"
     );
 }

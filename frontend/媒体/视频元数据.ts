@@ -31,7 +31,7 @@ type 视频元数据依赖 = {
 
 const 默认视频元数据探测超时毫秒 = 10_000;
 
-const 读取预览采样时间 = (durationSeconds: number): number => {
+export const 读取预览采样时间 = (durationSeconds: number): number => {
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return 0;
   }
@@ -45,6 +45,43 @@ const 读取预览采样时间 = (durationSeconds: number): number => {
   }
   return Math.min(Math.max(durationSeconds * 0.1, 0.35), 1.5, 可用末尾);
 };
+
+type 预览画布依赖 = {
+  createCanvasElement?: () => HTMLCanvasElement;
+};
+
+/**
+ * 预览图生成逻辑要收口成单一原语：
+ * 1. 发送侧 metadata 探测可以复用；
+ * 2. 时间线 / 查看器 runtime 预览也复用；
+ * 3. 避免“上传前一套抽帧、播放前又手搓第二套”继续分叉。
+ */
+export function 从视频探针导出静态预览图(
+  probe: Pick<HTMLVideoElement, "videoWidth" | "videoHeight"> & CanvasImageSource,
+  deps: 预览画布依赖 = {}
+): string | null {
+  if (probe.videoWidth <= 0 || probe.videoHeight <= 0) {
+    return null;
+  }
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = (deps.createCanvasElement ?? (() => document.createElement("canvas")))();
+  } catch {
+    return null;
+  }
+  canvas.width = probe.videoWidth;
+  canvas.height = probe.videoHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return null;
+  }
+  try {
+    context.drawImage(probe, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  } catch {
+    return null;
+  }
+}
 
 export function 解析视频元数据失败代码(error: unknown): string {
   const normalizedMessage =
@@ -94,29 +131,6 @@ export async function 读取视频文件元数据(
     let settled = false;
     let 等待Seek完成 = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-    const 生成静态预览图 = (): string | null => {
-      if (probe.videoWidth <= 0 || probe.videoHeight <= 0) {
-        return null;
-      }
-      let canvas: HTMLCanvasElement;
-      try {
-        canvas = createCanvasElement();
-      } catch {
-        return null;
-      }
-      canvas.width = probe.videoWidth;
-      canvas.height = probe.videoHeight;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        return null;
-      }
-      try {
-        context.drawImage(probe, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL("image/jpeg", 0.82);
-      } catch {
-        return null;
-      }
-    };
 
     const cleanup = (): void => {
       if (timeoutHandle) {
@@ -152,7 +166,9 @@ export async function 读取视频文件元数据(
         width: probe.videoWidth,
         height: probe.videoHeight,
         durationSeconds: probe.duration,
-        previewUrl: 生成静态预览图(),
+        previewUrl: 从视频探针导出静态预览图(probe, {
+          createCanvasElement,
+        }),
       };
       cleanup();
       resolve(result);

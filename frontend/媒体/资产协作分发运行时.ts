@@ -35,6 +35,8 @@ type 协作分发消费者绑定 = {
 
 type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings"> & {
   consumerBindings: Map<string, 协作分发消费者绑定>;
+  previewPriorityApplied: boolean;
+  wholeFileSelectApplied: boolean;
 };
 
 export type 资产协作分发会话快照 = {
@@ -535,6 +537,7 @@ function 绑定协作分发会话事件(
 
   torrent.on("wire", (wire) => {
     session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
+    恢复整附件补齐(session);
     发送事件(runtime, {
       type: "SWARM_ACTIVE",
       swarmId: session.swarmId,
@@ -581,7 +584,30 @@ function 激活整附件补齐(
     type: "BACKFILL_REQUESTED",
     swarmId: session.swarmId,
   });
-  session.file?.select(1);
+  激活预览关键字节优先(session);
+}
+
+function 激活预览关键字节优先(session: 底层协作分发会话): void {
+  if (session.previewPriorityApplied) {
+    return;
+  }
+  /**
+   * preview-first 只负责把最早一小段关键字节提到最高优先级：
+   * 1. 先让浏览器尽快拿到可出预览的头部 / 关键片段；
+   * 2. 正式 whole-file backfill 再等 swarm 真的活起来后恢复；
+   * 3. 这里先用非常克制的起始 piece 范围，避免在没有 byte planner 前重新炸整文件。
+   */
+  session.previewPriorityApplied = true;
+  session.torrent?.critical?.(0, 4);
+  session.torrent?.select?.(0, 4, 0);
+}
+
+function 恢复整附件补齐(session: 底层协作分发会话): void {
+  if (!session.eagerCompleting || session.wholeFileSelectApplied || !session.file) {
+    return;
+  }
+  session.wholeFileSelectApplied = true;
+  session.file.select(1);
 }
 
 function 协作分发会话可在零引用后保留(session: 底层协作分发会话): boolean {
@@ -643,6 +669,8 @@ async function 确保协作分发会话(
     contentHash: input.distribution.content_hash,
     sourcePromise: Promise.resolve(null),
     eagerCompleting: Boolean(input.eagerCompleting),
+    previewPriorityApplied: false,
+    wholeFileSelectApplied: false,
     locallyComplete: false,
     hint: null,
     presenceIntervalId: null,
@@ -683,7 +711,7 @@ async function 确保协作分发会话(
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
     session.file = file;
     if (session.eagerCompleting) {
-      file.select(1);
+      激活预览关键字节优先(session);
     }
     await 探测协作分发媒体源可读性(file.streamURL, {
       读取终止错误: () => session.terminalError,
