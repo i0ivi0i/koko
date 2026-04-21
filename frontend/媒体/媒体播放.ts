@@ -324,7 +324,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     options: {
       eagerCompleting?: boolean;
       reuseOnly?: boolean;
-      requireLocallyComplete?: boolean;
       allowTicketRefresh?: boolean;
     } = {}
   ): Promise<协作分发尝试结果> => {
@@ -362,20 +361,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         ...(options.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!swarmSource) {
-        return {
-          locator,
-          playback: null,
-          failureReason: null,
-        };
-      }
-      /**
-       * 消息流自动播的 `<video>` 只应该吃“已经完整落到本机”的 whole-file 资源：
-       * 1. `file.streamURL` 只保证当前可读，不保证整文件已经补齐；
-       * 2. 半成品 whole-file 丢给原生 `<video>` 时，浏览器可能出现局部黑块/残帧；
-       * 3. 这里一旦发现只是未补齐会话，立刻释放这次自动播占用，回到稳定锚点冷源。
-       */
-      if (options.requireLocallyComplete && swarmSource.locallyComplete !== true) {
-        释放协作分发占用(input);
         return {
           locator,
           playback: null,
@@ -533,13 +518,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     /**
      * viewer 与 inline_autoplay 必须共用同一条来源裁决真相：
      * 1. 先尝试 WebTorrent / WebSeed 协作分发；
-     * 2. server-assisted 阶段要求本地完整，避免半成品 whole-file 导致播放异常；
+     * 2. 只要 swarm 已可读就保持主链，不再因为“是否本地完整”回退冷源；
      * 3. 命不中协作分发时统一回退锚点，不再为某个 surface 维护独立 manifest 分支。
      */
-    const requireLocallyComplete = locator.distribution?.survival_mode !== "peer_only_after_expiry";
-    const swarmAttempt = await 尝试协作分发主链(input, locator, {
-      ...(requireLocallyComplete ? { requireLocallyComplete: true } : {}),
-    });
+    const swarmAttempt = await 尝试协作分发主链(input, locator);
     locator = swarmAttempt.locator;
     if (swarmAttempt.playback) {
       return swarmAttempt.playback;

@@ -400,7 +400,7 @@ describe("媒体播放器", () => {
     );
   });
 
-  it("viewer 命中未补齐的 server-assisted swarm 时会回退锚点冷源，避免 whole-file 半成品卡住", async () => {
+  it("viewer 命中未补齐的 server-assisted swarm 时仍保持协作分发主链，不回退锚点冷源", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-consumer-incomplete",
       hint: "正在协作分发" as const,
@@ -445,12 +445,12 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "swarm",
       attachmentId: "att-video-consumer-incomplete",
       kind: "video",
-      src: "http://media.local/original-video-consumer-incomplete",
+      src: "blob:http://media.local/swarm-video-consumer-incomplete",
       thumbnailUrl: "http://media.local/poster-video-consumer-incomplete",
-      hint: null,
+      hint: "正在协作分发",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -458,11 +458,8 @@ describe("媒体播放器", () => {
         consumerId: "session:att-video-consumer-incomplete",
       })
     );
-    expect(releaseSwarmSource).toHaveBeenCalledWith({
-      attachmentId: "att-video-consumer-incomplete",
-      consumerId: "session:att-video-consumer-incomplete",
-    });
-    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/original-video-consumer-incomplete");
+    expect(releaseSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
   });
 
   it("最后裁决改走锚点时会释放旧的 swarm 协作分发占用", async () => {
@@ -788,7 +785,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("viewer 命中未本地完整的已热 swarm 时，会回退锚点冷源避免全屏卡住", async () => {
+  it("viewer 命中未本地完整的已热 swarm 时，仍保持 swarm 主链并直接播放", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-hls-incomplete",
       hint: "正在协作分发" as const,
@@ -856,12 +853,12 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "anchor",
+      mode: "swarm",
       attachmentId: "att-video-hls-incomplete",
       kind: "video",
-      src: "http://media.local/cold-origin-video-hls-incomplete",
+      src: "blob:http://media.local/swarm-video-hls-incomplete",
       thumbnailUrl: "http://media.local/poster-video-hls-incomplete",
-      hint: null,
+      hint: "正在协作分发",
     });
     expect(resolveSwarmSource).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -869,7 +866,7 @@ describe("媒体播放器", () => {
         consumerId: "session:att-video-hls-incomplete",
       })
     );
-    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-video-hls-incomplete");
+    expect(probeAnchor).not.toHaveBeenCalled();
   });
 
   it("viewer 抢 swarm 时如果 join_ticket 已失效，会强制刷新 locator 一次并重试同一条主链", async () => {
@@ -1451,7 +1448,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("inline_autoplay 命中未补齐完成的 swarm 文件源时，会回退锚点冷源以避免消息卡片出现残缺画面", async () => {
+  it("inline_autoplay 命中未补齐完成的 swarm 文件源时，仍保持 swarm 主链并复用同一来源", async () => {
     const resolveSwarmSource = vi.fn(async () => ({
       src: "blob:http://media.local/swarm-video-inline-partial",
       hint: "正在协作分发" as const,
@@ -1524,11 +1521,12 @@ describe("媒体播放器", () => {
         consumerId: "inline_autoplay:att-video-inline-partial",
       })
     );
-    expect(probeAnchor).toHaveBeenCalledWith("http://media.local/cold-origin-inline-partial");
+    expect(probeAnchor).not.toHaveBeenCalled();
     expect(result).toMatchObject({
-      mode: "anchor",
-      src: "http://media.local/cold-origin-inline-partial",
+      mode: "swarm",
+      src: "blob:http://media.local/swarm-video-inline-partial",
       thumbnailUrl: "http://media.local/poster-inline-partial",
+      hint: "正在协作分发",
     });
   });
 
