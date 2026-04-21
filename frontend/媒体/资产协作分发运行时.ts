@@ -576,15 +576,24 @@ function 激活整附件补齐(
   runtime: 资产协作分发运行时内部,
   session: 底层协作分发会话
 ): void {
-  if (session.eagerCompleting) {
-    return;
+  const 首次进入整附件补齐 = !session.eagerCompleting;
+  if (首次进入整附件补齐) {
+    session.eagerCompleting = true;
+    发送事件(runtime, {
+      type: "BACKFILL_REQUESTED",
+      swarmId: session.swarmId,
+    });
   }
-  session.eagerCompleting = true;
-  发送事件(runtime, {
-    type: "BACKFILL_REQUESTED",
-    swarmId: session.swarmId,
-  });
+  /**
+   * 这条链的权威语义现在是：
+   * 1. 只要 owner 已经明确要求 eager completing，就立刻进入“整附件继续补齐”；
+   * 2. preview 优先级仍先抬起，保证首眼/首播关键字节不被 whole-file 抢掉；
+   * 3. 但不能再等到 `wire` 事件才 select 整文件，否则用户已经开始看了，后台补齐却还没真正启动。
+   *
+   * 换句话说：`wire` 只负责更新 swarm 活跃提示，不再拥有“要不要开始整附件补齐”的真相。
+   */
   激活预览关键字节优先(session);
+  恢复整附件补齐(session);
 }
 
 function 激活预览关键字节优先(session: 底层协作分发会话): void {
@@ -594,8 +603,8 @@ function 激活预览关键字节优先(session: 底层协作分发会话): void
   /**
    * preview-first 只负责把最早一小段关键字节提到最高优先级：
    * 1. 先让浏览器尽快拿到可出预览的头部 / 关键片段；
-   * 2. 正式 whole-file backfill 再等 swarm 真的活起来后恢复；
-   * 3. 这里先用非常克制的起始 piece 范围，避免在没有 byte planner 前重新炸整文件。
+   * 2. 正式 whole-file backfill 会在 eager owner 成立后马上接上，而不是继续等 `wire`；
+   * 3. 这里仍先用非常克制的起始 piece 范围，避免在没有 byte planner 前重新炸整文件。
    */
   session.previewPriorityApplied = true;
   session.torrent?.critical?.(0, 4);
@@ -711,7 +720,13 @@ async function 确保协作分发会话(
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
     session.file = file;
     if (session.eagerCompleting) {
-      激活预览关键字节优先(session);
+      /**
+       * 新建会话如果一上来就是 eager completing，file 一旦就绪就必须立刻走统一入口：
+       * 1. 不能只抬 preview 优先级，否则 whole-file backfill 仍然不会真正开始；
+       * 2. 统一复用 `激活整附件补齐`，让“抬 preview + 补整附件”始终是一条真相链；
+       * 3. 这样复用会自然保持幂等，不会额外重复发 BACKFILL_REQUESTED。
+       */
+      激活整附件补齐(runtime, session);
     }
     await 探测协作分发媒体源可读性(file.streamURL, {
       读取终止错误: () => session.terminalError,

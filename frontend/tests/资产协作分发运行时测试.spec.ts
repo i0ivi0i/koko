@@ -187,7 +187,7 @@ describe("资产协作分发运行时", () => {
     expect(读取协作分发会话状态("swarm-att-inline-cold-1")).toBeNull();
   });
 
-  it("视频进入 backfill 时应先请求预览关键片段，而不是立刻整附件补齐", async () => {
+  it("视频进入 backfill 时会先抬 preview 关键片段优先级，再继续整附件补齐", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const torrentHandle = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-preview-priority-1"
@@ -208,7 +208,22 @@ describe("资产协作分发运行时", () => {
     });
 
     expect(torrentHandle.critical).toHaveBeenCalled();
-    expect(torrentHandle.select).not.toHaveBeenCalledWith(1);
+    expect(torrentHandle.selectPieces).toHaveBeenCalledWith(0, 4, 0);
+    expect(torrentHandle.select).toHaveBeenCalledWith(1);
+    const 预览关键片段顺序 = torrentHandle.critical.mock.invocationCallOrder[0];
+    const 预览选片顺序 = torrentHandle.selectPieces.mock.invocationCallOrder[0];
+    const 整附件补齐顺序 = torrentHandle.select.mock.invocationCallOrder[0];
+    /**
+     * 权威顺序是 preview-first，而不是 preview-only：
+     * 1. 先把首眼/首播关键字节提到最高优先级；
+     * 2. 然后立刻接上 whole-file backfill；
+     * 3. 这样既不牺牲第一眼，也不会把“继续补完整文件”拖到更晚的 wire 才开始。
+     */
+    expect(预览关键片段顺序).toBeDefined();
+    expect(预览选片顺序).toBeDefined();
+    expect(整附件补齐顺序).toBeDefined();
+    expect(预览关键片段顺序!).toBeLessThan(整附件补齐顺序!);
+    expect(预览选片顺序!).toBeLessThan(整附件补齐顺序!);
   });
 
   it("最后一个 consumer 释放后，未补齐且未完成的冷 swarm 会立即从运行时摘除，并交给 client.remove 清理", async () => {
