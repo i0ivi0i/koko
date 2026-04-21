@@ -575,14 +575,34 @@ export class 房间消息窗 extends LitElement {
     inlineAutoplayPreviewSrc: string | null
   ): string | null {
     const cachedPreviewSrc = this.无封面视频稳定预览源.get(attachment.attachmentId) ?? null;
-    if (cachedPreviewSrc) {
-      return cachedPreviewSrc;
-    }
     if (inlineAutoplayPreviewSrc) {
+      /**
+       * 自动播 owner 切入时，若已存在稳定预览缓存（通常是切入前的同一颗 `<video>` 首帧源），
+       * 优先复用缓存，避免在 autoplay 边界那一帧切 src 造成闪烁或抽搐。
+       */
+      if (cachedPreviewSrc) {
+        return cachedPreviewSrc;
+      }
       this.无封面视频稳定预览源.set(attachment.attachmentId, inlineAutoplayPreviewSrc);
       return inlineAutoplayPreviewSrc;
     }
     const directPreviewSrc = this.读取时间线视频首帧预览源(attachment, playback);
+    if (cachedPreviewSrc) {
+      /**
+       * 无封面视频首次渲染常常只能先拿到 `attachment.originalSrc`。
+       * 后续 playback 如果升级到 `swarm/blob`，这里必须允许缓存“向上升级”，
+       * 否则时间线会长期钉在旧冷源，看起来像“协作分发已激活但实际没吃到”。
+       */
+      if (
+        directPreviewSrc &&
+        cachedPreviewSrc !== directPreviewSrc &&
+        (playback?.mode === "swarm" || playback?.mode === "blob")
+      ) {
+        this.无封面视频稳定预览源.set(attachment.attachmentId, directPreviewSrc);
+        return directPreviewSrc;
+      }
+      return cachedPreviewSrc;
+    }
     if (directPreviewSrc) {
       this.无封面视频稳定预览源.set(attachment.attachmentId, directPreviewSrc);
     }
