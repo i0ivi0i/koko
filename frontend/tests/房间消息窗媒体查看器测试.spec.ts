@@ -526,6 +526,61 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("无 poster 视频在首帧未就绪时应先显示轻量 guard，并在首帧事件后再揭开视频像素", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    const firstFrameGuard = pane.querySelector<HTMLImageElement>(
+      'img.message-video-first-frame-guard[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.classList.contains("message-video-preview--gated")).toBe(true);
+    expect(firstFrameGuard).not.toBeNull();
+    expect(firstFrameGuard?.getAttribute("src")).toContain("data:image/svg+xml");
+
+    previewVideo?.dispatchEvent(new Event("loadeddata"));
+    await Promise.resolve();
+    await pane.updateComplete;
+
+    expect(
+      pane.querySelector('img.message-video-first-frame-guard[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+    expect(previewVideo?.classList.contains("message-video-preview--gated")).toBe(false);
+
+    pane.remove();
+  });
+
   it("非自动播视频在没有 poster 但已解析 runtime preview 时，应直接显示 preview 图而不是继续等待 autoplay owner", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [

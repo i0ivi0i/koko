@@ -634,10 +634,31 @@ export class 聊天壳 extends LitElement {
         linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
     }
 
-    .message-video-play-indicator {
+    /*
+     * 无 poster 的视频首帧尚未就绪时，先把 video 像素压到透明：
+     * - 避免浏览器在 decoder 尚未产出首帧前短暂闪出黑底；
+     * - 仍保留同一颗 video 节点持续预热，不重建节点。
+     */
+    .message-video-preview--gated {
+      opacity: 0;
+    }
+
+    .message-video-first-frame-guard {
       position: absolute;
       inset: 0;
       z-index: 1;
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      object-fit: cover;
+      pointer-events: none;
+    }
+
+    .message-video-play-indicator {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
       display: grid;
       place-items: center;
       color: rgba(255, 255, 255, 0.82);

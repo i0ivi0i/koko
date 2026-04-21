@@ -76,6 +76,17 @@ export class 房间消息窗 extends LitElement {
   private readonly 自动播候选观察目标 = new Map<HTMLButtonElement, string>();
   private readonly 自动播候选可见条目 = new Map<string, 消息视频自动播候选>();
   private readonly 失效视频封面地址 = new Map<string, string>();
+  /**
+   * 时间线视频首帧就绪缓存：
+   * - key: attachmentId
+   * - value: 已经确认拿到首帧的 video src
+   *
+   * 设计约束：
+   * 1. 只缓存“哪一个 src 已经成功出首帧”，不缓存像素数据；
+   * 2. src 变化后会自动重新进入 gated，避免沿用旧 src 的就绪结论；
+   * 3. 缓存 owner 在消息窗本身，用来消除“首帧前黑闪”而不引入第二播放链。
+   */
+  private readonly 时间线视频首帧就绪源 = new Map<string, string>();
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -114,6 +125,7 @@ export class 房间消息窗 extends LitElement {
     this.取消自动播候选调度();
     this.清理自动播候选观察();
     this.失效视频封面地址.clear();
+    this.时间线视频首帧就绪源.clear();
     super.disconnectedCallback();
   }
 
@@ -158,6 +170,9 @@ export class 房间消息窗 extends LitElement {
   }
 
   override updated(changedProperties: PropertyValues<this>): void {
+    if (changedProperties.has("items")) {
+      this.同步时间线视频首帧就绪缓存();
+    }
     this.同步时间线自动播播放状态(changedProperties);
     const scrollContainer = this.messageScrollRef.value;
     if (!scrollContainer) {
@@ -172,6 +187,43 @@ export class 房间消息窗 extends LitElement {
     }
     this.同步自动播候选观察(scrollContainer);
     this.调度自动播候选(scrollContainer);
+  }
+
+  private 同步时间线视频首帧就绪缓存(): void {
+    const 当前视频附件 = new Set<string>();
+    for (const item of this.items) {
+      if (item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        if (attachment.kind === "video") {
+          当前视频附件.add(attachment.attachmentId);
+        }
+      }
+    }
+    for (const attachmentId of this.时间线视频首帧就绪源.keys()) {
+      if (!当前视频附件.has(attachmentId)) {
+        this.时间线视频首帧就绪源.delete(attachmentId);
+      }
+    }
+  }
+
+  private 读取时间线视频首帧是否就绪(attachmentId: string, src: string | null): boolean {
+    if (!src) {
+      return false;
+    }
+    return this.时间线视频首帧就绪源.get(attachmentId) === src;
+  }
+
+  private 标记时间线视频首帧已就绪(attachmentId: string, src: string | null): void {
+    if (!src) {
+      return;
+    }
+    if (this.时间线视频首帧就绪源.get(attachmentId) === src) {
+      return;
+    }
+    this.时间线视频首帧就绪源.set(attachmentId, src);
+    this.requestUpdate();
   }
 
   private 同步时间线自动播播放状态(changedProperties: PropertyValues<this>): void {
@@ -798,12 +850,20 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
             const previewVideoPoster =
               hasSourcePoster || hasRuntimePreview ? previewPosterSrc : undefined;
+            const shouldGateVideoUntilFirstFrame =
+              shouldRenderPreviewVideo && !hasSourcePoster && !hasRuntimePreview;
+            const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
+              attachment.attachmentId,
+              previewVideoSrc
+            );
+            const shouldShowFirstFrameGuard = shouldGateVideoUntilFirstFrame && !isFirstFrameReady;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
              * 1. 只要拿到同文件可播源（swarm/blob），就保持同一颗 `<video>` 作为时间线预览容器；
              * 2. runtime preview 作为该 `<video>` 的 poster，而不是另起一颗 `<img>` 与 autoplay 互切；
-             * 3. 这样从非 owner 切到 owner 只改 autoplay/loop，避免节点重建闪烁；
-             * 4. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
+             * 3. 没有任何 poster 时，先用轻量 guard 遮挡，等 `loadeddata/canplay/playing` 任一事件到达再揭开像素；
+             * 4. 这样从非 owner 切到 owner 只改 autoplay/loop，避免节点重建与首帧黑闪；
+             * 5. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
              */
             return html`
               <div
@@ -827,7 +887,9 @@ export class 房间消息窗 extends LitElement {
                   ${shouldRenderPreviewVideo
                     ? html`
                         <video
-                          class="message-video-preview"
+                          class=${`message-video-preview${
+                            shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
+                          }`}
                           data-attachment-id=${attachment.attachmentId}
                           src=${previewVideoSrc ?? ""}
                           width=${attachment.displayWidth}
@@ -843,7 +905,34 @@ export class 房间消息窗 extends LitElement {
                           tabindex="-1"
                           aria-hidden="true"
                           poster=${ifDefined(previewVideoPoster)}
-                          @playing=${() => {
+                          @loadeddata=${(event: Event) => {
+                            const target = event.currentTarget;
+                            if (!(target instanceof HTMLVideoElement)) {
+                              return;
+                            }
+                            this.标记时间线视频首帧已就绪(
+                              attachment.attachmentId,
+                              target.currentSrc || target.getAttribute("src")
+                            );
+                          }}
+                          @canplay=${(event: Event) => {
+                            const target = event.currentTarget;
+                            if (!(target instanceof HTMLVideoElement)) {
+                              return;
+                            }
+                            this.标记时间线视频首帧已就绪(
+                              attachment.attachmentId,
+                              target.currentSrc || target.getAttribute("src")
+                            );
+                          }}
+                          @playing=${(event: Event) => {
+                            const target = event.currentTarget;
+                            if (target instanceof HTMLVideoElement) {
+                              this.标记时间线视频首帧已就绪(
+                                attachment.attachmentId,
+                                target.currentSrc || target.getAttribute("src")
+                              );
+                            }
                             if (!shouldRenderInlineVideo) {
                               return;
                             }
@@ -874,6 +963,20 @@ export class 房间消息窗 extends LitElement {
                               });
                             })()}
                         ></video>
+                        ${shouldShowFirstFrameGuard
+                          ? html`
+                              <img
+                                class="message-video-first-frame-guard"
+                                data-attachment-id=${attachment.attachmentId}
+                                src=${默认视频清单占位Poster}
+                                alt=""
+                                width=${attachment.displayWidth}
+                                height=${attachment.displayHeight}
+                                loading="lazy"
+                                aria-hidden="true"
+                              />
+                            `
+                          : null}
                         ${shouldRenderInlineVideo
                           ? null
                           : html`
