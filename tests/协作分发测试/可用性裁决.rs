@@ -105,6 +105,15 @@ async fn presence上报会让web_seed过期但最近peer仍存活的locator保�
         Some("available"),
         "最近 peer 仍在活跃时，后端不应该仅因 24 小时 WebSeed 窗口结束就直接裁决 expired"
     );
+    assert_eq!(
+        body["distribution"]["media_state"]["code"].as_str(),
+        Some("MEDIA_READY"),
+        "当 web_seed 或最近 peer 仍可用时，locator 必须把媒体状态明确投影为 MEDIA_READY"
+    );
+    assert!(
+        body["distribution"]["media_state"]["retry_after_ms"].is_null(),
+        "MEDIA_READY 不应携带重试间隔，避免前端误判成等待态"
+    );
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -218,6 +227,16 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
         body["distribution"]["availability"].as_str(),
         Some("expired")
     );
+    assert_eq!(
+        body["distribution"]["media_state"]["code"].as_str(),
+        Some("MEDIA_NO_ONLINE_SEED"),
+        "web_seed 与最近 peer 都不可用时，必须给出明确的无在线种子状态"
+    );
+    assert_eq!(
+        body["distribution"]["media_state"]["retry_after_ms"].as_i64(),
+        Some(15_000),
+        "无在线种子状态应给出统一重试节奏，避免各端自猜重试频率"
+    );
 }
 
 #[tokio::test]
@@ -294,6 +313,11 @@ async fn web_seed过期且streaming已删除但最近peer仍存活时locator会�
         body["distribution"]["availability"].as_str(),
         Some("available"),
         "只要最近 peer 仍在活跃，locator 就必须进入 peer-only 可用态，而不是因为服务器 streaming 已删就直接 expired"
+    );
+    assert_eq!(
+        body["distribution"]["media_state"]["code"].as_str(),
+        Some("MEDIA_READY"),
+        "peer-only 可用态本质仍是 READY，前端不应被迫做二次状态翻译"
     );
     assert_eq!(
         body["distribution"]["survival_mode"].as_str(),

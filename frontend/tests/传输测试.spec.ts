@@ -482,6 +482,10 @@ describe("传输", () => {
             join_ticket: null,
             ticket_expires_at: null,
             availability: "available" as const,
+            media_state: {
+              code: "MEDIA_READY" as const,
+              retry_after_ms: null,
+            },
           },
           streaming_asset: {
             asset_id: "att-locator-1",
@@ -542,6 +546,10 @@ describe("传输", () => {
         join_ticket: null,
         ticket_expires_at: null,
         availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
       },
       file_asset: null,
       streaming_asset: {

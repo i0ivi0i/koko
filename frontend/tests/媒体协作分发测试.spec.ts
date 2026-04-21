@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { 媒体定位结果 } from "../契约.js";
 import {
   获取或创建协作分发浏览器运行时,
+  读取可用协作分发片段,
   读取协作分发定位片段,
   重置协作分发浏览器运行时,
   清理协作分发底层会话,
@@ -81,6 +82,10 @@ function 准备好的定位结果(
       join_ticket: null,
       ticket_expires_at: null,
       availability: "available" as const,
+      media_state: {
+        code: "MEDIA_READY" as const,
+        retry_after_ms: null,
+      },
       survival_mode: "server_assisted" as const,
     },
   };
@@ -226,6 +231,22 @@ describe("媒体协作分发", () => {
       thumbnail_url: "http://media.local/thumb-2",
       distribution: null,
     });
+
+    expect(distribution).toBeNull();
+  });
+
+  it("media_state 显示无在线种子时，不会把分发片段误判成可用主链", () => {
+    const locator = 准备好的定位结果("att-no-seed");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.availability = "available";
+    locator.distribution.media_state = {
+      code: "MEDIA_NO_ONLINE_SEED",
+      retry_after_ms: 15000,
+    };
+
+    const distribution = 读取可用协作分发片段(locator);
 
     expect(distribution).toBeNull();
   });

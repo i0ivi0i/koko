@@ -9,6 +9,11 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 /// 这里故意收口成常量，避免 shell、adapter、前端各自写一份“24 * 60 * 60”。
 pub(crate) const WEB_SEED_TTL秒: i64 = 24 * 60 * 60;
 pub(crate) const 同源协作分发ANNOUNCE路径: &str = "/api/swarm/announce";
+/// `media_state` 是跨壳稳定状态码，前端文案只能从这里派生，不能各端自造状态机。
+pub(crate) const 媒体状态已就绪: &str = "MEDIA_READY";
+pub(crate) const 媒体状态无在线种子: &str = "MEDIA_NO_ONLINE_SEED";
+/// `MEDIA_NO_ONLINE_SEED` 默认重试节奏：让各端共享同一把尺子，避免“有人 3 秒重试，有人 60 秒重试”。
+pub(crate) const 无在线种子默认重试毫秒: i64 = 15_000;
 
 /// 协作分发的内容哈希只认 canonical 共享载荷字节。
 /// 这样 Phase 1 就能稳定得到：
@@ -180,6 +185,39 @@ pub(crate) fn 裁决协作分发可用性(
     }
 }
 
+/// `media_state` 是比 availability 更稳定的跨端真相：
+/// 1. availability 先保留给旧前端兼容；
+/// 2. 新前端统一消费 media_state.code；
+/// 3. 这里先把“有可用来源 / 无可用来源”裁成 READY 与 NO_ONLINE_SEED。
+fn 裁决协作分发媒体状态码(
+    snapshot: &usecase::协作分发元数据快照,
+    web_seed仍可用: bool,
+    now_epoch秒: i64,
+    stale_seconds: i64,
+) -> &'static str {
+    let availability = 裁决协作分发可用性(snapshot, web_seed仍可用, now_epoch秒, stale_seconds);
+    if availability == "available" {
+        媒体状态已就绪
+    } else {
+        媒体状态无在线种子
+    }
+}
+
+/// 统一构造 `media_state` 响应面：
+/// - READY 不附带重试间隔；
+/// - NO_ONLINE_SEED 强制附带 retry_after_ms，避免前端自行拍脑袋重试。
+fn 构造媒体状态响应(code: &'static str) -> serde_json::Value {
+    let retry_after_ms = if code == 媒体状态无在线种子 {
+        Some(无在线种子默认重试毫秒)
+    } else {
+        None
+    };
+    serde_json::json!({
+        "code": code,
+        "retry_after_ms": retry_after_ms,
+    })
+}
+
 /// 运行态协作分发表达面只依赖这一小撮 HTTP 拼装上下文。
 /// 把参数收口成结构体后，调用方更清楚“哪部分是快照真相，哪部分只是外壳投影环境”。
 pub(crate) struct 协作分发响应上下文<'a> {
@@ -226,9 +264,9 @@ struct 协作分发入群票据签发结果 {
 fn 签发协作分发join_ticket(
     snapshot: &usecase::协作分发元数据快照,
     上下文: &协作分发响应上下文<'_>,
-    availability: &str,
+    media_state_code: &str,
 ) -> Option<协作分发入群票据签发结果> {
-    if availability != "available" {
+    if media_state_code != 媒体状态已就绪 {
         return None;
     }
     let secret = 上下文.ticket_secret?;
@@ -281,7 +319,13 @@ pub(crate) fn 协作分发快照转响应值(
         上下文.now_epoch秒,
         上下文.stale_seconds,
     );
-    let ticket = 签发协作分发join_ticket(snapshot, &上下文, availability);
+    let media_state_code = 裁决协作分发媒体状态码(
+        snapshot,
+        web_seed仍可用,
+        上下文.now_epoch秒,
+        上下文.stale_seconds,
+    );
+    let ticket = 签发协作分发join_ticket(snapshot, &上下文, media_state_code);
     serde_json::json!({
         "content_id": snapshot.content_id,
         "content_hash": snapshot.content_hash,
@@ -303,7 +347,10 @@ pub(crate) fn 协作分发快照转响应值(
         "ticket_expires_at": ticket
             .as_ref()
             .map(|value| value.ticket_expires_at.as_str()),
+        // 兼容字段：旧前端仍消费 availability；
+        // 新前端应优先消费 media_state.code。
         "availability": availability,
+        "media_state": 构造媒体状态响应(media_state_code),
         // survival_mode 表达的是“服务器流媒体退场后正式靠什么继续活”，
         // 它是稳定共享语义，不等于当前 availability，也不承载前端页面提示文案。
         "survival_mode": "peer_only_after_expiry",

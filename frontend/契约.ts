@@ -178,7 +178,22 @@ export interface 媒体协作分发定位片段 {
   presence_url?: string | null;
   join_ticket: string | null;
   ticket_expires_at: string | null;
+  /**
+   * 兼容字段：旧链路仍可能读它，但新实现应优先消费 `media_state.code`。
+   */
   availability: "available" | "expired";
+  /**
+   * 稳定媒体状态语义，跨端只认 code，不认壳层文案。
+   * 这里先保留 optional，避免新旧后端灰度期把前端一次性打爆。
+   */
+  media_state?: {
+    code:
+      | "MEDIA_READY"
+      | "MEDIA_CONNECTING_TO_PEERS"
+      | "MEDIA_NO_ONLINE_SEED"
+      | "MEDIA_DELETED";
+    retry_after_ms: number | null;
+  } | null;
   survival_mode: "server_assisted" | "peer_only_after_expiry";
 }
 
