@@ -125,7 +125,7 @@ describe("视频元数据", () => {
   it("首帧预览会等待可解码画面并采样非零时间点，避免 0 秒黑帧直接当作发送封面", async () => {
     const revokeObjectUrl = vi.fn();
     const drawImage = vi.fn();
-    const toDataUrl = vi.fn(() => "data:image/jpeg;base64,preview-frame");
+    const toDataUrl = vi.fn(() => "data:image/webp;base64,preview-frame");
     const file = new File([new Uint8Array([1, 2, 3])], "cover.mp4", {
       type: "video/mp4",
     });
@@ -168,12 +168,37 @@ describe("视频元数据", () => {
       width: 1920,
       height: 1080,
       durationSeconds: 12.5,
-      previewUrl: "data:image/jpeg;base64,preview-frame",
+      previewUrl: "data:image/webp;base64,preview-frame",
     });
     expect(内部当前时间).toBeGreaterThan(0);
     expect(drawImage).toHaveBeenCalledTimes(1);
-    expect(toDataUrl).toHaveBeenCalledWith("image/jpeg", 0.82);
+    expect(toDataUrl).toHaveBeenCalledWith("image/webp", 0.92);
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:cover.mp4");
+  });
+
+  it("浏览器不支持 WebP 导出时会返回空预览，避免回落成非 WebP 图片", async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], "fallback-format.mp4", {
+      type: "video/mp4",
+    });
+
+    const result = await 读取视频文件元数据(file, {
+      createObjectUrl: () => "blob:fallback-format.mp4",
+      revokeObjectUrl: vi.fn(),
+      createProbeElement: () => 创建成功探针() as unknown as HTMLVideoElement,
+      createCanvasElement: () =>
+        ({
+          width: 0,
+          height: 0,
+          getContext: () =>
+            ({
+              drawImage: vi.fn(),
+            }) as unknown as CanvasRenderingContext2D,
+          // 模拟浏览器把 toDataURL('image/webp') 悄悄回退成 data:image/png。
+          toDataURL: vi.fn(() => "data:image/png;base64,legacy-fallback"),
+        }) as unknown as HTMLCanvasElement,
+    });
+
+    expect(result.previewUrl).toBeNull();
   });
 
   it("导出的视频 accept 类型保持稳定", () => {

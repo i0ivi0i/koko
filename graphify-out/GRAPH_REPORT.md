@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-21)
 
 ## Corpus Check
-- 204 files · ~244,209 words
+- 204 files · ~244,319 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -83,7 +83,7 @@ Nodes (27): 新模块会拒绝非canonical_webp字节(), 预制图片为Canonica
 
 ### Community 3 - "Community 3"
 Cohesion: 0.07
-Nodes (0):
+Nodes (0): 
 
 ### Community 4 - "Community 4"
 Cohesion: 0.09
@@ -131,7 +131,7 @@ Nodes (2): ensureBackendBinaryPrepared(), startBackend()
 
 ### Community 15 - "Community 15"
 Cohesion: 0.25
-Nodes (0):
+Nodes (0): 
 
 ### Community 16 - "Community 16"
 Cohesion: 0.39
@@ -147,27 +147,27 @@ Nodes (2): abandon会先写业务abandoned再协调官方termination(), 启动�
 
 ### Community 19 - "Community 19"
 Cohesion: 0.4
-Nodes (0):
+Nodes (0): 
 
 ### Community 20 - "Community 20"
 Cohesion: 0.5
-Nodes (0):
+Nodes (0): 
 
 ### Community 21 - "Community 21"
 Cohesion: 0.67
-Nodes (0):
+Nodes (0): 
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 23 - "Community 23"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 25 - "Community 25"
 Cohesion: 1.0
@@ -175,36 +175,36 @@ Nodes (2): 文本布局, 文本布局测试
 
 ### Community 26 - "Community 26"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 27 - "Community 27"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 28 - "Community 28"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 29 - "Community 29"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 30 - "Community 30"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 31 - "Community 31"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ## Knowledge Gaps
 - **29 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+24 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 22`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 23`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 24`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 25`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

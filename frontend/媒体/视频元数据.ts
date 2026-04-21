@@ -30,6 +30,8 @@ type 视频元数据依赖 = {
 };
 
 const 默认视频元数据探测超时毫秒 = 10_000;
+const 视频预览导出Mime类型 = "image/webp";
+const 视频预览导出质量 = 0.92;
 
 export const 读取预览采样时间 = (durationSeconds: number): number => {
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
@@ -77,7 +79,13 @@ export function 从视频探针导出静态预览图(
   }
   try {
     context.drawImage(probe, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.82);
+    const dataUrl = canvas.toDataURL(视频预览导出Mime类型, 视频预览导出质量);
+    /**
+     * 项目裁决：图片产出统一 WebP。
+     * 某些极老环境可能在不支持 `image/webp` 时悄悄回退成 PNG；
+     * 这里宁可返回 null 占位，也不把非 WebP 结果混进主链。
+     */
+    return dataUrl.startsWith("data:image/webp") ? dataUrl : null;
   } catch {
     return null;
   }
