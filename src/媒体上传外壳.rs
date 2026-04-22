@@ -791,6 +791,7 @@ pub(super) async fn complete_media_upload(
                     ticket_secret: state.swarm_ticket_secret.as_deref(),
                     ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
                     冷源仍可用,
+                    附件已删除: false,
                     now_epoch秒,
                     stale_seconds: state.swarm_peer_presence_stale_seconds,
                 },

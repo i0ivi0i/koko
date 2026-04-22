@@ -1391,7 +1391,12 @@ pub fn 查询媒体定位(
     let snapshot = 仓储
         .查询附件快照(附件标识)?
         .ok_or(contract::错误码::附件不存在)?;
-    if snapshot.状态 != 附件状态读取结果::就绪 {
+    // locator 允许“已删除附件”继续走同一条受控查询链，
+    // 这样后端才能给前端返回稳定的 MEDIA_DELETED，而不是模糊的 not_ready 错误。
+    if !matches!(
+        snapshot.状态,
+        附件状态读取结果::就绪 | 附件状态读取结果::已过期
+    ) {
         return Err(contract::错误码::附件未就绪);
     }
     仓储

@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-22)
 
 ## Corpus Check
-- 205 files · ~252,820 words
+- 205 files · ~253,646 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 519 nodes · 669 edges · 34 communities detected
+- 521 nodes · 671 edges · 34 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -73,11 +73,11 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.03
-Nodes (58): abandon_media_upload(), AbandonMediaUploadBody, ApiError, axum_ws_message_to_tungstenite(), Blob媒体资产响应参数, BootstrapBody, Canonical图片校验结果, 媒体complete测试环境 (+50 more)
+Nodes (57): abandon_media_upload(), AbandonMediaUploadBody, ApiError, axum_ws_message_to_tungstenite(), Blob媒体资产响应参数, BootstrapBody, Canonical图片校验结果, 媒体complete测试环境 (+49 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.03
-Nodes (40): 创建资产协作分发Actor(), AdminLoginBody, AdminLoginResp, 新模块会拒绝非canonical_webp字节(), 预制图片为CanonicalWebp(), dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent() (+32 more)
+Nodes (43): 创建资产协作分发Actor(), AdminLoginBody, AdminLoginResp, 新模块会拒绝非canonical_webp字节(), 预制图片为CanonicalWebp(), dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent() (+35 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.03
@@ -160,12 +160,12 @@ Cohesion: 0.5
 Nodes (0): 
 
 ### Community 22 - "Community 22"
-Cohesion: 0.83
-Nodes (3): 看起来像Promise(), 兼容RemotePlayback异步契约(), 注册默认VideoJs元素()
-
-### Community 23 - "Community 23"
 Cohesion: 0.67
 Nodes (0): 
+
+### Community 23 - "Community 23"
+Cohesion: 1.0
+Nodes (1): Pg仓储
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
@@ -210,11 +210,11 @@ Nodes (0):
 ## Knowledge Gaps
 - **31 isolated node(s):** `文本布局`, `文本布局测试`, `TusHookBody`, `TusUploadBody`, `TusHookEventBody` (+26 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 24`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 25`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 26`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 26`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 27`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

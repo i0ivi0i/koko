@@ -384,7 +384,7 @@ fn 附件状态转标签(status: &usecase::附件状态读取结果) -> &'static
         usecase::附件状态读取结果::处理中 => "processing",
         usecase::附件状态读取结果::就绪 => "ready",
         usecase::附件状态读取结果::失败 => "failed",
-        usecase::附件状态读取结果::已过期 => "expired",
+        usecase::附件状态读取结果::已过期 => "deleted",
     }
 }
 
@@ -820,6 +820,112 @@ pub(super) fn 媒体附件快照转响应体(
     response
 }
 
+/// 连接窗口状态只属于运行态调度，不进入持久化真相。
+const 连接窗口状态最大保留秒: i64 = 60 * 60;
+const 连接窗口状态清理阈值: usize = 4096;
+
+fn 构造协作分发连接窗口键(attachment_id: &str, session_id: &str) -> String {
+    format!("{attachment_id}:{session_id}")
+}
+
+/// 统一裁决“连接群友 <-> 无在线种子”的轮转节奏。
+///
+/// 规则：
+/// 1. 没有窗口起点时，首次进入 `MEDIA_CONNECTING_TO_PEERS`；
+/// 2. 起点后的前 8 秒保持连接态；
+/// 3. 8 秒后进入 `MEDIA_NO_ONLINE_SEED`；
+/// 4. 15 秒重试预算到点后，开启下一轮连接态。
+fn 裁决连接群友窗口轮转(
+    窗口起点秒: Option<i64>,
+    当前时间戳秒: i64,
+) -> (i64, &'static str, i64) {
+    let 无在线种子重试周期秒 = media_distribution::无在线种子默认重试毫秒 / 1_000;
+    let 当前起点秒 = 窗口起点秒.unwrap_or(当前时间戳秒);
+    let 已过去秒 = 当前时间戳秒.saturating_sub(当前起点秒);
+
+    if 窗口起点秒.is_none() || 已过去秒 >= 无在线种子重试周期秒 {
+        return (
+            当前时间戳秒,
+            media_distribution::媒体状态连接群友中,
+            media_distribution::连接群友默认重试毫秒,
+        );
+    }
+
+    if 已过去秒 < media_distribution::连接群友窗口秒 {
+        (
+            当前起点秒,
+            media_distribution::媒体状态连接群友中,
+            media_distribution::连接群友默认重试毫秒,
+        )
+    } else {
+        (
+            当前起点秒,
+            media_distribution::媒体状态无在线种子,
+            media_distribution::无在线种子默认重试毫秒,
+        )
+    }
+}
+
+/// 把后端连接窗口节奏收口到 locator 运行态：
+/// 1. `READY/DELETED` 清理窗口；
+/// 2. `NO_ONLINE_SEED` 按 8 秒连接 + 15 秒重试周期轮转；
+/// 3. `CONNECTING_TO_PEERS` 写回短重试节奏，避免壳层自猜。
+fn 同步协作分发连接窗口状态(
+    state: &应用状态,
+    attachment_id: &str,
+    session_id: &str,
+    当前时间戳秒: i64,
+    运行态分发: &mut serde_json::Value,
+) {
+    let Some(分发表面) = 运行态分发.as_object_mut() else {
+        return;
+    };
+    let Some(媒体状态) = 分发表面
+        .get_mut("media_state")
+        .and_then(|value| value.as_object_mut())
+    else {
+        return;
+    };
+    let Some(状态码) = 媒体状态
+        .get("code")
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+    else {
+        return;
+    };
+    let 键 = 构造协作分发连接窗口键(attachment_id, session_id);
+    let Ok(mut 窗口表) = state.swarm_connecting_window_started_at.lock() else {
+        return;
+    };
+
+    if 窗口表.len() > 连接窗口状态清理阈值 {
+        窗口表.retain(|_, 起点秒| {
+            当前时间戳秒.saturating_sub(*起点秒) <= 连接窗口状态最大保留秒
+        });
+    }
+
+    match 状态码.as_str() {
+        media_distribution::媒体状态已就绪 | media_distribution::媒体状态已删除 => {
+            窗口表.remove(&键);
+        }
+        media_distribution::媒体状态连接群友中 => {
+            窗口表.entry(键).or_insert(当前时间戳秒);
+            媒体状态.insert(
+                "retry_after_ms".to_string(),
+                serde_json::json!(media_distribution::连接群友默认重试毫秒),
+            );
+        }
+        media_distribution::媒体状态无在线种子 => {
+            let (新起点秒, 新状态码, 重试毫秒) =
+                裁决连接群友窗口轮转(窗口表.get(&键).copied(), 当前时间戳秒);
+            窗口表.insert(键, 新起点秒);
+            媒体状态.insert("code".to_string(), serde_json::json!(新状态码));
+            媒体状态.insert("retry_after_ms".to_string(), serde_json::json!(重试毫秒));
+        }
+        _ => {}
+    }
+}
+
 /// locator 只暴露受控 transport 线索：
 /// - 当前先统一收口成受控 HTTP 内容地址；
 /// - 后续接入 WebTorrent/锚点时，也继续在这里追加 transport 线索，而不是把存储键下发给壳层。
@@ -885,7 +991,7 @@ pub(super) async fn load_media_locator(
         locator.原始冷源删除时间戳秒,
         now_epoch秒,
     );
-    let runtime_distribution = locator.协作分发.as_ref().map(|snapshot| {
+    let mut runtime_distribution = locator.协作分发.as_ref().map(|snapshot| {
         media_distribution::协作分发快照转响应值(
             snapshot,
             media_distribution::协作分发响应上下文 {
@@ -896,11 +1002,21 @@ pub(super) async fn load_media_locator(
                 ticket_secret: state.swarm_ticket_secret.as_deref(),
                 ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
                 冷源仍可用,
+                附件已删除: locator.状态 == usecase::附件状态读取结果::已过期,
                 now_epoch秒,
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
             },
         )
     });
+    if let Some(distribution) = runtime_distribution.as_mut() {
+        同步协作分发连接窗口状态(
+            &state,
+            attachment_id.as_str(),
+            query.session_id.as_str(),
+            now_epoch秒,
+            distribution,
+        );
+    }
     let mut response = serde_json::json!({
         "attachment_id": locator.附件标识,
         "kind": 媒体类型转标签(&locator.种类),
@@ -1531,4 +1647,40 @@ pub(super) async fn load_attachment_content(
         headers,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 连接窗口首次探测会进入连接群友态() {
+        let (起点秒, 状态码, 重试毫秒) = 裁决连接群友窗口轮转(None, 1_000);
+        assert_eq!(起点秒, 1_000);
+        assert_eq!(状态码, media_distribution::媒体状态连接群友中);
+        assert_eq!(重试毫秒, media_distribution::连接群友默认重试毫秒);
+    }
+
+    #[test]
+    fn 连接窗口预算内保持连接群友态预算后进入无在线种子态() {
+        let (预算内起点秒, 预算内状态码, 预算内重试毫秒) =
+            裁决连接群友窗口轮转(Some(1_000), 1_007);
+        assert_eq!(预算内起点秒, 1_000);
+        assert_eq!(预算内状态码, media_distribution::媒体状态连接群友中);
+        assert_eq!(预算内重试毫秒, media_distribution::连接群友默认重试毫秒);
+
+        let (预算后起点秒, 预算后状态码, 预算后重试毫秒) =
+            裁决连接群友窗口轮转(Some(1_000), 1_010);
+        assert_eq!(预算后起点秒, 1_000);
+        assert_eq!(预算后状态码, media_distribution::媒体状态无在线种子);
+        assert_eq!(预算后重试毫秒, media_distribution::无在线种子默认重试毫秒);
+    }
+
+    #[test]
+    fn 无在线种子重试周期到点后会开启下一轮连接群友态() {
+        let (新起点秒, 状态码, 重试毫秒) = 裁决连接群友窗口轮转(Some(1_000), 1_016);
+        assert_eq!(新起点秒, 1_016);
+        assert_eq!(状态码, media_distribution::媒体状态连接群友中);
+        assert_eq!(重试毫秒, media_distribution::连接群友默认重试毫秒);
+    }
 }

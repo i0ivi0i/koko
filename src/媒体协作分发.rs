@@ -198,9 +198,13 @@ pub(crate) fn 裁决协作分发可用性(
 fn 裁决协作分发媒体状态码(
     snapshot: &usecase::协作分发元数据快照,
     web_seed仍可用: bool,
+    附件已删除: bool,
     now_epoch秒: i64,
     stale_seconds: i64,
 ) -> &'static str {
+    if 附件已删除 {
+        return 媒体状态已删除;
+    }
     let availability = 裁决协作分发可用性(snapshot, web_seed仍可用, now_epoch秒, stale_seconds);
     if availability == "available" {
         return 媒体状态已就绪;
@@ -244,6 +248,8 @@ pub(crate) struct 协作分发响应上下文<'a> {
     /// 这里表达的是“original 变体当前还能不能作为受控冷备入口读取”，
     /// 不是协作分发 availability 本身。availability 还必须再过一层 web_seed TTL 裁决。
     pub 冷源仍可用: bool,
+    /// 删除终态属于业务权威事实，优先级高于运行态可用性裁决。
+    pub 附件已删除: bool,
     pub now_epoch秒: i64,
     pub stale_seconds: i64,
 }
@@ -324,15 +330,20 @@ pub(crate) fn 协作分发快照转响应值(
         上下文.attachment_id, 上下文.session_id
     );
     let web_seed仍可用 = 上下文.冷源仍可用 && 上下文.now_epoch秒 <= snapshot.web_seed_until秒;
-    let availability = 裁决协作分发可用性(
-        snapshot,
-        web_seed仍可用,
-        上下文.now_epoch秒,
-        上下文.stale_seconds,
-    );
+    let availability = if 上下文.附件已删除 {
+        "expired"
+    } else {
+        裁决协作分发可用性(
+            snapshot,
+            web_seed仍可用,
+            上下文.now_epoch秒,
+            上下文.stale_seconds,
+        )
+    };
     let media_state_code = 裁决协作分发媒体状态码(
         snapshot,
         web_seed仍可用,
+        上下文.附件已删除,
         上下文.now_epoch秒,
         上下文.stale_seconds,
     );
@@ -351,7 +362,7 @@ pub(crate) fn 协作分发快照转响应值(
             )),
         "torrent_info_hash": snapshot.torrent_info_hash,
         "announce_urls": [上下文.tracker_public_url],
-        "web_seed_url": web_seed仍可用
+        "web_seed_url": (!上下文.附件已删除 && web_seed仍可用)
             .then(|| 拼接公开地址(上下文.web_seed_public_endpoint, web_seed_relative_path.as_str())),
         "presence_url": presence_relative_path,
         "join_ticket": ticket.as_ref().map(|value| value.ticket.as_str()),

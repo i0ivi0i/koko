@@ -25,7 +25,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{
     collections::{HashMap, HashSet},
     fs, io,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 use tower_http::{
@@ -98,6 +98,11 @@ pub struct 应用状态 {
     pub swarm_ticket_secret: Option<String>,
     pub swarm_ticket_ttl_seconds: i64,
     pub swarm_peer_presence_stale_seconds: i64,
+    /// 连接群友窗口是 shell 运行态节奏，不是持久化业务真相：
+    /// 1. 只用于把 locator 的连接/无种子状态节奏保持一致；
+    /// 2. key 粒度是 `attachment_id + session_id`；
+    /// 3. 进程重启后可重建，不参与 domain 权威事实。
+    pub swarm_connecting_window_started_at: Arc<Mutex<HashMap<String, i64>>>,
     pub tus_public_endpoint: Option<String>,
     pub tus_server_port: u16,
     pub tus_base_path: String,
@@ -185,6 +190,7 @@ pub async fn 构建应用状态(
         swarm_ticket_secret: swarm.ticket_secret,
         swarm_ticket_ttl_seconds: swarm.ticket_ttl_seconds,
         swarm_peer_presence_stale_seconds: swarm.peer_presence_stale_seconds,
+        swarm_connecting_window_started_at: Arc::new(Mutex::new(HashMap::new())),
         tus_public_endpoint: tus.public_endpoint,
         tus_server_port: tus.server_port,
         tus_base_path: tus.base_path,
@@ -671,6 +677,7 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
                 ticket_secret: state.swarm_ticket_secret.as_deref(),
                 ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
                 冷源仍可用: 当前时间戳秒 <= 待做种.web_seed_until秒,
+                附件已删除: false,
                 now_epoch秒: 当前时间戳秒,
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
             },
