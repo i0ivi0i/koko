@@ -673,10 +673,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return;
     }
     /**
-     * 视频补齐必须遵守“服务器轻负担”裁决：只升级已热会话，不冷启动 whole-file 下载。
-     * 1. single-file 主链下，PLAYER_PLAYING 是“可以补齐”的信号，不是“必须新开 swarm”的指令；
-     * 2. whether 有无旧 streaming_asset，都只能在已存在会话上升级 eagerCompleting；
-     * 3. 会话不存在时静默返回，避免把后台补齐放大成对 web seed 的持续重读压力。
+     * 视频补齐现在默认允许冷启动同一条 swarm 主链：
+     * 1. PLAYER_PLAYING 代表“我已经看了这条视频，尽量把自己养成帮助者”；
+     * 2. 无论是 single-file 还是带 streaming_asset 的过渡面，后台补齐都继续只走 resolveSwarmSource；
+     * 3. 这里去掉的是 `reuseOnly` 保守门槛，不是重新引入第二条 raw/HLS 正式主链。
      */
     if (locator.kind === "video") {
       try {
@@ -685,7 +685,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
           kind: input.kind,
           locator,
           eagerCompleting: true,
-          reuseOnly: true,
           ...(input.consumerId ? { consumerId: input.consumerId } : {}),
           ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
         });

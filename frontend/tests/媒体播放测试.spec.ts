@@ -1279,7 +1279,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("视频查看器已经稳定在 HLS 时，激活协作补齐只升级已预热 swarm，不会再冷启第二条 raw whole-file 主链", async () => {
+  it("视频查看器已经稳定在 HLS 时，激活协作补齐会允许冷启动协作分发，而不是强制 reuseOnly", async () => {
     const resolveSwarmSource = vi.fn<
       (input: {
         attachmentId: string;
@@ -1370,15 +1370,15 @@ describe("媒体播放器", () => {
       kind: "video",
       consumerId: "session:att-video-hls-backfill",
       eagerCompleting: true,
-      reuseOnly: true,
     });
+    expect(调用参数?.reuseOnly).toBeUndefined();
     expect(调用参数?.locator).toMatchObject({
       attachment_id: "att-video-hls-backfill",
     });
     expect(调用参数?.onSessionEvent).toEqual(expect.any(Function));
   });
 
-  it("单文件 canonical 视频进入查看器后，激活协作补齐只允许复用已热 swarm，会话不存在时不得冷启动", async () => {
+  it("单文件 canonical 视频进入查看器后，激活协作补齐也会允许冷启动 swarm，而不是继续强制 reuseOnly", async () => {
     const resolveSwarmSource = vi.fn<
       (input: {
         attachmentId: string;
@@ -1445,8 +1445,8 @@ describe("媒体播放器", () => {
       kind: "video",
       consumerId: "session:att-video-canonical-backfill",
       eagerCompleting: true,
-      reuseOnly: true,
     });
+    expect(调用参数?.reuseOnly).toBeUndefined();
     expect(调用参数?.locator).toMatchObject({
       attachment_id: "att-video-canonical-backfill",
     });
