@@ -156,7 +156,9 @@ const 推导主附件标识 = (consumerAttachmentIds: Record<string, string>): s
   Object.values(consumerAttachmentIds)[0] ?? "";
 
 const 是否为零消费者冷协作分发会话 = (session: 底层协作分发会话): boolean =>
-  session.consumerBindings.size === 0 && !session.locallyComplete;
+  session.consumerBindings.size === 0 &&
+  !session.eagerCompleting &&
+  !session.locallyComplete;
 
 /**
  * AssetDistributionActor 只回答 swarm 会话是否存活、被谁占用、是否已经完整。
@@ -561,6 +563,9 @@ function 绑定协作分发会话事件(
   torrent.on("wire", (wire) => {
     session.曾连上群友 = true;
     session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
+    if (!session.locallyComplete) {
+      启动协作分发存活上报(session, distribution, "partial_peer");
+    }
     恢复整附件补齐(session);
     发送事件(runtime, {
       type: "SWARM_ACTIVE",
@@ -581,7 +586,7 @@ function 绑定协作分发会话事件(
     session.eagerCompleting = false;
     session.locallyComplete = true;
     session.hint = "正在协作分发";
-    启动协作分发存活上报(session, distribution);
+    启动协作分发存活上报(session, distribution, "complete_peer");
     发送事件(runtime, {
       type: "TORRENT_DONE",
       swarmId: session.swarmId,
@@ -671,6 +676,13 @@ async function 确保协作分发会话(
   if (runtime.已销毁) {
     return null;
   }
+  /**
+   * 这轮策略默认“接入就尽量补齐”：
+   * 1. caller 不传 `eagerCompleting` 时，也默认把会话推进到 whole-file backfill；
+   * 2. 但 consumer mode 继续保留 viewer / autoplay / session 身份，不伪造成 backfill 专属入口；
+   * 3. 如果上层明确要求 `reuseOnly` 或 `丢弃未完成补齐`，仍按那条显式意图执行。
+   */
+  const 应默认进入整附件补齐 = input.eagerCompleting ?? true;
   const consumerBinding = 归一化协作分发消费者(input);
   let session = runtime.底层会话表.get(input.distribution.swarm_id);
   if (session) {
@@ -684,12 +696,12 @@ async function 确保协作分发会话(
       consumerId: consumerBinding.consumerId,
       mode: consumerBinding.mode,
     });
-    if (input.eagerCompleting) {
+    if (应默认进入整附件补齐 && !session.locallyComplete) {
       激活整附件补齐(runtime, session);
     }
     更新协作分发会话主附件(session);
     if (session.locallyComplete) {
-      启动协作分发存活上报(session, input.distribution);
+      启动协作分发存活上报(session, input.distribution, "complete_peer");
     }
     return session;
   }
@@ -704,11 +716,12 @@ async function 确保协作分发会话(
     torrentInfoHash: input.distribution.torrent_info_hash!,
     contentHash: input.distribution.content_hash,
     sourcePromise: Promise.resolve(null),
-    eagerCompleting: Boolean(input.eagerCompleting),
+    eagerCompleting: 应默认进入整附件补齐,
     previewPriorityApplied: false,
     wholeFileSelectApplied: false,
     locallyComplete: false,
     hint: null,
+    presencePeerKind: null,
     presenceIntervalId: null,
     torrent: null,
     file: null,
@@ -906,11 +919,11 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         if (session.consumerBindings.size > 0) {
           continue;
         }
-        // locallyComplete 的零引用会话仍然是“继续做种 owner”：
-        // 1. 这类会话不能停 complete-peer heartbeat，否则后端会把它误判成掉线；
-        // 2. 未完成补齐会话没有上传能力，零引用后应立即停心跳；
-        // 3. 真正会话删除时仍会走 `删除底层协作分发会话`，那里会统一 stop heartbeat。
-        if (!(session.locallyComplete && 协作分发会话可在零引用后保留(session))) {
+        // 只要会话仍被产品层保留，presence 也要跟着保留：
+        // 1. locallyComplete 继续报 complete_peer；
+        // 2. eagerCompleting 且已接入 swarm 的会话继续报 partial_peer；
+        // 3. 只有真正删除会话时，才统一 stop heartbeat。
+        if (!协作分发会话可在零引用后保留(session)) {
           停止协作分发存活上报(session);
         }
         if (是否应强制丢弃未完成补齐(input, session)) {

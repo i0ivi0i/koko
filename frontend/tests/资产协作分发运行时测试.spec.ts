@@ -226,7 +226,7 @@ describe("资产协作分发运行时", () => {
     expect(预览选片顺序!).toBeLessThan(整附件补齐顺序!);
   });
 
-  it("最后一个 consumer 释放后，未补齐且未完成的冷 swarm 会立即从运行时摘除，并交给 client.remove 清理", async () => {
+  it("最后一个 consumer 释放后，未补齐会话默认继续保留补齐，不会立刻从运行时摘除", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, destroy } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-release-1"
@@ -255,8 +255,12 @@ describe("资产协作分发运行时", () => {
     });
     await Promise.resolve();
 
-    expect(读取协作分发会话状态("swarm-att-release-1")).toBeNull();
-    expect(remove).toHaveBeenCalled();
+    expect(读取协作分发会话状态("swarm-att-release-1")).toMatchObject({
+      refs: 0,
+      eagerCompleting: true,
+      hint: "正在补块",
+    });
+    expect(remove).not.toHaveBeenCalled();
     expect(destroy).not.toHaveBeenCalled();
   });
 
@@ -331,7 +335,7 @@ describe("资产协作分发运行时", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-ticket-invalid",
-      hint: "正在协作分发",
+      hint: "正在补块",
       locallyComplete: false,
     });
 
@@ -385,7 +389,7 @@ describe("资产协作分发运行时", () => {
     expect(remove).toHaveBeenCalledTimes(1);
   });
 
-  it("hidden 后会把 heavyWorkPolicy 变成 suspended，并释放无 consumer 的冷 swarm", async () => {
+  it("零消费者的 eagerCompleting 会话在后台策略变化时仍保留，不会被当成冷会话清掉", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-hidden-1");
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -417,10 +421,13 @@ describe("资产协作分发运行时", () => {
       heavyWorkPolicy: "suspended",
     });
 
-    expect(读取协作分发会话状态("swarm-att-hidden-1")).toBeNull();
+    expect(读取协作分发会话状态("swarm-att-hidden-1")).toMatchObject({
+      refs: 0,
+      eagerCompleting: true,
+    });
     expect(读取资产协作分发预算()).toMatchObject({
-      activeSwarmCount: 0,
-      hiddenHeavyTaskCount: 0,
+      activeSwarmCount: 1,
+      hiddenHeavyTaskCount: 1,
     });
   });
 

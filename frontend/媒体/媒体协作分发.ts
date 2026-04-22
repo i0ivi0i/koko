@@ -73,7 +73,11 @@ const 协作分发媒体源探测最大尝试次数 = 16;
 const 协作分发媒体源探测重试间隔毫秒 = 80;
 const 服务工作线程接管等待超时毫秒 = 1_200;
 const 服务工作线程接管轮询间隔毫秒 = 50;
-type 协作分发存活类型 = "viewer_intent" | "complete_peer" | "backend_strong_seed";
+type 协作分发存活类型 =
+  | "viewer_intent"
+  | "partial_peer"
+  | "complete_peer"
+  | "backend_strong_seed";
 export const 协作分发JoinTicket失效原因 = "join_ticket_invalid";
 export const 协作分发运行时环境不支持原因 = "swarm_runtime_unsupported";
 const 协作分发运行时环境不安全上下文细因 = "insecure_context";
@@ -182,6 +186,13 @@ export type 协作分发底层会话 = {
   eagerCompleting: boolean;
   locallyComplete: boolean;
   hint: 协作分发媒体源["hint"] | null;
+  /**
+   * 同一条会话上的 presence 心跳只允许存在一个当前来源类型：
+   * 1. `wire` 后先报 `partial_peer`；
+   * 2. `done` 后升级成 `complete_peer`；
+   * 3. stop 时统一清空，避免旧类型泄漏到下一轮。
+   */
+  presencePeerKind: 协作分发存活类型 | null;
   presenceIntervalId: ReturnType<typeof setInterval> | null;
   torrent: WebTorrent种子 | null;
   file: WebTorrent文件 | null;
@@ -530,20 +541,35 @@ export function 读取首个可播放文件(
 
 export function 启动协作分发存活上报(
   session: 协作分发底层会话,
-  distribution: 媒体协作分发定位片段
+  distribution: 媒体协作分发定位片段,
+  peerKind: 协作分发存活类型 = "complete_peer"
 ) {
-  if (!distribution.presence_url || session.presenceIntervalId !== null) {
+  if (!distribution.presence_url) {
     return;
   }
+  session.presencePeerKind = peerKind;
 
   const 推送存活 = () => {
-    // 这里明确只上报 complete_peer：
-    // 1. 会话只有在本地完整后才会启动这条心跳；
-    // 2. 后端据此把它计入 available source，而不是把任何 viewer 意图都算完整来源；
-    // 3. 失败时保持静默，不允许把临时网络抖动升级成前端自己裁决 expired。
-    void 上报协作分发存活(distribution.presence_url!, "complete_peer").catch(() => {});
+    const 当前存活类型 = session.presencePeerKind;
+    if (!当前存活类型) {
+      return;
+    }
+    /**
+     * 心跳类型必须紧跟同一条 swarm 会话的真实能力：
+     * 1. partial_peer 代表“已进 swarm、正在帮忙补块”；
+     * 2. complete_peer 只在 done 后升级，不能提前吹成完整来源；
+     * 3. 失败保持静默，不让前端越位改写后端真相。
+     */
+    void 上报协作分发存活(
+      distribution.presence_url!,
+      当前存活类型
+    ).catch(() => {});
   };
 
+  if (session.presenceIntervalId !== null) {
+    推送存活();
+    return;
+  }
   推送存活();
   session.presenceIntervalId = setInterval(
     推送存活,
@@ -552,6 +578,7 @@ export function 启动协作分发存活上报(
 }
 
 export function 停止协作分发存活上报(session: 协作分发底层会话): void {
+  session.presencePeerKind = null;
   if (session.presenceIntervalId === null) {
     return;
   }
