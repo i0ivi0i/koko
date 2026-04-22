@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建聊天媒体编排 } from "../聊天媒体编排";
 import type { 前端传输端口 } from "../传输";
 import type { 消息事件 } from "../契约";
-import type { 媒体播放结果 } from "../媒体";
+import { 创建内存媒体缓存仓库, type 媒体播放结果 } from "../媒体";
 
 const 生成视频消息 = (attachmentId: string): 消息事件 =>
   ({
@@ -10,6 +10,16 @@ const 生成视频消息 = (attachmentId: string): 消息事件 =>
       {
         attachment_id: attachmentId,
         kind: "video",
+      },
+    ],
+  }) as unknown as 消息事件;
+
+const 生成图片消息 = (attachmentId: string): 消息事件 =>
+  ({
+    attachments: [
+      {
+        attachment_id: attachmentId,
+        kind: "image",
       },
     ],
   }) as unknown as 消息事件;
@@ -598,6 +608,105 @@ describe("聊天媒体编排", () => {
           src: "",
         },
       ],
+    });
+
+    编排.销毁();
+  });
+
+  it("缓存启动后只恢复当前房间附件的帮助任务，不会扫描别的房间或全局历史附件", async () => {
+    const 激活协作补齐 = vi.fn(async () => {});
+    const transport: 前端传输端口 = {
+      loadMediaLocator: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      buildAttachmentContentUrl: vi.fn(
+        (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+          `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+      ),
+      prepareMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      abandonMediaUpload: vi.fn(async () => {}),
+      completeMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+    } as unknown as 前端传输端口;
+
+    const 编排 = 创建聊天媒体编排({
+      transport: () => transport,
+      读取会话编号: () => "s-test",
+      读取消息: () => [生成图片消息("att-image-current-room-1")],
+      媒体缓存仓库: 创建内存媒体缓存仓库({
+        "att-image-current-room-1": {
+          attachmentId: "att-image-current-room-1",
+          complete: true,
+          kind: "image",
+          contentHash: "hash-image-current-room-1",
+          retainedAt: 1,
+          lastAccessAt: 1,
+        },
+        "att-image-other-room-1": {
+          attachmentId: "att-image-other-room-1",
+          complete: true,
+          kind: "image",
+          contentHash: "hash-image-other-room-1",
+          retainedAt: 1,
+          lastAccessAt: 1,
+        },
+      }),
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+    });
+
+    (
+      编排 as unknown as {
+        设置媒体播放器供测试(player: {
+          解析播放结果(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            surface?: "viewer" | "inline_autoplay";
+            consumerId?: string;
+          }): Promise<媒体播放结果>;
+          激活协作补齐?(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            consumerId?: string;
+          }): Promise<void>;
+          释放附件播放资源?(input: {
+            attachmentId: string;
+            consumerId?: string;
+            丢弃未完成补齐?: boolean;
+          }): void;
+        }): void;
+      }
+    ).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "blob",
+        attachmentId: "att-image-current-room-1",
+        kind: "image",
+        src: "http://media.local/blob/att-image-current-room-1/preview.webp",
+        viewerSrc: "http://media.local/blob/att-image-current-room-1/full.webp",
+        thumbnailUrl: "http://media.local/blob/att-image-current-room-1/preview.webp",
+        contentHash: "hash-image-current-room-1",
+        distribution: null,
+        hint: null,
+      }),
+      激活协作补齐,
+    });
+
+    编排.同步消息附件播放结果();
+    await 刷新异步队列();
+
+    expect(激活协作补齐).toHaveBeenCalledTimes(1);
+    expect(激活协作补齐).toHaveBeenCalledWith({
+      attachmentId: "att-image-current-room-1",
+      consumerId: "session:att-image-current-room-1",
+      kind: "image",
+      onSessionEvent: expect.any(Function),
     });
 
     编排.销毁();

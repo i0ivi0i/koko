@@ -153,6 +153,8 @@ const 自动播候选稳定等待毫秒 = 80;
 export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天媒体编排端口 {
   const 媒体运行时 = 创建媒体运行时Actor();
   const 协作分发运行时 = 创建资产协作分发运行时();
+  let 媒体缓存已启动 = false;
+  const 已恢复帮助任务附件 = new Set<string>();
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 媒体定位器 = 创建媒体定位器({
     getSessionId: () => deps.读取会话编号(),
@@ -889,6 +891,44 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     }).catch(() => undefined);
   };
 
+  const 恢复当前房间缓存帮助任务 = (
+    attachments = 读取当前房间媒体附件()
+  ): void => {
+    if (!媒体缓存已启动) {
+      return;
+    }
+    const 当前房间附件编号 = new Set(
+      attachments.map((attachment) => attachment.attachmentId)
+    );
+    for (const attachmentId of Array.from(已恢复帮助任务附件)) {
+      if (!当前房间附件编号.has(attachmentId)) {
+        已恢复帮助任务附件.delete(attachmentId);
+      }
+    }
+    const 缓存快照 = 媒体缓存.snapshot();
+    for (const attachment of attachments) {
+      if (!缓存快照[attachment.attachmentId]?.complete) {
+        continue;
+      }
+      const playback = 媒体会话表.get(attachment.attachmentId)?.snapshot().playback;
+      if (playback?.mode === "degraded" && playback.reason === "media_deleted") {
+        continue;
+      }
+      应用缓存完整度到会话(attachment.attachmentId);
+      if (已恢复帮助任务附件.has(attachment.attachmentId)) {
+        continue;
+      }
+      /**
+       * 缓存恢复只认“当前房间 + 本地已完整”的最小事实：
+       * 1. 不扫描全局缓存历史，避免把浏览器壳偷做成后台守护进程；
+       * 2. 同一附件每轮页面生命周期只恢复一次，避免同步消息时重复放大同一帮助任务；
+       * 3. 真正的 swarm 接入仍沿现有播放器 owner 链推进，编排层不自造第二实现。
+       */
+      激活附件协作补齐(attachment.attachmentId);
+      已恢复帮助任务附件.add(attachment.attachmentId);
+    }
+  };
+
   const 释放附件播放资源 = (input: 媒体播放释放请求): void => {
     // 编排层只在附件会话退场时通知播放器释放底层占用；
     // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
@@ -1084,6 +1124,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       });
       session.销毁();
     }
+    已恢复帮助任务附件.clear();
     媒体会话表.clear();
     视频预览状态表.clear();
     视频预览解析代次表.clear();
@@ -1092,9 +1133,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   void 媒体缓存.启动().then(() => {
-    for (const attachmentId of 媒体会话表.keys()) {
-      应用缓存完整度到会话(attachmentId);
-    }
+    媒体缓存已启动 = true;
+    恢复当前房间缓存帮助任务();
     deps.请求重渲染();
   });
 
@@ -1192,6 +1232,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         });
         session.销毁();
         媒体会话表.delete(attachmentId);
+        已恢复帮助任务附件.delete(attachmentId);
         视频预览解析代次表.delete(attachmentId);
         删除视频预览状态(attachmentId);
         hasSessionSetChanged = true;
@@ -1224,6 +1265,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         }
         解析视频预览(attachment.attachmentId);
       }
+
+      恢复当前房间缓存帮助任务(attachments);
 
       if (hasSessionSetChanged) {
         deps.请求重渲染();

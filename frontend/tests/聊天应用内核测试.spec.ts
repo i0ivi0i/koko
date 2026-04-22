@@ -659,6 +659,7 @@ describe("聊天应用内核", () => {
       同步: vi.fn(),
       销毁: vi.fn(),
     };
+    const 恢复帮助任务 = vi.fn(async () => {});
     const reopenedKernel = 创建聊天应用内核({
       ...创建内核依赖(),
       transport: 创建视频消息传输(),
@@ -670,6 +671,7 @@ describe("聊天应用内核", () => {
     读取媒体编排供测试(reopenedKernel).设置媒体查看器供测试(fake查看器);
     读取媒体编排供测试(reopenedKernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockImplementation(() => 刷新后等待中的播放结果),
+      激活协作补齐: 恢复帮助任务,
     });
 
     await reopenedKernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
@@ -690,6 +692,12 @@ describe("聊天应用内核", () => {
     ).toMatchObject({
       locallyComplete: true,
       playback: null,
+    });
+    expect(恢复帮助任务).toHaveBeenCalledWith({
+      attachmentId: "att-video-cache-1",
+      consumerId: "session:att-video-cache-1",
+      kind: "video",
+      onSessionEvent: expect.any(Function),
     });
 
     await reopenedKernel.dispatch({
@@ -728,6 +736,71 @@ describe("聊天应用内核", () => {
         },
       ],
     });
+  });
+
+  it("缓存里没有完整记录时，重开后不会凭空恢复当前房间的帮助任务", async () => {
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-image-no-cache-1",
+            client_message_id: "c-image-no-cache-1",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            body: "",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-image-no-cache-1",
+                width: 1200,
+                height: 800,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const 激活协作补齐 = vi.fn(async () => {});
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      transport,
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    读取媒体编排供测试(kernel).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "blob",
+        attachmentId: "att-image-no-cache-1",
+        kind: "image",
+        src: "http://media.local/blob/att-image-no-cache-1/preview.webp",
+        viewerSrc: "http://media.local/blob/att-image-no-cache-1/full.webp",
+        thumbnailUrl: "http://media.local/blob/att-image-no-cache-1/preview.webp",
+        contentHash: "hash-image-no-cache-1",
+        distribution: {
+          swarm_id: "swarm-image-no-cache-1",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: "http://media.local/blob/att-image-no-cache-1/original.png",
+          join_ticket: null,
+          survival_mode: "server_assisted" as const,
+        },
+        hint: null,
+      }),
+      激活协作补齐,
+    });
+
+    await kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
+    await kernel.dispatch({ type: "ROOM_CODE_INPUT_CHANGED", value: "ROOM01" });
+    await kernel.dispatch({ type: "JOIN_ROOM_REQUESTED" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(激活协作补齐).not.toHaveBeenCalled();
   });
 
   it("本地完整视频已先落到 manifest 时，打开正式查看器会先触发一次会话重裁决，再决定是否继续走 HLS", async () => {

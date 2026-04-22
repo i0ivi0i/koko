@@ -751,7 +751,7 @@
       "label": "constructor()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L106",
+      "source_location": "L110",
       "id": "constructor",
       "community": 1
     },
@@ -783,7 +783,7 @@
       "label": "\u521b\u5efa\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1Actor()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6.ts",
-      "source_location": "L381",
+      "source_location": "L383",
       "id": "actor",
       "community": 1
     },
@@ -1575,7 +1575,7 @@
       "label": "\u521b\u5efa\u5ef6\u540ePromise()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u804a\u5929\u5a92\u4f53\u7f16\u6392\u6d4b\u8bd5.spec.ts",
-      "source_location": "L32",
+      "source_location": "L42",
       "id": "spec_promise",
       "community": 8
     },
@@ -1871,7 +1871,7 @@
       "label": "\u534f\u4f5c\u5206\u53d1JoinTicket\u5931\u6548\u9519\u8bef",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L87",
+      "source_location": "L91",
       "id": "jointicket",
       "community": 1
     },
@@ -1879,7 +1879,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L90",
+      "source_location": "L94",
       "id": "jointicket_constructor",
       "community": 1
     },
@@ -1895,7 +1895,7 @@
       "label": "\u9ed8\u8ba4\u52a0\u8f7dWebTorrent\u6d4f\u89c8\u5668\u6784\u9020\u5668()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L237",
+      "source_location": "L248",
       "id": "webtorrent",
       "community": 1
     },
@@ -1903,7 +1903,7 @@
       "label": "\u9ed8\u8ba4\u8bfb\u53d6\u5a92\u4f53ServiceWorker\u6ce8\u518c()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L248",
+      "source_location": "L259",
       "id": "serviceworker",
       "community": 1
     },
@@ -1911,7 +1911,7 @@
       "label": "\u8bfb\u53d6noPeers\u63a2\u6d4b\u95f4\u9694\u6beb\u79d2()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L349",
+      "source_location": "L360",
       "id": "nopeers",
       "community": 1
     },
@@ -3177,7 +3177,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 25
+      "community": 26
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u53ea\u66b4\u9732canonical\u800c\u4e0d\u662f\u670d\u52a1\u7aef\u6d3e\u751f\u591a\u7248\u672c()",
@@ -3185,7 +3185,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_canonical",
-      "community": 25
+      "community": 26
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3337,7 +3337,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 26
+      "community": 25
     },
     {
       "label": "Assert-True()",
@@ -3345,7 +3345,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 26
+      "community": 25
     },
     {
       "label": "\u89c6\u9891complete\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3673,7 +3673,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L1",
       "id": "tests_abandon_rs",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u542f\u52a8\u5047tus_termination\u4fa7\u8f66()",
@@ -3681,7 +3681,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L18",
       "id": "abandon_tus_termination",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u540c\u65f6\u6807\u8bb0\u9644\u4ef6\u4e0etransport\u4e3aabandoned\u5e76\u6e05\u6389\u5df2\u767b\u8bb0\u7684\u4e34\u65f6\u6587\u4ef6()",
@@ -3689,7 +3689,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L61",
       "id": "abandon_transport_abandoned",
-      "community": 19
+      "community": 18
     },
     {
       "label": "abandon\u4f1a\u5148\u5199\u4e1a\u52a1abandoned\u518d\u534f\u8c03\u5b98\u65b9termination()",
@@ -3697,7 +3697,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L207",
       "id": "abandon_abandon_abandoned_termination",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u6e05\u6389\u5f53\u524d\u4f1a\u8bdd\u4e0b\u6240\u6709partial\u4e34\u65f6\u6587\u4ef6()",
@@ -3705,7 +3705,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L321",
       "id": "abandon_partial",
-      "community": 19
+      "community": 18
     },
     {
       "label": "complete.rs",
@@ -4129,7 +4129,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L1",
       "id": "tests_seed_rs",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u63d2\u5165ready\u56fe\u7247\u9644\u4ef6\u8bb0\u5f55()",
@@ -4137,7 +4137,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L10",
       "id": "seed_ready",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u672a\u6765\u51b7\u6e90\u5230\u671f\u65f6\u95f4\u6233\u79d2()",
@@ -4145,7 +4145,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L51",
       "id": "seed",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u751f\u6210\u6d4b\u8bd5content_hash()",
@@ -4153,7 +4153,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L118",
       "id": "seed_content_hash",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u5199\u5165\u5b8c\u6574peer\u5b58\u6d3b\u8bb0\u5f55()",
@@ -4161,7 +4161,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L151",
       "id": "seed_peer",
-      "community": 18
+      "community": 19
     },
     {
       "label": "tus.rs",
@@ -5317,7 +5317,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L106",
+      "source_location": "L110",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "constructor",
@@ -5365,7 +5365,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6.ts",
-      "source_location": "L381",
+      "source_location": "L383",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "actor",
@@ -5737,7 +5737,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L127",
+      "source_location": "L131",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "jointicket",
@@ -5761,7 +5761,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L237",
+      "source_location": "L248",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "webtorrent",
@@ -5773,7 +5773,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L248",
+      "source_location": "L259",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "serviceworker",
@@ -5785,7 +5785,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L349",
+      "source_location": "L360",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "nopeers",
@@ -6493,7 +6493,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L470",
+      "source_location": "L481",
       "weight": 1.0,
       "_src": "",
       "_tgt": "nopeers",
@@ -6529,7 +6529,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6.ts",
-      "source_location": "L833",
+      "source_location": "L846",
       "weight": 1.0,
       "_src": "",
       "_tgt": "actor",
@@ -7393,7 +7393,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u804a\u5929\u5a92\u4f53\u7f16\u6392\u6d4b\u8bd5.spec.ts",
-      "source_location": "L32",
+      "source_location": "L42",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec_promise",
@@ -8425,7 +8425,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
-      "source_location": "L90",
+      "source_location": "L94",
       "weight": 1.0,
       "_src": "jointicket",
       "_tgt": "jointicket_constructor",
