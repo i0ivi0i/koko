@@ -1,6 +1,7 @@
 use super::{err_resp, map_domain_err_tuple, 应用状态, 构建共享仓储, 流媒体打包};
 use crate::{contract, media_distribution, usecase};
 use axum::{
+    body::Bytes,
     extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
@@ -22,6 +23,10 @@ struct ParsedAttachmentContentQuery {
 /// 流媒体资源 query 的内部稳定形状。
 struct ParsedStreamingAssetQuery {
     session_id: String,
+}
+
+struct ParsedDistributionPresencePayload {
+    peer_kind: String,
 }
 
 /// 标准化后的单段 bytes Range。
@@ -145,6 +150,44 @@ fn parse_streaming_asset_query(
     };
     Ok(ParsedStreamingAssetQuery {
         session_id: session_id.to_string(),
+    })
+}
+
+fn parse_distribution_presence_payload(
+    raw_body: &[u8],
+) -> Result<ParsedDistributionPresencePayload, (StatusCode, &'static str, String)> {
+    if raw_body.is_empty() {
+        return Ok(ParsedDistributionPresencePayload {
+            peer_kind: usecase::协作分发存活类型旁观意图.to_string(),
+        });
+    }
+    let value: serde_json::Value = serde_json::from_slice(raw_body).map_err(|err| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            format!("presence body 不是合法 JSON: {err}"),
+        )
+    })?;
+    let peer_kind = value
+        .get("peer_kind")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .unwrap_or(usecase::协作分发存活类型旁观意图);
+    if !usecase::是有效协作分发存活类型(peer_kind) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            format!(
+                "peer_kind 仅支持 {} / {} / {}",
+                usecase::协作分发存活类型旁观意图,
+                usecase::协作分发存活类型完整peer,
+                usecase::协作分发存活类型后端强种子
+            ),
+        ));
+    }
+    Ok(ParsedDistributionPresencePayload {
+        peer_kind: peer_kind.to_string(),
     })
 }
 
@@ -1413,9 +1456,14 @@ pub(super) async fn update_media_distribution_presence(
     State(state): State<应用状态>,
     Path(attachment_id): Path<String>,
     Query(raw_query): Query<HashMap<String, String>>,
+    body: Bytes,
 ) -> impl IntoResponse {
     let query = match parse_attachment_content_query(raw_query) {
         Ok(query) => query,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let presence_payload = match parse_distribution_presence_payload(body.as_ref()) {
+        Ok(payload) => payload,
         Err((status, code, message)) => return err_resp(status, code, message),
     };
     let now_epoch秒 = SystemTime::now()
@@ -1432,6 +1480,7 @@ pub(super) async fn update_media_distribution_presence(
             &usecase::协作分发存活写入请求 {
                 附件标识: attachment_id_for_usecase,
                 会话标识: session_id_for_usecase,
+                存活类型: presence_payload.peer_kind.clone(),
                 最近peer存活时间戳秒: now_epoch秒,
             },
         )

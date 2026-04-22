@@ -108,6 +108,28 @@ fn 协作分发迁移已包含元数据表() {
 }
 
 #[test]
+fn 协作分发迁移已包含swarm级peer_presence表() {
+    let sql = std::fs::read_to_string("migrations/0015_协作分发swarm_peer_presence.sql")
+        .expect("应能读到 swarm peer presence 迁移文件");
+
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS swarm_peer_presence"));
+    assert!(sql.contains("swarm_id TEXT NOT NULL"));
+    assert!(sql.contains("session_id TEXT NOT NULL"));
+    assert!(sql.contains("attachment_id TEXT NOT NULL REFERENCES attachments(attachment_id) ON DELETE CASCADE"));
+    assert!(sql.contains("peer_kind TEXT NOT NULL"));
+    assert!(sql.contains("PRIMARY KEY (swarm_id, session_id, peer_kind)"));
+}
+
+#[test]
+fn 协作分发迁移已移除附件级过时peer字段() {
+    let sql = std::fs::read_to_string("migrations/0016_移除附件协作分发过时peer字段.sql")
+        .expect("应能读到移除过时 peer 字段迁移文件");
+
+    assert!(sql.contains("ALTER TABLE attachment_distribution_metadata"));
+    assert!(sql.contains("DROP COLUMN IF EXISTS last_peer_seen_at"));
+}
+
+#[test]
 fn 流媒体清单迁移已包含清单元数据表() {
     let sql = std::fs::read_to_string("migrations/0009_附件流媒体清单元数据.sql")
         .expect("应能读到流媒体清单迁移文件");

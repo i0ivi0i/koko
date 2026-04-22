@@ -507,6 +507,7 @@ function 绑定协作分发会话事件(
   runtime: 资产协作分发运行时内部,
   session: 底层协作分发会话,
   torrent: WebTorrent种子,
+  distribution: NonNullable<ReturnType<typeof 读取协作分发定位片段>>,
   browserRuntime: Awaited<ReturnType<typeof 获取或创建协作分发浏览器运行时>>
 ) {
   const 处理JoinTicket失效 = (
@@ -580,6 +581,7 @@ function 绑定协作分发会话事件(
     session.eagerCompleting = false;
     session.locallyComplete = true;
     session.hint = "正在协作分发";
+    启动协作分发存活上报(session, distribution);
     发送事件(runtime, {
       type: "TORRENT_DONE",
       swarmId: session.swarmId,
@@ -686,7 +688,9 @@ async function 确保协作分发会话(
       激活整附件补齐(runtime, session);
     }
     更新协作分发会话主附件(session);
-    启动协作分发存活上报(session, input.distribution);
+    if (session.locallyComplete) {
+      启动协作分发存活上报(session, input.distribution);
+    }
     return session;
   }
 
@@ -729,7 +733,6 @@ async function 确保协作分发会话(
       swarmId: session.swarmId,
     });
   }
-  启动协作分发存活上报(session, input.distribution);
   void 请求协作分发持久化存储();
 
   session.sourcePromise = (async () => {
@@ -740,7 +743,7 @@ async function 确保协作分发会话(
       清理协作分发底层会话(session, browserRuntime);
       return null;
     }
-    绑定协作分发会话事件(runtime, session, torrent, browserRuntime);
+    绑定协作分发会话事件(runtime, session, torrent, input.distribution, browserRuntime);
     const file = 读取首个可播放文件(torrent, input.attachmentId, input.kind);
     session.file = file;
     if (session.eagerCompleting) {
@@ -903,7 +906,13 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         if (session.consumerBindings.size > 0) {
           continue;
         }
-        停止协作分发存活上报(session);
+        // locallyComplete 的零引用会话仍然是“继续做种 owner”：
+        // 1. 这类会话不能停 complete-peer heartbeat，否则后端会把它误判成掉线；
+        // 2. 未完成补齐会话没有上传能力，零引用后应立即停心跳；
+        // 3. 真正会话删除时仍会走 `删除底层协作分发会话`，那里会统一 stop heartbeat。
+        if (!(session.locallyComplete && 协作分发会话可在零引用后保留(session))) {
+          停止协作分发存活上报(session);
+        }
         if (是否应强制丢弃未完成补齐(input, session)) {
           删除底层协作分发会话(runtime, swarmId, session);
           if (!runtime.已销毁) {

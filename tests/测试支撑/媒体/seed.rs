@@ -100,6 +100,7 @@ pub async fn 插入ready视频附件记录(pool: &PgPool, 会话标识: &str, �
 /// Phase 1 先把协作分发元数据视作独立真相面，
 /// 这里直接插入最小记录，专门服务 locator 回归测试。
 pub async fn 插入附件协作分发元数据记录(pool: &PgPool, 附件标识: &str) {
+    let content_hash = 生成测试content_hash(附件标识);
     sqlx::query(
         "INSERT INTO attachment_distribution_metadata \
             (attachment_id, content_id, content_hash, swarm_id, web_seed_until) \
@@ -107,14 +108,24 @@ pub async fn 插入附件协作分发元数据记录(pool: &PgPool, 附件标识
     )
     .bind(附件标识)
     .bind(format!("content_{附件标识}"))
-    .bind("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-    .bind(format!(
-        "swarm_{}",
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    ))
+    .bind(content_hash.as_str())
+    .bind(format!("swarm_{content_hash}"))
     .execute(pool)
     .await
     .expect("应能插入协作分发元数据");
+}
+
+fn 生成测试content_hash(附件标识: &str) -> String {
+    let base = 附件标识
+        .bytes()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut out = String::new();
+    while out.len() < 64 {
+        out.push_str(base.as_str());
+    }
+    out.truncate(64);
+    out
 }
 
 /// 过渡完成后，ready 视频测试建数也要补齐正式 manifest 真相。
@@ -131,4 +142,31 @@ pub async fn 插入流媒体清单元数据记录(pool: &PgPool, 附件标识: &
     .execute(pool)
     .await
     .expect("应能插入流媒体清单元数据");
+}
+
+/// 把某个会话登记为“同 swarm 的完整 peer”：
+/// 1. 这里明确写入 `swarm_peer_presence`，不再回写 attachment 级 last_peer_seen_at；
+/// 2. `swarm_id` 从权威 distribution 元数据查询，避免测试手工拼错；
+/// 3. 用于验证“shared swarm 合法续命”与“streaming 退场后 peer-only 仍可用”这两类语义。
+pub async fn 写入完整peer存活记录(
+    pool: &PgPool,
+    附件标识: &str,
+    会话标识: &str,
+) {
+    sqlx::query(
+        "INSERT INTO swarm_peer_presence \
+            (swarm_id, session_id, attachment_id, peer_kind, last_seen_at) \
+         SELECT swarm_id, $2, $1, 'complete_peer', NOW() \
+         FROM attachment_distribution_metadata \
+         WHERE attachment_id = $1 \
+         ON CONFLICT (swarm_id, session_id, peer_kind) \
+         DO UPDATE SET \
+            attachment_id = EXCLUDED.attachment_id, \
+            last_seen_at = EXCLUDED.last_seen_at",
+    )
+    .bind(附件标识)
+    .bind(会话标识)
+    .execute(pool)
+    .await
+    .expect("应能写入完整 peer 存活记录");
 }

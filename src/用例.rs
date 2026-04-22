@@ -152,10 +152,36 @@ pub struct 协作分发torrent元信息写入请求 {
 
 /// cooperative 分发只上报“最近仍有 peer 存活”的事实。
 /// 浏览器是否在线、有没有 peer 仍属于运行态，但最近活跃时间戳要交给后端统一落权威记录。
+pub const 协作分发存活类型旁观意图: &str = "viewer_intent";
+#[allow(non_upper_case_globals)]
+pub const 协作分发存活类型完整peer: &str = "complete_peer";
+#[allow(non_upper_case_globals)]
+pub const 协作分发存活类型后端强种子: &str = "backend_strong_seed";
+
+#[allow(non_upper_case_globals)]
+pub fn 是有效协作分发存活类型(value: &str) -> bool {
+    matches!(
+        value,
+        协作分发存活类型旁观意图
+            | 协作分发存活类型完整peer
+            | 协作分发存活类型后端强种子
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 协作分发存活写入请求 {
     pub 附件标识: String,
     pub 会话标识: String,
+    pub 存活类型: String,
+    pub 最近peer存活时间戳秒: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 协作分发swarm存活写入请求 {
+    pub swarm_id: String,
+    pub 附件标识: String,
+    pub 会话标识: String,
+    pub 存活类型: String,
     pub 最近peer存活时间戳秒: i64,
 }
 
@@ -526,13 +552,13 @@ pub trait 仓储端口 {
         Ok(vec![])
     }
 
-    /// cooperative 客户端活跃时只刷新最近一次 peer 存活时间。
-    fn 写入协作分发最近peer存活时间(
+    /// swarm 运行态存活属于易变事实，必须按 swarm_id + session + kind 独立持久化。
+    /// 这样才能避免把“页面在线”偷写成 attachment 的长期可用来源。
+    fn 写入协作分发swarm存活(
         &mut self,
-        附件标识: &str,
-        最近peer存活时间戳秒: i64,
+        请求: &协作分发swarm存活写入请求,
     ) -> Result<(), contract::错误码> {
-        let _ = (附件标识, 最近peer存活时间戳秒);
+        let _ = 请求;
         Err(contract::错误码::系统错误)
     }
 
@@ -1226,16 +1252,50 @@ pub fn 写入协作分发存活(
 ) -> Result<(), contract::错误码> {
     if 请求.附件标识.trim().is_empty()
         || 请求.会话标识.trim().is_empty()
+        || 请求.存活类型.trim().is_empty()
         || 请求.最近peer存活时间戳秒 <= 0
     {
         return Err(contract::错误码::参数非法);
     }
-    let locator = 查询媒体定位(仓储, &请求.附件标识, &请求.会话标识)?;
-    if locator.协作分发.is_none() {
-        return Err(contract::错误码::附件未就绪);
+    if !是有效协作分发存活类型(请求.存活类型.as_str()) {
+        return Err(contract::错误码::参数非法);
     }
-    仓储.写入协作分发最近peer存活时间(&请求.附件标识, 请求.最近peer存活时间戳秒)
+    let locator = 查询媒体定位(仓储, &请求.附件标识, &请求.会话标识)?;
+    let distribution = locator.协作分发.ok_or(contract::错误码::附件未就绪)?;
+    写入协作分发swarm存活(
+        仓储,
+        &协作分发swarm存活写入请求 {
+            swarm_id: distribution.swarm_id,
+            附件标识: 请求.附件标识.clone(),
+            会话标识: 请求.会话标识.clone(),
+            存活类型: 请求.存活类型.clone(),
+            最近peer存活时间戳秒: 请求.最近peer存活时间戳秒,
+        },
+    )
 }
+
+/// 这条入口给后端 owner（如 seeder 对账）写 swarm 运行态事实：
+/// 1. 不再要求“会话必须是房间成员”，因为 backend strong seed 不是前端会话；
+/// 2. 仍然强校验 peer_kind 与基础参数，避免 adapter 被脏数据污染；
+/// 3. 只写运行态表，不改 attachment 稳定分发表面。
+pub fn 写入协作分发swarm存活(
+    仓储: &mut dyn 仓储端口,
+    请求: &协作分发swarm存活写入请求,
+) -> Result<(), contract::错误码> {
+    if 请求.swarm_id.trim().is_empty()
+        || 请求.附件标识.trim().is_empty()
+        || 请求.会话标识.trim().is_empty()
+        || 请求.存活类型.trim().is_empty()
+        || 请求.最近peer存活时间戳秒 <= 0
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    if !是有效协作分发存活类型(请求.存活类型.as_str()) {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.写入协作分发swarm存活(请求)
+}
+
 
 pub fn 写入协作分发torrent元信息(
     仓储: &mut dyn 仓储端口,

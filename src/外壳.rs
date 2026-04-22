@@ -523,6 +523,11 @@ pub(super) struct 协作分发做种启动命令 {
     pub join_ticket: Option<String>,
 }
 
+/// 后端 strong seed 是基础设施 owner，不应冒充任何前端会话。
+/// 这里使用固定系统会话标识，专门记录 backend seeder 的 swarm presence。
+#[allow(non_upper_case_globals)]
+const 后端强种子系统会话标识: &str = "__backend_strong_seed__";
+
 /// sidecar 拉取 `.torrent` / `web seed` 时必须拿到绝对 URL：
 /// 1. 优先允许运维显式指定 `SWARM_SEEDER_MEDIA_BASE_URL`；
 /// 2. 没配时回退到本机后端 `APP_PORT`（默认 8080）；
@@ -684,6 +689,46 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
                 error = %err,
                 "周期做种 start 失败，等待下一轮重试"
             );
+            continue;
+        }
+        let state_for_presence = state.clone();
+        let swarm_id = 待做种.swarm_id.clone();
+        let attachment_id = 待做种.附件标识.clone();
+        let upsert_presence = tokio::task::spawn_blocking(move || {
+            let mut repo = 构建共享仓储(&state_for_presence);
+            crate::usecase::写入协作分发swarm存活(
+                &mut repo,
+                &crate::usecase::协作分发swarm存活写入请求 {
+                    swarm_id,
+                    附件标识: attachment_id,
+                    会话标识: 后端强种子系统会话标识.to_string(),
+                    存活类型: crate::usecase::协作分发存活类型后端强种子.to_string(),
+                    最近peer存活时间戳秒: 当前时间戳秒,
+                },
+            )
+            .map_err(|err| io::Error::other(format!("写入 backend strong seed 存活失败: {err:?}")))
+        })
+        .await;
+        match upsert_presence {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => tracing::warn!(
+                usecase = "协作分发做种对账",
+                adapter = "shell",
+                outcome = "failed",
+                attachment_id = 待做种.附件标识.as_str(),
+                info_hash = 启动命令.info_hash.as_str(),
+                error = %err,
+                "做种 start 成功但写入 backend strong seed 存活失败，等待下一轮重试"
+            ),
+            Err(err) => tracing::warn!(
+                usecase = "协作分发做种对账",
+                adapter = "shell",
+                outcome = "failed",
+                attachment_id = 待做种.附件标识.as_str(),
+                info_hash = 启动命令.info_hash.as_str(),
+                error = %err,
+                "写入 backend strong seed 存活任务失败，等待下一轮重试"
+            ),
         }
     }
 

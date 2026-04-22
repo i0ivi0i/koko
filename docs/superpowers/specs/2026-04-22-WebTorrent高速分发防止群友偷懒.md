@@ -690,10 +690,12 @@
 1. 代码与测试：
    - Rust 协作分发状态机已落 `MEDIA_READY / MEDIA_CONNECTING_TO_PEERS / MEDIA_NO_ONLINE_SEED / MEDIA_DELETED`，并带统一重试节奏；
    - 前端时间线/查看器已统一消费 `media_state.code`，不再把新附件回退到第二正式播放链；
-   - 新增并通过对应回归测试（连接群友态、无在线种子态、删除终态、协作分发片段可用性）。
+   - `presence` 语义已收口为 `viewer_intent / complete_peer / backend_strong_seed` 三类，`available` 只认 `complete_peer/backend_strong_seed`；
+   - 运行态真相已迁移到 `swarm_peer_presence`，并移除 `attachment_distribution_metadata.last_peer_seen_at` 旧字段；
+   - 新增并通过对应回归测试（空 body presence 不再误抬 `MEDIA_READY`、shared swarm 合法续命、backend strong seed 合法续命、连接群友态、无在线种子态、删除终态、协作分发片段可用性）。
 2. 自动化验证全绿：
-   - `cargo test` 通过；
-   - `pnpm --dir frontend test` 通过（63 files / 606 tests）；
+   - `cargo test -j 1` 通过（并行编译在本机内存峰值下偶发 OOM，串行验证全绿）；
+   - `pnpm --dir frontend test` 通过（63 files / 618 tests）；
    - `pnpm --dir frontend typecheck` 与 `pnpm --dir frontend build` 通过；
    - `pwsh -File tests/启动器脚本检查.ps1` 通过；
    - `https.ps1` 输出 `https://localhost` 正常。
@@ -704,7 +706,8 @@
 4. 已定位并修复的关键根因：
    - 播放初段偶发 `GET /webtorrent/... [404]` 后立刻恢复 `206`；
    - 根因是媒体刚从后端窗口切到 peer 发现阶段时的短暂抖动窗口；
-   - 修复策略是后端先返回 `MEDIA_CONNECTING_TO_PEERS`（短重试节奏），并允许同一 swarm 会话持续探测恢复，避免直接误判成“无在线种子”或回退第二链。
+   - 修复策略是后端先返回 `MEDIA_CONNECTING_TO_PEERS`（短重试节奏），并允许同一 swarm 会话持续探测恢复，避免直接误判成“无在线种子”或回退第二链；
+   - 另一个根因是旧实现把 attachment 级 `last_peer_seen_at` 当作可用来源真相，导致“空心 presence 误抬 READY、shared swarm 语义失真”；修复后改为 swarm 级 presence 聚合与类型化来源裁决。
 5. seeder 能力核验：
    - `frontend/dev-seeder.mjs` 受管控制面已落地（`/seed/start` `/seed/stop` `/seed/reconcile`）；
    - 通过修复 `node-datachannel` 依赖构建，sidecar 健康检查已从 `mock` 切换为 `capability=webtorrent`。

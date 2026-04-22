@@ -73,6 +73,7 @@ const 协作分发媒体源探测最大尝试次数 = 16;
 const 协作分发媒体源探测重试间隔毫秒 = 80;
 const 服务工作线程接管等待超时毫秒 = 1_200;
 const 服务工作线程接管轮询间隔毫秒 = 50;
+type 协作分发存活类型 = "viewer_intent" | "complete_peer" | "backend_strong_seed";
 export const 协作分发JoinTicket失效原因 = "join_ticket_invalid";
 export const 协作分发运行时环境不支持原因 = "swarm_runtime_unsupported";
 const 协作分发运行时环境不安全上下文细因 = "insecure_context";
@@ -443,9 +444,18 @@ export async function 探测协作分发媒体源可读性(
   }
 }
 
-async function 上报协作分发存活(presenceUrl: string): Promise<void> {
+async function 上报协作分发存活(
+  presenceUrl: string,
+  peerKind: 协作分发存活类型
+): Promise<void> {
   const response = await fetch(presenceUrl, {
     method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      peer_kind: peerKind,
+    }),
   });
   if (!response.ok) {
     throw new Error(`上报协作分发存活失败: ${response.status}`);
@@ -527,9 +537,11 @@ export function 启动协作分发存活上报(
   }
 
   const 推送存活 = () => {
-    // presence 只是“我还在线帮传”的受控上报。
-    // 失败时保持静默，不允许把临时网络抖动升级成前端自己裁决 expired。
-    void 上报协作分发存活(distribution.presence_url!).catch(() => {});
+    // 这里明确只上报 complete_peer：
+    // 1. 会话只有在本地完整后才会启动这条心跳；
+    // 2. 后端据此把它计入 available source，而不是把任何 viewer 意图都算完整来源；
+    // 3. 失败时保持静默，不允许把临时网络抖动升级成前端自己裁决 expired。
+    void 上报协作分发存活(distribution.presence_url!, "complete_peer").catch(() => {});
   };
 
   推送存活();

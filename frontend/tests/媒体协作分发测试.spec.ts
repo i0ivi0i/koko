@@ -1378,7 +1378,7 @@ describe("媒体协作分发", () => {
     });
   });
 
-  it("开始协作分发后会按 presence_url 周期上报存活，而不是前端自己裁决 expired", async () => {
+  it("未补齐会话在 acquire 阶段不会上报 complete_peer heartbeat", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-3");
@@ -1391,12 +1391,7 @@ describe("媒体协作分发", () => {
           arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
         };
       }
-      expect(url).toContain("/api/media/att-3/presence");
-      expect(init?.method).toBe("POST");
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(0),
-      };
+      throw new Error(`未补齐会话不应触发 presence 心跳: ${url} ${String(init?.method ?? "")}`);
     });
     vi.stubGlobal("fetch", fetchMock);
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -1415,12 +1410,12 @@ describe("媒体协作分发", () => {
       locator,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("释放最后一个协作分发消费者后会停止 presence 上报，但继续保留补齐中的 swarm 会话", async () => {
+  it("释放最后一个协作分发消费者后会停止未完成会话的 heartbeat，但继续保留补齐中的 swarm 会话", async () => {
     vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-release");
@@ -1433,12 +1428,7 @@ describe("媒体协作分发", () => {
           arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
         };
       }
-      expect(url).toContain("/api/media/att-release/presence");
-      expect(init?.method).toBe("POST");
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(0),
-      };
+      throw new Error(`未完成补齐会话不应触发 presence 心跳: ${url} ${String(init?.method ?? "")}`);
     });
     vi.stubGlobal("fetch", fetchMock);
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -1461,7 +1451,7 @@ describe("媒体协作分发", () => {
     expect(读取协作分发会话状态("swarm-att-release")).toMatchObject({
       refs: 1,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     释放协作分发消费者("att-release");
     await vi.advanceTimersByTimeAsync(60_000);
@@ -1472,15 +1462,34 @@ describe("媒体协作分发", () => {
       eagerCompleting: true,
       hint: "正在补块",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(remove).not.toHaveBeenCalled();
   });
 
-  it("完整 swarm 在释放最后一个消费者后仍会保留，以便后端退场后继续重开", async () => {
+  it("完整 swarm 在释放最后一个消费者后仍会保留，并继续上报 complete_peer heartbeat", async () => {
+    vi.useFakeTimers();
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent, emit } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-retain-complete"
     );
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/torrent-att-retain-complete")) {
+        expect(init?.method).toBe("GET");
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      }
+      expect(url).toContain("/api/media/att-retain-complete/presence");
+      expect(init?.method).toBe("POST");
+      expect(String(init?.body ?? "")).toContain("complete_peer");
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(0),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
       onTorrent(torrent);
       return torrent;
@@ -1489,18 +1498,24 @@ describe("媒体协作分发", () => {
     await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
 
     const locator = 准备好的定位结果("att-retain-complete");
+    expect(locator.distribution).not.toBeNull();
+    locator.distribution!.presence_url =
+      "/api/media/att-retain-complete/presence?session_id=s-test";
     await 解析协作分发源({
       attachmentId: "att-retain-complete",
       kind: "video",
       locator,
       consumerId: "viewer:att-retain-complete",
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     emit("done");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     释放协作分发消费者({
       attachmentId: "att-retain-complete",
       consumerId: "viewer:att-retain-complete",
     });
+    await vi.advanceTimersByTimeAsync(60_000);
 
     expect(读取协作分发会话状态("swarm-att-retain-complete")).toMatchObject({
       refs: 0,
@@ -1508,6 +1523,7 @@ describe("媒体协作分发", () => {
       eagerCompleting: false,
       hint: "正在协作分发",
     });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(remove).not.toHaveBeenCalled();
 
     await 解析协作分发源({

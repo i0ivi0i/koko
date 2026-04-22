@@ -444,13 +444,24 @@ async fn 查询协作分发元数据_异步(
     附件标识: &str,
 ) -> Result<Option<usecase::协作分发元数据快照>, contract::错误码> {
     let row = sqlx::query(
-        "SELECT attachment_id, content_id, content_hash, swarm_id, torrent_info_hash, \
-                EXTRACT(EPOCH FROM web_seed_until)::BIGINT AS web_seed_until_epoch, \
-                EXTRACT(EPOCH FROM last_peer_seen_at)::BIGINT AS last_peer_seen_epoch \
-         FROM attachment_distribution_metadata \
-         WHERE attachment_id = $1",
+        "SELECT dm.attachment_id,
+                dm.content_id,
+                dm.content_hash,
+                dm.swarm_id,
+                dm.torrent_info_hash,
+                EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT AS web_seed_until_epoch,
+                (
+                    SELECT EXTRACT(EPOCH FROM MAX(sp.last_seen_at))::BIGINT
+                    FROM swarm_peer_presence sp
+                    WHERE sp.swarm_id = dm.swarm_id
+                      AND sp.peer_kind IN ($2, $3)
+                ) AS last_source_seen_epoch
+         FROM attachment_distribution_metadata dm
+         WHERE dm.attachment_id = $1",
     )
     .bind(附件标识)
+    .bind(usecase::协作分发存活类型完整peer)
+    .bind(usecase::协作分发存活类型后端强种子)
     .fetch_optional(pool)
     .await
     .map_err(|_| contract::错误码::系统错误)?;
@@ -461,7 +472,7 @@ async fn 查询协作分发元数据_异步(
         content_hash: row.get("content_hash"),
         swarm_id: row.get("swarm_id"),
         web_seed_until秒: row.get("web_seed_until_epoch"),
-        最近peer存活时间戳秒: row.get("last_peer_seen_epoch"),
+        最近peer存活时间戳秒: row.get("last_source_seen_epoch"),
         torrent_info_hash: row.get("torrent_info_hash"),
     }))
 }
@@ -542,38 +553,39 @@ pub(super) fn 列出待做种协作分发项(
     ))
 }
 
-async fn 写入协作分发最近peer存活时间_异步(
+/// swarm 运行态存活写入走独立表：
+/// 1. 主键按 `(swarm_id, session_id, peer_kind)` 去重，避免同一会话重复刷写膨胀；
+/// 2. `attachment_id` 只保留最近来源，便于排查与删除清理，不作为可用性裁决锚点；
+/// 3. `last_seen_at` 统一由后端时钟写入，避免前端各自发明在线真相。
+async fn 写入协作分发swarm存活_异步(
     pool: &PgPool,
-    附件标识: &str,
-    最近peer存活时间戳秒: i64,
+    请求: &usecase::协作分发swarm存活写入请求,
 ) -> Result<(), contract::错误码> {
-    let result = sqlx::query(
-        "UPDATE attachment_distribution_metadata \
-         SET last_peer_seen_at = TO_TIMESTAMP($2) \
-         WHERE attachment_id = $1",
+    sqlx::query(
+        "INSERT INTO swarm_peer_presence \
+            (swarm_id, session_id, attachment_id, peer_kind, last_seen_at) \
+         VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5)) \
+         ON CONFLICT (swarm_id, session_id, peer_kind) \
+         DO UPDATE SET \
+            attachment_id = EXCLUDED.attachment_id, \
+            last_seen_at = EXCLUDED.last_seen_at",
     )
-    .bind(附件标识)
-    .bind(最近peer存活时间戳秒)
+    .bind(&请求.swarm_id)
+    .bind(&请求.会话标识)
+    .bind(&请求.附件标识)
+    .bind(&请求.存活类型)
+    .bind(请求.最近peer存活时间戳秒)
     .execute(pool)
     .await
     .map_err(|_| contract::错误码::系统错误)?;
-
-    if result.rows_affected() == 0 {
-        return Err(contract::错误码::附件不存在);
-    }
     Ok(())
 }
 
-pub(super) fn 写入协作分发最近peer存活时间(
+pub(super) fn 写入协作分发swarm存活(
     repo: &mut Pg仓储,
-    附件标识: &str,
-    最近peer存活时间戳秒: i64,
+    请求: &usecase::协作分发swarm存活写入请求,
 ) -> Result<(), contract::错误码> {
-    repo.在运行时执行(写入协作分发最近peer存活时间_异步(
-        &repo.pool,
-        附件标识,
-        最近peer存活时间戳秒,
-    ))
+    repo.在运行时执行(写入协作分发swarm存活_异步(&repo.pool, 请求))
 }
 
 async fn 写入协作分发torrent元信息_异步(

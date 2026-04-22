@@ -335,7 +335,7 @@ describe("资产协作分发运行时", () => {
       locallyComplete: false,
     });
 
-    emit("warning", new Error("join_ticket_invalid"));
+    emit("error", new Error("join_ticket_invalid"));
     await Promise.resolve();
     await Promise.resolve();
 

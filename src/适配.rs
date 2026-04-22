@@ -557,16 +557,11 @@ impl 仓储端口 for Pg仓储 {
         媒体附件适配::列出待做种协作分发项(self, 当前时间戳秒, 限制条数)
     }
 
-    fn 写入协作分发最近peer存活时间(
+    fn 写入协作分发swarm存活(
         &mut self,
-        附件标识: &str,
-        最近peer存活时间戳秒: i64,
+        请求: &usecase::协作分发swarm存活写入请求,
     ) -> Result<(), contract::错误码> {
-        媒体附件适配::写入协作分发最近peer存活时间(
-            self,
-            附件标识,
-            最近peer存活时间戳秒,
-        )
+        媒体附件适配::写入协作分发swarm存活(self, 请求)
     }
 
     fn 查询协作分发torrent元信息(

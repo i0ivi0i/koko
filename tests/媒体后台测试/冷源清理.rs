@@ -348,8 +348,7 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
             插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
                 "UPDATE attachment_distribution_metadata
-                 SET web_seed_until = NOW() - INTERVAL '5 minutes',
-                     last_peer_seen_at = NULL
+                 SET web_seed_until = NOW() - INTERVAL '5 minutes'
                  WHERE attachment_id = $1",
             )
             .bind(&attachment_id_for_worker)
@@ -406,7 +405,9 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
         app.clone(),
         Method::POST,
         &format!("/api/media/{attachment_id}/presence?session_id={session_id}"),
-        None,
+        Some(serde_json::json!({
+            "peer_kind": "complete_peer"
+        })),
         &[],
     )
     .await;
