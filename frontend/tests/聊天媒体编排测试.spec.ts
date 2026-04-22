@@ -30,6 +30,124 @@ const 刷新异步队列 = async (): Promise<void> => {
 };
 
 describe("聊天媒体编排", () => {
+  it("新附件带协作分发片段时，视频预览优先走同一 swarm 主链，不回退 canonical/original 冷源", async () => {
+    vi.resetModules();
+    const attachmentId = "att-video-preview-swarm-first-1";
+    const swarmPreviewSrc = `blob:http://media.local/swarm-preview-${attachmentId}`;
+    const 解析协作分发源 = vi.fn(async () => ({
+      src: swarmPreviewSrc,
+      hint: "正在协作分发" as const,
+      locallyComplete: false,
+    }));
+    const 释放协作分发消费者 = vi.fn();
+    vi.doMock("../媒体/资产协作分发运行时.js", () => ({
+      创建资产协作分发运行时: () => ({
+        解析协作分发源,
+        释放协作分发消费者,
+        读取预算: () => ({}),
+        读取会话状态: () => null,
+        send: () => undefined,
+        重置: () => undefined,
+        销毁: () => undefined,
+      }),
+    }));
+
+    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../聊天媒体编排");
+    const 抓取视频预览 = vi.fn(async (input: { src: string }) => ({
+      objectUrl: `blob:preview-${attachmentId}`,
+      source: input.src.startsWith("blob:http://media.local/swarm-preview-")
+        ? ("embedded_hint" as const)
+        : ("none" as const),
+      width: 1280,
+      height: 720,
+    }));
+    const transport: 前端传输端口 = {
+      loadMediaLocator: vi.fn(async () => ({
+        attachment_id: attachmentId,
+        kind: "video" as const,
+        status: "ready" as const,
+        original_url: `http://media.local/original-${attachmentId}`,
+        thumbnail_url: null,
+        distribution: {
+          content_id: `content_${attachmentId}`,
+          content_hash: `hash-${attachmentId}`,
+          swarm_id: `swarm-${attachmentId}`,
+          web_seed_until: "1775942400",
+          torrent_url: `http://media.local/torrent-${attachmentId}`,
+          torrent_info_hash: `torrent-info-hash-${attachmentId}`,
+          announce_urls: ["ws://127.0.0.1:7072"],
+          web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+          join_ticket: null,
+          ticket_expires_at: null,
+          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
+          survival_mode: "server_assisted" as const,
+        },
+        file_asset: {
+          asset_id: attachmentId,
+          content_hash: `hash-${attachmentId}`,
+          kind: "single_file_video" as const,
+          variants: {
+            canonical: {
+              id: "canonical",
+              mime_type: "video/mp4",
+              url: `http://media.local/canonical-${attachmentId}.mp4`,
+              width: 1280,
+              height: 720,
+            },
+          },
+          origin: {
+            original_url: `http://media.local/original-${attachmentId}`,
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+          distribution: null,
+        },
+      })),
+      buildAttachmentContentUrl: vi.fn(
+        (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+          `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+      ),
+      prepareMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      abandonMediaUpload: vi.fn(async () => {}),
+      completeMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+    } as unknown as 前端传输端口;
+    const 编排 = 创建聊天媒体编排带协作分发桩({
+      transport: () => transport,
+      读取会话编号: () => "s-test",
+      读取消息: () => [生成视频消息(attachmentId)],
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+      抓取视频预览,
+    });
+
+    编排.同步消息附件播放结果();
+    await 刷新异步队列();
+    await 刷新异步队列();
+
+    expect(解析协作分发源).toHaveBeenCalledTimes(1);
+    expect(抓取视频预览).toHaveBeenCalledWith({ src: swarmPreviewSrc });
+    expect(抓取视频预览).not.toHaveBeenCalledWith(
+      expect.objectContaining({ src: `http://media.local/canonical-${attachmentId}.mp4` })
+    );
+
+    编排.销毁();
+    vi.doUnmock("../媒体/资产协作分发运行时.js");
+    vi.resetModules();
+  });
+
   it("视频预览进入 missing_source 后，同一 sourceVersion 下重复同步不会无限重试", async () => {
     const attachmentId = "att-video-preview-loop-1";
     const 抓取视频预览 = vi.fn(async () => ({

@@ -379,6 +379,37 @@ describe("媒体协作分发", () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 
+  it("locator 给出 media_state.retry_after_ms 时，会透传给 noPeersIntervalTime 统一探测节奏", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-retry-interval"
+    );
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      expect((options as { noPeersIntervalTime?: number }).noPeersIntervalTime).toBe(2000);
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-retry-interval");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.media_state = {
+      code: "MEDIA_CONNECTING_TO_PEERS",
+      retry_after_ms: 2000,
+    };
+
+    await 解析协作分发源({
+      attachmentId: "att-retry-interval",
+      kind: "video",
+      locator,
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
   it("当前页还没被根 service worker 接管时，会先请求 active worker 主动 claim 再继续初始化", async () => {
     vi.resetModules();
     let controllerAttached = false;

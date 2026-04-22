@@ -37,6 +37,7 @@ export interface WebTorrent浏览器客户端 {
       private?: boolean;
       maxWebConns?: number;
       destroyStoreOnDestroy?: boolean;
+      noPeersIntervalTime?: number;
       getAnnounceOpts?: () => Record<string, string | undefined>;
     },
     onTorrent: (torrent: WebTorrent种子) => void
@@ -337,6 +338,20 @@ export function 读取可用协作分发片段(
   };
 }
 
+/**
+ * retry_after_ms 是后端给出的跨端重试节奏契约：
+ * 1. 浏览器端 WebTorrent 的 noPeers 事件默认 30s，太慢会放大“刚退场窗口”的感知抖动；
+ * 2. 这里把连接群友态的 retry 显式透传给 noPeersIntervalTime，让 runtime 与 contract 对齐；
+ * 3. 值非法时回退默认行为，避免把异常配置放大成高频事件风暴。
+ */
+const 读取noPeers探测间隔毫秒 = (distribution: 媒体协作分发定位片段): number | null => {
+  const retryAfter = distribution.media_state?.retry_after_ms;
+  if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter) || retryAfter <= 0) {
+    return null;
+  }
+  return Math.floor(retryAfter);
+};
+
 async function 拉取受控Torrent字节(
   distribution: 媒体协作分发定位片段
 ): Promise<Uint8Array> {
@@ -441,6 +456,7 @@ export async function 接入协作分发种子(
   distribution: 媒体协作分发定位片段
 ): Promise<WebTorrent种子> {
   const torrentBytes = await 拉取受控Torrent字节(distribution);
+  const noPeersIntervalTime = 读取noPeers探测间隔毫秒(distribution);
   return await new Promise<WebTorrent种子>((resolve, reject) => {
     let 已结束 = false;
     const 收口resolve = (torrent: WebTorrent种子) => {
@@ -465,6 +481,7 @@ export async function 接入协作分发种子(
         private: true,
         maxWebConns: 4,
         destroyStoreOnDestroy: false,
+        ...(noPeersIntervalTime ? { noPeersIntervalTime } : {}),
         getAnnounceOpts: () => {
           if (!distribution.join_ticket) {
             return {};

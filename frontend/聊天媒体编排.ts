@@ -620,8 +620,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
               return;
             }
           }
-          previewSource = 读取视频canonical冷源地址(locator);
-          if (!previewSource && locator.distribution) {
+          /**
+           * 新附件只允许一条正式媒体主链：
+           * 1. 只要 locator 已声明协作分发片段，就必须优先走同一 swarm 会话；
+           * 2. 只有 legacy（缺少 distribution）才允许回退 canonical/original 冷源；
+           * 3. 这样时间线预览不会再偷偷并发第二条服务器字节链。
+           */
+          if (locator.distribution) {
             const swarmSource = await 协作分发运行时.解析协作分发源({
               attachmentId,
               kind: "video",
@@ -632,6 +637,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
               previewSource = swarmSource.src;
               shouldReleasePreviewConsumer = true;
             }
+          } else {
+            previewSource = 读取视频canonical冷源地址(locator);
           }
         }
 

@@ -90,6 +90,18 @@ type 协作分发尝试结果 = {
 const 协作分发运行时不支持提示 = "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）";
 const 查看器强刷定位冷却毫秒 = 15_000;
 
+/**
+ * 删除终态优先看稳定错误码，而不是 HTTP 文案：
+ * 1. transport 层会把后端 `attachment_not_found` 收口成 `code`；
+ * 2. 播放器只消费这条语义，不依赖具体 Error 子类；
+ * 3. 这样 locator 直接失败时也能给出“内容已删除”而不是模糊不可用。
+ */
+const 是否为附件已删除错误 = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  (error as { code?: unknown }).code === "attachment_not_found";
+
 const 过滤可播放媒体提示 = (
   hint: "正在协作分发" | "正在补块" | null
 ): "正在协作分发" | null => {
@@ -574,9 +586,11 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     let locator: 媒体定位结果;
     try {
       locator = await deps.locate(input.attachmentId);
-    } catch {
+    } catch (error) {
       释放协作分发占用(input);
-      return 创建降级结果(input, null, "locator_unavailable");
+      return 是否为附件已删除错误(error)
+        ? 创建降级结果(input, null, "media_deleted", "内容已删除")
+        : 创建降级结果(input, null, "locator_unavailable");
     }
     if (locator.status !== "ready") {
       释放协作分发占用(input);

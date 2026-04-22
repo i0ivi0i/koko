@@ -4,6 +4,7 @@ import {
   协作分发JoinTicket失效错误,
   协作分发运行时环境不支持错误,
 } from "../媒体/媒体协作分发";
+import { Http接口错误 } from "../传输";
 
 describe("媒体播放器", () => {
   it("视频默认启用循环播放，而图片不会被纳入这条策略", () => {
@@ -1888,6 +1889,36 @@ describe("媒体播放器", () => {
     expect(result).toEqual({
       mode: "degraded",
       attachmentId: "att-video-deleted",
+      kind: "video",
+      src: "",
+      thumbnailUrl: null,
+      reason: "media_deleted",
+      hint: "内容已删除",
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("locator 返回 attachment_not_found 时，会落删除终态而不是普通不可用", async () => {
+    const locate = vi.fn(async () => {
+      throw new Http接口错误(404, "attachment_not_found", "附件不存在");
+    });
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-attachment-not-found",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-attachment-not-found",
       kind: "video",
       src: "",
       thumbnailUrl: null,
