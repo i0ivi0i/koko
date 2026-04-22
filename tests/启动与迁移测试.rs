@@ -130,6 +130,14 @@ fn 协作分发迁移已移除附件级过时peer字段() {
 }
 
 #[test]
+fn 协作分发partial_peer迁移已扩展peer_kind约束() {
+    let sql = std::fs::read_to_string("migrations/0017_协作分发partial_peer与来源裁决.sql")
+        .expect("应能读到 partial_peer 迁移文件");
+
+    assert!(sql.contains("partial_peer"));
+}
+
+#[test]
 fn 流媒体清单迁移已包含清单元数据表() {
     let sql = std::fs::read_to_string("migrations/0009_附件流媒体清单元数据.sql")
         .expect("应能读到流媒体清单迁移文件");

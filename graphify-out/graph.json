@@ -425,7 +425,7 @@
       "source_file": "E:\\koko\\up.ps1",
       "source_location": "L1",
       "id": "up",
-      "community": 31
+      "community": 32
     },
     {
       "label": "app-sw.ts",
@@ -433,7 +433,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 23
+      "community": 24
     },
     {
       "label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()",
@@ -441,7 +441,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L42",
       "id": "app_sw",
-      "community": 23
+      "community": 24
     },
     {
       "label": "css.d.ts",
@@ -449,7 +449,7 @@
       "source_file": "frontend\\css.d.ts",
       "source_location": "L1",
       "id": "css_d",
-      "community": 27
+      "community": 28
     },
     {
       "label": "media-sw.ts",
@@ -481,7 +481,7 @@
       "source_file": "frontend\\vitest.config.ts",
       "source_location": "L1",
       "id": "frontend_vitest_config_ts",
-      "community": 29
+      "community": 30
     },
     {
       "label": "webtorrent.d.ts",
@@ -489,7 +489,7 @@
       "source_file": "frontend\\webtorrent.d.ts",
       "source_location": "L1",
       "id": "webtorrent_d",
-      "community": 32
+      "community": 33
     },
     {
       "label": "\u901a\u77e5\u8fd0\u884c\u65f6.ts",
@@ -893,7 +893,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout",
-      "community": 26
+      "community": 27
     },
     {
       "label": "revokeDraftPreviewUrl()",
@@ -1005,7 +1005,7 @@
       "source_file": "frontend\\tests\\blob\u5a92\u4f53\u8d44\u4ea7\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_blob_spec_ts",
-      "community": 28
+      "community": 29
     },
     {
       "label": "realtime\u771f\u5b9e\u94fe\u8def.spec.ts",
@@ -1505,7 +1505,7 @@
       "author": null,
       "contributor": null,
       "id": "text_layout_spec",
-      "community": 26
+      "community": 27
     },
     {
       "label": ".addEventListener()",
@@ -1887,7 +1887,7 @@
       "label": "\u505a\u79cd\u5bf9\u8d26\u4f1a\u8df3\u8fc7\u7f3a\u5931torrent\u5143\u4fe1\u606f\u7684\u810f\u9644\u4ef6\u8bb0\u5f55()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L1123",
+      "source_location": "L1498",
       "id": "torrent",
       "community": 1
     },
@@ -2193,7 +2193,7 @@
       "source_file": "src\\lib.rs",
       "source_location": "L1",
       "id": "src_lib_rs",
-      "community": 30
+      "community": 31
     },
     {
       "label": "main()",
@@ -2431,7 +2431,7 @@
       "label": "\u6784\u5efa_s3\u5ba2\u6237\u7aef()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L816",
+      "source_location": "L818",
       "id": "s3",
       "community": 1
     },
@@ -2439,7 +2439,7 @@
       "label": "proxy_swarm_tracker_announce()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L845",
+      "source_location": "L847",
       "id": "proxy_swarm_tracker_announce",
       "community": 0
     },
@@ -2447,7 +2447,7 @@
       "label": "relay_swarm_tracker_socket()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L870",
+      "source_location": "L872",
       "id": "relay_swarm_tracker_socket",
       "community": 0
     },
@@ -2455,7 +2455,7 @@
       "label": "axum_ws_message_to_tungstenite()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L916",
+      "source_location": "L918",
       "id": "axum_ws_message_to_tungstenite",
       "community": 0
     },
@@ -2463,7 +2463,7 @@
       "label": "tungstenite_message_to_axum_ws()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L926",
+      "source_location": "L928",
       "id": "tungstenite_message_to_axum_ws",
       "community": 0
     },
@@ -2471,7 +2471,7 @@
       "label": "\u6e32\u67d3\u524d\u7aef\u5165\u53e3_html()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1076",
+      "source_location": "L1078",
       "id": "html",
       "community": 0
     },
@@ -2479,7 +2479,7 @@
       "label": "load_frontend_index()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1085",
+      "source_location": "L1087",
       "id": "load_frontend_index",
       "community": 0
     },
@@ -2495,7 +2495,7 @@
       "label": "ApiError",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1155",
+      "source_location": "L1157",
       "id": "apierror",
       "community": 0
     },
@@ -2503,7 +2503,7 @@
       "label": "events_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1164",
+      "source_location": "L1166",
       "id": "events_to_json",
       "community": 0
     },
@@ -2511,7 +2511,7 @@
       "label": "attachments_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1174",
+      "source_location": "L1176",
       "id": "attachments_to_json",
       "community": 0
     },
@@ -2519,7 +2519,7 @@
       "label": "event_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1212",
+      "source_location": "L1214",
       "id": "event_to_json",
       "community": 0
     },
@@ -2527,7 +2527,7 @@
       "label": "map_domain_err_tuple()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1240",
+      "source_location": "L1242",
       "id": "map_domain_err_tuple",
       "community": 0
     },
@@ -2535,7 +2535,7 @@
       "label": "err_resp()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1296",
+      "source_location": "L1298",
       "id": "err_resp",
       "community": 0
     },
@@ -2599,7 +2599,7 @@
       "label": "abandon_media_upload()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L885",
+      "source_location": "L887",
       "id": "abandon_media_upload",
       "community": 0
     },
@@ -2607,7 +2607,7 @@
       "label": "proxy_tus_upload_transport()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L997",
+      "source_location": "L999",
       "id": "proxy_tus_upload_transport",
       "community": 0
     },
@@ -2631,7 +2631,7 @@
       "label": "\u89c6\u9891\u534f\u4f5c\u5206\u53d1\u5171\u4eab\u8f7d\u8377\u4f1a\u6536\u53e3\u5230canonical_mp4\u800c\u4e0d\u662f\u7ee7\u7eed\u6cbf\u7528\u539f\u7247mime()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L1510",
+      "source_location": "L1512",
       "id": "canonical_mp4_mime",
       "community": 0
     },
@@ -2671,7 +2671,7 @@
       "label": "\u7b7e\u53d1\u534f\u4f5c\u5206\u53d1join_ticket()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.rs",
-      "source_location": "L281",
+      "source_location": "L292",
       "id": "join_ticket",
       "community": 1
     },
@@ -2727,7 +2727,7 @@
       "label": "\u6784\u9020content_range\u503c()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L281",
+      "source_location": "L282",
       "id": "content_range",
       "community": 0
     },
@@ -2735,7 +2735,7 @@
       "label": "\u6784\u9020\u6d41\u5a92\u4f53\u5bf9\u8c61etag()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L304",
+      "source_location": "L305",
       "id": "etag",
       "community": 0
     },
@@ -2743,7 +2743,7 @@
       "label": "\u8bf7\u6c42\u547d\u4e2dif_none_match()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L331",
+      "source_location": "L332",
       "id": "if_none_match",
       "community": 0
     },
@@ -2751,7 +2751,7 @@
       "label": "\u8bf7\u6c42\u547d\u4e2dif_modified_since()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L344",
+      "source_location": "L345",
       "id": "if_modified_since",
       "community": 0
     },
@@ -2759,7 +2759,7 @@
       "label": "load_media_locator()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L932",
+      "source_location": "L933",
       "id": "load_media_locator",
       "community": 0
     },
@@ -2767,7 +2767,7 @@
       "label": "load_blob_asset_content()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1050",
+      "source_location": "L1051",
       "id": "load_blob_asset_content",
       "community": 0
     },
@@ -2775,7 +2775,7 @@
       "label": "load_streaming_asset_content()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1273",
+      "source_location": "L1274",
       "id": "load_streaming_asset_content",
       "community": 0
     },
@@ -2783,7 +2783,7 @@
       "label": "load_media_torrent()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1524",
+      "source_location": "L1525",
       "id": "load_media_torrent",
       "community": 0
     },
@@ -2791,7 +2791,7 @@
       "label": "update_media_distribution_presence()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1571",
+      "source_location": "L1572",
       "id": "update_media_distribution_presence",
       "community": 0
     },
@@ -2799,7 +2799,7 @@
       "label": "load_attachment_content()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1621",
+      "source_location": "L1622",
       "id": "load_attachment_content",
       "community": 0
     },
@@ -2807,7 +2807,7 @@
       "label": "\u534f\u4f5c\u5206\u53d1swarm\u5b58\u6d3b\u5199\u5165\u8bf7\u6c42",
       "file_type": "code",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L180",
+      "source_location": "L183",
       "id": "swarm",
       "community": 0
     },
@@ -3129,7 +3129,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L25",
       "id": "pg",
-      "community": 0
+      "community": 23
     },
     {
       "label": "as_str()",
@@ -3153,7 +3153,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L560",
       "id": "pg_swarm",
-      "community": 0
+      "community": 23
     },
     {
       "label": ".\u67e5\u8be2\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f()",
@@ -3161,7 +3161,7 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L567",
       "id": "pg_torrent",
-      "community": 0
+      "community": 23
     },
     {
       "label": "mod.rs",
@@ -3177,7 +3177,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 24
+      "community": 25
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u53ea\u66b4\u9732canonical\u800c\u4e0d\u662f\u670d\u52a1\u7aef\u6d3e\u751f\u591a\u7248\u672c()",
@@ -3185,7 +3185,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_canonical",
-      "community": 24
+      "community": 25
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3292,11 +3292,19 @@
       "community": 2
     },
     {
-      "label": "\u534f\u4f5c\u5206\u53d1\u8fc1\u79fb\u5df2\u79fb\u9664\u9644\u4ef6\u7ea7\u8fc7\u65f6peer\u5b57\u6bb5()",
+      "label": "\u5199\u5165\u6307\u5b9a\u7c7b\u578bpeer\u5b58\u6d3b\u8bb0\u5f55()",
+      "file_type": "code",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L72",
+      "id": "peer",
+      "community": 2
+    },
+    {
+      "label": "\u534f\u4f5c\u5206\u53d1partial_peer\u8fc1\u79fb\u5df2\u6269\u5c55peer_kind\u7ea6\u675f()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L124",
-      "id": "peer",
+      "source_location": "L133",
+      "id": "partial_peer_peer_kind",
       "community": 2
     },
     {
@@ -3311,7 +3319,7 @@
       "label": "\u89c6\u9891\u4e0a\u4f20\u751f\u547d\u5468\u671f\u8fc1\u79fb\u5df2\u5305\u542babandoned\u4e0emezzanine\u5b57\u6bb5()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L174",
+      "source_location": "L182",
       "id": "abandoned_mezzanine",
       "community": 2
     },
@@ -3319,7 +3327,7 @@
       "label": "\u6d41\u5a92\u4f53\u6e05\u5355\u751f\u547d\u5468\u671f\u8fc1\u79fb\u5df2\u5305\u542bstreaming\u8fc7\u671f\u4e0e\u5220\u9664\u5b57\u6bb5()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L191",
+      "source_location": "L199",
       "id": "streaming",
       "community": 2
     },
@@ -3329,7 +3337,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 25
+      "community": 26
     },
     {
       "label": "Assert-True()",
@@ -3337,7 +3345,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 25
+      "community": 26
     },
     {
       "label": "\u89c6\u9891complete\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3543,15 +3551,39 @@
       "label": "\u7a7abody_presence\u4e0d\u4f1a\u628a\u65e0\u79cd\u5b50\u9644\u4ef6\u62ac\u6210media_ready()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L75",
+      "source_location": "L104",
       "id": "body_presence_media_ready",
+      "community": 2
+    },
+    {
+      "label": "recent_partial_peer\u4f1a\u8ba9\u8fc7\u671f\u9644\u4ef6\u4fdd\u6301connecting\u800c\u4e0d\u662f\u76f4\u63a5no_seed()",
+      "file_type": "code",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L246",
+      "id": "recent_partial_peer_connecting_no_seed",
+      "community": 2
+    },
+    {
+      "label": "stale_partial_peer\u4e0d\u4f1a\u628a\u9644\u4ef6\u6c38\u4e45\u62ac\u5728connecting()",
+      "file_type": "code",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L356",
+      "id": "stale_partial_peer_connecting",
+      "community": 2
+    },
+    {
+      "label": "partial_peer\u4e0d\u80fd\u5192\u5145available_ready\u6765\u6e90()",
+      "file_type": "code",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L482",
+      "id": "partial_peer_available_ready",
       "community": 2
     },
     {
       "label": "\u540cswarm\u7684\u53e6\u4e00\u6761\u5b8c\u6574peer\u80fd\u8ba9\u65e7\u9644\u4ef6\u4fdd\u6301ready()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L217",
+      "source_location": "L592",
       "id": "swarm_peer_ready",
       "community": 2
     },
@@ -3559,7 +3591,7 @@
       "label": "web_seed\u8fc7\u671f\u4e14\u6700\u8fd1\u6ca1\u6709peer\u5b58\u6d3b\u65f6locator\u4f1a\u88c1\u51b3expired()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L350",
+      "source_location": "L725",
       "id": "web_seed_peer_locator_expired",
       "community": 2
     },
@@ -3567,7 +3599,7 @@
       "label": "web_seed\u521a\u8fc7\u671f\u4e14\u6700\u8fd1\u6ca1\u6709peer\u5b58\u6d3b\u65f6locator\u4f1a\u5148\u8fdb\u5165\u8fde\u63a5\u7fa4\u53cb\u6001()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L451",
+      "source_location": "L826",
       "id": "web_seed_peer_locator",
       "community": 2
     },
@@ -3575,7 +3607,7 @@
       "label": "web_seed\u5df2\u8fc7\u671f\u8f83\u4e45\u4e14\u6700\u8fd1\u6ca1\u6709peer\u5b58\u6d3b\u65f6\u9996\u6b21\u8bbf\u95ee\u4ecd\u4f1a\u5148\u8fdb\u5165\u8fde\u63a5\u7fa4\u53cb\u6001()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L555",
+      "source_location": "L930",
       "id": "web_seed_peer",
       "community": 2
     },
@@ -3583,7 +3615,7 @@
       "label": "\u9644\u4ef6\u5df2\u5220\u9664\u65f6locator\u4f1a\u8fd4\u56demedia_deleted\u7ec8\u6001\u800c\u4e0d\u662f\u9644\u4ef6\u672a\u5c31\u7eea\u9519\u8bef()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L659",
+      "source_location": "L1034",
       "id": "locator_media_deleted",
       "community": 2
     },
@@ -3591,7 +3623,7 @@
       "label": "web_seed\u8fc7\u671f\u4e14streaming\u5df2\u5220\u9664\u4f46\u6700\u8fd1peer\u4ecd\u5b58\u6d3b\u65f6locator\u4f1a\u8fdb\u5165peer_only\u53ef\u7528\u6001()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L775",
+      "source_location": "L1150",
       "id": "web_seed_streaming_peer_locator_peer_only",
       "community": 2
     },
@@ -3599,7 +3631,7 @@
       "label": "active_backend_strong_seed\u4f1a\u8ba9\u540cswarm\u8fc7\u671f\u9644\u4ef6\u4fdd\u6301ready()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L879",
+      "source_location": "L1254",
       "id": "active_backend_strong_seed_swarm_ready",
       "community": 2
     },
@@ -3607,7 +3639,7 @@
       "label": "\u505a\u79cd\u5bf9\u8d26\u4f1a\u6309\u6743\u5a01\u9644\u4ef6\u96c6\u5408\u89e6\u53d1start\u5e76\u4e0b\u53d1reconcile\u6e05\u5355()",
       "file_type": "code",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L995",
+      "source_location": "L1370",
       "id": "start_reconcile",
       "community": 2
     },
@@ -3641,7 +3673,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L1",
       "id": "tests_abandon_rs",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u542f\u52a8\u5047tus_termination\u4fa7\u8f66()",
@@ -3649,7 +3681,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L18",
       "id": "abandon_tus_termination",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u540c\u65f6\u6807\u8bb0\u9644\u4ef6\u4e0etransport\u4e3aabandoned\u5e76\u6e05\u6389\u5df2\u767b\u8bb0\u7684\u4e34\u65f6\u6587\u4ef6()",
@@ -3657,7 +3689,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L61",
       "id": "abandon_transport_abandoned",
-      "community": 18
+      "community": 19
     },
     {
       "label": "abandon\u4f1a\u5148\u5199\u4e1a\u52a1abandoned\u518d\u534f\u8c03\u5b98\u65b9termination()",
@@ -3665,7 +3697,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L207",
       "id": "abandon_abandon_abandoned_termination",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u6e05\u6389\u5f53\u524d\u4f1a\u8bdd\u4e0b\u6240\u6709partial\u4e34\u65f6\u6587\u4ef6()",
@@ -3673,7 +3705,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L321",
       "id": "abandon_partial",
-      "community": 18
+      "community": 19
     },
     {
       "label": "complete.rs",
@@ -4097,7 +4129,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L1",
       "id": "tests_seed_rs",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u63d2\u5165ready\u56fe\u7247\u9644\u4ef6\u8bb0\u5f55()",
@@ -4105,7 +4137,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L10",
       "id": "seed_ready",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u672a\u6765\u51b7\u6e90\u5230\u671f\u65f6\u95f4\u6233\u79d2()",
@@ -4113,7 +4145,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L51",
       "id": "seed",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u751f\u6210\u6d4b\u8bd5content_hash()",
@@ -4121,7 +4153,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L118",
       "id": "seed_content_hash",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u5199\u5165\u5b8c\u6574peer\u5b58\u6d3b\u8bb0\u5f55()",
@@ -4129,7 +4161,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L151",
       "id": "seed_peer",
-      "community": 19
+      "community": 18
     },
     {
       "label": "tus.rs",
@@ -6629,7 +6661,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L803",
+      "source_location": "L805",
       "weight": 1.0,
       "_src": "",
       "_tgt": "s3",
@@ -6665,7 +6697,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.rs",
-      "source_location": "L350",
+      "source_location": "L361",
       "weight": 1.0,
       "_src": "",
       "_tgt": "join_ticket",
@@ -6677,7 +6709,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1254",
+      "source_location": "L1255",
       "weight": 1.0,
       "_src": "",
       "_tgt": "content_range",
@@ -8405,7 +8437,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L1331",
+      "source_location": "L1340",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "torrent",
@@ -8417,7 +8449,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L1123",
+      "source_location": "L1498",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "torrent",
@@ -8441,7 +8473,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L942",
+      "source_location": "L944",
       "weight": 1.0,
       "_src": "abandon_media_upload",
       "_tgt": "tus",
@@ -8453,7 +8485,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L1292",
+      "source_location": "L1294",
       "weight": 1.0,
       "_src": "tus",
       "_tgt": "url",
@@ -9365,7 +9397,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L816",
+      "source_location": "L818",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "s3",
@@ -9377,7 +9409,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L845",
+      "source_location": "L847",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "proxy_swarm_tracker_announce",
@@ -9389,7 +9421,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L870",
+      "source_location": "L872",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "relay_swarm_tracker_socket",
@@ -9401,7 +9433,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L916",
+      "source_location": "L918",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "axum_ws_message_to_tungstenite",
@@ -9413,7 +9445,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L926",
+      "source_location": "L928",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "tungstenite_message_to_axum_ws",
@@ -9425,7 +9457,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1076",
+      "source_location": "L1078",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "html",
@@ -9437,7 +9469,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1085",
+      "source_location": "L1087",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "load_frontend_index",
@@ -9449,7 +9481,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L750",
+      "source_location": "L759",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "realtime",
@@ -9461,7 +9493,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1155",
+      "source_location": "L1157",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "apierror",
@@ -9473,7 +9505,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1164",
+      "source_location": "L1166",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "events_to_json",
@@ -9485,7 +9517,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1174",
+      "source_location": "L1176",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "attachments_to_json",
@@ -9497,7 +9529,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1212",
+      "source_location": "L1214",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "event_to_json",
@@ -9509,7 +9541,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1240",
+      "source_location": "L1242",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "map_domain_err_tuple",
@@ -9521,7 +9553,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1296",
+      "source_location": "L1298",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "err_resp",
@@ -9533,7 +9565,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L656",
+      "source_location": "L657",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "blob",
@@ -9629,7 +9661,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L885",
+      "source_location": "L887",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "abandon_media_upload",
@@ -9641,7 +9673,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L997",
+      "source_location": "L999",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "proxy_tus_upload_transport",
@@ -9677,7 +9709,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L1510",
+      "source_location": "L1512",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "canonical_mp4_mime",
@@ -9737,7 +9769,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.rs",
-      "source_location": "L281",
+      "source_location": "L292",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "join_ticket",
@@ -9821,7 +9853,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L281",
+      "source_location": "L282",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "content_range",
@@ -9833,7 +9865,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L304",
+      "source_location": "L305",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "etag",
@@ -9845,7 +9877,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L331",
+      "source_location": "L332",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "if_none_match",
@@ -9857,7 +9889,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L344",
+      "source_location": "L345",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "if_modified_since",
@@ -9869,7 +9901,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L932",
+      "source_location": "L933",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "load_media_locator",
@@ -9881,7 +9913,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1050",
+      "source_location": "L1051",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "load_blob_asset_content",
@@ -9893,7 +9925,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1273",
+      "source_location": "L1274",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "load_streaming_asset_content",
@@ -9905,7 +9937,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1524",
+      "source_location": "L1525",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "load_media_torrent",
@@ -9917,7 +9949,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1571",
+      "source_location": "L1572",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "update_media_distribution_presence",
@@ -9929,7 +9961,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1621",
+      "source_location": "L1622",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "load_attachment_content",
@@ -9941,7 +9973,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L1281",
+      "source_location": "L1290",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "swarm",
@@ -10457,7 +10489,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L857",
+      "source_location": "L859",
       "weight": 1.0,
       "_src": "proxy_swarm_tracker_announce",
       "_tgt": "relay_swarm_tracker_socket",
@@ -10469,7 +10501,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L883",
+      "source_location": "L885",
       "weight": 1.0,
       "_src": "relay_swarm_tracker_socket",
       "_tgt": "axum_ws_message_to_tungstenite",
@@ -10481,7 +10513,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L898",
+      "source_location": "L900",
       "weight": 1.0,
       "_src": "relay_swarm_tracker_socket",
       "_tgt": "tungstenite_message_to_axum_ws",
@@ -10493,7 +10525,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1086",
+      "source_location": "L1088",
       "weight": 1.0,
       "_src": "load_frontend_index",
       "_tgt": "html",
@@ -10505,7 +10537,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1088",
+      "source_location": "L1090",
       "weight": 1.0,
       "_src": "load_frontend_index",
       "_tgt": "err_resp",
@@ -10529,7 +10561,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1170",
+      "source_location": "L1172",
       "weight": 1.0,
       "_src": "events_to_json",
       "_tgt": "event_to_json",
@@ -10601,7 +10633,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L938",
+      "source_location": "L939",
       "weight": 1.0,
       "_src": "load_media_locator",
       "_tgt": "parse_attachment_content_query",
@@ -10613,7 +10645,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1529",
+      "source_location": "L1530",
       "weight": 1.0,
       "_src": "load_media_torrent",
       "_tgt": "parse_attachment_content_query",
@@ -10625,7 +10657,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1577",
+      "source_location": "L1578",
       "weight": 1.0,
       "_src": "update_media_distribution_presence",
       "_tgt": "parse_attachment_content_query",
@@ -10637,7 +10669,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1627",
+      "source_location": "L1628",
       "weight": 1.0,
       "_src": "load_attachment_content",
       "_tgt": "parse_attachment_content_query",
@@ -10649,7 +10681,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1056",
+      "source_location": "L1057",
       "weight": 1.0,
       "_src": "load_blob_asset_content",
       "_tgt": "parse_streaming_asset_query",
@@ -10661,7 +10693,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1279",
+      "source_location": "L1280",
       "weight": 1.0,
       "_src": "load_streaming_asset_content",
       "_tgt": "parse_streaming_asset_query",
@@ -10673,7 +10705,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1581",
+      "source_location": "L1582",
       "weight": 1.0,
       "_src": "update_media_distribution_presence",
       "_tgt": "parse_distribution_presence_payload",
@@ -10685,7 +10717,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1499",
+      "source_location": "L1500",
       "weight": 1.0,
       "_src": "load_streaming_asset_content",
       "_tgt": "content_range",
@@ -10697,7 +10729,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1360",
+      "source_location": "L1361",
       "weight": 1.0,
       "_src": "load_streaming_asset_content",
       "_tgt": "etag",
@@ -10709,7 +10741,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1362",
+      "source_location": "L1363",
       "weight": 1.0,
       "_src": "load_streaming_asset_content",
       "_tgt": "if_none_match",
@@ -10721,7 +10753,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
-      "source_location": "L1363",
+      "source_location": "L1364",
       "weight": 1.0,
       "_src": "load_streaming_asset_content",
       "_tgt": "if_modified_since",
@@ -10960,13 +10992,25 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L124",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L72",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "peer",
       "source": "tests_rs",
       "target": "peer",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
+      "source_location": "L133",
+      "weight": 1.0,
+      "_src": "tests_rs",
+      "_tgt": "partial_peer_peer_kind",
+      "source": "tests_rs",
+      "target": "partial_peer_peer_kind",
       "confidence_score": 1.0
     },
     {
@@ -10985,7 +11029,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L174",
+      "source_location": "L182",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "abandoned_mezzanine",
@@ -10997,7 +11041,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L191",
+      "source_location": "L199",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "streaming",
@@ -11249,7 +11293,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L75",
+      "source_location": "L104",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "body_presence_media_ready",
@@ -11261,7 +11305,43 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L217",
+      "source_location": "L246",
+      "weight": 1.0,
+      "_src": "tests_rs",
+      "_tgt": "recent_partial_peer_connecting_no_seed",
+      "source": "tests_rs",
+      "target": "recent_partial_peer_connecting_no_seed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L356",
+      "weight": 1.0,
+      "_src": "tests_rs",
+      "_tgt": "stale_partial_peer_connecting",
+      "source": "tests_rs",
+      "target": "stale_partial_peer_connecting",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L482",
+      "weight": 1.0,
+      "_src": "tests_rs",
+      "_tgt": "partial_peer_available_ready",
+      "source": "tests_rs",
+      "target": "partial_peer_available_ready",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L592",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "swarm_peer_ready",
@@ -11273,7 +11353,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L350",
+      "source_location": "L725",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "web_seed_peer_locator_expired",
@@ -11285,7 +11365,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L451",
+      "source_location": "L826",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "web_seed_peer_locator",
@@ -11297,7 +11377,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L555",
+      "source_location": "L930",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "web_seed_peer",
@@ -11309,7 +11389,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L659",
+      "source_location": "L1034",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "locator_media_deleted",
@@ -11321,7 +11401,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L775",
+      "source_location": "L1150",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "web_seed_streaming_peer_locator_peer_only",
@@ -11333,7 +11413,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L879",
+      "source_location": "L1254",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "active_backend_strong_seed_swarm_ready",
@@ -11345,7 +11425,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
-      "source_location": "L995",
+      "source_location": "L1370",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "start_reconcile",
@@ -11711,6 +11791,42 @@
       "_tgt": "seed",
       "source": "tests_rs",
       "target": "seed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L297",
+      "weight": 1.0,
+      "_src": "recent_partial_peer_connecting_no_seed",
+      "_tgt": "peer",
+      "source": "peer",
+      "target": "recent_partial_peer_connecting_no_seed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L407",
+      "weight": 1.0,
+      "_src": "stale_partial_peer_connecting",
+      "_tgt": "peer",
+      "source": "peer",
+      "target": "stale_partial_peer_connecting",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
+      "source_location": "L533",
+      "weight": 1.0,
+      "_src": "partial_peer_available_ready",
+      "_tgt": "peer",
+      "source": "peer",
+      "target": "partial_peer_available_ready",
       "confidence_score": 1.0
     },
     {

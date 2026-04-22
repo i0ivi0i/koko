@@ -179,12 +179,12 @@ pub(crate) fn 裁决协作分发可用性(
     now_epoch秒: i64,
     stale_seconds: i64,
 ) -> &'static str {
-    let 最近peer仍算活跃 = snapshot
-        .最近peer存活时间戳秒
-        .map(|ts| now_epoch秒 - ts <= stale_seconds)
-        .unwrap_or(false);
+    let 有新鲜完整peer =
+        来源仍算活跃(snapshot.最近完整peer存活时间戳秒, now_epoch秒, stale_seconds);
+    let 有新鲜后端强种子 =
+        来源仍算活跃(snapshot.最近后端强种子存活时间戳秒, now_epoch秒, stale_seconds);
 
-    if web_seed仍可用 || 最近peer仍算活跃 {
+    if web_seed仍可用 || 有新鲜完整peer || 有新鲜后端强种子 {
         "available"
     } else {
         "expired"
@@ -210,10 +210,21 @@ fn 裁决协作分发媒体状态码(
         return 媒体状态已就绪;
     }
 
-    if now_epoch秒 <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒) {
+    // partial_peer 说明群友侧已经真实进入 swarm，只是还没补齐成 ready 来源。
+    let 有新鲜片段peer =
+        来源仍算活跃(snapshot.最近片段peer存活时间戳秒, now_epoch秒, stale_seconds);
+    if 有新鲜片段peer || now_epoch秒 <= snapshot.web_seed_until秒.saturating_add(连接群友窗口秒)
+    {
         return 媒体状态连接群友中;
     }
     媒体状态无在线种子
+}
+
+/// 协作分发来源的新鲜度必须统一裁决，避免不同入口各自拍脑袋理解“最近还活着”。
+fn 来源仍算活跃(最近存活时间戳秒: Option<i64>, now_epoch秒: i64, stale_seconds: i64) -> bool {
+    最近存活时间戳秒
+        .map(|ts| now_epoch秒 - ts <= stale_seconds)
+        .unwrap_or(false)
 }
 
 /// 统一构造 `media_state` 响应面：

@@ -763,7 +763,9 @@ pub(super) async fn complete_media_upload(
                 content_hash: distribution_request.content_hash.clone(),
                 swarm_id: distribution_request.swarm_id.clone(),
                 web_seed_until秒: distribution_request.web_seed_until秒,
-                最近peer存活时间戳秒: None,
+                最近片段peer存活时间戳秒: None,
+                最近完整peer存活时间戳秒: None,
+                最近后端强种子存活时间戳秒: None,
                 torrent_info_hash: Some(torrent_request.torrent_info_hash.clone()),
             };
             let now_epoch秒 = SystemTime::now()

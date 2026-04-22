@@ -427,7 +427,9 @@ async fn 写入协作分发元数据_异步(
         content_hash: 请求.content_hash.clone(),
         swarm_id: 请求.swarm_id.clone(),
         web_seed_until秒: 请求.web_seed_until秒,
-        最近peer存活时间戳秒: None,
+        最近片段peer存活时间戳秒: None,
+        最近完整peer存活时间戳秒: None,
+        最近后端强种子存活时间戳秒: None,
         torrent_info_hash: None,
     })
 }
@@ -454,12 +456,25 @@ async fn 查询协作分发元数据_异步(
                     SELECT EXTRACT(EPOCH FROM MAX(sp.last_seen_at))::BIGINT
                     FROM swarm_peer_presence sp
                     WHERE sp.swarm_id = dm.swarm_id
-                      AND sp.peer_kind IN ($2, $3)
-                ) AS last_source_seen_epoch
+                      AND sp.peer_kind = $2
+                ) AS last_partial_peer_seen_epoch,
+                (
+                    SELECT EXTRACT(EPOCH FROM MAX(sp.last_seen_at))::BIGINT
+                    FROM swarm_peer_presence sp
+                    WHERE sp.swarm_id = dm.swarm_id
+                      AND sp.peer_kind = $3
+                ) AS last_complete_peer_seen_epoch,
+                (
+                    SELECT EXTRACT(EPOCH FROM MAX(sp.last_seen_at))::BIGINT
+                    FROM swarm_peer_presence sp
+                    WHERE sp.swarm_id = dm.swarm_id
+                      AND sp.peer_kind = $4
+                ) AS last_backend_strong_seed_seen_epoch
          FROM attachment_distribution_metadata dm
          WHERE dm.attachment_id = $1",
     )
     .bind(附件标识)
+    .bind(usecase::协作分发存活类型片段peer)
     .bind(usecase::协作分发存活类型完整peer)
     .bind(usecase::协作分发存活类型后端强种子)
     .fetch_optional(pool)
@@ -472,7 +487,9 @@ async fn 查询协作分发元数据_异步(
         content_hash: row.get("content_hash"),
         swarm_id: row.get("swarm_id"),
         web_seed_until秒: row.get("web_seed_until_epoch"),
-        最近peer存活时间戳秒: row.get("last_source_seen_epoch"),
+        最近片段peer存活时间戳秒: row.get("last_partial_peer_seen_epoch"),
+        最近完整peer存活时间戳秒: row.get("last_complete_peer_seen_epoch"),
+        最近后端强种子存活时间戳秒: row.get("last_backend_strong_seed_seen_epoch"),
         torrent_info_hash: row.get("torrent_info_hash"),
     }))
 }

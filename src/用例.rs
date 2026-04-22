@@ -154,6 +154,8 @@ pub struct 协作分发torrent元信息写入请求 {
 /// 浏览器是否在线、有没有 peer 仍属于运行态，但最近活跃时间戳要交给后端统一落权威记录。
 pub const 协作分发存活类型旁观意图: &str = "viewer_intent";
 #[allow(non_upper_case_globals)]
+pub const 协作分发存活类型片段peer: &str = "partial_peer";
+#[allow(non_upper_case_globals)]
 pub const 协作分发存活类型完整peer: &str = "complete_peer";
 #[allow(non_upper_case_globals)]
 pub const 协作分发存活类型后端强种子: &str = "backend_strong_seed";
@@ -163,6 +165,7 @@ pub fn 是有效协作分发存活类型(value: &str) -> bool {
     matches!(
         value,
         协作分发存活类型旁观意图
+            | 协作分发存活类型片段peer
             | 协作分发存活类型完整peer
             | 协作分发存活类型后端强种子
     )
@@ -203,7 +206,13 @@ pub struct 协作分发元数据快照 {
     pub content_hash: String,
     pub swarm_id: String,
     pub web_seed_until秒: i64,
-    pub 最近peer存活时间戳秒: Option<i64>,
+    /// 三路最近来源事实必须拆开保留：
+    /// 1. partial_peer 只能抬到 connecting，不能冒充 ready；
+    /// 2. complete/backend strong seed 才能抬起 available/ready；
+    /// 3. locator 继续只暴露最小可缓存事实，不下发 UI 私货。
+    pub 最近片段peer存活时间戳秒: Option<i64>,
+    pub 最近完整peer存活时间戳秒: Option<i64>,
+    pub 最近后端强种子存活时间戳秒: Option<i64>,
     pub torrent_info_hash: Option<String>,
 }
 

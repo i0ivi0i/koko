@@ -179,8 +179,9 @@ fn parse_distribution_presence_payload(
             StatusCode::BAD_REQUEST,
             "invalid_argument",
             format!(
-                "peer_kind 仅支持 {} / {} / {}",
+                "peer_kind 仅支持 {} / {} / {} / {}",
                 usecase::协作分发存活类型旁观意图,
+                usecase::协作分发存活类型片段peer,
                 usecase::协作分发存活类型完整peer,
                 usecase::协作分发存活类型后端强种子
             ),

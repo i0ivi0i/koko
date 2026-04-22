@@ -664,7 +664,9 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
             content_hash: 待做种.content_hash.clone(),
             swarm_id: 待做种.swarm_id.clone(),
             web_seed_until秒: 待做种.web_seed_until秒,
-            最近peer存活时间戳秒: None,
+            最近片段peer存活时间戳秒: None,
+            最近完整peer存活时间戳秒: None,
+            最近后端强种子存活时间戳秒: None,
             torrent_info_hash: Some(待做种.torrent_info_hash.clone()),
         };
         let runtime_distribution = media_distribution::协作分发快照转响应值(
