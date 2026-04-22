@@ -509,8 +509,30 @@ function 绑定协作分发会话事件(
   torrent: WebTorrent种子,
   browserRuntime: Awaited<ReturnType<typeof 获取或创建协作分发浏览器运行时>>
 ) {
-  const 处理JoinTicket失效 = (error: unknown) => {
+  const 处理JoinTicket失效 = (
+    error: unknown,
+    options: { 来自warning?: boolean } = {}
+  ) => {
     if (!是否为协作分发JoinTicket失效错误(error)) {
+      return;
+    }
+    if (options.来自warning && session.曾连上群友) {
+      /**
+       * warning 语义是“可恢复噪声”，不是“会话必死”：
+       * 1. 会话一旦已经连上群友，单条 warning 不该立刻触发全链路 teardown；
+       * 2. 直接销毁会话会把前端推入 locator/torrent 高频重建风暴；
+       * 3. 真正不可恢复时仍由 error 或后续探测失败兜底收敛成终态。
+       */
+      return;
+    }
+    if (options.来自warning) {
+      /**
+       * 会话尚未就绪时，warning 只作为“探测链应尽快终止”的软信号：
+       * 1. 这里不立刻 teardown，也不广播 SWARM_TICKET_INVALID；
+       * 2. `探测协作分发媒体源可读性` 会读取 terminalError 并把失败收敛成一次可控拒绝；
+       * 3. 播放器随后按既有 forceRefresh / degraded 节奏重试，避免同步风暴。
+       */
+      session.terminalError = error;
       return;
     }
     /**
@@ -536,6 +558,7 @@ function 绑定协作分发会话事件(
   };
 
   torrent.on("wire", (wire) => {
+    session.曾连上群友 = true;
     session.hint = wire.type === "webSeed" ? "正在补块" : "正在协作分发";
     恢复整附件补齐(session);
     发送事件(runtime, {
@@ -568,7 +591,7 @@ function 绑定协作分发会话事件(
     处理JoinTicket失效(error);
   });
   torrent.on("warning", (warning) => {
-    处理JoinTicket失效(warning);
+    处理JoinTicket失效(warning, { 来自warning: true });
   });
 }
 
@@ -687,6 +710,7 @@ async function 确保协作分发会话(
     file: null,
     terminalError: null,
     cleanupStarted: false,
+    曾连上群友: false,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);

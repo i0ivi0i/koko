@@ -1,6 +1,9 @@
 import type { 媒体种类 } from "../契约.js";
 import type { 媒体播放输入, 媒体播放结果 } from "./媒体播放.js";
 
+const 连接群友重试毫秒 = 2_000;
+const 无在线种子重试毫秒 = 15_000;
+
 export type 媒体会话状态 =
   | "bootstrapping"
   | "playing"
@@ -66,6 +69,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
   let 缺少群友 = false;
   let 冷源不可用 = false;
   let 播放器恢复窗口已触发 = false;
+  let 降级恢复重试定时器: ReturnType<typeof setTimeout> | null = null;
   const 会话ConsumerId = `session:${deps.attachmentId}`;
 
   let current: 媒体会话快照 = {
@@ -88,6 +92,52 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       ...patch,
     };
     发布快照();
+  };
+
+  const 清理降级恢复重试定时器 = (): void => {
+    if (降级恢复重试定时器 === null) {
+      return;
+    }
+    clearTimeout(降级恢复重试定时器);
+    降级恢复重试定时器 = null;
+  };
+
+  const 读取降级重试间隔毫秒 = (playback: 媒体播放结果): number | null => {
+    if (playback.mode !== "degraded") {
+      return null;
+    }
+    if (playback.reason === "connecting_to_peers") {
+      return 连接群友重试毫秒;
+    }
+    if (playback.reason === "no_online_seed") {
+      return 无在线种子重试毫秒;
+    }
+    return null;
+  };
+
+  const 安排降级恢复重试 = (playback: 媒体播放结果): void => {
+    清理降级恢复重试定时器();
+    const retryMs = 读取降级重试间隔毫秒(playback);
+    if (retryMs === null || 已销毁) {
+      return;
+    }
+    /**
+     * degraded=connecting/no_seed 不是终点，而是恢复节奏的一部分：
+     * 1. connecting_to_peers: 2 秒短轮询，尽快发现 peer 恢复；
+     * 2. no_online_seed: 15 秒慢轮询，避免空转风暴；
+     * 3. 重试触发后统一走现有恢复解析，不额外长第二套重试状态机。
+     */
+    降级恢复重试定时器 = setTimeout(() => {
+      降级恢复重试定时器 = null;
+      if (已销毁) {
+        return;
+      }
+      播放器恢复窗口已触发 = true;
+      写入快照({
+        status: "recovering",
+      });
+      触发恢复解析();
+    }, retryMs);
   };
 
   const 标记等待恢复 = (): void => {
@@ -153,9 +203,11 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
       sourceVersion:
         当前版本键 === 下一个版本键 ? current.sourceVersion : current.sourceVersion + 1,
     });
+    安排降级恢复重试(playback);
   };
 
   const 触发恢复解析 = (): void => {
+    清理降级恢复重试定时器();
     if (已销毁 || 正在恢复) {
       return;
     }
@@ -274,8 +326,14 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
           return;
         case "SWARM_ACTIVE":
           缺少群友 = false;
-          播放器恢复窗口已触发 = false;
           if (current.status === "waiting_for_peer_or_network") {
+            /**
+             * `SWARM_ACTIVE` 只在“确实在等群友恢复”的阶段才能重置恢复门禁：
+             * 1. waiting_for_peer_or_network 说明当前会话还没拿回可用播放源，这时需要立刻重试；
+             * 2. 稳定播放期会持续收到 wire 驱动的 SWARM_ACTIVE，若这里无条件清门禁会放大 PLAYER_ERROR；
+             * 3. 因此非 waiting 态不再借 SWARM_ACTIVE 重置恢复窗口，避免 locator/torrent 重试风暴。
+             */
+            播放器恢复窗口已触发 = false;
             写入快照({
               status: current.locallyComplete ? "locally_complete" : "recovering",
             });
@@ -364,6 +422,7 @@ export function 创建媒体会话(deps: 媒体会话依赖): 媒体会话端口
 
     销毁(): void {
       已销毁 = true;
+      清理降级恢复重试定时器();
       解析代次 += 1;
     },
   };

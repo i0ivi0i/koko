@@ -46,6 +46,26 @@ const 创建降级播放结果 = (attachmentId: string): 媒体播放结果 => (
   hint: "附件当前不可获取",
 });
 
+const 创建连接群友降级播放结果 = (attachmentId: string): 媒体播放结果 => ({
+  mode: "degraded",
+  attachmentId,
+  kind: "video",
+  src: "",
+  thumbnailUrl: null,
+  reason: "connecting_to_peers",
+  hint: "正在尝试连接群友",
+});
+
+const 创建无在线种子降级播放结果 = (attachmentId: string): 媒体播放结果 => ({
+  mode: "degraded",
+  attachmentId,
+  kind: "video",
+  src: "",
+  thumbnailUrl: null,
+  reason: "no_online_seed",
+  hint: "当前没有在线种子，等待群友上线",
+});
+
 describe("媒体会话", () => {
   it("启动与恢复解析时，会携带稳定的 session consumerId", async () => {
     const 解析播放结果 = vi.fn().mockResolvedValue(创建锚点播放结果("att-video-session-1"));
@@ -182,6 +202,109 @@ describe("媒体会话", () => {
 
     expect(解析播放结果).not.toHaveBeenCalled();
     expect(会话.snapshot().status).toBe("degraded");
+  });
+
+  it("稳定 swarm 播放期间重复 SWARM_ACTIVE 不会重置恢复门禁，避免 PLAYER_ERROR 被放大成恢复风暴", async () => {
+    const attachmentId = "att-video-swarm-active-error-gate-1";
+    const 解析播放结果 = vi.fn().mockResolvedValue(创建协作分发播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    await 会话.启动();
+    会话.send({ type: "PLAYER_PLAYING" });
+    解析播放结果.mockClear();
+
+    // 第一次错误触发一次恢复解析。
+    会话.send({ type: "PLAYER_ERROR" });
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(解析播放结果).toHaveBeenCalledTimes(1);
+    expect(会话.snapshot().status).toBe("backfilling");
+
+    // 恢复尚未被“真实播放恢复事件”确认前，重复 SWARM_ACTIVE 不应重置恢复门禁。
+    会话.send({ type: "SWARM_ACTIVE" });
+    会话.send({ type: "PLAYER_ERROR" });
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(解析播放结果).toHaveBeenCalledTimes(1);
+  });
+
+  it("播放结果为 connecting_to_peers 时，会按 2 秒节奏自动触发恢复重试", async () => {
+    const attachmentId = "att-video-connecting-retry-1";
+    const 解析播放结果 = vi
+      .fn()
+      .mockResolvedValueOnce(创建连接群友降级播放结果(attachmentId))
+      .mockResolvedValueOnce(创建锚点播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    vi.useFakeTimers();
+    try {
+      await 会话.启动();
+      expect(会话.snapshot().status).toBe("degraded");
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(1_999);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(解析播放结果).toHaveBeenCalledTimes(2);
+      expect(会话.snapshot().playback).toMatchObject({
+        mode: "anchor",
+        attachmentId,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("播放结果为 no_online_seed 时，会按 15 秒节奏自动触发下一轮恢复重试", async () => {
+    const attachmentId = "att-video-no-seed-retry-1";
+    const 解析播放结果 = vi
+      .fn()
+      .mockResolvedValueOnce(创建无在线种子降级播放结果(attachmentId))
+      .mockResolvedValueOnce(创建连接群友降级播放结果(attachmentId));
+    const 会话 = 创建媒体会话({
+      attachmentId,
+      kind: "video",
+      解析播放结果,
+    });
+
+    vi.useFakeTimers();
+    try {
+      await 会话.启动();
+      expect(会话.snapshot().status).toBe("degraded");
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(14_999);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(解析播放结果).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(解析播放结果).toHaveBeenCalledTimes(2);
+      expect(会话.snapshot().playback).toMatchObject({
+        mode: "degraded",
+        reason: "connecting_to_peers",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("recovering 期间没有 peer 和冷源时进入 waiting_for_peer_or_network", async () => {

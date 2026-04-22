@@ -8,6 +8,7 @@ import {
   清理协作分发底层会话,
   协作分发JoinTicket失效错误,
   协作分发运行时环境不支持错误,
+  type 协作分发会话事件,
   type WebTorrent浏览器客户端,
   type WebTorrent种子,
 } from "../媒体/媒体协作分发";
@@ -1123,6 +1124,66 @@ describe("媒体协作分发", () => {
       })
     ).rejects.toBeInstanceOf(协作分发JoinTicket失效错误);
     expect(读取协作分发会话状态("swarm-att-stream-probe-ticket-warning-invalid-1")).toBeNull();
+  });
+
+  it("会话已连上群友后收到 warning=join_ticket_invalid 不会立刻销毁会话并触发恢复风暴", async () => {
+    const registration = {
+      active: {
+        state: "activated",
+      },
+    };
+    const 事件记录: Array<协作分发会话事件["type"]> = [];
+    const { torrent, emit } = 创建可观测假Torrent("/webtorrent/warning-after-wire.mp4");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/torrent-att-warning-after-wire")) {
+          return {
+            ok: true,
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+          };
+        }
+        if (url.includes("/webtorrent/warning-after-wire.mp4")) {
+          return {
+            ok: true,
+            status: 206,
+          };
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        };
+      })
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-warning-after-wire",
+      kind: "video",
+      locator: 准备好的定位结果("att-warning-after-wire"),
+      onSessionEvent: (event) => {
+        事件记录.push(event.type);
+      },
+    });
+    expect(source).toMatchObject({
+      src: "/webtorrent/warning-after-wire.mp4",
+    });
+    expect(读取协作分发会话状态("swarm-att-warning-after-wire")).not.toBeNull();
+
+    // 先标记会话已经连上群友，再注入 warning 级 ticket-invalid。
+    emit("wire", { type: "webSeed" });
+    emit("warning", new Error("join_ticket_invalid"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(事件记录).not.toContain("SWARM_TICKET_INVALID");
+    expect(读取协作分发会话状态("swarm-att-warning-after-wire")).not.toBeNull();
   });
 
   it("受控 torrent 首次拉到后会缓存元数据，后端临时离线重开时仍能复用本地 swarm 描述", async () => {

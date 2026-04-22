@@ -186,6 +186,7 @@ export type 协作分发底层会话 = {
   file: WebTorrent文件 | null;
   terminalError: unknown | null;
   cleanupStarted: boolean;
+  曾连上群友: boolean;
   consumerBindings: Map<
     string,
     {
