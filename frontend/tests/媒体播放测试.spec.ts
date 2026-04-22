@@ -94,8 +94,11 @@ describe("媒体播放器", () => {
     expect(auto.src).toBe(view.src);
   });
 
-  it("图片首开仍优先 preview/full blob 主链，不会因为多消费者改造而强行切到 WebTorrent", async () => {
-    const resolveSwarmSource = vi.fn();
+  it("新代际图片首开优先走 WebTorrent 主链，不再把 blob canonical 当正式播放链", async () => {
+    const resolveSwarmSource = vi.fn(async () => ({
+      src: "blob:http://media.local/swarm-image-blob-1",
+      hint: "正在协作分发" as const,
+    }));
     const probeAnchor = vi.fn();
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -116,7 +119,7 @@ describe("媒体播放器", () => {
           join_ticket: null,
           ticket_expires_at: null,
           availability: "available" as const,
-          survival_mode: "server_assisted" as const,
+          survival_mode: "peer_only_after_expiry" as const,
         },
         preview_asset: {
           still_url: "http://media.local/preview-image-blob-1.jpg",
@@ -142,7 +145,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-image-blob-1",
             join_ticket: null,
-            survival_mode: "server_assisted" as const,
+            survival_mode: "peer_only_after_expiry" as const,
           },
           origin: {
             original_url: "http://media.local/blob/att-image-blob-1/original.png",
@@ -164,11 +167,10 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "blob",
+      mode: "swarm",
       attachmentId: "att-image-blob-1",
       kind: "image",
-      src: "http://media.local/blob/att-image-blob-1/canonical.webp",
-      viewerSrc: "http://media.local/blob/att-image-blob-1/canonical.webp",
+      src: "blob:http://media.local/swarm-image-blob-1",
       thumbnailUrl: "http://media.local/preview-image-blob-1.jpg",
       contentHash: "hash-image-blob-1",
       distribution: {
@@ -176,11 +178,11 @@ describe("媒体播放器", () => {
         announce_urls: ["http://media.local/announce"],
         web_seed_url: "http://media.local/web-seed-image-blob-1",
         join_ticket: null,
-        survival_mode: "server_assisted" as const,
+        survival_mode: "peer_only_after_expiry" as const,
       },
-      hint: null,
+      hint: "正在协作分发",
     });
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(resolveSwarmSource).toHaveBeenCalledTimes(1);
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
@@ -2029,6 +2031,62 @@ describe("媒体播放器", () => {
     expect(result).toEqual({
       mode: "degraded",
       attachmentId: "att-video-attachment-not-found",
+      kind: "video",
+      src: "",
+      thumbnailUrl: null,
+      reason: "media_deleted",
+      hint: "内容已删除",
+    });
+    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("locator.status=deleted 时，会直接落删除终态而不是 attachment_not_ready", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-status-deleted",
+      kind: "video" as const,
+      status: "deleted" as const,
+      original_url: "http://media.local/original-video-status-deleted",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-status-deleted",
+        content_hash: "hash-video-status-deleted",
+        swarm_id: "swarm-hash-video-status-deleted",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-status-deleted",
+        torrent_info_hash: "torrent-info-hash-video-status-deleted",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "expired" as const,
+        media_state: {
+          code: "MEDIA_DELETED" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+      preview_asset: null,
+      file_asset: null,
+      blob_asset: null,
+      streaming_asset: null,
+    }));
+    const resolveSwarmSource = vi.fn(async () => null);
+    const probeAnchor = vi.fn(async () => undefined);
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource,
+      probeAnchor,
+    });
+
+    const result = await 播放器.解析播放结果({
+      attachmentId: "att-video-status-deleted",
+      kind: "video",
+    });
+
+    expect(result).toEqual({
+      mode: "degraded",
+      attachmentId: "att-video-status-deleted",
       kind: "video",
       src: "",
       thumbnailUrl: null,

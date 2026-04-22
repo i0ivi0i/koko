@@ -177,7 +177,20 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return {
       startAttachmentId: request.startAttachmentId,
       items: request.items.map((item) => {
-        const playback = 媒体会话表.get(item.attachmentId)?.snapshot().playback;
+        const sessionSnapshot = 媒体会话表.get(item.attachmentId)?.snapshot();
+        const playback = sessionSnapshot?.playback;
+        if (item.kind === "video" && sessionSnapshot?.status === "recovering") {
+          const preview = 视频预览状态表.get(item.attachmentId) ?? null;
+          /**
+           * 显式重开查看器时，会话可能正从旧 source 重新裁决到删除态 / 新 ticket / 新主链。
+           * 这段窗口绝不能再把旧 playback.src 投回查看器，否则旧视频会在新真相到达前先抢跑一轮。
+           */
+          return {
+            ...item,
+            src: "",
+            posterSrc: preview?.phase === "ready" ? preview.src : item.posterSrc,
+          };
+        }
         if (
           playback?.mode === "blob" ||
           playback?.mode === "swarm" ||
@@ -204,6 +217,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           return {
             ...item,
             src: playback.mode === "blob" ? playback.viewerSrc ?? playback.src : playback.src,
+            ...((playback.mode === "blob" || playback.mode === "swarm") &&
+            ("contentHash" in playback || "distribution" in playback)
+              ? {
+                  contentHash: playback.contentHash ?? null,
+                  distribution: playback.distribution ?? null,
+                }
+              : {}),
           };
         }
         if (item.kind === "video") {
@@ -281,7 +301,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     if (!startItem || startItem.kind !== "video") {
       return false;
     }
-    const playback = 媒体会话表.get(startItem.attachmentId)?.snapshot().playback;
+    const sessionSnapshot = 媒体会话表.get(startItem.attachmentId)?.snapshot();
+    if (sessionSnapshot?.status === "recovering") {
+      return true;
+    }
+    const playback = sessionSnapshot?.playback;
     return playback?.mode === "expired" || playback?.mode === "degraded";
   };
   const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
@@ -1039,14 +1063,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       return;
     }
     /**
-     * 手动再次打开查看器 = 明确的“立即重试”意图：
-     * 1. 若会话已落到 degraded/expired，不能继续等后台 15 秒慢轮询；
-     * 2. 这里直接发 ENTER_RECOVERING，让会话立刻重跑 locator/swarm 裁决；
-     * 3. 其他可播放态保持不动，避免把正常播放误放大成重复解析。
+     * 手动打开正式查看器必须先重裁一次当前会话真相：
+     * 1. degraded/expired 当然要立刻重试，不能继续等后台慢轮询；
+     * 2. 即使旧会话手里还有可播 src，也要给删除态 / 新 ticket / 新主链一次抢占机会；
+     * 3. 只对显式 viewer open 生效，不把消息流常态渲染放大成持续重解析。
      */
-    if (snapshot.playback.mode === "degraded" || snapshot.playback.mode === "expired") {
-      session.send({ type: "ENTER_RECOVERING" });
-    }
+    session.send({ type: "ENTER_RECOVERING" });
   };
 
   const 清空播放状态 = (): void => {
@@ -1117,11 +1139,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     打开查看器(request: 媒体查看器打开请求): void {
-      const nextRequest = 投影查看器请求到当前播放真相({
+      const baseRequest = {
         startAttachmentId: request.startAttachmentId,
         items: request.items.map((item) => ({ ...item })),
-      });
-      启动查看器起始附件会话(nextRequest);
+      };
+      启动查看器起始附件会话(baseRequest);
+      const nextRequest = 投影查看器请求到当前播放真相(baseRequest);
       if (读取附件条目(request.startAttachmentId)?.kind === "video") {
         解析视频预览(request.startAttachmentId);
       }

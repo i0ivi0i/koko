@@ -649,7 +649,7 @@ export class 房间消息窗 extends LitElement {
             kind: "image",
             attachmentId: attachment.attachmentId,
             src: this.读取图片查看器播放源(attachment),
-            ...(playback?.mode === "blob"
+            ...((playback?.mode === "blob" || playback?.mode === "swarm")
               ? {
                   contentHash: playback.contentHash ?? null,
                   distribution: playback.distribution ?? null,

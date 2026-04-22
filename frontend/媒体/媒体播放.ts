@@ -313,6 +313,29 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     };
   };
 
+  const 读取媒体状态码 = (locator: 媒体定位结果): string | null =>
+    读取协作分发定位片段(locator)?.media_state?.code ?? null;
+
+  /**
+   * 新代际附件删除后，前端必须优先消费稳定删除真相：
+   * 1. 后端可能返回 `status=deleted`，也可能继续带着 `MEDIA_DELETED`；
+   * 2. 这里只认“附件已删”这条业务语义，不把它混回 not_ready；
+   * 3. 这样 fresh parse 和旧会话重裁决都能统一落到删除终态。
+   */
+  const 是否为已删除定位结果 = (locator: 媒体定位结果): boolean =>
+    locator.status === "deleted" || 读取媒体状态码(locator) === "MEDIA_DELETED";
+
+  /**
+   * 新附件的正式图片字节必须走 WebTorrent 主链；
+   * 1. 只有缺少 torrent/infohash 契约的旧 blob 资产，才继续走兼容读法；
+   * 2. 一旦协作分发契约完整，就不能再把 blob canonical 当正式主链；
+   * 3. 这样前向代际收口到单主链，旧代际仍保留兼容读取。
+   */
+  const 图片仍需兼容Blob主链 = (locator: 媒体定位结果): boolean =>
+    locator.kind === "image" &&
+    Boolean(读取图片Blob主链(locator)) &&
+    !Boolean(locator.distribution?.torrent_url && locator.distribution?.torrent_info_hash);
+
   const 是否值得为查看器视频强制刷新定位 = (
     input: 媒体播放输入,
     locator: 媒体定位结果
@@ -711,12 +734,17 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         ? 创建降级结果(input, null, "media_deleted", "内容已删除")
         : 创建降级结果(input, null, "locator_unavailable");
     }
+    if (是否为已删除定位结果(locator)) {
+      清理无在线种子连接窗口(input.attachmentId);
+      释放协作分发占用(input);
+      return 创建降级结果(input, locator, "media_deleted", "内容已删除");
+    }
     if (locator.status !== "ready") {
       释放协作分发占用(input);
       return 创建降级结果(input, locator, "attachment_not_ready");
     }
     const blobSource = 读取图片Blob主链(locator);
-    if (blobSource) {
+    if (blobSource && 图片仍需兼容Blob主链(locator)) {
       释放协作分发占用(input);
       return {
         mode: "blob",
