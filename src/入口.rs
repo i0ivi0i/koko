@@ -101,6 +101,16 @@ where
                     "后台上传残留清理失败"
                 );
             }
+            if let Err(err) = crate::shell::执行一次协作分发做种对账(cleanup_state.clone()).await
+            {
+                tracing::error!(
+                    usecase = "协作分发做种对账",
+                    adapter = "entry",
+                    outcome = "failed",
+                    error = %err,
+                    "后台协作分发做种对账失败"
+                );
+            }
         }
     });
     let serve_result = axum::serve(listener, app)

@@ -43,3 +43,14 @@ pub fn 最小webp字节() -> Vec<u8> {
 pub fn 最小mp4字节() -> Vec<u8> {
     include_bytes!("../../fixtures/minimal.mp4").to_vec()
 }
+
+/// 一部分手机与聊天 App 产出的 MP4 会使用 `iso5` 作为 major brand。
+/// 该样本基于最小 MP4 夹具原位替换 ftyp major brand，用来稳定复现
+/// “容器合法但 brand 非 isom/mp42” 的线上场景。
+pub fn iso5品牌mp4字节() -> Vec<u8> {
+    let mut bytes = 最小mp4字节();
+    if bytes.len() >= 12 {
+        bytes[8..12].copy_from_slice(b"iso5");
+    }
+    bytes
+}

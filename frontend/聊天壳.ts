@@ -696,6 +696,41 @@ export class 聊天壳 extends LitElement {
       background: rgba(255, 255, 255, 0.04);
     }
 
+    .message-media-unavailable {
+      display: grid;
+      place-items: center;
+      gap: 8px;
+      min-height: 120px;
+      padding: 14px;
+      border-radius: inherit;
+      text-align: center;
+      background:
+        radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.12), transparent 36%),
+        linear-gradient(135deg, rgba(34, 43, 56, 0.98), rgba(9, 13, 18, 0.98));
+    }
+
+    .message-media-hint {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+
+    .message-media-retry-trigger {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      font-size: 12px;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+
+    .message-media-retry-trigger:focus-visible {
+      outline: 2px solid var(--accent-hover);
+      outline-offset: 2px;
+    }
+
     /* 新消息提示属于房间壳层浮动入口：用户正在补旧未读时提示可见，但不抢走当前视角。 */
     .jump-latest-button {
       position: absolute;

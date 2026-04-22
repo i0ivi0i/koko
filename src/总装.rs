@@ -71,12 +71,14 @@ pub struct 媒体Tus侧车配置 {
 /// 2. web seed public endpoint 决定 24 小时保底源的公开地址；
 /// 3. ticket secret / TTL 决定私有 swarm 门禁如何签发；
 /// 4. peer presence staleness 为后续 Phase 3 的过期裁决预留稳定配置源；
-/// 5. 原始冷源清理间隔只属于启动/运维配置，不进入业务契约。
+/// 5. 原始冷源清理间隔只属于启动/运维配置，不进入业务契约；
+/// 6. seeder control base URL 只用于后端 owner 调 sidecar 命令面，不进入前端 contract。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 协作分发配置 {
     pub tracker_public_url: String,
     pub tracker_port: u16,
     pub web_seed_public_endpoint: Option<String>,
+    pub seeder_control_base_url: String,
     pub ticket_secret: Option<String>,
     pub ticket_ttl_seconds: i64,
     pub peer_presence_stale_seconds: i64,
@@ -438,12 +440,23 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
 /// 3. ticket secret 允许为空，此时 locator/complete 会显式不签发门禁令牌；
 /// 4. ticket TTL 默认 120 秒，保证浏览器不会长期复用旧门票；
 /// 5. stale 秒数先保守收口为 180 秒，给后续 Phase 3 的 presence 裁决复用；
-/// 6. 冷源清理默认每 60 秒扫一次，保证 TTL 真相不会只停留在数据库时间戳。
+/// 6. 冷源清理默认每 60 秒扫一次，保证 TTL 真相不会只停留在数据库时间戳；
+/// 7. seeder 命令面默认回落 `http://127.0.0.1:${SWARM_SEEDER_PORT|7073}`，避免 owner 调度入口漂移。
 pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
     let tracker_port = 读取可选端口("SWARM_TRACKER_PORT", 7072)?;
+    let seeder_port = 读取可选端口("SWARM_SEEDER_PORT", 7073)?;
     let tracker_public_url = 读取可选环境变量("SWARM_TRACKER_PUBLIC_URL")
         .unwrap_or_else(|| format!("ws://127.0.0.1:{tracker_port}"));
     let web_seed_public_endpoint = 读取可选环境变量("SWARM_WEB_SEED_PUBLIC_ENDPOINT");
+    let seeder_control_base_url = 读取可选环境变量("SWARM_SEEDER_CONTROL_BASE_URL")
+        .unwrap_or_else(|| format!("http://127.0.0.1:{seeder_port}"));
+    let seeder_control_base_url = seeder_control_base_url.trim_end_matches('/').to_string();
+    if seeder_control_base_url.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "环境变量 SWARM_SEEDER_CONTROL_BASE_URL 不能为空",
+        ));
+    }
     let ticket_secret = 读取可选环境变量("SWARM_TICKET_SECRET");
     let ticket_ttl_seconds = 读取可选整数("SWARM_TICKET_TTL_SECONDS", 120).and_then(|value| {
         if value <= 0 {
@@ -463,6 +476,7 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
         tracker_public_url,
         tracker_port,
         web_seed_public_endpoint,
+        seeder_control_base_url,
         ticket_secret,
         ticket_ttl_seconds,
         peer_presence_stale_seconds,
@@ -676,18 +690,39 @@ mod tests {
     #[serial]
     fn 读取协作分发配置会给出冷源清理默认值并尊重显式环境变量() {
         let old_cleanup_interval = env::var("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS").ok();
+        let old_seeder_port = env::var("SWARM_SEEDER_PORT").ok();
+        let old_seeder_control_base_url = env::var("SWARM_SEEDER_CONTROL_BASE_URL").ok();
         env::remove_var("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS");
+        env::set_var("SWARM_SEEDER_PORT", "17073");
+        env::remove_var("SWARM_SEEDER_CONTROL_BASE_URL");
 
         let default_config = 读取协作分发配置().expect("默认协作分发配置应可读");
         assert_eq!(default_config.media_origin_cleanup_interval_seconds, 60);
+        assert_eq!(
+            default_config.seeder_control_base_url,
+            "http://127.0.0.1:17073"
+        );
 
         env::set_var("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS", "15");
+        env::set_var(
+            "SWARM_SEEDER_CONTROL_BASE_URL",
+            "http://127.0.0.1:27073/",
+        );
         let explicit_config = 读取协作分发配置().expect("显式冷源清理间隔应可读");
         assert_eq!(explicit_config.media_origin_cleanup_interval_seconds, 15);
+        assert_eq!(
+            explicit_config.seeder_control_base_url,
+            "http://127.0.0.1:27073"
+        );
 
         恢复环境变量(
             "MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS",
             old_cleanup_interval,
+        );
+        恢复环境变量("SWARM_SEEDER_PORT", old_seeder_port);
+        恢复环境变量(
+            "SWARM_SEEDER_CONTROL_BASE_URL",
+            old_seeder_control_base_url,
         );
     }
 }

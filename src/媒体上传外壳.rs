@@ -795,6 +795,23 @@ pub(super) async fn complete_media_upload(
                     stale_seconds: state.swarm_peer_presence_stale_seconds,
                 },
             );
+            // complete 成功后立刻尝试触发 sidecar 做种：
+            // 1. 这里不改变“ready 真相已经落库”的结果；start 失败只记告警并交给后台对账补偿；
+            // 2. 命令载荷严格来自同一份 runtime_distribution，避免再长第二套 transport 真相；
+            // 3. 真正“谁该做种”的裁决仍在后端 owner，不在 sidecar 里发明业务语义。
+            if let Some(启动命令) = super::从协作分发响应构造做种启动命令(&runtime_distribution)
+            {
+                if let Err(err) = super::尝试启动协作分发做种(&state, &启动命令).await {
+                    tracing::warn!(
+                        usecase = "完成媒体上传",
+                        phase = "seed_start_failed",
+                        attachment_id = attachment_id.as_str(),
+                        info_hash = 启动命令.info_hash.as_str(),
+                        error = %err,
+                        "complete 成功后触发 sidecar 做种失败，等待后台对账重试"
+                    );
+                }
+            }
             let streaming_manifest_snapshot =
                 streaming_manifest_request
                     .as_ref()

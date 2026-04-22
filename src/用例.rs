@@ -181,6 +181,21 @@ pub struct 协作分发元数据快照 {
     pub torrent_info_hash: Option<String>,
 }
 
+/// 后台强 seed 对账只需要这组最小事实：
+/// 1. 哪个附件还在 0-24h 服务器强 seed 窗口；
+/// 2. owner 可用会话（用于构造受控 torrent/web_seed 入口）；
+/// 3. 稳定 swarm 元数据（用于签票与 sidecar 启动命令）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 待做种协作分发项 {
+    pub 附件标识: String,
+    pub 会话标识: String,
+    pub content_id: String,
+    pub content_hash: String,
+    pub swarm_id: String,
+    pub web_seed_until秒: i64,
+    pub torrent_info_hash: String,
+}
+
 /// 流媒体清单元数据是真正把“视频主链已经切到标准 manifest”落成权威事实的持久化表面。
 /// 这里只保存稳定清单存储键，不把段列表、播放器状态或本地缓存态混进仓储真相。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -498,6 +513,17 @@ pub trait 仓储端口 {
     ) -> Result<Option<协作分发元数据快照>, contract::错误码> {
         let _ = 附件标识;
         Ok(None)
+    }
+
+    /// 列出当前仍应由后端强 seed 的附件集合。
+    /// 这条查询只回答“现在谁该做种”，不直接触发 sidecar IO。
+    fn 列出待做种协作分发项(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<待做种协作分发项>, contract::错误码> {
+        let _ = (当前时间戳秒, 限制条数);
+        Ok(vec![])
     }
 
     /// cooperative 客户端活跃时只刷新最近一次 peer 存活时间。
@@ -1334,6 +1360,21 @@ pub fn 查询媒体定位(
         协作分发: distribution,
         流媒体清单: streaming_manifest,
     })
+}
+
+/// 0-24h 强 seed 的候选集合是后台对账输入，不面向壳层展示。
+/// 约束：
+/// 1. 时间与限制参数必须合法；
+/// 2. 具体筛选条件由仓储实现保持与权威表一致。
+pub fn 列出待做种协作分发项(
+    仓储: &dyn 仓储端口,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<待做种协作分发项>, contract::错误码> {
+    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.列出待做种协作分发项(当前时间戳秒, 限制条数)
 }
 
 /// 背景清理循环只做“把该删除的冷源挑出来”这一层过滤。

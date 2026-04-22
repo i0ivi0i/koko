@@ -52,6 +52,19 @@ const 发送JSON响应 = (response, statusCode, payload) => {
 
 const 读取WebTorrent构造器 = async () => {
   /**
+   * 强制 mock 模式只用于测试与诊断：
+   * - 默认仍优先 hybrid/webtorrent；
+   * - 只有显式设置 SWARM_SEEDER_FORCE_MOCK=1 才会跳过 WebTorrent 运行时探测。
+   */
+  if (process.env.SWARM_SEEDER_FORCE_MOCK?.trim() === "1") {
+    return {
+      Ctor: null,
+      capability: "mock",
+      error: new Error("forced by SWARM_SEEDER_FORCE_MOCK"),
+    };
+  }
+
+  /**
    * 优先尝试 webtorrent-hybrid：
    * 1. 它是官方 FAQ 明确提到的“Node 端可连接 WebRTC 浏览器 peer”路径；
    * 2. 但它包含原生依赖，某些开发机可能暂时没有装好；
@@ -120,6 +133,7 @@ const 读取活跃会话快照 = () =>
     infoHash: session.infoHash,
     addedAt: session.addedAt,
     source: session.source,
+    hasJoinTicket: Boolean(session.joinTicket),
     progress: Number.isFinite(session.torrent.progress)
       ? session.torrent.progress
       : 0,
@@ -161,20 +175,40 @@ const 启动做种会话 = async (payload) => {
   if (!normalizedInfoHash) {
     throw new Error("infoHash 非法或缺失");
   }
-  const existing = activeSessions.get(normalizedInfoHash);
-  if (existing) {
-    return { session: existing, created: false };
-  }
-
   const source = 选择种子来源(payload, normalizedInfoHash);
   if (!source) {
     throw new Error("缺少 magnetUri/torrentUrl/infoHash，无法启动做种");
+  }
+  const joinTicket = 读取JoinTicket(payload);
+  const existing = activeSessions.get(normalizedInfoHash);
+  if (existing) {
+    /**
+     * 同一 infohash 的 start 默认视为“续租/续命”，而不是重复创建：
+     * 1. 若 source 未变化，直接复用已有会话；
+     * 2. 若 join ticket 轮换，原地刷新 announce ticket 引用；
+     * 3. 这样可以避免 ticket TTL 到点后继续广播旧票据导致 join_ticket_invalid 风暴。
+     */
+    if (existing.source === source) {
+      const refreshedTicket = existing.joinTicket !== joinTicket;
+      if (refreshedTicket) {
+        existing.joinTicket = joinTicket;
+        if (existing.announceTicketRef) {
+          existing.announceTicketRef.value = joinTicket;
+        }
+      }
+      return { session: existing, created: false, refreshedTicket, restarted: false };
+    }
+
+    // source 发生变化（例如切换 torrentUrl/magnet）时，旧会话必须退场再重建，避免同 key 双轨漂移。
+    await 停止做种会话(normalizedInfoHash);
   }
 
   if (!client) {
     const session = {
       infoHash: normalizedInfoHash,
       source,
+      joinTicket,
+      announceTicketRef: { value: joinTicket },
       torrent: {
         progress: 0,
         numPeers: 0,
@@ -189,7 +223,7 @@ const 启动做种会话 = async (payload) => {
       addedAt: new Date().toISOString(),
     };
     activeSessions.set(normalizedInfoHash, session);
-    return { session, created: true };
+    return { session, created: true, refreshedTicket: false, restarted: false };
   }
 
   const announce = Array.isArray(payload.announceUrls)
@@ -199,7 +233,7 @@ const 启动做种会话 = async (payload) => {
     typeof payload.webSeedUrl === "string" && payload.webSeedUrl.trim().length > 0
       ? [payload.webSeedUrl.trim()]
       : [];
-  const joinTicket = 读取JoinTicket(payload);
+  const announceTicketRef = { value: joinTicket };
 
   const torrent = await new Promise((resolve, reject) => {
     let settled = false;
@@ -218,13 +252,14 @@ const 启动做种会话 = async (payload) => {
        * - 不允许 seeder 走“无票特权”导致 join_ticket_invalid 噪音；
        * - 这里透传的是 swarm 控制面门禁，不是前端第二播放链。
        */
-      ...(joinTicket
-        ? {
-            getAnnounceOpts: () => ({
-              ticket: joinTicket,
-            }),
-          }
-        : {}),
+      getAnnounceOpts: () => {
+        /**
+         * ticket 由 announceTicketRef 提供，允许同一会话在后续 /seed/start 时原地续租：
+         * - 有票时透传 `ticket`；
+         * - 无票时返回空对象，保持与 tracker 门禁配置一致。
+         */
+        return announceTicketRef.value ? { ticket: announceTicketRef.value } : {};
+      },
     };
     const instance = client.add(source, options, (readyTorrent) => {
       if (settled) {
@@ -248,12 +283,14 @@ const 启动做种会话 = async (payload) => {
   const session = {
     infoHash: actualInfoHash,
     source,
+    joinTicket,
+    announceTicketRef,
     torrent,
     addedAt: new Date().toISOString(),
   };
   activeSessions.set(actualInfoHash, session);
   绑定会话日志(session);
-  return { session, created: true };
+  return { session, created: true, refreshedTicket: false, restarted: false };
 };
 
 const 停止做种会话 = async (infoHashLike) => {
@@ -308,10 +345,12 @@ const server = createServer(async (request, response) => {
 
     if (method === "POST" && url.pathname === "/seed/start") {
       const payload = await 读取请求体JSON(request);
-      const { session, created } = await 启动做种会话(payload);
+      const { session, created, refreshedTicket, restarted } = await 启动做种会话(payload);
       发送JSON响应(response, 200, {
         ok: true,
         created,
+        refreshedTicket,
+        restarted,
         infoHash: session.infoHash,
         activeCount: activeSessions.size,
       });

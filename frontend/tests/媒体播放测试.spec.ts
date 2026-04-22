@@ -1795,7 +1795,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("media_state=MEDIA_NO_ONLINE_SEED 时会直接给出无在线种子提示", async () => {
+  it("media_state=MEDIA_NO_ONLINE_SEED 时会先进入连接群友窗口，预算耗尽后再进入无在线种子", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-no-seed",
       kind: "video" as const,
@@ -1828,23 +1828,133 @@ describe("媒体播放器", () => {
       resolveSwarmSource,
       probeAnchor,
     });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T00:00:00.000Z"));
+    try {
+      const 第一次结果 = await 播放器.解析播放结果({
+        attachmentId: "att-video-no-seed",
+        kind: "video",
+      });
+      expect(第一次结果).toEqual({
+        mode: "degraded",
+        attachmentId: "att-video-no-seed",
+        kind: "video",
+        src: "",
+        thumbnailUrl: "http://media.local/poster-video-no-seed",
+        reason: "connecting_to_peers",
+        hint: "正在尝试连接群友",
+      });
 
-    const result = await 播放器.解析播放结果({
-      attachmentId: "att-video-no-seed",
-      kind: "video",
-    });
+      vi.advanceTimersByTime(2_000);
+      const 第二次结果 = await 播放器.解析播放结果({
+        attachmentId: "att-video-no-seed",
+        kind: "video",
+      });
+      expect(第二次结果).toEqual({
+        mode: "degraded",
+        attachmentId: "att-video-no-seed",
+        kind: "video",
+        src: "",
+        thumbnailUrl: "http://media.local/poster-video-no-seed",
+        reason: "connecting_to_peers",
+        hint: "正在尝试连接群友",
+      });
 
-    expect(result).toEqual({
-      mode: "degraded",
-      attachmentId: "att-video-no-seed",
-      kind: "video",
-      src: "",
-      thumbnailUrl: "http://media.local/poster-video-no-seed",
-      reason: "no_online_seed",
-      hint: "当前没有在线种子，等待群友上线",
-    });
+      vi.advanceTimersByTime(6_001);
+      const 预算耗尽结果 = await 播放器.解析播放结果({
+        attachmentId: "att-video-no-seed",
+        kind: "video",
+      });
+      expect(预算耗尽结果).toEqual({
+        mode: "degraded",
+        attachmentId: "att-video-no-seed",
+        kind: "video",
+        src: "",
+        thumbnailUrl: "http://media.local/poster-video-no-seed",
+        reason: "no_online_seed",
+        hint: "当前没有在线种子，等待群友上线",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
     expect(resolveSwarmSource).not.toHaveBeenCalled();
     expect(probeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("MEDIA_NO_ONLINE_SEED 进入终态后，达到 retry_after_ms 会重新开启下一轮连接群友窗口", async () => {
+    const locate = vi.fn(async () => ({
+      attachment_id: "att-video-no-seed-retry-cycle",
+      kind: "video" as const,
+      status: "ready" as const,
+      original_url: "http://media.local/original-video-no-seed-retry-cycle",
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-video-no-seed-retry-cycle",
+        content_hash: "hash-video-no-seed-retry-cycle",
+        swarm_id: "swarm-hash-video-no-seed-retry-cycle",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-video-no-seed-retry-cycle",
+        torrent_info_hash: "torrent-info-hash-video-no-seed-retry-cycle",
+        announce_urls: ["http://media.local/announce"],
+        web_seed_url: null,
+        join_ticket: null,
+        ticket_expires_at: null,
+        availability: "expired" as const,
+        media_state: {
+          code: "MEDIA_NO_ONLINE_SEED" as const,
+          retry_after_ms: 15000,
+        },
+        survival_mode: "peer_only_after_expiry" as const,
+      },
+    }));
+    const 播放器 = 创建媒体播放器({
+      locate,
+      resolveSwarmSource: async () => null,
+      probeAnchor: async () => undefined,
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T00:00:00.000Z"));
+    try {
+      // 第一轮：8 秒连接预算耗尽后进入 no seed
+      await 播放器.解析播放结果({
+        attachmentId: "att-video-no-seed-retry-cycle",
+        kind: "video",
+      });
+      vi.advanceTimersByTime(8_001);
+      const 第一轮终态 = await 播放器.解析播放结果({
+        attachmentId: "att-video-no-seed-retry-cycle",
+        kind: "video",
+      });
+      expect(第一轮终态).toMatchObject({
+        mode: "degraded",
+        reason: "no_online_seed",
+      });
+
+      // 终态期间不到 15 秒，仍然保持 no seed，不应提前重开连接窗口
+      vi.advanceTimersByTime(14_999);
+      const 终态保持结果 = await 播放器.解析播放结果({
+        attachmentId: "att-video-no-seed-retry-cycle",
+        kind: "video",
+      });
+      expect(终态保持结果).toMatchObject({
+        mode: "degraded",
+        reason: "no_online_seed",
+      });
+
+      // 到达 retry_after_ms 后，下一轮应重新回到 connecting_to_peers
+      vi.advanceTimersByTime(1);
+      const 下一轮连接结果 = await 播放器.解析播放结果({
+        attachmentId: "att-video-no-seed-retry-cycle",
+        kind: "video",
+      });
+      expect(下一轮连接结果).toMatchObject({
+        mode: "degraded",
+        reason: "connecting_to_peers",
+        hint: "正在尝试连接群友",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("media_state=MEDIA_DELETED 时会直接落删除终态提示", async () => {

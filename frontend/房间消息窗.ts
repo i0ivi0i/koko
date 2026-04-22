@@ -793,10 +793,45 @@ export class 房间消息窗 extends LitElement {
       `;
     };
 
-    const 渲染不可用附件 = (attachmentId: string, playback: 媒体播放结果) =>
+    const 是否允许手动重试不可用视频 = (
+      attachment: 消息展示项["attachments"][number],
+      playback: 媒体播放结果
+    ): boolean =>
+      attachment.kind === "video" &&
+      playback.mode === "degraded" &&
+      (playback.reason === "connecting_to_peers" || playback.reason === "no_online_seed");
+
+    const 渲染不可用附件 = (
+      attachment: 消息展示项["attachments"][number],
+      playback: 媒体播放结果
+    ) =>
       html`
-        <div class="message-media-unavailable" data-attachment-id=${attachmentId}>
-          ${渲染媒体提示(attachmentId, playback)}
+        <div class="message-media-unavailable" data-attachment-id=${attachment.attachmentId}>
+          ${渲染媒体提示(attachment.attachmentId, playback)}
+          ${是否允许手动重试不可用视频(attachment, playback)
+            ? html`
+                <button
+                  class="message-media-retry-trigger"
+                  type="button"
+                  data-attachment-id=${attachment.attachmentId}
+                  @click=${(event: Event) => {
+                    /**
+                     * “暂无在线种子”卡片必须给出手动重试入口：
+                     * 1. 用户点重试代表显式恢复意图，不应被动等下一轮 15 秒窗口；
+                     * 2. 这里只回抛 ENTER_RECOVERING 信号，保持“壳层只表达意图，恢复裁决仍在会话 owner”； 
+                     * 3. deleted/非视频场景不显示该入口，避免误导无效操作。
+                     */
+                    event.preventDefault();
+                    event.stopPropagation();
+                    this.广播媒体会话信号(attachment.attachmentId, {
+                      type: "ENTER_RECOVERING",
+                    });
+                  }}
+                >
+                  立即重试
+                </button>
+              `
+            : null}
         </div>
       `;
 
@@ -821,7 +856,7 @@ export class 房间消息窗 extends LitElement {
                 data-grid-row-span=${attachment.gridRowSpan ?? ""}
                 style=${attachmentCardStyle}
               >
-                ${渲染不可用附件(attachment.attachmentId, playback)}
+                ${渲染不可用附件(attachment, playback)}
               </div>
             `;
           }

@@ -473,6 +473,75 @@ pub(super) fn 查询协作分发元数据(
     repo.在运行时执行(查询协作分发元数据_异步(&repo.pool, 附件标识))
 }
 
+/// 列出仍在强 seed 窗口的附件清单。
+/// 这里必须收口到“ready + 未删 + 完整 torrent 元信息 + web_seed_until 未过期”的最小集合：
+/// 1. 只有 `torrent_info_hash` 但没有 `torrent_bytes/piece_length` 的脏记录，不得继续进入做种对账；
+/// 2. 否则 sidecar 会拿到无法解析的 torrent 地址，触发持续 400/重试噪音，掩盖真实在线种子信号；
+/// 3. sidecar 启停调度仍由 shell/application 决策，不在 adapter 里直接发网络请求。
+async fn 列出待做种协作分发项_异步(
+    pool: &PgPool,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<usecase::待做种协作分发项>, contract::错误码> {
+    let rows = sqlx::query(
+        "SELECT a.attachment_id,
+                s.session_id AS owner_session_id,
+                dm.content_id,
+                dm.content_hash,
+                dm.swarm_id,
+                EXTRACT(EPOCH FROM dm.web_seed_until)::BIGINT AS web_seed_until_epoch,
+                dm.torrent_info_hash
+         FROM attachments a
+         JOIN attachment_distribution_metadata dm
+           ON dm.attachment_id = a.attachment_id
+         JOIN LATERAL (
+            SELECT s2.session_id
+            FROM sessions s2
+            WHERE s2.anonymous_identity_id = a.owner_anonymous_identity_id
+            ORDER BY s2.last_seen_at DESC, s2.created_at DESC
+            LIMIT 1
+         ) s ON TRUE
+         WHERE a.status = 'ready'
+           AND a.origin_deleted_at IS NULL
+           AND dm.torrent_bytes IS NOT NULL
+           AND dm.torrent_info_hash IS NOT NULL
+           AND dm.piece_length_bytes IS NOT NULL
+           AND dm.web_seed_until > TO_TIMESTAMP($1)
+         ORDER BY dm.web_seed_until ASC
+         LIMIT $2",
+    )
+    .bind(当前时间戳秒)
+    .bind(限制条数)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| usecase::待做种协作分发项 {
+            附件标识: row.get("attachment_id"),
+            会话标识: row.get("owner_session_id"),
+            content_id: row.get("content_id"),
+            content_hash: row.get("content_hash"),
+            swarm_id: row.get("swarm_id"),
+            web_seed_until秒: row.get("web_seed_until_epoch"),
+            torrent_info_hash: row.get("torrent_info_hash"),
+        })
+        .collect())
+}
+
+pub(super) fn 列出待做种协作分发项(
+    repo: &Pg仓储,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<usecase::待做种协作分发项>, contract::错误码> {
+    repo.在运行时执行(列出待做种协作分发项_异步(
+        &repo.pool,
+        当前时间戳秒,
+        限制条数,
+    ))
+}
+
 async fn 写入协作分发最近peer存活时间_异步(
     pool: &PgPool,
     附件标识: &str,

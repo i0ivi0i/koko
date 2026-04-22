@@ -1932,6 +1932,64 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("视频降级为 no_online_seed 时会显示手动重试入口，并回抛 ENTER_RECOVERING 信号", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-no-seed-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-no-seed-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-no-seed-1": {
+        mode: "degraded",
+        attachmentId: "att-video-no-seed-1",
+        kind: "video",
+        src: "",
+        thumbnailUrl: null,
+        reason: "no_online_seed",
+        hint: "当前没有在线种子，等待群友上线",
+      } satisfies 媒体播放结果,
+    };
+
+    const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];
+    pane.addEventListener("room-media-session-signal", (event) => {
+      信号记录.push(
+        (event as CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>).detail
+      );
+    });
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const retryButton = pane.querySelector<HTMLButtonElement>(
+      'button.message-media-retry-trigger[data-attachment-id="att-video-no-seed-1"]'
+    );
+    expect(retryButton).not.toBeNull();
+
+    retryButton?.click();
+
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-video-no-seed-1",
+        signal: { type: "ENTER_RECOVERING" },
+      },
+    ]);
+
+    pane.remove();
+  });
+
   it("图片已经切到 Blob 资产主链时，卡片继续吃 preview，查看器会拿 full 主链", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {

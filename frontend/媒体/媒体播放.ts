@@ -89,6 +89,15 @@ type 协作分发尝试结果 = {
 
 const 协作分发运行时不支持提示 = "当前环境不支持 WebTorrent 主链（请使用 HTTPS 或 localhost）";
 const 查看器强刷定位冷却毫秒 = 15_000;
+/**
+ * 连接群友窗口与重试节奏是跨端契约的固定基线：
+ * 1. 单轮连接预算 8 秒（每 2 秒一次探测）；
+ * 2. 预算耗尽后进入 no_online_seed，并按 15 秒节奏重开下一轮；
+ * 3. 这些值后端也有同尺度配置，这里保留前端兜底避免旧 locator 直接跳过连接态。
+ */
+const 连接群友窗口毫秒 = 8_000;
+const 连接群友默认重试毫秒 = 2_000;
+const 无在线种子默认重试毫秒 = 15_000;
 
 /**
  * 删除终态优先看稳定错误码，而不是 HTTP 文案：
@@ -162,6 +171,76 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       return;
     });
   const 查看器强刷定位时间戳 = new Map<string, number>();
+  /**
+   * 当后端已经给出 `MEDIA_NO_ONLINE_SEED` 时，前端仍要按契约跑“连接群友窗口”：
+   * 1. 首次进入 no-seed 会先回到 connecting_to_peers；
+   * 2. 窗口预算耗尽才显示 no_online_seed；
+   * 3. 到 retry_after_ms 后再开启下一轮连接窗口，避免长期卡死在单一终态。
+   */
+  const 无在线种子连接窗口表 = new Map<
+    string,
+    {
+      startedAtMs: number;
+      lastNoSeedAtMs: number | null;
+      retryAfterMs: number;
+    }
+  >();
+
+  const 清理无在线种子连接窗口 = (attachmentId: string): void => {
+    无在线种子连接窗口表.delete(attachmentId);
+  };
+
+  const 读取无在线种子重试间隔毫秒 = (
+    distribution: NonNullable<媒体定位结果["distribution"]>
+  ): number => {
+    const retryAfterMs = distribution.media_state?.retry_after_ms;
+    if (typeof retryAfterMs !== "number" || !Number.isFinite(retryAfterMs) || retryAfterMs <= 0) {
+      return 无在线种子默认重试毫秒;
+    }
+    return Math.floor(retryAfterMs);
+  };
+
+  const 读取或重置无在线种子连接窗口 = (
+    attachmentId: string,
+    nowMs: number,
+    retryAfterMs: number
+  ): { startedAtMs: number; lastNoSeedAtMs: number | null; retryAfterMs: number } => {
+    const current = 无在线种子连接窗口表.get(attachmentId);
+    if (!current) {
+      const initial = {
+        startedAtMs: nowMs,
+        lastNoSeedAtMs: null,
+        retryAfterMs,
+      };
+      无在线种子连接窗口表.set(attachmentId, initial);
+      return initial;
+    }
+    current.retryAfterMs = retryAfterMs;
+    if (current.lastNoSeedAtMs !== null && nowMs - current.lastNoSeedAtMs >= retryAfterMs) {
+      current.startedAtMs = nowMs;
+      current.lastNoSeedAtMs = null;
+    }
+    无在线种子连接窗口表.set(attachmentId, current);
+    return current;
+  };
+
+  const 标记进入无在线种子终态 = (attachmentId: string, nowMs: number): void => {
+    const current = 无在线种子连接窗口表.get(attachmentId);
+    if (!current) {
+      无在线种子连接窗口表.set(attachmentId, {
+        startedAtMs: nowMs - 连接群友窗口毫秒,
+        lastNoSeedAtMs: nowMs,
+        retryAfterMs: 无在线种子默认重试毫秒,
+      });
+      return;
+    }
+    // no-seed 终态时间只在“本轮第一次落终态”时写入；
+    // 否则频繁渲染/重复解析会把 15 秒重试窗口不断后推，导致永远重不开连接探测。
+    if (current.lastNoSeedAtMs === null) {
+      current.lastNoSeedAtMs = nowMs;
+    }
+    无在线种子连接窗口表.set(attachmentId, current);
+  };
 
   const 释放协作分发占用 = (input: {
     attachmentId: string;
@@ -372,6 +451,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     const distribution = 读取协作分发定位片段(locator);
     const mediaStateCode = distribution?.media_state?.code ?? null;
     if (mediaStateCode === "MEDIA_DELETED") {
+      清理无在线种子连接窗口(input.attachmentId);
       释放协作分发占用(input);
       return {
         locator,
@@ -380,7 +460,41 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       };
     }
     if (mediaStateCode === "MEDIA_NO_ONLINE_SEED") {
+      if (!distribution) {
+        清理无在线种子连接窗口(input.attachmentId);
+        释放协作分发占用(input);
+        return {
+          locator,
+          playback: 创建降级结果(
+            input,
+            locator,
+            "no_online_seed",
+            "当前没有在线种子，等待群友上线"
+          ),
+          failureReason: null,
+        };
+      }
+      const nowMs = Date.now();
+      const retryAfterMs = 读取无在线种子重试间隔毫秒(distribution);
+      const currentWindow = 读取或重置无在线种子连接窗口(
+        input.attachmentId,
+        nowMs,
+        retryAfterMs
+      );
       释放协作分发占用(input);
+      if (nowMs - currentWindow.startedAtMs < 连接群友窗口毫秒) {
+        return {
+          locator,
+          playback: 创建降级结果(
+            input,
+            locator,
+            "connecting_to_peers",
+            "正在尝试连接群友"
+          ),
+          failureReason: null,
+        };
+      }
+      标记进入无在线种子终态(input.attachmentId, nowMs);
       return {
         locator,
         playback: 创建降级结果(
@@ -392,7 +506,11 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         failureReason: null,
       };
     }
+    if (mediaStateCode !== "MEDIA_CONNECTING_TO_PEERS") {
+      清理无在线种子连接窗口(input.attachmentId);
+    }
     if (distribution?.availability === "expired" && mediaStateCode === null) {
+      清理无在线种子连接窗口(input.attachmentId);
       释放协作分发占用(input);
       return {
         locator,
@@ -408,6 +526,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
       };
     }
     if (!distribution) {
+      清理无在线种子连接窗口(input.attachmentId);
       return {
         locator,
         playback: null,

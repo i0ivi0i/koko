@@ -1,6 +1,12 @@
 use super::*;
-use axum::Router;
+use axum::{
+    extract::State as AxumState,
+    routing::post,
+    Json as AxumJson, Router,
+};
 use serde_json::Value;
+use std::sync::{Arc, Mutex};
+use tokio::{net::TcpListener, task::JoinHandle};
 
 struct 媒体complete测试环境 {
     app: Router,
@@ -11,6 +17,55 @@ struct 媒体complete测试环境 {
 
 struct 已登记上传回执 {
     attachment_id: String,
+}
+
+type 假SeederStart请求记录 = Arc<Mutex<Vec<serde_json::Value>>>;
+
+async fn 启动假seeder侧车() -> (String, 假SeederStart请求记录, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("应能绑定假的 seeder 端口");
+    let address = listener.local_addr().expect("应能读取假的 seeder 地址");
+    let requests: 假SeederStart请求记录 = Arc::new(Mutex::new(Vec::new()));
+    let app = Router::new()
+        .route("/seed/start", post(记录假seeder_start请求))
+        .route("/seed/reconcile", post(返回假seeder_reconcile成功))
+        .with_state(requests.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("假的 seeder 侧车应能启动");
+    });
+    (format!("http://{address}"), requests, server)
+}
+
+async fn 记录假seeder_start请求(
+    AxumState(requests): AxumState<假SeederStart请求记录>,
+    AxumJson(payload): AxumJson<serde_json::Value>,
+) -> (StatusCode, AxumJson<serde_json::Value>) {
+    requests
+        .lock()
+        .expect("seeder 请求记录锁不应中毒")
+        .push(payload);
+    (
+        StatusCode::OK,
+        AxumJson(serde_json::json!({
+            "ok": true,
+            "created": true
+        })),
+    )
+}
+
+async fn 返回假seeder_reconcile成功(
+    AxumJson(_payload): AxumJson<serde_json::Value>,
+) -> (StatusCode, AxumJson<serde_json::Value>) {
+    (
+        StatusCode::OK,
+        AxumJson(serde_json::json!({
+            "ok": true,
+            "activeCount": 0
+        })),
+    )
 }
 
 async fn 准备complete测试环境(token_prefix: &str) -> 媒体complete测试环境 {
@@ -251,4 +306,92 @@ async fn 视频complete后不再返回hls_dash_manifest() {
         manifest_exists.is_none(),
         "新视频附件不再写 HLS/DASH 清单记录"
     );
+}
+
+#[tokio::test]
+#[serial]
+async fn 视频complete在iso5_brand_mp4输入下不应返回500() {
+    let env = 准备complete测试环境("single-file-video-iso5-brand").await;
+    let video_bytes = iso5品牌mp4字节();
+    let 已登记上传回执 { attachment_id } =
+        准备并登记上传回执(&env, "video", "canonical.mp4", "video/mp4", &video_bytes).await;
+
+    let (complete_status, complete_body) = 完成媒体上传(&env, &attachment_id).await;
+    assert_eq!(
+        complete_status,
+        StatusCode::OK,
+        "iso5 品牌 mp4 是线上真实输入，complete 不应误报 500: {complete_body:?}"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 视频complete会触发seeder_start命令() {
+    let (fake_seeder_base_url, seeder_requests, fake_seeder_server) = 启动假seeder侧车().await;
+    let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
+    env::set_var("SWARM_SEEDER_CONTROL_BASE_URL", fake_seeder_base_url.as_str());
+
+    let env = 准备complete测试环境("single-file-video-seeder-start").await;
+    let video_bytes = 最小mp4字节();
+    let 已登记上传回执 { attachment_id } =
+        准备并登记上传回执(&env, "video", "canonical.mp4", "video/mp4", &video_bytes).await;
+    let (complete_status, complete_body) = 完成媒体上传(&env, &attachment_id).await;
+
+    assert_eq!(complete_status, StatusCode::OK, "{complete_body:?}");
+    let requests = seeder_requests
+        .lock()
+        .expect("seeder 请求记录锁不应中毒")
+        .clone();
+    assert_eq!(requests.len(), 1, "complete 成功后应至少触发一次 seeder start");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&env.database_url)
+        .await
+        .expect("应能连接数据库读取分发元信息");
+    let persisted_info_hash: Option<String> = sqlx::query_scalar(
+        "SELECT torrent_info_hash
+         FROM attachment_distribution_metadata
+         WHERE attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能读取权威 torrent_info_hash");
+    pool.close().await;
+
+    let start_payload = &requests[0];
+    assert_eq!(
+        start_payload["infoHash"].as_str(),
+        persisted_info_hash.as_deref(),
+        "sidecar start 的 infoHash 必须与权威库里的 torrent_info_hash 一致"
+    );
+    assert!(
+        start_payload["announceUrls"]
+            .as_array()
+            .map(|values| !values.is_empty())
+            .unwrap_or(false),
+        "sidecar start 必须携带 announceUrls，避免 tracker 入群线索丢失"
+    );
+    assert!(
+        start_payload["torrentUrl"]
+            .as_str()
+            .map(|value| value.starts_with("http://") || value.starts_with("https://"))
+            .unwrap_or(false),
+        "sidecar start 的 torrentUrl 必须是绝对 URL，不能继续给相对路径触发 Invalid torrent identifier"
+    );
+    assert!(
+        start_payload["webSeedUrl"]
+            .as_str()
+            .map(|value| value.starts_with("http://") || value.starts_with("https://"))
+            .unwrap_or(false),
+        "sidecar start 的 webSeedUrl 必须是绝对 URL，避免 sidecar 解析相对路径时漂移"
+    );
+    assert!(
+        start_payload.get("joinTicket").is_some(),
+        "start payload 至少应保留 joinTicket 字段（可为空），避免控制面命名漂移"
+    );
+
+    fake_seeder_server.abort();
+    恢复环境变量(backup);
 }

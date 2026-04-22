@@ -1033,8 +1033,19 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       return;
     }
     const session = 读取或创建媒体会话(startAttachment);
-    if (!session.snapshot().playback) {
+    const snapshot = session.snapshot();
+    if (!snapshot.playback) {
       void session.启动();
+      return;
+    }
+    /**
+     * 手动再次打开查看器 = 明确的“立即重试”意图：
+     * 1. 若会话已落到 degraded/expired，不能继续等后台 15 秒慢轮询；
+     * 2. 这里直接发 ENTER_RECOVERING，让会话立刻重跑 locator/swarm 裁决；
+     * 3. 其他可播放态保持不动，避免把正常播放误放大成重复解析。
+     */
+    if (snapshot.playback.mode === "degraded" || snapshot.playback.mode === "expired") {
+      session.send({ type: "ENTER_RECOVERING" });
     }
   };
 

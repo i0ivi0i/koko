@@ -62,6 +62,36 @@ pub(super) fn 解析视频内容(
     if !kind.mime_type().starts_with("video/") {
         return Err(媒体内容解析错误::类型不允许("只允许上传视频"));
     }
+    // 主路径继续优先复用 `nom-exif`：
+    // - 统一沿用现有解析能力；
+    // - 保持类型判断与元数据提取语义不漂移。
+    //
+    // 但线上存在 `iso5` 等 brand 的 BMFF 输入会触发 `nom-exif` 源构建失败。
+    // 这类失败不是业务系统错误，而是解析器能力边界；此处必须做容器级降级，
+    // 避免把可播放视频误报成 500。
+    let (宽, 高) = match 尝试用nom_exif解析视频宽高(bytes) {
+        Ok(size) => size,
+        Err(err) => match 尝试用mp4头解析视频宽高(bytes) {
+            Some(size) => size,
+            None => {
+                return Err(match err {
+                    // 解析器吃不下输入时统一回落到“输入非法”语义，
+                    // complete 阶段应返回 4xx，而不是把用户输入问题扩散成 5xx。
+                    媒体内容解析错误::系统错误(_) => 媒体内容解析错误::类型不允许("视频内容非法"),
+                    other => other,
+                })
+            }
+        },
+    };
+    let (宽, 高) = 应用mp4展示方向到视频宽高(bytes, 宽, 高);
+    Ok(视频内容解析结果 {
+        mime_type: kind.mime_type().to_string(),
+        宽: 宽 as i32,
+        高: 高 as i32,
+    })
+}
+
+fn 尝试用nom_exif解析视频宽高(bytes: &[u8]) -> Result<(u64, u64), 媒体内容解析错误> {
     let mut parser = MediaParser::new();
     let media_source = MediaSource::seekable(Cursor::new(bytes))
         .map_err(|_| 媒体内容解析错误::系统错误("构建视频元数据数据源失败"))?;
@@ -85,11 +115,23 @@ pub(super) fn 解析视频内容(
         .ok_or(媒体内容解析错误::类型不允许(
             "视频缺少高度元数据",
         ))?;
-    let (宽, 高) = 应用mp4展示方向到视频宽高(bytes, 宽, 高);
-    Ok(视频内容解析结果 {
-        mime_type: kind.mime_type().to_string(),
-        宽: 宽 as i32,
-        高: 高 as i32,
+    Ok((宽, 高))
+}
+
+fn 尝试用mp4头解析视频宽高(bytes: &[u8]) -> Option<(u64, u64)> {
+    let mut reader = Cursor::new(bytes);
+    let mp4 = mp4::Mp4Reader::read_header(&mut reader, bytes.len() as u64).ok()?;
+    mp4.tracks().values().find_map(|track| {
+        if !matches!(track.track_type(), Ok(mp4::TrackType::Video)) {
+            return None;
+        }
+        let 宽 = u64::from(track.width());
+        let 高 = u64::from(track.height());
+        if 宽 > 0 && 高 > 0 {
+            Some((宽, 高))
+        } else {
+            None
+        }
     })
 }
 
@@ -180,5 +222,17 @@ mod tests {
         assert_eq!(文件级结果.mime_type, 字节级结果.mime_type);
         assert_eq!(文件级结果.宽, 字节级结果.宽);
         assert_eq!(文件级结果.高, 字节级结果.高);
+    }
+
+    #[test]
+    fn iso5_brand_mp4仍应被解析为合法视频元数据() {
+        let mut iso5字节 = include_bytes!("../tests/fixtures/minimal.mp4").to_vec();
+        iso5字节[8..12].copy_from_slice(b"iso5");
+
+        let 结果 = 解析视频内容(&iso5字节);
+        assert!(
+            结果.is_ok(),
+            "major brand=iso5 的 mp4 属于协议内合法容器，解析不应再误判为系统错误: {结果:?}"
+        );
     }
 }
