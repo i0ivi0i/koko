@@ -723,6 +723,84 @@ describe("传输", () => {
     expect(locatorAsset?.distribution.web_seed_url).toBeNull();
   });
 
+  it("loadMediaLocator 会把 partial_peer 触发的 connecting 语义稳定透传给前端", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-connecting-peer-1",
+          kind: "video",
+          status: "ready",
+          original_url:
+            "/api/attachments/att-connecting-peer-1/content?session_id=s-1&variant=original",
+          thumbnail_url:
+            "/api/attachments/att-connecting-peer-1/content?session_id=s-1&variant=thumbnail",
+          preview_asset: null,
+          distribution: {
+            content_id: "content_att-connecting-peer-1",
+            content_hash: "hash-att-connecting-peer-1",
+            swarm_id: "swarm-hash-att-connecting-peer-1",
+            web_seed_until: "1775942400",
+            torrent_url: "/api/media/att-connecting-peer-1/torrent?session_id=s-1",
+            torrent_info_hash: "torrent-info-hash-connecting-peer-1",
+            announce_urls: ["/api/swarm/announce"],
+            web_seed_url: null,
+            join_ticket: null,
+            ticket_expires_at: null,
+            availability: "pending",
+            media_state: {
+              code: "MEDIA_CONNECTING_TO_PEERS",
+              retry_after_ms: 2000,
+            },
+            survival_mode: "peer_only_after_expiry",
+          },
+          streaming_asset: null,
+          file_asset: {
+            asset_id: "att-connecting-peer-1",
+            content_hash: "hash-att-connecting-peer-1",
+            kind: "single_file_video",
+            variants: {
+              canonical: {
+                id: "canonical",
+                mime_type: "video/mp4",
+                url: "/api/attachments/att-connecting-peer-1/content?session_id=s-1&variant=original",
+                width: 1280,
+                height: 720,
+              },
+            },
+            origin: {
+              original_url:
+                "/api/attachments/att-connecting-peer-1/content?session_id=s-1&variant=original",
+              expires_at_epoch_seconds: 1775942400,
+              available: false,
+              role: "cold_backup_only",
+            },
+            distribution: {
+              swarm_id: "swarm-hash-att-connecting-peer-1",
+              announce_urls: ["/api/swarm/announce"],
+              web_seed_url: null,
+              join_ticket: null,
+              survival_mode: "peer_only_after_expiry",
+            },
+          },
+          blob_asset: null,
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = new HttpRealtime传输("http://localhost:3000");
+
+    const locator = await transport.loadMediaLocator("s-1", "att-connecting-peer-1");
+
+    expect(locator.distribution?.media_state).toEqual({
+      code: "MEDIA_CONNECTING_TO_PEERS",
+      retry_after_ms: 2000,
+    });
+    expect(locator.file_asset?.distribution?.survival_mode).toBe("peer_only_after_expiry");
+  });
+
   it("buildAttachmentContentUrl 会生成受控图片内容地址", () => {
     const transport = new HttpRealtime传输("http://localhost:3000");
 

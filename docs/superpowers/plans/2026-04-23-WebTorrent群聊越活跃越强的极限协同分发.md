@@ -8,6 +8,16 @@
 
 **Tech Stack:** Rust (`axum` / `sqlx` / PostgreSQL), TypeScript (`vitest` / WebTorrent browser runtime / XState actor runtime), Chrome DevTools CLI smoke tests, PowerShell launcher checks
 
+**Execution Status:** Completed on `2026-04-23`
+
+**Execution Record:**
+
+- Task 1 commit: `aa2418b` `扩展协作分发来源裁决并引入 partial peer`
+- Task 2 commit: `9a74b3d` `让协作分发会话默认 eager 补齐并上报 partial peer`
+- Task 3 commit: `c11242d` `去掉视频协作补齐的 reuseOnly 保守门槛`
+- Task 4 commit: `850cf19` `让本地完整附件在重开后恢复当前房间的帮助任务`
+- Task 5 commit: final completion commit in git history; includes transport regression, full verification, browser smoke, spec backfill, and final graph rebuild.
+
 ---
 
 ## File Map

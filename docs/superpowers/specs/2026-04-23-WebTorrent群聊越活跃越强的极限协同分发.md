@@ -1,7 +1,7 @@
 # WebTorrent 群聊越活跃越强的极限协同分发
 
 日期：2026-04-23  
-状态：Proposed  
+状态：Implemented  
 适用范围：`koko` 的新上传图片/视频附件、时间线自动播放、查看器、全屏、后台补齐、群友协同上传、前 `24 小时` 服务器强参与、`24-48 小时` 纯 peer 接力。  
 前置文档：`docs/superpowers/specs/2026-04-22-WebTorrent高速分发防止群友偷懒.md`  
 补充目标：在“不允许第二正式播放主链”“`24 小时` 后服务器退字节”“失败态说真话”这三条已成立后，继续把系统推进到“群越活跃，分发越强”的极限协同方向。
@@ -21,6 +21,40 @@
 - BitTorrent BEP 19：<https://www.bittorrent.org/beps/bep_0019.html>
 - simple-peer：<https://github.com/feross/simple-peer>
 - bittorrent-tracker：<https://github.com/webtorrent/bittorrent-tracker>
+
+---
+
+## 实现与验收记录（2026-04-23）
+
+本次实现已经落地，关键收口如下：
+
+1. 后端 `swarm_peer_presence` 已扩展 `partial_peer`，但 `MEDIA_READY` 仍只认 `complete_peer / backend_strong_seed / 可用 web_seed`。
+2. 前端协作分发 runtime 已默认进入 eager 补齐，并在进入 swarm 后先上报 `partial_peer`，补齐完成后升级为 `complete_peer`。
+3. 视频协作补齐已去掉 `reuseOnly` 保守门槛，自动播放 / 查看器继续共用同一条 swarm owner 链。
+4. 页面重开后，只要本地完整缓存仍在，当前房间内的附件会恢复帮助任务；不再只恢复 `locally_complete` 表象。
+
+自动化验证已通过：
+
+- `pnpm --dir frontend test`
+- `pnpm --dir frontend typecheck`
+- `pnpm --dir frontend build`
+- `cargo test -j 1`
+- `pwsh -File tests/启动器脚本检查.ps1`
+
+真实浏览器烟测已完成：
+
+- 环境：`https://localhost`，房间 `1234b`，`sender / A / B / C / D` 多隔离上下文。
+- 素材：发送端先上传 1 张图片，再上传 2 条 MP4；其中后一条视频使用了 `D:\200-生活\230-照片备份\233-Telegram\色色\VID_20230823_122115_920.mp4`。
+- 现象 1：`A/B/C/D` 入房后都会真实发起 locator / torrent / `webtorrent/{infohash}/content-*.mp4` 请求，说明帮助链已经不是“只在显式 viewer 打开后才勉强开始”。
+- 现象 2：`A/B/C` 点开同一条最新视频后，前端真实上报 `POST /api/media/{attachment}/presence`；数据库 `swarm_peer_presence` 中同一附件同时出现多个 `complete_peer` 和 `backend_strong_seed`，群聊活跃度已经直接转成 swarm 强度。
+- 现象 3：`D` 在前 `24 小时` 阶段进入同一房间时，同时出现 `/webtorrent/{infohash}/content-*.mp4` 与 `/api/attachments/{attachment}/content?variant=original` 的 `206` 请求，符合“服务器强帮助者 + 群友 swarm”共同参与的现实，而不是单来源串行。
+- 现象 4：把 `web_seed_until` 人工拨到 `24 小时` 之后并清空该附件的 peer presence 后，前端先进入 `正在尝试连接群友`，随后稳定落到 `当前没有在线种子，等待群友上线`。
+- 现象 5：再把同一附件强制切到删除终态后，前端重试立即切成 `内容已删除`，没有继续伪装成一般加载失败。
+
+补充说明：
+
+- 在本机局域网 + aggressive eager 补齐环境下，浏览器侧 `partial_peer` 窗口极短，真实烟测里很快就晋级成 `complete_peer`；`partial_peer` 的连接语义、非 ready 语义、以及 stale 窗口裁决已由后端/前端定向测试单独覆盖。
+- 本轮没有新增 deferred 项；未实现项为 `0`。
 
 ---
 
