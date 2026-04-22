@@ -1735,6 +1735,126 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("非自动播 owner 的时间线视频触发 error 时，不应广播 PLAYER_ERROR 干扰会话恢复链路", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = null;
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];
+    pane.addEventListener("room-media-session-signal", (event) => {
+      信号记录.push(
+        (event as CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>).detail
+      );
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const preview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(preview).not.toBeNull();
+
+    preview?.dispatchEvent(new Event("error"));
+
+    expect(信号记录).toEqual([]);
+
+    pane.remove();
+  });
+
+  it("自动播 owner 的时间线视频触发 error 时，必须继续广播 PLAYER_ERROR 给媒体会话 owner", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    const 信号记录: Array<{ attachmentId: string; signal: 媒体会话信号 }> = [];
+    pane.addEventListener("room-media-session-signal", (event) => {
+      信号记录.push(
+        (event as CustomEvent<{ attachmentId: string; signal: 媒体会话信号 }>).detail
+      );
+    });
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    // 自动播 owner 可能在挂载后立即回抛一次 PLAYER_PLAYING，这里清空只看 error 语义。
+    信号记录.length = 0;
+
+    const preview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(preview).not.toBeNull();
+
+    preview?.dispatchEvent(new Event("error"));
+
+    expect(信号记录).toEqual([
+      {
+        attachmentId: "att-video-1",
+        signal: { type: "PLAYER_ERROR" },
+      },
+    ]);
+
+    pane.remove();
+  });
+
   it("视频封面加载失败时会回抛恢复信号并退回静态占位，新 thumbnail 到达后应恢复展示", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [

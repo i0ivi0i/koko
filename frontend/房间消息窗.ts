@@ -958,6 +958,15 @@ export class 房间消息窗 extends LitElement {
                           }}
                           @error=${() =>
                             (() => {
+                              /**
+                               * 时间线非 owner 的 `<video>` 只是首帧/静态预览壳：
+                               * - 它失败时不代表“当前活跃播放会话”失败；
+                               * - 若这里也广播 PLAYER_ERROR，会把 owner 侧恢复链路放大成抖动重试；
+                               * - 只有自动播 owner 才允许把 error 上抛给媒体会话状态机。
+                               */
+                              if (!shouldRenderInlineVideo) {
+                                return;
+                              }
                               this.广播媒体会话信号(attachment.attachmentId, {
                                 type: "PLAYER_ERROR",
                               });

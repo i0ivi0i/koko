@@ -106,6 +106,8 @@ Assert-True ($seederScript -match 'webtorrent-hybrid|webtorrent') "frontend/dev-
 Assert-True ($seederScript -match '/seed/start') "frontend/dev-seeder.mjs 应该暴露 start 控制面。"
 Assert-True ($seederScript -match '/seed/stop') "frontend/dev-seeder.mjs 应该暴露 stop 控制面。"
 Assert-True ($seederScript -match '/seed/reconcile') "frontend/dev-seeder.mjs 应该暴露 reconcile 控制面。"
+Assert-True ($seederScript -match 'getAnnounceOpts') "frontend/dev-seeder.mjs 应该把 join ticket 通过 getAnnounceOpts 透传给 tracker。"
+Assert-True ($seederScript -match 'joinTicket|join_ticket') "frontend/dev-seeder.mjs 的 start payload 应该支持 join ticket 字段。"
 Assert-True ($runScript -match 'Get-ListeningPortProcessRecords') "run.ps1 应该在启动前识别端口占用归属，而不是等 sidecar 启动失败后才把残留暴露给开发者。"
 Assert-True ($runScript -match 'Stop-StaleLauncherSidecars') "run.ps1 应该在启动前自动回收自己留下的 tusd / tracker 残留。"
 Assert-True ($runScript -match 'Invoke-LauncherCleanup') "run.ps1 应该把退出清理收口成统一入口，避免 finally / 退出事件各清各的。"

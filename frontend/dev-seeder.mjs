@@ -28,6 +28,22 @@ const 读取请求体JSON = async (request) => {
   return JSON.parse(Buffer.concat(chunks).toString("utf-8"));
 };
 
+/**
+ * 兼容控制面里可能出现的 ticket 命名：
+ * - 新字段优先 `joinTicket`（JS 风格）；
+ * - 同时接受 `join_ticket` / `ticket`，避免灰度阶段不同 caller 命名导致 seeder 漏票；
+ * - 统一只把非空字符串透传给 tracker announce。
+ */
+const 读取JoinTicket = (payload) => {
+  const raw =
+    payload?.joinTicket ?? payload?.join_ticket ?? payload?.ticket ?? null;
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 const 发送JSON响应 = (response, statusCode, payload) => {
   response.statusCode = statusCode;
   response.setHeader("content-type", "application/json; charset=utf-8");
@@ -183,6 +199,7 @@ const 启动做种会话 = async (payload) => {
     typeof payload.webSeedUrl === "string" && payload.webSeedUrl.trim().length > 0
       ? [payload.webSeedUrl.trim()]
       : [];
+  const joinTicket = 读取JoinTicket(payload);
 
   const torrent = await new Promise((resolve, reject) => {
     let settled = false;
@@ -195,6 +212,19 @@ const 启动做种会话 = async (payload) => {
     const options = {
       announce,
       urlList,
+      /**
+       * seeder 也必须按统一 swarm 门禁入场：
+       * - tracker 开启 join ticket 时，announce 请求要带 ticket；
+       * - 不允许 seeder 走“无票特权”导致 join_ticket_invalid 噪音；
+       * - 这里透传的是 swarm 控制面门禁，不是前端第二播放链。
+       */
+      ...(joinTicket
+        ? {
+            getAnnounceOpts: () => ({
+              ticket: joinTicket,
+            }),
+          }
+        : {}),
     };
     const instance = client.add(source, options, (readyTorrent) => {
       if (settled) {
