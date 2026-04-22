@@ -35,3 +35,7 @@ tmp/
 
 # Graphify output is local generated state and should not participate in version control.
 graphify-out/
+
+# Local Codex runtime noise
+.codex-*.log
+.codex-*.pid
