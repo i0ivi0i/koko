@@ -259,18 +259,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     });
 
     if (beforeContext.currentViewerRequest && !afterContext.currentViewerRequest) {
-      const attachmentId = beforeContext.currentViewerRequest.startAttachmentId;
-      const 已释放查看器起始附件 = 释放媒体附件会话(attachmentId, {
-        丢弃未完成播放补齐: true,
-        丢弃未完成预览补齐: true,
-        清理协作补齐: true,
-        清理视频预览: true,
-        立即请求重渲染: true,
-      });
-      if (!已释放查看器起始附件) {
-        协作补齐协作.清理附件(attachmentId);
-        视频预览协作.删除视频预览状态(attachmentId);
-      }
+      /**
+       * 关闭 viewer 只代表“查看器 owner 退场”，不代表附件生命周期结束：
+       * 1. 同一附件可能仍在当前时间线里，需要立刻回到 inline preview / autoplay 候选；
+       * 2. 一旦已经进入帮助链，也不能因为退出全屏就把共享会话、补齐任务和预览状态一起清掉；
+       * 3. 真正的释放仍交给“当前时间线集合 + 帮助链 + clear/destroy”那条统一裁决链，避免 viewer 变成第二套生命周期真相。
+       */
       查看器会话协作.处理查看器请求已清空();
     }
 

@@ -3172,14 +3172,21 @@ describe("聊天应用内核", () => {
 
     读取媒体编排供测试(kernel).关闭媒体查看器供测试();
 
-    expect(释放附件播放资源).toHaveBeenCalledWith({
-      attachmentId: "att-video-viewer-close-1",
-      consumerId: "session:att-video-viewer-close-1",
-      丢弃未完成补齐: true,
-    });
+    expect(释放附件播放资源).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-viewer-close-1",
+        consumerId: "session:att-video-viewer-close-1",
+      })
+    );
     expect(
       kernel.snapshot().media.sessionByAttachmentId["att-video-viewer-close-1"]
-    ).toBeUndefined();
+    ).toMatchObject({
+      attachmentId: "att-video-viewer-close-1",
+      playback: expect.objectContaining({
+        mode: "manifest",
+        src: "http://media.local/stream/att-video-viewer-close-1/master.m3u8",
+      }),
+    });
   });
 
   it("frozen/page_hidden 会把重型工作意图降到 suspended，并投影到运行时快照", async () => {
