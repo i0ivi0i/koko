@@ -68,6 +68,81 @@ fn realtime主链闭环() {
 }
 
 #[test]
+#[serial]
+fn 异步订阅主链遇到无效会话时仍返回会话无效() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let runtime = tokio::runtime::Runtime::new().expect("应能创建测试 runtime");
+    runtime
+        .block_on(koko::assembly::自动追平迁移(&cfg.database_url))
+        .expect("应先追平迁移");
+    let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("S{:011}", uniq % 100_000_000_000);
+    let device_token = format!("subscribe-valid-device-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
+    let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("进房应返回房间快照"),
+    };
+
+    // 这条测试专门锁住 realtime async 热路径的拒绝顺序：
+    // 先挡掉无效会话，不能因为后续还会查成员资格就把错误语义漂成别的 code。
+    let result =
+        runtime.block_on(koko::usecase::加载房间增量事件_异步(&repo, &room_id, "s-missing", 0));
+    assert_eq!(result, Err(koko::contract::错误码::会话无效));
+}
+
+#[test]
+#[serial]
+fn 异步订阅主链遇到非成员时仍返回成员资格不足() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let runtime = tokio::runtime::Runtime::new().expect("应能创建测试 runtime");
+    runtime
+        .block_on(koko::assembly::自动追平迁移(&cfg.database_url))
+        .expect("应先追平迁移");
+    let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let owner_device = format!("subscribe-owner-device-{uniq}");
+    let stranger_device = format!("subscribe-stranger-device-{uniq}");
+    let owner_session = koko::usecase::引导匿名身份(&mut repo, &owner_device)
+        .expect("应能引导房主身份")
+        .会话标识;
+    let stranger_session = koko::usecase::引导匿名身份(&mut repo, &stranger_device)
+        .expect("应能引导旁观身份")
+        .会话标识;
+    let room = koko::usecase::按短码进房或建房(
+        &mut repo,
+        &owner_session,
+        &format!("M{:011}", uniq % 100_000_000_000),
+    )
+    .expect("应能进房");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("进房应返回房间快照"),
+    };
+
+    // 这条测试锁住“有效会话但无成员资格”不能被偷改成静默订阅或系统错误。
+    let result = runtime.block_on(koko::usecase::加载房间增量事件_异步(
+        &repo,
+        &room_id,
+        &stranger_session,
+        0,
+    ));
+    assert_eq!(result, Err(koko::contract::错误码::成员资格不足));
+}
+
+#[test]
 fn 订阅需要重拉快照时控制面kind保持need_snapshot_reload() {
     // 这里先锁住 shell 对前端承诺的最小 payload 形状。
     // 即使内部实现继续重整，只要 kind / room_id / expected_position 漂了，

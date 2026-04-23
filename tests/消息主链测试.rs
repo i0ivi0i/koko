@@ -428,3 +428,60 @@ fn ready视频附件可以进入create_message主链() {
         }
     }
 }
+
+#[test]
+#[serial]
+fn 异步create_message主链成功时仍只返回权威消息事件() {
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let runtime = tokio::runtime::Runtime::new().expect("应能创建测试 runtime");
+    runtime
+        .block_on(koko::assembly::自动追平迁移(&cfg.database_url))
+        .expect("应先追平迁移");
+    let mut repo = koko::adapter::Pg仓储::连接并迁移(&cfg.database_url).expect("应能连接数据库");
+
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let code = format!("RA{:010}", uniq % 10_000_000_000);
+    let device_token = format!("async-create-message-device-{uniq}");
+    let session_id = koko::usecase::引导匿名身份(&mut repo, &device_token)
+        .expect("应能引导匿名身份")
+        .会话标识;
+    let room = koko::usecase::按短码进房或建房(&mut repo, &session_id, &code).expect("应能进房");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("进房应返回房间快照"),
+    };
+    let client_message_id = format!("async-message-{uniq}");
+
+    // 这条测试锁住 realtime 热路径成功结果的权威承载体：
+    // create_message_异步 成功时只能回到“消息已创建”领域事件，
+    // 不能长出第二套成功 ack 或旁路结果对象。
+    let event = koko::usecase::创建消息_异步(
+        &mut repo,
+        &room_id,
+        &session_id,
+        &client_message_id,
+        "hello async create_message",
+        &[],
+    );
+    let event = runtime
+        .block_on(event)
+        .expect("异步主链应能创建消息");
+
+    match event {
+        koko::contract::领域事件::消息已创建 {
+            房间标识,
+            文本,
+            发送者会话标识,
+            事件位置,
+            ..
+        } => {
+            assert_eq!(房间标识, room_id);
+            assert_eq!(发送者会话标识, session_id);
+            assert_eq!(文本, "hello async create_message");
+            assert_eq!(事件位置, 1);
+        }
+    }
+}
