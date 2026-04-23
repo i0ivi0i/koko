@@ -403,23 +403,6 @@ pub(super) async fn 提交统一消息事件_异步(
     })
 }
 
-pub(super) fn 创建消息事件(
-    repo: &mut Pg仓储,
-    房间标识: &str,
-    客户端消息标识: &str,
-    会话标识: &str,
-    文本: &str,
-) -> Result<contract::领域事件, contract::错误码> {
-    repo.在运行时执行(提交统一消息事件_异步(
-        &repo.pool,
-        房间标识,
-        客户端消息标识,
-        会话标识,
-        文本,
-        &[],
-    ))
-}
-
 pub(super) fn 创建统一消息事件(
     repo: &mut Pg仓储,
     房间标识: &str,

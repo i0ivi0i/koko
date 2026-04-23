@@ -197,7 +197,6 @@ async fn 空body_presence不会把无种子附件抬成media_ready() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["distribution"]["availability"].as_str(), Some("expired"));
     assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_CONNECTING_TO_PEERS"),
@@ -340,11 +339,6 @@ async fn recent_partial_peer会让过期附件保持connecting而不是直接no_
 
     assert_eq!(status, StatusCode::OK, "{first_body:?}");
     assert_eq!(
-        first_body["distribution"]["availability"].as_str(),
-        Some("expired"),
-        "recent partial peer 只有连接价值，不能把兼容 availability 抬成 available"
-    );
-    assert_eq!(
         first_body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_CONNECTING_TO_PEERS"),
         "只有 recent partial_peer 活跃时，过期附件仍应进入连接群友态"
@@ -450,11 +444,6 @@ async fn stale_partial_peer不会把附件永久抬在connecting() {
     .await;
 
     assert_eq!(status, StatusCode::OK, "{first_body:?}");
-    assert_eq!(
-        first_body["distribution"]["availability"].as_str(),
-        Some("expired"),
-        "stale partial peer 不能把附件抬回 available"
-    );
     assert_eq!(
         first_body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_CONNECTING_TO_PEERS"),
@@ -575,11 +564,6 @@ async fn partial_peer不能冒充available_ready来源() {
     .await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("expired"),
-        "只有 partial_peer 时，可用性兼容字段仍不能冒充 available"
-    );
     assert_ne!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_READY"),
@@ -709,11 +693,6 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("available"),
-        "同一 swarm 里已有完整 peer 时，旧附件不该被误判成 expired"
-    );
-    assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_READY"),
         "同一 swarm 的完整来源应统一投影成 MEDIA_READY"
@@ -805,10 +784,6 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("expired")
-    );
     assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_CONNECTING_TO_PEERS"),
@@ -909,11 +884,6 @@ async fn web_seed刚过期且最近没有peer存活时locator会先进入连接�
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("expired"),
-        "兼容字段 availability 仍保持旧语义：当前没有可用来源时继续是 expired"
-    );
-    assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_CONNECTING_TO_PEERS"),
         "web_seed 刚过期且仍在连接预算内时，应先进入连接群友态，而不是直接跳到无在线种子"
@@ -1012,11 +982,6 @@ async fn web_seed已过期较久且最近没有peer存活时首次访问仍会�
     .await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("expired"),
-        "长时间过期时可用性兼容字段仍是 expired"
-    );
     assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_CONNECTING_TO_PEERS"),
@@ -1130,11 +1095,6 @@ async fn 附件已删除时locator会返回media_deleted终态而不是附件未
         "附件已删除时，locator 顶层状态要明确进入 deleted，而不是继续报 ready/expired"
     );
     assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("expired"),
-        "删除终态不应冒充可用来源"
-    );
-    assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_DELETED"),
         "删除终态必须明确返回 MEDIA_DELETED，不能混成附件未就绪或无在线种子"
@@ -1215,11 +1175,6 @@ async fn web_seed过期且streaming已删除但最近peer仍存活时locator会�
     .await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("available"),
-        "只要最近 peer 仍在活跃，locator 就必须进入 peer-only 可用态，而不是因为服务器 streaming 已删就直接 expired"
-    );
     assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_READY"),
@@ -1350,11 +1305,6 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
     .await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
-    assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("available"),
-        "同 swarm 中 active backend strong seed 可用时，过期附件应保持 available"
-    );
     assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_READY"),
@@ -1583,4 +1533,14 @@ async fn 做种对账会跳过缺失torrent元信息的脏附件记录() {
 
     fake_seeder_server.abort();
     恢复环境变量(backup);
+}
+
+#[test]
+fn 协作分发响应源码不应继续输出availability兼容字段() {
+    let source = std::fs::read_to_string("src/媒体协作分发.rs")
+        .expect("应能读取协作分发响应实现源码");
+    assert!(
+        !source.contains("\"availability\""),
+        "收口目标要求协作分发只输出 media_state，不能继续保留 availability 兼容字段"
+    );
 }

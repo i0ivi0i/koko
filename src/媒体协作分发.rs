@@ -191,10 +191,10 @@ pub(crate) fn 裁决协作分发可用性(
     }
 }
 
-/// `media_state` 是比 availability 更稳定的跨端真相：
-/// 1. availability 先保留给旧前端兼容；
-/// 2. 新前端统一消费 media_state.code；
-/// 3. 无可用来源时先给短连接窗口，再进入无在线种子。
+/// `media_state` 是跨端唯一稳定状态真相：
+/// 1. 各壳统一消费 media_state.code；
+/// 2. 无可用来源时先给短连接窗口，再进入无在线种子；
+/// 3. 禁止并行维护第二套可用性字段。
 fn 裁决协作分发媒体状态码(
     snapshot: &usecase::协作分发元数据快照,
     web_seed仍可用: bool,
@@ -326,7 +326,7 @@ fn 签发协作分发join_ticket(
 
 /// Phase 2 的 runtime locator 仍然服从同一条边界：
 /// 1. 不下发存储键；
-/// 2. runtime 线索只包含浏览器真正要用到的 announce / web seed / presence / availability；
+/// 2. runtime 线索只包含浏览器真正要用到的 announce / web seed / presence / media_state；
 /// 3. join_ticket/ticket_expires_at 只表达 swarm 门禁，不扩散成页面流程字段。
 pub(crate) fn 协作分发快照转响应值(
     snapshot: &usecase::协作分发元数据快照,
@@ -341,16 +341,6 @@ pub(crate) fn 协作分发快照转响应值(
         上下文.attachment_id, 上下文.session_id
     );
     let web_seed仍可用 = 上下文.冷源仍可用 && 上下文.now_epoch秒 <= snapshot.web_seed_until秒;
-    let availability = if 上下文.附件已删除 {
-        "expired"
-    } else {
-        裁决协作分发可用性(
-            snapshot,
-            web_seed仍可用,
-            上下文.now_epoch秒,
-            上下文.stale_seconds,
-        )
-    };
     let media_state_code = 裁决协作分发媒体状态码(
         snapshot,
         web_seed仍可用,
@@ -380,12 +370,9 @@ pub(crate) fn 协作分发快照转响应值(
         "ticket_expires_at": ticket
             .as_ref()
             .map(|value| value.ticket_expires_at.as_str()),
-        // 兼容字段：旧前端仍消费 availability；
-        // 新前端应优先消费 media_state.code。
-        "availability": availability,
         "media_state": 构造媒体状态响应(media_state_code),
         // survival_mode 表达的是“服务器流媒体退场后正式靠什么继续活”，
-        // 它是稳定共享语义，不等于当前 availability，也不承载前端页面提示文案。
+        // 它是稳定共享语义，不等于当前 media_state，也不承载前端页面提示文案。
         "survival_mode": "peer_only_after_expiry",
     })
 }

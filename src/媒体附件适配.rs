@@ -75,7 +75,7 @@ fn 解析上传残留清理原因(
 }
 
 /// 媒体 owner 在写 prepared/ready 附件时，需要先把应用层持有的内部身份反查成数据库主键。
-/// 迁移窗口里优先吃 `identity_uuid`，只在存量还没补齐时回落兼容旧串。
+/// 收口后只认 `identity_uuid`，不再把兼容旧串抬回应用层真相。
 /// 这个反查只服务媒体链路，因此直接跟着媒体 owner 走，不把“查 owner id”升级成共享垃圾 helper。
 async fn 查询匿名身份数据库主键_异步(
     pool: &PgPool,
@@ -84,7 +84,7 @@ async fn 查询匿名身份数据库主键_异步(
     sqlx::query_scalar::<_, i64>(
         "SELECT id \
          FROM anonymous_identities \
-         WHERE COALESCE(identity_uuid::text, anonymous_identity_id) = $1",
+         WHERE identity_uuid::text = $1",
     )
     .bind(所属匿名身份标识)
     .fetch_optional(pool)
@@ -99,11 +99,11 @@ pub(super) async fn 查询附件快照_异步(
     pool: &PgPool,
     附件标识: &str,
 ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
-    // 单文件视频主链不再生成 mezzanine，冷备生命周期回到 origin_*；
-    // 旧记录仍可能只写了 mezzanine_*，因此查询层只做兼容回退，不再把旧字段当成新视频真相 owner。
+    // 单文件视频主链的生命周期真相已经收口到 origin_*；
+    // app-facing 读取层不再把 mezzanine_* 回退当成业务真相，避免继续并行两套生命周期。
     let row = sqlx::query(
         "SELECT a.attachment_id,
-                COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) AS owner_identity_text,
+                ai.identity_uuid::text AS owner_identity_text,
                 a.kind,
                 a.mime_type,
                 a.status,
@@ -112,18 +112,8 @@ pub(super) async fn 查询附件快照_异步(
                 a.thumbnail_storage_key IS NOT NULL AS has_thumbnail,
                 a.asset_original_storage_key,
                 a.full_storage_key,
-                EXTRACT(
-                    EPOCH FROM CASE
-                        WHEN a.kind = 'video' THEN COALESCE(a.origin_expires_at, a.mezzanine_expires_at)
-                        ELSE a.origin_expires_at
-                    END
-                )::BIGINT AS origin_expires_at_epoch,
-                EXTRACT(
-                    EPOCH FROM CASE
-                        WHEN a.kind = 'video' THEN COALESCE(a.origin_deleted_at, a.mezzanine_deleted_at)
-                        ELSE a.origin_deleted_at
-                    END
-                )::BIGINT AS origin_deleted_at_epoch \
+                EXTRACT(EPOCH FROM a.origin_expires_at)::BIGINT AS origin_expires_at_epoch,
+                EXTRACT(EPOCH FROM a.origin_deleted_at)::BIGINT AS origin_deleted_at_epoch \
          FROM attachments a \
          JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
          WHERE a.attachment_id = $1",
@@ -176,7 +166,7 @@ async fn 查询待完成媒体附件_异步(
 ) -> Result<Option<usecase::待完成媒体附件读取结果>, contract::错误码> {
     let row = sqlx::query(
         "SELECT a.attachment_id,
-                COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) AS owner_identity_text,
+                ai.identity_uuid::text AS owner_identity_text,
                 a.current_upload_session_id,
                 a.kind,
                 a.mime_type,
@@ -860,7 +850,7 @@ async fn 查询附件可读内容_异步(
             JOIN anonymous_identities ai ON ai.id = a.owner_anonymous_identity_id \
             WHERE a.attachment_id = $1 \
               AND a.committed_at IS NULL \
-              AND COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) = $2 \
+              AND ai.identity_uuid::text = $2 \
             UNION ALL \
             SELECT \
                 CASE \

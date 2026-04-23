@@ -485,3 +485,12 @@ fn 异步create_message主链成功时仍只返回权威消息事件() {
         }
     }
 }
+
+#[test]
+fn 消息主链不应继续保留纯文本旧提交路径注释() {
+    let source = std::fs::read_to_string("src/用例.rs").expect("应能读取用例实现源码");
+    assert!(
+        !source.contains("默认实现先兼容纯文本路径"),
+        "消息主链收口后，不应继续保留旧纯文本提交路径的兼容叙事"
+    );
+}

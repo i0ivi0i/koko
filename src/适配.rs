@@ -208,7 +208,7 @@ impl Pg仓储 {
         sqlx::query_scalar(
             // 应用层从这一刻开始只消费内部 identity_uuid；
             // 旧 anonymous_identity_id 留在库里只是迁移缝，不能继续冒充身份真相。
-            "SELECT COALESCE(ai.identity_uuid::text, ai.anonymous_identity_id) \
+            "SELECT ai.identity_uuid::text \
              FROM sessions s \
              JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
              WHERE s.session_id = $1",
@@ -716,19 +716,8 @@ impl 仓储端口 for Pg仓储 {
         房间阅读适配::拉取房间增量事件(self, 房间标识, 从位置开始)
     }
 
-    /// 提交“消息已创建”事务链：
+    /// 统一消息主链把纯文本和附件消息都收口到同一个事务提交入口：
     /// 锁房间 -> 写事件 -> 写消息 -> 推进房间事件锚点，四步缺一不可。
-    fn 创建消息事件(
-        &mut self,
-        房间标识: &str,
-        客户端消息标识: &str,
-        会话标识: &str,
-        文本: &str,
-    ) -> Result<contract::领域事件, contract::错误码> {
-        消息事件适配::创建消息事件(self, 房间标识, 客户端消息标识, 会话标识, 文本)
-    }
-
-    /// 统一消息主链把纯文本和附件消息都收口到同一个事务提交入口。
     fn 创建统一消息事件(
         &mut self,
         房间标识: &str,
@@ -798,24 +787,6 @@ impl usecase::Realtime仓储端口 for Pg仓储 {
         附件标识: &str,
     ) -> Result<Option<usecase::附件读取结果>, contract::错误码> {
         媒体附件适配::查询附件快照_异步(&self.pool, 附件标识).await
-    }
-
-    async fn 创建消息事件(
-        &mut self,
-        房间标识: &str,
-        客户端消息标识: &str,
-        会话标识: &str,
-        文本: &str,
-    ) -> Result<contract::领域事件, contract::错误码> {
-        消息事件适配::提交统一消息事件_异步(
-            &self.pool,
-            房间标识,
-            客户端消息标识,
-            会话标识,
-            文本,
-            &[],
-        )
-        .await
     }
 
     async fn 创建统一消息事件(

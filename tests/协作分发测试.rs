@@ -832,10 +832,6 @@ async fn locator会返回announce_web_seed与短时join_ticket() {
             .is_some_and(|expires_at| !expires_at.is_empty()),
         "locator 必须同时返回 ticket_expires_at，避免前端只能盲猜 refresh 时机"
     );
-    assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("available")
-    );
 }
 
 #[tokio::test]

@@ -281,8 +281,8 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator.preview_asset?.still_url ?? (locator.kind === "video" ? locator.thumbnail_url : null);
 
   /**
-   * 旧 streaming_asset 只继续作为“服务端冷备窗口还没退场”的信号。
-   * 播放裁决不再直接返回 HLS/DASH 主链；新单文件视频走 file_asset，旧资产命不中 swarm 时回到受控冷源。
+   * streaming_asset 现在是“服务端 24 小时标准冷备窗口”的明确信号。
+   * 播放裁决不直接返回 HLS/DASH 主链；新单文件视频走 file_asset，命不中 swarm 时回到受控冷源。
    */
   const 读取流媒体主链地址 = (locator: 媒体定位结果): string | null => {
     if (locator.kind !== "video" || 流媒体冷备窗口已退场(locator)) {

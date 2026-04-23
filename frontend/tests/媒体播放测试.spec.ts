@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放器, 媒体是否默认循环播放 } from "../媒体/媒体播放";
 import {
@@ -7,6 +8,11 @@ import {
 import { Http接口错误 } from "../传输";
 
 describe("媒体播放器", () => {
+  it("媒体播放模块不应继续保留旧 streaming_asset 兼容叙事", () => {
+    const source = readFileSync(new URL("../媒体/媒体播放.ts", import.meta.url), "utf-8");
+    expect(source.includes("旧 streaming_asset 只继续作为")).toBe(false);
+  });
+
   it("视频默认启用循环播放，而图片不会被纳入这条策略", () => {
     expect(媒体是否默认循环播放("video")).toBe(true);
     expect(媒体是否默认循环播放("image")).toBe(false);

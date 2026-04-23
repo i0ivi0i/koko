@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建前端传输 } from "../传输";
 
@@ -193,5 +194,10 @@ describe("媒体共享契约", () => {
     expect("preview" in ((result.media_asset ?? {}) as Record<string, unknown>)).toBe(false);
     expect("full" in ((result.media_asset ?? {}) as Record<string, unknown>)).toBe(false);
     expect("original" in ((result.media_asset ?? {}) as Record<string, unknown>)).toBe(false);
+  });
+
+  it("共享契约实现不应继续出现迁移期兼容表面叙事", () => {
+    const source = readFileSync(new URL("../../src/契约.rs", import.meta.url), "utf-8");
+    expect(source.includes("迁移期兼容表面")).toBe(false);
   });
 });

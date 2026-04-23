@@ -485,18 +485,8 @@ pub trait 仓储端口 {
         限制条数: i64,
     ) -> Result<contract::快照, contract::错误码>;
 
-    /// 以事务方式提交“消息已创建”领域事件。
-    /// 约束：客户端消息标识用于幂等链路追踪，不可被仓储静默丢弃。
-    fn 创建消息事件(
-        &mut self,
-        房间标识: &str,
-        客户端消息标识: &str,
-        会话标识: &str,
-        文本: &str,
-    ) -> Result<contract::领域事件, contract::错误码>;
-
-    /// 统一消息主链的提交入口。
-    /// 默认实现先兼容纯文本路径；真正的附件事件提交会在后续任务里由适配层接管。
+    /// 统一消息主链的提交入口：
+    /// 同步入口下的纯文本消息与附件消息都必须走这条单一路径提交。
     fn 创建统一消息事件(
         &mut self,
         房间标识: &str,
@@ -504,12 +494,7 @@ pub trait 仓储端口 {
         会话标识: &str,
         文本: &str,
         附件: &[domain::message::已校验附件引用],
-    ) -> Result<contract::领域事件, contract::错误码> {
-        if !附件.is_empty() {
-            return Err(contract::错误码::系统错误);
-        }
-        self.创建消息事件(房间标识, 客户端消息标识, 会话标识, 文本)
-    }
+    ) -> Result<contract::领域事件, contract::错误码>;
 
     /// 查询上传链已经形成的附件事实。
     /// 默认实现先返回空，便于用例和测试先收口边界，再逐步补适配。
@@ -789,14 +774,6 @@ pub trait Realtime仓储端口 {
         Ok(None)
     }
 
-    async fn 创建消息事件(
-        &mut self,
-        房间标识: &str,
-        客户端消息标识: &str,
-        会话标识: &str,
-        文本: &str,
-    ) -> Result<contract::领域事件, contract::错误码>;
-
     async fn 创建统一消息事件(
         &mut self,
         房间标识: &str,
@@ -804,13 +781,7 @@ pub trait Realtime仓储端口 {
         会话标识: &str,
         文本: &str,
         附件: &[domain::message::已校验附件引用],
-    ) -> Result<contract::领域事件, contract::错误码> {
-        if !附件.is_empty() {
-            return Err(contract::错误码::系统错误);
-        }
-        self.创建消息事件(房间标识, 客户端消息标识, 会话标识, 文本)
-            .await
-    }
+    ) -> Result<contract::领域事件, contract::错误码>;
 }
 
 /// 设备级匿名身份引导用例：

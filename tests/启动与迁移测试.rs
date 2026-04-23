@@ -253,3 +253,17 @@ async fn 启动收到关闭信号后会优雅停机() {
     等待端口停止监听(port).await;
     恢复环境变量(backup);
 }
+
+#[test]
+fn 最终收口迁移必须补齐identity与冷源字段() {
+    let sql = std::fs::read_to_string("migrations/0018_最终收口清零.sql")
+        .expect("应存在 0018 最终收口迁移文件");
+    assert!(
+        sql.contains("UPDATE anonymous_identities"),
+        "0018 迁移必须补齐匿名身份存量字段"
+    );
+    assert!(
+        sql.contains("origin_expires_at"),
+        "0018 迁移必须覆盖 origin_* 冷源字段补齐"
+    );
+}

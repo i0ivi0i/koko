@@ -1747,4 +1747,9 @@ describe("媒体协作分发", () => {
     expect(closeServer).toHaveBeenCalledTimes(1);
     expect(destroy).toHaveBeenCalledTimes(1);
   });
+
+  it("后端协作分发实现不应继续输出 availability 兼容字段", () => {
+    const source = readFileSync(new URL("../../src/媒体协作分发.rs", import.meta.url), "utf-8");
+    expect(source.includes("\"availability\"")).toBe(false);
+  });
 });

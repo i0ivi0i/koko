@@ -426,11 +426,6 @@ async fn streaming清理后distribution仍保留peer_only生存语义而不是�
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        body["distribution"]["availability"].as_str(),
-        Some("available"),
-        "流媒体冷备窗口结束后，只要最近 peer 仍活着，distribution 就必须保持 peer 侧可存活，不能因为服务器 manifest 被删就直接裁决 expired"
-    );
     assert!(
         body["distribution"]["web_seed_url"].is_null(),
         "web_seed 已过期时必须明确退场，避免 locator 偷偷把服务器 original 冷源继续当长期主链"

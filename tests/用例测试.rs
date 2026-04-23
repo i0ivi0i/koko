@@ -334,14 +334,17 @@ impl koko::usecase::仓储端口 for 假仓储 {
         })
     }
 
-    /// 假实现：直接生成消息已创建事件并推进本地事件位置。
-    fn 创建消息事件(
+    /// 假实现：统一消息入口直接生成消息已创建事件并推进本地事件位置。
+    fn 创建统一消息事件(
         &mut self,
         房间标识: &str,
         客户端消息标识: &str,
         会话标识: &str,
         文本: &str,
+        附件: &[koko::domain::message::已校验附件引用],
     ) -> Result<koko::contract::领域事件, koko::contract::错误码> {
+        // 用例测试只关心“统一入口是否单路径提交”，这里保持最小可验证快照。
+        let _ = 附件;
         self.消息计数 += 1;
         self.最新位置 += 1;
         Ok(koko::contract::领域事件::消息已创建 {
@@ -446,22 +449,6 @@ impl koko::usecase::Realtime仓储端口 for 假仓储 {
         <Self as koko::usecase::仓储端口>::查询附件快照(self, 附件标识)
     }
 
-    async fn 创建消息事件(
-        &mut self,
-        房间标识: &str,
-        客户端消息标识: &str,
-        会话标识: &str,
-        文本: &str,
-    ) -> Result<koko::contract::领域事件, koko::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::创建消息事件(
-            self,
-            房间标识,
-            客户端消息标识,
-            会话标识,
-            文本,
-        )
-    }
-
     async fn 创建统一消息事件(
         &mut self,
         房间标识: &str,
@@ -470,14 +457,7 @@ impl koko::usecase::Realtime仓储端口 for 假仓储 {
         文本: &str,
         附件: &[koko::domain::message::已校验附件引用],
     ) -> Result<koko::contract::领域事件, koko::contract::错误码> {
-        <Self as koko::usecase::仓储端口>::创建统一消息事件(
-            self,
-            房间标识,
-            客户端消息标识,
-            会话标识,
-            文本,
-            附件,
-        )
+        <Self as koko::usecase::仓储端口>::创建统一消息事件(self, 房间标识, 客户端消息标识, 会话标识, 文本, 附件)
     }
 }
 
@@ -761,4 +741,13 @@ async fn 统一消息异步用例仍返回权威消息事件() {
             assert_eq!(文本, "hello async");
         }
     }
+}
+
+#[test]
+fn 仓储实现不应继续暴露旧创建消息事件入口() {
+    let source = std::fs::read_to_string("src/适配.rs").expect("应能读取仓储适配实现");
+    assert!(
+        !source.contains("fn 创建消息事件("),
+        "消息写入收口后，仓储实现不应继续保留旧创建消息事件入口"
+    );
 }
