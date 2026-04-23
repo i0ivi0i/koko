@@ -318,7 +318,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -417,7 +416,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "image",
@@ -500,7 +498,6 @@ describe("聊天应用内核", () => {
               sender_session_id: "s-other",
               sender_display_alias: "冷静的水獭",
               text: "",
-              body: "",
               attachments: [
                 {
                   kind: "image",
@@ -527,11 +524,10 @@ describe("聊天应用内核", () => {
       销毁: vi.fn(),
     };
     const blob播放结果 = {
-      mode: "blob" as const,
+      mode: "anchor" as const,
       attachmentId: "att-image-cache-1",
       kind: "image" as const,
-      src: "http://media.local/blob/att-image-cache-1/preview.webp",
-      viewerSrc: "http://media.local/blob/att-image-cache-1/full.webp",
+      src: "http://media.local/blob/att-image-cache-1/full.webp",
       thumbnailUrl: "http://media.local/blob/att-image-cache-1/preview.webp",
       contentHash: "hash-image-cache-1",
       distribution: {
@@ -651,7 +647,6 @@ describe("聊天应用内核", () => {
               sender_session_id: "s-other",
               sender_display_alias: "冷静的水獭",
               text: "",
-              body: "",
               attachments: [
                 {
                   kind: "video",
@@ -673,7 +668,7 @@ describe("聊天应用内核", () => {
         storage: 创建存储运行时({ storage: storageSource }),
       });
     const blob播放结果 = {
-      mode: "blob" as const,
+      mode: "swarm" as const,
       attachmentId: "att-video-cache-1",
       kind: "video" as const,
       src: "http://media.local/webtorrent/att-video-cache-1.mp4",
@@ -824,7 +819,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "image",
@@ -848,11 +842,10 @@ describe("聊天应用内核", () => {
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "blob",
+        mode: "anchor",
         attachmentId: "att-image-no-cache-1",
         kind: "image",
-        src: "http://media.local/blob/att-image-no-cache-1/preview.webp",
-        viewerSrc: "http://media.local/blob/att-image-no-cache-1/full.webp",
+        src: "http://media.local/blob/att-image-no-cache-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-no-cache-1/preview.webp",
         contentHash: "hash-image-no-cache-1",
         distribution: {
@@ -890,7 +883,6 @@ describe("聊天应用内核", () => {
               sender_session_id: "s-other",
               sender_display_alias: "冷静的水獭",
               text: "",
-              body: "",
               attachments: [
                 {
                   kind: "video",
@@ -912,7 +904,7 @@ describe("聊天应用内核", () => {
         storage: 创建存储运行时({ storage: storageSource }),
       });
     const blob播放结果 = {
-      mode: "blob" as const,
+      mode: "swarm" as const,
       attachmentId: "att-video-cache-manifest-1",
       kind: "video" as const,
       src: "http://media.local/webtorrent/att-video-cache-manifest-1.mp4",
@@ -1025,7 +1017,7 @@ describe("聊天应用内核", () => {
     expect(
       reopenedKernel.snapshot().media.playbackByAttachmentId["att-video-cache-manifest-1"]
     ).toMatchObject({
-      mode: "blob",
+      mode: "swarm",
       src: "http://media.local/webtorrent/att-video-cache-manifest-1.mp4",
     });
     expect(fake查看器.打开).toHaveBeenCalledWith({
@@ -1063,7 +1055,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "image",
@@ -1086,11 +1077,10 @@ describe("聊天应用内核", () => {
     });
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "blob",
+        mode: "anchor",
         attachmentId: "att-image-seeding-1",
         kind: "image",
-        src: "http://media.local/blob/att-image-seeding-1/preview.webp",
-        viewerSrc: "http://media.local/blob/att-image-seeding-1/full.webp",
+        src: "http://media.local/blob/att-image-seeding-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-seeding-1/preview.webp",
         contentHash: "hash-image-seeding-1",
         distribution: {
@@ -1171,7 +1161,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "image",
@@ -1200,11 +1189,10 @@ describe("聊天应用内核", () => {
     );
     读取媒体编排供测试(kernel).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "blob",
+        mode: "anchor",
         attachmentId: "att-image-backfill-1",
         kind: "image",
-        src: "http://media.local/blob/att-image-backfill-1/preview.webp",
-        viewerSrc: "http://media.local/blob/att-image-backfill-1/full.webp",
+        src: "http://media.local/blob/att-image-backfill-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-backfill-1/preview.webp",
         contentHash: "hash-image-backfill-1",
         distribution: {
@@ -1268,7 +1256,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -1376,7 +1363,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -1484,7 +1470,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -1650,7 +1635,6 @@ describe("聊天应用内核", () => {
       sender_session_id: "s-other",
       sender_display_alias: "隔壁老王",
       text: "有人说话了",
-      body: "有人说话了",
       attachments: [],
       event_position: 2,
     });
@@ -1746,7 +1730,6 @@ describe("聊天应用内核", () => {
       sender_session_id: "s-other",
       sender_display_alias: "隔壁老王",
       text: "我还在前台",
-      body: "我还在前台",
       attachments: [],
       event_position: 2,
     });
@@ -1767,7 +1750,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -1984,7 +1966,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2046,7 +2027,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2162,7 +2142,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2282,7 +2261,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2365,7 +2343,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2384,7 +2361,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2403,7 +2379,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2508,7 +2483,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2570,7 +2544,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2717,7 +2690,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2872,7 +2844,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2962,7 +2933,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -2981,7 +2951,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -3120,7 +3089,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -3156,9 +3124,10 @@ describe("聊天应用内核", () => {
         thumbnailUrl: "http://media.local/poster-att-video-viewer-close-1",
         streamingDistribution: {
           swarm_id: "swarm-att-video-viewer-close-1",
-          torrent_info_hash: "info-att-video-viewer-close-1",
-          content_hash: "hash-att-video-viewer-close-1",
-          availability: "active",
+          announce_urls: ["wss://tracker.koko.local/announce"],
+          web_seed_url: null,
+          join_ticket: null,
+          survival_mode: "server_assisted" as const,
         },
         hint: null,
       }),
@@ -3470,7 +3439,6 @@ describe("聊天应用内核", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",

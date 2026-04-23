@@ -1990,15 +1990,14 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("图片已经切到 Blob 资产主链时，卡片继续吃 preview，查看器会拿 full 主链", async () => {
+  it("图片走 canonical 锚点主链时，卡片继续吃 preview，查看器会拿 canonical 原图", async () => {
     const pane = 创建媒体消息窗();
     pane.mediaPlaybackByAttachmentId = {
       "att-image-1": {
-        mode: "blob",
+        mode: "anchor",
         attachmentId: "att-image-1",
         kind: "image",
-        src: "http://media.local/blob/att-image-1/preview.webp",
-        viewerSrc: "http://media.local/blob/att-image-1/full.webp",
+        src: "http://media.local/blob/att-image-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-1/preview.webp",
         contentHash: "hash-image-1",
         distribution: {

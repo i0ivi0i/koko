@@ -317,7 +317,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
             client_message_id: "c-1",
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
-            body: "消息-1",
+            text: "消息-1",
             event_position: 1,
           },
           {
@@ -327,7 +327,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
             client_message_id: "c-2",
             sender_session_id: "s-test",
             sender_display_alias: "暴躁的企鹅",
-            body: "消息-2",
+            text: "消息-2",
             event_position: 2,
           },
         ],
@@ -397,7 +397,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "image",
@@ -479,7 +478,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "这是一张图片说明",
-            body: "这是一张图片说明",
             attachments: [
               {
                 kind: "image",
@@ -524,7 +522,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "看视频",
-            body: "看视频",
              attachments: [
                {
                  kind: "video",
@@ -621,7 +618,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "看协作分发视频",
-            body: "看协作分发视频",
              attachments: [
                {
                  kind: "video",
@@ -716,7 +712,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "看协作分发视频",
-            body: "看协作分发视频",
             attachments: [
               {
                 kind: "video",
@@ -791,7 +786,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -810,7 +804,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -939,7 +932,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -958,7 +950,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -1066,7 +1057,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "过期视频",
-            body: "过期视频",
             attachments: [
               {
                 kind: "video",
@@ -1129,7 +1119,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
             text: "",
-            body: "",
             attachments: [
               {
                 kind: "video",
@@ -1545,7 +1534,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
             client_message_id: "c-1",
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
-            body: "这是一条足够长的消息，用来确认聊天壳在窗口宽度变化后，会重新让 Pretext 按新的宿主宽度计算气泡尺寸，而不是继续挂着旧的布局结果。",
+            text: "这是一条足够长的消息，用来确认聊天壳在窗口宽度变化后，会重新让 Pretext 按新的宿主宽度计算气泡尺寸，而不是继续挂着旧的布局结果。",
             event_position: 1,
           },
         ],

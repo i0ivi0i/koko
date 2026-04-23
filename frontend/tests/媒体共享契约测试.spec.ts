@@ -34,7 +34,6 @@ describe("媒体共享契约", () => {
             presence_url: "/api/media/att-shared-video-1/presence?session_id=s-1",
             join_ticket: null,
             ticket_expires_at: null,
-            availability: "available" as const,
           },
           streaming_asset: {
             asset_id: "att-shared-video-1",

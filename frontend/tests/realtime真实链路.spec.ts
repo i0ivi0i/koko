@@ -27,7 +27,7 @@ type 房间事件 = {
   message_id: string;
   client_message_id: string;
   event_position: number;
-  body: string;
+  text: string;
 };
 
 const repoRoot = resolve(process.cwd(), "..");
@@ -158,7 +158,7 @@ describe("realtime真实链路", () => {
       expect(roomEventB.client_message_id).toBe("c-real-1");
       expect(roomEventA.message_id).toBe(roomEventB.message_id);
       expect(roomEventA.event_position).toBe(roomEventB.event_position);
-      expect(roomEventA.body).toBe("hello realtime");
+      expect(roomEventA.text).toBe("hello realtime");
 
       socketA.disconnect();
       socketB.disconnect();

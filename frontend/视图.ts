@@ -271,7 +271,7 @@ export function 派生消息展示项(
 }
 
 function 读取消息文本(event: 消息事件): string {
-  return event.text ?? event.body ?? "";
+  return event.text;
 }
 
 function 派生媒体附件展示结果(

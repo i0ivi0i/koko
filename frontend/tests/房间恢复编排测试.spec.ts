@@ -182,7 +182,6 @@ describe("房间恢复编排", () => {
               sender_session_id: "s-peer",
               sender_display_alias: "缓存同伴",
               text: "cached video",
-              body: "cached video",
               attachments: [
                 {
                   kind: "video",

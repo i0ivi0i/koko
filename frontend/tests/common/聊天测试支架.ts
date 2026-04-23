@@ -154,7 +154,6 @@ export class 假Socket {
         sender_session_id: "s-test",
         sender_display_alias: "暴躁的企鹅",
         text,
-        body: text,
         attachments: attachmentIds.map((attachmentId) => ({
           kind: String(attachmentId).includes("video") ? ("video" as const) : ("image" as const),
           attachment_id: String(attachmentId),
@@ -398,7 +397,6 @@ export class 假传输 implements 前端传输端口 {
           sender_session_id: "s-test",
           sender_display_alias: "暴躁的企鹅",
           text: "hello",
-          body: "hello",
           attachments: [],
           event_position: 1,
         },

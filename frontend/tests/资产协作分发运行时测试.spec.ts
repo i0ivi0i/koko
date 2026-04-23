@@ -61,7 +61,10 @@ function 准备好的定位结果(
       web_seed_url: `http://media.local/web-seed-${attachmentId}`,
       join_ticket: null,
       ticket_expires_at: null,
-      availability: "available" as const,
+      media_state: {
+        code: "MEDIA_READY" as const,
+        retry_after_ms: null,
+      },
       survival_mode: "server_assisted" as const,
     },
   };

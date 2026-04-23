@@ -30,7 +30,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-file-video-1",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
       preview_asset: null,
@@ -118,7 +121,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-image-blob-1",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "peer_only_after_expiry" as const,
         },
         preview_asset: {
@@ -209,7 +215,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-image-backfill-1",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         preview_asset: {
@@ -284,7 +293,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-video-1",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     }));
@@ -328,7 +340,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-video-3",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     }));
@@ -386,7 +401,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-consumer-1",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
       }),
@@ -434,7 +452,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-consumer-incomplete",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: null,
@@ -488,7 +509,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-video-release-1",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     }));
@@ -597,7 +621,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-viewer-race",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -645,7 +672,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-viewer-race",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -729,7 +759,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-viewer-refresh-budget",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
       streaming_asset: {
@@ -815,7 +848,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-hls",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -898,7 +934,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-hls-incomplete",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -975,7 +1014,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-ticket-stale",
         join_ticket: "ticket-stale",
         ticket_expires_at: "2026-04-18T10:00:00Z",
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
       streaming_asset: {
@@ -1112,7 +1154,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-hls",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -1195,7 +1240,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-shared-truth",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -1312,7 +1360,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-hls-backfill",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -1411,7 +1462,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-canonical-backfill",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         // 单文件主链场景不再提供 streaming_asset manifest。
@@ -1478,7 +1532,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-video-inline-hls",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -1562,7 +1619,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-inline-partial",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -1640,7 +1700,10 @@ describe("媒体播放器", () => {
           web_seed_url: "http://media.local/web-seed-inline-fallback",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
         streaming_asset: {
@@ -1716,7 +1779,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-video-4",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     }));
@@ -1763,7 +1829,6 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "expired" as const,
         media_state: {
           code: "MEDIA_CONNECTING_TO_PEERS" as const,
           retry_after_ms: 2000,
@@ -1815,7 +1880,6 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "expired" as const,
         media_state: {
           code: "MEDIA_NO_ONLINE_SEED" as const,
           retry_after_ms: 15000,
@@ -1901,7 +1965,6 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "expired" as const,
         media_state: {
           code: "MEDIA_NO_ONLINE_SEED" as const,
           retry_after_ms: 15000,
@@ -1977,7 +2040,6 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "expired" as const,
         media_state: {
           code: "MEDIA_DELETED" as const,
           retry_after_ms: null,
@@ -2059,7 +2121,6 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "expired" as const,
         media_state: {
           code: "MEDIA_DELETED" as const,
           retry_after_ms: null,
@@ -2097,7 +2158,7 @@ describe("媒体播放器", () => {
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
-  it("后端裁决 expired 时会直接返回内容已过期", async () => {
+  it("没有可播放锚点时，会回到统一的 anchor_unavailable 降级结果", async () => {
     const locate = vi.fn(async () => ({
       attachment_id: "att-video-expired",
       kind: "video" as const,
@@ -2115,7 +2176,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-video-expired",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "expired" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     }));
@@ -2133,14 +2197,20 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "expired",
+      mode: "degraded",
       attachmentId: "att-video-expired",
       kind: "video",
       src: "",
       thumbnailUrl: null,
-      hint: "内容已过期",
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-expired",
+        kind: "video",
+      })
+    );
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
@@ -2162,7 +2232,10 @@ describe("媒体播放器", () => {
         web_seed_url: "http://media.local/web-seed-video-streaming-expired",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "expired" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "peer_only_after_expiry" as const,
       },
       streaming_asset: {
@@ -2208,14 +2281,20 @@ describe("媒体播放器", () => {
     });
 
     expect(result).toEqual({
-      mode: "expired",
+      mode: "degraded",
       attachmentId: "att-video-streaming-expired",
       kind: "video",
       src: "",
       thumbnailUrl: "http://media.local/poster-video-streaming-expired",
-      hint: "内容已过期",
+      reason: "anchor_unavailable",
+      hint: "附件当前不可获取",
     });
-    expect(resolveSwarmSource).not.toHaveBeenCalled();
+    expect(resolveSwarmSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-video-streaming-expired",
+        kind: "video",
+      })
+    );
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
@@ -2237,7 +2316,10 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "peer_only_after_expiry" as const,
       },
       streaming_asset: null,
@@ -2300,7 +2382,10 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "peer_only_after_expiry" as const,
       },
       streaming_asset: null,
@@ -2365,7 +2450,10 @@ describe("媒体播放器", () => {
         web_seed_url: null,
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "peer_only_after_expiry" as const,
       },
       streaming_asset: null,

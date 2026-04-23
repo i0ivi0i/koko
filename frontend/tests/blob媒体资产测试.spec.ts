@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { 创建媒体播放器 } from "../媒体/媒体播放";
 
 describe("Blob 媒体资产", () => {
-  it("图片定位结果返回 blob_asset 时，会直接使用 canonical 作为唯一主链", async () => {
+  it("图片定位结果返回 blob_asset 时，会以 canonical 锚点作为唯一主链", async () => {
     const probeAnchor = vi.fn(async () => undefined);
     const 播放器 = 创建媒体播放器({
       locate: async () => ({
@@ -51,12 +51,11 @@ describe("Blob 媒体资产", () => {
     });
 
     expect(result).toEqual({
-      mode: "blob",
+      mode: "anchor",
       attachmentId: "att-image-blob-1",
       kind: "image",
       src: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
-      viewerSrc: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
-      thumbnailUrl: "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1",
+      thumbnailUrl: null,
       contentHash: "hash-image-blob-1",
       distribution: {
         swarm_id: "swarm-hash-image-blob-1",
@@ -67,7 +66,9 @@ describe("Blob 媒体资产", () => {
       },
       hint: null,
     });
-    expect(probeAnchor).not.toHaveBeenCalled();
+    expect(probeAnchor).toHaveBeenCalledWith(
+      "http://media.local/api/media/att-image-blob-1/blob/canonical?session_id=s-1"
+    );
   });
 
   it("图片进入 backfilling 时，会激活 blob_asset 绑定的协作分发 runtime", async () => {
@@ -88,7 +89,10 @@ describe("Blob 媒体资产", () => {
         web_seed_url: "http://media.local/blob/att-image-blob-2/original.png",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
       streaming_asset: null,

@@ -113,7 +113,6 @@ export function 创建乐观房间消息(input: 创建乐观房间消息输入):
     sender_session_id: input.sessionId,
     sender_display_alias: input.displayAlias,
     text: input.text,
-    body: input.text,
     attachments: [],
     event_position: input.latestEventPosition + 1,
   };

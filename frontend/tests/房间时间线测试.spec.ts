@@ -11,8 +11,7 @@ const 消息 = (patch: Partial<消息事件> & Pick<消息事件, "message_id" |
   client_message_id: patch.client_message_id ?? `client-${patch.message_id}`,
   sender_session_id: patch.sender_session_id ?? "s-other",
   sender_display_alias: patch.sender_display_alias ?? "冷静的水獭",
-  text: patch.text ?? patch.body ?? `消息 ${patch.event_position}`,
-  body: patch.body ?? patch.text ?? `消息 ${patch.event_position}`,
+  text: patch.text ?? `消息 ${patch.event_position}`,
   attachments: patch.attachments ?? [],
   event_position: patch.event_position,
 });
@@ -45,7 +44,7 @@ describe("房间时间线", () => {
         client_message_id: "c-1",
         sender_session_id: "s-test",
         event_position: 11,
-        body: "本地乐观态",
+        text: "本地乐观态",
       }),
     });
     const merged = 推进房间时间线(optimistic, {
@@ -56,7 +55,7 @@ describe("房间时间线", () => {
           client_message_id: "c-1",
           sender_session_id: "s-test",
           event_position: 12,
-          body: "权威消息",
+          text: "权威消息",
         }),
       ],
     });
@@ -65,7 +64,7 @@ describe("房间时间线", () => {
     expect(merged[0]).toMatchObject({
       message_id: "m-11",
       client_message_id: "c-1",
-      body: "权威消息",
+      text: "权威消息",
       event_position: 12,
     });
   });
@@ -127,7 +126,6 @@ describe("房间时间线", () => {
       sender_session_id: "s-test",
       sender_display_alias: "暴躁的企鹅",
       text: "hello",
-      body: "hello",
       attachments: [],
       event_position: 10,
     });

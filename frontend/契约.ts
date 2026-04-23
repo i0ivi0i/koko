@@ -63,16 +63,8 @@ export interface 消息事件 {
   client_message_id: string;
   sender_session_id: string;
   sender_display_alias: string;
-  /**
-   * 统一消息模型下的文本字段。
-   * 当前后端为了平滑迁移仍同时回 body，前端读取时优先消费 text。
-   */
-  text?: string;
-  /**
-   * 兼容旧纯文本链的过渡字段。
-   * 等所有前端入口都切到 text 后，再整体删除。
-   */
-  body: string;
+  /** 统一消息模型下的唯一文本字段。 */
+  text: string;
   /**
    * 附件列表属于权威消息事实，不再让前端靠本地上传态猜。
    * 当前最小媒体切片先放开图片和视频，其余媒体类型仍沿后续主链逐步接入。
@@ -178,22 +170,15 @@ export interface 媒体协作分发定位片段 {
   presence_url?: string | null;
   join_ticket: string | null;
   ticket_expires_at: string | null;
-  /**
-   * 兼容字段：旧链路仍可能读它，但新实现应优先消费 `media_state.code`。
-   */
-  availability: "available" | "expired";
-  /**
-   * 稳定媒体状态语义，跨端只认 code，不认壳层文案。
-   * 这里先保留 optional，避免新旧后端灰度期把前端一次性打爆。
-   */
-  media_state?: {
+  /** 稳定媒体状态语义，跨端只认 code，不认壳层文案。 */
+  media_state: {
     code:
       | "MEDIA_READY"
       | "MEDIA_CONNECTING_TO_PEERS"
       | "MEDIA_NO_ONLINE_SEED"
       | "MEDIA_DELETED";
     retry_after_ms: number | null;
-  } | null;
+  };
   survival_mode: "server_assisted" | "peer_only_after_expiry";
 }
 

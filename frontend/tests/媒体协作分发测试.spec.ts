@@ -84,7 +84,6 @@ function 准备好的定位结果(
       web_seed_url: `http://media.local/web-seed-${attachmentId}`,
       join_ticket: null,
       ticket_expires_at: null,
-      availability: "available" as const,
       media_state: {
         code: "MEDIA_READY" as const,
         retry_after_ms: null,
@@ -204,7 +203,10 @@ describe("媒体协作分发", () => {
         web_seed_url: "http://media.local/web-seed-1",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     });
@@ -220,7 +222,10 @@ describe("媒体协作分发", () => {
       web_seed_url: "http://media.local/web-seed-1",
       join_ticket: null,
       ticket_expires_at: null,
-      availability: "available" as const,
+      media_state: {
+        code: "MEDIA_READY" as const,
+        retry_after_ms: null,
+      },
       survival_mode: "server_assisted" as const,
     });
   });
@@ -243,7 +248,6 @@ describe("媒体协作分发", () => {
     if (!locator.distribution) {
       throw new Error("测试前提失败：缺少 distribution");
     }
-    locator.distribution.availability = "available";
     locator.distribution.media_state = {
       code: "MEDIA_NO_ONLINE_SEED",
       retry_after_ms: 15000,
@@ -259,7 +263,6 @@ describe("媒体协作分发", () => {
     if (!locator.distribution) {
       throw new Error("测试前提失败：缺少 distribution");
     }
-    locator.distribution.availability = "expired";
     locator.distribution.media_state = {
       code: "MEDIA_CONNECTING_TO_PEERS",
       retry_after_ms: 2000,

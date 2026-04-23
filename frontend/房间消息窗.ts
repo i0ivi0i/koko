@@ -557,8 +557,7 @@ export class 房间消息窗 extends LitElement {
 
   private 读取附件播放源(attachment: 消息展示项["attachments"][number]): string {
     const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
-    return playback?.mode === "blob" ||
-      playback?.mode === "swarm" ||
+    return playback?.mode === "swarm" ||
       playback?.mode === "anchor" ||
       playback?.mode === "manifest"
       ? playback.src
@@ -570,10 +569,7 @@ export class 房间消息窗 extends LitElement {
   private 读取图片查看器播放源(
     attachment: Extract<消息展示项["attachments"][number], { kind: "image" }>
   ): string {
-    const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
-    return playback?.mode === "blob"
-      ? playback.viewerSrc ?? playback.src
-      : this.读取附件播放源(attachment);
+    return this.读取附件播放源(attachment);
   }
 
   private 读取时间线视频封面地址(
@@ -649,7 +645,9 @@ export class 房间消息窗 extends LitElement {
             kind: "image",
             attachmentId: attachment.attachmentId,
             src: this.读取图片查看器播放源(attachment),
-            ...((playback?.mode === "blob" || playback?.mode === "swarm")
+            ...((playback &&
+            (playback.mode === "anchor" || playback.mode === "swarm") &&
+            ("contentHash" in playback || "distribution" in playback))
               ? {
                   contentHash: playback.contentHash ?? null,
                   distribution: playback.distribution ?? null,

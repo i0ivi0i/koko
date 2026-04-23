@@ -59,7 +59,6 @@ export function 创建查看器会话协作(
         };
       }
       if (
-        playback?.mode === "blob" ||
         playback?.mode === "swarm" ||
         playback?.mode === "anchor" ||
         playback?.mode === "manifest"
@@ -83,8 +82,8 @@ export function 创建查看器会话协作(
         }
         return {
           ...item,
-          src: playback.mode === "blob" ? playback.viewerSrc ?? playback.src : playback.src,
-          ...((playback.mode === "blob" || playback.mode === "swarm") &&
+          src: playback.src,
+          ...((playback.mode === "anchor" || playback.mode === "swarm") &&
           ("contentHash" in playback || "distribution" in playback)
             ? {
                 contentHash: playback.contentHash ?? null,

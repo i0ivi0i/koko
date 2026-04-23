@@ -20,7 +20,10 @@ describe("媒体定位器", () => {
         web_seed_url: "http://media.local/web-seed-att-1",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     }));
@@ -58,7 +61,10 @@ describe("媒体定位器", () => {
           web_seed_url: "http://media.local/web-seed-stale",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
       })
@@ -79,7 +85,10 @@ describe("媒体定位器", () => {
           web_seed_url: "http://media.local/web-seed-refresh",
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted" as const,
         },
       });
@@ -115,7 +124,10 @@ describe("媒体定位器", () => {
         web_seed_url: string;
         join_ticket: null;
         ticket_expires_at: null;
-        availability: "available";
+        media_state: {
+          code: "MEDIA_READY";
+          retry_after_ms: null;
+        };
         survival_mode: "server_assisted";
       };
     }) => void;
@@ -138,7 +150,10 @@ describe("媒体定位器", () => {
             web_seed_url: string;
             join_ticket: null;
             ticket_expires_at: null;
-            availability: "available";
+            media_state: {
+              code: "MEDIA_READY";
+              retry_after_ms: null;
+            };
             survival_mode: "server_assisted";
           };
         }>((resolve) => {
@@ -172,7 +187,10 @@ describe("媒体定位器", () => {
         web_seed_url: "http://media.local/web-seed-concurrent-1",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available",
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted",
       },
     });
@@ -211,7 +229,10 @@ describe("媒体定位器", () => {
         web_seed_url: "http://media.local/web-seed-persisted",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
         survival_mode: "server_assisted" as const,
       },
     }));

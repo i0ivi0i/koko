@@ -1331,7 +1331,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       type: "SHOW_NOTIFICATION",
       id: 最新一条他人消息.message_id,
       title: 最新一条他人消息.sender_display_alias,
-      body: 最新一条他人消息.text || 最新一条他人消息.body,
+      body: 最新一条他人消息.text,
       tag: 最新一条他人消息.room_id,
     });
   }

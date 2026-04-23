@@ -329,9 +329,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     if (
       !playback ||
       playback.kind !== "video" ||
-      (playback.mode !== "anchor" &&
-        playback.mode !== "blob" &&
-        playback.mode !== "swarm")
+      (playback.mode !== "anchor" && playback.mode !== "swarm")
     ) {
       return null;
     }
@@ -420,7 +418,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     attachmentId: string
   ): { kind?: 媒体种类 | null; contentHash?: string | null } => {
     const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
-    if (playback?.mode === "blob") {
+    if (
+      playback &&
+      (playback.mode === "anchor" || playback.mode === "swarm") &&
+      "contentHash" in playback &&
+      playback.contentHash
+    ) {
       return {
         kind: playback.kind,
         contentHash: playback.contentHash ?? null,

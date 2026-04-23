@@ -182,7 +182,7 @@ describe("聊天壳集成 / 引导与入房", () => {
       client_message_id: "c-99",
       sender_session_id: "s-other",
       sender_display_alias: "冷静的水獭",
-      body: "需要回退快照的最新消息",
+      text: "需要回退快照的最新消息",
       event_position: 99,
     });
     await 等待组件稳定(el);
@@ -484,7 +484,7 @@ describe("聊天壳集成 / 引导与入房", () => {
             client_message_id: "c-1",
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
-            body: "历史消息-1",
+            text: "历史消息-1",
             event_position: 1,
           },
           {
@@ -494,7 +494,7 @@ describe("聊天壳集成 / 引导与入房", () => {
             client_message_id: "c-2",
             sender_session_id: "s-test",
             sender_display_alias: "暴躁的企鹅",
-            body: "历史消息-2",
+            text: "历史消息-2",
             event_position: 2,
           },
         ],
@@ -529,7 +529,7 @@ describe("聊天壳集成 / 引导与入房", () => {
           client_message_id: "c-join-1",
           sender_session_id: "s-other",
           sender_display_alias: "冷静的水獭",
-          body: "进房基线-1",
+          text: "进房基线-1",
           event_position: 1,
         },
         {
@@ -539,7 +539,7 @@ describe("聊天壳集成 / 引导与入房", () => {
           client_message_id: "c-join-2",
           sender_session_id: "s-test",
           sender_display_alias: "暴躁的企鹅",
-          body: "进房基线-2",
+          text: "进房基线-2",
           event_position: 2,
         },
       ],
@@ -574,7 +574,7 @@ describe("聊天壳集成 / 引导与入房", () => {
             client_message_id: "c-restore-1",
             sender_session_id: "s-other",
             sender_display_alias: "冷静的水獭",
-            body: "恢复历史-1",
+            text: "恢复历史-1",
             event_position: 1,
           },
           {
@@ -584,7 +584,7 @@ describe("聊天壳集成 / 引导与入房", () => {
             client_message_id: "c-restore-2",
             sender_session_id: "s-test",
             sender_display_alias: "暴躁的企鹅",
-            body: "恢复历史-2",
+            text: "恢复历史-2",
             event_position: 2,
           },
         ],

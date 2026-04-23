@@ -184,7 +184,7 @@ const 重算自动播候选补丁 = (
 };
 
 const 可投影为自动播播放结果 = (playback: 媒体播放结果): boolean =>
-  playback.mode === "anchor" || playback.mode === "swarm" || playback.mode === "blob";
+  playback.mode === "anchor" || playback.mode === "swarm";
 
 const 累加长任务计数补丁 = (
   current: 媒体运行时上下文,

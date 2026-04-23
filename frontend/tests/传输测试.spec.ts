@@ -585,7 +585,6 @@ describe("传输", () => {
               "/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
             join_ticket: null,
             ticket_expires_at: null,
-            availability: "available" as const,
             media_state: {
               code: "MEDIA_READY" as const,
               retry_after_ms: null,
@@ -649,7 +648,6 @@ describe("传输", () => {
           "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
         join_ticket: null,
         ticket_expires_at: null,
-        availability: "available" as const,
         media_state: {
           code: "MEDIA_READY" as const,
           retry_after_ms: null,
@@ -753,7 +751,10 @@ describe("传输", () => {
               web_seed_url: null,
               join_ticket: null,
               ticket_expires_at: null,
-              availability: "available",
+              media_state: {
+                code: "MEDIA_READY" as const,
+                retry_after_ms: null,
+              },
               survival_mode: "peer_only_after_expiry",
             },
             streaming_asset: {
@@ -850,7 +851,6 @@ describe("传输", () => {
             web_seed_url: null,
             join_ticket: null,
             ticket_expires_at: null,
-            availability: "pending",
             media_state: {
               code: "MEDIA_CONNECTING_TO_PEERS",
               retry_after_ms: 2000,

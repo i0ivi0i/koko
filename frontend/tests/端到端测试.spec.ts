@@ -90,7 +90,6 @@ class 假Socket {
         sender_session_id: "s-e2e",
         sender_display_alias: "暴躁的企鹅",
         text,
-        body: text,
         attachments: [],
         event_position: 1,
       });
@@ -200,7 +199,10 @@ class 端到端假传输 implements 前端传输端口 {
           web_seed_url: `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=s-e2e`,
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available",
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
           survival_mode: "server_assisted",
         },
         streaming_asset: {
@@ -259,7 +261,6 @@ class 端到端假传输 implements 前端传输端口 {
           sender_session_id: "s-e2e",
           sender_display_alias: "暴躁的企鹅",
           text: "e2e-hello",
-          body: "e2e-hello",
           attachments: [],
           event_position: 1,
         },
@@ -332,7 +333,6 @@ describe("前后台壳端到端冒烟", () => {
           sender_session_id: "s-e2e",
           sender_display_alias: "暴躁的企鹅",
           text: "e2e-hello",
-          body: "e2e-hello",
           attachments: [],
           event_position: 1,
         },
@@ -400,7 +400,6 @@ describe("前后台壳端到端冒烟", () => {
           sender_session_id: "s-other",
           sender_display_alias: "冷静的水獭",
           text: "",
-          body: "",
            attachments: [
              {
                kind: "video",

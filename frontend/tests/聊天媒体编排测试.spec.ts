@@ -161,7 +161,6 @@ describe("聊天媒体编排", () => {
           web_seed_url: `http://media.local/web-seed-${attachmentId}`,
           join_ticket: null,
           ticket_expires_at: null,
-          availability: "available" as const,
           media_state: {
             code: "MEDIA_READY" as const,
             retry_after_ms: null,
@@ -749,11 +748,10 @@ describe("聊天媒体编排", () => {
       }
     ).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "blob",
+        mode: "anchor",
         attachmentId: "att-image-current-room-1",
         kind: "image",
-        src: "http://media.local/blob/att-image-current-room-1/preview.webp",
-        viewerSrc: "http://media.local/blob/att-image-current-room-1/full.webp",
+        src: "http://media.local/blob/att-image-current-room-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-current-room-1/preview.webp",
         contentHash: "hash-image-current-room-1",
         distribution: null,
@@ -860,11 +858,10 @@ describe("聊天媒体编排", () => {
       }
     ).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "blob",
+        mode: "anchor",
         attachmentId: "att-image-help-chain-1",
         kind: "image",
-        src: "http://media.local/blob/att-image-help-chain-1/preview.webp",
-        viewerSrc: "http://media.local/blob/att-image-help-chain-1/full.webp",
+        src: "http://media.local/blob/att-image-help-chain-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-help-chain-1/preview.webp",
         contentHash: "hash-image-help-chain-1",
         distribution: null,
@@ -980,11 +977,10 @@ describe("聊天媒体编排", () => {
       }
     ).设置媒体播放器供测试({
       解析播放结果: vi.fn().mockResolvedValue({
-        mode: "blob",
+        mode: "anchor",
         attachmentId: "att-image-destroy-1",
         kind: "image",
-        src: "http://media.local/blob/att-image-destroy-1/preview.webp",
-        viewerSrc: "http://media.local/blob/att-image-destroy-1/full.webp",
+        src: "http://media.local/blob/att-image-destroy-1/full.webp",
         thumbnailUrl: "http://media.local/blob/att-image-destroy-1/preview.webp",
         contentHash: "hash-image-destroy-1",
         distribution: null,

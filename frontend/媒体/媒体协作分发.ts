@@ -350,18 +350,14 @@ export function 读取可用协作分发片段(
 ): 媒体协作分发定位片段 | null {
   const distribution = 读取协作分发定位片段(locator);
   /**
-   * 可用性裁决优先级：
-   * 1. 新后端优先看 `media_state.code`（稳定跨端真相）；
-   * 2. 灰度期里缺失 `media_state` 时，退回旧 availability 字段；
-   * 3. READY / CONNECTING 允许进入同一 swarm 会话；
-   * 4. NO_ONLINE_SEED / DELETED 直接判为当前不可用。
+   * 协作分发当前是否可进入同一 swarm，只认稳定 `media_state.code`：
+   * 1. READY / CONNECTING 允许继续复用同一会话；
+   * 2. NO_ONLINE_SEED / DELETED 直接视为当前不可用；
+   * 3. 不再回退旧 availability 兼容字段，避免第二套可用性真相继续活着。
    */
-  const mediaStateCode = distribution?.media_state?.code ?? null;
+  const mediaStateCode = distribution?.media_state.code ?? null;
   const distribution可用 =
-    mediaStateCode !== null
-      ? mediaStateCode === "MEDIA_READY" ||
-        mediaStateCode === "MEDIA_CONNECTING_TO_PEERS"
-      : distribution?.availability !== "expired";
+    mediaStateCode === "MEDIA_READY" || mediaStateCode === "MEDIA_CONNECTING_TO_PEERS";
   if (
     !distribution ||
     !distribution可用 ||

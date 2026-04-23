@@ -18,12 +18,11 @@ type 媒体播放输入 = {
 
 type 媒体播放结果 =
   | {
-      mode: "swarm" | "anchor" | "manifest" | "blob";
+      mode: "swarm" | "anchor" | "manifest";
       attachmentId: string;
       kind: 媒体种类;
       src: string;
       fallbackSrc?: string;
-      viewerSrc?: string;
       thumbnailUrl: string | null;
       contentHash?: string | null;
       distribution?: 媒体资产分发表面 | null;
@@ -127,7 +126,7 @@ const 流媒体冷备窗口已退场 = (locator: 媒体定位结果): boolean =>
    * 流媒体冷备是否正式退场，以后端已经宣布的删除事实为准：
    * 1. 前端墙钟不能越位替后端裁“是不是到点了”；
    * 2. 这样不会因为缓存 locator、时钟漂移或测试固化时间把有效 HLS 误判成过期；
-   * 3. 真正整体是否 expired，仍继续由 distribution.availability 这条权威裁决兜底。
+   * 3. 这里只回答“服务端是否已经宣布流媒体冷备删掉”，不额外再长第二套可用性真相。
    */
   return Boolean(lifecycle.streaming_deleted_at);
 };
@@ -308,7 +307,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     return {
       src: canonicalSrc,
-      viewerSrc: canonicalSrc,
       thumbnailUrl: 读取预览缩略图地址(locator) ?? canonicalSrc,
     };
   };
@@ -324,17 +322,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
    */
   const 是否为已删除定位结果 = (locator: 媒体定位结果): boolean =>
     locator.status === "deleted" || 读取媒体状态码(locator) === "MEDIA_DELETED";
-
-  /**
-   * 新附件的正式图片字节必须走 WebTorrent 主链；
-   * 1. 只有缺少 torrent/infohash 契约的旧 blob 资产，才继续走兼容读法；
-   * 2. 一旦协作分发契约完整，就不能再把 blob canonical 当正式主链；
-   * 3. 这样前向代际收口到单主链，旧代际仍保留兼容读取。
-   */
-  const 图片仍需兼容Blob主链 = (locator: 媒体定位结果): boolean =>
-    locator.kind === "image" &&
-    Boolean(读取图片Blob主链(locator)) &&
-    !Boolean(locator.distribution?.torrent_url && locator.distribution?.torrent_info_hash);
 
   const 是否值得为查看器视频强制刷新定位 = (
     input: 媒体播放输入,
@@ -409,7 +396,10 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
 
   const 应坚持协作分发唯一主链 = (locator: 媒体定位结果): boolean =>
     locator.distribution?.survival_mode === "peer_only_after_expiry" &&
-    locator.distribution?.availability === "available";
+    (() => {
+      const mediaStateCode = 读取媒体状态码(locator);
+      return mediaStateCode !== "MEDIA_DELETED" && mediaStateCode !== "MEDIA_NO_ONLINE_SEED";
+    })();
 
   const 尝试锚点 = async (
     input: 媒体播放输入,
@@ -531,22 +521,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     }
     if (mediaStateCode !== "MEDIA_CONNECTING_TO_PEERS") {
       清理无在线种子连接窗口(input.attachmentId);
-    }
-    if (distribution?.availability === "expired" && mediaStateCode === null) {
-      清理无在线种子连接窗口(input.attachmentId);
-      释放协作分发占用(input);
-      return {
-        locator,
-        playback: {
-          mode: "expired",
-          attachmentId: input.attachmentId,
-          kind: input.kind,
-          src: "",
-          thumbnailUrl: 读取预览缩略图地址(locator),
-          hint: "内容已过期",
-        },
-        failureReason: null,
-      };
     }
     if (!distribution) {
       清理无在线种子连接窗口(input.attachmentId);
@@ -704,8 +678,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (
       !distribution ||
       mediaStateCode === "MEDIA_DELETED" ||
-      mediaStateCode === "MEDIA_NO_ONLINE_SEED" ||
-      (mediaStateCode === null && distribution.availability === "expired")
+      mediaStateCode === "MEDIA_NO_ONLINE_SEED"
     ) {
       return;
     }
@@ -741,23 +714,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     if (locator.status !== "ready") {
       释放协作分发占用(input);
       return 创建降级结果(input, locator, "attachment_not_ready");
-    }
-    const blobSource = 读取图片Blob主链(locator);
-    if (blobSource && 图片仍需兼容Blob主链(locator)) {
-      释放协作分发占用(input);
-      return {
-        mode: "blob",
-        attachmentId: input.attachmentId,
-        kind: input.kind,
-        src: blobSource.src,
-        viewerSrc: blobSource.viewerSrc,
-        thumbnailUrl: blobSource.thumbnailUrl,
-        // 图片查看器后续要靠 contentHash 把“真的拿到完整资产”落进 MediaCacheOwner，
-        // 这里必须把共享资产真相一路带下去，不能再让壳层去猜。
-        contentHash: locator.blob_asset?.content_hash ?? null,
-        distribution: locator.blob_asset?.distribution ?? null,
-        hint: null,
-      };
     }
     locator = await 刷新查看器视频定位(input, locator);
     /**

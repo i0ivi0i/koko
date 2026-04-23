@@ -45,7 +45,7 @@ function 创建消息事件(
     client_message_id: "c-test",
     sender_session_id: "s-other",
     sender_display_alias: "冷静的水獭",
-    body: "",
+    text: "",
     attachments,
     event_position: 1,
     ...overrides,
