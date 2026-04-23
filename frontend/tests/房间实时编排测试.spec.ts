@@ -19,6 +19,26 @@ describe("房间实时编排", () => {
     expect(source).not.toContain("function 接收时间线事实(");
   });
 
+  it("会把 connect_error 和 control_result 翻译委托给 实时控制面协作", () => {
+    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天实时/壳层/实时控制面协作.js"');
+    expect(source).toContain("处理连接错误(");
+    expect(source).toContain("处理实时控制面结果(");
+    expect(source).not.toContain("async function handleConnectError");
+    expect(source).not.toContain("async function handleControlResult");
+  });
+
+  it("会把离线补发登记与重放委托给 待补发消息协作", () => {
+    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天实时/壳层/待补发消息协作.js"');
+    expect(source).toContain("登记待补发创建消息(");
+    expect(source).toContain("重放待补发创建消息(");
+    expect(source).not.toContain("dedupeKey: clientMessageId");
+    expect(source).not.toContain("const payload = task.payload as");
+  });
+
   it("connect_error invalid_session 只上报 transport 异常，不自己刷新会话", async () => {
     const 创建房间实时编排 = await 读取房间实时编排工厂();
     const 场景 = 创建实时编排测试场景({

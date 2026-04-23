@@ -89,6 +89,15 @@ describe("聊天应用内核", () => {
     expect(source).not.toContain("推进房间时间线(this.时间线状态.messages");
   });
 
+  it("实时编排接线仍只注入端口，不在聊天应用内核里解释控制面失败", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+
+    expect(source).toContain("创建房间实时编排({");
+    expect(source).not.toContain("control_result");
+    expect(source).not.toContain("need_snapshot_reload");
+    expect(source).not.toContain('code: "invalid_session"');
+  });
+
   it("不再暴露 transportPort / replaceSnapshot 这类兼容旧壳层的旁路入口", () => {
     const kernel = 创建聊天应用内核({
       ...创建内核依赖(),

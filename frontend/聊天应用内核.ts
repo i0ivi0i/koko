@@ -621,6 +621,14 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private get 实时编排端口(): 房间实时编排端口 {
     if (!this._实时编排端口) {
+      /**
+       * 内核在这里只做端口接线：
+       * - realtime 编排继续拥有 socket 主链；
+       * - recovery 编排继续拥有 invalid_session / snapshot reload 恢复语义；
+       * - 平台离线能力只作为待补发协作的底层能力注入。
+       *
+       * 内核自己不解释 socket 控制面结果，也不把恢复 owner 拉回这里。
+       */
       this._实时编排端口 = 创建房间实时编排({
         读取实时状态: () => this.读取实时编排状态(),
         写入实时状态: (patch) => this.写入实时编排状态(patch),
@@ -1158,7 +1166,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       viewportMode: this.视口状态.viewportMode,
       messageInput: this.输入状态.messageInput,
       composerMediaDrafts: this.输入状态.composerMediaDrafts,
-      messages: this.时间线状态.messages,
       pending: this.流程状态.pending,
     };
   }

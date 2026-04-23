@@ -7,22 +7,19 @@ import {
   创建乐观房间消息,
 } from "./房间时间线.js";
 import { 提取可发送媒体附件标识 } from "./媒体/媒体草稿.js";
+import {
+  处理实时控制面结果,
+  处理连接错误,
+  type 实时控制面结果,
+} from "./聊天实时/壳层/实时控制面协作.js";
+import {
+  登记待补发创建消息,
+  重放待补发创建消息,
+} from "./聊天实时/壳层/待补发消息协作.js";
 import type { 聊天状态 } from "./状态.js";
-import { Http接口错误, type 前端传输端口 } from "./传输.js";
+import type { 前端传输端口 } from "./传输.js";
 import type { Transport异常 } from "./房间恢复编排.js";
 import type { 平台离线任务 } from "./平台/index.js";
-
-type 控制面结果 = {
-  kind?: string;
-  latest_event_position?: number;
-  code?: string;
-  room_id?: string;
-};
-
-type 恢复失败 = Error & {
-  status?: number;
-  code?: string;
-};
 
 type 房间内核端口 = {
   send(event: 房间内核事件): void;
@@ -37,7 +34,6 @@ type 实时编排状态 = Pick<
   | "viewportMode"
   | "messageInput"
   | "composerMediaDrafts"
-  | "messages"
   | "pending"
 >;
 
@@ -77,29 +73,6 @@ export interface 房间实时编排端口 {
 export function 创建房间实时编排(deps: 房间实时编排依赖): 房间实时编排端口 {
   let realtimeSocket: Socket | null = null;
   const 读取当前时间 = deps.读取当前时间 ?? (() => Date.now());
-  const 后台补发同步标识 = "koko-queue-main";
-
-  function asRecoveryFailure(error: unknown): 恢复失败 {
-    if (error instanceof Http接口错误) {
-      return error;
-    }
-    return error as 恢复失败;
-  }
-
-  function recoveryCodeOf(error: unknown): string | undefined {
-    const failure = asRecoveryFailure(error);
-    if (typeof failure.code === "string" && failure.code.trim()) {
-      return failure.code;
-    }
-    if (error instanceof Error && error.message.trim()) {
-      return error.message.trim();
-    }
-    return undefined;
-  }
-
-  function isInvalidSessionError(error: unknown): boolean {
-    return recoveryCodeOf(error) === "invalid_session";
-  }
 
   function applyAuthoritativeEvents(events: 消息事件[], latestEventPosition: number): void {
     const shouldFollowLatest = deps.读取实时状态().viewportMode === "贴底跟随";
@@ -117,66 +90,6 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     }
   }
 
-  async function handleConnectError(error: unknown): Promise<void> {
-    if (!isInvalidSessionError(error)) {
-      return;
-    }
-    deps.接收实时会话事实({
-      type: "SOCKET_DISCONNECTED",
-      code: "invalid_session",
-    });
-    await deps.上报Transport异常({
-      kind: "invalid_session",
-    });
-  }
-
-  async function handleControlResult(control: 控制面结果): Promise<void> {
-    if (control.kind === "subscribed" && typeof control.latest_event_position === "number") {
-      deps.接收实时会话事实({
-        type: "SUBSCRIPTION_ESTABLISHED",
-        latestEventPosition: control.latest_event_position,
-      });
-      deps.roomKernel.send({
-        type: "SUBSCRIPTION_ESTABLISHED",
-        latestEventPosition: control.latest_event_position,
-      });
-      return;
-    }
-
-    if (control.kind === "need_snapshot_reload" && control.room_id) {
-      await deps.上报Transport异常({
-        kind: "need_snapshot_reload",
-        roomId: control.room_id,
-      });
-      return;
-    }
-
-    if (control.kind !== "rejected" && control.kind !== "error") {
-      return;
-    }
-
-    const currentRoomId = deps.读取实时状态().roomId;
-    if (!currentRoomId) {
-      deps.写入实时状态({ pending: false });
-      return;
-    }
-
-    if (control.code === "invalid_session") {
-      deps.接收实时会话事实({
-        type: "SOCKET_DISCONNECTED",
-        code: "invalid_session",
-      });
-      await deps.上报Transport异常({
-        kind: "invalid_session",
-        roomId: currentRoomId,
-        keepRoomVisible: true,
-      });
-      return;
-    }
-
-    deps.处理恢复失败(control, true);
-  }
-
   function ensureRealtimeSocket(sessionId: string): void {
     if (realtimeSocket) {
       return;
@@ -189,7 +102,10 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
       }
     });
     socket.on("connect_error", (error: unknown) => {
-      void handleConnectError(error);
+      void 处理连接错误(error, {
+        接收实时会话事实: deps.接收实时会话事实,
+        上报Transport异常: deps.上报Transport异常,
+      });
     });
     socket.on("disconnect", (reason: string) => {
       deps.接收实时会话事实({
@@ -203,8 +119,24 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
     socket.on("room_event", (event: 消息事件) => {
       applyAuthoritativeEvents([event], event.event_position);
     });
-    socket.on("control_result", (control: 控制面结果) => {
-      void handleControlResult(control);
+    socket.on("control_result", (control: 实时控制面结果) => {
+      void 处理实时控制面结果(control, {
+        读取当前房间Id: () => deps.读取实时状态().roomId,
+        清除发送中: () => deps.写入实时状态({ pending: false }),
+        接收实时会话事实: deps.接收实时会话事实,
+        推进订阅已建立: (latestEventPosition) => {
+          deps.接收实时会话事实({
+            type: "SUBSCRIPTION_ESTABLISHED",
+            latestEventPosition,
+          });
+          deps.roomKernel.send({
+            type: "SUBSCRIPTION_ESTABLISHED",
+            latestEventPosition,
+          });
+        },
+        上报Transport异常: deps.上报Transport异常,
+        处理恢复失败: deps.处理恢复失败,
+      });
     });
     realtimeSocket = socket;
   }
@@ -269,32 +201,32 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
      * 这里把“发送时机”与“消息业务语义”解耦：
      * - payload 是否可发送（文本/附件 ready）由聊天编排判断；
      * - 当前是否能走实时通道由平台运行时判断；
-     * - 不可即时发送时只入离线队列，不在这里发明第二套业务协议。
+     * - 不可即时发送时只委托待补发协作登记 command，不在这里发明第二套业务协议。
      */
     if (!当前可即时发送()) {
-      const 入队成功 =
-        (await deps.登记待补发任务?.({
-          id: `offline-${clientMessageId}`,
-          kind: "create_message",
-          payload: {
-            roomId: state.roomId,
-            clientMessageId,
-            text,
-            attachmentIds,
+      const 入队成功 = await 登记待补发创建消息(
+        {
+          roomId: state.roomId,
+          clientMessageId,
+          text,
+          attachmentIds,
+        },
+        {
+          读取当前时间,
+          登记待补发任务: deps.登记待补发任务,
+          请求后台补发同步: deps.请求后台补发同步,
+          清空发送草稿: () => {
+            deps.写入实时状态({
+              messageInput: "",
+              composerMediaDrafts: [],
+              pending: false,
+            });
           },
-          createdAt: 读取当前时间(),
-          retryAt: 读取当前时间(),
-          dedupeKey: clientMessageId,
-        })) ?? false;
+        }
+      );
       if (!入队成功) {
         return;
       }
-      deps.写入实时状态({
-        messageInput: "",
-        composerMediaDrafts: [],
-        pending: false,
-      });
-      await deps.请求后台补发同步?.(后台补发同步标识);
       return;
     }
 
@@ -320,44 +252,13 @@ export function 创建房间实时编排(deps: 房间实时编排依赖): 房间
   }
 
   async function 重放待补发任务(task: 平台离线任务): Promise<"done" | "retry"> {
-    if (task.kind !== "create_message") {
-      return "done";
-    }
-    if (!当前可即时发送()) {
-      return "retry";
-    }
-    const payload = task.payload as
-      | {
-          roomId?: unknown;
-          clientMessageId?: unknown;
-          text?: unknown;
-          attachmentIds?: unknown;
-        }
-      | null
-      | undefined;
-    if (!payload || typeof payload !== "object") {
-      return "done";
-    }
-    const roomId = typeof payload.roomId === "string" ? payload.roomId : "";
-    const clientMessageId =
-      typeof payload.clientMessageId === "string" ? payload.clientMessageId : "";
-    if (!roomId || !clientMessageId) {
-      return "done";
-    }
-    if (deps.读取实时状态().roomId !== roomId) {
-      return "retry";
-    }
-    const text = typeof payload.text === "string" ? payload.text : "";
-    const attachmentIds = Array.isArray(payload.attachmentIds)
-      ? payload.attachmentIds.map((attachmentId) => String(attachmentId))
-      : [];
-    realtimeSocket?.emit("create_message", {
-      room_id: roomId,
-      client_message_id: clientMessageId,
-      text,
-      attachment_ids: attachmentIds,
+    return 重放待补发创建消息(task, {
+      当前可即时发送,
+      读取当前房间Id: () => deps.读取实时状态().roomId,
+      发送创建消息: (payload) => {
+        realtimeSocket?.emit("create_message", payload);
+      },
     });
-    return "done";
   }
 
   return {
