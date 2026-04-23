@@ -1097,6 +1097,7 @@ async fn load_frontend_index() -> impl IntoResponse {
 
 /// 注册单节点 realtime 命名空间。
 /// 约束：连接级认证在 connect middleware 完成，消息 handler 不再相信 payload 身份。
+/// 这里故意只保留 wiring；控制面 payload 翻译和热路径失败分级都继续沉在 `实时外壳.rs`。
 fn 注册realtime命名空间(io: &SocketIo, state: 应用状态) {
     let connect_state = state.clone();
     io.ns(

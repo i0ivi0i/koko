@@ -918,6 +918,8 @@ pub fn 加载房间增量事件(
 }
 
 /// realtime 订阅首帧补洞的异步版。
+/// 这里刻意保持“会话 -> 房间存在 -> 成员资格 -> 拉增量”的顺序，
+/// 让 handler 只负责把权威裁决翻译成 `control_result / room_events`。
 pub async fn 加载房间增量事件_异步<R: Realtime仓储端口 + ?Sized>(
     仓储: &R,
     房间标识: &str,
@@ -1003,6 +1005,8 @@ async fn 校验房间订阅资格_异步<R: Realtime仓储端口 + ?Sized>(
     房间标识: &str,
     会话标识: &str,
 ) -> Result<(), contract::错误码> {
+    // async 热路径和同步冷路径必须共用同一条成员资格真相；
+    // 这样 socket handler 才不会为了“方便”再长一层私有权限判断。
     let is_member = 仓储.检查成员资格(房间标识, 会话标识).await?;
     domain::member::校验成员可发言(is_member).map_err(映射领域错误)
 }
@@ -1115,6 +1119,8 @@ pub fn 创建消息(
 }
 
 /// realtime 创建消息的异步版。
+/// 这里只负责把 command 落成同一条权威消息成立主链；
+/// 成功后返回的仍然只能是领域事件，由 handler 决定如何广播成 `room_event`。
 pub async fn 创建消息_异步<R: Realtime仓储端口 + ?Sized>(
     仓储: &mut R,
     房间标识: &str,

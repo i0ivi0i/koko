@@ -90,6 +90,214 @@ pub(super) fn 分类断开原因(reason: DisconnectReason) -> 实时发送失败
     }
 }
 
+/// 订阅控制面 payload 仍由 realtime adapter 自己翻译。
+/// 这样 handler 只负责拿权威结果，不再在分支里散落 JSON 细节。
+fn 构造需要重拉快照控制面(房间标识: &str, expected_position: i64) -> serde_json::Value {
+    serde_json::json!({
+        "kind": "need_snapshot_reload",
+        "room_id": 房间标识,
+        "expected_position": expected_position,
+    })
+}
+
+fn 构造订阅已建立控制面(
+    房间标识: &str,
+    from: i64,
+    最新事件位置: i64,
+) -> serde_json::Value {
+    serde_json::json!({
+        "kind": "subscribed",
+        "room_id": 房间标识,
+        "from": from,
+        "latest_event_position": 最新事件位置,
+    })
+}
+
+fn 构造拒绝控制面(code: &str, message: &str) -> serde_json::Value {
+    serde_json::json!({
+        "kind": "rejected",
+        "code": code,
+        "message": message,
+    })
+}
+
+fn 构造系统错误控制面(message: &str) -> serde_json::Value {
+    serde_json::json!({
+        "kind": "error",
+        "code": "system_error",
+        "message": message,
+    })
+}
+
+fn 构造房间增量事件载荷(
+    房间标识: &str,
+    最新事件位置: i64,
+    事件: Vec<serde_json::Value>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "room_id": 房间标识,
+        "latest_event_position": 最新事件位置,
+        "events": 事件,
+    })
+}
+
+/// 订阅链路的单连接回包必须统一按同一套失败分级记录。
+/// 否则某些 `control_result` 分支会静默吞错，后续排查会失真。
+fn 记录订阅单连接发送失败(
+    room_id: &str,
+    session_id: &str,
+    from: i64,
+    phase: &str,
+    err: &SendError,
+) {
+    match 分类单连接发送失败(err) {
+        实时发送失败级别::正常断开 => tracing::info!(
+            usecase = "订阅房间事件流",
+            adapter = "socketioxide",
+            outcome = "dropped",
+            room_id = room_id,
+            session_id = session_id,
+            from = from,
+            phase = phase,
+            error_code = "socket_closed",
+            error = %err,
+            "订阅单连接消息在连接关闭后被丢弃"
+        ),
+        实时发送失败级别::背压 => tracing::error!(
+            usecase = "订阅房间事件流",
+            adapter = "socketioxide",
+            outcome = "failed",
+            room_id = room_id,
+            session_id = session_id,
+            from = from,
+            phase = phase,
+            error_code = "socket_backpressure",
+            error = %err,
+            "订阅单连接消息发送失败：socket 内部通道已满"
+        ),
+        实时发送失败级别::序列化 => tracing::error!(
+            usecase = "订阅房间事件流",
+            adapter = "socketioxide",
+            outcome = "failed",
+            room_id = room_id,
+            session_id = session_id,
+            from = from,
+            phase = phase,
+            error_code = "serialize_failed",
+            error = %err,
+            "订阅单连接消息序列化失败"
+        ),
+        实时发送失败级别::适配器 => {
+            unreachable!("单连接发送不应出现 adapter 级错误")
+        }
+    }
+}
+
+/// 创建消息的广播失败必须继续只记录 adapter 运行态事实，不能倒灌业务语义。
+fn 记录创建消息广播失败(
+    room_id: &str,
+    session_id: &str,
+    client_message_id: &str,
+    err: &BroadcastError,
+) {
+    match 分类广播发送失败(err) {
+        实时发送失败级别::正常断开 => tracing::info!(
+            usecase = "创建消息",
+            adapter = "socketioxide",
+            outcome = "dropped",
+            room_id = room_id,
+            session_id = session_id,
+            client_message_id = client_message_id,
+            error_code = "socket_closed",
+            error = %err,
+            "房间权威事件在连接关闭后被丢弃"
+        ),
+        实时发送失败级别::背压 => tracing::error!(
+            usecase = "创建消息",
+            adapter = "socketioxide",
+            outcome = "failed",
+            room_id = room_id,
+            session_id = session_id,
+            client_message_id = client_message_id,
+            error_code = "socket_backpressure",
+            error = %err,
+            "房间权威事件广播失败：存在 socket 内部通道已满"
+        ),
+        实时发送失败级别::序列化 => tracing::error!(
+            usecase = "创建消息",
+            adapter = "socketioxide",
+            outcome = "failed",
+            room_id = room_id,
+            session_id = session_id,
+            client_message_id = client_message_id,
+            error_code = "serialize_failed",
+            error = %err,
+            "房间权威事件广播失败：事件序列化失败"
+        ),
+        实时发送失败级别::适配器 => tracing::error!(
+            usecase = "创建消息",
+            adapter = "socketioxide",
+            outcome = "failed",
+            room_id = room_id,
+            session_id = session_id,
+            client_message_id = client_message_id,
+            error_code = "adapter_failed",
+            error = %err,
+            "房间权威事件广播失败：adapter 层出错"
+        ),
+    }
+}
+
+fn 记录创建消息单连接发送失败(
+    room_id: &str,
+    session_id: &str,
+    client_message_id: &str,
+    phase: &str,
+    err: &SendError,
+) {
+    match 分类单连接发送失败(err) {
+        实时发送失败级别::正常断开 => tracing::info!(
+            usecase = "创建消息",
+            adapter = "socketioxide",
+            outcome = "dropped",
+            room_id = room_id,
+            session_id = session_id,
+            client_message_id = client_message_id,
+            phase = phase,
+            error_code = "socket_closed",
+            error = %err,
+            "创建消息控制面在连接关闭后被丢弃"
+        ),
+        实时发送失败级别::背压 => tracing::error!(
+            usecase = "创建消息",
+            adapter = "socketioxide",
+            outcome = "failed",
+            room_id = room_id,
+            session_id = session_id,
+            client_message_id = client_message_id,
+            phase = phase,
+            error_code = "socket_backpressure",
+            error = %err,
+            "创建消息控制面发送失败：socket 内部通道已满"
+        ),
+        实时发送失败级别::序列化 => tracing::error!(
+            usecase = "创建消息",
+            adapter = "socketioxide",
+            outcome = "failed",
+            room_id = room_id,
+            session_id = session_id,
+            client_message_id = client_message_id,
+            phase = phase,
+            error_code = "serialize_failed",
+            error = %err,
+            "创建消息控制面序列化失败"
+        ),
+        实时发送失败级别::适配器 => {
+            unreachable!("单连接发送不应出现 adapter 级错误")
+        }
+    }
+}
+
 /// 统一记录 realtime 连接断开，给后续排查断线/心跳超时留一条稳定主链。
 ///
 /// 这里故意只记录“连接运行态事实”，不把房间成员资格或在线真相塞进 socket 层。
@@ -233,118 +441,43 @@ pub(super) async fn handle_realtime_subscribe(
                     latest_event_position = 最新事件位置,
                     "订阅锚点超前，要求客户端回退到 HTTP 快照"
                 );
-                let control = serde_json::json!({
-                    "kind": "need_snapshot_reload",
-                    "room_id": 房间标识,
-                    "expected_position": from,
-                });
+                let control = 构造需要重拉快照控制面(&房间标识, from);
                 if let Err(err) = socket.emit("control_result", &control) {
-                    tracing::error!(
-                        usecase = "订阅房间事件流",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = payload.room_id,
-                        session_id = auth.session_id,
-                        from = from,
-                        error_code = "emit_failed",
-                        error = %err,
-                        "订阅恢复控制消息发送失败"
+                    记录订阅单连接发送失败(
+                        payload.room_id.as_str(),
+                        auth.session_id.as_str(),
+                        from,
+                        "订阅恢复控制消息",
+                        &err,
                     );
                 }
                 return;
             }
             socket.join(房间标识.clone());
-            let control = serde_json::json!({
-                "kind": "subscribed",
-                "room_id": 房间标识,
-                "from": from,
-                "latest_event_position": 最新事件位置
-            });
-            let events_json = serde_json::json!({
-                "room_id": 房间标识,
-                "latest_event_position": 最新事件位置,
-                "events": events_to_json(事件, Some(auth.session_id.as_str()))
-            });
+            let control = 构造订阅已建立控制面(&房间标识, from, 最新事件位置);
+            let events_json = 构造房间增量事件载荷(
+                &房间标识,
+                最新事件位置,
+                events_to_json(事件, Some(auth.session_id.as_str())),
+            );
             if let Err(err) = socket.emit("control_result", &control) {
-                match 分类单连接发送失败(&err) {
-                    实时发送失败级别::正常断开 => tracing::info!(
-                        usecase = "订阅房间事件流",
-                        adapter = "socketioxide",
-                        outcome = "dropped",
-                        room_id = payload.room_id,
-                        session_id = auth.session_id,
-                        from = from,
-                        error_code = "socket_closed",
-                        error = %err,
-                        "订阅控制消息在连接关闭后被丢弃"
-                    ),
-                    实时发送失败级别::背压 => tracing::error!(
-                        usecase = "订阅房间事件流",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = payload.room_id,
-                        session_id = auth.session_id,
-                        from = from,
-                        error_code = "socket_backpressure",
-                        error = %err,
-                        "订阅控制消息发送失败：socket 内部通道已满"
-                    ),
-                    实时发送失败级别::序列化 => tracing::error!(
-                        usecase = "订阅房间事件流",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = payload.room_id,
-                        session_id = auth.session_id,
-                        from = from,
-                        error_code = "serialize_failed",
-                        error = %err,
-                        "订阅控制消息序列化失败"
-                    ),
-                    实时发送失败级别::适配器 => {
-                        unreachable!("单连接发送不应出现 adapter 级错误")
-                    }
-                }
+                记录订阅单连接发送失败(
+                    payload.room_id.as_str(),
+                    auth.session_id.as_str(),
+                    from,
+                    "订阅控制消息",
+                    &err,
+                );
                 return;
             }
             if let Err(err) = socket.emit("room_events", &events_json) {
-                match 分类单连接发送失败(&err) {
-                    实时发送失败级别::正常断开 => tracing::info!(
-                        usecase = "订阅房间事件流",
-                        adapter = "socketioxide",
-                        outcome = "dropped",
-                        room_id = payload.room_id,
-                        session_id = auth.session_id,
-                        from = from,
-                        error_code = "socket_closed",
-                        error = %err,
-                        "订阅增量事件在连接关闭后被丢弃"
-                    ),
-                    实时发送失败级别::背压 => tracing::error!(
-                        usecase = "订阅房间事件流",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = payload.room_id,
-                        session_id = auth.session_id,
-                        from = from,
-                        error_code = "socket_backpressure",
-                        error = %err,
-                        "订阅增量事件发送失败：socket 内部通道已满"
-                    ),
-                    实时发送失败级别::序列化 => tracing::error!(
-                        usecase = "订阅房间事件流",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = payload.room_id,
-                        session_id = auth.session_id,
-                        from = from,
-                        error_code = "serialize_failed",
-                        error = %err,
-                        "订阅增量事件序列化失败"
-                    ),
-                    实时发送失败级别::适配器 => {
-                        unreachable!("单连接发送不应出现 adapter 级错误")
-                    }
-                }
+                记录订阅单连接发送失败(
+                    payload.room_id.as_str(),
+                    auth.session_id.as_str(),
+                    from,
+                    "订阅增量事件",
+                    &err,
+                );
                 return;
             }
             tracing::info!(
@@ -369,8 +502,16 @@ pub(super) async fn handle_realtime_subscribe(
                 error_code = "system_error",
                 "订阅返回了错误的快照类型"
             );
-            let payload = serde_json::json!({"kind":"error","code":"system_error","message":"快照类型不匹配"});
-            let _ = socket.emit("control_result", &payload);
+            let control_payload = 构造系统错误控制面("快照类型不匹配");
+            if let Err(err) = socket.emit("control_result", &control_payload) {
+                记录订阅单连接发送失败(
+                    payload.room_id.as_str(),
+                    auth.session_id.as_str(),
+                    from,
+                    "订阅异常控制消息",
+                    &err,
+                );
+            }
         }
         Err((_, code, message)) => {
             tracing::info!(
@@ -383,8 +524,16 @@ pub(super) async fn handle_realtime_subscribe(
                 error_code = code,
                 "订阅房间事件流被拒绝"
             );
-            let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
-            let _ = socket.emit("control_result", &payload);
+            let control_payload = 构造拒绝控制面(code, message.as_str());
+            if let Err(err) = socket.emit("control_result", &control_payload) {
+                记录订阅单连接发送失败(
+                    payload.room_id.as_str(),
+                    auth.session_id.as_str(),
+                    from,
+                    "订阅拒绝控制消息",
+                    &err,
+                );
+            }
         }
     }
 }
@@ -441,52 +590,12 @@ pub(super) async fn handle_realtime_create_message(
                 .emit("room_event", &payload)
                 .await
             {
-                match 分类广播发送失败(&err) {
-                    实时发送失败级别::正常断开 => tracing::info!(
-                        usecase = "创建消息",
-                        adapter = "socketioxide",
-                        outcome = "dropped",
-                        room_id = room_id,
-                        session_id = auth.session_id,
-                        client_message_id = client_message_id,
-                        error_code = "socket_closed",
-                        error = %err,
-                        "房间权威事件在连接关闭后被丢弃"
-                    ),
-                    实时发送失败级别::背压 => tracing::error!(
-                        usecase = "创建消息",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = room_id,
-                        session_id = auth.session_id,
-                        client_message_id = client_message_id,
-                        error_code = "socket_backpressure",
-                        error = %err,
-                        "房间权威事件广播失败：存在 socket 内部通道已满"
-                    ),
-                    实时发送失败级别::序列化 => tracing::error!(
-                        usecase = "创建消息",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = room_id,
-                        session_id = auth.session_id,
-                        client_message_id = client_message_id,
-                        error_code = "serialize_failed",
-                        error = %err,
-                        "房间权威事件广播失败：事件序列化失败"
-                    ),
-                    实时发送失败级别::适配器 => tracing::error!(
-                        usecase = "创建消息",
-                        adapter = "socketioxide",
-                        outcome = "failed",
-                        room_id = room_id,
-                        session_id = auth.session_id,
-                        client_message_id = client_message_id,
-                        error_code = "adapter_failed",
-                        error = %err,
-                        "房间权威事件广播失败：adapter 层出错"
-                    ),
-                }
+                记录创建消息广播失败(
+                    room_id.as_str(),
+                    auth.session_id.as_str(),
+                    client_message_id.as_str(),
+                    &err,
+                );
             } else {
                 tracing::info!(
                     usecase = "创建消息",
@@ -511,8 +620,16 @@ pub(super) async fn handle_realtime_create_message(
                 error_code = code,
                 "创建消息被拒绝"
             );
-            let payload = serde_json::json!({"kind":"rejected","code":code,"message":message});
-            let _ = socket.emit("control_result", &payload);
+            let payload = 构造拒绝控制面(code, message.as_str());
+            if let Err(err) = socket.emit("control_result", &payload) {
+                记录创建消息单连接发送失败(
+                    room_id_for_log.as_str(),
+                    auth.session_id.as_str(),
+                    client_message_id_for_log.as_str(),
+                    "创建消息拒绝控制消息",
+                    &err,
+                );
+            }
         }
     }
 }
