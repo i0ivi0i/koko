@@ -39,6 +39,70 @@ describe("阅读推进编排", () => {
     expect(场景.读取状态().pendingReadAnchorPosition).toBe(7);
   });
 
+  it("取消跟随最新采样时，不会顺手清掉已进入提交队列的阅读补锚", async () => {
+    const 创建阅读推进编排 = await 读取阅读推进编排工厂();
+    const 场景 = 创建阅读推进测试场景({
+      roomId: "r-test",
+      latestEventPosition: 8,
+      initialUnreadSettled: true,
+      lastReadEventPosition: 1,
+      firstUnreadEventPosition: 2,
+    });
+    const 编排 = 创建阅读推进编排(场景.deps) as {
+      接收候选已读位置(position: number): void;
+      取消待跟随最新采样(): void;
+      dispose(): void;
+    };
+
+    vi.useFakeTimers();
+    try {
+      编排.接收候选已读位置(7);
+      编排.取消待跟随最新采样();
+      await vi.advanceTimersByTimeAsync(401);
+
+      expect(场景.transport.readAnchorUpdates).toEqual([
+        {
+          roomId: "r-test",
+          sessionId: "s-test",
+          lastReadEventPosition: 7,
+        },
+      ]);
+      编排.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("取消待提交阅读补锚时，不会误伤贴底跟随后的采样窗口", async () => {
+    const 创建阅读推进编排 = await 读取阅读推进编排工厂();
+    const 场景 = 创建阅读推进测试场景({
+      roomId: "r-test",
+      latestEventPosition: 8,
+      viewportMode: "离底浏览",
+      initialUnreadSettled: true,
+      lastReadEventPosition: 1,
+      firstUnreadEventPosition: 2,
+    });
+    场景.roomScroller.读取当前可见阅读锚点.mockReturnValue(8);
+    const 编排 = 创建阅读推进编排(场景.deps) as {
+      请求跳到最新(): Promise<void>;
+      取消待刷新已读锚点(): void;
+      dispose(): void;
+    };
+
+    vi.useFakeTimers();
+    try {
+      await 编排.请求跳到最新();
+      编排.取消待刷新已读锚点();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(场景.读取状态().pendingReadAnchorPosition).toBe(8);
+      编排.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("跳到最新后会进入贴底跟随并在需要时补读", async () => {
     const 创建阅读推进编排 = await 读取阅读推进编排工厂();
     const 场景 = 创建阅读推进测试场景({

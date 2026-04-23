@@ -45,6 +45,25 @@ describe("传输", () => {
     expect(source).toContain("return this.房间HTTP接口.loadRoomHistory(");
   });
 
+  it("HttpRealtime传输 会把 media 与 admin HTTP 适配拆回各自接口，只保留组合根职责", () => {
+    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+
+    expect(source).toContain('from "./媒体/适配/媒体HTTP接口.js"');
+    expect(source).toContain('from "./操作台/适配/后台HTTP接口.js"');
+    expect(source).toContain("private readonly 媒体HTTP接口");
+    expect(source).toContain("private readonly 后台HTTP接口");
+    expect(source).toContain("return this.媒体HTTP接口.prepareMediaUpload(kind, sessionId, file);");
+    expect(source).toContain("return this.媒体HTTP接口.abandonMediaUpload(sessionId, attachmentId);");
+    expect(source).toContain("return this.媒体HTTP接口.completeMediaUpload(sessionId, attachmentId);");
+    expect(source).toContain("return this.媒体HTTP接口.loadMediaLocator(sessionId, attachmentId);");
+    expect(source).toContain("return this.后台HTTP接口.loadAdminOverview(token);");
+    expect(source).toContain("return this.后台HTTP接口.adminLogin(username, password);");
+    expect(source).toContain("return this.后台HTTP接口.adminRooms(token);");
+    expect(source).toContain("return this.后台HTTP接口.adminRoomDetail(token, roomId);");
+    expect(source).not.toContain("private 解析流媒体资产(");
+    expect(source).not.toContain("private 解析Blob媒体资产(");
+  });
+
   it("socket连接配置只显式声明当前可安全启用的连接策略", () => {
     const transport = new HttpRealtime传输("http://localhost:3000");
 

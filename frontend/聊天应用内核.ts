@@ -5,20 +5,22 @@ import {
   type 房间壳外观,
 } from "./房间内核.js";
 import {
-  创建房间恢复编排,
   type 房间恢复编排依赖,
   type 房间恢复编排端口,
 } from "./房间恢复编排.js";
 import {
-  创建房间实时编排,
   type 房间实时编排依赖,
   type 房间实时编排端口,
 } from "./房间实时编排.js";
 import {
-  创建阅读推进编排,
   type 阅读推进编排依赖,
   type 阅读推进编排端口,
 } from "./阅读推进编排.js";
+import {
+  创建内核恢复编排端口,
+  创建内核实时编排端口,
+  创建内核阅读推进编排端口,
+} from "./聊天应用编排桥接.js";
 import {
   房间滚动器,
   type 房间滚动观测,
@@ -592,13 +594,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private get 恢复编排端口(): 房间恢复编排端口 {
     if (!this._恢复编排端口) {
-      /**
-       * 恢复链接线也只停在内核：
-       * - realtime 编排把 transport 异常交回来；
-       * - 恢复编排决定 session refresh / snapshot reload / hard failure；
-       * - 壳层继续只消费 snapshot，不直接碰恢复细节。
-       */
-      this._恢复编排端口 = 创建房间恢复编排({
+      this._恢复编排端口 = 创建内核恢复编排端口({
         读取恢复状态: () => this.读取恢复编排状态(),
         写入恢复状态: (patch) => this.写入恢复编排状态(patch),
         接收时间线事实: (event) => this.接收时间线事实(event),
@@ -610,8 +606,8 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         roomScroller: this.roomScroller,
         ensureRealtimeSocket: (sessionId) => this.实时编排端口.ensureRealtimeSocket(sessionId),
         subscribeRoom: (from) => this.实时编排端口.subscribeRoom(from),
-        cancelPendingReadAnchorFlush: () => this.阅读推进编排端口.dispose(),
-        cancelPendingFollowLatestReadSample: () => this.阅读推进编排端口.dispose(),
+        取消待刷新已读锚点: () => this.阅读推进编排端口.取消待刷新已读锚点(),
+        取消待跟随最新采样: () => this.阅读推进编排端口.取消待跟随最新采样(),
         exitCurrentRoomView: (opts) => this.exitCurrentRoomView(opts),
         disconnectRealtime: () => this.实时编排端口.disconnect(),
         写入恢复补锚标记: (value) => {
@@ -627,15 +623,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private get 实时编排端口(): 房间实时编排端口 {
     if (!this._实时编排端口) {
-      /**
-       * 内核在这里只做端口接线：
-       * - realtime 编排继续拥有 socket 主链；
-       * - recovery 编排继续拥有 invalid_session / snapshot reload 恢复语义；
-       * - 平台离线能力只作为待补发协作的底层能力注入。
-       *
-       * 内核自己不解释 socket 控制面结果，也不把恢复 owner 拉回这里。
-       */
-      this._实时编排端口 = 创建房间实时编排({
+      this._实时编排端口 = 创建内核实时编排端口({
         读取实时状态: () => this.读取实时编排状态(),
         写入实时状态: (patch) => this.写入实时编排状态(patch),
         接收时间线事实: (event) => this.接收时间线事实(event),
@@ -763,7 +751,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private get 阅读推进编排端口(): 阅读推进编排端口 {
     if (!this._阅读推进编排端口) {
-      this._阅读推进编排端口 = 创建阅读推进编排({
+      this._阅读推进编排端口 = 创建内核阅读推进编排端口({
         读取阅读状态: () => this.读取阅读推进状态(),
         写入阅读状态: (patch) => this.写入阅读状态(patch),
         接收时间线事实: (event) => this.接收时间线事实(event),

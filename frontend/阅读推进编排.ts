@@ -29,6 +29,8 @@ export interface 阅读推进编排端口 {
   请求加载更早历史(): Promise<void>;
   请求跳到最新(): Promise<void>;
   接收Realtime追加后跟随(): Promise<void>;
+  取消待刷新已读锚点(): void;
+  取消待跟随最新采样(): void;
   dispose(): void;
 }
 
@@ -257,6 +259,8 @@ export function 创建阅读推进编排(deps: 阅读推进编排依赖): 阅读
     请求加载更早历史,
     请求跳到最新,
     接收Realtime追加后跟随,
+    取消待刷新已读锚点: cancelPendingReadAnchorFlush,
+    取消待跟随最新采样: cancelPendingFollowLatestReadSample,
     dispose,
   };
 }

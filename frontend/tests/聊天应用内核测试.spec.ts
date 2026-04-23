@@ -92,10 +92,38 @@ describe("聊天应用内核", () => {
   it("实时编排接线仍只注入端口，不在聊天应用内核里解释控制面失败", () => {
     const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
 
-    expect(source).toContain("创建房间实时编排({");
+    expect(source).toContain("创建内核实时编排端口({");
     expect(source).not.toContain("control_result");
     expect(source).not.toContain("need_snapshot_reload");
     expect(source).not.toContain('code: "invalid_session"');
+  });
+
+  it("聊天应用内核 会把 realtime recovery read 接线委托给 聊天应用编排桥接", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天应用编排桥接.js"');
+    expect(source).toContain("创建内核恢复编排端口({");
+    expect(source).toContain("创建内核实时编排端口({");
+    expect(source).toContain("创建内核阅读推进编排端口({");
+    expect(source).not.toContain("创建房间恢复编排({");
+    expect(source).not.toContain("创建房间实时编排({");
+    expect(source).not.toContain("创建阅读推进编排({");
+  });
+
+  it("恢复编排撤销阅读节流时会区分补锚 flush 与跟随采样，不再都降成 dispose", () => {
+    const kernelSource = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+    const bridgeSource = readFileSync(resolve(process.cwd(), "聊天应用编排桥接.ts"), "utf8");
+
+    expect(kernelSource).toContain("取消待刷新已读锚点: () => this.阅读推进编排端口.取消待刷新已读锚点()");
+    expect(kernelSource).toContain(
+      "取消待跟随最新采样: () => this.阅读推进编排端口.取消待跟随最新采样()"
+    );
+    expect(bridgeSource).toContain("cancelPendingReadAnchorFlush: deps.取消待刷新已读锚点");
+    expect(bridgeSource).toContain("cancelPendingFollowLatestReadSample: deps.取消待跟随最新采样");
+    expect(kernelSource).not.toContain("cancelPendingReadAnchorFlush: () => this.阅读推进编排端口.dispose()");
+    expect(kernelSource).not.toContain(
+      "cancelPendingFollowLatestReadSample: () => this.阅读推进编排端口.dispose()"
+    );
   });
 
   it("不再暴露 transportPort / replaceSnapshot 这类兼容旧壳层的旁路入口", () => {

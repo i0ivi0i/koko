@@ -1,21 +1,14 @@
 import type { Socket } from "socket.io-client";
 import type {
-  Blob媒体资产描述,
-  Blob媒体变体描述,
-  单文件视频资产描述,
   附件快照,
   匿名身份引导结果,
   增量事件快照,
   消息事件,
-  流媒体资产描述,
-  媒体冷源描述,
-  媒体资产分发表面,
   媒体附件上传结果,
   媒体定位结果,
   媒体上传准备结果,
   媒体种类,
   预览资源描述,
-  阅读推进请求,
   房间历史页,
   房间快照,
   后台概览,
@@ -28,6 +21,8 @@ import {
   type 实时连接运行时策略,
 } from "./聊天实时/适配/实时连接适配.js";
 import { 房间HTTP接口 } from "./聊天恢复/适配/房间HTTP接口.js";
+import { 媒体HTTP接口 } from "./媒体/适配/媒体HTTP接口.js";
+import { 后台HTTP接口 } from "./操作台/适配/后台HTTP接口.js";
 
 type 接口错误响应 = {
   code?: string;
@@ -89,9 +84,20 @@ export interface 前端传输端口 {
 }
 export type { 实时连接运行时策略 } from "./聊天实时/适配/实时连接适配.js";
 
+/**
+ * HttpRealtime传输 现在只保留“组合根”职责：
+ * - socket 生命周期交给 realtime 适配；
+ * - 聊天房间 HTTP 主链交给房间接口；
+ * - 媒体上传/定位交给媒体接口；
+ * - 后台冷路径交给操作台接口。
+ *
+ * 这样 transport 不再继续吸 media/admin 细节，只负责把几条已存在的稳定主链拼起来。
+ */
 export class HttpRealtime传输 implements 前端传输端口 {
   private readonly 实时连接: 实时连接适配;
   private readonly 房间HTTP接口: 房间HTTP接口;
+  private readonly 媒体HTTP接口: 媒体HTTP接口;
+  private readonly 后台HTTP接口: 后台HTTP接口;
 
   constructor(private readonly baseUrl: string) {
     this.实时连接 = new 实时连接适配(baseUrl);
@@ -102,49 +108,24 @@ export class HttpRealtime传输 implements 前端传输端口 {
       解析增量事件快照: (snapshot) => this.解析增量事件快照(snapshot),
       解析房间历史页: (page) => this.解析房间历史页(page),
     });
+    this.媒体HTTP接口 = new 媒体HTTP接口({
+      get: this.get.bind(this),
+      post: this.post.bind(this),
+      解析绝对地址: (pathOrUrl) => this.解析绝对地址(pathOrUrl),
+      解析预览资源: (preview) => this.解析预览资源(preview),
+    });
+    this.后台HTTP接口 = new 后台HTTP接口({
+      get: this.get.bind(this),
+      post: this.post.bind(this),
+    });
   }
 
   /**
-   * 后端在本地回环模式下会返回相对 Tus endpoint，例如 `/files`。
-   * Uppy Tus 会直接拿这个地址去发 `POST/HEAD/PATCH`，所以前端必须先收口成绝对地址，
-   * 否则浏览器端的 resumable 上传会在构造请求时直接失败。
+   * 后端在本地回环模式下会返回相对地址，例如 `/files`。
+   * 浏览器里的 adapter 必须先收口成绝对地址，避免后续上传/预览直接用错主机。
    */
   private 解析绝对地址(pathOrUrl: string): string {
     return new URL(pathOrUrl, this.baseUrl).href;
-  }
-
-  /**
-   * 共享资产分发表面只做地址收口，不夹带 Web 私有运行态。
-   * 这样后续 iOS/Android/CLI 接同一契约时，不会被浏览器页面字段污染。
-   */
-  private 解析媒体资产分发表面(
-    distribution: 媒体资产分发表面
-  ): 媒体资产分发表面 {
-    return {
-      ...distribution,
-      announce_urls: distribution.announce_urls.map((url) =>
-        this.解析绝对地址(url)
-      ),
-      web_seed_url: distribution.web_seed_url
-        ? this.解析绝对地址(distribution.web_seed_url)
-        : null,
-    };
-  }
-
-  private 解析媒体冷源描述(origin: 媒体冷源描述): 媒体冷源描述 {
-    return {
-      ...origin,
-      original_url: origin.original_url
-        ? this.解析绝对地址(origin.original_url)
-        : null,
-    };
-  }
-
-  private 解析Blob媒体变体(variant: Blob媒体变体描述): Blob媒体变体描述 {
-    return {
-      ...variant,
-      url: this.解析绝对地址(variant.url),
-    };
   }
 
   private 解析预览资源(preview: 预览资源描述 | null | undefined): 预览资源描述 | null {
@@ -197,79 +178,6 @@ export class HttpRealtime传输 implements 前端传输端口 {
     };
   }
 
-  private 解析流媒体资产(asset: 流媒体资产描述): 流媒体资产描述 {
-    return {
-      ...asset,
-      manifest: {
-        hls_master_url: asset.manifest.hls_master_url
-          ? this.解析绝对地址(asset.manifest.hls_master_url)
-          : null,
-        dash_mpd_url: asset.manifest.dash_mpd_url
-          ? this.解析绝对地址(asset.manifest.dash_mpd_url)
-          : null,
-      },
-      distribution: this.解析媒体资产分发表面(asset.distribution),
-      origin: this.解析媒体冷源描述(asset.origin),
-    };
-  }
-
-  private 解析单文件视频资产(asset: 单文件视频资产描述): 单文件视频资产描述 {
-    return {
-      ...asset,
-      variants: {
-        canonical: asset.variants.canonical
-          ? this.解析Blob媒体变体(asset.variants.canonical)
-          : null,
-      },
-      distribution: this.解析媒体资产分发表面(asset.distribution),
-      origin: this.解析媒体冷源描述(asset.origin),
-    };
-  }
-
-  private 解析Blob媒体资产(asset: Blob媒体资产描述): Blob媒体资产描述 {
-    return {
-      ...asset,
-      variants: {
-        canonical: asset.variants.canonical
-          ? this.解析Blob媒体变体(asset.variants.canonical)
-          : null,
-      },
-      distribution: asset.distribution
-        ? this.解析媒体资产分发表面(asset.distribution)
-        : null,
-      origin: this.解析媒体冷源描述(asset.origin),
-    };
-  }
-
-  private 解析媒体上传结果(result: 媒体附件上传结果): 媒体附件上传结果 {
-    const preview_asset = this.解析预览资源(result.preview_asset);
-    if (!result.media_asset) {
-      return {
-        ...result,
-        preview_asset,
-      };
-    }
-    if (result.media_asset.kind === "blob_image") {
-      return {
-        ...result,
-        preview_asset,
-        media_asset: this.解析Blob媒体资产(result.media_asset),
-      };
-    }
-    if (result.media_asset.kind === "file_video") {
-      return {
-        ...result,
-        preview_asset,
-        media_asset: this.解析单文件视频资产(result.media_asset),
-      };
-    }
-    return {
-      ...result,
-      preview_asset,
-      media_asset: this.解析流媒体资产(result.media_asset),
-    };
-  }
-
   async bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果> {
     return this.房间HTTP接口.bootstrapAnonymousIdentity(deviceToken);
   }
@@ -282,89 +190,27 @@ export class HttpRealtime传输 implements 前端传输端口 {
     return this.房间HTTP接口.loadRoomSnapshot(roomId, sessionId);
   }
 
-  /**
-   * prepare 只向 Rust 申请权威 media 占位和浏览器直传参数。
-   * 真正的媒体字节不会经过聊天主服务主链。
-   */
   async prepareMediaUpload(
     kind: 媒体种类,
     sessionId: string,
     file: File
   ): Promise<媒体上传准备结果> {
-    const prepared = await this.post<媒体上传准备结果>(`/api/media/${kind}/prepare`, {
-      session_id: sessionId,
-      file_name: file.name,
-      mime_type: file.type,
-      byte_size: file.size,
-    });
-    return {
-      ...prepared,
-      tus_endpoint: this.解析绝对地址(prepared.tus_endpoint),
-    };
+    return this.媒体HTTP接口.prepareMediaUpload(kind, sessionId, file);
   }
 
-  /**
-   * restart 不是本地换个 attachmentId 就算完成，
-   * 必须先让后端把旧附件和旧 transport 一起标成 abandoned。
-   */
   async abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void> {
-    await this.post<{ attachment_id: string; status: string }>(`/api/media/${attachmentId}/abandon`, {
-      session_id: sessionId,
-    });
+    return this.媒体HTTP接口.abandonMediaUpload(sessionId, attachmentId);
   }
 
-  /**
-   * complete 负责把 prepared 附件升级成 ready。
-   * 只有这里成功后，壳层才允许把草稿显示成“可发送”。
-   */
   async completeMediaUpload(
     sessionId: string,
     attachmentId: string
   ): Promise<媒体附件上传结果> {
-    const result = await this.post<媒体附件上传结果>(`/api/media/${attachmentId}/complete`, {
-      session_id: sessionId,
-    });
-    return this.解析媒体上传结果(result);
+    return this.媒体HTTP接口.completeMediaUpload(sessionId, attachmentId);
   }
 
-  async loadMediaLocator(
-    sessionId: string,
-    attachmentId: string
-  ): Promise<媒体定位结果> {
-    const locator = await this.get<媒体定位结果>(
-      `/api/media/${attachmentId}/locator?session_id=${sessionId}`
-    );
-    return {
-      ...locator,
-      original_url: this.解析绝对地址(locator.original_url),
-      preview_asset: this.解析预览资源(locator.preview_asset),
-      thumbnail_url: locator.thumbnail_url
-        ? this.解析绝对地址(locator.thumbnail_url)
-        : null,
-      distribution: locator.distribution
-        ? {
-            ...locator.distribution,
-            announce_urls: locator.distribution.announce_urls.map((url) =>
-              this.解析绝对地址(url)
-            ),
-            torrent_url: locator.distribution.torrent_url
-              ? this.解析绝对地址(locator.distribution.torrent_url)
-              : null,
-            web_seed_url: locator.distribution.web_seed_url
-              ? this.解析绝对地址(locator.distribution.web_seed_url)
-              : null,
-          }
-        : null,
-      streaming_asset: locator.streaming_asset
-        ? this.解析流媒体资产(locator.streaming_asset)
-        : null,
-      file_asset: locator.file_asset
-        ? this.解析单文件视频资产(locator.file_asset)
-        : null,
-      blob_asset: locator.blob_asset
-        ? this.解析Blob媒体资产(locator.blob_asset)
-        : null,
-    };
+  async loadMediaLocator(sessionId: string, attachmentId: string): Promise<媒体定位结果> {
+    return this.媒体HTTP接口.loadMediaLocator(sessionId, attachmentId);
   }
 
   buildAttachmentContentUrl(
@@ -384,11 +230,7 @@ export class HttpRealtime传输 implements 前端传输端口 {
     sessionId: string,
     lastReadEventPosition: number
   ): Promise<void> {
-    return this.房间HTTP接口.updateRoomReadAnchor(
-      roomId,
-      sessionId,
-      lastReadEventPosition
-    );
+    return this.房间HTTP接口.updateRoomReadAnchor(roomId, sessionId, lastReadEventPosition);
   }
 
   async loadRoomEvents(
@@ -414,19 +256,19 @@ export class HttpRealtime传输 implements 前端传输端口 {
   }
 
   async loadAdminOverview(token: string): Promise<后台概览> {
-    return this.get("/api/admin/overview", { "x-admin-token": token });
+    return this.后台HTTP接口.loadAdminOverview(token);
   }
 
   async adminLogin(username: string, password: string): Promise<后台登录结果> {
-    return this.post("/api/admin/login", { username, password });
+    return this.后台HTTP接口.adminLogin(username, password);
   }
 
   async adminRooms(token: string): Promise<后台房间列表> {
-    return this.get("/api/admin/rooms", { "x-admin-token": token });
+    return this.后台HTTP接口.adminRooms(token);
   }
 
   async adminRoomDetail(token: string, roomId: string): Promise<后台房间详情> {
-    return this.get(`/api/admin/rooms/${roomId}`, { "x-admin-token": token });
+    return this.后台HTTP接口.adminRoomDetail(token, roomId);
   }
 
   createSocket(sessionId: string): Socket {
