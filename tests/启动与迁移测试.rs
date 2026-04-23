@@ -1,5 +1,10 @@
 use serial_test::serial;
 use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
+use sqlx::{
+    postgres::{PgConnectOptions, PgPoolOptions},
+    ConnectOptions, PgPool, Row,
+};
 use tokio::sync::oneshot;
 use tokio::time::{timeout, Duration};
 
@@ -7,6 +12,171 @@ use tokio::time::{timeout, Duration};
 mod test_support;
 
 use test_support::env_support::*;
+
+fn 生成迁移测试数据库名(prefix: &str) -> String {
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    format!("{prefix}_{uniq}")
+}
+
+async fn 创建迁移测试数据库(base_database_url: &str, db_name: &str) -> (PgPool, String) {
+    let admin_options = base_database_url
+        .parse::<PgConnectOptions>()
+        .expect("DATABASE_URL 应能解析成 PgConnectOptions")
+        .database("postgres")
+        .disable_statement_logging();
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(admin_options.clone())
+        .await
+        .expect("应能连到 postgres 管理库");
+    sqlx::query(&format!("CREATE DATABASE \"{db_name}\""))
+        .execute(&admin_pool)
+        .await
+        .expect("应能创建迁移测试数据库");
+    admin_pool.close().await;
+
+    let test_database_url = admin_options
+        .database(db_name)
+        .to_url_lossy()
+        .to_string();
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&test_database_url)
+        .await
+        .expect("应能连到迁移测试数据库");
+    (pool, test_database_url)
+}
+
+async fn 删除迁移测试数据库(base_database_url: &str, db_name: &str) {
+    let admin_options = base_database_url
+        .parse::<PgConnectOptions>()
+        .expect("DATABASE_URL 应能解析成 PgConnectOptions")
+        .database("postgres")
+        .disable_statement_logging();
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(admin_options)
+        .await
+        .expect("应能重新连到 postgres 管理库");
+    sqlx::query(
+        "SELECT pg_terminate_backend(pid)
+           FROM pg_stat_activity
+          WHERE datname = $1
+            AND pid <> pg_backend_pid()",
+    )
+    .bind(db_name)
+    .execute(&admin_pool)
+    .await
+    .expect("应能清理迁移测试数据库连接");
+    sqlx::query(&format!("DROP DATABASE IF EXISTS \"{db_name}\""))
+        .execute(&admin_pool)
+        .await
+        .expect("应能删除迁移测试数据库");
+    admin_pool.close().await;
+}
+
+async fn 执行迁移直到(pool: &PgPool, last_file: &str) {
+    let mut migration_files = std::fs::read_dir("migrations")
+        .expect("应能读取 migrations 目录")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "sql"))
+        .collect::<Vec<_>>();
+    migration_files.sort();
+
+    for path in migration_files {
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .expect("迁移文件名应是 utf-8");
+        if file_name > last_file {
+            break;
+        }
+        let sql = std::fs::read_to_string(&path).expect("应能读到迁移 SQL");
+        sqlx::raw_sql(&sql)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|err| panic!("执行迁移 {file_name} 失败: {err}"));
+    }
+}
+
+async fn 插入0018前脏匿名身份与视频附件(
+    pool: &PgPool,
+    device_token: &str,
+    attachment_id: &str,
+) -> (i64, i64, i64) {
+    let anonymous_identity_id = format!("legacy-identity-{device_token}");
+    let identity_row = sqlx::query(
+        "INSERT INTO anonymous_identities (anonymous_identity_id, display_alias, identity_uuid, theme_key)
+         VALUES ($1, $2, NULL, NULL)
+         RETURNING id",
+    )
+    .bind(&anonymous_identity_id)
+    .bind("迁移前旧身份")
+    .fetch_one(pool)
+    .await
+    .expect("应能插入旧匿名身份");
+    let identity_db_id: i64 = identity_row.get("id");
+
+    sqlx::query(
+        "INSERT INTO sessions (session_id, display_name, anonymous_identity_id, device_anonymous_token)
+         VALUES ($1, $2, $3, $4)",
+    )
+    .bind(format!("s-{device_token}"))
+    .bind("迁移前旧会话")
+    .bind(identity_db_id)
+    .bind(device_token)
+    .execute(pool)
+    .await
+    .expect("应能插入旧会话");
+
+    let mezzanine_expires_at_epoch = 1_775_942_400_i64;
+    let mezzanine_deleted_at_epoch = 1_775_946_000_i64;
+    sqlx::query(
+        "INSERT INTO attachments (
+             attachment_id,
+             owner_anonymous_identity_id,
+             kind,
+             mime_type,
+             byte_size,
+             width,
+             height,
+             storage_key,
+             thumbnail_storage_key,
+             status,
+             committed_at,
+             asset_original_storage_key,
+             full_storage_key,
+             origin_expires_at,
+             origin_deleted_at,
+             abandoned_at,
+             mezzanine_storage_key,
+             mezzanine_expires_at,
+             mezzanine_deleted_at
+         ) VALUES (
+             $1, $2, 'video', 'video/mp4', 1024, 1280, 720,
+             'videos/storage/original.mp4', NULL, 'ready', NOW(),
+             NULL, NULL, NULL, NULL, NULL,
+             'videos/storage/mezzanine.mp4', TO_TIMESTAMP($3), TO_TIMESTAMP($4)
+         )",
+    )
+    .bind(attachment_id)
+    .bind(identity_db_id)
+    .bind(mezzanine_expires_at_epoch)
+    .bind(mezzanine_deleted_at_epoch)
+    .execute(pool)
+    .await
+    .expect("应能插入 0018 前脏视频附件");
+
+    (
+        identity_db_id,
+        mezzanine_expires_at_epoch,
+        mezzanine_deleted_at_epoch,
+    )
+}
 
 /// 启动与迁移测试：
 /// 1. 这里只守“系统是否能以正确边界启动起来”的底线。
@@ -254,16 +424,142 @@ async fn 启动收到关闭信号后会优雅停机() {
     恢复环境变量(backup);
 }
 
-#[test]
-fn 最终收口迁移必须补齐identity与冷源字段() {
-    let sql = std::fs::read_to_string("migrations/0018_最终收口清零.sql")
+#[tokio::test]
+#[serial]
+async fn 读取旧匿名身份不应再偷偷写库回填影子字段() {
+    let base_database_url = koko::assembly::读取配置()
+        .expect("需要本地 DATABASE_URL")
+        .database_url;
+    let db_name = 生成迁移测试数据库名("koko_migration_read_guard");
+    let (pool, test_database_url) = 创建迁移测试数据库(&base_database_url, &db_name).await;
+    执行迁移直到(&pool, "0017_协作分发partial_peer与来源裁决.sql").await;
+    let (identity_db_id, _, _) =
+        插入0018前脏匿名身份与视频附件(&pool, "migration-read-guard-device", "att-read-guard")
+            .await;
+
+    let pool_for_bootstrap = pool.clone();
+    let runtime_handle = tokio::runtime::Handle::current();
+    let bootstrap = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::从连接池构建(pool_for_bootstrap, runtime_handle);
+        koko::usecase::引导匿名身份(&mut repo, "migration-read-guard-device")
+    })
+    .await
+    .expect("阻塞引导任务应完成")
+    .expect("旧匿名身份仍应能被现有 device token 读出");
+    assert_eq!(bootstrap.展示花名, "迁移前旧身份");
+
+    let row = sqlx::query(
+        "SELECT identity_uuid::text AS identity_uuid_text, theme_key
+           FROM anonymous_identities
+          WHERE id = $1",
+    )
+    .bind(identity_db_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能读到旧匿名身份行");
+    let identity_uuid_text: Option<String> = row.get("identity_uuid_text");
+    let theme_key: Option<String> = row.get("theme_key");
+    assert!(
+        identity_uuid_text.is_none() && theme_key.is_none(),
+        "读取旧匿名身份不应再偷偷把 identity_uuid/theme_key 写回数据库；这件事只能由 0018 迁移负责"
+    );
+
+    pool.close().await;
+    删除迁移测试数据库(&base_database_url, &db_name).await;
+    drop(test_database_url);
+}
+
+#[tokio::test]
+#[serial]
+async fn 最终收口迁移会把旧匿名身份与媒体冷源补齐到最终契约() {
+    let base_database_url = koko::assembly::读取配置()
+        .expect("需要本地 DATABASE_URL")
+        .database_url;
+    let db_name = 生成迁移测试数据库名("koko_migration_0018");
+    let (pool, _) = 创建迁移测试数据库(&base_database_url, &db_name).await;
+    执行迁移直到(&pool, "0017_协作分发partial_peer与来源裁决.sql").await;
+    let (identity_db_id, mezzanine_expires_at_epoch, mezzanine_deleted_at_epoch) =
+        插入0018前脏匿名身份与视频附件(&pool, "migration-0018-device", "att-migration-0018")
+            .await;
+
+    let migration_sql = std::fs::read_to_string("migrations/0018_最终收口清零.sql")
         .expect("应存在 0018 最终收口迁移文件");
+    sqlx::raw_sql(&migration_sql)
+        .execute(&pool)
+        .await
+        .expect("应能执行 0018 最终收口迁移");
+
+    let identity_row = sqlx::query(
+        "SELECT identity_uuid::text AS identity_uuid_text, theme_key
+           FROM anonymous_identities
+          WHERE id = $1",
+    )
+    .bind(identity_db_id)
+    .fetch_one(&pool)
+    .await
+    .expect("应能读到回填后的匿名身份");
+    let identity_uuid_text: Option<String> = identity_row.get("identity_uuid_text");
+    let theme_key: String = identity_row.get("theme_key");
     assert!(
-        sql.contains("UPDATE anonymous_identities"),
-        "0018 迁移必须补齐匿名身份存量字段"
+        identity_uuid_text.is_some(),
+        "0018 迁移必须把旧匿名身份补齐成内部 identity_uuid"
     );
-    assert!(
-        sql.contains("origin_expires_at"),
-        "0018 迁移必须覆盖 origin_* 冷源字段补齐"
+    assert_eq!(
+        theme_key, "legacy",
+        "0018 迁移必须把旧匿名身份补齐成统一 theme_key"
     );
+
+    let attachment_row = sqlx::query(
+        "SELECT
+            EXTRACT(EPOCH FROM origin_expires_at)::BIGINT AS origin_expires_at_epoch,
+            EXTRACT(EPOCH FROM origin_deleted_at)::BIGINT AS origin_deleted_at_epoch,
+            EXTRACT(EPOCH FROM mezzanine_expires_at)::BIGINT AS mezzanine_expires_at_epoch,
+            EXTRACT(EPOCH FROM mezzanine_deleted_at)::BIGINT AS mezzanine_deleted_at_epoch
+         FROM attachments
+         WHERE attachment_id = $1",
+    )
+    .bind("att-migration-0018")
+    .fetch_one(&pool)
+    .await
+    .expect("应能读到回填后的附件");
+    let origin_expires_at_epoch: Option<i64> = attachment_row.get("origin_expires_at_epoch");
+    let origin_deleted_at_epoch: Option<i64> = attachment_row.get("origin_deleted_at_epoch");
+    let mezzanine_expires_at_epoch_db: Option<i64> = attachment_row.get("mezzanine_expires_at_epoch");
+    let mezzanine_deleted_at_epoch_db: Option<i64> = attachment_row.get("mezzanine_deleted_at_epoch");
+    assert_eq!(
+        origin_expires_at_epoch,
+        Some(mezzanine_expires_at_epoch),
+        "0018 迁移必须把 mezzanine_expires_at 真正回填到 origin_expires_at"
+    );
+    assert_eq!(
+        origin_deleted_at_epoch,
+        Some(mezzanine_deleted_at_epoch),
+        "0018 迁移必须把 mezzanine_deleted_at 真正回填到 origin_deleted_at"
+    );
+    assert_eq!(
+        mezzanine_expires_at_epoch_db,
+        Some(mezzanine_expires_at_epoch),
+        "测试前提失败：旧 mezzanine_expires_at 不应被迁移顺手改掉"
+    );
+    assert_eq!(
+        mezzanine_deleted_at_epoch_db,
+        Some(mezzanine_deleted_at_epoch),
+        "测试前提失败：旧 mezzanine_deleted_at 不应被迁移顺手改掉"
+    );
+
+    let pool_for_bootstrap = pool.clone();
+    let runtime_handle = tokio::runtime::Handle::current();
+    let bootstrap = tokio::task::spawn_blocking(move || {
+        let mut repo =
+            koko::adapter::Pg仓储::从连接池构建(pool_for_bootstrap, runtime_handle);
+        koko::usecase::引导匿名身份(&mut repo, "migration-0018-device")
+    })
+    .await
+    .expect("阻塞引导任务应完成")
+    .expect("0018 补齐后，旧 device token 应仍能顺利引导匿名身份");
+    assert_eq!(bootstrap.展示花名, "迁移前旧身份");
+
+    pool.close().await;
+    删除迁移测试数据库(&base_database_url, &db_name).await;
 }

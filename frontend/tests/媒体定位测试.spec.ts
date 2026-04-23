@@ -1,13 +1,74 @@
 import { describe, expect, it, vi } from "vitest";
-import { 创建媒体定位器 } from "../媒体/媒体定位";
+import { 创建浏览器媒体定位缓存仓库, 创建媒体定位器 } from "../媒体/媒体定位";
 
 describe("媒体定位器", () => {
+  it("持久化 locator 只保留 nested asset 表面时，仍然可以恢复缓存", async () => {
+    const storage = new Map<string, string>();
+    const repo = 创建浏览器媒体定位缓存仓库({
+      getItem(key: string) {
+        return storage.get(key) ?? null;
+      },
+      setItem(key: string, value: string) {
+        storage.set(key, value);
+      },
+    });
+
+    await repo.保存({
+      attachmentId: "att-nested-only-1",
+      stale: false,
+      value: {
+        attachment_id: "att-nested-only-1",
+        kind: "video",
+        status: "ready",
+        thumbnail_url: null,
+        file_asset: {
+          asset_id: "att-nested-only-1",
+          content_hash: "hash-nested-only-1",
+          kind: "file_video",
+          variants: {
+            canonical: {
+              id: "canonical",
+              url: "http://media.local/canonical-nested-only-1.mp4",
+              mime_type: "video/mp4",
+              width: 1280,
+              height: 720,
+            },
+          },
+          manifest: null,
+          lifecycle: null,
+          distribution: {
+            swarm_id: "swarm-hash-nested-only-1",
+            announce_urls: ["http://media.local/announce"],
+            web_seed_url: "http://media.local/web-seed-nested-only-1",
+            join_ticket: null,
+            ticket_expires_at: null,
+            survival_mode: "server_assisted",
+          },
+          origin: {
+            original_url: "http://media.local/original-nested-only-1",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only",
+          },
+        },
+        streaming_asset: null,
+        blob_asset: null,
+      } as never,
+    });
+
+    const restored = await repo.读取("att-nested-only-1");
+
+    expect(restored?.value.attachment_id).toBe("att-nested-only-1");
+    expect(restored?.value.file_asset?.origin.original_url).toBe(
+      "http://media.local/original-nested-only-1"
+    );
+  });
+
   it("同一个 attachment 的 locator 会命中缓存，不重复请求后端", async () => {
     const loadMediaLocator = vi.fn(async () => ({
       attachment_id: "att-1",
       kind: "image" as const,
       status: "ready" as const,
-      original_url: "http://media.local/original-1",
       thumbnail_url: "http://media.local/thumb-1",
       distribution: {
         content_id: "content_att-1",
@@ -35,8 +96,8 @@ describe("媒体定位器", () => {
     const first = await 定位器.获取定位("att-1");
     const second = await 定位器.获取定位("att-1");
 
-    expect(first.original_url).toBe("http://media.local/original-1");
-    expect(second.original_url).toBe("http://media.local/original-1");
+    expect(first.thumbnail_url).toBe("http://media.local/thumb-1");
+    expect(second.thumbnail_url).toBe("http://media.local/thumb-1");
     expect(second.distribution?.swarm_id).toBe("swarm-hash-att-1");
     expect(loadMediaLocator).toHaveBeenCalledTimes(1);
   });
@@ -48,7 +109,6 @@ describe("媒体定位器", () => {
         attachment_id: "att-1",
         kind: "video" as const,
         status: "ready" as const,
-        original_url: "http://media.local/original-stale",
         thumbnail_url: null,
         distribution: {
           content_id: "content_att-1",
@@ -72,7 +132,6 @@ describe("媒体定位器", () => {
         attachment_id: "att-1",
         kind: "video" as const,
         status: "ready" as const,
-        original_url: "http://media.local/original-refresh",
         thumbnail_url: null,
         distribution: {
           content_id: "content_att-1",
@@ -101,7 +160,7 @@ describe("媒体定位器", () => {
     定位器.标记过期("att-1");
     const refreshed = await 定位器.获取定位("att-1");
 
-    expect(refreshed.original_url).toBe("http://media.local/original-refresh");
+    expect(refreshed.distribution?.torrent_url).toBe("http://media.local/torrent-refresh");
     expect(refreshed.distribution?.content_hash).toBe("hash-refresh");
     expect(loadMediaLocator).toHaveBeenCalledTimes(2);
   });
@@ -111,7 +170,6 @@ describe("媒体定位器", () => {
       attachment_id: string;
       kind: "video";
       status: "ready";
-      original_url: string;
       thumbnail_url: string | null;
       distribution: {
         content_id: string;
@@ -137,7 +195,6 @@ describe("媒体定位器", () => {
           attachment_id: string;
           kind: "video";
           status: "ready";
-          original_url: string;
           thumbnail_url: string | null;
           distribution: {
             content_id: string;
@@ -174,7 +231,6 @@ describe("媒体定位器", () => {
       attachment_id: "att-concurrent-1",
       kind: "video",
       status: "ready",
-      original_url: "http://media.local/original-concurrent-1",
       thumbnail_url: "http://media.local/thumb-concurrent-1",
       distribution: {
         content_id: "content_att-concurrent-1",
@@ -197,8 +253,8 @@ describe("媒体定位器", () => {
 
     const [first, second] = await Promise.all([firstPromise, secondPromise]);
 
-    expect(first.original_url).toBe("http://media.local/original-concurrent-1");
-    expect(second.original_url).toBe("http://media.local/original-concurrent-1");
+    expect(first.thumbnail_url).toBe("http://media.local/thumb-concurrent-1");
+    expect(second.thumbnail_url).toBe("http://media.local/thumb-concurrent-1");
     expect(loadMediaLocator).toHaveBeenCalledTimes(1);
   });
 
@@ -216,7 +272,6 @@ describe("媒体定位器", () => {
       attachment_id: "att-1",
       kind: "video" as const,
       status: "ready" as const,
-      original_url: "http://media.local/original-persisted",
       thumbnail_url: null,
       distribution: {
         content_id: "content_att-1",
@@ -253,7 +308,7 @@ describe("媒体定位器", () => {
     } as never);
     const restored = await 重开后定位器.获取定位("att-1");
 
-    expect(restored.original_url).toBe("http://media.local/original-persisted");
+    expect(restored.distribution?.torrent_url).toBe("http://media.local/torrent-persisted");
     expect(restored.distribution?.swarm_id).toBe("swarm-hash-persisted");
     expect(loadMediaLocator).toHaveBeenCalledTimes(1);
   });

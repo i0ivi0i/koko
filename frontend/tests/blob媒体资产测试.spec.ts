@@ -31,6 +31,7 @@ describe("Blob 媒体资产", () => {
             announce_urls: ["wss://tracker.koko.local/announce"],
             web_seed_url: "http://media.local/blob/att-image-blob-1/original.png",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -62,6 +63,7 @@ describe("Blob 媒体资产", () => {
         announce_urls: ["wss://tracker.koko.local/announce"],
         web_seed_url: "http://media.local/blob/att-image-blob-1/original.png",
         join_ticket: null,
+        ticket_expires_at: null,
         survival_mode: "server_assisted" as const,
       },
       hint: null,
@@ -114,6 +116,7 @@ describe("Blob 媒体资产", () => {
           announce_urls: ["wss://tracker.koko.local/announce"],
           web_seed_url: "http://media.local/blob/att-image-blob-2/original.png",
           join_ticket: null,
+          ticket_expires_at: null,
           survival_mode: "server_assisted" as const,
         },
         origin: {

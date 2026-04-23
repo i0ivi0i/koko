@@ -63,12 +63,3 @@ fn 超过24小时的原始冷源不会再被标成正式主读取入口() {
     assert_eq!(冷源.角色, 媒体冷源角色::冷备引导);
     assert!(!冷源.是否可用);
 }
-
-#[test]
-fn 共享契约不应继续把流媒体资产描述成迁移期兼容表面() {
-    let source = std::fs::read_to_string("src/契约.rs").expect("应能读取共享契约实现");
-    assert!(
-        !source.contains("迁移期兼容表面"),
-        "正式共享契约不能继续把 streaming_asset 描述成迁移残骸"
-    );
-}

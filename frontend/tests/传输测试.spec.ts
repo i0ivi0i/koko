@@ -494,6 +494,7 @@ describe("传输", () => {
               web_seed_url:
                 "/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
               join_ticket: null,
+              ticket_expires_at: null,
               survival_mode: "server_assisted",
             },
             origin: {
@@ -542,6 +543,7 @@ describe("传输", () => {
         web_seed_url:
           "http://localhost:3000/api/attachments/att-ready-1/content?session_id=s-1&variant=original",
         join_ticket: null,
+        ticket_expires_at: null,
         survival_mode: "server_assisted",
       },
       origin: {
@@ -645,8 +647,6 @@ describe("传输", () => {
       attachment_id: "att-locator-1",
       kind: "video",
       status: "ready",
-      original_url:
-        "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
       thumbnail_url:
         "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=thumbnail",
       preview_asset: {
@@ -663,6 +663,7 @@ describe("传输", () => {
         announce_urls: ["http://localhost:3000/api/swarm/announce"],
         web_seed_url:
           "http://localhost:3000/api/attachments/att-locator-1/content?session_id=s-1&variant=original",
+        presence_url: null,
         join_ticket: null,
         ticket_expires_at: null,
         media_state: {
@@ -728,6 +729,7 @@ describe("传输", () => {
                 web_seed_url:
                   "/api/attachments/att-ready-2/content?session_id=s-1&variant=original",
                 join_ticket: null,
+                ticket_expires_at: null,
                 survival_mode: "peer_only_after_expiry",
               },
               origin: {
@@ -791,6 +793,7 @@ describe("传输", () => {
                 announce_urls: ["/api/swarm/announce"],
                 web_seed_url: null,
                 join_ticket: null,
+                ticket_expires_at: null,
                 survival_mode: "peer_only_after_expiry",
               },
               origin: {
@@ -900,6 +903,7 @@ describe("传输", () => {
               announce_urls: ["/api/swarm/announce"],
               web_seed_url: null,
               join_ticket: null,
+              ticket_expires_at: null,
               survival_mode: "peer_only_after_expiry",
             },
           },

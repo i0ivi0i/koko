@@ -248,10 +248,8 @@ export function 创建浏览器应用平台(
             serviceWorker.写入持久化存储结果?.(persisted);
           }
           await offline.就绪({
-            已注册服务工作线程: [
-              serviceWorker.读取注册("app"),
-              serviceWorker.读取注册("media"),
-            ],
+            // 根 scope 只剩一个 service worker owner；离线能力也只消费这一份 registration。
+            已注册服务工作线程: [serviceWorker.读取注册?.()],
           });
         })();
       }

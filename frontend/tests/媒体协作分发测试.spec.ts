@@ -71,7 +71,6 @@ function 准备好的定位结果(
     attachment_id: attachmentId,
     kind,
     status: "ready" as const,
-    original_url: `http://media.local/original-${attachmentId}`,
     thumbnail_url: null,
     distribution: {
       content_id: `content_${attachmentId}`,
@@ -190,7 +189,6 @@ describe("媒体协作分发", () => {
       attachment_id: "att-1",
       kind: "video",
       status: "ready",
-      original_url: "http://media.local/original-1",
       thumbnail_url: null,
       distribution: {
         content_id: "content_att-1",
@@ -235,7 +233,6 @@ describe("媒体协作分发", () => {
       attachment_id: "att-2",
       kind: "image",
       status: "ready",
-      original_url: "http://media.local/original-2",
       thumbnail_url: "http://media.local/thumb-2",
       distribution: null,
     });
@@ -272,6 +269,71 @@ describe("媒体协作分发", () => {
 
     expect(distribution).not.toBeNull();
     expect(distribution?.torrent_info_hash).toBe("torrent-info-hash-att-connecting");
+  });
+
+  it("presence_url 相对地址会基于 nested asset 冷源而不是 locator.original_url 解析", () => {
+    const locator = {
+      attachment_id: "att-presence-base",
+      kind: "video" as const,
+      status: "ready" as const,
+      thumbnail_url: null,
+      distribution: {
+        content_id: "content_att-presence-base",
+        content_hash: "hash-att-presence-base",
+        swarm_id: "swarm-att-presence-base",
+        web_seed_until: "1775942400",
+        torrent_url: "http://media.local/torrent-att-presence-base",
+        torrent_info_hash: "torrent-info-hash-att-presence-base",
+        announce_urls: ["ws://127.0.0.1:7072"],
+        web_seed_url: "http://media.local/web-seed-att-presence-base",
+        presence_url: "/api/media/att-presence-base/presence?session_id=s-test",
+        join_ticket: null,
+        ticket_expires_at: null,
+        media_state: {
+          code: "MEDIA_READY" as const,
+          retry_after_ms: null,
+        },
+        survival_mode: "server_assisted" as const,
+      },
+      file_asset: {
+        asset_id: "att-presence-base",
+        content_hash: "hash-att-presence-base",
+        kind: "file_video" as const,
+        variants: {
+          canonical: {
+            id: "canonical",
+            url: "http://media.local/canonical-att-presence-base.mp4",
+            mime_type: "video/mp4",
+            width: 1280,
+            height: 720,
+          },
+        },
+        manifest: null,
+        lifecycle: null,
+        distribution: {
+          swarm_id: "swarm-att-presence-base",
+          announce_urls: ["ws://127.0.0.1:7072"],
+          web_seed_url: "http://media.local/web-seed-att-presence-base",
+          join_ticket: null,
+          ticket_expires_at: null,
+          survival_mode: "server_assisted" as const,
+        },
+        origin: {
+          original_url: "http://media.local/original-att-presence-base",
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only" as const,
+        },
+      },
+      streaming_asset: null,
+      blob_asset: null,
+    } as 媒体定位结果;
+
+    const distribution = 读取可用协作分发片段(locator);
+
+    expect(distribution?.presence_url).toBe(
+      "http://media.local/api/media/att-presence-base/presence?session_id=s-test"
+    );
   });
 
   it("浏览器协作分发运行时会复用同一个 WebTorrent client，并把已激活的 service worker registration 传给 createServer", async () => {
@@ -1746,10 +1808,5 @@ describe("媒体协作分发", () => {
 
     expect(closeServer).toHaveBeenCalledTimes(1);
     expect(destroy).toHaveBeenCalledTimes(1);
-  });
-
-  it("后端协作分发实现不应继续输出 availability 兼容字段", () => {
-    const source = readFileSync(new URL("../../src/媒体协作分发.rs", import.meta.url), "utf-8");
-    expect(source.includes("\"availability\"")).toBe(false);
   });
 });

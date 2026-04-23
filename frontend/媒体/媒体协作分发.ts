@@ -281,7 +281,7 @@ async function 默认加载WebTorrent浏览器构造器(): Promise<WebTorrent浏
  * 协作分发只消费平台层已经托管好的 media service worker registration：
  * 1. 页面侧不再自己等待浏览器原生的 SW ready promise；
  * 2. 真正的注册、激活和更新握手都归 BrowserAppPlatform；
- * 3. 这里只有“我要一个已经可用的 media worker”这一个需求。
+ * 3. 根 scope 现在只有一个 worker owner；这里读的是唯一 registration，而不是 app/media 双份快照。
  */
 async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
   const 是安全上下文 =
@@ -291,7 +291,7 @@ async function 默认读取媒体ServiceWorker注册(): Promise<unknown> {
   }
   const platform = 获取默认浏览器应用平台();
   await platform.启动();
-  const registration = platform.serviceWorker.读取注册("media");
+  const registration = platform.serviceWorker.读取注册?.();
   if (!registration) {
     throw new Error("media service worker 尚未注册");
   }
@@ -345,6 +345,15 @@ export function 读取协作分发定位片段(
   return locator.distribution ?? null;
 }
 
+const 读取协作分发基准地址 = (locator: 媒体定位结果): string | null =>
+  locator.file_asset?.origin.original_url ??
+  locator.streaming_asset?.origin.original_url ??
+  locator.blob_asset?.origin.original_url ??
+  locator.file_asset?.variants.canonical?.url ??
+  locator.blob_asset?.variants.canonical?.url ??
+  locator.distribution?.web_seed_url ??
+  null;
+
 export function 读取可用协作分发片段(
   locator: 媒体定位结果
 ): 媒体协作分发定位片段 | null {
@@ -366,11 +375,29 @@ export function 读取可用协作分发片段(
   ) {
     return null;
   }
+  const presenceUrl = (() => {
+    if (!distribution.presence_url) {
+      return null;
+    }
+    const baseUrl = 读取协作分发基准地址(locator);
+    try {
+      /**
+       * presence_url 可能来自三类输入：
+       * 1. transport 已经收口好的绝对地址；
+       * 2. 缓存里留下的相对地址；
+       * 3. 测试或本地构造对象里的相对地址。
+       * 这里只做“补全为可 fetch 地址”，不再绑死顶层 original_url。
+       */
+      return baseUrl
+        ? new URL(distribution.presence_url, baseUrl).href
+        : new URL(distribution.presence_url).href;
+    } catch {
+      return distribution.presence_url;
+    }
+  })();
   return {
     ...distribution,
-    presence_url: distribution.presence_url
-      ? new URL(distribution.presence_url, locator.original_url).href
-      : null,
+    presence_url: presenceUrl,
   };
 }
 

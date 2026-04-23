@@ -37,6 +37,11 @@ describe("媒体共享契约", () => {
             presence_url: "/api/media/att-shared-video-1/presence?session_id=s-1",
             join_ticket: null,
             ticket_expires_at: null,
+            media_state: {
+              code: "MEDIA_READY",
+              retry_after_ms: null,
+            },
+            survival_mode: "server_assisted",
           },
           streaming_asset: {
             asset_id: "att-shared-video-1",
@@ -52,6 +57,8 @@ describe("媒体共享契约", () => {
               web_seed_url:
                 "/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
               join_ticket: null,
+              ticket_expires_at: null,
+              survival_mode: "server_assisted",
             },
             origin: {
               original_url:
@@ -86,11 +93,31 @@ describe("媒体共享契约", () => {
       "drawerOpen" in
         (locator.streaming_asset?.distribution as unknown as Record<string, unknown>)
     ).toBe(false);
+    expect("original_url" in (locator as unknown as Record<string, unknown>)).toBe(false);
     expect(
       (locator as unknown as { preview_asset?: { still_url?: string } }).preview_asset
     ).toEqual({
       still_url:
         "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=thumbnail",
+    });
+    expect((locator as { distribution?: unknown }).distribution).toEqual({
+      content_id: "content_att-shared-video-1",
+      content_hash: "hash-att-shared-video-1",
+      swarm_id: "swarm-hash-att-shared-video-1",
+      web_seed_until: "1775942400",
+      torrent_url: "http://localhost:3000/api/media/att-shared-video-1/torrent?session_id=s-1",
+      torrent_info_hash: "torrent-info-hash-shared-video-1",
+      announce_urls: ["http://localhost:3000/api/swarm/announce"],
+      web_seed_url:
+        "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
+      presence_url: "http://localhost:3000/api/media/att-shared-video-1/presence?session_id=s-1",
+      join_ticket: null,
+      ticket_expires_at: null,
+      media_state: {
+        code: "MEDIA_READY",
+        retry_after_ms: null,
+      },
+      survival_mode: "server_assisted",
     });
     expect(
       "panelMode" in
@@ -103,6 +130,8 @@ describe("媒体共享契约", () => {
       web_seed_url:
         "http://localhost:3000/api/attachments/att-shared-video-1/content?session_id=s-1&variant=original",
       join_ticket: null,
+      ticket_expires_at: null,
+      survival_mode: "server_assisted",
     });
   });
 

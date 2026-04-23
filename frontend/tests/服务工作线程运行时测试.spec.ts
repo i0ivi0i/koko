@@ -40,22 +40,19 @@ describe("服务工作线程运行时", () => {
 
     expect(register).toHaveBeenCalledWith("/app-sw.js", { scope: "/" });
     expect(register).toHaveBeenCalledTimes(1);
-    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("app")).toBe(
-      registration
-    );
-    expect((runtime as unknown as { 读取注册(kind: "app" | "media"): unknown }).读取注册("media")).toBe(
-      registration
-    );
-    expect(runtime.snapshot()).toEqual({
-      appShellRegistered: true,
-      mediaWorkerRegistered: true,
+    const snapshot = runtime.snapshot();
+    expect(snapshot).toEqual({
+      workerRegistered: true,
       persistentStorageRequested: false,
       controllerAttached: false,
-      appShellWaiting: false,
-      mediaWorkerWaiting: false,
+      workerWaiting: false,
       lastMessageType: null,
       lastMessage: null,
     });
+    expect("appShellRegistered" in (snapshot as object)).toBe(false);
+    expect("mediaWorkerRegistered" in (snapshot as object)).toBe(false);
+    expect("appShellWaiting" in (snapshot as object)).toBe(false);
+    expect("mediaWorkerWaiting" in (snapshot as object)).toBe(false);
 
     runtime.写入持久化存储结果?.(true);
     expect(runtime.snapshot().persistentStorageRequested).toBe(true);
@@ -85,9 +82,9 @@ describe("服务工作线程运行时", () => {
     await runtime.启动();
 
     expect(runtime.snapshot()).toMatchObject({
+      workerRegistered: true,
       controllerAttached: true,
-      appShellWaiting: false,
-      mediaWorkerWaiting: false,
+      workerWaiting: false,
       lastMessageType: null,
       lastMessage: null,
     });
@@ -98,20 +95,10 @@ describe("服务工作线程运行时", () => {
 
     expect(runtime.发送消息?.({ type: "PING" }) ?? false).toBe(true);
     expect(controller.postMessage).toHaveBeenCalledWith({ type: "PING" });
-    expect(
-      (runtime as unknown as {
-        读取注册(kind: "app" | "media"): unknown;
-      }).读取注册("app")
-    ).toBe(appRegistration);
-    expect(
-      (runtime as unknown as {
-        读取注册(kind: "app" | "media"): unknown;
-      }).读取注册("media")
-    ).toBe(appRegistration);
     expect(runtime.snapshot()).toMatchObject({
+      workerRegistered: true,
       controllerAttached: true,
-      appShellWaiting: true,
-      mediaWorkerWaiting: true,
+      workerWaiting: true,
       lastMessageType: "SW_UPDATED",
       lastMessage: { type: "SW_UPDATED", scope: "app" },
     });

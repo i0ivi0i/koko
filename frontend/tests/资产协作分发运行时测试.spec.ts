@@ -48,7 +48,6 @@ function 准备好的定位结果(
     attachment_id: attachmentId,
     kind: "video",
     status: "ready" as const,
-    original_url: `http://media.local/original-${attachmentId}`,
     thumbnail_url: null,
     distribution: {
       content_id: `content_${attachmentId}`,

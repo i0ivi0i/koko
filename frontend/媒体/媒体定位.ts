@@ -47,15 +47,13 @@ const 规范化媒体定位结果 = (
   }
   if (
     (candidate.kind !== "image" && candidate.kind !== "video") ||
-    typeof candidate.status !== "string" ||
-    typeof candidate.original_url !== "string"
+    typeof candidate.status !== "string"
   ) {
     return null;
   }
   return {
     ...candidate,
     attachment_id: attachmentId,
-    original_url: candidate.original_url,
   } as 媒体定位结果;
 };
 

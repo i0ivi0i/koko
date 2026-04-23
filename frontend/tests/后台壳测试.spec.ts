@@ -93,13 +93,34 @@ class 假后台传输 implements 前端传输端口 {
     };
   }
   async loadMediaLocator(_sessionId: string, attachmentId: string): Promise<媒体定位结果> {
+    const originalUrl = this.buildAttachmentContentUrl(attachmentId, "s-x");
     return {
       attachment_id: attachmentId,
       kind: "image",
       status: "ready",
-      original_url: this.buildAttachmentContentUrl(attachmentId, "s-x"),
       thumbnail_url: this.buildAttachmentContentUrl(attachmentId, "s-x", "thumbnail"),
       distribution: null,
+      blob_asset: {
+        asset_id: attachmentId,
+        content_hash: `hash-${attachmentId}`,
+        kind: "blob_image",
+        variants: {
+          canonical: {
+            id: "canonical",
+            mime_type: "image/png",
+            url: originalUrl,
+            width: 120,
+            height: 90,
+          },
+        },
+        distribution: null,
+        origin: {
+          original_url: originalUrl,
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only",
+        },
+      },
     };
   }
   buildAttachmentContentUrl(

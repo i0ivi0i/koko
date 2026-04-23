@@ -63,6 +63,7 @@ describe("媒体播放器", () => {
           announce_urls: ["http://media.local/announce"],
           web_seed_url: "http://media.local/web-seed-file-video-1",
           join_ticket: null,
+          ticket_expires_at: null,
           survival_mode: "server_assisted" as const,
         },
         origin: {
@@ -157,6 +158,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-image-blob-1",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "peer_only_after_expiry" as const,
           },
           origin: {
@@ -190,6 +192,7 @@ describe("媒体播放器", () => {
         announce_urls: ["http://media.local/announce"],
         web_seed_url: "http://media.local/web-seed-image-blob-1",
         join_ticket: null,
+        ticket_expires_at: null,
         survival_mode: "peer_only_after_expiry" as const,
       },
       hint: "正在协作分发",
@@ -251,6 +254,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-image-backfill-1",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -575,6 +579,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-transition",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -650,6 +655,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-viewer-race",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -701,6 +707,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-viewer-race",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -788,6 +795,7 @@ describe("媒体播放器", () => {
           announce_urls: ["http://media.local/announce"],
           web_seed_url: "http://media.local/web-seed-viewer-refresh-budget",
           join_ticket: null,
+          ticket_expires_at: null,
           survival_mode: "server_assisted" as const,
         },
         origin: {
@@ -877,6 +885,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-hls",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -963,6 +972,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-hls-incomplete",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -1043,6 +1053,7 @@ describe("媒体播放器", () => {
           announce_urls: ["http://media.local/announce"],
           web_seed_url: "http://media.local/web-seed-ticket-stale",
           join_ticket: "ticket-stale",
+          ticket_expires_at: null,
           survival_mode: "server_assisted" as const,
         },
         origin: {
@@ -1183,6 +1194,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-hls",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -1269,6 +1281,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-shared-truth",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -1389,6 +1402,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-hls-backfill",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -1561,6 +1575,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-video-inline-hls",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -1648,6 +1663,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-inline-partial",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -1729,6 +1745,7 @@ describe("媒体播放器", () => {
             announce_urls: ["http://media.local/announce"],
             web_seed_url: "http://media.local/web-seed-inline-fallback",
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted" as const,
           },
           origin: {
@@ -2262,6 +2279,7 @@ describe("媒体播放器", () => {
           announce_urls: ["http://media.local/announce"],
           web_seed_url: "http://media.local/web-seed-video-streaming-expired",
           join_ticket: null,
+          ticket_expires_at: null,
           survival_mode: "peer_only_after_expiry" as const,
         },
         origin: {
@@ -2511,17 +2529,55 @@ describe("媒体播放器", () => {
         attachment_id: "att-image-1",
         kind: "image" as const,
         status: "ready" as const,
-        original_url: "http://media.local/original-stale",
         thumbnail_url: null,
         distribution: null,
+        blob_asset: {
+          asset_id: "att-image-1",
+          content_hash: "hash-image-stale",
+          kind: "blob_image" as const,
+          variants: {
+            canonical: {
+              id: "canonical",
+              url: "http://media.local/canonical-stale",
+              mime_type: "image/webp",
+              width: 1200,
+              height: 800,
+            },
+          },
+          origin: {
+            original_url: "http://media.local/original-stale",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
       })
       .mockResolvedValueOnce({
         attachment_id: "att-image-1",
         kind: "image" as const,
         status: "ready" as const,
-        original_url: "http://media.local/original-refresh",
         thumbnail_url: null,
         distribution: null,
+        blob_asset: {
+          asset_id: "att-image-1",
+          content_hash: "hash-image-refresh",
+          kind: "blob_image" as const,
+          variants: {
+            canonical: {
+              id: "canonical",
+              url: "http://media.local/canonical-refresh",
+              mime_type: "image/webp",
+              width: 1200,
+              height: 800,
+            },
+          },
+          origin: {
+            original_url: "http://media.local/original-refresh",
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+        },
       });
     const probeAnchor = vi
       .fn()
@@ -2544,8 +2600,9 @@ describe("媒体播放器", () => {
       mode: "anchor",
       attachmentId: "att-image-1",
       kind: "image",
-      src: "http://media.local/original-refresh",
+      src: "http://media.local/canonical-refresh",
       thumbnailUrl: null,
+      contentHash: "hash-image-refresh",
       hint: null,
     });
   });

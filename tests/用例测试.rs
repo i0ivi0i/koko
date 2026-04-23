@@ -140,6 +140,7 @@ struct 假仓储 {
     匿名身份计数: usize,
     房间计数: usize,
     消息计数: usize,
+    统一消息事件调用次数: usize,
     最新位置: i64,
     房间短码到标识: HashMap<String, String>,
     房间成员: HashMap<String, HashSet<String>>,
@@ -345,6 +346,7 @@ impl koko::usecase::仓储端口 for 假仓储 {
     ) -> Result<koko::contract::领域事件, koko::contract::错误码> {
         // 用例测试只关心“统一入口是否单路径提交”，这里保持最小可验证快照。
         let _ = 附件;
+        self.统一消息事件调用次数 += 1;
         self.消息计数 += 1;
         self.最新位置 += 1;
         Ok(koko::contract::领域事件::消息已创建 {
@@ -617,6 +619,10 @@ fn 发送文本消息返回权威事件() {
             && 发送者花名 == "测试用户"
             && 文本 == "hello"
     ));
+    assert_eq!(
+        repo.统一消息事件调用次数, 1,
+        "发送文本消息时只能走一次 创建统一消息事件，不能暗中再走旧入口或第二条提交路径"
+    );
 }
 
 #[test]
@@ -741,13 +747,8 @@ async fn 统一消息异步用例仍返回权威消息事件() {
             assert_eq!(文本, "hello async");
         }
     }
-}
-
-#[test]
-fn 仓储实现不应继续暴露旧创建消息事件入口() {
-    let source = std::fs::read_to_string("src/适配.rs").expect("应能读取仓储适配实现");
-    assert!(
-        !source.contains("fn 创建消息事件("),
-        "消息写入收口后，仓储实现不应继续保留旧创建消息事件入口"
+    assert_eq!(
+        repo.统一消息事件调用次数, 1,
+        "异步创建消息也只能命中统一消息入口一次，不能靠源码 grep 代替真实行为证明"
     );
 }

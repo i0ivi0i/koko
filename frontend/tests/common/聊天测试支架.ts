@@ -314,7 +314,6 @@ export class 假传输 implements 前端传输端口 {
         attachment_id: attachmentId,
         kind: "image",
         status: "ready",
-        original_url: originalUrl,
         thumbnail_url: null,
         distribution: null,
         blob_asset: {
@@ -345,9 +344,38 @@ export class 假传输 implements 前端传输端口 {
       attachment_id: attachmentId,
       kind: "video",
       status: "ready",
-      original_url: this.buildAttachmentContentUrl(attachmentId, "s-test"),
       thumbnail_url: null,
       distribution: null,
+      file_asset: {
+        asset_id: attachmentId,
+        content_hash: `hash-${attachmentId}`,
+        kind: "file_video",
+        variants: {
+          canonical: {
+            id: "canonical",
+            mime_type: "video/mp4",
+            url: this.buildAttachmentContentUrl(attachmentId, "s-test"),
+            width: 1280,
+            height: 720,
+          },
+        },
+        manifest: null,
+        lifecycle: null,
+        distribution: {
+          swarm_id: `swarm-${attachmentId}`,
+          announce_urls: [],
+          web_seed_url: null,
+          join_ticket: null,
+          ticket_expires_at: null,
+          survival_mode: "server_assisted",
+        },
+        origin: {
+          original_url: this.buildAttachmentContentUrl(attachmentId, "s-test"),
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only",
+        },
+      },
     };
   }
   buildBlobAssetUrl(

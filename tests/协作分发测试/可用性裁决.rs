@@ -197,6 +197,10 @@ async fn 空body_presence不会把无种子附件抬成media_ready() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
+    assert!(
+        body["distribution"].get("availability").is_none(),
+        "正式 locator contract 只能暴露 media_state，不能继续挂着 availability 兼容字段"
+    );
     assert_eq!(
         body["distribution"]["media_state"]["code"].as_str(),
         Some("MEDIA_CONNECTING_TO_PEERS"),
@@ -1533,14 +1537,4 @@ async fn 做种对账会跳过缺失torrent元信息的脏附件记录() {
 
     fake_seeder_server.abort();
     恢复环境变量(backup);
-}
-
-#[test]
-fn 协作分发响应源码不应继续输出availability兼容字段() {
-    let source = std::fs::read_to_string("src/媒体协作分发.rs")
-        .expect("应能读取协作分发响应实现源码");
-    assert!(
-        !source.contains("\"availability\""),
-        "收口目标要求协作分发只输出 media_state，不能继续保留 availability 兼容字段"
-    );
 }

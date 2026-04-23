@@ -364,15 +364,24 @@ async fn 视频complete与locator会共享同一套file_asset与peer_only生存�
         Some("peer_only_after_expiry"),
         "complete 必须直接表达删源后的长期正式平面只剩 peer"
     );
+    assert!(
+        locator_body.get("original_url").is_none(),
+        "locator 顶层 original_url 必须退场，冷源只允许留在 file_asset.origin"
+    );
     assert_eq!(
         locator_body["distribution"]["survival_mode"].as_str(),
         Some("peer_only_after_expiry"),
-        "locator 顶层 distribution 也必须共享同一套 survival_mode"
+        "locator 顶层 runtime distribution 仍必须共享同一套 survival_mode"
     );
     assert_eq!(
         complete_body["media_asset"]["distribution"]["survival_mode"].as_str(),
         locator_body["file_asset"]["distribution"]["survival_mode"].as_str(),
         "complete.media_asset 与 locator.file_asset 不能把 survival_mode 投影成两套不同语义"
+    );
+    assert_eq!(
+        locator_body["distribution"]["survival_mode"].as_str(),
+        locator_body["file_asset"]["distribution"]["survival_mode"].as_str(),
+        "locator 顶层 runtime distribution 与 file_asset.distribution 不能各说各话"
     );
     assert!(
         complete_body["media_asset"]["distribution"]["join_ticket"]
@@ -384,7 +393,7 @@ async fn 视频complete与locator会共享同一套file_asset与peer_only生存�
         locator_body["distribution"]["join_ticket"]
             .as_str()
             .is_some_and(|ticket| !ticket.is_empty()),
-        "locator 顶层 distribution 必须同步下发可用的 join_ticket"
+        "locator 顶层 runtime distribution 必须同步下发可用 join_ticket"
     );
     assert!(
         complete_body["media_asset"]["distribution"]["ticket_expires_at"]
@@ -396,7 +405,7 @@ async fn 视频complete与locator会共享同一套file_asset与peer_only生存�
         locator_body["distribution"]["ticket_expires_at"]
             .as_str()
             .is_some_and(|expires_at| !expires_at.is_empty()),
-        "locator 顶层 distribution 也必须共享同一类 ticket 过期语义"
+        "locator 顶层 runtime distribution 也必须共享同一类 ticket 过期语义"
     );
 }
 

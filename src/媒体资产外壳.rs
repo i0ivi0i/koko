@@ -1022,7 +1022,6 @@ pub(super) async fn load_media_locator(
         "attachment_id": locator.附件标识,
         "kind": 媒体类型转标签(&locator.种类),
         "status": 附件状态转标签(&locator.状态),
-        "original_url": original_url,
         "preview_asset": preview_asset,
         "thumbnail_url": thumbnail_url,
         "distribution": runtime_distribution.clone(),
@@ -1031,10 +1030,9 @@ pub(super) async fn load_media_locator(
         &locator,
         定位媒体资产响应上下文 {
             运行态分发: runtime_distribution.as_ref(),
-            原始地址: response["original_url"]
-                .as_str()
-                .map(str::to_string)
-                .unwrap_or_default(),
+            // 顶层 locator 已不再重复暴露 original_url；
+            // 资产投影继续直接复用这份受控冷源地址，避免再从响应 JSON 倒读一遍兼容别名。
+            原始地址: original_url.clone(),
             会话标识: query.session_id.as_str(),
             当前时间戳秒: now_epoch秒,
         },

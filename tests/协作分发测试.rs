@@ -139,19 +139,14 @@ async fn locator会返回协作分发片段但不泄漏仓储私货() {
         body["streaming_asset"]["origin"]["role"].as_str(),
         Some("cold_backup_only")
     );
-    assert_eq!(
-        body["streaming_asset"]["origin"]["original_url"].as_str(),
-        body["original_url"].as_str(),
-        "旧 original_url 还在兼容期时，必须和新的冷源描述保持一致"
+    assert!(
+        body.get("original_url").is_none(),
+        "locator 顶层 original_url 已退场，冷源只允许留在 streaming_asset.origin"
     );
     assert_eq!(
         body["streaming_asset"]["distribution"]["swarm_id"].as_str(),
         body["distribution"]["swarm_id"].as_str(),
-        "新旧过渡面在兼容期内必须引用同一份 swarm 真相"
-    );
-    assert!(
-        body["original_url"].as_str().is_some(),
-        "locator 必须返回受控原始内容地址"
+        "asset 分发表面与顶层 runtime distribution 必须继续引用同一份 swarm 真相"
     );
     assert_eq!(
         body["distribution"]["content_id"].as_str(),
@@ -443,15 +438,14 @@ async fn 图片locator会返回blob_asset而不是只给original_url() {
         body["blob_asset"]["origin"]["role"].as_str(),
         Some("cold_backup_only")
     );
-    assert_eq!(
-        body["blob_asset"]["origin"]["original_url"].as_str(),
-        body["original_url"].as_str(),
-        "兼容期里旧 original_url 只能留在 origin 里，不能再和 blob 主链分叉成两套真相"
+    assert!(
+        body.get("original_url").is_none(),
+        "图片 locator 顶层 original_url 已退场，冷源只允许留在 blob_asset.origin"
     );
     assert_eq!(
         body["blob_asset"]["distribution"]["swarm_id"].as_str(),
         body["distribution"]["swarm_id"].as_str(),
-        "blob_asset 和顶层 distribution 在兼容期内必须引用同一份 swarm 真相"
+        "blob_asset 和顶层 runtime distribution 必须继续引用同一份 swarm 真相"
     );
     assert!(
         body["thumbnail_url"].is_null(),

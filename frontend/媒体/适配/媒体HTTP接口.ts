@@ -75,9 +75,11 @@ export class 媒体HTTP接口 {
     const locator = await this.deps.get<媒体定位结果>(
       `/api/media/${attachmentId}/locator?session_id=${sessionId}`
     );
+    const { original_url: _legacyOriginalUrl, ...locatorWithoutLegacyOriginalUrl } = locator as {
+      original_url?: string;
+    } & 媒体定位结果;
     return {
-      ...locator,
-      original_url: this.deps.解析绝对地址(locator.original_url),
+      ...locatorWithoutLegacyOriginalUrl,
       preview_asset: this.deps.解析预览资源(locator.preview_asset),
       thumbnail_url: locator.thumbnail_url
         ? this.deps.解析绝对地址(locator.thumbnail_url)
@@ -93,6 +95,15 @@ export class 媒体HTTP接口 {
               : null,
             web_seed_url: locator.distribution.web_seed_url
               ? this.deps.解析绝对地址(locator.distribution.web_seed_url)
+              : null,
+            /**
+             * presence 绝对地址必须在 HTTP adapter 就收口：
+             * 1. runtime 只消费可直接 fetch 的受控地址；
+             * 2. 不再借 locator.original_url 做二次拼接；
+             * 3. 这样缓存下来的 locator 也不会携带“还得再猜 base URL”的隐形前提。
+             */
+            presence_url: locator.distribution.presence_url
+              ? this.deps.解析绝对地址(locator.distribution.presence_url)
               : null,
           }
         : null,

@@ -129,17 +129,12 @@ fn 生成会话标识() -> String {
     format!("s-{}", &raw[..12])
 }
 
-/// bootstrap 的共享契约现在只允许带回最小表面：
-/// - 展示花名
-/// - 会话锚点
-///
-/// 内部身份、主题键和迁移缝字段都留在持久化层，不再直接进入公共返回值。
 async fn 查询引导结果_异步(
     pool: &PgPool,
     设备匿名凭证: &str,
 ) -> Result<Option<contract::匿名身份引导结果>, contract::错误码> {
     let existing = sqlx::query(
-        "SELECT ai.id, ai.display_alias, s.session_id, ai.identity_uuid::text AS identity_uuid_text, ai.theme_key \
+        "SELECT ai.display_alias, s.session_id \
          FROM sessions s \
          JOIN anonymous_identities ai ON ai.id = s.anonymous_identity_id \
          WHERE s.device_anonymous_token = $1",
@@ -153,38 +148,13 @@ async fn 查询引导结果_异步(
         return Ok(None);
     };
 
-    let identity_db_id: i64 = row.get("id");
-    let identity_uuid_text: Option<String> = row.get("identity_uuid_text");
-    let theme_key: Option<String> = row.get("theme_key");
-    if identity_uuid_text.is_none() || theme_key.is_none() {
-        回填匿名身份影子字段_异步(pool, identity_db_id).await?;
-    }
-
     Ok(Some(contract::匿名身份引导结果 {
         展示花名: row.get("display_alias"),
         会话标识: row.get("session_id"),
     }))
 }
 
-/// 存量匿名身份在迁移窗口里可能还缺 `identity_uuid/theme_key`；
-/// 这里用幂等 UPDATE 把缺口补上，保证后续链路只有一处真实身份 owner。
-async fn 回填匿名身份影子字段_异步(
-    pool: &PgPool,
-    identity_db_id: i64,
-) -> Result<(), contract::错误码> {
-    sqlx::query(
-        "UPDATE anonymous_identities \
-         SET identity_uuid = COALESCE(identity_uuid, $1::uuid), \
-             theme_key = COALESCE(theme_key, 'legacy') \
-         WHERE id = $2",
-    )
-    .bind(user_identity::生成内部身份().to_string())
-    .bind(identity_db_id)
-    .execute(pool)
-    .await
-    .map_err(|_| contract::错误码::系统错误)?;
-    Ok(())
-}
+
 
 /// 只把 `device_anonymous_token` 唯一约束冲突视为 bootstrap 幂等竞态。
 /// 发生这类冲突时必须回查既有记录，而不是再造第二条匿名身份。

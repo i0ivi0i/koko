@@ -220,6 +220,7 @@ export interface 媒体资产分发表面 {
   announce_urls: string[];
   web_seed_url: string | null;
   join_ticket: string | null;
+  ticket_expires_at: string | null;
   survival_mode: "server_assisted" | "peer_only_after_expiry";
 }
 
@@ -269,7 +270,12 @@ export interface 媒体定位结果 {
   attachment_id: string;
   kind: 媒体种类;
   status: "ready" | "degraded" | "deleted";
-  original_url: string;
+  /**
+   * 顶层 locator 不再重复暴露 original_url：
+   * 1. 冷源锚点已经收口到 nested asset 的 origin；
+   * 2. 运行态 transport 继续留在顶层 distribution；
+   * 3. 这样播放链不会再被顶层兼容别名绑出第二份冷源真相。
+   */
   preview_asset?: 预览资源描述 | null;
   thumbnail_url: string | null;
   distribution: 媒体协作分发定位片段 | null;

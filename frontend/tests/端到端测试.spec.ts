@@ -186,7 +186,6 @@ class 端到端假传输 implements 前端传输端口 {
         attachment_id: attachmentId,
         kind: "video",
         status: "ready",
-        original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
         thumbnail_url: null,
         distribution: {
           content_id: `content_${attachmentId}`,
@@ -222,6 +221,7 @@ class 端到端假传输 implements 前端传输端口 {
             announce_urls: ["wss://tracker.test.local/announce"],
             web_seed_url: `http://test.local/api/media/${attachmentId}/stream/hls/master.m3u8?session_id=s-e2e`,
             join_ticket: null,
+            ticket_expires_at: null,
             survival_mode: "server_assisted",
           },
           origin: {
@@ -238,9 +238,29 @@ class 端到端假传输 implements 前端传输端口 {
       attachment_id: attachmentId,
       kind: "image",
       status: "ready",
-      original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
       thumbnail_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e", "thumbnail"),
       distribution: null,
+      blob_asset: {
+        asset_id: attachmentId,
+        content_hash: `hash-${attachmentId}`,
+        kind: "blob_image",
+        variants: {
+          canonical: {
+            id: "canonical",
+            mime_type: "image/png",
+            url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
+            width: 1200,
+            height: 800,
+          },
+        },
+        distribution: null,
+        origin: {
+          original_url: this.buildAttachmentContentUrl(attachmentId, "s-e2e"),
+          expires_at_epoch_seconds: 1775942400,
+          available: true,
+          role: "cold_backup_only",
+        },
+      },
     };
   }
   async updateRoomReadAnchor(): Promise<void> {}

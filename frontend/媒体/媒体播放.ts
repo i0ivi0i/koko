@@ -254,17 +254,17 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   };
 
   /**
-   * 过渡阶段优先读共享资产里的冷源描述：
-   * 1. 它已经明确声明原始附件只是 cold_backup_only；
-   * 2. 后续顶层 original_url 退场时，这里不用再回头大改播放入口；
-   * 3. 仍保留旧字段兜底，保证第一批后端过渡面上线时不打爆旧 locator。
+   * 播放锚点只认 nested asset 自己声明的冷源 / canonical：
+   * 1. file_video 优先 canonical，再退到 origin；
+   * 2. streaming_video 只从 streaming_asset.origin 读冷源；
+   * 3. blob_image 只读 canonical，不再回到顶层 original_url 兼容别名。
    */
-  const 读取锚点地址 = (locator: 媒体定位结果): string =>
+  const 读取锚点地址 = (locator: 媒体定位结果): string | null =>
     locator.file_asset?.variants.canonical?.url ??
     locator.file_asset?.origin.original_url ??
     locator.streaming_asset?.origin.original_url ??
     locator.blob_asset?.variants?.canonical?.url ??
-    locator.original_url;
+    null;
 
   const 读取播放内容哈希 = (locator: 媒体定位结果): string | null =>
     locator.file_asset?.content_hash ??
@@ -408,6 +408,37 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   ): Promise<媒体播放结果> => {
     释放协作分发占用(input);
     const anchorUrl = 读取锚点地址(locator);
+    if (!anchorUrl) {
+      if (!allowRefresh) {
+        return 创建降级结果(input, locator, "anchor_unavailable");
+      }
+      const refreshedLocator = await deps.locate(input.attachmentId, { forceRefresh: true });
+      if (refreshedLocator.status !== "ready") {
+        return 创建降级结果(input, refreshedLocator, "attachment_not_ready");
+      }
+      const refreshedAnchorUrl = 读取锚点地址(refreshedLocator);
+      if (!refreshedAnchorUrl) {
+        return 创建降级结果(input, refreshedLocator, "anchor_unavailable");
+      }
+      try {
+        await probeAnchor(refreshedAnchorUrl);
+        const contentHash = 读取播放内容哈希(refreshedLocator);
+        const distribution =
+          refreshedLocator.file_asset?.distribution ?? refreshedLocator.blob_asset?.distribution ?? null;
+        return {
+          mode: "anchor",
+          attachmentId: input.attachmentId,
+          kind: input.kind,
+          src: refreshedAnchorUrl,
+          thumbnailUrl: 读取预览缩略图地址(refreshedLocator),
+          ...(contentHash ? { contentHash } : {}),
+          ...(distribution ? { distribution } : {}),
+          hint: null,
+        };
+      } catch {
+        return 创建降级结果(input, refreshedLocator, "anchor_unavailable");
+      }
+    }
     try {
       await probeAnchor(anchorUrl);
       const contentHash = 读取播放内容哈希(locator);
@@ -431,6 +462,9 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         return 创建降级结果(input, refreshedLocator, "attachment_not_ready");
       }
       const refreshedAnchorUrl = 读取锚点地址(refreshedLocator);
+      if (!refreshedAnchorUrl) {
+        return 创建降级结果(input, refreshedLocator, "anchor_unavailable");
+      }
       try {
         await probeAnchor(refreshedAnchorUrl);
         const contentHash = 读取播放内容哈希(refreshedLocator);

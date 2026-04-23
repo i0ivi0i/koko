@@ -34,6 +34,13 @@ const 架构规则 = [
   },
 ];
 
+const 前端禁回流片段规则 = [
+  {
+    label: "locator original_url fallback",
+    pattern: /\blocator\.original_url\b/g,
+  },
+];
+
 const 热点文件行数上限 = [
   // 这里看的是“有效源码行数”而不是物理行数，避免中文注释、块注释和留白被误判成架构退化。
   { path: "frontend/聊天应用内核.ts", maxEffectiveLines: 1800 },
@@ -45,6 +52,11 @@ const 转成仓库相对路径 = (absolutePath) =>
 
 const 读取源码 = (relativePath) =>
   readFileSync(join(仓库根目录, relativePath), "utf8");
+
+const 去掉注释 = (source) =>
+  source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 export const 统计有效源码行数 = (source) => {
   let 位于块注释内 = false;
@@ -181,6 +193,26 @@ const 检查未登记XStateOwner = (files) => {
   return violations;
 };
 
+const 检查禁回流片段 = (files) => {
+  const violations = [];
+  for (const absolutePath of files) {
+    const relativePath = 转成仓库相对路径(absolutePath);
+    const source = 去掉注释(readFileSync(absolutePath, "utf8"));
+    for (const rule of 前端禁回流片段规则) {
+      rule.pattern.lastIndex = 0;
+      if (!rule.pattern.test(source)) {
+        continue;
+      }
+      violations.push({
+        file: relativePath,
+        label: rule.label,
+        detail: "命中已禁回流的前端兼容片段",
+      });
+    }
+  }
+  return violations;
+};
+
 export const 检查热点文件增长 = (
   hotFiles = 热点文件行数上限,
   readSource = 读取源码
@@ -205,6 +237,7 @@ export const 收集架构适应度违规 = () => {
   const 违规记录 = [
     ...检查Owner注册表(),
     ...检查未登记XStateOwner(files),
+    ...检查禁回流片段(files),
     ...检查热点文件增长(),
   ];
 

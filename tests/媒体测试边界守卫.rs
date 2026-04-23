@@ -43,3 +43,12 @@ fn 协作分发顶层不应回灌已迁走的_owner() {
         );
     }
 }
+
+#[test]
+fn 媒体定位正式表面守卫_禁止顶层original_url回流() {
+    let content = 读取("src/媒体资产外壳.rs");
+    assert!(
+        !content.contains("\"original_url\": original_url"),
+        "顶层 locator 已禁止继续暴露 original_url；冷源锚点必须留在 nested asset/origin 正式表面"
+    );
+}

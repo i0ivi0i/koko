@@ -42,7 +42,7 @@
 - `cargo test -j 1`
 - `pwsh -File tests/启动器脚本检查.ps1`
 
-真实浏览器烟测已完成：
+既有真实浏览器烟测记录（2026-04-23）：
 
 - 环境：`https://localhost`，房间 `1234b`，`sender / A / B / C / D` 多隔离上下文。
 - 素材：发送端先上传 1 张图片，再上传 2 条 MP4；其中后一条视频使用了 `D:\200-生活\230-照片备份\233-Telegram\色色\VID_20230823_122115_920.mp4`。
@@ -56,7 +56,42 @@
 
 - 在本机局域网 + aggressive eager 补齐环境下，浏览器侧 `partial_peer` 窗口极短，真实烟测里很快就晋级成 `complete_peer`；`partial_peer` 的连接语义、非 ready 语义、以及 stale 窗口裁决已由后端/前端定向测试单独覆盖。
 - 本轮最后收口前，残余根因是“帮助任务生命周期被当前时间线附件集合误绑死”；现已通过 `frontend/聊天媒体编排.ts` 的 owner 修正和 `frontend/tests/聊天媒体编排测试.spec.ts` 的回归测试收口。
-- 本轮没有新增 deferred 项；未实现项为 `0`。
+
+## 补充收尾验收（2026-04-23，同日追加）
+
+本轮补的是最后几处兼容尾巴和证据方式，没有改写本文既有的 `0-24 小时` 服务器冷备裁决，也没有改写 `24 小时` 后只认 peer 平面的主链结论。新增收口如下：
+
+1. locator 顶层 `original_url` 已从正式表面退场；冷源锚点只保留在 nested asset 的 `origin`。
+2. 前端定位、播放、协作分发已删除 `locator.original_url` fallback；`presence_url` 相对地址改为基于 nested asset 冷源解析，不再借顶层兼容别名拼接。
+3. 单 worker owner 的运行时快照已收口为 `workerRegistered / workerWaiting`；`appShellRegistered / mediaWorkerRegistered` 等双入口兼容字段已退场。
+4. 原先散落在业务测试里的源码 grep 检查，已改成行为断言和明示架构守卫，避免把“字符串不存在”继续冒充功能验收。
+
+本轮补充验证已执行：
+
+- `cargo test --test 启动与迁移测试 -- --nocapture`
+- `cargo test --test 协作分发测试 -- --nocapture`
+- `cargo test --test 流媒体资产契约测试 -- --nocapture`
+- `cargo test --test 媒体测试边界守卫 -- --nocapture`
+- `cargo test --test 用例测试 -- --nocapture`
+- `cargo test -j 1`
+- `pnpm --dir frontend test`
+- `pnpm --dir frontend typecheck`
+- `pnpm --dir frontend build`
+- `node scripts/check-frontend-architecture-fitness.mjs`
+- `pwsh -File tests/启动器脚本检查.ps1`
+- `pwsh -File tests/powershell/https-script.tests.ps1`
+
+本轮补充浏览器烟测已执行：
+
+- 新建隔离浏览器上下文访问 `https://localhost`（不复用既有 `localStorage / IndexedDB / service worker` 历史状态）
+- 房间 `1234b`
+- 页面成功进房，控制台无报错
+- `service worker` 处于 `hasController = true`、`hasRegistration = true`、`activeState = activated`
+
+本轮图谱补充复核只证明两件事：
+
+1. 最新 `graphify-out/GRAPH_REPORT.md` 没有新增媒体 locator / 播放 / worker 双真相热点。
+2. 当前高连接节点仍主要是既有壳层与脚本入口；这轮真收尾没有再引入新的跨 owner 混写热点。
 
 ---
 

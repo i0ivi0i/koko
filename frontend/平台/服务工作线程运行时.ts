@@ -1,10 +1,8 @@
 export interface 服务工作线程快照 {
-  appShellRegistered: boolean;
-  mediaWorkerRegistered: boolean;
+  workerRegistered: boolean;
   persistentStorageRequested: boolean;
   controllerAttached: boolean;
-  appShellWaiting: boolean;
-  mediaWorkerWaiting: boolean;
+  workerWaiting: boolean;
   lastMessageType: string | null;
   lastMessage: unknown | null;
 }
@@ -57,7 +55,7 @@ export interface 服务工作线程运行时 {
   接受更新?(): boolean;
   发送消息?(message: unknown): boolean;
   写入持久化存储结果?(persisted: boolean): void;
-  读取注册(kind: "app" | "media"): 服务工作线程注册结果 | null;
+  读取注册?(): 服务工作线程注册结果 | null;
 }
 
 const 读取消息类型 = (message: unknown): string | null => {
@@ -84,17 +82,14 @@ export function 创建服务工作线程运行时(
   const platformNavigator =
     deps.navigator ?? (typeof navigator !== "undefined" ? navigator : undefined);
   let started = false;
-  let appRegistration: 服务工作线程注册结果 | null = null;
-  let mediaRegistration: 服务工作线程注册结果 | null = null;
+  let workerRegistration: 服务工作线程注册结果 | null = null;
   const 事件监听器 = new Set<(event: 服务工作线程运行时事件) => void>();
 
   let current: 服务工作线程快照 = {
-    appShellRegistered: false,
-    mediaWorkerRegistered: false,
+    workerRegistered: false,
     persistentStorageRequested: false,
     controllerAttached: false,
-    appShellWaiting: false,
-    mediaWorkerWaiting: false,
+    workerWaiting: false,
     lastMessageType: null,
     lastMessage: null,
   };
@@ -119,15 +114,18 @@ export function 创建服务工作线程运行时(
     });
   };
 
-  const 同步共享Worker等待状态 = (registration: unknown): void => {
+  /**
+   * 根 scope 现在只有一个 service worker owner。
+   * waiting 也只能有一份真相，平台或壳层若还想区分 app/media，只能在更外层派生展示态。
+   */
+  const 同步Worker等待状态 = (registration: unknown): void => {
     const hasWaiting = 是可注册结果(registration) ? Boolean(registration.waiting) : false;
     更新快照({
-      appShellWaiting: hasWaiting,
-      mediaWorkerWaiting: hasWaiting,
+      workerWaiting: hasWaiting,
     });
     if (hasWaiting) {
-      // 现在根 scope 只有一个 worker owner。
-      // 这里仍保留 app/media 两组快照字段，只是把“更新已就绪”统一按 app scope 对外广播。
+      // cache update / 外层平台仍只认根 scope 更新 ready 信号；
+      // 这里保留 scope="app" 只是延续既有稳定事件面，不再暗示第二个 worker owner 存在。
       发布事件({
         type: "SERVICE_WORKER_UPDATE_READY",
         scope: "app",
@@ -176,18 +174,16 @@ export function 创建服务工作线程运行时(
             scope: "/",
           });
           更新快照({
-            appShellRegistered: true,
-            mediaWorkerRegistered: true,
+            workerRegistered: true,
           });
-          appRegistration = 是可注册结果(nextAppRegistration) ? nextAppRegistration : null;
-          mediaRegistration = appRegistration;
-          同步共享Worker等待状态(nextAppRegistration);
+          workerRegistration = 是可注册结果(nextAppRegistration) ? nextAppRegistration : null;
+          同步Worker等待状态(nextAppRegistration);
           if (
             是可注册结果(nextAppRegistration) &&
             typeof nextAppRegistration.addEventListener === "function"
           ) {
             nextAppRegistration.addEventListener("updatefound", () => {
-              同步共享Worker等待状态(nextAppRegistration);
+              同步Worker等待状态(nextAppRegistration);
             });
           }
         } catch {
@@ -210,13 +206,10 @@ export function 创建服务工作线程运行时(
 
     接受更新(): boolean {
       let accepted = false;
-      // 兼容字段仍保留 app/media 两个入口，但根 scope 实际只有一个 worker owner。
-      for (const registration of new Set([appRegistration, mediaRegistration])) {
-        const waiting = registration?.waiting;
-        if (waiting && typeof waiting.postMessage === "function") {
-          waiting.postMessage({ type: "SKIP_WAITING" });
-          accepted = true;
-        }
+      const waiting = workerRegistration?.waiting;
+      if (waiting && typeof waiting.postMessage === "function") {
+        waiting.postMessage({ type: "SKIP_WAITING" });
+        accepted = true;
       }
       return accepted;
     },
@@ -237,8 +230,8 @@ export function 创建服务工作线程运行时(
       });
     },
 
-    读取注册(kind: "app" | "media"): 服务工作线程注册结果 | null {
-      return kind === "app" ? appRegistration : mediaRegistration;
+    读取注册(): 服务工作线程注册结果 | null {
+      return workerRegistration;
     },
   };
 }
