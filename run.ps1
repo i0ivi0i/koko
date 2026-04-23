@@ -119,28 +119,14 @@ function Show-StartupCleanupMenu {
     )
 
     $selectedIndex = 0
-    $bufferWidth = [Math]::Max(40, $Host.UI.RawUI.BufferSize.Width - 1)
-    $blankLine = "".PadRight($bufferWidth)
-
-    Write-Host ""
-    Write-Host "启动前清理模式（上下箭头选择，回车确认）"
-    $menuTop = [Console]::CursorTop
-    foreach ($choice in $choices) {
-        Write-Host $blankLine
-    }
 
     while ($true) {
-        [Console]::SetCursorPosition(0, $menuTop)
+        Clear-Host
+        Write-Host "启动前清理模式（上下箭头选择，回车确认）"
+        Write-Host ""
         for ($i = 0; $i -lt $choices.Count; $i++) {
             $prefix = if ($i -eq $selectedIndex) { "> " } else { "  " }
-            $line = ($prefix + $choices[$i].Label)
-            if ($line.Length -gt $bufferWidth) {
-                $line = $line.Substring(0, $bufferWidth)
-            }
-            else {
-                $line = $line.PadRight($bufferWidth)
-            }
-            Write-Host $line
+            Write-Host ($prefix + $choices[$i].Label)
         }
 
         $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -153,8 +139,7 @@ function Show-StartupCleanupMenu {
             continue
         }
         if ($keyInfo.VirtualKeyCode -eq 13) {
-            [Console]::SetCursorPosition(0, $menuTop + $choices.Count)
-            Write-Host ""
+            Clear-Host
             return $choices[$selectedIndex].Value
         }
     }

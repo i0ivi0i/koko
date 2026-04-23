@@ -25,6 +25,10 @@ Assert-True (Test-Path -LiteralPath $cleanScriptPath) "缺少 qingli.ps1；应�
 $runScript = Get-Content -LiteralPath $runScriptPath -Raw
 $upScript = Get-Content -LiteralPath $upScriptPath -Raw
 $cleanScript = Get-Content -LiteralPath $cleanScriptPath -Raw
+$cleanupMenuSection = [regex]::Match(
+    $runScript,
+    'function Show-StartupCleanupMenu \{[\s\S]*?\n\}\r?\n\r?\nfunction New-LauncherLogDirectory'
+).Value
 $cleanStartupOptimizationSection = [regex]::Match(
     $cleanScript,
     'function Get-StartupArtifactOptimizationTargets \{[\s\S]*?\n\}\r?\n\r?\nfunction Get-WorkspaceStorageReclaimTargets'
@@ -162,6 +166,8 @@ Assert-True ($runScript -match 'VirtualKeyCode\s*-eq\s*13') "run.ps1 的清理�
 Assert-True ($runScript -match '继续启动') "run.ps1 的清理模式菜单应包含继续启动选项。"
 Assert-True ($runScript -match '重清理后启动') "run.ps1 的清理模式菜单应包含重清理后启动选项。"
 Assert-True ($runScript -match '取消') "run.ps1 的清理模式菜单应包含取消选项。"
+Assert-True (-not ($cleanupMenuSection -match 'SetCursorPosition')) "run.ps1 的清理模式菜单不应再依赖 Console 游标定位；当前实现会在缓冲区边界下直接炸掉。"
+Assert-True ($cleanupMenuSection -match 'Clear-Host') "run.ps1 的清理模式菜单应采用整屏重绘这类更稳的渲染方式，避免 cursor top 越界。"
 Assert-True ($runScript -match '-OptimizeStartupArtifacts') "run.ps1 启动前应调用 qingli.ps1 的自动优化模式。"
 Assert-True ($runScript -match '-SkipDatabase') "run.ps1 的自动优化不应触碰数据库真相。"
 Assert-True ($runScript -match '-SkipFiles') "run.ps1 的自动优化不应触碰媒体/上传目录真相。"
