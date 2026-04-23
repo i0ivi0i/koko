@@ -39,6 +39,12 @@ const 前端禁回流片段规则 = [
     label: "locator original_url fallback",
     pattern: /\blocator\.original_url\b/g,
   },
+  {
+    label: "video preview cold-source fallback",
+    path: "frontend/媒体/壳层/视频预览协作.ts",
+    pattern:
+      /读取视频canonical冷源地址|file_asset\?\.variants\.canonical\?\.url|file_asset\?\.origin\.original_url/g,
+  },
 ];
 
 const 热点文件行数上限 = [
@@ -199,6 +205,9 @@ const 检查禁回流片段 = (files) => {
     const relativePath = 转成仓库相对路径(absolutePath);
     const source = 去掉注释(readFileSync(absolutePath, "utf8"));
     for (const rule of 前端禁回流片段规则) {
+      if (rule.path && rule.path !== relativePath) {
+        continue;
+      }
       rule.pattern.lastIndex = 0;
       if (!rule.pattern.test(source)) {
         continue;

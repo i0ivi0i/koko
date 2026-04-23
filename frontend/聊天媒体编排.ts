@@ -366,11 +366,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     attachmentId: string
   ): { src: string; contentHash: string | null } | null => {
     const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
-    if (
-      !playback ||
-      playback.kind !== "video" ||
-      (playback.mode !== "anchor" && playback.mode !== "swarm")
-    ) {
+    /**
+     * 视频预览只允许复用 swarm 主链：
+     * 1. `anchor` 属于冷源/降级面，不能再反向喂回预览 owner；
+     * 2. 否则即便播放层已经说真话，预览层也会偷偷把第二字节路径 resurrect 回来；
+     * 3. 这里宁可回到 missing_source，也不能让预览再次吃冷源。
+     */
+    if (!playback || playback.kind !== "video" || playback.mode !== "swarm") {
       return null;
     }
     return {

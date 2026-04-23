@@ -238,7 +238,7 @@ describe("聊天媒体编排", () => {
     vi.resetModules();
   });
 
-  it("视频预览进入 missing_source 后，同一 sourceVersion 下重复同步不会无限重试", async () => {
+  it("视频预览缺少协作分发片段时会直接进入 missing_source，不再回退 canonical/original 冷源", async () => {
     const attachmentId = "att-video-preview-loop-1";
     const 抓取视频预览 = vi.fn(async () => ({
       objectUrl: null,
@@ -329,18 +329,24 @@ describe("聊天媒体编排", () => {
 
     编排.同步消息附件播放结果();
     await 刷新异步队列();
-    expect(抓取视频预览).toHaveBeenCalledTimes(1);
+    expect(抓取视频预览).not.toHaveBeenCalled();
+    expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
+      phase: "missing_source",
+    });
 
-    // 同一 sourceVersion 下再次同步，只允许维持 missing_source，不允许重复重试预览抓帧。
+    // 同一 sourceVersion 下再次同步，只允许维持 missing_source，不允许重新尝试冷源抓帧。
     编排.同步消息附件播放结果();
     await 刷新异步队列();
-    expect(抓取视频预览).toHaveBeenCalledTimes(1);
+    expect(抓取视频预览).not.toHaveBeenCalled();
 
-    // sourceVersion 发生变化（会话恢复重裁决）后，允许触发一次新的预览尝试。
+    // sourceVersion 发生变化（会话恢复重裁决）后，若仍缺少 swarm 片段，也只允许重进 missing_source。
     编排.处理媒体会话信号(attachmentId, { type: "ENTER_RECOVERING" });
     await 刷新异步队列();
     await 刷新异步队列();
-    expect(抓取视频预览).toHaveBeenCalledTimes(2);
+    expect(抓取视频预览).not.toHaveBeenCalled();
+    expect(编排.snapshot().previewByAttachmentId[attachmentId]).toEqual({
+      phase: "missing_source",
+    });
 
     编排.销毁();
   });

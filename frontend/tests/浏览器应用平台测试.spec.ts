@@ -220,6 +220,14 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("frontend/聊天媒体编排.ts");
   });
 
+  it("架构适应度门禁会拦住视频预览 owner 重新引入 canonical/original 冷源旁路", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('label: "video preview cold-source fallback"');
+    expect(source).toContain("frontend/媒体/壳层/视频预览协作.ts");
+    expect(source).toContain("读取视频canonical冷源地址");
+  });
+
   it("热点文件行数门禁预算会统一放宽到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 

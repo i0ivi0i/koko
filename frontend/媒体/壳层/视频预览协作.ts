@@ -82,20 +82,6 @@ export function 创建视频预览协作(
     写入视频预览状态(attachmentId, { phase: "missing_source" });
   };
 
-  const 读取视频canonical冷源地址 = (locator: 媒体定位结果): string | null => {
-    if (locator.status !== "ready" || locator.kind !== "video") {
-      return null;
-    }
-    if (locator.file_asset?.origin.available === false) {
-      return null;
-    }
-    return (
-      locator.file_asset?.variants.canonical?.url ??
-      locator.file_asset?.origin.original_url ??
-      null
-    );
-  };
-
   return {
     读取视频预览状态表(): Record<string, 视频预览状态> {
       return Object.fromEntries(视频预览状态表);
@@ -182,10 +168,10 @@ export function 创建视频预览协作(
               }
             }
             /**
-             * 新附件只允许一条正式媒体主链：
-             * 1. 只要 locator 已声明协作分发片段，就必须优先走同一 swarm 会话；
-             * 2. 只有 legacy（缺少 distribution）才允许回退 canonical/original 冷源；
-             * 3. 这样时间线预览不会再偷偷并发第二条服务器字节链。
+             * 视频预览也必须服从“只认 WebTorrent 一条正式字节主链”：
+             * 1. 有协作分发片段时，只允许复用同一 swarm 会话；
+             * 2. 没有 swarm 片段，就直接进入 missing_source，说真话；
+             * 3. 不再因为 legacy 形状偷偷回退 canonical/original 冷源。
              */
             if (locator.distribution) {
               const swarmSource = await deps.解析协作分发预览源({
@@ -197,8 +183,6 @@ export function 创建视频预览协作(
                 previewSource = swarmSource.src;
                 shouldReleasePreviewConsumer = true;
               }
-            } else {
-              previewSource = 读取视频canonical冷源地址(locator);
             }
           }
 
