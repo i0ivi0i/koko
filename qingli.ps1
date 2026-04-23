@@ -3,6 +3,7 @@ param(
     [switch]$Preview,
     [switch]$Force,
     [switch]$OptimizeStartupArtifacts,
+    [switch]$ReclaimWorkspaceStorage,
     [switch]$SkipDatabase,
     [switch]$SkipFiles,
     [string]$DatabaseUrl,
@@ -399,6 +400,22 @@ function Clear-DirectoryContents {
     }
 }
 
+function Resolve-CommandPath {
+    param(
+        [string[]]$Candidates,
+        [string]$ErrorMessage
+    )
+
+    foreach ($candidate in $Candidates) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($null -ne $command) {
+            return $command.Source
+        }
+    }
+
+    throw $ErrorMessage
+}
+
 function Get-StartupArtifactOptimizationTargets {
     param([string]$RepoRoot)
 
@@ -424,6 +441,25 @@ function Get-StartupArtifactOptimizationTargets {
         } | Sort-Object Path -Unique)
 }
 
+function Get-WorkspaceStorageReclaimTargets {
+    param([string]$RepoRoot)
+
+    $definitions = @(
+        @{ Path = "frontend\node_modules"; Kind = "Directory"; Reason = "前端依赖工作集；下次 pnpm install 会重建" }
+        @{ Path = "frontend\dist"; Kind = "Directory"; Reason = "前端构建产物" }
+        @{ Path = "frontend\.tsbuildinfo"; Kind = "File"; Reason = "TypeScript 增量缓存" }
+        @{ Path = "tmp"; Kind = "Directory"; Reason = "本地烟测/审计/调试临时产物" }
+    )
+
+    return @($definitions | ForEach-Object {
+            [pscustomobject]@{
+                Kind   = $_.Kind
+                Path   = Resolve-ManagedPath -RawPath $_.Path
+                Reason = $_.Reason
+            }
+        } | Sort-Object Path -Unique)
+}
+
 function Clear-CleanupTarget {
     param($Target)
 
@@ -435,6 +471,26 @@ function Clear-CleanupTarget {
     }
 
     Clear-DirectoryContents -Path $Target.Path
+}
+
+function Invoke-CargoWorkspaceClean {
+    param([string]$RepoRoot)
+
+    $cargoPath = Resolve-CommandPath `
+        -Candidates @("cargo.exe", "cargo") `
+        -ErrorMessage "未找到 cargo；无法执行工作区重清理。"
+
+    Push-Location $RepoRoot
+    try {
+        Write-Host "执行 cargo clean..."
+        & $cargoPath clean
+        if ($LASTEXITCODE -ne 0) {
+            throw "cargo clean 返回退出码 $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 $dotEnv = Read-DotEnvMap -Path (Join-Path $RepoRoot ".env")
@@ -516,6 +572,13 @@ else {
     @()
 }
 $startupOptimizationSummaries = $startupOptimizationTargets | ForEach-Object { Get-CleanupTargetSummary -Target $_ }
+$workspaceStorageTargets = if ($ReclaimWorkspaceStorage) {
+    Get-WorkspaceStorageReclaimTargets -RepoRoot $RepoRoot
+}
+else {
+    @()
+}
+$workspaceStorageSummaries = $workspaceStorageTargets | ForEach-Object { Get-CleanupTargetSummary -Target $_ }
 
 Write-Host ""
 Write-Host "=== koko 本地测试数据清理脚本 ==="
@@ -545,11 +608,21 @@ if ($OptimizeStartupArtifacts) {
     $startupOptimizationSummaries | Format-Table -AutoSize
 }
 
+if ($ReclaimWorkspaceStorage) {
+    Write-Host ""
+    Write-Host "将回收的工作区重缓存："
+    Write-Host "- cargo clean（清空整个 target/）"
+    $workspaceStorageSummaries | Format-Table -AutoSize
+}
+
 Write-Host ""
 Write-Host "不会触碰的目录：src/ frontend/ docs/ migrations/ tests/ assets/"
 Write-Host "不会触碰的数据库对象：迁移元数据表、schema、角色、扩展。"
 if ($OptimizeStartupArtifacts) {
     Write-Host "自动优化不会触碰：target/debug、target/flycheck0、frontend/node_modules、数据库业务表、data/attachments。"
+}
+if ($ReclaimWorkspaceStorage) {
+    Write-Host "工作区重清理不会默认随 run.ps1 启动；它会导致下次 Rust 全量重编译、前端重新安装依赖。"
 }
 
 Write-Host ""
@@ -571,12 +644,18 @@ if ($Preview) {
     if ($OptimizeStartupArtifacts) {
         Write-Host ".\\qingli.ps1 -Apply -OptimizeStartupArtifacts"
     }
+    elseif ($ReclaimWorkspaceStorage) {
+        Write-Host ".\\qingli.ps1 -Apply -ReclaimWorkspaceStorage"
+    }
     else {
         Write-Host ".\\qingli.ps1 -Apply"
     }
     Write-Host "如需跳过确认："
     if ($OptimizeStartupArtifacts) {
         Write-Host ".\\qingli.ps1 -Apply -Force -OptimizeStartupArtifacts"
+    }
+    elseif ($ReclaimWorkspaceStorage) {
+        Write-Host ".\\qingli.ps1 -Apply -Force -ReclaimWorkspaceStorage"
     }
     else {
         Write-Host ".\\qingli.ps1 -Apply -Force"
@@ -607,7 +686,13 @@ if ($Force) {
 Assert-ServicesStopped -Ports $servicePorts
 
 if (-not $Force) {
-    $confirmationPrompt = if ($OptimizeStartupArtifacts -and (-not $SkipDatabase -or -not $SkipFiles)) {
+    $confirmationPrompt = if ($ReclaimWorkspaceStorage -and (-not $SkipDatabase -or -not $SkipFiles)) {
+        "确认执行？这会回收工作区重缓存，并按当前开关处理数据库或媒体目录。输入 YES 继续"
+    }
+    elseif ($ReclaimWorkspaceStorage) {
+        "确认执行？这会执行 cargo clean，并删除 node_modules / dist / .tsbuildinfo / tmp。输入 YES 继续"
+    }
+    elseif ($OptimizeStartupArtifacts -and (-not $SkipDatabase -or -not $SkipFiles)) {
         "确认执行？这会清理启动器/烟测本地产物，并按当前开关处理数据库或媒体目录。输入 YES 继续"
     }
     elseif ($OptimizeStartupArtifacts) {
@@ -648,6 +733,16 @@ if ($OptimizeStartupArtifacts) {
     Write-Host ""
     Write-Host "清理启动器/烟测本地产物..."
     foreach ($target in $startupOptimizationTargets) {
+        Write-Host "  -> $($target.Path)"
+        Clear-CleanupTarget -Target $target
+    }
+}
+
+if ($ReclaimWorkspaceStorage) {
+    Write-Host ""
+    Write-Host "回收工作区重缓存..."
+    Invoke-CargoWorkspaceClean -RepoRoot $RepoRoot
+    foreach ($target in $workspaceStorageTargets) {
         Write-Host "  -> $($target.Path)"
         Clear-CleanupTarget -Target $target
     }

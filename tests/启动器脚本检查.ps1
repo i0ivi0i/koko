@@ -25,6 +25,10 @@ Assert-True (Test-Path -LiteralPath $cleanScriptPath) "缺少 qingli.ps1；应�
 $runScript = Get-Content -LiteralPath $runScriptPath -Raw
 $upScript = Get-Content -LiteralPath $upScriptPath -Raw
 $cleanScript = Get-Content -LiteralPath $cleanScriptPath -Raw
+$cleanStartupOptimizationSection = [regex]::Match(
+    $cleanScript,
+    'function Get-StartupArtifactOptimizationTargets \{[\s\S]*?\n\}\r?\n\r?\nfunction Get-WorkspaceStorageReclaimTargets'
+).Value
 $trackerScript = if (Test-Path -LiteralPath $trackerScriptPath) {
     Get-Content -LiteralPath $trackerScriptPath -Raw
 } else {
@@ -132,6 +136,7 @@ Assert-True ($upScript -match '-UpgradeDependencies') "up.ps1 应该把 UpgradeD
 Assert-True ($upScript -match 'run\.ps1') "up.ps1 应该复用 run.ps1，而不是复制出第二套启动主链。"
 Assert-True ($cleanScript -match '\[switch\]\$Apply') "qingli.ps1 应该显式接受 Apply 开关，避免无人值守调用把 -Apply 误解析成别的参数。"
 Assert-True ($cleanScript -match '\[switch\]\$OptimizeStartupArtifacts') "qingli.ps1 应该显式接受启动自动优化开关，避免 run.ps1 再复制第二套清理真相。"
+Assert-True ($cleanScript -match '\[switch\]\$ReclaimWorkspaceStorage') "qingli.ps1 应该显式接受工作区重清理开关，给磁盘告急场景留出一键回收入口。"
 Assert-True ($cleanScript -match 'MEDIA_TUS_UPLOAD_DIR') "qingli.ps1 应该跟随 tusd 主链清理 MEDIA_TUS_UPLOAD_DIR，而不是继续只盯着旧的 Rustus 目录。"
 Assert-True ($cleanScript -match 'TUSD_PORT' -or $cleanScript -match 'MEDIA_TUS_SERVER_PORT') "qingli.ps1 应该优先读取当前 tusd 端口配置，而不是只看旧的 RUSTUS_SERVER_PORT。"
 Assert-True ($cleanScript -match 'SWARM_SEEDER_PORT') "qingli.ps1 应该把 webtorrent-seeder 也纳入已识别服务停服范围。"
@@ -143,10 +148,14 @@ Assert-True ($cleanScript -match 'target\\realtime-tests') "qingli.ps1 的自动
 Assert-True ($cleanScript -match 'frontend\\dist') "qingli.ps1 的自动优化清理应该纳入前端 dist 产物。"
 Assert-True ($cleanScript -match 'tmp\\audit') "qingli.ps1 的自动优化清理应该纳入 tmp/audit 审计产物。"
 Assert-True (-not ($cleanScript -match 'target\\debug')) "qingli.ps1 的自动优化清理不应该越权清空默认 target/debug。"
-Assert-True (-not ($cleanScript -match 'frontend\\node_modules')) "qingli.ps1 的自动优化清理不应该动前端 node_modules。"
+Assert-True (-not ($cleanStartupOptimizationSection -match 'frontend\\node_modules')) "qingli.ps1 的自动优化清理不应该动前端 node_modules。"
+Assert-True ($cleanScript -match 'cargo(?:\.exe)?\s+clean') "qingli.ps1 的工作区重清理应该直接复用 cargo clean，而不是手搓第二套 Rust 构建产物删除逻辑。"
+Assert-True ($cleanScript -match 'frontend\\node_modules') "qingli.ps1 的工作区重清理应该能回收前端 node_modules。"
+Assert-True ($cleanScript -match 'frontend\\\.tsbuildinfo') "qingli.ps1 的工作区重清理应该能回收 TypeScript 增量缓存。"
 Assert-True ($runScript -match '\[switch\]\$DisableAutoOptimizeCleanup') "run.ps1 应该允许显式关闭启动前自动优化，避免特殊调试场景只能改脚本。"
 Assert-True ($runScript -match 'qingli\.ps1') "run.ps1 应该复用 qingli.ps1 的自动优化入口，而不是复制第三套清理逻辑。"
 Assert-True ($runScript -match '-OptimizeStartupArtifacts') "run.ps1 启动前应调用 qingli.ps1 的自动优化模式。"
 Assert-True ($runScript -match '-SkipDatabase') "run.ps1 的自动优化不应触碰数据库真相。"
 Assert-True ($runScript -match '-SkipFiles') "run.ps1 的自动优化不应触碰媒体/上传目录真相。"
+Assert-True (-not ($runScript -match '-ReclaimWorkspaceStorage')) "run.ps1 默认启动不应该把工作区重清理绑进主链，否则每次启动都会退化成全量重编译/重装依赖。"
 Write-Host "启动器脚本检查通过。"
