@@ -152,6 +152,27 @@ const 复制会话表 = (
   sessions: Record<string, 资产协作分发会话快照>
 ): Record<string, 资产协作分发会话快照> => ({ ...sessions });
 
+/**
+ * 壳层可以读取 actor 快照，但不能拿到可回写的内部 sessions 引用。
+ * 这里保留原快照原型与字段形状，只把最容易被误改的 sessions 投影成副本，
+ * 避免调用侧把“读模型”写成“第二套真相”。
+ */
+const 投影公开资产协作分发快照 = (
+  snapshot: 资产协作分发快照
+): 资产协作分发快照 =>
+  Object.create(Object.getPrototypeOf(snapshot), {
+    ...Object.getOwnPropertyDescriptors(snapshot),
+    context: {
+      value: {
+        ...snapshot.context,
+        sessions: 复制会话表(snapshot.context.sessions),
+      },
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    },
+  }) as 资产协作分发快照;
+
 const 推导主附件标识 = (consumerAttachmentIds: Record<string, string>): string =>
   Object.values(consumerAttachmentIds)[0] ?? "";
 
@@ -854,14 +875,14 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
     },
 
     snapshot(): 资产协作分发快照 {
-      return runtime.actor.getSnapshot();
+      return 投影公开资产协作分发快照(runtime.actor.getSnapshot());
     },
 
     读取会话状态(swarmId: string) {
       return 读取会话状态(runtime, swarmId);
     },
 
-    读取预算(snapshot = runtime.actor.getSnapshot()) {
+    读取预算(snapshot = 投影公开资产协作分发快照(runtime.actor.getSnapshot())) {
       return 读取资产协作分发预算(runtime, snapshot);
     },
 

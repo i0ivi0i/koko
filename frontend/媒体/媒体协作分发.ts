@@ -211,6 +211,33 @@ export type 协作分发底层会话 = {
 let 协作分发浏览器运行时Promise: Promise<协作分发浏览器运行时> | null = null;
 let 协作分发浏览器运行时实例: 协作分发浏览器运行时 | null = null;
 
+/**
+ * 浏览器里的 WebTorrent client / stream server 只有一套共享基础设施真相。
+ * 这里显式收口“认领实例”的判断，避免后续在别处偷偷长出第二套缓存逻辑。
+ */
+function 认领协作分发浏览器运行时实例(
+  targetPromise: Promise<协作分发浏览器运行时>,
+  runtime: 协作分发浏览器运行时
+): 协作分发浏览器运行时 {
+  if (协作分发浏览器运行时Promise === targetPromise) {
+    协作分发浏览器运行时实例 = runtime;
+  }
+  return runtime;
+}
+
+/**
+ * 冷启动失败时必须释放单例锁。
+ * 否则第一轮 reject 会把后续所有调用都钉死在旧 promise 上，形成“第二套失败真相”。
+ */
+function 释放协作分发浏览器运行时单例锁(
+  targetPromise: Promise<协作分发浏览器运行时>
+): void {
+  if (协作分发浏览器运行时Promise === targetPromise) {
+    协作分发浏览器运行时Promise = null;
+    协作分发浏览器运行时实例 = null;
+  }
+}
+
 function 读取协作分发Torrent缓存仓库() {
   return 获取默认浏览器应用平台().storage.协作分发缓存仓库?.() ?? null;
 }
@@ -625,7 +652,7 @@ export async function 获取或创建协作分发浏览器运行时(
   读取媒体ServiceWorker注册: () => Promise<unknown> = 默认读取媒体ServiceWorker注册
 ): Promise<协作分发浏览器运行时> {
   if (!协作分发浏览器运行时Promise) {
-    const nextPromise = (async () => {
+    const nextPromise: Promise<协作分发浏览器运行时> = (async () => {
       const WebTorrentCtor = await loadCtor();
       const serviceWorkerRegistration = await 读取媒体ServiceWorker注册();
       const client = new WebTorrentCtor();
@@ -633,27 +660,21 @@ export async function 获取或创建协作分发浏览器运行时(
         controller: serviceWorkerRegistration,
       });
       return { client, streamServer };
-    })().then((runtime) => {
-      if (协作分发浏览器运行时Promise === nextPromise) {
-        协作分发浏览器运行时实例 = runtime;
-      }
-      return runtime;
-    }).catch((error) => {
-      /**
-       * 运行时冷启动失败后不能把 rejected promise 永久缓存：
-       * - 否则首轮失败会让当前页面后续所有播放都只剩锚点回退；
-       * - 下游条件恢复后（例如 SW 已接管）也无法再重试；
-       * - 这里必须释放单例锁，让后续调用能按最新事实重新初始化。
-       */
-      if (协作分发浏览器运行时Promise === nextPromise) {
-        协作分发浏览器运行时Promise = null;
-        协作分发浏览器运行时实例 = null;
-      }
-      throw error;
-    });
+    })()
+      .then((runtime) => 认领协作分发浏览器运行时实例(nextPromise, runtime))
+      .catch((error) => {
+        /**
+         * 运行时冷启动失败后不能把 rejected promise 永久缓存：
+         * - 否则首轮失败会让当前页面后续所有播放都只剩锚点回退；
+         * - 下游条件恢复后（例如 SW 已接管）也无法再重试；
+         * - 这里必须释放单例锁，让后续调用能按最新事实重新初始化。
+         */
+        释放协作分发浏览器运行时单例锁(nextPromise);
+        throw error;
+      });
     协作分发浏览器运行时Promise = nextPromise;
   }
-  return 协作分发浏览器运行时Promise;
+  return 协作分发浏览器运行时Promise!;
 }
 
 export function 重置协作分发浏览器运行时() {

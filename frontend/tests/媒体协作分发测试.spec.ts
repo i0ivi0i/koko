@@ -374,6 +374,35 @@ describe("媒体协作分发", () => {
     }
   });
 
+  it("资产协作分发运行时 snapshot 只暴露会话投影，外部改写返回值不会污染内部 actor 真相", () => {
+    const runtime = 创建资产协作分发运行时();
+
+    try {
+      const exposedSnapshot = runtime.snapshot();
+      exposedSnapshot.context.sessions["swarm-shadow"] = {
+        attachmentId: "att-shadow",
+        swarmId: "swarm-shadow",
+        torrentInfoHash: "torrent-shadow",
+        contentHash: "content-shadow",
+        consumers: ["viewer:att-shadow"],
+        consumerAttachmentIds: {
+          "viewer:att-shadow": "att-shadow",
+        },
+        consumerModes: {
+          "viewer:att-shadow": "viewer",
+        },
+        eagerCompleting: false,
+        locallyComplete: false,
+        hint: "正在协作分发",
+      };
+
+      expect(runtime.snapshot().context.sessions).toEqual({});
+      expect(runtime.读取会话状态("swarm-shadow")).toBeNull();
+    } finally {
+      runtime.销毁();
+    }
+  });
+
   it("join_ticket 存在时会通过 getAnnounceOpts 传给 tracker，而不是前端自己拼第二套 announce URL", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-ticket-opts");
