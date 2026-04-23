@@ -4,67 +4,18 @@ import { describe, expect, it } from "vitest";
 import { 创建后台应用内核 } from "../后台应用内核";
 import { 创建后台查询编排 } from "../后台查询编排";
 import type {
-  匿名身份引导结果,
-  增量事件快照,
   后台房间列表,
   后台房间详情,
   后台概览,
   后台登录结果,
-  媒体附件上传结果,
-  媒体定位结果,
-  媒体上传准备结果,
-  房间历史页,
-  房间快照,
 } from "../契约";
-import type { 前端传输端口 } from "../传输";
-import type { Socket } from "socket.io-client";
+import type {
+  后台会话传输端口,
+  后台查询传输端口,
+} from "../传输";
 
-class 假后台内核传输 implements 前端传输端口 {
+class 假后台内核传输 implements 后台查询传输端口, 后台会话传输端口 {
   readonly 调用记录: string[] = [];
-
-  async bootstrapAnonymousIdentity(): Promise<匿名身份引导结果> {
-    throw new Error("unused");
-  }
-
-  async joinOrCreateRoom(): Promise<房间快照> {
-    throw new Error("unused");
-  }
-
-  async loadRoomSnapshot(): Promise<房间快照> {
-    throw new Error("unused");
-  }
-
-  async prepareMediaUpload(): Promise<媒体上传准备结果> {
-    throw new Error("unused");
-  }
-
-  async abandonMediaUpload(): Promise<void> {
-    throw new Error("unused");
-  }
-
-  async completeMediaUpload(): Promise<媒体附件上传结果> {
-    throw new Error("unused");
-  }
-
-  async loadMediaLocator(): Promise<媒体定位结果> {
-    throw new Error("unused");
-  }
-
-  buildAttachmentContentUrl(): string {
-    throw new Error("unused");
-  }
-
-  async updateRoomReadAnchor(): Promise<void> {
-    throw new Error("unused");
-  }
-
-  async loadRoomEvents(): Promise<增量事件快照> {
-    throw new Error("unused");
-  }
-
-  async loadRoomHistory(): Promise<房间历史页> {
-    throw new Error("unused");
-  }
 
   async loadAdminOverview(token: string): Promise<后台概览> {
     this.调用记录.push(`overview:${token}`);
@@ -85,26 +36,31 @@ class 假后台内核传输 implements 前端传输端口 {
     this.调用记录.push(`detail:${token}:${roomId}`);
     return { room_id: roomId, latest_event_position: 12, message_count: 34 };
   }
-
-  createSocket(): Socket {
-    throw new Error("unused");
-  }
 }
 
 describe("后台应用内核", () => {
   it("后台查询和会话编排分别只依赖各自后台窄接口", () => {
     const querySource = readFileSync(resolve(process.cwd(), "后台查询编排.ts"), "utf8");
     const sessionSource = readFileSync(resolve(process.cwd(), "后台会话编排.ts"), "utf8");
+    const kernelSource = readFileSync(resolve(process.cwd(), "后台应用内核.ts"), "utf8");
 
     expect(querySource).toContain('import type { 后台查询传输端口 } from "./传输.js";');
     expect(querySource).not.toContain("type 前端传输端口");
     expect(sessionSource).toContain('import type { 后台会话传输端口 } from "./传输.js";');
     expect(sessionSource).not.toContain("type 前端传输端口");
+    expect(kernelSource).toContain("后台查询传输?: 后台查询传输端口;");
+    expect(kernelSource).toContain("后台会话传输?: 后台会话传输端口;");
+    expect(kernelSource).not.toContain("transport?: 前端传输端口;");
+    expect(kernelSource).not.toContain("this.platform.transport.transport()");
+    expect(kernelSource).not.toContain("setTransportForTest(transport: 前端传输端口)");
   });
 
   it("登录命令会刷新 token、概览和房间列表快照", async () => {
     const transport = new 假后台内核传输();
-    const kernel = 创建后台应用内核({ transport });
+    const kernel = 创建后台应用内核({
+      后台查询传输: transport,
+      后台会话传输: transport,
+    });
 
     await kernel.dispatch({ type: "USERNAME_CHANGED", value: "ops-admin" });
     await kernel.dispatch({ type: "PASSWORD_CHANGED", value: "super-secret" });
@@ -129,7 +85,10 @@ describe("后台应用内核", () => {
 
   it("筛选和详情命令都只通过快照暴露给壳层", async () => {
     const transport = new 假后台内核传输();
-    const kernel = 创建后台应用内核({ transport });
+    const kernel = 创建后台应用内核({
+      后台查询传输: transport,
+      后台会话传输: transport,
+    });
 
     await kernel.dispatch({ type: "LOGIN_REQUESTED" });
     await kernel.dispatch({ type: "ROOM_FILTER_CHANGED", value: "ops" });

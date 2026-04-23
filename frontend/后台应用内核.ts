@@ -6,7 +6,7 @@ import {
   获取默认浏览器应用平台,
   type 浏览器应用平台,
 } from "./平台/index.js";
-import type { 前端传输端口 } from "./传输.js";
+import type { 后台会话传输端口, 后台查询传输端口 } from "./传输.js";
 
 export type 后台应用命令 =
   | { type: "USERNAME_CHANGED"; value: string }
@@ -29,14 +29,15 @@ export interface 后台应用快照 {
 
 export interface 后台应用内核依赖 {
   platform?: 浏览器应用平台;
-  transport?: 前端传输端口;
+  后台查询传输?: 后台查询传输端口;
+  后台会话传输?: 后台会话传输端口;
   onSnapshotChanged?(): void;
 }
 
 export interface 后台应用内核端口 {
   snapshot(): 后台应用快照;
   dispatch(command: 后台应用命令): Promise<void>;
-  setTransportForTest(transport: 前端传输端口): void;
+  setTransportForTest(transport: 后台查询传输端口 & 后台会话传输端口): void;
 }
 
 class 后台应用内核 implements 后台应用内核端口 {
@@ -44,12 +45,14 @@ class 后台应用内核 implements 后台应用内核端口 {
   private readonly 会话编排: 后台会话编排端口;
   private readonly 查询编排: 后台查询编排端口;
   private readonly 壳编排: 后台壳编排端口;
-  private transport: 前端传输端口;
+  private 后台查询传输: 后台查询传输端口;
+  private 后台会话传输: 后台会话传输端口;
   private readonly onSnapshotChanged: () => void;
 
   constructor(deps: 后台应用内核依赖 = {}) {
     this.platform = deps.platform ?? 获取默认浏览器应用平台();
-    this.transport = deps.transport ?? this.platform.transport.transport();
+    this.后台查询传输 = deps.后台查询传输 ?? this.platform.transport.后台查询传输();
+    this.后台会话传输 = deps.后台会话传输 ?? this.platform.transport.后台会话传输();
     this.onSnapshotChanged = deps.onSnapshotChanged ?? (() => {});
     this.会话编排 = 创建后台会话编排();
     this.查询编排 = 创建后台查询编排();
@@ -88,9 +91,9 @@ class 后台应用内核 implements 后台应用内核端口 {
         this.通知快照变化();
         return;
       case "LOGIN_REQUESTED": {
-        const out = await this.会话编排.登录(this.transport);
-        await this.查询编排.加载概览(this.transport, out.token);
-        await this.查询编排.加载房间列表(this.transport, out.token);
+        const out = await this.会话编排.登录(this.后台会话传输);
+        await this.查询编排.加载概览(this.后台查询传输, out.token);
+        await this.查询编排.加载房间列表(this.后台查询传输, out.token);
         this.通知快照变化();
         return;
       }
@@ -99,7 +102,7 @@ class 后台应用内核 implements 后台应用内核端口 {
         if (!token) {
           return;
         }
-        await this.查询编排.加载房间列表(this.transport, token);
+        await this.查询编排.加载房间列表(this.后台查询传输, token);
         this.通知快照变化();
         return;
       }
@@ -109,15 +112,18 @@ class 后台应用内核 implements 后台应用内核端口 {
           return;
         }
         this.壳编排.选择房间(command.roomId);
-        await this.查询编排.加载房间详情(this.transport, token, command.roomId);
+        await this.查询编排.加载房间详情(this.后台查询传输, token, command.roomId);
         this.通知快照变化();
         return;
       }
     }
   }
 
-  setTransportForTest(transport: 前端传输端口): void {
-    this.transport = transport;
+  setTransportForTest(
+    transport: 后台查询传输端口 & 后台会话传输端口
+  ): void {
+    this.后台查询传输 = transport;
+    this.后台会话传输 = transport;
   }
 
   private 通知快照变化(): void {
