@@ -174,4 +174,7 @@ Assert-True ($runScript -match '-SkipFiles') "run.ps1 的自动优化不应触�
 Assert-True ($runScript -match '-ReclaimWorkspaceStorage') "run.ps1 的启动菜单应能分流到工作区重清理。"
 Assert-True ($runScript -match 'Show-StartupCleanupMenu[\s\S]*Invoke-StartupArtifactOptimization') "run.ps1 的启动菜单应能分流到默认轻清理。"
 Assert-True ($runScript -match 'Show-StartupCleanupMenu[\s\S]*Invoke-WorkspaceStorageReclaim') "run.ps1 的启动菜单应能分流到工作区重清理。"
+Assert-True ($runScript -match 'Ensure-FrontendDependenciesInstalled') "run.ps1 应该在前端首轮构建前检查并补齐缺失依赖，避免重清理后直接卡死在空 node_modules。"
+Assert-True ($runScript -match '--dir",\s*"frontend",\s*"install",\s*"--frozen-lockfile"' -or $runScript -match '--dir frontend install --frozen-lockfile') "run.ps1 补齐前端依赖时必须使用 frozen lockfile，不能偷偷升级依赖。"
+Assert-True ($runScript -match 'Ensure-FrontendDependenciesInstalled[\s\S]*pnpm --dir frontend build') "run.ps1 应先补齐前端依赖，再执行首轮构建。"
 Write-Host "启动器脚本检查通过。"

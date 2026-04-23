@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-04-24)
 
 ## Corpus Check
-- 220 files · ~270,560 words
+- 220 files · ~270,687 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 535 nodes · 699 edges · 33 communities detected
+- 537 nodes · 702 edges · 33 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -83,12 +83,12 @@ Cohesion: 0.04
 Nodes (27): 新模块会拒绝非canonical_webp字节(), 预制图片为CanonicalWebp(), dispatch(), dispatchPointerScrollIntent(), dispatchScrollIntent(), dispose(), exitCurrentRoomView(), 协作分发JoinTicket失效错误 (+19 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.07
-Nodes (0): 
+Cohesion: 0.09
+Nodes (19): Ensure-FrontendDependenciesInstalled(), Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Parse-CloudflareTunnelPublicUrlFromLogLine(), Read-NewLogLines(), Resolve-PwshPath() (+11 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.1
-Nodes (17): Get-ListeningPortProcessRecords(), Invoke-LauncherCleanup(), New-ManagedProcess(), New-StreamState(), Parse-CloudflareTunnelPublicUrlFromLogLine(), Read-NewLogLines(), Resolve-PwshPath(), Resolve-StaleLauncherSidecar() (+9 more)
+Cohesion: 0.07
+Nodes (0): 
 
 ### Community 5 - "Community 5"
 Cohesion: 0.07
@@ -143,12 +143,12 @@ Cohesion: 0.4
 Nodes (2): iso5品牌mp4字节(), 最小mp4字节()
 
 ### Community 18 - "Community 18"
-Cohesion: 0.6
-Nodes (3): 未来冷源到期时间戳秒(), 生成测试content_hash(), 插入ready图片附件记录()
-
-### Community 19 - "Community 19"
 Cohesion: 0.5
 Nodes (2): abandon会先写业务abandoned再协调官方termination(), 启动假tus_termination侧车()
+
+### Community 19 - "Community 19"
+Cohesion: 0.6
+Nodes (3): 未来冷源到期时间戳秒(), 生成测试content_hash(), 插入ready图片附件记录()
 
 ### Community 20 - "Community 20"
 Cohesion: 0.5
@@ -207,9 +207,9 @@ Nodes (0):
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 23`** (2 nodes): `向受控页面广播后台补发请求()`, `app-sw.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
+- **Thin community `Community 24`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 25`** (2 nodes): `Assert-True()`, `启动器脚本检查.ps1`
+- **Thin community `Community 25`** (2 nodes): `图片资产描述只暴露canonical而不是服务端派生多版本()`, `blob媒体资产契约测试.rs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 26`** (2 nodes): `文本布局`, `文本布局测试`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -230,9 +230,9 @@ Nodes (0):
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `单连接发送到已关闭socket时降级为正常断开()` connect `Community 6` to `Community 0`, `Community 2`, `Community 12`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
+  _High betweenness centrality (0.044) - this node is a cross-community bridge._
 - **Why does `提取媒体上传授权头()` connect `Community 5` to `Community 0`, `Community 1`, `Community 2`, `Community 16`?**
-  _High betweenness centrality (0.037) - this node is a cross-community bridge._
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
 - **What connects `文本布局`, `文本布局测试`, `TusHookBody` to the rest of the system?**
   _31 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
@@ -242,4 +242,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.04 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
-  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09 - nodes in this community are weakly interconnected._

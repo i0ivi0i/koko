@@ -313,7 +313,7 @@
       "source_file": "run.ps1",
       "source_location": "L1",
       "id": "run_ps1",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Assert-PowerShellVersion()",
@@ -321,7 +321,7 @@
       "source_file": "run.ps1",
       "source_location": "L10",
       "id": "run_assert_powershellversion",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Import-DotEnv()",
@@ -329,7 +329,7 @@
       "source_file": "run.ps1",
       "source_location": "L17",
       "id": "run_import_dotenv",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Resolve-CleanupScriptHostPath()",
@@ -337,7 +337,7 @@
       "source_file": "run.ps1",
       "source_location": "L36",
       "id": "run_resolve_cleanupscripthostpath",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Invoke-StartupArtifactOptimization()",
@@ -345,7 +345,7 @@
       "source_file": "run.ps1",
       "source_location": "L53",
       "id": "run_invoke_startupartifactoptimization",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Invoke-WorkspaceStorageReclaim()",
@@ -353,7 +353,7 @@
       "source_file": "run.ps1",
       "source_location": "L79",
       "id": "run_invoke_workspacestoragereclaim",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Show-StartupCleanupMenu()",
@@ -361,191 +361,207 @@
       "source_file": "run.ps1",
       "source_location": "L105",
       "id": "run_show_startupcleanupmenu",
-      "community": 4
+      "community": 3
+    },
+    {
+      "label": "Test-FrontendDependenciesInstalled()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L148",
+      "id": "run_test_frontenddependenciesinstalled",
+      "community": 3
+    },
+    {
+      "label": "Ensure-FrontendDependenciesInstalled()",
+      "file_type": "code",
+      "source_file": "run.ps1",
+      "source_location": "L167",
+      "id": "run_ensure_frontenddependenciesinstalled",
+      "community": 3
     },
     {
       "label": "New-LauncherLogDirectory()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L148",
+      "source_location": "L190",
       "id": "run_new_launcherlogdirectory",
-      "community": 4
+      "community": 3
     },
     {
       "label": "New-StreamState()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L167",
+      "source_location": "L209",
       "id": "run_new_streamstate",
-      "community": 4
+      "community": 3
     },
     {
       "label": "New-ManagedProcess()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L181",
+      "source_location": "L223",
       "id": "run_new_managedprocess",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Parse-CloudflareTunnelPublicUrlFromLogLine()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L216",
+      "source_location": "L258",
       "id": "run_parse_cloudflaretunnelpublicurlfromlogline",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Test-AnsiOutputEnabled()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L230",
+      "source_location": "L272",
       "id": "run_test_ansioutputenabled",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Write-HighlightedAccessBlock()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L252",
+      "source_location": "L294",
       "id": "run_write_highlightedaccessblock",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Update-CloudflareTunnelStateFromLogLine()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L288",
+      "source_location": "L330",
       "id": "run_update_cloudflaretunnelstatefromlogline",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Resolve-CloudflaredBinaryPath()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L317",
+      "source_location": "L359",
       "id": "run_resolve_cloudflaredbinarypath",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Resolve-CloudflareEdgeBindAddress()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L344",
+      "source_location": "L386",
       "id": "run_resolve_cloudflareedgebindaddress",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Resolve-PwshPath()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L373",
+      "source_location": "L415",
       "id": "run_resolve_pwshpath",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Start-LocalHttpsBootstrap()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L387",
+      "source_location": "L429",
       "id": "run_start_localhttpsbootstrap",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Read-NewLogLines()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L419",
+      "source_location": "L461",
       "id": "run_read_newloglines",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Write-ManagedStreamLines()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L479",
+      "source_location": "L521",
       "id": "run_write_managedstreamlines",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Write-CloudflareTunnelReadyBanner()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L504",
+      "source_location": "L546",
       "id": "run_write_cloudflaretunnelreadybanner",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Write-ManagedProcessLogs()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L517",
+      "source_location": "L559",
       "id": "run_write_managedprocesslogs",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Stop-StaleLauncherBackend()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L532",
+      "source_location": "L574",
       "id": "run_stop_stalelauncherbackend",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Get-ListeningPortProcessRecords()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L558",
+      "source_location": "L600",
       "id": "run_get_listeningportprocessrecords",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Resolve-StaleLauncherSidecar()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L589",
+      "source_location": "L631",
       "id": "run_resolve_stalelaunchersidecar",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Stop-StaleLauncherSidecars()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L650",
+      "source_location": "L692",
       "id": "run_stop_stalelaunchersidecars",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Resolve-TusdBinaryPath()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L692",
+      "source_location": "L734",
       "id": "run_resolve_tusdbinarypath",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Test-TruthyEnvironmentFlag()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L702",
+      "source_location": "L744",
       "id": "run_test_truthyenvironmentflag",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Stop-ManagedProcess()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L715",
+      "source_location": "L757",
       "id": "run_stop_managedprocess",
-      "community": 4
+      "community": 3
     },
     {
       "label": "Invoke-LauncherCleanup()",
       "file_type": "code",
       "source_file": "run.ps1",
-      "source_location": "L738",
+      "source_location": "L780",
       "id": "run_invoke_launchercleanup",
-      "community": 4
+      "community": 3
     },
     {
       "label": "up.ps1",
@@ -1109,7 +1125,7 @@
       "source_file": "frontend\\tests\\\u9644\u4ef6\u80fd\u529b\u6ce8\u518c\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "spec",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".bootstrapAnonymousIdentity()",
@@ -1117,7 +1133,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L133",
       "id": "spec_bootstrapanonymousidentity",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".joinOrCreateRoom()",
@@ -1125,7 +1141,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L139",
       "id": "spec_joinorcreateroom",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".loadRoomSnapshot()",
@@ -1133,7 +1149,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L142",
       "id": "spec_loadroomsnapshot",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".prepareMediaUpload()",
@@ -1141,7 +1157,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L145",
       "id": "spec_preparemediaupload",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".abandonMediaUpload()",
@@ -1149,7 +1165,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L168",
       "id": "spec_abandonmediaupload",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".completeMediaUpload()",
@@ -1157,7 +1173,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L169",
       "id": "spec_completemediaupload",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".loadMediaLocator()",
@@ -1165,7 +1181,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L183",
       "id": "spec_loadmedialocator",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".buildAttachmentContentUrl()",
@@ -1173,7 +1189,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L290",
       "id": "spec_buildattachmentcontenturl",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".updateRoomReadAnchor()",
@@ -1181,7 +1197,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L266",
       "id": "spec_updateroomreadanchor",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".loadRoomEvents()",
@@ -1189,7 +1205,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L267",
       "id": "spec_loadroomevents",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".loadRoomHistory()",
@@ -1197,7 +1213,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L307",
       "id": "spec_loadroomhistory",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".loadAdminOverview()",
@@ -1205,7 +1221,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L310",
       "id": "spec_loadadminoverview",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".adminLogin()",
@@ -1213,7 +1229,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L313",
       "id": "spec_adminlogin",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".adminRooms()",
@@ -1221,7 +1237,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L316",
       "id": "spec_adminrooms",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".adminRoomDetail()",
@@ -1229,7 +1245,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L319",
       "id": "spec_adminroomdetail",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".createSocket()",
@@ -1237,7 +1253,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L322",
       "id": "spec_createsocket",
-      "community": 3
+      "community": 4
     },
     {
       "label": "getResponseHeader()",
@@ -1309,7 +1325,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L41",
       "id": "spec_on",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".addFile()",
@@ -1317,7 +1333,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L47",
       "id": "spec_addfile",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".getFile()",
@@ -1325,7 +1341,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L69",
       "id": "spec_getfile",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".removeFile()",
@@ -1333,7 +1349,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L73",
       "id": "spec_removefile",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".retryUpload()",
@@ -1341,7 +1357,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L86",
       "id": "spec_retryupload",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".cancelAll()",
@@ -1349,7 +1365,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L93",
       "id": "spec_cancelall",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".destroy()",
@@ -1357,7 +1373,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L97",
       "id": "spec_destroy",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".emit()",
@@ -1365,7 +1381,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L129",
       "id": "spec_emit",
-      "community": 3
+      "community": 4
     },
     {
       "label": "\u5b89\u88c5\u5168\u5c4fDOM\u6a21\u62df()",
@@ -1405,7 +1421,7 @@
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L172",
       "id": "spec_constructor",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".observe()",
@@ -1413,7 +1429,7 @@
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L176",
       "id": "spec_observe",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".unobserve()",
@@ -1421,7 +1437,7 @@
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L178",
       "id": "spec_unobserve",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".disconnect()",
@@ -1429,7 +1445,7 @@
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L180",
       "id": "spec_disconnect",
-      "community": 3
+      "community": 4
     },
     {
       "label": ".takeRecords()",
@@ -1437,7 +1453,7 @@
       "source_file": "frontend\\tests\\\u623f\u95f4\u6d88\u606f\u7a97\u5a92\u4f53\u67e5\u770b\u5668\u6d4b\u8bd5.spec.ts",
       "source_location": "L182",
       "id": "spec_takerecords",
-      "community": 3
+      "community": 4
     },
     {
       "label": "\u6587\u672c\u5e03\u5c40\u6d4b\u8bd5",
@@ -1457,7 +1473,7 @@
       "source_file": "frontend\\tests\\\u79bb\u7ebf\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
       "source_location": "L9",
       "id": "spec_addeventlistener",
-      "community": 3
+      "community": 4
     },
     {
       "label": "\u5047Socket",
@@ -1505,7 +1521,7 @@
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
       "source_location": "L297",
       "id": "spec_buildstreamingasseturl",
-      "community": 3
+      "community": 4
     },
     {
       "label": "get()",
@@ -3233,7 +3249,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L1",
       "id": "tests_blob_rs",
-      "community": 24
+      "community": 25
     },
     {
       "label": "\u56fe\u7247\u8d44\u4ea7\u63cf\u8ff0\u53ea\u66b4\u9732canonical\u800c\u4e0d\u662f\u670d\u52a1\u7aef\u6d3e\u751f\u591a\u7248\u672c()",
@@ -3241,7 +3257,7 @@
       "source_file": "tests\\blob\u5a92\u4f53\u8d44\u4ea7\u5951\u7ea6\u6d4b\u8bd5.rs",
       "source_location": "L7",
       "id": "blob_canonical",
-      "community": 24
+      "community": 25
     },
     {
       "label": "\u5a92\u4f53.rs",
@@ -3401,7 +3417,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L1",
       "id": "tests_ps1",
-      "community": 25
+      "community": 24
     },
     {
       "label": "Assert-True()",
@@ -3409,7 +3425,7 @@
       "source_file": "tests\\\u542f\u52a8\u5668\u811a\u672c\u68c0\u67e5.ps1",
       "source_location": "L3",
       "id": "assert_true",
-      "community": 25
+      "community": 24
     },
     {
       "label": "\u89c6\u9891complete\u5171\u4eab\u5951\u7ea6\u4e0d\u5305\u542b_web_\u9875\u9762\u6d41\u7a0b\u548c\u5c55\u793a\u6587\u6848\u5b57\u6bb5()",
@@ -3745,7 +3761,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L1",
       "id": "tests_abandon_rs",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u542f\u52a8\u5047tus_termination\u4fa7\u8f66()",
@@ -3753,7 +3769,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L18",
       "id": "abandon_tus_termination",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u540c\u65f6\u6807\u8bb0\u9644\u4ef6\u4e0etransport\u4e3aabandoned\u5e76\u6e05\u6389\u5df2\u767b\u8bb0\u7684\u4e34\u65f6\u6587\u4ef6()",
@@ -3761,7 +3777,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L61",
       "id": "abandon_transport_abandoned",
-      "community": 19
+      "community": 18
     },
     {
       "label": "abandon\u4f1a\u5148\u5199\u4e1a\u52a1abandoned\u518d\u534f\u8c03\u5b98\u65b9termination()",
@@ -3769,7 +3785,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L207",
       "id": "abandon_abandon_abandoned_termination",
-      "community": 19
+      "community": 18
     },
     {
       "label": "\u653e\u5f03\u5a92\u4f53\u4e0a\u4f20\u4f1a\u6e05\u6389\u5f53\u524d\u4f1a\u8bdd\u4e0b\u6240\u6709partial\u4e34\u65f6\u6587\u4ef6()",
@@ -3777,7 +3793,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\abandon.rs",
       "source_location": "L321",
       "id": "abandon_partial",
-      "community": 19
+      "community": 18
     },
     {
       "label": "complete.rs",
@@ -4201,7 +4217,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L1",
       "id": "tests_seed_rs",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u63d2\u5165ready\u56fe\u7247\u9644\u4ef6\u8bb0\u5f55()",
@@ -4209,7 +4225,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L10",
       "id": "seed_ready",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u672a\u6765\u51b7\u6e90\u5230\u671f\u65f6\u95f4\u6233\u79d2()",
@@ -4217,7 +4233,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L51",
       "id": "seed",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u751f\u6210\u6d4b\u8bd5content_hash()",
@@ -4225,7 +4241,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L118",
       "id": "seed_content_hash",
-      "community": 18
+      "community": 19
     },
     {
       "label": "\u5199\u5165\u5b8c\u6574peer\u5b58\u6d3b\u8bb0\u5f55()",
@@ -4233,7 +4249,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L151",
       "id": "seed_peer",
-      "community": 18
+      "community": 19
     },
     {
       "label": "tus.rs",
@@ -5104,6 +5120,30 @@
       "source_location": "L148",
       "weight": 1.0,
       "_src": "run_ps1",
+      "_tgt": "run_test_frontenddependenciesinstalled",
+      "source": "run_ps1",
+      "target": "run_test_frontenddependenciesinstalled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L167",
+      "weight": 1.0,
+      "_src": "run_ps1",
+      "_tgt": "run_ensure_frontenddependenciesinstalled",
+      "source": "run_ps1",
+      "target": "run_ensure_frontenddependenciesinstalled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L190",
+      "weight": 1.0,
+      "_src": "run_ps1",
       "_tgt": "run_new_launcherlogdirectory",
       "source": "run_ps1",
       "target": "run_new_launcherlogdirectory",
@@ -5113,7 +5153,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L167",
+      "source_location": "L209",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_new_streamstate",
@@ -5125,7 +5165,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L181",
+      "source_location": "L223",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_new_managedprocess",
@@ -5137,7 +5177,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L216",
+      "source_location": "L258",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_parse_cloudflaretunnelpublicurlfromlogline",
@@ -5149,7 +5189,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L230",
+      "source_location": "L272",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_test_ansioutputenabled",
@@ -5161,7 +5201,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L252",
+      "source_location": "L294",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_write_highlightedaccessblock",
@@ -5173,7 +5213,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L288",
+      "source_location": "L330",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_update_cloudflaretunnelstatefromlogline",
@@ -5185,7 +5225,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L317",
+      "source_location": "L359",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_cloudflaredbinarypath",
@@ -5197,7 +5237,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L344",
+      "source_location": "L386",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_cloudflareedgebindaddress",
@@ -5209,7 +5249,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L373",
+      "source_location": "L415",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_pwshpath",
@@ -5221,7 +5261,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L387",
+      "source_location": "L429",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_start_localhttpsbootstrap",
@@ -5233,7 +5273,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L419",
+      "source_location": "L461",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_read_newloglines",
@@ -5245,7 +5285,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L479",
+      "source_location": "L521",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_write_managedstreamlines",
@@ -5257,7 +5297,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L504",
+      "source_location": "L546",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_write_cloudflaretunnelreadybanner",
@@ -5269,7 +5309,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L517",
+      "source_location": "L559",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_write_managedprocesslogs",
@@ -5281,7 +5321,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L532",
+      "source_location": "L574",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_stop_stalelauncherbackend",
@@ -5293,7 +5333,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L558",
+      "source_location": "L600",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_get_listeningportprocessrecords",
@@ -5305,7 +5345,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L589",
+      "source_location": "L631",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_stalelaunchersidecar",
@@ -5317,7 +5357,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L650",
+      "source_location": "L692",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_stop_stalelaunchersidecars",
@@ -5329,7 +5369,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L692",
+      "source_location": "L734",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_resolve_tusdbinarypath",
@@ -5341,7 +5381,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L702",
+      "source_location": "L744",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_test_truthyenvironmentflag",
@@ -5353,7 +5393,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L715",
+      "source_location": "L757",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_stop_managedprocess",
@@ -5365,7 +5405,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L738",
+      "source_location": "L780",
       "weight": 1.0,
       "_src": "run_ps1",
       "_tgt": "run_invoke_launchercleanup",
@@ -5377,7 +5417,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L211",
+      "source_location": "L173",
+      "weight": 1.0,
+      "_src": "run_ensure_frontenddependenciesinstalled",
+      "_tgt": "run_test_frontenddependenciesinstalled",
+      "source": "run_test_frontenddependenciesinstalled",
+      "target": "run_ensure_frontenddependenciesinstalled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run.ps1",
+      "source_location": "L253",
       "weight": 1.0,
       "_src": "run_new_managedprocess",
       "_tgt": "run_new_streamstate",
@@ -5389,7 +5441,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L408",
+      "source_location": "L450",
       "weight": 1.0,
       "_src": "run_start_localhttpsbootstrap",
       "_tgt": "run_new_managedprocess",
@@ -5401,7 +5453,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L298",
+      "source_location": "L340",
       "weight": 1.0,
       "_src": "run_update_cloudflaretunnelstatefromlogline",
       "_tgt": "run_parse_cloudflaretunnelpublicurlfromlogline",
@@ -5413,7 +5465,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L271",
+      "source_location": "L313",
       "weight": 1.0,
       "_src": "run_write_highlightedaccessblock",
       "_tgt": "run_test_ansioutputenabled",
@@ -5425,7 +5477,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L510",
+      "source_location": "L552",
       "weight": 1.0,
       "_src": "run_write_cloudflaretunnelreadybanner",
       "_tgt": "run_write_highlightedaccessblock",
@@ -5437,7 +5489,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L500",
+      "source_location": "L542",
       "weight": 1.0,
       "_src": "run_write_managedstreamlines",
       "_tgt": "run_update_cloudflaretunnelstatefromlogline",
@@ -5449,7 +5501,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L406",
+      "source_location": "L448",
       "weight": 1.0,
       "_src": "run_start_localhttpsbootstrap",
       "_tgt": "run_resolve_pwshpath",
@@ -5461,7 +5513,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L486",
+      "source_location": "L528",
       "weight": 1.0,
       "_src": "run_write_managedstreamlines",
       "_tgt": "run_read_newloglines",
@@ -5473,7 +5525,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L527",
+      "source_location": "L569",
       "weight": 1.0,
       "_src": "run_write_managedprocesslogs",
       "_tgt": "run_write_managedstreamlines",
@@ -5485,7 +5537,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L529",
+      "source_location": "L571",
       "weight": 1.0,
       "_src": "run_write_managedprocesslogs",
       "_tgt": "run_write_cloudflaretunnelreadybanner",
@@ -5497,7 +5549,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L750",
+      "source_location": "L792",
       "weight": 1.0,
       "_src": "run_invoke_launchercleanup",
       "_tgt": "run_write_managedprocesslogs",
@@ -5509,7 +5561,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L659",
+      "source_location": "L701",
       "weight": 1.0,
       "_src": "run_stop_stalelaunchersidecars",
       "_tgt": "run_get_listeningportprocessrecords",
@@ -5521,7 +5573,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L666",
+      "source_location": "L708",
       "weight": 1.0,
       "_src": "run_stop_stalelaunchersidecars",
       "_tgt": "run_resolve_stalelaunchersidecar",
@@ -5533,7 +5585,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "run.ps1",
-      "source_location": "L758",
+      "source_location": "L800",
       "weight": 1.0,
       "_src": "run_invoke_launchercleanup",
       "_tgt": "run_stop_managedprocess",

@@ -145,6 +145,48 @@ function Show-StartupCleanupMenu {
     }
 }
 
+function Test-FrontendDependenciesInstalled {
+    param([string]$FrontendRoot)
+
+    $requiredPaths = @(
+        (Join-Path $FrontendRoot "node_modules\\.modules.yaml"),
+        (Join-Path $FrontendRoot "node_modules\\typescript"),
+        (Join-Path $FrontendRoot "node_modules\\vitest"),
+        (Join-Path $FrontendRoot "node_modules\\@types\\node")
+    )
+
+    foreach ($path in $requiredPaths) {
+        if (-not (Test-Path -LiteralPath $path)) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Ensure-FrontendDependenciesInstalled {
+    param(
+        [string]$FrontendRoot,
+        [string]$PnpmPath
+    )
+
+    if (Test-FrontendDependenciesInstalled -FrontendRoot $FrontendRoot) {
+        return
+    }
+
+    # 重清理会明确删掉 frontend/node_modules；
+    # 启动器这里用 frozen lockfile 只恢复当前锁定依赖，不把“重清理后启动”偷换成依赖升级入口。
+    Write-Host "前端依赖缺失，执行: pnpm --dir frontend install --frozen-lockfile"
+    & $PnpmPath --dir frontend install --frozen-lockfile
+    if ($LASTEXITCODE -ne 0) {
+        throw "前端依赖安装失败，已停止启动。"
+    }
+
+    if (-not (Test-FrontendDependenciesInstalled -FrontendRoot $FrontendRoot)) {
+        throw "前端依赖安装后仍不完整，已停止启动。"
+    }
+}
+
 function New-LauncherLogDirectory {
     param(
         [string]$RootDirectory,
@@ -841,6 +883,8 @@ try {
     }
 
     Stop-StaleLauncherBackend -BackendTargetDir $backendTargetDir
+
+    Ensure-FrontendDependenciesInstalled -FrontendRoot $frontendRoot -PnpmPath $pnpmPath
 
     Write-Host "前端首轮构建: pnpm --dir frontend build"
     & $pnpmPath --dir frontend build
