@@ -250,23 +250,53 @@ function 写入协作分发Torrent缓存快照(snapshot: 协作分发Torrent缓�
   读取协作分发Torrent缓存仓库()?.写入全部(snapshot);
 }
 
+/**
+ * `.torrent` 描述只允许在同一 session 内复用：
+ * 1. 当前后端会把 session_id 写进受控 URL；
+ * 2. 页面重开但 session 未变时仍可复用 cached torrent bytes；
+ * 3. session 变了就必须重新向后端拿，不能让旧缓存越权续命。
+ */
+const 读取缓存URL里的会话编号 = (value: string | null | undefined): string | null => {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+  try {
+    const url = new URL(value, "http://127.0.0.1/");
+    const sessionId = url.searchParams.get("session_id");
+    return typeof sessionId === "string" && sessionId.trim().length > 0 ? sessionId.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+const 读取协作分发缓存会话编号 = (
+  distribution: Pick<媒体协作分发定位片段, "torrent_url" | "presence_url">
+): string | null =>
+  读取缓存URL里的会话编号(distribution.torrent_url) ??
+  读取缓存URL里的会话编号(distribution.presence_url);
+
 function 保存协作分发Torrent缓存记录(
   torrentInfoHash: string,
+  sessionId: string | null,
   torrentUrl: string,
   bytes: Uint8Array
 ): void {
   const current = 读取协作分发Torrent缓存快照();
   current[torrentInfoHash] = {
     torrentInfoHash,
+    sessionId,
     torrentUrl,
     bytes: Array.from(bytes),
   };
   写入协作分发Torrent缓存快照(current);
 }
 
-function 读取协作分发Torrent缓存字节(torrentInfoHash: string): Uint8Array | null {
+function 读取协作分发Torrent缓存字节(
+  torrentInfoHash: string,
+  sessionId: string | null
+): Uint8Array | null {
   const record = 读取协作分发Torrent缓存快照()[torrentInfoHash];
-  if (!record) {
+  if (!record || !sessionId || record.sessionId !== sessionId) {
     return null;
   }
   return new Uint8Array(record.bytes);
@@ -420,6 +450,7 @@ async function 拉取受控Torrent字节(
 ): Promise<Uint8Array> {
   const torrentInfoHash = distribution.torrent_info_hash!;
   const torrentUrl = distribution.torrent_url!;
+  const sessionId = 读取协作分发缓存会话编号(distribution);
   try {
     const response = await fetch(torrentUrl, {
       method: "GET",
@@ -430,10 +461,10 @@ async function 拉取受控Torrent字节(
     const bytes = new Uint8Array(await response.arrayBuffer());
     // WebTorrent 的块持久化只能解决“字节还在本机磁盘”；
     // 想要在页面重开、后端临时离线时重新挂回同一 swarm，还得把极小的 .torrent 描述一起记住。
-    保存协作分发Torrent缓存记录(torrentInfoHash, torrentUrl, bytes);
+    保存协作分发Torrent缓存记录(torrentInfoHash, sessionId, torrentUrl, bytes);
     return bytes;
   } catch (error) {
-    const cachedBytes = 读取协作分发Torrent缓存字节(torrentInfoHash);
+    const cachedBytes = 读取协作分发Torrent缓存字节(torrentInfoHash, sessionId);
     if (cachedBytes) {
       return cachedBytes;
     }

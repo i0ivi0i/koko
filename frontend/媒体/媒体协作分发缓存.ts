@@ -2,6 +2,7 @@ const 协作分发Torrent缓存存储键 = "koko_swarm_torrent_records";
 
 export type 协作分发Torrent缓存记录 = {
   torrentInfoHash: string;
+  sessionId?: string | null;
   torrentUrl: string;
   bytes: number[];
 };
@@ -29,6 +30,7 @@ const 规范化协作分发Torrent缓存记录 = (
   }
   const candidate = raw as {
     torrentInfoHash?: unknown;
+    sessionId?: unknown;
     torrentUrl?: unknown;
     bytes?: unknown;
   };
@@ -49,6 +51,10 @@ const 规范化协作分发Torrent缓存记录 = (
   }
   return {
     torrentInfoHash,
+    sessionId:
+      typeof candidate.sessionId === "string" && candidate.sessionId.trim()
+        ? candidate.sessionId.trim()
+        : null,
     torrentUrl,
     bytes,
   };

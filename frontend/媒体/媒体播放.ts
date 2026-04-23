@@ -68,7 +68,6 @@ type 媒体播放器依赖 = {
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
-    reuseOnly?: boolean;
   }): Promise<
     { src: string; hint: "正在协作分发" | "正在补块" | null; locallyComplete?: boolean } | null
   >;
@@ -491,7 +490,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
     locator: 媒体定位结果,
     options: {
       eagerCompleting?: boolean;
-      reuseOnly?: boolean;
       allowTicketRefresh?: boolean;
     } = {}
   ): Promise<协作分发尝试结果> => {
@@ -573,7 +571,6 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
         ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
         ...(options.eagerCompleting ? { eagerCompleting: true } : {}),
-        ...(options.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!swarmSource) {
         if (处于连接群友态) {
@@ -684,7 +681,7 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
      * 视频补齐现在默认允许冷启动同一条 swarm 主链：
      * 1. PLAYER_PLAYING 代表“我已经看了这条视频，尽量把自己养成帮助者”；
      * 2. 无论是 single-file 还是带 streaming_asset 的过渡面，后台补齐都继续只走 resolveSwarmSource；
-     * 3. 这里去掉的是 `reuseOnly` 保守门槛，不是重新引入第二条 raw/HLS 正式主链。
+     * 3. 这里去掉的是旧保守门槛，不是重新引入第二条 raw/HLS 正式主链。
      */
     if (locator.kind === "video") {
       try {

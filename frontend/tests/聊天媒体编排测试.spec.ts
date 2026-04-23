@@ -691,7 +691,7 @@ describe("聊天媒体编排", () => {
     编排.销毁();
   });
 
-  it("缓存启动后只恢复当前房间附件的帮助任务，不会扫描别的房间或全局历史附件", async () => {
+  it("缓存启动后会按当前 roomId 恢复本房间的完整附件帮助任务，不会误扫别的房间", async () => {
     const 激活协作补齐 = vi.fn(async () => {});
     const transport: 前端传输端口 = {
       loadMediaLocator: vi.fn(async () => {
@@ -713,18 +713,30 @@ describe("聊天媒体编排", () => {
     const 编排 = 创建聊天媒体编排({
       transport: () => transport,
       读取会话编号: () => "s-test",
+      读取当前房间标识: () => "r-current",
       读取消息: () => [生成图片消息("att-image-current-room-1")],
       媒体缓存仓库: 创建内存媒体缓存仓库({
         "att-image-current-room-1": {
           attachmentId: "att-image-current-room-1",
+          roomId: "r-current",
           complete: true,
           kind: "image",
           contentHash: "hash-image-current-room-1",
           retainedAt: 1,
           lastAccessAt: 1,
         },
+        "att-image-current-room-hidden-2": {
+          attachmentId: "att-image-current-room-hidden-2",
+          roomId: "r-current",
+          complete: true,
+          kind: "image",
+          contentHash: "hash-image-current-room-hidden-2",
+          retainedAt: 1,
+          lastAccessAt: 1,
+        },
         "att-image-other-room-1": {
           attachmentId: "att-image-other-room-1",
+          roomId: "r-other",
           complete: true,
           kind: "image",
           contentHash: "hash-image-other-room-1",
@@ -778,10 +790,16 @@ describe("聊天媒体编排", () => {
     编排.同步消息附件播放结果();
     await 刷新异步队列();
 
-    expect(激活协作补齐).toHaveBeenCalledTimes(1);
-    expect(激活协作补齐).toHaveBeenCalledWith({
+    expect(激活协作补齐).toHaveBeenCalledTimes(2);
+    expect(激活协作补齐).toHaveBeenNthCalledWith(1, {
       attachmentId: "att-image-current-room-1",
       consumerId: "session:att-image-current-room-1",
+      kind: "image",
+      onSessionEvent: expect.any(Function),
+    });
+    expect(激活协作补齐).toHaveBeenNthCalledWith(2, {
+      attachmentId: "att-image-current-room-hidden-2",
+      consumerId: "session:att-image-current-room-hidden-2",
       kind: "image",
       onSessionEvent: expect.any(Function),
     });

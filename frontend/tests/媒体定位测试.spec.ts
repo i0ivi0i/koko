@@ -15,6 +15,7 @@ describe("媒体定位器", () => {
 
     await repo.保存({
       attachmentId: "att-nested-only-1",
+      sessionId: "s-test",
       stale: false,
       value: {
         attachment_id: "att-nested-only-1",
@@ -262,9 +263,18 @@ describe("媒体定位器", () => {
     const records = new Map<string, unknown>();
     const repo = {
       async 读取(attachmentId: string) {
-        return (records.get(attachmentId) as { value: unknown; stale: boolean } | null) ?? null;
+        return (
+          records.get(attachmentId) as
+            | { sessionId?: string; value: unknown; stale: boolean }
+            | null
+        ) ?? null;
       },
-      async 保存(record: { attachmentId: string; value: unknown; stale: boolean }) {
+      async 保存(record: {
+        attachmentId: string;
+        sessionId?: string;
+        value: unknown;
+        stale: boolean;
+      }) {
         records.set(record.attachmentId, record);
       },
     };
@@ -311,5 +321,69 @@ describe("媒体定位器", () => {
     expect(restored.distribution?.torrent_url).toBe("http://media.local/torrent-persisted");
     expect(restored.distribution?.swarm_id).toBe("swarm-hash-persisted");
     expect(loadMediaLocator).toHaveBeenCalledTimes(1);
+  });
+
+  it("不同 session 不会复用旧 locator 持久化缓存，后端失败时必须说真话", async () => {
+    const records = new Map<string, unknown>();
+    const repo = {
+      async 读取(attachmentId: string) {
+        return (
+          records.get(attachmentId) as
+            | {
+                attachmentId: string;
+                sessionId?: string;
+                value: unknown;
+                stale: boolean;
+              }
+            | null
+        ) ?? null;
+      },
+      async 保存(record: {
+        attachmentId: string;
+        sessionId?: string;
+        value: unknown;
+        stale: boolean;
+      }) {
+        records.set(record.attachmentId, record);
+      },
+    };
+    const 首次定位器 = 创建媒体定位器({
+      getSessionId: () => "s-old",
+      loadMediaLocator: vi.fn(async () => ({
+        attachment_id: "att-session-bound-1",
+        kind: "video" as const,
+        status: "ready" as const,
+        thumbnail_url: null,
+        distribution: {
+          content_id: "content_att-session-bound-1",
+          content_hash: "hash-session-bound-1",
+          swarm_id: "swarm-hash-session-bound-1",
+          web_seed_until: "1776028800",
+          torrent_url: "http://media.local/torrent-session-bound-1",
+          torrent_info_hash: "torrent-info-hash-session-bound-1",
+          announce_urls: ["http://media.local/announce"],
+          web_seed_url: "http://media.local/web-seed-session-bound-1",
+          join_ticket: null,
+          ticket_expires_at: null,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
+          survival_mode: "server_assisted" as const,
+        },
+      })),
+      repo,
+    } as never);
+    await 首次定位器.获取定位("att-session-bound-1");
+
+    const 新会话定位器 = 创建媒体定位器({
+      getSessionId: () => "s-new",
+      loadMediaLocator: vi.fn(async () => {
+        throw new Error("offline");
+      }),
+      repo,
+    } as never);
+
+    await expect(新会话定位器.获取定位("att-session-bound-1")).rejects.toThrow("offline");
   });
 });

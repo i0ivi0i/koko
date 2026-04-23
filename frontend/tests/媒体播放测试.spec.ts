@@ -1329,20 +1329,14 @@ describe("媒体播放器", () => {
     expect(resolveSwarmSource).toHaveBeenCalledTimes(2);
     const calls = resolveSwarmSource.mock.calls as unknown as Array<
       Array<{
-        reuseOnly?: boolean;
         eagerCompleting?: boolean;
-      }>
+      } & Record<string, unknown>>
     >;
-    const viewerCall = calls[0]?.[0] as {
-      reuseOnly?: boolean;
-      eagerCompleting?: boolean;
-    };
-    const inlineCall = calls[1]?.[0] as {
-      reuseOnly?: boolean;
-      eagerCompleting?: boolean;
-    };
-    expect(viewerCall?.reuseOnly).toBe(inlineCall?.reuseOnly);
+    const viewerCall = calls[0]?.[0];
+    const inlineCall = calls[1]?.[0];
     expect(viewerCall?.eagerCompleting).toBe(inlineCall?.eagerCompleting);
+    expect(viewerCall).not.toHaveProperty("reuseOnly");
+    expect(inlineCall).not.toHaveProperty("reuseOnly");
     expect(probeAnchor).not.toHaveBeenCalled();
   });
 
@@ -1355,7 +1349,6 @@ describe("媒体播放器", () => {
         consumerId?: string;
         onSessionEvent?: unknown;
         eagerCompleting?: boolean;
-        reuseOnly?: boolean;
       }) => Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>
     >(async () => ({
       src: "blob:http://media.local/swarm-video-hls-backfill",
@@ -1430,7 +1423,6 @@ describe("媒体播放器", () => {
       kind: "video";
       consumerId?: string;
       eagerCompleting?: boolean;
-      reuseOnly?: boolean;
       locator: {
         attachment_id: string;
       };
@@ -1442,7 +1434,7 @@ describe("媒体播放器", () => {
       consumerId: "session:att-video-hls-backfill",
       eagerCompleting: true,
     });
-    expect(调用参数?.reuseOnly).toBeUndefined();
+    expect(调用参数).not.toHaveProperty("reuseOnly");
     expect(调用参数?.locator).toMatchObject({
       attachment_id: "att-video-hls-backfill",
     });
@@ -1458,7 +1450,6 @@ describe("媒体播放器", () => {
         consumerId?: string;
         onSessionEvent?: unknown;
         eagerCompleting?: boolean;
-        reuseOnly?: boolean;
       }) => Promise<{ src: string; hint: "正在协作分发" | "正在补块" | null } | null>
     >(async () => ({
       src: "blob:http://media.local/swarm-video-canonical-backfill",
@@ -1508,7 +1499,6 @@ describe("媒体播放器", () => {
       kind: "video";
       consumerId?: string;
       eagerCompleting?: boolean;
-      reuseOnly?: boolean;
       locator: {
         attachment_id: string;
       };
@@ -1520,7 +1510,7 @@ describe("媒体播放器", () => {
       consumerId: "session:att-video-canonical-backfill",
       eagerCompleting: true,
     });
-    expect(调用参数?.reuseOnly).toBeUndefined();
+    expect(调用参数).not.toHaveProperty("reuseOnly");
     expect(调用参数?.locator).toMatchObject({
       attachment_id: "att-video-canonical-backfill",
     });

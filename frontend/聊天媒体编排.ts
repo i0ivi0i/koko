@@ -78,6 +78,7 @@ type 聊天媒体预算快照 = Pick<
 type 聊天媒体编排依赖 = {
   transport(): 媒体传输端口;
   读取会话编号(): string;
+  读取当前房间标识?(): string | null;
   读取消息(): 消息事件[];
   读取草稿(): 媒体附件草稿[];
   媒体缓存仓库?: 媒体缓存仓库;
@@ -356,6 +357,45 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return attachments;
   };
 
+  const 读取当前房间缓存帮助附件 = (): 媒体附件条目[] => {
+    const currentRoomId = deps.读取当前房间标识?.()?.trim() ?? "";
+    if (!currentRoomId) {
+      return [];
+    }
+    /**
+     * 这里恢复的是“当前房间里已经完整落盘过的附件”，不是“当前列表刚好还在屏上的附件”：
+     * 1. 同房间的隐藏旧附件也该继续帮后人；
+     * 2. 别的房间绝不能被本页顺手扫进来；
+     * 3. roomId 因此成为媒体缓存恢复链的最小边界。
+     */
+    const attachments: 媒体附件条目[] = [];
+    for (const record of Object.values(媒体缓存.snapshot())) {
+      if (!record.complete || record.roomId !== currentRoomId || !record.kind) {
+        continue;
+      }
+      attachments.push({
+        attachmentId: record.attachmentId,
+        kind: record.kind,
+      });
+    }
+    return attachments;
+  };
+
+  const 读取当前房间帮助附件候选 = (
+    attachments = 读取当前房间媒体附件()
+  ): 媒体附件条目[] => {
+    const merged = new Map<string, 媒体附件条目>();
+    for (const attachment of attachments) {
+      merged.set(attachment.attachmentId, attachment);
+    }
+    for (const attachment of 读取当前房间缓存帮助附件()) {
+      if (!merged.has(attachment.attachmentId)) {
+        merged.set(attachment.attachmentId, attachment);
+      }
+    }
+    return Array.from(merged.values());
+  };
+
   const 读取附件条目 = (attachmentId: string): 媒体附件条目 | null =>
     读取当前房间媒体附件().find((attachment) => attachment.attachmentId === attachmentId) ?? null;
 
@@ -459,6 +499,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 读取附件缓存元数据 = (
     attachmentId: string
   ): { kind?: 媒体种类 | null; contentHash?: string | null } => {
+    const cached = 媒体缓存.snapshot()[attachmentId];
     const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
     if (
       playback &&
@@ -483,8 +524,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return {
       kind:
         读取当前房间媒体附件().find((item) => item.attachmentId === attachmentId)?.kind ??
+        cached?.kind ??
         null,
-      contentHash: null,
+      contentHash: cached?.contentHash ?? null,
     };
   };
 
@@ -493,9 +535,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     input: { kind?: 媒体种类 | null; contentHash?: string | null }
   ): void => {
     媒体会话表.get(attachmentId)?.send({ type: "ASSET_COMPLETE" });
-    void 媒体缓存.标记完整(attachmentId, input).then(() => {
-      deps.请求重渲染();
-    });
+    void 媒体缓存
+      .标记完整(attachmentId, {
+        roomId: deps.读取当前房间标识?.() ?? null,
+        ...input,
+      })
+      .then(() => {
+        deps.请求重渲染();
+      });
   };
 
   查看器会话协作 = 创建查看器会话协作({
@@ -732,7 +779,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   void 媒体缓存.启动().then(() => {
     媒体缓存已启动 = true;
-    协作补齐协作.恢复当前房间缓存帮助任务();
+    协作补齐协作.恢复当前房间缓存帮助任务(读取当前房间帮助附件候选());
     deps.请求重渲染();
   });
 
@@ -821,7 +868,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         attachmentIds: Array.from(activeAttachmentIds),
       });
       const hasSessionSetChanged = 补齐当前房间媒体会话(attachments);
-      协作补齐协作.恢复当前房间缓存帮助任务(attachments);
+      协作补齐协作.恢复当前房间缓存帮助任务(读取当前房间帮助附件候选(attachments));
       if (hasSessionSetChanged) {
         deps.请求重渲染();
       }

@@ -93,6 +93,39 @@
 1. 最新 `graphify-out/GRAPH_REPORT.md` 没有新增媒体 locator / 播放 / worker 双真相热点。
 2. 当前高连接节点仍主要是既有壳层与脚本入口；这轮真收尾没有再引入新的跨 owner 混写热点。
 
+## 最终补齐验收（2026-04-24）
+
+到昨天这份 spec 距离“真的彻底完成”还差四个尾巴：视频预览 owner 仍残留冷源旁路、`reuseOnly` 还活在生产边界、locator / torrent cache 还不是 session-aware、帮助任务恢复口径还只覆盖“当前已加载时间线附件”。
+
+今天这四个点已经全部收口，新增事实如下：
+
+1. 视频预览 owner 已删除 `canonical/original` 冷源回退；预览只认 swarm 主链，缺少协作分发片段时直接说 `missing_source`。
+2. `reuseOnly` 已从 `frontend/媒体/媒体播放.ts` 与 `frontend/媒体/资产协作分发运行时.ts` 的生产接口、运行时分支和测试依赖里退场，并新增架构门禁，禁止它回流。
+3. locator 持久化缓存与 `.torrent` 描述缓存都已改成 session-aware；后端失败时只允许回退同 session 缓存，禁止跨 session 复用旧真相。
+4. 帮助任务恢复已从“当前已加载消息里的附件”扩到“当前房间且本地完整缓存仍在的附件集合”；跨房间缓存不会误恢复，本房间已缓存但暂时不在当前时间线里的附件会继续回到帮助链。
+5. 做种对账回归测试已补齐共享测试库脏数据下的确定性约束，证明权威附件集合仍会触发 `seed/start + seed/reconcile`，不会被历史残留样例挤出本轮对账窗口。
+
+今天这轮最终补齐实际执行并通过的验证如下：
+
+- `cargo test --test 协作分发测试 -- --nocapture`
+- `cargo test --test 流媒体资产契约测试 -- --nocapture`
+- `cargo test --test 媒体测试边界守卫 -- --nocapture`
+- `cargo test -j 1`
+- `pnpm --dir frontend test`
+- `pnpm --dir frontend typecheck`
+- `pnpm --dir frontend build`
+- `node scripts/check-frontend-architecture-fitness.mjs`
+- `node scripts/check-frontend-browser-app-constitution.mjs`
+- `pwsh -File tests/启动器脚本检查.ps1`
+- `pwsh -File tests/powershell/https-script.tests.ps1`
+
+因此，截至 `2026-04-24`，这份 spec 对应的几条关键硬裁决已经同时满足：
+
+1. 前端正式媒体字节只认 WebTorrent swarm 主链，不再保留视频预览冷源旁路。
+2. 自动播放 / 查看器 / 后台补齐继续共用同一条 swarm owner 链，不再保留 `reuseOnly` 保守门槛。
+3. 恢复帮助任务、恢复 locator、恢复 `.torrent` 都不再跨 session / 跨房间偷拿旧真相。
+4. 高活跃协作分发的行为门禁、架构门禁和后端对账门禁都已补齐，可将本文视为真正完成态。
+
 ---
 
 ## 0. 为什么还要补这一份设计

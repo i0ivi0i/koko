@@ -324,6 +324,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this.媒体编排 = 创建聊天媒体编排({
       transport: () => this.媒体传输,
       读取会话编号: () => this.回填房间壳补丁().sessionId,
+      读取当前房间标识: () => this.回填房间壳补丁().roomId || null,
       读取消息: () => this.时间线状态.messages,
       读取草稿: () => this.输入状态.composerMediaDrafts,
       ...(this.平台桥接.媒体资产仓库

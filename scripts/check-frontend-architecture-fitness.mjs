@@ -45,6 +45,16 @@ const 前端禁回流片段规则 = [
     pattern:
       /读取视频canonical冷源地址|file_asset\?\.variants\.canonical\?\.url|file_asset\?\.origin\.original_url/g,
   },
+  {
+    label: "reuseOnly playback barrier",
+    path: "frontend/媒体/媒体播放.ts",
+    pattern: /\breuseOnly\b/g,
+  },
+  {
+    label: "reuseOnly runtime barrier",
+    path: "frontend/媒体/资产协作分发运行时.ts",
+    pattern: /\breuseOnly\b/g,
+  },
 ];
 
 const 热点文件行数上限 = [

@@ -166,7 +166,7 @@ describe("资产协作分发运行时", () => {
     vi.useRealTimers();
   });
 
-  it("inline autoplay 只允许复用已热 swarm，不会为冷视频新开 whole-file 会话", async () => {
+  it("inline autoplay 命中冷视频时也会冷启动 whole-file 会话，不再受 reuseOnly 保守门槛限制", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-inline-1");
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -181,12 +181,19 @@ describe("资产协作分发运行时", () => {
       kind: "video",
       locator: 准备好的定位结果("att-inline-cold-1"),
       consumerId: "inline_autoplay:att-inline-cold-1",
-      reuseOnly: true,
     });
 
-    expect(source).toBeNull();
-    expect(add).not.toHaveBeenCalled();
-    expect(读取协作分发会话状态("swarm-att-inline-cold-1")).toBeNull();
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-inline-1",
+      hint: "正在补块",
+      locallyComplete: false,
+    });
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(读取协作分发会话状态("swarm-att-inline-cold-1")).toMatchObject({
+      refs: 1,
+      consumers: ["inline_autoplay:att-inline-cold-1"],
+      eagerCompleting: true,
+    });
   });
 
   it("视频进入 backfill 时会先抬 preview 关键片段优先级，再继续整附件补齐", async () => {

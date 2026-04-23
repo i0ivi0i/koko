@@ -228,6 +228,15 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toContain("读取视频canonical冷源地址");
   });
 
+  it("架构适应度门禁会拦住旧 reuseOnly 保守门槛重新回流到播放或 runtime owner", () => {
+    const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
+
+    expect(source).toContain('label: "reuseOnly playback barrier"');
+    expect(source).toContain('label: "reuseOnly runtime barrier"');
+    expect(source).toContain("frontend/媒体/媒体播放.ts");
+    expect(source).toContain("frontend/媒体/资产协作分发运行时.ts");
+  });
+
   it("热点文件行数门禁预算会统一放宽到 1800 行", () => {
     const source = 读取仓库脚本源码("scripts/check-frontend-architecture-fitness.mjs");
 

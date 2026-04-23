@@ -1,7 +1,11 @@
 use super::*;
 use axum::{extract::State as AxumState, routing::post, Json as AxumJson, Router};
 use std::sync::{Arc, Mutex};
-use tokio::{net::TcpListener, task::JoinHandle};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    task::JoinHandle,
+    time::{sleep, Duration},
+};
 
 use sqlx::PgPool;
 
@@ -30,7 +34,21 @@ async fn 启动假seeder控制面() -> (String, 假Seeder控制面记录句柄, 
             .await
             .expect("假的 seeder 控制面应能启动");
     });
+    // 做种对账会先发 start、再发 reconcile。
+    // 如果 helper 在 listener 还没真正 accept 前就返回，早到的 start 可能因为竞态丢掉，
+    // 只留下更晚的 reconcile 成功，进而把测试误导成“权威附件没有触发 start”。
+    等待假seeder控制面就绪(address).await;
     (format!("http://{address}"), records, server)
+}
+
+async fn 等待假seeder控制面就绪(address: std::net::SocketAddr) {
+    for _ in 0..50 {
+        if TcpStream::connect(address).await.is_ok() {
+            return;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    panic!("假的 seeder 控制面未能在预期时间内进入可连接状态");
 }
 
 async fn 记录假seeder_start请求(
@@ -1364,11 +1382,15 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
         .expect("应能直连数据库插入附件");
     插入ready视频附件记录(&pool, session_id, &attachment_id).await;
     插入附件协作分发元数据记录(&pool, &attachment_id).await;
+    // 对账查询按 `web_seed_until ASC LIMIT 256` 取样。
+    // 共享测试库里可能残留旧附件；这里把当前样例显式推到“更早过期但仍未过期”的窗口，
+    // 避免被历史脏数据挤出本轮对账集合，确保测试验证的是当前附件的权威 infoHash。
     sqlx::query(
         "UPDATE attachment_distribution_metadata
          SET torrent_info_hash = $2,
              torrent_bytes = $3,
-             piece_length_bytes = $4
+             piece_length_bytes = $4,
+             web_seed_until = NOW() + INTERVAL '5 minutes'
          WHERE attachment_id = $1",
     )
     .bind(&attachment_id)

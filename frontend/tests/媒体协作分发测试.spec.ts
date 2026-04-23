@@ -532,6 +532,71 @@ describe("媒体协作分发", () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 
+  it("不同 session 的本地 torrent 缓存不会在 fetch 失败时被错误复用", async () => {
+    vi.resetModules();
+    const storage = 创建假Storage();
+    const 缓存模块 = await import("../媒体/媒体协作分发缓存");
+    const repo = 缓存模块.创建浏览器协作分发Torrent缓存仓库(storage);
+    repo.写入全部({
+      "torrent-info-hash-stale-session": {
+        torrentInfoHash: "torrent-info-hash-stale-session",
+        sessionId: "s-old",
+        torrentUrl: "http://media.local/torrent-att-stale-session?session_id=s-old",
+        bytes: [1, 2, 3],
+      },
+    });
+    vi.doMock("../平台/index.js", () => ({
+      获取默认浏览器应用平台: () => ({
+        storage: {
+          协作分发缓存仓库: () => repo,
+        },
+      }),
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+      }))
+    );
+    const add = vi.fn();
+    const mod = await import("../媒体/媒体协作分发");
+
+    await expect(
+      mod.接入协作分发种子(
+        {
+          client: {
+            add,
+          },
+          streamServer: {},
+        } as never,
+        {
+          content_id: "content_att-stale-session",
+          content_hash: "hash-att-stale-session",
+          swarm_id: "swarm-att-stale-session",
+          web_seed_until: "1775942400",
+          torrent_url: "http://media.local/torrent-att-stale-session?session_id=s-new",
+          torrent_info_hash: "torrent-info-hash-stale-session",
+          announce_urls: ["ws://127.0.0.1:7072"],
+          web_seed_url: "http://media.local/web-seed-att-stale-session",
+          presence_url: "/api/media/att-stale-session/presence?session_id=s-new",
+          join_ticket: null,
+          ticket_expires_at: null,
+          media_state: {
+            code: "MEDIA_READY" as const,
+            retry_after_ms: null,
+          },
+          survival_mode: "server_assisted" as const,
+        }
+      )
+    ).rejects.toThrow("加载受控 torrent 失败: 503");
+
+    expect(add).not.toHaveBeenCalled();
+    mod.重置协作分发浏览器运行时();
+    vi.doUnmock("../平台/index.js");
+    vi.resetModules();
+  });
+
   it("当前页还没被根 service worker 接管时，会先请求 active worker 主动 claim 再继续初始化", async () => {
     vi.resetModules();
     let controllerAttached = false;
@@ -823,7 +888,6 @@ describe("媒体协作分发", () => {
       kind: "video",
       locator,
       consumerId: "inline_autoplay:att-multi-1",
-      reuseOnly: true,
     });
 
     expect(add).toHaveBeenCalledTimes(1);
@@ -844,7 +908,7 @@ describe("媒体协作分发", () => {
     });
   });
 
-  it("reuseOnly 的 inline_autoplay 不会为冷附件新开 torrent 会话", async () => {
+  it("inline_autoplay 命中冷附件时也会冷启动同一条 swarm 会话，不再保留 reuseOnly 保守门槛", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-autoplay-cold");
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -859,12 +923,19 @@ describe("媒体协作分发", () => {
       kind: "video",
       locator: 准备好的定位结果("att-autoplay-cold"),
       consumerId: "inline_autoplay:att-autoplay-cold",
-      reuseOnly: true,
     });
 
-    expect(source).toBeNull();
-    expect(add).not.toHaveBeenCalled();
-    expect(读取协作分发会话状态("swarm-att-autoplay-cold")).toBeNull();
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-autoplay-cold",
+      hint: "正在补块",
+      locallyComplete: false,
+    });
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(读取协作分发会话状态("swarm-att-autoplay-cold")).toMatchObject({
+      refs: 1,
+      consumers: ["inline_autoplay:att-autoplay-cold"],
+      eagerCompleting: true,
+    });
   });
 
   it("图片也会复用同一套协作分发 runtime，而不是分叉第二套实现", async () => {
@@ -1350,6 +1421,13 @@ describe("媒体协作分发", () => {
     );
 
     const locator = 准备好的定位结果("att-offline-reopen");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.torrent_url =
+      "http://media.local/torrent-att-offline-reopen?session_id=s-test";
+    locator.distribution.presence_url =
+      "/api/media/att-offline-reopen/presence?session_id=s-test";
     const firstSource = await 解析协作分发源({
       attachmentId: "att-offline-reopen",
       kind: "video",

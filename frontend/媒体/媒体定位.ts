@@ -4,6 +4,7 @@ type 媒体定位缓存存储源 = Pick<Storage, "getItem" | "setItem"> | Partia
 
 export interface 媒体定位缓存记录 {
   attachmentId: string;
+  sessionId?: string | null;
   value: 媒体定位结果;
   stale: boolean;
 }
@@ -26,9 +27,13 @@ const 媒体定位缓存存储键 = "koko_media_locators";
 
 type 原始媒体定位缓存记录 = Partial<媒体定位缓存记录> & {
   attachmentId?: unknown;
+  sessionId?: unknown;
   value?: unknown;
   stale?: unknown;
 };
+
+const 读取可空会话编号 = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
 const 规范化媒体定位结果 = (
   value: unknown,
@@ -78,6 +83,7 @@ const 规范化媒体定位缓存记录 = (
   }
   return {
     attachmentId,
+    sessionId: 读取可空会话编号(candidate.sessionId),
     value,
     stale: candidate.stale === true,
   };
@@ -166,18 +172,36 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
   const cache = new Map<string, 定位缓存项>();
   const inflight = new Map<string, Promise<媒体定位结果>>();
 
-  const 读取缓存 = (attachmentId: string): 媒体定位结果 | null =>
-    cache.get(attachmentId)?.value ?? null;
+  /**
+   * locator 缓存必须跟 session 一起收口：
+   * 1. ticket / 可访问地址天然属于当前会话；
+   * 2. 旧 session 的 locator 不能在新 session 里冒充仍然可用；
+   * 3. 因此内存态和持久态都只允许命中当前 session。
+   */
+  const 缓存命中当前会话 = (
+    record: 定位缓存项 | null | undefined,
+    sessionId: string
+  ): record is 定位缓存项 => Boolean(record && record.sessionId === sessionId);
+
+  const 读取缓存 = (attachmentId: string): 媒体定位结果 | null => {
+    const currentSessionId = deps.getSessionId();
+    const cached = cache.get(attachmentId);
+    return 缓存命中当前会话(cached, currentSessionId) ? cached.value : null;
+  };
 
   const 读取或恢复缓存 = async (
-    attachmentId: string
+    attachmentId: string,
+    sessionId: string
   ): Promise<定位缓存项 | null> => {
     const memoryCached = cache.get(attachmentId);
-    if (memoryCached) {
+    if (缓存命中当前会话(memoryCached, sessionId)) {
       return memoryCached;
     }
+    if (memoryCached) {
+      cache.delete(attachmentId);
+    }
     const persisted = await repo.读取(attachmentId);
-    if (!persisted) {
+    if (!缓存命中当前会话(persisted, sessionId)) {
       return null;
     }
     cache.set(attachmentId, persisted);
@@ -208,7 +232,8 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
     attachmentId: string,
     options: { forceRefresh?: boolean } = {}
   ): Promise<媒体定位结果> => {
-    const cached = await 读取或恢复缓存(attachmentId);
+    const currentSessionId = deps.getSessionId();
+    const cached = await 读取或恢复缓存(attachmentId, currentSessionId);
     if (cached && !cached.stale && !options.forceRefresh) {
       return cached.value;
     }
@@ -219,9 +244,10 @@ export function 创建媒体定位器(deps: 媒体定位器依赖) {
     let request!: Promise<媒体定位结果>;
     request = (async () => {
       try {
-        const locator = await deps.loadMediaLocator(deps.getSessionId(), attachmentId);
+        const locator = await deps.loadMediaLocator(currentSessionId, attachmentId);
         const next = {
           attachmentId,
+          sessionId: currentSessionId,
           value: locator,
           stale: false,
         };

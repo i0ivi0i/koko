@@ -4,6 +4,7 @@ export type 媒体资产种类 = "image" | "video";
 
 export type 媒体缓存记录 = {
   attachmentId: string;
+  roomId?: string | null;
   complete: boolean;
   kind: 媒体资产种类 | null;
   contentHash: string | null;
@@ -28,6 +29,7 @@ const 媒体缓存存储键 = "koko_media_asset_records";
 
 type 原始媒体缓存记录 = Partial<媒体缓存记录> & {
   attachmentId?: unknown;
+  roomId?: unknown;
   complete?: unknown;
   kind?: unknown;
   contentHash?: unknown;
@@ -38,6 +40,9 @@ type 原始媒体缓存记录 = Partial<媒体缓存记录> & {
 
 const 读取可空时间戳 = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const 读取可空房间标识 = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
 const 规范化媒体缓存记录 = (
   raw: unknown,
@@ -58,6 +63,7 @@ const 规范化媒体缓存记录 = (
     读取可空时间戳(candidate.retainedAt) ?? 读取可空时间戳(candidate.completedAt);
   return {
     attachmentId,
+    roomId: 读取可空房间标识(candidate.roomId),
     complete: candidate.complete === true,
     kind: candidate.kind === "image" || candidate.kind === "video" ? candidate.kind : null,
     contentHash: typeof candidate.contentHash === "string" ? candidate.contentHash : null,
@@ -102,10 +108,14 @@ export function 创建浏览器媒体缓存仓库(
     },
 
     async 保存(record: 媒体缓存记录): Promise<void> {
+      const normalized = 规范化媒体缓存记录(record, record.attachmentId);
+      if (!normalized) {
+        return;
+      }
       const current = 读取仓库快照(storage);
       写入仓库快照(storage, {
         ...current,
-        [record.attachmentId]: record,
+        [record.attachmentId]: normalized,
       });
     },
 
@@ -131,7 +141,11 @@ export function 创建内存媒体缓存仓库(
     },
 
     async 保存(record: 媒体缓存记录): Promise<void> {
-      records.set(record.attachmentId, record);
+      const normalized = 规范化媒体缓存记录(record, record.attachmentId);
+      if (!normalized) {
+        return;
+      }
+      records.set(record.attachmentId, normalized);
     },
 
     async 列出(): Promise<媒体缓存记录[]> {
@@ -160,12 +174,17 @@ export function 创建媒体缓存(deps: 媒体缓存依赖) {
 
     async 标记完整(
       attachmentId: string,
-      input: { kind?: 媒体资产种类 | null; contentHash?: string | null } = {}
+      input: {
+        roomId?: string | null;
+        kind?: 媒体资产种类 | null;
+        contentHash?: string | null;
+      } = {}
     ): Promise<void> {
       const previous = current[attachmentId];
       const currentEpoch = now();
       const next: 媒体缓存记录 = {
         attachmentId,
+        roomId: 读取可空房间标识(input.roomId) ?? previous?.roomId ?? null,
         complete: true,
         kind: input.kind ?? previous?.kind ?? null,
         contentHash: input.contentHash ?? previous?.contentHash ?? null,

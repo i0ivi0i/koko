@@ -128,7 +128,6 @@ export interface 资产协作分发运行时端口 {
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
-    reuseOnly?: boolean;
   }): Promise<协作分发媒体源 | null>;
   释放协作分发消费者(
     input:
@@ -561,7 +560,7 @@ function 绑定协作分发会话事件(
     }
     /**
      * join ticket 失效属于“这条 swarm 会话已经不可信”：
-     * 1. 旧会话必须立刻退场，避免 reuseOnly 继续命中脏 runtime；
+     * 1. 旧会话必须立刻退场，避免旧 runtime 继续命中脏 ticket；
      * 2. 这里只发布稳定的 ticket invalid 语义，不把 tracker 私有报错直接扩散给壳层；
      * 3. 真正怎么刷新 locator、怎么恢复播放，继续交回播放器/媒体会话 owner。
      */
@@ -691,7 +690,6 @@ async function 确保协作分发会话(
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
-    reuseOnly?: boolean;
   }
 ): Promise<底层协作分发会话 | null> {
   if (runtime.已销毁) {
@@ -701,7 +699,7 @@ async function 确保协作分发会话(
    * 这轮策略默认“接入就尽量补齐”：
    * 1. caller 不传 `eagerCompleting` 时，也默认把会话推进到 whole-file backfill；
    * 2. 但 consumer mode 继续保留 viewer / autoplay / session 身份，不伪造成 backfill 专属入口；
-   * 3. 如果上层明确要求 `reuseOnly` 或 `丢弃未完成补齐`，仍按那条显式意图执行。
+   * 3. 如果上层明确要求 `丢弃未完成补齐`，仍按那条显式意图执行。
    */
   const 应默认进入整附件补齐 = input.eagerCompleting ?? true;
   const consumerBinding = 归一化协作分发消费者(input);
@@ -725,10 +723,6 @@ async function 确保协作分发会话(
       启动协作分发存活上报(session, input.distribution, "complete_peer");
     }
     return session;
-  }
-
-  if (input.reuseOnly) {
-    return null;
   }
 
   session = {
@@ -898,7 +892,6 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
         ...(input.eagerCompleting ? { eagerCompleting: true } : {}),
-        ...(input.reuseOnly ? { reuseOnly: true } : {}),
       });
       if (!session) {
         return null;
