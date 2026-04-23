@@ -98,22 +98,25 @@ describe("聊天应用内核", () => {
     expect(source).not.toContain('code: "invalid_session"');
   });
 
-  it("聊天应用内核当前只从平台消费显式运行时入口，不直接回摸浏览器平台原语", () => {
+  it("聊天应用内核不再直接依赖完整浏览器应用平台全表面，而是只消费窄平台桥接", () => {
     const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
 
-    expect(source).toContain("this.platform.transport.transport()");
-    expect(source).toContain("this.platform.storage.壳层记忆()");
-    expect(source).toContain("this.platform.offline.");
-    expect(source).toContain("const platformSnapshot = this.platform.snapshot()");
-    expect(source).toContain("void this.platform.dispatch({");
+    expect(source).toContain("创建聊天内核平台桥接(");
+    expect(source).toContain("private readonly 平台桥接: 聊天内核平台端口;");
+    expect(source).toContain("this.平台桥接.聊天房间传输()");
+    expect(source).toContain("this.平台桥接.聊天实时连接()");
+    expect(source).toContain("this.平台桥接.媒体传输()");
+    expect(source).toContain("this.平台桥接.壳层记忆()");
+    expect(source).toContain("const platformSnapshot = this.平台桥接.snapshot()");
+    expect(source).toContain("void this.平台桥接.dispatch({");
     expect(source).not.toContain("navigator.serviceWorker");
     expect(source).not.toContain("window.addEventListener");
     expect(source).not.toContain("new BroadcastChannel");
     expect(source).not.toContain("new Notification(");
-    expect(source).not.toContain("this.platform.lifecycle.");
-    expect(source).not.toContain("this.platform.serviceWorker.");
-    expect(source).not.toContain("this.platform.multiContext.");
-    expect(source).not.toContain("this.platform.notification.");
+    expect(source).not.toContain("private readonly platform: 浏览器应用平台");
+    expect(source).not.toContain("this.platform.transport.transport()");
+    expect(source).not.toContain("this.platform.storage.壳层记忆()");
+    expect(source).not.toContain("this.platform.snapshot()");
   });
 
   it("聊天应用内核 会把 realtime recovery read 接线委托给 聊天应用编排桥接", () => {
@@ -126,6 +129,18 @@ describe("聊天应用内核", () => {
     expect(source).not.toContain("创建房间恢复编排({");
     expect(source).not.toContain("创建房间实时编排({");
     expect(source).not.toContain("创建阅读推进编排({");
+  });
+
+  it("聊天应用编排桥接会把平台依赖裁成窄平台桥接，而不是偷拿聊天业务真相", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天应用编排桥接.ts"), "utf8");
+
+    expect(source).toContain("export interface 聊天内核平台端口");
+    expect(source).toContain("export function 创建聊天内核平台桥接(");
+    expect(source).toContain("聊天房间传输()");
+    expect(source).toContain("壳层记忆()");
+    expect(source).not.toContain("BOOTSTRAP_REQUESTED");
+    expect(source).not.toContain("MESSAGE_INPUT_CHANGED");
+    expect(source).not.toContain("SEND_MESSAGE_REQUESTED");
   });
 
   it("恢复编排撤销阅读节流时会区分补锚 flush 与跟随采样，不再都降成 dispose", () => {

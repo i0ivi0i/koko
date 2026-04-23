@@ -74,6 +74,14 @@ export type 浏览器应用平台事件 =
   | { type: "CACHE_UPDATE_CHANGED"; snapshot: 缓存更新快照 }
   | { type: "PRIMARY_CONTEXT_FOCUSED" }
   | { type: "OFFLINE_STATUS_CHANGED"; online: boolean };
+/**
+ * 这组事件只允许表达浏览器运行时事实：
+ * - lifecycle / offline
+ * - service worker / cache
+ * - 多上下文聚焦
+ *
+ * 聊天房间、消息、媒体裁决都不允许从这里冒出来。
+ */
 
 export interface 浏览器应用平台 {
   lifecycle: 生命周期运行时;
@@ -114,7 +122,7 @@ export function 创建浏览器应用平台(
   const 事件监听器 = new Set<(event: 浏览器应用平台事件) => void>();
   let 最近一次已广播的刷新完成上下文: string | null = null;
 
-  const 发布平台事件 = (event: 浏览器应用平台事件): void => {
+  const 广播浏览器运行时事实 = (event: 浏览器应用平台事件): void => {
     for (const listener of 事件监听器) {
       listener(event);
     }
@@ -129,11 +137,11 @@ export function 创建浏览器应用平台(
       return;
     }
     最近一次已广播的刷新完成上下文 = snapshot.controllerReadyContextId;
-    发布平台事件({ type: "SERVICE_WORKER_CONTROLLER_READY" });
-    发布平台事件({ type: "CACHE_UPDATE_CHANGED", snapshot });
+    广播浏览器运行时事实({ type: "SERVICE_WORKER_CONTROLLER_READY" });
+    广播浏览器运行时事实({ type: "CACHE_UPDATE_CHANGED", snapshot });
   };
   const 发布缓存更新快照事件 = (): void => {
-    发布平台事件({
+    广播浏览器运行时事实({
       type: "CACHE_UPDATE_CHANGED",
       snapshot: cacheUpdate.snapshot(),
     });
@@ -147,7 +155,7 @@ export function 创建浏览器应用平台(
    */
   lifecycle.订阅((snapshot) => {
     transport.接收生命周期变化(snapshot);
-    发布平台事件({ type: "LIFECYCLE_CHANGED", snapshot });
+    广播浏览器运行时事实({ type: "LIFECYCLE_CHANGED", snapshot });
     if (snapshot.phase === "active") {
       multiContext.声明主上下文();
       void notification.清除角标();
@@ -156,7 +164,7 @@ export function 创建浏览器应用平台(
   offline.订阅?.((snapshot) => {
     // 平台层只把“网络是否恢复”翻成稳定浏览器事件；
     // 具体哪些媒体会话该恢复，仍然交给上层应用 owner 裁决。
-    发布平台事件({ type: "OFFLINE_STATUS_CHANGED", online: snapshot.online });
+    广播浏览器运行时事实({ type: "OFFLINE_STATUS_CHANGED", online: snapshot.online });
   });
 
   notification.订阅点击(() => {
@@ -168,7 +176,7 @@ export function 创建浏览器应用平台(
       }
       multiContext.声明主上下文();
       await notification.清除角标();
-      发布平台事件({ type: "PRIMARY_CONTEXT_FOCUSED" });
+      广播浏览器运行时事实({ type: "PRIMARY_CONTEXT_FOCUSED" });
     })();
   });
   multiContext.订阅事件?.((event) => {
@@ -188,7 +196,7 @@ export function 创建浏览器应用平台(
         type: "SERVICE_WORKER_UPDATE_READY",
         scope: event.scope,
       });
-      发布平台事件(event);
+      广播浏览器运行时事实(event);
       发布缓存更新快照事件();
       return;
     }
@@ -198,7 +206,7 @@ export function 创建浏览器应用平台(
       尝试广播刷新完成事件();
       return;
     }
-    发布平台事件(event);
+    广播浏览器运行时事实(event);
   });
   storage.订阅事件?.((event) => {
     cacheUpdate.send(event);

@@ -17,9 +17,11 @@ import {
   type 阅读推进编排端口,
 } from "./阅读推进编排.js";
 import {
+  创建聊天内核平台桥接,
   创建内核恢复编排端口,
   创建内核实时编排端口,
   创建内核阅读推进编排端口,
+  type 聊天内核平台端口,
 } from "./聊天应用编排桥接.js";
 import {
   房间滚动器,
@@ -34,7 +36,15 @@ import {
   type 生命周期快照,
 } from "./平台/index.js";
 import type { 消息事件 } from "./契约.js";
-import type { 前端传输端口 } from "./传输.js";
+import {
+  投影媒体传输端口,
+  投影聊天实时连接端口,
+  投影聊天房间传输端口,
+  type 媒体传输端口,
+  type 聊天实时连接端口,
+  type 聊天房间传输端口,
+  type 前端传输端口,
+} from "./传输.js";
 import type { 前端存储端口 } from "./存储.js";
 import {
   初始聊天运行时状态,
@@ -215,7 +225,7 @@ type 聊天视口调试状态 = Pick<
 
 class 聊天应用内核 implements 聊天应用内核端口 {
   private readonly deps: 聊天应用内核依赖;
-  private readonly platform: 浏览器应用平台;
+  private readonly 平台桥接: 聊天内核平台端口;
 
   /**
    * 房间阶段机仍然是聊天内核里唯一的房间编排真相。
@@ -248,10 +258,13 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   private 运行时状态: 聊天运行时状态;
 
   /**
-   * transport / storage 现在都属于聊天内核依赖。
-   * 壳层只通过内核拿稳定端口，不再直接 new / 持有这些浏览器适配器。
+   * transport / storage 继续属于聊天内核依赖，
+   * 但这里已经收成 recovery / realtime / media 三条窄 transport。
+   * 壳层不再直接 new / 持有这些浏览器适配器。
    */
-  private transport: 前端传输端口;
+  private 房间传输: 聊天房间传输端口;
+  private 实时连接: 聊天实时连接端口;
+  private 媒体传输: 媒体传输端口;
   private storage: 前端存储端口;
   private readonly 媒体编排: 聊天媒体编排端口;
 
@@ -273,9 +286,19 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   constructor(deps: 聊天应用内核依赖) {
     this.deps = deps;
-    this.platform = deps.platform ?? 获取默认浏览器应用平台();
-    this.transport = deps.transport ?? this.platform.transport.transport();
-    this.storage = deps.storage ?? this.platform.storage.壳层记忆();
+    const rawPlatform = deps.platform ?? 获取默认浏览器应用平台();
+    this.平台桥接 = 创建聊天内核平台桥接(rawPlatform);
+    const transport = deps.transport;
+    this.房间传输 = transport
+      ? 投影聊天房间传输端口(transport)
+      : this.平台桥接.聊天房间传输();
+    this.实时连接 = transport
+      ? 投影聊天实时连接端口(transport)
+      : this.平台桥接.聊天实时连接();
+    this.媒体传输 = transport
+      ? 投影媒体传输端口(transport)
+      : this.平台桥接.媒体传输();
+    this.storage = deps.storage ?? this.平台桥接.壳层记忆();
     this.会话状态 = { ...初始聊天会话状态 };
     this.输入状态 = { ...初始聊天输入状态 };
     this.时间线状态 = { ...初始聊天时间线状态 };
@@ -308,18 +331,18 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       },
     });
     this.媒体编排 = 创建聊天媒体编排({
-      transport: () => this.transport,
+      transport: () => this.媒体传输,
       读取会话编号: () => this.回填房间壳补丁().sessionId,
       读取消息: () => this.时间线状态.messages,
       读取草稿: () => this.输入状态.composerMediaDrafts,
-      ...(this.platform.storage.媒体资产仓库
-        ? { 媒体缓存仓库: this.platform.storage.媒体资产仓库() }
+      ...(this.平台桥接.媒体资产仓库
+        ? { 媒体缓存仓库: this.平台桥接.媒体资产仓库() }
         : {}),
-      ...(this.platform.storage.媒体定位仓库
-        ? { 媒体定位仓库: this.platform.storage.媒体定位仓库() }
+      ...(this.平台桥接.媒体定位仓库
+        ? { 媒体定位仓库: this.平台桥接.媒体定位仓库() }
         : {}),
-      ...(this.platform.storage.视频预览仓库
-        ? { 预览缓存: this.platform.storage.视频预览仓库() }
+      ...(this.平台桥接.视频预览仓库
+        ? { 预览缓存: this.平台桥接.视频预览仓库() }
         : {}),
       写入草稿列表: (nextDrafts) => {
         this.应用本地状态补丁({ composerMediaDrafts: nextDrafts });
@@ -437,7 +460,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this._阅读推进编排端口?.dispose();
     this._阅读推进编排端口 = null;
     this._恢复编排端口 = null;
-    this.transport = transport;
+    this.房间传输 = 投影聊天房间传输端口(transport);
+    this.实时连接 = 投影聊天实时连接端口(transport);
+    this.媒体传输 = 投影媒体传输端口(transport);
     this.媒体编排.清空();
   }
 
@@ -598,7 +623,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         读取恢复状态: () => this.读取恢复编排状态(),
         写入恢复状态: (patch) => this.写入恢复编排状态(patch),
         接收时间线事实: (event) => this.接收时间线事实(event),
-        transport: this.transport,
+        transport: this.房间传输,
         storage: this.storage,
         roomKernel: {
           send: (event) => this.发送房间事件(event),
@@ -628,7 +653,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         写入实时状态: (patch) => this.写入实时编排状态(patch),
         接收时间线事实: (event) => this.接收时间线事实(event),
         接收实时会话事实: (event) => this.接收实时会话事实(event),
-        transport: this.transport,
+        transport: this.实时连接,
         roomKernel: {
           send: (event) => this.发送房间事件(event),
         },
@@ -647,10 +672,10 @@ class 聊天应用内核 implements 聊天应用内核端口 {
           this.处理权威新消息平台副作用(events);
         },
         登记待补发任务: async (task) => {
-          return (await this.platform.offline.登记待补发任务?.(task)) ?? false;
+          return (await this.平台桥接.登记待补发任务?.(task)) ?? false;
         },
         请求后台补发同步: async (tag) => {
-          return (await this.platform.offline.请求后台补发同步?.(tag)) ?? false;
+          return (await this.平台桥接.请求后台补发同步?.(tag)) ?? false;
         },
         读取当前时间: () => Date.now(),
       });
@@ -740,7 +765,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
   }
 
   private async 尝试排空待补发任务(): Promise<void> {
-    const 排空函数 = this.platform.offline.排空到期任务;
+    const 排空函数 = this.平台桥接.排空到期任务;
     if (typeof 排空函数 !== "function") {
       return;
     }
@@ -755,7 +780,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         读取阅读状态: () => this.读取阅读推进状态(),
         写入阅读状态: (patch) => this.写入阅读状态(patch),
         接收时间线事实: (event) => this.接收时间线事实(event),
-        transport: this.transport,
+        transport: this.房间传输,
         上报历史前插开始: () => {
           this.roomViewport.send({
             type: "PROGRAMMATIC_SCROLL_STARTED",
@@ -1297,7 +1322,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
       return;
     }
 
-    const platformSnapshot = this.platform.snapshot();
+    const platformSnapshot = this.平台桥接.snapshot();
     const 当前就在前台主窗口 =
       platformSnapshot.lifecycle.phase === "active" &&
       platformSnapshot.lifecycle.visibility === "visible" &&
@@ -1307,11 +1332,11 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     }
 
     const 最新一条他人消息 = otherMessages.at(-1)!;
-    void this.platform.dispatch({
+    void this.平台桥接.dispatch({
       type: "SET_BADGE",
       count: platformSnapshot.notification.badgeCount + otherMessages.length,
     });
-    void this.platform.dispatch({
+    void this.平台桥接.dispatch({
       type: "SHOW_NOTIFICATION",
       id: 最新一条他人消息.message_id,
       title: 最新一条他人消息.sender_display_alias,

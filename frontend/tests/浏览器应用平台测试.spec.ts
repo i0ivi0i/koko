@@ -289,9 +289,12 @@ const stillKeep = true;
     const adminKernelSource = 读取前端源码("后台应用内核.ts");
 
     expect(chatSource).not.toContain("new HttpRealtime传输(window.location.origin)");
+    expect(kernelSource).toContain('from "./聊天应用编排桥接.js"');
+    expect(kernelSource).toContain("const rawPlatform = deps.platform ?? 获取默认浏览器应用平台()");
+    expect(kernelSource).toContain("创建聊天内核平台桥接(rawPlatform)");
+    expect(kernelSource).toContain("this.平台桥接.聊天房间传输()");
+    expect(kernelSource).not.toContain("this.platform.transport.transport()");
     expect(kernelSource).toContain('from "./平台/index.js"');
-    expect(kernelSource).toContain("deps.platform ?? 获取默认浏览器应用平台()");
-    expect(kernelSource).toContain("this.platform.transport.transport()");
 
     expect(adminSource).toContain('from "./后台应用内核.js"');
     expect(adminSource).not.toContain('from "./平台/index.js"');

@@ -13,6 +13,23 @@ import {
   type 阅读推进编排依赖,
   type 阅读推进编排端口,
 } from "./阅读推进编排.js";
+import type {
+  媒体缓存仓库,
+  媒体定位缓存仓库,
+  预览缓存端口,
+} from "./媒体/index.js";
+import type {
+  浏览器应用平台,
+  浏览器应用平台命令,
+  浏览器应用平台快照,
+  平台离线任务,
+} from "./平台/index.js";
+import {
+  type 媒体传输端口,
+  type 聊天实时连接端口,
+  type 聊天房间传输端口,
+} from "./传输.js";
+import type { 前端存储端口 } from "./存储.js";
 
 export interface 内核恢复编排桥接依赖 {
   读取恢复状态: 房间恢复编排依赖["读取恢复状态"];
@@ -58,6 +75,115 @@ export interface 内核阅读推进编排桥接依赖 {
   withSessionRefreshOnInvalid: 阅读推进编排依赖["withSessionRefreshOnInvalid"];
   等待壳渲染完成: 阅读推进编排依赖["等待壳渲染完成"];
   滚到最新位置: 阅读推进编排依赖["滚到最新位置"];
+}
+
+export type 聊天内核平台快照 = Pick<
+  浏览器应用平台快照,
+  "lifecycle" | "multiContext" | "notification"
+>;
+
+export type 聊天内核平台命令 = Extract<
+  浏览器应用平台命令,
+  | { type: "SHOW_NOTIFICATION" }
+  | { type: "SET_BADGE" }
+  | { type: "CLEAR_BADGE" }
+>;
+
+export interface 聊天内核平台端口 {
+  聊天房间传输(): 聊天房间传输端口;
+  聊天实时连接(): 聊天实时连接端口;
+  媒体传输(): 媒体传输端口;
+  壳层记忆(): 前端存储端口;
+  媒体资产仓库?(): 媒体缓存仓库;
+  媒体定位仓库?(): 媒体定位缓存仓库;
+  视频预览仓库?(): 预览缓存端口;
+  登记待补发任务?(task: 平台离线任务): Promise<boolean>;
+  请求后台补发同步?(tag: string): Promise<boolean>;
+  排空到期任务?(
+    handler: (task: 平台离线任务) => Promise<"done" | "retry">
+  ): Promise<void>;
+  snapshot(): 聊天内核平台快照;
+  dispatch(command: 聊天内核平台命令): Promise<boolean | void>;
+}
+
+/**
+ * 聊天内核平台桥接只把浏览器平台裁成聊天主链真正会用到的那几条能力：
+ * 1. 三条 transport 窄口；
+ * 2. 壳层存储与媒体缓存仓库；
+ * 3. 离线队列入口；
+ * 4. 通知判断所需的最小快照与命令。
+ *
+ * 这里故意不暴露 lifecycle/service worker/multi-context 的完整实现细节，
+ * 避免聊天应用内核继续把 BrowserAppPlatform 当成“万能大平台”。
+ */
+export function 创建聊天内核平台桥接(
+  platform: 浏览器应用平台
+): 聊天内核平台端口 {
+  return {
+    聊天房间传输(): 聊天房间传输端口 {
+      return platform.transport.聊天房间传输();
+    },
+
+    聊天实时连接(): 聊天实时连接端口 {
+      return platform.transport.聊天实时连接();
+    },
+
+    媒体传输(): 媒体传输端口 {
+      return platform.transport.媒体传输();
+    },
+
+    壳层记忆(): 前端存储端口 {
+      return platform.storage.壳层记忆();
+    },
+
+    ...(platform.storage.媒体资产仓库
+      ? {
+          媒体资产仓库: () => platform.storage.媒体资产仓库!(),
+        }
+      : {}),
+    ...(platform.storage.媒体定位仓库
+      ? {
+          媒体定位仓库: () => platform.storage.媒体定位仓库!(),
+        }
+      : {}),
+    ...(platform.storage.视频预览仓库
+      ? {
+          视频预览仓库: () => platform.storage.视频预览仓库!(),
+        }
+      : {}),
+    ...(platform.offline.登记待补发任务
+      ? {
+          登记待补发任务: (task: 平台离线任务) =>
+            platform.offline.登记待补发任务!(task),
+        }
+      : {}),
+    ...(platform.offline.请求后台补发同步
+      ? {
+          请求后台补发同步: (tag: string) =>
+            platform.offline.请求后台补发同步!(tag),
+        }
+      : {}),
+    ...(platform.offline.排空到期任务
+      ? {
+          排空到期任务: (
+            handler: (task: 平台离线任务) => Promise<"done" | "retry">
+          ) => platform.offline.排空到期任务!(handler),
+        }
+      : {}),
+
+    snapshot(): 聊天内核平台快照 {
+      const snapshot = platform.snapshot();
+      return {
+        lifecycle: snapshot.lifecycle,
+        multiContext: snapshot.multiContext,
+        notification: snapshot.notification,
+      };
+    },
+
+    dispatch(command: 聊天内核平台命令): Promise<boolean | void> {
+      return platform.dispatch(command);
+    },
+  };
 }
 
 /**
