@@ -2,6 +2,7 @@ param(
     [switch]$Apply,
     [switch]$Preview,
     [switch]$Force,
+    [switch]$OptimizeStartupArtifacts,
     [switch]$SkipDatabase,
     [switch]$SkipFiles,
     [string]$DatabaseUrl,
@@ -110,6 +111,46 @@ function Get-DirectorySummary {
         Exists = $true
         Files  = $files.Count
         SizeMB = [math]::Round(($measure.Sum / 1MB), 2)
+    }
+}
+
+function Get-CleanupTargetSummary {
+    param($Target)
+
+    $path = $Target.Path
+    if (-not (Test-Path -LiteralPath $path)) {
+        return [pscustomobject]@{
+            Kind   = $Target.Kind
+            Path   = $path
+            Exists = $false
+            Items  = 0
+            SizeMB = 0
+            Reason = $Target.Reason
+        }
+    }
+
+    if ($Target.Kind -eq "File") {
+        $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        $size = if ($null -ne $item) { [math]::Round(($item.Length / 1MB), 2) } else { 0 }
+        return [pscustomobject]@{
+            Kind   = $Target.Kind
+            Path   = $path
+            Exists = $true
+            Items  = 1
+            SizeMB = $size
+            Reason = $Target.Reason
+        }
+    }
+
+    $files = Get-ChildItem -LiteralPath $path -Recurse -File -Force -ErrorAction SilentlyContinue
+    $measure = $files | Measure-Object -Property Length -Sum
+    return [pscustomobject]@{
+        Kind   = $Target.Kind
+        Path   = $path
+        Exists = $true
+        Items  = $files.Count
+        SizeMB = [math]::Round(($measure.Sum / 1MB), 2)
+        Reason = $Target.Reason
     }
 }
 
@@ -358,6 +399,44 @@ function Clear-DirectoryContents {
     }
 }
 
+function Get-StartupArtifactOptimizationTargets {
+    param([string]$RepoRoot)
+
+    $definitions = @(
+        @{ Path = "target\launcher-run"; Kind = "Directory"; Reason = "run.ps1 独享的 Cargo target 产物" }
+        @{ Path = "target\realtime-tests"; Kind = "Directory"; Reason = "真实链路测试独享的 Cargo target 产物" }
+        @{ Path = "target\tmp-investigate"; Kind = "Directory"; Reason = "临时调查 target 噪音" }
+        @{ Path = "frontend\dist"; Kind = "Directory"; Reason = "前端构建产物" }
+        @{ Path = "tmp\audit"; Kind = "Directory"; Reason = "审计/大附件抽样产物" }
+        @{ Path = "tmp\smoke-run"; Kind = "Directory"; Reason = "烟测运行目录" }
+        @{ Path = "tmp\smoke-logs"; Kind = "Directory"; Reason = "烟测日志目录" }
+        @{ Path = "tmp\codex-smoke"; Kind = "Directory"; Reason = "Codex 烟测目录" }
+        @{ Path = "tmp\https-bootstrap"; Kind = "Directory"; Reason = "本地 HTTPS 引导临时目录" }
+        @{ Path = "tmp\cloudflared-quick-home"; Kind = "Directory"; Reason = "Cloudflare 快捷临时目录" }
+    )
+
+    return @($definitions | ForEach-Object {
+            [pscustomobject]@{
+                Kind   = $_.Kind
+                Path   = Resolve-ManagedPath -RawPath $_.Path
+                Reason = $_.Reason
+            }
+        } | Sort-Object Path -Unique)
+}
+
+function Clear-CleanupTarget {
+    param($Target)
+
+    if ($Target.Kind -eq "File") {
+        if (Test-Path -LiteralPath $Target.Path) {
+            Remove-Item -LiteralPath $Target.Path -Force
+        }
+        return
+    }
+
+    Clear-DirectoryContents -Path $Target.Path
+}
+
 $dotEnv = Read-DotEnvMap -Path (Join-Path $RepoRoot ".env")
 
 $DatabaseUrl = if ($PSBoundParameters.ContainsKey("DatabaseUrl")) {
@@ -430,6 +509,13 @@ $managedDirectories = @(
 } | Sort-Object -Unique
 
 $directorySummaries = $managedDirectories | ForEach-Object { Get-DirectorySummary -Path $_ }
+$startupOptimizationTargets = if ($OptimizeStartupArtifacts) {
+    Get-StartupArtifactOptimizationTargets -RepoRoot $RepoRoot
+}
+else {
+    @()
+}
+$startupOptimizationSummaries = $startupOptimizationTargets | ForEach-Object { Get-CleanupTargetSummary -Target $_ }
 
 Write-Host ""
 Write-Host "=== koko 本地测试数据清理脚本 ==="
@@ -445,12 +531,26 @@ else {
 }
 
 Write-Host ""
-Write-Host "将清理的目录："
-$directorySummaries | Format-Table -AutoSize
+if ($SkipFiles) {
+    Write-Host "媒体/上传目录：已跳过 (-SkipFiles)"
+}
+else {
+    Write-Host "将清理的目录："
+    $directorySummaries | Format-Table -AutoSize
+}
+
+if ($OptimizeStartupArtifacts) {
+    Write-Host ""
+    Write-Host "将自动优化清理的本地产物："
+    $startupOptimizationSummaries | Format-Table -AutoSize
+}
 
 Write-Host ""
 Write-Host "不会触碰的目录：src/ frontend/ docs/ migrations/ tests/ assets/"
 Write-Host "不会触碰的数据库对象：迁移元数据表、schema、角色、扩展。"
+if ($OptimizeStartupArtifacts) {
+    Write-Host "自动优化不会触碰：target/debug、target/flycheck0、frontend/node_modules、数据库业务表、data/attachments。"
+}
 
 Write-Host ""
 Write-Host "浏览器端如需彻底重置媒体/离线缓存，仍可手动清理："
@@ -468,9 +568,19 @@ if ($Preview) {
     Write-Host ""
     Write-Host "当前是预览模式；默认直接执行清理。"
     Write-Host "真正执行："
-    Write-Host ".\\qingli.ps1 -Apply"
+    if ($OptimizeStartupArtifacts) {
+        Write-Host ".\\qingli.ps1 -Apply -OptimizeStartupArtifacts"
+    }
+    else {
+        Write-Host ".\\qingli.ps1 -Apply"
+    }
     Write-Host "如需跳过确认："
-    Write-Host ".\\qingli.ps1 -Apply -Force"
+    if ($OptimizeStartupArtifacts) {
+        Write-Host ".\\qingli.ps1 -Apply -Force -OptimizeStartupArtifacts"
+    }
+    else {
+        Write-Host ".\\qingli.ps1 -Apply -Force"
+    }
     return
 }
 
@@ -497,7 +607,16 @@ if ($Force) {
 Assert-ServicesStopped -Ports $servicePorts
 
 if (-not $Force) {
-    $confirmation = Read-Host "确认执行？这会清空测试业务数据和媒体目录。输入 YES 继续"
+    $confirmationPrompt = if ($OptimizeStartupArtifacts -and (-not $SkipDatabase -or -not $SkipFiles)) {
+        "确认执行？这会清理启动器/烟测本地产物，并按当前开关处理数据库或媒体目录。输入 YES 继续"
+    }
+    elseif ($OptimizeStartupArtifacts) {
+        "确认执行？这会清理启动器/烟测本地产物。输入 YES 继续"
+    }
+    else {
+        "确认执行？这会清空测试业务数据和媒体目录。输入 YES 继续"
+    }
+    $confirmation = Read-Host $confirmationPrompt
     if ($confirmation -ne "YES") {
         Write-Host "已取消。"
         return
@@ -522,6 +641,15 @@ if (-not $SkipFiles) {
     foreach ($dir in $managedDirectories) {
         Write-Host "  -> $dir"
         Clear-DirectoryContents -Path $dir
+    }
+}
+
+if ($OptimizeStartupArtifacts) {
+    Write-Host ""
+    Write-Host "清理启动器/烟测本地产物..."
+    foreach ($target in $startupOptimizationTargets) {
+        Write-Host "  -> $($target.Path)"
+        Clear-CleanupTarget -Target $target
     }
 }
 

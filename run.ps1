@@ -1,7 +1,8 @@
 param(
     [switch]$UpgradeDependencies,
     [switch]$DisableCloudflareTunnel,
-    [switch]$DisableLocalHttpsBootstrap
+    [switch]$DisableLocalHttpsBootstrap,
+    [switch]$DisableAutoOptimizeCleanup
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +30,49 @@ function Import-DotEnv {
         if ($pair.Count -eq 2) {
             [Environment]::SetEnvironmentVariable($pair[0].Trim(), $pair[1].Trim())
         }
+    }
+}
+
+function Resolve-CleanupScriptHostPath {
+    $pwshCommand = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+    if ($null -eq $pwshCommand) {
+        $pwshCommand = Get-Command pwsh -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $pwshCommand) {
+        return $pwshCommand.Source
+    }
+
+    $fallbackCommand = Get-Command powershell.exe -ErrorAction SilentlyContinue
+    if ($null -ne $fallbackCommand) {
+        return $fallbackCommand.Source
+    }
+
+    throw "未找到可用于调用 qingli.ps1 的 PowerShell 宿主。"
+}
+
+function Invoke-StartupArtifactOptimization {
+    param(
+        [string]$RepoRoot,
+        [string]$ScriptHostPath
+    )
+
+    $cleanScriptPath = Join-Path $RepoRoot "qingli.ps1"
+    if (-not (Test-Path -LiteralPath $cleanScriptPath)) {
+        throw "缺少 qingli.ps1；无法执行启动前自动优化。"
+    }
+
+    Write-Host "启动前自动优化本地产物: qingli.ps1 -Apply -Force -SkipDatabase -SkipFiles -OptimizeStartupArtifacts"
+    & $ScriptHostPath `
+        -NoProfile `
+        -ExecutionPolicy Bypass `
+        -File $cleanScriptPath `
+        -Apply `
+        -Force `
+        -SkipDatabase `
+        -SkipFiles `
+        -OptimizeStartupArtifacts
+    if ($LASTEXITCODE -ne 0) {
+        throw "启动前自动优化失败，已停止启动。"
     }
 }
 
@@ -656,6 +700,7 @@ Assert-PowerShellVersion
 Import-DotEnv
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$cleanupScriptHostPath = Resolve-CleanupScriptHostPath
 $cargoPath = (Get-Command cargo.exe -ErrorAction Stop).Source
 $pnpmPath = (Get-Command pnpm.cmd -ErrorAction Stop).Source
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -702,6 +747,14 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "pnpm up 失败，已停止启动。"
         }
+    }
+
+    if (-not $DisableAutoOptimizeCleanup) {
+        # 自动优化只清启动器/烟测 owner 明确的本地产物：
+        # 1. 不碰数据库业务表；
+        # 2. 不碰 data/attachments / data/tus 这类业务真相目录；
+        # 3. 只在 qingli.ps1 这一处维护目录名单，避免 run.ps1 再长出第三套清理 owner。
+        Invoke-StartupArtifactOptimization -RepoRoot $repoRoot -ScriptHostPath $cleanupScriptHostPath
     }
 
     Stop-StaleLauncherBackend -BackendTargetDir $backendTargetDir
