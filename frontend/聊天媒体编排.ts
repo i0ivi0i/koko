@@ -1,5 +1,5 @@
 import type { 消息事件, 媒体种类 } from "./契约.js";
-import type { 前端传输端口 } from "./传输.js";
+import type { 媒体传输端口 } from "./传输.js";
 import type { 聊天运行时预算状态 } from "./状态.js";
 import {
   创建媒体运行时Actor,
@@ -63,7 +63,7 @@ type 聊天媒体预算快照 = Pick<
 >;
 
 type 聊天媒体编排依赖 = {
-  transport(): 前端传输端口;
+  transport(): 媒体传输端口;
   读取会话编号(): string;
   读取消息(): 消息事件[];
   读取草稿(): 媒体附件草稿[];

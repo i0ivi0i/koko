@@ -16,8 +16,8 @@ import {
   登记待补发创建消息,
   重放待补发创建消息,
 } from "./聊天实时/壳层/待补发消息协作.js";
+import type { 聊天实时连接端口 } from "./聊天共享/适配/聊天实时连接端口.js";
 import type { 聊天状态 } from "./状态.js";
-import type { 前端传输端口 } from "./传输.js";
 import type { Transport异常 } from "./房间恢复编排.js";
 import type { 平台离线任务 } from "./平台/index.js";
 
@@ -42,7 +42,7 @@ export interface 房间实时编排依赖 {
   写入实时状态(patch: Partial<实时编排状态>): void;
   接收时间线事实(event: 房间时间线事件): void;
   接收实时会话事实(event: 实时会话事件): void;
-  transport: 前端传输端口;
+  transport: 聊天实时连接端口;
   roomKernel: 房间内核端口;
   上报Transport异常(error: Transport异常): Promise<void>;
   处理恢复失败(error: unknown, keepRoomVisible: boolean): void;

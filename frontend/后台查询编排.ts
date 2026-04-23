@@ -1,5 +1,5 @@
 import type { 后台房间详情, 后台概览 } from "./契约.js";
-import type { 前端传输端口 } from "./传输.js";
+import type { 后台查询传输端口 } from "./传输.js";
 
 export interface 后台查询快照 {
   overview: 后台概览 | null;
@@ -9,10 +9,10 @@ export interface 后台查询快照 {
 
 export interface 后台查询编排端口 {
   snapshot(): 后台查询快照;
-  加载概览(transport: 前端传输端口, token: string): Promise<void>;
-  加载房间列表(transport: 前端传输端口, token: string): Promise<void>;
+  加载概览(transport: 后台查询传输端口, token: string): Promise<void>;
+  加载房间列表(transport: 后台查询传输端口, token: string): Promise<void>;
   加载房间详情(
-    transport: 前端传输端口,
+    transport: 后台查询传输端口,
     token: string,
     roomId: string
   ): Promise<void>;
@@ -42,17 +42,17 @@ export function 创建后台查询编排(
       };
     },
 
-    async 加载概览(transport: 前端传输端口, token: string): Promise<void> {
+    async 加载概览(transport: 后台查询传输端口, token: string): Promise<void> {
       state.overview = await transport.loadAdminOverview(token);
     },
 
-    async 加载房间列表(transport: 前端传输端口, token: string): Promise<void> {
+    async 加载房间列表(transport: 后台查询传输端口, token: string): Promise<void> {
       const rooms = await transport.adminRooms(token);
       state.roomIds = [...rooms.rooms];
     },
 
     async 加载房间详情(
-      transport: 前端传输端口,
+      transport: 后台查询传输端口,
       token: string,
       roomId: string
     ): Promise<void> {

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { 创建后台应用内核 } from "../后台应用内核";
 import { 创建后台查询编排 } from "../后台查询编排";
@@ -90,6 +92,16 @@ class 假后台内核传输 implements 前端传输端口 {
 }
 
 describe("后台应用内核", () => {
+  it("后台查询和会话编排分别只依赖各自后台窄接口", () => {
+    const querySource = readFileSync(resolve(process.cwd(), "后台查询编排.ts"), "utf8");
+    const sessionSource = readFileSync(resolve(process.cwd(), "后台会话编排.ts"), "utf8");
+
+    expect(querySource).toContain('import type { 后台查询传输端口 } from "./传输.js";');
+    expect(querySource).not.toContain("type 前端传输端口");
+    expect(sessionSource).toContain('import type { 后台会话传输端口 } from "./传输.js";');
+    expect(sessionSource).not.toContain("type 前端传输端口");
+  });
+
   it("登录命令会刷新 token、概览和房间列表快照", async () => {
     const transport = new 假后台内核传输();
     const kernel = 创建后台应用内核({ transport });

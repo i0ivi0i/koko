@@ -19,6 +19,13 @@ describe("房间实时编排", () => {
     expect(source).not.toContain("function 接收时间线事实(");
   });
 
+  it("只依赖聊天 realtime 窄接口，而不再声明完整前端传输端口", () => {
+    const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天共享/适配/聊天实时连接端口.js"');
+    expect(source).not.toContain("type 前端传输端口");
+  });
+
   it("会把 connect_error 和 control_result 翻译委托给 实时控制面协作", () => {
     const source = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
 

@@ -1,5 +1,5 @@
 import type { 后台登录结果 } from "./契约.js";
-import type { 前端传输端口 } from "./传输.js";
+import type { 后台会话传输端口 } from "./传输.js";
 
 export interface 后台会话快照 {
   username: string;
@@ -11,7 +11,7 @@ export interface 后台会话编排端口 {
   snapshot(): 后台会话快照;
   设置用户名(value: string): void;
   设置密码(value: string): void;
-  登录(transport: 前端传输端口): Promise<后台登录结果>;
+  登录(transport: 后台会话传输端口): Promise<后台登录结果>;
 }
 
 /**
@@ -42,7 +42,7 @@ export function 创建后台会话编排(
       state.password = value;
     },
 
-    async 登录(transport: 前端传输端口): Promise<后台登录结果> {
+    async 登录(transport: 后台会话传输端口): Promise<后台登录结果> {
       const out = await transport.adminLogin(state.username, state.password);
       state.token = out.token;
       return out;

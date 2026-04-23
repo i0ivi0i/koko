@@ -64,6 +64,21 @@ describe("传输", () => {
     expect(source).not.toContain("private 解析Blob媒体资产(");
   });
 
+  it("HttpRealtime传输 会把聊天房间/realtime/media/admin 显式投影成窄接口，而不是让所有调用者都抱住巨型端口", () => {
+    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天共享/适配/聊天房间传输端口.js"');
+    expect(source).toContain('from "./聊天共享/适配/聊天实时连接端口.js"');
+    expect(source).toContain("export interface 媒体传输端口");
+    expect(source).toContain("export interface 后台查询传输端口");
+    expect(source).toContain("export interface 后台会话传输端口");
+    expect(source).toContain("export const 投影聊天房间传输端口");
+    expect(source).toContain("export const 投影聊天实时连接端口");
+    expect(source).toContain("export const 投影媒体传输端口");
+    expect(source).toContain("export const 投影后台查询传输端口");
+    expect(source).toContain("export const 投影后台会话传输端口");
+  });
+
   it("聊天 realtime / 房间恢复 / 后台 admin / 媒体定位 当前已经只消费各自需要的 transport 子表面", () => {
     const realtimeSource = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
     const recoverySource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");

@@ -26,6 +26,22 @@ describe("传输运行时", () => {
     expect(first).toBe(second);
   });
 
+  it("会把同一个组合根 transport 投影成聊天/媒体/后台窄口，而不是重新创建第二份实例", () => {
+    const transport = {
+      marker: "runtime-owned",
+    } as unknown as 前端传输端口;
+    const runtime = 创建传输运行时({
+      baseUrl: "http://platform.local",
+      createTransport: () => transport,
+    });
+
+    expect(runtime.聊天房间传输()).toBe(transport);
+    expect(runtime.聊天实时连接()).toBe(transport);
+    expect(runtime.媒体传输()).toBe(transport);
+    expect(runtime.后台查询传输()).toBe(transport);
+    expect(runtime.后台会话传输()).toBe(transport);
+  });
+
   it("接收生命周期变化时会把浏览器可见性翻成传输策略，并统一交给 transport 适配器", () => {
     const 接收运行时策略 = vi.fn();
     const runtime = 创建传输运行时({
@@ -62,7 +78,7 @@ describe("传输运行时", () => {
 
     expect(source).toContain("lastLifecycle");
     expect(source).toContain("realtimePolicy");
-    expect(source).toContain("this.transport().接收运行时策略?.(realtimePolicy);");
+    expect(source).toContain("读取组合根传输().接收运行时策略?.(realtimePolicy);");
     expect(source).not.toContain("loadRoomSnapshot(");
     expect(source).not.toContain("loadMediaLocator(");
     expect(source).not.toContain("adminLogin(");

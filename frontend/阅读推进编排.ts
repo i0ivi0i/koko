@@ -1,7 +1,7 @@
 import type { 房间时间线事件 } from "./房间时间线运行时.js";
 import type { 历史补偿上下文 } from "./房间滚动器.js";
 import type { 聊天状态 } from "./状态.js";
-import type { 前端传输端口 } from "./传输.js";
+import type { 聊天房间传输端口 } from "./聊天共享/适配/聊天房间传输端口.js";
 
 const 阅读推进节流毫秒 = 400;
 
@@ -15,7 +15,7 @@ export interface 阅读推进编排依赖 {
   读取阅读状态(): 阅读推进状态;
   写入阅读状态(patch: Partial<阅读推进状态>): void;
   接收时间线事实(event: 房间时间线事件): void;
-  transport: 前端传输端口;
+  transport: 聊天房间传输端口;
   roomScroller: 房间滚动器端口;
   上报历史前插开始?(): void;
   withSessionRefreshOnInvalid<T>(operation: (sessionId: string) => Promise<T>): Promise<T>;

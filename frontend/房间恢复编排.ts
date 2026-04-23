@@ -4,7 +4,8 @@ import type { 房间时间线事件 } from "./房间时间线运行时.js";
 import type { 前端存储端口, 首页房间历史条目 } from "./存储.js";
 import { 创建会话失效恢复协作 } from "./聊天恢复/壳层/会话失效恢复.js";
 import { 创建房间快照恢复协作 } from "./聊天恢复/壳层/房间快照恢复.js";
-import { Http接口错误, type 前端传输端口 } from "./传输.js";
+import type { 聊天房间传输端口 } from "./聊天共享/适配/聊天房间传输端口.js";
+import { Http接口错误 } from "./传输.js";
 import type { 聊天状态 } from "./状态.js";
 
 export type Transport异常 =
@@ -57,7 +58,7 @@ export interface 房间恢复编排依赖 {
   读取恢复状态(): 恢复编排状态;
   写入恢复状态(patch: Partial<恢复编排状态>): void;
   接收时间线事实(event: 房间时间线事件): void;
-  transport: 前端传输端口;
+  transport: 聊天房间传输端口;
   storage: 前端存储端口;
   roomKernel: 房间内核端口;
   roomScroller: 房间滚动器端口;

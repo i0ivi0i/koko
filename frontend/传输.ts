@@ -16,10 +16,14 @@ import type {
   后台房间详情,
   后台登录结果,
 } from "./契约.js";
-import {
-  实时连接适配,
-  type 实时连接运行时策略,
-} from "./聊天实时/适配/实时连接适配.js";
+import { 实时连接适配 } from "./聊天实时/适配/实时连接适配.js";
+import type {
+  聊天房间传输端口,
+} from "./聊天共享/适配/聊天房间传输端口.js";
+import type {
+  聊天实时连接端口,
+  实时连接运行时策略,
+} from "./聊天共享/适配/聊天实时连接端口.js";
 import { 房间HTTP接口 } from "./聊天恢复/适配/房间HTTP接口.js";
 import { 媒体HTTP接口 } from "./媒体/适配/媒体HTTP接口.js";
 import { 后台HTTP接口 } from "./操作台/适配/后台HTTP接口.js";
@@ -44,10 +48,11 @@ export class Http接口错误 extends Error {
   }
 }
 
-export interface 前端传输端口 {
-  bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果>;
-  joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照>;
-  loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照>;
+/**
+ * 媒体传输端口只承接上传、定位和附件内容地址构建。
+ * 这里继续保留最薄的 adapter 语义，不倒灌聊天房间或后台管理能力。
+ */
+export interface 媒体传输端口 {
   prepareMediaUpload(
     kind: 媒体种类,
     sessionId: string,
@@ -61,28 +66,64 @@ export interface 前端传输端口 {
     sessionId: string,
     variant?: "original" | "thumbnail"
   ): string;
-  updateRoomReadAnchor(
-    roomId: string,
-    sessionId: string,
-    lastReadEventPosition: number
-  ): Promise<void>;
-  loadRoomEvents(roomId: string, sessionId: string, from: number): Promise<增量事件快照>;
-  loadRoomHistory(
-    roomId: string,
-    sessionId: string,
-    beforeEventPosition: number,
-    limit: number
-  ): Promise<房间历史页>;
+}
+
+/**
+ * 后台查询传输端口只承接后台只读查询。
+ * 登录留在单独窄口，避免后台调用方又退回“全拿一份巨型 transport”。
+ */
+export interface 后台查询传输端口 {
   loadAdminOverview(token: string): Promise<后台概览>;
-  adminLogin(username: string, password: string): Promise<后台登录结果>;
   adminRooms(token: string): Promise<后台房间列表>;
   adminRoomDetail(token: string, roomId: string): Promise<后台房间详情>;
-  接收运行时策略?(policy: 实时连接运行时策略): void;
-  读取运行时策略?(): 实时连接运行时策略;
-  释放Socket?(socket: Socket): void;
-  createSocket(sessionId: string): Socket;
 }
-export type { 实时连接运行时策略 } from "./聊天实时/适配/实时连接适配.js";
+
+/**
+ * 后台会话传输端口只承接登录。
+ * 这样后台会话编排不会顺手看到概览/房间详情等查询能力。
+ */
+export interface 后台会话传输端口 {
+  adminLogin(username: string, password: string): Promise<后台登录结果>;
+}
+
+/**
+ * 正式组合根仍然是 `前端传输端口`。
+ * 但调用侧不该再默认抱住整张表，而要通过下面的投影函数拿自己那一小截能力。
+ */
+export interface 前端传输端口
+  extends 聊天房间传输端口,
+    聊天实时连接端口,
+    媒体传输端口,
+    后台查询传输端口,
+    后台会话传输端口 {}
+
+export type { 聊天房间传输端口, 聊天实时连接端口, 实时连接运行时策略 };
+
+/**
+ * 这些投影函数故意只是“身份收窄”：
+ * 1. 不创建第二个 transport；
+ * 2. 不包一层新的共享状态；
+ * 3. 只把 TypeScript 视角收回到调用方真正需要的那一小截。
+ */
+export const 投影聊天房间传输端口 = (
+  transport: 前端传输端口
+): 聊天房间传输端口 => transport;
+
+export const 投影聊天实时连接端口 = (
+  transport: 前端传输端口
+): 聊天实时连接端口 => transport;
+
+export const 投影媒体传输端口 = (
+  transport: 前端传输端口
+): 媒体传输端口 => transport;
+
+export const 投影后台查询传输端口 = (
+  transport: 前端传输端口
+): 后台查询传输端口 => transport;
+
+export const 投影后台会话传输端口 = (
+  transport: 前端传输端口
+): 后台会话传输端口 => transport;
 
 /**
  * HttpRealtime传输 现在只保留“组合根”职责：

@@ -19,6 +19,16 @@ describe("房间恢复编排", () => {
     expect(source).not.toContain("async function handleInvalidSessionTransport异常");
   });
 
+  it("房间恢复编排和阅读推进只依赖聊天房间窄接口，而不再声明完整前端传输端口", () => {
+    const recoverySource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+    const readSource = readFileSync(resolve(process.cwd(), "阅读推进编排.ts"), "utf8");
+
+    expect(recoverySource).toContain('from "./聊天共享/适配/聊天房间传输端口.js"');
+    expect(recoverySource).not.toContain("type 前端传输端口");
+    expect(readSource).toContain('from "./聊天共享/适配/聊天房间传输端口.js"');
+    expect(readSource).not.toContain("type 前端传输端口");
+  });
+
   it("会把 snapshot reload 与房间硬失败委托给 房间快照恢复 协作", () => {
     const source = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
 

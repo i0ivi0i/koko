@@ -1,5 +1,15 @@
 import {
   HttpRealtime传输,
+  投影后台会话传输端口,
+  投影后台查询传输端口,
+  投影媒体传输端口,
+  投影聊天实时连接端口,
+  投影聊天房间传输端口,
+  type 后台会话传输端口,
+  type 后台查询传输端口,
+  type 媒体传输端口,
+  type 聊天实时连接端口,
+  type 聊天房间传输端口,
   type 前端传输端口,
   type 实时连接运行时策略,
 } from "../传输.js";
@@ -25,6 +35,15 @@ export interface 传输运行时 {
    * 这样后面接生命周期、网络、离线等浏览器能力时，入口仍然只有这一处。
    */
   transport(): 前端传输端口;
+  /**
+   * 下面这些 getter 都是“同一实例上的窄视角”：
+   * 它们不创建第二个 transport，只帮助上层停止依赖整张大表。
+   */
+  聊天房间传输(): 聊天房间传输端口;
+  聊天实时连接(): 聊天实时连接端口;
+  媒体传输(): 媒体传输端口;
+  后台查询传输(): 后台查询传输端口;
+  后台会话传输(): 后台会话传输端口;
   /**
    * 这里只记录最近一次浏览器生命周期快照。
    * 它故意不解释聊天业务该做什么，业务语义仍由各自 owner 裁决。
@@ -79,13 +98,34 @@ export function 创建传输运行时(
     realtimePolicy: 推导实时连接运行时策略(null),
   };
   let transportPort: 前端传输端口 | null = null;
+  const 读取组合根传输 = (): 前端传输端口 => {
+    if (!transportPort) {
+      transportPort = createTransport(baseUrl);
+    }
+    return transportPort;
+  };
 
   return {
-    transport(): 前端传输端口 {
-      if (!transportPort) {
-        transportPort = createTransport(baseUrl);
-      }
-      return transportPort;
+    transport: 读取组合根传输,
+
+    聊天房间传输(): 聊天房间传输端口 {
+      return 投影聊天房间传输端口(读取组合根传输());
+    },
+
+    聊天实时连接(): 聊天实时连接端口 {
+      return 投影聊天实时连接端口(读取组合根传输());
+    },
+
+    媒体传输(): 媒体传输端口 {
+      return 投影媒体传输端口(读取组合根传输());
+    },
+
+    后台查询传输(): 后台查询传输端口 {
+      return 投影后台查询传输端口(读取组合根传输());
+    },
+
+    后台会话传输(): 后台会话传输端口 {
+      return 投影后台会话传输端口(读取组合根传输());
     },
 
     接收生命周期变化(snapshot: 生命周期快照): void {
@@ -94,7 +134,7 @@ export function 创建传输运行时(
         lastLifecycle: { ...snapshot },
         realtimePolicy,
       };
-      this.transport().接收运行时策略?.(realtimePolicy);
+      读取组合根传输().接收运行时策略?.(realtimePolicy);
     },
 
     snapshot(): 传输运行时快照 {

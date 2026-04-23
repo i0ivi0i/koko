@@ -5,12 +5,52 @@ import { 创建浏览器应用平台 } from "../平台/浏览器应用平台";
 import type { 浏览器应用平台事件 } from "../平台/浏览器应用平台";
 import type { 生命周期快照 } from "../平台/生命周期运行时";
 import type { 服务工作线程运行时事件 } from "../平台/服务工作线程运行时";
+import type { 前端传输端口 } from "../传输";
 
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), "utf8");
 
 const 读取仓库脚本源码 = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(`../../${relativePath}`, import.meta.url)), "utf8");
+
+const 创建假传输运行时 = (input: {
+  transport?: 前端传输端口;
+  接收生命周期变化?: (snapshot: 生命周期快照) => void;
+  snapshot?: () => {
+    lastLifecycle: 生命周期快照 | null;
+    realtimePolicy: {
+      intent: "resume" | "suspend";
+      reconnection: boolean;
+      reason: "active" | "background" | "page_hidden";
+    };
+  };
+} = {}) => {
+  const transport =
+    input.transport ??
+    (({
+      marker: "test-transport",
+    } as unknown) as 前端传输端口);
+
+  return {
+    transport: () => transport,
+    聊天房间传输: () => transport,
+    聊天实时连接: () => transport,
+    媒体传输: () => transport,
+    后台查询传输: () => transport,
+    后台会话传输: () => transport,
+    接收生命周期变化: input.接收生命周期变化 ?? (() => {}),
+    snapshot:
+      input.snapshot ??
+      (() => ({
+        lastLifecycle: { visibility: "visible" as const, phase: "active" as const },
+        realtimePolicy: {
+          intent: "resume" as const,
+          reconnection: true,
+          reason: "active" as const,
+        },
+      })),
+  };
+};
 
 describe("浏览器端应用平台化基线", () => {
   it("聊天壳会把业务入口收进 ChatAppKernel，自身只保留 view + bridge", () => {
@@ -326,10 +366,7 @@ const stillKeep = true;
         }),
         发送消息: () => true,
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: (snapshot) => {
           transportLifecycleCalls.push(snapshot);
         },
@@ -341,7 +378,7 @@ const stillKeep = true;
             reason: "active" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-a",
@@ -454,10 +491,7 @@ const stillKeep = true;
         }),
         发送消息: () => false,
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({
           lastLifecycle: { visibility: "visible" as const, phase: "active" as const },
@@ -467,7 +501,7 @@ const stillKeep = true;
             reason: "active" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-a",
@@ -559,10 +593,7 @@ const stillKeep = true;
         }),
         发送消息: () => false,
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({
           lastLifecycle: null,
@@ -572,7 +603,7 @@ const stillKeep = true;
             reason: "background" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-b",
@@ -659,10 +690,7 @@ const stillKeep = true;
         }),
         发送消息: () => false,
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({
           lastLifecycle: null,
@@ -672,7 +700,7 @@ const stillKeep = true;
             reason: "background" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-b",
@@ -758,13 +786,10 @@ const stillKeep = true;
         }),
         发送消息: () => false,
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({ lastLifecycle: null, realtimePolicy: null as never }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-click",
@@ -851,13 +876,10 @@ const stillKeep = true;
         }),
         发送消息: () => false,
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({ lastLifecycle: null, realtimePolicy: null as never }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-click",
@@ -949,10 +971,7 @@ const stillKeep = true;
         },
       },
       serviceWorker,
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({
           lastLifecycle: null,
@@ -962,7 +981,7 @@ const stillKeep = true;
             reason: "background" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-event",
@@ -1049,10 +1068,7 @@ const stillKeep = true;
           lastMessage: { type: "SW_UPDATED", scope: "app" },
         }),
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({
           lastLifecycle: null,
@@ -1062,7 +1078,7 @@ const stillKeep = true;
             reason: "background" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-c",
@@ -1158,10 +1174,7 @@ const stillKeep = true;
           lastMessage: null,
         }),
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({
           lastLifecycle: { visibility: "visible" as const, phase: "active" as const },
@@ -1171,7 +1184,7 @@ const stillKeep = true;
             reason: "active" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({ ...多上下文快照 }),
         订阅事件: (listener) => {
@@ -1301,10 +1314,7 @@ const stillKeep = true;
           lastMessage: null,
         }),
       },
-      transport: {
-        transport: () => {
-          throw new Error("not used");
-        },
+      transport: 创建假传输运行时({
         接收生命周期变化: () => {},
         snapshot: () => ({
           lastLifecycle: { visibility: "visible" as const, phase: "active" as const },
@@ -1314,7 +1324,7 @@ const stillKeep = true;
             reason: "active" as const,
           },
         }),
-      },
+      }),
       multiContext: {
         snapshot: () => ({
           contextId: "tab-a",
