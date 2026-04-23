@@ -1093,7 +1093,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L1",
       "id": "frontend_tests_videojs_spec_ts",
-      "community": 15
+      "community": 14
     },
     {
       "label": "\u521b\u5efa\u5047\u64ad\u653e\u5668\u6839()",
@@ -1101,7 +1101,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L6",
       "id": "videojs_spec",
-      "community": 15
+      "community": 14
     },
     {
       "label": "\u5047Hls\u6784\u9020\u5668",
@@ -1109,7 +1109,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L66",
       "id": "videojs_spec_hls",
-      "community": 15
+      "community": 14
     },
     {
       "label": ".isSupported()",
@@ -1117,7 +1117,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L67",
       "id": "videojs_spec_hls_issupported",
-      "community": 15
+      "community": 14
     },
     {
       "label": ".constructor()",
@@ -1125,7 +1125,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L197",
       "id": "videojs_spec_hls_constructor",
-      "community": 15
+      "community": 14
     },
     {
       "label": ".on()",
@@ -1133,7 +1133,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L201",
       "id": "videojs_spec_hls_on",
-      "community": 15
+      "community": 14
     },
     {
       "label": "get()",
@@ -1141,7 +1141,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L262",
       "id": "videojs_spec_get",
-      "community": 15
+      "community": 14
     },
     {
       "label": "set()",
@@ -1149,7 +1149,7 @@
       "source_file": "frontend\\tests\\videojs\u64ad\u653e\u5668\u58f3\u6d4b\u8bd5.spec.ts",
       "source_location": "L267",
       "id": "videojs_spec_set",
-      "community": 15
+      "community": 14
     },
     {
       "label": "\u9884\u89c8\u7f13\u5b58\u6d4b\u8bd5.spec.ts",
@@ -3713,7 +3713,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L1",
       "id": "tests_complete_rs",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u4f1a\u628aprepared\u9644\u4ef6\u5347\u7ea7\u6210ready\u5e76\u5199\u5165canonical\u8d44\u4ea7()",
@@ -3721,7 +3721,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L9",
       "id": "complete_complete_prepared_ready_canonical",
-      "community": 14
+      "community": 15
     },
     {
       "label": "\u6ca1\u6709\u4e0a\u4f20\u56de\u6267\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deattachment_not_ready()",
@@ -3729,7 +3729,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L189",
       "id": "complete_complete_attachment_not_ready",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u5728\u53ea\u6709partial\u6ca1\u6709final\u65f6\u4f1a\u8fd4\u56deattachment_not_ready()",
@@ -3737,7 +3737,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L251",
       "id": "complete_complete_partial_final_attachment_not_ready",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u4f1a\u4f18\u5148\u6d88\u8d39\u5f53\u524d\u4f1a\u8bdd\u7684final\u56de\u6267\u800c\u4e0d\u662fsingle\u56de\u6267()",
@@ -3745,7 +3745,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L351",
       "id": "complete_complete_final_single",
-      "community": 14
+      "community": 15
     },
     {
       "label": "post_finish\u7a0d\u540e\u5230\u8fbe\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u7b49\u5f85\u56de\u6267\u5e76\u6210\u529f()",
@@ -3753,7 +3753,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L481",
       "id": "complete_post_finish_complete",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u89c6\u9891\u4e0a\u4f20\u4f1a\u5199\u5165canonical\u5e76\u8fd4\u56defile_asset()",
@@ -3761,7 +3761,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L593",
       "id": "complete_complete_canonical_file_asset",
-      "community": 14
+      "community": 15
     },
     {
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u9047\u5230\u975e\u56fe\u7247\u539f\u56fe\u4f1a\u8fd4\u56deattachment_type_not_allowed()",
@@ -3769,7 +3769,7 @@
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
       "source_location": "L868",
       "id": "complete_complete_attachment_type_not_allowed",
-      "community": 14
+      "community": 15
     },
     {
       "label": "prepare.rs",

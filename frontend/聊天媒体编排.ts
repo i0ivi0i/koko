@@ -154,6 +154,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 媒体运行时 = 创建媒体运行时Actor();
   const 协作分发运行时 = 创建资产协作分发运行时();
   let 媒体缓存已启动 = false;
+  /**
+   * 一旦附件已经进入帮助链，就不能再被“当前时间线暂时看不见”这件事立刻误杀。
+   * 这个集合只负责帮助任务生命周期，不参与 ready / locator / playback 真相裁决。
+   */
+  const 已进入帮助链附件 = new Set<string>();
   const 已恢复帮助任务附件 = new Set<string>();
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 媒体定位器 = 创建媒体定位器({
@@ -877,6 +882,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     if (!metadata.kind) {
       return;
     }
+    已进入帮助链附件.add(attachmentId);
     // 编排层只负责把“当前这张图值得后台补齐”的业务信号转交给播放器；
     // 真正 locate、读取 locator 兼容字段、接入 WebTorrent runtime 的细节仍留在播放器 owner。
     void 媒体播放器.激活协作补齐?.({
@@ -896,14 +902,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   ): void => {
     if (!媒体缓存已启动) {
       return;
-    }
-    const 当前房间附件编号 = new Set(
-      attachments.map((attachment) => attachment.attachmentId)
-    );
-    for (const attachmentId of Array.from(已恢复帮助任务附件)) {
-      if (!当前房间附件编号.has(attachmentId)) {
-        已恢复帮助任务附件.delete(attachmentId);
-      }
     }
     const 缓存快照 = 媒体缓存.snapshot();
     for (const attachment of attachments) {
@@ -1124,6 +1122,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       });
       session.销毁();
     }
+    已进入帮助链附件.clear();
     已恢复帮助任务附件.clear();
     媒体会话表.clear();
     视频预览状态表.clear();
@@ -1209,8 +1208,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     /**
-     * 播放结果只从当前时间线附件集合推导；新增附件进入解析，
-     * 退场附件释放资源，壳层不再自己记播放缓存。
+     * 播放结果仍以当前时间线附件集合为主输入；
+     * 但已进入帮助链的附件不能因为暂时退出当前消息集合就被立刻释放。
      */
     同步消息附件播放结果(): void {
       const attachments = 读取当前房间媒体附件();
@@ -1219,6 +1218,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
       for (const [attachmentId, session] of 媒体会话表) {
         if (activeAttachmentIds.has(attachmentId)) {
+          continue;
+        }
+        const playback = session.snapshot().playback;
+        const 帮助任务仍应保留 =
+          已进入帮助链附件.has(attachmentId) &&
+          !(playback?.mode === "degraded" && playback.reason === "media_deleted");
+        if (帮助任务仍应保留) {
           continue;
         }
         释放附件播放资源({
@@ -1231,6 +1237,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           丢弃未完成补齐: true,
         });
         session.销毁();
+        已进入帮助链附件.delete(attachmentId);
         媒体会话表.delete(attachmentId);
         已恢复帮助任务附件.delete(attachmentId);
         视频预览解析代次表.delete(attachmentId);

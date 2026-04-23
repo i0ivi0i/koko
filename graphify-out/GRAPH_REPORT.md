@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-23)
 
 ## Corpus Check
-- 205 files · ~258,795 words
+- 205 files · ~258,108 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -128,12 +128,12 @@ Cohesion: 0.22
 Nodes (2): ensureBackendBinaryPrepared(), startBackend()
 
 ### Community 14 - "Community 14"
-Cohesion: 0.25
-Nodes (0): 
-
-### Community 15 - "Community 15"
 Cohesion: 0.39
 Nodes (3): get(), 假Hls构造器, set()
+
+### Community 15 - "Community 15"
+Cohesion: 0.25
+Nodes (0): 
 
 ### Community 16 - "Community 16"
 Cohesion: 0.43

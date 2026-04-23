@@ -711,4 +711,241 @@ describe("聊天媒体编排", () => {
 
     编排.销毁();
   });
+
+  it("附件进入帮助链后，即使暂时不在当前时间线集合里，也不会立刻释放帮助任务", async () => {
+    vi.resetModules();
+    const 释放协作分发消费者 = vi.fn();
+    vi.doMock("../媒体/资产协作分发运行时.js", () => ({
+      创建资产协作分发运行时: () => ({
+        解析协作分发源: vi.fn(async () => null),
+        释放协作分发消费者,
+        读取预算: () => ({}),
+        读取会话状态: () => null,
+        send: () => undefined,
+        重置: () => undefined,
+        销毁: () => undefined,
+      }),
+    }));
+
+    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../聊天媒体编排");
+    const 激活协作补齐 = vi.fn(async () => {});
+    const 释放附件播放资源 = vi.fn();
+    const 当前消息 = {
+      value: [生成图片消息("att-image-help-chain-1")] as 消息事件[],
+    };
+
+    const transport: 前端传输端口 = {
+      loadMediaLocator: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      buildAttachmentContentUrl: vi.fn(
+        (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+          `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+      ),
+      prepareMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      abandonMediaUpload: vi.fn(async () => {}),
+      completeMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+    } as unknown as 前端传输端口;
+
+    const 编排 = 创建聊天媒体编排带协作分发桩({
+      transport: () => transport,
+      读取会话编号: () => "s-test",
+      读取消息: () => 当前消息.value,
+      媒体缓存仓库: 创建内存媒体缓存仓库({
+        "att-image-help-chain-1": {
+          attachmentId: "att-image-help-chain-1",
+          complete: true,
+          kind: "image",
+          contentHash: "hash-image-help-chain-1",
+          retainedAt: 1,
+          lastAccessAt: 1,
+        },
+      }),
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+    });
+
+    (
+      编排 as unknown as {
+        设置媒体播放器供测试(player: {
+          解析播放结果(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            surface?: "viewer" | "inline_autoplay";
+            consumerId?: string;
+          }): Promise<媒体播放结果>;
+          激活协作补齐?(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            consumerId?: string;
+          }): Promise<void>;
+          释放附件播放资源?(input: {
+            attachmentId: string;
+            consumerId?: string;
+            丢弃未完成补齐?: boolean;
+          }): void;
+        }): void;
+      }
+    ).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "blob",
+        attachmentId: "att-image-help-chain-1",
+        kind: "image",
+        src: "http://media.local/blob/att-image-help-chain-1/preview.webp",
+        viewerSrc: "http://media.local/blob/att-image-help-chain-1/full.webp",
+        thumbnailUrl: "http://media.local/blob/att-image-help-chain-1/preview.webp",
+        contentHash: "hash-image-help-chain-1",
+        distribution: null,
+        hint: null,
+      }),
+      激活协作补齐,
+      释放附件播放资源,
+    });
+
+    编排.同步消息附件播放结果();
+    await 刷新异步队列();
+
+    expect(激活协作补齐).toHaveBeenCalledTimes(1);
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toContain("att-image-help-chain-1");
+
+    当前消息.value = [生成图片消息("att-image-current-only-2")];
+    编排.同步消息附件播放结果();
+    await 刷新异步队列();
+
+    expect(释放附件播放资源).not.toHaveBeenCalledWith(
+      expect.objectContaining({ attachmentId: "att-image-help-chain-1" })
+    );
+    expect(释放协作分发消费者).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-image-help-chain-1",
+        consumerId: "preview:att-image-help-chain-1",
+      })
+    );
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toContain("att-image-help-chain-1");
+
+    编排.销毁();
+    vi.doUnmock("../媒体/资产协作分发运行时.js");
+    vi.resetModules();
+  });
+
+  it("显式销毁编排时，已保留的帮助任务仍会被正确释放", async () => {
+    vi.resetModules();
+    const 释放协作分发消费者 = vi.fn();
+    vi.doMock("../媒体/资产协作分发运行时.js", () => ({
+      创建资产协作分发运行时: () => ({
+        解析协作分发源: vi.fn(async () => null),
+        释放协作分发消费者,
+        读取预算: () => ({}),
+        读取会话状态: () => null,
+        send: () => undefined,
+        重置: () => undefined,
+        销毁: () => undefined,
+      }),
+    }));
+
+    const { 创建聊天媒体编排: 创建聊天媒体编排带协作分发桩 } = await import("../聊天媒体编排");
+    const 释放附件播放资源 = vi.fn();
+
+    const transport: 前端传输端口 = {
+      loadMediaLocator: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      buildAttachmentContentUrl: vi.fn(
+        (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+          `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+      ),
+      prepareMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+      abandonMediaUpload: vi.fn(async () => {}),
+      completeMediaUpload: vi.fn(async () => {
+        throw new Error("unused");
+      }),
+    } as unknown as 前端传输端口;
+
+    const 编排 = 创建聊天媒体编排带协作分发桩({
+      transport: () => transport,
+      读取会话编号: () => "s-test",
+      读取消息: () => [生成图片消息("att-image-destroy-1")],
+      媒体缓存仓库: 创建内存媒体缓存仓库({
+        "att-image-destroy-1": {
+          attachmentId: "att-image-destroy-1",
+          complete: true,
+          kind: "image",
+          contentHash: "hash-image-destroy-1",
+          retainedAt: 1,
+          lastAccessAt: 1,
+        },
+      }),
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+    });
+
+    (
+      编排 as unknown as {
+        设置媒体播放器供测试(player: {
+          解析播放结果(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            surface?: "viewer" | "inline_autoplay";
+            consumerId?: string;
+          }): Promise<媒体播放结果>;
+          激活协作补齐?(input: {
+            attachmentId: string;
+            kind: "image" | "video";
+            consumerId?: string;
+          }): Promise<void>;
+          释放附件播放资源?(input: {
+            attachmentId: string;
+            consumerId?: string;
+            丢弃未完成补齐?: boolean;
+          }): void;
+        }): void;
+      }
+    ).设置媒体播放器供测试({
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "blob",
+        attachmentId: "att-image-destroy-1",
+        kind: "image",
+        src: "http://media.local/blob/att-image-destroy-1/preview.webp",
+        viewerSrc: "http://media.local/blob/att-image-destroy-1/full.webp",
+        thumbnailUrl: "http://media.local/blob/att-image-destroy-1/preview.webp",
+        contentHash: "hash-image-destroy-1",
+        distribution: null,
+        hint: null,
+      }),
+      激活协作补齐: vi.fn(async () => {}),
+      释放附件播放资源,
+    });
+
+    编排.同步消息附件播放结果();
+    await 刷新异步队列();
+
+    编排.销毁();
+
+    expect(释放附件播放资源).toHaveBeenCalledWith(
+      expect.objectContaining({ attachmentId: "att-image-destroy-1" })
+    );
+    expect(释放协作分发消费者).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentId: "att-image-destroy-1",
+        consumerId: "preview:att-image-destroy-1",
+      })
+    );
+
+    vi.doUnmock("../媒体/资产协作分发运行时.js");
+    vi.resetModules();
+  });
 });
