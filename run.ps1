@@ -76,6 +76,90 @@ function Invoke-StartupArtifactOptimization {
     }
 }
 
+function Invoke-WorkspaceStorageReclaim {
+    param(
+        [string]$RepoRoot,
+        [string]$ScriptHostPath
+    )
+
+    $cleanScriptPath = Join-Path $RepoRoot "qingli.ps1"
+    if (-not (Test-Path -LiteralPath $cleanScriptPath)) {
+        throw "缺少 qingli.ps1；无法执行工作区重清理。"
+    }
+
+    Write-Host "启动前工作区重清理: qingli.ps1 -Apply -Force -SkipDatabase -SkipFiles -ReclaimWorkspaceStorage"
+    & $ScriptHostPath `
+        -NoProfile `
+        -ExecutionPolicy Bypass `
+        -File $cleanScriptPath `
+        -Apply `
+        -Force `
+        -SkipDatabase `
+        -SkipFiles `
+        -ReclaimWorkspaceStorage
+    if ($LASTEXITCODE -ne 0) {
+        throw "启动前工作区重清理失败，已停止启动。"
+    }
+}
+
+function Show-StartupCleanupMenu {
+    $choices = @(
+        [pscustomobject]@{
+            Value = "optimize"
+            Label = "继续启动（只做默认轻清理）"
+        }
+        [pscustomobject]@{
+            Value = "reclaim"
+            Label = "重清理后启动（cargo clean + node_modules / dist / .tsbuildinfo / tmp）"
+        }
+        [pscustomobject]@{
+            Value = "cancel"
+            Label = "取消"
+        }
+    )
+
+    $selectedIndex = 0
+    $bufferWidth = [Math]::Max(40, $Host.UI.RawUI.BufferSize.Width - 1)
+    $blankLine = "".PadRight($bufferWidth)
+
+    Write-Host ""
+    Write-Host "启动前清理模式（上下箭头选择，回车确认）"
+    $menuTop = [Console]::CursorTop
+    foreach ($choice in $choices) {
+        Write-Host $blankLine
+    }
+
+    while ($true) {
+        [Console]::SetCursorPosition(0, $menuTop)
+        for ($i = 0; $i -lt $choices.Count; $i++) {
+            $prefix = if ($i -eq $selectedIndex) { "> " } else { "  " }
+            $line = ($prefix + $choices[$i].Label)
+            if ($line.Length -gt $bufferWidth) {
+                $line = $line.Substring(0, $bufferWidth)
+            }
+            else {
+                $line = $line.PadRight($bufferWidth)
+            }
+            Write-Host $line
+        }
+
+        $keyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        if ($keyInfo.VirtualKeyCode -eq 38) {
+            $selectedIndex = ($selectedIndex - 1 + $choices.Count) % $choices.Count
+            continue
+        }
+        if ($keyInfo.VirtualKeyCode -eq 40) {
+            $selectedIndex = ($selectedIndex + 1) % $choices.Count
+            continue
+        }
+        if ($keyInfo.VirtualKeyCode -eq 13) {
+            [Console]::SetCursorPosition(0, $menuTop + $choices.Count)
+            Write-Host ""
+            return $choices[$selectedIndex].Value
+        }
+    }
+}
+
 function New-LauncherLogDirectory {
     param(
         [string]$RootDirectory,
@@ -750,11 +834,25 @@ try {
     }
 
     if (-not $DisableAutoOptimizeCleanup) {
-        # 自动优化只清启动器/烟测 owner 明确的本地产物：
-        # 1. 不碰数据库业务表；
-        # 2. 不碰 data/attachments / data/tus 这类业务真相目录；
-        # 3. 只在 qingli.ps1 这一处维护目录名单，避免 run.ps1 再长出第三套清理 owner。
-        Invoke-StartupArtifactOptimization -RepoRoot $repoRoot -ScriptHostPath $cleanupScriptHostPath
+        # 每次启动都先给一个固定菜单：
+        # 1. 默认继续启动只做轻清理；
+        # 2. 磁盘告急时可直接进重清理；
+        # 3. 交互仍然只发生在 run.ps1 入口层，不把清理真相复制到别的脚本。
+        $startupCleanupMode = Show-StartupCleanupMenu
+        if ($startupCleanupMode -eq "cancel") {
+            Write-Host "已取消启动。"
+            return
+        }
+        if ($startupCleanupMode -eq "reclaim") {
+            Invoke-WorkspaceStorageReclaim -RepoRoot $repoRoot -ScriptHostPath $cleanupScriptHostPath
+        }
+        else {
+            # 默认轻清理只清启动器/烟测 owner 明确的本地产物：
+            # 1. 不碰数据库业务表；
+            # 2. 不碰 data/attachments / data/tus 这类业务真相目录；
+            # 3. 只在 qingli.ps1 这一处维护目录名单，避免 run.ps1 再长出第三套清理 owner。
+            Invoke-StartupArtifactOptimization -RepoRoot $repoRoot -ScriptHostPath $cleanupScriptHostPath
+        }
     }
 
     Stop-StaleLauncherBackend -BackendTargetDir $backendTargetDir
