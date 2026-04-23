@@ -59,6 +59,8 @@ Assert-True ($runScript -match 'if \(\$UpgradeDependencies\)') "run.ps1 应该�
 Assert-True ($runScript -match 'https\.ps1') "run.ps1 应该衔接 https.ps1，让一键启动默认包含本地 HTTPS 主链。"
 Assert-True ($runScript -match '-SkipAppBootstrap') "run.ps1 调用 https.ps1 时应显式跳过二次拉起 run.ps1，避免启动递归。"
 Assert-True ($runScript -match '-LauncherMode') "run.ps1 调用 https.ps1 时应使用 launcher 模式，避免把证书安装/开机任务交互阻塞主链。"
+Assert-True (-not ($runScript -match 'Start-AppViaRunScriptIfNeeded')) "run.ps1 不得复制 https.ps1 的 app bootstrap 协调入口。"
+Assert-True (-not ($runScript -match 'Wait-LoopbackPortOpen')) "run.ps1 不得复制 https.ps1 的端口就绪轮询。"
 Assert-True ($runScript -match 'Stop-StaleLauncherBackend') "run.ps1 应该只清理自己 launcher-run 留下的开发态后端残进程，而不是发明项目级退出真相。"
 Assert-True ($runScript -match 'launcher-run') "run.ps1 应该把开发启动器产物隔离在 launcher-run 目录下，避免跟源码主产物争抢。"
 Assert-True ($runScript -match 'Get-Command tusd(?:\.exe)?') "run.ps1 应该显式检查 tusd 可执行文件是否存在。"

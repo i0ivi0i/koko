@@ -84,6 +84,9 @@ Assert-True -Condition ($scriptContent -match 'start --config[\s\S]*1>\$null[\s\
 Assert-True -Condition ($scriptContent -match 'trust --config[\s\S]*1>\$null[\s\S]*2>\$null') -Message "caddy trust 应显式重定向 stdout/stderr。"
 Assert-True -Condition ($scriptContent -match '\[switch\]\$LauncherMode') -Message "https.ps1 应支持 launcher 模式。"
 Assert-True -Condition ($scriptContent -match 'if \(\$IsLauncherMode\)') -Message "launcher 模式应跳过 caddy trust 与开机自启任务。"
+Assert-True -Condition ($scriptContent -match 'Start-AppViaRunScriptIfNeeded') -Message "https.ps1 应继续只保留 app bootstrap 协调入口。"
+Assert-True -Condition ($scriptContent -match 'run\.ps1') -Message "https.ps1 的 app bootstrap 协调应只衔接 run.ps1。"
+Assert-False -Condition ($scriptContent -match 'cargo\s+run') -Message "https.ps1 不应自己直接拉起 cargo 主链。"
 
 # 用例5：HTTPS 运行时目录默认不应在仓库内。
 $runtimeDir = Resolve-HttpsRuntimeDirectory

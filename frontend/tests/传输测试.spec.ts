@@ -64,6 +64,48 @@ describe("传输", () => {
     expect(source).not.toContain("private 解析Blob媒体资产(");
   });
 
+  it("聊天 realtime / 房间恢复 / 后台 admin / 媒体定位 当前已经只消费各自需要的 transport 子表面", () => {
+    const realtimeSource = readFileSync(resolve(process.cwd(), "房间实时编排.ts"), "utf8");
+    const recoverySource = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+    const readSource = readFileSync(resolve(process.cwd(), "阅读推进编排.ts"), "utf8");
+    const mediaSource = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+    const adminQuerySource = readFileSync(resolve(process.cwd(), "后台查询编排.ts"), "utf8");
+    const adminSessionSource = readFileSync(resolve(process.cwd(), "后台会话编排.ts"), "utf8");
+
+    expect(realtimeSource).toContain("deps.transport.createSocket(sessionId)");
+    expect(realtimeSource).toContain("deps.transport.释放Socket?.(realtimeSocket);");
+    expect(realtimeSource).not.toContain("deps.transport.loadRoomSnapshot");
+    expect(realtimeSource).not.toContain("deps.transport.adminLogin");
+
+    expect(recoverySource).toContain("deps.transport.bootstrapAnonymousIdentity(deviceAnonymousToken)");
+    expect(recoverySource).toContain("deps.transport.joinOrCreateRoom(sessionId, roomCode)");
+    expect(recoverySource).toContain("deps.transport.loadRoomSnapshot(roomId, sessionId)");
+    expect(recoverySource).not.toContain("deps.transport.adminRooms");
+    expect(recoverySource).not.toContain("deps.transport.prepareMediaUpload");
+
+    expect(readSource).toContain(
+      "deps.transport.updateRoomReadAnchor(state.roomId, state.sessionId, nextPosition)"
+    );
+    expect(readSource).toContain(
+      "deps.transport.loadRoomHistory(state.roomId, sessionId, oldestMessage.event_position, 55)"
+    );
+    expect(readSource).not.toContain("deps.transport.createSocket");
+
+    expect(mediaSource).toContain("deps.transport().loadMediaLocator(sessionId, attachmentId)");
+    expect(mediaSource).toContain("deps.transport().prepareMediaUpload(kind, sessionId, file)");
+    expect(mediaSource).toContain("deps.transport().buildAttachmentContentUrl(");
+    expect(mediaSource).not.toContain("deps.transport().adminLogin");
+    expect(mediaSource).not.toContain("deps.transport().joinOrCreateRoom");
+
+    expect(adminQuerySource).toContain("transport.loadAdminOverview(token)");
+    expect(adminQuerySource).toContain("transport.adminRooms(token)");
+    expect(adminQuerySource).toContain("transport.adminRoomDetail(token, roomId)");
+    expect(adminQuerySource).not.toContain("transport.loadRoomSnapshot");
+
+    expect(adminSessionSource).toContain("transport.adminLogin(state.username, state.password)");
+    expect(adminSessionSource).not.toContain("transport.loadAdminOverview");
+  });
+
   it("socket连接配置只显式声明当前可安全启用的连接策略", () => {
     const transport = new HttpRealtime传输("http://localhost:3000");
 

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { 前端传输端口 } from "../传输";
 import type { 生命周期快照 } from "../平台";
@@ -53,5 +55,18 @@ describe("传输运行时", () => {
       reconnection: false,
       reason: "page_hidden",
     });
+  });
+
+  it("传输运行时只推导 realtime 生命周期策略，不重养聊天/媒体业务真相", () => {
+    const source = readFileSync(resolve(process.cwd(), "平台/传输运行时.ts"), "utf8");
+
+    expect(source).toContain("lastLifecycle");
+    expect(source).toContain("realtimePolicy");
+    expect(source).toContain("this.transport().接收运行时策略?.(realtimePolicy);");
+    expect(source).not.toContain("loadRoomSnapshot(");
+    expect(source).not.toContain("loadMediaLocator(");
+    expect(source).not.toContain("adminLogin(");
+    expect(source).not.toContain("inlineAutoplay");
+    expect(source).not.toContain("latestEventPosition");
   });
 });

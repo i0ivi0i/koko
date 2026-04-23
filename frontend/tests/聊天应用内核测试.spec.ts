@@ -98,6 +98,24 @@ describe("聊天应用内核", () => {
     expect(source).not.toContain('code: "invalid_session"');
   });
 
+  it("聊天应用内核当前只从平台消费显式运行时入口，不直接回摸浏览器平台原语", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
+
+    expect(source).toContain("this.platform.transport.transport()");
+    expect(source).toContain("this.platform.storage.壳层记忆()");
+    expect(source).toContain("this.platform.offline.");
+    expect(source).toContain("const platformSnapshot = this.platform.snapshot()");
+    expect(source).toContain("void this.platform.dispatch({");
+    expect(source).not.toContain("navigator.serviceWorker");
+    expect(source).not.toContain("window.addEventListener");
+    expect(source).not.toContain("new BroadcastChannel");
+    expect(source).not.toContain("new Notification(");
+    expect(source).not.toContain("this.platform.lifecycle.");
+    expect(source).not.toContain("this.platform.serviceWorker.");
+    expect(source).not.toContain("this.platform.multiContext.");
+    expect(source).not.toContain("this.platform.notification.");
+  });
+
   it("聊天应用内核 会把 realtime recovery read 接线委托给 聊天应用编排桥接", () => {
     const source = readFileSync(resolve(process.cwd(), "聊天应用内核.ts"), "utf8");
 

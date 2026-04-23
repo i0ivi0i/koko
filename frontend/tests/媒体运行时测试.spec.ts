@@ -144,6 +144,18 @@ describe("媒体运行时", () => {
     expect(source).not.toContain("let 当前自动播解析结果");
   });
 
+  it("媒体运行时只负责 viewer/autoplay/runtime budget，不接手分发底层运行时初始化", () => {
+    const source = readFileSync(resolve(import.meta.dirname, "../媒体运行时.ts"), "utf8");
+
+    expect(source).toContain("VIEWER_OPEN_REQUESTED");
+    expect(source).toContain("INLINE_AUTOPLAY_CANDIDATES_OBSERVED");
+    expect(source).toContain("PLAYBACK_REQUEST_STARTED");
+    expect(source).not.toContain("获取或创建协作分发浏览器运行时");
+    expect(source).not.toContain("创建资产协作分发运行时");
+    expect(source).not.toContain("new WebTorrent");
+    expect(source).not.toContain("createServer(");
+  });
+
   it("自动播播放结果由媒体运行时快照承载，编排层只负责解析副作用", () => {
     const actor = 创建媒体运行时Actor();
     const playback: 媒体播放结果 = {

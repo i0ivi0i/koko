@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { 媒体定位结果 } from "../契约.js";
 import {
@@ -340,11 +342,36 @@ describe("媒体协作分发", () => {
       async () => fakeCtor,
       readRegistration
     );
+    const sameRuntime = await 获取或创建协作分发浏览器运行时(
+      async () => fakeCtor,
+      readRegistration
+    );
 
     expect(runtime).toBeDefined();
+    expect(sameRuntime).toBe(runtime);
     expect(readRegistration).toHaveBeenCalledTimes(2);
     expect(ctorSpy).toHaveBeenCalledTimes(1);
     expect(createServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("资产协作分发运行时只管理 swarm/session owner，不向壳层回声第二会话表", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "媒体/资产协作分发运行时.ts"),
+      "utf8"
+    );
+    const runtime = 创建资产协作分发运行时();
+
+    try {
+      expect(runtime.snapshot().context.sessions).toEqual({});
+      expect(runtime.读取会话状态("swarm-none")).toBeNull();
+      expect("底层会话表" in (runtime as object)).toBe(false);
+      expect("browserRuntime" in (runtime as object)).toBe(false);
+      expect(source).toContain("AssetDistributionActor 只回答 swarm 会话是否存活、被谁占用、是否已经完整");
+      expect(source).not.toContain("createServer(");
+      expect(source).not.toContain("new WebTorrent");
+    } finally {
+      runtime.销毁();
+    }
   });
 
   it("join_ticket 存在时会通过 getAnnounceOpts 传给 tracker，而不是前端自己拼第二套 announce URL", async () => {

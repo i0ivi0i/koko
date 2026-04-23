@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { 创建聊天媒体编排 } from "../聊天媒体编排";
 import type { 前端传输端口 } from "../传输";
@@ -48,6 +50,19 @@ const 创建延后Promise = <T>() => {
 };
 
 describe("聊天媒体编排", () => {
+  it("聊天媒体编排当前通过 runtime / player / viewer / distribution seam 协调媒体，不直接手搓底层浏览器能力", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+
+    expect(source).toContain("创建媒体运行时Actor");
+    expect(source).toContain("创建媒体播放器");
+    expect(source).toContain("创建媒体查看器");
+    expect(source).toContain("创建资产协作分发运行时");
+    expect(source).not.toContain("new WebTorrent");
+    expect(source).not.toContain("navigator.serviceWorker");
+    expect(source).not.toContain("createServer(");
+    expect(source).not.toContain("window.localStorage");
+  });
+
   it("新附件带协作分发片段时，视频预览优先走同一 swarm 主链，不回退 canonical/original 冷源", async () => {
     vi.resetModules();
     const attachmentId = "att-video-preview-swarm-first-1";

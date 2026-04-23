@@ -123,6 +123,18 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).not.toContain("取消平台事件订阅");
   });
 
+  it("浏览器应用平台只发布浏览器运行时事实，不发布聊天/媒体业务裁决", () => {
+    const source = 读取前端源码("平台/浏览器应用平台.ts");
+
+    expect(source).toContain('| { type: "LIFECYCLE_CHANGED"; snapshot: 生命周期快照 }');
+    expect(source).toContain('| { type: "PRIMARY_CONTEXT_FOCUSED" }');
+    expect(source).toContain('| { type: "OFFLINE_STATUS_CHANGED"; online: boolean }');
+    expect(source).not.toContain('"ROOM_');
+    expect(source).not.toContain('"MESSAGE_');
+    expect(source).not.toContain('"MEDIA_');
+    expect(source).not.toContain('"READ_');
+  });
+
   it("媒体协作分发不再直接访问 navigator.storage.persist 或裸 localStorage", () => {
     const source = 读取前端源码("媒体/媒体协作分发.ts");
 
