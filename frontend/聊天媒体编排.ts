@@ -194,6 +194,48 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   let 自动播协作!: 自动播协作端口;
   let 视频预览协作!: 视频预览协作端口;
   let 协作补齐协作!: 协作补齐协作端口;
+  const 释放附件播放资源 = (input: 媒体播放释放请求): void => {
+    // 编排层只在附件会话退场时通知播放器释放底层占用；
+    // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
+    媒体播放器.释放附件播放资源?.(input);
+  };
+  const 释放媒体附件会话 = (
+    attachmentId: string,
+    input: {
+      丢弃未完成播放补齐?: boolean;
+      丢弃未完成预览补齐?: boolean;
+      清理协作补齐?: boolean;
+      清理视频预览?: boolean;
+      立即请求重渲染?: boolean;
+    } = {}
+  ): boolean => {
+    const session = 媒体会话表.get(attachmentId);
+    if (!session) {
+      return false;
+    }
+    释放附件播放资源({
+      attachmentId,
+      consumerId: 构造媒体会话ConsumerId(attachmentId),
+      ...(input.丢弃未完成播放补齐 ? { 丢弃未完成补齐: true } : {}),
+    });
+    协作分发运行时.释放协作分发消费者({
+      attachmentId,
+      consumerId: 构造预览ConsumerId(attachmentId),
+      ...(input.丢弃未完成预览补齐 ? { 丢弃未完成补齐: true } : {}),
+    });
+    session.销毁();
+    媒体会话表.delete(attachmentId);
+    if (input.清理协作补齐) {
+      协作补齐协作.清理附件(attachmentId);
+    }
+    if (input.清理视频预览) {
+      视频预览协作.删除视频预览状态(attachmentId);
+    }
+    if (input.立即请求重渲染) {
+      deps.请求重渲染();
+    }
+    return true;
+  };
   const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
     const before = 媒体运行时.getSnapshot();
     媒体运行时.send(event);
@@ -217,19 +259,17 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     if (beforeContext.currentViewerRequest && !afterContext.currentViewerRequest) {
       const attachmentId = beforeContext.currentViewerRequest.startAttachmentId;
-      const session = 媒体会话表.get(attachmentId);
-      if (session) {
-        释放附件播放资源({
-          attachmentId,
-          consumerId: 构造媒体会话ConsumerId(attachmentId),
-          丢弃未完成补齐: true,
-        });
-        session.销毁();
-        媒体会话表.delete(attachmentId);
-        deps.请求重渲染();
+      const 已释放查看器起始附件 = 释放媒体附件会话(attachmentId, {
+        丢弃未完成播放补齐: true,
+        丢弃未完成预览补齐: true,
+        清理协作补齐: true,
+        清理视频预览: true,
+        立即请求重渲染: true,
+      });
+      if (!已释放查看器起始附件) {
+        协作补齐协作.清理附件(attachmentId);
+        视频预览协作.删除视频预览状态(attachmentId);
       }
-      协作补齐协作.清理附件(attachmentId);
-      视频预览协作.删除视频预览状态(attachmentId);
       查看器会话协作.处理查看器请求已清空();
     }
 
@@ -456,12 +496,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     });
   };
 
-  const 释放附件播放资源 = (input: 媒体播放释放请求): void => {
-    // 编排层只在附件会话退场时通知播放器释放底层占用；
-    // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
-    媒体播放器.释放附件播放资源?.(input);
-  };
-
   查看器会话协作 = 创建查看器会话协作({
     读取当前查看器请求: () => 读取媒体运行时上下文().currentViewerRequest,
     读取查看器是否已打开: () => 读取媒体运行时上下文().viewerOpen,
@@ -602,24 +636,96 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     session.send({ type: "ENTER_RECOVERING" });
   };
 
-  const 清空播放状态 = (): void => {
+  const 清理失活媒体会话 = (activeAttachmentIds: Set<string>): boolean => {
+    let hasSessionSetChanged = false;
     for (const [attachmentId, session] of 媒体会话表) {
-      释放附件播放资源({
-        attachmentId,
-        consumerId: 构造媒体会话ConsumerId(attachmentId),
+      if (activeAttachmentIds.has(attachmentId)) {
+        continue;
+      }
+      const playback = session.snapshot().playback;
+      if (
+        协作补齐协作.应保留帮助任务({
+          attachmentId,
+          playback,
+        })
+      ) {
+        continue;
+      }
+      if (
+        释放媒体附件会话(attachmentId, {
+          丢弃未完成预览补齐: true,
+          清理协作补齐: true,
+          清理视频预览: true,
+        })
+      ) {
+        hasSessionSetChanged = true;
+      }
+    }
+    return hasSessionSetChanged;
+  };
+
+  const 补齐当前房间媒体会话 = (attachments: 媒体附件条目[]): boolean => {
+    let hasSessionSetChanged = false;
+    for (const attachment of attachments) {
+      if (媒体会话表.has(attachment.attachmentId)) {
+        if (attachment.kind === "video") {
+          const previewPhase = 视频预览协作.读取视频预览状态(attachment.attachmentId)?.phase;
+          if (!previewPhase || previewPhase === "idle") {
+            视频预览协作.解析视频预览(attachment.attachmentId);
+          }
+        }
+        continue;
+      }
+      hasSessionSetChanged = true;
+      const session = 创建媒体会话条目(attachment);
+      媒体会话表.set(attachment.attachmentId, session);
+      if (attachment.kind === "image") {
+        void session.启动();
+        continue;
+      }
+      视频预览协作.解析视频预览(attachment.attachmentId);
+    }
+    return hasSessionSetChanged;
+  };
+
+  const 清空播放状态 = (): void => {
+    for (const attachmentId of Array.from(媒体会话表.keys())) {
+      释放媒体附件会话(attachmentId, {
+        丢弃未完成预览补齐: true,
       });
-      协作分发运行时.释放协作分发消费者({
-        attachmentId,
-        consumerId: 构造预览ConsumerId(attachmentId),
-        丢弃未完成补齐: true,
-      });
-      session.销毁();
     }
     协作补齐协作.清空();
-    媒体会话表.clear();
     视频预览协作.清空();
     查看器会话协作.重置();
     媒体定位器.清空();
+  };
+
+  const 执行媒体编排关停 = (input: {
+    发布器动作: "clear" | "destroy";
+    协作分发动作: "reset" | "destroy";
+    停止媒体运行时?: boolean;
+  }): void => {
+    const before = 媒体运行时.getSnapshot();
+    媒体运行时.send({ type: "VIEWER_CLOSED" });
+    媒体运行时.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
+    媒体查看器.销毁();
+    if (input.发布器动作 === "clear") {
+      媒体发布器.清空();
+    } else {
+      媒体发布器.销毁();
+    }
+    清空播放状态();
+    if (input.协作分发动作 === "reset") {
+      协作分发运行时.重置();
+    } else {
+      协作分发运行时.销毁();
+    }
+    void 同步媒体运行时快照并执行副作用(before);
+    if (input.停止媒体运行时) {
+      媒体运行时.stop();
+    }
+    自动播协作.销毁();
+    deps.请求重渲染();
   };
 
   void 媒体缓存.启动().then(() => {
@@ -705,67 +811,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     同步消息附件播放结果(): void {
       const attachments = 读取当前房间媒体附件();
       const activeAttachmentIds = new Set(attachments.map((item) => item.attachmentId));
-      let hasSessionSetChanged = false;
-
-      for (const [attachmentId, session] of 媒体会话表) {
-        if (activeAttachmentIds.has(attachmentId)) {
-          continue;
-        }
-        const playback = session.snapshot().playback;
-        if (
-          协作补齐协作.应保留帮助任务({
-            attachmentId,
-            playback,
-          })
-        ) {
-          continue;
-        }
-        释放附件播放资源({
-          attachmentId,
-          consumerId: 构造媒体会话ConsumerId(attachmentId),
-        });
-        协作分发运行时.释放协作分发消费者({
-          attachmentId,
-          consumerId: 构造预览ConsumerId(attachmentId),
-          丢弃未完成补齐: true,
-        });
-        session.销毁();
-        协作补齐协作.清理附件(attachmentId);
-        媒体会话表.delete(attachmentId);
-        视频预览协作.删除视频预览状态(attachmentId);
-        hasSessionSetChanged = true;
-      }
-
-      if (hasSessionSetChanged) {
+      if (清理失活媒体会话(activeAttachmentIds)) {
         deps.请求重渲染();
       }
       接收媒体运行时事实({
         type: "MESSAGE_ATTACHMENTS_SYNCED",
         attachmentIds: Array.from(activeAttachmentIds),
       });
-
-      for (const attachment of attachments) {
-        if (媒体会话表.has(attachment.attachmentId)) {
-          if (attachment.kind === "video") {
-            const previewPhase = 视频预览协作.读取视频预览状态(attachment.attachmentId)?.phase;
-            if (!previewPhase || previewPhase === "idle") {
-              视频预览协作.解析视频预览(attachment.attachmentId);
-            }
-          }
-          continue;
-        }
-        hasSessionSetChanged = true;
-        const session = 创建媒体会话条目(attachment);
-        媒体会话表.set(attachment.attachmentId, session);
-        if (attachment.kind === "image") {
-          void session.启动();
-          continue;
-        }
-        视频预览协作.解析视频预览(attachment.attachmentId);
-      }
-
+      const hasSessionSetChanged = 补齐当前房间媒体会话(attachments);
       协作补齐协作.恢复当前房间缓存帮助任务(attachments);
-
       if (hasSessionSetChanged) {
         deps.请求重渲染();
       }
@@ -806,30 +860,18 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     清空(): void {
-      const before = 媒体运行时.getSnapshot();
-      媒体运行时.send({ type: "VIEWER_CLOSED" });
-      媒体运行时.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
-      媒体查看器.销毁();
-      媒体发布器.清空();
-      清空播放状态();
-      协作分发运行时.重置();
-      void 同步媒体运行时快照并执行副作用(before);
-      自动播协作.销毁();
-      deps.请求重渲染();
+      执行媒体编排关停({
+        发布器动作: "clear",
+        协作分发动作: "reset",
+      });
     },
 
     销毁(): void {
-      const before = 媒体运行时.getSnapshot();
-      媒体运行时.send({ type: "VIEWER_CLOSED" });
-      媒体运行时.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
-      媒体查看器.销毁();
-      媒体发布器.销毁();
-      清空播放状态();
-      协作分发运行时.销毁();
-      void 同步媒体运行时快照并执行副作用(before);
-      媒体运行时.stop();
-      自动播协作.销毁();
-      deps.请求重渲染();
+      执行媒体编排关停({
+        发布器动作: "destroy",
+        协作分发动作: "destroy",
+        停止媒体运行时: true,
+      });
     },
 
     设置媒体播放器供测试(player): void {

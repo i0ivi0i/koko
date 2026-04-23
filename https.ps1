@@ -329,6 +329,51 @@ function Resolve-CaddyRootCertificatePath {
     return $null
 }
 
+function Write-HttpsAccessSummary {
+    param(
+        [Parameter(Mandatory = $true)][int]$AppPort,
+        [Parameter(Mandatory = $true)][string]$CaddyfilePath,
+        [Parameter(Mandatory = $true)][string[]]$DisplayUrls
+    )
+
+    Write-Host "后端端口: $AppPort"
+    Write-Host "Caddyfile: $CaddyfilePath"
+    Write-Host "HTTPS 地址："
+    foreach ($url in $DisplayUrls) {
+        Write-Host "  - $url"
+    }
+    Write-Host "注意：不要访问 https://127.0.0.1:$AppPort/ （该端口是后端明文 HTTP 端口）。"
+    Write-Host "注意：不要访问 https://0.0.0.0:$AppPort/ （0.0.0.0 仅用于监听绑定，不是可访问主机名）。"
+}
+
+function Enable-CaddyTrustAndAutoStart {
+    param(
+        [Parameter(Mandatory = $true)][string]$CaddyPath,
+        [Parameter(Mandatory = $true)][string]$CaddyfilePath
+    )
+
+    # 证书信任是 best-effort，不阻断 HTTPS 主链。
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $CaddyPath trust --config $CaddyfilePath --adapter caddyfile 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "自动写入本机证书信任失败（常见于权限不足）。"
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $taskName = Ensure-CaddyAutoStartTask -CaddyPath $CaddyPath -CaddyfilePath $CaddyfilePath
+    Write-Host "已写入开机自启任务: $taskName"
+
+    $rootCertPath = Resolve-CaddyRootCertificatePath
+    if (-not [string]::IsNullOrWhiteSpace($rootCertPath)) {
+        Write-Host "局域网设备若提示证书不受信任，请导入此根证书: $rootCertPath"
+    }
+}
+
 function Invoke-HttpsBootstrap {
     param(
         [int]$RequestedPort = 0,
@@ -359,14 +404,10 @@ function Invoke-HttpsBootstrap {
     $displayUrls = @("https://localhost", "https://127.0.0.1") + ($lanIps | ForEach-Object { "https://$_" })
     $displayUrls = @($displayUrls | Select-Object -Unique)
 
-    Write-Host "后端端口: $appPort"
-    Write-Host "Caddyfile: $caddyfilePath"
-    Write-Host "HTTPS 地址："
-    foreach ($url in $displayUrls) {
-        Write-Host "  - $url"
-    }
-    Write-Host "注意：不要访问 https://127.0.0.1:$appPort/ （该端口是后端明文 HTTP 端口）。"
-    Write-Host "注意：不要访问 https://0.0.0.0:$appPort/ （0.0.0.0 仅用于监听绑定，不是可访问主机名）。"
+    Write-HttpsAccessSummary `
+        -AppPort $appPort `
+        -CaddyfilePath $caddyfilePath `
+        -DisplayUrls $displayUrls
 
     if ($PreviewOnly) {
         Write-Host "DryRun 模式：仅展示动作，不执行。"
@@ -384,26 +425,9 @@ function Invoke-HttpsBootstrap {
         return
     }
 
-    # 证书信任是 best-effort，不阻断主链。
-    $previousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        & $caddyPath trust --config $caddyfilePath --adapter caddyfile 1>$null 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "自动写入本机证书信任失败（常见于权限不足）。"
-        }
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    $taskName = Ensure-CaddyAutoStartTask -CaddyPath $caddyPath -CaddyfilePath $caddyfilePath
-    Write-Host "已写入开机自启任务: $taskName"
-
-    $rootCertPath = Resolve-CaddyRootCertificatePath
-    if (-not [string]::IsNullOrWhiteSpace($rootCertPath)) {
-        Write-Host "局域网设备若提示证书不受信任，请导入此根证书: $rootCertPath"
-    }
+    Enable-CaddyTrustAndAutoStart `
+        -CaddyPath $caddyPath `
+        -CaddyfilePath $caddyfilePath
 }
 
 if ($MyInvocation.InvocationName -ne ".") {

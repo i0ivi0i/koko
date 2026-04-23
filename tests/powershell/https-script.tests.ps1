@@ -87,6 +87,8 @@ Assert-True -Condition ($scriptContent -match 'if \(\$IsLauncherMode\)') -Messag
 Assert-True -Condition ($scriptContent -match 'Start-AppViaRunScriptIfNeeded') -Message "https.ps1 应继续只保留 app bootstrap 协调入口。"
 Assert-True -Condition ($scriptContent -match 'run\.ps1') -Message "https.ps1 的 app bootstrap 协调应只衔接 run.ps1。"
 Assert-True -Condition ($scriptContent -match 'Resolve-HttpsBootstrapLogDirectory') -Message "https.ps1 应把 bootstrap 日志目录解析收口到独立 helper。"
+Assert-True -Condition ($scriptContent -match 'Write-HttpsAccessSummary') -Message "https.ps1 应把访问入口打印收口到独立 helper，避免 Invoke-HttpsBootstrap 继续长胖。"
+Assert-True -Condition ($scriptContent -match 'Enable-CaddyTrustAndAutoStart') -Message "https.ps1 应把证书信任与开机自启收口到独立 helper，避免 Invoke-HttpsBootstrap 混杂太多步骤。"
 Assert-False -Condition ($scriptContent -match 'cargo\s+run') -Message "https.ps1 不应自己直接拉起 cargo 主链。"
 
 # 用例5：HTTPS 运行时目录默认不应在仓库内。

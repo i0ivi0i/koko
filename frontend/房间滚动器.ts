@@ -44,15 +44,8 @@ type 程序滚动来源 = "media_viewer_open" | "jump_to_latest";
 
 export interface 房间滚动器依赖 {
   读取状态(): 房间滚动观察态;
-  /**
-   * 旧测试支架仍可能带着这些属性进来；
-   * 真正的视口 owner 已经不再消费它们，这里只保留兼容类型口子，避免测试基建在迁移期整片爆炸。
-   */
-  更新状态?(patch: Partial<房间滚动观察态>): void;
   查询滚动容器(): HTMLElement | null;
   查询消息节点(): HTMLElement[];
-  请求更早历史?(): void;
-  采样阅读锚点?(position: number): void;
   上报滚动观测?(observation: 房间滚动观测): void;
   读取是否需要恢复补锚(): boolean;
   消耗恢复补锚标记(): void;

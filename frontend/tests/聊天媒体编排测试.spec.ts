@@ -112,6 +112,15 @@ describe("聊天媒体编排", () => {
     expect(source).not.toContain("const 恢复当前房间缓存帮助任务 =");
   });
 
+  it("聊天媒体编排统一复用附件释放和关停 helper，不再在多处复制销毁序列", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天媒体编排.ts"), "utf8");
+
+    expect(source).toContain("const 释放媒体附件会话 =");
+    expect(source).toContain("const 执行媒体编排关停 =");
+    expect(source).toMatch(/清空\(\): void \{\s+执行媒体编排关停\(\{/);
+    expect(source).toMatch(/销毁\(\): void \{\s+执行媒体编排关停\(\{/);
+  });
+
   it("新附件带协作分发片段时，视频预览优先走同一 swarm 主链，不回退 canonical/original 冷源", async () => {
     vi.resetModules();
     const attachmentId = "att-video-preview-swarm-first-1";

@@ -1,5 +1,5 @@
 import {
-  HttpRealtime传输,
+  创建前端传输,
   type 后台会话传输端口,
   type 后台查询传输端口,
   type 媒体传输端口,
@@ -85,8 +85,9 @@ export function 创建传输运行时(
   deps: 传输运行时依赖 = {}
 ): 传输运行时 {
   const baseUrl = deps.baseUrl ?? 读取默认基地址();
-  const createTransport =
-    deps.createTransport ?? ((resolvedBaseUrl: string) => new HttpRealtime传输(resolvedBaseUrl));
+  // 平台层只保留“如何拿到唯一 transport 组合根”这一条构造口。
+  // 默认实现继续走前端传输工厂，不再维持一个额外的巨型 class 入口。
+  const createTransport = deps.createTransport ?? 创建前端传输;
 
   let current: 传输运行时快照 = {
     lastLifecycle: null,

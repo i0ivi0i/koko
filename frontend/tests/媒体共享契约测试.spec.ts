@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpRealtime传输 } from "../传输";
+import { 创建前端传输 } from "../传输";
+
+const 创建测试传输 = () => 创建前端传输("http://localhost:3000");
 
 describe("媒体共享契约", () => {
   beforeEach(() => {
@@ -66,7 +68,7 @@ describe("媒体共享契约", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const locator = await transport.loadMediaLocator("s-1", "att-shared-video-1");
 
@@ -149,7 +151,7 @@ describe("媒体共享契约", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const result = await transport.completeMediaUpload("s-1", "att-shared-image-1");
 

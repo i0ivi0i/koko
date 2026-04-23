@@ -10,8 +10,10 @@ vi.mock("socket.io-client", () => ({
   io: ioSpy,
 }));
 
-import { HttpRealtime传输 } from "../传输";
+import { 创建前端传输 } from "../传输";
 import type { 匿名身份快照 } from "../契约";
+
+const 创建测试传输 = () => 创建前端传输("http://localhost:3000");
 
 describe("传输", () => {
   beforeEach(() => {
@@ -19,52 +21,54 @@ describe("传输", () => {
     vi.restoreAllMocks();
   });
 
-  it("HttpRealtime传输 会把 socket 生命周期与运行时策略委托给 实时连接适配", () => {
+  it("前端传输组合根 会把 socket 生命周期与运行时策略委托给 实时连接适配", () => {
     const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
 
     expect(source).toContain('from "./聊天实时/适配/实时连接适配.js"');
-    expect(source).toContain("private readonly 实时连接");
-    expect(source).toContain("return this.实时连接.createSocket(sessionId);");
-    expect(source).toContain("this.实时连接.接收运行时策略(policy);");
-    expect(source).toContain("return this.实时连接.读取运行时策略();");
-    expect(source).toContain("this.实时连接.释放Socket(socket);");
+    expect(source).toContain("const 实时连接 = new 实时连接适配(baseUrl);");
+    expect(source).toContain("createSocket: (sessionId: string): Socket => 实时连接.createSocket(sessionId),");
+    expect(source).toContain("实时连接.接收运行时策略(policy);");
+    expect(source).toContain("读取运行时策略: () => 实时连接.读取运行时策略(),");
+    expect(source).toContain("实时连接.释放Socket(socket);");
     expect(source).not.toContain("private 当前运行时策略");
     expect(source).not.toContain("private readonly 活跃Socket表");
   });
 
-  it("HttpRealtime传输 会把房间主链 HTTP 调用委托给 房间HTTP接口", () => {
+  it("前端传输组合根 会把房间主链 HTTP 调用委托给 房间HTTP接口", () => {
     const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
 
     expect(source).toContain('from "./聊天恢复/适配/房间HTTP接口.js"');
-    expect(source).toContain("private readonly 房间HTTP接口");
-    expect(source).toContain("return this.房间HTTP接口.bootstrapAnonymousIdentity(deviceToken);");
-    expect(source).toContain("return this.房间HTTP接口.joinOrCreateRoom(sessionId, roomCode);");
-    expect(source).toContain("return this.房间HTTP接口.loadRoomSnapshot(roomId, sessionId);");
-    expect(source).toContain("return this.房间HTTP接口.updateRoomReadAnchor(");
-    expect(source).toContain("return this.房间HTTP接口.loadRoomEvents(roomId, sessionId, from);");
-    expect(source).toContain("return this.房间HTTP接口.loadRoomHistory(");
+    expect(source).toContain("const 房间传输 = 创建房间HTTP接口({");
+    expect(source).toContain("...房间传输,");
   });
 
-  it("HttpRealtime传输 会把 media 与 admin HTTP 适配拆回各自接口，只保留组合根职责", () => {
+  it("前端传输组合根 会把 media 与 admin HTTP 适配拆回各自接口，只保留组合根职责", () => {
     const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
 
     expect(source).toContain('from "./媒体/适配/媒体HTTP接口.js"');
     expect(source).toContain('from "./操作台/适配/后台HTTP接口.js"');
-    expect(source).toContain("private readonly 媒体HTTP接口");
-    expect(source).toContain("private readonly 后台HTTP接口");
-    expect(source).toContain("return this.媒体HTTP接口.prepareMediaUpload(kind, sessionId, file);");
-    expect(source).toContain("return this.媒体HTTP接口.abandonMediaUpload(sessionId, attachmentId);");
-    expect(source).toContain("return this.媒体HTTP接口.completeMediaUpload(sessionId, attachmentId);");
-    expect(source).toContain("return this.媒体HTTP接口.loadMediaLocator(sessionId, attachmentId);");
-    expect(source).toContain("return this.后台HTTP接口.loadAdminOverview(token);");
-    expect(source).toContain("return this.后台HTTP接口.adminLogin(username, password);");
-    expect(source).toContain("return this.后台HTTP接口.adminRooms(token);");
-    expect(source).toContain("return this.后台HTTP接口.adminRoomDetail(token, roomId);");
+    expect(source).toContain("const 媒体传输 = new 媒体HTTP接口({");
+    expect(source).toContain("const 后台传输 = new 后台HTTP接口({");
+    expect(source).toContain("媒体传输.prepareMediaUpload(kind, sessionId, file)");
+    expect(source).toContain("媒体传输.abandonMediaUpload(sessionId, attachmentId)");
+    expect(source).toContain("媒体传输.completeMediaUpload(sessionId, attachmentId)");
+    expect(source).toContain("媒体传输.loadMediaLocator(sessionId, attachmentId)");
+    expect(source).toContain("后台传输.loadAdminOverview(token)");
+    expect(source).toContain("后台传输.adminLogin(username, password)");
+    expect(source).toContain("后台传输.adminRooms(token)");
+    expect(source).toContain("后台传输.adminRoomDetail(token, roomId)");
     expect(source).not.toContain("private 解析流媒体资产(");
     expect(source).not.toContain("private 解析Blob媒体资产(");
   });
 
-  it("HttpRealtime传输 会把聊天房间/realtime/media/admin 显式投影成窄接口，而不是让所有调用者都抱住巨型端口", () => {
+  it("前端传输组合根改成工厂组合，不再维持巨型 class 热点", () => {
+    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+
+    expect(source).toContain("export function 创建前端传输(");
+    expect(source).not.toContain("export class HttpRealtime传输");
+  });
+
+  it("前端传输组合根 会把聊天房间/realtime/media/admin 显式投影成窄接口，而不是让所有调用者都抱住巨型端口", () => {
     const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
 
     expect(source).toContain('from "./聊天共享/适配/聊天房间传输端口.js"');
@@ -122,7 +126,7 @@ describe("传输", () => {
   });
 
   it("socket连接配置只显式声明当前可安全启用的连接策略", () => {
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     transport.createSocket("s-auth");
 
@@ -141,24 +145,37 @@ describe("传输", () => {
       connect,
       disconnect,
     } as never);
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
+    const realtimeTransport = transport as typeof transport & {
+      接收运行时策略(policy: {
+        intent: "resume" | "suspend";
+        reconnection: boolean;
+        reason: "active" | "background" | "page_hidden";
+      }): void;
+      读取运行时策略(): {
+        intent: "resume" | "suspend";
+        reconnection: boolean;
+        reason: "active" | "background" | "page_hidden";
+      };
+      释放Socket(socket: unknown): void;
+    };
 
     const socket = transport.createSocket("s-auth");
-    transport.接收运行时策略({
+    realtimeTransport.接收运行时策略({
       intent: "suspend",
       reconnection: false,
       reason: "page_hidden",
     });
-    transport.接收运行时策略({
+    realtimeTransport.接收运行时策略({
       intent: "resume",
       reconnection: true,
       reason: "active",
     });
-    transport.释放Socket(socket);
+    realtimeTransport.释放Socket(socket);
 
     expect(disconnect).toHaveBeenCalledTimes(2);
     expect(connect).toHaveBeenCalledTimes(1);
-    expect(transport.读取运行时策略()).toEqual({
+    expect(realtimeTransport.读取运行时策略()).toEqual({
       intent: "resume",
       reconnection: true,
       reason: "active",
@@ -187,7 +204,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const result = await transport.bootstrapAnonymousIdentity("device-token-1");
 
@@ -215,7 +232,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     await transport.loadRoomEvents("r-1", "s-1", 6);
 
@@ -242,7 +259,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const snapshot = await transport.loadRoomSnapshot("r-1", "s-1");
 
@@ -293,7 +310,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const snapshot = await transport.loadRoomSnapshot("r-1", "s-1");
     const attachment = snapshot.snapshot_messages[0]?.attachments?.[0] as
@@ -312,7 +329,7 @@ describe("传输", () => {
         headers: { "content-type": "application/json" },
       })
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     await transport.updateRoomReadAnchor("r-1", "s-1", 7);
 
@@ -339,7 +356,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     await transport.loadRoomHistory("r-1", "s-1", 12, 55);
 
@@ -349,8 +366,8 @@ describe("传输", () => {
     );
   });
 
-  it("HttpRealtime传输 不再暴露 uploadImageAttachment", () => {
-    const transport = new HttpRealtime传输("http://localhost:3000") as unknown as Record<
+  it("前端传输组合根 不再暴露 uploadImageAttachment", () => {
+    const transport = 创建测试传输() as unknown as Record<
       string,
       unknown
     >;
@@ -380,7 +397,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
     const file = new File([new Uint8Array([1, 2, 3])], "photo.jpg", {
       type: "image/jpeg",
     });
@@ -428,7 +445,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
     const file = new File([new Uint8Array([1, 2, 3])], "clip.mp4", {
       type: "video/mp4",
     });
@@ -494,7 +511,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const result = await transport.completeMediaUpload("s-1", "att-ready-1");
 
@@ -550,7 +567,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     await transport.abandonMediaUpload("s-1", "att-old-1");
 
@@ -620,7 +637,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const locator = await transport.loadMediaLocator("s-1", "att-locator-1");
 
@@ -792,7 +809,7 @@ describe("传输", () => {
           }
         )
       );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const ready = await transport.completeMediaUpload("s-1", "att-ready-2");
     const locator = await transport.loadMediaLocator("s-1", "att-ready-2");
@@ -894,7 +911,7 @@ describe("传输", () => {
         }
       )
     );
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const locator = await transport.loadMediaLocator("s-1", "att-connecting-peer-1");
 
@@ -906,7 +923,7 @@ describe("传输", () => {
   });
 
   it("buildAttachmentContentUrl 会生成受控图片内容地址", () => {
-    const transport = new HttpRealtime传输("http://localhost:3000");
+    const transport = 创建测试传输();
 
     const originalUrl = transport.buildAttachmentContentUrl("att-1", "s-1");
     const thumbnailUrl = transport.buildAttachmentContentUrl("att-1", "s-1", "thumbnail");

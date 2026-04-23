@@ -363,31 +363,32 @@ function Read-NewLogLines {
     return $parts[0..($parts.Length - 2)]
 }
 
-function Write-ManagedProcessLogs {
-    param($ManagedProcess)
+function Write-ManagedStreamLines {
+    param(
+        [Parameter(Mandatory = $true)][string]$ManagedProcessName,
+        [Parameter(Mandatory = $true)]$StreamState,
+        [switch]$StdErr
+    )
 
-    if ($null -eq $ManagedProcess) {
-        return
-    }
-
-    # 这里按“读取新增日志 -> 立刻写回当前控制台”的真实语义命名，
-    # 避免继续用 PowerShell 未批准的 Flush 动词，同时也让维护者一眼看出它不是在清空日志文件。
-    foreach ($line in (Read-NewLogLines -StreamState $ManagedProcess.Stdout)) {
+    foreach ($line in (Read-NewLogLines -StreamState $StreamState)) {
         if ([string]::IsNullOrWhiteSpace($line)) {
             continue
         }
-        [Console]::Out.WriteLine(("[{0}] {1}" -f $ManagedProcess.Name, $line))
-        Update-CloudflareTunnelStateFromLogLine -ManagedProcessName $ManagedProcess.Name -Line $line
-    }
 
-    foreach ($line in (Read-NewLogLines -StreamState $ManagedProcess.Stderr)) {
-        if ([string]::IsNullOrWhiteSpace($line)) {
-            continue
+        if ($StdErr) {
+            [Console]::Error.WriteLine(("[{0}] {1}" -f $ManagedProcessName, $line))
         }
-        [Console]::Error.WriteLine(("[{0}] {1}" -f $ManagedProcess.Name, $line))
-        Update-CloudflareTunnelStateFromLogLine -ManagedProcessName $ManagedProcess.Name -Line $line
-    }
+        else {
+            [Console]::Out.WriteLine(("[{0}] {1}" -f $ManagedProcessName, $line))
+        }
 
+        # tunnel 日志语义继续只在这里被提取成稳定运行时事实，
+        # 读取日志的调度者本身不再顺手夹带解析状态逻辑。
+        Update-CloudflareTunnelStateFromLogLine -ManagedProcessName $ManagedProcessName -Line $line
+    }
+}
+
+function Write-CloudflareTunnelReadyBanner {
     if (
         -not $script:CloudflareTunnelPublicUrlAnnounced -and
         $script:CloudflareTunnelConnected -and
@@ -398,6 +399,21 @@ function Write-ManagedProcessLogs {
             -Url $script:CloudflareTunnelPublicUrl
         $script:CloudflareTunnelPublicUrlAnnounced = $true
     }
+}
+
+function Write-ManagedProcessLogs {
+    param($ManagedProcess)
+
+    if ($null -eq $ManagedProcess) {
+        return
+    }
+
+    # 这里按“读取新增日志 -> 委托 stdout/stderr 写回 -> 最后补 tunnel ready 横幅”的顺序工作，
+    # tunnel 状态解析已经下沉到 Write-ManagedStreamLines / Update-CloudflareTunnelStateFromLogLine，
+    # 自己不再同时拥有两条流循环和展示编排。
+    Write-ManagedStreamLines -ManagedProcessName $ManagedProcess.Name -StreamState $ManagedProcess.Stdout
+    Write-ManagedStreamLines -ManagedProcessName $ManagedProcess.Name -StreamState $ManagedProcess.Stderr -StdErr
+    Write-CloudflareTunnelReadyBanner
 }
 
 function Stop-StaleLauncherBackend {
