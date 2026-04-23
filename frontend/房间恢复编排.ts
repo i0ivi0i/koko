@@ -2,6 +2,8 @@ import type { 房间快照 } from "./契约.js";
 import type { 房间内核事件 } from "./房间内核.js";
 import type { 房间时间线事件 } from "./房间时间线运行时.js";
 import type { 前端存储端口, 首页房间历史条目 } from "./存储.js";
+import { 创建会话失效恢复协作 } from "./聊天恢复/壳层/会话失效恢复.js";
+import { 创建房间快照恢复协作 } from "./聊天恢复/壳层/房间快照恢复.js";
 import { Http接口错误, type 前端传输端口 } from "./传输.js";
 import type { 聊天状态 } from "./状态.js";
 
@@ -88,8 +90,6 @@ export interface 房间恢复编排端口 {
  * 3. 硬失败与可重试失败的房间收场边界。
  */
 export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间恢复编排端口 {
-  let invalidSessionRecoveryTask: Promise<void> | null = null;
-
   function 读取恢复状态(): 恢复编排状态 {
     return deps.读取恢复状态();
   }
@@ -100,16 +100,6 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
 
   function 接收时间线事实(event: 房间时间线事件): void {
     deps.接收时间线事实(event);
-  }
-
-  /**
-   * 首页历史只是一份壳层本地记忆。
-   * 恢复编排只表达“该同步首页历史了”，不让 UI 再自己推导一份第二真相。
-   */
-  function 同步首页房间历史(): void {
-    写入恢复状态({
-      homeSessionItems: deps.storage.读取首页房间历史(),
-    });
   }
 
   function 应用引导身份(
@@ -126,18 +116,6 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     写入恢复状态({
       deviceAnonymousToken,
     });
-  }
-
-  function 读取当前房间恢复快照(roomIdHint = "") {
-    const cached = deps.storage.读取当前房间恢复快照();
-    if (!cached) {
-      return null;
-    }
-    const roomId = roomIdHint.trim() || deps.storage.读取当前房间标识();
-    if (!roomId || cached.snapshot.room_id !== roomId) {
-      return null;
-    }
-    return cached;
   }
 
   function asRecoveryFailure(error: unknown): 恢复失败 {
@@ -162,177 +140,6 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     return recoveryCodeOf(error) === "invalid_session";
   }
 
-  function isHardRoomFailure(error: { code?: string; status?: number }): boolean {
-    return (
-      error.code === "room_not_found" ||
-      error.code === "membership_required" ||
-      error.status === 403 ||
-      error.status === 404
-    );
-  }
-
-  /**
-   * 首页历史删除边界必须非常窄：
-   * - 只有明确的 `room_not_found`，才说明这条历史锚点已经失效；
-   * - `membership_required` 仍然可能是有价值的历史房间，只是当前身份暂时进不去。
-   */
-  function pruneHomeSessionIfRoomMissing(code: string | undefined, roomIdHint = ""): void {
-    if (code !== "room_not_found") {
-      return;
-    }
-    const roomId =
-      roomIdHint.trim() || 读取恢复状态().roomId || deps.storage.读取当前房间标识();
-    if (!roomId) {
-      return;
-    }
-    deps.storage.按房间标识删除首页房间历史条目(roomId);
-    同步首页房间历史();
-  }
-
-  /**
-   * 硬失败退出房间时，首页仍然需要一份“最后一次可用的 room code”继续承接用户动作。
-   * 否则像 qingli 这种把房间实体清掉的场景，刷新后只会把人甩回一个空输入框。
-   */
-  function resolveFallbackRoomCode(roomIdHint = ""): string {
-    const cachedRoomCode = deps.storage.读取当前房间短码().trim();
-    if (cachedRoomCode) {
-      return cachedRoomCode;
-    }
-    const roomId =
-      roomIdHint.trim() || 读取恢复状态().roomId || deps.storage.读取当前房间标识();
-    if (!roomId) {
-      return "";
-    }
-    const matched = 读取恢复状态().homeSessionItems.find((item) => item.roomId === roomId);
-    return matched?.roomCode.trim() ?? "";
-  }
-
-  /**
-   * 硬失败要清 room 锚点并退出房间；临时失败则保留锚点，让用户还能重试。
-   */
-  function 处理恢复失败(error: unknown, keepRoomVisible: boolean): void {
-    const failure = asRecoveryFailure(error);
-    if (isHardRoomFailure(failure)) {
-      const failedRoomId = 读取恢复状态().roomId || deps.storage.读取当前房间标识();
-      const fallbackRoomCode = resolveFallbackRoomCode(failedRoomId);
-      pruneHomeSessionIfRoomMissing(failure.code, failedRoomId);
-      deps.storage.清除当前房间恢复快照();
-      deps.roomKernel.send({
-        type: "RECOVERY_FAILED",
-        code: failure.code ?? "",
-        keepRoomVisible: false,
-      });
-      deps.exitCurrentRoomView({
-        keepRoomCodeCache: failure.code === "room_not_found" && fallbackRoomCode.length > 0,
-      });
-      if (fallbackRoomCode) {
-        写入恢复状态({ roomCodeInput: fallbackRoomCode });
-      }
-      return;
-    }
-
-    deps.roomKernel.send({
-      type: "RECOVERY_FAILED",
-      code: failure.code ?? "system_error",
-      keepRoomVisible,
-    });
-    写入恢复状态({
-      pending: false,
-      historyLoading: false,
-      scrollPhase: "idle",
-      hasUserScrollIntent: keepRoomVisible ? 读取恢复状态().hasUserScrollIntent : false,
-    });
-    deps.roomScroller.取消挂起滚动副作用();
-  }
-
-  /**
-   * 房间标题当前优先来自用户实际输入过的短码缓存。
-   * 后端还没有回房间标题前，只允许这里决定展示回退值。
-   */
-  function resolveRoomDisplayTitle(roomCodeForDisplay?: string): string {
-    const trimmedRoomCode = roomCodeForDisplay?.trim() ?? "";
-    if (trimmedRoomCode) {
-      deps.storage.写入当前房间短码(trimmedRoomCode);
-      return trimmedRoomCode;
-    }
-    return deps.storage.读取当前房间短码() || "群聊房间";
-  }
-
-  /**
-   * 只在房间基线成功成立后，才把它记进首页历史。
-   * 这样软离房不会删历史，硬失败也不会留下半成品条目。
-   */
-  function recordHomeSession(roomId: string, roomCode: string): void {
-    const trimmedRoomId = roomId.trim();
-    const trimmedRoomCode = roomCode.trim();
-    if (!trimmedRoomId || !trimmedRoomCode) {
-      return;
-    }
-    const nextItem: 首页房间历史条目 = {
-      roomId: trimmedRoomId,
-      roomCode: trimmedRoomCode,
-      lastEnteredAt: Date.now(),
-    };
-    deps.storage.写入或更新首页房间历史条目(nextItem);
-    同步首页房间历史();
-  }
-
-  /**
-   * 房间基线一旦成立，就统一从这里更新壳层状态与本地恢复锚点。
-   * 这样 join / 刷新恢复 两条入口不会各自漂出一套写状态逻辑。
-   */
-  function enterRoomFromSnapshot(
-    snapshot: 房间快照,
-    roomCodeForDisplay?: string,
-    primeReadAnchorAfterInitialSettle = false
-  ): void {
-    deps.cancelPendingReadAnchorFlush();
-    deps.cancelPendingFollowLatestReadSample();
-    deps.roomScroller.取消挂起滚动副作用();
-    deps.写入恢复补锚标记(primeReadAnchorAfterInitialSettle);
-    deps.storage.写入当前房间标识(snapshot.room_id);
-    const roomDisplayTitle = resolveRoomDisplayTitle(roomCodeForDisplay);
-    const persistedRoomCode =
-      roomCodeForDisplay?.trim() || deps.storage.读取当前房间短码().trim();
-    deps.storage.写入当前房间恢复快照({
-      roomCode: persistedRoomCode,
-      snapshot,
-    });
-    recordHomeSession(
-      snapshot.room_id,
-      persistedRoomCode
-    );
-    deps.roomKernel.send({
-      type: "SNAPSHOT_LOADED",
-      roomId: snapshot.room_id,
-      roomDisplayTitle,
-      latestEventPosition: snapshot.latest_event_position,
-    });
-    写入恢复状态({
-      lastReadEventPosition: snapshot.last_read_event_position,
-      firstUnreadEventPosition: snapshot.first_unread_event_position,
-      initialUnreadSettled: false,
-      // 只有带着首条未读恢复时，壳层才进入程序性恢复阶段；否则滚动语义直接保持 idle。
-      scrollPhase:
-        snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
-      hasUserScrollIntent: false,
-      pendingReadAnchorPosition: null,
-      pending: false,
-      historyLoading: false,
-      historyLoadThrottleUntil: 0,
-      historyErrorCode: "",
-    });
-    // snapshot_messages 是后端给出的权威房间基线，不是前端自己残留的缓存。
-    // 只要快照成立，房间第一屏就应该直接可读，而不是先清空再等待未来增量。
-    接收时间线事实({
-      type: "AUTHORITATIVE_SNAPSHOT_LOADED",
-      messages: snapshot.snapshot_messages,
-      latestEventPosition: snapshot.latest_event_position,
-      hasMoreBefore: snapshot.has_more_before,
-    });
-    deps.roomScroller.安排首屏定位();
-  }
-
   /**
    * invalid_session 不是永久房间失效，而是“当前 session 失效，需要重新 bootstrap”。
    * 刷新后的新 session 建好后，再重试当前恢复步骤一次。
@@ -346,95 +153,60 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       if (!isInvalidSessionError(error)) {
         throw error;
       }
-      const sessionId = await bootstrapFreshSession();
+      const sessionId = await 会话失效恢复.刷新会话();
       return operation(sessionId);
     }
   }
 
-  async function bootstrapFreshSession(): Promise<string> {
-    const deviceAnonymousToken =
-      读取恢复状态().deviceAnonymousToken || deps.storage.读取或创建设备匿名凭证();
-    const identity = await deps.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
-    deps.disconnectRealtime();
-    应用引导身份(deviceAnonymousToken, identity);
-    deps.roomKernel.send({
-      type: "SESSION_REFRESHED",
-      sessionId: identity.session_id,
-      displayAlias: identity.display_alias,
-    });
-    deps.ensureRealtimeSocket(identity.session_id);
-    return identity.session_id;
-  }
+  const 房间快照恢复 = 创建房间快照恢复协作({
+    读取恢复状态,
+    写入恢复状态,
+    接收时间线事实,
+    storage: deps.storage,
+    roomKernel: deps.roomKernel,
+    roomScroller: deps.roomScroller,
+    cancelPendingReadAnchorFlush: deps.cancelPendingReadAnchorFlush,
+    cancelPendingFollowLatestReadSample: deps.cancelPendingFollowLatestReadSample,
+    exitCurrentRoomView: (opts) => deps.exitCurrentRoomView(opts),
+    写入恢复补锚标记: deps.写入恢复补锚标记,
+    ensureRealtimeSocket: deps.ensureRealtimeSocket,
+    subscribeRoom: deps.subscribeRoom,
+    loadRoomSnapshot: (roomId, sessionId) => deps.transport.loadRoomSnapshot(roomId, sessionId),
+    loadRoomEvents: (roomId, sessionId, from) =>
+      deps.transport.loadRoomEvents(roomId, sessionId, from),
+    withSessionRefreshOnInvalid,
+  });
 
-  /**
-   * 当 realtime 锚点闭合不了时，退回 HTTP 快照 + 增量补洞重建基线。
-   * 这里继续沿用同一条权威锚点语义：`from = snapshot.latest_event_position`。
-   */
-  async function reloadRoomFromSnapshot(roomId: string): Promise<void> {
-    const state = 读取恢复状态();
-    if (!state.roomId || roomId !== state.roomId) {
-      return;
-    }
-    try {
-      deps.roomScroller.取消挂起滚动副作用();
-      deps.ensureRealtimeSocket(state.sessionId);
-      const snapshot = await withSessionRefreshOnInvalid((sessionId) =>
-        deps.transport.loadRoomSnapshot(roomId, sessionId)
-      );
-      const delta = await withSessionRefreshOnInvalid((sessionId) =>
-        deps.transport.loadRoomEvents(roomId, sessionId, snapshot.latest_event_position)
-      );
-      const latestEventPosition = Math.max(
-        snapshot.latest_event_position,
-        delta.latest_event_position
-      );
-      const roomDisplayTitle = deps.storage.读取当前房间短码() || "群聊房间";
+  const 会话失效恢复 = 创建会话失效恢复协作({
+    读取恢复状态: () => ({
+      deviceAnonymousToken: 读取恢复状态().deviceAnonymousToken,
+      roomId: 读取恢复状态().roomId,
+    }),
+    读取或创建设备匿名凭证: () => deps.storage.读取或创建设备匿名凭证(),
+    bootstrapAnonymousIdentity: (deviceAnonymousToken) =>
+      deps.transport.bootstrapAnonymousIdentity(deviceAnonymousToken),
+    disconnectRealtime: deps.disconnectRealtime,
+    应用引导身份,
+    广播会话已刷新: (identity) => {
       deps.roomKernel.send({
-        type: "SNAPSHOT_LOADED",
-        roomId,
-        roomDisplayTitle,
-        latestEventPosition,
+        type: "SESSION_REFRESHED",
+        sessionId: identity.session_id,
+        displayAlias: identity.display_alias,
       });
-      deps.写入恢复补锚标记(true);
-      写入恢复状态({
-        lastReadEventPosition: snapshot.last_read_event_position,
-        firstUnreadEventPosition: snapshot.first_unread_event_position,
-        initialUnreadSettled: false,
-        scrollPhase:
-          snapshot.first_unread_event_position === null ? "idle" : "restoring_unread",
-        hasUserScrollIntent: false,
-        pendingReadAnchorPosition: null,
-        pending: false,
-        historyLoading: false,
-        historyLoadThrottleUntil: 0,
-        historyErrorCode: "",
+    },
+    ensureRealtimeSocket: deps.ensureRealtimeSocket,
+    从房间快照恢复: (roomId) => 房间快照恢复.从房间快照恢复(roomId),
+    处理恢复失败: (error, keepRoomVisible) => {
+      房间快照恢复.处理恢复失败(error, keepRoomVisible);
+    },
+    读取恢复失败代码: recoveryCodeOf,
+    上报引导失败: (code) => {
+      deps.roomKernel.send({
+        type: "BOOTSTRAP_FAILED",
+        code,
       });
-      // 重拉快照时，必须先回到快照自带的权威首屏，再叠加其后的增量。
-      // 否则一旦同步链重建，房间又会退化成“只有未来消息、没有最近历史”的假空房。
-      接收时间线事实({
-        type: "AUTHORITATIVE_SNAPSHOT_LOADED",
-        messages: snapshot.snapshot_messages,
-        latestEventPosition: snapshot.latest_event_position,
-        hasMoreBefore: snapshot.has_more_before,
-      });
-      if (delta.events.length > 0) {
-        接收时间线事实({
-          type: "REALTIME_EVENTS_RECEIVED",
-          messages: delta.events,
-          latestEventPosition,
-        });
-      }
-      deps.roomScroller.安排首屏定位();
-      deps.subscribeRoom(latestEventPosition);
-    } catch (error) {
-      const cached = 读取当前房间恢复快照(roomId);
-      if (cached) {
-        enterRoomFromSnapshot(cached.snapshot, cached.roomCode, true);
-        return;
-      }
-      处理恢复失败(error, true);
-    }
-  }
+    },
+  });
 
   /**
    * transport 异常在恢复编排里只有这一条统一入口。
@@ -444,55 +216,20 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
    */
   async function handleTransport异常(error: Transport异常): Promise<void> {
     if (error.kind === "need_snapshot_reload") {
-      await reloadRoomFromSnapshot(error.roomId);
+      await 房间快照恢复.从房间快照恢复(error.roomId);
       return;
     }
-    await handleInvalidSessionTransport异常(
-      error.roomId ?? 读取恢复状态().roomId,
+    await 会话失效恢复.处理会话失效Transport异常(
+      error.roomId ?? 读取恢复状态().roomId ?? "",
       error.keepRoomVisible ?? Boolean(error.roomId ?? 读取恢复状态().roomId)
     );
-  }
-
-  /**
-   * invalid_session 不区分来自握手阶段还是控制面阶段，
-   * 都必须收口到同一个门闩里，避免重复 bootstrap / 重拉快照。
-   */
-  async function handleInvalidSessionTransport异常(
-    roomId: string,
-    keepRoomVisible: boolean
-  ): Promise<void> {
-    if (invalidSessionRecoveryTask) {
-      await invalidSessionRecoveryTask;
-      return;
-    }
-    const targetRoomId = roomId.trim();
-    invalidSessionRecoveryTask = (async () => {
-      try {
-        await bootstrapFreshSession();
-        if (targetRoomId) {
-          await reloadRoomFromSnapshot(targetRoomId);
-        }
-      } catch (recoveryError) {
-        if (keepRoomVisible) {
-          处理恢复失败(recoveryError, true);
-        } else {
-          deps.roomKernel.send({
-            type: "BOOTSTRAP_FAILED",
-            code: recoveryCodeOf(recoveryError) ?? "system_error",
-          });
-        }
-      } finally {
-        invalidSessionRecoveryTask = null;
-      }
-    })();
-    await invalidSessionRecoveryTask;
   }
 
   async function bootstrap(): Promise<void> {
     const deviceAnonymousToken = deps.storage.读取或创建设备匿名凭证();
     const roomId = deps.storage.读取当前房间标识();
     try {
-      同步首页房间历史();
+      房间快照恢复.同步首页房间历史();
       const identity = await deps.transport.bootstrapAnonymousIdentity(deviceAnonymousToken);
       应用引导身份(deviceAnonymousToken, identity);
       deps.roomKernel.send({
@@ -505,7 +242,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       await restoreCurrentRoomIfNeeded();
     } catch (error) {
       const cachedIdentity = deps.storage.读取最近引导身份();
-      const cachedRoom = 读取当前房间恢复快照(roomId);
+      const cachedRoom = 房间快照恢复.读取当前房间恢复快照(roomId);
       if (roomId && cachedIdentity && cachedRoom) {
         写入恢复状态({
           deviceAnonymousToken,
@@ -524,7 +261,7 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
           code: asRecoveryFailure(error).code ?? "system_error",
         });
       }
-      同步首页房间历史();
+      房间快照恢复.同步首页房间历史();
     } finally {
       await deps.等待壳渲染完成();
       // 刷新恢复房间时，快照状态可能早于 roomView 真正渲染完成。
@@ -549,10 +286,10 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       // join-or-create 现在已经返回权威房间快照：
       // 这里直接消费 snapshot_messages，避免进房后再额外打一枪 snapshot，
       // 否则不仅浪费一次请求，还会人为拉大“进房成功”和“首屏可读”之间的竞态窗口。
-      enterRoomFromSnapshot(snapshot, roomCode, false);
+      房间快照恢复.进入房间快照(snapshot, roomCode, false);
       deps.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
-      处理恢复失败(error, false);
+      房间快照恢复.处理恢复失败(error, false);
     }
   }
 
@@ -572,15 +309,15 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
       const snapshot = await withSessionRefreshOnInvalid((sessionId) =>
         deps.transport.loadRoomSnapshot(roomId, sessionId)
       );
-      enterRoomFromSnapshot(snapshot, undefined, true);
+      房间快照恢复.进入房间快照(snapshot, undefined, true);
       deps.subscribeRoom(snapshot.latest_event_position);
     } catch (error) {
-      const cached = 读取当前房间恢复快照(roomId);
+      const cached = 房间快照恢复.读取当前房间恢复快照(roomId);
       if (cached) {
-        enterRoomFromSnapshot(cached.snapshot, cached.roomCode, true);
+        房间快照恢复.进入房间快照(cached.snapshot, cached.roomCode, true);
         return;
       }
-      处理恢复失败(error, false);
+      房间快照恢复.处理恢复失败(error, false);
     }
   }
 
@@ -590,6 +327,8 @@ export function 创建房间恢复编排(deps: 房间恢复编排依赖): 房间
     restoreCurrentRoomIfNeeded,
     withSessionRefreshOnInvalid,
     接收Transport异常: handleTransport异常,
-    处理恢复失败,
+    处理恢复失败: (error, keepRoomVisible) => {
+      房间快照恢复.处理恢复失败(error, keepRoomVisible);
+    },
   };
 }

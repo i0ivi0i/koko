@@ -1051,6 +1051,10 @@ export class 聊天壳 extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     globalThis.addEventListener("resize", this.handleViewportResize);
+    /**
+     * 聊天壳只负责启动应用运行时并触发统一 bootstrap 命令。
+     * 会话恢复、房间恢复、snapshot reload 全都留在内核与恢复编排里。
+     */
     this.应用运行时.start();
     void this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" });
   }

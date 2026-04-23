@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   创建传输错误,
@@ -8,6 +10,24 @@ import {
   读取房间恢复编排工厂,
 } from "./common/聊天测试支架";
 describe("房间恢复编排", () => {
+  it("会把 invalid_session 恢复委托给 会话失效恢复 协作", () => {
+    const source = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天恢复/壳层/会话失效恢复.js"');
+    expect(source).toContain("创建会话失效恢复协作(");
+    expect(source).not.toContain("async function bootstrapFreshSession");
+    expect(source).not.toContain("async function handleInvalidSessionTransport异常");
+  });
+
+  it("会把 snapshot reload 与房间硬失败委托给 房间快照恢复 协作", () => {
+    const source = readFileSync(resolve(process.cwd(), "房间恢复编排.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天恢复/壳层/房间快照恢复.js"');
+    expect(source).toContain("创建房间快照恢复协作(");
+    expect(source).not.toContain("async function reloadRoomFromSnapshot");
+    expect(source).not.toContain("function resolveFallbackRoomCode");
+  });
+
   it("收到 invalid_session transport 异常时会刷新会话并重拉当前房间", async () => {
     const 创建房间恢复编排 = await 读取房间恢复编排工厂();
     const 场景 = 创建恢复编排测试场景({

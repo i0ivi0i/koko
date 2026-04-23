@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { 创建浏览器存储 } from "../存储";
 import {
@@ -36,6 +38,16 @@ describe("聊天壳集成 / 恢复失败与历史分页", () => {
     });
     vi.restoreAllMocks();
   });
+
+  it("聊天壳恢复入口仍只通过内核 dispatch，不自己触发 bootstrap 或 snapshot 恢复", () => {
+    const source = readFileSync(resolve(process.cwd(), "聊天壳.ts"), "utf8");
+
+    expect(source).toContain('this.kernel.dispatch({ type: "BOOTSTRAP_REQUESTED" })');
+    expect(source).not.toContain("bootstrapAnonymousIdentity(");
+    expect(source).not.toContain("loadRoomSnapshot(");
+    expect(source).not.toContain("joinOrCreateRoom(");
+  });
+
   it("room_not_found 会清掉 current_room_id、删除对应历史并回到首页", async () => {
     window.localStorage.setItem("koko_current_room_id", "r-missing");
     window.localStorage.setItem(

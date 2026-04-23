@@ -592,6 +592,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
 
   private get 恢复编排端口(): 房间恢复编排端口 {
     if (!this._恢复编排端口) {
+      /**
+       * 恢复链接线也只停在内核：
+       * - realtime 编排把 transport 异常交回来；
+       * - 恢复编排决定 session refresh / snapshot reload / hard failure；
+       * - 壳层继续只消费 snapshot，不直接碰恢复细节。
+       */
       this._恢复编排端口 = 创建房间恢复编排({
         读取恢复状态: () => this.读取恢复编排状态(),
         写入恢复状态: (patch) => this.写入恢复编排状态(patch),
