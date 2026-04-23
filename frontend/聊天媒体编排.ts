@@ -7,6 +7,19 @@ import {
   type 媒体运行时事件,
 } from "./媒体运行时.js";
 import {
+  创建查看器会话协作,
+  type 查看器会话协作端口,
+} from "./媒体/壳层/查看器会话协作.js";
+import { 创建自动播协作, type 自动播协作端口 } from "./媒体/壳层/自动播协作.js";
+import {
+  创建视频预览协作,
+  type 视频预览协作端口,
+} from "./媒体/壳层/视频预览协作.js";
+import {
+  创建协作补齐协作,
+  type 协作补齐协作端口,
+} from "./媒体/壳层/协作补齐协作.js";
+import {
   创建媒体定位器,
   创建媒体缓存,
   创建内存预览缓存,
@@ -139,8 +152,6 @@ type 媒体播放释放请求 = { attachmentId: string; consumerId?: string; 丢
 const 构造媒体会话ConsumerId = (attachmentId: string): string => `session:${attachmentId}`;
 const 构造自动播ConsumerId = (attachmentId: string): string => `inline_autoplay:${attachmentId}`;
 const 构造预览ConsumerId = (attachmentId: string): string => `preview:${attachmentId}`;
-// 自动播保留轻微迟滞防抖，但不能继续维持旧的 120ms 网页式空窗。
-const 自动播候选稳定等待毫秒 = 80;
 
 /**
  * 聊天媒体编排只拥有“浏览器端媒体体验真相”：
@@ -154,12 +165,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 媒体运行时 = 创建媒体运行时Actor();
   const 协作分发运行时 = 创建资产协作分发运行时();
   let 媒体缓存已启动 = false;
-  /**
-   * 一旦附件已经进入帮助链，就不能再被“当前时间线暂时看不见”这件事立刻误杀。
-   * 这个集合只负责帮助任务生命周期，不参与 ready / locator / playback 真相裁决。
-   */
-  const 已进入帮助链附件 = new Set<string>();
-  const 已恢复帮助任务附件 = new Set<string>();
   const 读取媒体运行时上下文 = () => 媒体运行时.getSnapshot().context;
   const 媒体定位器 = 创建媒体定位器({
     getSessionId: () => deps.读取会话编号(),
@@ -173,177 +178,26 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     resolveSwarmSource: (input) => 协作分发运行时.解析协作分发源(input),
     releaseSwarmSource: (input) => 协作分发运行时.释放协作分发消费者(input),
   });
-  let 待重裁决的本地完整视频附件标识: string | null = null;
-  let inlineAutoplay启动定时器: ReturnType<typeof setTimeout> | null = null;
-  let inlineAutoplay解析代次 = 0;
-  const 投影查看器请求到当前播放真相 = (
-    request: 媒体查看器打开请求
-  ): 媒体查看器打开请求 => {
-    // 查看器一旦打开，就不能继续抱着旧 request.items 里的静态 src。
-    // 这里把会话 owner 当前裁决出的播放源重新投影回查看器，让 overlay 和时间线预览共用同一条恢复真相。
-    return {
-      startAttachmentId: request.startAttachmentId,
-      items: request.items.map((item) => {
-        const sessionSnapshot = 媒体会话表.get(item.attachmentId)?.snapshot();
-        const playback = sessionSnapshot?.playback;
-        if (item.kind === "video" && sessionSnapshot?.status === "recovering") {
-          const preview = 视频预览状态表.get(item.attachmentId) ?? null;
-          /**
-           * 显式重开查看器时，会话可能正从旧 source 重新裁决到删除态 / 新 ticket / 新主链。
-           * 这段窗口绝不能再把旧 playback.src 投回查看器，否则旧视频会在新真相到达前先抢跑一轮。
-           */
-          return {
-            ...item,
-            src: "",
-            posterSrc: preview?.phase === "ready" ? preview.src : item.posterSrc,
-          };
-        }
-        if (
-          playback?.mode === "blob" ||
-          playback?.mode === "swarm" ||
-          playback?.mode === "anchor" ||
-          playback?.mode === "manifest"
-        ) {
-          if (item.kind === "video") {
-            return {
-              ...item,
-              src: playback.src,
-              ...(playback.mode === "manifest" && playback.fallbackSrc
-                ? {
-                    fallbackSrc: playback.fallbackSrc,
-                  }
-                : {}),
-              posterSrc: playback.thumbnailUrl ?? item.posterSrc,
-              ...(playback.mode === "manifest" && playback.streamingDistribution
-                ? {
-                    streamingDistribution: playback.streamingDistribution,
-                  }
-                : {}),
-            };
-          }
-          return {
-            ...item,
-            src: playback.mode === "blob" ? playback.viewerSrc ?? playback.src : playback.src,
-            ...((playback.mode === "blob" || playback.mode === "swarm") &&
-            ("contentHash" in playback || "distribution" in playback)
-              ? {
-                  contentHash: playback.contentHash ?? null,
-                  distribution: playback.distribution ?? null,
-                }
-              : {}),
-          };
-        }
-        if (item.kind === "video") {
-          const preview = 视频预览状态表.get(item.attachmentId) ?? null;
-          /**
-           * 查看器 request 的视频 `src` 不允许继续携带旧静态地址。
-           * 当会话 playback 尚未裁决完成时，这里明确清空旧值，
-           * 让查看器只等待 owner 后续同步出来的正式播放源。
-           */
-          return {
-            ...item,
-            src: "",
-            posterSrc:
-              preview?.phase === "ready"
-                ? preview.src
-                : item.posterSrc,
-          };
-        }
-        return item;
-      }),
-    };
-  };
-  const 是否应等待本地完整视频会话真相 = (
-    request: 媒体查看器打开请求
-  ): boolean => {
-    const startItem = request.items.find(
-      (item) => item.attachmentId === request.startAttachmentId
-    );
-    if (!startItem || startItem.kind !== "video") {
-      待重裁决的本地完整视频附件标识 = null;
-      return false;
-    }
-    const session = 媒体会话表.get(startItem.attachmentId);
-    const sessionSnapshot = session?.snapshot();
-    if (!sessionSnapshot?.playback) {
-      return true;
-    }
-    if (!sessionSnapshot.locallyComplete) {
-      if (待重裁决的本地完整视频附件标识 === startItem.attachmentId) {
-        待重裁决的本地完整视频附件标识 = null;
-      }
-      return false;
-    }
-    /**
-     * 本地完整度可能先于 playback hydrate 恢复；这时先等会话真相一拍，
-     * 避免查看器拿静态 HLS/original src 先打一轮冷源请求。
-     * manifest 只重裁一次，防止为了 P2P 复用把查看器卡进无限等待。
-     */
-    if (sessionSnapshot.playback.mode !== "manifest") {
-      待重裁决的本地完整视频附件标识 = null;
-      return false;
-    }
-    if (待重裁决的本地完整视频附件标识 !== startItem.attachmentId) {
-      待重裁决的本地完整视频附件标识 = startItem.attachmentId;
-      session?.send({
-        type: "PLAYER_WAITING",
-      });
-      return true;
-    }
-    if (sessionSnapshot.status === "recovering") {
-      return true;
-    }
-    待重裁决的本地完整视频附件标识 = null;
-    return false;
-  };
-  const 正式打开查看器 = (request: 媒体查看器打开请求): void => {
-    deps.登记程序滚动来源("media_viewer_open");
-    媒体查看器.打开(request);
-    接收媒体运行时事实({ type: "VIEWER_OPEN_CONFIRMED" });
-  };
-  const 起始视频会话当前不可打开 = (request: 媒体查看器打开请求): boolean => {
-    const startItem = request.items.find(
-      (item) => item.attachmentId === request.startAttachmentId
-    );
-    if (!startItem || startItem.kind !== "video") {
-      return false;
-    }
-    const sessionSnapshot = 媒体会话表.get(startItem.attachmentId)?.snapshot();
-    if (sessionSnapshot?.status === "recovering") {
-      return true;
-    }
-    const playback = sessionSnapshot?.playback;
-    return playback?.mode === "expired" || playback?.mode === "degraded";
-  };
+  const 媒体会话表 = new Map<string, 媒体会话端口>();
+  const 媒体缓存 = 创建媒体缓存({
+    repo: deps.媒体缓存仓库 ?? 创建内存媒体缓存仓库(),
+  });
+  const 抓取视频预览 = deps.抓取视频预览 ?? 从媒体源抓取视频预览;
+  /**
+   * 预览缓存默认只退回内存仓库：
+   * - 生产环境由平台存储运行时显式注入浏览器仓库；
+   * - 这里不允许再直接猜 `localStorage`，避免 owner 越层双活；
+   * - 测试未注入时，内存仓库也足够覆盖编排行为。
+   */
+  const 预览缓存 = deps.预览缓存 ?? 创建内存预览缓存();
+  let 查看器会话协作!: 查看器会话协作端口;
+  let 自动播协作!: 自动播协作端口;
+  let 视频预览协作!: 视频预览协作端口;
+  let 协作补齐协作!: 协作补齐协作端口;
   const 接收媒体运行时事实 = (event: 媒体运行时事件): void => {
     const before = 媒体运行时.getSnapshot();
     媒体运行时.send(event);
     void 同步媒体运行时快照并执行副作用(before);
-  };
-  const 同步当前查看器请求 = (): void => {
-    const 当前查看器请求 = 读取媒体运行时上下文().currentViewerRequest;
-    if (!当前查看器请求) {
-      return;
-    }
-    const nextRequest = 投影查看器请求到当前播放真相(当前查看器请求);
-    if (JSON.stringify(nextRequest) !== JSON.stringify(当前查看器请求)) {
-      接收媒体运行时事实({
-        type: "VIEWER_REQUEST_SYNCED",
-        request: nextRequest,
-      });
-      return;
-    }
-    if (!读取媒体运行时上下文().viewerOpen) {
-      if (起始视频会话当前不可打开(nextRequest)) {
-        return;
-      }
-      if (是否应等待本地完整视频会话真相(nextRequest)) {
-        return;
-      }
-      正式打开查看器(nextRequest);
-      return;
-    }
-    媒体查看器.同步?.(nextRequest);
   };
   const 同步媒体运行时快照并执行副作用 = async (
     before = 媒体运行时.getSnapshot()
@@ -356,32 +210,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         afterContext.inlineAutoplayOwnerAttachmentId ||
       beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback;
 
-    if (
-      beforeContext.inlineAutoplayPendingAttachmentId !==
-      afterContext.inlineAutoplayPendingAttachmentId
-    ) {
-      if (inlineAutoplay启动定时器 !== null) {
-        clearTimeout(inlineAutoplay启动定时器);
-        inlineAutoplay启动定时器 = null;
-      }
-      if (afterContext.inlineAutoplayPendingAttachmentId) {
-        调度自动播播放结果解析(afterContext.inlineAutoplayPendingAttachmentId);
-      }
-    }
-
-    if (
-      beforeContext.inlineAutoplayOwnerAttachmentId !==
-      afterContext.inlineAutoplayOwnerAttachmentId
-    ) {
-      if (beforeContext.inlineAutoplayOwnerAttachmentId) {
-        释放当前自动播Owner(beforeContext.inlineAutoplayOwnerAttachmentId);
-      } else {
-        清空自动播播放结果();
-      }
-      if (afterContext.inlineAutoplayOwnerAttachmentId) {
-        解析自动播播放结果(afterContext.inlineAutoplayOwnerAttachmentId);
-      }
-    }
+    自动播协作.同步媒体运行时上下文变化({
+      before: beforeContext,
+      after: afterContext,
+    });
 
     if (beforeContext.currentViewerRequest && !afterContext.currentViewerRequest) {
       const attachmentId = beforeContext.currentViewerRequest.startAttachmentId;
@@ -396,12 +228,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         媒体会话表.delete(attachmentId);
         deps.请求重渲染();
       }
-      待重裁决的本地完整视频附件标识 = null;
-      deps.清除程序滚动来源("media_viewer_open");
+      协作补齐协作.清理附件(attachmentId);
+      视频预览协作.删除视频预览状态(attachmentId);
+      查看器会话协作.处理查看器请求已清空();
     }
 
     if (afterContext.currentViewerRequest) {
-      同步当前查看器请求();
+      查看器会话协作.同步当前查看器请求();
     }
 
     if (自动播消息流投影已变化) {
@@ -421,60 +254,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
     onMediaSessionSignal: 转发媒体查看器会话信号,
   });
-
-  const 媒体会话表 = new Map<string, 媒体会话端口>();
-  const 媒体缓存 = 创建媒体缓存({
-    repo: deps.媒体缓存仓库 ?? 创建内存媒体缓存仓库(),
-  });
-  const 抓取视频预览 = deps.抓取视频预览 ?? 从媒体源抓取视频预览;
-  /**
-   * 预览缓存默认只退回内存仓库：
-   * - 生产环境由平台存储运行时显式注入浏览器仓库；
-   * - 这里不允许再直接猜 `localStorage`，避免 owner 越层双活；
-   * - 测试未注入时，内存仓库也足够覆盖编排行为。
-   */
-  const 预览缓存 = deps.预览缓存 ?? 创建内存预览缓存();
-  const 视频预览状态表 = new Map<string, 视频预览状态>();
-  const 视频预览解析代次表 = new Map<string, number>();
-  const 视频预览缺源阻断版本表 = new Map<string, number>();
-
-  const 读取视频预览状态表 = (): Record<string, 视频预览状态> =>
-    Object.fromEntries(视频预览状态表);
-
-  const 写入视频预览状态 = (
-    attachmentId: string,
-    nextState: 视频预览状态
-  ): void => {
-    const previous = 视频预览状态表.get(attachmentId);
-    if (JSON.stringify(previous ?? null) === JSON.stringify(nextState)) {
-      return;
-    }
-    视频预览状态表.set(attachmentId, nextState);
-    deps.请求重渲染();
-    同步当前查看器请求();
-  };
-
-  const 删除视频预览状态 = (attachmentId: string): void => {
-    视频预览缺源阻断版本表.delete(attachmentId);
-    if (!视频预览状态表.delete(attachmentId)) {
-      return;
-    }
-    deps.请求重渲染();
-    同步当前查看器请求();
-  };
-
-  const 读取会话播放源版本 = (attachmentId: string): number =>
-    媒体会话表.get(attachmentId)?.snapshot().sourceVersion ?? 0;
-
-  const 标记视频预览缺源 = (attachmentId: string): void => {
-    // missing_source 只在“当前 sourceVersion”上阻断；一旦会话重裁决出新版本，会允许重试一次。
-    视频预览缺源阻断版本表.set(attachmentId, 读取会话播放源版本(attachmentId));
-    写入视频预览状态(attachmentId, { phase: "missing_source" });
-  };
-
-  const 清除视频预览缺源阻断 = (attachmentId: string): void => {
-    视频预览缺源阻断版本表.delete(attachmentId);
-  };
 
   const 写入草稿列表 = (
     nextDrafts: 媒体附件草稿[],
@@ -540,7 +319,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   const 读取附件条目 = (attachmentId: string): 媒体附件条目 | null =>
     读取当前房间媒体附件().find((attachment) => attachment.attachmentId === attachmentId) ?? null;
 
-  const 读取当前视频预览播放源 = (
+  const 读取会话播放源版本 = (attachmentId: string): number =>
+    媒体会话表.get(attachmentId)?.snapshot().sourceVersion ?? 0;
+
+  const 读取视频预览候选播放源 = (
     attachmentId: string
   ): { src: string; contentHash: string | null } | null => {
     const playback = 媒体会话表.get(attachmentId)?.snapshot().playback;
@@ -557,179 +339,6 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       src: playback.src,
       contentHash: playback.contentHash ?? null,
     };
-  };
-
-  const 读取视频canonical冷源地址 = (
-    locator: Awaited<ReturnType<typeof 媒体定位器.获取定位>>
-  ): string | null => {
-    if (locator.status !== "ready" || locator.kind !== "video") {
-      return null;
-    }
-    if (locator.file_asset?.origin.available === false) {
-      return null;
-    }
-    return (
-      locator.file_asset?.variants.canonical?.url ??
-      locator.file_asset?.origin.original_url ??
-      null
-    );
-  };
-
-  const 解析视频预览 = (attachmentId: string): void => {
-    const attachment = 读取附件条目(attachmentId);
-    const currentPreview = 视频预览状态表.get(attachmentId) ?? { phase: "idle" as const };
-    const 当前会话源版本 = 读取会话播放源版本(attachmentId);
-    const 缺源阻断版本 = 视频预览缺源阻断版本表.get(attachmentId);
-    if (
-      !attachment ||
-      attachment.kind !== "video" ||
-      currentPreview.phase === "loading" ||
-      currentPreview.phase === "ready" ||
-      (currentPreview.phase === "missing_source" && 缺源阻断版本 === 当前会话源版本)
-    ) {
-      return;
-    }
-    const 当前代次 = (视频预览解析代次表.get(attachmentId) ?? 0) + 1;
-    视频预览解析代次表.set(attachmentId, 当前代次);
-    写入视频预览状态(attachmentId, { phase: "loading" });
-
-    void (async () => {
-      let shouldReleasePreviewConsumer = false;
-      try {
-        let contentHash = 读取当前视频预览播放源(attachmentId)?.contentHash ?? null;
-        if (contentHash) {
-          await 预览缓存.写入附件索引(attachmentId, contentHash);
-          const cachedPreview = await 预览缓存.按内容读取(contentHash);
-          if (cachedPreview?.objectUrl) {
-            if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
-              return;
-            }
-            清除视频预览缺源阻断(attachmentId);
-            写入视频预览状态(attachmentId, {
-              phase: "ready",
-              src: cachedPreview.objectUrl,
-              source: "cache",
-            });
-            return;
-          }
-        }
-
-        let previewSource = 读取当前视频预览播放源(attachmentId)?.src ?? null;
-        if (!previewSource) {
-          const startedAt = performance.now();
-          接收媒体运行时事实({ type: "LOCATOR_REQUEST_STARTED" });
-          let locator: Awaited<ReturnType<typeof 媒体定位器.获取定位>>;
-          try {
-            locator = await 媒体定位器.获取定位(attachmentId);
-          } finally {
-            接收媒体运行时事实({
-              type: "LOCATOR_REQUEST_FINISHED",
-              durationMs: performance.now() - startedAt,
-            });
-          }
-          if (locator.status !== "ready" || locator.kind !== "video") {
-            if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
-              return;
-            }
-            标记视频预览缺源(attachmentId);
-            return;
-          }
-          contentHash = locator.file_asset?.content_hash ?? locator.distribution?.content_hash ?? null;
-          if (contentHash) {
-            await 预览缓存.写入附件索引(attachmentId, contentHash);
-            const cachedPreview = await 预览缓存.按内容读取(contentHash);
-            if (cachedPreview?.objectUrl) {
-              if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
-                return;
-              }
-              清除视频预览缺源阻断(attachmentId);
-              写入视频预览状态(attachmentId, {
-                phase: "ready",
-                src: cachedPreview.objectUrl,
-                source: "cache",
-              });
-              return;
-            }
-          }
-          /**
-           * 新附件只允许一条正式媒体主链：
-           * 1. 只要 locator 已声明协作分发片段，就必须优先走同一 swarm 会话；
-           * 2. 只有 legacy（缺少 distribution）才允许回退 canonical/original 冷源；
-           * 3. 这样时间线预览不会再偷偷并发第二条服务器字节链。
-           */
-          if (locator.distribution) {
-            const swarmSource = await 协作分发运行时.解析协作分发源({
-              attachmentId,
-              kind: "video",
-              locator,
-              consumerId: 构造预览ConsumerId(attachmentId),
-            });
-            if (swarmSource?.src) {
-              previewSource = swarmSource.src;
-              shouldReleasePreviewConsumer = true;
-            }
-          } else {
-            previewSource = 读取视频canonical冷源地址(locator);
-          }
-        }
-
-        if (!previewSource) {
-          if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
-            return;
-          }
-          标记视频预览缺源(attachmentId);
-          return;
-        }
-
-        const preview = await 抓取视频预览({
-          src: previewSource,
-        });
-        if (shouldReleasePreviewConsumer) {
-          协作分发运行时.释放协作分发消费者({
-            attachmentId,
-            consumerId: 构造预览ConsumerId(attachmentId),
-          });
-        }
-        if (
-          视频预览解析代次表.get(attachmentId) !== 当前代次 ||
-          preview.source === "none" ||
-          !preview.objectUrl
-        ) {
-          if (视频预览解析代次表.get(attachmentId) === 当前代次) {
-            标记视频预览缺源(attachmentId);
-          }
-          return;
-        }
-        if (contentHash) {
-          await 预览缓存.写入附件索引(attachmentId, contentHash);
-          await 预览缓存.保存({
-            contentHash,
-            objectUrl: preview.objectUrl,
-            source: preview.source,
-            width: preview.width,
-            height: preview.height,
-            updatedAt: Date.now(),
-          });
-        }
-        清除视频预览缺源阻断(attachmentId);
-        写入视频预览状态(attachmentId, {
-          phase: "ready",
-          src: preview.objectUrl,
-          source: preview.source,
-        });
-      } catch {
-        if (shouldReleasePreviewConsumer) {
-          协作分发运行时.释放协作分发消费者({
-            attachmentId,
-            consumerId: 构造预览ConsumerId(attachmentId),
-          });
-        }
-        if (视频预览解析代次表.get(attachmentId) !== 当前代次) {
-          return;
-        }
-        标记视频预览缺源(attachmentId);
-      }
-    })();
   };
 
   /**
@@ -844,212 +453,92 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     });
   };
 
-  const 处理协作分发事件 = (
-    attachment: { attachmentId: string; kind: 媒体种类 },
-    event:
-      | { type: "SWARM_ACTIVE"; attachmentId: string; swarmId: string }
-      | { type: "SWARM_NO_PEERS"; attachmentId: string; swarmId: string }
-      | { type: "SWARM_TICKET_INVALID"; attachmentId: string; swarmId: string }
-      | { type: "ASSET_COMPLETE"; attachmentId: string; swarmId: string; contentHash: string }
-  ): void => {
-    if (event.type === "SWARM_ACTIVE") {
-      媒体会话表.get(attachment.attachmentId)?.send({ type: "SWARM_ACTIVE" });
-      return;
-    }
-    if (event.type === "SWARM_NO_PEERS") {
-      媒体会话表.get(attachment.attachmentId)?.send({ type: "SWARM_NO_PEERS" });
-      return;
-    }
-    if (event.type === "SWARM_TICKET_INVALID") {
-      /**
-       * join ticket 过期后，真正该过期的是这条 locator 缓存，而不是附件业务真相：
-       * 1. 编排层掌握 locator owner，所以由这里统一标脏；
-       * 2. 媒体会话只收到“需要恢复”的稳定信号，不直接碰缓存实现；
-       * 3. 下一次恢复解析会自然 forceRefresh，拿到后端新签的 ticket。
-       */
-      媒体定位器.标记过期(attachment.attachmentId);
-      媒体会话表.get(attachment.attachmentId)?.send({ type: "SWARM_TICKET_INVALID" });
-      return;
-    }
-    标记附件完整并持久化(attachment.attachmentId, {
-      kind: attachment.kind,
-      contentHash: event.contentHash,
-    });
-  };
-
-  const 激活附件协作补齐 = (attachmentId: string): void => {
-    const metadata = 读取附件缓存元数据(attachmentId);
-    if (!metadata.kind) {
-      return;
-    }
-    已进入帮助链附件.add(attachmentId);
-    // 编排层只负责把“当前这张图值得后台补齐”的业务信号转交给播放器；
-    // 真正 locate、读取 locator 兼容字段、接入 WebTorrent runtime 的细节仍留在播放器 owner。
-    void 媒体播放器.激活协作补齐?.({
-      attachmentId,
-      kind: metadata.kind,
-      consumerId: 构造媒体会话ConsumerId(attachmentId),
-      onSessionEvent: (event) =>
-        处理协作分发事件(
-          { attachmentId, kind: metadata.kind! },
-          event
-        ),
-    }).catch(() => undefined);
-  };
-
-  const 恢复当前房间缓存帮助任务 = (
-    attachments = 读取当前房间媒体附件()
-  ): void => {
-    if (!媒体缓存已启动) {
-      return;
-    }
-    const 缓存快照 = 媒体缓存.snapshot();
-    for (const attachment of attachments) {
-      if (!缓存快照[attachment.attachmentId]?.complete) {
-        continue;
-      }
-      const playback = 媒体会话表.get(attachment.attachmentId)?.snapshot().playback;
-      if (playback?.mode === "degraded" && playback.reason === "media_deleted") {
-        continue;
-      }
-      应用缓存完整度到会话(attachment.attachmentId);
-      if (已恢复帮助任务附件.has(attachment.attachmentId)) {
-        continue;
-      }
-      /**
-       * 缓存恢复只认“当前房间 + 本地已完整”的最小事实：
-       * 1. 不扫描全局缓存历史，避免把浏览器壳偷做成后台守护进程；
-       * 2. 同一附件每轮页面生命周期只恢复一次，避免同步消息时重复放大同一帮助任务；
-       * 3. 真正的 swarm 接入仍沿现有播放器 owner 链推进，编排层不自造第二实现。
-       */
-      激活附件协作补齐(attachment.attachmentId);
-      已恢复帮助任务附件.add(attachment.attachmentId);
-    }
-  };
-
   const 释放附件播放资源 = (input: 媒体播放释放请求): void => {
     // 编排层只在附件会话退场时通知播放器释放底层占用；
     // 真正“该不该持有 swarm lease”的判断仍在播放器/runtime 自己收口。
     媒体播放器.释放附件播放资源?.(input);
   };
 
-  const 读取自动播播放结果表 = (): Record<string, 媒体播放结果> => {
-    const 媒体运行时上下文 = 读取媒体运行时上下文();
-    const ownerAttachmentId = 媒体运行时上下文.inlineAutoplayOwnerAttachmentId;
-    const playback = 媒体运行时上下文.inlineAutoplayPlayback;
-    if (!ownerAttachmentId || playback === null) {
-      return {};
-    }
-    return {
-      [ownerAttachmentId]: playback,
-    };
-  };
-
-  const 清空自动播播放结果 = (
-    ownerAttachmentId = 读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId
-  ): void => {
-    const 媒体运行时上下文 = 读取媒体运行时上下文();
-    if (
-      !ownerAttachmentId &&
-      媒体运行时上下文.inlineAutoplayOwnerAttachmentId === null &&
-      媒体运行时上下文.inlineAutoplayPendingAttachmentId === null &&
-      inlineAutoplay启动定时器 === null &&
-      媒体运行时上下文.inlineAutoplayPlayback === null
-    ) {
-      return;
-    }
-    if (inlineAutoplay启动定时器 !== null) {
-      clearTimeout(inlineAutoplay启动定时器);
-      inlineAutoplay启动定时器 = null;
-    }
-    inlineAutoplay解析代次 += 1;
-    if (ownerAttachmentId) {
+  查看器会话协作 = 创建查看器会话协作({
+    读取当前查看器请求: () => 读取媒体运行时上下文().currentViewerRequest,
+    读取查看器是否已打开: () => 读取媒体运行时上下文().viewerOpen,
+    读取媒体会话快照: (attachmentId) => 媒体会话表.get(attachmentId)?.snapshot() ?? null,
+    读取媒体会话: (attachmentId) => 媒体会话表.get(attachmentId) ?? null,
+    读取视频预览状态: (attachmentId) => 视频预览协作.读取视频预览状态(attachmentId),
+    更新当前查看器请求: (request) => {
       接收媒体运行时事实({
-        type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
-        attachmentId: ownerAttachmentId,
+        type: "VIEWER_REQUEST_SYNCED",
+        request,
       });
-    } else {
-      deps.请求重渲染();
-    }
-  };
+    },
+    确认查看器已打开: () => {
+      接收媒体运行时事实({ type: "VIEWER_OPEN_CONFIRMED" });
+    },
+    打开查看器: (request) => {
+      媒体查看器.打开(request);
+    },
+    同步查看器: (request) => {
+      媒体查看器.同步?.(request);
+    },
+    登记程序滚动来源: deps.登记程序滚动来源,
+    清除程序滚动来源: deps.清除程序滚动来源,
+  });
 
-  const 释放当前自动播Owner = (
-    ownerAttachmentId = 读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId
-  ): void => {
-    const 当前Owner = ownerAttachmentId;
-    if (!当前Owner) {
-      清空自动播播放结果();
-      return;
-    }
-    释放附件播放资源({
-      attachmentId: 当前Owner,
-      consumerId: 构造自动播ConsumerId(当前Owner),
-    });
-    清空自动播播放结果(当前Owner);
-  };
+  自动播协作 = 创建自动播协作({
+    读取媒体运行时上下文,
+    读取附件条目,
+    接收媒体运行时事实,
+    解析播放结果: (input) => 媒体播放器.解析播放结果(input),
+    释放附件播放资源,
+    构造自动播ConsumerId,
+    请求重渲染: deps.请求重渲染,
+  });
 
-  const 解析自动播播放结果 = (attachmentId: string): void => {
-    const attachment = 读取附件条目(attachmentId);
-    if (!attachment || attachment.kind !== "video") {
-      清空自动播播放结果();
-      return;
-    }
-    const 当前代次 = ++inlineAutoplay解析代次;
-    接收媒体运行时事实({
-      type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
-      attachmentId,
-    });
-    void 媒体播放器
-      .解析播放结果({
+  视频预览协作 = 创建视频预览协作({
+    读取附件条目,
+    读取会话播放源版本,
+    读取当前视频预览播放源: 读取视频预览候选播放源,
+    获取媒体定位: (attachmentId) => 媒体定位器.获取定位(attachmentId),
+    解析协作分发预览源: ({ attachmentId, locator, consumerId }) =>
+      协作分发运行时.解析协作分发源({
         attachmentId,
-        kind: attachment.kind,
-        surface: "inline_autoplay",
-        consumerId: 构造自动播ConsumerId(attachmentId),
-      })
-      .then((playback) => {
-        if (
-          读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
-          当前代次 !== inlineAutoplay解析代次
-        ) {
-          return;
-        }
-        接收媒体运行时事实({
-          type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
-          attachmentId,
-          playback,
-        });
-      })
-      .catch(() => {
-        if (
-          读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
-          当前代次 !== inlineAutoplay解析代次
-        ) {
-          return;
-        }
-        接收媒体运行时事实({
-          type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
-          attachmentId,
-        });
-      });
-  };
+        kind: "video",
+        locator,
+        consumerId,
+      }),
+    释放协作分发消费者: (input) => {
+      协作分发运行时.释放协作分发消费者(input);
+    },
+    预览缓存,
+    抓取视频预览,
+    接收媒体运行时事实,
+    请求重渲染: deps.请求重渲染,
+    同步当前查看器请求: () => {
+      查看器会话协作.同步当前查看器请求();
+    },
+    构造预览ConsumerId,
+  });
 
-  const 调度自动播播放结果解析 = (attachmentId: string): void => {
-    if (inlineAutoplay启动定时器 !== null) {
-      clearTimeout(inlineAutoplay启动定时器);
-      inlineAutoplay启动定时器 = null;
-    }
-    inlineAutoplay启动定时器 = setTimeout(() => {
-      inlineAutoplay启动定时器 = null;
-      if (
-        读取媒体运行时上下文().inlineAutoplayPendingAttachmentId !== attachmentId
-      ) {
-        return;
-      }
-      接收媒体运行时事实({
-        type: "INLINE_AUTOPLAY_SETTLE_ELAPSED",
-      });
-    }, 自动播候选稳定等待毫秒);
-  };
+  协作补齐协作 = 创建协作补齐协作({
+    读取媒体会话: (attachmentId) => 媒体会话表.get(attachmentId) ?? null,
+    读取附件缓存元数据,
+    读取附件缓存是否完整: (attachmentId) =>
+      媒体缓存.snapshot()[attachmentId]?.complete === true,
+    读取媒体缓存已启动: () => 媒体缓存已启动,
+    激活协作补齐: (input) => 媒体播放器.激活协作补齐?.(input) ?? Promise.resolve(),
+    应用缓存完整度到会话: (attachmentId) => {
+      应用缓存完整度到会话(attachmentId);
+    },
+    标记媒体定位过期: (attachmentId) => {
+      媒体定位器.标记过期(attachmentId);
+    },
+    标记附件完整并持久化,
+    读取当前房间媒体附件,
+    读取附件条目,
+    读取当前查看器起始附件标识: () =>
+      读取媒体运行时上下文().currentViewerRequest?.startAttachmentId ?? null,
+    构造媒体会话ConsumerId,
+  });
 
   const 创建媒体会话条目 = (attachment: 媒体附件条目): 媒体会话端口 => {
     let session: 媒体会话端口;
@@ -1059,18 +548,19 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       解析播放结果: (input) =>
         媒体播放器.解析播放结果({
           ...input,
-          onSessionEvent: (event) => 处理协作分发事件(attachment, event),
+          onSessionEvent: 协作补齐协作.创建协作分发事件转发器(attachment),
         }),
       onSnapshotChange: () => {
         deps.请求重渲染();
-        同步当前查看器请求();
+        查看器会话协作.同步当前查看器请求();
         if (
           attachment.kind === "video" &&
-          (视频预览状态表.get(attachment.attachmentId)?.phase === "missing_source" ||
-            视频预览状态表.get(attachment.attachmentId)?.phase === "idle" ||
-            !视频预览状态表.has(attachment.attachmentId))
+          (() => {
+            const previewPhase = 视频预览协作.读取视频预览状态(attachment.attachmentId)?.phase;
+            return !previewPhase || previewPhase === "idle" || previewPhase === "missing_source";
+          })()
         ) {
-          解析视频预览(attachment.attachmentId);
+          视频预览协作.解析视频预览(attachment.attachmentId);
         }
       },
     });
@@ -1122,18 +612,16 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       });
       session.销毁();
     }
-    已进入帮助链附件.clear();
-    已恢复帮助任务附件.clear();
+    协作补齐协作.清空();
     媒体会话表.clear();
-    视频预览状态表.clear();
-    视频预览解析代次表.clear();
-    视频预览缺源阻断版本表.clear();
+    视频预览协作.清空();
+    查看器会话协作.重置();
     媒体定位器.清空();
   };
 
   void 媒体缓存.启动().then(() => {
     媒体缓存已启动 = true;
-    恢复当前房间缓存帮助任务();
+    协作补齐协作.恢复当前房间缓存帮助任务();
     deps.请求重渲染();
   });
 
@@ -1141,12 +629,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     snapshot(): 聊天媒体快照 {
       return {
         playbackByAttachmentId: 读取媒体播放结果表(),
-        previewByAttachmentId: 读取视频预览状态表(),
+        previewByAttachmentId: 视频预览协作.读取视频预览状态表(),
         sessionByAttachmentId: 读取媒体会话快照表(),
         contentUrlByAttachmentId: 读取附件内容地址表(),
         inlineAutoplayOwnerAttachmentId:
           读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId,
-        inlineAutoplayPlaybackByAttachmentId: 读取自动播播放结果表(),
+        inlineAutoplayPlaybackByAttachmentId: 自动播协作.读取自动播播放结果表(),
       };
     },
 
@@ -1183,9 +671,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         items: request.items.map((item) => ({ ...item })),
       };
       启动查看器起始附件会话(baseRequest);
-      const nextRequest = 投影查看器请求到当前播放真相(baseRequest);
+      const nextRequest = 查看器会话协作.投影查看器请求到当前播放真相(baseRequest);
       if (读取附件条目(request.startAttachmentId)?.kind === "video") {
-        解析视频预览(request.startAttachmentId);
+        视频预览协作.解析视频预览(request.startAttachmentId);
       }
       接收媒体运行时事实({
         type: "VIEWER_OPEN_REQUESTED",
@@ -1221,10 +709,12 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           continue;
         }
         const playback = session.snapshot().playback;
-        const 帮助任务仍应保留 =
-          已进入帮助链附件.has(attachmentId) &&
-          !(playback?.mode === "degraded" && playback.reason === "media_deleted");
-        if (帮助任务仍应保留) {
+        if (
+          协作补齐协作.应保留帮助任务({
+            attachmentId,
+            playback,
+          })
+        ) {
           continue;
         }
         释放附件播放资源({
@@ -1237,11 +727,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           丢弃未完成补齐: true,
         });
         session.销毁();
-        已进入帮助链附件.delete(attachmentId);
+        协作补齐协作.清理附件(attachmentId);
         媒体会话表.delete(attachmentId);
-        已恢复帮助任务附件.delete(attachmentId);
-        视频预览解析代次表.delete(attachmentId);
-        删除视频预览状态(attachmentId);
+        视频预览协作.删除视频预览状态(attachmentId);
         hasSessionSetChanged = true;
       }
 
@@ -1256,9 +744,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       for (const attachment of attachments) {
         if (媒体会话表.has(attachment.attachmentId)) {
           if (attachment.kind === "video") {
-            const previewPhase = 视频预览状态表.get(attachment.attachmentId)?.phase;
+            const previewPhase = 视频预览协作.读取视频预览状态(attachment.attachmentId)?.phase;
             if (!previewPhase || previewPhase === "idle") {
-              解析视频预览(attachment.attachmentId);
+              视频预览协作.解析视频预览(attachment.attachmentId);
             }
           }
           continue;
@@ -1270,10 +758,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
           void session.启动();
           continue;
         }
-        解析视频预览(attachment.attachmentId);
+        视频预览协作.解析视频预览(attachment.attachmentId);
       }
 
-      恢复当前房间缓存帮助任务(attachments);
+      协作补齐协作.恢复当前房间缓存帮助任务(attachments);
 
       if (hasSessionSetChanged) {
         deps.请求重渲染();
@@ -1281,22 +769,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {
-      if (signal.type === "ASSET_COMPLETE") {
-        // 图片查看器只负责把“完整图已经拿到”回抛成会话信号；
-        // 真正落盘到 MediaCacheOwner 的动作仍然只能由编排层统一收口。
-        标记附件完整并持久化(attachmentId, 读取附件缓存元数据(attachmentId));
-        return;
-      }
-      if (signal.type === "ASSET_BACKFILLING") {
-        激活附件协作补齐(attachmentId);
-      }
       if (
-        signal.type === "PLAYER_PLAYING" &&
-        读取媒体运行时上下文().currentViewerRequest?.startAttachmentId ===
-          attachmentId &&
-        读取附件条目(attachmentId)?.kind === "video"
+        !协作补齐协作.处理媒体会话信号({
+          attachmentId,
+          signal,
+        })
       ) {
-        激活附件协作补齐(attachmentId);
+        return;
       }
       接收媒体运行时事实({
         type: "MEDIA_SESSION_SIGNALLED",
@@ -1332,6 +811,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       清空播放状态();
       协作分发运行时.重置();
       void 同步媒体运行时快照并执行副作用(before);
+      自动播协作.销毁();
       deps.请求重渲染();
     },
 
@@ -1345,6 +825,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       协作分发运行时.销毁();
       void 同步媒体运行时快照并执行副作用(before);
       媒体运行时.stop();
+      自动播协作.销毁();
       deps.请求重渲染();
     },
 

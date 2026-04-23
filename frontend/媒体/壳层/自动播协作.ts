@@ -1,0 +1,201 @@
+import type { 媒体运行时上下文, 媒体运行时事件 } from "../../媒体运行时.js";
+import type { 媒体播放结果 } from "../index.js";
+
+type 媒体附件条目 = {
+  attachmentId: string;
+  kind: "image" | "video";
+};
+
+type 媒体播放释放请求 = {
+  attachmentId: string;
+  consumerId?: string;
+  丢弃未完成补齐?: boolean;
+};
+
+type 自动播协作依赖 = {
+  读取媒体运行时上下文(): 媒体运行时上下文;
+  读取附件条目(attachmentId: string): 媒体附件条目 | null;
+  接收媒体运行时事实(event: 媒体运行时事件): void;
+  解析播放结果(input: {
+    attachmentId: string;
+    kind: "image" | "video";
+    surface?: "viewer" | "inline_autoplay";
+    consumerId?: string;
+  }): Promise<媒体播放结果>;
+  释放附件播放资源(input: 媒体播放释放请求): void;
+  构造自动播ConsumerId(attachmentId: string): string;
+  请求重渲染(): void;
+};
+
+export interface 自动播协作端口 {
+  读取自动播播放结果表(): Record<string, 媒体播放结果>;
+  同步媒体运行时上下文变化(input: {
+    before: 媒体运行时上下文;
+    after: 媒体运行时上下文;
+  }): void;
+  销毁(): void;
+}
+
+// 自动播保留轻微迟滞防抖，但不能继续维持旧的 120ms 网页式空窗。
+const 自动播候选稳定等待毫秒 = 80;
+
+/**
+ * 自动播协作只拥有“消息流自动播 owner 的稳定等待、解析和释放”：
+ * 1. runtime 只负责谁该成为 owner；
+ * 2. 本模块负责何时触发解析、何时释放底层占用；
+ * 3. 最终播放结果仍回写到 runtime 上下文，壳层只做副作用接线。
+ */
+export function 创建自动播协作(deps: 自动播协作依赖): 自动播协作端口 {
+  let 自动播启动定时器: ReturnType<typeof setTimeout> | null = null;
+  let 自动播解析代次 = 0;
+
+  const 清除自动播定时器 = (): void => {
+    if (自动播启动定时器 === null) {
+      return;
+    }
+    clearTimeout(自动播启动定时器);
+    自动播启动定时器 = null;
+  };
+
+  const 清空自动播播放结果 = (
+    ownerAttachmentId = deps.读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId
+  ): void => {
+    const 媒体运行时上下文 = deps.读取媒体运行时上下文();
+    if (
+      !ownerAttachmentId &&
+      媒体运行时上下文.inlineAutoplayOwnerAttachmentId === null &&
+      媒体运行时上下文.inlineAutoplayPendingAttachmentId === null &&
+      自动播启动定时器 === null &&
+      媒体运行时上下文.inlineAutoplayPlayback === null
+    ) {
+      return;
+    }
+    清除自动播定时器();
+    自动播解析代次 += 1;
+    if (ownerAttachmentId) {
+      deps.接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
+        attachmentId: ownerAttachmentId,
+      });
+      return;
+    }
+    deps.请求重渲染();
+  };
+
+  const 释放当前自动播Owner = (
+    ownerAttachmentId = deps.读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId
+  ): void => {
+    if (!ownerAttachmentId) {
+      清空自动播播放结果();
+      return;
+    }
+    deps.释放附件播放资源({
+      attachmentId: ownerAttachmentId,
+      consumerId: deps.构造自动播ConsumerId(ownerAttachmentId),
+    });
+    清空自动播播放结果(ownerAttachmentId);
+  };
+
+  const 解析自动播播放结果 = (attachmentId: string): void => {
+    const attachment = deps.读取附件条目(attachmentId);
+    if (!attachment || attachment.kind !== "video") {
+      清空自动播播放结果();
+      return;
+    }
+    const 当前代次 = ++自动播解析代次;
+    deps.接收媒体运行时事实({
+      type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
+      attachmentId,
+    });
+    void deps
+      .解析播放结果({
+        attachmentId,
+        kind: attachment.kind,
+        surface: "inline_autoplay",
+        consumerId: deps.构造自动播ConsumerId(attachmentId),
+      })
+      .then((playback) => {
+        if (
+          deps.读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
+          当前代次 !== 自动播解析代次
+        ) {
+          return;
+        }
+        deps.接收媒体运行时事实({
+          type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+          attachmentId,
+          playback,
+        });
+      })
+      .catch(() => {
+        if (
+          deps.读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId !== attachmentId ||
+          当前代次 !== 自动播解析代次
+        ) {
+          return;
+        }
+        deps.接收媒体运行时事实({
+          type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
+          attachmentId,
+        });
+      });
+  };
+
+  const 调度自动播播放结果解析 = (attachmentId: string): void => {
+    清除自动播定时器();
+    自动播启动定时器 = setTimeout(() => {
+      自动播启动定时器 = null;
+      if (deps.读取媒体运行时上下文().inlineAutoplayPendingAttachmentId !== attachmentId) {
+        return;
+      }
+      deps.接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_SETTLE_ELAPSED",
+      });
+    }, 自动播候选稳定等待毫秒);
+  };
+
+  return {
+    读取自动播播放结果表(): Record<string, 媒体播放结果> {
+      const 媒体运行时上下文 = deps.读取媒体运行时上下文();
+      const ownerAttachmentId = 媒体运行时上下文.inlineAutoplayOwnerAttachmentId;
+      const playback = 媒体运行时上下文.inlineAutoplayPlayback;
+      if (!ownerAttachmentId || playback === null) {
+        return {};
+      }
+      return {
+        [ownerAttachmentId]: playback,
+      };
+    },
+
+    同步媒体运行时上下文变化({
+      before,
+      after,
+    }: {
+      before: 媒体运行时上下文;
+      after: 媒体运行时上下文;
+    }): void {
+      if (before.inlineAutoplayPendingAttachmentId !== after.inlineAutoplayPendingAttachmentId) {
+        清除自动播定时器();
+        if (after.inlineAutoplayPendingAttachmentId) {
+          调度自动播播放结果解析(after.inlineAutoplayPendingAttachmentId);
+        }
+      }
+
+      if (before.inlineAutoplayOwnerAttachmentId !== after.inlineAutoplayOwnerAttachmentId) {
+        if (before.inlineAutoplayOwnerAttachmentId) {
+          释放当前自动播Owner(before.inlineAutoplayOwnerAttachmentId);
+        } else {
+          清空自动播播放结果();
+        }
+        if (after.inlineAutoplayOwnerAttachmentId) {
+          解析自动播播放结果(after.inlineAutoplayOwnerAttachmentId);
+        }
+      }
+    },
+
+    销毁(): void {
+      清除自动播定时器();
+      自动播解析代次 += 1;
+    },
+  };
+}
