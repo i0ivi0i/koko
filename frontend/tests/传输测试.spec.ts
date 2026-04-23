@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { ioSpy } = vi.hoisted(() => ({
@@ -15,6 +17,32 @@ describe("传输", () => {
   beforeEach(() => {
     ioSpy.mockClear();
     vi.restoreAllMocks();
+  });
+
+  it("HttpRealtime传输 会把 socket 生命周期与运行时策略委托给 实时连接适配", () => {
+    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天实时/适配/实时连接适配.js"');
+    expect(source).toContain("private readonly 实时连接");
+    expect(source).toContain("return this.实时连接.createSocket(sessionId);");
+    expect(source).toContain("this.实时连接.接收运行时策略(policy);");
+    expect(source).toContain("return this.实时连接.读取运行时策略();");
+    expect(source).toContain("this.实时连接.释放Socket(socket);");
+    expect(source).not.toContain("private 当前运行时策略");
+    expect(source).not.toContain("private readonly 活跃Socket表");
+  });
+
+  it("HttpRealtime传输 会把房间主链 HTTP 调用委托给 房间HTTP接口", () => {
+    const source = readFileSync(resolve(process.cwd(), "传输.ts"), "utf8");
+
+    expect(source).toContain('from "./聊天恢复/适配/房间HTTP接口.js"');
+    expect(source).toContain("private readonly 房间HTTP接口");
+    expect(source).toContain("return this.房间HTTP接口.bootstrapAnonymousIdentity(deviceToken);");
+    expect(source).toContain("return this.房间HTTP接口.joinOrCreateRoom(sessionId, roomCode);");
+    expect(source).toContain("return this.房间HTTP接口.loadRoomSnapshot(roomId, sessionId);");
+    expect(source).toContain("return this.房间HTTP接口.updateRoomReadAnchor(");
+    expect(source).toContain("return this.房间HTTP接口.loadRoomEvents(roomId, sessionId, from);");
+    expect(source).toContain("return this.房间HTTP接口.loadRoomHistory(");
   });
 
   it("socket连接配置只显式声明当前可安全启用的连接策略", () => {

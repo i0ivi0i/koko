@@ -1,4 +1,4 @@
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 import type {
   Blob媒体资产描述,
   Blob媒体变体描述,
@@ -23,6 +23,11 @@ import type {
   后台房间详情,
   后台登录结果,
 } from "./契约.js";
+import {
+  实时连接适配,
+  type 实时连接运行时策略,
+} from "./聊天实时/适配/实时连接适配.js";
+import { 房间HTTP接口 } from "./聊天恢复/适配/房间HTTP接口.js";
 
 type 接口错误响应 = {
   code?: string;
@@ -82,24 +87,22 @@ export interface 前端传输端口 {
   释放Socket?(socket: Socket): void;
   createSocket(sessionId: string): Socket;
 }
-
-export interface 实时连接运行时策略 {
-  intent: "resume" | "suspend";
-  reconnection: boolean;
-  reason: "active" | "background" | "page_hidden";
-}
-
-const 默认实时连接运行时策略: 实时连接运行时策略 = {
-  intent: "resume",
-  reconnection: true,
-  reason: "active",
-};
+export type { 实时连接运行时策略 } from "./聊天实时/适配/实时连接适配.js";
 
 export class HttpRealtime传输 implements 前端传输端口 {
-  private 当前运行时策略: 实时连接运行时策略 = 默认实时连接运行时策略;
-  private readonly 活跃Socket表 = new Map<Socket, { 由运行时挂起: boolean }>();
+  private readonly 实时连接: 实时连接适配;
+  private readonly 房间HTTP接口: 房间HTTP接口;
 
-  constructor(private readonly baseUrl: string) {}
+  constructor(private readonly baseUrl: string) {
+    this.实时连接 = new 实时连接适配(baseUrl);
+    this.房间HTTP接口 = new 房间HTTP接口({
+      get: this.get.bind(this),
+      post: this.post.bind(this),
+      解析房间快照: (snapshot) => this.解析房间快照(snapshot),
+      解析增量事件快照: (snapshot) => this.解析增量事件快照(snapshot),
+      解析房间历史页: (page) => this.解析房间历史页(page),
+    });
+  }
 
   /**
    * 后端在本地回环模式下会返回相对 Tus endpoint，例如 `/files`。
@@ -268,24 +271,15 @@ export class HttpRealtime传输 implements 前端传输端口 {
   }
 
   async bootstrapAnonymousIdentity(deviceToken: string): Promise<匿名身份引导结果> {
-    return this.post("/api/session/bootstrap", {
-      device_anonymous_token: deviceToken,
-    });
+    return this.房间HTTP接口.bootstrapAnonymousIdentity(deviceToken);
   }
 
   async joinOrCreateRoom(sessionId: string, roomCode: string): Promise<房间快照> {
-    const snapshot = await this.post<房间快照>("/api/rooms/join-or-create", {
-      session_id: sessionId,
-      room_code: roomCode,
-    });
-    return this.解析房间快照(snapshot);
+    return this.房间HTTP接口.joinOrCreateRoom(sessionId, roomCode);
   }
 
   async loadRoomSnapshot(roomId: string, sessionId: string): Promise<房间快照> {
-    const snapshot = await this.get<房间快照>(
-      `/api/rooms/${roomId}/snapshot?session_id=${sessionId}`
-    );
-    return this.解析房间快照(snapshot);
+    return this.房间HTTP接口.loadRoomSnapshot(roomId, sessionId);
   }
 
   /**
@@ -390,13 +384,11 @@ export class HttpRealtime传输 implements 前端传输端口 {
     sessionId: string,
     lastReadEventPosition: number
   ): Promise<void> {
-    const payload: 阅读推进请求 = {
-      session_id: sessionId,
-      last_read_event_position: lastReadEventPosition,
-    };
-    // 阅读推进属于冷路径写接口：
-    // 它只上报“这个身份已确认读到哪里”，不借道 realtime，也不和进房快照混用。
-    await this.post(`/api/rooms/${roomId}/read-anchor`, payload);
+    return this.房间HTTP接口.updateRoomReadAnchor(
+      roomId,
+      sessionId,
+      lastReadEventPosition
+    );
   }
 
   async loadRoomEvents(
@@ -404,10 +396,7 @@ export class HttpRealtime传输 implements 前端传输端口 {
     sessionId: string,
     from: number
   ): Promise<增量事件快照> {
-    const snapshot = await this.get<增量事件快照>(
-      `/api/rooms/${roomId}/events?session_id=${sessionId}&from=${from}`
-    );
-    return this.解析增量事件快照(snapshot);
+    return this.房间HTTP接口.loadRoomEvents(roomId, sessionId, from);
   }
 
   async loadRoomHistory(
@@ -416,10 +405,12 @@ export class HttpRealtime传输 implements 前端传输端口 {
     beforeEventPosition: number,
     limit: number
   ): Promise<房间历史页> {
-    const page = await this.get<房间历史页>(
-      `/api/rooms/${roomId}/history?session_id=${sessionId}&before_event_position=${beforeEventPosition}&limit=${limit}`
+    return this.房间HTTP接口.loadRoomHistory(
+      roomId,
+      sessionId,
+      beforeEventPosition,
+      limit
     );
-    return this.解析房间历史页(page);
   }
 
   async loadAdminOverview(token: string): Promise<后台概览> {
@@ -439,50 +430,19 @@ export class HttpRealtime传输 implements 前端传输端口 {
   }
 
   createSocket(sessionId: string): Socket {
-    // 这里先只显式声明“当前协议下可以安全开启”的连接策略：
-    // 1. 保持 websocket-only，继续贴合现在的 realtime 主通道；
-    // 2. 显式保留自动重连，便于断线后继续走 snapshot + 补洞恢复链；
-    // 3. 暂时不启用 retries / ackTimeout。
-    //
-    // 原因不是忘了配，而是 Socket.IO 官方文档明确要求：
-    // `retries` 必须和服务端 ack 配套使用；否则客户端会重发命令。
-    // 我们当前的 create_message / subscribe_room_stream 还没有 ack 协议，
-    // 可靠性仍然由 latest_event_position + snapshot + 增量补洞保证，
-    // 不能为了“看起来更可靠”而把同一条命令重放多次。
-    const socket = io(this.baseUrl, {
-      transports: ["websocket"],
-      reconnection: this.当前运行时策略.reconnection,
-      autoConnect: this.当前运行时策略.intent !== "suspend",
-      auth: { session_id: sessionId },
-    });
-    this.活跃Socket表.set(socket, { 由运行时挂起: false });
-    return socket;
+    return this.实时连接.createSocket(sessionId);
   }
 
   接收运行时策略(policy: 实时连接运行时策略): void {
-    this.当前运行时策略 = { ...policy };
-    for (const [socket, state] of this.活跃Socket表.entries()) {
-      if (policy.intent === "suspend") {
-        if (!state.由运行时挂起) {
-          state.由运行时挂起 = true;
-          socket.disconnect();
-        }
-        continue;
-      }
-      if (state.由运行时挂起 && typeof socket.connect === "function") {
-        state.由运行时挂起 = false;
-        socket.connect();
-      }
-    }
+    this.实时连接.接收运行时策略(policy);
   }
 
   读取运行时策略(): 实时连接运行时策略 {
-    return { ...this.当前运行时策略 };
+    return this.实时连接.读取运行时策略();
   }
 
   释放Socket(socket: Socket): void {
-    this.活跃Socket表.delete(socket);
-    socket.disconnect();
+    this.实时连接.释放Socket(socket);
   }
 
   private async get<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
