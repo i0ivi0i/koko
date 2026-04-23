@@ -86,6 +86,7 @@ Assert-True -Condition ($scriptContent -match '\[switch\]\$LauncherMode') -Messa
 Assert-True -Condition ($scriptContent -match 'if \(\$IsLauncherMode\)') -Message "launcher 模式应跳过 caddy trust 与开机自启任务。"
 Assert-True -Condition ($scriptContent -match 'Start-AppViaRunScriptIfNeeded') -Message "https.ps1 应继续只保留 app bootstrap 协调入口。"
 Assert-True -Condition ($scriptContent -match 'run\.ps1') -Message "https.ps1 的 app bootstrap 协调应只衔接 run.ps1。"
+Assert-True -Condition ($scriptContent -match 'Resolve-HttpsBootstrapLogDirectory') -Message "https.ps1 应把 bootstrap 日志目录解析收口到独立 helper。"
 Assert-False -Condition ($scriptContent -match 'cargo\s+run') -Message "https.ps1 不应自己直接拉起 cargo 主链。"
 
 # 用例5：HTTPS 运行时目录默认不应在仓库内。
@@ -93,5 +94,10 @@ $runtimeDir = Resolve-HttpsRuntimeDirectory
 $normalizedRuntimeDir = $runtimeDir.TrimEnd('\').ToLowerInvariant()
 $normalizedRepoRoot = $repoRoot.TrimEnd('\').ToLowerInvariant()
 Assert-False -Condition $normalizedRuntimeDir.StartsWith($normalizedRepoRoot) -Message "运行时目录不应落在仓库里。"
+
+# 用例6：bootstrap 日志目录默认也不应落在仓库内，避免 https.ps1 再维护一套 repo 内运行时状态。
+$bootstrapLogDir = Resolve-HttpsBootstrapLogDirectory
+$normalizedBootstrapLogDir = $bootstrapLogDir.TrimEnd('\').ToLowerInvariant()
+Assert-False -Condition $normalizedBootstrapLogDir.StartsWith($normalizedRepoRoot) -Message "bootstrap 日志目录不应落在仓库里。"
 
 Write-Host "https.ps1 测试通过"

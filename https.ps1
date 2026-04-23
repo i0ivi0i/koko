@@ -65,6 +65,20 @@ function Resolve-PwshPath {
     throw "未找到可用 PowerShell（pwsh / powershell.exe）。"
 }
 
+function Resolve-HttpsBootstrapLogDirectory {
+    $override = [Environment]::GetEnvironmentVariable("KOKO_HTTPS_BOOTSTRAP_LOG_HOME")
+    if (-not [string]::IsNullOrWhiteSpace($override)) {
+        return [System.IO.Path]::GetFullPath($override)
+    }
+
+    $localAppData = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
+    if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
+        return [System.IO.Path]::GetFullPath((Join-Path $localAppData "koko\\https-bootstrap"))
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $env:TEMP "koko-https-bootstrap"))
+}
+
 function Test-LoopbackPortOpen {
     param(
         [Parameter(Mandatory = $true)][int]$TargetPort,
@@ -121,7 +135,8 @@ function Start-AppViaRunScriptIfNeeded {
 
     $pwshPath = Resolve-PwshPath
     $sessionId = Get-Date -Format "yyyyMMdd-HHmmss-fff"
-    $logRoot = Join-Path $RepoRoot "tmp\\https-bootstrap"
+    # https.ps1 只负责 bootstrap 协调；日志也应落在运行时目录，而不是在仓库里再长一套脚本状态。
+    $logRoot = Resolve-HttpsBootstrapLogDirectory
     New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
     $stdoutPath = Join-Path $logRoot ("run-$sessionId.stdout.log")
     $stderrPath = Join-Path $logRoot ("run-$sessionId.stderr.log")

@@ -61,6 +61,8 @@ Assert-True ($runScript -match '-SkipAppBootstrap') "run.ps1 调用 https.ps1 �
 Assert-True ($runScript -match '-LauncherMode') "run.ps1 调用 https.ps1 时应使用 launcher 模式，避免把证书安装/开机任务交互阻塞主链。"
 Assert-True (-not ($runScript -match 'Start-AppViaRunScriptIfNeeded')) "run.ps1 不得复制 https.ps1 的 app bootstrap 协调入口。"
 Assert-True (-not ($runScript -match 'Wait-LoopbackPortOpen')) "run.ps1 不得复制 https.ps1 的端口就绪轮询。"
+Assert-True ($runScript -match 'Update-CloudflareTunnelStateFromLogLine') "run.ps1 应把 tunnel 行解析收口到独立 helper，避免 Write-ManagedProcessLogs 长成第二运行总控。"
+Assert-True ($runScript -match 'Write-ManagedProcessLogs[\s\S]*Update-CloudflareTunnelStateFromLogLine') "Write-ManagedProcessLogs 应该只托管日志读取与输出，把 tunnel 状态解析委托给 helper。"
 Assert-True ($runScript -match 'Stop-StaleLauncherBackend') "run.ps1 应该只清理自己 launcher-run 留下的开发态后端残进程，而不是发明项目级退出真相。"
 Assert-True ($runScript -match 'launcher-run') "run.ps1 应该把开发启动器产物隔离在 launcher-run 目录下，避免跟源码主产物争抢。"
 Assert-True ($runScript -match 'Get-Command tusd(?:\.exe)?') "run.ps1 应该显式检查 tusd 可执行文件是否存在。"

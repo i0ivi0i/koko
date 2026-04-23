@@ -172,6 +172,35 @@ function Write-HighlightedAccessBlock {
     Write-Host ("+" + $frame + "+") -ForegroundColor DarkYellow
 }
 
+function Update-CloudflareTunnelStateFromLogLine {
+    param(
+        [string]$ManagedProcessName,
+        [string]$Line
+    )
+
+    if ($ManagedProcessName -ne "tunnel" -or [string]::IsNullOrWhiteSpace($Line)) {
+        return
+    }
+
+    $publicUrl = Parse-CloudflareTunnelPublicUrlFromLogLine -Line $Line
+    if (-not [string]::IsNullOrWhiteSpace($publicUrl)) {
+        $script:CloudflareTunnelPublicUrl = $publicUrl
+    }
+    if ($Line -match "Registered tunnel connection") {
+        $script:CloudflareTunnelConnected = $true
+    }
+    if (
+        -not $script:CloudflareTunnelFailureAnnounced -and
+        (
+            $Line -match "TLS handshake with edge error" -or
+            $Line -match "failed to verify certificate"
+        )
+    ) {
+        Write-Warning "Cloudflare Tunnel 未连通：TLS 握手失败。请检查本机时间、网络 HTTPS 检查策略，或尝试关闭代理后重试。"
+        $script:CloudflareTunnelFailureAnnounced = $true
+    }
+}
+
 function Resolve-CloudflaredBinaryPath {
     $command = Get-Command cloudflared.exe -ErrorAction SilentlyContinue
     if ($null -eq $command) {
@@ -348,25 +377,7 @@ function Write-ManagedProcessLogs {
             continue
         }
         [Console]::Out.WriteLine(("[{0}] {1}" -f $ManagedProcess.Name, $line))
-        if ($ManagedProcess.Name -eq "tunnel") {
-            $publicUrl = Parse-CloudflareTunnelPublicUrlFromLogLine -Line $line
-            if (-not [string]::IsNullOrWhiteSpace($publicUrl)) {
-                $script:CloudflareTunnelPublicUrl = $publicUrl
-            }
-            if ($line -match "Registered tunnel connection") {
-                $script:CloudflareTunnelConnected = $true
-            }
-            if (
-                -not $script:CloudflareTunnelFailureAnnounced -and
-                (
-                    $line -match "TLS handshake with edge error" -or
-                    $line -match "failed to verify certificate"
-                )
-            ) {
-                Write-Warning "Cloudflare Tunnel 未连通：TLS 握手失败。请检查本机时间、网络 HTTPS 检查策略，或尝试关闭代理后重试。"
-                $script:CloudflareTunnelFailureAnnounced = $true
-            }
-        }
+        Update-CloudflareTunnelStateFromLogLine -ManagedProcessName $ManagedProcess.Name -Line $line
     }
 
     foreach ($line in (Read-NewLogLines -StreamState $ManagedProcess.Stderr)) {
@@ -374,25 +385,7 @@ function Write-ManagedProcessLogs {
             continue
         }
         [Console]::Error.WriteLine(("[{0}] {1}" -f $ManagedProcess.Name, $line))
-        if ($ManagedProcess.Name -eq "tunnel") {
-            $publicUrl = Parse-CloudflareTunnelPublicUrlFromLogLine -Line $line
-            if (-not [string]::IsNullOrWhiteSpace($publicUrl)) {
-                $script:CloudflareTunnelPublicUrl = $publicUrl
-            }
-            if ($line -match "Registered tunnel connection") {
-                $script:CloudflareTunnelConnected = $true
-            }
-            if (
-                -not $script:CloudflareTunnelFailureAnnounced -and
-                (
-                    $line -match "TLS handshake with edge error" -or
-                    $line -match "failed to verify certificate"
-                )
-            ) {
-                Write-Warning "Cloudflare Tunnel 未连通：TLS 握手失败。请检查本机时间、网络 HTTPS 检查策略，或尝试关闭代理后重试。"
-                $script:CloudflareTunnelFailureAnnounced = $true
-            }
-        }
+        Update-CloudflareTunnelStateFromLogLine -ManagedProcessName $ManagedProcess.Name -Line $line
     }
 
     if (
