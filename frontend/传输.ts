@@ -88,7 +88,8 @@ export interface 后台会话传输端口 {
 
 /**
  * 正式组合根仍然是 `前端传输端口`。
- * 但调用侧不该再默认抱住整张表，而要通过下面的投影函数拿自己那一小截能力。
+ * 调用侧应该直接用 TypeScript 的结构类型收窄到自己那一小截能力，
+ * 不再保留“只是返回自己”的纯转发 facade。
  */
 export interface 前端传输端口
   extends 聊天房间传输端口,
@@ -98,32 +99,6 @@ export interface 前端传输端口
     后台会话传输端口 {}
 
 export type { 聊天房间传输端口, 聊天实时连接端口, 实时连接运行时策略 };
-
-/**
- * 这些投影函数故意只是“身份收窄”：
- * 1. 不创建第二个 transport；
- * 2. 不包一层新的共享状态；
- * 3. 只把 TypeScript 视角收回到调用方真正需要的那一小截。
- */
-export const 投影聊天房间传输端口 = (
-  transport: 前端传输端口
-): 聊天房间传输端口 => transport;
-
-export const 投影聊天实时连接端口 = (
-  transport: 前端传输端口
-): 聊天实时连接端口 => transport;
-
-export const 投影媒体传输端口 = (
-  transport: 前端传输端口
-): 媒体传输端口 => transport;
-
-export const 投影后台查询传输端口 = (
-  transport: 前端传输端口
-): 后台查询传输端口 => transport;
-
-export const 投影后台会话传输端口 = (
-  transport: 前端传输端口
-): 后台会话传输端口 => transport;
 
 /**
  * HttpRealtime传输 现在只保留“组合根”职责：

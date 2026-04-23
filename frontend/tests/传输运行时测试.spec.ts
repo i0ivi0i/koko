@@ -79,6 +79,11 @@ describe("传输运行时", () => {
     expect(source).toContain("lastLifecycle");
     expect(source).toContain("realtimePolicy");
     expect(source).toContain("读取组合根传输().接收运行时策略?.(realtimePolicy);");
+    expect(source).not.toContain("投影聊天房间传输端口");
+    expect(source).not.toContain("投影聊天实时连接端口");
+    expect(source).not.toContain("投影媒体传输端口");
+    expect(source).not.toContain("投影后台查询传输端口");
+    expect(source).not.toContain("投影后台会话传输端口");
     expect(source).not.toContain("loadRoomSnapshot(");
     expect(source).not.toContain("loadMediaLocator(");
     expect(source).not.toContain("adminLogin(");

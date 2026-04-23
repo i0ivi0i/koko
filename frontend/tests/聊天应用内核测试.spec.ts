@@ -115,6 +115,9 @@ describe("聊天应用内核", () => {
     expect(source).not.toContain("new Notification(");
     expect(source).not.toContain("private readonly platform: 浏览器应用平台");
     expect(source).not.toContain("this.platform.transport.transport()");
+    expect(source).not.toContain("投影聊天房间传输端口");
+    expect(source).not.toContain("投影聊天实时连接端口");
+    expect(source).not.toContain("投影媒体传输端口");
     expect(source).not.toContain("this.platform.storage.壳层记忆()");
     expect(source).not.toContain("this.platform.snapshot()");
   });

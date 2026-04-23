@@ -37,9 +37,6 @@ import {
 } from "./平台/index.js";
 import type { 消息事件 } from "./契约.js";
 import {
-  投影媒体传输端口,
-  投影聊天实时连接端口,
-  投影聊天房间传输端口,
   type 媒体传输端口,
   type 聊天实时连接端口,
   type 聊天房间传输端口,
@@ -289,15 +286,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     const rawPlatform = deps.platform ?? 获取默认浏览器应用平台();
     this.平台桥接 = 创建聊天内核平台桥接(rawPlatform);
     const transport = deps.transport;
-    this.房间传输 = transport
-      ? 投影聊天房间传输端口(transport)
-      : this.平台桥接.聊天房间传输();
-    this.实时连接 = transport
-      ? 投影聊天实时连接端口(transport)
-      : this.平台桥接.聊天实时连接();
-    this.媒体传输 = transport
-      ? 投影媒体传输端口(transport)
-      : this.平台桥接.媒体传输();
+    this.房间传输 = transport ?? this.平台桥接.聊天房间传输();
+    this.实时连接 = transport ?? this.平台桥接.聊天实时连接();
+    this.媒体传输 = transport ?? this.平台桥接.媒体传输();
     this.storage = deps.storage ?? this.平台桥接.壳层记忆();
     this.会话状态 = { ...初始聊天会话状态 };
     this.输入状态 = { ...初始聊天输入状态 };
@@ -460,9 +451,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
     this._阅读推进编排端口?.dispose();
     this._阅读推进编排端口 = null;
     this._恢复编排端口 = null;
-    this.房间传输 = 投影聊天房间传输端口(transport);
-    this.实时连接 = 投影聊天实时连接端口(transport);
-    this.媒体传输 = 投影媒体传输端口(transport);
+    this.房间传输 = transport;
+    this.实时连接 = transport;
+    this.媒体传输 = transport;
     this.媒体编排.清空();
   }
 
