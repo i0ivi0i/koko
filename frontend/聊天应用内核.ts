@@ -417,7 +417,6 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         await this.请求跳到最新();
         return;
       case "MEDIA_OPEN_REQUESTED":
-        this.登记程序滚动来源("media_viewer_open");
         this.打开媒体查看器(command.request);
         return;
       case "MEDIA_SESSION_SIGNALLED":

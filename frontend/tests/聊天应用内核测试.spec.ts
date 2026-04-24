@@ -274,6 +274,41 @@ describe("聊天应用内核", () => {
     });
   });
 
+  it("打开正式查看器时只登记一次 media_viewer_open 程序滚动来源", async () => {
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const 滚动器 = (
+      kernel as unknown as {
+        读取房间滚动器供测试(): {
+          登记程序滚动来源(source: "media_viewer_open"): void;
+        };
+      }
+    ).读取房间滚动器供测试();
+    const 登记程序滚动来源 = vi.spyOn(滚动器, "登记程序滚动来源");
+    const 打开查看器 = vi.fn();
+
+    读取媒体编排供测试(kernel).设置媒体查看器供测试({
+      打开: 打开查看器,
+      销毁: vi.fn(),
+    });
+
+    await kernel.dispatch({
+      type: "MEDIA_OPEN_REQUESTED",
+      request: {
+        startAttachmentId: "att-1",
+        items: [],
+      },
+    });
+
+    expect(打开查看器).toHaveBeenCalledTimes(1);
+    expect(登记程序滚动来源).toHaveBeenCalledTimes(1);
+    expect(登记程序滚动来源).toHaveBeenCalledWith("media_viewer_open");
+  });
+
   it("壳层媒体失败草稿的新双动作也必须只通过 dispatch 进入内核", async () => {
     const kernel = 创建聊天应用内核({
       ...创建内核依赖(),
