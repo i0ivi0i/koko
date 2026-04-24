@@ -42,6 +42,8 @@
     把 WebTorrent、tracker、Web Seed 和浏览器真实边界收成实现可直接复用的一张清单。
   - [WebTorrent最新版官方建议与高性能设计补充-2026-04.md](./WebTorrent最新版官方建议与高性能设计补充-2026-04.md)
     专门回答最新版 `WebTorrent` 到底能不能让群聊视频/图片秒开，以及官方和 WebTorrent/BitTorrent 实作者给出的高性能路线是什么。
+  - [WebTorrent-HTTPS-WSS公私announce与单机冒烟测试官方实践清单-2026-04-25.md](./WebTorrent-HTTPS-WSS公私announce与单机冒烟测试官方实践清单-2026-04-25.md)
+    专门收口 HTTPS 页面公开 `WSS announce`、sidecar 私有 tracker announce、单机 WebTorrent 烟测与未来公网部署前置门禁。
   - [WebTorrent-秒开秒播秒切与图片秒开-官方与BEP性能清单-2026-04-19.md](./WebTorrent-秒开秒播秒切与图片秒开-官方与BEP性能清单-2026-04-19.md)
     按 2026-04-19 重新核对最新版 `WebTorrent`、BEP 规范与主流高性能实现，收敛成可直接执行的秒开/秒切/秒开图落地清单。
   - [客户端预制媒体与WebTorrent单文件主链-官方实践清单-2026-04-20.md](./客户端预制媒体与WebTorrent单文件主链-官方实践清单-2026-04-20.md)
