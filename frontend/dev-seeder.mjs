@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { parseArgs } from "node:util";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 /**
  * 统一把 infoHash 归一化成小写十六进制。
@@ -93,39 +94,8 @@ const 读取WebTorrent构造器 = async () => {
   }
 };
 
-const { values } = parseArgs({
-  options: {
-    host: {
-      type: "string",
-      default: "127.0.0.1",
-    },
-    port: {
-      type: "string",
-      default: process.env.SWARM_SEEDER_PORT ?? "7073",
-    },
-  },
-});
-
-const seederPort = Number(values.port);
-if (!Number.isInteger(seederPort) || seederPort <= 0 || seederPort > 65535) {
-  console.error(`[dev-seeder] 非法端口: ${values.port}`);
-  process.exit(1);
-}
-
-const { Ctor: WebTorrentCtor, capability, error: webtorrentError } =
-  await 读取WebTorrent构造器();
-if (capability === "mock") {
-  console.warn(
-    "[dev-seeder] WebTorrent 运行时不可用，已退回 mock seeder（仅保留控制面语义）。",
-    webtorrentError?.message ?? webtorrentError ?? ""
-  );
-} else if (capability !== "hybrid") {
-  console.warn(
-    "[dev-seeder] 当前未加载 webtorrent-hybrid；浏览器 WebRTC 互通能力可能受限（仅用于开发兜底）。"
-  );
-}
-
-const client = WebTorrentCtor ? new WebTorrentCtor() : null;
+let capability = "mock";
+let client = null;
 const activeSessions = new Map();
 
 const 读取活跃会话快照 = () =>
@@ -170,6 +140,23 @@ const 选择种子来源 = (payload, normalizedInfoHash) => {
   return null;
 };
 
+export const 刷新已有做种会话 = (existing, input) => {
+  const nextTicket = input.joinTicket ?? null;
+  const refreshedTicket = existing.joinTicket !== nextTicket;
+  const sourceChanged = existing.source !== input.source;
+  if (refreshedTicket) {
+    existing.joinTicket = nextTicket;
+    if (existing.announceTicketRef) {
+      existing.announceTicketRef.value = nextTicket;
+    }
+  }
+  if (sourceChanged) {
+    // source 是同 infohash 的取种入口线索；同一 infohash 不能因为附件 URL 变化制造第二条做种真相。
+    existing.source = input.source;
+  }
+  return { created: false, refreshedTicket, restarted: false, sourceChanged };
+};
+
 const 启动做种会话 = async (payload) => {
   const normalizedInfoHash = 归一化InfoHash(payload.infoHash);
   if (!normalizedInfoHash) {
@@ -184,23 +171,12 @@ const 启动做种会话 = async (payload) => {
   if (existing) {
     /**
      * 同一 infohash 的 start 默认视为“续租/续命”，而不是重复创建：
-     * 1. 若 source 未变化，直接复用已有会话；
+     * 1. source 只是取种入口线索，不能成为做种会话身份；
      * 2. 若 join ticket 轮换，原地刷新 announce ticket 引用；
      * 3. 这样可以避免 ticket TTL 到点后继续广播旧票据导致 join_ticket_invalid 风暴。
      */
-    if (existing.source === source) {
-      const refreshedTicket = existing.joinTicket !== joinTicket;
-      if (refreshedTicket) {
-        existing.joinTicket = joinTicket;
-        if (existing.announceTicketRef) {
-          existing.announceTicketRef.value = joinTicket;
-        }
-      }
-      return { session: existing, created: false, refreshedTicket, restarted: false };
-    }
-
-    // source 发生变化（例如切换 torrentUrl/magnet）时，旧会话必须退场再重建，避免同 key 双轨漂移。
-    await 停止做种会话(normalizedInfoHash);
+    const refreshed = 刷新已有做种会话(existing, { source, joinTicket });
+    return { session: existing, ...refreshed };
   }
 
   if (!client) {
@@ -345,12 +321,14 @@ const server = createServer(async (request, response) => {
 
     if (method === "POST" && url.pathname === "/seed/start") {
       const payload = await 读取请求体JSON(request);
-      const { session, created, refreshedTicket, restarted } = await 启动做种会话(payload);
+      const { session, created, refreshedTicket, restarted, sourceChanged } =
+        await 启动做种会话(payload);
       发送JSON响应(response, 200, {
         ok: true,
         created,
         refreshedTicket,
         restarted,
+        sourceChanged,
         infoHash: session.infoHash,
         activeCount: activeSessions.size,
       });
@@ -400,15 +378,55 @@ const 优雅退出 = async () => {
   process.exit(0);
 };
 
-process.once("SIGINT", () => {
-  void 优雅退出();
-});
-process.once("SIGTERM", () => {
-  void 优雅退出();
-});
+const main = async () => {
+  const { values } = parseArgs({
+    options: {
+      host: {
+        type: "string",
+        default: "127.0.0.1",
+      },
+      port: {
+        type: "string",
+        default: process.env.SWARM_SEEDER_PORT ?? "7073",
+      },
+    },
+  });
 
-server.listen(seederPort, values.host, () => {
-  console.log(
-    `[dev-seeder] Seeder ready on http://${values.host}:${seederPort} (capability=${capability})`
-  );
-});
+  const seederPort = Number(values.port);
+  if (!Number.isInteger(seederPort) || seederPort <= 0 || seederPort > 65535) {
+    console.error(`[dev-seeder] 非法端口: ${values.port}`);
+    process.exit(1);
+  }
+
+  const { Ctor: WebTorrentCtor, capability: detectedCapability, error: webtorrentError } =
+    await 读取WebTorrent构造器();
+  capability = detectedCapability;
+  if (capability === "mock") {
+    console.warn(
+      "[dev-seeder] WebTorrent 运行时不可用，已退回 mock seeder（仅保留控制面语义）。",
+      webtorrentError?.message ?? webtorrentError ?? ""
+    );
+  } else if (capability !== "hybrid") {
+    console.warn(
+      "[dev-seeder] 当前未加载 webtorrent-hybrid；浏览器 WebRTC 互通能力可能受限（仅用于开发兜底）。"
+    );
+  }
+  client = WebTorrentCtor ? new WebTorrentCtor() : null;
+
+  process.once("SIGINT", () => {
+    void 优雅退出();
+  });
+  process.once("SIGTERM", () => {
+    void 优雅退出();
+  });
+
+  server.listen(seederPort, values.host, () => {
+    console.log(
+      `[dev-seeder] Seeder ready on http://${values.host}:${seederPort} (capability=${capability})`
+    );
+  });
+};
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}
