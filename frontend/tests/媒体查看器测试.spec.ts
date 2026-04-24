@@ -274,7 +274,7 @@ const 安装ShadowHost全屏DOM模拟 = () => {
 };
 
 const 读取VideoJs媒体容器 = (): HTMLElement | null => {
-  const skin = document.body.querySelector("video-skin");
+  const skin = document.body.querySelector("koko-video-skin, video-skin");
   return skin?.shadowRoot?.querySelector("media-container") ?? null;
 };
 
@@ -1514,7 +1514,7 @@ describe("媒体查看器适配器", () => {
     await 等待查询元素("video-player[data-player-shell='videojs']");
 
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(document.fullscreenElement?.tagName).toBe("VIDEO-SKIN");
+    expect(document.fullscreenElement?.tagName).toBe("KOKO-VIDEO-SKIN");
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
 
     await document.exitFullscreen?.();

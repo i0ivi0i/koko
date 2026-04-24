@@ -524,6 +524,35 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
+  it("默认根节点使用 Koko 最小皮肤，不渲染快进快退与倍速控件", async () => {
+    const shell = await 创建VideoJs播放器壳({
+      kind: "file",
+      src: "blob:http://media.local/videojs-koko-skin-1",
+      posterSrc: "http://media.local/poster-koko-skin-1.jpg",
+      width: 1280,
+      height: 720,
+    });
+
+    const skin = document.body.querySelector<HTMLElement>("koko-video-skin");
+    const shadowRoot = skin?.shadowRoot;
+    const hotkeyActions = Array.from(shadowRoot?.querySelectorAll("media-hotkey") ?? []).map(
+      (hotkey) => hotkey.getAttribute("action")
+    );
+
+    expect(skin).not.toBeNull();
+    expect(shadowRoot?.querySelector("media-play-button")).not.toBeNull();
+    expect(shadowRoot?.querySelector("media-time-slider")).not.toBeNull();
+    expect(shadowRoot?.querySelector("media-mute-button")).not.toBeNull();
+    expect(shadowRoot?.querySelector("media-fullscreen-button")).not.toBeNull();
+    expect(shadowRoot?.querySelector("media-seek-button")).toBeNull();
+    expect(shadowRoot?.querySelector("media-playback-rate-button")).toBeNull();
+    expect(hotkeyActions).not.toContain("seekStep");
+    expect(hotkeyActions).not.toContain("speedUp");
+    expect(hotkeyActions).not.toContain("speedDown");
+
+    shell.destroy();
+  });
+
   it("默认 Video.js 根节点在 RemotePlayback 只给出非 Promise cancel 接口时，销毁也不能炸掉整个播放器会话", async () => {
     const shell = await 创建VideoJs播放器壳({
       kind: "file",

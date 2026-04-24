@@ -34,6 +34,7 @@ type 可原生全屏视频元素 = HTMLVideoElement & {
 };
 export type VideoJs全屏进入结果 = "standard" | "native" | "unsupported";
 const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
+const KokoVideoSkinTagName = "koko-video-skin";
 let 默认VideoJs元素注册Promise: Promise<void> | null = null;
 
 type 可兼容远端播放对象 = {
@@ -152,6 +153,219 @@ const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolea
   return false;
 };
 
+const KokoVideoSkinTemplate = `
+  <style>
+    :host {
+      display: grid;
+      width: 100%;
+      height: 100%;
+      color: #fff;
+      font-family: inherit;
+    }
+    media-container {
+      position: relative;
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      border-radius: inherit;
+    }
+    ::slotted(video[slot="media"]) {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      object-fit: contain;
+    }
+    media-buffering-indicator {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      pointer-events: none;
+    }
+    media-buffering-indicator[data-visible] {
+      display: grid;
+    }
+    .koko-spinner {
+      width: 2rem;
+      height: 2rem;
+      border: 2px solid rgb(255 255 255 / 0.25);
+      border-top-color: #fff;
+      border-radius: 999px;
+      animation: koko-video-spin 0.8s linear infinite;
+    }
+    @keyframes koko-video-spin {
+      to { transform: rotate(360deg); }
+    }
+    media-controls {
+      position: absolute;
+      inset-inline: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      background: linear-gradient(to top, rgb(0 0 0 / 0.76), rgb(0 0 0 / 0));
+      opacity: var(--media-controls-opacity, 1);
+      transition: opacity 160ms ease-out;
+    }
+    media-controls-group {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      min-width: 0;
+    }
+    .koko-time-controls {
+      flex: 1;
+      gap: 0.625rem;
+    }
+    media-time {
+      min-width: 3.25rem;
+      color: rgb(255 255 255 / 0.88);
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+    media-time-slider {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 5rem;
+      height: 2rem;
+      cursor: pointer;
+    }
+    media-slider-track {
+      position: relative;
+      width: 100%;
+      height: 0.25rem;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.24);
+    }
+    media-slider-buffer,
+    media-slider-fill {
+      position: absolute;
+      inset-block: 0;
+      left: 0;
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    media-slider-buffer {
+      width: var(--media-slider-buffer);
+      background: rgb(255 255 255 / 0.26);
+    }
+    media-slider-fill {
+      width: var(--media-slider-fill);
+      background: #fff;
+    }
+    media-slider-thumb {
+      position: absolute;
+      top: 50%;
+      left: var(--media-slider-fill);
+      width: 0.75rem;
+      height: 0.75rem;
+      border-radius: 999px;
+      background: #fff;
+      translate: -50% -50%;
+      opacity: 0;
+      transition: opacity 140ms ease-out;
+    }
+    media-time-slider:hover media-slider-thumb,
+    media-time-slider:focus-within media-slider-thumb {
+      opacity: 1;
+    }
+    .koko-button {
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      padding: 0;
+      border: 0;
+      border-radius: 0.375rem;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .koko-button:hover,
+    .koko-button:focus-visible {
+      background: rgb(255 255 255 / 0.12);
+      outline: none;
+    }
+    .koko-icon {
+      display: none;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    media-play-button[data-paused] .koko-icon--play,
+    media-play-button[data-ended] .koko-icon--restart,
+    media-play-button:not([data-paused]):not([data-ended]) .koko-icon--pause,
+    media-mute-button .koko-icon--mute,
+    media-fullscreen-button .koko-icon--fullscreen {
+      display: block;
+    }
+  </style>
+  <media-container>
+    <slot name="media"></slot>
+    <slot></slot>
+    <media-buffering-indicator><span class="koko-spinner" aria-hidden="true"></span></media-buffering-indicator>
+    <media-controls>
+      <media-controls-group>
+        <media-play-button class="koko-button">
+          <span class="koko-icon koko-icon--play" aria-hidden="true">▶</span>
+          <span class="koko-icon koko-icon--pause" aria-hidden="true">Ⅱ</span>
+          <span class="koko-icon koko-icon--restart" aria-hidden="true">↻</span>
+        </media-play-button>
+      </media-controls-group>
+      <media-controls-group class="koko-time-controls">
+        <media-time type="current"></media-time>
+        <media-time-slider>
+          <media-slider-track>
+            <media-slider-buffer></media-slider-buffer>
+            <media-slider-fill></media-slider-fill>
+          </media-slider-track>
+          <media-slider-thumb></media-slider-thumb>
+        </media-time-slider>
+        <media-time type="duration"></media-time>
+      </media-controls-group>
+      <media-controls-group>
+        <media-mute-button class="koko-button">
+          <span class="koko-icon koko-icon--mute" aria-hidden="true">◼</span>
+        </media-mute-button>
+        <media-fullscreen-button class="koko-button">
+          <span class="koko-icon koko-icon--fullscreen" aria-hidden="true">⛶</span>
+        </media-fullscreen-button>
+      </media-controls-group>
+    </media-controls>
+    <media-hotkey keys="Space" action="togglePaused"></media-hotkey>
+    <media-hotkey keys="k" action="togglePaused"></media-hotkey>
+    <media-hotkey keys="m" action="toggleMuted"></media-hotkey>
+    <media-hotkey keys="f" action="toggleFullscreen"></media-hotkey>
+  </media-container>
+`;
+
+const 注册KokoVideoSkin元素 = (): void => {
+  if (typeof globalThis.customElements === "undefined" || typeof HTMLElement === "undefined") {
+    return;
+  }
+  if (globalThis.customElements.get(KokoVideoSkinTagName)) {
+    return;
+  }
+  class KokoVideoSkinElement extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) {
+        return;
+      }
+      const shadowRoot = this.attachShadow({ mode: "open" });
+      shadowRoot.innerHTML = KokoVideoSkinTemplate;
+    }
+  }
+  globalThis.customElements.define(KokoVideoSkinTagName, KokoVideoSkinElement);
+};
+
 const 注册默认VideoJs元素 = (): void | Promise<void> => {
   /**
    * 默认走懒注册，但 Promise 会被复用，避免并发打开时重复 import。
@@ -160,14 +374,23 @@ const 注册默认VideoJs元素 = (): void | Promise<void> => {
   if (
     typeof globalThis.customElements !== "undefined" &&
     globalThis.customElements.get("video-player") &&
-    globalThis.customElements.get("video-skin")
+    globalThis.customElements.get(KokoVideoSkinTagName)
   ) {
     return;
   }
   if (!默认VideoJs元素注册Promise) {
     默认VideoJs元素注册Promise = (async () => {
       await import("@videojs/html/video/player");
-      await import("@videojs/html/video/skin");
+      await import("@videojs/html/media/container");
+      await import("@videojs/html/ui/buffering-indicator");
+      await import("@videojs/html/ui/controls");
+      await import("@videojs/html/ui/fullscreen-button");
+      await import("@videojs/html/ui/hotkey");
+      await import("@videojs/html/ui/mute-button");
+      await import("@videojs/html/ui/play-button");
+      await import("@videojs/html/ui/time");
+      await import("@videojs/html/ui/time-slider");
+      注册KokoVideoSkin元素();
     })();
   }
   return 默认VideoJs元素注册Promise;
@@ -185,7 +408,8 @@ const 创建默认播放器根 = (
   }
 
   const provider = document.createElement("video-player");
-  const skin = document.createElement("video-skin");
+  注册KokoVideoSkin元素();
+  const skin = document.createElement(KokoVideoSkinTagName);
   const video = document.createElement("video") as 可原生全屏视频元素;
   const 使用沉浸挂载布局 = mountTarget?.dataset.mediaViewerImmersive === "true";
 
