@@ -54,6 +54,51 @@ pub(super) enum 实时发送失败级别 {
     适配器,
 }
 
+/// RoomRuntime 广播批次的内部运行观测。
+///
+/// 这里故意只记录“广播这一批发生了什么”，不把它升级成消息是否成立、
+/// 成员是否在线这类业务真相；消息成立真相只来自用例返回的领域事件。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct 房间广播运行观测 {
+    broadcast_attempts: u64,
+    broadcast_delivered: u64,
+    broadcast_channel_full: u64,
+    broadcast_closed_socket: u64,
+    broadcast_serialize_errors: u64,
+    broadcast_adapter_errors: u64,
+    room_runtime_continues: bool,
+}
+
+fn 归纳房间广播运行观测(result: Result<(), &BroadcastError>) -> 房间广播运行观测 {
+    let mut observation = 房间广播运行观测 {
+        broadcast_attempts: 1,
+        room_runtime_continues: true,
+        ..房间广播运行观测::default()
+    };
+
+    match result {
+        Ok(()) => {
+            observation.broadcast_delivered = 1;
+        }
+        Err(BroadcastError::Socket(socket_errors)) => {
+            for socket_error in socket_errors {
+                match socket_error {
+                    SocketError::Closed => observation.broadcast_closed_socket += 1,
+                    SocketError::InternalChannelFull => observation.broadcast_channel_full += 1,
+                }
+            }
+        }
+        Err(BroadcastError::Serialize(_)) => {
+            observation.broadcast_serialize_errors = 1;
+        }
+        Err(BroadcastError::Adapter(_)) => {
+            observation.broadcast_adapter_errors = 1;
+        }
+    }
+
+    observation
+}
+
 pub(super) fn 分类单连接发送失败(err: &SendError) -> 实时发送失败级别 {
     match err {
         SendError::Socket(SocketError::Closed) => 实时发送失败级别::正常断开,
@@ -199,6 +244,7 @@ fn 记录创建消息广播失败(
     session_id: &str,
     client_message_id: &str,
     err: &BroadcastError,
+    observation: 房间广播运行观测,
 ) {
     match 分类广播发送失败(err) {
         实时发送失败级别::正常断开 => tracing::info!(
@@ -209,6 +255,9 @@ fn 记录创建消息广播失败(
             session_id = session_id,
             client_message_id = client_message_id,
             error_code = "socket_closed",
+            broadcast_attempts = observation.broadcast_attempts,
+            broadcast_closed_socket = observation.broadcast_closed_socket,
+            room_runtime_continues = observation.room_runtime_continues,
             error = %err,
             "房间权威事件在连接关闭后被丢弃"
         ),
@@ -220,6 +269,10 @@ fn 记录创建消息广播失败(
             session_id = session_id,
             client_message_id = client_message_id,
             error_code = "socket_backpressure",
+            broadcast_attempts = observation.broadcast_attempts,
+            broadcast_channel_full = observation.broadcast_channel_full,
+            broadcast_closed_socket = observation.broadcast_closed_socket,
+            room_runtime_continues = observation.room_runtime_continues,
             error = %err,
             "房间权威事件广播失败：存在 socket 内部通道已满"
         ),
@@ -231,6 +284,9 @@ fn 记录创建消息广播失败(
             session_id = session_id,
             client_message_id = client_message_id,
             error_code = "serialize_failed",
+            broadcast_attempts = observation.broadcast_attempts,
+            broadcast_serialize_errors = observation.broadcast_serialize_errors,
+            room_runtime_continues = observation.room_runtime_continues,
             error = %err,
             "房间权威事件广播失败：事件序列化失败"
         ),
@@ -242,6 +298,9 @@ fn 记录创建消息广播失败(
             session_id = session_id,
             client_message_id = client_message_id,
             error_code = "adapter_failed",
+            broadcast_attempts = observation.broadcast_attempts,
+            broadcast_adapter_errors = observation.broadcast_adapter_errors,
+            room_runtime_continues = observation.room_runtime_continues,
             error = %err,
             "房间权威事件广播失败：adapter 层出错"
         ),
@@ -585,16 +644,21 @@ pub(super) async fn handle_realtime_create_message(
             // 广播路径当前没有逐连接会话上下文，不能安全地把受控 preview URL 广播成同一份。
             // 这里显式传 `None`，保持 preview 真相仍由同一个投影函数 owner 控制。
             let payload = event_to_json(event, None);
-            if let Err(err) = socket
+            let broadcast_result = socket
                 .within(room_id.clone())
                 .emit("room_event", &payload)
-                .await
-            {
+                .await;
+            let broadcast_observation = match &broadcast_result {
+                Ok(()) => 归纳房间广播运行观测(Ok(())),
+                Err(err) => 归纳房间广播运行观测(Err(err)),
+            };
+            if let Err(err) = broadcast_result {
                 记录创建消息广播失败(
                     room_id.as_str(),
                     auth.session_id.as_str(),
                     client_message_id.as_str(),
                     &err,
+                    broadcast_observation,
                 );
             } else {
                 tracing::info!(
@@ -605,6 +669,9 @@ pub(super) async fn handle_realtime_create_message(
                     session_id = auth.session_id,
                     client_message_id = client_message_id,
                     event_position = event_position,
+                    broadcast_attempts = broadcast_observation.broadcast_attempts,
+                    broadcast_delivered = broadcast_observation.broadcast_delivered,
+                    room_runtime_continues = broadcast_observation.room_runtime_continues,
                     "创建消息成功"
                 );
             }
@@ -637,7 +704,8 @@ pub(super) async fn handle_realtime_create_message(
 #[cfg(test)]
 mod 实时外壳测试 {
     use super::{
-        分类单连接发送失败, 分类广播发送失败, 分类断开原因, 实时发送失败级别
+        分类单连接发送失败, 分类广播发送失败, 分类断开原因, 归纳房间广播运行观测,
+        实时发送失败级别
     };
     use crate::contract;
     use socketioxide::{socket::DisconnectReason, BroadcastError, SendError, SocketError};
@@ -671,6 +739,33 @@ mod 实时外壳测试 {
             SocketError::InternalChannelFull,
         ]));
         assert_eq!(level, 实时发送失败级别::背压);
+    }
+
+    #[test]
+    fn 房间广播成功会记录一次批次送达() {
+        let observation = 归纳房间广播运行观测(Ok(()));
+
+        assert_eq!(observation.broadcast_attempts, 1);
+        assert_eq!(observation.broadcast_delivered, 1);
+        assert_eq!(observation.broadcast_channel_full, 0);
+        assert!(observation.room_runtime_continues);
+    }
+
+    #[test]
+    fn 房间广播遇到慢连接和关闭连接只记录运行态并继续房间() {
+        let error = BroadcastError::Socket(vec![
+            SocketError::Closed,
+            SocketError::InternalChannelFull,
+        ]);
+
+        let observation = 归纳房间广播运行观测(Err(&error));
+
+        assert_eq!(observation.broadcast_attempts, 1);
+        assert_eq!(observation.broadcast_delivered, 0);
+        assert_eq!(observation.broadcast_closed_socket, 1);
+        assert_eq!(observation.broadcast_channel_full, 1);
+        assert_eq!(observation.broadcast_adapter_errors, 0);
+        assert!(observation.room_runtime_continues);
     }
 
     #[test]

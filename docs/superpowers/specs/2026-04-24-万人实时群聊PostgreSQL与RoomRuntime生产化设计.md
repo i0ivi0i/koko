@@ -25,6 +25,38 @@
 
 ---
 
+## 实施与验收记录（2026-04-24）
+
+本轮执行的是第一阶段单机生产化的基础收口，不把结果夸大成“已经实测 `10 万+` 在线”。已经落地的事实如下：
+
+1. 应用 PostgreSQL 连接池已从硬编码退场，新增 `KOKO_DATABASE_MAX_CONNECTIONS / KOKO_DATABASE_MIN_CONNECTIONS / KOKO_DATABASE_ACQUIRE_TIMEOUT_MS / KOKO_DATABASE_CONNECT_TIMEOUT_MS / KOKO_DATABASE_IDLE_TIMEOUT_SECONDS`；迁移 pool 继续保持单连接语义，不被应用高并发 pool 放大。
+2. 旧同步兼容入口 `Pg仓储::连接并迁移` 已复用同一套应用连接池配置，不再暗藏 `max_connections(5)` 的第二套连接真相。
+3. 新增 `0019_万人实时群聊生产化索引.sql`，补齐 `swarm_peer_presence (swarm_id, peer_kind, last_seen_at DESC)`，只补当前 locator / availability 热查询真实需要的索引；房间事件历史继续复用既有 `(room_id, event_position)` 唯一约束，不重复建等价索引。
+4. 用例层新增门禁证明：异步创建消息只命中一次统一权威消息事件提交，不会为了广播再读取订阅历史；历史页读取继续把 `event_position` 游标和受控 `limit` 交给仓储，不退回 `OFFSET` 或全量历史模型。
+5. Realtime 广播路径新增 RoomRuntime 运行观测：成功批次、关闭连接、channel full、序列化错误和 adapter 错误都归为运行态字段；慢连接和已关闭连接不会改变“消息已成立”的业务真相，也不会写入 PostgreSQL。
+6. 本轮没有引入 Kafka / Redis / PostgreSQL `LISTEN/NOTIFY` / 分库分表 / 新 `.rs` 文件；仍保持 `socketioxide` 为第一阶段实时主通道，PostgreSQL 只做权威事实与冷路径。
+
+本轮实际执行并通过：
+
+- `cargo test --test 启动与迁移测试 数据库连接池配置 -- --nocapture`
+- `cargo test --test 启动与迁移测试 万人群聊生产化索引迁移必须覆盖当前热查询 -- --nocapture`
+- `cargo test --test 用例测试 异步消息成立只提交一次权威事件且不读取订阅历史 -- --nocapture`
+- `cargo test --test 用例测试 历史读取使用事件位置游标并限制批量大小 -- --nocapture`
+- `cargo test 房间广播成功会记录一次批次送达 -- --nocapture`
+- `cargo test 房间广播遇到慢连接和关闭连接只记录运行态并继续房间 -- --nocapture`
+- `cargo test --test 用例测试 -- --nocapture`
+- `cargo test --test 实时链路测试 -- --nocapture`
+- `cargo test --test 启动与迁移测试 -- --nocapture`
+- `cargo test -j 1`
+
+补充复核：
+
+1. `graphify-out/GRAPH_REPORT.md` 已重建；当前 god nodes 仍主要是既有通用 helper / 壳层节点，没有出现新的实时主通道与数据库访问混写热点。
+2. `cargo fmt --check` 暴露仓库既有大量非本轮格式化漂移；为避免制造无关格式化噪音，本轮未执行全量 `cargo fmt`。
+3. 尚未执行真实 `5000+` 连接或 `10 万+` 在线压测；当前只能证明连接池配置、索引、消息热路径和 RoomRuntime 广播错误分类边界已经收口。
+
+---
+
 ## 0. 当前明确的规模假设
 
 第一阶段不是小群 demo，而是：

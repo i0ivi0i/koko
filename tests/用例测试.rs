@@ -1,4 +1,5 @@
 use serial_test::serial;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -141,12 +142,14 @@ struct 假仓储 {
     房间计数: usize,
     消息计数: usize,
     统一消息事件调用次数: usize,
+    增量事件读取调用次数: Cell<usize>,
     最新位置: i64,
     房间短码到标识: HashMap<String, String>,
     房间成员: HashMap<String, HashSet<String>>,
     会话到匿名身份: HashMap<String, String>,
     设备匿名身份: HashMap<String, 测试匿名身份记录>,
     房间阅读位置: HashMap<(String, String), i64>,
+    历史页读取参数: RefCell<Vec<(String, i64, i64)>>,
     附件: HashMap<String, koko::usecase::附件读取结果>,
 }
 
@@ -303,6 +306,8 @@ impl koko::usecase::仓储端口 for 假仓储 {
         房间标识: &str,
         从位置开始: i64,
     ) -> Result<koko::contract::快照, koko::contract::错误码> {
+        self.增量事件读取调用次数
+            .set(self.增量事件读取调用次数.get() + 1);
         if 从位置开始 < 0 {
             return Err(koko::contract::错误码::参数非法);
         }
@@ -323,6 +328,11 @@ impl koko::usecase::仓储端口 for 假仓储 {
         截止位置之前: i64,
         限制条数: i64,
     ) -> Result<koko::contract::快照, koko::contract::错误码> {
+        self.历史页读取参数.borrow_mut().push((
+            房间标识.to_string(),
+            截止位置之前,
+            限制条数,
+        ));
         if 截止位置之前 <= 0 || 限制条数 <= 0 {
             return Err(koko::contract::错误码::参数非法);
         }
@@ -750,5 +760,56 @@ async fn 统一消息异步用例仍返回权威消息事件() {
     assert_eq!(
         repo.统一消息事件调用次数, 1,
         "异步创建消息也只能命中统一消息入口一次，不能靠源码 grep 代替真实行为证明"
+    );
+}
+
+#[tokio::test]
+async fn 异步消息成立只提交一次权威事件且不读取订阅历史() {
+    let mut repo = 假仓储::default();
+    let sender =
+        koko::usecase::引导匿名身份(&mut repo, "device-async-hot-path").expect("应成功");
+    let room =
+        koko::usecase::按短码进房或建房(&mut repo, &sender.会话标识, "ROOMA003").expect("应成功");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+
+    let _ = koko::usecase::创建消息_异步(
+        &mut repo,
+        &room_id,
+        &sender.会话标识,
+        "client-hot-path-1",
+        "hello hot path",
+        &[],
+    )
+    .await
+    .expect("应成功");
+
+    assert_eq!(repo.统一消息事件调用次数, 1, "消息成立只能落一次权威事件");
+    assert_eq!(
+        repo.增量事件读取调用次数.get(),
+        0,
+        "创建消息热路径不能为了广播再反查订阅历史，广播必须消费提交返回的同一份事件"
+    );
+}
+
+#[test]
+fn 历史读取使用事件位置游标并限制批量大小() {
+    let mut repo = 假仓储::default();
+    let room = koko::usecase::按短码进房或建房(&mut repo, "s-history", "ROOMH001")
+        .expect("应成功");
+    let room_id = match room {
+        koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
+        _ => panic!("应返回房间快照"),
+    };
+
+    let _ = koko::usecase::加载房间历史页(&repo, &room_id, "s-history", 120, 1000)
+        .expect("成员应能读取历史页");
+
+    assert_eq!(
+        repo.历史页读取参数.borrow().clone(),
+        vec![(room_id, 120, 55)],
+        "历史读取必须把 event_position 游标和受控 limit 传给仓储，不能退回 OFFSET/全量历史模型"
     );
 }

@@ -308,6 +308,24 @@ fn 协作分发partial_peer迁移已扩展peer_kind约束() {
 }
 
 #[test]
+fn 万人群聊生产化索引迁移必须覆盖当前热查询() {
+    let sql = std::fs::read_to_string("migrations/0019_万人实时群聊生产化索引.sql")
+        .expect("应能读到万人实时群聊生产化索引迁移");
+
+    assert!(sql.contains("idx_swarm_peer_presence_swarm_kind_seen"));
+    assert!(sql.contains(
+        "ON swarm_peer_presence (swarm_id, peer_kind, last_seen_at DESC)"
+    ));
+
+    let base_sql = std::fs::read_to_string("migrations/0001_初始化真相模型.sql")
+        .expect("应能读到初始化真相模型迁移");
+    assert!(
+        base_sql.contains("UNIQUE (room_id, event_position)"),
+        "room_events/messages 已由事件位置唯一约束承担 cursor 查询索引，不应为了计划文本重复新增等价索引"
+    );
+}
+
+#[test]
 fn 流媒体清单迁移已包含清单元数据表() {
     let sql = std::fs::read_to_string("migrations/0009_附件流媒体清单元数据.sql")
         .expect("应能读到流媒体清单迁移文件");
@@ -422,6 +440,49 @@ async fn 启动收到关闭信号后会优雅停机() {
 
     等待端口停止监听(port).await;
     恢复环境变量(backup);
+}
+
+#[test]
+fn 数据库连接池配置默认适合单机生产起步() {
+    let cfg = koko::assembly::数据库连接池配置::from_env_with(|_| None)
+        .expect("缺省连接池配置应可解析");
+
+    assert_eq!(cfg.app_max_connections, 20);
+    assert_eq!(cfg.app_min_connections, 0);
+    assert_eq!(cfg.migration_max_connections, 1);
+    assert!(
+        cfg.acquire_timeout_ms <= 5_000,
+        "应用连接池等待时间要短，不能把数据库压力伪装成无限排队"
+    );
+}
+
+#[test]
+fn 数据库连接池配置允许生产环境覆盖但拒绝无效值() {
+    let cfg = koko::assembly::数据库连接池配置::from_env_with(|key| match key {
+        "KOKO_DATABASE_MAX_CONNECTIONS" => Some("60".to_string()),
+        "KOKO_DATABASE_MIN_CONNECTIONS" => Some("6".to_string()),
+        "KOKO_DATABASE_ACQUIRE_TIMEOUT_MS" => Some("3000".to_string()),
+        "KOKO_DATABASE_CONNECT_TIMEOUT_MS" => Some("2000".to_string()),
+        "KOKO_DATABASE_IDLE_TIMEOUT_SECONDS" => Some("120".to_string()),
+        _ => None,
+    })
+    .expect("显式生产连接池配置应可解析");
+    assert_eq!(cfg.app_max_connections, 60);
+    assert_eq!(cfg.app_min_connections, 6);
+    assert_eq!(cfg.acquire_timeout_ms, 3000);
+    assert_eq!(cfg.connect_timeout_ms, 2000);
+    assert_eq!(cfg.idle_timeout_seconds, 120);
+
+    let err = koko::assembly::数据库连接池配置::from_env_with(|key| match key {
+        "KOKO_DATABASE_MAX_CONNECTIONS" => Some("4".to_string()),
+        "KOKO_DATABASE_MIN_CONNECTIONS" => Some("8".to_string()),
+        _ => None,
+    })
+    .expect_err("min_connections 超过 max_connections 必须拒绝");
+    assert!(
+        err.to_string().contains("KOKO_DATABASE_MIN_CONNECTIONS"),
+        "错误必须指向配置源，便于无人值守排查"
+    );
 }
 
 #[tokio::test]

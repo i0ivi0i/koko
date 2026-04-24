@@ -1,7 +1,11 @@
-use sqlx::{postgres::PgConnectOptions, ConnectOptions};
+use sqlx::{
+    postgres::{PgConnectOptions, PgPoolOptions},
+    ConnectOptions,
+};
 use std::{
     env, io, panic,
     sync::{Once, OnceLock},
+    time::Duration,
 };
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter};
 
@@ -20,6 +24,94 @@ pub struct 配置 {
     pub media_packaging: 媒体打包配置,
     pub tus: 媒体Tus侧车配置,
     pub 协作分发: 协作分发配置,
+}
+
+/// 数据库连接池配置只描述“应用如何使用成熟 PostgreSQL 池化能力”。
+/// 它不拥有业务真相，也不把在线用户数映射成数据库连接数。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct 数据库连接池配置 {
+    pub app_max_connections: u32,
+    pub app_min_connections: u32,
+    pub migration_max_connections: u32,
+    pub acquire_timeout_ms: u64,
+    pub connect_timeout_ms: u64,
+    pub idle_timeout_seconds: u64,
+}
+
+impl 数据库连接池配置 {
+    const 默认应用最大连接数: u32 = 20;
+    const 默认应用最小连接数: u32 = 0;
+    const 迁移固定连接数: u32 = 1;
+    const 默认获取连接超时毫秒: u64 = 3_000;
+    const 默认建池超时毫秒: u64 = 5_000;
+    const 默认空闲回收秒数: u64 = 600;
+
+    /// 从可注入的环境变量读取函数构建配置，方便测试不触碰进程全局环境。
+    pub fn from_env_with<F>(mut read: F) -> io::Result<Self>
+    where
+        F: FnMut(&str) -> Option<String>,
+    {
+        let app_max_connections = 读取可选正_u32(
+            &mut read,
+            "KOKO_DATABASE_MAX_CONNECTIONS",
+            Self::默认应用最大连接数,
+        )?;
+        let app_min_connections = 读取可选_u32(
+            &mut read,
+            "KOKO_DATABASE_MIN_CONNECTIONS",
+            Self::默认应用最小连接数,
+        )?;
+        if app_min_connections > app_max_connections {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "KOKO_DATABASE_MIN_CONNECTIONS({app_min_connections}) 不能大于 KOKO_DATABASE_MAX_CONNECTIONS({app_max_connections})"
+                ),
+            ));
+        }
+
+        Ok(Self {
+            app_max_connections,
+            app_min_connections,
+            migration_max_connections: Self::迁移固定连接数,
+            acquire_timeout_ms: 读取可选正_u64(
+                &mut read,
+                "KOKO_DATABASE_ACQUIRE_TIMEOUT_MS",
+                Self::默认获取连接超时毫秒,
+            )?,
+            connect_timeout_ms: 读取可选正_u64(
+                &mut read,
+                "KOKO_DATABASE_CONNECT_TIMEOUT_MS",
+                Self::默认建池超时毫秒,
+            )?,
+            idle_timeout_seconds: 读取可选正_u64(
+                &mut read,
+                "KOKO_DATABASE_IDLE_TIMEOUT_SECONDS",
+                Self::默认空闲回收秒数,
+            )?,
+        })
+    }
+
+    pub fn acquire_timeout(self) -> Duration {
+        Duration::from_millis(self.acquire_timeout_ms)
+    }
+
+    pub fn connect_timeout(self) -> Duration {
+        Duration::from_millis(self.connect_timeout_ms)
+    }
+
+    pub fn idle_timeout(self) -> Duration {
+        Duration::from_secs(self.idle_timeout_seconds)
+    }
+
+    /// 这里直接复用 `sqlx` 成熟连接池，不包装第二套私有池化核心。
+    pub fn 应用连接池选项(self) -> PgPoolOptions {
+        PgPoolOptions::new()
+            .max_connections(self.app_max_connections)
+            .min_connections(self.app_min_connections)
+            .acquire_timeout(self.acquire_timeout())
+            .idle_timeout(Some(self.idle_timeout()))
+    }
 }
 
 /// 媒体存储驱动只回答“上传对象最终落在哪类后端”。
@@ -110,6 +202,13 @@ pub fn 读取配置() -> io::Result<配置> {
         tus,
         协作分发,
     })
+}
+
+/// 读取应用数据库池化配置。
+/// 迁移连接仍由 `自动追平迁移` 的单连接池独立控制，避免 app pool 配置误伤迁移顺序。
+pub fn 读取数据库连接池配置() -> io::Result<数据库连接池配置> {
+    尝试加载dotenv();
+    数据库连接池配置::from_env_with(|key| env::var(key).ok())
 }
 
 /// 日志系统必须天然存在：启动时默认初始化，开发和生产只在详细度上有差异。
@@ -550,6 +649,63 @@ fn 读取可选整数(key: &str, default_value: i64) -> io::Result<i64> {
             format!("环境变量 {key} 不是合法整数: {raw}"),
         )
     })
+}
+
+fn 读取可选_u32<F>(read: &mut F, key: &str, default_value: u32) -> io::Result<u32>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let Some(raw) = read(key)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(default_value);
+    };
+    raw.parse::<u32>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("环境变量 {key} 不是合法非负整数: {raw}"),
+        )
+    })
+}
+
+fn 读取可选正_u32<F>(read: &mut F, key: &str, default_value: u32) -> io::Result<u32>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let value = 读取可选_u32(read, key, default_value)?;
+    if value == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("环境变量 {key} 必须大于 0"),
+        ));
+    }
+    Ok(value)
+}
+
+fn 读取可选正_u64<F>(read: &mut F, key: &str, default_value: u64) -> io::Result<u64>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let Some(raw) = read(key)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(default_value);
+    };
+    let value = raw.parse::<u64>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("环境变量 {key} 不是合法正整数: {raw}"),
+        )
+    })?;
+    if value == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("环境变量 {key} 必须大于 0"),
+        ));
+    }
+    Ok(value)
 }
 
 fn 读取布尔环境变量(key: &str, default_value: bool) -> io::Result<bool> {

@@ -21,7 +21,7 @@ use socketioxide::{
     handler::ConnectHandler,
     SocketIo,
 };
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::PgPool;
 use std::{
     collections::{HashMap, HashSet},
     fs, io,
@@ -164,14 +164,24 @@ pub async fn 构建应用状态(
     let swarm = crate::assembly::读取协作分发配置()?;
     let tus = crate::assembly::读取媒体_tus侧车配置()?;
     let media_complete_max_concurrency = crate::assembly::读取媒体上传完成并发上限()?;
+    let database_pool = crate::assembly::读取数据库连接池配置()?;
     let attachment_storage_dir = crate::assembly::读取附件存储目录();
     fs::create_dir_all(&tus.upload_dir)
         .map_err(|err| std::io::Error::other(format!("创建媒体 Tus 上传目录失败: {err}")))?;
     let attachment_store = 构建附件对象存储(&media_storage, &attachment_storage_dir)?;
-    let pool = PgPoolOptions::new()
-        .max_connections(20)
-        .connect(&database_url)
+    tracing::info!(
+        database_pool_max_connections = database_pool.app_max_connections,
+        database_pool_min_connections = database_pool.app_min_connections,
+        database_pool_acquire_timeout_ms = database_pool.acquire_timeout_ms,
+        database_pool_connect_timeout_ms = database_pool.connect_timeout_ms,
+        "应用数据库连接池配置已加载"
+    );
+    let pool = tokio::time::timeout(
+        database_pool.connect_timeout(),
+        database_pool.应用连接池选项().connect(&database_url),
+    )
         .await
+        .map_err(|_| std::io::Error::other("连接数据库超时"))?
         .map_err(|err| std::io::Error::other(format!("连接数据库失败: {err}")))?;
 
     Ok(应用状态 {

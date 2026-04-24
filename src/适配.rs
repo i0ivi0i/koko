@@ -1,6 +1,6 @@
 use std::{future::Future, io};
 
-use sqlx::{postgres::PgPoolOptions, PgPool, Row};
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
@@ -252,13 +252,17 @@ impl Pg仓储 {
             .enable_all()
             .build()
             .map_err(|err| io::Error::other(format!("创建运行时失败: {err}")))?;
+        let database_pool = crate::assembly::读取数据库连接池配置()?;
         let pool = rt
             .block_on(async {
-                PgPoolOptions::new()
-                    .max_connections(5)
-                    .connect(database_url)
+                // 旧同步入口仍复用同一套应用池配置，避免测试/后台路径长期背着第二套连接真相。
+                tokio::time::timeout(
+                    database_pool.connect_timeout(),
+                    database_pool.应用连接池选项().connect(database_url),
+                )
                     .await
             })
+            .map_err(|_| io::Error::other("连接数据库超时"))?
             .map_err(|err| io::Error::other(format!("连接数据库失败: {err}")))?;
         rt.block_on(async {
             sqlx::migrate!("./migrations")
