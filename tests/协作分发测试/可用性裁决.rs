@@ -1341,8 +1341,17 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
 #[serial]
 async fn 做种对账会按权威附件集合触发start并下发reconcile清单() {
     let (fake_seeder_base_url, seeder_records, fake_seeder_server) = 启动假seeder控制面().await;
-    let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
+    let backup = 备份并清空环境变量(&[
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        "SWARM_TRACKER_PUBLIC_URL",
+        "SWARM_SEEDER_TRACKER_URL",
+    ]);
     env::set_var("SWARM_SEEDER_CONTROL_BASE_URL", fake_seeder_base_url.as_str());
+    env::set_var(
+        "SWARM_TRACKER_PUBLIC_URL",
+        "wss://im.example.com/api/swarm/announce",
+    );
+    env::set_var("SWARM_SEEDER_TRACKER_URL", "ws://127.0.0.1:17072");
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
@@ -1419,6 +1428,14 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
         "对账触发的 seeder start 集合里必须包含当前测试附件的权威 infoHash"
     );
     let matched_start_payload = matched_start_payload.expect("上面已断言存在匹配 payload");
+    assert_eq!(
+        matched_start_payload["announceUrls"]
+            .as_array()
+            .and_then(|values| values.first())
+            .and_then(|value| value.as_str()),
+        Some("ws://127.0.0.1:17072"),
+        "后台做种对账也必须使用 sidecar 私有 tracker announce，禁止复用浏览器 public WSS announce"
+    );
     assert!(
         matched_start_payload["torrentUrl"]
             .as_str()
