@@ -105,6 +105,8 @@ Assert-True ($runScript -match 'bittorrent-tracker') "run.ps1 应该启动 bitto
 Assert-True ($runScript -match 'SWARM_TRACKER_PORT') "run.ps1 应该允许显式覆写 tracker 端口。"
 Assert-True ($runScript -match 'SWARM_SEEDER_PORT') "run.ps1 应该允许显式覆写 seeder 控制面端口。"
 Assert-True ($runScript -match 'SWARM_TRACKER_PUBLIC_URL') "run.ps1 应该允许显式覆写前端 announce 用的 tracker 公网地址。"
+Assert-True ($runScript -match 'SWARM_SEEDER_TRACKER_URL') "run.ps1 应该允许显式覆写 seeder 私有 tracker announce。"
+Assert-True ($runScript -match 'WebTorrent seeder 私有 announce') "run.ps1 应该把 public announce 与 seeder 私有 announce 分开打印，避免烟测误读。"
 Assert-True ($runScript -match 'SWARM_TICKET_SECRET') "run.ps1 应该为后端和 tracker 协调同一份 swarm join ticket secret。"
 Assert-True ($runScript -match '--ticket-secret') "run.ps1 应该把 ticket secret 传给 tracker 进程，而不是让 tracker 自己猜。"
 Assert-True ($runScript -match '-Name "tracker"') "run.ps1 应该把 tracker 当成独立受管进程拉起。"

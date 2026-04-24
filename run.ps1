@@ -983,6 +983,12 @@ try {
     if ([string]::IsNullOrWhiteSpace($trackerPublicUrl)) {
         $trackerPublicUrl = "ws://127.0.0.1:$trackerPort"
     }
+    $seederTrackerUrl = [Environment]::GetEnvironmentVariable("SWARM_SEEDER_TRACKER_URL")
+    if ([string]::IsNullOrWhiteSpace($seederTrackerUrl)) {
+        # 浏览器 public announce 可能是 HTTPS 反代下的 WSS；本机 sidecar 做强种子只应走内网 tracker。
+        # 两者共用同一个 tracker / infoHash 真相，但不能共用同一个可达地址配置。
+        $seederTrackerUrl = "ws://127.0.0.1:$trackerPort"
+    }
     $swarmTicketSecret = [Environment]::GetEnvironmentVariable("SWARM_TICKET_SECRET")
     if ([string]::IsNullOrWhiteSpace($swarmTicketSecret)) {
         # join ticket secret 只属于“本轮开发态后端 + tracker”共识，不需要开发者每次手工预置。
@@ -995,6 +1001,7 @@ try {
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PORT", $trackerPort)
     [Environment]::SetEnvironmentVariable("SWARM_SEEDER_PORT", $seederPort)
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL", $trackerPublicUrl)
+    [Environment]::SetEnvironmentVariable("SWARM_SEEDER_TRACKER_URL", $seederTrackerUrl)
     [Environment]::SetEnvironmentVariable("SWARM_TICKET_SECRET", $swarmTicketSecret)
     Stop-StaleLauncherSidecars `
         -AppPort ([int]$appPort) `
@@ -1008,7 +1015,8 @@ try {
         -Url $localAccessUrl
     Write-Host "访问入口: $localAccessUrl"
     Write-Host "tusd 监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
-    Write-Host "WebTorrent tracker 对外 announce: $trackerPublicUrl"
+    Write-Host "WebTorrent tracker 浏览器公开 announce: $trackerPublicUrl"
+    Write-Host "WebTorrent seeder 私有 announce: $seederTrackerUrl"
     Write-Host "WebTorrent seeder 控制面: http://127.0.0.1:$seederPort/health"
     Write-Host "子进程日志目录: $logDirectory"
     # 启动器使用独立 target 目录：
