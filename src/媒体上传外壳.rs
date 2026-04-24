@@ -362,9 +362,10 @@ async fn 构造ready媒体附件响应并触发做种(
             stale_seconds: state.swarm_peer_presence_stale_seconds,
         },
     );
-    if let Some(启动命令) =
-        super::从协作分发响应构造做种启动命令(&runtime_distribution)
-    {
+    if let Some(启动命令) = super::从协作分发响应构造做种启动命令(
+        &runtime_distribution,
+        state.swarm_seeder_tracker_url.as_str(),
+    ) {
         if let Err(err) = super::尝试启动协作分发做种(state, &启动命令).await {
             tracing::warn!(
                 usecase = usecase_label,
@@ -1183,9 +1184,10 @@ pub(super) async fn complete_media_upload(
             // 1. 这里不改变“ready 真相已经落库”的结果；start 失败只记告警并交给后台对账补偿；
             // 2. 命令载荷严格来自同一份 runtime_distribution，避免再长第二套 transport 真相；
             // 3. 真正“谁该做种”的裁决仍在后端 owner，不在 sidecar 里发明业务语义。
-            if let Some(启动命令) =
-                super::从协作分发响应构造做种启动命令(&runtime_distribution)
-            {
+            if let Some(启动命令) = super::从协作分发响应构造做种启动命令(
+                &runtime_distribution,
+                state.swarm_seeder_tracker_url.as_str(),
+            ) {
                 if let Err(err) = super::尝试启动协作分发做种(&state, &启动命令).await
                 {
                     tracing::warn!(

@@ -95,6 +95,7 @@ pub struct 应用状态 {
     pub swarm_tracker_port: u16,
     pub swarm_web_seed_public_endpoint: Option<String>,
     pub swarm_seeder_control_base_url: String,
+    pub swarm_seeder_tracker_url: String,
     pub swarm_ticket_secret: Option<String>,
     pub swarm_ticket_ttl_seconds: i64,
     pub swarm_peer_presence_stale_seconds: i64,
@@ -197,6 +198,7 @@ pub async fn 构建应用状态(
         swarm_tracker_port: swarm.tracker_port,
         swarm_web_seed_public_endpoint: swarm.web_seed_public_endpoint,
         swarm_seeder_control_base_url: swarm.seeder_control_base_url,
+        swarm_seeder_tracker_url: swarm.seeder_tracker_url,
         swarm_ticket_secret: swarm.ticket_secret,
         swarm_ticket_ttl_seconds: swarm.ticket_ttl_seconds,
         swarm_peer_presence_stale_seconds: swarm.peer_presence_stale_seconds,
@@ -623,24 +625,25 @@ fn 归一化sidecar媒体地址(raw: Option<&str>) -> Option<String> {
 /// 把 runtime 分发响应收口成 sidecar 可执行命令。
 /// 约束：
 /// 1. 缺少 `torrent_info_hash` 时不能启动做种；
-/// 2. sidecar 只吃 transport 线索，不承载页面态字段。
+/// 2. sidecar 只吃 transport 线索，不承载页面态字段；
+/// 3. 浏览器 public announce 已在 locator contract 里返回，这里只能使用 sidecar 私有 announce。
 pub(super) fn 从协作分发响应构造做种启动命令(
     runtime_distribution: &serde_json::Value,
+    seeder_tracker_url: &str,
 ) -> Option<协作分发做种启动命令> {
     let info_hash = runtime_distribution["torrent_info_hash"]
         .as_str()
         .map(str::trim)
         .filter(|value| !value.is_empty())?
         .to_string();
-    let announce_urls = runtime_distribution["announce_urls"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let seeder_tracker_url = seeder_tracker_url.trim();
+    // 注意：runtime_distribution["announce_urls"] 是浏览器公开入口，HTTPS 下通常是 WSS 反代地址。
+    // Node sidecar 在服务端本机做强种子，应走内网 tracker，避免把公开反代入口误当成基础设施回环。
+    let announce_urls = if seeder_tracker_url.is_empty() {
+        Vec::new()
+    } else {
+        vec![seeder_tracker_url.to_string()]
+    };
     let web_seed_url = 归一化sidecar媒体地址(runtime_distribution["web_seed_url"].as_str());
     let torrent_url = 归一化sidecar媒体地址(runtime_distribution["torrent_url"].as_str());
     let join_ticket = runtime_distribution["join_ticket"]
@@ -736,7 +739,10 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
             },
         );
-        let Some(启动命令) = 从协作分发响应构造做种启动命令(&runtime_distribution)
+        let Some(启动命令) = 从协作分发响应构造做种启动命令(
+            &runtime_distribution,
+            state.swarm_seeder_tracker_url.as_str(),
+        )
         else {
             continue;
         };

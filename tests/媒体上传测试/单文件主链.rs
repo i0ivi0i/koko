@@ -333,11 +333,20 @@ async fn 视频complete在iso5_brand_mp4输入下不应返回500() {
 #[serial]
 async fn 视频complete会触发seeder_start命令() {
     let (fake_seeder_base_url, seeder_requests, fake_seeder_server) = 启动假seeder侧车().await;
-    let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
+    let backup = 备份并清空环境变量(&[
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        "SWARM_TRACKER_PUBLIC_URL",
+        "SWARM_SEEDER_TRACKER_URL",
+    ]);
     env::set_var(
         "SWARM_SEEDER_CONTROL_BASE_URL",
         fake_seeder_base_url.as_str(),
     );
+    env::set_var(
+        "SWARM_TRACKER_PUBLIC_URL",
+        "wss://im.example.com/api/swarm/announce",
+    );
+    env::set_var("SWARM_SEEDER_TRACKER_URL", "ws://127.0.0.1:17072");
 
     let env = 准备complete测试环境("single-file-video-seeder-start").await;
     let video_bytes = 最小mp4字节();
@@ -384,6 +393,14 @@ async fn 视频complete会触发seeder_start命令() {
             .map(|values| !values.is_empty())
             .unwrap_or(false),
         "sidecar start 必须携带 announceUrls，避免 tracker 入群线索丢失"
+    );
+    assert_eq!(
+        start_payload["announceUrls"]
+            .as_array()
+            .and_then(|values| values.first())
+            .and_then(|value| value.as_str()),
+        Some("ws://127.0.0.1:17072"),
+        "sidecar start 必须使用私有 tracker announce，禁止复用浏览器 public WSS announce"
     );
     assert!(
         start_payload["torrentUrl"]
