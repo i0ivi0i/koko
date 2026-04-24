@@ -164,7 +164,8 @@ pub struct 媒体Tus侧车配置 {
 /// 3. ticket secret / TTL 决定私有 swarm 门禁如何签发；
 /// 4. peer presence staleness 为后续 Phase 3 的过期裁决预留稳定配置源；
 /// 5. 原始冷源清理间隔只属于启动/运维配置，不进入业务契约；
-/// 6. seeder control base URL 只用于后端 owner 调 sidecar 命令面，不进入前端 contract。
+/// 6. 做种对账间隔只负责刷新 sidecar/tracker 协作分发门禁，必须短于 ticket TTL；
+/// 7. seeder control base URL 只用于后端 owner 调 sidecar 命令面，不进入前端 contract。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 协作分发配置 {
     pub tracker_public_url: String,
@@ -175,6 +176,7 @@ pub struct 协作分发配置 {
     pub ticket_ttl_seconds: i64,
     pub peer_presence_stale_seconds: i64,
     pub media_origin_cleanup_interval_seconds: i64,
+    pub swarm_seed_reconcile_interval_seconds: i64,
 }
 
 /// 读取启动所需的最小配置。缺关键配置时必须失败，避免静默启动。
@@ -540,7 +542,8 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
 /// 4. ticket TTL 默认 120 秒，保证浏览器不会长期复用旧门票；
 /// 5. stale 秒数先保守收口为 180 秒，给后续 Phase 3 的 presence 裁决复用；
 /// 6. 冷源清理默认每 60 秒扫一次，保证 TTL 真相不会只停留在数据库时间戳；
-/// 7. seeder 命令面默认回落 `http://127.0.0.1:${SWARM_SEEDER_PORT|7073}`，避免 owner 调度入口漂移。
+/// 7. 做种对账默认比 ticket TTL 更短，避免 sidecar 拿旧票持续 announce；
+/// 8. seeder 命令面默认回落 `http://127.0.0.1:${SWARM_SEEDER_PORT|7073}`，避免 owner 调度入口漂移。
 pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
     let tracker_port = 读取可选端口("SWARM_TRACKER_PORT", 7072)?;
     let seeder_port = 读取可选端口("SWARM_SEEDER_PORT", 7073)?;
@@ -570,6 +573,25 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
     let peer_presence_stale_seconds = 读取可选整数("SWARM_PEER_PRESENCE_STALE_SECONDS", 180)?;
     let media_origin_cleanup_interval_seconds =
         读取可选整数("MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS", 60)?;
+    let default_seed_reconcile_interval_seconds = if ticket_ttl_seconds > 1 {
+        (ticket_ttl_seconds / 2)
+            .clamp(1, 60)
+            .min(ticket_ttl_seconds - 1)
+    } else {
+        1
+    };
+    let swarm_seed_reconcile_interval_seconds = 读取可选整数(
+        "SWARM_SEED_RECONCILE_INTERVAL_SECONDS",
+        default_seed_reconcile_interval_seconds,
+    )?;
+    if swarm_seed_reconcile_interval_seconds <= 0
+        || swarm_seed_reconcile_interval_seconds >= ticket_ttl_seconds
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "环境变量 SWARM_SEED_RECONCILE_INTERVAL_SECONDS 必须大于 0 且小于 SWARM_TICKET_TTL_SECONDS",
+        ));
+    }
 
     Ok(协作分发配置 {
         tracker_public_url,
@@ -580,6 +602,7 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
         ticket_ttl_seconds,
         peer_presence_stale_seconds,
         media_origin_cleanup_interval_seconds,
+        swarm_seed_reconcile_interval_seconds,
     })
 }
 
@@ -880,5 +903,41 @@ mod tests {
             "SWARM_SEEDER_CONTROL_BASE_URL",
             old_seeder_control_base_url,
         );
+    }
+
+    #[test]
+    #[serial]
+    fn 做种对账间隔默认小于join_ticket_ttl() {
+        let old_ticket_ttl = env::var("SWARM_TICKET_TTL_SECONDS").ok();
+        let old_seed_reconcile = env::var("SWARM_SEED_RECONCILE_INTERVAL_SECONDS").ok();
+        env::set_var("SWARM_TICKET_TTL_SECONDS", "120");
+        env::remove_var("SWARM_SEED_RECONCILE_INTERVAL_SECONDS");
+
+        let config = 读取协作分发配置().expect("默认做种对账间隔应可读");
+
+        assert!(config.swarm_seed_reconcile_interval_seconds > 0);
+        assert!(config.swarm_seed_reconcile_interval_seconds < config.ticket_ttl_seconds);
+
+        恢复环境变量("SWARM_TICKET_TTL_SECONDS", old_ticket_ttl);
+        恢复环境变量("SWARM_SEED_RECONCILE_INTERVAL_SECONDS", old_seed_reconcile);
+    }
+
+    #[test]
+    #[serial]
+    fn 做种对账间隔不能大于等于join_ticket_ttl() {
+        let old_ticket_ttl = env::var("SWARM_TICKET_TTL_SECONDS").ok();
+        let old_seed_reconcile = env::var("SWARM_SEED_RECONCILE_INTERVAL_SECONDS").ok();
+        env::set_var("SWARM_TICKET_TTL_SECONDS", "30");
+        env::set_var("SWARM_SEED_RECONCILE_INTERVAL_SECONDS", "30");
+
+        let err = 读取协作分发配置().expect_err("做种对账间隔不能覆盖 ticket 全生命周期");
+
+        assert!(
+            err.to_string()
+                .contains("SWARM_SEED_RECONCILE_INTERVAL_SECONDS")
+        );
+
+        恢复环境变量("SWARM_TICKET_TTL_SECONDS", old_ticket_ttl);
+        恢复环境变量("SWARM_SEED_RECONCILE_INTERVAL_SECONDS", old_seed_reconcile);
     }
 }
