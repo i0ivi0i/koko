@@ -153,7 +153,8 @@ export interface 媒体SourceHash信息 {
 
 /**
  * source_hash 复用请求必须带 room_id：
- * 后端只能在当前会话可见的房间事实内查询命中，不能做全局存在性探测。
+ * room_id 是目标房间发送裁决锚点，不是媒体资产身份边界。
+ * 后端只能在当前身份有权复用的资产内命中，禁止返回全站存在性信号。
  */
 export interface 媒体SourceHash复用请求 extends 媒体SourceHash信息 {
   session_id: string;

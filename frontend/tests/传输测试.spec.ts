@@ -515,7 +515,7 @@ describe("传输", () => {
     );
   });
 
-  it("reuseMediaBySourceHash 会调用受房间权限约束的 source_hash 复用路由并解析 ready 附件", async () => {
+  it("reuseMediaBySourceHash 会调用受目标房间发送权限约束的 source_hash 复用路由并解析 ready 附件", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -605,6 +605,13 @@ describe("传输", () => {
         })
       );
     }
+  });
+
+  it("契约禁止把 room_id 描述成 source_hash 的唯一搜索范围", () => {
+    const source = readFileSync(resolve(process.cwd(), "契约.ts"), "utf8");
+
+    expect(source).toContain("room_id 是目标房间发送裁决锚点");
+    expect(source).not.toContain("只能在当前会话可见的房间事实内查询命中");
   });
 
   it("completeMediaUpload 会按 file_video 解析新单文件视频主链", async () => {
