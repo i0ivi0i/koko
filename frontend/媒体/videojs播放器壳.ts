@@ -32,6 +32,7 @@ type 可原生全屏视频元素 = HTMLVideoElement & {
   webkitSupportsFullscreen?: boolean;
   webkitDisplayingFullscreen?: boolean;
 };
+export type VideoJs全屏进入结果 = "standard" | "native" | "unsupported";
 const 远端播放Promise兼容标记 = Symbol("koko-videojs-remote-playback-promise-compat");
 let 默认VideoJs元素注册Promise: Promise<void> | null = null;
 
@@ -50,7 +51,7 @@ type VideoJs播放器根节点 = {
 
 export interface VideoJs播放器壳实例 {
   同步(source: VideoJs播放器源描述): void;
-  进入全屏(): Promise<void>;
+  进入全屏(): Promise<VideoJs全屏进入结果>;
   读取容器元素(): 可请求全屏容器;
   读取视频元素(): 可原生全屏视频元素;
   destroy(): void;
@@ -482,7 +483,7 @@ const 创建VideoJs播放器壳核心 = (
     },
     async 进入全屏() {
       if (已销毁) {
-        return;
+        return "unsupported";
       }
       /**
        * Video.js 官方 v10 建议是 container 优先、media element 回退。
@@ -491,9 +492,12 @@ const 创建VideoJs播放器壳核心 = (
        */
       if (typeof root.container.requestFullscreen === "function") {
         await root.container.requestFullscreen({ navigationUI: "hide" });
-        return;
+        return "standard";
       }
-      请求原生视频真全屏(root.video);
+      if (请求原生视频真全屏(root.video)) {
+        return "native";
+      }
+      return "unsupported";
     },
     读取容器元素() {
       return root.container;

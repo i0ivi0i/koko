@@ -278,6 +278,15 @@ const 读取VideoJs媒体容器 = (): HTMLElement | null => {
   return skin?.shadowRoot?.querySelector("media-container") ?? null;
 };
 
+const 创建测试VideoJs进入全屏 = (container: HTMLElement) =>
+  vi.fn(async () => {
+    if (typeof container.requestFullscreen === "function") {
+      await container.requestFullscreen({ navigationUI: "hide" });
+      return "standard" as const;
+    }
+    return "unsupported" as const;
+  });
+
 const 等待查询元素 = async <T extends Element>(
   selector: string,
   maxAttempts = 30
@@ -557,6 +566,67 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelectorAll("video")).toHaveLength(1);
   });
 
+  it("显式打开视频时，会把系统全屏进入动作委托给 Video.js 播放器壳", async () => {
+    vi.resetModules();
+    const { requestFullscreen } = 安装全屏DOM模拟();
+    let container!: HTMLElement;
+    let 进入全屏!: ReturnType<typeof 创建测试VideoJs进入全屏>;
+    const 创建VideoJs播放器壳 = vi.fn(
+      (_source?: unknown, deps?: { mountTarget?: HTMLElement | null }) => {
+        const video = document.createElement("video");
+        Object.assign(video, {
+          play: vi.fn(() => Promise.resolve()),
+          pause: vi.fn(),
+        });
+        container = document.createElement("div");
+        container.className = "fake-videojs-container";
+        (deps?.mountTarget ?? document.body).append(container, video);
+        进入全屏 = 创建测试VideoJs进入全屏(container);
+        return {
+          destroy: vi.fn(),
+          同步: vi.fn(),
+          读取视频元素: () => video,
+          读取容器元素: () => container,
+          进入全屏,
+        };
+      }
+    );
+    vi.doMock("../媒体/videojs播放器壳", () => ({
+      创建VideoJs播放器壳,
+      预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
+    }));
+
+    try {
+      const { 创建媒体查看器 } = await import("../媒体/媒体查看器");
+      const viewer = 创建媒体查看器({
+        isMobileViewport: () => false,
+      });
+
+      viewer.打开({
+        startAttachmentId: "att-video-videojs-fullscreen-owner-1",
+        items: [
+          {
+            kind: "video",
+            attachmentId: "att-video-videojs-fullscreen-owner-1",
+            src: "blob:http://media.local/videojs-fullscreen-owner-1",
+            posterSrc: "http://media.local/poster-videojs-fullscreen-owner-1",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(进入全屏).toHaveBeenCalledTimes(1);
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+      expect(requestFullscreen.mock.instances.at(0)).toBe(container);
+    } finally {
+      vi.doUnmock("../媒体/videojs播放器壳");
+      vi.resetModules();
+    }
+  });
+
   it("标准系统全屏请求挂起时，沉浸查看器不会提前亮起或暴露关闭按钮", async () => {
     vi.resetModules();
     const 创建VideoJs播放器壳 = vi.fn(
@@ -574,6 +644,7 @@ describe("媒体查看器适配器", () => {
           同步: vi.fn(),
           读取视频元素: () => video,
           读取容器元素: () => container,
+          进入全屏: 创建测试VideoJs进入全屏(container),
         };
       }
     );
@@ -1045,6 +1116,7 @@ describe("媒体查看器适配器", () => {
               同步: vi.fn(),
               读取视频元素: () => video,
               读取容器元素: () => container,
+              进入全屏: 创建测试VideoJs进入全屏(container),
             });
           });
         })
@@ -1113,6 +1185,7 @@ describe("媒体查看器适配器", () => {
               同步: vi.fn(),
               读取视频元素: () => video,
               读取容器元素: () => container,
+              进入全屏: 创建测试VideoJs进入全屏(container),
             });
           });
         })
@@ -1469,6 +1542,7 @@ describe("媒体查看器适配器", () => {
               同步: vi.fn(),
               读取视频元素: () => video,
               读取容器元素: () => container,
+              进入全屏: 创建测试VideoJs进入全屏(container),
             });
           });
         })
@@ -1548,6 +1622,7 @@ describe("媒体查看器适配器", () => {
           同步: vi.fn(),
           读取视频元素: () => video,
           读取容器元素: () => container,
+          进入全屏: 创建测试VideoJs进入全屏(container),
         });
       }
     );
@@ -1684,6 +1759,7 @@ describe("媒体查看器适配器", () => {
               同步: vi.fn(),
               读取视频元素: () => video,
               读取容器元素: () => container,
+              进入全屏: 创建测试VideoJs进入全屏(container),
             });
           });
         })

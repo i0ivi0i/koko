@@ -1,6 +1,10 @@
 import type { 媒体资产分发表面 } from "../契约.js";
 import type { 媒体会话信号 } from "./媒体会话.js";
-import type { VideoJs播放器壳实例, VideoJs播放器源描述 } from "./videojs播放器壳.js";
+import type {
+  VideoJs播放器壳实例,
+  VideoJs播放器源描述,
+  VideoJs全屏进入结果,
+} from "./videojs播放器壳.js";
 import * as VideoJs播放器壳模块 from "./videojs播放器壳.js";
 
 const 创建VideoJs播放器壳 = VideoJs播放器壳模块.创建VideoJs播放器壳;
@@ -119,25 +123,6 @@ type 可锁定屏幕方向 = ScreenOrientation & {
 };
 
 const 媒体全屏历史键 = "__kokoMediaFullscreenSession";
-
-const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolean => {
-  if (video.webkitSupportsFullscreen === false) {
-    return false;
-  }
-  try {
-    if (typeof video.webkitEnterFullscreen === "function") {
-      video.webkitEnterFullscreen();
-      return true;
-    }
-    if (typeof video.webkitEnterFullScreen === "function") {
-      video.webkitEnterFullScreen();
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-};
 
 const 退出原生视频真全屏 = (video: 可原生全屏视频元素): boolean => {
   try {
@@ -278,6 +263,7 @@ const 启动同会话全屏策略 = (
   fullscreenTarget: 可原生全屏容器元素,
   container: 可原生全屏容器元素,
   video: 可原生全屏视频元素,
+  请求播放器壳进入全屏: () => Promise<VideoJs全屏进入结果>,
   回收查看器: () => void,
   options: {
     同步沉浸查看器显示阶段?: (phase: "pending" | "active") => void;
@@ -449,6 +435,8 @@ const 启动同会话全屏策略 = (
     if (是主全屏目标(document.fullscreenElement)) {
       本会话已接管系统全屏 = true;
       同步沉浸查看器显示阶段("active");
+      lockScreenOrientation();
+      startPlayback();
       return;
     }
     if (存在待结算的系统全屏退出 && !document.fullscreenElement) {
@@ -492,6 +480,20 @@ const 启动同会话全屏策略 = (
       // 这里失败也不能回退成旧原生全屏旁路；只是少一层返回键接管。
     }
   };
+  const 处理播放器壳进入全屏结果 = (result: VideoJs全屏进入结果): void => {
+    if (cleaned) {
+      return;
+    }
+    if (result === "standard") {
+      本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
+    } else if (result === "native") {
+      本会话已接管系统全屏 = true;
+      本会话正在原生视频全屏 = true;
+    }
+    同步沉浸查看器显示阶段("active");
+    lockScreenOrientation();
+    startPlayback();
+  };
 
   container.dataset.videoOrientation = videoOrientation ?? "natural";
   document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -501,34 +503,22 @@ const 启动同会话全屏策略 = (
   pushMediaHistoryEntry();
 
   startPlayback();
-  if (typeof fullscreenTarget.requestFullscreen === "function") {
-    /**
-     * 即便上一会话的 exitFullscreen 仍在浏览器结算窗口里，新会话首击也必须尝试一次真全屏。
-     * 之前把这一步绑在“待结算退出=false”上，会直接吞掉首击，导致用户必须二次点击才能全屏。
-     */
-    同步沉浸查看器显示阶段(
-      本会话已接管系统全屏 || 本会话正在原生视频全屏 ? "active" : "pending"
-    );
-    void fullscreenTarget
-      .requestFullscreen({ navigationUI: "hide" })
-      .then(() => {
-        本会话已接管系统全屏 = 是本会话全屏元素(document.fullscreenElement);
-        同步沉浸查看器显示阶段("active");
-        lockScreenOrientation();
-        startPlayback();
-      })
-      .catch(() => {
-        同步沉浸查看器显示阶段("active");
-      });
-  } else if (请求原生视频真全屏(video)) {
-    本会话已接管系统全屏 = true;
-    本会话正在原生视频全屏 = true;
-    同步沉浸查看器显示阶段("active");
-    lockScreenOrientation();
-  } else {
-    同步沉浸查看器显示阶段("active");
-    lockScreenOrientation();
-  }
+  /**
+   * 即便上一会话的 exitFullscreen 仍在浏览器结算窗口里，新会话首击也必须尝试一次真全屏。
+   * 具体的 container-first / media-fallback 进入动作交给 Video.js 播放器壳，
+   * viewer 这里只维护聊天应用需要的会话、history、显示阶段和回收顺序。
+   */
+  const 标准全屏可能挂起 = typeof fullscreenTarget.requestFullscreen === "function";
+  同步沉浸查看器显示阶段(
+    标准全屏可能挂起 && !本会话已接管系统全屏 && !本会话正在原生视频全屏
+      ? "pending"
+      : "active"
+  );
+  void 请求播放器壳进入全屏()
+    .then(处理播放器壳进入全屏结果)
+    .catch(() => {
+      同步沉浸查看器显示阶段("active");
+    });
 
   return {
     清理: cleanup,
@@ -733,6 +723,7 @@ const 创建默认VideoJs播放器层 = async (
         container,
         container,
         video,
+        () => shell.进入全屏(),
         cleanup,
         {
           同步沉浸查看器显示阶段,
