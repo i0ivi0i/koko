@@ -166,12 +166,14 @@ pub struct 媒体Tus侧车配置 {
 /// 5. 原始冷源清理间隔只属于启动/运维配置，不进入业务契约；
 /// 6. 做种对账间隔只负责刷新 sidecar/tracker 协作分发门禁，必须短于 ticket TTL；
 /// 7. seeder control base URL 只用于后端 owner 调 sidecar 命令面，不进入前端 contract。
+/// 8. seeder tracker URL 是 sidecar 内网 announce，禁止与浏览器 public announce 混用。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 协作分发配置 {
     pub tracker_public_url: String,
     pub tracker_port: u16,
     pub web_seed_public_endpoint: Option<String>,
     pub seeder_control_base_url: String,
+    pub seeder_tracker_url: String,
     pub ticket_secret: Option<String>,
     pub ticket_ttl_seconds: i64,
     pub peer_presence_stale_seconds: i64,
@@ -544,11 +546,21 @@ pub fn 读取媒体存储配置() -> io::Result<媒体存储配置> {
 /// 6. 冷源清理默认每 60 秒扫一次，保证 TTL 真相不会只停留在数据库时间戳；
 /// 7. 做种对账默认比 ticket TTL 更短，避免 sidecar 拿旧票持续 announce；
 /// 8. seeder 命令面默认回落 `http://127.0.0.1:${SWARM_SEEDER_PORT|7073}`，避免 owner 调度入口漂移。
+/// 9. sidecar tracker 默认回落本机 `SWARM_TRACKER_PORT`，public WSS 只给浏览器 locator。
 pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
     let tracker_port = 读取可选端口("SWARM_TRACKER_PORT", 7072)?;
     let seeder_port = 读取可选端口("SWARM_SEEDER_PORT", 7073)?;
     let tracker_public_url = 读取可选环境变量("SWARM_TRACKER_PUBLIC_URL")
         .unwrap_or_else(|| format!("ws://127.0.0.1:{tracker_port}"));
+    let seeder_tracker_url = 读取可选环境变量("SWARM_SEEDER_TRACKER_URL")
+        .unwrap_or_else(|| format!("ws://127.0.0.1:{tracker_port}"));
+    let seeder_tracker_url = seeder_tracker_url.trim().to_string();
+    if seeder_tracker_url.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "环境变量 SWARM_SEEDER_TRACKER_URL 不能为空",
+        ));
+    }
     let web_seed_public_endpoint = 读取可选环境变量("SWARM_WEB_SEED_PUBLIC_ENDPOINT");
     let seeder_control_base_url = 读取可选环境变量("SWARM_SEEDER_CONTROL_BASE_URL")
         .unwrap_or_else(|| format!("http://127.0.0.1:{seeder_port}"));
@@ -598,6 +610,7 @@ pub fn 读取协作分发配置() -> io::Result<协作分发配置> {
         tracker_port,
         web_seed_public_endpoint,
         seeder_control_base_url,
+        seeder_tracker_url,
         ticket_secret,
         ticket_ttl_seconds,
         peer_presence_stale_seconds,
@@ -863,6 +876,55 @@ mod tests {
 
         assert!(debug.contains("statements_level: Off"));
         assert!(debug.contains("slow_statements_level: Off"));
+    }
+
+    #[test]
+    #[serial]
+    fn 协作分发配置会为sidecar生成私有tracker地址() {
+        let old_tracker_port = 读并清空环境变量("SWARM_TRACKER_PORT");
+        let old_public_url = 读并清空环境变量("SWARM_TRACKER_PUBLIC_URL");
+        let old_seeder_tracker_url = 读并清空环境变量("SWARM_SEEDER_TRACKER_URL");
+
+        env::set_var("SWARM_TRACKER_PORT", "17072");
+        env::set_var(
+            "SWARM_TRACKER_PUBLIC_URL",
+            "wss://im.example.com/api/swarm/announce",
+        );
+
+        let config = 读取协作分发配置().expect("应能读取协作分发配置");
+
+        assert_eq!(
+            config.tracker_public_url,
+            "wss://im.example.com/api/swarm/announce",
+            "public announce 继续服务浏览器 contract"
+        );
+        assert_eq!(
+            config.seeder_tracker_url,
+            "ws://127.0.0.1:17072",
+            "sidecar 默认必须走本机私有 tracker，禁止复用浏览器 public WSS"
+        );
+
+        恢复环境变量("SWARM_TRACKER_PORT", old_tracker_port);
+        恢复环境变量("SWARM_TRACKER_PUBLIC_URL", old_public_url);
+        恢复环境变量("SWARM_SEEDER_TRACKER_URL", old_seeder_tracker_url);
+    }
+
+    #[test]
+    #[serial]
+    fn 协作分发配置允许显式覆盖sidecar私有tracker地址() {
+        let old_seeder_tracker_url = 读并清空环境变量("SWARM_SEEDER_TRACKER_URL");
+
+        env::set_var("SWARM_SEEDER_TRACKER_URL", "ws://tracker.internal:7072");
+
+        let config = 读取协作分发配置().expect("应能读取协作分发配置");
+
+        assert_eq!(
+            config.seeder_tracker_url,
+            "ws://tracker.internal:7072",
+            "部署环境可以把 sidecar 指向内网 tracker，但这个值不能污染浏览器 locator"
+        );
+
+        恢复环境变量("SWARM_SEEDER_TRACKER_URL", old_seeder_tracker_url);
     }
 
     #[test]
