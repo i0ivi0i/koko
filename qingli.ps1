@@ -420,10 +420,8 @@ function Get-StartupArtifactOptimizationTargets {
     param([string]$RepoRoot)
 
     $definitions = @(
-        @{ Path = "target\launcher-run"; Kind = "Directory"; Reason = "run.ps1 独享的 Cargo target 产物" }
         @{ Path = "target\realtime-tests"; Kind = "Directory"; Reason = "真实链路测试独享的 Cargo target 产物" }
         @{ Path = "target\tmp-investigate"; Kind = "Directory"; Reason = "临时调查 target 噪音" }
-        @{ Path = "frontend\dist"; Kind = "Directory"; Reason = "前端构建产物" }
         @{ Path = "tmp\audit"; Kind = "Directory"; Reason = "审计/大附件抽样产物" }
         @{ Path = "tmp\smoke-run"; Kind = "Directory"; Reason = "烟测运行目录" }
         @{ Path = "tmp\smoke-logs"; Kind = "Directory"; Reason = "烟测日志目录" }
@@ -619,7 +617,7 @@ Write-Host ""
 Write-Host "不会触碰的目录：src/ frontend/ docs/ migrations/ tests/ assets/"
 Write-Host "不会触碰的数据库对象：迁移元数据表、schema、角色、扩展。"
 if ($OptimizeStartupArtifacts) {
-    Write-Host "自动优化不会触碰：target/debug、target/flycheck0、frontend/node_modules、数据库业务表、data/attachments。"
+    Write-Host "自动优化不会触碰：target/debug、target/launcher-run、target/flycheck0、frontend/dist、frontend/node_modules、数据库业务表、data/attachments。"
 }
 if ($ReclaimWorkspaceStorage) {
     Write-Host "工作区重清理不会默认随 run.ps1 启动；它会导致下次 Rust 全量重编译、前端重新安装依赖。"

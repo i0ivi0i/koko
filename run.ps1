@@ -2,7 +2,8 @@ param(
     [switch]$UpgradeDependencies,
     [switch]$DisableCloudflareTunnel,
     [switch]$DisableLocalHttpsBootstrap,
-    [switch]$DisableAutoOptimizeCleanup
+    [switch]$DisableAutoOptimizeCleanup,
+    [switch]$ForceInitialFrontendBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -886,10 +887,15 @@ try {
 
     Ensure-FrontendDependenciesInstalled -FrontendRoot $frontendRoot -PnpmPath $pnpmPath
 
-    Write-Host "前端首轮构建: pnpm --dir frontend build"
-    & $pnpmPath --dir frontend build
-    if ($LASTEXITCODE -ne 0) {
-        throw "前端首轮构建失败，已停止启动。"
+    if ($ForceInitialFrontendBuild) {
+        Write-Host "前端完整首轮构建: pnpm --dir frontend build"
+        & $pnpmPath --dir frontend build
+        if ($LASTEXITCODE -ne 0) {
+            throw "前端完整首轮构建失败，已停止启动。"
+        }
+    }
+    else {
+        Write-Host "跳过前端完整首轮构建；由 dev:watch:supervised 负责启动基线构建。需要完整门禁时加 -ForceInitialFrontendBuild。"
     }
 
     Write-Host "前端增量编译: pnpm --dir frontend run dev:watch:supervised"
