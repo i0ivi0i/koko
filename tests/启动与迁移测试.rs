@@ -326,6 +326,9 @@ fn 万人群聊生产化索引迁移必须覆盖当前热查询() {
 fn source_hash精确去重迁移会建立内容资产和受权限索引() {
     let sql = std::fs::read_to_string("migrations/0020_媒体source_hash精确去重资产索引.sql")
         .expect("应能读到 source_hash 精确去重资产索引迁移");
+    let boundary_comment_sql =
+        std::fs::read_to_string("migrations/0021_媒体source_hash权限边界注释.sql")
+            .expect("应能读到 source_hash 权限边界注释迁移");
 
     // source_hash 只用于当前可见范围内的精确原文件命中，不能做成全局唯一资产身份。
     assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachment_source_hashes"));
@@ -333,7 +336,8 @@ fn source_hash精确去重迁移会建立内容资产和受权限索引() {
     assert!(sql.contains("CHECK (source_hash ~ '^[0-9a-f]{64}$')"));
     assert!(sql.contains("source_byte_size BIGINT NOT NULL"));
     assert!(sql.contains("idx_attachment_source_hashes_lookup"));
-    assert!(sql.contains("禁止跨权限存在性探测"));
+    assert!(boundary_comment_sql.contains("禁止跨权限存在性探测"));
+    assert!(boundary_comment_sql.contains("COMMENT ON TABLE attachment_source_hashes"));
     assert!(!sql.contains("UNIQUE (source_hash"));
 
     // canonical 资产才拥有 WebTorrent / WebSeed 分发事实，多个业务附件只引用同一内容资产。
