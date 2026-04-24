@@ -1,551 +1,183 @@
-# 媒体全局资产去重与转发复用 Implementation Plan
+# 多媒体附件精确去重收尾 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 按项目现有 Rust/TypeScript 代码，把媒体物理资产去重从“单房间 source_hash 命中”纠正为“canonical 资产全局唯一、source_hash 受权限复用、转发分享复用可见源附件”的完整链路。
+**Goal:** 在现有 `source_hash / content_hash / canonical asset / WebTorrent` 主链已经基本落地的基础上，修掉真实冒烟暴露的 `join_ticket` 续租缺口，让 `docs/superpowers/specs/2026-04-24-多媒体附件精确去重.md` 的验证门禁可长期稳定通过。
 
-**Architecture:** `application/usecase` 继续拥有媒体身份、发送权限、附件 owner、删除语义和复用裁决；`adapter/sql` 只回答受授权查询和持久化；`shell/http` 只做请求解析、错误转码和响应组装；前端只表达上传/转发意图，不拥有媒体去重真相。全局物理资产只按 `content_hash` 收口，`source_hash` 不能变成全站存在性探针，转发不能要求客户端持有原文件。
+**Architecture:** 媒体身份层继续以 `source_hash`、`content_hash`、`canonical_asset_id`、`torrent_info_hash`、`swarm_id` 收口真相；分发层只维护 WebTorrent 会话、tracker ticket 和做种续租。前端运行态、dev seeder 和后端做种对账都必须把同一 `swarm_id / infohash` 视为同一分发会话，禁止因为新附件引用、旧 locator 或过期 ticket 重新制造第二套分发真相。
 
-**Tech Stack:** Rust 2024 + Axum + SQLx + PostgreSQL；TypeScript + Vitest；现有 `canonical_media_assets`、`attachment_canonical_asset_refs`、`attachment_source_hashes` 迁移；现有 WebTorrent 分发元数据链路。
+**Tech Stack:** Rust 2024 + Axum + SQLx + PostgreSQL；TypeScript + Vitest；WebTorrent + bittorrent-tracker；`chrome-devtools-cli` 真实浏览器冒烟测试。
 
 ---
 
-## 0. 当前代码事实
+## 0. 当前事实
 
-**已经存在：**
+**已经通过真实冒烟验证：**
 
-- `migrations/0020_媒体source_hash精确去重资产索引.sql` 已建立 `canonical_media_assets`、`attachment_canonical_asset_refs`、`attachment_source_hashes`。
-- `src/用例.rs` 已有 `复用source_hash媒体附件`，命中后会新建 ready 附件、绑定 canonical 资产、写入协作分发元数据和 torrent 元信息。
-- `src/媒体附件适配.rs` 已有 `查询房间可复用source_hash媒体资产_异步`，但 SQL 从 `rooms/messages/message_attachment_refs` 出发并 `WHERE r.room_id = $1`，仍是旧的单房间命中模型。
-- `src/媒体上传外壳.rs` 已有 `/api/media/{kind}/source-dedupe`，请求体包含 `session_id / room_id / source_hash / source_byte_size / source_file_name`。
-- `frontend/契约.ts`、`frontend/传输.ts`、`frontend/媒体/适配/媒体HTTP接口.ts`、`frontend/媒体/媒体发布.ts` 已接入上传前 source_hash 计算和复用尝试。
-- `tests/媒体上传测试/source_hash.rs` 已覆盖“同一房间复用”“未授权房间 miss”“已删除 canonical 不复活”。
+- 同一 MP4 第一次上传：`source-dedupe miss -> prepare -> TUS -> complete`。
+- 同一 MP4 第二次选择：只走 `source-dedupe reused`，没有再次 `prepare / TUS / complete`。
+- 两个附件拥有不同 `attachment_id`，但共享同一 `content_hash / swarm_id / torrent_info_hash`。
+- `cargo test --test 媒体上传测试 source_hash -- --nocapture` 已覆盖 source_hash、跨房间、不可见探测、删除、转发边界。
+- `pnpm vitest run tests/传输测试.spec.ts tests/媒体发布测试.spec.ts --exclude dist/**` 已覆盖前端上传前复用链路。
 
-**必须纠正：**
+**真实缺口：**
 
-- 禁止继续把“目标房间”当成媒体资产身份边界。
-- 禁止 `source_hash` 查询只在当前房间内找资产；同一匿名身份自己在房间 A 上传过的资产，应允许在房间 B 创建新附件引用。
-- 禁止跨用户、跨不可见房间通过 `source_hash` 探测存在性；这种场景只能 miss，然后正常上传，上传完成后由 `content_hash` 在物理层全局收口。
-- 禁止把转发/分享做成重新上传；转发必须以“源附件当前可见 + 目标房间可发送”为授权，直接复用 canonical 资产。
+- tracker / seeder 日志出现 `jwt expired` 和 `join_ticket_invalid`。
+- 根因不是 source_hash 去重，而是同一 WebTorrent 会话复用时，旧会话仍可能持有旧 `join_ticket`。
+- `frontend/媒体/资产协作分发运行时.ts` 命中已有 `swarm_id` 会话后直接返回，没有把新 locator 的 `join_ticket` 刷进底层会话。
+- `frontend/媒体/媒体协作分发.ts` 的 `getAnnounceOpts` 当前闭包读取创建会话时的 `distribution.join_ticket`，不是可续租引用。
+- `frontend/dev-seeder.mjs` 对同 infohash 的 `/seed/start` 已有续租意图，但同 infohash 不同 `torrentUrl` 的场景仍要被测试锁死为“续租而不是重建第二真相”。
+- 后端做种对账复用 `MEDIA_ORIGIN_CLEANUP_INTERVAL_SECONDS`，职责混在一个后台循环里；ticket 续租应该有独立 cadence，并且必须小于 ticket TTL。
 
-## 1. 目标边界
+**本 plan 不重做：**
 
-**权威真相 owner：**
+- 不重新设计 source_hash 算法。
+- 不新增感知哈希、AI 相似度、帧级指纹。
+- 不新增媒体资产表。
+- 不把 `source_hash` 做成全站存在性探针。
+- 不把转发分享做成重新上传。
 
-- `src/用例.rs`：媒体复用、转发、发送权限、附件 owner、删除语义。
-- `src/媒体附件适配.rs`：受授权 SQL 查询与媒体资产持久化。
-- `src/媒体上传外壳.rs`：HTTP 请求解析和响应组装，不做业务判断。
-- `frontend/契约.ts`：多壳共享请求/响应语义，不夹带 Web 页面流程。
-- `frontend/媒体/媒体发布.ts`：只做上传体验编排，不决定能不能复用。
+## 1. 文件改动地图
 
-**三条复用链：**
+**前端 WebTorrent 运行态：**
 
-1. 上传前：`source_hash + 当前身份/目标房间权限 -> 已授权 canonical 资产 -> 新附件引用`。
-2. 转发分享：`可见 source_attachment_id -> canonical 资产 -> 目标房间新消息/新附件引用`。
-3. 上传完成后：`content_hash -> canonical_media_assets 全局唯一 -> 同一 WebTorrent swarm/torrent`。
+- Modify: `frontend/媒体/媒体协作分发.ts`
+  - 新增可变 `joinTicketRef`，让 `getAnnounceOpts` 读取最新票据。
+- Modify: `frontend/媒体/资产协作分发运行时.ts`
+  - 底层 session 持有 `joinTicketRef`。
+  - 命中已有 `swarm_id` session 时刷新 `joinTicketRef.value`。
+- Test: `frontend/tests/媒体协作分发测试.spec.ts`
+  - 低层 `接入协作分发种子` 支持 ticket ref 原地续租。
+- Test: `frontend/tests/资产协作分发运行时测试.spec.ts`
+  - 同一 swarm 第二次 locator 到达后不重建 WebTorrent torrent，但 announce ticket 变成新值。
 
-**禁止事项：**
+**开发态 seeder sidecar：**
 
-- 禁止新增全局 `source_hash` 唯一约束。
-- 禁止返回旧房间、旧消息、旧上传者。
-- 禁止让 HTTP handler 或前端决定复用权限。
-- 禁止创建第二套并行媒体资产表或第二套 torrent 生成路径。
-- 禁止为转发新增“客户端持有原文件证明”。
+- Modify: `frontend/dev-seeder.mjs`
+  - 同 infohash 的 `/seed/start` 一律先视为续租。
+  - 即使 `torrentUrl` 因新附件引用变化，也只刷新 ticket 和记录 source，不因附件 URL 变化重建做种会话。
+- Test: `frontend/tests/dev-seeder做种续租测试.spec.ts`
+  - 抽出纯函数测试同 infohash、不同 source、新 ticket 的续租行为。
 
-## 2. 文件改动地图
+**后端做种对账：**
 
-**后端领域/用例：**
+- Modify: `src/总装.rs`
+  - 新增 `SWARM_SEED_RECONCILE_INTERVAL_SECONDS` 配置。
+  - 默认值必须小于 `SWARM_TICKET_TTL_SECONDS`。
+- Modify: `src/入口.rs`
+  - 媒体冷源清理和协作分发做种对账拆成两个后台循环。
+- Test: `src/总装.rs` 内配置单测。
 
-- Modify: `src/用例.rs`
-  - 重命名并扩展 `查询房间可复用source_hash媒体资产` 端口。
-  - 保留 `复用source_hash媒体附件` 作为上传前秒传用例，但查询范围改成“当前身份可复用资产”。
-  - 新增 `转发媒体附件到房间` 用例，复用可见源附件的 canonical 资产并创建目标房间新消息。
+**验收：**
 
-**后端适配：**
+- Verify: `tests/媒体上传测试/source_hash.rs`
+- Verify: `frontend/tests/传输测试.spec.ts`
+- Verify: `frontend/tests/媒体发布测试.spec.ts`
+- Verify: `frontend/tests/资产协作分发运行时测试.spec.ts`
+- Verify: `frontend/tests/媒体协作分发测试.spec.ts`
+- Verify: `chrome-devtools-cli` 真实房间 `1234b` 冒烟。
 
-- Modify: `src/适配.rs`
-  - 更新 `Pg仓储` 对新端口的实现转发。
-- Modify: `src/媒体附件适配.rs`
-  - 替换旧单房间 SQL 查询。
-  - 新增“查询可转发源附件资产”的 SQL 查询。
-  - 禁止新增表；优先复用 `attachments`、`message_attachment_refs`、`messages`、`room_members`、`attachment_canonical_asset_refs`、`canonical_media_assets`、`attachment_source_hashes`。
-
-**后端 HTTP 壳：**
-
-- Modify: `src/媒体上传外壳.rs`
-  - 保留 `/api/media/{kind}/source-dedupe`，语义改为“目标房间内创建新附件引用”。
-  - 新增转发入口，建议 `POST /api/media/{kind}/forward`，只接收 `session_id / target_room_id / source_attachment_id / client_message_id / text?`。
-- Modify: `src/外壳.rs`
-  - 注册转发路由。
-
-**前端契约与传输：**
-
-- Modify: `frontend/契约.ts`
-  - 修正文档注释：`room_id` 是目标房间发送裁决锚点，不是 source_hash 搜索范围。
-  - 新增 `媒体附件转发请求 / 媒体附件转发结果`。
-- Modify: `frontend/传输.ts`
-  - 媒体传输端口新增 `forwardMediaAttachment`。
-- Modify: `frontend/媒体/适配/媒体HTTP接口.ts`
-  - 新增转发 HTTP 方法。
-- Modify: `frontend/聊天媒体编排.ts`
-  - 只暴露窄端口转发方法，不把转发业务写进壳层。
-- Modify only if needed: `frontend/媒体/媒体发布.ts`
-  - 上传前 source_hash 请求体保留 target `room_id`，不做转发逻辑。
-
-**测试：**
-
-- Modify: `tests/媒体上传测试/source_hash.rs`
-  - 增加同一身份跨房间 source_hash 复用红测。
-  - 增加不同身份不可见房间 source_hash miss 但上传后 `content_hash` 全局收口红测。
-  - 增加转发可见源附件到目标房间红测。
-  - 增加不可见源附件禁止转发红测。
-- Modify: `tests/媒体上传测试.rs`
-  - 不新增测试入口，优先复用现有 `source_hash_tests` 模块。
-- Modify: `tests/启动与迁移测试.rs`
-  - 保持“不加全局 source_hash unique”的断言，并补充 canonical 资产全局唯一说明。
-- Modify: `frontend/tests/传输测试.spec.ts`
-  - 更新 source_hash 复用用例文案。
-  - 增加转发传输用例。
-- Modify: `frontend/tests/媒体发布测试.spec.ts`
-  - 确认上传前 source_hash 命中仍跳过预处理/prepare/Uppy。
-  - 确认未命中仍正常 prepare 上传。
-
-## 3. Task 1: 后端红测 - 同一身份跨房间 source_hash 可复用
+## 2. Task 1: 红测 - WebTorrent 底层接入支持可变 ticket ref
 
 **Files:**
 
-- Modify: `tests/媒体上传测试/source_hash.rs`
+- Modify: `frontend/tests/媒体协作分发测试.spec.ts`
+- Modify: `frontend/媒体/媒体协作分发.ts`
 
 - [ ] **Step 1: 写失败测试**
 
-先在 `tests/媒体上传测试/source_hash.rs` 增加只服务本文件的 helper，避免用“同一 device token 再 bootstrap”误导成同一发送会话：
+在 `frontend/tests/媒体协作分发测试.spec.ts` 的 `join_ticket` 相关用例附近新增：
 
-```rust
-async fn 既有会话进房(app: axum::Router, session_id: &str, room_code: String) -> String {
-    let (join_status, join) = send_json(
-        app,
-        Method::POST,
-        "/api/rooms/join-or-create",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "room_code": room_code,
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(join_status, StatusCode::OK, "既有会话进房失败: {join:?}");
-    join["room_id"].as_str().expect("room_id").to_string()
-}
+```ts
+it("join_ticket 续租引用更新后 getAnnounceOpts 会读取新票据", async () => {
+  const registration = 准备已激活媒体ServiceWorker注册();
+  const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-ticket-ref");
+  let getAnnounceOpts!: () => Record<string, string | undefined>;
+  const add = vi.fn(((_torrentId, options, onTorrent) => {
+    getAnnounceOpts = options.getAnnounceOpts!;
+    onTorrent(torrent);
+    return torrent;
+  }) as WebTorrent浏览器客户端["add"]);
+  const { ctor } = 创建假WebTorrent构造器(add);
+  await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+  const ticketRef = { value: "ticket-old" };
+  await 接入协作分发种子(
+    {
+      client: new ctor(),
+      server: { close: vi.fn() } as never,
+      streamBaseUrl: "blob:http://media.local",
+    },
+    {
+      ...准备好的协作分发定位片段("att-ticket-ref"),
+      join_ticket: "ticket-old",
+    },
+    { joinTicketRef: ticketRef }
+  );
+
+  expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
+  ticketRef.value = "ticket-new";
+  expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
+});
 ```
 
-新增测试函数：
-
-```rust
-#[tokio::test]
-#[serial]
-async fn 同一身份跨房间同source_hash会复用全局canonical资产但创建目标房间新附件事实() {
-    let (database_url, state, app) = 构建source_hash测试应用().await;
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect(&database_url)
-        .await
-        .expect("应能连接 source_hash 测试数据库");
-    let uniq = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_millis();
-
-    let (session_id, room_a) =
-        启动会话并进房(app.clone(), format!("source-cross-owner-{uniq}"), format!("XA{:010}", uniq % 10_000_000_000)).await;
-    let room_b =
-        既有会话进房(app.clone(), &session_id, format!("XB{:010}", uniq % 10_000_000_000)).await;
-
-    let original_attachment_id = 上传带source_hash的最小图片(
-        app.clone(),
-        state.tus_upload_dir.clone(),
-        &session_id,
-        SOURCE_HASH_一号,
-        "same-source-cross-room.webp",
-        uniq,
-    )
-    .await;
-    用附件创建房间消息(
-        database_url.clone(),
-        room_a,
-        session_id.clone(),
-        original_attachment_id.clone(),
-        format!("source-cross-original-{uniq}"),
-    )
-    .await;
-
-    let (reuse_status, reuse_body) = send_json(
-        app,
-        Method::POST,
-        "/api/media/image/source-dedupe",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "room_id": room_b,
-            "source_hash": SOURCE_HASH_一号,
-            "source_byte_size": 最小webp字节().len() as i64,
-            "source_file_name": "same-source-cross-room.webp"
-        })),
-        &[],
-    )
-    .await;
-
-    assert_eq!(reuse_status, StatusCode::OK, "source-dedupe 响应: {reuse_body:?}");
-    assert_eq!(reuse_body["status"].as_str(), Some("reused"));
-
-    let reused_attachment_id = reuse_body["attachment"]["attachment_id"]
-        .as_str()
-        .expect("复用命中必须创建新附件")
-        .to_string();
-    assert_ne!(original_attachment_id, reused_attachment_id);
-
-    let asset_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(DISTINCT acar.content_hash)
-           FROM attachment_canonical_asset_refs acar
-          WHERE acar.attachment_id = ANY($1)",
-    )
-    .bind(vec![original_attachment_id, reused_attachment_id])
-    .fetch_one(&pool)
-    .await
-    .expect("应能统计两个附件绑定的 canonical 资产");
-    assert_eq!(asset_count, 1, "跨房间复用只能新增附件引用，不能新增物理资产");
-    pool.close().await;
-}
-```
+如果本文件没有 `准备好的协作分发定位片段` helper，就按现有 locator helper 改成最小合法 distribution 对象。
 
 - [ ] **Step 2: 跑红测确认失败**
 
 Run:
 
 ```powershell
-cargo test 同一身份跨房间同source_hash会复用全局canonical资产但创建目标房间新附件事实 --test 媒体上传测试 -- --nocapture
+pnpm --dir frontend vitest run tests/媒体协作分发测试.spec.ts --exclude dist/**
 ```
 
-Expected: FAIL，当前 SQL 限制 `WHERE r.room_id = $1`，房间 B 找不到房间 A 的 source_hash 资产。
+Expected: FAIL，`接入协作分发种子` 当前没有第三个 options 参数，`getAnnounceOpts` 仍捕获旧 `distribution.join_ticket`。
 
-- [ ] **Step 3: 暂不改实现，先提交红测**
+- [ ] **Step 3: 实现最小代码**
 
-```powershell
-git add tests/媒体上传测试/source_hash.rs
-git commit -m "测试：刻画同一身份跨房间媒体复用"
-```
+在 `frontend/媒体/媒体协作分发.ts` 新增类型：
 
-## 4. Task 2: 后端红测 - 不可见跨用户不能 source_hash 探测，但 content_hash 必须全局收口
-
-**Files:**
-
-- Modify: `tests/媒体上传测试/source_hash.rs`
-
-- [ ] **Step 1: 写失败或 characterization 测试**
-
-新增测试函数：
-
-```rust
-#[tokio::test]
-#[serial]
-async fn 不同身份不可见房间source_hash只能miss但相同canonical上传后只保留一份物理资产() {
-    let (database_url, state, app) = 构建source_hash测试应用().await;
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect(&database_url)
-        .await
-        .expect("应能连接 source_hash 测试数据库");
-    let uniq = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_millis();
-
-    let (session_a, room_a) =
-        启动会话并进房(app.clone(), format!("source-hidden-a-{uniq}"), format!("HA{:010}", uniq % 10_000_000_000)).await;
-    let (session_b, room_b) =
-        启动会话并进房(app.clone(), format!("source-hidden-b-{uniq}"), format!("HB{:010}", uniq % 10_000_000_000)).await;
-
-    let attachment_a = 上传带source_hash的最小图片(
-        app.clone(),
-        state.tus_upload_dir.clone(),
-        &session_a,
-        SOURCE_HASH_二号,
-        "same-canonical-a.webp",
-        uniq,
-    )
-    .await;
-    用附件创建房间消息(
-        database_url.clone(),
-        room_a,
-        session_a,
-        attachment_a.clone(),
-        format!("source-hidden-a-{uniq}"),
-    )
-    .await;
-
-    let (reuse_status, reuse_body) = send_json(
-        app.clone(),
-        Method::POST,
-        "/api/media/image/source-dedupe",
-        Some(serde_json::json!({
-            "session_id": session_b,
-            "room_id": room_b,
-            "source_hash": SOURCE_HASH_二号,
-            "source_byte_size": 最小webp字节().len() as i64,
-            "source_file_name": "same-canonical-b.webp"
-        })),
-        &[],
-    )
-    .await;
-    assert_eq!(reuse_status, StatusCode::OK);
-    assert_eq!(reuse_body["status"].as_str(), Some("miss"));
-    assert!(reuse_body.get("attachment").is_none());
-
-    let attachment_b = 上传带source_hash的最小图片(
-        app.clone(),
-        state.tus_upload_dir.clone(),
-        &session_b,
-        SOURCE_HASH_二号,
-        "same-canonical-b.webp",
-        uniq + 1,
-    )
-    .await;
-
-    let distinct_asset_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(DISTINCT content_hash)
-           FROM attachment_canonical_asset_refs
-          WHERE attachment_id = ANY($1)",
-    )
-    .bind(vec![attachment_a, attachment_b])
-    .fetch_one(&pool)
-    .await
-    .expect("应能统计两个附件的 canonical 资产");
-    assert_eq!(distinct_asset_count, 1, "物理资产必须按 content_hash 全局收口");
-    pool.close().await;
+```ts
+export interface 协作分发JoinTicketRef {
+  value: string | null;
 }
 ```
 
-- [ ] **Step 2: 运行测试**
-
-Run:
-
-```powershell
-cargo test 不同身份不可见房间source_hash只能miss但相同canonical上传后只保留一份物理资产 --test 媒体上传测试 -- --nocapture
-```
-
-Expected: 如果已通过，记录为 characterization；如果失败，失败点必须指向 `content_hash` 全局收口缺口，不能用扩大 `source_hash` 权限来修。
-
-- [ ] **Step 3: 提交测试**
-
-```powershell
-git add tests/媒体上传测试/source_hash.rs
-git commit -m "测试：锁定不可见媒体的物理去重边界"
-```
-
-## 5. Task 3: 实现 source_hash 受权限跨房间复用
-
-**Files:**
-
-- Modify: `src/用例.rs`
-- Modify: `src/适配.rs`
-- Modify: `src/媒体附件适配.rs`
-- Test: `tests/媒体上传测试/source_hash.rs`
-
-- [ ] **Step 1: 重新读取目标文件**
-
-Run:
-
-```powershell
-rg -n "查询房间可复用source_hash|复用source_hash媒体附件|SourceHash媒体复用请求" src tests -S
-```
-
-Expected: 找到所有旧命名和调用点。
-
-- [ ] **Step 2: 修改用例端口命名与参数**
-
-在 `src/用例.rs` 中把端口改成表达真实边界：
-
-```rust
-fn 查询可复用source_hash媒体资产(
-    &self,
-    会话标识: &str,
-    目标房间标识: &str,
-    当前匿名身份标识: &str,
-    source_hash: &str,
-    source_byte_size: i64,
-    种类: 媒体附件类型,
-) -> Result<Option<可复用媒体资产>, contract::错误码>
-```
-
-要求：
-
-- `目标房间标识` 只用于确认当前发送上下文，不代表搜索范围。
-- `当前匿名身份标识` 用于允许“自己曾上传过的资产跨房间复用”。
-- 注释必须写清：禁止全站 source_hash 探测，允许自有资产和当前可见资产复用。
-
-- [ ] **Step 3: 修改 `复用source_hash媒体附件`**
-
-最小改动：
-
-```rust
-let Some(asset) = 仓储.查询可复用source_hash媒体资产(
-    &请求.会话标识,
-    &请求.房间标识,
-    &所属匿名身份标识,
-    &请求.source_hash,
-    请求.source_byte_size,
-    请求.种类.clone(),
-)?
-else {
-    return Ok(SourceHash媒体复用结果::Miss);
-};
-```
-
-要求：
-
-- 保留 `校验房间订阅资格`，防止绕过目标房间发送权限。
-- 查询端口显式传入当前 `会话标识`，因为“可见源消息”按会话成员资格判定，不能用匿名身份偷换当前连接的房间 membership。
-- 命中后仍创建新附件，不能复用旧附件 id。
-- 命中后仍写 `attachment_source_hashes`，方便后续自有资产复用链继续成立。
-
-- [ ] **Step 4: 修改 SQL 查询**
-
-在 `src/媒体附件适配.rs` 中替换旧 `查询房间可复用source_hash媒体资产_异步`。
-
-核心 SQL 约束应等价于：
-
-```sql
-SELECT
-    cma.content_hash,
-    cma.kind,
-    cma.mime_type,
-    cma.byte_size,
-    cma.width,
-    cma.height,
-    cma.storage_key,
-    cma.torrent_bytes,
-    cma.torrent_info_hash,
-    cma.piece_length_bytes,
-    EXTRACT(EPOCH FROM cma.web_seed_until)::BIGINT AS web_seed_until_epoch,
-    EXTRACT(EPOCH FROM cma.origin_expires_at)::BIGINT AS origin_expires_at_epoch
-FROM attachments a
-JOIN anonymous_identities owner_ai ON owner_ai.id = a.owner_anonymous_identity_id
-JOIN attachment_source_hashes ash ON ash.attachment_id = a.attachment_id
-JOIN attachment_canonical_asset_refs acar ON acar.attachment_id = a.attachment_id
-JOIN canonical_media_assets cma ON cma.content_hash = acar.content_hash
-WHERE ash.source_hash = $1
-  AND ash.source_byte_size = $2
-  AND a.kind = $3
-  AND cma.kind = $3
-  AND a.status = 'ready'
-  AND a.origin_deleted_at IS NULL
-  AND cma.origin_deleted_at IS NULL
-  AND (
-      owner_ai.identity_uuid::text = $4
-      OR owner_ai.anonymous_identity_id = $4
-      OR EXISTS (
-          SELECT 1
-            FROM message_attachment_refs mar
-            JOIN messages m ON m.message_id = mar.message_id
-            JOIN room_members rm ON rm.room_id = m.room_id
-            JOIN sessions viewer_s ON viewer_s.session_id = rm.session_id
-           WHERE mar.attachment_id = a.id
-             AND rm.left_at IS NULL
-             AND viewer_s.session_id = $5
-      )
-  )
-ORDER BY a.created_at DESC
-LIMIT 1
-```
-
-实现时可以按实际 schema 微调，但必须保留三点：
-
-- 自己拥有的 ready 附件可跨房间复用。
-- 当前会话可见消息里的 ready 附件可复用。
-- 不可见别人的附件不能通过 `source_hash` 返回命中。
-- `source_hash` 查询函数的实际 bind 必须包含当前 `会话标识`，不能只传匿名身份。
-
-- [ ] **Step 5: 更新 `src/适配.rs` 转发方法**
-
-要求：
-
-- 旧方法名不应继续保留成第二条 live path。
-- 如果短期必须保留兼容 wrapper，必须在同一任务内删除或改成私有转发，禁止两个公开端口并存。
-
-- [ ] **Step 6: 跑目标测试**
-
-Run:
-
-```powershell
-cargo test 同一身份跨房间同source_hash会复用全局canonical资产但创建目标房间新附件事实 --test 媒体上传测试 -- --nocapture
-cargo test 未授权房间不能通过source_hash探测已有媒体 --test 媒体上传测试 -- --nocapture
-cargo test canonical资产删除后source_hash不会复活ready附件 --test 媒体上传测试 -- --nocapture
-```
-
-Expected: PASS。
-
-- [ ] **Step 7: 提交实现**
-
-```powershell
-git add src/用例.rs src/适配.rs src/媒体附件适配.rs tests/媒体上传测试/source_hash.rs
-git commit -m "实现：source_hash按授权复用全局媒体资产"
-```
-
-## 6. Task 4: 修正前端契约文案和 source_hash 传输测试
-
-**Files:**
-
-- Modify: `frontend/契约.ts`
-- Modify: `frontend/tests/传输测试.spec.ts`
-- Modify only if wording asserts old boundary: `frontend/媒体/媒体发布.ts`
-
-- [ ] **Step 1: 写前端文案守卫测试**
-
-在 `frontend/tests/传输测试.spec.ts` 更新旧用例名：
+把 `接入协作分发种子` 签名改成：
 
 ```ts
-it("reuseMediaBySourceHash 会调用受目标房间发送权限约束的 source_hash 复用路由并解析 ready 附件", async () => {
-  // 保留现有 body 断言：room_id 仍然必须发送。
-});
+export async function 接入协作分发种子(
+  runtime: 协作分发浏览器运行时,
+  distribution: 媒体协作分发定位片段,
+  options: { joinTicketRef?: 协作分发JoinTicketRef } = {}
+): Promise<WebTorrent种子> {
 ```
 
-新增源码守卫：
+在 `client.add` 之前创建 ref：
 
 ```ts
-it("契约禁止把 room_id 描述成 source_hash 的唯一搜索范围", () => {
-  const source = readFileSync(resolve(process.cwd(), "契约.ts"), "utf8");
-
-  expect(source).toContain("room_id 是目标房间发送裁决锚点");
-  expect(source).not.toContain("只能在当前会话可见的房间事实内查询命中");
-});
+const joinTicketRef = options.joinTicketRef ?? { value: distribution.join_ticket };
 ```
 
-- [ ] **Step 2: 跑红测**
+把 `getAnnounceOpts` 改成：
+
+```ts
+getAnnounceOpts: () => {
+  if (!joinTicketRef.value) {
+    return {};
+  }
+  return { ticket: joinTicketRef.value };
+},
+```
+
+注释要求：说明 ticket 是 swarm 门禁续租引用，不是播放 UI 状态。
+
+- [ ] **Step 4: 跑测试转绿**
 
 Run:
 
 ```powershell
-pnpm --dir frontend test -- 传输测试.spec.ts
-```
-
-Expected: FAIL，当前 `frontend/契约.ts` 仍写着旧房间范围描述。
-
-- [ ] **Step 3: 更新契约注释**
-
-把 `媒体SourceHash复用请求` 注释改成：
-
-```ts
-/**
- * source_hash 复用请求必须带 room_id：
- * room_id 是目标房间发送裁决锚点，不是媒体资产身份边界。
- * 后端只能在当前身份有权复用的资产内命中，禁止返回全站存在性信号。
- */
-```
-
-- [ ] **Step 4: 跑前端目标测试**
-
-Run:
-
-```powershell
-pnpm --dir frontend test -- 传输测试.spec.ts 媒体发布测试.spec.ts 源文件哈希测试.spec.ts
+pnpm --dir frontend vitest run tests/媒体协作分发测试.spec.ts --exclude dist/**
 ```
 
 Expected: PASS。
@@ -553,366 +185,293 @@ Expected: PASS。
 - [ ] **Step 5: 提交**
 
 ```powershell
-git add frontend/契约.ts frontend/tests/传输测试.spec.ts frontend/媒体/媒体发布.ts
-git commit -m "修正：source_hash前端契约表达授权复用边界"
+git add frontend/媒体/媒体协作分发.ts frontend/tests/媒体协作分发测试.spec.ts
+git commit -m "修复：WebTorrent announce 使用可续租入群票据"
 ```
 
-## 7. Task 5: 后端红测 - 转发可见源附件复用 canonical 资产
+## 3. Task 2: 红测 - 已有 swarm session 收到新 locator 时刷新 ticket
 
 **Files:**
 
-- Modify: `tests/媒体上传测试/source_hash.rs`
+- Modify: `frontend/tests/资产协作分发运行时测试.spec.ts`
+- Modify: `frontend/媒体/资产协作分发运行时.ts`
 
-- [ ] **Step 1: 写转发成功红测**
+- [ ] **Step 1: 写失败测试**
 
-新增测试函数：
+在 `frontend/tests/资产协作分发运行时测试.spec.ts` 增加：
 
-```rust
-#[tokio::test]
-#[serial]
-async fn 可见媒体附件转发到目标房间时只新增消息和附件引用不重建物理资产() {
-    let (database_url, state, app) = 构建source_hash测试应用().await;
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .connect(&database_url)
-        .await
-        .expect("应能连接 source_hash 测试数据库");
-    let uniq = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_millis();
+```ts
+it("同一 swarm 复用已有会话时会刷新 join_ticket 而不是继续拿旧票 announce", async () => {
+  const registration = 准备已激活媒体ServiceWorker注册();
+  const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-ticket-renew");
+  let getAnnounceOpts!: () => Record<string, string | undefined>;
+  const add = vi.fn(((_torrentId, options, onTorrent) => {
+    getAnnounceOpts = options.getAnnounceOpts!;
+    onTorrent(torrent);
+    return torrent;
+  }) as WebTorrent浏览器客户端["add"]);
+  const { ctor } = 创建假WebTorrent构造器(add);
+  await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
 
-    let (session_id, source_room) =
-        启动会话并进房(app.clone(), format!("forward-owner-{uniq}"), format!("FA{:010}", uniq % 10_000_000_000)).await;
-    let target_room =
-        既有会话进房(app.clone(), &session_id, format!("FB{:010}", uniq % 10_000_000_000)).await;
+  const firstLocator = 准备好的定位结果("att-ticket-a", "swarm-ticket-renew");
+  firstLocator.distribution!.join_ticket = "ticket-old";
+  firstLocator.distribution!.torrent_info_hash = "torrent-info-same";
 
-    let source_attachment_id = 上传带source_hash的最小图片(
-        app.clone(),
-        state.tus_upload_dir.clone(),
-        &session_id,
-        SOURCE_HASH_一号,
-        "forward-source.webp",
-        uniq,
-    )
-    .await;
-    用附件创建房间消息(
-        database_url.clone(),
-        source_room,
-        session_id.clone(),
-        source_attachment_id.clone(),
-        format!("forward-source-message-{uniq}"),
-    )
-    .await;
+  const secondLocator = 准备好的定位结果("att-ticket-b", "swarm-ticket-renew");
+  secondLocator.distribution!.join_ticket = "ticket-new";
+  secondLocator.distribution!.torrent_info_hash = "torrent-info-same";
 
-    let (forward_status, forward_body) = send_json(
-        app,
-        Method::POST,
-        "/api/media/image/forward",
-        Some(serde_json::json!({
-            "session_id": session_id,
-            "target_room_id": target_room,
-            "source_attachment_id": source_attachment_id,
-            "client_message_id": format!("forward-target-message-{uniq}"),
-            "text": "转发"
-        })),
-        &[],
-    )
-    .await;
+  await 解析协作分发源({
+    attachmentId: "att-ticket-a",
+    kind: "video",
+    locator: firstLocator,
+    consumerId: "session:att-ticket-a",
+  });
+  expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
 
-    assert_eq!(forward_status, StatusCode::OK, "转发响应: {forward_body:?}");
-    let forwarded_attachment_id = forward_body["message"]["attachments"][0]["attachment_id"]
-        .as_str()
-        .expect("转发必须返回目标房间的新附件")
-        .to_string();
-    assert_ne!(source_attachment_id, forwarded_attachment_id);
+  await 解析协作分发源({
+    attachmentId: "att-ticket-b",
+    kind: "video",
+    locator: secondLocator,
+    consumerId: "session:att-ticket-b",
+  });
 
-    let distinct_asset_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(DISTINCT content_hash)
-           FROM attachment_canonical_asset_refs
-          WHERE attachment_id = ANY($1)",
-    )
-    .bind(vec![source_attachment_id, forwarded_attachment_id])
-    .fetch_one(&pool)
-    .await
-    .expect("应能统计转发前后的 canonical 资产");
-    assert_eq!(distinct_asset_count, 1);
-    pool.close().await;
-}
+  expect(add).toHaveBeenCalledTimes(1);
+  expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
+  expect(读取协作分发会话状态("swarm-ticket-renew")).toMatchObject({
+    refs: 2,
+    consumers: ["session:att-ticket-a", "session:att-ticket-b"],
+  });
+});
 ```
 
-- [ ] **Step 2: 跑红测确认 404 或未实现**
+- [ ] **Step 2: 跑红测确认失败**
 
 Run:
 
 ```powershell
-cargo test 可见媒体附件转发到目标房间时只新增消息和附件引用不重建物理资产 --test 媒体上传测试 -- --nocapture
+pnpm --dir frontend vitest run tests/资产协作分发运行时测试.spec.ts --exclude dist/**
 ```
 
-Expected: FAIL，当前没有 `/api/media/image/forward`。
+Expected: FAIL，第二次解析复用旧 session 后 `getAnnounceOpts()` 仍返回 `ticket-old`。
 
-- [ ] **Step 3: 写不可见源附件禁止转发红测**
+- [ ] **Step 3: 实现最小代码**
 
-新增测试函数：
+在 `frontend/媒体/资产协作分发运行时.ts` 导入 `协作分发JoinTicketRef`。
 
-```rust
-#[tokio::test]
-#[serial]
-async fn 不可见源附件不能被转发也不能泄漏旧附件线索() {
-    // user A 在 room A 发源附件；user B 在 room B 请求转发 source_attachment_id。
-    // 断言返回 403/404/业务错误，且响应不包含旧房间、旧消息、旧上传者、canonical content_hash。
+扩展 `底层协作分发会话`：
+
+```ts
+type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings"> & {
+  consumerBindings: Map<string, 协作分发消费者绑定>;
+  previewPriorityApplied: boolean;
+  joinTicketRef: 协作分发JoinTicketRef;
+};
+```
+
+新增小函数：
+
+```ts
+function 刷新协作分发会话票据(
+  session: 底层协作分发会话,
+  distribution: NonNullable<ReturnType<typeof 读取协作分发定位片段>>
+): void {
+  // join_ticket 是 tracker 入群门禁，跟随最新 locator 续租；这里不改变媒体身份和业务附件事实。
+  session.joinTicketRef.value = distribution.join_ticket ?? null;
 }
 ```
 
-实现测试时必须断言：
+在命中已有 session 分支靠前位置调用：
 
-- 响应不是 `200 OK` 成功转发。
-- 响应体不包含 `content_hash`、`swarm_id`、`source_room_id`、`source_message_id`、`owner`。
-
-- [ ] **Step 4: 提交红测**
-
-```powershell
-git add tests/媒体上传测试/source_hash.rs
-git commit -m "测试：刻画媒体附件转发复用边界"
+```ts
+刷新协作分发会话票据(session, input.distribution);
 ```
 
-## 8. Task 6: 实现转发分享用例与 HTTP 路由
+新建 session 时：
 
-**Files:**
-
-- Modify: `src/用例.rs`
-- Modify: `src/适配.rs`
-- Modify: `src/媒体附件适配.rs`
-- Modify: `src/媒体上传外壳.rs`
-- Modify: `src/外壳.rs`
-- Test: `tests/媒体上传测试/source_hash.rs`
-
-- [ ] **Step 1: 新增用例请求/结果类型**
-
-在 `src/用例.rs` 中新增：
-
-```rust
-pub struct 媒体附件转发请求 {
-    pub 会话标识: String,
-    pub 目标房间标识: String,
-    pub 源附件标识: String,
-    pub 新附件标识: String,
-    pub 客户端消息标识: String,
-    pub 文本: String,
-    pub 种类: 媒体附件类型,
-}
-
-pub struct 媒体附件转发结果 {
-    pub 消息事件: contract::领域事件,
-    pub 附件: 媒体附件快照,
-    pub 协作分发: 协作分发元数据快照,
-    pub torrent: 协作分发Torrent元信息快照,
-}
+```ts
+joinTicketRef: { value: input.distribution.join_ticket ?? null },
 ```
 
-字段名可按现有命名调整，但结果必须能让 HTTP 层返回目标消息和新附件快照。
+调用 `接入协作分发种子` 时传入：
 
-- [ ] **Step 2: 新增仓储端口**
-
-在 `src/用例.rs` 的 `仓储端口` 增加：
-
-```rust
-fn 查询可转发媒体资产(
-    &self,
-    会话标识: &str,
-    源附件标识: &str,
-    种类: 媒体附件类型,
-) -> Result<Option<可复用媒体资产>, contract::错误码>
+```ts
+const torrent = await 接入协作分发种子(browserRuntime, input.distribution, {
+  joinTicketRef: session.joinTicketRef,
+});
 ```
 
-注释必须写清：
-
-- 只从当前会话可见消息里的源附件出发。
-- 不接受 `source_hash`。
-- 不返回旧消息/旧房间/旧上传者。
-
-- [ ] **Step 3: 实现用例 `转发媒体附件到房间`**
-
-核心流程：
-
-```rust
-pub fn 转发媒体附件到房间(
-    仓储: &mut dyn 仓储端口,
-    请求: &媒体附件转发请求,
-) -> Result<媒体附件转发结果, contract::错误码> {
-    校验房间订阅资格(仓储, &请求.目标房间标识, &请求.会话标识)?;
-    let 所属匿名身份标识 = 仓储
-        .查询会话所属匿名身份(&请求.会话标识)?
-        .ok_or(contract::错误码::会话无效)?;
-    let asset = 仓储
-        .查询可转发媒体资产(&请求.会话标识, &请求.源附件标识, 请求.种类.clone())?
-        .ok_or(contract::错误码::附件不存在)?;
-
-    // 用 asset 创建当前发送者拥有的新 ready 附件。
-    // 绑定同一 canonical 资产、写同一 content_hash 派生的 swarm、复制 torrent 元信息。
-    // 然后调用现有 创建消息，复用 owner/status/kind 校验。
-}
-```
-
-要求：
-
-- 必须调用现有 `创建消息` 或等价的统一消息主链，禁止在转发用例里绕过消息成立规则。
-- 新附件 owner 必须是当前发送者身份，这样现有 `创建消息` 的 owner 校验继续有效。
-- 不记录新的 `source_hash`，除非源附件已有 source_hash 且业务明确要复制；本计划默认不复制，避免把转发伪装成原文件持有。
-
-- [ ] **Step 4: 实现 SQL 查询**
-
-在 `src/媒体附件适配.rs` 新增私有异步函数，查询当前会话可见的源附件：
-
-```sql
-SELECT
-    cma.content_hash,
-    cma.kind,
-    cma.mime_type,
-    cma.byte_size,
-    cma.width,
-    cma.height,
-    cma.storage_key,
-    cma.torrent_bytes,
-    cma.torrent_info_hash,
-    cma.piece_length_bytes,
-    EXTRACT(EPOCH FROM cma.web_seed_until)::BIGINT AS web_seed_until_epoch,
-    EXTRACT(EPOCH FROM cma.origin_expires_at)::BIGINT AS origin_expires_at_epoch
-FROM attachments a
-JOIN message_attachment_refs mar ON mar.attachment_id = a.id
-JOIN messages m ON m.message_id = mar.message_id
-JOIN room_members rm ON rm.room_id = m.room_id AND rm.left_at IS NULL
-JOIN sessions viewer_s ON viewer_s.session_id = rm.session_id
-JOIN attachment_canonical_asset_refs acar ON acar.attachment_id = a.attachment_id
-JOIN canonical_media_assets cma ON cma.content_hash = acar.content_hash
-WHERE viewer_s.session_id = $1
-  AND a.attachment_id = $2
-  AND a.kind = $3
-  AND cma.kind = $3
-  AND a.status = 'ready'
-  AND a.origin_deleted_at IS NULL
-  AND cma.origin_deleted_at IS NULL
-LIMIT 1
-```
-
-- [ ] **Step 5: 实现 HTTP handler**
-
-在 `src/媒体上传外壳.rs` 新增请求体：
-
-```rust
-pub(super) struct ForwardMediaBody {
-    session_id: Option<String>,
-    target_room_id: Option<String>,
-    source_attachment_id: Option<String>,
-    client_message_id: Option<String>,
-    text: Option<String>,
-}
-```
-
-handler 职责：
-
-- 校验必填字段非空。
-- 生成新附件 id。
-- 调用 `usecase::转发媒体附件到房间`。
-- 返回目标房间新消息事件和新附件媒体资产快照。
-- 尝试启动协作分发做种失败只能 warn，不能把业务转发回滚。
-
-- [ ] **Step 6: 注册路由**
-
-在 `src/外壳.rs` 注册：
-
-```rust
-.route("/api/media/{kind}/forward", post(媒体上传外壳::forward_media_attachment))
-```
-
-实际 path 参数写法必须跟当前 Axum 版本和现有路由风格一致。
-
-- [ ] **Step 7: 跑转发目标测试**
+- [ ] **Step 4: 跑测试转绿**
 
 Run:
 
 ```powershell
-cargo test 可见媒体附件转发到目标房间时只新增消息和附件引用不重建物理资产 --test 媒体上传测试 -- --nocapture
-cargo test 不可见源附件不能被转发也不能泄漏旧附件线索 --test 媒体上传测试 -- --nocapture
+pnpm --dir frontend vitest run tests/资产协作分发运行时测试.spec.ts tests/媒体协作分发测试.spec.ts --exclude dist/**
 ```
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交实现**
+- [ ] **Step 5: 提交**
 
 ```powershell
-git add src/用例.rs src/适配.rs src/媒体附件适配.rs src/媒体上传外壳.rs src/外壳.rs tests/媒体上传测试/source_hash.rs
-git commit -m "实现：媒体转发复用可见源附件资产"
+git add frontend/媒体/资产协作分发运行时.ts frontend/tests/资产协作分发运行时测试.spec.ts
+git commit -m "修复：复用swarm会话时刷新入群票据"
 ```
 
-## 9. Task 7: 前端转发契约与传输
+## 4. Task 3: 红测 - dev seeder 同 infohash 不因新附件 URL 重建会话
 
 **Files:**
 
-- Modify: `frontend/契约.ts`
-- Modify: `frontend/传输.ts`
-- Modify: `frontend/媒体/适配/媒体HTTP接口.ts`
-- Modify: `frontend/聊天媒体编排.ts`
-- Modify: `frontend/tests/传输测试.spec.ts`
+- Modify: `frontend/dev-seeder.mjs`
+- Create: `frontend/tests/dev-seeder做种续租测试.spec.ts`
 
-- [ ] **Step 1: 写传输红测**
+- [ ] **Step 1: 把 dev-seeder 先改成可测试结构的红测目标**
 
-在 `frontend/tests/传输测试.spec.ts` 新增：
+新增测试文件 `frontend/tests/dev-seeder做种续租测试.spec.ts`：
 
 ```ts
-it("forwardMediaAttachment 会调用媒体转发路由且不提交 source_hash 或原文件字节", async () => {
-  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(
-      JSON.stringify({
-        message: {
-          type: "message_created",
-          room_id: "target-room",
-          message_id: "m-forward-1",
-          client_message_id: "c-forward-1",
-          sender_session_id: "s-1",
-          sender_display_alias: "暴躁的企鹅",
-          text: "转发",
-          attachments: [{ kind: "image", attachment_id: "att-forward-1", width: 1, height: 1 }],
-          event_position: 12,
-        },
-        attachment: {
-          attachment_id: "att-forward-1",
-          kind: "image",
-          mime_type: "image/webp",
-          byte_size: 88,
-          width: 1,
-          height: 1,
-          status: "ready",
-        },
-      }),
-      { status: 200, headers: { "content-type": "application/json" } }
-    )
-  );
-  const transport = 创建测试传输();
+import { describe, expect, it, vi } from "vitest";
+import { 刷新已有做种会话 } from "../dev-seeder.mjs";
 
-  await transport.forwardMediaAttachment("image", {
-    session_id: "s-1",
-    target_room_id: "target-room",
-    source_attachment_id: "att-source-1",
-    client_message_id: "c-forward-1",
-    text: "转发",
-  });
+describe("dev-seeder 做种续租", () => {
+  it("同 infohash 的 start 即使 source URL 变化也只刷新 ticket 不重建会话", async () => {
+    const existing = {
+      infoHash: "same-infohash",
+      source: "http://127.0.0.1:8080/api/media/att-old/torrent?session_id=s-1",
+      joinTicket: "ticket-old",
+      announceTicketRef: { value: "ticket-old" },
+      torrent: { destroy: vi.fn() },
+      addedAt: new Date().toISOString(),
+    };
 
-  const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
-  expect(fetchSpy).toHaveBeenCalledWith(
-    "http://localhost:3000/api/media/image/forward",
-    expect.objectContaining({ method: "POST" })
-  );
-  expect(body).toEqual({
-    session_id: "s-1",
-    target_room_id: "target-room",
-    source_attachment_id: "att-source-1",
-    client_message_id: "c-forward-1",
-    text: "转发",
+    const result = 刷新已有做种会话(existing as never, {
+      source: "http://127.0.0.1:8080/api/media/att-new/torrent?session_id=s-1",
+      joinTicket: "ticket-new",
+    });
+
+    expect(result).toEqual({
+      created: false,
+      refreshedTicket: true,
+      restarted: false,
+      sourceChanged: true,
+    });
+    expect(existing.joinTicket).toBe("ticket-new");
+    expect(existing.announceTicketRef.value).toBe("ticket-new");
+    expect(existing.source).toContain("att-new");
   });
-  expect(body.source_hash).toBeUndefined();
-  expect(body.source_byte_size).toBeUndefined();
 });
+```
+
+- [ ] **Step 2: 跑红测确认失败**
+
+Run:
+
+```powershell
+pnpm --dir frontend vitest run tests/dev-seeder做种续租测试.spec.ts --exclude dist/**
+```
+
+Expected: FAIL，`dev-seeder.mjs` 当前没有导出纯函数，且同 infohash 不同 source 的续租语义没有测试保护。
+
+- [ ] **Step 3: 最小重构 dev-seeder**
+
+在 `frontend/dev-seeder.mjs` 中导出纯函数：
+
+```js
+export const 刷新已有做种会话 = (existing, input) => {
+  const nextTicket = input.joinTicket ?? null;
+  const refreshedTicket = existing.joinTicket !== nextTicket;
+  const sourceChanged = existing.source !== input.source;
+  if (refreshedTicket) {
+    existing.joinTicket = nextTicket;
+    if (existing.announceTicketRef) {
+      existing.announceTicketRef.value = nextTicket;
+    }
+  }
+  if (sourceChanged) {
+    // source 只是同 infohash 的取种入口；同一 infohash 不应因新附件 URL 变化重建做种会话。
+    existing.source = input.source;
+  }
+  return { created: false, refreshedTicket, restarted: false, sourceChanged };
+};
+```
+
+把 `启动做种会话` 的 existing 分支改成：
+
+```js
+if (existing) {
+  const refreshed = 刷新已有做种会话(existing, { source, joinTicket });
+  return { session: existing, ...refreshed };
+}
+```
+
+如果 `dev-seeder.mjs` 被 Vitest import 时会直接监听端口，必须把 `server.listen(...)` 包进 `main()`，并加：
+
+```js
+if (import.meta.url === `file://${process.argv[1]?.replaceAll("\\", "/")}`) {
+  main();
+}
+```
+
+Windows 路径判断要在测试中验证不启动服务器；必要时用 `pathToFileURL`，不要手搓不可靠路径拼接。
+
+- [ ] **Step 4: 跑测试转绿**
+
+Run:
+
+```powershell
+pnpm --dir frontend vitest run tests/dev-seeder做种续租测试.spec.ts --exclude dist/**
+```
+
+Expected: PASS。
+
+- [ ] **Step 5: 回归 sidecar 不破坏启动**
+
+Run:
+
+```powershell
+node frontend/dev-seeder.mjs --port 17073
+```
+
+Expected: 能正常监听；手动 Ctrl+C 退出。若命令会挂住，看到监听日志后停止即可。
+
+- [ ] **Step 6: 提交**
+
+```powershell
+git add frontend/dev-seeder.mjs frontend/tests/dev-seeder做种续租测试.spec.ts
+git commit -m "修复：dev seeder按infohash续租做种会话"
+```
+
+## 5. Task 4: 后端做种对账独立续租周期
+
+**Files:**
+
+- Modify: `src/总装.rs`
+- Modify: `src/入口.rs`
+
+- [ ] **Step 1: 写配置红测**
+
+在 `src/总装.rs` 现有协作分发配置测试附近新增：
+
+```rust
+#[test]
+fn 做种对账间隔默认小于join_ticket_ttl() {
+    备份并清空环境变量(|_| {
+        std::env::set_var("SWARM_TICKET_TTL_SECONDS", "120");
+        let config = 读取协作分发配置().expect("默认做种对账间隔应可读");
+        assert!(config.swarm_seed_reconcile_interval_seconds > 0);
+        assert!(config.swarm_seed_reconcile_interval_seconds < config.ticket_ttl_seconds);
+    });
+}
+
+#[test]
+fn 做种对账间隔不能大于等于join_ticket_ttl() {
+    备份并清空环境变量(|_| {
+        std::env::set_var("SWARM_TICKET_TTL_SECONDS", "30");
+        std::env::set_var("SWARM_SEED_RECONCILE_INTERVAL_SECONDS", "30");
+        let err = 读取协作分发配置().expect_err("做种对账间隔不能覆盖 ticket 全生命周期");
+        assert!(err.to_string().contains("SWARM_SEED_RECONCILE_INTERVAL_SECONDS"));
+    });
+}
 ```
 
 - [ ] **Step 2: 跑红测**
@@ -920,132 +479,274 @@ it("forwardMediaAttachment 会调用媒体转发路由且不提交 source_hash �
 Run:
 
 ```powershell
-pnpm --dir frontend test -- 传输测试.spec.ts
+cargo test 做种对账间隔 --lib -- --nocapture
 ```
 
-Expected: FAIL，当前传输端口没有 `forwardMediaAttachment`。
+Expected: FAIL，配置字段不存在。
 
-- [ ] **Step 3: 新增契约**
+- [ ] **Step 3: 实现配置**
 
-在 `frontend/契约.ts` 增加：
+在 `协作分发配置` 增加：
 
-```ts
-export interface 媒体附件转发请求 {
-  session_id: string;
-  target_room_id: string;
-  source_attachment_id: string;
-  client_message_id: string;
-  text?: string;
-}
-
-export interface 媒体附件转发结果 {
-  message: 消息事件;
-  attachment: 媒体附件上传结果;
-}
+```rust
+pub swarm_seed_reconcile_interval_seconds: i64,
 ```
 
-注释必须写清：转发以源附件可见性授权，不依赖 `source_hash` 和原文件字节。
+读取逻辑：
 
-- [ ] **Step 4: 实现媒体 HTTP 方法**
-
-在 `frontend/媒体/适配/媒体HTTP接口.ts` 增加：
-
-```ts
-async forwardMediaAttachment(
-  kind: 媒体种类,
-  input: 媒体附件转发请求
-): Promise<媒体附件转发结果> {
-  return await this.deps.post<媒体附件转发结果>(`/api/media/${kind}/forward`, {
-    session_id: input.session_id,
-    target_room_id: input.target_room_id,
-    source_attachment_id: input.source_attachment_id,
-    client_message_id: input.client_message_id,
-    text: input.text ?? "",
-  });
+```rust
+let default_seed_reconcile_interval_seconds = (ticket_ttl_seconds / 2).clamp(5, 60);
+let swarm_seed_reconcile_interval_seconds = 读取可选整数(
+    "SWARM_SEED_RECONCILE_INTERVAL_SECONDS",
+    default_seed_reconcile_interval_seconds,
+)?;
+if swarm_seed_reconcile_interval_seconds <= 0
+    || swarm_seed_reconcile_interval_seconds >= ticket_ttl_seconds
+{
+    return Err(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "环境变量 SWARM_SEED_RECONCILE_INTERVAL_SECONDS 必须大于 0 且小于 SWARM_TICKET_TTL_SECONDS",
+    ));
 }
 ```
 
-- [ ] **Step 5: 更新组合根窄端口**
+- [ ] **Step 4: 拆分后台循环**
 
-在 `frontend/传输.ts` 和 `frontend/聊天媒体编排.ts` 暴露窄端口：
+在 `src/入口.rs` 中保留媒体冷源/上传残留清理循环，再新增独立做种对账循环：
 
-```ts
-forwardMediaAttachment(
-  kind: 媒体种类,
-  input: 媒体附件转发请求
-): Promise<媒体附件转发结果>;
+```rust
+let seed_reconcile_state = state.clone();
+let seed_reconcile_interval_seconds = config.协作分发.swarm_seed_reconcile_interval_seconds;
+let seed_reconcile_handle = tokio::spawn(async move {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+        seed_reconcile_interval_seconds as u64,
+    ));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        interval.tick().await;
+        if let Err(err) =
+            crate::shell::执行一次协作分发做种对账(seed_reconcile_state.clone()).await
+        {
+            tracing::error!(
+                usecase = "协作分发做种对账",
+                adapter = "entry",
+                outcome = "failed",
+                error = %err,
+                "后台协作分发做种对账失败"
+            );
+        }
+    }
+});
 ```
 
-要求：不要把转发 UI 状态、菜单文案或页面流程放进 `contract`。
+停机时同时 `abort()` 两个 handle。注释必须说明：做种续租不再挂在冷源清理周期上。
 
-- [ ] **Step 6: 跑前端目标测试**
+- [ ] **Step 5: 跑后端测试**
 
 Run:
 
 ```powershell
-pnpm --dir frontend test -- 传输测试.spec.ts 媒体发布测试.spec.ts
-pnpm --dir frontend typecheck
+cargo test 做种对账间隔 --lib -- --nocapture
+cargo test source_hash --test 媒体上传测试 -- --nocapture
 ```
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [ ] **Step 6: 提交**
 
 ```powershell
-git add frontend/契约.ts frontend/传输.ts frontend/媒体/适配/媒体HTTP接口.ts frontend/聊天媒体编排.ts frontend/tests/传输测试.spec.ts
-git commit -m "实现：前端媒体转发传输契约"
+git add src/总装.rs src/入口.rs
+git commit -m "修复：协作分发做种对账使用独立续租周期"
 ```
 
-## 10. Task 8: 迁移与注释守卫
+## 6. Task 5: 内容身份命名风险守卫
 
 **Files:**
 
-- Modify: `migrations/0020_媒体source_hash精确去重资产索引.sql`
-- Modify: `tests/启动与迁移测试.rs`
+- Modify: `tests/媒体上传测试/source_hash.rs`
+- Modify only if needed: `src/用例.rs`
+- Modify only if needed: `src/媒体协作分发.rs`
 
-- [ ] **Step 1: 更新迁移注释，不改 schema**
+- [ ] **Step 1: 写守卫测试**
 
-只允许改注释，不新增 `source_hash` unique：
-
-```sql
--- source_hash 是上传前精确命中索引，不是全站可见资产身份；
--- 允许同一身份或可见授权范围复用，禁止跨权限存在性探测。
-```
-
-- [ ] **Step 2: 更新迁移守卫测试**
-
-在 `tests/启动与迁移测试.rs` 的 `source_hash精确去重迁移会建立内容资产和受权限索引` 中增加：
+在 `tests/媒体上传测试/source_hash.rs` 增加或补强现有断言：
 
 ```rust
-assert!(sql.contains("禁止跨权限存在性探测"));
-assert!(!sql.contains("UNIQUE (source_hash"));
-assert!(sql.contains("content_hash TEXT PRIMARY KEY"));
+#[tokio::test]
+#[serial]
+async fn source_hash复用附件允许业务content_id不同但分发身份必须完全一致() {
+    // 复用已有 helper 上传同一 source_hash 两次。
+    // 断言 attachment_id 不同。
+    // 断言 content_hash / swarm_id / torrent_info_hash 完全一致。
+    // 断言测试名明确 content_id 不是分发身份 owner。
+}
 ```
 
-- [ ] **Step 3: 跑迁移测试**
+如果现有测试已经覆盖同等断言，只改测试名和注释，不新增重复测试。
+
+- [ ] **Step 2: 跑测试**
 
 Run:
 
 ```powershell
-cargo test source_hash精确去重迁移会建立内容资产和受权限索引 --test 启动与迁移测试 -- --nocapture
+cargo test source_hash复用附件允许业务content_id不同但分发身份必须完全一致 --test 媒体上传测试 -- --nocapture
 ```
 
-Expected: PASS。
+Expected: PASS 或通过最小补充断言后 PASS。
+
+- [ ] **Step 3: 必要时补注释**
+
+如果 `src/用例.rs` 或 `src/媒体协作分发.rs` 中 `content_id` 容易被误读为 canonical 身份，补中文注释：
+
+```rust
+// content_id 保留附件级业务内容引用；真正的分发身份只认 content_hash / torrent_info_hash / swarm_id。
+```
+
+禁止顺手做 schema rename；那是单独迁移，不属于本收尾计划。
 
 - [ ] **Step 4: 提交**
 
 ```powershell
-git add migrations/0020_媒体source_hash精确去重资产索引.sql tests/启动与迁移测试.rs
-git commit -m "文档：收口source_hash迁移权限边界"
+git add tests/媒体上传测试/source_hash.rs src/用例.rs src/媒体协作分发.rs
+git commit -m "测试：锁定媒体分发身份不依赖附件content_id"
 ```
 
-## 11. Task 9: 全量回归与噪音清理
+## 7. Task 6: 真实浏览器冒烟验收
 
 **Files:**
 
 - Verify only.
 
-- [ ] **Step 1: 后端目标回归**
+- [ ] **Step 1: 启动本地应用**
+
+Run:
+
+```powershell
+$env:SWARM_TICKET_TTL_SECONDS="30"
+$env:SWARM_SEED_RECONCILE_INTERVAL_SECONDS="10"
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\koko\run.ps1 -DisableCloudflareTunnel -DisableLocalHttpsBootstrap -DisableAutoOptimizeCleanup -ForceInitialFrontendBuild
+```
+
+Expected:
+
+- 后端 8080 监听。
+- tusd 1081 监听。
+- tracker 7072 监听。
+- seeder 7073 监听。
+
+- [ ] **Step 2: 用 chrome-devtools-cli 进入房间**
+
+Run:
+
+```powershell
+chrome-devtools navigate_page --url "http://127.0.0.1:8080/" --timeout 30000
+chrome-devtools take_snapshot --verbose false
+```
+
+Expected: 页面打开，进入或可进入房间 `1234b`。
+如果当前快照没有直接进入房间，先用快照里可见的输入框和按钮 uid 进入房间，再重新执行 `chrome-devtools take_snapshot --verbose false`。
+
+- [ ] **Step 3: 上传同一个 MP4 两次**
+
+使用文件：
+
+```text
+D:\200-生活\230-照片备份\233-Telegram\色色\VID_20230706_205015_863.mp4
+```
+
+流程：
+
+```powershell
+$snapshotBeforeUpload = chrome-devtools take_snapshot --verbose false
+$snapshotBeforeUpload | Set-Content -LiteralPath ".\target\媒体去重-上传前快照.txt" -Encoding UTF8
+Select-String -LiteralPath ".\target\媒体去重-上传前快照.txt" -Pattern "file|upload|上传|附件|视频" -Context 1,1
+
+# 从上一条 Select-String 输出中取文件输入控件 uid；该 uid 由浏览器运行时动态生成，禁止在计划里写死。
+$fileInputUid = Read-Host "粘贴上传前快照中的文件输入 uid"
+
+chrome-devtools upload_file $fileInputUid "D:\200-生活\230-照片备份\233-Telegram\色色\VID_20230706_205015_863.mp4" --includeSnapshot true
+Start-Sleep -Seconds 8
+chrome-devtools upload_file $fileInputUid "D:\200-生活\230-照片备份\233-Telegram\色色\VID_20230706_205015_863.mp4" --includeSnapshot true
+Start-Sleep -Seconds 8
+chrome-devtools list_network_requests --includePreservedRequests true --pageSize 300
+```
+
+Expected:
+
+- 第一次有 `POST /api/media/video/source-dedupe` -> `miss`。
+- 第一次有 `/prepare`、`1081/files`、`/complete`。
+- 第二次只有 `POST /api/media/video/source-dedupe` -> `reused`。
+- 第二次没有新的 `/prepare`、`1081/files`、`/complete`。
+
+- [ ] **Step 4: 发送并读取 locator**
+
+Run:
+
+```powershell
+$snapshotBeforeSend = chrome-devtools take_snapshot --verbose false
+$snapshotBeforeSend | Set-Content -LiteralPath ".\target\媒体去重-发送前快照.txt" -Encoding UTF8
+Select-String -LiteralPath ".\target\媒体去重-发送前快照.txt" -Pattern "send|发送|发布|提交" -Context 1,1
+
+# 从上一条 Select-String 输出中取发送按钮 uid；该 uid 由浏览器运行时动态生成，禁止在计划里写死。
+$sendButtonUid = Read-Host "粘贴发送前快照中的发送按钮 uid"
+
+chrome-devtools click $sendButtonUid --includeSnapshot true
+chrome-devtools list_network_requests --includePreservedRequests true --pageSize 300
+
+# 从网络列表中过滤 locator 请求，记录本轮两个附件对应的 reqid 后分别读取响应体。
+chrome-devtools list_network_requests --includePreservedRequests true --pageSize 300 |
+  Select-String -Pattern "locator|attachment|media"
+$locatorReqidA = Read-Host "粘贴第一个 locator 请求 reqid"
+$locatorReqidB = Read-Host "粘贴第二个 locator 请求 reqid"
+chrome-devtools get_network_request $locatorReqidA
+chrome-devtools get_network_request $locatorReqidB
+```
+
+Expected:
+
+- 两个附件 `attachment_id` 不同。
+- 两个 locator 的 `content_hash` 相同。
+- 两个 locator 的 `swarm_id` 相同。
+- 两个 locator 的 `torrent_info_hash` 相同。
+- `join_ticket` 非空，`ticket_expires_at` 晚于当前时间。
+
+- [ ] **Step 5: 等待超过旧 ticket 半生命周期并验证没有过期风暴**
+
+Run:
+
+```powershell
+Start-Sleep -Seconds 45
+$logDir = Get-ChildItem -LiteralPath "$env:TEMP\koko-runner" -Directory -ErrorAction Stop |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1 -ExpandProperty FullName
+Select-String -LiteralPath (Join-Path $logDir "tracker.stderr.log") -Pattern "jwt expired|join_ticket_invalid" | Select-Object -Last 20
+Select-String -LiteralPath (Join-Path $logDir "webtorrent-seeder.stderr.log") -Pattern "jwt expired|join_ticket_invalid" | Select-Object -Last 20
+```
+
+Expected:
+
+- 本轮测试产生的 `torrent_info_hash` 不再出现 `jwt expired`。
+- 不再持续追加 `join_ticket_invalid` 风暴。
+- 如果其他历史 infohash 仍有旧噪音，必须按时间和 infohash 区分，不能误判当前修复失败。
+
+- [ ] **Step 6: 清理测试进程**
+
+Run:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8080,1081,7072,7073 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object LocalPort,OwningProcess
+```
+
+停止本轮 `run.ps1` 启动的进程，避免遗留后台服务。
+
+## 8. Task 7: 全量回归与收尾
+
+**Files:**
+
+- Verify only.
+
+- [ ] **Step 1: 后端回归**
 
 Run:
 
@@ -1058,18 +759,18 @@ cargo test 共享canonical资产超过24小时只删除一次并同步标记所�
 
 Expected: PASS。
 
-- [ ] **Step 2: 前端目标回归**
+- [ ] **Step 2: 前端回归**
 
 Run:
 
 ```powershell
-pnpm --dir frontend test -- 传输测试.spec.ts 媒体发布测试.spec.ts 源文件哈希测试.spec.ts
+pnpm --dir frontend vitest run tests/媒体协作分发测试.spec.ts tests/资产协作分发运行时测试.spec.ts tests/传输测试.spec.ts tests/媒体发布测试.spec.ts tests/源文件哈希测试.spec.ts --exclude dist/**
 pnpm --dir frontend typecheck
 ```
 
 Expected: PASS。
 
-- [ ] **Step 3: 格式与脏尾巴检查**
+- [ ] **Step 3: 格式和脏尾巴检查**
 
 Run:
 
@@ -1083,9 +784,9 @@ Expected:
 
 - `cargo fmt --check` PASS。
 - `git diff --check` 无输出。
-- `git status --short` 只包含本任务预期文件。
+- `git status --short` 只包含本计划改动。
 
-- [ ] **Step 4: 如果改过代码文件，刷新 graphify**
+- [ ] **Step 4: 刷新 graphify**
 
 Run:
 
@@ -1093,47 +794,49 @@ Run:
 python -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
 ```
 
-Expected: graphify 刷新完成。若本地 Python 环境缺 graphify，记录失败原因，不用改业务代码绕过。
+Expected: graphify 刷新完成。若本机 Python 环境缺依赖，只记录失败原因，不改业务代码绕过。
 
 - [ ] **Step 5: 最终提交**
 
 ```powershell
-git add src tests frontend migrations graphify-out
-git commit -m "完成：媒体全局资产去重与转发复用"
+git add frontend src tests graphify-out
+git commit -m "完成：多媒体附件精确去重收尾"
 ```
 
-## 12. 自审清单
+## 9. 自审清单
 
 **按 writing-plans 审查：**
 
-- [ ] 计划已保存到 `docs/superpowers/plans/2026-04-24-媒体source_hash精确去重执行计划.md`。
-- [ ] 每个任务都有明确文件、红测、运行命令、期望结果、提交点。
-- [ ] 没有要求执行者凭记忆修改；关键任务都要求先 `rg` 或重新读取目标文件。
-- [ ] 没有新增非必要 `.rs` 文件；优先复用现有 `source_hash.rs` 测试模块。
+- [x] 计划已保存到 `docs/superpowers/plans/2026-04-24-媒体source_hash精确去重执行计划.md`。
+- [x] 每个任务都有明确文件、红测、运行命令、期望结果、提交点。
+- [x] 计划没有让执行者凭记忆修改；关键任务要求重新跑测试和真实浏览器验证。
+- [x] 计划没有新增 `.rs` 文件。
+- [x] 计划没有重复重做已经验证通过的 source_hash / canonical asset / forward 主链。
 
-**按 supxcode 审查：**
+**按 spec 红线审查：**
 
-- [ ] 真相 owner 明确：媒体身份和复用权限在 `usecase`，SQL adapter 不做业务裁决，前端不做权限裁决。
-- [ ] 没有把“全局唯一”偷换成“全局可见”。
-- [ ] 没有引入第二套媒体资产表、第二套 torrent 生成路径或第二条消息成立路径。
-- [ ] 转发路径不依赖 `source_hash` 或原文件持有证明。
-- [ ] 不可见跨用户场景只能 miss；上传完成后的物理去重由 `content_hash` 收口。
-- [ ] 删除语义优先于 `source_hash`、转发和 `content_hash` 复用。
+- [x] 没有把 `source_hash` 做成感知哈希或全站探针。
+- [x] 没有把业务附件复用偷换成消息复用。
+- [x] 没有把播放器或 WebTorrent 反向抬成媒体身份 owner。
+- [x] 同 canonical 字节仍只认 `content_hash / swarm_id / torrent_info_hash`。
+- [x] 转发分享仍不要求客户端持有原文件。
 
-**按项目约束审查：**
+**按本次根因审查：**
 
-- [ ] 业务核心不依赖 Axum/Dioxus/socketioxide/sqlx 类型。
-- [ ] `contract` 不携带 Web UI 文案、菜单状态或页面流程。
-- [ ] HTTP handler 只做协议翻译和错误转码。
-- [ ] 没有把转发 UI 功能混进上传发布流程。
-- [ ] 代码实现阶段必须补克制中文注释，解释权限边界、资产 owner 和禁止探测原因。
+- [x] 明确区分“source_hash 去重已通过”和“WebTorrent ticket 生命周期未闭合”。
+- [x] 前端已有 swarm 会话必须刷新 `join_ticket`。
+- [x] dev seeder 同 infohash 必须续租而不是因附件 URL 变化重启。
+- [x] 后端做种对账周期必须小于 ticket TTL。
+- [x] 验收必须用 `chrome-devtools-cli` 复现同一 MP4 二次上传并观察网络/locator/log。
 
-## 13. 执行建议
+## 10. 执行建议
 
-建议选择 **Inline Execution**：
+建议选择 **Inline Execution**。
 
-1. 这个计划多数任务共享同一组热点文件，平行 worker 容易造成冲突。
-2. TDD 顺序强，必须先把 source_hash 权限边界改对，再做转发。
-3. 每个任务都有提交点，适合当前主干线逐步推进。
+原因：
 
-如果后续要并行，最多并行前端传输契约与后端转发红测；不要并行修改 `src/用例.rs` 和 `src/媒体附件适配.rs`。
+1. 改动集中在前端运行态、dev sidecar 和后端启动配置，文件之间有顺序依赖。
+2. 真实根因需要 TDD + 浏览器冒烟串起来验证，平行 worker 容易各修一半。
+3. 每个 task 都有提交点，可以一口气执行但保留回滚边界。
+
+执行时先做 Task 1 和 Task 2；如果这两步已经消除浏览器侧 stale ticket，再做 Task 3 和 Task 4 强化 seeder 与后台续租。
