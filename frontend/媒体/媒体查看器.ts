@@ -102,8 +102,6 @@ type PhotoSwipeLightbox构造器 = new (
 ) => 媒体查看器实例;
 
 type 可原生全屏视频元素 = HTMLVideoElement & {
-  webkitEnterFullscreen?: () => void;
-  webkitEnterFullScreen?: () => void;
   webkitExitFullscreen?: () => void;
   webkitExitFullScreen?: () => void;
   webkitSupportsFullscreen?: boolean;
@@ -260,7 +258,6 @@ const 映射VideoJs播放源 = (item: 媒体查看器视频项目): VideoJs播�
 
 const 启动同会话全屏策略 = (
   读取当前项目: () => 媒体查看器视频项目,
-  fullscreenTarget: 可原生全屏容器元素,
   container: 可原生全屏容器元素,
   video: 可原生全屏视频元素,
   请求播放器壳进入全屏: () => Promise<VideoJs全屏进入结果>,
@@ -295,7 +292,7 @@ const 启动同会话全屏策略 = (
     }
     return owners;
   };
-  const 主目标Owner链 = 读取全屏Owner链(fullscreenTarget);
+  const 主目标Owner链 = 读取全屏Owner链(container);
   const 主目标Owner集合 = new Set<Element>(主目标Owner链);
   const 元素落在Owner链里 = (element: Element | null, owners: Set<Element>): boolean => {
     if (!element || owners.size === 0) {
@@ -508,7 +505,7 @@ const 启动同会话全屏策略 = (
    * 具体的 container-first / media-fallback 进入动作交给 Video.js 播放器壳，
    * viewer 这里只维护聊天应用需要的会话、history、显示阶段和回收顺序。
    */
-  const 标准全屏可能挂起 = typeof fullscreenTarget.requestFullscreen === "function";
+  const 标准全屏可能挂起 = typeof container.requestFullscreen === "function";
   同步沉浸查看器显示阶段(
     标准全屏可能挂起 && !本会话已接管系统全屏 && !本会话正在原生视频全屏
       ? "pending"
@@ -720,7 +717,6 @@ const 创建默认VideoJs播放器层 = async (
        */
       清理全屏策略 = 启动同会话全屏策略(
         () => 当前视频项目,
-        container,
         container,
         video,
         () => shell.进入全屏(),

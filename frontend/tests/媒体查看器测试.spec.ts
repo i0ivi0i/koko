@@ -774,15 +774,17 @@ describe("媒体查看器适配器", () => {
 
   it("默认视频查看器会把 HLS P2P 增强挂接函数交给 Video.js 壳，而不是让 provider 裸跑", async () => {
     vi.resetModules();
-    const 创建VideoJs播放器壳 = vi.fn(
-      async (_source?: unknown, _deps?: Record<string, unknown>) => ({
-      destroy: vi.fn(),
-      同步: vi.fn(),
-      读取视频元素: () => document.createElement("video"),
-      读取容器元素: () => document.createElement("div"),
-      进入全屏: vi.fn(),
-      })
-    );
+    const 创建VideoJs播放器壳 = vi.fn(async (_source?: unknown, _deps?: Record<string, unknown>) => {
+      const video = document.createElement("video");
+      const container = document.createElement("div");
+      return {
+        destroy: vi.fn(),
+        同步: vi.fn(),
+        读取视频元素: () => video,
+        读取容器元素: () => container,
+        进入全屏: 创建测试VideoJs进入全屏(container),
+      };
+    });
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
       预热默认VideoJs元素: vi.fn(() => Promise.resolve()),
@@ -825,15 +827,17 @@ describe("媒体查看器适配器", () => {
 
   it("默认视频查看器挂接 HLS P2P 引擎时，会显式带上 announceTrackers 与正式时间窗参数", async () => {
     vi.resetModules();
-    const 创建VideoJs播放器壳 = vi.fn(
-      async (_source?: unknown, _deps?: Record<string, unknown>) => ({
+    const 创建VideoJs播放器壳 = vi.fn(async (_source?: unknown, _deps?: Record<string, unknown>) => {
+      const video = document.createElement("video");
+      const container = document.createElement("div");
+      return {
         destroy: vi.fn(),
         同步: vi.fn(),
-        读取视频元素: () => document.createElement("video"),
-        读取容器元素: () => document.createElement("div"),
-        进入全屏: vi.fn(),
-      })
-    );
+        读取视频元素: () => video,
+        读取容器元素: () => container,
+        进入全屏: 创建测试VideoJs进入全屏(container),
+      };
+    });
     const bindHls = vi.fn();
     const HlsJsP2PEngine = vi.fn(
       class {
