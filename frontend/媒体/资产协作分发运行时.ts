@@ -34,11 +34,23 @@ type 协作分发消费者绑定 = {
   onSessionEvent: ((event: 协作分发会话事件) => void) | null;
 };
 
+type 协作分发定位片段 = NonNullable<ReturnType<typeof 读取协作分发定位片段>>;
+
+type 协作分发JoinTicket刷新器 = (input: {
+  attachmentId: string;
+  swarmId: string;
+  torrentInfoHash: string;
+}) => Promise<媒体定位结果 | null>;
+
 type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings"> & {
   consumerBindings: Map<string, 协作分发消费者绑定>;
   previewPriorityApplied: boolean;
   wholeFileSelectApplied: boolean;
   joinTicketRef: 协作分发JoinTicketRef;
+  joinTicketAttachmentId: string;
+  joinTicketRefreshTimerId: ReturnType<typeof setTimeout> | null;
+  joinTicketRefreshInFlight: boolean;
+  refreshJoinTicket: 协作分发JoinTicket刷新器 | null;
 };
 
 export type 资产协作分发会话快照 = {
@@ -130,6 +142,7 @@ export interface 资产协作分发运行时端口 {
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
+    refreshJoinTicket?: 协作分发JoinTicket刷新器;
   }): Promise<协作分发媒体源 | null>;
   释放协作分发消费者(
     input:
@@ -414,6 +427,10 @@ type 资产协作分发运行时内部 = {
 
 let 活跃资产协作分发运行时实例数 = 0;
 
+const JOIN_TICKET_REFRESH_SAFETY_MS = 5_000;
+const JOIN_TICKET_REFRESH_RETRY_MS = 5_000;
+const JOIN_TICKET_REFRESH_MIN_DELAY_MS = 1_000;
+
 const 推导协作分发提示 = (session: 底层协作分发会话): 协作分发媒体源["hint"] => {
   if (session.hint) {
     return session.hint;
@@ -501,6 +518,7 @@ const 删除底层协作分发会话 = (
   swarmId: string,
   session: 底层协作分发会话
 ): void => {
+  清除协作分发会话票据续租(session);
   停止协作分发存活上报(session);
   runtime.底层会话表.delete(swarmId);
   清理协作分发底层会话(session);
@@ -683,12 +701,131 @@ const 是否应强制丢弃未完成补齐 = (
   input.丢弃未完成补齐 === true &&
   !session.locallyComplete;
 
+function 清除协作分发会话票据续租(session: 底层协作分发会话): void {
+  if (!session.joinTicketRefreshTimerId) {
+    return;
+  }
+  clearTimeout(session.joinTicketRefreshTimerId);
+  session.joinTicketRefreshTimerId = null;
+}
+
+function 读取JoinTicket过期时间(
+  distribution: 协作分发定位片段
+): number | null {
+  if (!distribution.join_ticket || !distribution.ticket_expires_at) {
+    return null;
+  }
+  const expiresAt = Date.parse(distribution.ticket_expires_at);
+  return Number.isFinite(expiresAt) ? expiresAt : null;
+}
+
+function 安排协作分发会话票据续租重试(
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话
+): void {
+  清除协作分发会话票据续租(session);
+  if (runtime.已销毁 || runtime.底层会话表.get(session.swarmId) !== session) {
+    return;
+  }
+  session.joinTicketRefreshTimerId = setTimeout(() => {
+    session.joinTicketRefreshTimerId = null;
+    void 执行协作分发会话票据续租(runtime, session);
+  }, JOIN_TICKET_REFRESH_RETRY_MS);
+}
+
+function 安排协作分发会话票据续租(
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话,
+  distribution: 协作分发定位片段
+): void {
+  清除协作分发会话票据续租(session);
+  if (!session.refreshJoinTicket) {
+    return;
+  }
+  const expiresAt = 读取JoinTicket过期时间(distribution);
+  if (!expiresAt) {
+    return;
+  }
+  /**
+   * 续租计时器属于 WebTorrent 会话 owner：
+   * 1. 它只更新 tracker 门禁票据，不改变媒体资产身份；
+   * 2. 定位请求仍经上层注入的 locator owner，运行态不直接碰 transport；
+   * 3. 提前少量时间刷新，避免长生命周期会话等到 tracker 报 expired 才恢复。
+   */
+  const refreshDelayMs = Math.max(
+    JOIN_TICKET_REFRESH_MIN_DELAY_MS,
+    expiresAt - Date.now() - JOIN_TICKET_REFRESH_SAFETY_MS
+  );
+  session.joinTicketRefreshTimerId = setTimeout(() => {
+    session.joinTicketRefreshTimerId = null;
+    void 执行协作分发会话票据续租(runtime, session);
+  }, refreshDelayMs);
+}
+
 function 刷新协作分发会话票据(
   session: 底层协作分发会话,
-  distribution: NonNullable<ReturnType<typeof 读取协作分发定位片段>>
+  distribution: 协作分发定位片段
 ): void {
   // join_ticket 只属于 tracker 入群门禁续租；刷新它不改变媒体身份、业务附件或 swarm 归属。
   session.joinTicketRef.value = distribution.join_ticket ?? null;
+}
+
+async function 执行协作分发会话票据续租(
+  runtime: 资产协作分发运行时内部,
+  session: 底层协作分发会话
+): Promise<void> {
+  if (
+    runtime.已销毁 ||
+    session.joinTicketRefreshInFlight ||
+    runtime.底层会话表.get(session.swarmId) !== session
+  ) {
+    return;
+  }
+  const refreshJoinTicket = session.refreshJoinTicket;
+  if (!refreshJoinTicket) {
+    return;
+  }
+  session.joinTicketRefreshInFlight = true;
+  try {
+    const locator = await refreshJoinTicket({
+      attachmentId: session.joinTicketAttachmentId,
+      swarmId: session.swarmId,
+      torrentInfoHash: session.torrentInfoHash,
+    });
+    if (runtime.已销毁 || runtime.底层会话表.get(session.swarmId) !== session) {
+      return;
+    }
+    const distribution = locator ? 读取可用协作分发片段(locator) : null;
+    if (
+      !distribution ||
+      distribution.swarm_id !== session.swarmId ||
+      distribution.torrent_info_hash !== session.torrentInfoHash
+    ) {
+      /**
+       * 续租只允许更新同一 swarm 的门禁票据。
+       * 如果 locator 已不可用或身份不一致，不能在这里偷换媒体身份，只做低频重试等待上层恢复。
+       */
+      安排协作分发会话票据续租重试(runtime, session);
+      return;
+    }
+    刷新协作分发会话票据(session, distribution);
+    安排协作分发会话票据续租(runtime, session, distribution);
+  } catch {
+    if (!runtime.已销毁 && runtime.底层会话表.get(session.swarmId) === session) {
+      安排协作分发会话票据续租重试(runtime, session);
+    }
+  } finally {
+    session.joinTicketRefreshInFlight = false;
+  }
+}
+
+function 更新协作分发会话票据刷新器(
+  session: 底层协作分发会话,
+  refreshJoinTicket?: 协作分发JoinTicket刷新器
+): void {
+  if (refreshJoinTicket) {
+    session.refreshJoinTicket = refreshJoinTicket;
+  }
 }
 
 async function 确保协作分发会话(
@@ -696,10 +833,11 @@ async function 确保协作分发会话(
   input: {
     attachmentId: string;
     kind: 媒体种类;
-    distribution: NonNullable<ReturnType<typeof 读取协作分发定位片段>>;
+    distribution: 协作分发定位片段;
     consumerId?: string;
     onSessionEvent?: (event: 协作分发会话事件) => void;
     eagerCompleting?: boolean;
+    refreshJoinTicket?: 协作分发JoinTicket刷新器;
   }
 ): Promise<底层协作分发会话 | null> {
   if (runtime.已销毁) {
@@ -715,7 +853,11 @@ async function 确保协作分发会话(
   const consumerBinding = 归一化协作分发消费者(input);
   let session = runtime.底层会话表.get(input.distribution.swarm_id);
   if (session) {
+    更新协作分发会话票据刷新器(session, input.refreshJoinTicket);
+    // 续租锚点必须跟随最新取得 locator 的业务附件；旧附件删除后不能拖垮同一 canonical 资产的新引用。
+    session.joinTicketAttachmentId = input.attachmentId;
     刷新协作分发会话票据(session, input.distribution);
+    安排协作分发会话票据续租(runtime, session, input.distribution);
     session.consumerBindings.set(consumerBinding.consumerId, consumerBinding);
     发送事件(runtime, {
       type: "ACQUIRE_REQUESTED",
@@ -756,8 +898,13 @@ async function 确保协作分发会话(
     曾连上群友: false,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
     joinTicketRef: { value: input.distribution.join_ticket ?? null },
+    joinTicketAttachmentId: input.attachmentId,
+    joinTicketRefreshTimerId: null,
+    joinTicketRefreshInFlight: false,
+    refreshJoinTicket: input.refreshJoinTicket ?? null,
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);
+  安排协作分发会话票据续租(runtime, session, input.distribution);
   发送事件(runtime, {
     type: "ACQUIRE_REQUESTED",
     attachmentId: consumerBinding.attachmentId,
@@ -906,6 +1053,7 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         ...(input.consumerId ? { consumerId: input.consumerId } : {}),
         ...(input.onSessionEvent ? { onSessionEvent: input.onSessionEvent } : {}),
         ...(input.eagerCompleting ? { eagerCompleting: true } : {}),
+        ...(input.refreshJoinTicket ? { refreshJoinTicket: input.refreshJoinTicket } : {}),
       });
       if (!session) {
         return null;
@@ -943,6 +1091,10 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         });
         if (session.attachmentId === binding.attachmentId) {
           更新协作分发会话主附件(session);
+        }
+        if (session.joinTicketAttachmentId === binding.attachmentId) {
+          // 被释放的附件不能继续充当续租授权锚点；有剩余消费者时退回当前主附件。
+          session.joinTicketAttachmentId = session.attachmentId;
         }
         if (session.consumerBindings.size > 0) {
           continue;

@@ -1,7 +1,9 @@
 import Server from "bittorrent-tracker/server";
 import jsonwebtoken from "jsonwebtoken";
+import { pathToFileURL } from "node:url";
 
 const 失效JoinTicket原因 = "join_ticket_invalid";
+const 已验证Peer信令免票毫秒 = 5 * 60 * 1000;
 
 function readCliOptions(argv) {
   const options = {
@@ -81,14 +83,66 @@ function 读取Ticket参数(params) {
   return null;
 }
 
-function createJoinTicketFilter(ticketSecret) {
+function 归一化PeerId(value) {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString("hex");
+  }
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString("hex");
+  }
+  return null;
+}
+
+function 构造已验证Peer键(infoHash, params) {
+  const peerId = 归一化PeerId(params?.peer_id);
+  return peerId ? `${infoHash}:${peerId}` : null;
+}
+
+function 允许已验证Peer信令免票(infoHash, params, 已验证Peer表) {
+  /**
+   * WebSocket tracker 的 WebRTC answer 也是 announce，但 bittorrent-tracker
+   * 不会在 answer 分支重新调用 getAnnounceOpts。这里不能把“已入群 peer 的后续信令”
+   * 误判成新的无票入群；只允许短期内已持票验证过的 peer 免票发送 answer。
+   */
+  if (!params?.answer || !params?.to_peer_id) {
+    return false;
+  }
+  const peerKey = 构造已验证Peer键(infoHash, params);
+  if (!peerKey) {
+    return false;
+  }
+  const expiresAt = 已验证Peer表.get(peerKey);
+  if (!expiresAt || expiresAt <= Date.now()) {
+    已验证Peer表.delete(peerKey);
+    return false;
+  }
+  return true;
+}
+
+function 记录已验证Peer(infoHash, params, 已验证Peer表) {
+  const peerKey = 构造已验证Peer键(infoHash, params);
+  if (!peerKey) {
+    return;
+  }
+  已验证Peer表.set(peerKey, Date.now() + 已验证Peer信令免票毫秒);
+}
+
+export function createJoinTicketFilter(ticketSecret) {
   if (!ticketSecret) {
     return undefined;
   }
 
+  const 已验证Peer表 = new Map();
   return (infoHash, params, cb) => {
     const ticket = 读取Ticket参数(params);
     if (!ticket) {
+      if (允许已验证Peer信令免票(infoHash, params, 已验证Peer表)) {
+        cb(null);
+        return;
+      }
       cb(new Error(失效JoinTicket原因));
       return;
     }
@@ -106,6 +160,7 @@ function createJoinTicketFilter(ticketSecret) {
       if (!payload || typeof payload !== "object" || payload.ih !== infoHash) {
         throw new Error("join ticket info hash mismatch");
       }
+      记录已验证Peer(infoHash, params, 已验证Peer表);
       cb(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -180,7 +235,9 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(`[tracker] ${error.message}`);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`[tracker] ${error.message}`);
+    process.exit(1);
+  });
+}

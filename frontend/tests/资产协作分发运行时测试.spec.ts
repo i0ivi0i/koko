@@ -247,6 +247,220 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("长生命周期 swarm 会话会在 join_ticket 过期前主动重签 locator 并刷新 announce 票据", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-24T00:00:00.000Z"));
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-ticket-proactive-renew"
+    );
+    let getAnnounceOpts!: () => Record<string, string | undefined>;
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      getAnnounceOpts = options.getAnnounceOpts!;
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const firstLocator = 准备好的定位结果(
+      "att-ticket-proactive",
+      "swarm-ticket-proactive-renew"
+    );
+    if (!firstLocator.distribution) {
+      throw new Error("测试前提失败：初始 locator 缺少 distribution");
+    }
+    firstLocator.distribution.join_ticket = "ticket-old";
+    firstLocator.distribution.ticket_expires_at = "2026-04-24T00:00:30.000Z";
+    firstLocator.distribution.torrent_info_hash = "torrent-info-proactive-same";
+
+    const refreshedLocator = 准备好的定位结果(
+      "att-ticket-proactive",
+      "swarm-ticket-proactive-renew"
+    );
+    if (!refreshedLocator.distribution) {
+      throw new Error("测试前提失败：续签 locator 缺少 distribution");
+    }
+    refreshedLocator.distribution.join_ticket = "ticket-new";
+    refreshedLocator.distribution.ticket_expires_at = "2026-04-24T00:01:00.000Z";
+    refreshedLocator.distribution.torrent_info_hash = "torrent-info-proactive-same";
+    const refreshJoinTicket = vi.fn(async () => refreshedLocator);
+
+    await 解析协作分发源({
+      attachmentId: "att-ticket-proactive",
+      kind: "video",
+      locator: firstLocator,
+      consumerId: "session:att-ticket-proactive",
+      refreshJoinTicket,
+    });
+
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
+
+    await vi.advanceTimersByTimeAsync(26_000);
+
+    expect(refreshJoinTicket).toHaveBeenCalledTimes(1);
+    expect(refreshJoinTicket).toHaveBeenCalledWith({
+      attachmentId: "att-ticket-proactive",
+      swarmId: "swarm-ticket-proactive-renew",
+      torrentInfoHash: "torrent-info-proactive-same",
+    });
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it("同一 swarm 被新附件复用后会用最新附件引用续租 join_ticket", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-24T00:00:00.000Z"));
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-ticket-renew-anchor"
+    );
+    let getAnnounceOpts!: () => Record<string, string | undefined>;
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      getAnnounceOpts = options.getAnnounceOpts!;
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const firstLocator = 准备好的定位结果(
+      "att-ticket-anchor-a",
+      "swarm-ticket-renew-anchor"
+    );
+    if (!firstLocator.distribution) {
+      throw new Error("测试前提失败：初始 locator 缺少 distribution");
+    }
+    firstLocator.distribution.join_ticket = "ticket-a";
+    firstLocator.distribution.ticket_expires_at = "2026-04-24T00:00:30.000Z";
+    firstLocator.distribution.torrent_info_hash = "torrent-info-anchor-same";
+
+    const secondLocator = 准备好的定位结果(
+      "att-ticket-anchor-b",
+      "swarm-ticket-renew-anchor"
+    );
+    if (!secondLocator.distribution) {
+      throw new Error("测试前提失败：复用 locator 缺少 distribution");
+    }
+    secondLocator.distribution.join_ticket = "ticket-b";
+    secondLocator.distribution.ticket_expires_at = "2026-04-24T00:00:30.000Z";
+    secondLocator.distribution.torrent_info_hash = "torrent-info-anchor-same";
+
+    const renewedSecondLocator = 准备好的定位结果(
+      "att-ticket-anchor-b",
+      "swarm-ticket-renew-anchor"
+    );
+    if (!renewedSecondLocator.distribution) {
+      throw new Error("测试前提失败：续租 locator 缺少 distribution");
+    }
+    renewedSecondLocator.distribution.join_ticket = "ticket-b-renewed";
+    renewedSecondLocator.distribution.ticket_expires_at = "2026-04-24T00:01:00.000Z";
+    renewedSecondLocator.distribution.torrent_info_hash = "torrent-info-anchor-same";
+    const refreshFirstJoinTicket = vi.fn(async () => firstLocator);
+    const refreshSecondJoinTicket = vi.fn(async () => renewedSecondLocator);
+
+    await 解析协作分发源({
+      attachmentId: "att-ticket-anchor-a",
+      kind: "video",
+      locator: firstLocator,
+      consumerId: "session:att-ticket-anchor-a",
+      refreshJoinTicket: refreshFirstJoinTicket,
+    });
+    await 解析协作分发源({
+      attachmentId: "att-ticket-anchor-b",
+      kind: "video",
+      locator: secondLocator,
+      consumerId: "session:att-ticket-anchor-b",
+      refreshJoinTicket: refreshSecondJoinTicket,
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-b" });
+
+    await vi.advanceTimersByTimeAsync(26_000);
+
+    expect(refreshFirstJoinTicket).not.toHaveBeenCalled();
+    expect(refreshSecondJoinTicket).toHaveBeenCalledWith({
+      attachmentId: "att-ticket-anchor-b",
+      swarmId: "swarm-ticket-renew-anchor",
+      torrentInfoHash: "torrent-info-anchor-same",
+    });
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-b-renewed" });
+  });
+
+  it("最新附件引用释放后 join_ticket 续租锚点会退回仍在使用的附件", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-24T00:00:00.000Z"));
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-ticket-release-anchor"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const firstLocator = 准备好的定位结果(
+      "att-ticket-release-a",
+      "swarm-ticket-release-anchor"
+    );
+    const secondLocator = 准备好的定位结果(
+      "att-ticket-release-b",
+      "swarm-ticket-release-anchor"
+    );
+    for (const locator of [firstLocator, secondLocator]) {
+      if (!locator.distribution) {
+        throw new Error("测试前提失败：locator 缺少 distribution");
+      }
+      locator.distribution.ticket_expires_at = "2026-04-24T00:00:30.000Z";
+      locator.distribution.torrent_info_hash = "torrent-info-release-same";
+    }
+    firstLocator.distribution!.join_ticket = "ticket-release-a";
+    secondLocator.distribution!.join_ticket = "ticket-release-b";
+
+    const renewedLocator = 准备好的定位结果(
+      "att-ticket-release-a",
+      "swarm-ticket-release-anchor"
+    );
+    if (!renewedLocator.distribution) {
+      throw new Error("测试前提失败：续租 locator 缺少 distribution");
+    }
+    renewedLocator.distribution.join_ticket = "ticket-release-a-renewed";
+    renewedLocator.distribution.ticket_expires_at = "2026-04-24T00:01:00.000Z";
+    renewedLocator.distribution.torrent_info_hash = "torrent-info-release-same";
+    const refreshJoinTicket = vi.fn(async () => renewedLocator);
+
+    await 解析协作分发源({
+      attachmentId: "att-ticket-release-a",
+      kind: "video",
+      locator: firstLocator,
+      consumerId: "session:att-ticket-release-a",
+      refreshJoinTicket,
+    });
+    await 解析协作分发源({
+      attachmentId: "att-ticket-release-b",
+      kind: "video",
+      locator: secondLocator,
+      consumerId: "session:att-ticket-release-b",
+      refreshJoinTicket,
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-ticket-release-b",
+      consumerId: "session:att-ticket-release-b",
+    });
+
+    await vi.advanceTimersByTimeAsync(26_000);
+
+    expect(refreshJoinTicket).toHaveBeenCalledWith({
+      attachmentId: "att-ticket-release-a",
+      swarmId: "swarm-ticket-release-anchor",
+      torrentInfoHash: "torrent-info-release-same",
+    });
+  });
+
   it("视频进入 backfill 时会先抬 preview 关键片段优先级，再继续整附件补齐", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const torrentHandle = 创建可观测假Torrent(

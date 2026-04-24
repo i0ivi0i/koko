@@ -179,10 +179,24 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       deps.transport().loadMediaLocator(sessionId, attachmentId),
     repo: deps.媒体定位仓库 ?? 创建内存媒体定位缓存仓库(),
   });
+  const 刷新协作分发入群定位 = (input: {
+    attachmentId: string;
+    swarmId: string;
+    torrentInfoHash: string;
+  }) =>
+    // 续租只要求 locator owner 重签当前附件；swarm/infohash 由运行态校验，防止刷新时偷换媒体身份。
+    媒体定位器.获取定位(input.attachmentId, { forceRefresh: true });
+  const 解析协作分发源 = (
+    input: Parameters<typeof 协作分发运行时.解析协作分发源>[0]
+  ) =>
+    协作分发运行时.解析协作分发源({
+      ...input,
+      refreshJoinTicket: 刷新协作分发入群定位,
+    });
 
   let 媒体播放器 = 创建媒体播放器({
     locate: (attachmentId, options) => 媒体定位器.获取定位(attachmentId, options),
-    resolveSwarmSource: (input) => 协作分发运行时.解析协作分发源(input),
+    resolveSwarmSource: (input) => 解析协作分发源(input),
     releaseSwarmSource: (input) => 协作分发运行时.释放协作分发消费者(input),
   });
   const 媒体会话表 = new Map<string, 媒体会话端口>();
@@ -589,7 +603,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     读取当前视频预览播放源: 读取视频预览候选播放源,
     获取媒体定位: (attachmentId) => 媒体定位器.获取定位(attachmentId),
     解析协作分发预览源: ({ attachmentId, locator, consumerId }) =>
-      协作分发运行时.解析协作分发源({
+      解析协作分发源({
         attachmentId,
         kind: "video",
         locator,
