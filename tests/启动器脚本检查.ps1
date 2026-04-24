@@ -15,7 +15,6 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $runScriptPath = Join-Path $repoRoot "run.ps1"
 $upScriptPath = Join-Path $repoRoot "up.ps1"
 $cleanScriptPath = Join-Path $repoRoot "qingli.ps1"
-$trackerScriptPath = Join-Path $repoRoot "frontend\\dev-tracker.mjs"
 $seederScriptPath = Join-Path $repoRoot "frontend\\dev-seeder.mjs"
 
 Assert-True (Test-Path -LiteralPath $runScriptPath) "缺少 run.ps1。"
@@ -33,11 +32,6 @@ $cleanStartupOptimizationSection = [regex]::Match(
     $cleanScript,
     'function Get-StartupArtifactOptimizationTargets \{[\s\S]*?\n\}\r?\n\r?\nfunction Get-WorkspaceStorageReclaimTargets'
 ).Value
-$trackerScript = if (Test-Path -LiteralPath $trackerScriptPath) {
-    Get-Content -LiteralPath $trackerScriptPath -Raw
-} else {
-    ""
-}
 $seederScript = if (Test-Path -LiteralPath $seederScriptPath) {
     Get-Content -LiteralPath $seederScriptPath -Raw
 } else {
@@ -102,22 +96,21 @@ Assert-True (-not ($runScript -match '--info-dir')) "tusd 本地盘不再需要 
 Assert-True (-not ($runScript -match '--remove-parts')) "tusd 不支持 Rustus 的 remove-parts，partial 清理由主服务/GC 收口。"
 Assert-True (-not ($runScript -match '-disable-termination')) "当前阶段要站在 tusd 官方 termination 能力上，run.ps1 不应禁用 termination。"
 Assert-True ($runScript -match 'bittorrent-tracker') "run.ps1 应该启动 bittorrent-tracker 开发进程，避免 Phase 2 还要靠手工另开一个窗口。"
+Assert-True (-not ($runScript -match 'dev-tracker\.mjs')) "run.ps1 禁止继续启动自写 dev-tracker.mjs；业务验票已经回到 Rust 同源代理。"
 Assert-True ($runScript -match 'SWARM_TRACKER_PORT') "run.ps1 应该允许显式覆写 tracker 端口。"
 Assert-True ($runScript -match 'SWARM_SEEDER_PORT') "run.ps1 应该允许显式覆写 seeder 控制面端口。"
 Assert-True ($runScript -match 'SWARM_TRACKER_PUBLIC_URL') "run.ps1 应该允许显式覆写前端 announce 用的 tracker 公网地址。"
+Assert-True ($runScript -match 'SWARM_TRACKER_UPSTREAM_URL') "run.ps1 应该显式配置后端 tracker upstream，浏览器和 sidecar 都不能裸连 tracker。"
 Assert-True ($runScript -match 'SWARM_SEEDER_TRACKER_URL') "run.ps1 应该允许显式覆写 seeder 私有 tracker announce。"
+Assert-True ($runScript -match 'api/swarm/announce') "seeder 私有 announce 默认必须走后端同源认证入口。"
+Assert-True ($runScript -match 'stats') "成熟 tracker 必须暴露结构化 stats 入口，不能只靠人眼读日志。"
 Assert-True ($runScript -match 'WebTorrent seeder 私有 announce') "run.ps1 应该把 public announce 与 seeder 私有 announce 分开打印，避免烟测误读。"
 Assert-True ($runScript -match 'SWARM_TICKET_SECRET') "run.ps1 应该为后端和 tracker 协调同一份 swarm join ticket secret。"
-Assert-True ($runScript -match '--ticket-secret') "run.ps1 应该把 ticket secret 传给 tracker 进程，而不是让 tracker 自己猜。"
+Assert-True (-not ($runScript -match '--ticket-secret')) "成熟 tracker 不再接业务密钥；join_ticket 门禁只能由 Rust 同源代理执行。"
 Assert-True ($runScript -match '-Name "tracker"') "run.ps1 应该把 tracker 当成独立受管进程拉起。"
 Assert-True ($runScript -match '-Name "webtorrent-seeder"') "run.ps1 应该把 webtorrent-seeder 当成独立受管进程拉起。"
 Assert-True ($runScript -match 'dev-seeder\.mjs') "run.ps1 应该显式拉起 dev-seeder.mjs，避免 seeder 仍靠人工另开窗口。"
-Assert-True (Test-Path -LiteralPath $trackerScriptPath) "应该提供 frontend/dev-tracker.mjs，把官方 tracker server 子入口收口成可复用开发脚本。"
 Assert-True (Test-Path -LiteralPath $seederScriptPath) "应该提供 frontend/dev-seeder.mjs，把 WebRTC seeder sidecar 收口成可复用开发脚本。"
-Assert-True ($trackerScript -match 'bittorrent-tracker/server') "frontend/dev-tracker.mjs 应该直接复用官方 bittorrent-tracker/server 子入口，而不是手搓 tracker。"
-Assert-True ($trackerScript -match 'jsonwebtoken') "frontend/dev-tracker.mjs 应该直接复用成熟 JWT 库校验 join_ticket，而不是手搓签名解析。"
-Assert-True ($trackerScript -match 'params\.ticket') "frontend/dev-tracker.mjs 应该从 tracker 参数里读取 join_ticket。"
-Assert-True ($trackerScript -match 'join_ticket_invalid') "frontend/dev-tracker.mjs 应该对外返回稳定的 invalid ticket 原因，方便前端恢复。"
 Assert-True ($seederScript -match 'webtorrent-hybrid|webtorrent') "frontend/dev-seeder.mjs 应该复用成熟 WebTorrent 实现，而不是手搓协议栈。"
 Assert-True ($seederScript -match '/seed/start') "frontend/dev-seeder.mjs 应该暴露 start 控制面。"
 Assert-True ($seederScript -match '/seed/stop') "frontend/dev-seeder.mjs 应该暴露 stop 控制面。"

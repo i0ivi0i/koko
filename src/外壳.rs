@@ -93,6 +93,7 @@ pub struct 应用状态 {
     pub shaka_packager_bin: String,
     pub swarm_tracker_public_url: String,
     pub swarm_tracker_port: u16,
+    pub swarm_tracker_upstream_url: String,
     pub swarm_web_seed_public_endpoint: Option<String>,
     pub swarm_seeder_control_base_url: String,
     pub swarm_seeder_tracker_url: String,
@@ -196,6 +197,7 @@ pub async fn 构建应用状态(
         shaka_packager_bin: media_packaging.shaka_packager_bin,
         swarm_tracker_public_url: swarm.tracker_public_url,
         swarm_tracker_port: swarm.tracker_port,
+        swarm_tracker_upstream_url: swarm.tracker_upstream_url,
         swarm_web_seed_public_endpoint: swarm.web_seed_public_endpoint,
         swarm_seeder_control_base_url: swarm.seeder_control_base_url,
         swarm_seeder_tracker_url: swarm.seeder_tracker_url,
@@ -900,25 +902,20 @@ fn 构建_s3客户端(
 }
 
 /// 协作分发 tracker 同源代理：
-/// 1. 浏览器永远连当前应用域名下的 `/api/swarm/announce`，不再直连侧车私有端口；
-/// 2. 壳层只做 websocket 字节转发，不承载门禁和业务裁决；
-/// 3. query 全量透传给 tracker，保证 info_hash/peer_id/ticket 语义不漂移。
+/// 1. 浏览器永远连当前应用域名下的 `/api/swarm/announce`，不再直连 tracker upstream；
+/// 2. 壳层只做首帧入场门禁和 websocket 字节转发，不承载 peer/offer/swarm 状态；
+/// 3. 验证通过后首帧原样透传给成熟 tracker，保证 WebTorrent 协议语义不漂移。
 async fn proxy_swarm_tracker_announce(
     State(state): State<应用状态>,
     original_uri: OriginalUri,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
     let announce_query = original_uri.0.query().unwrap_or_default();
-    let upstream_url = if announce_query.is_empty() {
-        format!("ws://127.0.0.1:{}/", state.swarm_tracker_port)
-    } else {
-        format!(
-            "ws://127.0.0.1:{}/?{announce_query}",
-            state.swarm_tracker_port
-        )
-    };
+    let upstream_url =
+        拼接tracker上游查询(state.swarm_tracker_upstream_url.as_str(), announce_query);
+    let ticket_secret = state.swarm_ticket_secret.clone();
     ws.on_upgrade(move |socket| async move {
-        if let Err(error) = relay_swarm_tracker_socket(socket, upstream_url).await {
+        if let Err(error) = relay_swarm_tracker_socket(socket, upstream_url, ticket_secret).await {
             tracing::warn!(
                 usecase = "协作分发tracker代理",
                 adapter = "http",
@@ -931,12 +928,43 @@ async fn proxy_swarm_tracker_announce(
     })
 }
 
-async fn relay_swarm_tracker_socket(socket: WebSocket, upstream_url: String) -> Result<(), String> {
+async fn relay_swarm_tracker_socket(
+    socket: WebSocket,
+    upstream_url: String,
+    ticket_secret: Option<String>,
+) -> Result<(), String> {
+    let (mut client_writer, mut client_reader) = socket.split();
+    let first_client_message = client_reader
+        .next()
+        .await
+        .ok_or_else(|| "客户端在发送 tracker 首帧前已断开".to_string())?
+        .map_err(|error| format!("读取客户端 tracker 首帧失败: {error}"))?;
+
+    // 这里不是自研 tracker：只做业务入场门禁，验证首帧后不维护 peer、offer、swarm 状态。
+    // WebTorrent signaling 全部交给成熟 tracker upstream。
+    if let Some(secret) = ticket_secret.as_deref() {
+        let (info_hash, ticket) = 解析tracker首帧门禁字段(&first_client_message)?;
+        let Some(ticket) = ticket else {
+            return Err("join_ticket_invalid".to_string());
+        };
+        media_distribution::验证协作分发join_ticket(
+            secret,
+            info_hash.as_str(),
+            ticket.as_str(),
+        )
+        .map_err(str::to_string)?;
+    }
+
+    let first_upstream_message = axum_ws_message_to_tungstenite(first_client_message)
+        .ok_or_else(|| "tracker 首帧不是可转发消息".to_string())?;
     let (upstream_socket, _) = tokio_tungstenite::connect_async(upstream_url.as_str())
         .await
-        .map_err(|error| format!("连接 tracker sidecar 失败: {error}"))?;
-    let (mut client_writer, mut client_reader) = socket.split();
+        .map_err(|error| format!("连接 tracker upstream 失败: {error}"))?;
     let (mut upstream_writer, mut upstream_reader) = upstream_socket.split();
+    upstream_writer
+        .send(first_upstream_message)
+        .await
+        .map_err(|error| format!("写入 tracker upstream 首帧失败: {error}"))?;
 
     let client_to_upstream = async {
         while let Some(message_result) = client_reader.next().await {
@@ -948,7 +976,7 @@ async fn relay_swarm_tracker_socket(socket: WebSocket, upstream_url: String) -> 
             upstream_writer
                 .send(upstream_message)
                 .await
-                .map_err(|error| format!("写入 tracker sidecar websocket 失败: {error}"))?;
+                .map_err(|error| format!("写入 tracker upstream websocket 失败: {error}"))?;
         }
         Ok::<(), String>(())
     };
@@ -956,7 +984,7 @@ async fn relay_swarm_tracker_socket(socket: WebSocket, upstream_url: String) -> 
     let upstream_to_client = async {
         while let Some(message_result) = upstream_reader.next().await {
             let message = message_result
-                .map_err(|error| format!("读取 tracker sidecar websocket 失败: {error}"))?;
+                .map_err(|error| format!("读取 tracker upstream websocket 失败: {error}"))?;
             let Some(client_message) = tungstenite_message_to_axum_ws(message) else {
                 continue;
             };
@@ -973,6 +1001,57 @@ async fn relay_swarm_tracker_socket(socket: WebSocket, upstream_url: String) -> 
         backward_result = upstream_to_client => backward_result?,
     }
     Ok(())
+}
+
+fn 拼接tracker上游查询(base_url: &str, announce_query: &str) -> String {
+    if announce_query.is_empty() {
+        return base_url.to_string();
+    }
+    let separator = if base_url.contains('?') { '&' } else { '?' };
+    format!("{base_url}{separator}{announce_query}")
+}
+
+fn 解析tracker首帧门禁字段(
+    message: &AxumWsMessage,
+) -> Result<(String, Option<String>), String> {
+    let raw = match message {
+        AxumWsMessage::Text(text) => text.as_str().as_bytes().to_vec(),
+        AxumWsMessage::Binary(bytes) => bytes.to_vec(),
+        _ => return Err("tracker 首帧必须是 JSON 文本或二进制 JSON".to_string()),
+    };
+    let value = serde_json::from_slice::<serde_json::Value>(raw.as_slice())
+        .map_err(|error| format!("解析 tracker 首帧 JSON 失败: {error}"))?;
+    let info_hash = value
+        .get("info_hash")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "tracker 首帧缺少 info_hash".to_string())
+        .and_then(归一化tracker_info_hash)?;
+    let ticket = value
+        .get("ticket")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string);
+    Ok((info_hash, ticket))
+}
+
+fn 归一化tracker_info_hash(raw: &str) -> Result<String, String> {
+    let value = raw.trim();
+    if value.len() == 40 && value.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Ok(value.to_ascii_lowercase());
+    }
+
+    let mut bytes = Vec::with_capacity(20);
+    for ch in value.chars() {
+        let code = ch as u32;
+        if code > u8::MAX as u32 {
+            return Err("tracker 首帧 info_hash 不是 20 字节或 40 位 hex".to_string());
+        }
+        bytes.push(code as u8);
+    }
+    if bytes.len() != 20 {
+        return Err("tracker 首帧 info_hash 不是 20 字节或 40 位 hex".to_string());
+    }
+    Ok(hex::encode(bytes))
 }
 
 fn axum_ws_message_to_tungstenite(message: AxumWsMessage) -> Option<tungstenite::Message> {

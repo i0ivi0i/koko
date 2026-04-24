@@ -66,9 +66,9 @@ Assert-True -Condition $caddyfile.Contains("reverse_proxy 127.0.0.1:28080") -Mes
 Assert-True -Condition $caddyfile.Contains("https://192.168.3.10") -Message "Caddyfile 应包含局域网地址。"
 Assert-True -Condition $caddyfile.Contains("@tus path /files*") -Message "Caddyfile 应把 /files 路由到 tusd。"
 Assert-True -Condition $caddyfile.Contains("reverse_proxy @tus 127.0.0.1:1081") -Message "Caddyfile 应把 /files 反代到 tusd 1081。"
-Assert-True -Condition $caddyfile.Contains("@tracker_ws") -Message "Caddyfile 应包含 tracker websocket 分流 matcher。"
-Assert-True -Condition $caddyfile.Contains("not path /socket.io*") -Message "Caddyfile 应排除 socket.io，避免误分流。"
-Assert-True -Condition $caddyfile.Contains("reverse_proxy @tracker_ws 127.0.0.1:7072") -Message "Caddyfile 应把 tracker websocket 分流到 7072。"
+Assert-False -Condition $caddyfile.Contains("reverse_proxy @tracker_ws 127.0.0.1:7072") -Message "Caddyfile 禁止把 /api/swarm/announce 直反到裸 tracker，必须先进入 Rust 认证代理。"
+Assert-False -Condition ($caddyfile -match '@tracker_ws[\s\S]*header Connection \*Upgrade[\s\S]*reverse_proxy @tracker_ws 127\.0\.0\.1:7072') -Message "HTTPS WebSocket 分流不能绕过后端 /api/swarm/announce 首帧验票。"
+Assert-True -Condition $caddyfile.Contains("reverse_proxy 127.0.0.1:28080") -Message "Caddyfile 应继续把业务流量反代到后端端口，由后端代理 tracker。"
 
 # 用例4：开机自启命令必须使用 caddy start 并带 config。
 $cmd = Build-CaddyAutoStartCommand -CaddyPath "C:\tools\caddy.exe" -CaddyfilePath "C:\tmp\Caddyfile"

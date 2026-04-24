@@ -1,5 +1,5 @@
 use super::*;
-use axum::{extract::State as AxumState, routing::post, Json as AxumJson, Router};
+use axum::{Json as AxumJson, Router, extract::State as AxumState, routing::post};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -334,10 +334,12 @@ async fn 视频complete在iso5_brand_mp4输入下不应返回500() {
 async fn 视频complete会触发seeder_start命令() {
     let (fake_seeder_base_url, seeder_requests, fake_seeder_server) = 启动假seeder侧车().await;
     let backup = 备份并清空环境变量(&[
+        "APP_PORT",
         "SWARM_SEEDER_CONTROL_BASE_URL",
         "SWARM_TRACKER_PUBLIC_URL",
         "SWARM_SEEDER_TRACKER_URL",
     ]);
+    env::set_var("APP_PORT", "18080");
     env::set_var(
         "SWARM_SEEDER_CONTROL_BASE_URL",
         fake_seeder_base_url.as_str(),
@@ -346,7 +348,6 @@ async fn 视频complete会触发seeder_start命令() {
         "SWARM_TRACKER_PUBLIC_URL",
         "wss://im.example.com/api/swarm/announce",
     );
-    env::set_var("SWARM_SEEDER_TRACKER_URL", "ws://127.0.0.1:17072");
 
     let env = 准备complete测试环境("single-file-video-seeder-start").await;
     let video_bytes = 最小mp4字节();
@@ -399,8 +400,8 @@ async fn 视频complete会触发seeder_start命令() {
             .as_array()
             .and_then(|values| values.first())
             .and_then(|value| value.as_str()),
-        Some("ws://127.0.0.1:17072"),
-        "sidecar start 必须使用私有 tracker announce，禁止复用浏览器 public WSS announce"
+        Some("ws://127.0.0.1:18080/api/swarm/announce"),
+        "sidecar 默认必须走后端同源认证入口，禁止直连裸 tracker 绕过 join_ticket 门禁"
     );
     assert!(
         start_payload["torrentUrl"]

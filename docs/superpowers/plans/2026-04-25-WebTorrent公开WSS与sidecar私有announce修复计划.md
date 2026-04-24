@@ -1,5 +1,7 @@
 # WebTorrent 公开 WSS 与 Sidecar 私有 Announce 分离 Implementation Plan
 
+> 2026-04-25 后续修正：本计划解决了 public WSS 与 sidecar announce 混用的第一阶段问题；后续已被 `2026-04-25-WebTorrent成熟tracker替换与dev-tracker退场计划.md` 覆盖。当前最终口径是：sidecar 默认也走后端 `/api/swarm/announce` 验票入口，裸 tracker upstream 只允许 Rust 代理通过 `SWARM_TRACKER_UPSTREAM_URL` 使用，禁止 sidecar 默认直连 `ws://127.0.0.1:7072` 绕过 `join_ticket` 门禁。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复 HTTPS 冒烟暴露的 `浏览器公开 WSS announce` 与 `服务端 sidecar 私有 tracker announce` 混用问题，让浏览器继续拿 `wss://.../api/swarm/announce`，同时让 dev seeder / 后端强 seed 走私有 tracker announce。

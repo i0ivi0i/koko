@@ -4,7 +4,7 @@
 
 **Goal:** 用成熟高性能 WebTorrent tracker 替换当前 `frontend/dev-tracker.mjs` 里的自写 tracker 胶水，让 `koko` 只保留业务授权、同源代理、启动编排和观测接线，不继续手搓 tracker 核心。
 
-**Architecture:** `wt-tracker` 作为第一候选成熟 tracker 核心，只负责 WebTorrent/WebRTC signaling、swarm peer 管理和 `/stats.json`；Rust 后端 `/api/swarm/announce` 只做首帧 `join_ticket` 校验和 WebSocket 字节转发，禁止维护 peer 列表、offer 路由或第二套 swarm 状态。媒体身份、房间权限、附件可见性、`source_hash / content_hash / infoHash / swarm_id` 继续由领域/用例层拥有，tracker 永远只是基础设施。
+**Architecture:** 成熟 tracker 只负责 WebTorrent/WebRTC signaling、swarm peer 管理和 stats；Rust 后端 `/api/swarm/announce` 只做首帧 `join_ticket` 校验和 WebSocket 字节转发，禁止维护 peer 列表、offer 路由或第二套 swarm 状态。媒体身份、房间权限、附件可见性、`source_hash / content_hash / infoHash / swarm_id` 继续由领域/用例层拥有，tracker 永远只是基础设施。
 
 **Tech Stack:** Rust 2024 + Axum WebSocket proxy + jsonwebtoken；PowerShell launcher；Node.js 25+；`wt-tracker` / `bittorrent-tracker` / `aquatic_ws` 候选评估；WebTorrent / WebRTC；Vitest；Cargo integration tests；`chrome-devtools-cli` HTTPS multi-context smoke.
 
@@ -24,11 +24,18 @@
 
 1. `wt-tracker` 是本计划第一候选：高性能 WebTorrent tracker，官方 README 明确写了 WSS/WS、uWebSockets.js、大连接数、`/stats.json`。
 2. `aquatic_ws` 是 Linux 公网生产后续候选：Rust、高性能、Prometheus、allow/deny info hash，但本地 Win11 开发烟测不适合作为第一落地。
-3. `bittorrent-tracker` 是当前已用成熟轮子：支持 `filter` 和 `/stats.json`，可作为回退基线，但不应继续加厚 `dev-tracker.mjs`。
+3. `bittorrent-tracker` 是当前已用成熟轮子：支持 WebSocket tracker CLI 和 `/stats`，可作为回退基线，但不应继续加厚 `dev-tracker.mjs`。
 
 硬裁决：
 
 **如果 `wt-tracker` 不能在当前开发环境跑通，或不能在不手搓 tracker 协议核心的前提下保住 `join_ticket` 门禁，本计划必须停止在候选验证阶段，不允许为了“换轮子”破坏权限和现有业务。**
+
+执行修正记录：
+
+1. `wt-tracker@0.0.1` 的 npm 包在本机验证时缺少 `dist/run-uws-tracker.js`，CLI 无法启动，触发第一候选停止条件。
+2. 本轮不回退到自写 tracker，而是落地计划中已有成熟回退基线：官方 `bittorrent-tracker@11.2.2` CLI。
+3. 由于 `bittorrent-tracker` 官方 CLI 暴露的是 `/stats`，本轮验收接受 `/stats` 作为成熟轮子的等价观测入口；`/stats.json` 作为 `wt-tracker` / 未来生产候选能力继续保留在后续评估项。
+4. `join_ticket` 门禁已经迁到 Rust `/api/swarm/announce` 首帧验票代理，成熟 tracker 不接收业务密钥、不拥有业务权限真相。
 
 ---
 
@@ -703,7 +710,7 @@ git commit -m "清理：移除自写WebTorrent dev tracker"
 Modify `tests/启动器脚本检查.ps1`:
 
 ```powershell
-Assert-True ($runScript -match 'stats\\.json') "成熟 tracker 必须暴露 /stats.json，不能只靠人眼读日志。"
+Assert-True ($runScript -match 'stats') "成熟 tracker 必须暴露 stats 观测入口，不能只靠人眼读日志。"
 Assert-True ($runScript -match 'SWARM_TRACKER_UPSTREAM_URL') "后端必须知道 tracker upstream，方便 health/smoke 读取。"
 ```
 
@@ -712,7 +719,7 @@ Assert-True ($runScript -match 'SWARM_TRACKER_UPSTREAM_URL') "后端必须知道
 Modify `run.ps1`:
 
 ```powershell
-Write-Host "WebTorrent tracker stats: http://127.0.0.1:$trackerPort/stats.json"
+Write-Host "WebTorrent tracker stats: http://127.0.0.1:$trackerPort/stats"
 ```
 
 - [ ] **Step 3: 可选后端 health 透出**
@@ -722,7 +729,7 @@ Only if smoke scripts need same-origin JSON:
 1. Add `/api/swarm/tracker-stats` handler that reverse-proxies JSON from `SWARM_TRACKER_UPSTREAM_URL` stats endpoint.
 2. This endpoint must be admin/dev-only or disabled by default in production.
 
-Prefer not adding this unless smoke automation cannot read `127.0.0.1:$trackerPort/stats.json` directly.
+Prefer not adding this unless smoke automation cannot read `127.0.0.1:$trackerPort/stats` directly.
 
 - [ ] **Step 4: 跑脚本测试**
 
@@ -830,7 +837,7 @@ Expected log:
 WebTorrent tracker upstream: ws://127.0.0.1:7072
 WebTorrent tracker 浏览器公开 announce: wss://localhost/api/swarm/announce
 WebTorrent seeder 私有认证 announce: ws://127.0.0.1:8080/api/swarm/announce
-WebTorrent tracker stats: http://127.0.0.1:7072/stats.json
+WebTorrent tracker stats: http://127.0.0.1:7072/stats
 ```
 
 Expected Caddy behavior:
@@ -880,7 +887,7 @@ Expected:
 Run:
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:7072/stats.json" | ConvertTo-Json -Depth 8
+Invoke-WebRequest -Uri "http://127.0.0.1:7072/stats" | Select-Object -ExpandProperty Content
 ```
 
 Expected:

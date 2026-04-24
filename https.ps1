@@ -223,14 +223,8 @@ $siteAddressLine {
     @tus path /files*
     reverse_proxy @tus 127.0.0.1:1081
 
-    # tracker announce 走 wss://<host>/（无路径）时，
-    # 只把“非 socket.io 的 websocket upgrade”分流到 tracker。
-    @tracker_ws {
-        header Connection *Upgrade*
-        header Upgrade websocket
-        not path /socket.io*
-    }
-    reverse_proxy @tracker_ws 127.0.0.1:7072
+    # WebTorrent public announce 必须先进入 Rust 后端验票代理；
+    # Caddy 不能把 /api/swarm/announce 直反到裸 tracker。
 
     reverse_proxy 127.0.0.1:$AppPort
 }

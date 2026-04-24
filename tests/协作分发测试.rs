@@ -1,8 +1,12 @@
-use axum::http::{header, Method, StatusCode};
+use axum::http::{Method, StatusCode, header};
+use futures_util::{SinkExt, StreamExt};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serial_test::serial;
-use sqlx::{postgres::PgPoolOptions, Row};
+use sqlx::{Row, postgres::PgPoolOptions};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::{net::TcpListener, task::JoinHandle};
+use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
 #[path = "协作分发测试/可用性裁决.rs"]
 mod availability_ruling_tests;
@@ -19,6 +23,131 @@ mod test_support;
 // - 分发元数据、投影一致性、可用性裁决、内容读取都已拆到子模块
 // - 这里继续守 locator/torrent 共享的地址与协作分发合同
 use test_support::{env_support::*, http::*, media::*};
+
+struct 测试服务器 {
+    base_ws_url: String,
+    handle: JoinHandle<()>,
+}
+
+impl 测试服务器 {
+    fn announce_url(&self) -> String {
+        format!("{}/api/swarm/announce", self.base_ws_url)
+    }
+}
+
+struct 假Tracker上游 {
+    port: u16,
+    received: tokio::sync::mpsc::Receiver<String>,
+    handle: JoinHandle<()>,
+}
+
+async fn 启动假tracker上游() -> 假Tracker上游 {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("应能启动 fake tracker upstream");
+    let port = listener
+        .local_addr()
+        .expect("应能读取 fake tracker 端口")
+        .port();
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    let handle = tokio::spawn(async move {
+        let Ok((stream, _addr)) = listener.accept().await else {
+            return;
+        };
+        let Ok(mut socket) = tokio_tungstenite::accept_async(stream).await else {
+            return;
+        };
+        if let Some(Ok(message)) = socket.next().await {
+            let text = match message {
+                TungsteniteMessage::Text(text) => text.to_string(),
+                TungsteniteMessage::Binary(bytes) => String::from_utf8_lossy(&bytes).to_string(),
+                _ => String::new(),
+            };
+            let _ = tx.send(text).await;
+        }
+    });
+    假Tracker上游 {
+        port,
+        received: rx,
+        handle,
+    }
+}
+
+async fn 启动协作分发测试应用(
+    upstream_port: u16,
+    ticket_secret: &str,
+) -> 测试服务器 {
+    let backup = 备份并清空环境变量(&[
+        "SWARM_TRACKER_PORT",
+        "SWARM_TRACKER_UPSTREAM_URL",
+        "SWARM_TICKET_SECRET",
+    ]);
+    env::set_var("SWARM_TRACKER_PORT", upstream_port.to_string());
+    env::set_var(
+        "SWARM_TRACKER_UPSTREAM_URL",
+        format!("ws://127.0.0.1:{upstream_port}"),
+    );
+    env::set_var("SWARM_TICKET_SECRET", ticket_secret);
+
+    let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
+    let state = koko::shell::构建应用状态(cfg.database_url, cfg.admin_password)
+        .await
+        .expect("应能构建共享应用状态");
+    恢复环境变量(backup);
+
+    let app = koko::shell::构建路由(state);
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("应能启动测试后端");
+    let port = listener.local_addr().expect("应能读取测试后端端口").port();
+    let handle = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    测试服务器 {
+        base_ws_url: format!("ws://127.0.0.1:{port}"),
+        handle,
+    }
+}
+
+fn 签发测试join_ticket(secret: &str, info_hash: &str) -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_secs() as usize;
+    encode(
+        &Header::new(Algorithm::HS256),
+        &serde_json::json!({
+            "sub": "session-for-tracker-proxy-test",
+            "aid": "attachment-for-tracker-proxy-test",
+            "ih": info_hash,
+            "iat": now,
+            "exp": now + 120,
+        }),
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .expect("应能签发测试 join_ticket")
+}
+
+fn 构造tracker首帧(info_hash: &str, ticket: Option<&str>) -> String {
+    let mut payload = serde_json::json!({
+        "action": 1,
+        "info_hash": info_hash,
+        "peer_id": "00112233445566778899",
+        "offers": [],
+        "numwant": 1,
+    });
+    if let Some(ticket) = ticket {
+        payload["ticket"] = serde_json::Value::String(ticket.to_string());
+    }
+    payload.to_string()
+}
+
+async fn 发送tracker首帧(url: &str, payload: String) {
+    let (mut socket, _) = tokio_tungstenite::connect_async(url)
+        .await
+        .expect("应能连上同源 tracker 代理");
+    let _ = socket.send(TungsteniteMessage::Text(payload.into())).await;
+}
 
 /// locator 给不同成员返回的受控地址，允许 `session_id` 不同，但不允许主链事实本身漂移。
 /// 这里把会话参数统一折叠成占位符，专门用于比较“同一附件对不同成员看到的是不是同一条主链”。
@@ -975,5 +1104,88 @@ async fn 同源tracker代理入口会响应websocket握手而不是404() {
         status,
         StatusCode::UPGRADE_REQUIRED,
         "同源 tracker announce 入口必须被路由识别；即使测试请求未完整升级，也不应返回 404"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 同源tracker代理首帧缺少join_ticket会拒绝而不是放行到tracker() {
+    let mut upstream = 启动假tracker上游().await;
+    let server = 启动协作分发测试应用(upstream.port, "tracker-proxy-secret").await;
+    let info_hash = "0123456789abcdef0123456789abcdef01234567";
+
+    发送tracker首帧(
+        server.announce_url().as_str(),
+        构造tracker首帧(info_hash, None),
+    )
+    .await;
+
+    let forwarded = tokio::time::timeout(
+        std::time::Duration::from_millis(400),
+        upstream.received.recv(),
+    )
+    .await;
+
+    server.handle.abort();
+    upstream.handle.abort();
+    assert!(
+        forwarded.is_err(),
+        "缺少 join_ticket 的首帧不得透传到成熟 tracker upstream；Rust 同源代理必须先做业务入场门禁"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 同源tracker代理首帧join_ticket的info_hash不匹配会拒绝() {
+    let mut upstream = 启动假tracker上游().await;
+    let server = 启动协作分发测试应用(upstream.port, "tracker-proxy-secret").await;
+    let info_hash = "0123456789abcdef0123456789abcdef01234567";
+    let ticket = 签发测试join_ticket(
+        "tracker-proxy-secret",
+        "fedcba9876543210fedcba9876543210fedcba98",
+    );
+
+    发送tracker首帧(
+        server.announce_url().as_str(),
+        构造tracker首帧(info_hash, Some(ticket.as_str())),
+    )
+    .await;
+
+    let forwarded = tokio::time::timeout(
+        std::time::Duration::from_millis(400),
+        upstream.received.recv(),
+    )
+    .await;
+
+    server.handle.abort();
+    upstream.handle.abort();
+    assert!(
+        forwarded.is_err(),
+        "join_ticket.ih 与首帧 info_hash 不一致时不得入群，避免拿别的 swarm 门票混入当前 swarm"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn 同源tracker代理首帧join_ticket有效会放行到tracker_upstream() {
+    let mut upstream = 启动假tracker上游().await;
+    let server = 启动协作分发测试应用(upstream.port, "tracker-proxy-secret").await;
+    let info_hash = "0123456789abcdef0123456789abcdef01234567";
+    let ticket = 签发测试join_ticket("tracker-proxy-secret", info_hash);
+    let first_frame = 构造tracker首帧(info_hash, Some(ticket.as_str()));
+
+    发送tracker首帧(server.announce_url().as_str(), first_frame.clone()).await;
+
+    let forwarded =
+        tokio::time::timeout(std::time::Duration::from_secs(2), upstream.received.recv())
+            .await
+            .expect("有效票据应被放行到 tracker upstream")
+            .expect("fake upstream 应收到首帧");
+
+    server.handle.abort();
+    upstream.handle.abort();
+    assert_eq!(
+        forwarded, first_frame,
+        "验票成功后首帧必须原样透明转发，Rust 代理不能改写 WebTorrent tracker 协议"
     );
 }

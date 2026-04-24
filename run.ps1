@@ -645,8 +645,11 @@ function Resolve-StaleLauncherSidecar {
     if (
         $PortRecord.Port -eq $TrackerPort -and
         $PortRecord.Name -match '^node(?:\.exe)?$' -and
-        $PortRecord.CommandLine -match 'dev-tracker\.mjs' -and
-        $PortRecord.CommandLine -match ("--port\s+$TrackerPort(\s|$)")
+        (
+            $PortRecord.CommandLine -match 'bittorrent-tracker' -or
+            $PortRecord.CommandLine -match 'node_modules[\\/]+bittorrent-tracker[\\/]+bin[\\/]+cmd\.js'
+        ) -and
+        $PortRecord.CommandLine -match ("(?:--port|-p)\s+$TrackerPort(\s|$)")
     ) {
         return [pscustomobject]@{
             Role      = "tracker"
@@ -981,13 +984,16 @@ try {
     }
     $trackerPublicUrl = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL")
     if ([string]::IsNullOrWhiteSpace($trackerPublicUrl)) {
-        $trackerPublicUrl = "ws://127.0.0.1:$trackerPort"
+        $trackerPublicUrl = "ws://127.0.0.1:$appPort/api/swarm/announce"
+    }
+    $trackerUpstreamUrl = [Environment]::GetEnvironmentVariable("SWARM_TRACKER_UPSTREAM_URL")
+    if ([string]::IsNullOrWhiteSpace($trackerUpstreamUrl)) {
+        $trackerUpstreamUrl = "ws://127.0.0.1:$trackerPort"
     }
     $seederTrackerUrl = [Environment]::GetEnvironmentVariable("SWARM_SEEDER_TRACKER_URL")
     if ([string]::IsNullOrWhiteSpace($seederTrackerUrl)) {
-        # 浏览器 public announce 可能是 HTTPS 反代下的 WSS；本机 sidecar 做强种子只应走内网 tracker。
-        # 两者共用同一个 tracker / infoHash 真相，但不能共用同一个可达地址配置。
-        $seederTrackerUrl = "ws://127.0.0.1:$trackerPort"
+        # sidecar 虽然是本机进程，也必须走后端认证入口；裸 tracker upstream 只给后端代理使用。
+        $seederTrackerUrl = "ws://127.0.0.1:$appPort/api/swarm/announce"
     }
     $swarmTicketSecret = [Environment]::GetEnvironmentVariable("SWARM_TICKET_SECRET")
     if ([string]::IsNullOrWhiteSpace($swarmTicketSecret)) {
@@ -1001,6 +1007,7 @@ try {
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PORT", $trackerPort)
     [Environment]::SetEnvironmentVariable("SWARM_SEEDER_PORT", $seederPort)
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_PUBLIC_URL", $trackerPublicUrl)
+    [Environment]::SetEnvironmentVariable("SWARM_TRACKER_UPSTREAM_URL", $trackerUpstreamUrl)
     [Environment]::SetEnvironmentVariable("SWARM_SEEDER_TRACKER_URL", $seederTrackerUrl)
     [Environment]::SetEnvironmentVariable("SWARM_TICKET_SECRET", $swarmTicketSecret)
     Stop-StaleLauncherSidecars `
@@ -1015,7 +1022,9 @@ try {
         -Url $localAccessUrl
     Write-Host "访问入口: $localAccessUrl"
     Write-Host "tusd 监听: http://${tusdHost}:$tusdPort$mediaTusBasePath"
+    Write-Host "WebTorrent tracker upstream: $trackerUpstreamUrl"
     Write-Host "WebTorrent tracker 浏览器公开 announce: $trackerPublicUrl"
+    Write-Host "WebTorrent tracker stats: http://127.0.0.1:$trackerPort/stats"
     Write-Host "WebTorrent seeder 私有 announce: $seederTrackerUrl"
     Write-Host "WebTorrent seeder 控制面: http://127.0.0.1:$seederPort/health"
     Write-Host "子进程日志目录: $logDirectory"
@@ -1058,17 +1067,17 @@ try {
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 
-    # 这里不用官方 `bittorrent-tracker` CLI：
-    # 1. 当前 11.2.2 的 `bin/cmd.js` 会先 import 整个 index，再把 client/node-datachannel 一起拖进 Node 进程；
-    # 2. 这台 Win11 + Node 25 开发机上会先炸在原生模块缺失，真正的 websocket tracker 还没开始监听；
-    # 3. 我们仍然站在成熟轮子上，只调用官方 `bittorrent-tracker/server` 子入口，
-    #    让 `frontend/dev-tracker.mjs` 负责极薄的端口、announce 地址、join ticket 门禁和日志胶水。
-    Write-Host "启动 WebTorrent tracker: node dev-tracker.mjs --port $trackerPort --public-url $trackerPublicUrl --ticket-secret <hidden>"
+    # tracker 进程只运行成熟 WebTorrent tracker 轮子：
+    # 1. 业务 join_ticket 门禁已经前移到 Rust /api/swarm/announce 同源代理；
+    # 2. 这里不再传业务密钥，也不再维护私有 tracker 核心；
+    # 3. HTTP 只用于官方 stats 页面，浏览器/sidecar 的 announce 仍必须先经过后端验票入口。
+    $trackerArgumentList = @("--dir", "frontend", "exec", "bittorrent-tracker", "--port", $trackerPort, "--ws", "--http", "--stats", "--http-hostname", "127.0.0.1")
+    Write-Host ("启动 WebTorrent tracker: pnpm {0}" -f ($trackerArgumentList -join " "))
     $trackerProcess = New-ManagedProcess `
         -Name "tracker" `
-        -FilePath $nodePath `
-        -ArgumentList @("dev-tracker.mjs", "--port", $trackerPort, "--public-url", $trackerPublicUrl, "--ticket-secret", $swarmTicketSecret) `
-        -WorkingDirectory $frontendRoot `
+        -FilePath $pnpmPath `
+        -ArgumentList $trackerArgumentList `
+        -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
 
     # seeder sidecar 只承接协议执行：

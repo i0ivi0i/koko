@@ -1,7 +1,7 @@
 # WebTorrent HTTPS / WSS 公私 announce 与单机冒烟测试官方实践清单
 
 日期：2026-04-25
-适用范围：`koko` 的 WebTorrent 浏览器协作分发、同源 `/api/swarm/announce` 代理、dev tracker、dev seeder sidecar、HTTPS 本地烟测、未来 Linux 公网部署前置验证。
+适用范围：`koko` 的 WebTorrent 浏览器协作分发、同源 `/api/swarm/announce` 代理、成熟 tracker sidecar、dev seeder sidecar、HTTPS 本地烟测、未来 Linux 公网部署前置验证。
 目标：把这次 HTTPS 冒烟暴露出的 `浏览器公开 WSS announce` 与 `服务端 sidecar 私有 tracker announce` 混用问题收成施工准绳，避免后续为了“HTTPS 正确”把所有链路都粗暴改成 WSS，或为了“本机方便”把浏览器退回不安全 WS。
 
 关联资料：
@@ -19,8 +19,8 @@
 
 1. 浏览器公开入口必须按页面安全上下文暴露 `wss://公网域名/api/swarm/announce`。
 2. 服务端 sidecar / backend / tracker 的本机控制链不应该复用浏览器公开 WSS URL。
-3. sidecar 在同机或同内网部署时，正确私有 announce 可以是 `ws://127.0.0.1:7072` 或运维显式配置的内网 tracker URL。
-4. `public announce` 是给浏览器 contract 的；`private announce` 是给后端做种执行面的。二者同属 WebTorrent 分发平面，但不是同一个配置真相。
+3. sidecar 在同机部署时默认也必须走后端同源验票入口，例如 `ws://127.0.0.1:<APP_PORT>/api/swarm/announce`；裸 tracker upstream 只能给 Rust 代理使用。
+4. `public announce` 是给浏览器 contract 的；`seeder announce` 是给做种 sidecar 的已认证入口；`tracker_upstream_url` 是 Rust 代理到成熟 tracker 的内部地址。三者同属 WebTorrent 分发平面，但不是同一个配置真相。
 5. 禁止为了修 sidecar 本机证书问题，把浏览器 locator 从 `wss://` 退回 `ws://`。
 6. 禁止为了追求“全 HTTPS”，强迫本机 sidecar 走 `wss://localhost/...`，这会把公网证书信任、反向代理和本机控制面绑死。
 7. 一台电脑可以证明本地 HTTPS / WSS / WebRTC 链路搭得对，但不能证明全球 NAT、运营商网络和跨洲公网一定通。
@@ -96,15 +96,16 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 - MDN RTCPeerConnection: <https://developer.mozilla.org/docs/Web/API/RTCPeerConnection>
 - Chrome getStats migration: <https://developer.chrome.com/blog/getstats-migration>
 
-### 2.5 tracker 是成熟轮子边界，未来不应长期手搓
+### 2.5 tracker 是成熟轮子边界，禁止长期手搓
 
-`bittorrent-tracker` 官方提供 WebSocket tracker server、stats / stats.json、scrape 等能力。`wt-tracker` 作为高性能 WebTorrent tracker，明确支持 `ws://` 和 `wss://` 同时处理，并提供 `/stats.json`，其 README 声称可用 uWebSockets.js 在小 VPS 上承载大量 WSS peer。
+`bittorrent-tracker` 官方提供 WebSocket tracker server、stats、scrape 等能力。`wt-tracker` 作为高性能 WebTorrent tracker，明确支持 `ws://` 和 `wss://` 同时处理，并提供 `/stats.json`，其 README 声称可用 uWebSockets.js 在小 VPS 上承载大量 WSS peer。
 
 工程含义：
 
-1. 当前 dev tracker 可以继续作为开发态薄 sidecar，但它不应变成长期重型自研 tracker 核心。
-2. 未来 Linux 公网部署前，要评估 `wt-tracker` / `bittorrent-tracker` 等成熟实现，而不是继续把私有 tracker 功能堆进主服务。
-3. `koko` 的业务真相是授权、资产、ticket、presence；WebTorrent signaling 能力应尽量交给成熟 tracker 轮子。
+1. 当前实现已经禁止继续保留 `frontend/dev-tracker.mjs` 作为 tracker 核心。
+2. Win11 + Node 25 本机验证显示 `wt-tracker@0.0.1` npm 包缺少 `dist/run-uws-tracker.js`，不能作为当前落地轮子。
+3. 当前落地选择是官方 `bittorrent-tracker@11.2.2` CLI；它只负责 WebTorrent tracker/signaling，业务门禁由 Rust `/api/swarm/announce` 首帧验票代理负责。
+4. `koko` 的业务真相是授权、资产、ticket、presence；WebTorrent signaling 能力应交给成熟 tracker 轮子。
 
 来源：
 
@@ -132,23 +133,40 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 3. 它进入 `locator.distribution.announce_urls`。
 4. 禁止把裸 sidecar 端口直接下发给公网浏览器。
 
-### 3.2 sidecar 私有 announce
+### 3.2 sidecar 认证 announce
 
 拥有者：后端 shell / infrastructure 配置。
 消费者：dev seeder sidecar、未来服务器强 seed。
 典型值：
 
-1. 本机开发：`ws://127.0.0.1:7072`
-2. 同内网部署：`ws://tracker.internal:7072`
-3. 特殊生产拓扑：运维显式配置的私有或公网 WSS tracker。
+1. 本机开发：`ws://127.0.0.1:8080/api/swarm/announce`
+2. 同机不同端口：`ws://127.0.0.1:<APP_PORT>/api/swarm/announce`
+3. 特殊生产拓扑：运维显式配置的私有或公网同源验票入口。
 
 硬约束：
 
 1. 它不进入浏览器 locator。
 2. 它只进入后端发给 `/seed/start` 的控制面 payload。
-3. 它默认应该从 `SWARM_TRACKER_PORT` 派生，而不是从请求头派生。
-4. 它可以由 `SWARM_SEEDER_TRACKER_URL` 显式覆盖。
+3. 它默认应该从 `APP_PORT` 派生，而不是从请求头派生。
+4. 它可以由 `SWARM_SEEDER_TRACKER_URL` 显式覆盖，但覆盖值仍应指向验票入口。
 5. 禁止让 sidecar 复用 `runtime_distribution["announce_urls"]` 里的浏览器公开 WSS URL。
+6. 禁止让 sidecar 默认直连裸 tracker 端口绕过 `join_ticket` 门禁。
+
+### 3.3 tracker upstream
+
+拥有者：后端 shell / infrastructure 配置。
+消费者：Rust `/api/swarm/announce` 代理。
+典型值：
+
+1. 本机开发：`ws://127.0.0.1:7072`
+2. 同内网部署：`ws://tracker.internal:7072`
+
+硬约束：
+
+1. 它只允许由 Rust 同源代理读取。
+2. 它不能进入浏览器 locator。
+3. 它不能进入 `/seed/start` payload。
+4. 它可以由 `SWARM_TRACKER_UPSTREAM_URL` 显式覆盖。
 
 ---
 
@@ -183,8 +201,8 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 
 1. HTTPS 页面是否能加载。
 2. 浏览器 locator 是否下发 WSS announce。
-3. 同源 `/api/swarm/announce` 是否能代理到 tracker。
-4. sidecar 是否用私有 announce 成功入群。
+3. 同源 `/api/swarm/announce` 是否能验票后代理到成熟 tracker。
+4. sidecar 是否用后端认证 announce 成功入群。
 5. 多个隔离浏览器上下文之间是否能建立 WebRTC peer。
 6. WebSeed 关闭或受控阻断时，浏览器是否仍能从 peer 拉块。
 7. tracker / seeder / browser 三侧指标是否一致。
@@ -209,7 +227,7 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 5. 读取 seeder `/health`，确认新 `infoHash` active。
 6. 读取 seeder 日志，禁止出现 `Error connecting to wss://localhost/api/swarm/announce`。
 7. 打开至少两个 isolated browser context，进入同一房间并观看同一视频。
-8. 读取 tracker `/stats` 或 `/stats.json`，确认同一 `infoHash` 的 peers 增加。
+8. 读取 tracker `/stats` 或所选成熟 tracker 的等价统计入口，确认同一 `infoHash` 的 peers 增加。
 9. 读取 WebTorrent runtime 指标，确认 `numPeers > 0`、`downloaded/uploaded` 增长。
 10. 受控阻断或禁用 WebSeed 路径，确认第二个 viewer 仍能从 peer 获取数据。
 11. 读取浏览器控制台，禁止 mixed-content、WebSocket failure、WebRTC fatal error。
@@ -220,7 +238,7 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 合格必须同时满足：
 
 1. 浏览器 public announce 是 `wss://.../api/swarm/announce`。
-2. sidecar private announce 是 `ws://127.0.0.1:7072` 或显式配置值。
+2. sidecar seeder announce 是 `ws://127.0.0.1:<APP_PORT>/api/swarm/announce` 或显式配置的验票入口。
 3. seeder 日志没有连接 public WSS 失败。
 4. tracker 能看到同一 `infoHash` 下多个 peer。
 5. browser WebTorrent 能看到 WebRTC wire 或等价 peer 传输指标。
@@ -236,7 +254,7 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 
 1. `https://域名` 页面正常。
 2. `wss://域名/api/swarm/announce` 通过反代进入 tracker。
-3. sidecar 到 tracker 走内网或本机私有地址。
+3. sidecar 到 tracker 只能通过后端验票入口；后端再用 `SWARM_TRACKER_UPSTREAM_URL` 连接内网或本机 tracker upstream。
 4. 证书续期不影响 WSS。
 5. tracker stats 能按 `infoHash` 输出 peers。
 6. seeder / backend / tracker 日志都带足够 correlation 信息。
@@ -259,7 +277,7 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 
 1. STUN / TURN 配置策略。
 2. tracker 高可用或成熟 tracker 替换评估。
-3. `/stats.json` 或等价结构化观测。
+3. `/stats`、`/stats.json` 或等价结构化观测。
 4. smoke 脚本自动断言 WSS、公私 announce、peer 数、上传下载计数。
 5. 日志里区分 `public_announce_url`、`seeder_announce_url`、`tracker_upstream_url`。
 
@@ -267,7 +285,7 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 
 ## 7. 给后续实现的禁令
 
-1. 禁止把浏览器 public announce 和 sidecar private announce 合并成一个配置。
+1. 禁止把浏览器 public announce、sidecar seeder announce 和 tracker upstream 合并成一个配置。
 2. 禁止让 sidecar 复用 locator 里的 `announce_urls`。
 3. 禁止把 HTTPS 页面里的浏览器 tracker 改成 `ws://`。
 4. 禁止把 `wss://localhost` 作为本机 sidecar 的默认 announce。
@@ -275,7 +293,7 @@ MDN `RTCPeerConnection` 说明 WebRTC 连接拥有连接状态、ICE 状态和 `
 6. 禁止只用 presence 心跳证明 WebRTC peer 已经互通。
 7. 禁止把 WebSeed 206 当作 P2P 成功。
 8. 禁止为了修本机烟测，把公网部署需要的 WSS contract 弱化。
-9. 禁止继续扩展自研 tracker 成长期核心，未来公网部署前必须重新评估成熟 tracker 轮子。
+9. 禁止继续扩展自研 tracker 成长期核心；当前默认使用成熟 tracker 轮子，未来公网部署前只允许在成熟 tracker 之间替换。
 
 ---
 

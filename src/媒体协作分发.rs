@@ -1,7 +1,7 @@
 use crate::usecase;
 use axum::http::{uri::Authority, HeaderMap, Uri};
 use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use sha2::{Digest, Sha256};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
@@ -280,6 +280,12 @@ struct 协作分发入群票据声明<'a> {
     exp: usize,
 }
 
+#[derive(serde::Deserialize)]
+struct 协作分发入群票据校验声明 {
+    /// tracker 入群只锚定 info hash；房间/附件权限已经在签发票据前由用例层裁决。
+    ih: String,
+}
+
 struct 协作分发入群票据签发结果 {
     ticket: String,
     ticket_expires_at: String,
@@ -323,6 +329,28 @@ fn 签发协作分发join_ticket(
         ticket,
         ticket_expires_at,
     })
+}
+
+/// 校验 tracker 入群票据，只回答“这张票能不能进入当前 infoHash 对应的 swarm”。
+/// 这里不查询房间、不判断附件可见性：这些业务真相必须在签发 locator/join_ticket 前完成。
+pub(crate) fn 验证协作分发join_ticket(
+    secret: &str,
+    expected_info_hash: &str,
+    ticket: &str,
+) -> Result<(), &'static str> {
+    let claims = decode::<协作分发入群票据校验声明>(
+        ticket,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .map_err(|_| "join_ticket_invalid")?
+    .claims;
+
+    if claims.ih != expected_info_hash {
+        return Err("join_ticket_invalid");
+    }
+
+    Ok(())
 }
 
 /// Phase 2 的 runtime locator 仍然服从同一条边界：

@@ -1,10 +1,10 @@
 use super::*;
-use axum::{extract::State as AxumState, routing::post, Json as AxumJson, Router};
+use axum::{Json as AxumJson, Router, extract::State as AxumState, routing::post};
 use std::sync::{Arc, Mutex};
 use tokio::{
     net::{TcpListener, TcpStream},
     task::JoinHandle,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 
 use sqlx::PgPool;
@@ -303,7 +303,12 @@ async fn recent_partial_peer会让过期附件保持connecting而不是直接no_
                 .connect(&database_url_for_attachment)
                 .await
                 .expect("应能直连数据库插入附件");
-            插入ready视频附件记录(&pool, &session_id_for_attachment, &attachment_id_for_worker).await;
+            插入ready视频附件记录(
+                &pool,
+                &session_id_for_attachment,
+                &attachment_id_for_worker,
+            )
+            .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
             插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
@@ -408,7 +413,12 @@ async fn stale_partial_peer不会把附件永久抬在connecting() {
                 .connect(&database_url_for_attachment)
                 .await
                 .expect("应能直连数据库插入附件");
-            插入ready视频附件记录(&pool, &session_id_for_attachment, &attachment_id_for_worker).await;
+            插入ready视频附件记录(
+                &pool,
+                &session_id_for_attachment,
+                &attachment_id_for_worker,
+            )
+            .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
             插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
@@ -529,7 +539,12 @@ async fn partial_peer不能冒充available_ready来源() {
                 .connect(&database_url_for_attachment)
                 .await
                 .expect("应能直连数据库插入附件");
-            插入ready视频附件记录(&pool, &session_id_for_attachment, &attachment_id_for_worker).await;
+            插入ready视频附件记录(
+                &pool,
+                &session_id_for_attachment,
+                &attachment_id_for_worker,
+            )
+            .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_for_worker).await;
             插入流媒体清单元数据记录(&pool, &attachment_id_for_worker).await;
             sqlx::query(
@@ -639,10 +654,20 @@ async fn 同swarm的另一条完整peer能让旧附件保持ready() {
                 .connect(&database_url_for_attachment)
                 .await
                 .expect("应能直连数据库插入附件");
-            插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_target_for_worker).await;
+            插入ready视频附件记录(
+                &pool,
+                &identity.会话标识,
+                &attachment_id_target_for_worker,
+            )
+            .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_target_for_worker).await;
             插入流媒体清单元数据记录(&pool, &attachment_id_target_for_worker).await;
-            插入ready视频附件记录(&pool, &identity.会话标识, &attachment_id_seed_for_worker).await;
+            插入ready视频附件记录(
+                &pool,
+                &identity.会话标识,
+                &attachment_id_seed_for_worker,
+            )
+            .await;
             插入附件协作分发元数据记录(&pool, &attachment_id_seed_for_worker).await;
             插入流媒体清单元数据记录(&pool, &attachment_id_seed_for_worker).await;
             sqlx::query(
@@ -742,8 +767,9 @@ async fn web_seed过期且最近没有peer存活时locator会裁决expired() {
         let mut repo = koko::adapter::Pg仓储::连接并迁移(&database_url).expect("应能连接数据库");
         let identity =
             koko::usecase::引导匿名身份(&mut repo, &device_token).expect("应能引导匿名身份");
-        let room = koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
-            .expect("应能进房");
+        let room =
+            koko::usecase::按短码进房或建房(&mut repo, &identity.会话标识, &room_code)
+                .expect("应能进房");
         let room_id = match room {
             koko::contract::快照::房间 { 房间标识, .. } => 房间标识,
             _ => panic!("进房应返回房间快照"),
@@ -1231,15 +1257,19 @@ async fn web_seed过期且streaming已删除但最近peer仍存活时locator会�
 async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
     let (fake_seeder_base_url, _seeder_records, fake_seeder_server) = 启动假seeder控制面().await;
     let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
-    env::set_var("SWARM_SEEDER_CONTROL_BASE_URL", fake_seeder_base_url.as_str());
+    env::set_var(
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        fake_seeder_base_url.as_str(),
+    );
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
         .expect("应先追平附件迁移");
-    let state = koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
-        .await
-        .expect("应能构建共享应用状态");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1342,24 +1372,29 @@ async fn active_backend_strong_seed会让同swarm过期附件保持ready() {
 async fn 做种对账会按权威附件集合触发start并下发reconcile清单() {
     let (fake_seeder_base_url, seeder_records, fake_seeder_server) = 启动假seeder控制面().await;
     let backup = 备份并清空环境变量(&[
+        "APP_PORT",
         "SWARM_SEEDER_CONTROL_BASE_URL",
         "SWARM_TRACKER_PUBLIC_URL",
         "SWARM_SEEDER_TRACKER_URL",
     ]);
-    env::set_var("SWARM_SEEDER_CONTROL_BASE_URL", fake_seeder_base_url.as_str());
+    env::set_var("APP_PORT", "18080");
+    env::set_var(
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        fake_seeder_base_url.as_str(),
+    );
     env::set_var(
         "SWARM_TRACKER_PUBLIC_URL",
         "wss://im.example.com/api/swarm/announce",
     );
-    env::set_var("SWARM_SEEDER_TRACKER_URL", "ws://127.0.0.1:17072");
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
         .expect("应先追平附件迁移");
-    let state = koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
-        .await
-        .expect("应能构建共享应用状态");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1433,8 +1468,8 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
             .as_array()
             .and_then(|values| values.first())
             .and_then(|value| value.as_str()),
-        Some("ws://127.0.0.1:17072"),
-        "后台做种对账也必须使用 sidecar 私有 tracker announce，禁止复用浏览器 public WSS announce"
+        Some("ws://127.0.0.1:18080/api/swarm/announce"),
+        "后台做种对账必须走后端同源认证入口，禁止直连裸 tracker 绕过 join_ticket 门禁"
     );
     assert!(
         matched_start_payload["torrentUrl"]
@@ -1491,15 +1526,19 @@ async fn 做种对账会按权威附件集合触发start并下发reconcile清单
 async fn 做种对账会跳过缺失torrent元信息的脏附件记录() {
     let (fake_seeder_base_url, seeder_records, fake_seeder_server) = 启动假seeder控制面().await;
     let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
-    env::set_var("SWARM_SEEDER_CONTROL_BASE_URL", fake_seeder_base_url.as_str());
+    env::set_var(
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        fake_seeder_base_url.as_str(),
+    );
 
     let cfg = koko::assembly::读取配置().expect("需要本地 DATABASE_URL");
     koko::assembly::自动追平迁移(&cfg.database_url)
         .await
         .expect("应先追平附件迁移");
-    let state = koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
-        .await
-        .expect("应能构建共享应用状态");
+    let state =
+        koko::shell::构建应用状态(cfg.database_url.clone(), cfg.admin_password.clone())
+            .await
+            .expect("应能构建共享应用状态");
     let app = koko::shell::构建路由(state.clone());
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
