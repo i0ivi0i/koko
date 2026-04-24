@@ -196,6 +196,57 @@ describe("资产协作分发运行时", () => {
     });
   });
 
+  it("同一 swarm 复用已有会话时会刷新 join_ticket 而不是继续拿旧票 announce", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-ticket-renew"
+    );
+    let getAnnounceOpts!: () => Record<string, string | undefined>;
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      getAnnounceOpts = options.getAnnounceOpts!;
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const firstLocator = 准备好的定位结果("att-ticket-a", "swarm-ticket-renew");
+    if (!firstLocator.distribution) {
+      throw new Error("测试前提失败：第一个 locator 缺少 distribution");
+    }
+    firstLocator.distribution.join_ticket = "ticket-old";
+    firstLocator.distribution.torrent_info_hash = "torrent-info-same";
+
+    const secondLocator = 准备好的定位结果("att-ticket-b", "swarm-ticket-renew");
+    if (!secondLocator.distribution) {
+      throw new Error("测试前提失败：第二个 locator 缺少 distribution");
+    }
+    secondLocator.distribution.join_ticket = "ticket-new";
+    secondLocator.distribution.torrent_info_hash = "torrent-info-same";
+
+    await 解析协作分发源({
+      attachmentId: "att-ticket-a",
+      kind: "video",
+      locator: firstLocator,
+      consumerId: "session:att-ticket-a",
+    });
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
+
+    await 解析协作分发源({
+      attachmentId: "att-ticket-b",
+      kind: "video",
+      locator: secondLocator,
+      consumerId: "session:att-ticket-b",
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
+    expect(读取协作分发会话状态("swarm-ticket-renew")).toMatchObject({
+      refs: 2,
+      consumers: ["session:att-ticket-a", "session:att-ticket-b"],
+    });
+  });
+
   it("视频进入 backfill 时会先抬 preview 关键片段优先级，再继续整附件补齐", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const torrentHandle = 创建可观测假Torrent(

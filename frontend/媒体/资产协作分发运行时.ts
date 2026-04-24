@@ -15,6 +15,7 @@ import {
   是否为协作分发JoinTicket失效错误,
   type 协作分发底层会话,
   type 协作分发会话事件,
+  type 协作分发JoinTicketRef,
   type 协作分发媒体源,
   type WebTorrent文件,
   type WebTorrent种子,
@@ -37,6 +38,7 @@ type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings
   consumerBindings: Map<string, 协作分发消费者绑定>;
   previewPriorityApplied: boolean;
   wholeFileSelectApplied: boolean;
+  joinTicketRef: 协作分发JoinTicketRef;
 };
 
 export type 资产协作分发会话快照 = {
@@ -681,6 +683,14 @@ const 是否应强制丢弃未完成补齐 = (
   input.丢弃未完成补齐 === true &&
   !session.locallyComplete;
 
+function 刷新协作分发会话票据(
+  session: 底层协作分发会话,
+  distribution: NonNullable<ReturnType<typeof 读取协作分发定位片段>>
+): void {
+  // join_ticket 只属于 tracker 入群门禁续租；刷新它不改变媒体身份、业务附件或 swarm 归属。
+  session.joinTicketRef.value = distribution.join_ticket ?? null;
+}
+
 async function 确保协作分发会话(
   runtime: 资产协作分发运行时内部,
   input: {
@@ -705,6 +715,7 @@ async function 确保协作分发会话(
   const consumerBinding = 归一化协作分发消费者(input);
   let session = runtime.底层会话表.get(input.distribution.swarm_id);
   if (session) {
+    刷新协作分发会话票据(session, input.distribution);
     session.consumerBindings.set(consumerBinding.consumerId, consumerBinding);
     发送事件(runtime, {
       type: "ACQUIRE_REQUESTED",
@@ -744,6 +755,7 @@ async function 确保协作分发会话(
     cleanupStarted: false,
     曾连上群友: false,
     consumerBindings: new Map([[consumerBinding.consumerId, consumerBinding]]),
+    joinTicketRef: { value: input.distribution.join_ticket ?? null },
   };
   runtime.底层会话表.set(input.distribution.swarm_id, session);
   发送事件(runtime, {
@@ -765,7 +777,9 @@ async function 确保协作分发会话(
 
   session.sourcePromise = (async () => {
     const browserRuntime = await 获取或创建协作分发浏览器运行时();
-    const torrent = await 接入协作分发种子(browserRuntime, input.distribution);
+    const torrent = await 接入协作分发种子(browserRuntime, input.distribution, {
+      joinTicketRef: session.joinTicketRef,
+    });
     session.torrent = torrent;
     if (runtime.底层会话表.get(session.swarmId) !== session) {
       清理协作分发底层会话(session, browserRuntime);

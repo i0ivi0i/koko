@@ -7,6 +7,7 @@ import {
   读取可用协作分发片段,
   读取协作分发定位片段,
   重置协作分发浏览器运行时,
+  接入协作分发种子,
   清理协作分发底层会话,
   协作分发JoinTicket失效错误,
   协作分发运行时环境不支持错误,
@@ -499,6 +500,41 @@ describe("媒体协作分发", () => {
       locallyComplete: false,
     });
     expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it("join_ticket 续租引用更新后 getAnnounceOpts 会读取新票据", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-ticket-ref"
+    );
+    let getAnnounceOpts!: () => Record<string, string | undefined>;
+    const add = vi.fn(((_torrentId, options, onTorrent) => {
+      getAnnounceOpts = options.getAnnounceOpts!;
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-ticket-ref");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+    locator.distribution.join_ticket = "ticket-old";
+    const ticketRef = { value: "ticket-old" };
+
+    await 接入协作分发种子(
+      {
+        client: new ctor(),
+        streamServer: { close: vi.fn() },
+      },
+      locator.distribution,
+      { joinTicketRef: ticketRef }
+    );
+
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-old" });
+    ticketRef.value = "ticket-new";
+    expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
   });
 
   it("locator 给出 media_state.retry_after_ms 时，会透传给 noPeersIntervalTime 统一探测节奏", async () => {

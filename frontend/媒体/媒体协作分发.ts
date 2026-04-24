@@ -169,6 +169,10 @@ type 协作分发媒体源探测选项 = {
   读取终止错误?: () => unknown | null;
 };
 
+export interface 协作分发JoinTicketRef {
+  value: string | null;
+}
+
 const 读取探测终止错误 = (options: 协作分发媒体源探测选项): unknown | null => {
   const raw = options.读取终止错误?.() ?? null;
   if (!raw) {
@@ -556,10 +560,13 @@ async function 上报协作分发存活(
 
 export async function 接入协作分发种子(
   runtime: 协作分发浏览器运行时,
-  distribution: 媒体协作分发定位片段
+  distribution: 媒体协作分发定位片段,
+  options: { joinTicketRef?: 协作分发JoinTicketRef } = {}
 ): Promise<WebTorrent种子> {
   const torrentBytes = await 拉取受控Torrent字节(distribution);
   const noPeersIntervalTime = 读取noPeers探测间隔毫秒(distribution);
+  // join_ticket 是 tracker 入群门禁。它必须跟随 locator 续租，不能被首次建 torrent 的闭包冻住。
+  const joinTicketRef = options.joinTicketRef ?? { value: distribution.join_ticket };
   return await new Promise<WebTorrent种子>((resolve, reject) => {
     let 已结束 = false;
     const 收口resolve = (torrent: WebTorrent种子) => {
@@ -586,11 +593,11 @@ export async function 接入协作分发种子(
         destroyStoreOnDestroy: false,
         ...(noPeersIntervalTime ? { noPeersIntervalTime } : {}),
         getAnnounceOpts: () => {
-          if (!distribution.join_ticket) {
+          if (!joinTicketRef.value) {
             return {};
           }
           return {
-            ticket: distribution.join_ticket,
+            ticket: joinTicketRef.value,
           };
         },
       },
