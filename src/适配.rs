@@ -525,16 +525,20 @@ impl 仓储端口 for Pg仓储 {
         )
     }
 
-    fn 查询房间可复用source_hash媒体资产(
+    fn 查询可复用source_hash媒体资产(
         &self,
-        房间标识: &str,
+        会话标识: &str,
+        目标房间标识: &str,
+        当前匿名身份标识: &str,
         source_hash: &str,
         source_byte_size: i64,
         种类: usecase::媒体附件类型,
     ) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
-        媒体附件适配::查询房间可复用source_hash媒体资产(
+        媒体附件适配::查询可复用source_hash媒体资产(
             self,
-            房间标识,
+            会话标识,
+            目标房间标识,
+            当前匿名身份标识,
             source_hash,
             source_byte_size,
             种类,

@@ -435,9 +435,39 @@ fn 媒体附件类型转数据库值(种类: &usecase::媒体附件类型) -> &'
     }
 }
 
-async fn 查询房间可复用source_hash媒体资产_异步(
+fn 行转可复用媒体资产(row: PgRow) -> Result<usecase::可复用媒体资产, contract::错误码> {
+    let kind = match row.get::<String, _>("kind").as_str() {
+        "image" => usecase::媒体附件类型::图片,
+        "video" => usecase::媒体附件类型::视频,
+        _ => return Err(contract::错误码::系统错误),
+    };
+    let width = row
+        .get::<Option<i32>, _>("width")
+        .ok_or(contract::错误码::系统错误)?;
+    let height = row
+        .get::<Option<i32>, _>("height")
+        .ok_or(contract::错误码::系统错误)?;
+    Ok(usecase::可复用媒体资产 {
+        content_hash: row.get("content_hash"),
+        种类: kind,
+        mime_type: row.get("mime_type"),
+        字节大小: row.get("byte_size"),
+        宽: width,
+        高: height,
+        存储键: row.get("storage_key"),
+        torrent_bytes: row.get("torrent_bytes"),
+        torrent_info_hash: row.get("torrent_info_hash"),
+        piece_length字节: row.get("piece_length_bytes"),
+        web_seed_until秒: row.get("web_seed_until_epoch"),
+        origin_expires_at秒: row.get("origin_expires_at_epoch"),
+    })
+}
+
+async fn 查询可复用source_hash媒体资产_异步(
     pool: &PgPool,
-    房间标识: &str,
+    会话标识: &str,
+    _目标房间标识: &str,
+    当前匿名身份标识: &str,
     source_hash: &str,
     source_byte_size: i64,
     种类: usecase::媒体附件类型,
@@ -457,72 +487,59 @@ async fn 查询房间可复用source_hash媒体资产_异步(
             cma.piece_length_bytes,
             EXTRACT(EPOCH FROM cma.web_seed_until)::BIGINT AS web_seed_until_epoch,
             EXTRACT(EPOCH FROM cma.origin_expires_at)::BIGINT AS origin_expires_at_epoch
-         FROM rooms r
-         JOIN messages m ON m.room_id = r.id
-         JOIN message_attachment_refs mar ON mar.message_id = m.message_id
-         JOIN attachments a ON a.id = mar.attachment_id
+         FROM attachments a
+         JOIN anonymous_identities owner_ai ON owner_ai.id = a.owner_anonymous_identity_id
          JOIN attachment_source_hashes ash ON ash.attachment_id = a.attachment_id
          JOIN attachment_canonical_asset_refs acar ON acar.attachment_id = a.attachment_id
          JOIN canonical_media_assets cma ON cma.content_hash = acar.content_hash
-         WHERE r.room_id = $1
-           AND ash.source_hash = $2
-           AND ash.source_byte_size = $3
-           AND a.kind = $4
-           AND cma.kind = $4
+         WHERE ash.source_hash = $1
+           AND ash.source_byte_size = $2
+           AND a.kind = $3
+           AND cma.kind = $3
            AND a.status = 'ready'
            AND a.origin_deleted_at IS NULL
            AND cma.origin_deleted_at IS NULL
-         ORDER BY m.event_position DESC
-         LIMIT 1",
+           AND (
+               owner_ai.identity_uuid::text = $4
+               OR EXISTS (
+                   SELECT 1
+                     FROM message_attachment_refs mar
+                     JOIN messages m ON m.message_id = mar.message_id
+                     JOIN room_members rm ON rm.room_id = m.room_id AND rm.left_at IS NULL
+                     JOIN sessions viewer_s ON viewer_s.id = rm.session_id
+                    WHERE mar.attachment_id = a.id
+                      AND viewer_s.session_id = $5
+               )
+           )
+         ORDER BY a.created_at DESC
+          LIMIT 1",
     )
-    .bind(房间标识)
     .bind(source_hash)
     .bind(source_byte_size)
     .bind(kind)
+    .bind(当前匿名身份标识)
+    .bind(会话标识)
     .fetch_optional(pool)
     .await
     .map_err(|_| contract::错误码::系统错误)?;
 
-    row.map(|row| {
-        let kind = match row.get::<String, _>("kind").as_str() {
-            "image" => usecase::媒体附件类型::图片,
-            "video" => usecase::媒体附件类型::视频,
-            _ => return Err(contract::错误码::系统错误),
-        };
-        let width = row
-            .get::<Option<i32>, _>("width")
-            .ok_or(contract::错误码::系统错误)?;
-        let height = row
-            .get::<Option<i32>, _>("height")
-            .ok_or(contract::错误码::系统错误)?;
-        Ok(usecase::可复用媒体资产 {
-            content_hash: row.get("content_hash"),
-            种类: kind,
-            mime_type: row.get("mime_type"),
-            字节大小: row.get("byte_size"),
-            宽: width,
-            高: height,
-            存储键: row.get("storage_key"),
-            torrent_bytes: row.get("torrent_bytes"),
-            torrent_info_hash: row.get("torrent_info_hash"),
-            piece_length字节: row.get("piece_length_bytes"),
-            web_seed_until秒: row.get("web_seed_until_epoch"),
-            origin_expires_at秒: row.get("origin_expires_at_epoch"),
-        })
-    })
-    .transpose()
+    row.map(行转可复用媒体资产).transpose()
 }
 
-pub(super) fn 查询房间可复用source_hash媒体资产(
+pub(super) fn 查询可复用source_hash媒体资产(
     repo: &Pg仓储,
-    房间标识: &str,
+    会话标识: &str,
+    目标房间标识: &str,
+    当前匿名身份标识: &str,
     source_hash: &str,
     source_byte_size: i64,
     种类: usecase::媒体附件类型,
 ) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
-    repo.在运行时执行(查询房间可复用source_hash媒体资产_异步(
+    repo.在运行时执行(查询可复用source_hash媒体资产_异步(
         &repo.pool,
-        房间标识,
+        会话标识,
+        目标房间标识,
+        当前匿名身份标识,
         source_hash,
         source_byte_size,
         种类,

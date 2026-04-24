@@ -604,16 +604,25 @@ pub trait 仓储端口 {
         Err(contract::错误码::系统错误)
     }
 
-    /// 只允许从“当前房间已经成立且当前会话可见的消息附件”里找 source_hash 命中。
-    /// 这条端口故意不提供全局 source_hash 查询，避免把 dedupe 做成存在性探测侧信道。
-    fn 查询房间可复用source_hash媒体资产(
+    /// source_hash 查询只回答“当前发送者是否已经有权复用这份资产”。
+    /// 目标房间只用于发送上下文，不能被误当成媒体资产身份边界；SQL 仍必须拒绝全站存在性探测。
+    fn 查询可复用source_hash媒体资产(
         &self,
-        房间标识: &str,
+        会话标识: &str,
+        目标房间标识: &str,
+        当前匿名身份标识: &str,
         source_hash: &str,
         source_byte_size: i64,
         种类: 媒体附件类型,
     ) -> Result<Option<可复用媒体资产>, contract::错误码> {
-        let _ = (房间标识, source_hash, source_byte_size, 种类);
+        let _ = (
+            会话标识,
+            目标房间标识,
+            当前匿名身份标识,
+            source_hash,
+            source_byte_size,
+            种类,
+        );
         Ok(None)
     }
 
@@ -1323,8 +1332,8 @@ pub fn 准备媒体附件上传(
     let snapshot = 仓储.创建预备媒体附件记录(&所属匿名身份标识, 附件)?;
     if let Some(source_hash) = 附件.source_hash.as_deref() {
         let source_byte_size = 附件.source_byte_size.ok_or(contract::错误码::参数非法)?;
-        // source_hash 跟随附件占位记录落库；后续查询仍必须从房间已成立消息出发，
-        // 所以这里不会产生跨房间“已有此文件”的探测能力。
+        // source_hash 跟随附件占位记录落库；后续查询必须经过当前身份、
+        // 当前会话可见性和目标房间发送裁决，避免把原文件哈希做成全站探针。
         仓储.记录附件source_hash(
             &snapshot.附件标识,
             source_hash,
@@ -1393,8 +1402,10 @@ pub fn 复用source_hash媒体附件(
         .查询会话所属匿名身份(&请求.会话标识)?
         .ok_or(contract::错误码::会话无效)?;
 
-    let Some(asset) = 仓储.查询房间可复用source_hash媒体资产(
+    let Some(asset) = 仓储.查询可复用source_hash媒体资产(
+        &请求.会话标识,
         &请求.房间标识,
+        &所属匿名身份标识,
         &请求.source_hash,
         请求.source_byte_size,
         请求.种类.clone(),
