@@ -96,6 +96,7 @@
 
 ```rust
 #[test]
+#[serial]
 fn 协作分发配置会为sidecar生成私有tracker地址() {
     let old_tracker_port = env::var("SWARM_TRACKER_PORT").ok();
     let old_public_url = env::var("SWARM_TRACKER_PUBLIC_URL").ok();
@@ -128,6 +129,7 @@ fn 协作分发配置会为sidecar生成私有tracker地址() {
 
 ```rust
 #[test]
+#[serial]
 fn 协作分发配置允许显式覆盖sidecar私有tracker地址() {
     let old = env::var("SWARM_SEEDER_TRACKER_URL").ok();
     env::set_var("SWARM_SEEDER_TRACKER_URL", "ws://tracker.internal:7072");
@@ -144,7 +146,7 @@ fn 协作分发配置允许显式覆盖sidecar私有tracker地址() {
 Run:
 
 ```powershell
-cargo test --test 启动与迁移测试 协作分发配置 -- --nocapture
+cargo test --lib 协作分发配置 -- --nocapture
 ```
 
 Expected: FAIL，`协作分发配置` 当前没有 `seeder_tracker_url` 字段。
@@ -175,7 +177,7 @@ if seeder_tracker_url.is_empty() {
 Run:
 
 ```powershell
-cargo test --test 启动与迁移测试 协作分发配置 -- --nocapture
+cargo test --lib 协作分发配置 -- --nocapture
 ```
 
 Expected: PASS。
@@ -272,7 +274,7 @@ let announce_urls = if seeder_tracker_url.trim().is_empty() {
 ```
 
 5. 中文注释写明：public announce 已在 locator 里给浏览器；这里是后端 owner 调 sidecar 的私有入口。
-6. 更新所有调用点：
+6. 更新所有调用点，至少包括 complete、source_hash reuse、后台做种对账：
 
 ```rust
 super::从协作分发响应构造做种启动命令(
@@ -302,7 +304,7 @@ Expected: PASS。
 Run:
 
 ```powershell
-cargo test --test 协作分发测试 默认回推同源tracker代理入口 -- --nocapture
+cargo test --test 协作分发测试 未显式配置tracker公网地址时locator会按请求host推导可达announce地址 -- --nocapture
 ```
 
 如果测试名不匹配，执行：
@@ -417,16 +419,20 @@ env::set_var("SWARM_SEEDER_TRACKER_URL", "ws://127.0.0.1:17072");
 并断言所有 `/seed/start` 请求：
 
 ```rust
-for request in requests.iter().filter(|request| request["kind"] == "start") {
+let records = seeder_records
+    .lock()
+    .expect("seeder 控制面记录锁不应中毒")
+    .clone();
+for payload in records.start_payloads.iter() {
     assert_eq!(
-        request["body"]["announceUrls"][0].as_str(),
+        payload["announceUrls"][0].as_str(),
         Some("ws://127.0.0.1:17072"),
         "后台做种对账也必须使用 sidecar 私有 tracker announce"
     );
 }
 ```
 
-如果 fake seeder 请求结构不同，按现有 helper 的实际 JSON 形状调整，不能弱化断言为“非空”。
+这里必须使用当前 helper 的真实结构：`records.start_payloads` 直接保存 `/seed/start` body，不能写成 `kind/body` 包装结构，也不能弱化断言为“非空”。
 
 - [ ] **Step 3: 跑红测确认失败**
 
@@ -568,8 +574,14 @@ Expected:
 
 ```powershell
 git status --short
-git add .
-git commit -m "验证：HTTPS下WebTorrent公私announce分离"
+```
+
+如果 Task 5 没有新增脚本或验收记录文件，不需要提交。
+如果新增了 `scripts/smoke-webtorrent-https.ps1` 或验收记录，只允许显式 add 对应文件：
+
+```powershell
+git add scripts/smoke-webtorrent-https.ps1
+git commit -m "验证：补充WebTorrent HTTPS冒烟脚本"
 ```
 
 ---
