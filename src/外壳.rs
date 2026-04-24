@@ -1,25 +1,25 @@
 use axum::{
+    Json, Router,
     extract::{
-        ws::{CloseFrame as AxumCloseFrame, Message as AxumWsMessage, WebSocket, WebSocketUpgrade},
         DefaultBodyLimit, OriginalUri, State,
+        ws::{CloseFrame as AxumCloseFrame, Message as AxumWsMessage, WebSocket, WebSocketUpgrade},
     },
-    http::{header, HeaderValue, StatusCode},
+    http::{HeaderValue, StatusCode, header},
     response::{Html, IntoResponse},
     routing::{any, get, post},
-    Json, Router,
 };
 use futures_util::{SinkExt, StreamExt};
 use object_store::{
+    ObjectStore, ObjectStoreExt,
     aws::{AmazonS3, AmazonS3Builder},
     local::LocalFileSystem,
     path::Path as ObjectPath,
-    ObjectStore, ObjectStoreExt,
 };
 use serde::{Deserialize, Serialize};
 use socketioxide::{
+    SocketIo,
     extract::{Data, Extension, SocketRef, TryData},
     handler::ConnectHandler,
-    SocketIo,
 };
 use sqlx::PgPool;
 use std::{
@@ -1018,6 +1018,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route(
             "/api/media/{attachment_kind}/source-dedupe",
             post(媒体上传外壳::reuse_media_by_source_hash),
+        )
+        .route(
+            "/api/media/{attachment_kind}/forward",
+            post(媒体上传外壳::forward_media_attachment),
         )
         .route(
             "/api/media/{attachment_id}/complete",

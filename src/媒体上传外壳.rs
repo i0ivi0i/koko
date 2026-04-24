@@ -8,14 +8,14 @@ use crate::{
     usecase::仓储端口,
 };
 use axum::{
+    Json,
     body::Body,
     extract::{Path, Request, State},
-    http::{uri::Authority, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, uri::Authority},
     response::{IntoResponse, Response},
-    Json,
 };
 use memmap2::{Mmap, MmapOptions};
-use object_store::{path::Path as ObjectPath, ObjectStoreExt};
+use object_store::{ObjectStoreExt, path::Path as ObjectPath};
 use serde::Deserialize;
 use std::{
     fs::File as StdFile,
@@ -52,6 +52,15 @@ pub(super) struct SourceHashReuseBody {
     source_hash: Option<String>,
     source_byte_size: Option<i64>,
     source_file_name: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ForwardMediaBody {
+    session_id: Option<String>,
+    target_room_id: Option<String>,
+    source_attachment_id: Option<String>,
+    client_message_id: Option<String>,
+    text: Option<String>,
 }
 
 /// 媒体 complete 请求体。
@@ -115,7 +124,7 @@ pub(super) async fn prepare_media_upload(
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 "缺少 file_name",
-            )
+            );
         }
     };
     let mime_type = match body
@@ -129,7 +138,7 @@ pub(super) async fn prepare_media_upload(
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 "缺少 mime_type",
-            )
+            );
         }
     };
     let byte_size = match body.byte_size {
@@ -139,7 +148,7 @@ pub(super) async fn prepare_media_upload(
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 "缺少 byte_size",
-            )
+            );
         }
     };
     if let Err((status, code, message)) =
@@ -192,7 +201,7 @@ pub(super) async fn prepare_media_upload(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("prepare 任务执行失败: {err}"),
-            )
+            );
         }
     };
 
@@ -311,6 +320,83 @@ pub(super) async fn prepare_media_upload(
         .into_response()
 }
 
+async fn 构造ready媒体附件响应并触发做种(
+    state: &应用状态,
+    headers: &HeaderMap,
+    session_id: &str,
+    附件: &usecase::媒体附件快照,
+    协作分发: &usecase::协作分发元数据快照,
+    usecase_label: &'static str,
+) -> serde_json::Value {
+    let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
+        state.swarm_tracker_public_url.as_str(),
+        headers,
+    );
+    let now_epoch秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
+    let original_url = super::媒体资产外壳::构造附件受控地址(
+        附件.附件标识.as_str(),
+        session_id,
+        "original",
+    );
+    let 冷源仍可用 = usecase::冷源当前可用(
+        Some(original_url.as_str()),
+        Some(协作分发.web_seed_until秒),
+        None,
+        now_epoch秒,
+    );
+    let runtime_distribution = media_distribution::协作分发快照转响应值(
+        协作分发,
+        media_distribution::协作分发响应上下文 {
+            attachment_id: 附件.附件标识.as_str(),
+            session_id,
+            tracker_public_url: tracker_public_url.as_str(),
+            web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
+            ticket_secret: state.swarm_ticket_secret.as_deref(),
+            ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
+            冷源仍可用,
+            附件已删除: false,
+            now_epoch秒,
+            stale_seconds: state.swarm_peer_presence_stale_seconds,
+        },
+    );
+    if let Some(启动命令) =
+        super::从协作分发响应构造做种启动命令(&runtime_distribution)
+    {
+        if let Err(err) = super::尝试启动协作分发做种(state, &启动命令).await {
+            tracing::warn!(
+                usecase = usecase_label,
+                phase = "seed_start_failed",
+                attachment_id = 附件.附件标识.as_str(),
+                info_hash = 启动命令.info_hash.as_str(),
+                error = %err,
+                "复用已有 canonical 资产后触发 sidecar 做种失败，等待后台对账重试"
+            );
+        }
+    }
+    let media_asset = super::媒体资产外壳::构造媒体资产响应体(
+        附件,
+        super::媒体资产外壳::媒体资产响应上下文 {
+            运行态分发: Some(&runtime_distribution),
+            分发快照: Some(协作分发),
+            流媒体清单: None,
+            原始地址: original_url,
+            原始冷源到期时间戳秒: Some(协作分发.web_seed_until秒),
+            原始冷源删除时间戳秒: None,
+            会话标识: session_id,
+            当前时间戳秒: now_epoch秒,
+        },
+    );
+    let preview_asset = super::媒体资产外壳::构造预览资源响应体(
+        附件.附件标识.as_str(),
+        Some(session_id),
+        matches!(附件.种类, usecase::媒体附件类型::视频) && 附件.允许缩略图,
+    );
+    super::媒体资产外壳::媒体附件快照转响应体(附件, media_asset, preview_asset)
+}
+
 pub(super) async fn reuse_media_by_source_hash(
     Path(raw_kind): Path<String>,
     State(state): State<应用状态>,
@@ -378,7 +464,7 @@ pub(super) async fn reuse_media_by_source_hash(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("source_hash 复用任务执行失败: {err}"),
-            )
+            );
         }
     };
 
@@ -395,82 +481,123 @@ pub(super) async fn reuse_media_by_source_hash(
             .into_response();
     };
 
-    let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
-        state.swarm_tracker_public_url.as_str(),
+    let attachment = 构造ready媒体附件响应并触发做种(
+        &state,
         &headers,
-    );
-    let now_epoch秒 = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or_default();
-    let original_url = super::媒体资产外壳::构造附件受控地址(
-        附件.附件标识.as_str(),
         session_id.as_str(),
-        "original",
-    );
-    let 冷源仍可用 = usecase::冷源当前可用(
-        Some(original_url.as_str()),
-        Some(协作分发.web_seed_until秒),
-        None,
-        now_epoch秒,
-    );
-    let runtime_distribution = media_distribution::协作分发快照转响应值(
+        &附件,
         &协作分发,
-        media_distribution::协作分发响应上下文 {
-            attachment_id: 附件.附件标识.as_str(),
-            session_id: session_id.as_str(),
-            tracker_public_url: tracker_public_url.as_str(),
-            web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
-            ticket_secret: state.swarm_ticket_secret.as_deref(),
-            ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
-            冷源仍可用,
-            附件已删除: false,
-            now_epoch秒,
-            stale_seconds: state.swarm_peer_presence_stale_seconds,
-        },
-    );
-    if let Some(启动命令) =
-        super::从协作分发响应构造做种启动命令(&runtime_distribution)
-    {
-        if let Err(err) = super::尝试启动协作分发做种(&state, &启动命令).await {
-            tracing::warn!(
-                usecase = "source_hash媒体复用",
-                phase = "seed_start_failed",
-                attachment_id = 附件.附件标识.as_str(),
-                info_hash = 启动命令.info_hash.as_str(),
-                error = %err,
-                "source_hash 命中后触发 sidecar 做种失败，等待后台对账重试"
-            );
-        }
-    }
-    let media_asset = super::媒体资产外壳::构造媒体资产响应体(
-        &附件,
-        super::媒体资产外壳::媒体资产响应上下文 {
-            运行态分发: Some(&runtime_distribution),
-            分发快照: Some(&协作分发),
-            流媒体清单: None,
-            原始地址: original_url,
-            原始冷源到期时间戳秒: Some(协作分发.web_seed_until秒),
-            原始冷源删除时间戳秒: None,
-            会话标识: session_id.as_str(),
-            当前时间戳秒: now_epoch秒,
-        },
-    );
-    let preview_asset = super::媒体资产外壳::构造预览资源响应体(
-        附件.附件标识.as_str(),
-        Some(session_id.as_str()),
-        matches!(附件.种类, usecase::媒体附件类型::视频) && 附件.允许缩略图,
-    );
-    let attachment = super::媒体资产外壳::媒体附件快照转响应体(
-        &附件,
-        media_asset,
-        preview_asset,
-    );
+        "source_hash媒体复用",
+    )
+    .await;
 
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "status": "reused",
+            "attachment": attachment,
+        })),
+    )
+        .into_response()
+}
+
+pub(super) async fn forward_media_attachment(
+    Path(raw_kind): Path<String>,
+    State(state): State<应用状态>,
+    headers: HeaderMap,
+    Json(body): Json<ForwardMediaBody>,
+) -> impl IntoResponse {
+    let media_kind = match 解析媒体类型(raw_kind.as_str()) {
+        Ok(kind) => kind,
+        Err(err) => return err_resp(err.0, err.1, err.2),
+    };
+    let session_id = match super::读取非空会话标识(body.session_id) {
+        Ok(session_id) => session_id,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let Some(target_room_id) = body
+        .target_room_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 target_room_id",
+        );
+    };
+    let Some(source_attachment_id) = body
+        .source_attachment_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 source_attachment_id",
+        );
+    };
+    let Some(client_message_id) = body
+        .client_message_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 client_message_id",
+        );
+    };
+    let text = body
+        .text
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default();
+    let attachment_id = 生成附件标识();
+    let request = usecase::媒体附件转发请求 {
+        会话标识: session_id.clone(),
+        目标房间标识: target_room_id,
+        源附件标识: source_attachment_id,
+        新附件标识: attachment_id,
+        客户端消息标识: client_message_id,
+        文本: text,
+        种类: media_kind,
+    };
+    let state_for_usecase = state.clone();
+    let result = task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_usecase);
+        usecase::转发媒体附件到房间(&mut repo, &request).map_err(map_domain_err_tuple)
+    })
+    .await;
+    let usecase::媒体附件转发结果 {
+        消息事件,
+        附件,
+        协作分发,
+        torrent: _,
+    } = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("媒体附件转发任务执行失败: {err}"),
+            );
+        }
+    };
+    let attachment = 构造ready媒体附件响应并触发做种(
+        &state,
+        &headers,
+        session_id.as_str(),
+        &附件,
+        &协作分发,
+        "媒体附件转发",
+    )
+    .await;
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "message": super::event_to_json(消息事件, Some(session_id.as_str())),
             "attachment": attachment,
         })),
     )
@@ -518,7 +645,7 @@ pub(super) async fn complete_media_upload(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("complete 任务执行失败: {err}"),
-            )
+            );
         }
     };
     let (prepared, transport) = prepared_and_transport;
@@ -685,7 +812,7 @@ pub(super) async fn complete_media_upload(
                                 message,
                                 "parse_image_kind_not_allowed",
                                 message,
-                            )
+                            );
                         }
                         Err(媒体内容解析::媒体内容解析错误::系统错误(
                             message,
@@ -697,7 +824,7 @@ pub(super) async fn complete_media_upload(
                                 message,
                                 "parse_image_system_error",
                                 message,
-                            )
+                            );
                         }
                     };
                 let 协作分发共享载荷 = 选择协作分发共享载荷(
@@ -807,7 +934,7 @@ pub(super) async fn complete_media_upload(
                             message,
                             "parse_video_kind_not_allowed",
                             message,
-                        )
+                        );
                     }
                     Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
                         return 记录并返回complete重活失败(
@@ -817,7 +944,7 @@ pub(super) async fn complete_media_upload(
                             message,
                             "parse_video_system_error",
                             message,
-                        )
+                        );
                     }
                 };
                 记录complete阶段耗时("parse_video", 视频解析开始);
@@ -1000,7 +1127,7 @@ pub(super) async fn complete_media_upload(
                         "删除上传临时文件失败",
                         "delete_upload_temp_file_failed",
                         format!("删除 Tus 上传临时文件失败: {err}"),
-                    )
+                    );
                 }
             }
             记录complete阶段耗时("delete_upload_temp_file", 上传临时文件退场开始);
@@ -1191,7 +1318,7 @@ pub(super) async fn abandon_media_upload(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "system_error",
                 format!("abandon 任务执行失败: {err}"),
-            )
+            );
         }
     };
 
@@ -1280,7 +1407,7 @@ pub(super) async fn proxy_tus_upload_transport(
                 StatusCode::BAD_REQUEST,
                 "invalid_argument",
                 format!("不支持的 Tus 上传方法: {err}"),
-            )
+            );
         }
     };
     let mut upstream_request = reqwest::Client::new().request(upstream_method, &upstream_url);
@@ -1301,7 +1428,7 @@ pub(super) async fn proxy_tus_upload_transport(
                 StatusCode::BAD_GATEWAY,
                 "media_tus_upstream_unreachable",
                 format!("Tus sidecar 不可达: {err}"),
-            )
+            );
         }
     };
 
@@ -1329,7 +1456,7 @@ pub(super) async fn proxy_tus_upload_transport(
                 StatusCode::BAD_GATEWAY,
                 "media_tus_upstream_invalid_response",
                 format!("读取 Tus sidecar 响应失败: {err}"),
-            )
+            );
         }
     };
     match response_builder.body(Body::from(body)) {
@@ -1692,7 +1819,7 @@ pub(super) async fn 等待complete所需运输回执(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "system_error",
                     format!("等待上传运输回执任务执行失败: {err}"),
-                ))
+                ));
             }
         };
         if transport.as_ref().is_some_and(媒体上传运输回执已就绪) {
@@ -1779,13 +1906,11 @@ mod tests {
         .expect("视频协作分发应能拿到 canonical mp4 载荷");
 
         assert_eq!(
-            共享载荷.稳定扩展名,
-            ".mp4",
+            共享载荷.稳定扩展名, ".mp4",
             "视频协作分发 torrent 内文件名必须跟随长期可播放的 canonical mp4，而不是继续沿用上传原片后缀"
         );
         assert_eq!(
-            共享载荷.字节,
-            b"canonical-mp4",
+            共享载荷.字节, b"canonical-mp4",
             "视频协作分发的 content_hash / swarm payload 必须认 canonical mp4 字节，而不是认已退场原片"
         );
     }

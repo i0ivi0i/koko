@@ -48,11 +48,7 @@ async fn 既有会话进房(app: axum::Router, session_id: &str, room_code: Stri
         &[],
     )
     .await;
-    assert_eq!(
-        join_status,
-        StatusCode::OK,
-        "既有会话进房失败: {join:?}"
-    );
+    assert_eq!(join_status, StatusCode::OK, "既有会话进房失败: {join:?}");
     join["room_id"].as_str().expect("room_id").to_string()
 }
 
@@ -472,6 +468,163 @@ async fn 不同身份不可见房间source_hash只能miss但相同canonical上�
         "互不可见身份只能禁止 source_hash 探测，不能阻止 content_hash 物理去重"
     );
     pool.close().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn 可见媒体附件转发到目标房间时只新增消息和附件引用不重建物理资产() {
+    let (database_url, state, app) = 构建source_hash测试应用().await;
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("应能连接 source_hash 测试数据库");
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let (session_id, source_room) = 启动会话并进房(
+        app.clone(),
+        format!("forward-owner-{uniq}"),
+        format!("FA{:010}", uniq % 10_000_000_000),
+    )
+    .await;
+    let target_room = 既有会话进房(
+        app.clone(),
+        &session_id,
+        format!("FB{:010}", uniq % 10_000_000_000),
+    )
+    .await;
+
+    let source_attachment_id = 上传带source_hash的最小图片(
+        app.clone(),
+        state.tus_upload_dir.clone(),
+        &session_id,
+        SOURCE_HASH_一号,
+        "forward-source.webp",
+        uniq,
+    )
+    .await;
+    用附件创建房间消息(
+        database_url.clone(),
+        source_room,
+        session_id.clone(),
+        source_attachment_id.clone(),
+        format!("forward-source-message-{uniq}"),
+    )
+    .await;
+
+    let (forward_status, forward_body) = send_json(
+        app,
+        Method::POST,
+        "/api/media/image/forward",
+        Some(serde_json::json!({
+            "session_id": session_id,
+            "target_room_id": target_room,
+            "source_attachment_id": source_attachment_id.clone(),
+            "client_message_id": format!("forward-target-message-{uniq}"),
+            "text": "转发",
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(forward_status, StatusCode::OK, "转发响应: {forward_body:?}");
+    let forwarded_attachment_id = forward_body["message"]["attachments"][0]["attachment_id"]
+        .as_str()
+        .expect("转发必须返回目标房间的新附件")
+        .to_string();
+    assert_ne!(
+        source_attachment_id, forwarded_attachment_id,
+        "转发只能新增当前房间附件引用，不能复用源附件事实"
+    );
+
+    let distinct_asset_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT content_hash)
+           FROM attachment_canonical_asset_refs
+          WHERE attachment_id = ANY($1)",
+    )
+    .bind(vec![source_attachment_id, forwarded_attachment_id])
+    .fetch_one(&pool)
+    .await
+    .expect("应能统计转发前后的 canonical 资产");
+    assert_eq!(
+        distinct_asset_count, 1,
+        "转发必须复用同一全局 canonical 资产，不能重建物理资产"
+    );
+    pool.close().await;
+}
+
+#[tokio::test]
+#[serial]
+async fn 不可见源附件不能被转发也不能泄漏旧附件线索() {
+    let (database_url, state, app) = 构建source_hash测试应用().await;
+    let uniq = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_millis();
+    let (session_a, room_a) = 启动会话并进房(
+        app.clone(),
+        format!("forward-hidden-a-{uniq}"),
+        format!("GA{:010}", uniq % 10_000_000_000),
+    )
+    .await;
+    let (session_b, room_b) = 启动会话并进房(
+        app.clone(),
+        format!("forward-hidden-b-{uniq}"),
+        format!("GB{:010}", uniq % 10_000_000_000),
+    )
+    .await;
+
+    let source_attachment_id = 上传带source_hash的最小图片(
+        app.clone(),
+        state.tus_upload_dir.clone(),
+        &session_a,
+        SOURCE_HASH_二号,
+        "forward-hidden-source.webp",
+        uniq,
+    )
+    .await;
+    用附件创建房间消息(
+        database_url,
+        room_a,
+        session_a,
+        source_attachment_id.clone(),
+        format!("forward-hidden-source-message-{uniq}"),
+    )
+    .await;
+
+    let (forward_status, forward_body) = send_json(
+        app,
+        Method::POST,
+        "/api/media/image/forward",
+        Some(serde_json::json!({
+            "session_id": session_b,
+            "target_room_id": room_b,
+            "source_attachment_id": source_attachment_id,
+            "client_message_id": format!("forward-hidden-target-message-{uniq}"),
+            "text": "转发",
+        })),
+        &[],
+    )
+    .await;
+    assert_ne!(
+        forward_status,
+        StatusCode::OK,
+        "不可见源附件不能被成功转发: {forward_body:?}"
+    );
+    let body_text = forward_body.to_string();
+    for leaked_key in [
+        "content_hash",
+        "swarm_id",
+        "source_room_id",
+        "source_message_id",
+        "owner",
+    ] {
+        assert!(
+            !body_text.contains(leaked_key),
+            "不可见源附件失败响应不能泄漏 {leaked_key}: {body_text}"
+        );
+    }
 }
 
 #[tokio::test]

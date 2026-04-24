@@ -1,4 +1,4 @@
-use sqlx::{postgres::PgRow, PgPool, Row};
+use sqlx::{PgPool, Row, postgres::PgRow};
 
 use crate::{contract, usecase};
 
@@ -435,7 +435,9 @@ fn 媒体附件类型转数据库值(种类: &usecase::媒体附件类型) -> &'
     }
 }
 
-fn 行转可复用媒体资产(row: PgRow) -> Result<usecase::可复用媒体资产, contract::错误码> {
+fn 行转可复用媒体资产(
+    row: PgRow,
+) -> Result<usecase::可复用媒体资产, contract::错误码> {
     let kind = match row.get::<String, _>("kind").as_str() {
         "image" => usecase::媒体附件类型::图片,
         "video" => usecase::媒体附件类型::视频,
@@ -542,6 +544,67 @@ pub(super) fn 查询可复用source_hash媒体资产(
         当前匿名身份标识,
         source_hash,
         source_byte_size,
+        种类,
+    ))
+}
+
+async fn 查询可转发媒体资产_异步(
+    pool: &PgPool,
+    会话标识: &str,
+    源附件标识: &str,
+    种类: usecase::媒体附件类型,
+) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
+    let kind = 媒体附件类型转数据库值(&种类);
+    let row = sqlx::query(
+        "SELECT
+            cma.content_hash,
+            cma.kind,
+            cma.mime_type,
+            cma.byte_size,
+            cma.width,
+            cma.height,
+            cma.storage_key,
+            cma.torrent_bytes,
+            cma.torrent_info_hash,
+            cma.piece_length_bytes,
+            EXTRACT(EPOCH FROM cma.web_seed_until)::BIGINT AS web_seed_until_epoch,
+            EXTRACT(EPOCH FROM cma.origin_expires_at)::BIGINT AS origin_expires_at_epoch
+         FROM attachments a
+         JOIN message_attachment_refs mar ON mar.attachment_id = a.id
+         JOIN messages m ON m.message_id = mar.message_id
+         JOIN room_members rm ON rm.room_id = m.room_id AND rm.left_at IS NULL
+         JOIN sessions viewer_s ON viewer_s.id = rm.session_id
+         JOIN attachment_canonical_asset_refs acar ON acar.attachment_id = a.attachment_id
+         JOIN canonical_media_assets cma ON cma.content_hash = acar.content_hash
+         WHERE viewer_s.session_id = $1
+           AND a.attachment_id = $2
+           AND a.kind = $3
+           AND cma.kind = $3
+           AND a.status = 'ready'
+           AND a.origin_deleted_at IS NULL
+           AND cma.origin_deleted_at IS NULL
+         LIMIT 1",
+    )
+    .bind(会话标识)
+    .bind(源附件标识)
+    .bind(kind)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| contract::错误码::系统错误)?;
+
+    row.map(行转可复用媒体资产).transpose()
+}
+
+pub(super) fn 查询可转发媒体资产(
+    repo: &Pg仓储,
+    会话标识: &str,
+    源附件标识: &str,
+    种类: usecase::媒体附件类型,
+) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
+    repo.在运行时执行(查询可转发媒体资产_异步(
+        &repo.pool,
+        会话标识,
+        源附件标识,
         种类,
     ))
 }

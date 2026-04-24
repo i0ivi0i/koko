@@ -188,6 +188,25 @@ pub enum SourceHash媒体复用结果 {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体附件转发请求 {
+    pub 会话标识: String,
+    pub 目标房间标识: String,
+    pub 源附件标识: String,
+    pub 新附件标识: String,
+    pub 客户端消息标识: String,
+    pub 文本: String,
+    pub 种类: 媒体附件类型,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 媒体附件转发结果 {
+    pub 消息事件: contract::领域事件,
+    pub 附件: 媒体附件快照,
+    pub 协作分发: 协作分发元数据快照,
+    pub torrent: 协作分发torrent元信息快照,
+}
+
 /// 协作分发元数据是 ready 附件旁边的稳定分发表面：
 /// 1. 业务锚点仍然是 attachment_id；
 /// 2. 这里只记录 Phase 1 真正需要的稳定字段；
@@ -623,6 +642,18 @@ pub trait 仓储端口 {
             source_byte_size,
             种类,
         );
+        Ok(None)
+    }
+
+    /// 转发只从“当前会话可见的源附件”出发复用 canonical 资产。
+    /// 这里禁止接受 source_hash，也禁止返回旧房间、旧消息或旧上传者，避免把转发误做成全站探测接口。
+    fn 查询可转发媒体资产(
+        &self,
+        会话标识: &str,
+        源附件标识: &str,
+        种类: 媒体附件类型,
+    ) -> Result<Option<可复用媒体资产>, contract::错误码> {
+        let _ = (会话标识, 源附件标识, 种类);
         Ok(None)
     }
 
@@ -1387,6 +1418,72 @@ pub fn 完成媒体附件上传(
     仓储.创建媒体附件记录(&prepared.所属匿名身份标识, 附件)
 }
 
+struct SourceHash附件记录<'a> {
+    source_hash: &'a str,
+    source_byte_size: i64,
+    source_file_name: Option<&'a str>,
+}
+
+/// 从已有 canonical 资产派生当前业务附件引用。
+///
+/// 这条内部主链同时服务 source_hash 秒传和转发：
+/// - 只新增当前发送者拥有的 ready 附件事实；
+/// - 只绑定同一份 canonical 物理资产；
+/// - 只复用同一份 swarm/torrent 线索；
+/// - 绝不复制旧消息、旧房间或旧上传者事实。
+fn 用可复用资产创建ready附件引用(
+    仓储: &mut dyn 仓储端口,
+    所属匿名身份标识: &str,
+    新附件标识: &str,
+    asset: &可复用媒体资产,
+    source_hash记录: Option<SourceHash附件记录<'_>>,
+) -> Result<(媒体附件快照, 协作分发元数据快照, 协作分发torrent元信息快照), contract::错误码> {
+    let ready_request = 媒体附件写入请求 {
+        附件标识: 新附件标识.to_string(),
+        种类: asset.种类.clone(),
+        mime_type: asset.mime_type.clone(),
+        字节大小: asset.字节大小,
+        宽: asset.宽,
+        高: asset.高,
+        原始内容存储键: asset.存储键.clone(),
+        缩略图存储键: None,
+        资产原图存储键: None,
+        完整图存储键: None,
+        原始冷源到期时间戳秒: Some(asset.origin_expires_at秒),
+        回退母本存储键: None,
+        回退母本到期时间戳秒: None,
+    };
+    let snapshot = 仓储.创建媒体附件记录(所属匿名身份标识, &ready_request)?;
+    if let Some(记录) = source_hash记录 {
+        仓储.记录附件source_hash(
+            &snapshot.附件标识,
+            记录.source_hash,
+            记录.source_byte_size,
+            记录.source_file_name,
+        )?;
+    }
+    仓储.绑定附件canonical媒体资产(&snapshot.附件标识, &asset.content_hash)?;
+
+    let distribution_request = 协作分发元数据写入请求 {
+        附件标识: snapshot.附件标识.clone(),
+        content_id: format!("content_{}", snapshot.附件标识),
+        content_hash: asset.content_hash.clone(),
+        swarm_id: format!("swarm_{}", asset.content_hash),
+        web_seed_until秒: asset.web_seed_until秒,
+    };
+    let mut distribution = 仓储.写入协作分发元数据(&distribution_request)?;
+    let torrent_request = 协作分发torrent元信息写入请求 {
+        附件标识: snapshot.附件标识.clone(),
+        torrent_bytes: asset.torrent_bytes.clone(),
+        torrent_info_hash: asset.torrent_info_hash.clone(),
+        piece_length字节: asset.piece_length字节,
+    };
+    let torrent = 仓储.写入协作分发torrent元信息(&torrent_request)?;
+    distribution.torrent_info_hash = Some(torrent.torrent_info_hash.clone());
+
+    Ok((snapshot, distribution, torrent))
+}
+
 pub fn 复用source_hash媒体附件(
     仓储: &mut dyn 仓储端口,
     请求: &SourceHash媒体复用请求,
@@ -1414,48 +1511,65 @@ pub fn 复用source_hash媒体附件(
         return Ok(SourceHash媒体复用结果::Miss);
     };
 
-    let ready_request = 媒体附件写入请求 {
-        附件标识: 请求.附件标识.clone(),
-        种类: asset.种类.clone(),
-        mime_type: asset.mime_type.clone(),
-        字节大小: asset.字节大小,
-        宽: asset.宽,
-        高: asset.高,
-        原始内容存储键: asset.存储键.clone(),
-        缩略图存储键: None,
-        资产原图存储键: None,
-        完整图存储键: None,
-        原始冷源到期时间戳秒: Some(asset.origin_expires_at秒),
-        回退母本存储键: None,
-        回退母本到期时间戳秒: None,
-    };
-    let snapshot = 仓储.创建媒体附件记录(&所属匿名身份标识, &ready_request)?;
-    仓储.记录附件source_hash(
-        &snapshot.附件标识,
-        &请求.source_hash,
-        请求.source_byte_size,
-        请求.source_file_name.as_deref(),
+    let (snapshot, distribution, torrent) = 用可复用资产创建ready附件引用(
+        仓储,
+        &所属匿名身份标识,
+        &请求.附件标识,
+        &asset,
+        Some(SourceHash附件记录 {
+            source_hash: &请求.source_hash,
+            source_byte_size: 请求.source_byte_size,
+            source_file_name: 请求.source_file_name.as_deref(),
+        }),
     )?;
-    仓储.绑定附件canonical媒体资产(&snapshot.附件标识, &asset.content_hash)?;
-
-    let distribution_request = 协作分发元数据写入请求 {
-        附件标识: snapshot.附件标识.clone(),
-        content_id: format!("content_{}", snapshot.附件标识),
-        content_hash: asset.content_hash.clone(),
-        swarm_id: format!("swarm_{}", asset.content_hash),
-        web_seed_until秒: asset.web_seed_until秒,
-    };
-    let mut distribution = 仓储.写入协作分发元数据(&distribution_request)?;
-    let torrent_request = 协作分发torrent元信息写入请求 {
-        附件标识: snapshot.附件标识.clone(),
-        torrent_bytes: asset.torrent_bytes,
-        torrent_info_hash: asset.torrent_info_hash,
-        piece_length字节: asset.piece_length字节,
-    };
-    let torrent = 仓储.写入协作分发torrent元信息(&torrent_request)?;
-    distribution.torrent_info_hash = Some(torrent.torrent_info_hash.clone());
 
     Ok(SourceHash媒体复用结果::Reused {
+        附件: snapshot,
+        协作分发: distribution,
+        torrent,
+    })
+}
+
+pub fn 转发媒体附件到房间(
+    仓储: &mut dyn 仓储端口,
+    请求: &媒体附件转发请求,
+) -> Result<媒体附件转发结果, contract::错误码> {
+    if 请求.会话标识.trim().is_empty()
+        || 请求.目标房间标识.trim().is_empty()
+        || 请求.源附件标识.trim().is_empty()
+        || 请求.新附件标识.trim().is_empty()
+        || 请求.客户端消息标识.trim().is_empty()
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    校验房间订阅资格(仓储, &请求.目标房间标识, &请求.会话标识)?;
+    let 所属匿名身份标识 = 仓储
+        .查询会话所属匿名身份(&请求.会话标识)?
+        .ok_or(contract::错误码::会话无效)?;
+    let asset = 仓储
+        .查询可转发媒体资产(&请求.会话标识, &请求.源附件标识, 请求.种类.clone())?
+        .ok_or(contract::错误码::附件不存在)?;
+
+    let (snapshot, distribution, torrent) = 用可复用资产创建ready附件引用(
+        仓储,
+        &所属匿名身份标识,
+        &请求.新附件标识,
+        &asset,
+        None,
+    )?;
+
+    // 转发必须复用统一消息主链，让 owner、附件状态、房间成员资格和事件顺序继续由同一处裁决。
+    let message_event = 创建消息(
+        仓储,
+        &请求.目标房间标识,
+        &请求.会话标识,
+        &请求.客户端消息标识,
+        &请求.文本,
+        std::slice::from_ref(&snapshot.附件标识),
+    )?;
+
+    Ok(媒体附件转发结果 {
+        消息事件: message_event,
         附件: snapshot,
         协作分发: distribution,
         torrent,

@@ -545,6 +545,15 @@ impl 仓储端口 for Pg仓储 {
         )
     }
 
+    fn 查询可转发媒体资产(
+        &self,
+        会话标识: &str,
+        源附件标识: &str,
+        种类: usecase::媒体附件类型,
+    ) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
+        媒体附件适配::查询可转发媒体资产(self, 会话标识, 源附件标识, 种类)
+    }
+
     fn 写入canonical媒体资产(
         &mut self,
         请求: &usecase::Canonical媒体资产写入请求,
