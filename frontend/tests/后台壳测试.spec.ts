@@ -11,6 +11,8 @@ import type {
   后台概览,
   后台登录结果,
   媒体附件上传结果,
+  媒体附件转发请求,
+  媒体附件转发结果,
   媒体定位结果,
   媒体SourceHash信息,
   媒体SourceHash复用请求,
@@ -86,6 +88,42 @@ class 假后台传输 implements 前端传输端口 {
     _input: 媒体SourceHash复用请求
   ): Promise<媒体SourceHash复用结果> {
     return { status: "miss" };
+  }
+  async forwardMediaAttachment(
+    kind: "image" | "video",
+    input: 媒体附件转发请求
+  ): Promise<媒体附件转发结果> {
+    const attachmentId = "att-admin-forwarded";
+    // 后台壳测试不触发转发；这里保持端口完整，避免假对象成为第二套业务判断。
+    return {
+      message: {
+        type: "message_created",
+        room_id: input.target_room_id,
+        message_id: "m-admin-forwarded",
+        client_message_id: input.client_message_id,
+        sender_session_id: input.session_id,
+        sender_display_alias: "暴躁的企鹅",
+        text: input.text ?? "",
+        attachments: [
+          {
+            kind,
+            attachment_id: attachmentId,
+            width: kind === "video" ? 1280 : 120,
+            height: kind === "video" ? 720 : 90,
+          },
+        ],
+        event_position: 1,
+      },
+      attachment: {
+        attachment_id: attachmentId,
+        kind,
+        mime_type: kind === "video" ? "video/mp4" : "image/png",
+        byte_size: 68,
+        width: kind === "video" ? 1280 : 120,
+        height: kind === "video" ? 720 : 90,
+        status: "ready",
+      },
+    };
   }
   async abandonMediaUpload(_sessionId: string, _attachmentId: string): Promise<void> {}
   async completeMediaUpload(

@@ -29,6 +29,8 @@ import type {
   后台登录结果,
   后台房间列表,
   后台房间详情,
+  媒体附件转发请求,
+  媒体附件转发结果,
 } from "../../契约";
 import { 聊天壳 } from "../../聊天壳";
 import type { Socket } from "socket.io-client";
@@ -225,6 +227,10 @@ export class 假传输 implements 前端传输端口 {
     kind: "image" | "video";
     input: 媒体SourceHash复用请求;
   }> = [];
+  forwardMediaCalls: Array<{
+    kind: "image" | "video";
+    input: 媒体附件转发请求;
+  }> = [];
   completeMediaCalls: Array<{ sessionId: string; attachmentId: string }> = [];
   bootstrapResult: 匿名身份引导结果 = {
     display_alias: "暴躁的企鹅",
@@ -311,6 +317,43 @@ export class 假传输 implements 前端传输端口 {
   ): Promise<媒体SourceHash复用结果> {
     this.sourceHashReuseCalls.push({ kind, input });
     return { status: "miss" };
+  }
+  async forwardMediaAttachment(
+    kind: "image" | "video",
+    input: 媒体附件转发请求
+  ): Promise<媒体附件转发结果> {
+    this.forwardMediaCalls.push({ kind, input });
+    const attachmentId = `att-forward-${this.forwardMediaCalls.length}`;
+    // 转发测试桩只表达“新消息绑定同一类 ready 附件”，不模拟重新上传、source_hash 或旧消息复制。
+    return {
+      message: {
+        type: "message_created",
+        room_id: input.target_room_id,
+        message_id: `m-forward-${this.forwardMediaCalls.length}`,
+        client_message_id: input.client_message_id,
+        sender_session_id: input.session_id,
+        sender_display_alias: "暴躁的企鹅",
+        text: input.text ?? "",
+        attachments: [
+          {
+            kind,
+            attachment_id: attachmentId,
+            width: kind === "video" ? 1280 : 1,
+            height: kind === "video" ? 720 : 1,
+          },
+        ],
+        event_position: this.forwardMediaCalls.length,
+      },
+      attachment: {
+        attachment_id: attachmentId,
+        kind,
+        mime_type: kind === "video" ? "video/mp4" : "image/png",
+        byte_size: 68,
+        width: kind === "video" ? 1280 : 1,
+        height: kind === "video" ? 720 : 1,
+        status: "ready",
+      },
+    };
   }
   async abandonMediaUpload(_sessionId: string, _attachmentId: string): Promise<void> {}
   async completeMediaUpload(

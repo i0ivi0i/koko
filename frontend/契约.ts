@@ -166,6 +166,23 @@ export type 媒体SourceHash复用结果 =
   | { status: "reused"; attachment: 媒体附件上传结果 };
 
 /**
+ * 媒体转发以“当前会话可见源附件 + 目标房间可发送”为授权来源。
+ * 它不依赖 source_hash，也不要求客户端持有原始 File 字节。
+ */
+export interface 媒体附件转发请求 {
+  session_id: string;
+  target_room_id: string;
+  source_attachment_id: string;
+  client_message_id: string;
+  text?: string;
+}
+
+export interface 媒体附件转发结果 {
+  message: 消息事件;
+  attachment: 媒体附件上传结果;
+}
+
+/**
  * locator 只暴露当前客户端下一步该去哪里读媒体。
  * 业务权限、房间成员真相仍然由后端用例层裁决，不下放给 Web 壳猜。
  */

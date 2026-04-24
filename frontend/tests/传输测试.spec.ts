@@ -51,6 +51,7 @@ describe("传输", () => {
     expect(source).toContain("const 后台传输 = new 后台HTTP接口({");
     expect(source).toContain("媒体传输.prepareMediaUpload(kind, sessionId, file, sourceHash)");
     expect(source).toContain("媒体传输.reuseMediaBySourceHash(kind, input)");
+    expect(source).toContain("媒体传输.forwardMediaAttachment(kind, input)");
     expect(source).toContain("媒体传输.abandonMediaUpload(sessionId, attachmentId)");
     expect(source).toContain("媒体传输.completeMediaUpload(sessionId, attachmentId)");
     expect(source).toContain("媒体传输.loadMediaLocator(sessionId, attachmentId)");
@@ -114,6 +115,7 @@ describe("传输", () => {
     expect(mediaSource).toContain("deps.transport().loadMediaLocator(sessionId, attachmentId)");
     expect(mediaSource).toContain("deps.transport().prepareMediaUpload(kind, sessionId, file, sourceHash)");
     expect(mediaSource).toContain("deps.transport().reuseMediaBySourceHash(kind, input)");
+    expect(mediaSource).toContain("deps.transport().forwardMediaAttachment(kind, input)");
     expect(mediaSource).toContain("deps.transport().buildAttachmentContentUrl(");
     expect(mediaSource).not.toContain("deps.transport().adminLogin");
     expect(mediaSource).not.toContain("deps.transport().joinOrCreateRoom");
@@ -612,6 +614,67 @@ describe("传输", () => {
 
     expect(source).toContain("room_id 是目标房间发送裁决锚点");
     expect(source).not.toContain("只能在当前会话可见的房间事实内查询命中");
+  });
+
+  it("forwardMediaAttachment 会调用媒体转发路由且不提交 source_hash 或原文件字节", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          message: {
+            type: "message_created",
+            room_id: "target-room",
+            message_id: "m-forward-1",
+            client_message_id: "c-forward-1",
+            sender_session_id: "s-1",
+            sender_display_alias: "暴躁的企鹅",
+            text: "转发",
+            attachments: [
+              {
+                kind: "image",
+                attachment_id: "att-forward-1",
+                width: 1,
+                height: 1,
+              },
+            ],
+            event_position: 12,
+          },
+          attachment: {
+            attachment_id: "att-forward-1",
+            kind: "image",
+            mime_type: "image/webp",
+            byte_size: 88,
+            width: 1,
+            height: 1,
+            status: "ready",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    const transport = 创建测试传输();
+
+    await transport.forwardMediaAttachment("image", {
+      session_id: "s-1",
+      target_room_id: "target-room",
+      source_attachment_id: "att-source-1",
+      client_message_id: "c-forward-1",
+      text: "转发",
+    });
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/media/image/forward",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(body).toEqual({
+      session_id: "s-1",
+      target_room_id: "target-room",
+      source_attachment_id: "att-source-1",
+      client_message_id: "c-forward-1",
+      text: "转发",
+    });
+    expect(body.source_hash).toBeUndefined();
+    expect(body.source_byte_size).toBeUndefined();
   });
 
   it("completeMediaUpload 会按 file_video 解析新单文件视频主链", async () => {

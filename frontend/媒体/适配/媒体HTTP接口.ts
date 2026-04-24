@@ -6,6 +6,8 @@ import type {
   媒体冷源描述,
   媒体资产分发表面,
   媒体附件上传结果,
+  媒体附件转发请求,
+  媒体附件转发结果,
   媒体定位结果,
   媒体SourceHash复用请求,
   媒体SourceHash复用结果,
@@ -82,6 +84,31 @@ export class 媒体HTTP接口 {
     }
     return {
       status: "reused",
+      attachment: this.解析媒体上传结果(result.attachment),
+    };
+  }
+
+  async forwardMediaAttachment(
+    kind: 媒体种类,
+    input: 媒体附件转发请求
+  ): Promise<媒体附件转发结果> {
+    const result = await this.deps.post<媒体附件转发结果>(`/api/media/${kind}/forward`, {
+      session_id: input.session_id,
+      target_room_id: input.target_room_id,
+      source_attachment_id: input.source_attachment_id,
+      client_message_id: input.client_message_id,
+      text: input.text ?? "",
+    });
+    const attachments = result.message.attachments?.map((attachment) => ({
+      ...attachment,
+      preview_asset: this.deps.解析预览资源(attachment.preview_asset),
+    }));
+    return {
+      ...result,
+      message: {
+        ...result.message,
+        ...(attachments ? { attachments } : {}),
+      },
       attachment: this.解析媒体上传结果(result.attachment),
     };
   }

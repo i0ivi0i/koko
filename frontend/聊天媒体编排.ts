@@ -1,4 +1,9 @@
-import type { 消息事件, 媒体种类 } from "./契约.js";
+import type {
+  消息事件,
+  媒体附件转发请求,
+  媒体附件转发结果,
+  媒体种类,
+} from "./契约.js";
 import type { 媒体传输端口 } from "./传输.js";
 import type { 聊天运行时预算状态 } from "./状态.js";
 import {
@@ -96,6 +101,7 @@ export interface 聊天媒体编排端口 {
   snapshot(): 聊天媒体快照;
   读取预算(): 聊天媒体预算快照;
   处理选择媒体文件(files: Iterable<File>): Promise<void>;
+  转发媒体附件(kind: 媒体种类, input: 媒体附件转发请求): Promise<媒体附件转发结果>;
   移除媒体草稿(localId: string): void;
   继续上传媒体草稿(localId: string): Promise<void>;
   重新上传媒体草稿(localId: string): Promise<void>;
@@ -802,6 +808,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     async 处理选择媒体文件(files: Iterable<File>): Promise<void> {
       await 媒体发布器.处理选择媒体文件(files);
+    },
+
+    async 转发媒体附件(
+      kind: 媒体种类,
+      input: 媒体附件转发请求
+    ): Promise<媒体附件转发结果> {
+      // 编排层只暴露“转发意图”的窄口，授权和资产复用仍由后端用例层裁决。
+      return deps.transport().forwardMediaAttachment(kind, input);
     },
 
     移除媒体草稿(localId: string): void {
