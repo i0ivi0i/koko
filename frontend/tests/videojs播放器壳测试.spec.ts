@@ -539,11 +539,16 @@ describe("Video.js 播放器壳", () => {
     const hotkeyActions = Array.from(shadowRoot?.querySelectorAll("media-hotkey") ?? []).map(
       (hotkey) => hotkey.getAttribute("action")
     );
+    const muteButton = shadowRoot?.querySelector("media-mute-button");
 
     expect(skin).not.toBeNull();
     expect(shadowRoot?.querySelector("media-play-button")).not.toBeNull();
     expect(shadowRoot?.querySelector("media-time-slider")).not.toBeNull();
-    expect(shadowRoot?.querySelector("media-mute-button")).not.toBeNull();
+    expect(muteButton).not.toBeNull();
+    expect(muteButton?.textContent).not.toContain("♪");
+    expect(muteButton?.querySelector(".koko-icon--volume-off")).not.toBeNull();
+    expect(muteButton?.querySelector(".koko-icon--volume-low")).not.toBeNull();
+    expect(muteButton?.querySelector(".koko-icon--volume-high")).not.toBeNull();
     expect(shadowRoot?.querySelector("media-fullscreen-button")).toBeNull();
     expect(shadowRoot?.querySelector("media-seek-button")).toBeNull();
     expect(shadowRoot?.querySelector("media-playback-rate-button")).toBeNull();
@@ -553,6 +558,10 @@ describe("Video.js 播放器壳", () => {
     expect(hotkeyActions).not.toContain("toggleFullscreen");
     expect(styleText).toContain("width: 3rem");
     expect(styleText).toContain("height: 3rem");
+    expect(styleText).toContain("media-mute-button[data-muted] .koko-icon--volume-off");
+    expect(styleText).toContain(
+      'media-mute-button:not([data-muted])[data-volume-level="low"] .koko-icon--volume-low'
+    );
     expect(shell.读取容器元素().style.backgroundColor).toBe("#000");
 
     shell.destroy();

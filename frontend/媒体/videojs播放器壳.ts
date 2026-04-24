@@ -153,6 +153,17 @@ const 请求原生视频真全屏 = (video: 可原生全屏视频元素): boolea
   return false;
 };
 
+// 播放与音量图标沿用 @videojs/html minimal skin 的官方 SVG 形状，
+// 本壳只负责删减控件与布局，不再用文本符号另造按钮语义。
+const KokoVideoSkinIcons = {
+  play: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><path fill="currentColor" d="m13.473 10.476-6.845 4.256a1.697 1.697 0 0 1-2.364-.547 1.77 1.77 0 0 1-.264-.93v-8.51C4 3.78 4.768 3 5.714 3c.324 0 .64.093.914.268l6.845 4.255a1.763 1.763 0 0 1 0 2.953"/></svg>`,
+  pause: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><rect width="4" height="12" x="3" y="3" fill="currentColor" rx="1.75"/><rect width="4" height="12" x="11" y="3" fill="currentColor" rx="1.75"/></svg>`,
+  restart: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><path fill="currentColor" d="M9 17a8 8 0 0 1-8-8h1.5a6.5 6.5 0 1 0 1.43-4.07l1.643 1.643A.25.25 0 0 1 5.396 7H1.25A.25.25 0 0 1 1 6.75V2.604a.25.25 0 0 1 .427-.177l1.438 1.438A8 8 0 1 1 9 17"/><path fill="currentColor" d="m11.61 9.639-3.331 2.07a.826.826 0 0 1-1.15-.266.86.86 0 0 1-.129-.452V6.849C7 6.38 7.374 6 7.834 6c.158 0 .312.045.445.13l3.331 2.071a.858.858 0 0 1 0 1.438"/></svg>`,
+  volumeOff: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><path fill="currentColor" d="M.714 6.008h3.072l4.071-3.857c.5-.376 1.143 0 1.143.601V15.28c0 .602-.643.903-1.143.602l-4.071-3.858H.714c-.428 0-.714-.3-.714-.752V6.76c0-.451.286-.752.714-.752M14.5 7.586l-1.768-1.768a1 1 0 1 0-1.414 1.414L13.085 9l-1.767 1.768a1 1 0 0 0 1.414 1.414l1.768-1.768 1.768 1.768a1 1 0 0 0 1.414-1.414L15.914 9l1.768-1.768a1 1 0 0 0-1.414-1.414z"/></svg>`,
+  volumeLow: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><path fill="currentColor" d="M.714 6.008h3.072l4.071-3.857c.5-.376 1.143 0 1.143.601V15.28c0 .602-.643.903-1.143.602l-4.071-3.858H.714c-.428 0-.714-.3-.714-.752V6.76c0-.451.286-.752.714-.752m10.568.59a.91.91 0 0 1 0-1.316.91.91 0 0 1 1.316 0c1.203 1.203 1.47 2.216 1.522 3.208q.012.255.011.51c0 1.16-.358 2.733-1.533 3.803a.7.7 0 0 1-.298.156c-.382.106-.873-.011-1.018-.156a.91.91 0 0 1 0-1.316c.57-.57.995-1.551.995-2.487 0-.944-.26-1.667-.995-2.402"/></svg>`,
+  volumeHigh: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18"><path fill="currentColor" d="M15.6 3.3c-.4-.4-1-.4-1.4 0s-.4 1 0 1.4C15.4 5.9 16 7.4 16 9s-.6 3.1-1.8 4.3c-.4.4-.4 1 0 1.4.2.2.5.3.7.3.3 0 .5-.1.7-.3C17.1 13.2 18 11.2 18 9s-.9-4.2-2.4-5.7"/><path fill="currentColor" d="M.714 6.008h3.072l4.071-3.857c.5-.376 1.143 0 1.143.601V15.28c0 .602-.643.903-1.143.602l-4.071-3.858H.714c-.428 0-.714-.3-.714-.752V6.76c0-.451.286-.752.714-.752m10.568.59a.91.91 0 0 1 0-1.316.91.91 0 0 1 1.316 0c1.203 1.203 1.47 2.216 1.522 3.208q.012.255.011.51c0 1.16-.358 2.733-1.533 3.803a.7.7 0 0 1-.298.156c-.382.106-.873-.011-1.018-.156a.91.91 0 0 1 0-1.316c.57-.57.995-1.551.995-2.487 0-.944-.26-1.667-.995-2.402"/></svg>`,
+} as const;
+
 const KokoVideoSkinTemplate = `
   <style>
     :host {
@@ -297,13 +308,20 @@ const KokoVideoSkinTemplate = `
     }
     .koko-icon {
       display: none;
-      font-size: 1.25rem;
-      line-height: 1;
+      width: 1.25rem;
+      height: 1.25rem;
+      line-height: 0;
+    }
+    .koko-icon svg {
+      width: 100%;
+      height: 100%;
     }
     media-play-button[data-paused] .koko-icon--play,
     media-play-button[data-ended] .koko-icon--restart,
     media-play-button:not([data-paused]):not([data-ended]) .koko-icon--pause,
-    media-mute-button .koko-icon--mute {
+    media-mute-button[data-muted] .koko-icon--volume-off,
+    media-mute-button:not([data-muted])[data-volume-level="low"] .koko-icon--volume-low,
+    media-mute-button:not([data-muted]):not([data-volume-level="low"]) .koko-icon--volume-high {
       display: block;
     }
   </style>
@@ -314,9 +332,9 @@ const KokoVideoSkinTemplate = `
     <media-controls>
       <media-controls-group>
         <media-play-button class="koko-button">
-          <span class="koko-icon koko-icon--play" aria-hidden="true">▶</span>
-          <span class="koko-icon koko-icon--pause" aria-hidden="true">Ⅱ</span>
-          <span class="koko-icon koko-icon--restart" aria-hidden="true">↻</span>
+          <span class="koko-icon koko-icon--play" aria-hidden="true">${KokoVideoSkinIcons.play}</span>
+          <span class="koko-icon koko-icon--pause" aria-hidden="true">${KokoVideoSkinIcons.pause}</span>
+          <span class="koko-icon koko-icon--restart" aria-hidden="true">${KokoVideoSkinIcons.restart}</span>
         </media-play-button>
       </media-controls-group>
       <media-controls-group class="koko-time-controls">
@@ -332,7 +350,9 @@ const KokoVideoSkinTemplate = `
       </media-controls-group>
       <media-controls-group>
         <media-mute-button class="koko-button">
-          <span class="koko-icon koko-icon--mute" aria-hidden="true">♪</span>
+          <span class="koko-icon koko-icon--volume-off" aria-hidden="true">${KokoVideoSkinIcons.volumeOff}</span>
+          <span class="koko-icon koko-icon--volume-low" aria-hidden="true">${KokoVideoSkinIcons.volumeLow}</span>
+          <span class="koko-icon koko-icon--volume-high" aria-hidden="true">${KokoVideoSkinIcons.volumeHigh}</span>
         </media-mute-button>
       </media-controls-group>
     </media-controls>
