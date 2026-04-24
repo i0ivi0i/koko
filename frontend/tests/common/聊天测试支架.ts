@@ -21,6 +21,9 @@ import type {
   消息事件,
   媒体附件上传结果,
   媒体定位结果,
+  媒体SourceHash信息,
+  媒体SourceHash复用请求,
+  媒体SourceHash复用结果,
   房间历史页,
   房间快照,
   后台登录结果,
@@ -212,7 +215,16 @@ export class 假传输 implements 前端传输端口 {
     limit: number;
   }> = [];
   socketSessionIds: string[] = [];
-  prepareMediaCalls: Array<{ kind: "image" | "video"; sessionId: string; fileName: string }> = [];
+  prepareMediaCalls: Array<{
+    kind: "image" | "video";
+    sessionId: string;
+    fileName: string;
+    sourceHash?: 媒体SourceHash信息;
+  }> = [];
+  sourceHashReuseCalls: Array<{
+    kind: "image" | "video";
+    input: 媒体SourceHash复用请求;
+  }> = [];
   completeMediaCalls: Array<{ sessionId: string; attachmentId: string }> = [];
   bootstrapResult: 匿名身份引导结果 = {
     display_alias: "暴躁的企鹅",
@@ -263,9 +275,15 @@ export class 假传输 implements 前端传输端口 {
   async prepareMediaUpload(
     kind: "image" | "video",
     sessionId: string,
-    file: File
+    file: File,
+    sourceHash?: 媒体SourceHash信息
   ): Promise<假媒体上传准备结果> {
-    this.prepareMediaCalls.push({ kind, sessionId, fileName: file.name });
+    this.prepareMediaCalls.push({
+      kind,
+      sessionId,
+      fileName: file.name,
+      ...(sourceHash ? { sourceHash } : {}),
+    });
     const queued = this.prepareQueue.shift();
     if (queued instanceof Error) throw queued;
     if (queued) return queued;
@@ -286,6 +304,13 @@ export class 假传输 implements 前端传输端口 {
       },
       expires_at: "2026-04-10T12:00:00Z",
     };
+  }
+  async reuseMediaBySourceHash(
+    kind: "image" | "video",
+    input: 媒体SourceHash复用请求
+  ): Promise<媒体SourceHash复用结果> {
+    this.sourceHashReuseCalls.push({ kind, input });
+    return { status: "miss" };
   }
   async abandonMediaUpload(_sessionId: string, _attachmentId: string): Promise<void> {}
   async completeMediaUpload(

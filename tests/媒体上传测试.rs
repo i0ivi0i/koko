@@ -16,6 +16,8 @@ mod complete_tests;
 mod prepare_tests;
 #[path = "媒体上传测试/公网地址推导.rs"]
 mod public_endpoint_tests;
+#[path = "媒体上传测试/source_hash.rs"]
+mod source_hash_tests;
 #[path = "媒体上传测试/tus_hook.rs"]
 mod tus_hook_tests;
 #[path = "媒体上传测试/单文件主链.rs"]

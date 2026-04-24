@@ -154,8 +154,6 @@ async fn 查询引导结果_异步(
     }))
 }
 
-
-
 /// 只把 `device_anonymous_token` 唯一约束冲突视为 bootstrap 幂等竞态。
 /// 发生这类冲突时必须回查既有记录，而不是再造第二条匿名身份。
 fn 是设备匿名凭证幂等冲突(err: &sqlx::Error) -> bool {
@@ -260,7 +258,7 @@ impl Pg仓储 {
                     database_pool.connect_timeout(),
                     database_pool.应用连接池选项().connect(database_url),
                 )
-                    .await
+                .await
             })
             .map_err(|_| io::Error::other("连接数据库超时"))?
             .map_err(|err| io::Error::other(format!("连接数据库失败: {err}")))?;
@@ -495,7 +493,10 @@ impl 仓储端口 for Pg仓储 {
         媒体附件适配::创建预备媒体附件记录(self, 所属匿名身份标识, 附件)
     }
 
-    fn 回滚预备媒体附件记录(&mut self, 附件标识: &str) -> Result<(), contract::错误码> {
+    fn 回滚预备媒体附件记录(
+        &mut self,
+        附件标识: &str,
+    ) -> Result<(), contract::错误码> {
         媒体附件适配::回滚预备媒体附件记录(self, 附件标识)
     }
 
@@ -506,6 +507,53 @@ impl 仓储端口 for Pg仓储 {
         附件: &usecase::媒体附件写入请求,
     ) -> Result<usecase::媒体附件快照, contract::错误码> {
         媒体附件适配::创建媒体附件记录(self, 所属匿名身份标识, 附件)
+    }
+
+    fn 记录附件source_hash(
+        &mut self,
+        附件标识: &str,
+        source_hash: &str,
+        source_byte_size: i64,
+        source_file_name: Option<&str>,
+    ) -> Result<(), contract::错误码> {
+        媒体附件适配::记录附件source_hash(
+            self,
+            附件标识,
+            source_hash,
+            source_byte_size,
+            source_file_name,
+        )
+    }
+
+    fn 查询房间可复用source_hash媒体资产(
+        &self,
+        房间标识: &str,
+        source_hash: &str,
+        source_byte_size: i64,
+        种类: usecase::媒体附件类型,
+    ) -> Result<Option<usecase::可复用媒体资产>, contract::错误码> {
+        媒体附件适配::查询房间可复用source_hash媒体资产(
+            self,
+            房间标识,
+            source_hash,
+            source_byte_size,
+            种类,
+        )
+    }
+
+    fn 写入canonical媒体资产(
+        &mut self,
+        请求: &usecase::Canonical媒体资产写入请求,
+    ) -> Result<(), contract::错误码> {
+        媒体附件适配::写入canonical媒体资产(self, 请求)
+    }
+
+    fn 绑定附件canonical媒体资产(
+        &mut self,
+        附件标识: &str,
+        content_hash: &str,
+    ) -> Result<(), contract::错误码> {
+        媒体附件适配::绑定附件canonical媒体资产(self, 附件标识, content_hash)
     }
 
     /// 用例层只通过这个端口写入 Phase 1 分发元数据，不绕过应用层去拼 SQL。
@@ -606,6 +654,22 @@ impl 仓储端口 for Pg仓储 {
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
         媒体附件适配::标记媒体冷源已删除(self, 附件标识, 删除时间戳秒)
+    }
+
+    fn 列出待清理canonical媒体资产(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<usecase::待清理Canonical媒体资产>, contract::错误码> {
+        媒体附件适配::列出待清理canonical媒体资产(self, 当前时间戳秒, 限制条数)
+    }
+
+    fn 标记canonical媒体资产已删除(
+        &mut self,
+        content_hash: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        媒体附件适配::标记canonical媒体资产已删除(self, content_hash, 删除时间戳秒)
     }
 
     fn 列出待清理媒体回退母本(

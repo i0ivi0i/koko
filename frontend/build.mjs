@@ -11,6 +11,10 @@ const mediaServiceWorkerOutputFiles = [
   path.join(distDir, 'media-sw.js'),
   path.join(distDir, 'media-sw.js.map'),
 ]
+const sourceHashWorkerOutputFiles = [
+  path.join(distDir, 'source-hash-worker.js'),
+  path.join(distDir, 'source-hash-worker.js.map'),
+]
 const appShellHtmlPath = path.join(distDir, 'app-shell.html')
 const appShellServiceWorkerOutputFiles = [
   path.join(distDir, 'app-sw.js'),
@@ -81,6 +85,7 @@ function 生成静态资源清单插件() {
           manifestPath,
           appShellHtmlPath,
           ...mediaServiceWorkerOutputFiles,
+          ...sourceHashWorkerOutputFiles,
           ...appShellServiceWorkerOutputFiles,
         ]))
         console.log(
@@ -192,6 +197,17 @@ const mediaServiceWorkerBuildOptions = {
   sourcemap: true,
 }
 
+const sourceHashWorkerBuildOptions = {
+  entryPoints: ['媒体/源文件哈希.worker.ts'],
+  bundle: true,
+  outfile: 'dist/source-hash-worker.js',
+  format: 'esm',
+  platform: 'browser',
+  target: 浏览器兼容构建目标,
+  supported: 浏览器兼容构建能力覆盖,
+  sourcemap: true,
+}
+
 const appShellServiceWorkerBuildOptions = {
   entryPoints: ['app-sw.ts'],
   bundle: true,
@@ -208,17 +224,21 @@ if (watchMode) {
   // watch 模式先串行产一轮基线，确保离线壳 HTML 与 precache 清单不会互相抢跑。
   await esbuild.build(appBuildOptions)
   await esbuild.build(mediaServiceWorkerBuildOptions)
+  await esbuild.build(sourceHashWorkerBuildOptions)
   await esbuild.build(appShellServiceWorkerBuildOptions)
   const appContext = await esbuild.context(appBuildOptions)
   const mediaSwContext = await esbuild.context(mediaServiceWorkerBuildOptions)
+  const sourceHashWorkerContext = await esbuild.context(sourceHashWorkerBuildOptions)
   const appShellSwContext = await esbuild.context(appShellServiceWorkerBuildOptions)
   await appContext.watch()
   await mediaSwContext.watch()
+  await sourceHashWorkerContext.watch()
   await appShellSwContext.watch()
   console.log('[koko-build] watch mode started')
 } else {
   await esbuild.build(appBuildOptions)
   await esbuild.build(mediaServiceWorkerBuildOptions)
+  await esbuild.build(sourceHashWorkerBuildOptions)
   await esbuild.build(appShellServiceWorkerBuildOptions)
   console.log('[koko-build] build completed')
 }

@@ -6,6 +6,9 @@ import type {
   消息事件,
   媒体附件上传结果,
   媒体定位结果,
+  媒体SourceHash复用请求,
+  媒体SourceHash复用结果,
+  媒体SourceHash信息,
   媒体上传准备结果,
   媒体种类,
   预览资源描述,
@@ -56,8 +59,13 @@ export interface 媒体传输端口 {
   prepareMediaUpload(
     kind: 媒体种类,
     sessionId: string,
-    file: File
+    file: File,
+    sourceHash?: 媒体SourceHash信息
   ): Promise<媒体上传准备结果>;
+  reuseMediaBySourceHash(
+    kind: 媒体种类,
+    input: 媒体SourceHash复用请求
+  ): Promise<媒体SourceHash复用结果>;
   abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
   loadMediaLocator(sessionId: string, attachmentId: string): Promise<媒体定位结果>;
@@ -233,8 +241,10 @@ export function 创建前端传输(baseUrl: string): 前端传输端口 {
 
   return {
     ...房间传输,
-    prepareMediaUpload: (kind, sessionId, file) =>
-      媒体传输.prepareMediaUpload(kind, sessionId, file),
+    prepareMediaUpload: (kind, sessionId, file, sourceHash) =>
+      媒体传输.prepareMediaUpload(kind, sessionId, file, sourceHash),
+    reuseMediaBySourceHash: (kind, input) =>
+      媒体传输.reuseMediaBySourceHash(kind, input),
     abandonMediaUpload: (sessionId, attachmentId) =>
       媒体传输.abandonMediaUpload(sessionId, attachmentId),
     completeMediaUpload: (sessionId, attachmentId) =>

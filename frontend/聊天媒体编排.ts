@@ -320,8 +320,11 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   let 媒体发布器 = 创建媒体发布器({
     getSessionId: () => deps.读取会话编号(),
-    prepareMediaUpload: (kind, sessionId, file) =>
-      deps.transport().prepareMediaUpload(kind, sessionId, file),
+    getCurrentRoomId: () => deps.读取当前房间标识?.() ?? null,
+    reuseMediaBySourceHash: (kind, input) =>
+      deps.transport().reuseMediaBySourceHash(kind, input),
+    prepareMediaUpload: (kind, sessionId, file, sourceHash) =>
+      deps.transport().prepareMediaUpload(kind, sessionId, file, sourceHash),
     abandonMediaUpload: (sessionId, attachmentId) =>
       deps.transport().abandonMediaUpload(sessionId, attachmentId),
     completeMediaUpload: (sessionId, attachmentId) =>

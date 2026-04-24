@@ -28,11 +28,11 @@ use std::{
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
+use tokio_tungstenite::tungstenite;
 use tower_http::{
     services::{ServeDir, ServeFile},
     set_header::response::SetResponseHeaderLayer,
 };
-use tokio_tungstenite::tungstenite;
 
 use crate::{adapter::Pg仓储, contract, media_distribution};
 
@@ -180,9 +180,9 @@ pub async fn 构建应用状态(
         database_pool.connect_timeout(),
         database_pool.应用连接池选项().connect(&database_url),
     )
-        .await
-        .map_err(|_| std::io::Error::other("连接数据库超时"))?
-        .map_err(|err| std::io::Error::other(format!("连接数据库失败: {err}")))?;
+    .await
+    .map_err(|_| std::io::Error::other("连接数据库超时"))?
+    .map_err(|err| std::io::Error::other(format!("连接数据库失败: {err}")))?;
 
     Ok(应用状态 {
         pool,
@@ -259,6 +259,48 @@ pub async fn 执行一次媒体冷源清理(state: 应用状态) -> io::Result<(
         })
         .await
         .map_err(|err| io::Error::other(format!("冷源清理写回任务失败: {err}")))??;
+    }
+
+    let state_for_query = state.clone();
+    let 待清理canonical资产 = tokio::task::spawn_blocking(move || {
+        let repo = 构建共享仓储(&state_for_query);
+        crate::usecase::列出待清理canonical媒体资产(&repo, 当前时间戳秒, 128)
+            .map_err(|err| io::Error::other(format!("查询待清理 canonical 媒体资产失败: {err:?}")))
+    })
+    .await
+    .map_err(|err| io::Error::other(format!("canonical 媒体资产清理查询任务失败: {err}")))??;
+
+    for 资产 in 待清理canonical资产 {
+        let object_path = ObjectPath::from(资产.存储键.as_str());
+        match state.attachment_store.delete(&object_path).await {
+            Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
+            Err(err) => {
+                tracing::error!(
+                    usecase = "媒体冷源清理",
+                    adapter = "shell",
+                    outcome = "failed",
+                    content_hash = 资产.content_hash.as_str(),
+                    storage_key = 资产.存储键.as_str(),
+                    error = %err,
+                    "删除 canonical 媒体资产对象失败"
+                );
+                continue;
+            }
+        }
+
+        let state_for_mark = state.clone();
+        let content_hash = 资产.content_hash.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut repo = 构建共享仓储(&state_for_mark);
+            crate::usecase::标记canonical媒体资产已删除(
+                &mut repo,
+                &content_hash,
+                当前时间戳秒,
+            )
+            .map_err(|err| io::Error::other(format!("标记 canonical 媒体资产已删除失败: {err:?}")))
+        })
+        .await
+        .map_err(|err| io::Error::other(format!("canonical 媒体资产清理写回任务失败: {err}")))??;
     }
 
     let state_for_query = state.clone();
@@ -694,7 +736,8 @@ pub async fn 执行一次协作分发做种对账(state: 应用状态) -> io::Re
                 stale_seconds: state.swarm_peer_presence_stale_seconds,
             },
         );
-        let Some(启动命令) = 从协作分发响应构造做种启动命令(&runtime_distribution) else {
+        let Some(启动命令) = 从协作分发响应构造做种启动命令(&runtime_distribution)
+        else {
             continue;
         };
         active_info_hashes.insert(启动命令.info_hash.clone());
@@ -863,7 +906,10 @@ async fn proxy_swarm_tracker_announce(
     let upstream_url = if announce_query.is_empty() {
         format!("ws://127.0.0.1:{}/", state.swarm_tracker_port)
     } else {
-        format!("ws://127.0.0.1:{}/?{announce_query}", state.swarm_tracker_port)
+        format!(
+            "ws://127.0.0.1:{}/?{announce_query}",
+            state.swarm_tracker_port
+        )
     };
     ws.on_upgrade(move |socket| async move {
         if let Err(error) = relay_swarm_tracker_socket(socket, upstream_url).await {
@@ -879,10 +925,7 @@ async fn proxy_swarm_tracker_announce(
     })
 }
 
-async fn relay_swarm_tracker_socket(
-    socket: WebSocket,
-    upstream_url: String,
-) -> Result<(), String> {
+async fn relay_swarm_tracker_socket(socket: WebSocket, upstream_url: String) -> Result<(), String> {
     let (upstream_socket, _) = tokio_tungstenite::connect_async(upstream_url.as_str())
         .await
         .map_err(|error| format!("连接 tracker sidecar 失败: {error}"))?;
@@ -891,7 +934,8 @@ async fn relay_swarm_tracker_socket(
 
     let client_to_upstream = async {
         while let Some(message_result) = client_reader.next().await {
-            let message = message_result.map_err(|error| format!("读取客户端 websocket 失败: {error}"))?;
+            let message =
+                message_result.map_err(|error| format!("读取客户端 websocket 失败: {error}"))?;
             let Some(upstream_message) = axum_ws_message_to_tungstenite(message) else {
                 continue;
             };
@@ -905,8 +949,8 @@ async fn relay_swarm_tracker_socket(
 
     let upstream_to_client = async {
         while let Some(message_result) = upstream_reader.next().await {
-            let message =
-                message_result.map_err(|error| format!("读取 tracker sidecar websocket 失败: {error}"))?;
+            let message = message_result
+                .map_err(|error| format!("读取 tracker sidecar websocket 失败: {error}"))?;
             let Some(client_message) = tungstenite_message_to_axum_ws(message) else {
                 continue;
             };
@@ -970,6 +1014,10 @@ pub fn 构建路由(state: 应用状态) -> Router {
         .route(
             "/api/media/{attachment_kind}/prepare",
             post(媒体上传外壳::prepare_media_upload),
+        )
+        .route(
+            "/api/media/{attachment_kind}/source-dedupe",
+            post(媒体上传外壳::reuse_media_by_source_hash),
         )
         .route(
             "/api/media/{attachment_id}/complete",

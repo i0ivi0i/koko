@@ -648,7 +648,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L1",
       "id": "frontend_app_sw_ts",
-      "community": 18,
+      "community": 0,
       "norm_label": "app-sw.ts"
     },
     {
@@ -657,7 +657,7 @@
       "source_file": "frontend\\app-sw.ts",
       "source_location": "L42",
       "id": "app_sw",
-      "community": 18,
+      "community": 0,
       "norm_label": "\u5411\u53d7\u63a7\u9875\u9762\u5e7f\u64ad\u540e\u53f0\u8865\u53d1\u8bf7\u6c42()"
     },
     {
@@ -673,7 +673,7 @@
       "label": "\u89c4\u8303\u8f93\u51fa\u8def\u5f84()",
       "file_type": "code",
       "source_file": "frontend\\build.mjs",
-      "source_location": "L26",
+      "source_location": "L30",
       "id": "build",
       "community": 19,
       "norm_label": "\u89c4\u8303\u8f93\u51fa\u8def\u5f84()"
@@ -693,7 +693,7 @@
       "source_file": "frontend\\dev-seeder.mjs",
       "source_location": "L1",
       "id": "frontend_dev_seeder_mjs",
-      "community": 6,
+      "community": 3,
       "norm_label": "dev-seeder.mjs"
     },
     {
@@ -702,7 +702,7 @@
       "source_file": "frontend\\dev-seeder.mjs",
       "source_location": "L9",
       "id": "dev_seeder_infohash",
-      "community": 6,
+      "community": 3,
       "norm_label": "\u5f52\u4e00\u5316infohash()"
     },
     {
@@ -711,7 +711,7 @@
       "source_file": "frontend\\dev-seeder.mjs",
       "source_location": "L20",
       "id": "dev_seeder_json",
-      "community": 6,
+      "community": 3,
       "norm_label": "\u8bfb\u53d6\u8bf7\u6c42\u4f53json()"
     },
     {
@@ -720,7 +720,7 @@
       "source_file": "frontend\\dev-seeder.mjs",
       "source_location": "L37",
       "id": "dev_seeder_jointicket",
-      "community": 6,
+      "community": 3,
       "norm_label": "\u8bfb\u53d6jointicket()"
     },
     {
@@ -729,7 +729,7 @@
       "source_file": "frontend\\dev-seeder.mjs",
       "source_location": "L53",
       "id": "dev_seeder_webtorrent",
-      "community": 6,
+      "community": 3,
       "norm_label": "\u8bfb\u53d6webtorrent\u6784\u9020\u5668()"
     },
     {
@@ -738,7 +738,7 @@
       "source_file": "frontend\\dev-seeder.mjs",
       "source_location": "L131",
       "id": "dev_seeder",
-      "community": 6,
+      "community": 3,
       "norm_label": "\u8bfb\u53d6\u6d3b\u8dc3\u4f1a\u8bdd\u5feb\u7167()"
     },
     {
@@ -747,7 +747,7 @@
       "source_file": "frontend\\dev-tracker.mjs",
       "source_location": "L1",
       "id": "frontend_dev_tracker_mjs",
-      "community": 6,
+      "community": 15,
       "norm_label": "dev-tracker.mjs"
     },
     {
@@ -756,7 +756,7 @@
       "source_file": "frontend\\dev-tracker.mjs",
       "source_location": "L6",
       "id": "dev_tracker_readclioptions",
-      "community": 6,
+      "community": 15,
       "norm_label": "readclioptions()"
     },
     {
@@ -765,7 +765,7 @@
       "source_file": "frontend\\dev-tracker.mjs",
       "source_location": "L64",
       "id": "dev_tracker_formatsocketaddress",
-      "community": 6,
+      "community": 15,
       "norm_label": "formatsocketaddress()"
     },
     {
@@ -774,7 +774,7 @@
       "source_file": "frontend\\dev-tracker.mjs",
       "source_location": "L73",
       "id": "dev_tracker_ticket",
-      "community": 6,
+      "community": 15,
       "norm_label": "\u8bfb\u53d6ticket\u53c2\u6570()"
     },
     {
@@ -783,7 +783,7 @@
       "source_file": "frontend\\dev-tracker.mjs",
       "source_location": "L84",
       "id": "dev_tracker_createjointicketfilter",
-      "community": 6,
+      "community": 15,
       "norm_label": "createjointicketfilter()"
     },
     {
@@ -792,7 +792,7 @@
       "source_file": "frontend\\dev-tracker.mjs",
       "source_location": "L118",
       "id": "dev_tracker_main",
-      "community": 6,
+      "community": 15,
       "norm_label": "main()"
     },
     {
@@ -801,7 +801,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L1",
       "id": "frontend_media_sw_ts",
-      "community": 17,
+      "community": 18,
       "norm_label": "media-sw.ts"
     },
     {
@@ -810,7 +810,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L19",
       "id": "media_sw_blob",
-      "community": 17,
+      "community": 18,
       "norm_label": "\u662f\u56fe\u7247blob\u8d44\u4ea7\u8bf7\u6c42()"
     },
     {
@@ -819,7 +819,7 @@
       "source_file": "frontend\\media-sw.ts",
       "source_location": "L30",
       "id": "media_sw",
-      "community": 17,
+      "community": 18,
       "norm_label": "\u547d\u4e2d\u6216\u56de\u586b\u56fe\u7247\u8d44\u4ea7\u7f13\u5b58()"
     },
     {
@@ -846,7 +846,7 @@
       "source_file": "frontend\\\u804a\u5929\u6062\u590d\\\u58f3\u5c42\\\u623f\u95f4\u5feb\u7167\u6062\u590d.ts",
       "source_location": "L1",
       "id": "frontend_ts",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u623f\u95f4\u5feb\u7167\u6062\u590d.ts"
     },
     {
@@ -862,7 +862,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "frontend\\\u4f20\u8f93.ts",
-      "source_location": "L41",
+      "source_location": "L44",
       "id": "http_constructor",
       "community": 1,
       "norm_label": ".constructor()"
@@ -873,7 +873,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u73af\u5883.rs",
       "source_location": "L6",
       "id": "",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u5907\u4efd\u5e76\u6e05\u7a7a\u73af\u5883\u53d8\u91cf()"
     },
     {
@@ -891,7 +891,7 @@
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
       "source_location": "L448",
       "id": "settransportfortest",
-      "community": 2,
+      "community": 0,
       "norm_label": "settransportfortest()"
     },
     {
@@ -900,7 +900,7 @@
       "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L33",
       "id": "setkernelfortest",
-      "community": 2,
+      "community": 0,
       "norm_label": "setkernelfortest()"
     },
     {
@@ -909,7 +909,7 @@
       "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L53",
       "id": "submitloginform",
-      "community": 2,
+      "community": 0,
       "norm_label": "submitloginform()"
     },
     {
@@ -918,7 +918,7 @@
       "source_file": "frontend\\\u540e\u53f0\u58f3.ts",
       "source_location": "L58",
       "id": "submitroomsearchform",
-      "community": 2,
+      "community": 0,
       "norm_label": "submitroomsearchform()"
     },
     {
@@ -927,7 +927,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1463",
       "id": "render",
-      "community": 2,
+      "community": 0,
       "norm_label": "render()"
     },
     {
@@ -936,7 +936,7 @@
       "source_file": "frontend\\\u804a\u5929\u5b9e\u65f6\\\u9002\u914d\\\u5b9e\u65f6\u8fde\u63a5\u9002\u914d.ts",
       "source_location": "L23",
       "id": "constructor",
-      "community": 2,
+      "community": 0,
       "norm_label": "constructor()"
     },
     {
@@ -945,7 +945,7 @@
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
       "source_location": "L357",
       "id": "snapshot",
-      "community": 2,
+      "community": 0,
       "norm_label": "snapshot()"
     },
     {
@@ -954,7 +954,7 @@
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
       "source_location": "L364",
       "id": "dispatch",
-      "community": 2,
+      "community": 0,
       "norm_label": "dispatch()"
     },
     {
@@ -963,7 +963,7 @@
       "source_file": "tests\\\u7528\u4f8b\u6d4b\u8bd5.rs",
       "source_location": "L674",
       "id": "owner",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u9644\u4ef6owner\u4e0d\u5339\u914d\u65f6\u62d2\u7edd\u521b\u5efa\u6d88\u606f()"
     },
     {
@@ -972,7 +972,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1\u8fd0\u884c\u65f6.ts",
       "source_location": "L403",
       "id": "actor",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u521b\u5efa\u8d44\u4ea7\u534f\u4f5c\u5206\u53d1actor()"
     },
     {
@@ -981,7 +981,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L120",
       "id": "createrenderroot",
-      "community": 2,
+      "community": 0,
       "norm_label": "createrenderroot()"
     },
     {
@@ -990,7 +990,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1066",
       "id": "disconnectedcallback",
-      "community": 2,
+      "community": 0,
       "norm_label": "disconnectedcallback()"
     },
     {
@@ -999,7 +999,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L132",
       "id": "dispatchpointerscrollintent",
-      "community": 2,
+      "community": 0,
       "norm_label": "dispatchpointerscrollintent()"
     },
     {
@@ -1008,7 +1008,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L139",
       "id": "dispatchscrollintent",
-      "community": 2,
+      "community": 0,
       "norm_label": "dispatchscrollintent()"
     },
     {
@@ -1017,7 +1017,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L160",
       "id": "dispatchscroll",
-      "community": 2,
+      "community": 0,
       "norm_label": "dispatchscroll()"
     },
     {
@@ -1026,7 +1026,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1062",
       "id": "updated",
-      "community": 2,
+      "community": 0,
       "norm_label": "updated()"
     },
     {
@@ -1035,7 +1035,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L472",
       "id": "dispatchjumptolatest",
-      "community": 2,
+      "community": 0,
       "norm_label": "dispatchjumptolatest()"
     },
     {
@@ -1044,7 +1044,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L737",
       "id": "rendermessagebody",
-      "community": 2,
+      "community": 0,
       "norm_label": "rendermessagebody()"
     },
     {
@@ -1053,7 +1053,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L754",
       "id": "rendermessageattachments",
-      "community": 2,
+      "community": 0,
       "norm_label": "rendermessageattachments()"
     },
     {
@@ -1062,7 +1062,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6d88\u606f\u7a97.ts",
       "source_location": "L1101",
       "id": "rendervirtualmessageitem",
-      "community": 2,
+      "community": 0,
       "norm_label": "rendervirtualmessageitem()"
     },
     {
@@ -1071,7 +1071,7 @@
       "source_file": "frontend\\\u623f\u95f4\u6eda\u52a8\u5668.ts",
       "source_location": "L79",
       "id": "hostdisconnected",
-      "community": 2,
+      "community": 0,
       "norm_label": "hostdisconnected()"
     },
     {
@@ -1080,7 +1080,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1015",
       "id": "revokedraftpreviewurl",
-      "community": 2,
+      "community": 0,
       "norm_label": "revokedraftpreviewurl()"
     },
     {
@@ -1089,7 +1089,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1032",
       "id": "removecomposerdraft",
-      "community": 2,
+      "community": 0,
       "norm_label": "removecomposerdraft()"
     },
     {
@@ -1098,7 +1098,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1043",
       "id": "resumecomposerdraft",
-      "community": 2,
+      "community": 0,
       "norm_label": "resumecomposerdraft()"
     },
     {
@@ -1107,7 +1107,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1047",
       "id": "restartcomposerdraft",
-      "community": 2,
+      "community": 0,
       "norm_label": "restartcomposerdraft()"
     },
     {
@@ -1116,7 +1116,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1051",
       "id": "connectedcallback",
-      "community": 2,
+      "community": 3,
       "norm_label": "connectedcallback()"
     },
     {
@@ -1125,7 +1125,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1080",
       "id": "submitshellconsole",
-      "community": 2,
+      "community": 0,
       "norm_label": "submitshellconsole()"
     },
     {
@@ -1134,7 +1134,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1098",
       "id": "handleshellconsoleprimaryinput",
-      "community": 2,
+      "community": 0,
       "norm_label": "handleshellconsoleprimaryinput()"
     },
     {
@@ -1143,7 +1143,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1107",
       "id": "handleshellconsoleprimarykeydown",
-      "community": 2,
+      "community": 0,
       "norm_label": "handleshellconsoleprimarykeydown()"
     },
     {
@@ -1152,7 +1152,7 @@
       "source_file": "frontend\\\u804a\u5929\u58f3.ts",
       "source_location": "L1185",
       "id": "rendershellconsole",
-      "community": 2,
+      "community": 0,
       "norm_label": "rendershellconsole()"
     },
     {
@@ -1161,7 +1161,7 @@
       "source_file": "frontend\\\u804a\u5929\u5a92\u4f53\u7f16\u6392.ts",
       "source_location": "L153",
       "id": "consumerid",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u6784\u9020\u5a92\u4f53\u4f1a\u8bddconsumerid()"
     },
     {
@@ -1170,7 +1170,7 @@
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
       "source_location": "L460",
       "id": "dispose",
-      "community": 2,
+      "community": 0,
       "norm_label": "dispose()"
     },
     {
@@ -1179,7 +1179,7 @@
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
       "source_location": "L1269",
       "id": "exitcurrentroomview",
-      "community": 2,
+      "community": 0,
       "norm_label": "exitcurrentroomview()"
     },
     {
@@ -1188,7 +1188,7 @@
       "source_file": "frontend\\\u804a\u5929\u5e94\u7528\u5185\u6838.ts",
       "source_location": "L1298",
       "id": "leavecurrentroomview",
-      "community": 2,
+      "community": 0,
       "norm_label": "leavecurrentroomview()"
     },
     {
@@ -1384,7 +1384,7 @@
       "label": ".bootstrapAnonymousIdentity()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L133",
+      "source_location": "L136",
       "id": "spec_bootstrapanonymousidentity",
       "community": 3,
       "norm_label": ".bootstrapanonymousidentity()"
@@ -1393,7 +1393,7 @@
       "label": ".joinOrCreateRoom()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L139",
+      "source_location": "L142",
       "id": "spec_joinorcreateroom",
       "community": 3,
       "norm_label": ".joinorcreateroom()"
@@ -1402,7 +1402,7 @@
       "label": ".loadRoomSnapshot()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L142",
+      "source_location": "L145",
       "id": "spec_loadroomsnapshot",
       "community": 3,
       "norm_label": ".loadroomsnapshot()"
@@ -1411,16 +1411,25 @@
       "label": ".prepareMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L145",
+      "source_location": "L148",
       "id": "spec_preparemediaupload",
       "community": 3,
       "norm_label": ".preparemediaupload()"
     },
     {
+      "label": ".reuseMediaBySourceHash()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": "L172",
+      "id": "spec_reusemediabysourcehash",
+      "community": 3,
+      "norm_label": ".reusemediabysourcehash()"
+    },
+    {
       "label": ".abandonMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L168",
+      "source_location": "L178",
       "id": "spec_abandonmediaupload",
       "community": 3,
       "norm_label": ".abandonmediaupload()"
@@ -1429,7 +1438,7 @@
       "label": ".completeMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L169",
+      "source_location": "L179",
       "id": "spec_completemediaupload",
       "community": 3,
       "norm_label": ".completemediaupload()"
@@ -1438,7 +1447,7 @@
       "label": ".loadMediaLocator()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L183",
+      "source_location": "L193",
       "id": "spec_loadmedialocator",
       "community": 3,
       "norm_label": ".loadmedialocator()"
@@ -1447,7 +1456,7 @@
       "label": ".buildAttachmentContentUrl()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L290",
+      "source_location": "L300",
       "id": "spec_buildattachmentcontenturl",
       "community": 3,
       "norm_label": ".buildattachmentcontenturl()"
@@ -1456,7 +1465,7 @@
       "label": ".updateRoomReadAnchor()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L266",
+      "source_location": "L276",
       "id": "spec_updateroomreadanchor",
       "community": 3,
       "norm_label": ".updateroomreadanchor()"
@@ -1465,7 +1474,7 @@
       "label": ".loadRoomEvents()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L267",
+      "source_location": "L277",
       "id": "spec_loadroomevents",
       "community": 3,
       "norm_label": ".loadroomevents()"
@@ -1474,7 +1483,7 @@
       "label": ".loadRoomHistory()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L307",
+      "source_location": "L317",
       "id": "spec_loadroomhistory",
       "community": 3,
       "norm_label": ".loadroomhistory()"
@@ -1483,7 +1492,7 @@
       "label": ".loadAdminOverview()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L310",
+      "source_location": "L320",
       "id": "spec_loadadminoverview",
       "community": 3,
       "norm_label": ".loadadminoverview()"
@@ -1492,7 +1501,7 @@
       "label": ".adminLogin()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L313",
+      "source_location": "L323",
       "id": "spec_adminlogin",
       "community": 3,
       "norm_label": ".adminlogin()"
@@ -1501,7 +1510,7 @@
       "label": ".adminRooms()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L316",
+      "source_location": "L326",
       "id": "spec_adminrooms",
       "community": 3,
       "norm_label": ".adminrooms()"
@@ -1510,7 +1519,7 @@
       "label": ".adminRoomDetail()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L319",
+      "source_location": "L329",
       "id": "spec_adminroomdetail",
       "community": 3,
       "norm_label": ".adminroomdetail()"
@@ -1519,7 +1528,7 @@
       "label": ".createSocket()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L322",
+      "source_location": "L332",
       "id": "spec_createsocket",
       "community": 3,
       "norm_label": ".createsocket()"
@@ -1656,7 +1665,7 @@
       "source_file": "frontend\\tests\\\u5a92\u4f53\u53d1\u5e03\u6d4b\u8bd5.spec.ts",
       "source_location": "L97",
       "id": "spec_destroy",
-      "community": 2,
+      "community": 0,
       "norm_label": ".destroy()"
     },
     {
@@ -1750,19 +1759,64 @@
       "norm_label": ".takerecords()"
     },
     {
+      "label": "\u5931\u8d25Worker",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L27",
+      "id": "spec_worker",
+      "community": 0,
+      "norm_label": "\u5931\u8d25worker"
+    },
+    {
+      "label": ".addEventListener()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L29",
+      "id": "spec_worker_addeventlistener",
+      "community": 0,
+      "norm_label": ".addeventlistener()"
+    },
+    {
+      "label": ".removeEventListener()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L34",
+      "id": "spec_worker_removeeventlistener",
+      "community": 0,
+      "norm_label": ".removeeventlistener()"
+    },
+    {
+      "label": ".postMessage()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L35",
+      "id": "spec_worker_postmessage",
+      "community": 0,
+      "norm_label": ".postmessage()"
+    },
+    {
+      "label": ".terminate()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L45",
+      "id": "spec_worker_terminate",
+      "community": 0,
+      "norm_label": ".terminate()"
+    },
+    {
       "label": ".addEventListener()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u79bb\u7ebf\u8fd0\u884c\u65f6\u6d4b\u8bd5.spec.ts",
       "source_location": "L9",
       "id": "spec_addeventlistener",
-      "community": 2,
+      "community": 3,
       "norm_label": ".addeventlistener()"
     },
     {
       "label": "\u5047Socket",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L60",
+      "source_location": "L63",
       "id": "spec_socket",
       "community": 3,
       "norm_label": "\u5047socket"
@@ -1771,7 +1825,7 @@
       "label": ".on()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L63",
+      "source_location": "L66",
       "id": "spec_socket_on",
       "community": 3,
       "norm_label": ".on()"
@@ -1780,7 +1834,7 @@
       "label": ".emit()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L70",
+      "source_location": "L73",
       "id": "spec_socket_emit",
       "community": 3,
       "norm_label": ".emit()"
@@ -1789,7 +1843,7 @@
       "label": ".disconnect()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L100",
+      "source_location": "L103",
       "id": "spec_socket_disconnect",
       "community": 3,
       "norm_label": ".disconnect()"
@@ -1798,7 +1852,7 @@
       "label": ".fire()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L102",
+      "source_location": "L105",
       "id": "spec_socket_fire",
       "community": 3,
       "norm_label": ".fire()"
@@ -1807,7 +1861,7 @@
       "label": ".buildStreamingAssetUrl()",
       "file_type": "code",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L297",
+      "source_location": "L307",
       "id": "spec_buildstreamingasseturl",
       "community": 3,
       "norm_label": ".buildstreamingasseturl()"
@@ -1818,7 +1872,7 @@
       "source_file": "frontend\\tests\\\u89c6\u9891\u5143\u6570\u636e\u6d4b\u8bd5.spec.ts",
       "source_location": "L137",
       "id": "spec_get",
-      "community": 0,
+      "community": 3,
       "norm_label": "get()"
     },
     {
@@ -1845,16 +1899,16 @@
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
       "source_location": "L1",
       "id": "frontend_tests_common_ts",
-      "community": 3,
+      "community": 6,
       "norm_label": "\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts"
     },
     {
       "label": "createFakeStorage()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L84",
+      "source_location": "L87",
       "id": "createfakestorage",
-      "community": 3,
+      "community": 6,
       "norm_label": "createfakestorage()"
     },
     {
@@ -1870,16 +1924,16 @@
       "label": ".on()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L113",
+      "source_location": "L116",
       "id": "socket_on",
-      "community": 6,
+      "community": 3,
       "norm_label": ".on()"
     },
     {
       "label": ".emit()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L120",
+      "source_location": "L123",
       "id": "socket_emit",
       "community": 6,
       "norm_label": ".emit()"
@@ -1888,16 +1942,16 @@
       "label": ".disconnect()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L170",
+      "source_location": "L173",
       "id": "socket_disconnect",
-      "community": 2,
+      "community": 0,
       "norm_label": ".disconnect()"
     },
     {
       "label": ".trigger()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L172",
+      "source_location": "L175",
       "id": "socket_trigger",
       "community": 6,
       "norm_label": ".trigger()"
@@ -1906,7 +1960,7 @@
       "label": ".fire()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L176",
+      "source_location": "L179",
       "id": "socket_fire",
       "community": 6,
       "norm_label": ".fire()"
@@ -1915,144 +1969,153 @@
       "label": "bootstrapAnonymousIdentity()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L237",
+      "source_location": "L249",
       "id": "bootstrapanonymousidentity",
-      "community": 3,
+      "community": 6,
       "norm_label": "bootstrapanonymousidentity()"
     },
     {
       "label": "joinOrCreateRoom()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L246",
+      "source_location": "L258",
       "id": "joinorcreateroom",
-      "community": 3,
+      "community": 6,
       "norm_label": "joinorcreateroom()"
     },
     {
       "label": "loadRoomSnapshot()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L254",
+      "source_location": "L266",
       "id": "loadroomsnapshot",
-      "community": 3,
+      "community": 6,
       "norm_label": "loadroomsnapshot()"
     },
     {
       "label": "prepareMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L263",
+      "source_location": "L275",
       "id": "preparemediaupload",
-      "community": 3,
+      "community": 6,
       "norm_label": "preparemediaupload()"
+    },
+    {
+      "label": "reuseMediaBySourceHash()",
+      "file_type": "code",
+      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
+      "source_location": "L308",
+      "id": "reusemediabysourcehash",
+      "community": 6,
+      "norm_label": "reusemediabysourcehash()"
     },
     {
       "label": "abandonMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L290",
+      "source_location": "L315",
       "id": "abandonmediaupload",
-      "community": 3,
+      "community": 6,
       "norm_label": "abandonmediaupload()"
     },
     {
       "label": "completeMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L291",
+      "source_location": "L316",
       "id": "completemediaupload",
-      "community": 3,
+      "community": 6,
       "norm_label": "completemediaupload()"
     },
     {
       "label": "loadMediaLocator()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L309",
+      "source_location": "L334",
       "id": "loadmedialocator",
-      "community": 3,
+      "community": 6,
       "norm_label": "loadmedialocator()"
     },
     {
       "label": "buildBlobAssetUrl()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L381",
+      "source_location": "L406",
       "id": "buildblobasseturl",
-      "community": 3,
+      "community": 6,
       "norm_label": "buildblobasseturl()"
     },
     {
       "label": "buildAttachmentContentUrl()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L388",
+      "source_location": "L413",
       "id": "buildattachmentcontenturl",
-      "community": 3,
+      "community": 6,
       "norm_label": "buildattachmentcontenturl()"
     },
     {
       "label": "updateRoomReadAnchor()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L395",
+      "source_location": "L420",
       "id": "updateroomreadanchor",
-      "community": 3,
+      "community": 6,
       "norm_label": "updateroomreadanchor()"
     },
     {
       "label": "loadRoomEvents()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L406",
+      "source_location": "L431",
       "id": "loadroomevents",
-      "community": 3,
+      "community": 6,
       "norm_label": "loadroomevents()"
     },
     {
       "label": "loadRoomHistory()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L434",
+      "source_location": "L459",
       "id": "loadroomhistory",
-      "community": 3,
+      "community": 6,
       "norm_label": "loadroomhistory()"
     },
     {
       "label": "loadAdminOverview()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L447",
+      "source_location": "L472",
       "id": "loadadminoverview",
-      "community": 3,
+      "community": 6,
       "norm_label": "loadadminoverview()"
     },
     {
       "label": "adminLogin()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L450",
+      "source_location": "L475",
       "id": "adminlogin",
-      "community": 3,
+      "community": 6,
       "norm_label": "adminlogin()"
     },
     {
       "label": "adminRooms()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L453",
+      "source_location": "L478",
       "id": "adminrooms",
-      "community": 3,
+      "community": 6,
       "norm_label": "adminrooms()"
     },
     {
       "label": "adminRoomDetail()",
       "file_type": "code",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L456",
+      "source_location": "L481",
       "id": "adminroomdetail",
-      "community": 3,
+      "community": 6,
       "norm_label": "adminroomdetail()"
     },
     {
@@ -2070,7 +2133,7 @@
       "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\index.ts",
       "source_location": "L1",
       "id": "frontend_index_ts",
-      "community": 2,
+      "community": 0,
       "norm_label": "index.ts"
     },
     {
@@ -2133,7 +2196,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u56fe\u7247\u9884\u5904\u7406.ts",
       "source_location": "L43",
       "id": "mime",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u63a8\u5bfc\u56fe\u7247mime\u7c7b\u578b()"
     },
     {
@@ -2142,7 +2205,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L898",
       "id": "webp",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u6700\u5c0fwebp\u5b57\u8282()"
     },
     {
@@ -2151,7 +2214,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u56fe\u7247\u9884\u5904\u7406.ts",
       "source_location": "L132",
       "id": "jpeg",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u8f6c\u7801\u624b\u673a\u56fe\u7247\u4e3a\u6807\u51c6jpeg()"
     },
     {
@@ -2160,7 +2223,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u56fe\u7247\u9884\u5904\u7406.ts",
       "source_location": "L148",
       "id": "canonicalwebp",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u9884\u5236\u56fe\u7247\u4e3acanonicalwebp()"
     },
     {
@@ -2169,7 +2232,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
       "source_location": "L91",
       "id": "jointicket",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u534f\u4f5c\u5206\u53d1jointicket\u5931\u6548\u9519\u8bef"
     },
     {
@@ -2178,7 +2241,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
       "source_location": "L94",
       "id": "jointicket_constructor",
-      "community": 2,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -2187,7 +2250,7 @@
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5\\\u53ef\u7528\u6027\u88c1\u51b3.rs",
       "source_location": "L1474",
       "id": "torrent",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u505a\u79cd\u5bf9\u8d26\u4f1a\u8df3\u8fc7\u7f3a\u5931torrent\u5143\u4fe1\u606f\u7684\u810f\u9644\u4ef6\u8bb0\u5f55()"
     },
     {
@@ -2205,7 +2268,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
       "source_location": "L305",
       "id": "webtorrent",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u9ed8\u8ba4\u52a0\u8f7dwebtorrent\u6d4f\u89c8\u5668\u6784\u9020\u5668()"
     },
     {
@@ -2214,7 +2277,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
       "source_location": "L316",
       "id": "serviceworker",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u9ed8\u8ba4\u8bfb\u53d6\u5a92\u4f53serviceworker\u6ce8\u518c()"
     },
     {
@@ -2223,7 +2286,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
       "source_location": "L440",
       "id": "nopeers",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u8bfb\u53d6nopeers\u63a2\u6d4b\u95f4\u9694\u6beb\u79d2()"
     },
     {
@@ -2236,12 +2299,21 @@
       "norm_label": "\u63d0\u53d6\u5a92\u4f53\u4e0a\u4f20\u6388\u6743\u5934()"
     },
     {
+      "label": "SourceHash\u5a92\u4f53\u590d\u7528\u8bf7\u6c42",
+      "file_type": "code",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L171",
+      "id": "sourcehash",
+      "community": 0,
+      "norm_label": "sourcehash\u5a92\u4f53\u590d\u7528\u8bf7\u6c42"
+    },
+    {
       "label": "\u6784\u9020\u5a92\u4f53\u4e0a\u4f20Meta()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L347",
+      "source_location": "L391",
       "id": "meta",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u6784\u9020\u5a92\u4f53\u4e0a\u4f20meta()"
     },
     {
@@ -2250,7 +2322,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
       "source_location": "L141",
       "id": "photoswipe",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u6620\u5c04photoswipe\u56fe\u7247()"
     },
     {
@@ -2259,7 +2331,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u67e5\u770b\u5668.ts",
       "source_location": "L148",
       "id": "photoswipelightbox",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u521b\u5efa\u9ed8\u8ba4photoswipelightbox()"
     },
     {
@@ -2272,12 +2344,57 @@
       "norm_label": "\u770b\u8d77\u6765\u50cfpromise()"
     },
     {
+      "label": "\u521b\u5efa\u9ed8\u8ba4\u6e90\u6587\u4ef6\u54c8\u5e0cWorker()",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L33",
+      "id": "worker",
+      "community": 0,
+      "norm_label": "\u521b\u5efa\u9ed8\u8ba4\u6e90\u6587\u4ef6\u54c8\u5e0cworker()"
+    },
+    {
+      "label": "\u5207\u7247\u8f6cUint8Array()",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L37",
+      "id": "uint8array",
+      "community": 0,
+      "norm_label": "\u5207\u7247\u8f6cuint8array()"
+    },
+    {
+      "label": "\u8ba1\u7b97\u6e90\u6587\u4ef6SHA256()",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L51",
+      "id": "sha256",
+      "community": 0,
+      "norm_label": "\u8ba1\u7b97\u6e90\u6587\u4ef6sha256()"
+    },
+    {
+      "label": "\u8ba1\u7b97\u6e90\u6587\u4ef6SHA256\u7ecfWorker()",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L67",
+      "id": "sha256_worker",
+      "community": 0,
+      "norm_label": "\u8ba1\u7b97\u6e90\u6587\u4ef6sha256\u7ecfworker()"
+    },
+    {
+      "label": "\u6e90\u6587\u4ef6\u54c8\u5e0c.worker.ts",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.worker.ts",
+      "source_location": "L1",
+      "id": "frontend_worker_ts",
+      "community": 0,
+      "norm_label": "\u6e90\u6587\u4ef6\u54c8\u5e0c.worker.ts"
+    },
+    {
       "label": "\u65b0\u6a21\u5757\u4f1a\u7ed9\u6700\u5c0f_mp4_\u8fd4\u56de\u5c55\u793a\u5c3a\u5bf8()",
       "file_type": "code",
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L927",
       "id": "mp4",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u65b0\u6a21\u5757\u4f1a\u7ed9\u6700\u5c0f_mp4_\u8fd4\u56de\u5c55\u793a\u5c3a\u5bf8()"
     },
     {
@@ -2286,7 +2403,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u89c6\u9891\u9884\u5904\u7406.ts",
       "source_location": "L56",
       "id": "mediabunny",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u9ed8\u8ba4mediabunny\u53ef\u65e0\u635f\u6574\u7406()"
     },
     {
@@ -2295,7 +2412,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u89c6\u9891\u9884\u5904\u7406.ts",
       "source_location": "L62",
       "id": "mediabunny_webcodecs",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u9ed8\u8ba4mediabunny\u4e0ewebcodecs\u53ef\u8f6c\u7801()"
     },
     {
@@ -2304,7 +2421,7 @@
       "source_file": "frontend\\\u5a92\u4f53\\\u89c6\u9891\u9884\u5904\u7406.ts",
       "source_location": "L74",
       "id": "mediabunny_mp4",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u4f7f\u7528mediabunny\u8f6c\u6362\u5230mp4()"
     },
     {
@@ -2313,7 +2430,7 @@
       "source_file": "frontend\\\u804a\u5929\u6062\u590d\\\u9002\u914d\\\u623f\u95f4HTTP\u63a5\u53e3.ts",
       "source_location": "L1",
       "id": "frontend_http_ts",
-      "community": 1,
+      "community": 12,
       "norm_label": "\u623f\u95f4http\u63a5\u53e3.ts"
     },
     {
@@ -2338,16 +2455,25 @@
       "label": ".prepareMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L35",
+      "source_location": "L38",
       "id": "http_http_preparemediaupload",
       "community": 12,
       "norm_label": ".preparemediaupload()"
     },
     {
+      "label": ".reuseMediaBySourceHash()",
+      "file_type": "code",
+      "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
+      "source_location": "L66",
+      "id": "http_http_reusemediabysourcehash",
+      "community": 12,
+      "norm_label": ".reusemediabysourcehash()"
+    },
+    {
       "label": ".abandonMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L52",
+      "source_location": "L89",
       "id": "http_http_abandonmediaupload",
       "community": 12,
       "norm_label": ".abandonmediaupload()"
@@ -2356,7 +2482,7 @@
       "label": ".completeMediaUpload()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L61",
+      "source_location": "L98",
       "id": "http_http_completemediaupload",
       "community": 12,
       "norm_label": ".completemediaupload()"
@@ -2365,7 +2491,7 @@
       "label": ".loadMediaLocator()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L74",
+      "source_location": "L111",
       "id": "http_http_loadmedialocator",
       "community": 12,
       "norm_label": ".loadmedialocator()"
@@ -2374,7 +2500,7 @@
       "label": ".\u89e3\u6790Blob\u5a92\u4f53\u8d44\u4ea7()",
       "file_type": "code",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L176",
+      "source_location": "L213",
       "id": "http_http_blob",
       "community": 12,
       "norm_label": ".\u89e3\u6790blob\u5a92\u4f53\u8d44\u4ea7()"
@@ -2385,7 +2511,7 @@
       "source_file": "frontend\\\u5e73\u53f0\\index.ts",
       "source_location": "L12",
       "id": "index",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u83b7\u53d6\u9ed8\u8ba4\u6d4f\u89c8\u5668\u5e94\u7528\u5e73\u53f0()"
     },
     {
@@ -2430,7 +2556,7 @@
       "source_file": "frontend\\\u64cd\u4f5c\u53f0\\\u9644\u4ef6\u5165\u53e3\\\u9644\u4ef6\u80fd\u529b\u6ce8\u518c.ts",
       "source_location": "L25",
       "id": "accept",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u6784\u9020\u7edf\u4e00\u5a92\u4f53\u6587\u4ef6accept()"
     },
     {
@@ -2439,7 +2565,7 @@
       "source_file": "frontend\\\u804a\u5929\u6062\u590d\\\u58f3\u5c42\\\u623f\u95f4\u5feb\u7167\u6062\u590d.ts",
       "source_location": "L85",
       "id": "asrecoveryfailure",
-      "community": 2,
+      "community": 0,
       "norm_label": "asrecoveryfailure()"
     },
     {
@@ -2448,7 +2574,7 @@
       "source_file": "frontend\\\u804a\u5929\u6062\u590d\\\u58f3\u5c42\\\u623f\u95f4\u5feb\u7167\u6062\u590d.ts",
       "source_location": "L89",
       "id": "ishardroomfailure",
-      "community": 2,
+      "community": 0,
       "norm_label": "ishardroomfailure()"
     },
     {
@@ -2457,7 +2583,7 @@
       "source_file": "scripts\\check-frontend-architecture-fitness.mjs",
       "source_location": "L1",
       "id": "scripts_check_frontend_architecture_fitness_mjs",
-      "community": 15,
+      "community": 16,
       "norm_label": "check-frontend-architecture-fitness.mjs"
     },
     {
@@ -2466,7 +2592,7 @@
       "source_file": "scripts\\check-frontend-architecture-fitness.mjs",
       "source_location": "L66",
       "id": "check_frontend_architecture_fitness",
-      "community": 15,
+      "community": 16,
       "norm_label": "\u8f6c\u6210\u4ed3\u5e93\u76f8\u5bf9\u8def\u5f84()"
     },
     {
@@ -2475,7 +2601,7 @@
       "source_file": "scripts\\check-frontend-architecture-fitness.mjs",
       "source_location": "L138",
       "id": "check_frontend_architecture_fitness_import",
-      "community": 15,
+      "community": 16,
       "norm_label": "\u5e73\u53f0\u5185\u5c42import\u8fdd\u89c4()"
     },
     {
@@ -2484,7 +2610,7 @@
       "source_file": "scripts\\check-frontend-architecture-fitness.mjs",
       "source_location": "L166",
       "id": "check_frontend_architecture_fitness_owner",
-      "community": 15,
+      "community": 16,
       "norm_label": "\u68c0\u67e5owner\u6ce8\u518c\u8868()"
     },
     {
@@ -2493,7 +2619,7 @@
       "source_file": "scripts\\check-frontend-architecture-fitness.mjs",
       "source_location": "L191",
       "id": "check_frontend_architecture_fitness_xstateowner",
-      "community": 15,
+      "community": 16,
       "norm_label": "\u68c0\u67e5\u672a\u767b\u8bb0xstateowner()"
     },
     {
@@ -2925,7 +3051,7 @@
       "source_file": "src\\\u9886\u57df\\\u9519\u8bef.rs",
       "source_location": "L1",
       "id": "src_rs",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u9519\u8bef.rs"
     },
     {
@@ -2934,7 +3060,7 @@
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L16",
       "id": "adminloginbody",
-      "community": 0,
+      "community": 2,
       "norm_label": "adminloginbody"
     },
     {
@@ -2943,7 +3069,7 @@
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L25",
       "id": "adminloginresp",
-      "community": 0,
+      "community": 2,
       "norm_label": "adminloginresp"
     },
     {
@@ -2952,7 +3078,7 @@
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L40",
       "id": "require_admin",
-      "community": 0,
+      "community": 3,
       "norm_label": "require_admin()"
     },
     {
@@ -2961,7 +3087,7 @@
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L97",
       "id": "admin_login",
-      "community": 0,
+      "community": 2,
       "norm_label": "admin_login()"
     },
     {
@@ -2970,7 +3096,7 @@
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L140",
       "id": "admin_overview",
-      "community": 0,
+      "community": 2,
       "norm_label": "admin_overview()"
     },
     {
@@ -2979,7 +3105,7 @@
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L234",
       "id": "admin_rooms",
-      "community": 0,
+      "community": 2,
       "norm_label": "admin_rooms()"
     },
     {
@@ -2988,79 +3114,79 @@
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L326",
       "id": "admin_room_detail",
-      "community": 0,
+      "community": 2,
       "norm_label": "admin_room_detail()"
     },
     {
       "label": "\u8bfb\u53d6sidecar\u5a92\u4f53\u57fa\u51c6\u5730\u5740()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L551",
+      "source_location": "L593",
       "id": "sidecar",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u8bfb\u53d6sidecar\u5a92\u4f53\u57fa\u51c6\u5730\u5740()"
     },
     {
       "label": "\u6784\u5efa_s3\u5ba2\u6237\u7aef()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L828",
+      "source_location": "L871",
       "id": "s3",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u6784\u5efa_s3\u5ba2\u6237\u7aef()"
     },
     {
       "label": "proxy_swarm_tracker_announce()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L857",
+      "source_location": "L900",
       "id": "proxy_swarm_tracker_announce",
-      "community": 0,
+      "community": 2,
       "norm_label": "proxy_swarm_tracker_announce()"
     },
     {
       "label": "relay_swarm_tracker_socket()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L882",
+      "source_location": "L928",
       "id": "relay_swarm_tracker_socket",
-      "community": 0,
+      "community": 2,
       "norm_label": "relay_swarm_tracker_socket()"
     },
     {
       "label": "axum_ws_message_to_tungstenite()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L928",
+      "source_location": "L972",
       "id": "axum_ws_message_to_tungstenite",
-      "community": 0,
+      "community": 2,
       "norm_label": "axum_ws_message_to_tungstenite()"
     },
     {
       "label": "tungstenite_message_to_axum_ws()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L938",
+      "source_location": "L982",
       "id": "tungstenite_message_to_axum_ws",
-      "community": 0,
+      "community": 2,
       "norm_label": "tungstenite_message_to_axum_ws()"
     },
     {
       "label": "\u6e32\u67d3\u524d\u7aef\u5165\u53e3_html()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1088",
+      "source_location": "L1136",
       "id": "html",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u6e32\u67d3\u524d\u7aef\u5165\u53e3_html()"
     },
     {
       "label": "load_frontend_index()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1097",
+      "source_location": "L1145",
       "id": "load_frontend_index",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_frontend_index()"
     },
     {
@@ -3069,61 +3195,61 @@
       "source_file": "tests\\\u7528\u4f8b\u6d4b\u8bd5.rs",
       "source_location": "L707",
       "id": "realtime",
-      "community": 6,
+      "community": 3,
       "norm_label": "realtime\u8fde\u63a5\u8ba4\u8bc1\u5f02\u6b65\u7528\u4f8b\u4f1a\u653e\u884c\u6709\u6548\u4f1a\u8bdd()"
     },
     {
       "label": "ApiError",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1168",
+      "source_location": "L1216",
       "id": "apierror",
-      "community": 0,
+      "community": 2,
       "norm_label": "apierror"
     },
     {
       "label": "events_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1177",
+      "source_location": "L1225",
       "id": "events_to_json",
-      "community": 6,
+      "community": 2,
       "norm_label": "events_to_json()"
     },
     {
       "label": "attachments_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1187",
+      "source_location": "L1235",
       "id": "attachments_to_json",
-      "community": 1,
+      "community": 2,
       "norm_label": "attachments_to_json()"
     },
     {
       "label": "event_to_json()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1225",
+      "source_location": "L1273",
       "id": "event_to_json",
-      "community": 6,
+      "community": 2,
       "norm_label": "event_to_json()"
     },
     {
       "label": "map_domain_err_tuple()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1253",
+      "source_location": "L1301",
       "id": "map_domain_err_tuple",
-      "community": 0,
+      "community": 2,
       "norm_label": "map_domain_err_tuple()"
     },
     {
       "label": "err_resp()",
       "file_type": "code",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1309",
+      "source_location": "L1357",
       "id": "err_resp",
-      "community": 0,
+      "community": 2,
       "norm_label": "err_resp()"
     },
     {
@@ -3132,7 +3258,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L88",
       "id": "blob",
-      "community": 0,
+      "community": 2,
       "norm_label": "blob\u5a92\u4f53\u8d44\u4ea7\u54cd\u5e94\u53c2\u6570"
     },
     {
@@ -3141,25 +3267,34 @@
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
       "source_location": "L38",
       "id": "preparemediauploadbody",
-      "community": 0,
+      "community": 2,
       "norm_label": "preparemediauploadbody"
+    },
+    {
+      "label": "SourceHashReuseBody",
+      "file_type": "code",
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L49",
+      "id": "sourcehashreusebody",
+      "community": 2,
+      "norm_label": "sourcehashreusebody"
     },
     {
       "label": "CompleteMediaUploadBody",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L47",
+      "source_location": "L59",
       "id": "completemediauploadbody",
-      "community": 0,
+      "community": 2,
       "norm_label": "completemediauploadbody"
     },
     {
       "label": "AbandonMediaUploadBody",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L54",
+      "source_location": "L66",
       "id": "abandonmediauploadbody",
-      "community": 0,
+      "community": 2,
       "norm_label": "abandonmediauploadbody"
     },
     {
@@ -3175,64 +3310,73 @@
       "label": "prepare_media_upload()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L81",
+      "source_location": "L93",
       "id": "prepare_media_upload",
       "community": 1,
       "norm_label": "prepare_media_upload()"
     },
     {
+      "label": "reuse_media_by_source_hash()",
+      "file_type": "code",
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L314",
+      "id": "reuse_media_by_source_hash",
+      "community": 1,
+      "norm_label": "reuse_media_by_source_hash()"
+    },
+    {
       "label": "complete_media_upload()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L293",
+      "source_location": "L482",
       "id": "complete_media_upload",
-      "community": 0,
+      "community": 2,
       "norm_label": "complete_media_upload()"
     },
     {
       "label": "abandon_media_upload()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L887",
+      "source_location": "L1143",
       "id": "abandon_media_upload",
-      "community": 0,
+      "community": 2,
       "norm_label": "abandon_media_upload()"
     },
     {
       "label": "proxy_tus_upload_transport()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L999",
+      "source_location": "L1255",
       "id": "proxy_tus_upload_transport",
-      "community": 0,
+      "community": 2,
       "norm_label": "proxy_tus_upload_transport()"
+    },
+    {
+      "label": "Canonical\u5a92\u4f53\u8d44\u4ea7\u5199\u5165\u8bf7\u6c42",
+      "file_type": "code",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L139",
+      "id": "canonical",
+      "community": 2,
+      "norm_label": "canonical\u5a92\u4f53\u8d44\u4ea7\u5199\u5165\u8bf7\u6c42"
     },
     {
       "label": "\u5a92\u4f53complete\u6d4b\u8bd5\u73af\u5883",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L11",
+      "source_location": "L7",
       "id": "complete",
-      "community": 0,
+      "community": 1,
       "norm_label": "\u5a92\u4f53complete\u6d4b\u8bd5\u73af\u5883"
     },
     {
       "label": "\u89c6\u9891\u534f\u4f5c\u5206\u53d1\u5171\u4eab\u8f7d\u8377\u4f1a\u6536\u53e3\u5230canonical_mp4\u800c\u4e0d\u662f\u7ee7\u7eed\u6cbf\u7528\u539f\u7247mime()",
       "file_type": "code",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L1512",
+      "source_location": "L1772",
       "id": "canonical_mp4_mime",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u89c6\u9891\u534f\u4f5c\u5206\u53d1\u5171\u4eab\u8f7d\u8377\u4f1a\u6536\u53e3\u5230canonical_mp4\u800c\u4e0d\u662f\u7ee7\u7eed\u6cbf\u7528\u539f\u7247mime()"
-    },
-    {
-      "label": "Canonical\u56fe\u7247\u6821\u9a8c\u7ed3\u679c",
-      "file_type": "code",
-      "source_file": "src\\\u5a92\u4f53\u5185\u5bb9\u89e3\u6790.rs",
-      "source_location": "L7",
-      "id": "canonical",
-      "community": 0,
-      "norm_label": "canonical\u56fe\u7247\u6821\u9a8c\u7ed3\u679c"
     },
     {
       "label": "\u5c1d\u8bd5\u7528nom_exif\u89e3\u6790\u89c6\u9891\u5bbd\u9ad8()",
@@ -3240,7 +3384,7 @@
       "source_file": "src\\\u5a92\u4f53\u5185\u5bb9\u89e3\u6790.rs",
       "source_location": "L94",
       "id": "nom_exif",
-      "community": 0,
+      "community": 3,
       "norm_label": "\u5c1d\u8bd5\u7528nom_exif\u89e3\u6790\u89c6\u9891\u5bbd\u9ad8()"
     },
     {
@@ -3249,7 +3393,7 @@
       "source_file": "src\\\u5a92\u4f53\u5185\u5bb9\u89e3\u6790.rs",
       "source_location": "L228",
       "id": "iso5_brand_mp4",
-      "community": 0,
+      "community": 2,
       "norm_label": "iso5_brand_mp4\u4ecd\u5e94\u88ab\u89e3\u6790\u4e3a\u5408\u6cd5\u89c6\u9891\u5143\u6570\u636e()"
     },
     {
@@ -3267,7 +3411,7 @@
       "source_file": "src\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.rs",
       "source_location": "L292",
       "id": "join_ticket",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u7b7e\u53d1\u534f\u4f5c\u5206\u53d1join_ticket()"
     },
     {
@@ -3276,7 +3420,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L18",
       "id": "parsedattachmentcontentquery",
-      "community": 0,
+      "community": 2,
       "norm_label": "parsedattachmentcontentquery"
     },
     {
@@ -3285,7 +3429,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L24",
       "id": "parsedstreamingassetquery",
-      "community": 0,
+      "community": 2,
       "norm_label": "parsedstreamingassetquery"
     },
     {
@@ -3294,7 +3438,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L28",
       "id": "parseddistributionpresencepayload",
-      "community": 0,
+      "community": 2,
       "norm_label": "parseddistributionpresencepayload"
     },
     {
@@ -3303,7 +3447,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L102",
       "id": "parse_attachment_content_query",
-      "community": 0,
+      "community": 2,
       "norm_label": "parse_attachment_content_query()"
     },
     {
@@ -3312,7 +3456,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L137",
       "id": "parse_streaming_asset_query",
-      "community": 0,
+      "community": 2,
       "norm_label": "parse_streaming_asset_query()"
     },
     {
@@ -3321,7 +3465,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L156",
       "id": "parse_distribution_presence_payload",
-      "community": 0,
+      "community": 2,
       "norm_label": "parse_distribution_presence_payload()"
     },
     {
@@ -3330,7 +3474,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L282",
       "id": "content_range",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u6784\u9020content_range\u503c()"
     },
     {
@@ -3339,7 +3483,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L305",
       "id": "etag",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u6784\u9020\u6d41\u5a92\u4f53\u5bf9\u8c61etag()"
     },
     {
@@ -3348,7 +3492,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L332",
       "id": "if_none_match",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u8bf7\u6c42\u547d\u4e2dif_none_match()"
     },
     {
@@ -3357,7 +3501,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L345",
       "id": "if_modified_since",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u8bf7\u6c42\u547d\u4e2dif_modified_since()"
     },
     {
@@ -3366,7 +3510,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L933",
       "id": "load_media_locator",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_media_locator()"
     },
     {
@@ -3375,7 +3519,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L1049",
       "id": "load_blob_asset_content",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_blob_asset_content()"
     },
     {
@@ -3384,7 +3528,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L1272",
       "id": "load_streaming_asset_content",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_streaming_asset_content()"
     },
     {
@@ -3393,7 +3537,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L1523",
       "id": "load_media_torrent",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_media_torrent()"
     },
     {
@@ -3402,7 +3546,7 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L1570",
       "id": "update_media_distribution_presence",
-      "community": 0,
+      "community": 2,
       "norm_label": "update_media_distribution_presence()"
     },
     {
@@ -3411,14 +3555,23 @@
       "source_file": "src\\\u5a92\u4f53\u8d44\u4ea7\u5916\u58f3.rs",
       "source_location": "L1620",
       "id": "load_attachment_content",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_attachment_content()"
+    },
+    {
+      "label": "\u542f\u52a8\u4f1a\u8bdd\u5e76\u8fdb\u623f()",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L6",
+      "id": "source_hash",
+      "community": 1,
+      "norm_label": "\u542f\u52a8\u4f1a\u8bdd\u5e76\u8fdb\u623f()"
     },
     {
       "label": "\u534f\u4f5c\u5206\u53d1swarm\u5b58\u6d3b\u5199\u5165\u8bf7\u6c42",
       "file_type": "code",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L183",
+      "source_location": "L244",
       "id": "swarm",
       "community": 0,
       "norm_label": "\u534f\u4f5c\u5206\u53d1swarm\u5b58\u6d3b\u5199\u5165\u8bf7\u6c42"
@@ -3429,7 +3582,7 @@
       "source_file": "src\\\u5b9e\u65f6\u5916\u58f3.rs",
       "source_location": "L12",
       "id": "realtimeconnectauth",
-      "community": 0,
+      "community": 2,
       "norm_label": "realtimeconnectauth"
     },
     {
@@ -3438,7 +3591,7 @@
       "source_file": "src\\\u5b9e\u65f6\u5916\u58f3.rs",
       "source_location": "L25",
       "id": "realtimesubscribebody",
-      "community": 0,
+      "community": 2,
       "norm_label": "realtimesubscribebody"
     },
     {
@@ -3447,7 +3600,7 @@
       "source_file": "src\\\u5b9e\u65f6\u5916\u58f3.rs",
       "source_location": "L34",
       "id": "realtimecreatemessagebody",
-      "community": 0,
+      "community": 2,
       "norm_label": "realtimecreatemessagebody"
     },
     {
@@ -3456,7 +3609,7 @@
       "source_file": "src\\\u5b9e\u65f6\u5916\u58f3.rs",
       "source_location": "L464",
       "id": "handle_realtime_subscribe",
-      "community": 6,
+      "community": 2,
       "norm_label": "handle_realtime_subscribe()"
     },
     {
@@ -3465,7 +3618,7 @@
       "source_file": "src\\\u5b9e\u65f6\u5916\u58f3.rs",
       "source_location": "L605",
       "id": "handle_realtime_create_message",
-      "community": 6,
+      "community": 2,
       "norm_label": "handle_realtime_create_message()"
     },
     {
@@ -3474,7 +3627,7 @@
       "source_file": "tests\\\u6d88\u606f\u4e3b\u94fe\u6d4b\u8bd5.rs",
       "source_location": "L434",
       "id": "create_message",
-      "community": 1,
+      "community": 2,
       "norm_label": "\u5f02\u6b65create_message\u4e3b\u94fe\u6210\u529f\u65f6\u4ecd\u53ea\u8fd4\u56de\u6743\u5a01\u6d88\u606f\u4e8b\u4ef6()"
     },
     {
@@ -3483,7 +3636,7 @@
       "source_file": "src\\\u5b9e\u65f6\u5916\u58f3.rs",
       "source_location": "L800",
       "id": "room_event_control_result",
-      "community": 6,
+      "community": 2,
       "norm_label": "\u53d1\u9001\u6210\u529f\u65f6\u4ecd\u7136\u901a\u8fc7room_event\u8868\u8fbe\u6743\u5a01\u4e8b\u5b9e\u800c\u4e0d\u662fcontrol_result\u6210\u529f()"
     },
     {
@@ -3492,7 +3645,7 @@
       "source_file": "src\\\u5b9e\u65f6\u5916\u58f3.rs",
       "source_location": "L826",
       "id": "room_event",
-      "community": 6,
+      "community": 2,
       "norm_label": "room_event\u5728\u65e0\u4f1a\u8bdd\u4e0a\u4e0b\u6587\u65f6\u4ecd\u4f1a\u5e26\u51fa\u9644\u4ef6\u662f\u5426\u6709\u9759\u6001\u5c01\u9762\u7684\u7a33\u5b9a\u4e8b\u5b9e()"
     },
     {
@@ -3501,7 +3654,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L50",
       "id": "from_env_with",
-      "community": 0,
+      "community": 2,
       "norm_label": "from_env_with()"
     },
     {
@@ -3510,7 +3663,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L95",
       "id": "acquire_timeout",
-      "community": 2,
+      "community": 0,
       "norm_label": "acquire_timeout()"
     },
     {
@@ -3528,7 +3681,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L103",
       "id": "idle_timeout",
-      "community": 2,
+      "community": 0,
       "norm_label": "idle_timeout()"
     },
     {
@@ -3537,7 +3690,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L263",
       "id": "panic",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u5b89\u88c5panic\u65e5\u5fd7\u94a9\u5b50()"
     },
     {
@@ -3546,7 +3699,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L276",
       "id": "dotenv",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u5c1d\u8bd5\u52a0\u8f7ddotenv()"
     },
     {
@@ -3555,7 +3708,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L422",
       "id": "shaka_packager",
-      "community": 1,
+      "community": 2,
       "norm_label": "\u63a8\u5bfc\u9ed8\u8ba4shaka_packager\u547d\u4ee4()"
     },
     {
@@ -3564,7 +3717,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L654",
       "id": "u32",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u8bfb\u53d6\u53ef\u9009_u32()"
     },
     {
@@ -3573,7 +3726,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L686",
       "id": "u64",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u8bfb\u53d6\u53ef\u9009\u6b63_u64()"
     },
     {
@@ -3582,7 +3735,7 @@
       "source_file": "src\\\u603b\u88c5.rs",
       "source_location": "L835",
       "id": "statement",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u6784\u5efa\u8fc1\u79fb\u6570\u636e\u5e93\u8fde\u63a5\u9009\u9879\u4f1a\u5173\u95ed_statement_\u65e5\u5fd7()"
     },
     {
@@ -3591,7 +3744,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L17",
       "id": "bootstrapbody",
-      "community": 0,
+      "community": 2,
       "norm_label": "bootstrapbody"
     },
     {
@@ -3600,7 +3753,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L25",
       "id": "joinbody",
-      "community": 0,
+      "community": 2,
       "norm_label": "joinbody"
     },
     {
@@ -3609,7 +3762,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L34",
       "id": "updatereadanchorbody",
-      "community": 0,
+      "community": 2,
       "norm_label": "updatereadanchorbody"
     },
     {
@@ -3618,7 +3771,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L45",
       "id": "snapshotquery",
-      "community": 0,
+      "community": 2,
       "norm_label": "snapshotquery"
     },
     {
@@ -3627,7 +3780,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L53",
       "id": "parsedeventsquery",
-      "community": 0,
+      "community": 2,
       "norm_label": "parsedeventsquery"
     },
     {
@@ -3636,7 +3789,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L61",
       "id": "parsedhistoryquery",
-      "community": 0,
+      "community": 2,
       "norm_label": "parsedhistoryquery"
     },
     {
@@ -3645,7 +3798,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L73",
       "id": "parse_events_query",
-      "community": 0,
+      "community": 2,
       "norm_label": "parse_events_query()"
     },
     {
@@ -3654,7 +3807,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L108",
       "id": "parse_history_query",
-      "community": 0,
+      "community": 2,
       "norm_label": "parse_history_query()"
     },
     {
@@ -3663,7 +3816,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L164",
       "id": "bootstrap_session",
-      "community": 0,
+      "community": 2,
       "norm_label": "bootstrap_session()"
     },
     {
@@ -3672,7 +3825,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L248",
       "id": "join_or_create_room",
-      "community": 0,
+      "community": 2,
       "norm_label": "join_or_create_room()"
     },
     {
@@ -3681,7 +3834,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L354",
       "id": "load_room_snapshot",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_room_snapshot()"
     },
     {
@@ -3690,7 +3843,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L478",
       "id": "update_room_read_anchor",
-      "community": 0,
+      "community": 2,
       "norm_label": "update_room_read_anchor()"
     },
     {
@@ -3699,7 +3852,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L618",
       "id": "load_room_events",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_room_events()"
     },
     {
@@ -3708,7 +3861,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L746",
       "id": "load_room_history",
-      "community": 0,
+      "community": 2,
       "norm_label": "load_room_history()"
     },
     {
@@ -3717,7 +3870,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L884",
       "id": "room_not_found",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u623f\u95f4\u5feb\u7167_room_not_found_\u62d2\u7edd\u4e0d\u7b97\u8b66\u544a()"
     },
     {
@@ -3726,7 +3879,7 @@
       "source_file": "src\\\u623f\u95f4\u5916\u58f3.rs",
       "source_location": "L909",
       "id": "canonical_webp",
-      "community": 2,
+      "community": 0,
       "norm_label": "\u65b0\u6a21\u5757\u4f1a\u62d2\u7edd\u975ecanonical_webp\u5b57\u8282()"
     },
     {
@@ -3735,7 +3888,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L762",
       "id": "hls",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u91cd\u5199_hls\u6e05\u5355\u5185\u5bb9()"
     },
     {
@@ -3744,7 +3897,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L830",
       "id": "dash",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u91cd\u5199_dash\u6e05\u5355\u5185\u5bb9()"
     },
     {
@@ -3753,7 +3906,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L80",
       "id": "ffprobe",
-      "community": 0,
+      "community": 2,
       "norm_label": "ffprobe\u6d41\u4fe1\u606f"
     },
     {
@@ -3771,7 +3924,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L802",
       "id": "xml",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u91cd\u5199_xml\u5c5e\u6027\u8def\u5f84()"
     },
     {
@@ -3780,7 +3933,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L945",
       "id": "ffprobe_h264_aac_mp4",
-      "community": 0,
+      "community": 2,
       "norm_label": "ffprobe\u63a2\u6d4b\u4f1a\u628ah264_aac_mp4\u5224\u5b9a\u4e3a\u53ef\u76f4\u63a5\u5305\u88c5\u539f\u59cb\u6587\u4ef6()"
     },
     {
@@ -3789,7 +3942,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L960",
       "id": "ffprobe_mp4",
-      "community": 0,
+      "community": 2,
       "norm_label": "ffprobe\u63a2\u6d4b\u4f1a\u628a\u65e0\u6269\u5c55\u540d\u7684mp4\u4e34\u65f6\u6587\u4ef6\u4ecd\u5224\u5b9a\u4e3a\u53ef\u76f4\u63a5\u5305\u88c5\u539f\u59cb\u6587\u4ef6()"
     },
     {
@@ -3798,7 +3951,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L975",
       "id": "ffprobe_qt",
-      "community": 0,
+      "community": 2,
       "norm_label": "ffprobe\u63a2\u6d4b\u4f1a\u628aqt\u54c1\u724c\u7684\u65e0\u6269\u5c55\u540d\u4e34\u65f6\u6587\u4ef6\u5224\u5b9a\u4e3a\u65e0\u635f\u5f52\u4e00\u5316\u540e\u6253\u5305()"
     },
     {
@@ -3807,7 +3960,7 @@
       "source_file": "src\\\u6d41\u5a92\u4f53\u6253\u5305.rs",
       "source_location": "L996",
       "id": "ffprobe_h264",
-      "community": 0,
+      "community": 2,
       "norm_label": "ffprobe\u63a2\u6d4b\u4f1a\u628a\u975eh264\u89c6\u9891\u56de\u843d\u5230\u8f6c\u7801\u94fe\u8def()"
     },
     {
@@ -3820,12 +3973,21 @@
       "norm_label": "qt\u54c1\u724c\u6587\u4ef6\u4f1a\u5148\u8d70\u65e0\u635f\u5f52\u4e00\u5316\u800c\u4e0d\u662f\u76f4\u63a5\u6253\u5305\u6216\u91cd\u8f6c\u7801()"
     },
     {
+      "label": "\u662f64\u4f4d\u5c0f\u5199hex()",
+      "file_type": "code",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L396",
+      "id": "64_hex",
+      "community": 2,
+      "norm_label": "\u662f64\u4f4d\u5c0f\u5199hex()"
+    },
+    {
       "label": "\u7ec4\u5408\u82b1\u540d\u7ee7\u7eed\u901a\u8fc7_names_\u8f6e\u5b50\u751f\u6210()",
       "file_type": "code",
       "source_file": "src\\\u7528\u6237\u8eab\u4efd.rs",
       "source_location": "L244",
       "id": "names",
-      "community": 0,
+      "community": 2,
       "norm_label": "\u7ec4\u5408\u82b1\u540d\u7ee7\u7eed\u901a\u8fc7_names_\u8f6e\u5b50\u751f\u6210()"
     },
     {
@@ -3852,14 +4014,32 @@
       "source_file": "src\\\u9002\u914d.rs",
       "source_location": "L90",
       "id": "from_db",
-      "community": 2,
+      "community": 0,
       "norm_label": "from_db()"
+    },
+    {
+      "label": ".\u8bb0\u5f55\u9644\u4ef6source_hash()",
+      "file_type": "code",
+      "source_file": "src\\\u9002\u914d.rs",
+      "source_location": "L512",
+      "id": "pg_source_hash",
+      "community": 0,
+      "norm_label": ".\u8bb0\u5f55\u9644\u4ef6source_hash()"
+    },
+    {
+      "label": ".\u5199\u5165canonical\u5a92\u4f53\u8d44\u4ea7()",
+      "file_type": "code",
+      "source_file": "src\\\u9002\u914d.rs",
+      "source_location": "L544",
+      "id": "pg_canonical",
+      "community": 2,
+      "norm_label": ".\u5199\u5165canonical\u5a92\u4f53\u8d44\u4ea7()"
     },
     {
       "label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1swarm\u5b58\u6d3b()",
       "file_type": "code",
       "source_file": "src\\\u9002\u914d.rs",
-      "source_location": "L534",
+      "source_location": "L582",
       "id": "pg_swarm",
       "community": 0,
       "norm_label": ".\u5199\u5165\u534f\u4f5c\u5206\u53d1swarm\u5b58\u6d3b()"
@@ -3868,7 +4048,7 @@
       "label": ".\u67e5\u8be2\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f()",
       "file_type": "code",
       "source_file": "src\\\u9002\u914d.rs",
-      "source_location": "L541",
+      "source_location": "L589",
       "id": "pg_torrent",
       "community": 0,
       "norm_label": ".\u67e5\u8be2\u534f\u4f5c\u5206\u53d1torrent\u5143\u4fe1\u606f()"
@@ -3879,7 +4059,7 @@
       "source_file": "src\\\u9886\u57df\\mod.rs",
       "source_location": "L1",
       "id": "src_mod_rs",
-      "community": 2,
+      "community": 0,
       "norm_label": "mod.rs"
     },
     {
@@ -3960,7 +4140,7 @@
       "source_file": "tests\\\u534f\u4f5c\u5206\u53d1\u6d4b\u8bd5.rs",
       "source_location": "L954",
       "id": "tracker_websocket_404",
-      "community": 1,
+      "community": 4,
       "norm_label": "\u540c\u6e90tracker\u4ee3\u7406\u5165\u53e3\u4f1a\u54cd\u5e94websocket\u63e1\u624b\u800c\u4e0d\u662f404()"
     },
     {
@@ -4003,16 +4183,16 @@
       "label": "\u63d2\u51650018\u524d\u810f\u533f\u540d\u8eab\u4efd\u4e0e\u89c6\u9891\u9644\u4ef6()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L106",
+      "source_location": "L103",
       "id": "0018",
-      "community": 0,
+      "community": 3,
       "norm_label": "\u63d2\u51650018\u524d\u810f\u533f\u540d\u8eab\u4efd\u4e0e\u89c6\u9891\u9644\u4ef6()"
     },
     {
       "label": "\u6570\u636e\u5e93\u771f\u76f8\u6a21\u578b\u5305\u542battachments\u4e0emessage_attachment_refs\u8868()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L236",
+      "source_location": "L233",
       "id": "attachments_message_attachment_refs",
       "community": 1,
       "norm_label": "\u6570\u636e\u5e93\u771f\u76f8\u6a21\u578b\u5305\u542battachments\u4e0emessage_attachment_refs\u8868()"
@@ -4021,7 +4201,7 @@
       "label": "\u534f\u4f5c\u5206\u53d1\u8fc1\u79fb\u5df2\u5305\u542bswarm\u7ea7peer_presence\u8868()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L281",
+      "source_location": "L278",
       "id": "swarm_peer_presence",
       "community": 1,
       "norm_label": "\u534f\u4f5c\u5206\u53d1\u8fc1\u79fb\u5df2\u5305\u542bswarm\u7ea7peer_presence\u8868()"
@@ -4039,7 +4219,7 @@
       "label": "\u534f\u4f5c\u5206\u53d1partial_peer\u8fc1\u79fb\u5df2\u6269\u5c55peer_kind\u7ea6\u675f()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L303",
+      "source_location": "L302",
       "id": "partial_peer_peer_kind",
       "community": 1,
       "norm_label": "\u534f\u4f5c\u5206\u53d1partial_peer\u8fc1\u79fb\u5df2\u6269\u5c55peer_kind\u7ea6\u675f()"
@@ -4050,14 +4230,14 @@
       "source_file": "tests\\\u6d88\u606f\u4e3b\u94fe\u6d4b\u8bd5.rs",
       "source_location": "L16",
       "id": "uuid",
-      "community": 0,
+      "community": 3,
       "norm_label": "\u4f1a\u8bdd\u6240\u5c5e\u533f\u540d\u8eab\u4efd\u8fd4\u56de\u5185\u90e8uuid\u800c\u4e0d\u662f\u517c\u5bb9\u65e7\u4e32()"
     },
     {
       "label": "\u89c6\u9891\u4e0a\u4f20\u751f\u547d\u5468\u671f\u8fc1\u79fb\u5df2\u5305\u542babandoned\u4e0emezzanine\u5b57\u6bb5()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L370",
+      "source_location": "L400",
       "id": "abandoned_mezzanine",
       "community": 1,
       "norm_label": "\u89c6\u9891\u4e0a\u4f20\u751f\u547d\u5468\u671f\u8fc1\u79fb\u5df2\u5305\u542babandoned\u4e0emezzanine\u5b57\u6bb5()"
@@ -4066,7 +4246,7 @@
       "label": "\u6d41\u5a92\u4f53\u6e05\u5355\u751f\u547d\u5468\u671f\u8fc1\u79fb\u5df2\u5305\u542bstreaming\u8fc7\u671f\u4e0e\u5220\u9664\u5b57\u6bb5()",
       "file_type": "code",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L387",
+      "source_location": "L417",
       "id": "streaming",
       "community": 1,
       "norm_label": "\u6d41\u5a92\u4f53\u6e05\u5355\u751f\u547d\u5468\u671f\u8fc1\u79fb\u5df2\u5305\u542bstreaming\u8fc7\u671f\u4e0e\u5220\u9664\u5b57\u6bb5()"
@@ -4185,7 +4365,7 @@
       "source_file": "tests\\\u7528\u4f8b\u6d4b\u8bd5.rs",
       "source_location": "L46",
       "id": "panic_hook_panic",
-      "community": 2,
+      "community": 0,
       "norm_label": "panic_hook\u4f1a\u628apanic\u5199\u5165\u7edf\u4e00\u65e5\u5fd7\u4e3b\u94fe()"
     },
     {
@@ -4239,7 +4419,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L1",
       "id": "tests_powershell_https_script_tests_ps1",
-      "community": 16,
+      "community": 17,
       "norm_label": "https-script.tests.ps1"
     },
     {
@@ -4248,7 +4428,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L13",
       "id": "https_script_tests_assert_equal",
-      "community": 16,
+      "community": 17,
       "norm_label": "assert-equal()"
     },
     {
@@ -4257,7 +4437,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L25",
       "id": "https_script_tests_assert_true",
-      "community": 16,
+      "community": 17,
       "norm_label": "assert-true()"
     },
     {
@@ -4266,7 +4446,7 @@
       "source_file": "tests\\powershell\\https-script.tests.ps1",
       "source_location": "L36",
       "id": "https_script_tests_assert_false",
-      "community": 16,
+      "community": 17,
       "norm_label": "assert-false()"
     },
     {
@@ -4300,7 +4480,7 @@
       "label": "\u542f\u52a8\u5047seeder\u4fa7\u8f66()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L24",
+      "source_location": "L20",
       "id": "seeder",
       "community": 1,
       "norm_label": "\u542f\u52a8\u5047seeder\u4fa7\u8f66()"
@@ -4309,7 +4489,7 @@
       "label": "\u8bb0\u5f55\u5047seeder_start\u8bf7\u6c42()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L42",
+      "source_location": "L38",
       "id": "seeder_start",
       "community": 1,
       "norm_label": "\u8bb0\u5f55\u5047seeder_start\u8bf7\u6c42()"
@@ -4318,7 +4498,7 @@
       "label": "\u8fd4\u56de\u5047seeder_reconcile\u6210\u529f()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L59",
+      "source_location": "L55",
       "id": "seeder_reconcile",
       "community": 1,
       "norm_label": "\u8fd4\u56de\u5047seeder_reconcile\u6210\u529f()"
@@ -4525,7 +4705,7 @@
       "label": "\u6ca1\u6709\u4e0a\u4f20\u56de\u6267\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deattachment_not_ready()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L189",
+      "source_location": "L225",
       "id": "complete_complete_attachment_not_ready",
       "community": 1,
       "norm_label": "\u6ca1\u6709\u4e0a\u4f20\u56de\u6267\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u8fd4\u56deattachment_not_ready()"
@@ -4534,7 +4714,7 @@
       "label": "complete\u5728\u53ea\u6709partial\u6ca1\u6709final\u65f6\u4f1a\u8fd4\u56deattachment_not_ready()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L251",
+      "source_location": "L287",
       "id": "complete_complete_partial_final_attachment_not_ready",
       "community": 4,
       "norm_label": "complete\u5728\u53ea\u6709partial\u6ca1\u6709final\u65f6\u4f1a\u8fd4\u56deattachment_not_ready()"
@@ -4543,7 +4723,7 @@
       "label": "complete\u4f1a\u4f18\u5148\u6d88\u8d39\u5f53\u524d\u4f1a\u8bdd\u7684final\u56de\u6267\u800c\u4e0d\u662fsingle\u56de\u6267()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L351",
+      "source_location": "L387",
       "id": "complete_complete_final_single",
       "community": 4,
       "norm_label": "complete\u4f1a\u4f18\u5148\u6d88\u8d39\u5f53\u524d\u4f1a\u8bdd\u7684final\u56de\u6267\u800c\u4e0d\u662fsingle\u56de\u6267()"
@@ -4552,7 +4732,7 @@
       "label": "post_finish\u7a0d\u540e\u5230\u8fbe\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u7b49\u5f85\u56de\u6267\u5e76\u6210\u529f()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L481",
+      "source_location": "L517",
       "id": "complete_post_finish_complete",
       "community": 4,
       "norm_label": "post_finish\u7a0d\u540e\u5230\u8fbe\u65f6complete\u5a92\u4f53\u4e0a\u4f20\u4f1a\u7b49\u5f85\u56de\u6267\u5e76\u6210\u529f()"
@@ -4561,7 +4741,7 @@
       "label": "complete\u89c6\u9891\u4e0a\u4f20\u4f1a\u5199\u5165canonical\u5e76\u8fd4\u56defile_asset()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L593",
+      "source_location": "L629",
       "id": "complete_complete_canonical_file_asset",
       "community": 4,
       "norm_label": "complete\u89c6\u9891\u4e0a\u4f20\u4f1a\u5199\u5165canonical\u5e76\u8fd4\u56defile_asset()"
@@ -4570,7 +4750,7 @@
       "label": "complete\u56fe\u7247\u4e0a\u4f20\u9047\u5230\u975e\u56fe\u7247\u539f\u56fe\u4f1a\u8fd4\u56deattachment_type_not_allowed()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L868",
+      "source_location": "L917",
       "id": "complete_complete_attachment_type_not_allowed",
       "community": 4,
       "norm_label": "complete\u56fe\u7247\u4e0a\u4f20\u9047\u5230\u975e\u56fe\u7247\u539f\u56fe\u4f1a\u8fd4\u56deattachment_type_not_allowed()"
@@ -4610,6 +4790,42 @@
       "id": "prepare_prepare_prepared",
       "community": 1,
       "norm_label": "prepare\u8fd0\u8f93\u6388\u6743\u5199\u5165\u5931\u8d25\u65f6\u4e0d\u4f1a\u7559\u4e0b\u5b64\u513fprepared\u9644\u4ef6()"
+    },
+    {
+      "label": "source_hash.rs",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L1",
+      "id": "tests_source_hash_rs",
+      "community": 1,
+      "norm_label": "source_hash.rs"
+    },
+    {
+      "label": "\u4e0a\u4f20\u5e26source_hash\u7684\u6700\u5c0f\u56fe\u7247()",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L39",
+      "id": "source_hash_source_hash",
+      "community": 1,
+      "norm_label": "\u4e0a\u4f20\u5e26source_hash\u7684\u6700\u5c0f\u56fe\u7247()"
+    },
+    {
+      "label": "\u540c\u4e00\u623f\u95f4\u540csource_hash\u4f1a\u590d\u7528canonical\u8d44\u4ea7\u4f46\u521b\u5efa\u65b0\u9644\u4ef6\u4e8b\u5b9e()",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L158",
+      "id": "source_hash_source_hash_canonical",
+      "community": 1,
+      "norm_label": "\u540c\u4e00\u623f\u95f4\u540csource_hash\u4f1a\u590d\u7528canonical\u8d44\u4ea7\u4f46\u521b\u5efa\u65b0\u9644\u4ef6\u4e8b\u5b9e()"
+    },
+    {
+      "label": "canonical\u8d44\u4ea7\u5220\u9664\u540esource_hash\u4e0d\u4f1a\u590d\u6d3bready\u9644\u4ef6()",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L343",
+      "id": "source_hash_canonical_source_hash_ready",
+      "community": 1,
+      "norm_label": "canonical\u8d44\u4ea7\u5220\u9664\u540esource_hash\u4e0d\u4f1a\u590d\u6d3bready\u9644\u4ef6()"
     },
     {
       "label": "tus_hook.rs",
@@ -4714,34 +4930,34 @@
       "label": "\u56fe\u7247complete\u540e\u53ea\u4fdd\u7559\u4e00\u4efdcanonical\u5bf9\u8c61()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L178",
+      "source_location": "L174",
       "id": "complete_canonical",
-      "community": 0,
+      "community": 3,
       "norm_label": "\u56fe\u7247complete\u540e\u53ea\u4fdd\u7559\u4e00\u4efdcanonical\u5bf9\u8c61()"
     },
     {
       "label": "\u89c6\u9891complete\u540e\u4e0d\u518d\u8fd4\u56dehls_dash_manifest()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L242",
+      "source_location": "L244",
       "id": "complete_hls_dash_manifest",
-      "community": 0,
+      "community": 3,
       "norm_label": "\u89c6\u9891complete\u540e\u4e0d\u518d\u8fd4\u56dehls_dash_manifest()"
     },
     {
       "label": "\u89c6\u9891complete\u5728iso5_brand_mp4\u8f93\u5165\u4e0b\u4e0d\u5e94\u8fd4\u56de500()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L313",
+      "source_location": "L318",
       "id": "complete_iso5_brand_mp4_500",
-      "community": 1,
+      "community": 4,
       "norm_label": "\u89c6\u9891complete\u5728iso5_brand_mp4\u8f93\u5165\u4e0b\u4e0d\u5e94\u8fd4\u56de500()"
     },
     {
       "label": "\u89c6\u9891complete\u4f1a\u89e6\u53d1seeder_start\u547d\u4ee4()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L329",
+      "source_location": "L334",
       "id": "complete_seeder_start",
       "community": 1,
       "norm_label": "\u89c6\u9891complete\u4f1a\u89e6\u53d1seeder_start\u547d\u4ee4()"
@@ -4774,19 +4990,28 @@
       "norm_label": "\u540e\u53f0\u4f1a\u6536\u53e3\u5386\u53f2rustus\u6b8b\u7559locator\u800c\u4e0d\u518d\u8ba9\u6e05\u7406\u5361\u4f4f()"
     },
     {
-      "label": "\u89c6\u9891mezzanine\u8d85\u8fc724\u5c0f\u65f6\u540e\u4f1a\u88ab\u540e\u53f0\u6e05\u7406\u5e76\u5199\u5165\u5220\u9664\u65f6\u95f4()",
+      "label": "\u5171\u4eabcanonical\u8d44\u4ea7\u8d85\u8fc724\u5c0f\u65f6\u53ea\u5220\u9664\u4e00\u6b21\u5e76\u540c\u6b65\u6807\u8bb0\u6240\u6709\u5f15\u7528\u9644\u4ef6()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
       "source_location": "L106",
+      "id": "canonical_24",
+      "community": 1,
+      "norm_label": "\u5171\u4eabcanonical\u8d44\u4ea7\u8d85\u8fc724\u5c0f\u65f6\u53ea\u5220\u9664\u4e00\u6b21\u5e76\u540c\u6b65\u6807\u8bb0\u6240\u6709\u5f15\u7528\u9644\u4ef6()"
+    },
+    {
+      "label": "\u89c6\u9891mezzanine\u8d85\u8fc724\u5c0f\u65f6\u540e\u4f1a\u88ab\u540e\u53f0\u6e05\u7406\u5e76\u5199\u5165\u5220\u9664\u65f6\u95f4()",
+      "file_type": "code",
+      "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
+      "source_location": "L252",
       "id": "mezzanine_24",
-      "community": 0,
+      "community": 1,
       "norm_label": "\u89c6\u9891mezzanine\u8d85\u8fc724\u5c0f\u65f6\u540e\u4f1a\u88ab\u540e\u53f0\u6e05\u7406\u5e76\u5199\u5165\u5220\u9664\u65f6\u95f4()"
     },
     {
       "label": "streaming\u6e05\u7406\u540edistribution\u4ecd\u4fdd\u7559peer_only\u751f\u5b58\u8bed\u4e49\u800c\u4e0d\u662f\u56de\u9000\u670d\u52a1\u5668\u4e3b\u94fe()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
-      "source_location": "L308",
+      "source_location": "L454",
       "id": "streaming_distribution_peer_only",
       "community": 1,
       "norm_label": "streaming\u6e05\u7406\u540edistribution\u4ecd\u4fdd\u7559peer_only\u751f\u5b58\u8bed\u4e49\u800c\u4e0d\u662f\u56de\u9000\u670d\u52a1\u5668\u4e3b\u94fe()"
@@ -4795,9 +5020,9 @@
       "label": "\u51b7\u6e90\u5220\u9664\u540elocator\u9876\u5c42original\u548cblob_canonical\u90fd\u4f1a\u5931\u6548()",
       "file_type": "code",
       "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
-      "source_location": "L437",
+      "source_location": "L583",
       "id": "locator_original_blob_canonical",
-      "community": 4,
+      "community": 1,
       "norm_label": "\u51b7\u6e90\u5220\u9664\u540elocator\u9876\u5c42original\u548cblob_canonical\u90fd\u4f1a\u5931\u6548()"
     },
     {
@@ -5004,7 +5229,7 @@
       "source_file": "tests\\\u6d4b\u8bd5\u652f\u6491\\\u5a92\u4f53\\seed.rs",
       "source_location": "L10",
       "id": "seed_ready",
-      "community": 4,
+      "community": 1,
       "norm_label": "\u63d2\u5165ready\u56fe\u7247\u9644\u4ef6\u8bb0\u5f55()"
     },
     {
@@ -6396,10 +6621,22 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "frontend\\app-sw.ts",
+      "source_location": "L48",
+      "weight": 1.0,
+      "_src": "app_sw",
+      "_tgt": "spec_worker_postmessage",
+      "source": "app_sw",
+      "target": "spec_worker_postmessage"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\build.mjs",
-      "source_location": "L148",
+      "source_location": "L153",
       "weight": 1.0,
       "_src": "frontend_build_mjs",
       "_tgt": "build",
@@ -6675,7 +6912,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u4f20\u8f93.ts",
-      "source_location": "L159",
+      "source_location": "L167",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "http",
@@ -7287,7 +7524,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
-      "source_location": "L347",
+      "source_location": "L374",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "sourcehash",
+      "source": "frontend_ts",
+      "target": "sourcehash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
+      "source_location": "L391",
       "weight": 1.0,
       "_src": "frontend_ts",
       "_tgt": "meta",
@@ -7341,6 +7590,66 @@
       "_tgt": "videojs",
       "source": "frontend_ts",
       "target": "videojs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L33",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "worker",
+      "source": "frontend_ts",
+      "target": "worker",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L37",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "uint8array",
+      "source": "frontend_ts",
+      "target": "uint8array",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "sha256",
+      "source": "frontend_ts",
+      "target": "sha256",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L67",
+      "weight": 1.0,
+      "_src": "frontend_ts",
+      "_tgt": "sha256_worker",
+      "source": "frontend_ts",
+      "target": "sha256_worker",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.worker.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "_src": "frontend_worker_ts",
+      "_tgt": "frontend_ts",
+      "source": "frontend_ts",
+      "target": "frontend_worker_ts",
       "confidence_score": 1.0
     },
     {
@@ -7455,7 +7764,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u4f20\u8f93.ts",
-      "source_location": "L41",
+      "source_location": "L44",
       "weight": 1.0,
       "_src": "http",
       "_tgt": "http_constructor",
@@ -7563,7 +7872,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u4f20\u8f93.ts",
-      "source_location": "L213",
+      "source_location": "L221",
       "weight": 1.0,
       "_src": "",
       "_tgt": "json",
@@ -7623,7 +7932,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L1094",
+      "source_location": "L1119",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "",
@@ -7635,7 +7944,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L869",
+      "source_location": "L894",
       "weight": 1.0,
       "_src": "",
       "_tgt": "createfakestorage",
@@ -7767,7 +8076,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L815",
+      "source_location": "L858",
       "weight": 1.0,
       "_src": "",
       "_tgt": "s3",
@@ -7779,7 +8088,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L951",
+      "source_location": "L995",
       "weight": 1.0,
       "_src": "",
       "_tgt": "realtime",
@@ -7896,6 +8205,18 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L1312",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "64_hex",
+      "source": "",
+      "target": "64_hex",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u9886\u57df\\mod.rs",
@@ -7923,7 +8244,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L498",
+      "source_location": "L527",
       "weight": 1.0,
       "_src": "",
       "_tgt": "0018",
@@ -8067,6 +8388,18 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
+      "source_file": "src\\\u5165\u53e3.rs",
+      "source_location": "L169",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "spec_worker_terminate",
+      "source": "",
+      "target": "spec_worker_terminate"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
       "source_file": "src\\\u540e\u53f0\u5916\u58f3.rs",
       "source_location": "L91",
       "weight": 1.0,
@@ -8134,6 +8467,18 @@
       "_tgt": "write",
       "source": "",
       "target": "write"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L1327",
+      "weight": 1.0,
+      "_src": "",
+      "_tgt": "pg_source_hash",
+      "source": "",
+      "target": "pg_source_hash"
     },
     {
       "relation": "calls",
@@ -8398,6 +8743,18 @@
       "source": "owner",
       "target": "tests_rs",
       "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "frontend\\\u804a\u5929\u58f3.ts",
+      "source_location": "L1067",
+      "weight": 1.0,
+      "_src": "disconnectedcallback",
+      "_tgt": "spec_worker_removeeventlistener",
+      "source": "disconnectedcallback",
+      "target": "spec_worker_removeeventlistener"
     },
     {
       "relation": "calls",
@@ -8930,8 +9287,20 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "_src": "frontend_tests_spec_ts",
+      "_tgt": "spec_worker",
+      "source": "frontend_tests_spec_ts",
+      "target": "spec_worker",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L60",
+      "source_location": "L63",
       "weight": 1.0,
       "_src": "frontend_tests_spec_ts",
       "_tgt": "spec_socket",
@@ -8979,7 +9348,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L133",
+      "source_location": "L136",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_bootstrapanonymousidentity",
@@ -8991,7 +9360,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L139",
+      "source_location": "L142",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_joinorcreateroom",
@@ -9003,7 +9372,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L142",
+      "source_location": "L145",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadroomsnapshot",
@@ -9015,7 +9384,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L145",
+      "source_location": "L148",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_preparemediaupload",
@@ -9027,7 +9396,19 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L168",
+      "source_location": "L172",
+      "weight": 1.0,
+      "_src": "spec",
+      "_tgt": "spec_reusemediabysourcehash",
+      "source": "spec",
+      "target": "spec_reusemediabysourcehash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
+      "source_location": "L178",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_abandonmediaupload",
@@ -9039,7 +9420,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L169",
+      "source_location": "L179",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_completemediaupload",
@@ -9051,7 +9432,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L183",
+      "source_location": "L193",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadmedialocator",
@@ -9063,7 +9444,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L290",
+      "source_location": "L300",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_buildattachmentcontenturl",
@@ -9075,7 +9456,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L266",
+      "source_location": "L276",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_updateroomreadanchor",
@@ -9087,7 +9468,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L267",
+      "source_location": "L277",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadroomevents",
@@ -9099,7 +9480,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L307",
+      "source_location": "L317",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadroomhistory",
@@ -9111,7 +9492,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L310",
+      "source_location": "L320",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_loadadminoverview",
@@ -9123,7 +9504,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L313",
+      "source_location": "L323",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_adminlogin",
@@ -9135,7 +9516,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L316",
+      "source_location": "L326",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_adminrooms",
@@ -9147,7 +9528,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L319",
+      "source_location": "L329",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_adminroomdetail",
@@ -9159,7 +9540,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L322",
+      "source_location": "L332",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_createsocket",
@@ -9351,7 +9732,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L297",
+      "source_location": "L307",
       "weight": 1.0,
       "_src": "spec",
       "_tgt": "spec_buildstreamingasseturl",
@@ -9399,7 +9780,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L228",
+      "source_location": "L238",
       "weight": 1.0,
       "_src": "spec_loadmedialocator",
       "_tgt": "spec_buildattachmentcontenturl",
@@ -9411,7 +9792,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L212",
+      "source_location": "L222",
       "weight": 1.0,
       "_src": "spec_loadmedialocator",
       "_tgt": "spec_buildstreamingasseturl",
@@ -9540,6 +9921,66 @@
       "target": "spec_get"
     },
     {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L29",
+      "weight": 1.0,
+      "_src": "spec_worker",
+      "_tgt": "spec_worker_addeventlistener",
+      "source": "spec_worker",
+      "target": "spec_worker_addeventlistener",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L34",
+      "weight": 1.0,
+      "_src": "spec_worker",
+      "_tgt": "spec_worker_removeeventlistener",
+      "source": "spec_worker",
+      "target": "spec_worker_removeeventlistener",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "_src": "spec_worker",
+      "_tgt": "spec_worker_postmessage",
+      "source": "spec_worker",
+      "target": "spec_worker_postmessage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\\u6e90\u6587\u4ef6\u54c8\u5e0c\u6d4b\u8bd5.spec.ts",
+      "source_location": "L45",
+      "weight": 1.0,
+      "_src": "spec_worker",
+      "_tgt": "spec_worker_terminate",
+      "source": "spec_worker",
+      "target": "spec_worker_terminate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u534f\u4f5c\u5206\u53d1.ts",
+      "source_location": "L347",
+      "weight": 1.0,
+      "_src": "spec_worker_postmessage",
+      "_tgt": "serviceworker",
+      "source": "spec_worker_postmessage",
+      "target": "serviceworker"
+    },
+    {
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
@@ -9579,7 +10020,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L63",
+      "source_location": "L66",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_on",
@@ -9591,7 +10032,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L70",
+      "source_location": "L73",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_emit",
@@ -9603,7 +10044,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L100",
+      "source_location": "L103",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_disconnect",
@@ -9615,7 +10056,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L102",
+      "source_location": "L105",
       "weight": 1.0,
       "_src": "spec_socket",
       "_tgt": "spec_socket_fire",
@@ -9651,7 +10092,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\\u7aef\u5230\u7aef\u6d4b\u8bd5.spec.ts",
-      "source_location": "L72",
+      "source_location": "L75",
       "weight": 1.0,
       "_src": "spec_socket_emit",
       "_tgt": "spec_socket_fire",
@@ -9928,6 +10369,18 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src\\\u5a92\u4f53\u9644\u4ef6\u9002\u914d.rs",
+      "source_location": "L499",
+      "weight": 1.0,
+      "_src": "spec_get",
+      "_tgt": "source_hash",
+      "source": "spec_get",
+      "target": "source_hash"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u5a92\u4f53\u9644\u4ef6\u9002\u914d.rs",
       "source_location": "L650",
       "weight": 1.0,
       "_src": "spec_get",
@@ -10107,6 +10560,18 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L232",
+      "weight": 1.0,
+      "_src": "spec_get",
+      "_tgt": "source_hash_source_hash_canonical",
+      "source": "spec_get",
+      "target": "source_hash_source_hash_canonical"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
       "source_location": "L221",
       "weight": 1.0,
@@ -10215,7 +10680,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L84",
+      "source_location": "L87",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "createfakestorage",
@@ -10227,7 +10692,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L464",
+      "source_location": "L489",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "socket",
@@ -10239,7 +10704,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L237",
+      "source_location": "L249",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "bootstrapanonymousidentity",
@@ -10251,7 +10716,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L246",
+      "source_location": "L258",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "joinorcreateroom",
@@ -10263,7 +10728,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L254",
+      "source_location": "L266",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "loadroomsnapshot",
@@ -10275,7 +10740,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L263",
+      "source_location": "L275",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "preparemediaupload",
@@ -10287,7 +10752,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L290",
+      "source_location": "L308",
+      "weight": 1.0,
+      "_src": "frontend_tests_common_ts",
+      "_tgt": "reusemediabysourcehash",
+      "source": "frontend_tests_common_ts",
+      "target": "reusemediabysourcehash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
+      "source_location": "L315",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "abandonmediaupload",
@@ -10299,7 +10776,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L291",
+      "source_location": "L316",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "completemediaupload",
@@ -10311,7 +10788,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L309",
+      "source_location": "L334",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "loadmedialocator",
@@ -10323,7 +10800,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L381",
+      "source_location": "L406",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "buildblobasseturl",
@@ -10335,7 +10812,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L388",
+      "source_location": "L413",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "buildattachmentcontenturl",
@@ -10347,7 +10824,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L395",
+      "source_location": "L420",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "updateroomreadanchor",
@@ -10359,7 +10836,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L406",
+      "source_location": "L431",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "loadroomevents",
@@ -10371,7 +10848,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L434",
+      "source_location": "L459",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "loadroomhistory",
@@ -10383,7 +10860,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L447",
+      "source_location": "L472",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "loadadminoverview",
@@ -10395,7 +10872,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L450",
+      "source_location": "L475",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "adminlogin",
@@ -10407,7 +10884,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L453",
+      "source_location": "L478",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "adminrooms",
@@ -10419,7 +10896,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L456",
+      "source_location": "L481",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "adminroomdetail",
@@ -10431,7 +10908,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L459",
+      "source_location": "L484",
       "weight": 1.0,
       "_src": "frontend_tests_common_ts",
       "_tgt": "createsocket",
@@ -10443,7 +10920,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L113",
+      "source_location": "L116",
       "weight": 1.0,
       "_src": "socket",
       "_tgt": "socket_on",
@@ -10455,7 +10932,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L120",
+      "source_location": "L123",
       "weight": 1.0,
       "_src": "socket",
       "_tgt": "socket_emit",
@@ -10467,7 +10944,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L466",
+      "source_location": "L491",
       "weight": 1.0,
       "_src": "socket",
       "_tgt": "socket_disconnect",
@@ -10479,7 +10956,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L172",
+      "source_location": "L175",
       "weight": 1.0,
       "_src": "socket",
       "_tgt": "socket_trigger",
@@ -10491,7 +10968,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L176",
+      "source_location": "L179",
       "weight": 1.0,
       "_src": "socket",
       "_tgt": "socket_fire",
@@ -10539,7 +11016,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L124",
+      "source_location": "L127",
       "weight": 1.0,
       "_src": "socket_emit",
       "_tgt": "socket_fire",
@@ -10575,7 +11052,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L173",
+      "source_location": "L176",
       "weight": 1.0,
       "_src": "socket_trigger",
       "_tgt": "socket_fire",
@@ -10587,7 +11064,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\tests\\common\\\u804a\u5929\u6d4b\u8bd5\u652f\u67b6.ts",
-      "source_location": "L312",
+      "source_location": "L337",
       "weight": 1.0,
       "_src": "loadmedialocator",
       "_tgt": "buildattachmentcontenturl",
@@ -10791,7 +11268,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L1317",
+      "source_location": "L1549",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "torrent",
@@ -10875,7 +11352,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L1294",
+      "source_location": "L1554",
       "weight": 1.0,
       "_src": "tus",
       "_tgt": "url",
@@ -10923,7 +11400,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L944",
+      "source_location": "L1200",
       "weight": 1.0,
       "_src": "abandon_media_upload",
       "_tgt": "tus",
@@ -11151,6 +11628,18 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L73",
+      "weight": 1.0,
+      "_src": "tus",
+      "_tgt": "source_hash_source_hash",
+      "source": "tus",
+      "target": "source_hash_source_hash"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\tus_hook.rs",
       "source_location": "L133",
       "weight": 1.0,
@@ -11220,6 +11709,54 @@
       "target": "rustus_locator"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L182",
+      "weight": 1.0,
+      "_src": "src_rs",
+      "_tgt": "sourcehash",
+      "source": "sourcehash",
+      "target": "src_rs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "frontend\\\u5a92\u4f53\\\u5a92\u4f53\u53d1\u5e03.ts",
+      "source_location": "L363",
+      "weight": 1.0,
+      "_src": "sourcehash",
+      "_tgt": "sha256_worker",
+      "source": "sourcehash",
+      "target": "sha256_worker"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L74",
+      "weight": 1.0,
+      "_src": "sha256_worker",
+      "_tgt": "worker",
+      "source": "worker",
+      "target": "sha256_worker",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u6e90\u6587\u4ef6\u54c8\u5e0c.ts",
+      "source_location": "L62",
+      "weight": 1.0,
+      "_src": "sha256",
+      "_tgt": "uint8array",
+      "source": "uint8array",
+      "target": "sha256",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u89c6\u9891\u9884\u5904\u7406.ts",
@@ -11271,7 +11808,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L35",
+      "source_location": "L38",
       "weight": 1.0,
       "_src": "http_http",
       "_tgt": "http_http_preparemediaupload",
@@ -11283,7 +11820,19 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L52",
+      "source_location": "L66",
+      "weight": 1.0,
+      "_src": "http_http",
+      "_tgt": "http_http_reusemediabysourcehash",
+      "source": "http_http",
+      "target": "http_http_reusemediabysourcehash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
+      "source_location": "L89",
       "weight": 1.0,
       "_src": "http_http",
       "_tgt": "http_http_abandonmediaupload",
@@ -11295,7 +11844,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L61",
+      "source_location": "L98",
       "weight": 1.0,
       "_src": "http_http",
       "_tgt": "http_http_completemediaupload",
@@ -11307,7 +11856,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L74",
+      "source_location": "L111",
       "weight": 1.0,
       "_src": "http_http",
       "_tgt": "http_http_loadmedialocator",
@@ -11319,7 +11868,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L205",
+      "source_location": "L242",
       "weight": 1.0,
       "_src": "http_http",
       "_tgt": "http_http",
@@ -11331,7 +11880,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L130",
+      "source_location": "L167",
       "weight": 1.0,
       "_src": "http_http",
       "_tgt": "http_http_blob",
@@ -11391,7 +11940,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "frontend\\\u5a92\u4f53\\\u9002\u914d\\\u5a92\u4f53HTTP\u63a5\u53e3.ts",
-      "source_location": "L114",
+      "source_location": "L151",
       "weight": 1.0,
       "_src": "http_http_loadmedialocator",
       "_tgt": "http_http_blob",
@@ -12531,7 +13080,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L569",
+      "source_location": "L611",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "sidecar",
@@ -12543,7 +13092,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L828",
+      "source_location": "L871",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "s3",
@@ -12555,7 +13104,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L857",
+      "source_location": "L900",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "proxy_swarm_tracker_announce",
@@ -12567,7 +13116,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L882",
+      "source_location": "L928",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "relay_swarm_tracker_socket",
@@ -12579,7 +13128,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L928",
+      "source_location": "L972",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "axum_ws_message_to_tungstenite",
@@ -12591,7 +13140,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L938",
+      "source_location": "L982",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "tungstenite_message_to_axum_ws",
@@ -12603,7 +13152,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1088",
+      "source_location": "L1136",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "html",
@@ -12615,7 +13164,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1097",
+      "source_location": "L1145",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "load_frontend_index",
@@ -12627,7 +13176,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L744",
+      "source_location": "L885",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "realtime",
@@ -12639,7 +13188,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1168",
+      "source_location": "L1216",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "apierror",
@@ -12651,7 +13200,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1177",
+      "source_location": "L1225",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "events_to_json",
@@ -12663,7 +13212,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1187",
+      "source_location": "L1235",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "attachments_to_json",
@@ -12675,7 +13224,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1225",
+      "source_location": "L1273",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "event_to_json",
@@ -12687,7 +13236,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1253",
+      "source_location": "L1301",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "map_domain_err_tuple",
@@ -12699,7 +13248,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1309",
+      "source_location": "L1357",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "err_resp",
@@ -12747,7 +13296,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L47",
+      "source_location": "L49",
+      "weight": 1.0,
+      "_src": "src_rs",
+      "_tgt": "sourcehashreusebody",
+      "source": "src_rs",
+      "target": "sourcehashreusebody",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L59",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "completemediauploadbody",
@@ -12759,7 +13320,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L54",
+      "source_location": "L66",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "abandonmediauploadbody",
@@ -12771,7 +13332,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L58",
+      "source_location": "L70",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "prepare",
@@ -12783,7 +13344,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L81",
+      "source_location": "L93",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "prepare_media_upload",
@@ -12795,7 +13356,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L293",
+      "source_location": "L314",
+      "weight": 1.0,
+      "_src": "src_rs",
+      "_tgt": "reuse_media_by_source_hash",
+      "source": "src_rs",
+      "target": "reuse_media_by_source_hash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L482",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "complete_media_upload",
@@ -12807,7 +13380,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L887",
+      "source_location": "L1143",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "abandon_media_upload",
@@ -12819,12 +13392,24 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L999",
+      "source_location": "L1255",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "proxy_tus_upload_transport",
       "source": "src_rs",
       "target": "proxy_tus_upload_transport",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L1700",
+      "weight": 1.0,
+      "_src": "src_rs",
+      "_tgt": "canonical",
+      "source": "src_rs",
+      "target": "canonical",
       "confidence_score": 1.0
     },
     {
@@ -12843,7 +13428,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L1512",
+      "source_location": "L1772",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "canonical_mp4_mime",
@@ -12861,18 +13446,6 @@
       "_tgt": "nom_exif",
       "source": "src_rs",
       "target": "nom_exif",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src\\\u5a92\u4f53\u5185\u5bb9\u89e3\u6790.rs",
-      "source_location": "L158",
-      "weight": 1.0,
-      "_src": "src_rs",
-      "_tgt": "canonical",
-      "source": "src_rs",
-      "target": "canonical",
       "confidence_score": 1.0
     },
     {
@@ -13107,7 +13680,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u7528\u4f8b.rs",
-      "source_location": "L1267",
+      "source_location": "L1381",
+      "weight": 1.0,
+      "_src": "src_rs",
+      "_tgt": "source_hash",
+      "source": "src_rs",
+      "target": "source_hash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L1502",
       "weight": 1.0,
       "_src": "src_rs",
       "_tgt": "swarm",
@@ -13658,6 +14243,18 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L396",
+      "weight": 1.0,
+      "_src": "src_rs",
+      "_tgt": "64_hex",
+      "source": "src_rs",
+      "target": "64_hex",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "src\\\u7528\u6237\u8eab\u4efd.rs",
       "source_location": "L266",
       "weight": 1.0,
@@ -13755,7 +14352,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L869",
+      "source_location": "L915",
       "weight": 1.0,
       "_src": "proxy_swarm_tracker_announce",
       "_tgt": "relay_swarm_tracker_socket",
@@ -13767,7 +14364,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L895",
+      "source_location": "L939",
       "weight": 1.0,
       "_src": "relay_swarm_tracker_socket",
       "_tgt": "axum_ws_message_to_tungstenite",
@@ -13779,7 +14376,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L910",
+      "source_location": "L954",
       "weight": 1.0,
       "_src": "relay_swarm_tracker_socket",
       "_tgt": "tungstenite_message_to_axum_ws",
@@ -13803,7 +14400,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1098",
+      "source_location": "L1146",
       "weight": 1.0,
       "_src": "load_frontend_index",
       "_tgt": "html",
@@ -13827,7 +14424,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1100",
+      "source_location": "L1148",
       "weight": 1.0,
       "_src": "load_frontend_index",
       "_tgt": "err_resp",
@@ -13875,7 +14472,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5916\u58f3.rs",
-      "source_location": "L1183",
+      "source_location": "L1231",
       "weight": 1.0,
       "_src": "events_to_json",
       "_tgt": "event_to_json",
@@ -13954,6 +14551,18 @@
       "_tgt": "prepare_media_upload",
       "source": "err_resp",
       "target": "prepare_media_upload"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L322",
+      "weight": 1.0,
+      "_src": "err_resp",
+      "_tgt": "reuse_media_by_source_hash",
+      "source": "err_resp",
+      "target": "reuse_media_by_source_hash"
     },
     {
       "relation": "calls",
@@ -14151,7 +14760,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L206",
+      "source_location": "L229",
       "weight": 1.0,
       "_src": "prepare_media_upload",
       "_tgt": "prepare",
@@ -14233,14 +14842,50 @@
     },
     {
       "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L320",
+      "weight": 1.0,
+      "_src": "reuse_media_by_source_hash",
+      "_tgt": "as_str",
+      "source": "reuse_media_by_source_hash",
+      "target": "as_str"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L370",
+      "weight": 1.0,
+      "_src": "reuse_media_by_source_hash",
+      "_tgt": "source_hash",
+      "source": "reuse_media_by_source_hash",
+      "target": "source_hash"
+    },
+    {
+      "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
-      "source_location": "L336",
+      "source_location": "L525",
       "weight": 1.0,
       "_src": "complete_media_upload",
       "_tgt": "complete",
       "source": "complete_media_upload",
       "target": "complete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L733",
+      "weight": 1.0,
+      "_src": "complete_media_upload",
+      "_tgt": "canonical",
+      "source": "complete_media_upload",
+      "target": "canonical",
       "confidence_score": 1.0
     },
     {
@@ -14254,6 +14899,18 @@
       "_tgt": "as_str",
       "source": "complete_media_upload",
       "target": "as_str"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u5a92\u4f53\u4e0a\u4f20\u5916\u58f3.rs",
+      "source_location": "L956",
+      "weight": 1.0,
+      "_src": "complete_media_upload",
+      "_tgt": "pg_canonical",
+      "source": "complete_media_upload",
+      "target": "pg_canonical"
     },
     {
       "relation": "calls",
@@ -14280,10 +14937,22 @@
       "target": "as_str"
     },
     {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L1705",
+      "weight": 1.0,
+      "_src": "canonical",
+      "_tgt": "64_hex",
+      "source": "canonical",
+      "target": "64_hex",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L71",
+      "source_location": "L67",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "complete",
@@ -14533,6 +15202,114 @@
     },
     {
       "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L1386",
+      "weight": 1.0,
+      "_src": "source_hash",
+      "_tgt": "64_hex",
+      "source": "source_hash",
+      "target": "64_hex",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
+      "source_location": "L326",
+      "weight": 1.0,
+      "_src": "tests_rs",
+      "_tgt": "source_hash",
+      "source": "source_hash",
+      "target": "tests_rs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L120",
+      "weight": 1.0,
+      "_src": "tests_source_hash_rs",
+      "_tgt": "source_hash",
+      "source": "source_hash",
+      "target": "tests_source_hash_rs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L171",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash_canonical",
+      "_tgt": "source_hash",
+      "source": "source_hash",
+      "target": "source_hash_source_hash_canonical",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L284",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash",
+      "_tgt": "source_hash",
+      "source": "source_hash",
+      "target": "source_hash_source_hash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L355",
+      "weight": 1.0,
+      "_src": "source_hash_canonical_source_hash_ready",
+      "_tgt": "source_hash",
+      "source": "source_hash",
+      "target": "source_hash_canonical_source_hash_ready",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u5a92\u4f53\u9644\u4ef6\u9002\u914d.rs",
+      "source_location": "L487",
+      "weight": 1.0,
+      "_src": "source_hash",
+      "_tgt": "as_str",
+      "source": "source_hash",
+      "target": "as_str"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "src\\\u7528\u4f8b.rs",
+      "source_location": "L1421",
+      "weight": 1.0,
+      "_src": "source_hash",
+      "_tgt": "pg_source_hash",
+      "source": "source_hash",
+      "target": "pg_source_hash"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L13",
+      "weight": 1.0,
+      "_src": "source_hash",
+      "_tgt": "http_send_json",
+      "source": "source_hash",
+      "target": "http_send_json"
+    },
+    {
+      "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src\\\u7528\u4f8b.rs",
@@ -14739,7 +15516,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u9002\u914d.rs",
-      "source_location": "L766",
+      "source_location": "L830",
       "weight": 1.0,
       "_src": "pg",
       "_tgt": "pg",
@@ -14751,7 +15528,31 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u9002\u914d.rs",
-      "source_location": "L534",
+      "source_location": "L528",
+      "weight": 1.0,
+      "_src": "pg",
+      "_tgt": "pg_source_hash",
+      "source": "pg",
+      "target": "pg_source_hash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u9002\u914d.rs",
+      "source_location": "L667",
+      "weight": 1.0,
+      "_src": "pg",
+      "_tgt": "pg_canonical",
+      "source": "pg",
+      "target": "pg_canonical",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "src\\\u9002\u914d.rs",
+      "source_location": "L582",
       "weight": 1.0,
       "_src": "pg",
       "_tgt": "pg_swarm",
@@ -14763,7 +15564,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src\\\u9002\u914d.rs",
-      "source_location": "L548",
+      "source_location": "L596",
       "weight": 1.0,
       "_src": "pg",
       "_tgt": "pg_torrent",
@@ -15075,6 +15876,30 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L68",
+      "weight": 1.0,
+      "_src": "as_str",
+      "_tgt": "source_hash_source_hash",
+      "source": "as_str",
+      "target": "source_hash_source_hash"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L202",
+      "weight": 1.0,
+      "_src": "as_str",
+      "_tgt": "source_hash_source_hash_canonical",
+      "source": "as_str",
+      "target": "source_hash_source_hash_canonical"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\tus_hook.rs",
       "source_location": "L114",
       "weight": 1.0,
@@ -15226,6 +16051,18 @@
       "_tgt": "24",
       "source": "as_str",
       "target": "24"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
+      "source_location": "L242",
+      "weight": 1.0,
+      "_src": "as_str",
+      "_tgt": "canonical_24",
+      "source": "as_str",
+      "target": "canonical_24"
     },
     {
       "relation": "calls",
@@ -15531,7 +16368,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L106",
+      "source_location": "L103",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "0018",
@@ -15543,7 +16380,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L236",
+      "source_location": "L233",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "attachments_message_attachment_refs",
@@ -15555,7 +16392,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L281",
+      "source_location": "L278",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "swarm_peer_presence",
@@ -15579,7 +16416,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L303",
+      "source_location": "L302",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "partial_peer_peer_kind",
@@ -15603,7 +16440,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L370",
+      "source_location": "L400",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "abandoned_mezzanine",
@@ -15615,7 +16452,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u542f\u52a8\u4e0e\u8fc1\u79fb\u6d4b\u8bd5.rs",
-      "source_location": "L387",
+      "source_location": "L417",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "streaming",
@@ -15699,7 +16536,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
-      "source_location": "L191",
+      "source_location": "L337",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "24",
@@ -15855,7 +16692,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L24",
+      "source_location": "L20",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "seeder",
@@ -15867,7 +16704,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L42",
+      "source_location": "L38",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "seeder_start",
@@ -15879,7 +16716,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L59",
+      "source_location": "L55",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "seeder_reconcile",
@@ -16143,7 +16980,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L178",
+      "source_location": "L174",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "complete_canonical",
@@ -16155,7 +16992,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L242",
+      "source_location": "L244",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "complete_hls_dash_manifest",
@@ -16167,7 +17004,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L313",
+      "source_location": "L318",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "complete_iso5_brand_mp4_500",
@@ -16179,7 +17016,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L329",
+      "source_location": "L334",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "complete_seeder_start",
@@ -16230,6 +17067,18 @@
       "source_location": "L106",
       "weight": 1.0,
       "_src": "tests_rs",
+      "_tgt": "canonical_24",
+      "source": "tests_rs",
+      "target": "canonical_24",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
+      "source_location": "L252",
+      "weight": 1.0,
+      "_src": "tests_rs",
       "_tgt": "mezzanine_24",
       "source": "tests_rs",
       "target": "mezzanine_24",
@@ -16239,7 +17088,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
-      "source_location": "L308",
+      "source_location": "L454",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "streaming_distribution_peer_only",
@@ -16251,7 +17100,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
-      "source_location": "L437",
+      "source_location": "L583",
       "weight": 1.0,
       "_src": "tests_rs",
       "_tgt": "locator_original_blob_canonical",
@@ -16995,7 +17844,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\\u5355\u6587\u4ef6\u4e3b\u94fe.rs",
-      "source_location": "L330",
+      "source_location": "L335",
       "weight": 1.0,
       "_src": "complete_seeder_start",
       "_tgt": "seeder",
@@ -17499,7 +18348,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L189",
+      "source_location": "L225",
       "weight": 1.0,
       "_src": "tests_complete_rs",
       "_tgt": "complete_complete_attachment_not_ready",
@@ -17511,7 +18360,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L251",
+      "source_location": "L287",
       "weight": 1.0,
       "_src": "tests_complete_rs",
       "_tgt": "complete_complete_partial_final_attachment_not_ready",
@@ -17523,7 +18372,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L351",
+      "source_location": "L387",
       "weight": 1.0,
       "_src": "tests_complete_rs",
       "_tgt": "complete_complete_final_single",
@@ -17535,7 +18384,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L481",
+      "source_location": "L517",
       "weight": 1.0,
       "_src": "tests_complete_rs",
       "_tgt": "complete_post_finish_complete",
@@ -17547,7 +18396,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L593",
+      "source_location": "L629",
       "weight": 1.0,
       "_src": "tests_complete_rs",
       "_tgt": "complete_complete_canonical_file_asset",
@@ -17559,7 +18408,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\complete.rs",
-      "source_location": "L868",
+      "source_location": "L917",
       "weight": 1.0,
       "_src": "tests_complete_rs",
       "_tgt": "complete_complete_attachment_type_not_allowed",
@@ -18062,6 +18911,150 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L276",
+      "weight": 1.0,
+      "_src": "tests_source_hash_rs",
+      "_tgt": "source_hash_source_hash",
+      "source": "tests_source_hash_rs",
+      "target": "source_hash_source_hash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L158",
+      "weight": 1.0,
+      "_src": "tests_source_hash_rs",
+      "_tgt": "source_hash_source_hash_canonical",
+      "source": "tests_source_hash_rs",
+      "target": "source_hash_source_hash_canonical",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L343",
+      "weight": 1.0,
+      "_src": "tests_source_hash_rs",
+      "_tgt": "source_hash_canonical_source_hash_ready",
+      "source": "tests_source_hash_rs",
+      "target": "source_hash_canonical_source_hash_ready",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L173",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash_canonical",
+      "_tgt": "source_hash_source_hash",
+      "source": "source_hash_source_hash",
+      "target": "source_hash_source_hash_canonical",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L362",
+      "weight": 1.0,
+      "_src": "source_hash_canonical_source_hash_ready",
+      "_tgt": "source_hash_source_hash",
+      "source": "source_hash_source_hash",
+      "target": "source_hash_canonical_source_hash_ready",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L49",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash",
+      "_tgt": "fixture_webp",
+      "source": "source_hash_source_hash",
+      "target": "fixture_webp"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash",
+      "_tgt": "http_send_json",
+      "source": "source_hash_source_hash",
+      "target": "http_send_json"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L75",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash",
+      "_tgt": "fixture_tus",
+      "source": "source_hash_source_hash",
+      "target": "fixture_tus"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L81",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash",
+      "_tgt": "tus_tus_hook",
+      "source": "source_hash_source_hash",
+      "target": "tus_tus_hook"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L95",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash",
+      "_tgt": "tus_tushook",
+      "source": "source_hash_source_hash",
+      "target": "tus_tushook"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L186",
+      "weight": 1.0,
+      "_src": "source_hash_source_hash_canonical",
+      "_tgt": "http_send_json",
+      "source": "source_hash_source_hash_canonical",
+      "target": "http_send_json"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\source_hash.rs",
+      "source_location": "L380",
+      "weight": 1.0,
+      "_src": "source_hash_canonical_source_hash_ready",
+      "_tgt": "http_send_json",
+      "source": "source_hash_canonical_source_hash_ready",
+      "target": "http_send_json"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "tests\\\u5a92\u4f53\u4e0a\u4f20\u6d4b\u8bd5\\tus_hook.rs",
       "source_location": "L49",
       "weight": 1.0,
@@ -18526,6 +19519,30 @@
       "_tgt": "tus_tushook",
       "source": "rustus_locator",
       "target": "tus_tushook"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
+      "source_location": "L141",
+      "weight": 1.0,
+      "_src": "canonical_24",
+      "_tgt": "seed_ready",
+      "source": "canonical_24",
+      "target": "seed_ready"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests\\\u5a92\u4f53\u540e\u53f0\u6d4b\u8bd5\\\u51b7\u6e90\u6e05\u7406.rs",
+      "source_location": "L168",
+      "weight": 1.0,
+      "_src": "canonical_24",
+      "_tgt": "fixture_webp",
+      "source": "canonical_24",
+      "target": "fixture_webp"
     },
     {
       "relation": "calls",

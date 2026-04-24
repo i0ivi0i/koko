@@ -192,6 +192,36 @@ function 模拟浏览器Webp编码(): void {
 function 创建场景(overrides: {
   preprocessVideo?: (file: File) => Promise<{ file: File; width?: number; height?: number; previewUrl?: string | null }>;
   readVideoMetadata?: (file: File) => Promise<{ width: number; height: number; previewUrl?: string | null }>;
+  getCurrentRoomId?: () => string | null;
+  calculateSourceHash?: (file: File) => Promise<{
+    source_hash: string;
+    source_byte_size: number;
+    source_file_name?: string;
+  }>;
+  reuseMediaBySourceHash?: (
+    kind: "image" | "video",
+    input: {
+      session_id: string;
+      room_id: string;
+      source_hash: string;
+      source_byte_size: number;
+      source_file_name?: string;
+    }
+  ) => Promise<
+    | { status: "miss" }
+    | {
+        status: "reused";
+        attachment: {
+          attachment_id: string;
+          kind: "image" | "video";
+          mime_type: string;
+          byte_size: number;
+          width: number;
+          height: number;
+          status: "ready";
+        };
+      }
+  >;
 } = {}) {
   const 默认上传器 = new 假媒体上传器();
   const 大视频上传器 = new 假媒体上传器();
@@ -212,6 +242,18 @@ function 创建场景(overrides: {
     uploadSessionId?: string;
   }> = [];
   const yieldToMainThread = vi.fn(async () => {});
+  const calculateSourceHash =
+    overrides.calculateSourceHash ??
+    vi.fn(async (file: File) => ({
+      source_hash: "a".repeat(64),
+      source_byte_size: file.size,
+      source_file_name: file.name,
+    }));
+  const reuseMediaBySourceHash =
+    overrides.reuseMediaBySourceHash ??
+    vi.fn(async () => ({
+      status: "miss" as const,
+    }));
   const prepareMediaUpload = vi.fn(async (_kind: "image" | "video", _sessionId: string, file: File) => ({
     attachment_id: `att-${file.name}`,
     upload_session_id: `upl-${file.name}`,
@@ -239,6 +281,9 @@ function 创建场景(overrides: {
   const abandonMediaUpload = vi.fn(async (_sessionId: string, _attachmentId: string) => undefined);
   const 发布器 = 创建媒体发布器({
     getSessionId: () => "s-test",
+    getCurrentRoomId: overrides.getCurrentRoomId ?? (() => null),
+    calculateSourceHash,
+    reuseMediaBySourceHash,
     prepareMediaUpload,
     abandonMediaUpload,
     completeMediaUpload,
@@ -279,6 +324,8 @@ function 创建场景(overrides: {
     大视频上传器,
     drafts,
     prepareMediaUpload,
+    calculateSourceHash,
+    reuseMediaBySourceHash,
     abandonMediaUpload,
     completeMediaUpload,
     writeDraft,
@@ -385,8 +432,26 @@ describe("媒体发布器", () => {
     await 场景.发布器.处理选择媒体文件([imageFile, videoFile]);
 
     expect(场景.prepareMediaUpload.mock.calls).toEqual([
-      ["image", "s-test", expect.objectContaining({ name: "canonical.webp", type: "image/webp" })],
-      ["video", "s-test", videoFile],
+      [
+        "image",
+        "s-test",
+        expect.objectContaining({ name: "canonical.webp", type: "image/webp" }),
+        {
+          source_hash: "a".repeat(64),
+          source_byte_size: 3,
+          source_file_name: "mixed.jpg",
+        },
+      ],
+      [
+        "video",
+        "s-test",
+        videoFile,
+        {
+          source_hash: "a".repeat(64),
+          source_byte_size: 3,
+          source_file_name: "mixed.mp4",
+        },
+      ],
     ]);
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
@@ -440,7 +505,12 @@ describe("媒体发布器", () => {
     expect(场景.prepareMediaUpload).toHaveBeenCalledWith(
       "image",
       "s-test",
-      expect.objectContaining({ name: "canonical.webp", type: "image/webp" })
+      expect.objectContaining({ name: "canonical.webp", type: "image/webp" }),
+      {
+        source_hash: "a".repeat(64),
+        source_byte_size: 3,
+        source_file_name: "picked.jpg",
+      }
     );
     expect(场景.默认上传器.addFileCalls).toEqual([
       expect.objectContaining({
@@ -585,7 +655,11 @@ describe("媒体发布器", () => {
 
     await 场景.发布器.处理选择媒体文件([sourceFile]);
 
-    expect(场景.prepareMediaUpload).toHaveBeenCalledWith("video", "s-test", sourceFile);
+    expect(场景.prepareMediaUpload).toHaveBeenCalledWith("video", "s-test", sourceFile, {
+      source_hash: "a".repeat(64),
+      source_byte_size: 3,
+      source_file_name: "picked.mp4",
+    });
     expect(场景.drafts.readDrafts()).toEqual([
       expect.objectContaining({
         localId: "att-picked.mp4",
@@ -597,6 +671,86 @@ describe("媒体发布器", () => {
         height: 720,
       }),
     ]);
+  });
+
+  it("source_hash 命中会直接写 ready 草稿并跳过预处理、prepare 和 Uppy 上传", async () => {
+    const preprocessVideo = vi.fn(async (file: File) => ({ file }));
+    const reuseMediaBySourceHash = vi.fn(async () => ({
+      status: "reused" as const,
+      attachment: {
+        attachment_id: "att-source-hit-video",
+        kind: "video" as const,
+        mime_type: "video/mp4",
+        byte_size: 2048,
+        width: 1920,
+        height: 1080,
+        status: "ready" as const,
+      },
+    }));
+    const 场景 = 创建场景({
+      getCurrentRoomId: () => "r-test",
+      preprocessVideo,
+      reuseMediaBySourceHash,
+    });
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "hit.mp4", {
+      type: "video/mp4",
+    });
+
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
+
+    expect(场景.calculateSourceHash).toHaveBeenCalledWith(sourceFile);
+    expect(reuseMediaBySourceHash).toHaveBeenCalledWith("video", {
+      session_id: "s-test",
+      room_id: "r-test",
+      source_hash: "a".repeat(64),
+      source_byte_size: 3,
+      source_file_name: "hit.mp4",
+    });
+    expect(preprocessVideo).not.toHaveBeenCalled();
+    expect(场景.prepareMediaUpload).not.toHaveBeenCalled();
+    expect(场景.默认上传器.addFileCalls).toEqual([]);
+    expect(场景.drafts.readDrafts()).toEqual([
+      expect.objectContaining({
+        localId: "att-source-hit-video",
+        kind: "video",
+        attachmentId: "att-source-hit-video",
+        previewUrl: "",
+        width: 1920,
+        height: 1080,
+        status: "ready",
+        sourceFile,
+      }),
+    ]);
+  });
+
+  it("source_hash 未命中会继续预处理上传并把原文件身份透传给 prepare", async () => {
+    const 场景 = 创建场景({
+      getCurrentRoomId: () => "r-test",
+    });
+    const sourceFile = new File([new Uint8Array([1, 2, 3])], "miss.jpg", {
+      type: "image/jpeg",
+    });
+
+    await 场景.发布器.处理选择媒体文件([sourceFile]);
+
+    expect(场景.reuseMediaBySourceHash).toHaveBeenCalledWith("image", {
+      session_id: "s-test",
+      room_id: "r-test",
+      source_hash: "a".repeat(64),
+      source_byte_size: 3,
+      source_file_name: "miss.jpg",
+    });
+    expect(场景.prepareMediaUpload).toHaveBeenCalledWith(
+      "image",
+      "s-test",
+      expect.objectContaining({ name: "canonical.webp", type: "image/webp" }),
+      {
+        source_hash: "a".repeat(64),
+        source_byte_size: 3,
+        source_file_name: "miss.jpg",
+      }
+    );
+    expect(场景.默认上传器.addFileCalls).toHaveLength(1);
   });
 
   it("视频预制很快完成时不会写入瞬时预制占位草稿", async () => {

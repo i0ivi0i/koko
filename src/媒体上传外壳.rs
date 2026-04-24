@@ -40,6 +40,18 @@ pub(super) struct PrepareMediaUploadBody {
     file_name: Option<String>,
     mime_type: Option<String>,
     byte_size: Option<i64>,
+    source_hash: Option<String>,
+    source_byte_size: Option<i64>,
+    source_file_name: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct SourceHashReuseBody {
+    session_id: Option<String>,
+    room_id: Option<String>,
+    source_hash: Option<String>,
+    source_byte_size: Option<i64>,
+    source_file_name: Option<String>,
 }
 
 /// 媒体 complete 请求体。
@@ -135,6 +147,14 @@ pub(super) async fn prepare_media_upload(
     {
         return err_resp(status, code, message);
     }
+    let source_hash = body
+        .source_hash
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let source_file_name = body
+        .source_file_name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     let attachment_id = 生成附件标识();
     let upload_session_id = 生成媒体上传会话标识();
@@ -152,6 +172,9 @@ pub(super) async fn prepare_media_upload(
         mime_type: mime_type.clone(),
         字节大小: byte_size,
         原始内容存储键: original_storage_key.clone(),
+        source_hash,
+        source_byte_size: body.source_byte_size,
+        source_file_name,
     };
     let state_for_usecase = state.clone();
     let session_id_for_usecase = session_id.clone();
@@ -283,6 +306,172 @@ pub(super) async fn prepare_media_upload(
                 "byte_size": response_byte_size.to_string(),
             },
             "expires_at": expires_at,
+        })),
+    )
+        .into_response()
+}
+
+pub(super) async fn reuse_media_by_source_hash(
+    Path(raw_kind): Path<String>,
+    State(state): State<应用状态>,
+    headers: HeaderMap,
+    Json(body): Json<SourceHashReuseBody>,
+) -> impl IntoResponse {
+    let media_kind = match 解析媒体类型(raw_kind.as_str()) {
+        Ok(kind) => kind,
+        Err(err) => return err_resp(err.0, err.1, err.2),
+    };
+    let session_id = match super::读取非空会话标识(body.session_id) {
+        Ok(session_id) => session_id,
+        Err((status, code, message)) => return err_resp(status, code, message),
+    };
+    let Some(room_id) = body
+        .room_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return err_resp(StatusCode::BAD_REQUEST, "invalid_argument", "缺少 room_id");
+    };
+    let Some(source_hash) = body
+        .source_hash
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 source_hash",
+        );
+    };
+    let Some(source_byte_size) = body.source_byte_size else {
+        return err_resp(
+            StatusCode::BAD_REQUEST,
+            "invalid_argument",
+            "缺少 source_byte_size",
+        );
+    };
+    let source_file_name = body
+        .source_file_name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let attachment_id = 生成附件标识();
+    let request = usecase::SourceHash媒体复用请求 {
+        会话标识: session_id.clone(),
+        房间标识: room_id.clone(),
+        附件标识: attachment_id.clone(),
+        种类: media_kind,
+        source_hash,
+        source_byte_size,
+        source_file_name,
+    };
+    let state_for_usecase = state.clone();
+    let result = task::spawn_blocking(move || {
+        let mut repo = 构建共享仓储(&state_for_usecase);
+        usecase::复用source_hash媒体附件(&mut repo, &request).map_err(map_domain_err_tuple)
+    })
+    .await;
+    let result = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err((status, code, message))) => return err_resp(status, code, message),
+        Err(err) => {
+            return err_resp(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "system_error",
+                format!("source_hash 复用任务执行失败: {err}"),
+            )
+        }
+    };
+
+    let usecase::SourceHash媒体复用结果::Reused {
+        附件,
+        协作分发,
+        torrent: _,
+    } = result
+    else {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "miss" })),
+        )
+            .into_response();
+    };
+
+    let tracker_public_url = media_distribution::读取协作分发tracker对外地址(
+        state.swarm_tracker_public_url.as_str(),
+        &headers,
+    );
+    let now_epoch秒 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
+    let original_url = super::媒体资产外壳::构造附件受控地址(
+        附件.附件标识.as_str(),
+        session_id.as_str(),
+        "original",
+    );
+    let 冷源仍可用 = usecase::冷源当前可用(
+        Some(original_url.as_str()),
+        Some(协作分发.web_seed_until秒),
+        None,
+        now_epoch秒,
+    );
+    let runtime_distribution = media_distribution::协作分发快照转响应值(
+        &协作分发,
+        media_distribution::协作分发响应上下文 {
+            attachment_id: 附件.附件标识.as_str(),
+            session_id: session_id.as_str(),
+            tracker_public_url: tracker_public_url.as_str(),
+            web_seed_public_endpoint: state.swarm_web_seed_public_endpoint.as_deref(),
+            ticket_secret: state.swarm_ticket_secret.as_deref(),
+            ticket_ttl_seconds: state.swarm_ticket_ttl_seconds,
+            冷源仍可用,
+            附件已删除: false,
+            now_epoch秒,
+            stale_seconds: state.swarm_peer_presence_stale_seconds,
+        },
+    );
+    if let Some(启动命令) =
+        super::从协作分发响应构造做种启动命令(&runtime_distribution)
+    {
+        if let Err(err) = super::尝试启动协作分发做种(&state, &启动命令).await {
+            tracing::warn!(
+                usecase = "source_hash媒体复用",
+                phase = "seed_start_failed",
+                attachment_id = 附件.附件标识.as_str(),
+                info_hash = 启动命令.info_hash.as_str(),
+                error = %err,
+                "source_hash 命中后触发 sidecar 做种失败，等待后台对账重试"
+            );
+        }
+    }
+    let media_asset = super::媒体资产外壳::构造媒体资产响应体(
+        &附件,
+        super::媒体资产外壳::媒体资产响应上下文 {
+            运行态分发: Some(&runtime_distribution),
+            分发快照: Some(&协作分发),
+            流媒体清单: None,
+            原始地址: original_url,
+            原始冷源到期时间戳秒: Some(协作分发.web_seed_until秒),
+            原始冷源删除时间戳秒: None,
+            会话标识: session_id.as_str(),
+            当前时间戳秒: now_epoch秒,
+        },
+    );
+    let preview_asset = super::媒体资产外壳::构造预览资源响应体(
+        附件.附件标识.as_str(),
+        Some(session_id.as_str()),
+        matches!(附件.种类, usecase::媒体附件类型::视频) && 附件.允许缩略图,
+    );
+    let attachment = super::媒体资产外壳::媒体附件快照转响应体(
+        &附件,
+        media_asset,
+        preview_asset,
+    );
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "reused",
+            "attachment": attachment,
         })),
     )
         .into_response()
@@ -467,23 +656,148 @@ pub(super) async fn complete_media_upload(
         .unwrap_or(0);
     let 原始冷源到期时间戳秒 = ready_epoch秒 + usecase::媒体原始冷源保留秒数;
     let streaming_manifest_request = None;
-    let (ready_request, distribution_request, torrent_request) = match &prepared.种类 {
-        usecase::媒体附件类型::图片 => {
-            let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
-                Ok(bytes) => bytes,
-                Err(err) => {
+    let (ready_request, distribution_request, torrent_request, canonical_asset_request) =
+        match &prepared.种类 {
+            usecase::媒体附件类型::图片 => {
+                let original_bytes: Vec<u8> = match fs::read(&temp_file_path).await {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        return 记录并返回complete重活失败(
+                            &complete失败上下文,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            "读取原图临时文件失败",
+                            "read_temp_file_failed",
+                            format!("读取 Tus 临时原图文件失败: {err}"),
+                        );
+                    }
+                };
+                let parsed =
+                    match 媒体内容解析::校验canonical图片内容(original_bytes.as_ref()) {
+                        Ok(parsed) => parsed,
+                        Err(媒体内容解析::媒体内容解析错误::类型不允许(
+                            message,
+                        )) => {
+                            return 记录并返回complete重活失败(
+                                &complete失败上下文,
+                                StatusCode::BAD_REQUEST,
+                                "attachment_type_not_allowed",
+                                message,
+                                "parse_image_kind_not_allowed",
+                                message,
+                            )
+                        }
+                        Err(媒体内容解析::媒体内容解析错误::系统错误(
+                            message,
+                        )) => {
+                            return 记录并返回complete重活失败(
+                                &complete失败上下文,
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "system_error",
+                                message,
+                                "parse_image_system_error",
+                                message,
+                            )
+                        }
+                    };
+                let 协作分发共享载荷 = 选择协作分发共享载荷(
+                    &prepared.种类,
+                    parsed.mime_type.as_str(),
+                    original_bytes.as_ref(),
+                    None,
+                )
+                .expect("图片协作分发应直接复用 canonical 原图字节");
+                let distribution_request =
+                    media_distribution::构造协作分发元数据写入请求(
+                        &attachment_id,
+                        协作分发共享载荷.字节,
+                        ready_epoch秒,
+                    );
+                let torrent = match media_distribution::生成附件torrent元信息(
+                    distribution_request.content_hash.as_str(),
+                    协作分发共享载荷.稳定扩展名,
+                    协作分发共享载荷.字节,
+                ) {
+                    Ok(torrent) => torrent,
+                    Err(message) => {
+                        return 记录并返回complete重活失败(
+                            &complete失败上下文,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            message.clone(),
+                            "generate_torrent_failed",
+                            message,
+                        );
+                    }
+                };
+                let canonical_storage_key = 构造canonical内容寻址存储键(
+                    distribution_request.content_hash.as_str(),
+                    协作分发共享载荷.稳定扩展名,
+                );
+                let canonical_path = ObjectPath::from(canonical_storage_key.clone());
+                if let Err(err) = state
+                    .attachment_store
+                    .put(&canonical_path, original_bytes.clone().into())
+                    .await
+                {
                     return 记录并返回complete重活失败(
                         &complete失败上下文,
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "system_error",
-                        "读取原图临时文件失败",
-                        "read_temp_file_failed",
-                        format!("读取 Tus 临时原图文件失败: {err}"),
+                        "写入 canonical 图片对象失败",
+                        "put_image_canonical_failed",
+                        format!("写入 canonical 图片对象失败: {err}"),
                     );
                 }
-            };
-            let parsed =
-                match 媒体内容解析::校验canonical图片内容(original_bytes.as_ref()) {
+                let ready_request = usecase::媒体附件写入请求 {
+                    附件标识: attachment_id.clone(),
+                    种类: prepared.种类.clone(),
+                    mime_type: parsed.mime_type,
+                    字节大小: original_bytes.len() as i64,
+                    宽: parsed.宽,
+                    高: parsed.高,
+                    // 图片主链已前移到客户端预制；后端只保存一份 canonical.webp。
+                    // 缩略图、full、asset-original 派生对象全部退场，避免服务器继续吃 CPU/IO 重活。
+                    原始内容存储键: canonical_storage_key,
+                    缩略图存储键: None,
+                    资产原图存储键: None,
+                    完整图存储键: None,
+                    原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
+                    回退母本存储键: None,
+                    回退母本到期时间戳秒: None,
+                };
+                let torrent_request = usecase::协作分发torrent元信息写入请求 {
+                    附件标识: attachment_id.clone(),
+                    torrent_bytes: torrent.torrent_bytes,
+                    torrent_info_hash: torrent.torrent_info_hash,
+                    piece_length字节: torrent.piece_length_bytes,
+                };
+                let canonical_asset_request = usecase::Canonical媒体资产写入请求 {
+                    content_hash: distribution_request.content_hash.clone(),
+                    种类: ready_request.种类.clone(),
+                    mime_type: ready_request.mime_type.clone(),
+                    字节大小: ready_request.字节大小,
+                    宽: ready_request.宽,
+                    高: ready_request.高,
+                    存储键: ready_request.原始内容存储键.clone(),
+                    torrent_bytes: torrent_request.torrent_bytes.clone(),
+                    torrent_info_hash: torrent_request.torrent_info_hash.clone(),
+                    piece_length字节: torrent_request.piece_length字节,
+                    web_seed_until秒: distribution_request.web_seed_until秒,
+                    origin_expires_at秒: 原始冷源到期时间戳秒,
+                };
+                (
+                    ready_request,
+                    distribution_request,
+                    torrent_request,
+                    canonical_asset_request,
+                )
+            }
+            usecase::媒体附件类型::视频 => {
+                let 视频解析开始 = Instant::now();
+                let parsed = match 媒体内容解析::校验canonical视频文件内容(
+                    temp_file_path.as_path(),
+                ) {
                     Ok(parsed) => parsed,
                     Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
                         return 记录并返回complete重活失败(
@@ -491,7 +805,7 @@ pub(super) async fn complete_media_upload(
                             StatusCode::BAD_REQUEST,
                             "attachment_type_not_allowed",
                             message,
-                            "parse_image_kind_not_allowed",
+                            "parse_video_kind_not_allowed",
                             message,
                         )
                     }
@@ -501,219 +815,146 @@ pub(super) async fn complete_media_upload(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "system_error",
                             message,
-                            "parse_image_system_error",
+                            "parse_video_system_error",
                             message,
                         )
                     }
                 };
-            let canonical_storage_key = format!("images/{attachment_id}/canonical.webp");
-            let canonical_path = ObjectPath::from(canonical_storage_key.clone());
-            if let Err(err) = state
-                .attachment_store
-                .put(&canonical_path, original_bytes.clone().into())
-                .await
-            {
-                return 记录并返回complete重活失败(
-                    &complete失败上下文,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "写入 canonical 图片对象失败",
-                    "put_image_canonical_failed",
-                    format!("写入 canonical 图片对象失败: {err}"),
-                );
-            }
-            let 协作分发共享载荷 = 选择协作分发共享载荷(
-                &prepared.种类,
-                parsed.mime_type.as_str(),
-                original_bytes.as_ref(),
-                None,
-            )
-            .expect("图片协作分发应直接复用 canonical 原图字节");
-            let distribution_request = media_distribution::构造协作分发元数据写入请求(
-                &attachment_id,
-                协作分发共享载荷.字节,
-                ready_epoch秒,
-            );
-            let torrent = match media_distribution::生成附件torrent元信息(
-                distribution_request.content_hash.as_str(),
-                协作分发共享载荷.稳定扩展名,
-                协作分发共享载荷.字节,
-            ) {
-                Ok(torrent) => torrent,
-                Err(message) => {
-                    return 记录并返回complete重活失败(
-                        &complete失败上下文,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message.clone(),
-                        "generate_torrent_failed",
-                        message,
-                    );
-                }
-            };
-            let ready_request = usecase::媒体附件写入请求 {
-                附件标识: attachment_id.clone(),
-                种类: prepared.种类.clone(),
-                mime_type: parsed.mime_type,
-                字节大小: original_bytes.len() as i64,
-                宽: parsed.宽,
-                高: parsed.高,
-                // 图片主链已前移到客户端预制；后端只保存一份 canonical.webp。
-                // 缩略图、full、asset-original 派生对象全部退场，避免服务器继续吃 CPU/IO 重活。
-                原始内容存储键: canonical_storage_key,
-                缩略图存储键: None,
-                资产原图存储键: None,
-                完整图存储键: None,
-                原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
-                回退母本存储键: None,
-                回退母本到期时间戳秒: None,
-            };
-            let torrent_request = usecase::协作分发torrent元信息写入请求 {
-                附件标识: attachment_id.clone(),
-                torrent_bytes: torrent.torrent_bytes,
-                torrent_info_hash: torrent.torrent_info_hash,
-                piece_length字节: torrent.piece_length_bytes,
-            };
-            (ready_request, distribution_request, torrent_request)
-        }
-        usecase::媒体附件类型::视频 => {
-            let 视频解析开始 = Instant::now();
-            let parsed = match 媒体内容解析::校验canonical视频文件内容(
-                temp_file_path.as_path(),
-            ) {
-                Ok(parsed) => parsed,
-                Err(媒体内容解析::媒体内容解析错误::类型不允许(message)) => {
-                    return 记录并返回complete重活失败(
-                        &complete失败上下文,
-                        StatusCode::BAD_REQUEST,
-                        "attachment_type_not_allowed",
-                        message,
-                        "parse_video_kind_not_allowed",
-                        message,
-                    )
-                }
-                Err(媒体内容解析::媒体内容解析错误::系统错误(message)) => {
-                    return 记录并返回complete重活失败(
-                        &complete失败上下文,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message,
-                        "parse_video_system_error",
-                        message,
-                    )
-                }
-            };
-            记录complete阶段耗时("parse_video", 视频解析开始);
-            let canonical_video_storage_key = format!("videos/{attachment_id}/canonical.mp4");
-            let canonical_video_path = ObjectPath::from(canonical_video_storage_key.clone());
-            let canonical_video_mapping =
-                match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
-                    Ok(mapped) => mapped,
-                    Err(err) => {
+                记录complete阶段耗时("parse_video", 视频解析开始);
+                let canonical_video_mapping =
+                    match 映射只读完成媒体临时文件(temp_file_path.as_path()) {
+                        Ok(mapped) => mapped,
+                        Err(err) => {
+                            return 记录并返回complete重活失败(
+                                &complete失败上下文,
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "system_error",
+                                "映射 canonical 视频临时文件失败",
+                                "map_canonical_video_failed",
+                                format!("映射 canonical 视频失败: {err}"),
+                            );
+                        }
+                    };
+                let 分发元数据构造开始 = Instant::now();
+                let 协作分发共享载荷 = match 选择协作分发共享载荷(
+                    &prepared.种类,
+                    parsed.mime_type.as_str(),
+                    &[],
+                    Some(canonical_video_mapping.as_ref()),
+                ) {
+                    Ok(payload) => payload,
+                    Err(message) => {
                         return 记录并返回complete重活失败(
                             &complete失败上下文,
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "system_error",
-                            "映射 canonical 视频临时文件失败",
-                            "map_canonical_video_failed",
-                            format!("映射 canonical 视频失败: {err}"),
+                            message,
+                            "select_swarm_payload_failed",
+                            message,
                         );
                     }
                 };
-            let 视频canonical写入开始 = Instant::now();
-            if let Err(err) = state
-                .attachment_store
-                .put(
-                    &canonical_video_path,
-                    canonical_video_mapping.as_ref().to_vec().into(),
-                )
-                .await
-            {
-                return 记录并返回complete重活失败(
-                    &complete失败上下文,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "system_error",
-                    "写入 canonical 视频对象失败",
-                    "put_video_canonical_failed",
-                    format!("写入 canonical 视频对象失败: {err}"),
+                let distribution_request =
+                    media_distribution::构造协作分发元数据写入请求(
+                        &attachment_id,
+                        协作分发共享载荷.字节,
+                        ready_epoch秒,
+                    );
+                记录complete阶段耗时("build_distribution_request", 分发元数据构造开始);
+                let canonical_video_storage_key = 构造canonical内容寻址存储键(
+                    distribution_request.content_hash.as_str(),
+                    协作分发共享载荷.稳定扩展名,
                 );
+                let canonical_video_path = ObjectPath::from(canonical_video_storage_key.clone());
+                let 视频canonical写入开始 = Instant::now();
+                if let Err(err) = state
+                    .attachment_store
+                    .put(
+                        &canonical_video_path,
+                        canonical_video_mapping.as_ref().to_vec().into(),
+                    )
+                    .await
+                {
+                    return 记录并返回complete重活失败(
+                        &complete失败上下文,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "system_error",
+                        "写入 canonical 视频对象失败",
+                        "put_video_canonical_failed",
+                        format!("写入 canonical 视频对象失败: {err}"),
+                    );
+                }
+                记录complete阶段耗时("put_canonical_video", 视频canonical写入开始);
+                let torrent生成开始 = Instant::now();
+                let torrent = match media_distribution::生成附件torrent元信息(
+                    distribution_request.content_hash.as_str(),
+                    协作分发共享载荷.稳定扩展名,
+                    协作分发共享载荷.字节,
+                ) {
+                    Ok(torrent) => torrent,
+                    Err(message) => {
+                        return 记录并返回complete重活失败(
+                            &complete失败上下文,
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "system_error",
+                            message.clone(),
+                            "generate_torrent_failed",
+                            message,
+                        );
+                    }
+                };
+                记录complete阶段耗时("generate_torrent", torrent生成开始);
+                drop(canonical_video_mapping);
+                let ready_request = usecase::媒体附件写入请求 {
+                    附件标识: attachment_id.clone(),
+                    种类: prepared.种类.clone(),
+                    mime_type: parsed.mime_type,
+                    字节大小: attachment_byte_size,
+                    宽: parsed.宽,
+                    高: parsed.高,
+                    // 视频主链已前移到客户端预制；后端只保存一份 canonical.mp4。
+                    // HLS/DASH、mezzanine 和静态封面都不在 complete 阶段生成，避免服务端继续承担加工 owner。
+                    原始内容存储键: canonical_video_storage_key,
+                    缩略图存储键: None,
+                    资产原图存储键: None,
+                    完整图存储键: None,
+                    原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
+                    回退母本存储键: None,
+                    回退母本到期时间戳秒: None,
+                };
+                let torrent_request = usecase::协作分发torrent元信息写入请求 {
+                    附件标识: attachment_id.clone(),
+                    torrent_bytes: torrent.torrent_bytes,
+                    torrent_info_hash: torrent.torrent_info_hash,
+                    piece_length字节: torrent.piece_length_bytes,
+                };
+                let canonical_asset_request = usecase::Canonical媒体资产写入请求 {
+                    content_hash: distribution_request.content_hash.clone(),
+                    种类: ready_request.种类.clone(),
+                    mime_type: ready_request.mime_type.clone(),
+                    字节大小: ready_request.字节大小,
+                    宽: ready_request.宽,
+                    高: ready_request.高,
+                    存储键: ready_request.原始内容存储键.clone(),
+                    torrent_bytes: torrent_request.torrent_bytes.clone(),
+                    torrent_info_hash: torrent_request.torrent_info_hash.clone(),
+                    piece_length字节: torrent_request.piece_length字节,
+                    web_seed_until秒: distribution_request.web_seed_until秒,
+                    origin_expires_at秒: 原始冷源到期时间戳秒,
+                };
+                (
+                    ready_request,
+                    distribution_request,
+                    torrent_request,
+                    canonical_asset_request,
+                )
             }
-            记录complete阶段耗时("put_canonical_video", 视频canonical写入开始);
-            let 分发元数据构造开始 = Instant::now();
-            let 协作分发共享载荷 = match 选择协作分发共享载荷(
-                &prepared.种类,
-                parsed.mime_type.as_str(),
-                &[],
-                Some(canonical_video_mapping.as_ref()),
-            ) {
-                Ok(payload) => payload,
-                Err(message) => {
-                    return 记录并返回complete重活失败(
-                        &complete失败上下文,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message,
-                        "select_swarm_payload_failed",
-                        message,
-                    );
-                }
-            };
-            let distribution_request = media_distribution::构造协作分发元数据写入请求(
-                &attachment_id,
-                协作分发共享载荷.字节,
-                ready_epoch秒,
-            );
-            记录complete阶段耗时("build_distribution_request", 分发元数据构造开始);
-            let torrent生成开始 = Instant::now();
-            let torrent = match media_distribution::生成附件torrent元信息(
-                distribution_request.content_hash.as_str(),
-                协作分发共享载荷.稳定扩展名,
-                协作分发共享载荷.字节,
-            ) {
-                Ok(torrent) => torrent,
-                Err(message) => {
-                    return 记录并返回complete重活失败(
-                        &complete失败上下文,
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "system_error",
-                        message.clone(),
-                        "generate_torrent_failed",
-                        message,
-                    );
-                }
-            };
-            记录complete阶段耗时("generate_torrent", torrent生成开始);
-            drop(canonical_video_mapping);
-            let ready_request = usecase::媒体附件写入请求 {
-                附件标识: attachment_id.clone(),
-                种类: prepared.种类.clone(),
-                mime_type: parsed.mime_type,
-                字节大小: attachment_byte_size,
-                宽: parsed.宽,
-                高: parsed.高,
-                // 视频主链已前移到客户端预制；后端只保存一份 canonical.mp4。
-                // HLS/DASH、mezzanine 和静态封面都不在 complete 阶段生成，避免服务端继续承担加工 owner。
-                原始内容存储键: canonical_video_storage_key,
-                缩略图存储键: None,
-                资产原图存储键: None,
-                完整图存储键: None,
-                原始冷源到期时间戳秒: Some(原始冷源到期时间戳秒),
-                回退母本存储键: None,
-                回退母本到期时间戳秒: None,
-            };
-            let torrent_request = usecase::协作分发torrent元信息写入请求 {
-                附件标识: attachment_id.clone(),
-                torrent_bytes: torrent.torrent_bytes,
-                torrent_info_hash: torrent.torrent_info_hash,
-                piece_length字节: torrent.piece_length_bytes,
-            };
-            (ready_request, distribution_request, torrent_request)
-        }
-    };
+        };
     let state_for_usecase = state.clone();
     let session_id_for_usecase = session_id.clone();
     let distribution_request_for_write = distribution_request.clone();
     let torrent_request_for_write = torrent_request.clone();
+    let canonical_asset_request_for_write = canonical_asset_request.clone();
     let streaming_manifest_request_for_write = streaming_manifest_request.clone();
     let 写入权威真相开始 = Instant::now();
     let complete_result = task::spawn_blocking(move || {
@@ -721,6 +962,19 @@ pub(super) async fn complete_media_upload(
         let snapshot =
             usecase::完成媒体附件上传(&mut repo, &session_id_for_usecase, &ready_request)
                 .map_err(map_domain_err_tuple)?;
+        // canonical 资产是内容身份层事实，先写资产再绑定附件引用；
+        // 后续 source_hash 命中才能复用同一资产，而不是复制旧附件或旧消息。
+        usecase::仓储端口::写入canonical媒体资产(
+            &mut repo,
+            &canonical_asset_request_for_write,
+        )
+        .map_err(map_domain_err_tuple)?;
+        usecase::仓储端口::绑定附件canonical媒体资产(
+            &mut repo,
+            &snapshot.附件标识,
+            canonical_asset_request_for_write.content_hash.as_str(),
+        )
+        .map_err(map_domain_err_tuple)?;
         usecase::写入协作分发元数据(&mut repo, &distribution_request_for_write)
             .map_err(map_domain_err_tuple)?;
         usecase::写入协作分发torrent元信息(&mut repo, &torrent_request_for_write)
@@ -802,9 +1056,11 @@ pub(super) async fn complete_media_upload(
             // 1. 这里不改变“ready 真相已经落库”的结果；start 失败只记告警并交给后台对账补偿；
             // 2. 命令载荷严格来自同一份 runtime_distribution，避免再长第二套 transport 真相；
             // 3. 真正“谁该做种”的裁决仍在后端 owner，不在 sidecar 里发明业务语义。
-            if let Some(启动命令) = super::从协作分发响应构造做种启动命令(&runtime_distribution)
+            if let Some(启动命令) =
+                super::从协作分发响应构造做种启动命令(&runtime_distribution)
             {
-                if let Err(err) = super::尝试启动协作分发做种(&state, &启动命令).await {
+                if let Err(err) = super::尝试启动协作分发做种(&state, &启动命令).await
+                {
                     tracing::warn!(
                         usecase = "完成媒体上传",
                         phase = "seed_start_failed",
@@ -1214,6 +1470,10 @@ fn 推导原始内容扩展名(
             _ => ".bin",
         },
     }
+}
+
+fn 构造canonical内容寻址存储键(content_hash: &str, extension: &str) -> String {
+    format!("media-assets/{content_hash}/canonical{extension}")
 }
 
 struct 协作分发共享载荷<'a> {

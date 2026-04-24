@@ -1,10 +1,10 @@
 use serial_test::serial;
-use std::env;
-use std::time::{SystemTime, UNIX_EPOCH};
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
     ConnectOptions, PgPool, Row,
 };
+use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::oneshot;
 use tokio::time::{timeout, Duration};
 
@@ -38,10 +38,7 @@ async fn 创建迁移测试数据库(base_database_url: &str, db_name: &str) -> 
         .expect("应能创建迁移测试数据库");
     admin_pool.close().await;
 
-    let test_database_url = admin_options
-        .database(db_name)
-        .to_url_lossy()
-        .to_string();
+    let test_database_url = admin_options.database(db_name).to_url_lossy().to_string();
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&test_database_url)
@@ -285,7 +282,9 @@ fn 协作分发迁移已包含swarm级peer_presence表() {
     assert!(sql.contains("CREATE TABLE IF NOT EXISTS swarm_peer_presence"));
     assert!(sql.contains("swarm_id TEXT NOT NULL"));
     assert!(sql.contains("session_id TEXT NOT NULL"));
-    assert!(sql.contains("attachment_id TEXT NOT NULL REFERENCES attachments(attachment_id) ON DELETE CASCADE"));
+    assert!(sql.contains(
+        "attachment_id TEXT NOT NULL REFERENCES attachments(attachment_id) ON DELETE CASCADE"
+    ));
     assert!(sql.contains("peer_kind TEXT NOT NULL"));
     assert!(sql.contains("PRIMARY KEY (swarm_id, session_id, peer_kind)"));
 }
@@ -313,9 +312,7 @@ fn 万人群聊生产化索引迁移必须覆盖当前热查询() {
         .expect("应能读到万人实时群聊生产化索引迁移");
 
     assert!(sql.contains("idx_swarm_peer_presence_swarm_kind_seen"));
-    assert!(sql.contains(
-        "ON swarm_peer_presence (swarm_id, peer_kind, last_seen_at DESC)"
-    ));
+    assert!(sql.contains("ON swarm_peer_presence (swarm_id, peer_kind, last_seen_at DESC)"));
 
     let base_sql = std::fs::read_to_string("migrations/0001_初始化真相模型.sql")
         .expect("应能读到初始化真相模型迁移");
@@ -323,6 +320,39 @@ fn 万人群聊生产化索引迁移必须覆盖当前热查询() {
         base_sql.contains("UNIQUE (room_id, event_position)"),
         "room_events/messages 已由事件位置唯一约束承担 cursor 查询索引，不应为了计划文本重复新增等价索引"
     );
+}
+
+#[test]
+fn source_hash精确去重迁移会建立内容资产和受权限索引() {
+    let sql = std::fs::read_to_string("migrations/0020_媒体source_hash精确去重资产索引.sql")
+        .expect("应能读到 source_hash 精确去重资产索引迁移");
+
+    // source_hash 只用于当前可见范围内的精确原文件命中，不能做成全局唯一资产身份。
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachment_source_hashes"));
+    assert!(sql.contains("source_hash TEXT NOT NULL"));
+    assert!(sql.contains("CHECK (source_hash ~ '^[0-9a-f]{64}$')"));
+    assert!(sql.contains("source_byte_size BIGINT NOT NULL"));
+    assert!(sql.contains("idx_attachment_source_hashes_lookup"));
+    assert!(!sql.contains("UNIQUE (source_hash"));
+
+    // canonical 资产才拥有 WebTorrent / WebSeed 分发事实，多个业务附件只引用同一内容资产。
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS canonical_media_assets"));
+    assert!(sql.contains("content_hash TEXT PRIMARY KEY"));
+    assert!(sql.contains("storage_key TEXT NOT NULL UNIQUE"));
+    assert!(sql.contains("torrent_bytes BYTEA NOT NULL"));
+    assert!(sql.contains("torrent_info_hash TEXT NOT NULL"));
+    assert!(sql.contains("web_seed_until TIMESTAMPTZ NOT NULL"));
+    assert!(sql.contains("origin_expires_at TIMESTAMPTZ NOT NULL"));
+    assert!(sql.contains("origin_deleted_at TIMESTAMPTZ NULL"));
+
+    // 附件到 canonical 资产的引用必须独立于消息事实，避免把“资产复用”偷换成“消息复用”。
+    assert!(sql.contains("CREATE TABLE IF NOT EXISTS attachment_canonical_asset_refs"));
+    assert!(sql.contains(
+        "attachment_id TEXT PRIMARY KEY REFERENCES attachments(attachment_id) ON DELETE CASCADE"
+    ));
+    assert!(sql.contains(
+        "content_hash TEXT NOT NULL REFERENCES canonical_media_assets(content_hash) ON DELETE RESTRICT"
+    ));
 }
 
 #[test]
@@ -444,8 +474,8 @@ async fn 启动收到关闭信号后会优雅停机() {
 
 #[test]
 fn 数据库连接池配置默认适合单机生产起步() {
-    let cfg = koko::assembly::数据库连接池配置::from_env_with(|_| None)
-        .expect("缺省连接池配置应可解析");
+    let cfg =
+        koko::assembly::数据库连接池配置::from_env_with(|_| None).expect("缺省连接池配置应可解析");
 
     assert_eq!(cfg.app_max_connections, 20);
     assert_eq!(cfg.app_min_connections, 0);
@@ -494,9 +524,12 @@ async fn 读取旧匿名身份不应再偷偷写库回填影子字段() {
     let db_name = 生成迁移测试数据库名("koko_migration_read_guard");
     let (pool, test_database_url) = 创建迁移测试数据库(&base_database_url, &db_name).await;
     执行迁移直到(&pool, "0017_协作分发partial_peer与来源裁决.sql").await;
-    let (identity_db_id, _, _) =
-        插入0018前脏匿名身份与视频附件(&pool, "migration-read-guard-device", "att-read-guard")
-            .await;
+    let (identity_db_id, _, _) = 插入0018前脏匿名身份与视频附件(
+        &pool,
+        "migration-read-guard-device",
+        "att-read-guard",
+    )
+    .await;
 
     let pool_for_bootstrap = pool.clone();
     let runtime_handle = tokio::runtime::Handle::current();
@@ -541,8 +574,12 @@ async fn 最终收口迁移会把旧匿名身份与媒体冷源补齐到最终�
     let (pool, _) = 创建迁移测试数据库(&base_database_url, &db_name).await;
     执行迁移直到(&pool, "0017_协作分发partial_peer与来源裁决.sql").await;
     let (identity_db_id, mezzanine_expires_at_epoch, mezzanine_deleted_at_epoch) =
-        插入0018前脏匿名身份与视频附件(&pool, "migration-0018-device", "att-migration-0018")
-            .await;
+        插入0018前脏匿名身份与视频附件(
+            &pool,
+            "migration-0018-device",
+            "att-migration-0018",
+        )
+        .await;
 
     let migration_sql = std::fs::read_to_string("migrations/0018_最终收口清零.sql")
         .expect("应存在 0018 最终收口迁移文件");
@@ -586,8 +623,10 @@ async fn 最终收口迁移会把旧匿名身份与媒体冷源补齐到最终�
     .expect("应能读到回填后的附件");
     let origin_expires_at_epoch: Option<i64> = attachment_row.get("origin_expires_at_epoch");
     let origin_deleted_at_epoch: Option<i64> = attachment_row.get("origin_deleted_at_epoch");
-    let mezzanine_expires_at_epoch_db: Option<i64> = attachment_row.get("mezzanine_expires_at_epoch");
-    let mezzanine_deleted_at_epoch_db: Option<i64> = attachment_row.get("mezzanine_deleted_at_epoch");
+    let mezzanine_expires_at_epoch_db: Option<i64> =
+        attachment_row.get("mezzanine_expires_at_epoch");
+    let mezzanine_deleted_at_epoch_db: Option<i64> =
+        attachment_row.get("mezzanine_deleted_at_epoch");
     assert_eq!(
         origin_expires_at_epoch,
         Some(mezzanine_expires_at_epoch),

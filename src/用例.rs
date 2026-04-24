@@ -61,6 +61,10 @@ pub struct 媒体附件准备请求 {
     pub mime_type: String,
     pub 字节大小: i64,
     pub 原始内容存储键: String,
+    /// 原始用户 File 字节的 SHA-256；只用于精确原文件去重，不参与 canonical 身份判断。
+    pub source_hash: Option<String>,
+    pub source_byte_size: Option<i64>,
+    pub source_file_name: Option<String>,
 }
 
 /// prepare 阶段只落“媒体占位真相”，不把 ready 元数据提前伪造出来。
@@ -125,6 +129,63 @@ pub struct 媒体附件快照 {
     /// 这样 complete / locator / 消息时间线都能共用同一份 preview 真相。
     pub 允许缩略图: bool,
     pub 状态: 附件状态读取结果,
+}
+
+/// canonical 媒体资产是内容身份层的稳定事实：
+/// - `content_hash` 锚定正式共享字节；
+/// - torrent / web_seed 元数据跟随内容资产复用；
+/// - 业务附件仍然单独存在，不能把资产复用偷换成消息或附件复用。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Canonical媒体资产写入请求 {
+    pub content_hash: String,
+    pub 种类: 媒体附件类型,
+    pub mime_type: String,
+    pub 字节大小: i64,
+    pub 宽: i32,
+    pub 高: i32,
+    pub 存储键: String,
+    pub torrent_bytes: Vec<u8>,
+    pub torrent_info_hash: String,
+    pub piece_length字节: i32,
+    pub web_seed_until秒: i64,
+    pub origin_expires_at秒: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 可复用媒体资产 {
+    pub content_hash: String,
+    pub 种类: 媒体附件类型,
+    pub mime_type: String,
+    pub 字节大小: i64,
+    pub 宽: i32,
+    pub 高: i32,
+    pub 存储键: String,
+    pub torrent_bytes: Vec<u8>,
+    pub torrent_info_hash: String,
+    pub piece_length字节: i32,
+    pub web_seed_until秒: i64,
+    pub origin_expires_at秒: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceHash媒体复用请求 {
+    pub 会话标识: String,
+    pub 房间标识: String,
+    pub 附件标识: String,
+    pub 种类: 媒体附件类型,
+    pub source_hash: String,
+    pub source_byte_size: i64,
+    pub source_file_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceHash媒体复用结果 {
+    Miss,
+    Reused {
+        附件: 媒体附件快照,
+        协作分发: 协作分发元数据快照,
+        torrent: 协作分发torrent元信息快照,
+    },
 }
 
 /// 协作分发元数据是 ready 附件旁边的稳定分发表面：
@@ -282,6 +343,13 @@ pub struct 待清理媒体冷源 {
     pub 原始内容存储键: String,
 }
 
+/// canonical 资产级冷源清理按内容资产去重，避免多个附件共享同一对象时重复删除或互相误伤。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct 待清理Canonical媒体资产 {
+    pub content_hash: String,
+    pub 存储键: String,
+}
+
 /// 视频 mezzanine 是短期回退层，不是长期主资产。
 /// 因此后台清理需要有一条独立待删清单，避免跟图片原图冷源混成一个 owner。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -324,6 +392,14 @@ pub const 媒体原始冷源保留秒数: i64 = 24 * 60 * 60;
 /// 标准流媒体产物同样只保留 24 小时冷备窗口。
 /// 这条常量只回答“服务端清单什么时候该退场”，不等于 swarm 长期存活时间。
 pub const 流媒体冷备保留秒数: i64 = 24 * 60 * 60;
+
+fn 是64位小写hex(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+}
 
 /// 冷源可用性只看三件事：
 /// 1. 还有没有冷源地址；
@@ -516,6 +592,50 @@ pub trait 仓储端口 {
         Err(contract::错误码::系统错误)
     }
 
+    /// 记录原始 File 字节的强哈希。它只服务精确去重，不拥有权限和消息成立真相。
+    fn 记录附件source_hash(
+        &mut self,
+        附件标识: &str,
+        source_hash: &str,
+        source_byte_size: i64,
+        source_file_name: Option<&str>,
+    ) -> Result<(), contract::错误码> {
+        let _ = (附件标识, source_hash, source_byte_size, source_file_name);
+        Err(contract::错误码::系统错误)
+    }
+
+    /// 只允许从“当前房间已经成立且当前会话可见的消息附件”里找 source_hash 命中。
+    /// 这条端口故意不提供全局 source_hash 查询，避免把 dedupe 做成存在性探测侧信道。
+    fn 查询房间可复用source_hash媒体资产(
+        &self,
+        房间标识: &str,
+        source_hash: &str,
+        source_byte_size: i64,
+        种类: 媒体附件类型,
+    ) -> Result<Option<可复用媒体资产>, contract::错误码> {
+        let _ = (房间标识, source_hash, source_byte_size, 种类);
+        Ok(None)
+    }
+
+    /// canonical 资产写入以 `content_hash` 幂等收口；命中已有资产时不得续租 24 小时冷源窗口。
+    fn 写入canonical媒体资产(
+        &mut self,
+        请求: &Canonical媒体资产写入请求,
+    ) -> Result<(), contract::错误码> {
+        let _ = 请求;
+        Err(contract::错误码::系统错误)
+    }
+
+    /// 附件引用 canonical 资产只是资产复用，不改变附件 owner、消息、房间或权限事实。
+    fn 绑定附件canonical媒体资产(
+        &mut self,
+        附件标识: &str,
+        content_hash: &str,
+    ) -> Result<(), contract::错误码> {
+        let _ = (附件标识, content_hash);
+        Err(contract::错误码::系统错误)
+    }
+
     /// 协作分发元数据是 ready 后的补充真相面。
     /// 第一版只允许写入稳定片段，不让壳层自己拼 hash / swarm_id。
     fn 写入协作分发元数据(
@@ -626,7 +746,10 @@ pub trait 仓储端口 {
 
     /// prepare 第二阶段失败时，需要把还没绑定上传会话的 prepared 占位回滚掉。
     /// 约束：这里只回收“孤儿 prepared 附件”，不承载正常业务删除语义。
-    fn 回滚预备媒体附件记录(&mut self, 附件标识: &str) -> Result<(), contract::错误码> {
+    fn 回滚预备媒体附件记录(
+        &mut self,
+        附件标识: &str,
+    ) -> Result<(), contract::错误码> {
         let _ = 附件标识;
         Err(contract::错误码::系统错误)
     }
@@ -668,6 +791,24 @@ pub trait 仓储端口 {
         删除时间戳秒: i64,
     ) -> Result<(), contract::错误码> {
         let _ = (附件标识, 删除时间戳秒);
+        Err(contract::错误码::系统错误)
+    }
+
+    fn 列出待清理canonical媒体资产(
+        &self,
+        当前时间戳秒: i64,
+        限制条数: i64,
+    ) -> Result<Vec<待清理Canonical媒体资产>, contract::错误码> {
+        let _ = (当前时间戳秒, 限制条数);
+        Ok(vec![])
+    }
+
+    fn 标记canonical媒体资产已删除(
+        &mut self,
+        content_hash: &str,
+        删除时间戳秒: i64,
+    ) -> Result<(), contract::错误码> {
+        let _ = (content_hash, 删除时间戳秒);
         Err(contract::错误码::系统错误)
     }
 
@@ -1167,10 +1308,31 @@ pub fn 准备媒体附件上传(
         return Err(contract::错误码::参数非法);
     }
     校验实时连接会话(仓储, 会话标识)?;
+    if let Some(source_hash) = 附件.source_hash.as_deref() {
+        if !是64位小写hex(source_hash)
+            || 附件.source_byte_size.is_none_or(|byte_size| byte_size <= 0)
+        {
+            return Err(contract::错误码::参数非法);
+        }
+    } else if 附件.source_byte_size.is_some() || 附件.source_file_name.is_some() {
+        return Err(contract::错误码::参数非法);
+    }
     let 所属匿名身份标识 = 仓储
         .查询会话所属匿名身份(会话标识)?
         .ok_or(contract::错误码::会话无效)?;
-    仓储.创建预备媒体附件记录(&所属匿名身份标识, 附件)
+    let snapshot = 仓储.创建预备媒体附件记录(&所属匿名身份标识, 附件)?;
+    if let Some(source_hash) = 附件.source_hash.as_deref() {
+        let source_byte_size = 附件.source_byte_size.ok_or(contract::错误码::参数非法)?;
+        // source_hash 跟随附件占位记录落库；后续查询仍必须从房间已成立消息出发，
+        // 所以这里不会产生跨房间“已有此文件”的探测能力。
+        仓储.记录附件source_hash(
+            &snapshot.附件标识,
+            source_hash,
+            source_byte_size,
+            附件.source_file_name.as_deref(),
+        )?;
+    }
+    Ok(snapshot)
 }
 
 /// complete 前必须先验证：
@@ -1214,6 +1376,79 @@ pub fn 完成媒体附件上传(
         return Err(contract::错误码::附件类型不支持);
     }
     仓储.创建媒体附件记录(&prepared.所属匿名身份标识, 附件)
+}
+
+pub fn 复用source_hash媒体附件(
+    仓储: &mut dyn 仓储端口,
+    请求: &SourceHash媒体复用请求,
+) -> Result<SourceHash媒体复用结果, contract::错误码> {
+    if 请求.附件标识.trim().is_empty()
+        || !是64位小写hex(请求.source_hash.as_str())
+        || 请求.source_byte_size <= 0
+    {
+        return Err(contract::错误码::参数非法);
+    }
+    校验房间订阅资格(仓储, &请求.房间标识, &请求.会话标识)?;
+    let 所属匿名身份标识 = 仓储
+        .查询会话所属匿名身份(&请求.会话标识)?
+        .ok_or(contract::错误码::会话无效)?;
+
+    let Some(asset) = 仓储.查询房间可复用source_hash媒体资产(
+        &请求.房间标识,
+        &请求.source_hash,
+        请求.source_byte_size,
+        请求.种类.clone(),
+    )?
+    else {
+        return Ok(SourceHash媒体复用结果::Miss);
+    };
+
+    let ready_request = 媒体附件写入请求 {
+        附件标识: 请求.附件标识.clone(),
+        种类: asset.种类.clone(),
+        mime_type: asset.mime_type.clone(),
+        字节大小: asset.字节大小,
+        宽: asset.宽,
+        高: asset.高,
+        原始内容存储键: asset.存储键.clone(),
+        缩略图存储键: None,
+        资产原图存储键: None,
+        完整图存储键: None,
+        原始冷源到期时间戳秒: Some(asset.origin_expires_at秒),
+        回退母本存储键: None,
+        回退母本到期时间戳秒: None,
+    };
+    let snapshot = 仓储.创建媒体附件记录(&所属匿名身份标识, &ready_request)?;
+    仓储.记录附件source_hash(
+        &snapshot.附件标识,
+        &请求.source_hash,
+        请求.source_byte_size,
+        请求.source_file_name.as_deref(),
+    )?;
+    仓储.绑定附件canonical媒体资产(&snapshot.附件标识, &asset.content_hash)?;
+
+    let distribution_request = 协作分发元数据写入请求 {
+        附件标识: snapshot.附件标识.clone(),
+        content_id: format!("content_{}", snapshot.附件标识),
+        content_hash: asset.content_hash.clone(),
+        swarm_id: format!("swarm_{}", asset.content_hash),
+        web_seed_until秒: asset.web_seed_until秒,
+    };
+    let mut distribution = 仓储.写入协作分发元数据(&distribution_request)?;
+    let torrent_request = 协作分发torrent元信息写入请求 {
+        附件标识: snapshot.附件标识.clone(),
+        torrent_bytes: asset.torrent_bytes,
+        torrent_info_hash: asset.torrent_info_hash,
+        piece_length字节: asset.piece_length字节,
+    };
+    let torrent = 仓储.写入协作分发torrent元信息(&torrent_request)?;
+    distribution.torrent_info_hash = Some(torrent.torrent_info_hash.clone());
+
+    Ok(SourceHash媒体复用结果::Reused {
+        附件: snapshot,
+        协作分发: distribution,
+        torrent,
+    })
 }
 
 /// Phase 1 先把“ready 后立刻补齐分发元数据”也收口在用例层语义里。
@@ -1282,7 +1517,6 @@ pub fn 写入协作分发swarm存活(
     仓储.写入协作分发swarm存活(请求)
 }
 
-
 pub fn 写入协作分发torrent元信息(
     仓储: &mut dyn 仓储端口,
     请求: &协作分发torrent元信息写入请求,
@@ -1305,9 +1539,7 @@ pub fn 写入流媒体清单元数据(
         || 请求.hls主清单存储键.trim().is_empty()
         || 请求.dash主清单存储键.trim().is_empty()
         || 请求.streaming到期时间戳秒 < 0
-        || 请求
-            .streaming删除时间戳秒
-            .is_some_and(|value| value < 0)
+        || 请求.streaming删除时间戳秒.is_some_and(|value| value < 0)
     {
         return Err(contract::错误码::参数非法);
     }
@@ -1452,6 +1684,28 @@ pub fn 标记媒体冷源已删除(
         return Err(contract::错误码::参数非法);
     }
     仓储.标记媒体冷源已删除(附件标识, 删除时间戳秒)
+}
+
+pub fn 列出待清理canonical媒体资产(
+    仓储: &dyn 仓储端口,
+    当前时间戳秒: i64,
+    限制条数: i64,
+) -> Result<Vec<待清理Canonical媒体资产>, contract::错误码> {
+    if 当前时间戳秒 < 0 || 限制条数 <= 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.列出待清理canonical媒体资产(当前时间戳秒, 限制条数)
+}
+
+pub fn 标记canonical媒体资产已删除(
+    仓储: &mut dyn 仓储端口,
+    content_hash: &str,
+    删除时间戳秒: i64,
+) -> Result<(), contract::错误码> {
+    if !是64位小写hex(content_hash) || 删除时间戳秒 < 0 {
+        return Err(contract::错误码::参数非法);
+    }
+    仓储.标记canonical媒体资产已删除(content_hash, 删除时间戳秒)
 }
 
 /// 视频 mezzanine TTL 到期后，只能回收短期回退层本身，不能误删流媒体主资产。

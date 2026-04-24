@@ -57,10 +57,20 @@ describe("应用壳缓存边界", () => {
 
     expect(source).toMatch(/const 浏览器兼容构建目标 = \[\s*'safari14'\s*\]/);
     expect(source).toMatch(/const 浏览器兼容构建能力覆盖 = \{\s*destructuring: true\s*\}/);
-    expect(source.match(/target: 浏览器兼容构建目标/g)?.length ?? 0).toBe(3);
-    expect(source.match(/supported: 浏览器兼容构建能力覆盖/g)?.length ?? 0).toBe(3);
+    expect(source.match(/target: 浏览器兼容构建目标/g)?.length ?? 0).toBe(4);
+    expect(source.match(/supported: 浏览器兼容构建能力覆盖/g)?.length ?? 0).toBe(4);
     expect(source).not.toContain("target: 'es2022'");
     expect(source).not.toContain('target: "es2022"');
+  });
+
+  it("build 脚本会把 source hash worker 作为独立产物构建并在 app 清理时保留", () => {
+    const source = 读取前端文件("build.mjs");
+
+    expect(source).toContain("source-hash-worker.js");
+    expect(source).toContain("媒体/源文件哈希.worker.ts");
+    expect(source).toContain("sourceHashWorkerOutputFiles");
+    expect(source).toContain("sourceHashWorkerBuildOptions");
+    expect(source).toContain("...sourceHashWorkerOutputFiles");
   });
 
   it("media-sw 会给图片 blob 受控路由留出缓存命中入口，而不是只剩裸 WebTorrent worker import", () => {

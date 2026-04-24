@@ -1,9 +1,5 @@
 use super::*;
-use axum::{
-    extract::State as AxumState,
-    routing::post,
-    Json as AxumJson, Router,
-};
+use axum::{extract::State as AxumState, routing::post, Json as AxumJson, Router};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -200,9 +196,15 @@ async fn 图片complete后只保留一份canonical对象() {
     assert!(variants.get("preview").is_none() || variants["preview"].is_null());
     assert!(variants.get("full").is_none() || variants["full"].is_null());
     assert!(variants.get("original").is_none() || variants["original"].is_null());
-    assert!(media_asset.get("preview").is_none(), "旧 preview 变体必须退场");
+    assert!(
+        media_asset.get("preview").is_none(),
+        "旧 preview 变体必须退场"
+    );
     assert!(media_asset.get("full").is_none(), "旧 full 变体必须退场");
-    assert!(media_asset.get("original").is_none(), "旧 original 变体必须退场");
+    assert!(
+        media_asset.get("original").is_none(),
+        "旧 original 变体必须退场"
+    );
 
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -222,9 +224,9 @@ async fn 图片complete后只保留一份canonical对象() {
     let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
     let full_storage_key: Option<String> = row.get("full_storage_key");
     let asset_original_storage_key: Option<String> = row.get("asset_original_storage_key");
-    assert_eq!(
-        storage_key,
-        format!("images/{attachment_id}/canonical.webp")
+    assert!(
+        storage_key.starts_with("media-assets/") && storage_key.ends_with("/canonical.webp"),
+        "图片 canonical 应落到内容寻址资产键，当前为 {storage_key}"
     );
     assert!(
         thumbnail_storage_key.is_none(),
@@ -286,7 +288,10 @@ async fn 视频complete后不再返回hls_dash_manifest() {
     let storage_key: String = row.get("storage_key");
     let thumbnail_storage_key: Option<String> = row.get("thumbnail_storage_key");
     let mezzanine_storage_key: Option<String> = row.get("mezzanine_storage_key");
-    assert_eq!(storage_key, format!("videos/{attachment_id}/canonical.mp4"));
+    assert!(
+        storage_key.starts_with("media-assets/") && storage_key.ends_with("/canonical.mp4"),
+        "视频 canonical 应落到内容寻址资产键，当前为 {storage_key}"
+    );
     assert!(thumbnail_storage_key.is_none(), "后端不再抽取视频静态封面");
     assert!(
         mezzanine_storage_key.is_none(),
@@ -329,7 +334,10 @@ async fn 视频complete在iso5_brand_mp4输入下不应返回500() {
 async fn 视频complete会触发seeder_start命令() {
     let (fake_seeder_base_url, seeder_requests, fake_seeder_server) = 启动假seeder侧车().await;
     let backup = 备份并清空环境变量(&["SWARM_SEEDER_CONTROL_BASE_URL"]);
-    env::set_var("SWARM_SEEDER_CONTROL_BASE_URL", fake_seeder_base_url.as_str());
+    env::set_var(
+        "SWARM_SEEDER_CONTROL_BASE_URL",
+        fake_seeder_base_url.as_str(),
+    );
 
     let env = 准备complete测试环境("single-file-video-seeder-start").await;
     let video_bytes = 最小mp4字节();
@@ -342,7 +350,11 @@ async fn 视频complete会触发seeder_start命令() {
         .lock()
         .expect("seeder 请求记录锁不应中毒")
         .clone();
-    assert_eq!(requests.len(), 1, "complete 成功后应至少触发一次 seeder start");
+    assert_eq!(
+        requests.len(),
+        1,
+        "complete 成功后应至少触发一次 seeder start"
+    );
 
     let pool = PgPoolOptions::new()
         .max_connections(1)

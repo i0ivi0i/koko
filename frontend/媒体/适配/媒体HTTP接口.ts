@@ -7,6 +7,9 @@ import type {
   媒体资产分发表面,
   媒体附件上传结果,
   媒体定位结果,
+  媒体SourceHash复用请求,
+  媒体SourceHash复用结果,
+  媒体SourceHash信息,
   媒体上传准备结果,
   媒体种类,
   预览资源描述,
@@ -35,17 +38,51 @@ export class 媒体HTTP接口 {
   async prepareMediaUpload(
     kind: 媒体种类,
     sessionId: string,
-    file: File
+    file: File,
+    sourceHash?: 媒体SourceHash信息
   ): Promise<媒体上传准备结果> {
-    const prepared = await this.deps.post<媒体上传准备结果>(`/api/media/${kind}/prepare`, {
+    const body = {
       session_id: sessionId,
       file_name: file.name,
       mime_type: file.type,
       byte_size: file.size,
-    });
+      ...(sourceHash
+        ? {
+            source_hash: sourceHash.source_hash,
+            source_byte_size: sourceHash.source_byte_size,
+            ...(sourceHash.source_file_name
+              ? { source_file_name: sourceHash.source_file_name }
+              : {}),
+          }
+        : {}),
+    };
+    const prepared = await this.deps.post<媒体上传准备结果>(`/api/media/${kind}/prepare`, body);
     return {
       ...prepared,
       tus_endpoint: this.deps.解析绝对地址(prepared.tus_endpoint),
+    };
+  }
+
+  async reuseMediaBySourceHash(
+    kind: 媒体种类,
+    input: 媒体SourceHash复用请求
+  ): Promise<媒体SourceHash复用结果> {
+    const result = await this.deps.post<媒体SourceHash复用结果>(
+      `/api/media/${kind}/source-dedupe`,
+      {
+        session_id: input.session_id,
+        room_id: input.room_id,
+        source_hash: input.source_hash,
+        source_byte_size: input.source_byte_size,
+        ...(input.source_file_name ? { source_file_name: input.source_file_name } : {}),
+      }
+    );
+    if (result.status !== "reused") {
+      return { status: "miss" };
+    }
+    return {
+      status: "reused",
+      attachment: this.解析媒体上传结果(result.attachment),
     };
   }
 

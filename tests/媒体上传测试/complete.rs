@@ -19,6 +19,7 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
     let tus_upload_dir = state.tus_upload_dir.clone();
     let image_bytes = 最小webp字节();
     let image_byte_size = image_bytes.len() as i64;
+    let source_hash = "3333333333333333333333333333333333333333333333333333333333333333";
     let uniq = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -42,7 +43,10 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
             "session_id": session_id,
             "file_name": "canonical.webp",
             "mime_type": "image/webp",
-            "byte_size": image_byte_size
+            "byte_size": image_byte_size,
+            "source_hash": source_hash,
+            "source_byte_size": image_byte_size,
+            "source_file_name": "canonical.webp"
         })),
         &[],
     )
@@ -156,9 +160,9 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
     assert_eq!(status_in_db, "ready");
     assert_eq!(width_in_db, Some(1));
     assert_eq!(height_in_db, Some(1));
-    assert_eq!(
-        storage_key,
-        format!("images/{attachment_id}/canonical.webp")
+    assert!(
+        storage_key.starts_with("media-assets/") && storage_key.ends_with("/canonical.webp"),
+        "图片 canonical 必须改为内容寻址资产键，当前为 {storage_key}"
     );
     assert!(thumbnail_storage_key.is_none());
     assert!(full_storage_key.is_none());
@@ -166,6 +170,38 @@ async fn complete图片上传会把prepared附件升级成ready并写入canonica
     assert!(
         origin_expires_at_epoch.is_some(),
         "原始冷源必须在 complete 时写入明确到期时间，后续 24 小时清理才能有权威锚点"
+    );
+
+    let asset_row = sqlx::query(
+        "SELECT
+            cma.content_hash,
+            cma.storage_key,
+            cma.torrent_info_hash,
+            acar.content_hash AS ref_content_hash,
+            ash.source_hash,
+            ash.source_byte_size
+         FROM attachment_canonical_asset_refs acar
+         JOIN canonical_media_assets cma ON cma.content_hash = acar.content_hash
+         LEFT JOIN attachment_source_hashes ash ON ash.attachment_id = acar.attachment_id
+         WHERE acar.attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("complete 后必须写入 canonical 资产与附件引用");
+    let asset_hash: String = asset_row.get("content_hash");
+    let ref_hash: String = asset_row.get("ref_content_hash");
+    let asset_storage_key: String = asset_row.get("storage_key");
+    let asset_torrent_info_hash: String = asset_row.get("torrent_info_hash");
+    let recorded_source_hash: Option<String> = asset_row.get("source_hash");
+    let recorded_source_byte_size: Option<i64> = asset_row.get("source_byte_size");
+    assert_eq!(asset_hash, ref_hash);
+    assert_eq!(asset_storage_key, storage_key);
+    assert_eq!(recorded_source_hash.as_deref(), Some(source_hash));
+    assert_eq!(recorded_source_byte_size, Some(image_byte_size));
+    assert!(
+        !asset_torrent_info_hash.trim().is_empty(),
+        "canonical 资产必须持有可复用 torrent info hash"
     );
 
     let (canonical_status, canonical_headers, canonical_body) =
@@ -827,10 +863,9 @@ async fn complete视频上传会写入canonical并返回file_asset() {
         thumbnail_storage_key.is_none(),
         "后端不再为视频抽取静态封面，避免把上传热路径重新压回服务器"
     );
-    assert_eq!(
-        storage_key,
-        format!("videos/{attachment_id}/canonical.mp4"),
-        "视频附件只保留客户端预制后的 canonical 单文件"
+    assert!(
+        storage_key.starts_with("media-assets/") && storage_key.ends_with("/canonical.mp4"),
+        "视频 canonical 必须改为内容寻址资产键，当前为 {storage_key}"
     );
     assert!(
         mezzanine_storage_key.is_none(),
@@ -843,6 +878,20 @@ async fn complete视频上传会写入canonical并返回file_asset() {
     assert!(
         origin_deleted_at_epoch.is_none(),
         "刚 complete 完的 canonical 冷备还在 24 小时窗口内，不能提前伪造已删除事实"
+    );
+    let asset_storage_key: String = sqlx::query_scalar(
+        "SELECT cma.storage_key
+         FROM attachment_canonical_asset_refs acar
+         JOIN canonical_media_assets cma ON cma.content_hash = acar.content_hash
+         WHERE acar.attachment_id = $1",
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("视频 complete 后必须写入 canonical 资产引用");
+    assert_eq!(
+        asset_storage_key, storage_key,
+        "视频附件投影和 canonical 资产表必须指向同一内容寻址对象"
     );
     let manifest_exists: Option<i64> = sqlx::query_scalar(
         "SELECT 1::BIGINT

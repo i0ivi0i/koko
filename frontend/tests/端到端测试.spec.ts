@@ -22,6 +22,9 @@ import type {
   后台登录结果,
   媒体附件上传结果,
   媒体定位结果,
+  媒体SourceHash信息,
+  媒体SourceHash复用请求,
+  媒体SourceHash复用结果,
   媒体上传准备结果,
   房间历史页,
   房间快照,
@@ -145,7 +148,8 @@ class 端到端假传输 implements 前端传输端口 {
   async prepareMediaUpload(
     kind: "image" | "video",
     _sessionId: string,
-    file: File
+    file: File,
+    _sourceHash?: 媒体SourceHash信息
   ): Promise<媒体上传准备结果> {
     return {
       attachment_id: "att-e2e-prepared",
@@ -164,6 +168,12 @@ class 端到端假传输 implements 前端传输端口 {
       },
       expires_at: "2026-04-10T12:00:00Z",
     };
+  }
+  async reuseMediaBySourceHash(
+    _kind: "image" | "video",
+    _input: 媒体SourceHash复用请求
+  ): Promise<媒体SourceHash复用结果> {
+    return { status: "miss" };
   }
   async abandonMediaUpload(_sessionId: string, _attachmentId: string): Promise<void> {}
   async completeMediaUpload(

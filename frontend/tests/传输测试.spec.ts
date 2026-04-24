@@ -49,7 +49,8 @@ describe("传输", () => {
     expect(source).toContain('from "./操作台/适配/后台HTTP接口.js"');
     expect(source).toContain("const 媒体传输 = new 媒体HTTP接口({");
     expect(source).toContain("const 后台传输 = new 后台HTTP接口({");
-    expect(source).toContain("媒体传输.prepareMediaUpload(kind, sessionId, file)");
+    expect(source).toContain("媒体传输.prepareMediaUpload(kind, sessionId, file, sourceHash)");
+    expect(source).toContain("媒体传输.reuseMediaBySourceHash(kind, input)");
     expect(source).toContain("媒体传输.abandonMediaUpload(sessionId, attachmentId)");
     expect(source).toContain("媒体传输.completeMediaUpload(sessionId, attachmentId)");
     expect(source).toContain("媒体传输.loadMediaLocator(sessionId, attachmentId)");
@@ -111,7 +112,8 @@ describe("传输", () => {
     expect(readSource).not.toContain("deps.transport.createSocket");
 
     expect(mediaSource).toContain("deps.transport().loadMediaLocator(sessionId, attachmentId)");
-    expect(mediaSource).toContain("deps.transport().prepareMediaUpload(kind, sessionId, file)");
+    expect(mediaSource).toContain("deps.transport().prepareMediaUpload(kind, sessionId, file, sourceHash)");
+    expect(mediaSource).toContain("deps.transport().reuseMediaBySourceHash(kind, input)");
     expect(mediaSource).toContain("deps.transport().buildAttachmentContentUrl(");
     expect(mediaSource).not.toContain("deps.transport().adminLogin");
     expect(mediaSource).not.toContain("deps.transport().joinOrCreateRoom");
@@ -460,6 +462,149 @@ describe("传输", () => {
       mime_type: "video/mp4",
       byte_size: "3",
     });
+  });
+
+  it("prepareMediaUpload 会把原始 source_hash 作为预处理前身份一并提交", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment_id: "att-source-prepare-1",
+          upload_method: "tus",
+          tus_endpoint: "/files",
+          tus_headers: { Authorization: "Bearer source-upload-token" },
+          tus_metadata: {
+            attachment_id: "att-source-prepare-1",
+            file_name: "canonical.webp",
+            mime_type: "image/webp",
+            byte_size: "3",
+          },
+          expires_at: "2026-04-10T12:00:00Z",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = 创建测试传输();
+    const file = new File([new Uint8Array([9, 8, 7])], "canonical.webp", {
+      type: "image/webp",
+    });
+    const sourceHash = "a".repeat(64);
+
+    await transport.prepareMediaUpload("image", "s-1", file, {
+      source_hash: sourceHash,
+      source_byte_size: 3,
+      source_file_name: "raw.jpg",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/media/image/prepare",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          session_id: "s-1",
+          file_name: "canonical.webp",
+          mime_type: "image/webp",
+          byte_size: 3,
+          source_hash: sourceHash,
+          source_byte_size: 3,
+          source_file_name: "raw.jpg",
+        }),
+      })
+    );
+  });
+
+  it("reuseMediaBySourceHash 会调用受房间权限约束的 source_hash 复用路由并解析 ready 附件", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "reused",
+          attachment: {
+            attachment_id: "att-source-hit-1",
+            kind: "video",
+            mime_type: "video/mp4",
+            byte_size: 2048,
+            width: 1280,
+            height: 720,
+            status: "ready",
+            media_asset: {
+              asset_id: "att-source-hit-1",
+              content_hash: "hash-source-hit-1",
+              kind: "file_video",
+              variants: {
+                canonical: {
+                  id: "canonical",
+                  mime_type: "video/mp4",
+                  url: "/api/attachments/att-source-hit-1/content?session_id=s-1&variant=original",
+                  width: 1280,
+                  height: 720,
+                },
+              },
+              manifest: null,
+              lifecycle: null,
+              distribution: {
+                swarm_id: "swarm-hash-source-hit-1",
+                announce_urls: ["/api/swarm/announce"],
+                web_seed_url:
+                  "/api/attachments/att-source-hit-1/content?session_id=s-1&variant=original",
+                join_ticket: null,
+                ticket_expires_at: null,
+                survival_mode: "server_assisted",
+              },
+              origin: {
+                original_url:
+                  "/api/attachments/att-source-hit-1/content?session_id=s-1&variant=original",
+                expires_at_epoch_seconds: 1775942400,
+                available: true,
+                role: "cold_backup_only",
+              },
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    const transport = 创建测试传输();
+    const sourceHash = "b".repeat(64);
+
+    const result = await transport.reuseMediaBySourceHash("video", {
+      session_id: "s-1",
+      room_id: "r-1",
+      source_hash: sourceHash,
+      source_byte_size: 2048,
+      source_file_name: "clip.mp4",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://localhost:3000/api/media/video/source-dedupe",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          session_id: "s-1",
+          room_id: "r-1",
+          source_hash: sourceHash,
+          source_byte_size: 2048,
+          source_file_name: "clip.mp4",
+        }),
+      })
+    );
+    expect(result.status).toBe("reused");
+    if (result.status === "reused") {
+      expect(result.attachment.media_asset).toEqual(
+        expect.objectContaining({
+          asset_id: "att-source-hit-1",
+          variants: {
+            canonical: expect.objectContaining({
+              url: "http://localhost:3000/api/attachments/att-source-hit-1/content?session_id=s-1&variant=original",
+            }),
+          },
+        })
+      );
+    }
   });
 
   it("completeMediaUpload 会按 file_video 解析新单文件视频主链", async () => {

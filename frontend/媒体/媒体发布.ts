@@ -1,6 +1,13 @@
 import Uppy from "@uppy/core";
 import Tus from "@uppy/tus";
-import type { 媒体附件上传结果, 媒体上传准备结果, 媒体种类 } from "../契约.js";
+import type {
+  媒体附件上传结果,
+  媒体SourceHash复用请求,
+  媒体SourceHash复用结果,
+  媒体SourceHash信息,
+  媒体上传准备结果,
+  媒体种类,
+} from "../契约.js";
 import type { 媒体附件草稿, 媒体草稿状态补丁 } from "./媒体草稿.js";
 import {
   创建本地图片预览地址 as 创建本地媒体预览地址,
@@ -21,6 +28,7 @@ import {
   解析传输错误代码,
   type 媒体上传失败响应,
 } from "./媒体诊断.js";
+import { 计算源文件SHA256经Worker } from "./源文件哈希.js";
 
 export type 媒体上传Meta = {
   session_id?: string;
@@ -139,10 +147,17 @@ type 媒体Tus传输选项 = {
 
 type 媒体发布器依赖 = {
   getSessionId(): string;
+  getCurrentRoomId?(): string | null;
+  calculateSourceHash?(file: File): Promise<媒体SourceHash信息>;
+  reuseMediaBySourceHash?(
+    kind: 媒体种类,
+    input: 媒体SourceHash复用请求
+  ): Promise<媒体SourceHash复用结果>;
   prepareMediaUpload(
     kind: 媒体种类,
     sessionId: string,
-    file: File
+    file: File,
+    sourceHash?: 媒体SourceHash信息
   ): Promise<媒体上传准备结果>;
   abandonMediaUpload(sessionId: string, attachmentId: string): Promise<void>;
   completeMediaUpload(sessionId: string, attachmentId: string): Promise<媒体附件上传结果>;
@@ -344,6 +359,35 @@ async function 默认让出主线程(): Promise<void> {
   });
 }
 
+async function 默认计算源文件SourceHash(file: File): Promise<媒体SourceHash信息> {
+  const result = await 计算源文件SHA256经Worker(file);
+  const info: 媒体SourceHash信息 = {
+    source_hash: result.sourceHash,
+    source_byte_size: result.sourceByteSize,
+  };
+  if (result.sourceFileName.trim()) {
+    info.source_file_name = result.sourceFileName;
+  }
+  return info;
+}
+
+function 构造SourceHash复用请求(input: {
+  sessionId: string;
+  roomId: string;
+  sourceHash: 媒体SourceHash信息;
+}): 媒体SourceHash复用请求 {
+  const request: 媒体SourceHash复用请求 = {
+    session_id: input.sessionId,
+    room_id: input.roomId,
+    source_hash: input.sourceHash.source_hash,
+    source_byte_size: input.sourceHash.source_byte_size,
+  };
+  if (input.sourceHash.source_file_name?.trim()) {
+    request.source_file_name = input.sourceHash.source_file_name;
+  }
+  return request;
+}
+
 function 构造媒体上传Meta(input: {
   sessionId: string;
   kind: 媒体种类;
@@ -397,6 +441,7 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
   const preprocessVideo = deps.preprocessVideo ?? 预处理待上传视频文件;
   const createPreviewUrl = deps.createPreviewUrl ?? 创建本地媒体预览地址;
   const yieldToMainThread = deps.yieldToMainThread ?? 默认让出主线程;
+  const calculateSourceHash = deps.calculateSourceHash ?? 默认计算源文件SourceHash;
   const 上传器表 = new Map<string, 媒体上传器>();
   const 草稿上传器键表 = new Map<string, string>();
 
@@ -649,6 +694,75 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
     return localId;
   };
 
+  const 尝试计算源文件SourceHash = async (file: File): Promise<媒体SourceHash信息 | null> => {
+    try {
+      return await calculateSourceHash(file);
+    } catch (error: unknown) {
+      /**
+       * source_hash 是上传前加速层，不是“没有它就不能上传”的业务真相。
+       * 计算失败时继续走原 prepare/upload/complete 主链，后端 content_hash 仍会在上传后收口分发身份。
+       */
+      console.warn("[koko:media-source-hash:error]", {
+        fileName: file.name,
+        fileByteSize: file.size,
+        errorCode: 解析传输错误代码(error, "source_hash_failed"),
+      });
+      return null;
+    }
+  };
+
+  const 尝试复用SourceHash媒体资产 = async (
+    kind: 媒体种类,
+    sourceHash: 媒体SourceHash信息 | null
+  ): Promise<媒体SourceHash复用结果> => {
+    const roomId = deps.getCurrentRoomId?.()?.trim() ?? "";
+    if (!sourceHash || !roomId || !deps.reuseMediaBySourceHash) {
+      return { status: "miss" };
+    }
+    try {
+      return await deps.reuseMediaBySourceHash(
+        kind,
+        构造SourceHash复用请求({
+          sessionId: deps.getSessionId(),
+          roomId,
+          sourceHash,
+        })
+      );
+    } catch (error: unknown) {
+      /**
+       * 复用预检失败不能变成上传硬失败：
+       * - 会话/权限真相仍会在后续 prepare 再裁一次；
+       * - 这里降级为 miss，避免一次去重探测故障卡住真实发送。
+       */
+      console.warn("[koko:media-source-hash:dedupe-error]", {
+        roomId,
+        kind,
+        sourceHash: sourceHash.source_hash,
+        errorCode: 解析传输错误代码(error, "source_hash_dedupe_failed"),
+      });
+      return { status: "miss" };
+    }
+  };
+
+  const 写入SourceHash命中草稿 = (
+    ready: 媒体附件上传结果,
+    sourceFile: File
+  ): void => {
+    deps.writeDraft({
+      localId: ready.attachment_id,
+      kind: ready.kind,
+      attachmentId: ready.attachment_id,
+      // 命中复用时不会再解码视频取本地 poster；视频草稿用占位符，避免把 video Blob 塞进 <img>。
+      previewUrl: ready.kind === "video" ? "" : createPreviewUrl(sourceFile),
+      width: ready.width,
+      height: ready.height,
+      status: "ready",
+      fileName: sourceFile.name || 默认文件名(ready.kind),
+      errorCode: "",
+      sourceFile,
+    });
+  };
+
   const 处理选择同类媒体文件 = async (
     kind: 媒体种类,
     files: Iterable<File>
@@ -687,6 +801,21 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
             }, 15 * 60 * 1000)
           : null;
       try {
+        const sourceHash = await 尝试计算源文件SourceHash(sourceFile);
+        const reuseResult = await 尝试复用SourceHash媒体资产(kind, sourceHash);
+        if (reuseResult.status === "reused") {
+          if (preprocessingDraftDelayTimer) {
+            globalThis.clearTimeout(preprocessingDraftDelayTimer);
+          }
+          if (preprocessingWaitTimer) {
+            globalThis.clearTimeout(preprocessingWaitTimer);
+          }
+          if (preprocessingDraftId) {
+            deps.removeDraft(preprocessingDraftId);
+          }
+          写入SourceHash命中草稿(reuseResult.attachment, sourceFile);
+          continue;
+        }
         const preparedFile = await 准备待上传媒体文件(kind, sourceFile);
         if (preprocessingDraftDelayTimer) {
           globalThis.clearTimeout(preprocessingDraftDelayTimer);
@@ -707,7 +836,12 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
           }
           continue;
         }
-        const prepared = await deps.prepareMediaUpload(kind, deps.getSessionId(), preparedFile.file);
+        const prepared = await deps.prepareMediaUpload(
+          kind,
+          deps.getSessionId(),
+          preparedFile.file,
+          sourceHash ?? undefined
+        );
         const uploaderInput: 媒体上传器创建参数 = {
           tusEndpoint: prepared.tus_endpoint,
           profile: 读取媒体上传档位(kind, preparedFile.file),
@@ -843,10 +977,12 @@ export function 创建媒体发布器(deps: 媒体发布器依赖) {
       return;
     }
     try {
+      const sourceHash = await 尝试计算源文件SourceHash(draft.sourceFile);
       const prepared = await deps.prepareMediaUpload(
         draft.kind,
         deps.getSessionId(),
-        draft.sourceFile
+        draft.sourceFile,
+        sourceHash ?? undefined
       );
       const uploaderInput: 媒体上传器创建参数 = {
         tusEndpoint: prepared.tus_endpoint,

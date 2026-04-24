@@ -142,6 +142,29 @@ export interface 媒体上传准备结果 {
 export type 图片上传准备结果 = 媒体上传准备结果;
 
 /**
+ * source_hash 只描述用户选择的原始 File 字节身份。
+ * 它服务上传前精确去重，不表达肉眼相似、转码等价或播放器状态。
+ */
+export interface 媒体SourceHash信息 {
+  source_hash: string;
+  source_byte_size: number;
+  source_file_name?: string;
+}
+
+/**
+ * source_hash 复用请求必须带 room_id：
+ * 后端只能在当前会话可见的房间事实内查询命中，不能做全局存在性探测。
+ */
+export interface 媒体SourceHash复用请求 extends 媒体SourceHash信息 {
+  session_id: string;
+  room_id: string;
+}
+
+export type 媒体SourceHash复用结果 =
+  | { status: "miss" }
+  | { status: "reused"; attachment: 媒体附件上传结果 };
+
+/**
  * locator 只暴露当前客户端下一步该去哪里读媒体。
  * 业务权限、房间成员真相仍然由后端用例层裁决，不下放给 Web 壳猜。
  */
