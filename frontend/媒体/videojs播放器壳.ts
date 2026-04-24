@@ -205,8 +205,8 @@ const KokoVideoSkinTemplate = `
       bottom: 0;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.75rem;
+      gap: 0.75rem;
+      padding: 1rem;
       background: linear-gradient(to top, rgb(0 0 0 / 0.76), rgb(0 0 0 / 0));
       opacity: var(--media-controls-opacity, 1);
       transition: opacity 160ms ease-out;
@@ -222,9 +222,9 @@ const KokoVideoSkinTemplate = `
       gap: 0.625rem;
     }
     media-time {
-      min-width: 3.25rem;
+      min-width: 3.75rem;
       color: rgb(255 255 255 / 0.88);
-      font-size: 0.75rem;
+      font-size: 0.875rem;
       font-variant-numeric: tabular-nums;
       text-align: center;
     }
@@ -234,13 +234,13 @@ const KokoVideoSkinTemplate = `
       align-items: center;
       flex: 1;
       min-width: 5rem;
-      height: 2rem;
+      height: 2.75rem;
       cursor: pointer;
     }
     media-slider-track {
       position: relative;
       width: 100%;
-      height: 0.25rem;
+      height: 0.35rem;
       overflow: hidden;
       border-radius: 999px;
       background: rgb(255 255 255 / 0.24);
@@ -265,8 +265,8 @@ const KokoVideoSkinTemplate = `
       position: absolute;
       top: 50%;
       left: var(--media-slider-fill);
-      width: 0.75rem;
-      height: 0.75rem;
+      width: 1rem;
+      height: 1rem;
       border-radius: 999px;
       background: #fff;
       translate: -50% -50%;
@@ -280,11 +280,11 @@ const KokoVideoSkinTemplate = `
     .koko-button {
       display: grid;
       place-items: center;
-      width: 2.25rem;
-      height: 2.25rem;
+      width: 3rem;
+      height: 3rem;
       padding: 0;
       border: 0;
-      border-radius: 0.375rem;
+      border-radius: 0.5rem;
       background: transparent;
       color: inherit;
       cursor: pointer;
@@ -297,14 +297,13 @@ const KokoVideoSkinTemplate = `
     }
     .koko-icon {
       display: none;
-      font-size: 1rem;
+      font-size: 1.25rem;
       line-height: 1;
     }
     media-play-button[data-paused] .koko-icon--play,
     media-play-button[data-ended] .koko-icon--restart,
     media-play-button:not([data-paused]):not([data-ended]) .koko-icon--pause,
-    media-mute-button .koko-icon--mute,
-    media-fullscreen-button .koko-icon--fullscreen {
+    media-mute-button .koko-icon--mute {
       display: block;
     }
   </style>
@@ -333,17 +332,13 @@ const KokoVideoSkinTemplate = `
       </media-controls-group>
       <media-controls-group>
         <media-mute-button class="koko-button">
-          <span class="koko-icon koko-icon--mute" aria-hidden="true">◼</span>
+          <span class="koko-icon koko-icon--mute" aria-hidden="true">♪</span>
         </media-mute-button>
-        <media-fullscreen-button class="koko-button">
-          <span class="koko-icon koko-icon--fullscreen" aria-hidden="true">⛶</span>
-        </media-fullscreen-button>
       </media-controls-group>
     </media-controls>
     <media-hotkey keys="Space" action="togglePaused"></media-hotkey>
     <media-hotkey keys="k" action="togglePaused"></media-hotkey>
     <media-hotkey keys="m" action="toggleMuted"></media-hotkey>
-    <media-hotkey keys="f" action="toggleFullscreen"></media-hotkey>
   </media-container>
 `;
 
@@ -384,7 +379,6 @@ const 注册默认VideoJs元素 = (): void | Promise<void> => {
       await import("@videojs/html/media/container");
       await import("@videojs/html/ui/buffering-indicator");
       await import("@videojs/html/ui/controls");
-      await import("@videojs/html/ui/fullscreen-button");
       await import("@videojs/html/ui/hotkey");
       await import("@videojs/html/ui/mute-button");
       await import("@videojs/html/ui/play-button");
@@ -420,8 +414,8 @@ const 创建默认播放器根 = (
    * 这样查看器、Video.js 壳和真实 video 就不会各算各的尺寸。
    */
   provider.style.cssText = 使用沉浸挂载布局
-    ? "display:block;width:100%;height:100%;max-width:100%;"
-    : "display:block;width:100%;max-width:100%;";
+    ? "display:block;width:100%;height:100%;max-width:100%;background:#000;"
+    : "display:block;width:100%;max-width:100%;background:#000;";
   /**
    * 官方文档说 `slot="media"` 已不是必需，但显式声明能让当前测试环境和部分浏览器
    * 更稳定地把真实媒体元素投影进 skin 内的 container。
@@ -436,6 +430,7 @@ const 创建默认播放器根 = (
   video.loop = 媒体是否默认循环播放("video");
   video.playsInline = true;
   video.style.cssText = "display:block;width:100%;height:100%;background:#000;";
+  skin.style.cssText = "display:block;width:100%;height:100%;background:#000;";
 
   provider.append(skin);
   skin.append(video);
@@ -443,10 +438,10 @@ const 创建默认播放器根 = (
   const container =
     (skin.shadowRoot?.querySelector("media-container") as 可请求全屏容器 | null) ?? provider;
   container.style.cssText = 使用沉浸挂载布局
-    ? `display:block;width:100%;max-width:100%;max-height:100%;aspect-ratio:${读取纵横比(
+    ? `display:block;width:100%;height:100%;max-width:100%;max-height:100%;background:#000;aspect-ratio:${读取纵横比(
         source
       )};`
-    : `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);aspect-ratio:${读取纵横比(
+    : `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);background:#000;aspect-ratio:${读取纵横比(
         source
       )};`;
 

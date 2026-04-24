@@ -524,7 +524,7 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
-  it("默认根节点使用 Koko 最小皮肤，不渲染快进快退与倍速控件", async () => {
+  it("默认根节点使用 Koko 大触控最小皮肤，不渲染快进快退、倍速与重复全屏控件", async () => {
     const shell = await 创建VideoJs播放器壳({
       kind: "file",
       src: "blob:http://media.local/videojs-koko-skin-1",
@@ -535,6 +535,7 @@ describe("Video.js 播放器壳", () => {
 
     const skin = document.body.querySelector<HTMLElement>("koko-video-skin");
     const shadowRoot = skin?.shadowRoot;
+    const styleText = shadowRoot?.querySelector("style")?.textContent ?? "";
     const hotkeyActions = Array.from(shadowRoot?.querySelectorAll("media-hotkey") ?? []).map(
       (hotkey) => hotkey.getAttribute("action")
     );
@@ -543,12 +544,16 @@ describe("Video.js 播放器壳", () => {
     expect(shadowRoot?.querySelector("media-play-button")).not.toBeNull();
     expect(shadowRoot?.querySelector("media-time-slider")).not.toBeNull();
     expect(shadowRoot?.querySelector("media-mute-button")).not.toBeNull();
-    expect(shadowRoot?.querySelector("media-fullscreen-button")).not.toBeNull();
+    expect(shadowRoot?.querySelector("media-fullscreen-button")).toBeNull();
     expect(shadowRoot?.querySelector("media-seek-button")).toBeNull();
     expect(shadowRoot?.querySelector("media-playback-rate-button")).toBeNull();
     expect(hotkeyActions).not.toContain("seekStep");
     expect(hotkeyActions).not.toContain("speedUp");
     expect(hotkeyActions).not.toContain("speedDown");
+    expect(hotkeyActions).not.toContain("toggleFullscreen");
+    expect(styleText).toContain("width: 3rem");
+    expect(styleText).toContain("height: 3rem");
+    expect(shell.读取容器元素().style.backgroundColor).toBe("#000");
 
     shell.destroy();
   });
