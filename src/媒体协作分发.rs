@@ -32,7 +32,8 @@ pub(crate) fn 生成内容哈希(共享字节: &[u8]) -> String {
 }
 
 /// Phase 1 只组装“稳定分发真相”，不生成 metainfo、不碰 tracker ticket。
-/// attachment_id 继续是业务锚点，content_hash / swarm_id 只是分发层的稳定附属事实。
+/// attachment_id 继续是业务锚点；content_id 保留附件级业务内容引用。
+/// 真正跨附件复用的分发身份只能由 content_hash / swarm_id / torrent_info_hash 决定。
 pub(crate) fn 构造协作分发元数据写入请求(
     附件标识: &str,
     共享字节: &[u8],

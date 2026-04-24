@@ -260,7 +260,7 @@ async fn 同一身份跨房间同source_hash会复用全局canonical资产但创
 
 #[tokio::test]
 #[serial]
-async fn 同一房间同source_hash会复用canonical资产但创建新附件事实() {
+async fn source_hash复用附件允许业务content_id不同但分发身份必须完全一致() {
     let (database_url, state, app) = 构建source_hash测试应用().await;
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -327,6 +327,7 @@ async fn 同一房间同source_hash会复用canonical资产但创建新附件事
             a.attachment_id,
             a.status,
             ash.source_hash,
+            adm.content_id AS distribution_content_id,
             acar.content_hash AS asset_content_hash,
             adm.content_hash AS distribution_content_hash,
             adm.swarm_id,
@@ -350,20 +351,27 @@ async fn 同一房间同source_hash会复用canonical资产但创建新附件事
     let first_distribution_hash: String = rows[0].get("distribution_content_hash");
     let first_swarm_id: String = rows[0].get("swarm_id");
     let first_torrent_info_hash: Option<String> = rows[0].get("torrent_info_hash");
-    for row in rows {
+    let mut content_ids = Vec::new();
+    for row in &rows {
         let status: String = row.get("status");
         let source_hash: String = row.get("source_hash");
+        let content_id: String = row.get("distribution_content_id");
         let asset_hash: String = row.get("asset_content_hash");
         let distribution_hash: String = row.get("distribution_content_hash");
         let swarm_id: String = row.get("swarm_id");
         let torrent_info_hash: Option<String> = row.get("torrent_info_hash");
         assert_eq!(status, "ready");
         assert_eq!(source_hash, SOURCE_HASH_一号);
+        content_ids.push(content_id);
         assert_eq!(asset_hash, first_asset_hash);
         assert_eq!(distribution_hash, first_distribution_hash);
         assert_eq!(swarm_id, first_swarm_id);
         assert_eq!(torrent_info_hash, first_torrent_info_hash);
     }
+    assert_ne!(
+        content_ids[0], content_ids[1],
+        "content_id 是附件级业务引用，可以随新附件变化；分发身份只能看 content_hash / swarm_id / torrent_info_hash"
+    );
 
     用附件创建房间消息(
         database_url.clone(),

@@ -214,6 +214,7 @@ pub struct 媒体附件转发结果 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct 协作分发元数据写入请求 {
     pub 附件标识: String,
+    /// content_id 是附件级业务内容引用；分发层去重不能把它当成 canonical 资产身份。
     pub content_id: String,
     pub content_hash: String,
     pub swarm_id: String,
