@@ -1,12 +1,12 @@
 use serial_test::serial;
 use sqlx::{
-    postgres::{PgConnectOptions, PgPoolOptions},
     ConnectOptions, PgPool, Row,
+    postgres::{PgConnectOptions, PgPoolOptions},
 };
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::oneshot;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 #[path = "测试支撑/mod.rs"]
 mod test_support;
