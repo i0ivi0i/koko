@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_attachment_canonical_asset_refs_content_hash
 ON attachment_canonical_asset_refs (content_hash);
 
 CREATE TABLE IF NOT EXISTS attachment_source_hashes (
-    -- source_hash 是原始 File 字节的 SHA-256，只用于精确命中；不加全局唯一，避免跨权限探测和误把原文件身份当资产身份。
+    -- source_hash 是原始 File 字节的 SHA-256，只用于上传前精确命中；不加全局唯一，禁止跨权限存在性探测，禁止误把原文件身份当资产身份。
     attachment_id TEXT PRIMARY KEY REFERENCES attachments(attachment_id) ON DELETE CASCADE,
     source_hash TEXT NOT NULL,
     source_byte_size BIGINT NOT NULL CHECK (source_byte_size >= 0),

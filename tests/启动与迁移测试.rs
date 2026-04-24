@@ -333,6 +333,7 @@ fn source_hash精确去重迁移会建立内容资产和受权限索引() {
     assert!(sql.contains("CHECK (source_hash ~ '^[0-9a-f]{64}$')"));
     assert!(sql.contains("source_byte_size BIGINT NOT NULL"));
     assert!(sql.contains("idx_attachment_source_hashes_lookup"));
+    assert!(sql.contains("禁止跨权限存在性探测"));
     assert!(!sql.contains("UNIQUE (source_hash"));
 
     // canonical 资产才拥有 WebTorrent / WebSeed 分发事实，多个业务附件只引用同一内容资产。
