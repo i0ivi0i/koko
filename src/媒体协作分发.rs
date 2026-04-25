@@ -282,6 +282,9 @@ struct 协作分发入群票据声明<'a> {
 
 #[derive(serde::Deserialize)]
 struct 协作分发入群票据校验声明 {
+    /// `sub/aid` 只用于诊断 join ticket 漂移来源；tracker 放行语义仍然只认 `ih`。
+    sub: Option<String>,
+    aid: Option<String>,
     /// tracker 入群只锚定 info hash；房间/附件权限已经在签发票据前由用例层裁决。
     ih: String,
 }
@@ -289,6 +292,17 @@ struct 协作分发入群票据校验声明 {
 struct 协作分发入群票据签发结果 {
     ticket: String,
     ticket_expires_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum 协作分发入群票据校验诊断 {
+    通过,
+    票据解码失败,
+    InfoHash不匹配 {
+        票据内info_hash: String,
+        session_id: Option<String>,
+        attachment_id: Option<String>,
+    },
 }
 
 /// tracker ticket 只在“当前 swarm 仍值得接入”时签发：
@@ -333,24 +347,29 @@ fn 签发协作分发join_ticket(
 
 /// 校验 tracker 入群票据，只回答“这张票能不能进入当前 infoHash 对应的 swarm”。
 /// 这里不查询房间、不判断附件可见性：这些业务真相必须在签发 locator/join_ticket 前完成。
-pub(crate) fn 验证协作分发join_ticket(
+pub(crate) fn 诊断协作分发join_ticket(
     secret: &str,
     expected_info_hash: &str,
     ticket: &str,
-) -> Result<(), &'static str> {
-    let claims = decode::<协作分发入群票据校验声明>(
+) -> 协作分发入群票据校验诊断 {
+    let claims = match decode::<协作分发入群票据校验声明>(
         ticket,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
-    )
-    .map_err(|_| "join_ticket_invalid")?
-    .claims;
+    ) {
+        Ok(token) => token.claims,
+        Err(_) => return 协作分发入群票据校验诊断::票据解码失败,
+    };
 
     if claims.ih != expected_info_hash {
-        return Err("join_ticket_invalid");
+        return 协作分发入群票据校验诊断::InfoHash不匹配 {
+            票据内info_hash: claims.ih,
+            session_id: claims.sub,
+            attachment_id: claims.aid,
+        };
     }
 
-    Ok(())
+    协作分发入群票据校验诊断::通过
 }
 
 /// Phase 2 的 runtime locator 仍然服从同一条边界：
@@ -404,4 +423,46 @@ pub(crate) fn 协作分发快照转响应值(
         // 它是稳定共享语义，不等于当前 media_state，也不承载前端页面提示文案。
         "survival_mode": "peer_only_after_expiry",
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn 签发测试join_ticket(secret: &str, session_id: &str, attachment_id: &str, info_hash: &str) -> String {
+        let claims = 协作分发入群票据声明 {
+            sub: session_id,
+            aid: attachment_id,
+            ih: info_hash,
+            iat: 1,
+            exp: 4_102_444_800usize,
+        };
+        encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .expect("测试票据应当可以签发")
+    }
+
+    #[test]
+    fn 诊断协作分发join_ticket会区分票据解码失败() {
+        let 结果 = 诊断协作分发join_ticket("secret", "expected-info-hash", "not-a-jwt");
+        assert_eq!(结果, 协作分发入群票据校验诊断::票据解码失败);
+    }
+
+    #[test]
+    fn 诊断协作分发join_ticket会暴露infohash串票上下文() {
+        let 票据 = 签发测试join_ticket("secret", "s-test", "att-test", "other-info-hash");
+        let 结果 = 诊断协作分发join_ticket("secret", "expected-info-hash", 票据.as_str());
+        assert_eq!(
+            结果,
+            协作分发入群票据校验诊断::InfoHash不匹配 {
+                票据内info_hash: "other-info-hash".to_string(),
+                session_id: Some("s-test".to_string()),
+                attachment_id: Some("att-test".to_string()),
+            }
+        );
+    }
+
 }

@@ -1,0 +1,5 @@
+[build] [koko-build] workbox warning: app-MNEILVM5.js is 5.81 MB, and won't be precached. Configure maximumFileSizeToCacheInBytes to change this limit.
+[webtorrent-seeder] [dev-seeder] 当前未加载 webtorrent-hybrid；浏览器 WebRTC 互通能力可能受限（仅用于开发兜底）。
+[build] [koko-build] workbox warning: app-MNEILVM5.js is 5.81 MB, and won't be precached. Configure maximumFileSizeToCacheInBytes to change this limit.
+[backend]     Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.25s
+[backend]      Running `target\\launcher-run\debug\koko.exe`

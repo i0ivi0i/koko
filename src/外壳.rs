@@ -945,14 +945,55 @@ async fn relay_swarm_tracker_socket(
     if let Some(secret) = ticket_secret.as_deref() {
         let (info_hash, ticket) = 解析tracker首帧门禁字段(&first_client_message)?;
         let Some(ticket) = ticket else {
+            tracing::warn!(
+                usecase = "协作分发tracker验票",
+                adapter = "http",
+                outcome = "failed",
+                error_code = "swarm_tracker_join_ticket_invalid",
+                invalid_reason = "missing_ticket",
+                info_hash = %info_hash,
+                "tracker 首帧缺少 join ticket"
+            );
             return Err("join_ticket_invalid".to_string());
         };
-        media_distribution::验证协作分发join_ticket(
+        match media_distribution::诊断协作分发join_ticket(
             secret,
             info_hash.as_str(),
             ticket.as_str(),
-        )
-        .map_err(str::to_string)?;
+        ) {
+            media_distribution::协作分发入群票据校验诊断::通过 => {}
+            media_distribution::协作分发入群票据校验诊断::票据解码失败 => {
+                tracing::warn!(
+                    usecase = "协作分发tracker验票",
+                    adapter = "http",
+                    outcome = "failed",
+                    error_code = "swarm_tracker_join_ticket_invalid",
+                    invalid_reason = "ticket_decode_failed",
+                    info_hash = %info_hash,
+                    "tracker join ticket 解码失败"
+                );
+                return Err("join_ticket_invalid".to_string());
+            }
+            media_distribution::协作分发入群票据校验诊断::InfoHash不匹配 {
+                票据内info_hash,
+                session_id,
+                attachment_id,
+            } => {
+                tracing::warn!(
+                    usecase = "协作分发tracker验票",
+                    adapter = "http",
+                    outcome = "failed",
+                    error_code = "swarm_tracker_join_ticket_invalid",
+                    invalid_reason = "ticket_info_hash_mismatch",
+                    expected_info_hash = %info_hash,
+                    ticket_info_hash = %票据内info_hash,
+                    session_id = session_id.as_deref().unwrap_or("unknown"),
+                    attachment_id = attachment_id.as_deref().unwrap_or("unknown"),
+                    "tracker join ticket 与首帧 info_hash 不匹配"
+                );
+                return Err("join_ticket_invalid".to_string());
+            }
+        }
     }
 
     let first_upstream_message = axum_ws_message_to_tungstenite(first_client_message)
