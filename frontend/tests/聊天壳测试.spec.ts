@@ -808,7 +808,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("点击当前自动播 owner 视频时，会直接接管现有时间线 video 进入全屏，不再冷开查看器", async () => {
+  it("点击当前自动播 owner 视频时，也走统一查看器入口，不再让时间线原生 video 直达全屏", async () => {
     const { requestFullscreen, restore } = 安装聊天壳直达全屏模拟();
     const transport = new 假传输();
     transport.joinQueue = [
@@ -898,9 +898,25 @@ describe("聊天壳集成 / 首页与控制台", () => {
       trigger?.click();
       await pane!.updateComplete;
 
-      expect(requestFullscreen).toHaveBeenCalledTimes(1);
-      expect(requestFullscreen.mock.instances.at(0)).toBe(preview);
-      expect(viewer.打开).not.toHaveBeenCalled();
+      /**
+       * 壳层现在必须把“当前 owner 点击”也交回统一查看器入口：
+       * 1. 消息窗不再直接请求原生全屏；
+       * 2. 查看器会基于同一颗 canonical Video.js player 决定接管/迁移；
+       * 3. 这里只验证入口统一，不在聊天壳测试里重复断言底层迁移实现。
+       */
+      expect(requestFullscreen).toHaveBeenCalledTimes(0);
+      expect(viewer.打开).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startAttachmentId: "att-video-inline-direct-fullscreen",
+          items: [
+            expect.objectContaining({
+              attachmentId: "att-video-inline-direct-fullscreen",
+              kind: "video",
+              src: "blob:http://localhost/webtorrent-inline-direct-fullscreen",
+            }),
+          ],
+        })
+      );
       expect(document.body.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
       expect(pane!.inlineAutoplayOwnerAttachmentId).toBe("att-video-inline-direct-fullscreen");
     } finally {

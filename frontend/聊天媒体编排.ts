@@ -598,6 +598,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   自动播协作 = 创建自动播协作({
     读取媒体运行时上下文,
     读取附件条目,
+    读取媒体会话快照: (attachmentId) => 媒体会话表.get(attachmentId)?.snapshot() ?? null,
     接收媒体运行时事实,
     解析播放结果: (input) => 媒体播放器.解析播放结果(input),
     释放附件播放资源,
@@ -708,6 +709,30 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      * 3. 只对显式 viewer open 生效，不把消息流常态渲染放大成持续重解析。
      */
     session.send({ type: "ENTER_RECOVERING" });
+  };
+
+  const 当前请求命中热自动播会话 = (request: 媒体查看器打开请求): boolean => {
+    const startAttachment = 读取附件条目(request.startAttachmentId);
+    if (!startAttachment || startAttachment.kind !== "video") {
+      return false;
+    }
+    const 当前媒体运行时上下文 = 读取媒体运行时上下文();
+    if (当前媒体运行时上下文.inlineAutoplayOwnerAttachmentId !== request.startAttachmentId) {
+      return false;
+    }
+    const 当前自动播播放 = 当前媒体运行时上下文.inlineAutoplayPlayback;
+    if (!当前自动播播放 || 当前自动播播放.attachmentId !== request.startAttachmentId) {
+      return false;
+    }
+    const session = 读取或创建媒体会话(startAttachment);
+    const snapshot = session.snapshot();
+    /**
+     * 当前自动播 owner 已经握着同一条正式播放真相时，点击放大只是“迁移宿主表面”：
+     * 1. 不该再先打回 recovering，把热会话暂时清空成 `src: ""`；
+     * 2. 也不该为了统一入口重复触发一轮播放结果解析，制造第二条恢复链；
+     * 3. 只有当前 owner + 当前 playback + 当前会话快照同时对齐时，才允许跳过这次重裁。
+     */
+    return Boolean(snapshot.playback);
   };
 
   const 预热自动播候选媒体会话 = (candidates: 消息视频自动播候选[]): void => {
@@ -885,7 +910,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         startAttachmentId: request.startAttachmentId,
         items: request.items.map((item) => ({ ...item })),
       };
-      启动查看器起始附件会话(baseRequest);
+      if (!当前请求命中热自动播会话(baseRequest)) {
+        启动查看器起始附件会话(baseRequest);
+      }
       const nextRequest = 查看器会话协作.投影查看器请求到当前播放真相(baseRequest);
       if (读取附件条目(request.startAttachmentId)?.kind === "video") {
         视频预览协作.解析视频预览(request.startAttachmentId);

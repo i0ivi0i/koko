@@ -52,6 +52,7 @@ type VideoJs播放器根节点 = {
 
 export interface VideoJs播放器壳实例 {
   同步(source: VideoJs播放器源描述): void;
+  挂载到宿主(mountTarget: HTMLElement): void;
   进入全屏(): Promise<VideoJs全屏进入结果>;
   读取容器元素(): 可请求全屏容器;
   读取视频元素(): 可原生全屏视频元素;
@@ -89,6 +90,30 @@ export type VideoJs播放器壳依赖 = {
 
 const 读取纵横比 = (source: VideoJs播放器源描述): string =>
   `${Math.max(1, source.width)}/${Math.max(1, source.height)}`;
+
+const 同步播放器挂载布局 = (
+  root: VideoJs播放器根节点,
+  source: VideoJs播放器源描述,
+  mountTarget?: HTMLElement
+): void => {
+  const 使用沉浸挂载布局 = mountTarget?.dataset.mediaViewerImmersive === "true";
+  /**
+   * provider/container 的尺寸真相必须跟着当前宿主走：
+   * 1. 同一颗 canonical player 会在时间线宿主和查看器宿主之间迁移；
+   * 2. 不能把“第一次挂载时的布局样式”偷偷残留到下一次宿主，否则时间线和沉浸层会互相污染；
+   * 3. 因此每次迁移宿主后，都要按新宿主重新同步 provider/container 的唯一尺寸语义。
+   */
+  root.provider.style.cssText = 使用沉浸挂载布局
+    ? "display:block;width:100%;height:100%;max-width:100%;background:#000;"
+    : "display:block;width:100%;max-width:100%;background:#000;";
+  root.container.style.cssText = 使用沉浸挂载布局
+    ? `display:block;width:100%;height:100%;max-width:100%;max-height:100%;background:#000;aspect-ratio:${读取纵横比(
+        source
+      )};`
+    : `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);background:#000;aspect-ratio:${读取纵横比(
+        source
+      )};`;
+};
 
 const 看起来像Promise = (value: unknown): value is PromiseLike<unknown> =>
   (typeof value === "object" || typeof value === "function") &&
@@ -425,17 +450,8 @@ const 创建默认播放器根 = (
   注册KokoVideoSkin元素();
   const skin = document.createElement(KokoVideoSkinTagName);
   const video = document.createElement("video") as 可原生全屏视频元素;
-  const 使用沉浸挂载布局 = mountTarget?.dataset.mediaViewerImmersive === "true";
 
   provider.dataset.playerShell = "videojs";
-  /**
-   * 尺寸真相只允许存在于 mountTarget：
-   * provider 自己只负责占满父盒子，不再偷偷带第二套宽度公式，
-   * 这样查看器、Video.js 壳和真实 video 就不会各算各的尺寸。
-   */
-  provider.style.cssText = 使用沉浸挂载布局
-    ? "display:block;width:100%;height:100%;max-width:100%;background:#000;"
-    : "display:block;width:100%;max-width:100%;background:#000;";
   /**
    * 官方文档说 `slot="media"` 已不是必需，但显式声明能让当前测试环境和部分浏览器
    * 更稳定地把真实媒体元素投影进 skin 内的 container。
@@ -457,13 +473,7 @@ const 创建默认播放器根 = (
   (mountTarget ?? document.body).append(provider);
   const container =
     (skin.shadowRoot?.querySelector("media-container") as 可请求全屏容器 | null) ?? provider;
-  container.style.cssText = 使用沉浸挂载布局
-    ? `display:block;width:100%;height:100%;max-width:100%;max-height:100%;background:#000;aspect-ratio:${读取纵横比(
-        source
-      )};`
-    : `display:block;width:100%;max-width:100%;max-height:min(calc(100vh - 40px), 100%);background:#000;aspect-ratio:${读取纵横比(
-        source
-      )};`;
+  同步播放器挂载布局({ provider, container, video }, source, mountTarget);
 
   return {
     provider,
@@ -719,6 +729,13 @@ const 创建VideoJs播放器壳核心 = (
       }
       const previousSource = 当前源;
       当前源 = 应用源(source, previousSource);
+    },
+    挂载到宿主(mountTarget) {
+      if (已销毁) {
+        return;
+      }
+      mountTarget.append(root.provider);
+      同步播放器挂载布局(root, 当前源, mountTarget);
     },
     async 进入全屏() {
       if (已销毁) {

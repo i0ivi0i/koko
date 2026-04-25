@@ -4,7 +4,6 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
-  媒体是否默认循环播放,
   type 媒体播放结果,
   type 媒体播放位置,
 } from "./媒体/媒体播放.js";
@@ -12,37 +11,13 @@ import type { 视频预览状态 } from "./媒体/视频预览.js";
 import type { 消息视频自动播候选 } from "./媒体/消息视频自动播编排.js";
 import type { 媒体会话信号 } from "./媒体/媒体会话.js";
 import type { 媒体查看器打开请求, 媒体查看器项目 } from "./媒体/媒体查看器.js";
+import { 读取默认全局唯一播放器 } from "./媒体/全局唯一播放器.js";
 import type { 聊天列表展示项, 消息展示项 } from "./视图.js";
 
 type 消息虚拟项 = {
   key: unknown;
   index: number;
   start: number;
-};
-
-type 可直达全屏时间线视频 = HTMLVideoElement & {
-  requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
-  webkitEnterFullscreen?: () => void;
-  webkitEnterFullScreen?: () => void;
-  webkitSupportsFullscreen?: boolean;
-};
-
-type 时间线视频直达全屏接管 = {
-  attachmentId: string;
-  video: 可直达全屏时间线视频;
-  handleFullscreenChange: () => void;
-  handleNativeVideoFullscreenEnd: () => void;
-  restore: {
-    controls: boolean;
-    muted: boolean;
-    loop: boolean;
-    ariaHidden: string | null;
-    tabIndex: string | null;
-    pointerEvents: string;
-    objectFit: string;
-    background: string;
-    inlineFullscreenActive: string | null;
-  };
 };
 
 /**
@@ -125,7 +100,6 @@ export class 房间消息窗 extends LitElement {
    * 3. 缓存 owner 在消息窗本身，用来消除“首帧前黑闪”而不引入第二播放链。
    */
   private readonly 时间线视频首帧就绪源 = new Map<string, string>();
-  private 当前时间线视频直达全屏接管: 时间线视频直达全屏接管 | null = null;
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -164,7 +138,7 @@ export class 房间消息窗 extends LitElement {
   override disconnectedCallback(): void {
     this.取消自动播候选调度();
     this.清理自动播候选观察();
-    this.清理时间线视频直达全屏接管();
+    读取默认全局唯一播放器().同步时间线自动播(null);
     this.失效视频封面地址.clear();
     this.时间线视频首帧就绪源.clear();
     this.自动播位置上报记录.clear();
@@ -474,12 +448,16 @@ export class 房间消息窗 extends LitElement {
      * 因此这里显式补一次 `play()`，并在 owner 退场时显式 `pause()`，
      * 让自动播行为稳定且可预期，避免“看起来是自动播 owner 但画面不动”的回归。
      */
+    this.同步时间线唯一播放器宿主();
     const previewVideos = this.querySelectorAll<HTMLVideoElement>(
       "video.message-video-preview[data-attachment-id]"
     );
     const previousAutoplayOwnerAttachmentId =
       changedProperties.get("inlineAutoplayOwnerAttachmentId") ?? null;
     for (const video of previewVideos) {
+      if (video.dataset.canonicalPlayer === "true") {
+        continue;
+      }
       const attachmentId = video.getAttribute("data-attachment-id");
       if (!attachmentId) {
         continue;
@@ -894,6 +872,50 @@ export class 房间消息窗 extends LitElement {
     return preview?.phase === "ready" ? preview : null;
   }
 
+  private 同步时间线唯一播放器宿主(): void {
+    const ownerAttachmentId = this.inlineAutoplayOwnerAttachmentId;
+    if (!ownerAttachmentId) {
+      读取默认全局唯一播放器().同步时间线自动播(null);
+      return;
+    }
+    const host = this.querySelector<HTMLElement>(
+      `.message-video-canonical-host[data-attachment-id="${ownerAttachmentId}"]`
+    );
+    const src = host?.dataset.videoSrc?.trim() ?? "";
+    const kind = host?.dataset.videoKind === "hls" ? "hls" : "file";
+    const width = Number(host?.dataset.videoWidth ?? "0");
+    const height = Number(host?.dataset.videoHeight ?? "0");
+    if (!host || !host.isConnected || !src || !Number.isFinite(width) || !Number.isFinite(height)) {
+      读取默认全局唯一播放器().同步时间线自动播(null);
+      return;
+    }
+    读取默认全局唯一播放器().同步时间线自动播({
+      attachmentId: ownerAttachmentId,
+      mountTarget: host,
+      source: {
+        kind,
+        src,
+        posterSrc: host.dataset.videoPoster?.trim() || null,
+        width,
+        height,
+      },
+      回调: {
+        恢复播放位置: (video) => {
+          this.恢复时间线自动播播放位置(ownerAttachmentId, video);
+        },
+        标记首帧已就绪: (currentSrc) => {
+          this.标记时间线视频首帧已就绪(ownerAttachmentId, currentSrc);
+        },
+        广播播放位置: (video, force = false, allowReleasedOwner = false) => {
+          this.广播自动播播放位置(ownerAttachmentId, video, force, allowReleasedOwner);
+        },
+        广播媒体会话信号: (signal) => {
+          this.广播媒体会话信号(ownerAttachmentId, signal);
+        },
+      },
+    });
+  }
+
   private 标记视频封面加载失败(attachmentId: string, event: Event): void {
     const target = event.currentTarget;
     if (!(target instanceof HTMLImageElement)) {
@@ -968,191 +990,9 @@ export class 房间消息窗 extends LitElement {
     return items;
   }
 
-  private 当前全屏元素仍属于该时间线视频(
-    element: Element | null,
-    video: 可直达全屏时间线视频
-  ): boolean {
-    if (!element) {
-      return false;
-    }
-    let current: Node | null = video;
-    while (current) {
-      if (current === element) {
-        return true;
-      }
-      const root = current.getRootNode();
-      if (root instanceof ShadowRoot) {
-        current = root.host;
-        continue;
-      }
-      current = current.parentNode;
-    }
-    return false;
-  }
-
-  private 清理时间线视频直达全屏接管(input?: {
-    attachmentId?: string;
-    video?: 可直达全屏时间线视频;
-  }): void {
-    const active = this.当前时间线视频直达全屏接管;
-    if (!active) {
-      return;
-    }
-    if (input?.attachmentId && active.attachmentId !== input.attachmentId) {
-      return;
-    }
-    if (input?.video && active.video !== input.video) {
-      return;
-    }
-    document.removeEventListener("fullscreenchange", active.handleFullscreenChange);
-    active.video.removeEventListener(
-      "webkitendfullscreen",
-      active.handleNativeVideoFullscreenEnd
-    );
-    active.video.controls = active.restore.controls;
-    active.video.muted = active.restore.muted;
-    active.video.loop = active.restore.loop;
-    if (active.restore.ariaHidden === null) {
-      active.video.removeAttribute("aria-hidden");
-    } else {
-      active.video.setAttribute("aria-hidden", active.restore.ariaHidden);
-    }
-    if (active.restore.tabIndex === null) {
-      active.video.removeAttribute("tabindex");
-    } else {
-      active.video.setAttribute("tabindex", active.restore.tabIndex);
-    }
-    active.video.style.pointerEvents = active.restore.pointerEvents;
-    active.video.style.objectFit = active.restore.objectFit;
-    active.video.style.background = active.restore.background;
-    if (active.restore.inlineFullscreenActive === null) {
-      delete active.video.dataset.inlineFullscreenActive;
-    } else {
-      active.video.dataset.inlineFullscreenActive = active.restore.inlineFullscreenActive;
-    }
-    this.当前时间线视频直达全屏接管 = null;
-  }
-
-  private 启动时间线视频直达全屏接管(
-    attachmentId: string,
-    video: 可直达全屏时间线视频
-  ): void {
-    this.清理时间线视频直达全屏接管();
-    /**
-     * 当前自动播 owner 被显式点击时，用户要的是“把这颗活着的 video 升格成正式观看表面”：
-     * 1. 继续复用同一条 src/currentTime 真相，不重建第二颗播放器；
-     * 2. 只临时放开 controls / 非静音 / 非循环，让它具备正式观看语义；
-     * 3. 全屏退出后再恢复成时间线预览配置，避免把查看器状态残留回消息流。
-     */
-    const active: 时间线视频直达全屏接管 = {
-      attachmentId,
-      video,
-      handleFullscreenChange: () => {
-        if (
-          this.当前全屏元素仍属于该时间线视频(document.fullscreenElement, video)
-        ) {
-          return;
-        }
-        this.清理时间线视频直达全屏接管({ attachmentId, video });
-      },
-      handleNativeVideoFullscreenEnd: () => {
-        this.清理时间线视频直达全屏接管({ attachmentId, video });
-      },
-      restore: {
-        controls: video.controls,
-        muted: video.muted,
-        loop: video.loop,
-        ariaHidden: video.getAttribute("aria-hidden"),
-        tabIndex: video.getAttribute("tabindex"),
-        pointerEvents: video.style.pointerEvents,
-        objectFit: video.style.objectFit,
-        background: video.style.background,
-        inlineFullscreenActive: video.dataset.inlineFullscreenActive ?? null,
-      },
-    };
-    video.controls = true;
-    video.muted = false;
-    video.loop = false;
-    video.removeAttribute("aria-hidden");
-    video.removeAttribute("tabindex");
-    video.style.pointerEvents = "auto";
-    video.style.objectFit = "contain";
-    video.style.background = "#000";
-    video.dataset.inlineFullscreenActive = "true";
-    document.addEventListener("fullscreenchange", active.handleFullscreenChange);
-    video.addEventListener("webkitendfullscreen", active.handleNativeVideoFullscreenEnd);
-    if (video.paused) {
-      void video.play().catch(() => undefined);
-    }
-    this.当前时间线视频直达全屏接管 = active;
-  }
-
-  private 请求时间线视频直达全屏(video: 可直达全屏时间线视频): boolean {
-    if (typeof video.requestFullscreen === "function") {
-      void video.requestFullscreen({ navigationUI: "hide" }).catch(() => {
-        this.清理时间线视频直达全屏接管({ video });
-      });
-      return true;
-    }
-    if (video.webkitSupportsFullscreen === false) {
-      return false;
-    }
-    try {
-      if (typeof video.webkitEnterFullscreen === "function") {
-        video.webkitEnterFullscreen();
-        return true;
-      }
-      if (typeof video.webkitEnterFullScreen === "function") {
-        video.webkitEnterFullScreen();
-        return true;
-      }
-    } catch {
-      return false;
-    }
-    return false;
-  }
-
-  private 读取当前自动播Owner视频(
-    attachmentId: string
-  ): 可直达全屏时间线视频 | null {
-    if (this.inlineAutoplayOwnerAttachmentId !== attachmentId) {
-      return null;
-    }
-    const video = this.querySelector<可直达全屏时间线视频>(
-      `video.message-video-preview[data-attachment-id="${attachmentId}"]`
-    );
-    if (!video || !video.autoplay) {
-      return null;
-    }
-    if (!this.读取视频当前播放源(video)) {
-      return null;
-    }
-    return video;
-  }
-
-  private 尝试直接接管当前自动播视频全屏(attachmentId: string): boolean {
-    const active = this.当前时间线视频直达全屏接管;
-    if (active?.attachmentId === attachmentId) {
-      return true;
-    }
-    const video = this.读取当前自动播Owner视频(attachmentId);
-    if (!video) {
-      return false;
-    }
-    this.启动时间线视频直达全屏接管(attachmentId, video);
-    if (this.请求时间线视频直达全屏(video)) {
-      return true;
-    }
-    this.清理时间线视频直达全屏接管({ attachmentId, video });
-    return false;
-  }
-
   private 打开媒体查看器(event: Event, startAttachmentId: string): void {
     event.preventDefault();
     event.stopPropagation();
-    if (this.尝试直接接管当前自动播视频全屏(startAttachmentId)) {
-      return;
-    }
     const items = this.读取媒体查看器项目();
     if (!items.some((item) => item.attachmentId === startAttachmentId)) {
       return;
@@ -1387,6 +1227,87 @@ export class 房间消息窗 extends LitElement {
             const shouldGateVideoUntilFirstFrame =
               shouldRenderPreviewVideo && !hasSourcePoster && !hasRuntimePreview;
             const shouldShowFirstFrameGuard = shouldGateVideoUntilFirstFrame && !isFirstFrameReady;
+            const 时间线视频预览内容 = shouldRenderInlineVideo
+              ? html`
+                  <div
+                    class="message-video-canonical-host"
+                    data-attachment-id=${attachment.attachmentId}
+                    data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                    data-video-src=${previewVideoSrc ?? ""}
+                    data-video-poster=${previewVideoPoster ?? ""}
+                    data-video-width=${attachment.width}
+                    data-video-height=${attachment.height}
+                    style="display:block;width:100%;height:100%;background:#000;"
+                    aria-hidden="true"
+                  ></div>
+                `
+              : html`
+                  <video
+                    class=${`message-video-preview${
+                      shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
+                    }`}
+                    data-attachment-id=${attachment.attachmentId}
+                    src=${previewVideoSrc ?? ""}
+                    width=${attachment.displayWidth}
+                    height=${attachment.displayHeight}
+                    muted
+                    playsinline
+                    preload="metadata"
+                    disablepictureinpicture
+                    disableremoteplayback
+                    controlslist="nodownload nofullscreen noremoteplayback"
+                    tabindex="-1"
+                    aria-hidden="true"
+                    poster=${ifDefined(previewVideoPoster)}
+                    @loadedmetadata=${(event: Event) => {
+                      const target = event.currentTarget;
+                      if (!(target instanceof HTMLVideoElement)) {
+                        return;
+                      }
+                      this.恢复时间线自动播播放位置(attachment.attachmentId, target, {
+                        allowPreviewFrame: Boolean(restorableTimelineFrame),
+                      });
+                    }}
+                    @loadeddata=${(event: Event) => {
+                      const target = event.currentTarget;
+                      if (!(target instanceof HTMLVideoElement)) {
+                        return;
+                      }
+                      this.标记时间线视频首帧已就绪(
+                        attachment.attachmentId,
+                        target.currentSrc || target.getAttribute("src")
+                      );
+                    }}
+                    @canplay=${(event: Event) => {
+                      const target = event.currentTarget;
+                      if (!(target instanceof HTMLVideoElement)) {
+                        return;
+                      }
+                      this.标记时间线视频首帧已就绪(
+                        attachment.attachmentId,
+                        target.currentSrc || target.getAttribute("src")
+                      );
+                    }}
+                    @playing=${(event: Event) => {
+                      const target = event.currentTarget;
+                      if (!(target instanceof HTMLVideoElement)) {
+                        return;
+                      }
+                      this.标记时间线视频首帧已就绪(
+                        attachment.attachmentId,
+                        target.currentSrc || target.getAttribute("src")
+                      );
+                    }}
+                    @error=${() => {
+                      /**
+                       * 时间线非 owner 的 `<video>` 只是首帧/静态预览壳：
+                       * - 它失败时不代表“当前活跃播放会话”失败；
+                       * - 若这里也广播 PLAYER_ERROR，会把 owner 侧恢复链路放大成抖动重试；
+                       * - 所以只允许 owner 那颗 canonical player 上抛错误，预览壳保持静默退避。
+                       */
+                    }}
+                  ></video>
+                `;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
              * 1. 只要拿到同文件可播源（swarm/blob），就保持同一颗 `<video>` 作为时间线预览容器；
@@ -1417,117 +1338,7 @@ export class 房间消息窗 extends LitElement {
                 >
                   ${shouldRenderPreviewVideo
                     ? html`
-                        <video
-                          class=${`message-video-preview${
-                            shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
-                          }`}
-                          data-attachment-id=${attachment.attachmentId}
-                          src=${previewVideoSrc ?? ""}
-                          width=${attachment.displayWidth}
-                          height=${attachment.displayHeight}
-                          muted
-                          ?autoplay=${shouldRenderInlineVideo}
-                          ?loop=${shouldRenderInlineVideo && 媒体是否默认循环播放("video")}
-                          playsinline
-                          preload="metadata"
-                          disablepictureinpicture
-                          disableremoteplayback
-                          controlslist="nodownload nofullscreen noremoteplayback"
-                          tabindex="-1"
-                          aria-hidden="true"
-                          poster=${ifDefined(previewVideoPoster)}
-                          @loadedmetadata=${(event: Event) => {
-                            const target = event.currentTarget;
-                            if (!(target instanceof HTMLVideoElement)) {
-                              return;
-                            }
-                            this.恢复时间线自动播播放位置(attachment.attachmentId, target, {
-                              allowPreviewFrame: Boolean(
-                                restorableTimelineFrame && !shouldRenderInlineVideo
-                              ),
-                            });
-                          }}
-                          @loadeddata=${(event: Event) => {
-                            const target = event.currentTarget;
-                            if (!(target instanceof HTMLVideoElement)) {
-                              return;
-                            }
-                            this.标记时间线视频首帧已就绪(
-                              attachment.attachmentId,
-                              target.currentSrc || target.getAttribute("src")
-                            );
-                          }}
-                          @canplay=${(event: Event) => {
-                            const target = event.currentTarget;
-                            if (!(target instanceof HTMLVideoElement)) {
-                              return;
-                            }
-                            this.标记时间线视频首帧已就绪(
-                              attachment.attachmentId,
-                              target.currentSrc || target.getAttribute("src")
-                            );
-                          }}
-                          @playing=${(event: Event) => {
-                            const target = event.currentTarget;
-                            if (target instanceof HTMLVideoElement) {
-                              this.标记时间线视频首帧已就绪(
-                                attachment.attachmentId,
-                                target.currentSrc || target.getAttribute("src")
-                              );
-                            }
-                            if (!shouldRenderInlineVideo) {
-                              return;
-                            }
-                            this.广播媒体会话信号(attachment.attachmentId, {
-                              type: "PLAYER_PLAYING",
-                            });
-                          }}
-                          @timeupdate=${(event: Event) => {
-                            const target = event.currentTarget;
-                            if (!(target instanceof HTMLVideoElement)) {
-                              return;
-                            }
-                            this.广播自动播播放位置(attachment.attachmentId, target);
-                          }}
-                          @pause=${(event: Event) => {
-                            const target = event.currentTarget;
-                            if (!(target instanceof HTMLVideoElement)) {
-                              return;
-                            }
-                            this.广播自动播播放位置(attachment.attachmentId, target, true);
-                          }}
-                          @waiting=${() => {
-                            if (!shouldRenderInlineVideo) {
-                              return;
-                            }
-                            this.广播媒体会话信号(attachment.attachmentId, {
-                              type: "PLAYER_WAITING",
-                            });
-                          }}
-                          @stalled=${() => {
-                            if (!shouldRenderInlineVideo) {
-                              return;
-                            }
-                            this.广播媒体会话信号(attachment.attachmentId, {
-                              type: "PLAYER_STALLED",
-                            });
-                          }}
-                          @error=${() =>
-                            (() => {
-                              /**
-                               * 时间线非 owner 的 `<video>` 只是首帧/静态预览壳：
-                               * - 它失败时不代表“当前活跃播放会话”失败；
-                               * - 若这里也广播 PLAYER_ERROR，会把 owner 侧恢复链路放大成抖动重试；
-                               * - 只有自动播 owner 才允许把 error 上抛给媒体会话状态机。
-                               */
-                              if (!shouldRenderInlineVideo) {
-                                return;
-                              }
-                              this.广播媒体会话信号(attachment.attachmentId, {
-                                type: "PLAYER_ERROR",
-                              });
-                            })()}
-                        ></video>
+                        ${时间线视频预览内容}
                         ${shouldShowFirstFrameGuard
                           ? html`
                               <img

@@ -38,6 +38,10 @@ export function 创建查看器会话协作(
   deps: 查看器会话协作依赖
 ): 查看器会话协作端口 {
   let 待重裁决的本地完整视频附件标识: string | null = null;
+  let 上次已交付查看器请求摘要: string | null = null;
+
+  const 序列化查看器请求 = (request: 媒体查看器打开请求): string =>
+    JSON.stringify(request);
 
   const 投影查看器请求到当前播放真相 = (
     request: 媒体查看器打开请求
@@ -168,6 +172,11 @@ export function 创建查看器会话协作(
 
   const 正式打开查看器 = (request: 媒体查看器打开请求): void => {
     deps.登记程序滚动来源("media_viewer_open");
+    /**
+     * `确认查看器已打开` 可能同步触发新一轮 runtime 投影；
+     * 因此要先记住这次已经交付给 viewer 的 request，避免同一拍里又被当成“需要同步一次”的新输入。
+     */
+    上次已交付查看器请求摘要 = 序列化查看器请求(request);
     deps.打开查看器(request);
     deps.确认查看器已打开();
   };
@@ -181,7 +190,8 @@ export function 创建查看器会话协作(
         return;
       }
       const nextRequest = 投影查看器请求到当前播放真相(当前查看器请求);
-      if (JSON.stringify(nextRequest) !== JSON.stringify(当前查看器请求)) {
+      const nextRequest摘要 = 序列化查看器请求(nextRequest);
+      if (nextRequest摘要 !== 序列化查看器请求(当前查看器请求)) {
         deps.更新当前查看器请求(nextRequest);
         return;
       }
@@ -195,16 +205,22 @@ export function 创建查看器会话协作(
         正式打开查看器(nextRequest);
         return;
       }
+      if (上次已交付查看器请求摘要 === nextRequest摘要) {
+        return;
+      }
       deps.同步查看器(nextRequest);
+      上次已交付查看器请求摘要 = nextRequest摘要;
     },
 
     处理查看器请求已清空(): void {
       待重裁决的本地完整视频附件标识 = null;
+      上次已交付查看器请求摘要 = null;
       deps.清除程序滚动来源("media_viewer_open");
     },
 
     重置(): void {
       待重裁决的本地完整视频附件标识 = null;
+      上次已交付查看器请求摘要 = null;
     },
   };
 }

@@ -1,13 +1,17 @@
 import type { 媒体资产分发表面 } from "../契约.js";
 import type { 媒体会话信号 } from "./媒体会话.js";
 import type {
-  VideoJs播放器壳实例,
   VideoJs播放器源描述,
   VideoJs全屏进入结果,
 } from "./videojs播放器壳.js";
-import * as VideoJs播放器壳模块 from "./videojs播放器壳.js";
-
-const 创建VideoJs播放器壳 = VideoJs播放器壳模块.创建VideoJs播放器壳;
+import { 创建VideoJs播放器壳, 预热默认VideoJs元素 } from "./videojs播放器壳.js";
+import {
+  创建全局唯一播放器,
+  读取默认全局唯一播放器,
+  type 全局唯一播放器依赖,
+  type 全局唯一播放器端口,
+  type 全局唯一播放器查看器会话,
+} from "./全局唯一播放器.js";
 
 export type 媒体查看器项目 =
   | {
@@ -73,12 +77,8 @@ type 媒体查看器运行时钩子 = {
   通知查看器已关闭?(): void;
 };
 type PhotoSwipe查看器工厂 = (options: PhotoSwipe查看器选项) => 媒体查看器工厂结果;
-type VideoJs播放器壳工厂 = (
-  item: 媒体查看器视频项目,
-  lifecycle: 媒体查看器视口占用生命周期,
-  hooks: 媒体查看器运行时钩子
-) => 媒体查看器工厂结果;
-type 默认VideoJs播放器壳依赖 = NonNullable<Parameters<typeof 创建VideoJs播放器壳>[1]>;
+type VideoJs播放器壳工厂 = NonNullable<全局唯一播放器依赖["createVideoJsPlayerShell"]>;
+type 默认VideoJs播放器壳依赖 = NonNullable<Parameters<VideoJs播放器壳工厂>[1]>;
 type 壳外P2PHls增强层输入 = Parameters<
   NonNullable<默认VideoJs播放器壳依赖["挂接P2PHls增强层"]>
 >[0];
@@ -86,6 +86,7 @@ type 壳外P2PHls增强层输入 = Parameters<
 export type 媒体查看器依赖 = {
   createPhotoSwipeLightbox?: PhotoSwipe查看器工厂;
   createVideoJsPlayerShell?: VideoJs播放器壳工厂;
+  globalVideoPlayer?: 全局唯一播放器端口;
   isMobileViewport?: () => boolean;
   onMediaSessionSignal?: (attachmentId: string, signal: 媒体会话信号) => void;
   onViewportCaptureStart?: () => void;
@@ -156,9 +157,6 @@ const 是异步媒体查看器结果 = (
 ): result is Promise<媒体查看器实例> =>
   typeof (result as Promise<媒体查看器实例>).then === "function";
 
-const 看起来像Promise = <T>(value: T | Promise<T>): value is Promise<T> =>
-  typeof (value as Promise<T>).then === "function";
-
 const 是移动触屏视口 = (): boolean => {
   const hasCoarsePointer = globalThis.matchMedia?.("(pointer: coarse)").matches ?? false;
   const touchPoints = globalThis.navigator?.maxTouchPoints ?? 0;
@@ -194,47 +192,6 @@ const 读取视频元素方向锁 = (video: HTMLVideoElement): 媒体方向锁 |
 
 const 读取屏幕方向 = (): 可锁定屏幕方向 | null =>
   (globalThis.screen?.orientation as 可锁定屏幕方向 | undefined) ?? null;
-
-const 绑定媒体运行时信号 = (
-  target: EventTarget,
-  attachmentId: string,
-  hooks: 媒体查看器运行时钩子
-): (() => void) => {
-  const listeners: Array<[string, EventListener]> = [
-    [
-      "playing",
-      () => {
-        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_PLAYING" });
-      },
-    ],
-    [
-      "waiting",
-      () => {
-        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_WAITING" });
-      },
-    ],
-    [
-      "stalled",
-      () => {
-        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_STALLED" });
-      },
-    ],
-    [
-      "error",
-      () => {
-        hooks.发出媒体会话信号(attachmentId, { type: "PLAYER_ERROR" });
-      },
-    ],
-  ];
-  for (const [eventName, listener] of listeners) {
-    target.addEventListener(eventName, listener);
-  }
-  return () => {
-    for (const [eventName, listener] of listeners) {
-      target.removeEventListener(eventName, listener);
-    }
-  };
-};
 
 const 映射VideoJs播放源 = (item: 媒体查看器视频项目): VideoJs播放器源描述 => {
   if (/\.m3u8(?:$|\?)/.test(item.src)) {
@@ -527,6 +484,8 @@ const 创建默认VideoJs播放器层 = async (
   item: 媒体查看器视频项目,
   lifecycle: 媒体查看器视口占用生命周期,
   hooks: 媒体查看器运行时钩子,
+  playerOwner: 全局唯一播放器端口,
+  同步Hls增强视频项目: (item: 媒体查看器视频项目) => void,
   options: {
     shouldAutoEnterFullscreen: boolean;
   }
@@ -621,53 +580,29 @@ const 创建默认VideoJs播放器层 = async (
 
   let 当前视频项目 = item;
   let cleaned = false;
-  let 解绑媒体运行时信号: () => void = () => undefined;
   let 清理全屏策略: 同会话全屏策略控制器 = {
     清理: () => undefined,
     请求关闭: () => undefined,
   };
-  const 挂接P2PHls增强层 = async ({ hls }: 壳外P2PHls增强层输入): Promise<void> => {
-    /**
-     * `p2p-media-loader-hlsjs` 在这里始终只是 HLS 支路的外挂增强：
-     * 1. 真正的播放 owner 仍然是外层媒体会话和唯一 Video.js 壳；
-     * 2. 动态导入放在查看器默认工厂，避免把具体库绑死进壳层核心；
-     * 3. 是否成功挂上只影响带宽协作，不影响 HLS 首播真相。
-     */
-    const { HlsJsP2PEngine } = await import("p2p-media-loader-hlsjs");
-    const engine = new HlsJsP2PEngine({
-      core: {
-        /**
-         * 这里显式传一遍正式主链认可的核心参数，而不是默默吃库默认值：
-         * 1. announceTrackers 必须跟当前流媒体分发表面一致，避免 HLS P2P 另走野 tracker；
-         * 2. 时间窗/并发阈值沿用官方默认推荐值，保持“库升级后行为仍可审计”；
-         * 3. 这些都只是 HLS 支路增强参数，不会把 `p2p-media-loader` 升级成新的 owner。
-         */
-        announceTrackers: 当前视频项目.streamingDistribution?.announce_urls ?? [],
-        simultaneousHttpDownloads: 2,
-        simultaneousP2PDownloads: 3,
-        highDemandTimeWindow: 15,
-        httpDownloadTimeWindow: 3000,
-        p2pDownloadTimeWindow: 6000,
-      },
-    });
-    engine.bindHls(hls);
-  };
+  let 当前查看器会话: 全局唯一播放器查看器会话 | null = null;
 
   try {
-    const shell结果 = 创建VideoJs播放器壳(映射VideoJs播放源(item), {
+    同步Hls增强视频项目(item);
+    当前查看器会话 = await playerOwner.接管查看器({
+      attachmentId: item.attachmentId,
       mountTarget: mount,
-      挂接P2PHls增强层,
+      source: 映射VideoJs播放源(item),
+      回调: {
+        广播媒体会话信号: (signal) => {
+          hooks.发出媒体会话信号(item.attachmentId, signal);
+        },
+      },
     });
-    const shell: VideoJs播放器壳实例 = 看起来像Promise(shell结果)
-      ? await shell结果
-      : shell结果;
-    const video = shell.读取视频元素();
-    const container = shell.读取容器元素();
-    const 重新绑定媒体运行时信号 = (attachmentId: string): void => {
-      解绑媒体运行时信号();
-      解绑媒体运行时信号 = 绑定媒体运行时信号(video, attachmentId, hooks);
-    };
-    重新绑定媒体运行时信号(item.attachmentId);
+    const video = 当前查看器会话.读取视频元素();
+    const container = 当前查看器会话.读取容器元素();
+    if (!video || !container) {
+      throw new Error("全局唯一播放器未能返回可用的 Video.js 宿主表面");
+    }
 
     const cleanup = (): void => {
       if (cleaned) {
@@ -683,10 +618,9 @@ const 创建默认VideoJs播放器层 = async (
       closeButton.removeEventListener("click", 请求关闭);
       overlay.removeEventListener("click", closeWhenClickingBackdrop);
       document.removeEventListener("keydown", closeWhenPressingEscape);
-      解绑媒体运行时信号();
       清理全屏策略.清理();
+      当前查看器会话?.关闭();
       video.pause();
-      shell.destroy();
       overlay.remove();
       lifecycle.结束视口占用();
     };
@@ -719,7 +653,7 @@ const 创建默认VideoJs播放器层 = async (
         () => 当前视频项目,
         container,
         video,
-        () => shell.进入全屏(),
+        () => 当前查看器会话?.进入全屏() ?? Promise.resolve("unsupported"),
         cleanup,
         {
           同步沉浸查看器显示阶段,
@@ -739,17 +673,23 @@ const 创建默认VideoJs播放器层 = async (
         if (nextItem.kind !== "video") {
           return;
         }
-        if (当前视频项目.attachmentId !== nextItem.attachmentId) {
-          重新绑定媒体运行时信号(nextItem.attachmentId);
-        }
         当前视频项目 = nextItem;
-        shell.同步(映射VideoJs播放源(nextItem));
+        同步Hls增强视频项目(nextItem);
+        void 当前查看器会话?.同步({
+          attachmentId: nextItem.attachmentId,
+          source: 映射VideoJs播放源(nextItem),
+          回调: {
+            广播媒体会话信号: (signal) => {
+              hooks.发出媒体会话信号(nextItem.attachmentId, signal);
+            },
+          },
+        });
       },
       destroy: cleanup,
     };
   } catch (error) {
-    解绑媒体运行时信号();
     清理全屏策略.清理();
+    当前查看器会话?.关闭();
     overlay.remove();
     lifecycle.结束视口占用();
     throw error;
@@ -761,22 +701,52 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
    * 提前把 Video.js 自定义元素注册好，避免用户首次点击视频时才触发动态 import，
    * 导致壳创建跨出手势窗口、后续容器全屏请求被浏览器按“无激活”拒绝。
    */
-  if (typeof VideoJs播放器壳模块.预热默认VideoJs元素 === "function") {
-    void VideoJs播放器壳模块.预热默认VideoJs元素().catch(() => undefined);
-  }
+  void 预热默认VideoJs元素().catch(() => undefined);
   const createPhotoSwipeLightbox =
     deps.createPhotoSwipeLightbox ?? 创建默认PhotoSwipeLightbox;
-  const createVideoJsPlayerShell =
-    deps.createVideoJsPlayerShell ??
-    ((item, lifecycle, hooks) =>
-      创建默认VideoJs播放器层(item, lifecycle, hooks, {
+  const globalVideoPlayer =
+    deps.globalVideoPlayer ??
+    (deps.createVideoJsPlayerShell
+      ? 创建全局唯一播放器({
+          createVideoJsPlayerShell: deps.createVideoJsPlayerShell,
+        })
+      : 读取默认全局唯一播放器());
+  let 当前Hls增强视频项目: 媒体查看器视频项目 | null = null;
+  const 同步Hls增强视频项目 = (item: 媒体查看器视频项目): void => {
+    当前Hls增强视频项目 = item;
+  };
+  const 挂接P2PHls增强层 = async ({ hls }: 壳外P2PHls增强层输入): Promise<void> => {
+    /**
+     * `p2p-media-loader-hlsjs` 在这里始终只是 HLS 支路的外挂增强：
+     * 1. 真正的播放 owner 仍然是外层媒体会话和唯一 Video.js 壳；
+     * 2. 壳工厂会被 room pane 和 viewer 共享，所以增强参数必须从“当前查看器视频项目”这条窄上下文读取；
+     * 3. 是否成功挂上只影响带宽协作，不影响 HLS 首播真相。
+     */
+    const { HlsJsP2PEngine } = await import("p2p-media-loader-hlsjs");
+    const engine = new HlsJsP2PEngine({
+      core: {
         /**
-         * 从消息流显式打开正式视频查看器，本身就是“进入沉浸观看”的明确用户意图。
-         * 真全屏不该只在移动端成立；桌面端也沿同一条容器 owner 链尝试系统 fullscreen，
-         * 失败时再自然回落到同一个查看器表面，而不是另起一套“桌面放大卡片”的假分支。
+         * 这里显式传一遍正式主链认可的核心参数，而不是默默吃库默认值：
+         * 1. announceTrackers 必须跟当前流媒体分发表面一致，避免 HLS P2P 另走野 tracker；
+         * 2. 时间窗/并发阈值沿用官方默认推荐值，保持“库升级后行为仍可审计”；
+         * 3. 这些都只是 HLS 支路增强参数，不会把 `p2p-media-loader` 升级成新的 owner。
          */
-        shouldAutoEnterFullscreen: true,
-      }));
+        announceTrackers: 当前Hls增强视频项目?.streamingDistribution?.announce_urls ?? [],
+        simultaneousHttpDownloads: 2,
+        simultaneousP2PDownloads: 3,
+        highDemandTimeWindow: 15,
+        httpDownloadTimeWindow: 3000,
+        p2pDownloadTimeWindow: 6000,
+      },
+    });
+    engine.bindHls(hls);
+  };
+  globalVideoPlayer.配置壳工厂((source, shellDeps = {}) =>
+    (deps.createVideoJsPlayerShell ?? 创建VideoJs播放器壳)(source, {
+      ...shellDeps,
+      挂接P2PHls增强层,
+    })
+  );
   let current: 媒体查看器实例 | null = null;
   let openGeneration = 0;
   let 正在占用聊天视口 = false;
@@ -1023,7 +993,21 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
 
     接管当前查看器(
       generation,
-      createVideoJsPlayerShell(startItem, 视口占用生命周期, 运行时钩子)
+      创建默认VideoJs播放器层(
+        startItem,
+        视口占用生命周期,
+        运行时钩子,
+        globalVideoPlayer,
+        同步Hls增强视频项目,
+        {
+          /**
+           * 从消息流显式打开正式视频查看器，本身就是“进入沉浸观看”的明确用户意图。
+           * 真全屏不该只在移动端成立；桌面端也沿同一条容器 owner 链尝试系统 fullscreen，
+           * 失败时再自然回落到同一个查看器表面，而不是另起一套“桌面放大卡片”的假分支。
+           */
+          shouldAutoEnterFullscreen: true,
+        }
+      )
     );
   };
 

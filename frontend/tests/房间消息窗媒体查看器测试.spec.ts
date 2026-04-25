@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放";
 import type { 媒体查看器打开请求 } from "../媒体/媒体查看器";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
+import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
 import type { 房间消息窗 } from "../房间消息窗";
 import type { 消息展示项 } from "../视图";
 import "../房间消息窗";
@@ -193,6 +194,41 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
 });
 
 const 创建媒体消息窗 = (): 房间消息窗 => {
+  const 全局唯一播放器 = 读取默认全局唯一播放器();
+  全局唯一播放器.销毁();
+  全局唯一播放器.配置壳工厂((initialSource, deps = {}) => {
+    const video = document.createElement("video");
+    const container = document.createElement("div");
+    const 挂载到宿主 = (mountTarget: HTMLElement): void => {
+      mountTarget.append(container);
+      if (!container.contains(video)) {
+        container.append(video);
+      }
+    };
+    const 同步源 = (source = initialSource): void => {
+      video.src = source.src;
+      if (source.posterSrc) {
+        video.poster = source.posterSrc;
+      } else {
+        video.removeAttribute("poster");
+      }
+    };
+    if (deps.mountTarget) {
+      挂载到宿主(deps.mountTarget);
+    }
+    同步源(initialSource);
+    return {
+      destroy() {
+        video.pause();
+        container.remove();
+      },
+      同步: 同步源,
+      挂载到宿主,
+      进入全屏: async () => "standard",
+      读取视频元素: () => video,
+      读取容器元素: () => container,
+    };
+  });
   // 阶段 0 的保护测试共用同一条“图片 + 视频”消息，防止两条入口的 fixture 漂移。
   const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
   pane.items = [创建媒体消息项()];
@@ -756,7 +792,8 @@ describe("房间消息窗媒体查看器", () => {
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).toBe(beforeOwnerVideo);
+    expect(ownerVideo).not.toBe(beforeOwnerVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
 
@@ -1031,7 +1068,8 @@ describe("房间消息窗媒体查看器", () => {
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).toBe(beforeOwnerVideo);
+    expect(ownerVideo).not.toBe(beforeOwnerVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.autoplay).toBe(true);
     expect(ownerVideo?.getAttribute("poster")).toBeNull();
     expect(pane.querySelector(".message-video-play-indicator")).toBeNull();
@@ -1100,7 +1138,8 @@ describe("房间消息窗媒体查看器", () => {
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).toBe(previewVideo);
+    expect(ownerVideo).not.toBe(previewVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
 
@@ -1113,7 +1152,8 @@ describe("房间消息窗媒体查看器", () => {
     const releasedVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(releasedVideo).toBe(ownerVideo);
+    expect(releasedVideo).not.toBe(ownerVideo);
+    expect(releasedVideo?.dataset.canonicalPlayer).toBeUndefined();
     expect(releasedVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(releasedVideo?.autoplay).toBe(false);
     expect(pane.querySelector(".message-video-play-indicator")).not.toBeNull();
@@ -1182,7 +1222,8 @@ describe("房间消息窗媒体查看器", () => {
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).toBe(beforeOwnerVideo);
+    expect(ownerVideo).not.toBe(beforeOwnerVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
 
@@ -1228,11 +1269,9 @@ describe("房间消息窗媒体查看器", () => {
     expect(beforeOwnerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(beforeOwnerVideo?.autoplay).toBe(false);
 
-    const playSpy = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
-    Object.defineProperty(beforeOwnerVideo!, "play", {
-      configurable: true,
-      value: playSpy,
-    });
+    const playSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
 
     (pane as 房间消息窗 & {
       inlineAutoplayOwnerAttachmentId: string | null;
@@ -1256,11 +1295,13 @@ describe("房间消息窗媒体查看器", () => {
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).toBe(beforeOwnerVideo);
+    expect(ownerVideo).not.toBe(beforeOwnerVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
     expect(playSpy).toHaveBeenCalledTimes(1);
 
+    playSpy.mockRestore();
     pane.remove();
   });
 
@@ -1339,7 +1380,7 @@ describe("房间消息窗媒体查看器", () => {
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
     expect(afterRemountVideo).not.toBeNull();
-    expect(afterRemountVideo).not.toBe(beforeRemountVideo);
+    expect(afterRemountVideo).toBe(beforeRemountVideo);
     afterRemountVideo!.dispatchEvent(new Event("loadedmetadata"));
 
     expect(afterRemountVideo!.currentTime).toBeCloseTo(18.25, 2);
@@ -1717,7 +1758,8 @@ describe("房间消息窗媒体查看器", () => {
     const releasedVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(releasedVideo).toBe(ownerVideo);
+    expect(releasedVideo).not.toBe(ownerVideo);
+    expect(releasedVideo?.dataset.canonicalPlayer).toBeUndefined();
     expect(releasedVideo?.autoplay).toBe(false);
     expect(releasedVideo?.getAttribute("src")).toBe(playback.src);
 
@@ -1727,7 +1769,8 @@ describe("房间消息窗媒体查看器", () => {
     const reacquiredVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(reacquiredVideo).toBe(ownerVideo);
+    expect(reacquiredVideo).not.toBe(releasedVideo);
+    expect(reacquiredVideo?.dataset.canonicalPlayer).toBe("true");
     expect(reacquiredVideo?.autoplay).toBe(true);
     expect(reacquiredVideo?.getAttribute("src")).toBe(playback.src);
 
@@ -1834,10 +1877,12 @@ describe("房间消息窗媒体查看器", () => {
     const secondOwnerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-2"]'
     );
-    expect(firstReleasedVideo).toBe(firstOwnerVideo);
+    expect(firstReleasedVideo).not.toBe(firstOwnerVideo);
+    expect(firstReleasedVideo?.dataset.canonicalPlayer).toBeUndefined();
     expect(firstReleasedVideo?.autoplay).toBe(false);
     expect(firstReleasedVideo?.getAttribute("src")).toBe(playback1.src);
-    expect(secondOwnerVideo).toBe(secondPreviewVideo);
+    expect(secondOwnerVideo).not.toBe(secondPreviewVideo);
+    expect(secondOwnerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(secondOwnerVideo?.autoplay).toBe(true);
     expect(secondOwnerVideo?.getAttribute("src")).toBe(playback2.src);
 
@@ -1928,7 +1973,8 @@ describe("房间消息窗媒体查看器", () => {
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).toBe(readyPreviewVideo);
+    expect(ownerVideo).not.toBe(readyPreviewVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("poster")).toBeNull();
     expect(ownerVideo?.autoplay).toBe(true);
 
@@ -2061,7 +2107,8 @@ describe("房间消息窗媒体查看器", () => {
     const ownerVideo = pane.querySelector<HTMLVideoElement>(
       'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(ownerVideo).toBe(previewVideo);
+    expect(ownerVideo).not.toBe(previewVideo);
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.autoplay).toBe(true);
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
@@ -2876,7 +2923,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("点击当前自动播 owner 视频时，会直接接管同一颗时间线 video 进入全屏，而不是继续回抛查看器冷开请求", async () => {
+  it("点击当前自动播 owner 视频时，也只回抛统一查看器意图，不再让消息窗直接接管原生全屏", async () => {
     const { requestFullscreen, exitFullscreen, restore } = 安装消息窗直达全屏模拟();
     const pane = 创建媒体消息窗();
     pane.items = [
@@ -2940,23 +2987,25 @@ describe("房间消息窗媒体查看器", () => {
       trigger?.click();
       await pane.updateComplete;
 
-      expect(details).toHaveLength(0);
-      expect(requestFullscreen).toHaveBeenCalledTimes(1);
-      expect(requestFullscreen.mock.instances.at(0)).toBe(preview);
-      expect(document.fullscreenElement).toBe(preview);
+      /**
+       * 当前自动播 owner 也必须走统一查看器入口：
+       * 1. 消息窗只负责表达用户意图，不再自己抓原生 `<video>` 去 requestFullscreen；
+       * 2. 后续是否复用同一颗 canonical Video.js player，由壳层/唯一播放器 owner 决定；
+       * 3. 这样才能删掉“当前 owner 一条路、非 owner 另一条路”的双轨真相。
+       */
+      expect(details).toHaveLength(1);
+      expect(details[0]?.startAttachmentId).toBe("att-video-1");
+      expect(requestFullscreen).toHaveBeenCalledTimes(0);
+      expect(document.fullscreenElement).toBeNull();
       expect(
         pane.querySelectorAll('video.message-video-preview[data-attachment-id="att-video-1"]')
       ).toHaveLength(1);
-      expect(preview?.controls).toBe(true);
-      expect(preview?.muted).toBe(false);
-      expect(preview?.loop).toBe(false);
-
-      await exitFullscreen();
-      await pane.updateComplete;
-
       expect(preview?.controls).toBe(false);
       expect(preview?.muted).toBe(true);
       expect(preview?.loop).toBe(true);
+
+      await exitFullscreen();
+      await pane.updateComplete;
     } finally {
       pane.remove();
       restore();

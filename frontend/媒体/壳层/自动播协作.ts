@@ -1,5 +1,5 @@
 import type { 媒体运行时上下文, 媒体运行时事件 } from "../../媒体运行时.js";
-import type { 媒体播放结果 } from "../index.js";
+import type { 媒体会话快照, 媒体播放结果 } from "../index.js";
 
 type 媒体附件条目 = {
   attachmentId: string;
@@ -15,6 +15,7 @@ type 媒体播放释放请求 = {
 type 自动播协作依赖 = {
   读取媒体运行时上下文(): 媒体运行时上下文;
   读取附件条目(attachmentId: string): 媒体附件条目 | null;
+  读取媒体会话快照(attachmentId: string): 媒体会话快照 | null;
   接收媒体运行时事实(event: 媒体运行时事件): void;
   解析播放结果(input: {
     attachmentId: string;
@@ -103,6 +104,21 @@ export function 创建自动播协作(deps: 自动播协作依赖): 自动播协
       return;
     }
     const 当前代次 = ++自动播解析代次;
+    const 热会话播放结果 = deps.读取媒体会话快照(attachmentId)?.playback;
+    if (热会话播放结果?.kind === "video" && 热会话播放结果.mode === "swarm") {
+      /**
+       * 当前附件的正式媒体会话已经拿到 swarm 主链时，自动播 owner 只是在消息流里接管同一条热真相：
+       * 1. 不该再用 `inline_autoplay` consumer 额外解析一次同源播放结果；
+       * 2. 这样点击放大时，viewer 才能继续沿用这条热会话，而不是在“会话已热、自动播再热”之间抖动；
+       * 3. 这里只对 swarm 复用，其他 surface 仍保留原来的自动播裁决分支，避免把 anchor/manifest 误投到时间线自动播。
+       */
+      deps.接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+        attachmentId,
+        playback: 热会话播放结果,
+      });
+      return;
+    }
     deps.接收媒体运行时事实({
       type: "INLINE_AUTOPLAY_PLAYBACK_FAILED",
       attachmentId,

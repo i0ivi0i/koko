@@ -2,6 +2,12 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { 创建媒体查看器, type 媒体查看器依赖 } from "../媒体/媒体查看器";
+import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
+import type {
+  VideoJs全屏进入结果,
+  VideoJs播放器壳实例,
+  VideoJs播放器源描述,
+} from "../媒体/videojs播放器壳";
 
 const 安装方向模拟 = () => {
   const lock = vi.fn(() => Promise.resolve());
@@ -287,6 +293,60 @@ const 创建测试VideoJs进入全屏 = (container: HTMLElement) =>
     return "unsupported" as const;
   });
 
+const 创建测试VideoJs播放器壳 = (options: {
+  mountTarget?: HTMLElement;
+  video?: HTMLVideoElement;
+  container?: HTMLElement;
+  同步?: (source: VideoJs播放器源描述) => void;
+  destroy?: () => void;
+  进入全屏?: () => Promise<VideoJs全屏进入结果>;
+  初始源?: VideoJs播放器源描述;
+} = {}): VideoJs播放器壳实例 => {
+  const video = options.video ?? document.createElement("video");
+  const container = options.container ?? document.createElement("div");
+  const 外部同步回调 = options.同步 ?? vi.fn<(source: VideoJs播放器源描述) => void>();
+  const destroy = options.destroy ?? vi.fn<() => void>();
+  const 进入全屏 = options.进入全屏 ?? 创建测试VideoJs进入全屏(container);
+  /**
+   * 测试壳也要尽量贴近真实壳语义：
+   * 1. 同步播放源时直接驱动唯一 video 的 src/poster；
+   * 2. 外部传进来的 spy 只负责观测，不替代真实 DOM 变化；
+   * 3. 这样 pending/open/sync 测试就不会因为测试替身过于空心而误判实现。
+   */
+  const 应用测试播放源 = (source: VideoJs播放器源描述): void => {
+    video.src = source.src;
+    if (source.posterSrc) {
+      video.poster = source.posterSrc;
+    } else {
+      video.removeAttribute("poster");
+    }
+  };
+  const 同步 = (source: VideoJs播放器源描述): void => {
+    应用测试播放源(source);
+    外部同步回调(source);
+  };
+  const 挂载到宿主 = (mountTarget: HTMLElement): void => {
+    mountTarget.append(container);
+    if (!container.contains(video)) {
+      container.append(video);
+    }
+  };
+  if (options.mountTarget) {
+    挂载到宿主(options.mountTarget);
+  }
+  if (options.初始源) {
+    应用测试播放源(options.初始源);
+  }
+  return {
+    destroy,
+    同步,
+    挂载到宿主,
+    进入全屏,
+    读取视频元素: () => video,
+    读取容器元素: () => container,
+  };
+};
+
 const 等待查询元素 = async <T extends Element>(
   selector: string,
   maxAttempts = 30
@@ -301,8 +361,20 @@ const 等待查询元素 = async <T extends Element>(
   return document.body.querySelector<T>(selector);
 };
 
+const 等待查看器任务完成 = async (turns = 4): Promise<void> => {
+  /**
+   * 唯一播放器现在允许异步建壳/接管。
+   * 这些等待点只负责让测试追上真实 owner 链的微任务结算，
+   * 不改变任何运行时行为。
+   */
+  for (let turn = 0; turn < turns; turn += 1) {
+    await Promise.resolve();
+  }
+};
+
 describe("媒体查看器适配器", () => {
   afterEach(() => {
+    读取默认全局唯一播放器().销毁();
     vi.restoreAllMocks();
     document.body.replaceChildren();
     Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
@@ -322,7 +394,7 @@ describe("媒体查看器适配器", () => {
       loadAndOpen,
       destroy,
     }));
-    const createVideoJsPlayerShell = vi.fn(() => ({ destroy: vi.fn(), 同步: vi.fn() }));
+    const createVideoJsPlayerShell = vi.fn(() => 创建测试VideoJs播放器壳());
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
       createVideoJsPlayerShell,
@@ -395,7 +467,7 @@ describe("媒体查看器适配器", () => {
     }));
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
-      createVideoJsPlayerShell: vi.fn(() => ({ destroy: vi.fn(), 同步: vi.fn() })),
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
       onMediaSessionSignal: (attachmentId, signal) => {
         信号记录.push({ attachmentId, signal });
       },
@@ -457,7 +529,7 @@ describe("媒体查看器适配器", () => {
       createPhotoSwipeLightbox: () => {
         throw error;
       },
-      createVideoJsPlayerShell: vi.fn(() => ({ destroy: vi.fn(), 同步: vi.fn() })),
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
       onViewportCaptureStart,
       onViewportCaptureEnd,
     });
@@ -491,10 +563,7 @@ describe("媒体查看器适配器", () => {
       loadAndOpen: vi.fn(),
       destroy: vi.fn(),
     }));
-    const createVideoJsPlayerShell = vi.fn(() => ({
-      destroy: vi.fn(),
-      同步: vi.fn(),
-    }));
+    const createVideoJsPlayerShell = vi.fn(() => 创建测试VideoJs播放器壳());
     const viewer = 创建媒体查看器({
       createPhotoSwipeLightbox,
       createVideoJsPlayerShell,
@@ -580,15 +649,13 @@ describe("媒体查看器适配器", () => {
         });
         container = document.createElement("div");
         container.className = "fake-videojs-container";
-        (deps?.mountTarget ?? document.body).append(container, video);
         进入全屏 = 创建测试VideoJs进入全屏(container);
-        return {
-          destroy: vi.fn(),
-          同步: vi.fn(),
-          读取视频元素: () => video,
-          读取容器元素: () => container,
+        return 创建测试VideoJs播放器壳({
+          video,
+          container,
+          mountTarget: deps?.mountTarget ?? document.body,
           进入全屏,
-        };
+        });
       }
     );
     vi.doMock("../媒体/videojs播放器壳", () => ({
@@ -638,14 +705,12 @@ describe("媒体查看器适配器", () => {
         });
         const container = document.createElement("div");
         container.className = "fake-desktop-container";
-        (deps?.mountTarget ?? document.body).append(container, video);
-        return {
-          destroy: vi.fn(),
-          同步: vi.fn(),
-          读取视频元素: () => video,
-          读取容器元素: () => container,
+        return 创建测试VideoJs播放器壳({
+          video,
+          container,
+          mountTarget: deps?.mountTarget ?? document.body,
           进入全屏: 创建测试VideoJs进入全屏(container),
-        };
+        });
       }
     );
     vi.doMock("../媒体/videojs播放器壳", () => ({
@@ -734,10 +799,7 @@ describe("媒体查看器适配器", () => {
   });
 
   it("manifest 视频也会进入同一个 Video.js 壳，不再单独拉起 HLS overlay", async () => {
-    const createVideoJsPlayerShell = vi.fn(() => ({
-      destroy: vi.fn(),
-      同步: vi.fn(),
-    }));
+    const createVideoJsPlayerShell = vi.fn(() => 创建测试VideoJs播放器壳());
     const viewer = 创建媒体查看器({
       createVideoJsPlayerShell,
       isMobileViewport: () => false,
@@ -759,15 +821,12 @@ describe("媒体查看器适配器", () => {
 
     expect(createVideoJsPlayerShell).toHaveBeenCalledWith(
       expect.objectContaining({
-        attachmentId: "att-video-manifest-1",
+        kind: "hls",
         src: "http://media.local/stream/att-video-manifest-1/master.m3u8",
       }),
       expect.objectContaining({
-        开始视口占用: expect.any(Function),
-        结束视口占用: expect.any(Function),
-      }),
-      expect.objectContaining({
-        发出媒体会话信号: expect.any(Function),
+        mountTarget: expect.any(HTMLElement),
+        挂接P2PHls增强层: expect.any(Function),
       })
     );
   });
@@ -777,13 +836,11 @@ describe("媒体查看器适配器", () => {
     const 创建VideoJs播放器壳 = vi.fn(async (_source?: unknown, _deps?: Record<string, unknown>) => {
       const video = document.createElement("video");
       const container = document.createElement("div");
-      return {
-        destroy: vi.fn(),
-        同步: vi.fn(),
-        读取视频元素: () => video,
-        读取容器元素: () => container,
+      return 创建测试VideoJs播放器壳({
+        video,
+        container,
         进入全屏: 创建测试VideoJs进入全屏(container),
-      };
+      });
     });
     vi.doMock("../媒体/videojs播放器壳", () => ({
       创建VideoJs播放器壳,
@@ -830,13 +887,11 @@ describe("媒体查看器适配器", () => {
     const 创建VideoJs播放器壳 = vi.fn(async (_source?: unknown, _deps?: Record<string, unknown>) => {
       const video = document.createElement("video");
       const container = document.createElement("div");
-      return {
-        destroy: vi.fn(),
-        同步: vi.fn(),
-        读取视频元素: () => video,
-        读取容器元素: () => container,
+      return 创建测试VideoJs播放器壳({
+        video,
+        container,
         进入全屏: 创建测试VideoJs进入全屏(container),
-      };
+      });
     });
     const bindHls = vi.fn();
     const HlsJsP2PEngine = vi.fn(
@@ -935,6 +990,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     const video = await 等待查询元素<HTMLVideoElement>("video");
+    await 等待查看器任务完成();
     expect(video).not.toBeNull();
 
     video?.dispatchEvent(new Event("waiting"));
@@ -956,6 +1012,7 @@ describe("媒体查看器适配器", () => {
         },
       ],
     });
+    await 等待查看器任务完成();
 
     expect(video?.src).toBe("blob:http://media.local/video-sync-new");
     expect(video?.poster).toBe("http://media.local/poster-sync-new");
@@ -1060,6 +1117,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
 
     const video = document.body.querySelector("video");
     const mediaContainer = 读取VideoJs媒体容器();
@@ -1114,13 +1172,13 @@ describe("媒体查看器适配器", () => {
             });
             const container = document.createElement("div");
             container.className = "fake-mobile-container";
-            (deps?.mountTarget ?? document.body).append(container, video);
             resolve({
-              destroy: vi.fn(),
-              同步: vi.fn(),
-              读取视频元素: () => video,
-              读取容器元素: () => container,
-              进入全屏: 创建测试VideoJs进入全屏(container),
+              ...创建测试VideoJs播放器壳({
+                video,
+                container,
+                mountTarget: deps?.mountTarget ?? document.body,
+                进入全屏: 创建测试VideoJs进入全屏(container),
+              }),
             });
           });
         })
@@ -1157,8 +1215,7 @@ describe("媒体查看器适配器", () => {
     expect(document.body.querySelector("[data-media-viewer-mount='video']")).not.toBeNull();
 
     延迟壳解析器.at(0)?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    await 等待查看器任务完成();
 
     const container = document.body.querySelector<HTMLElement>(".fake-mobile-container");
     expect(container).not.toBeNull();
@@ -1183,13 +1240,13 @@ describe("媒体查看器适配器", () => {
             });
             const container = document.createElement("div");
             container.className = "fake-mobile-container";
-            (deps?.mountTarget ?? document.body).append(container, video);
             resolve({
-              destroy: vi.fn(),
-              同步: vi.fn(),
-              读取视频元素: () => video,
-              读取容器元素: () => container,
-              进入全屏: 创建测试VideoJs进入全屏(container),
+              ...创建测试VideoJs播放器壳({
+                video,
+                container,
+                mountTarget: deps?.mountTarget ?? document.body,
+                进入全屏: 创建测试VideoJs进入全屏(container),
+              }),
             });
           });
         })
@@ -1232,8 +1289,7 @@ describe("媒体查看器适配器", () => {
       ).toBeNull();
 
       延迟壳解析器.at(0)?.();
-      await Promise.resolve();
-      await Promise.resolve();
+      await 等待查看器任务完成();
 
       const container = document.body.querySelector<HTMLElement>(".fake-mobile-container");
       expect(container).not.toBeNull();
@@ -1304,6 +1360,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
 
     expect(webkitEnterFullscreen).toHaveBeenCalledTimes(1);
     expect(document.body.querySelector("[data-media-viewer-mount='video']")).not.toBeNull();
@@ -1347,6 +1404,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
     const 已打开视频 = document.body.querySelector<HTMLVideoElement>("video");
 
     expect(webkitEnterFullscreen).toHaveBeenCalledTimes(1);
@@ -1403,6 +1461,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
 
     document.body
       .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
@@ -1436,6 +1495,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
 
     const container = 读取VideoJs媒体容器();
     expect(container).not.toBeNull();
@@ -1474,7 +1534,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
-    await Promise.resolve();
+    await 等待查看器任务完成();
     expect(document.body.querySelector("video")).not.toBeNull();
 
     window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
@@ -1512,6 +1572,7 @@ describe("媒体查看器适配器", () => {
     });
 
     await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
 
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
     expect(document.fullscreenElement?.tagName).toBe("KOKO-VIDEO-SKIN");
@@ -1540,13 +1601,13 @@ describe("媒体查看器适配器", () => {
             });
             const container = document.createElement("div");
             container.className = "fake-mobile-container";
-            (deps?.mountTarget ?? document.body).append(container, video);
             resolve({
-              destroy: vi.fn(),
-              同步: vi.fn(),
-              读取视频元素: () => video,
-              读取容器元素: () => container,
-              进入全屏: 创建测试VideoJs进入全屏(container),
+              ...创建测试VideoJs播放器壳({
+                video,
+                container,
+                mountTarget: deps?.mountTarget ?? document.body,
+                进入全屏: 创建测试VideoJs进入全屏(container),
+              }),
             });
           });
         })
@@ -1576,15 +1637,14 @@ describe("媒体查看器适配器", () => {
     });
     expect(requestFullscreen).toHaveBeenCalledTimes(0);
     延迟壳解析器.at(0)?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    await 等待查看器任务完成();
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
-    document.body
-      .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
-      ?.click();
-    await Promise.resolve();
-    await Promise.resolve();
+    const closeButton = await 等待查询元素<HTMLButtonElement>(
+      'button[aria-label="关闭视频查看器"]'
+    );
+    closeButton?.click();
+    await 等待查看器任务完成(6);
 
     viewer.打开({
       startAttachmentId: "att-video-mobile-reopen-2",
@@ -1601,10 +1661,10 @@ describe("媒体查看器适配器", () => {
     });
 
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(2);
 
     延迟壳解析器.at(1)?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    await 等待查看器任务完成(6);
     expect(requestFullscreen).toHaveBeenCalledTimes(2);
     expect(document.body.querySelector('[aria-label="视频查看器"]')).not.toBeNull();
   });
@@ -1620,13 +1680,13 @@ describe("媒体查看器适配器", () => {
         });
         const container = document.createElement("div");
         container.className = "fake-mobile-container";
-        (deps?.mountTarget ?? document.body).append(container, video);
         return Promise.resolve({
-          destroy: vi.fn(),
-          同步: vi.fn(),
-          读取视频元素: () => video,
-          读取容器元素: () => container,
-          进入全屏: 创建测试VideoJs进入全屏(container),
+          ...创建测试VideoJs播放器壳({
+            video,
+            container,
+            mountTarget: deps?.mountTarget ?? document.body,
+            进入全屏: 创建测试VideoJs进入全屏(container),
+          }),
         });
       }
     );
@@ -1653,8 +1713,7 @@ describe("媒体查看器适配器", () => {
         },
       ],
     });
-    await Promise.resolve();
-    await Promise.resolve();
+    await 等待查看器任务完成();
 
     document.body
       .querySelector<HTMLButtonElement>('button[aria-label="关闭视频查看器"]')
@@ -1674,8 +1733,7 @@ describe("媒体查看器适配器", () => {
         },
       ],
     });
-    await Promise.resolve();
-    await Promise.resolve();
+    await 等待查看器任务完成();
 
     expect(创建VideoJs播放器壳).toHaveBeenCalledTimes(2);
     expect(document.body.querySelectorAll('[aria-label="视频查看器"]')).toHaveLength(1);
@@ -1757,13 +1815,13 @@ describe("媒体查看器适配器", () => {
             });
             const container = document.createElement("div");
             container.className = "fake-mobile-container";
-            (deps?.mountTarget ?? document.body).append(container, video);
             resolve({
-              destroy: vi.fn(),
-              同步: vi.fn(),
-              读取视频元素: () => video,
-              读取容器元素: () => container,
-              进入全屏: 创建测试VideoJs进入全屏(container),
+              ...创建测试VideoJs播放器壳({
+                video,
+                container,
+                mountTarget: deps?.mountTarget ?? document.body,
+                进入全屏: 创建测试VideoJs进入全屏(container),
+              }),
             });
           });
         })
@@ -1793,8 +1851,7 @@ describe("媒体查看器适配器", () => {
     });
     expect(requestFullscreen).toHaveBeenCalledTimes(0);
     延迟壳解析器.at(0)?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    await 等待查看器任务完成();
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
     // 单 owner 下只会退出一次 container，全屏不会回落到第二层 overlay。
@@ -1813,13 +1870,15 @@ describe("媒体查看器适配器", () => {
     const 销毁 = vi.fn();
     type 测试视频壳工厂 = NonNullable<媒体查看器依赖["createVideoJsPlayerShell"]>;
     const createVideoJsPlayerShell: 测试视频壳工厂 = vi.fn(
-      (_item, _lifecycle, _hooks) =>
+      (_source, _deps) =>
         new Promise<Awaited<ReturnType<测试视频壳工厂>>>((resolve) => {
           延迟壳解析器.push(() =>
-            resolve({
-              destroy: 销毁,
-              同步,
-            })
+            resolve(
+              创建测试VideoJs播放器壳({
+                destroy: 销毁,
+                同步,
+              })
+            )
           );
         })
     );
@@ -1858,12 +1917,11 @@ describe("媒体查看器适配器", () => {
     expect(createVideoJsPlayerShell).toHaveBeenCalledTimes(1);
 
     延迟壳解析器.at(0)?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    await 等待查看器任务完成(6);
 
-    expect(同步).toHaveBeenCalledWith({
-      kind: "video",
-      attachmentId: "att-video-pending-open-1",
+    expect(同步).toHaveBeenCalledTimes(2);
+    expect(同步).toHaveBeenLastCalledWith({
+      kind: "file",
       src: "blob:http://media.local/pending-open-video-1-updated",
       posterSrc: "http://media.local/poster-pending-open-1-updated",
       width: 1280,
@@ -1891,14 +1949,15 @@ describe("媒体查看器适配器", () => {
       ],
     });
     await 等待查询元素("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
 
-    const closeButton = document.body.querySelector<HTMLButtonElement>(
+    const closeButton = await 等待查询元素<HTMLButtonElement>(
       'button[aria-label="关闭视频查看器"]'
     );
     expect(closeButton).not.toBeNull();
 
     closeButton?.click();
-    await Promise.resolve();
+    await 等待查看器任务完成();
 
     expect(document.body.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
     expect(document.body.querySelector("video")).toBeNull();
@@ -1917,6 +1976,7 @@ describe("媒体查看器适配器", () => {
       ],
     });
     const reopenedShell = await 等待查询元素<HTMLElement>("video-player[data-player-shell='videojs']");
+    await 等待查看器任务完成();
     const reopenedVideo = document.body.querySelector<HTMLVideoElement>("video");
 
     expect(reopenedShell).not.toBeNull();
