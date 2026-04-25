@@ -153,6 +153,26 @@ const 自动播播放位置相同 = (
   left?.currentTime === right?.currentTime &&
   left?.updatedAt === right?.updatedAt;
 
+const 自动播播放位置需要更新 = (
+  current: 媒体播放位置 | undefined,
+  next: 媒体播放位置
+): boolean => {
+  if (!current) {
+    return true;
+  }
+  /**
+   * `updatedAt` 是消息流续播位置的唯一排序锚点：
+   * - 当前时间会因为自然 loop、seek 或热接管而回到更小的数值；
+   * - 但更旧的 timeupdate 绝不能反过来覆盖更新的事实。
+   *
+   * 因此这里只接受“更晚”或“同一毫秒内的不同事实”。
+   */
+  if (next.updatedAt < current.updatedAt) {
+    return false;
+  }
+  return !自动播播放位置相同(current, next);
+};
+
 const 自动播播放位置表相同 = (
   left: Record<string, 媒体播放位置>,
   right: Record<string, 媒体播放位置>
@@ -472,7 +492,7 @@ const 媒体运行时机 = createMachine(
         }
         const currentPosition =
           context.inlineAutoplayPositionByAttachmentId[event.attachmentId];
-        if (自动播播放位置相同(currentPosition, nextPosition)) {
+        if (!自动播播放位置需要更新(currentPosition, nextPosition)) {
           return {};
         }
         /**

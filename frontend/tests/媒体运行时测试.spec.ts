@@ -232,6 +232,141 @@ describe("媒体运行时", () => {
     });
   });
 
+  it("离屏释放 owner 后重新成为自动播 owner 时，会继续沿用上次中断位置", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-resume-after-release-1",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-inline-resume-after-release-1",
+      position: {
+        src: "http://media.local/swarm-inline-resume-after-release-1",
+        currentTime: 18.25,
+        updatedAt: 1_000,
+      },
+    });
+
+    actor.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-resume-after-release-1",
+          visibilityRatio: 0.93,
+          distanceToViewportCenter: 12,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-inline-resume-after-release-1"
+    );
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-resume-after-release-1"
+      ]
+    ).toMatchObject({
+      src: "http://media.local/swarm-inline-resume-after-release-1",
+      currentTime: 18.25,
+    });
+  });
+
+  it("自然循环进入下一轮后，会接受更晚的 0.x 位置并忽略延迟到达的旧轮次时间戳", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-inline-loop-1",
+      position: {
+        src: "http://media.local/swarm-inline-loop-1",
+        currentTime: 58.5,
+        updatedAt: 1_000,
+      },
+    });
+    actor.send({
+      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-inline-loop-1",
+      position: {
+        src: "http://media.local/swarm-inline-loop-1",
+        currentTime: 0.35,
+        updatedAt: 2_000,
+      },
+    });
+    actor.send({
+      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-inline-loop-1",
+      position: {
+        src: "http://media.local/swarm-inline-loop-1",
+        currentTime: 58.75,
+        updatedAt: 1_500,
+      },
+    });
+
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-loop-1"
+      ]
+    ).toMatchObject({
+      currentTime: 0.35,
+      updatedAt: 2_000,
+    });
+  });
+
+  it("viewer 打开或生命周期降级释放 inline owner 时，不会清空 resume 资格", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-viewer-resume-1",
+          visibilityRatio: 0.92,
+          distanceToViewportCenter: 8,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-inline-viewer-resume-1",
+      position: {
+        src: "http://media.local/swarm-inline-viewer-resume-1",
+        currentTime: 26.5,
+        updatedAt: 1_000,
+      },
+    });
+
+    actor.send({
+      type: "VIEWER_OPEN_REQUESTED",
+      request: 创建视频查看器请求("att-video-inline-viewer-resume-1"),
+    });
+    actor.send({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "reduced",
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-viewer-resume-1"
+      ]
+    ).toMatchObject({
+      currentTime: 26.5,
+      updatedAt: 1_000,
+    });
+  });
+
   it("自动播播放位置会保留当前消息集合内的全部附件，不能因为超过固定上限丢失续播时间戳", () => {
     const actor = 创建媒体运行时Actor();
     const activeAttachmentIds = Array.from(

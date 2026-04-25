@@ -1477,6 +1477,59 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("自动播时间戳在同一秒内发生自然 loop 大跳变时，也会上报新的 0.x 事实", async () => {
+    const pane = 创建媒体消息窗();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(5_000);
+    const positionEvents: Array<
+      CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+    > = [];
+    const autoplayPlayback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    try {
+      pane.items = [创建媒体消息项()];
+      pane.addEventListener("room-inline-autoplay-position-changed", (event) => {
+        positionEvents.push(
+          event as CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+        );
+      });
+      pane.mediaPlaybackByAttachmentId = {
+        "att-video-1": autoplayPlayback,
+      };
+      pane.inlineAutoplayPlaybackByAttachmentId = {
+        "att-video-1": autoplayPlayback,
+      };
+      pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const ownerVideo = pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-1"]'
+      );
+      expect(ownerVideo).not.toBeNull();
+
+      ownerVideo!.currentTime = 58.5;
+      ownerVideo!.dispatchEvent(new Event("timeupdate"));
+      expect(positionEvents).toHaveLength(1);
+
+      nowSpy.mockReturnValue(5_200);
+      ownerVideo!.currentTime = 0.35;
+      ownerVideo!.dispatchEvent(new Event("timeupdate"));
+
+      expect(positionEvents).toHaveLength(2);
+      expect(positionEvents[1]?.detail.position.currentTime).toBeCloseTo(0.35, 2);
+    } finally {
+      nowSpy.mockRestore();
+      pane.remove();
+    }
+  });
+
   it("自动播 owner 释放时会在暂停前强制 flush 最新时间戳", async () => {
     const pane = 创建媒体消息窗();
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(3_000);

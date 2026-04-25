@@ -397,9 +397,15 @@ export class 房间消息窗 extends LitElement {
     if (
       !force &&
       last?.src === src &&
-      (now - last.reportedAt < 自动播时间戳常规上报最小间隔毫秒 ||
-        Math.abs(video.currentTime - last.currentTime) <
-          自动播时间戳常规上报最小变化秒)
+      /**
+       * 节流只负责吞掉“同一小段播放进度里的高频噪声”：
+       * - 时间很近但 currentTime 已经发生大跳变（例如自然 loop 回到 0.x、seek、热接管补位），
+       *   这类事实必须立刻上报，不能继续沿用上一轮时间戳；
+       * - 只有“时间很近且位移也很小”时，才说明这只是连续 timeupdate 噪声。
+       */
+      now - last.reportedAt < 自动播时间戳常规上报最小间隔毫秒 &&
+      Math.abs(video.currentTime - last.currentTime) <
+        自动播时间戳常规上报最小变化秒
     ) {
       return;
     }

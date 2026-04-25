@@ -434,6 +434,12 @@ describe("聊天媒体编排", () => {
 
     const viewerOpenCalls: Array<{ startAttachmentId: string; items: unknown[] }> = [];
     const viewerSyncCalls: Array<{ startAttachmentId: string; items: unknown[] }> = [];
+    const 抓取视频预览 = vi.fn(async () => ({
+      objectUrl: null,
+      source: "none" as const,
+      width: null,
+      height: null,
+    }));
 
     const 编排 = 创建聊天媒体编排({
       transport: () => transport,
@@ -445,12 +451,7 @@ describe("聊天媒体编排", () => {
       回收媒体草稿预览地址: () => {},
       登记程序滚动来源: () => {},
       清除程序滚动来源: () => {},
-      抓取视频预览: vi.fn(async () => ({
-        objectUrl: null,
-        source: "none" as const,
-        width: null,
-        height: null,
-      })),
+      抓取视频预览,
     });
 
     (
@@ -512,6 +513,7 @@ describe("聊天媒体编排", () => {
       src: swarmSrc,
     });
     expect(解析播放结果).toHaveBeenCalledTimes(1);
+    const 打开前预览抓取次数 = 抓取视频预览.mock.calls.length;
 
     编排.打开查看器({
       startAttachmentId: attachmentId,
@@ -535,6 +537,7 @@ describe("聊天媒体编排", () => {
      * 不能再触发一轮 recovering，把查看器 request 暂时投成 `src: ""`。
      */
     expect(解析播放结果).toHaveBeenCalledTimes(1);
+    expect(抓取视频预览).toHaveBeenCalledTimes(打开前预览抓取次数);
     expect(viewerOpenCalls).toHaveLength(1);
     expect(viewerOpenCalls[0]).toMatchObject({
       startAttachmentId: attachmentId,
