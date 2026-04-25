@@ -473,6 +473,7 @@ function Get-ListeningPortProcessRecords {
         $records += [pscustomobject]@{
             Port           = [int]$connection.LocalPort
             ProcessId      = [int]$connection.OwningProcess
+            LocalAddresses = @($group.Group | Select-Object -ExpandProperty LocalAddress -Unique)
             Name           = if ($process) { $process.Name } else { "" }
             ExecutablePath = if ($process) { $process.ExecutablePath } else { "" }
             CommandLine    = if ($process) { $process.CommandLine } else { "" }
@@ -480,6 +481,214 @@ function Get-ListeningPortProcessRecords {
     }
 
     return $records
+}
+
+function Test-NonLoopbackListenAddress {
+    param([string]$Address)
+
+    if ([string]::IsNullOrWhiteSpace($Address)) {
+        return $false
+    }
+
+    return $Address -notin @("127.0.0.1", "::1")
+}
+
+function Format-PortRecordSummary {
+    param($PortRecords)
+
+    $records = @($PortRecords)
+    if ($records.Count -eq 0) {
+        return "无监听进程"
+    }
+
+    return (($records | ForEach-Object {
+                $addresses = @($_.LocalAddresses | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+                $addressSummary = if ($addresses.Count -gt 0) { $addresses -join "/" } else { "unknown" }
+                "端口 $($_.Port) -> PID $($_.ProcessId) ($($_.Name)) 地址 $addressSummary"
+            }) -join "; ")
+}
+
+function Test-TcpPortBindable {
+    param(
+        [int]$Port,
+        [string]$BindAddress = "127.0.0.1"
+    )
+
+    if ($Port -le 0 -or [string]::IsNullOrWhiteSpace($BindAddress)) {
+        return $false
+    }
+
+    $listener = $null
+    try {
+        $ipAddress = [System.Net.IPAddress]::Parse($BindAddress)
+        $listener = [System.Net.Sockets.TcpListener]::new($ipAddress, $Port)
+        $listener.Server.ExclusiveAddressUse = $true
+        $listener.Start()
+        return $true
+    }
+    catch [System.Net.Sockets.SocketException] {
+        return $false
+    }
+    finally {
+        if ($listener) {
+            try {
+                $listener.Stop()
+            }
+            catch {
+                # 这里只做启动前探针，不让 Stop 失败反过来污染主链。
+            }
+        }
+    }
+}
+
+function Wait-PortsBindable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$PortBindings,
+        [int]$TimeoutSeconds = 20
+    )
+
+    $bindings = @($PortBindings | Where-Object {
+            $null -ne $_ -and
+            $_.PSObject.Properties.Name -contains "Port" -and
+            [int]$_.Port -gt 0
+        })
+    if ($bindings.Count -eq 0) {
+        return
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $blocked = @()
+    while ((Get-Date) -lt $deadline) {
+        $blocked = @()
+        foreach ($binding in $bindings) {
+            $bindAddress = if (
+                $binding.PSObject.Properties.Name -contains "BindAddress" -and
+                -not [string]::IsNullOrWhiteSpace($binding.BindAddress)
+            ) {
+                [string]$binding.BindAddress
+            }
+            else {
+                "127.0.0.1"
+            }
+
+            if (-not (Test-TcpPortBindable -Port ([int]$binding.Port) -BindAddress $bindAddress)) {
+                $blocked += [pscustomobject]@{
+                    Label       = if ($binding.PSObject.Properties.Name -contains "Label") { [string]$binding.Label } else { "" }
+                    Port        = [int]$binding.Port
+                    BindAddress = $bindAddress
+                }
+            }
+        }
+
+        if ($blocked.Count -eq 0) {
+            return
+        }
+
+        Start-Sleep -Milliseconds 300
+    }
+
+    $blockedMessages = foreach ($blockedBinding in $blocked) {
+        $records = @(Get-ListeningPortProcessRecords -Ports @($blockedBinding.Port))
+        $labelPrefix = if ([string]::IsNullOrWhiteSpace($blockedBinding.Label)) {
+            "端口 $($blockedBinding.Port)"
+        }
+        else {
+            "$($blockedBinding.Label) 端口 $($blockedBinding.Port)"
+        }
+
+        if ($records.Count -gt 0) {
+            "$labelPrefix 仍被占用（目标绑定 $($blockedBinding.BindAddress)）：$(Format-PortRecordSummary -PortRecords $records)"
+        }
+        else {
+            "$labelPrefix 在 $TimeoutSeconds 秒后仍不可绑定（目标绑定 $($blockedBinding.BindAddress)），但当前未发现活跃监听；通常是上一轮强杀后 socket 还没真正释放"
+        }
+    }
+    throw ($blockedMessages -join "；")
+}
+
+function Get-ManagedProcessFamilyProcessIds {
+    param([int]$RootProcessId)
+
+    if ($RootProcessId -le 0) {
+        return @()
+    }
+
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $seen = New-Object 'System.Collections.Generic.HashSet[int]'
+    $pending = New-Object 'System.Collections.Generic.Queue[int]'
+    [void]$seen.Add($RootProcessId)
+    $pending.Enqueue($RootProcessId)
+
+    while ($pending.Count -gt 0) {
+        $current = $pending.Dequeue()
+        foreach ($process in $processes) {
+            if ([int]$process.ParentProcessId -ne $current) {
+                continue
+            }
+
+            $childId = [int]$process.ProcessId
+            if ($seen.Add($childId)) {
+                $pending.Enqueue($childId)
+            }
+        }
+    }
+
+    return @($seen | Sort-Object)
+}
+
+function Wait-ManagedProcessPortReady {
+    param(
+        [Parameter(Mandatory = $true)]$ManagedProcess,
+        [Parameter(Mandatory = $true)][int]$Port,
+        [int]$TimeoutSeconds = 20,
+        [switch]$RequireNonLoopback
+    )
+
+    if ($null -eq $ManagedProcess -or $null -eq $ManagedProcess.Process) {
+        throw "缺少托管进程上下文，无法等待端口 $Port 就绪。"
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        Write-ManagedProcessLogs $ManagedProcess
+
+        $processFamilyIds = @(Get-ManagedProcessFamilyProcessIds -RootProcessId $ManagedProcess.Process.Id)
+        $records = @(Get-ListeningPortProcessRecords -Ports @($Port) | Where-Object {
+                $processFamilyIds -contains $_.ProcessId
+            })
+        if ($records.Count -gt 0) {
+            if (-not $RequireNonLoopback) {
+                return
+            }
+
+            $hasNonLoopback = $false
+            foreach ($record in $records) {
+                foreach ($address in @($record.LocalAddresses)) {
+                    if (Test-NonLoopbackListenAddress -Address $address) {
+                        $hasNonLoopback = $true
+                        break
+                    }
+                }
+                if ($hasNonLoopback) {
+                    return
+                }
+            }
+        }
+
+        if ($ManagedProcess.Process.HasExited) {
+            throw "托管进程 [$($ManagedProcess.Name)] 在端口 $Port 就绪前已退出，退出码: $($ManagedProcess.Process.ExitCode)"
+        }
+
+        Start-Sleep -Milliseconds 250
+    }
+
+    $allPortRecords = @(Get-ListeningPortProcessRecords -Ports @($Port))
+    $summary = Format-PortRecordSummary -PortRecords $allPortRecords
+    if ($RequireNonLoopback) {
+        throw "托管进程 [$($ManagedProcess.Name)] 在 $TimeoutSeconds 秒内未拿到端口 $Port 的非回环监听；当前端口归属：$summary"
+    }
+    throw "托管进程 [$($ManagedProcess.Name)] 在 $TimeoutSeconds 秒内未拿到端口 $Port 监听；当前端口归属：$summary"
 }
 
 function Test-CommandLineFlagValue {
@@ -949,6 +1158,12 @@ try {
         -TusPort $script:LauncherServiceSweepContext.TusPort `
         -TusUploadDir $script:LauncherServiceSweepContext.TusUploadDir `
         -ReasonLabel "清理上一轮 launcher 残留服务"
+    Wait-PortsBindable -PortBindings @(
+        [pscustomobject]@{ Label = "backend"; Port = [int]$appPort; BindAddress = "0.0.0.0" },
+        [pscustomobject]@{ Label = "tusd"; Port = [int]$tusdPort; BindAddress = $tusdHost },
+        [pscustomobject]@{ Label = "tracker"; Port = [int]$trackerPort; BindAddress = "127.0.0.1" },
+        [pscustomobject]@{ Label = "webtorrent-seeder"; Port = [int]$seederPort; BindAddress = "127.0.0.1" }
+    )
     $localAccessUrl = "http://127.0.0.1:$appPort/"
     Write-HighlightedAccessBlock `
         -Title "本机访问入口（日志再多也先看这里）" `
@@ -971,6 +1186,7 @@ try {
         -ArgumentList @("run", "--target-dir", $backendTargetDir) `
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
+    Wait-ManagedProcessPortReady -ManagedProcess $backendProcess -Port ([int]$appPort) -TimeoutSeconds 30 -RequireNonLoopback
 
     # tusd 只负责官方 resumable upload / concatenation / termination / local disk：
     # 1. `-base-path` 明确固定前端真正要打的 Tus 路径；
@@ -999,6 +1215,11 @@ try {
         -ArgumentList $tusdArgumentList `
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
+    Wait-ManagedProcessPortReady `
+        -ManagedProcess $tusdProcess `
+        -Port ([int]$tusdPort) `
+        -TimeoutSeconds 20 `
+        -RequireNonLoopback:(Test-NonLoopbackListenAddress -Address $tusdHost)
 
     # tracker 进程只运行成熟 WebTorrent tracker 轮子：
     # 1. 业务 join_ticket 门禁已经前移到 Rust /api/swarm/announce 同源代理；
@@ -1012,6 +1233,7 @@ try {
         -ArgumentList $trackerArgumentList `
         -WorkingDirectory $repoRoot `
         -LogDirectory $logDirectory
+    Wait-ManagedProcessPortReady -ManagedProcess $trackerProcess -Port ([int]$trackerPort) -TimeoutSeconds 20
 
     # seeder sidecar 只承接协议执行：
     # 1. 后端继续做业务 owner，决定谁该 start/stop/reconcile；
@@ -1024,6 +1246,7 @@ try {
         -ArgumentList @("dev-seeder.mjs", "--port", $seederPort) `
         -WorkingDirectory $frontendRoot `
         -LogDirectory $logDirectory
+    Wait-ManagedProcessPortReady -ManagedProcess $seederProcess -Port ([int]$seederPort) -TimeoutSeconds 20
 
     $httpsBootstrapProcess = Start-LocalHttpsBootstrap `
         -RepoRoot $repoRoot `
