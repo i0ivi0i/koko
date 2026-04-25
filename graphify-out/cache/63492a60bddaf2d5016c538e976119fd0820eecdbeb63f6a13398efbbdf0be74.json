@@ -1,1 +1,0 @@
-{"nodes": [{"id": "media_sw", "label": "media-sw.ts", "file_type": "code", "source_file": "frontend\\media-sw.ts", "source_location": "L1"}], "edges": [{"source": "media_sw", "target": "sw_min_js", "relation": "imports_from", "confidence": "EXTRACTED", "source_file": "frontend\\media-sw.ts", "source_location": "L2", "weight": 1.0}]}
