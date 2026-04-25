@@ -2,7 +2,7 @@
 
 日期：2026-04-24  
 状态：Design  
-适用范围：`koko` 第一阶段单台 Linux 公网服务器部署、全站 `10 万+` 在线、多个群聊房、单房间 `5000+` 在线、峰值 `20-50` 条消息/秒、前端纯 TypeScript、后端纯 Rust + `socketioxide`、WebTorrent 图片/视频协作分发、未来迁移到 Cloudflare Workers + Durable Objects。  
+适用范围：`koko` 第一阶段单台 Linux 公网服务器部署、全站 `10 万+` 在线、多个群聊房、单房间 `5000+` 在线、峰值 `20-50` 条消息/秒、前端纯 TypeScript、后端纯 Rust + `socketioxide`、WebTorrent 图片/视频协作分发，未来可迁移到边缘运行时与分布式房间协调。
 核心目标：优化 PostgreSQL 在实时万人群聊里的权威事实能力，但不能把实时在线、广播扇出、媒体字节、观看者高频状态压力转嫁给 PostgreSQL。
 
 关联文档：
@@ -19,9 +19,6 @@
 - PostgreSQL Indexes：<https://www.postgresql.org/docs/current/indexes.html>
 - PostgreSQL High Availability：<https://www.postgresql.org/docs/current/high-availability.html>
 - PgBouncer Config：<https://www.pgbouncer.org/config>
-- Cloudflare Durable Objects Overview：<https://developers.cloudflare.com/durable-objects/>
-- Cloudflare Durable Objects Limits：<https://developers.cloudflare.com/durable-objects/platform/limits/>
-- Cloudflare Durable Objects WebSockets：<https://developers.cloudflare.com/durable-objects/best-practices/websockets/>
 
 ---
 
@@ -68,7 +65,7 @@
 5. 单房间峰值发言频率大约 `20-50 条/秒`。
 6. 观看的人远多于发言的人。
 7. 图片/视频需要 WebTorrent 秒开、拖动进度条、后台补齐和群友协作分发。
-8. 后续目标是迁移到 Cloudflare Workers + Durable Objects，实现全球边缘低延迟实时协调。
+8. 后续目标是迁移到可替换的边缘运行时与分布式房间协调，实现全球边缘低延迟实时协调。
 
 这组假设推出一个核心结论：
 
@@ -399,17 +396,17 @@ WebTorrent 图片视频秒开和拖动进度条，不能靠 PostgreSQL 扛。
 
 ---
 
-## 10. 未来迁移到 Workers + Durable Objects
+## 10. 未来迁移到边缘运行时与分布式房间协调
 
-未来 DO 方案的直觉映射：
+未来边缘协调方案的直觉映射：
 
-1. 一个房间一个 Durable Object，或大房间按 room shard 拆多个 Durable Object。
-2. Worker 负责入口、鉴权承接、静态资源和边缘路由。
-3. DO 负责房间实时协调、WebSocket、短期内存态和局部 SQLite 状态。
-4. 长期媒体字节仍走 R2 / 对象存储 / WebTorrent 平面。
-5. 权威历史可按迁移阶段留在 PostgreSQL、D1 或 DO SQLite 组合里。
+1. 一个房间一个协调单元，或大房间按 room shard 拆多个协调单元。
+2. 边缘入口负责鉴权承接、静态资源和边缘路由。
+3. 协调单元负责房间实时协调、WebSocket、短期内存态和局部状态。
+4. 长期媒体字节仍走对象存储 / WebTorrent 平面。
+5. 权威历史可按迁移阶段留在 PostgreSQL 或可替换的边缘存储组合里。
 
-但第一阶段不能提前把代码写死到 Cloudflare API。  
+但第一阶段不能提前把代码写死到某个厂商 API。
 正确方式是先抽稳定契约：
 
 1. 房间命令。
@@ -419,7 +416,7 @@ WebTorrent 图片视频秒开和拖动进度条，不能靠 PostgreSQL 扛。
 5. 连接生命周期事件。
 6. 运行态指标。
 
-这样 Rust 单机和未来 DO 都只是不同 adapter。
+这样 Rust 单机和未来边缘协调单元都只是不同 adapter。
 
 ---
 

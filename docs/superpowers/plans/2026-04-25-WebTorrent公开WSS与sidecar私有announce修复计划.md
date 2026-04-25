@@ -481,7 +481,7 @@ git commit -m "修复：后台做种对账使用私有announce"
 Run:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File run.ps1 -DisableAutoOptimizeCleanup -DisableCloudflareTunnel
+pwsh -NoProfile -ExecutionPolicy Bypass -File run.ps1 -DisableAutoOptimizeCleanup
 ```
 
 Expected:

@@ -427,7 +427,6 @@ function Get-StartupArtifactOptimizationTargets {
         @{ Path = "tmp\smoke-logs"; Kind = "Directory"; Reason = "烟测日志目录" }
         @{ Path = "tmp\codex-smoke"; Kind = "Directory"; Reason = "Codex 烟测目录" }
         @{ Path = "tmp\https-bootstrap"; Kind = "Directory"; Reason = "本地 HTTPS 引导临时目录" }
-        @{ Path = "tmp\cloudflared-quick-home"; Kind = "Directory"; Reason = "Cloudflare 快捷临时目录" }
     )
 
     return @($definitions | ForEach-Object {

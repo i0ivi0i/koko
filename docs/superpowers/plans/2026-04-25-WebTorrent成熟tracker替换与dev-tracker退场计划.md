@@ -828,7 +828,7 @@ git commit -m "修复：保持成熟tracker替换后的媒体主链回归"
 Run:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File run.ps1 -DisableAutoOptimizeCleanup -DisableCloudflareTunnel
+pwsh -NoProfile -ExecutionPolicy Bypass -File run.ps1 -DisableAutoOptimizeCleanup
 ```
 
 Expected log:

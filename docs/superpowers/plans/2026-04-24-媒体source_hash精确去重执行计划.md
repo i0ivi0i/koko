@@ -624,7 +624,7 @@ Run:
 ```powershell
 $env:SWARM_TICKET_TTL_SECONDS="30"
 $env:SWARM_SEED_RECONCILE_INTERVAL_SECONDS="10"
-powershell -NoProfile -ExecutionPolicy Bypass -File E:\koko\run.ps1 -DisableCloudflareTunnel -DisableLocalHttpsBootstrap -DisableAutoOptimizeCleanup -ForceInitialFrontendBuild
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\koko\run.ps1 -DisableLocalHttpsBootstrap -DisableAutoOptimizeCleanup -ForceInitialFrontendBuild
 ```
 
 Expected:
