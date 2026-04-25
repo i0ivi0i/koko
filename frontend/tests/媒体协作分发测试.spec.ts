@@ -537,6 +537,40 @@ describe("媒体协作分发", () => {
     expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
   });
 
+  it("接入 WebTorrent 种子时会调高 torrent 监听器预算，避免高并发读流被默认阈值误报成泄漏", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-listener-budget"
+    );
+    const getMaxListeners = vi.fn(() => 10);
+    const setMaxListeners = vi.fn();
+    Object.assign(torrent, {
+      getMaxListeners,
+      setMaxListeners,
+    });
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const locator = 准备好的定位结果("att-listener-budget");
+    if (!locator.distribution) {
+      throw new Error("测试前提失败：缺少 distribution");
+    }
+
+    await 解析协作分发源({
+      attachmentId: "att-listener-budget",
+      kind: "video",
+      locator,
+    });
+
+    expect(setMaxListeners).toHaveBeenCalledWith(expect.any(Number));
+    const [listenerBudget] = setMaxListeners.mock.calls[0] ?? [];
+    expect(listenerBudget).toBeGreaterThanOrEqual(64);
+  });
+
   it("locator 给出 media_state.retry_after_ms 时，会透传给 noPeersIntervalTime 统一探测节奏", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(

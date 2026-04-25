@@ -1,7 +1,36 @@
 import { createServer } from "node:http";
+import { EventEmitter } from "node:events";
 import { parseArgs } from "node:util";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+
+const 默认做种监听器预算 = 128;
+
+export const 读取做种监听器预算 = (
+  raw = process.env.SWARM_SEEDER_MAX_EVENT_LISTENERS
+) => {
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 64) {
+    return 默认做种监听器预算;
+  }
+  return parsed;
+};
+
+export const 应用做种监听器预算 = (
+  budget = 读取做种监听器预算()
+) => {
+  /**
+   * dev-seeder 的真实语义是“一个 WebTorrent client 同时服务活跃房间内多条视频”。
+   * Node 默认 10 个 listener 更像通用诊断阈值，不是本项目的物理上限；
+   * 这里调高到有限预算，保留超过预算后的泄漏告警，避免用无限阈值掩盖真问题。
+   */
+  if (EventEmitter.defaultMaxListeners < budget) {
+    EventEmitter.defaultMaxListeners = budget;
+  }
+  return EventEmitter.defaultMaxListeners;
+};
+
+应用做种监听器预算();
 
 /**
  * 统一把 infoHash 归一化成小写十六进制。
@@ -313,6 +342,7 @@ const server = createServer(async (request, response) => {
       发送JSON响应(response, 200, {
         ok: true,
         capability,
+        listenerBudget: EventEmitter.defaultMaxListeners,
         activeCount: activeSessions.size,
         sessions: 读取活跃会话快照(),
       });

@@ -1,7 +1,7 @@
 # Graph Report - koko  (2026-04-25)
 
 ## Corpus Check
-- 229 files · ~296,900 words
+- 230 files · ~297,560 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -41,9 +41,9 @@
 ## Surprising Connections (you probably didn't know these)
 - `同源tracker代理入口会响应websocket握手而不是404()` --calls--> `send_bytes()`  [INFERRED]
   tests\协作分发测试.rs → tests\测试支撑\http.rs
-- `读取活跃会话快照()` --calls--> `get()`  [INFERRED]
+- `读取做种监听器预算()` --calls--> `get()`  [INFERRED]
   frontend\dev-seeder.mjs → frontend\tests\视频元数据测试.spec.ts
-- `读取活跃会话快照()` --calls--> `set()`  [INFERRED]
+- `读取做种监听器预算()` --calls--> `set()`  [INFERRED]
   frontend\dev-seeder.mjs → frontend\tests\视频元数据测试.spec.ts
 - `备份并清空环境变量()` --calls--> `createFakeStorage()`  [EXTRACTED]
   tests\测试支撑\环境.rs → frontend\tests\common\聊天测试支架.ts
@@ -86,7 +86,7 @@ Nodes (12): Assert-ServicesStopped(), Clear-CleanupTarget(), Clear-DirectoryCont
 
 ### Community 8 - "Community 8"
 Cohesion: 0.14
-Nodes (8): 读取活跃会话快照(), 归一化InfoHash(), 读取JoinTicket(), main(), 读取WebTorrent构造器(), ensureBackendBinaryPrepared(), once(), startBackend()
+Nodes (8): 读取做种监听器预算(), 归一化InfoHash(), 读取JoinTicket(), main(), 读取WebTorrent构造器(), ensureBackendBinaryPrepared(), once(), startBackend()
 
 ### Community 9 - "Community 9"
 Cohesion: 0.18
@@ -135,5 +135,5 @@ _Questions this graph is uniquely positioned to answer:_
   _`send_json()` has 77 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 26 inferred relationships involving `备份并清空环境变量()` (e.g. with `创建房间HTTP接口()` and `get()`) actually correct?**
   _`备份并清空环境变量()` has 26 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 54 inferred relationships involving `get()` (e.g. with `读取活跃会话快照()` and `备份并清空环境变量()`) actually correct?**
+- **Are the 54 inferred relationships involving `get()` (e.g. with `读取做种监听器预算()` and `备份并清空环境变量()`) actually correct?**
   _`get()` has 54 INFERRED edges - model-reasoned connections that need verification._

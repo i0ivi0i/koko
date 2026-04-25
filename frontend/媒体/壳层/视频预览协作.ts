@@ -55,6 +55,39 @@ export function 创建视频预览协作(
   const 视频预览状态表 = new Map<string, 视频预览状态>();
   const 视频预览解析代次表 = new Map<string, number>();
   const 视频预览缺源阻断版本表 = new Map<string, number>();
+  const 视频预览抓帧任务表 = new Map<
+    string,
+    Promise<Awaited<ReturnType<typeof deps.抓取视频预览>>>
+  >();
+
+  const 构造视频预览抓帧任务键 = (
+    contentHash: string | null,
+    previewSource: string
+  ): string => {
+    return contentHash ? `content:${contentHash}` : `src:${previewSource}`;
+  };
+
+  const 读取或创建视频预览抓帧任务 = (
+    taskKey: string,
+    previewSource: string
+  ): Promise<Awaited<ReturnType<typeof deps.抓取视频预览>>> => {
+    const existing = 视频预览抓帧任务表.get(taskKey);
+    if (existing) {
+      return existing;
+    }
+    /**
+     * 抓帧是 poster 体验态，不是 WebTorrent 正式补齐/做种链。
+     * 同一内容在消息流里出现多次时，只允许一个隐藏 video/streamURL 读流探针；
+     * 其他附件共享这次结果，避免把 WebTorrent torrent 的 `verified` 监听器堆成假泄漏告警。
+     */
+    const task = deps.抓取视频预览({ src: previewSource }).finally(() => {
+      if (视频预览抓帧任务表.get(taskKey) === task) {
+        视频预览抓帧任务表.delete(taskKey);
+      }
+    });
+    视频预览抓帧任务表.set(taskKey, task);
+    return task;
+  };
 
   const 写入视频预览状态 = (
     attachmentId: string,
@@ -194,9 +227,10 @@ export function 创建视频预览协作(
             return;
           }
 
-          const preview = await deps.抓取视频预览({
-            src: previewSource,
-          });
+          const preview = await 读取或创建视频预览抓帧任务(
+            构造视频预览抓帧任务键(contentHash, previewSource),
+            previewSource
+          );
           if (shouldReleasePreviewConsumer) {
             deps.释放协作分发消费者({
               attachmentId,
@@ -258,6 +292,7 @@ export function 创建视频预览协作(
       视频预览状态表.clear();
       视频预览解析代次表.clear();
       视频预览缺源阻断版本表.clear();
+      视频预览抓帧任务表.clear();
     },
   };
 }

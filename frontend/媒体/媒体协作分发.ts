@@ -15,6 +15,8 @@ export interface WebTorrent种子 {
   files: WebTorrent文件[];
   critical?(start: number, end: number): void;
   select?(start: number, end: number, priority?: number): void;
+  getMaxListeners?(): number;
+  setMaxListeners?(count: number): void;
   on(event: "error", handler: (error: unknown) => void): void;
   on(event: "warning", handler: (warning: unknown) => void): void;
   on(event: "wire", handler: (wire: WebTorrent连接) => void): void;
@@ -71,6 +73,7 @@ export type 协作分发会话事件 =
 const 协作分发存活上报间隔毫秒 = 60_000;
 const 协作分发媒体源探测最大尝试次数 = 16;
 const 协作分发媒体源探测重试间隔毫秒 = 80;
+const 协作分发Torrent监听器预算 = 128;
 const 服务工作线程接管等待超时毫秒 = 1_200;
 const 服务工作线程接管轮询间隔毫秒 = 50;
 type 协作分发存活类型 =
@@ -449,6 +452,26 @@ const 读取noPeers探测间隔毫秒 = (distribution: 媒体协作分发定位�
   return Math.floor(retryAfter);
 };
 
+const 调高协作分发Torrent监听器预算 = (torrent: WebTorrent种子): void => {
+  if (
+    typeof torrent.getMaxListeners !== "function" ||
+    typeof torrent.setMaxListeners !== "function"
+  ) {
+    return;
+  }
+  const current = torrent.getMaxListeners();
+  if (!Number.isFinite(current) || current <= 0 || current >= 协作分发Torrent监听器预算) {
+    return;
+  }
+  /**
+   * `file.streamURL` 背后会为正式播放、seek、全屏和预览探针创建多个 Range reader。
+   * WebTorrent 的默认 EventEmitter 阈值只有 10，适合发现泄漏，但不适合本项目
+   * “多 peer + web seed + 多 surface 同 swarm” 的高活跃读流；这里提升有限预算，
+   * 不降低协作分发强度，也不把 warning 全局关死。
+   */
+  torrent.setMaxListeners(协作分发Torrent监听器预算);
+};
+
 async function 拉取受控Torrent字节(
   distribution: 媒体协作分发定位片段
 ): Promise<Uint8Array> {
@@ -574,6 +597,7 @@ export async function 接入协作分发种子(
         return;
       }
       已结束 = true;
+      调高协作分发Torrent监听器预算(torrent);
       resolve(torrent);
     };
     const 收口reject = (error: unknown) => {
@@ -603,6 +627,7 @@ export async function 接入协作分发种子(
       },
       收口resolve
     );
+    调高协作分发Torrent监听器预算(torrent);
     torrent.on("error", (error) => {
       收口reject(error);
     });
