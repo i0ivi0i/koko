@@ -1555,6 +1555,40 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("自动播 owner 暂退且播放快照还未回灌时，仍用保存的同源视频帧而不是退回 poster", async () => {
+    const pane = 创建媒体消息窗();
+    pane.items = [创建媒体消息项()];
+    pane.inlineAutoplayOwnerAttachmentId = null;
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    pane.mediaPlaybackByAttachmentId = {};
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: "http://media.local/swarm-video-1",
+        currentTime: 31.25,
+        updatedAt: Date.now(),
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const restoredVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(restoredVideo).not.toBeNull();
+    expect(restoredVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
+    expect(restoredVideo?.autoplay).toBe(false);
+    expect(restoredVideo?.getAttribute("poster")).toBeNull();
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+
+    restoredVideo!.dispatchEvent(new Event("loadedmetadata"));
+    expect(restoredVideo!.currentTime).toBeCloseTo(31.25, 2);
+
+    pane.remove();
+  });
+
   it("有 poster 的视频保存位置源不匹配时仍回退 poster，禁止偷用旧播放帧", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [创建媒体消息项()];

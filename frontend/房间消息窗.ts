@@ -1042,8 +1042,17 @@ export class 房间消息窗 extends LitElement {
               attachment,
               playback
             );
+            const savedTimelineFrame =
+              this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
+            /**
+             * owner 刚滑出视口时，上层可能先撤掉 autoplay playback 快照，
+             * 下一轮可见性裁决才会重新回灌。这个短窗口不能退回 poster：
+             * 保存位置的 src 来自刚才那颗真实 `<video>` 的 currentSrc，只作为同源续帧画面，
+             * 不打开 original 冷源，也不产生第二条播放真相。
+             */
+            const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
             const timelinePlayableVideoSrc =
-              inlineAutoplayPreviewSrc ?? playbackTimelineVideoSrc;
+              inlineAutoplayPreviewSrc ?? playbackTimelineVideoSrc ?? savedTimelineFrameSrc;
             const restorableTimelineFrame = this.读取自动播恢复位置(
               attachment.attachmentId,
               timelinePlayableVideoSrc
