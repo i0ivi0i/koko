@@ -710,6 +710,27 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     session.send({ type: "ENTER_RECOVERING" });
   };
 
+  const 预热自动播候选媒体会话 = (candidates: 消息视频自动播候选[]): void => {
+    for (const candidate of candidates) {
+      const attachment = 读取附件条目(candidate.attachmentId);
+      if (!attachment || attachment.kind !== "video") {
+        continue;
+      }
+      const session = 读取或创建媒体会话(attachment);
+      const snapshot = session.snapshot();
+      /**
+       * 可见自动播候选需要提前拿到正式播放源：
+       * 1. 房间消息窗只认 `playbackByAttachmentId` 这条正式播放真相；
+       * 2. 如果等它真正成为 owner 才第一次 `session.启动()`，列表层只能先渲染 poster，再切成 `<video>`；
+       * 3. 这里仅对“还没 bootstrapping、也还没拿到 playback”的可见候选做一次预热，不额外造第二预览源状态机。
+       */
+      if (snapshot.playback || snapshot.lastSignal === "BOOTSTRAP_REQUESTED") {
+        continue;
+      }
+      void session.启动();
+    }
+  };
+
   const 清理失活媒体会话 = (activeAttachmentIds: Set<string>): boolean => {
     let hasSessionSetChanged = false;
     for (const [attachmentId, session] of 媒体会话表) {
@@ -876,6 +897,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     处理自动播候选(candidates: 消息视频自动播候选[]): void {
+      预热自动播候选媒体会话(candidates);
       接收媒体运行时事实({
         type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
         candidates,

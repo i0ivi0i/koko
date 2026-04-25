@@ -1106,7 +1106,7 @@ describe("聊天壳集成 / 首页与控制台", () => {
     el.remove();
   });
 
-  it("自动播 owner 和播放结果一旦成立，就会立刻投影回消息流视频卡片，而不是等下一次无关刷新", async () => {
+  it("可见自动播候选一旦预热出正式播放结果，就会立刻投影回消息流视频卡片并复用同一颗 video 节点", async () => {
     const transport = new 假传输();
     transport.joinQueue = [
       创建房间快照("r-test", 1, {
@@ -1152,7 +1152,6 @@ describe("聊天壳集成 / 首页与控制台", () => {
     读取操作台主动作(el).click();
     await 等待组件稳定(el);
     await 等待组件稳定(el);
-    vi.useFakeTimers();
     try {
       const kernel = (el as unknown as {
         kernel: {
@@ -1177,24 +1176,47 @@ describe("聊天壳集成 / 首页与控制台", () => {
           },
         ],
       });
+      const pane = el.shadowRoot!.querySelector(
+        "koko-room-message-pane"
+      ) as HTMLElement & { updateComplete?: Promise<unknown> };
+      await Promise.resolve();
+      await Promise.resolve();
+      await el.updateComplete;
+      await pane.updateComplete;
 
       const beforeOwnerVideo = el.shadowRoot!.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
       );
-      expect(beforeOwnerVideo).toBeNull();
+      expect(beforeOwnerVideo).not.toBeNull();
+      expect(beforeOwnerVideo?.autoplay).toBe(false);
+      expect(
+        el.shadowRoot!.querySelector(
+          'img.message-video-poster[data-attachment-id="att-video-inline-shell"]'
+        )
+      ).toBeNull();
 
-      await vi.advanceTimersByTimeAsync(81);
+      /**
+       * 壳层先建好再切 fake timer 时，自动播协作已经持有真实定时链；
+       * 这里直接按真实时间等待一轮稳定窗，更符合“投影是否会自己发生”的集成语义。
+       */
+      await new Promise((resolve) => setTimeout(resolve, 121));
+      await Promise.resolve();
       await Promise.resolve();
       await el.updateComplete;
+      await pane.updateComplete;
 
       const ownerVideo = el.shadowRoot!.querySelector<HTMLVideoElement>(
         'video.message-video-preview[data-attachment-id="att-video-inline-shell"]'
       );
       expect(ownerVideo).not.toBeNull();
-      expect(ownerVideo?.autoplay).toBe(true);
+      expect(ownerVideo).toBe(beforeOwnerVideo);
+      expect(
+        el.shadowRoot!.querySelector(
+          'img.message-video-poster[data-attachment-id="att-video-inline-shell"]'
+        )
+      ).toBeNull();
     } finally {
       el.remove();
-      vi.useRealTimers();
     }
   });
 

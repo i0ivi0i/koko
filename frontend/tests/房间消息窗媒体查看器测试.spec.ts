@@ -1555,6 +1555,88 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("有 poster 的 swarm 视频在未成为 owner 前也继续使用 video 预览壳", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    /**
+     * 关键保护：
+     * 1. 只要时间线已经拿到 swarm 播放源，就必须保持 `<video>` 作为唯一视觉容器；
+     * 2. poster 只允许挂在这颗 `<video>` 上当首帧兜底，不能再回退成独立 `<img>`；
+     * 3. 否则一旦它成为自动播 owner，就会发生 `img -> video` 节点切换，真实滚动时必闪。
+     */
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.autoplay).toBe(false);
+    expect(previewVideo?.getAttribute("src")).toBe(playback.src);
+    expect(previewVideo?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+
+    pane.remove();
+  });
+
+  it("有 poster 的 swarm 视频从预览切到自动播时复用同一颗 video 节点", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.autoplay).toBe(false);
+
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    await pane.updateComplete;
+
+    const ownerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(ownerVideo).toBe(previewVideo);
+    expect(ownerVideo?.autoplay).toBe(true);
+    expect(
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+
+    pane.remove();
+  });
+
   it("自动播 owner 暂退且播放快照还未回灌时，仍用保存的同源视频帧而不是退回 poster", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [创建媒体消息项()];
@@ -1589,7 +1671,7 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
-  it("有 poster 的视频保存位置源不匹配时仍回退 poster，禁止偷用旧播放帧", async () => {
+  it("有 poster 的视频保存位置源不匹配时，不偷用旧播放帧但继续复用当前 swarm 视频壳", async () => {
     const pane = 创建媒体消息窗();
     pane.items = [创建媒体消息项()];
     pane.mediaPlaybackByAttachmentId = {
@@ -1613,14 +1695,19 @@ describe("房间消息窗媒体查看器", () => {
     document.body.appendChild(pane);
     await pane.updateComplete;
 
-    const poster = pane.querySelector<HTMLImageElement>(
-      'img.message-video-poster[data-attachment-id="att-video-1"]'
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
     );
-    expect(poster).not.toBeNull();
-    expect(poster?.getAttribute("src")).toBe("http://media.local/poster-video-1");
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.autoplay).toBe(false);
+    expect(previewVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1-new");
+    expect(previewVideo?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
     expect(
-      pane.querySelector('video.message-video-preview[data-attachment-id="att-video-1"]')
+      pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).toBeNull();
+
+    previewVideo!.dispatchEvent(new Event("loadedmetadata"));
+    expect(previewVideo!.currentTime).not.toBeCloseTo(24.5, 2);
 
     pane.remove();
   });

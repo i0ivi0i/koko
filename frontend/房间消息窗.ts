@@ -1061,9 +1061,14 @@ export class 房间消息窗 extends LitElement {
               restorableTimelineFrame && !shouldRenderInlineVideo
                 ? restorableTimelineFrame.src
                 : null;
+            /**
+             * 时间线视频一旦拿到正式 swarm 播放源，就继续复用同一颗 `<video>` 作为唯一视觉壳：
+             * 1. 有 poster 也只允许挂在这颗 `<video>` 上等待首帧，不能退回独立 `<img>`；
+             * 2. 这样下一个可见视频从“静态预览 -> 自动播 owner”时，只切 autoplay，不切主节点；
+             * 3. `savedTimelineFrameSrc` 仍只兜住 playback 快照短暂缺席时的释放帧，不改写正式源真相。
+             */
             const timelinePreviewVideoSrc =
-              restorableTimelineVideoSrc ??
-              (!hasSourcePoster ? playbackTimelineVideoSrc : null);
+              restorableTimelineVideoSrc ?? playbackTimelineVideoSrc;
             const previewVideoSrc =
               shouldRenderInlineVideo ? inlineAutoplayPreviewSrc : timelinePreviewVideoSrc;
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
