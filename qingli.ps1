@@ -255,8 +255,11 @@ function Resolve-RecognizedProjectService {
     if (
         $PortRecord.Port -eq $TrackerPort -and
         $PortRecord.Name -match '^node(?:\.exe)?$' -and
-        $PortRecord.CommandLine -match 'dev-tracker\.mjs' -and
-        $PortRecord.CommandLine -match ("--port\s+$TrackerPort(\s|$)")
+        (
+            $PortRecord.CommandLine -match 'bittorrent-tracker' -or
+            $PortRecord.CommandLine -match 'node_modules[\\/]+bittorrent-tracker[\\/]+bin[\\/]+cmd\.js'
+        ) -and
+        $PortRecord.CommandLine -match ("(?:--port|-p)\s+$TrackerPort(\s|$)")
     ) {
         return [pscustomobject]@{
             Role      = "tracker"

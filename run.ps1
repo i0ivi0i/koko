@@ -508,9 +508,10 @@ function Get-ListeningPortProcessRecords {
     return $records
 }
 
-function Resolve-StaleLauncherSidecar {
+function Resolve-RecognizedLauncherService {
     param(
         $PortRecord,
+        [string]$BackendTargetDir,
         [int]$AppPort,
         [int]$TrackerPort,
         [int]$SeederPort,
@@ -518,8 +519,31 @@ function Resolve-StaleLauncherSidecar {
         [string]$TusUploadDir
     )
 
+    $backendTargetPattern = if ([string]::IsNullOrWhiteSpace($BackendTargetDir)) {
+        $null
+    }
+    else {
+        [Regex]::Escape($BackendTargetDir)
+    }
     $tusUploadDirPattern = [Regex]::Escape($TusUploadDir)
     $tusHookUrlPattern = [Regex]::Escape("http://127.0.0.1:$AppPort/internal/tus/hooks")
+
+    if (
+        -not [string]::IsNullOrWhiteSpace($backendTargetPattern) -and
+        $PortRecord.Port -eq $AppPort -and
+        $PortRecord.Name -in @("cargo.exe", "koko.exe") -and (
+            $PortRecord.ExecutablePath -like "*target\\launcher-run\\debug\\koko.exe" -or
+            $PortRecord.CommandLine -match $backendTargetPattern -or
+            $PortRecord.CommandLine -match 'target\\\\launcher-run\\debug\\koko\.exe'
+        )
+    ) {
+        return [pscustomobject]@{
+            Role      = "backend"
+            Port      = $PortRecord.Port
+            ProcessId = $PortRecord.ProcessId
+            Name      = $PortRecord.Name
+        }
+    }
 
     if (
         $PortRecord.Port -eq $TrackerPort -and
@@ -572,24 +596,28 @@ function Resolve-StaleLauncherSidecar {
     return $null
 }
 
-function Stop-StaleLauncherSidecars {
+function Stop-RecognizedLauncherServices {
     param(
+        [int[]]$Ports,
+        [string]$BackendTargetDir,
         [int]$AppPort,
         [int]$TrackerPort,
         [int]$SeederPort,
         [int]$TusPort,
-        [string]$TusUploadDir
+        [string]$TusUploadDir,
+        [string]$ReasonLabel = "清理 launcher 残留服务"
     )
 
-    $listeningRecords = Get-ListeningPortProcessRecords -Ports @($TrackerPort, $SeederPort, $TusPort)
+    $listeningRecords = Get-ListeningPortProcessRecords -Ports $Ports
     if ($listeningRecords.Count -eq 0) {
-        return
+        return @()
     }
 
-    $stoppedCount = 0
+    $recognizedServices = @()
     foreach ($record in $listeningRecords) {
-        $recognized = Resolve-StaleLauncherSidecar `
+        $recognized = Resolve-RecognizedLauncherService `
             -PortRecord $record `
+            -BackendTargetDir $BackendTargetDir `
             -AppPort $AppPort `
             -TrackerPort $TrackerPort `
             -SeederPort $SeederPort `
@@ -599,19 +627,48 @@ function Stop-StaleLauncherSidecars {
             continue
         }
 
+        if ($recognizedServices.ProcessId -contains $recognized.ProcessId) {
+            continue
+        }
+
+        $recognizedServices += $recognized
+    }
+
+    foreach ($recognized in $recognizedServices) {
         try {
-            Write-Host "清理上一轮 launcher 残留 sidecar [$($recognized.Role)]：端口 $($recognized.Port) -> PID $($recognized.ProcessId) ($($recognized.Name))"
+            Write-Host "$ReasonLabel [$($recognized.Role)]：端口 $($recognized.Port) -> PID $($recognized.ProcessId) ($($recognized.Name))"
             & taskkill.exe /PID $recognized.ProcessId /T /F 2>$null | Out-Null
-            $stoppedCount++
         }
         catch {
-            Write-Warning "清理残留 sidecar 失败 [$($recognized.Role)][$($recognized.ProcessId)]: $($_.Exception.Message)"
+            Write-Warning "$ReasonLabel 失败 [$($recognized.Role)][$($recognized.ProcessId)]: $($_.Exception.Message)"
         }
     }
 
-    if ($stoppedCount -gt 0) {
+    if ($recognizedServices.Count -gt 0) {
         Start-Sleep -Milliseconds 800
     }
+
+    return $recognizedServices
+}
+
+function Stop-StaleLauncherSidecars {
+    param(
+        [int]$AppPort,
+        [int]$TrackerPort,
+        [int]$SeederPort,
+        [int]$TusPort,
+        [string]$TusUploadDir
+    )
+
+    $null = Stop-RecognizedLauncherServices `
+        -Ports @($TrackerPort, $SeederPort, $TusPort) `
+        -BackendTargetDir "" `
+        -AppPort $AppPort `
+        -TrackerPort $TrackerPort `
+        -SeederPort $SeederPort `
+        -TusPort $TusPort `
+        -TusUploadDir $TusUploadDir `
+        -ReasonLabel "清理上一轮 launcher 残留 sidecar"
 }
 
 function Resolve-TusdBinaryPath {
@@ -686,6 +743,19 @@ function Invoke-LauncherCleanup {
     Stop-ManagedProcess $httpsBootstrapProcess
     Stop-ManagedProcess $frontendTypeWatch
     Stop-ManagedProcess $frontendWatch
+
+    if ($null -ne $script:LauncherServiceSweepContext) {
+        $cleanupContext = $script:LauncherServiceSweepContext
+        $null = Stop-RecognizedLauncherServices `
+            -Ports $cleanupContext.Ports `
+            -BackendTargetDir $cleanupContext.BackendTargetDir `
+            -AppPort $cleanupContext.AppPort `
+            -TrackerPort $cleanupContext.TrackerPort `
+            -SeederPort $cleanupContext.SeederPort `
+            -TusPort $cleanupContext.TusPort `
+            -TusUploadDir $cleanupContext.TusUploadDir `
+            -ReasonLabel "回收 launcher 退出残留"
+    }
 }
 
 Assert-PowerShellVersion
@@ -712,6 +782,7 @@ $trackerProcess = $null
 $seederProcess = $null
 $httpsBootstrapProcess = $null
 $script:LauncherCleanupStarted = $false
+$script:LauncherServiceSweepContext = $null
 $launcherCleanupSubscription = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -SupportEvent -Action {
     Invoke-LauncherCleanup -Reason "PowerShell.Exiting"
 }
@@ -757,8 +828,6 @@ try {
             Invoke-StartupArtifactOptimization -RepoRoot $repoRoot -ScriptHostPath $cleanupScriptHostPath
         }
     }
-
-    Stop-StaleLauncherBackend -BackendTargetDir $backendTargetDir
 
     Ensure-FrontendDependenciesInstalled -FrontendRoot $frontendRoot -PnpmPath $pnpmPath
 
@@ -882,12 +951,24 @@ try {
     [Environment]::SetEnvironmentVariable("SWARM_TRACKER_UPSTREAM_URL", $trackerUpstreamUrl)
     [Environment]::SetEnvironmentVariable("SWARM_SEEDER_TRACKER_URL", $seederTrackerUrl)
     [Environment]::SetEnvironmentVariable("SWARM_TICKET_SECRET", $swarmTicketSecret)
-    Stop-StaleLauncherSidecars `
-        -AppPort ([int]$appPort) `
-        -TrackerPort ([int]$trackerPort) `
-        -SeederPort ([int]$seederPort) `
-        -TusPort ([int]$tusdPort) `
-        -TusUploadDir $resolvedTusUploadDir
+    $script:LauncherServiceSweepContext = [pscustomobject]@{
+        Ports            = @([int]$appPort, [int]$trackerPort, [int]$seederPort, [int]$tusdPort)
+        BackendTargetDir = $backendTargetDir
+        AppPort          = [int]$appPort
+        TrackerPort      = [int]$trackerPort
+        SeederPort       = [int]$seederPort
+        TusPort          = [int]$tusdPort
+        TusUploadDir     = $resolvedTusUploadDir
+    }
+    $null = Stop-RecognizedLauncherServices `
+        -Ports $script:LauncherServiceSweepContext.Ports `
+        -BackendTargetDir $script:LauncherServiceSweepContext.BackendTargetDir `
+        -AppPort $script:LauncherServiceSweepContext.AppPort `
+        -TrackerPort $script:LauncherServiceSweepContext.TrackerPort `
+        -SeederPort $script:LauncherServiceSweepContext.SeederPort `
+        -TusPort $script:LauncherServiceSweepContext.TusPort `
+        -TusUploadDir $script:LauncherServiceSweepContext.TusUploadDir `
+        -ReasonLabel "清理上一轮 launcher 残留服务"
     $localAccessUrl = "http://127.0.0.1:$appPort/"
     Write-HighlightedAccessBlock `
         -Title "本机访问入口（日志再多也先看这里）" `
