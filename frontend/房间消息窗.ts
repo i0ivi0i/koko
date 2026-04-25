@@ -201,7 +201,14 @@ export class 房间消息窗 extends LitElement {
       return;
     }
     this.同步自动播候选观察(scrollContainer);
-    this.调度自动播候选(scrollContainer);
+    /**
+     * 房间首轮渲染 / playback 更新不是滚动风暴：
+     * 1. 此时候选表刚刚按最新 DOM 同步完成，继续再等一帧只会白白推迟正式会话预热；
+     * 2. 真正高频的滚动链仍然走 `调度自动播候选`，不会把每次 wheel/touchmove 放大成同步全量派发；
+     * 3. 这里先清掉旧的 rAF 尾波，避免首轮“立刻派发”和上一轮延迟派发重复回抛同一批候选。
+     */
+    this.取消自动播候选调度();
+    this.dispatch自动播候选(scrollContainer);
   }
 
   private 同步时间线视频首帧就绪缓存(): void {
@@ -224,21 +231,63 @@ export class 房间消息窗 extends LitElement {
   }
 
   private 读取时间线视频首帧是否就绪(attachmentId: string, src: string | null): boolean {
-    if (!src) {
+    const normalizedSrc = this.归一化时间线视频播放源(src);
+    if (!normalizedSrc) {
       return false;
     }
-    return this.时间线视频首帧就绪源.get(attachmentId) === src;
+    return this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc;
   }
 
   private 标记时间线视频首帧已就绪(attachmentId: string, src: string | null): void {
-    if (!src) {
+    const normalizedSrc = this.归一化时间线视频播放源(src);
+    if (!normalizedSrc) {
       return;
     }
-    if (this.时间线视频首帧就绪源.get(attachmentId) === src) {
+    if (this.时间线视频首帧就绪源.get(attachmentId) === normalizedSrc) {
       return;
     }
-    this.时间线视频首帧就绪源.set(attachmentId, src);
+    this.时间线视频首帧就绪源.set(attachmentId, normalizedSrc);
     this.requestUpdate();
+  }
+
+  /**
+   * 自动播候选一进入预热窗口，就要用现有这颗 `<video>` 把首帧热出来：
+   * 1. 目标不是提前播放，而是让 Chrome 在 owner 接管前先拿到真实视频帧；
+   * 2. 只提升已经存在正式预览源的时间线 `<video>`，不新增第二条预览真相；
+   * 3. 已经有续播帧/首帧 ready 的卡片不再 `load()`，避免把暂停中的续播位置重置回开头。
+   */
+  private 预热时间线视频首帧(button: HTMLButtonElement, attachmentId: string): void {
+    if (!attachmentId) {
+      return;
+    }
+    const previewVideo = button.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id]'
+    );
+    if (!previewVideo || previewVideo.dataset.attachmentId !== attachmentId) {
+      return;
+    }
+    if (previewVideo.autoplay) {
+      return;
+    }
+    const currentSrc = this.读取视频当前播放源(previewVideo);
+    if (!currentSrc) {
+      return;
+    }
+    if (this.读取时间线视频首帧是否就绪(attachmentId, currentSrc)) {
+      return;
+    }
+    if (previewVideo.currentTime > 0) {
+      return;
+    }
+    const 需要提升预载强度 = previewVideo.preload !== "auto";
+    previewVideo.preload = "auto";
+    if (previewVideo.readyState >= previewVideo.HAVE_CURRENT_DATA) {
+      return;
+    }
+    if (!需要提升预载强度) {
+      return;
+    }
+    previewVideo.load();
   }
 
   private 读取视频当前播放源(video: HTMLVideoElement): string | null {
@@ -475,9 +524,56 @@ export class 房间消息窗 extends LitElement {
   }
 
   /**
-   * IntersectionObserver 的首次回调在不同浏览器/帧节奏下可能晚一拍。
-   * 这里给新进入观察集的按钮做一次同步热启动量测，避免“视频已经完整进视口，但候选表还是空的”。
+   * 自动播候选不只服务“谁现在开播”，还要服务“下一条视频能否提前长出稳定 `<video>` 壳”：
+   * 1. 已经可见的按钮返回真实 `visibilityRatio`，供 owner 裁决使用；
+   * 2. 刚贴到视口边缘外的一小段按钮返回 `visibilityRatio=0`，只作为预热候选，不抢 owner；
+   * 3. 这样可避免视频露头后才第一次 `img -> video` 换壳，而不需要新增第二套预热状态机。
    */
+  private 根据矩形计算自动播候选(
+    attachmentId: string,
+    rect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">,
+    viewportRect: Pick<DOMRectReadOnly, "top" | "bottom" | "height">
+  ): 消息视频自动播候选 | null {
+    if (!attachmentId || rect.height <= 0) {
+      return null;
+    }
+    const distanceToViewportCenter = Math.abs(
+      (rect.top + rect.bottom) / 2 - (viewportRect.top + viewportRect.bottom) / 2
+    );
+    const visibleTop = Math.max(rect.top, viewportRect.top);
+    const visibleBottom = Math.min(rect.bottom, viewportRect.bottom);
+    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+    if (visibleHeight > 0) {
+      return {
+        attachmentId,
+        visibilityRatio: visibleHeight / rect.height,
+        distanceToViewportCenter,
+      };
+    }
+    /**
+     * 预热窗口不能只盯着“已经贴边的一条卡片”：
+     * - 正式媒体会话从 locator / cache / swarm 解析到可播 src 本身就有异步成本；
+     * - 如果只在 `edgeGap <= rect.height` 时才开始，用户一次较快滚动就可能先看到 poster，再等 `<video>` 长出来；
+     * - 这里把预热边界放宽到“距离当前视口不足一屏”，仍然只预热当前虚拟 DOM 里离视口最近的一批视频，
+     *   但能给正式会话留出足够的解析提前量。
+     */
+    const 预热边界像素 = Math.max(rect.height, viewportRect.height);
+    const edgeGap =
+      rect.bottom <= viewportRect.top
+        ? viewportRect.top - rect.bottom
+        : rect.top >= viewportRect.bottom
+          ? rect.top - viewportRect.bottom
+          : 0;
+    if (edgeGap > 预热边界像素) {
+      return null;
+    }
+    return {
+      attachmentId,
+      visibilityRatio: 0,
+      distanceToViewportCenter,
+    };
+  }
+
   private 量测按钮自动播候选(
     button: HTMLButtonElement,
     viewportRect: DOMRect
@@ -486,20 +582,11 @@ export class 房间消息窗 extends LitElement {
     if (!attachmentId) {
       return null;
     }
-    const rect = button.getBoundingClientRect();
-    const visibleTop = Math.max(rect.top, viewportRect.top);
-    const visibleBottom = Math.min(rect.bottom, viewportRect.bottom);
-    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-    if (visibleHeight <= 0 || rect.height <= 0) {
-      return null;
-    }
-    return {
+    return this.根据矩形计算自动播候选(
       attachmentId,
-      visibilityRatio: visibleHeight / rect.height,
-      distanceToViewportCenter: Math.abs(
-        (rect.top + rect.bottom) / 2 - (viewportRect.top + viewportRect.bottom) / 2
-      ),
-    };
+      button.getBoundingClientRect(),
+      viewportRect
+    );
   }
 
   /**
@@ -532,26 +619,24 @@ export class 房间消息窗 extends LitElement {
             if (currentAttachmentId !== "") {
               this.自动播候选观察目标.set(button, currentAttachmentId);
             }
-            if (!currentAttachmentId || !entry.isIntersecting || entry.intersectionRatio <= 0) {
-              if (currentAttachmentId !== "") {
-                this.自动播候选可见条目.delete(currentAttachmentId);
-              }
-              continue;
-            }
             const rootBounds =
               entry.rootBounds ?? this.自动播候选观察根?.getBoundingClientRect() ?? null;
             if (!rootBounds) {
               continue;
             }
-            const distanceToViewportCenter = Math.abs(
-              (entry.boundingClientRect.top + entry.boundingClientRect.bottom) / 2 -
-                (rootBounds.top + rootBounds.bottom) / 2
+            const candidate = this.根据矩形计算自动播候选(
+              currentAttachmentId,
+              entry.boundingClientRect,
+              rootBounds
             );
-            this.自动播候选可见条目.set(currentAttachmentId, {
-              attachmentId: currentAttachmentId,
-              visibilityRatio: entry.intersectionRatio,
-              distanceToViewportCenter,
-            });
+            if (!candidate) {
+              if (currentAttachmentId !== "") {
+                this.自动播候选可见条目.delete(currentAttachmentId);
+              }
+              continue;
+            }
+            this.自动播候选可见条目.set(currentAttachmentId, candidate);
+            this.预热时间线视频首帧(button, currentAttachmentId);
           }
           this.调度自动播候选(scrollContainer);
         },
@@ -591,25 +676,24 @@ export class 房间消息窗 extends LitElement {
       if (previousAttachmentId === undefined) {
         this.自动播候选观察目标.set(button, attachmentId);
         observer.observe(button);
-        const warmCandidate = this.量测按钮自动播候选(button, 读取视口矩形());
-        if (warmCandidate) {
-          this.自动播候选可见条目.set(attachmentId, warmCandidate);
-        } else if (attachmentId !== "") {
-          this.自动播候选可见条目.delete(attachmentId);
-        }
-        continue;
-      }
-      if (previousAttachmentId !== attachmentId) {
+      } else if (previousAttachmentId !== attachmentId) {
         if (previousAttachmentId !== "") {
           this.自动播候选可见条目.delete(previousAttachmentId);
         }
         this.自动播候选观察目标.set(button, attachmentId);
-        const warmCandidate = this.量测按钮自动播候选(button, 读取视口矩形());
-        if (warmCandidate) {
-          this.自动播候选可见条目.set(attachmentId, warmCandidate);
-        } else if (attachmentId !== "") {
-          this.自动播候选可见条目.delete(attachmentId);
-        }
+      }
+      /**
+       * 既有观察目标也要在每次房间更新时重算一次几何：
+       * - 进房恢复、虚拟列表回填、poster/video 切换都会让按钮位置晚于 `observe()` 再稳定；
+       * - 如果只在“首次 observe”时量一次，候选表可能长期停在旧的空结果，直到用户手动滚一下才恢复；
+       * - 这里仍然只在 `updated(items/playback/preview)` 这些低频节点重算，不把滚动路径重新变回同步全量扫描。
+       */
+      const warmCandidate = this.量测按钮自动播候选(button, 读取视口矩形());
+      if (warmCandidate) {
+        this.自动播候选可见条目.set(attachmentId, warmCandidate);
+        this.预热时间线视频首帧(button, attachmentId);
+      } else if (attachmentId !== "") {
+        this.自动播候选可见条目.delete(attachmentId);
       }
     }
   }
@@ -1072,17 +1156,24 @@ export class 房间消息窗 extends LitElement {
             const previewVideoSrc =
               shouldRenderInlineVideo ? inlineAutoplayPreviewSrc : timelinePreviewVideoSrc;
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
-            const previewVideoPoster = restorableTimelineFrame
-              ? undefined
-              : hasSourcePoster || hasRuntimePreview
-                ? previewPosterSrc
-                : undefined;
-            const shouldGateVideoUntilFirstFrame =
-              shouldRenderPreviewVideo && !hasSourcePoster && !hasRuntimePreview;
             const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
               attachment.attachmentId,
               previewVideoSrc
             );
+            /**
+             * 时间线 `<video>` 一旦已经拿到首帧，就不能继续把 `poster` 当正式画面：
+             * 1. 让非 owner 长期挂着 poster，等 owner 接管时再移除，会在 Chrome 里形成一次可见的“海报 -> 真视频帧”跳变；
+             * 2. 真正丝滑的体验应该是：首帧 ready 之后，非 owner 也已经在展示真实视频像素，只是暂停着；
+             * 3. `poster` 仍然保留为首帧未就绪前的临时遮挡，不改写无源/未 ready 时的兜底语义。
+             */
+            const previewVideoPoster =
+              !restorableTimelineFrame &&
+              !isFirstFrameReady &&
+              (hasSourcePoster || hasRuntimePreview)
+                ? previewPosterSrc
+                : undefined;
+            const shouldGateVideoUntilFirstFrame =
+              shouldRenderPreviewVideo && !hasSourcePoster && !hasRuntimePreview;
             const shouldShowFirstFrameGuard = shouldGateVideoUntilFirstFrame && !isFirstFrameReady;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：

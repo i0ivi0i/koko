@@ -1594,6 +1594,150 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("有 poster 的 swarm 视频首帧就绪后会提前移除 video.poster，避免 owner 接管时再闪一下", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
+    expect(previewVideo?.autoplay).toBe(false);
+
+    previewVideo!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
+
+    const readyPreviewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(readyPreviewVideo).toBe(previewVideo);
+    expect(readyPreviewVideo?.getAttribute("poster")).toBeNull();
+    expect(readyPreviewVideo?.autoplay).toBe(false);
+
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    await pane.updateComplete;
+
+    const ownerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(ownerVideo).toBe(readyPreviewVideo);
+    expect(ownerVideo?.getAttribute("poster")).toBeNull();
+    expect(ownerVideo?.autoplay).toBe(true);
+
+    pane.remove();
+  });
+
+  it("有 poster 的 swarm 视频进入自动播预热窗口时，会把同一颗 video 提前提升到 auto preload", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const trigger = pane.querySelector<HTMLButtonElement>(
+      'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+    );
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(trigger).not.toBeNull();
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.preload).toBe("metadata");
+
+    Object.defineProperty(previewVideo!, "readyState", {
+      configurable: true,
+      value: HTMLMediaElement.HAVE_METADATA,
+    });
+    Object.defineProperty(previewVideo!, "networkState", {
+      configurable: true,
+      value: HTMLMediaElement.NETWORK_IDLE,
+    });
+    const loadSpy = vi.spyOn(previewVideo!, "load").mockImplementation(() => {});
+
+    (
+      pane as unknown as {
+        预热时间线视频首帧(button: HTMLButtonElement, attachmentId: string): void;
+      }
+    ).预热时间线视频首帧(trigger!, "att-video-1");
+
+    expect(previewVideo?.preload).toBe("auto");
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+
+    loadSpy.mockRestore();
+    pane.remove();
+  });
+
+  it("有 poster 的 swarm 视频首帧事件回抛 currentSrc 绝对地址时，也能识别为同源并移除 poster", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "/webtorrent/demo-infohash/content-demo.mp4",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const previewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(previewVideo).not.toBeNull();
+    expect(previewVideo?.getAttribute("poster")).toBe("http://media.local/poster-video-1");
+
+    Object.defineProperty(previewVideo!, "currentSrc", {
+      configurable: true,
+      value: new URL(playback.src, window.location.href).href,
+    });
+    previewVideo!.dispatchEvent(new Event("loadeddata"));
+    await pane.updateComplete;
+
+    const readyPreviewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(readyPreviewVideo?.getAttribute("poster")).toBeNull();
+
+    pane.remove();
+  });
+
   it("有 poster 的 swarm 视频从预览切到自动播时复用同一颗 video 节点", async () => {
     const pane = 创建媒体消息窗();
     const playback = {
@@ -1974,12 +2118,331 @@ describe("房间消息窗媒体查看器", () => {
       expect(observedEvents[0]?.detail.candidates).toEqual([
         {
           attachmentId: "att-video-2",
-          visibilityRatio: 0.82,
+          visibilityRatio: 1,
           distanceToViewportCenter: 0,
         },
       ]);
       expect(firstRectSpy).not.toHaveBeenCalled();
       expect(secondRectSpy).not.toHaveBeenCalled();
+    } finally {
+      pane.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("支持 IntersectionObserver 时，贴近视口但尚未相交的视频也会保留为预热候选", async () => {
+    const pane = 创建媒体消息窗();
+    const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];
+    let nextAnimationFrameId = 1;
+    const rafCallbacks = new Map<number, FrameRequestCallback>();
+    const flushAnimationFrame = () => {
+      const callbacks = Array.from(rafCallbacks.values());
+      rafCallbacks.clear();
+      for (const callback of callbacks) {
+        callback(performance.now());
+      }
+    };
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    type 观察回调 = (
+      entries: IntersectionObserverEntry[],
+      observer: IntersectionObserver
+    ) => void;
+    let observerCallback: 观察回调 | null = null;
+    let observerInstance: IntersectionObserver | null = null;
+
+    class 假交叉观察器 {
+      readonly root: Element | Document | null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0, 0.25, 0.5, 0.75, 1];
+      readonly observe = observe;
+      readonly unobserve = vi.fn();
+      readonly disconnect = disconnect;
+
+      constructor(callback: 观察回调, options?: IntersectionObserverInit) {
+        observerCallback = callback;
+        this.root = (options?.root as Element | Document | null) ?? null;
+        observerInstance = this as unknown as IntersectionObserver;
+      }
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const id = nextAnimationFrameId++;
+        rafCallbacks.set(id, callback);
+        return id;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        rafCallbacks.delete(id);
+      })
+    );
+    vi.stubGlobal(
+      "IntersectionObserver",
+      假交叉观察器 as unknown as typeof IntersectionObserver
+    );
+
+    try {
+      pane.addEventListener("room-inline-autoplay-observed", (event) => {
+        observedEvents.push(event as CustomEvent<{ candidates: unknown[] }>);
+      });
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const button = pane.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      );
+      expect(button).not.toBeNull();
+
+      flushAnimationFrame();
+      observedEvents.length = 0;
+
+      expect(observe).toHaveBeenCalledTimes(1);
+      expect(observerCallback).not.toBeNull();
+      expect(observerInstance).not.toBeNull();
+      if (!observerCallback || !observerInstance) {
+        throw new Error("IntersectionObserver 回调未就绪");
+      }
+
+      /**
+       * 目标视频尚未真正进入视口，但已经紧贴下沿：
+       * - 这时它不该抢自动播 owner；
+       * - 但应该提前进入预热候选，避免真正露头后才第一次 `img -> video` 换壳。
+       */
+      (observerCallback as 观察回调)(
+        [
+          {
+            target: button!,
+            isIntersecting: false,
+            intersectionRatio: 0,
+            boundingClientRect: new DOMRect(0, 730, 320, 180),
+            rootBounds: new DOMRect(0, 0, 320, 720),
+            intersectionRect: new DOMRect(0, 0, 0, 0),
+            time: performance.now(),
+          } as IntersectionObserverEntry,
+        ],
+        observerInstance as IntersectionObserver
+      );
+
+      expect(observedEvents).toHaveLength(0);
+      expect(rafCallbacks.size).toBe(1);
+
+      flushAnimationFrame();
+
+      expect(observedEvents).toHaveLength(1);
+      expect(observedEvents[0]?.detail.candidates).toEqual([
+        {
+          attachmentId: "att-video-1",
+          visibilityRatio: 0,
+          distanceToViewportCenter: 460,
+        },
+      ]);
+    } finally {
+      pane.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("支持 IntersectionObserver 时，距离视口不足一屏的未相交视频也会保留为预热候选，给正式会话留出解析提前量", async () => {
+    const pane = 创建媒体消息窗();
+    const observedEvents: Array<CustomEvent<{ candidates: unknown[] }>> = [];
+    let nextAnimationFrameId = 1;
+    const rafCallbacks = new Map<number, FrameRequestCallback>();
+    const flushAnimationFrame = () => {
+      const callbacks = Array.from(rafCallbacks.values());
+      rafCallbacks.clear();
+      for (const callback of callbacks) {
+        callback(performance.now());
+      }
+    };
+
+    class 假交叉观察器 {
+      readonly root: Element | Document | null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0, 0.25, 0.5, 0.75, 1];
+
+      constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        this.root = (options?.root as Element | Document | null) ?? null;
+      }
+
+      observe(): void {}
+
+      unobserve(): void {}
+
+      disconnect(): void {}
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const id = nextAnimationFrameId++;
+        rafCallbacks.set(id, callback);
+        return id;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        rafCallbacks.delete(id);
+      })
+    );
+    vi.stubGlobal(
+      "IntersectionObserver",
+      假交叉观察器 as unknown as typeof IntersectionObserver
+    );
+
+    try {
+      pane.addEventListener("room-inline-autoplay-observed", (event) => {
+        observedEvents.push(event as CustomEvent<{ candidates: unknown[] }>);
+      });
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const scrollContainer = pane.querySelector<HTMLElement>(".message-scroll");
+      const videoButton = pane.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      );
+      expect(scrollContainer).not.toBeNull();
+      expect(videoButton).not.toBeNull();
+      vi.spyOn(scrollContainer!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 320, 720)
+      );
+      vi.spyOn(videoButton!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 980, 320, 180)
+      );
+      observedEvents.length = 0;
+      (
+        pane as unknown as {
+          清理自动播候选观察(): void;
+          同步自动播候选观察(scrollContainer: HTMLElement): void;
+          调度自动播候选(scrollContainer: HTMLElement): void;
+        }
+      ).清理自动播候选观察();
+      (
+        pane as unknown as {
+          清理自动播候选观察(): void;
+          同步自动播候选观察(scrollContainer: HTMLElement): void;
+          调度自动播候选(scrollContainer: HTMLElement): void;
+        }
+      ).同步自动播候选观察(scrollContainer!);
+      (
+        pane as unknown as {
+          清理自动播候选观察(): void;
+          同步自动播候选观察(scrollContainer: HTMLElement): void;
+          调度自动播候选(scrollContainer: HTMLElement): void;
+        }
+      ).调度自动播候选(scrollContainer!);
+
+      flushAnimationFrame();
+
+      expect(observedEvents).toHaveLength(1);
+      expect(observedEvents[0]?.detail.candidates).toEqual([
+        {
+          attachmentId: "att-video-1",
+          visibilityRatio: 0,
+          distanceToViewportCenter: 710,
+        },
+      ]);
+    } finally {
+      pane.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("房间首轮更新时，近视口预热候选会立即派发，而不是再额外等一帧 rAF", async () => {
+    const pane = 创建媒体消息窗();
+    const observedDetails: Array<{ candidates: unknown[] }> = [];
+    let nextAnimationFrameId = 1;
+    const rafCallbacks = new Map<number, FrameRequestCallback>();
+
+    class 假交叉观察器 {
+      readonly root: Element | Document | null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0, 0.25, 0.5, 0.75, 1];
+
+      constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        this.root = (options?.root as Element | Document | null) ?? null;
+      }
+
+      observe(): void {}
+
+      unobserve(): void {}
+
+      disconnect(): void {}
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        const id = nextAnimationFrameId++;
+        rafCallbacks.set(id, callback);
+        return id;
+      })
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn((id: number) => {
+        rafCallbacks.delete(id);
+      })
+    );
+    vi.stubGlobal(
+      "IntersectionObserver",
+      假交叉观察器 as unknown as typeof IntersectionObserver
+    );
+
+    try {
+      pane.addEventListener("room-inline-autoplay-observed", (event) => {
+        observedDetails.push(
+          (event as CustomEvent<{ candidates: unknown[] }>).detail
+        );
+      });
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const scrollContainer = pane.querySelector<HTMLElement>(".message-scroll");
+      const videoButton = pane.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      );
+      expect(scrollContainer).not.toBeNull();
+      expect(videoButton).not.toBeNull();
+      vi.spyOn(scrollContainer!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 320, 720)
+      );
+      vi.spyOn(videoButton!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 980, 320, 180)
+      );
+      observedDetails.length = 0;
+
+      pane.mediaPlaybackByAttachmentId = { ...pane.mediaPlaybackByAttachmentId };
+      await pane.updateComplete;
+
+      expect(observedDetails).toEqual([
+        {
+          candidates: [
+            {
+              attachmentId: "att-video-1",
+              visibilityRatio: 0,
+              distanceToViewportCenter: 710,
+            },
+          ],
+        },
+      ]);
+      expect(rafCallbacks.size).toBe(0);
     } finally {
       pane.remove();
       vi.unstubAllGlobals();

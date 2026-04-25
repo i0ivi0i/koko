@@ -1,11 +1,11 @@
 # Graph Report - koko  (2026-04-25)
 
 ## Corpus Check
-- 230 files · ~300,816 words
+- 230 files · ~302,279 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 601 nodes · 1265 edges · 15 communities detected
+- 601 nodes · 1266 edges · 15 communities detected
 - Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 461 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
@@ -53,16 +53,16 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.03
-Nodes (87): 插入0018前脏匿名身份与视频附件(), 是64位小写hex(), abandon_media_upload(), AbandonMediaUploadBody, admin_login(), admin_overview(), admin_room_detail(), admin_rooms() (+79 more)
-
-### Community 1 - "Community 1"
 Cohesion: 0.04
 Nodes (80): 原始冷源超过24小时后会被后台清理并写入删除时间(), active_backend_strong_seed会让同swarm过期附件保持ready(), announce_url(), as_str(), attachments_to_json(), 房间历史分页会返回before_event_position之前的消息(), 房间历史分页缺少before_event_position会返回invalid_argument(), 空body_presence不会把无种子附件抬成media_ready() (+72 more)
 
+### Community 1 - "Community 1"
+Cohesion: 0.03
+Nodes (84): 插入0018前脏匿名身份与视频附件(), 是64位小写hex(), abandon_media_upload(), AbandonMediaUploadBody, admin_login(), admin_overview(), admin_room_detail(), admin_rooms() (+76 more)
+
 ### Community 2 - "Community 2"
-Cohesion: 0.04
-Nodes (55): 备份并清空环境变量(), 构造统一媒体文件Accept(), acquire_timeout(), 创建资产协作分发Actor(), 向受控页面广播后台补发请求(), 新模块会拒绝非canonical_webp字节(), 预制图片为CanonicalWebp(), connectedCallback() (+47 more)
+Cohesion: 0.03
+Nodes (59): 备份并清空环境变量(), 构造统一媒体文件Accept(), acquire_timeout(), 创建资产协作分发Actor(), 向受控页面广播后台补发请求(), 新模块会拒绝非canonical_webp字节(), 预制图片为CanonicalWebp(), connect_timeout() (+51 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.03
@@ -125,9 +125,9 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `备份并清空环境变量()` connect `Community 2` to `Community 0`, `Community 1`, `Community 3`, `Community 4`, `Community 10`, `Community 12`?**
   _High betweenness centrality (0.177) - this node is a cross-community bridge._
-- **Why does `get()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`?**
+- **Why does `get()` connect `Community 1` to `Community 0`, `Community 2`, `Community 3`, `Community 4`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`?**
   _High betweenness centrality (0.158) - this node is a cross-community bridge._
-- **Why does `as_str()` connect `Community 1` to `Community 0`, `Community 9`, `Community 2`, `Community 4`?**
+- **Why does `as_str()` connect `Community 0` to `Community 1`, `Community 2`, `Community 4`, `Community 9`?**
   _High betweenness centrality (0.094) - this node is a cross-community bridge._
 - **Are the 91 inferred relationships involving `as_str()` (e.g. with `handle_tus_hook()` and `handle_tus_hook_pre_create()`) actually correct?**
   _`as_str()` has 91 INFERRED edges - model-reasoned connections that need verification._
