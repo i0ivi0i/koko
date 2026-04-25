@@ -8,6 +8,55 @@ import type { 房间消息窗 } from "../房间消息窗";
 import type { 消息展示项 } from "../视图";
 import "../房间消息窗";
 
+const 安装消息窗直达全屏模拟 = () => {
+  const fullscreenDescriptor = Object.getOwnPropertyDescriptor(document, "fullscreenElement");
+  const exitFullscreenDescriptor = Object.getOwnPropertyDescriptor(document, "exitFullscreen");
+  const requestFullscreenDescriptor = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "requestFullscreen"
+  );
+  let fullscreenElement: Element | null = null;
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    fullscreenElement = this;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  const exitFullscreen = vi.fn(async () => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+  });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  const restore = () => {
+    if (fullscreenDescriptor) {
+      Object.defineProperty(document, "fullscreenElement", fullscreenDescriptor);
+    } else {
+      Reflect.deleteProperty(document, "fullscreenElement");
+    }
+    if (exitFullscreenDescriptor) {
+      Object.defineProperty(document, "exitFullscreen", exitFullscreenDescriptor);
+    } else {
+      Reflect.deleteProperty(document, "exitFullscreen");
+    }
+    if (requestFullscreenDescriptor) {
+      Object.defineProperty(HTMLElement.prototype, "requestFullscreen", requestFullscreenDescriptor);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
+    }
+  };
+  return { requestFullscreen, exitFullscreen, restore };
+};
+
 const 空文本布局 = {
   height: 0,
   lineCount: 0,
@@ -2825,6 +2874,149 @@ describe("房间消息窗媒体查看器", () => {
     ]);
 
     pane.remove();
+  });
+
+  it("点击当前自动播 owner 视频时，会直接接管同一颗时间线 video 进入全屏，而不是继续回抛查看器冷开请求", async () => {
+    const { requestFullscreen, exitFullscreen, restore } = 安装消息窗直达全屏模拟();
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    try {
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const preview = pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-1"]'
+      );
+      const trigger = pane.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+      );
+      expect(preview).not.toBeNull();
+      expect(trigger).not.toBeNull();
+      expect(preview?.controls).toBe(false);
+      expect(preview?.muted).toBe(true);
+      expect(preview?.loop).toBe(true);
+
+      trigger?.click();
+      await pane.updateComplete;
+
+      expect(details).toHaveLength(0);
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+      expect(requestFullscreen.mock.instances.at(0)).toBe(preview);
+      expect(document.fullscreenElement).toBe(preview);
+      expect(
+        pane.querySelectorAll('video.message-video-preview[data-attachment-id="att-video-1"]')
+      ).toHaveLength(1);
+      expect(preview?.controls).toBe(true);
+      expect(preview?.muted).toBe(false);
+      expect(preview?.loop).toBe(false);
+
+      await exitFullscreen();
+      await pane.updateComplete;
+
+      expect(preview?.controls).toBe(false);
+      expect(preview?.muted).toBe(true);
+      expect(preview?.loop).toBe(true);
+    } finally {
+      pane.remove();
+      restore();
+    }
+  });
+
+  it("点击非自动播 owner 视频时，仍然继续走查看器冷开请求", async () => {
+    const { requestFullscreen, restore } = 安装消息窗直达全屏模拟();
+    const pane = 创建媒体消息窗();
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/swarm-video-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    pane.inlineAutoplayOwnerAttachmentId = null;
+    const details: 媒体查看器打开请求[] = [];
+    pane.addEventListener("room-open-media-viewer", (event) => {
+      details.push((event as CustomEvent<媒体查看器打开请求>).detail);
+    });
+    try {
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      pane
+        .querySelector<HTMLButtonElement>(
+          'button.message-video-preview-trigger[data-attachment-id="att-video-1"]'
+        )
+        ?.click();
+      await pane.updateComplete;
+
+      expect(requestFullscreen).toHaveBeenCalledTimes(0);
+      expect(details).toHaveLength(1);
+      expect(details[0]?.startAttachmentId).toBe("att-video-1");
+    } finally {
+      pane.remove();
+      restore();
+    }
   });
 
   it("视频已经切到 HLS manifest 主链且没有 poster 时，消息卡片会退到静态占位，而不是把 m3u8 塞给原生 video", async () => {

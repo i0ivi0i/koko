@@ -20,6 +20,31 @@ type 消息虚拟项 = {
   start: number;
 };
 
+type 可直达全屏时间线视频 = HTMLVideoElement & {
+  requestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
+  webkitEnterFullscreen?: () => void;
+  webkitEnterFullScreen?: () => void;
+  webkitSupportsFullscreen?: boolean;
+};
+
+type 时间线视频直达全屏接管 = {
+  attachmentId: string;
+  video: 可直达全屏时间线视频;
+  handleFullscreenChange: () => void;
+  handleNativeVideoFullscreenEnd: () => void;
+  restore: {
+    controls: boolean;
+    muted: boolean;
+    loop: boolean;
+    ariaHidden: string | null;
+    tabIndex: string | null;
+    pointerEvents: string;
+    objectFit: string;
+    background: string;
+    inlineFullscreenActive: string | null;
+  };
+};
+
 /**
  * HLS manifest 不是时间线原生 `<video>` 的可播放文件。
  * 当后端暂时还没有真正的 poster 资产时，这里给一张极轻的 SVG 静态占位图：
@@ -100,6 +125,7 @@ export class 房间消息窗 extends LitElement {
    * 3. 缓存 owner 在消息窗本身，用来消除“首帧前黑闪”而不引入第二播放链。
    */
   private readonly 时间线视频首帧就绪源 = new Map<string, string>();
+  private 当前时间线视频直达全屏接管: 时间线视频直达全屏接管 | null = null;
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -138,6 +164,7 @@ export class 房间消息窗 extends LitElement {
   override disconnectedCallback(): void {
     this.取消自动播候选调度();
     this.清理自动播候选观察();
+    this.清理时间线视频直达全屏接管();
     this.失效视频封面地址.clear();
     this.时间线视频首帧就绪源.clear();
     this.自动播位置上报记录.clear();
@@ -941,9 +968,191 @@ export class 房间消息窗 extends LitElement {
     return items;
   }
 
+  private 当前全屏元素仍属于该时间线视频(
+    element: Element | null,
+    video: 可直达全屏时间线视频
+  ): boolean {
+    if (!element) {
+      return false;
+    }
+    let current: Node | null = video;
+    while (current) {
+      if (current === element) {
+        return true;
+      }
+      const root = current.getRootNode();
+      if (root instanceof ShadowRoot) {
+        current = root.host;
+        continue;
+      }
+      current = current.parentNode;
+    }
+    return false;
+  }
+
+  private 清理时间线视频直达全屏接管(input?: {
+    attachmentId?: string;
+    video?: 可直达全屏时间线视频;
+  }): void {
+    const active = this.当前时间线视频直达全屏接管;
+    if (!active) {
+      return;
+    }
+    if (input?.attachmentId && active.attachmentId !== input.attachmentId) {
+      return;
+    }
+    if (input?.video && active.video !== input.video) {
+      return;
+    }
+    document.removeEventListener("fullscreenchange", active.handleFullscreenChange);
+    active.video.removeEventListener(
+      "webkitendfullscreen",
+      active.handleNativeVideoFullscreenEnd
+    );
+    active.video.controls = active.restore.controls;
+    active.video.muted = active.restore.muted;
+    active.video.loop = active.restore.loop;
+    if (active.restore.ariaHidden === null) {
+      active.video.removeAttribute("aria-hidden");
+    } else {
+      active.video.setAttribute("aria-hidden", active.restore.ariaHidden);
+    }
+    if (active.restore.tabIndex === null) {
+      active.video.removeAttribute("tabindex");
+    } else {
+      active.video.setAttribute("tabindex", active.restore.tabIndex);
+    }
+    active.video.style.pointerEvents = active.restore.pointerEvents;
+    active.video.style.objectFit = active.restore.objectFit;
+    active.video.style.background = active.restore.background;
+    if (active.restore.inlineFullscreenActive === null) {
+      delete active.video.dataset.inlineFullscreenActive;
+    } else {
+      active.video.dataset.inlineFullscreenActive = active.restore.inlineFullscreenActive;
+    }
+    this.当前时间线视频直达全屏接管 = null;
+  }
+
+  private 启动时间线视频直达全屏接管(
+    attachmentId: string,
+    video: 可直达全屏时间线视频
+  ): void {
+    this.清理时间线视频直达全屏接管();
+    /**
+     * 当前自动播 owner 被显式点击时，用户要的是“把这颗活着的 video 升格成正式观看表面”：
+     * 1. 继续复用同一条 src/currentTime 真相，不重建第二颗播放器；
+     * 2. 只临时放开 controls / 非静音 / 非循环，让它具备正式观看语义；
+     * 3. 全屏退出后再恢复成时间线预览配置，避免把查看器状态残留回消息流。
+     */
+    const active: 时间线视频直达全屏接管 = {
+      attachmentId,
+      video,
+      handleFullscreenChange: () => {
+        if (
+          this.当前全屏元素仍属于该时间线视频(document.fullscreenElement, video)
+        ) {
+          return;
+        }
+        this.清理时间线视频直达全屏接管({ attachmentId, video });
+      },
+      handleNativeVideoFullscreenEnd: () => {
+        this.清理时间线视频直达全屏接管({ attachmentId, video });
+      },
+      restore: {
+        controls: video.controls,
+        muted: video.muted,
+        loop: video.loop,
+        ariaHidden: video.getAttribute("aria-hidden"),
+        tabIndex: video.getAttribute("tabindex"),
+        pointerEvents: video.style.pointerEvents,
+        objectFit: video.style.objectFit,
+        background: video.style.background,
+        inlineFullscreenActive: video.dataset.inlineFullscreenActive ?? null,
+      },
+    };
+    video.controls = true;
+    video.muted = false;
+    video.loop = false;
+    video.removeAttribute("aria-hidden");
+    video.removeAttribute("tabindex");
+    video.style.pointerEvents = "auto";
+    video.style.objectFit = "contain";
+    video.style.background = "#000";
+    video.dataset.inlineFullscreenActive = "true";
+    document.addEventListener("fullscreenchange", active.handleFullscreenChange);
+    video.addEventListener("webkitendfullscreen", active.handleNativeVideoFullscreenEnd);
+    if (video.paused) {
+      void video.play().catch(() => undefined);
+    }
+    this.当前时间线视频直达全屏接管 = active;
+  }
+
+  private 请求时间线视频直达全屏(video: 可直达全屏时间线视频): boolean {
+    if (typeof video.requestFullscreen === "function") {
+      void video.requestFullscreen({ navigationUI: "hide" }).catch(() => {
+        this.清理时间线视频直达全屏接管({ video });
+      });
+      return true;
+    }
+    if (video.webkitSupportsFullscreen === false) {
+      return false;
+    }
+    try {
+      if (typeof video.webkitEnterFullscreen === "function") {
+        video.webkitEnterFullscreen();
+        return true;
+      }
+      if (typeof video.webkitEnterFullScreen === "function") {
+        video.webkitEnterFullScreen();
+        return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
+
+  private 读取当前自动播Owner视频(
+    attachmentId: string
+  ): 可直达全屏时间线视频 | null {
+    if (this.inlineAutoplayOwnerAttachmentId !== attachmentId) {
+      return null;
+    }
+    const video = this.querySelector<可直达全屏时间线视频>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"]`
+    );
+    if (!video || !video.autoplay) {
+      return null;
+    }
+    if (!this.读取视频当前播放源(video)) {
+      return null;
+    }
+    return video;
+  }
+
+  private 尝试直接接管当前自动播视频全屏(attachmentId: string): boolean {
+    const active = this.当前时间线视频直达全屏接管;
+    if (active?.attachmentId === attachmentId) {
+      return true;
+    }
+    const video = this.读取当前自动播Owner视频(attachmentId);
+    if (!video) {
+      return false;
+    }
+    this.启动时间线视频直达全屏接管(attachmentId, video);
+    if (this.请求时间线视频直达全屏(video)) {
+      return true;
+    }
+    this.清理时间线视频直达全屏接管({ attachmentId, video });
+    return false;
+  }
+
   private 打开媒体查看器(event: Event, startAttachmentId: string): void {
     event.preventDefault();
     event.stopPropagation();
+    if (this.尝试直接接管当前自动播视频全屏(startAttachmentId)) {
+      return;
+    }
     const items = this.读取媒体查看器项目();
     if (!items.some((item) => item.attachmentId === startAttachmentId)) {
       return;

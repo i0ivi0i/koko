@@ -43,6 +43,41 @@ const 当前测试文件目录 = dirname(fileURLToPath(import.meta.url));
 const 读取前端源码 = (relativePath: string): string =>
   readFileSync(resolve(当前测试文件目录, "..", relativePath), "utf8");
 
+const 安装聊天壳直达全屏模拟 = () => {
+  const fullscreenDescriptor = Object.getOwnPropertyDescriptor(document, "fullscreenElement");
+  const requestFullscreenDescriptor = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "requestFullscreen"
+  );
+  let fullscreenElement: Element | null = null;
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+  const requestFullscreen = vi.fn(function (this: Element) {
+    fullscreenElement = this;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  const restore = () => {
+    if (fullscreenDescriptor) {
+      Object.defineProperty(document, "fullscreenElement", fullscreenDescriptor);
+    } else {
+      Reflect.deleteProperty(document, "fullscreenElement");
+    }
+    if (requestFullscreenDescriptor) {
+      Object.defineProperty(HTMLElement.prototype, "requestFullscreen", requestFullscreenDescriptor);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
+    }
+  };
+  return { requestFullscreen, restore };
+};
+
 describe("聊天壳集成 / 首页与控制台", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -771,6 +806,107 @@ describe("聊天壳集成 / 首页与控制台", () => {
       })
     );
     el.remove();
+  });
+
+  it("点击当前自动播 owner 视频时，会直接接管现有时间线 video 进入全屏，不再冷开查看器", async () => {
+    const { requestFullscreen, restore } = 安装聊天壳直达全屏模拟();
+    const transport = new 假传输();
+    transport.joinQueue = [
+      创建房间快照("r-test", 1, {
+        snapshot_messages: [
+          {
+            type: "message_created",
+            room_id: "r-test",
+            message_id: "m-video-inline-direct-fullscreen",
+            client_message_id: "c-video-inline-direct-fullscreen",
+            sender_session_id: "s-other",
+            sender_display_alias: "冷静的水獭",
+            text: "",
+            attachments: [
+              {
+                kind: "video",
+                attachment_id: "att-video-inline-direct-fullscreen",
+                width: 1280,
+                height: 720,
+              },
+            ],
+            event_position: 1,
+          },
+        ],
+      }),
+    ];
+    const viewer = {
+      打开: vi.fn(),
+      销毁: vi.fn(),
+    };
+    const el = document.createElement("koko-chat-shell") as 聊天壳;
+    el.setTransportForTest(transport);
+    注入媒体查看器供测试(el, viewer);
+    注入媒体播放器供测试(el, {
+      解析播放结果: vi.fn().mockResolvedValue({
+        mode: "swarm",
+        attachmentId: "att-video-inline-direct-fullscreen",
+        kind: "video",
+        src: "blob:http://localhost/webtorrent-inline-direct-fullscreen",
+        thumbnailUrl: null,
+        hint: null,
+      }),
+    });
+    try {
+      document.body.appendChild(el);
+      await 等待组件稳定(el);
+
+      输入房间短码到操作台(el, "ROOM01");
+      读取操作台主动作(el).click();
+      await 等待组件稳定(el);
+      await 等待组件稳定(el);
+
+      const pane = el.shadowRoot!.querySelector("koko-room-message-pane") as 房间消息窗 | null;
+      expect(pane).not.toBeNull();
+      pane!.mediaPlaybackByAttachmentId = {
+        "att-video-inline-direct-fullscreen": {
+          mode: "swarm",
+          attachmentId: "att-video-inline-direct-fullscreen",
+          kind: "video",
+          src: "blob:http://localhost/webtorrent-inline-direct-fullscreen",
+          thumbnailUrl: null,
+          hint: null,
+        },
+      };
+      pane!.inlineAutoplayPlaybackByAttachmentId = {
+        "att-video-inline-direct-fullscreen": {
+          mode: "swarm",
+          attachmentId: "att-video-inline-direct-fullscreen",
+          kind: "video",
+          src: "blob:http://localhost/webtorrent-inline-direct-fullscreen",
+          thumbnailUrl: null,
+          hint: null,
+        },
+      };
+      pane!.inlineAutoplayOwnerAttachmentId = "att-video-inline-direct-fullscreen";
+      await pane!.updateComplete;
+
+      const preview = el.shadowRoot!.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-inline-direct-fullscreen"]'
+      );
+      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(
+        'button.message-video-preview-trigger[data-attachment-id="att-video-inline-direct-fullscreen"]'
+      );
+      expect(preview).not.toBeNull();
+      expect(trigger).not.toBeNull();
+
+      trigger?.click();
+      await pane!.updateComplete;
+
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+      expect(requestFullscreen.mock.instances.at(0)).toBe(preview);
+      expect(viewer.打开).not.toHaveBeenCalled();
+      expect(document.body.querySelector("video-player[data-player-shell='videojs']")).toBeNull();
+      expect(pane!.inlineAutoplayOwnerAttachmentId).toBe("att-video-inline-direct-fullscreen");
+    } finally {
+      el.remove();
+      restore();
+    }
   });
 
   it("真实查看器打开后切到另一条视频时，会继续复用同一颗 Video.js 壳", async () => {
