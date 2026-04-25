@@ -291,7 +291,14 @@ export class 房间消息窗 extends LitElement {
   }
 
   private 读取视频当前播放源(video: HTMLVideoElement): string | null {
-    const src = video.currentSrc || video.getAttribute("src") || "";
+    /**
+     * 时间线 `<video>` 的 canonical 源应优先认模板当前绑定的 `src`：
+     * 1. Chrome 会把 `currentSrc` 展开成绝对地址；
+     * 2. 若把这个绝对地址继续上报回运行时，再回灌到模板，就会在 owner 切换时把
+     *    `/webtorrent/...` 改写成 `https://host/webtorrent/...`；
+     * 3. 对浏览器来说这依然是一次新的 `src` 赋值，会触发 `emptied/loadstart`，真实滚动里就会抽一下。
+     */
+    const src = video.getAttribute("src") || video.currentSrc || "";
     return src.length > 0 ? src : null;
   }
 
@@ -1131,30 +1138,26 @@ export class 房间消息窗 extends LitElement {
             /**
              * owner 刚滑出视口时，上层可能先撤掉 autoplay playback 快照，
              * 下一轮可见性裁决才会重新回灌。这个短窗口不能退回 poster：
-             * 保存位置的 src 来自刚才那颗真实 `<video>` 的 currentSrc，只作为同源续帧画面，
+             * 保存位置的 src 来自刚才那颗真实 `<video>` 的当前模板源，只作为同源续帧画面，
              * 不打开 original 冷源，也不产生第二条播放真相。
              */
             const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
-            const timelinePlayableVideoSrc =
-              inlineAutoplayPreviewSrc ?? playbackTimelineVideoSrc ?? savedTimelineFrameSrc;
-            const restorableTimelineFrame = this.读取自动播恢复位置(
-              attachment.attachmentId,
-              timelinePlayableVideoSrc
-            );
-            const restorableTimelineVideoSrc =
-              restorableTimelineFrame && !shouldRenderInlineVideo
-                ? restorableTimelineFrame.src
-                : null;
             /**
-             * 时间线视频一旦拿到正式 swarm 播放源，就继续复用同一颗 `<video>` 作为唯一视觉壳：
+             * 时间线视频一旦拿到正式 swarm 播放源，就继续复用同一颗 `<video>` 作为唯一视觉壳，
+             * 且优先保留 playback 给出的 canonical src：
              * 1. 有 poster 也只允许挂在这颗 `<video>` 上等待首帧，不能退回独立 `<img>`；
              * 2. 这样下一个可见视频从“静态预览 -> 自动播 owner”时，只切 autoplay，不切主节点；
-             * 3. `savedTimelineFrameSrc` 仍只兜住 playback 快照短暂缺席时的释放帧，不改写正式源真相。
+             * 3. `savedTimelineFrameSrc` 只在 playback 暂缺时兜住释放帧，不允许反过来改写已有的 canonical playback 源；
+             * 4. 否则同一资源会在相对/绝对 URL 间来回赋值，Chrome 会把它当成一次新 load，自动播切换就会闪。
              */
             const timelinePreviewVideoSrc =
-              restorableTimelineVideoSrc ?? playbackTimelineVideoSrc;
+              playbackTimelineVideoSrc ?? savedTimelineFrameSrc;
             const previewVideoSrc =
               shouldRenderInlineVideo ? inlineAutoplayPreviewSrc : timelinePreviewVideoSrc;
+            const restorableTimelineFrame = this.读取自动播恢复位置(
+              attachment.attachmentId,
+              previewVideoSrc
+            );
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
             const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
               attachment.attachmentId,
@@ -1230,7 +1233,9 @@ export class 房间消息窗 extends LitElement {
                               return;
                             }
                             this.恢复时间线自动播播放位置(attachment.attachmentId, target, {
-                              allowPreviewFrame: Boolean(restorableTimelineVideoSrc),
+                              allowPreviewFrame: Boolean(
+                                restorableTimelineFrame && !shouldRenderInlineVideo
+                              ),
                             });
                           }}
                           @loadeddata=${(event: Event) => {

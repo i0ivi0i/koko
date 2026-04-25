@@ -1459,6 +1459,76 @@ describe("房间消息窗媒体查看器", () => {
     }
   });
 
+  it("自动播时间戳上报会优先使用模板里的 canonical src，而不是浏览器展开后的 currentSrc 绝对地址", async () => {
+    const pane = 创建媒体消息窗();
+    const positionEvents: Array<
+      CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+    > = [];
+    const autoplayPlayback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "/webtorrent/demo-infohash/content-demo.mp4",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.addEventListener("room-inline-autoplay-position-changed", (event) => {
+      positionEvents.push(
+        event as CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+      );
+    });
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: null,
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": autoplayPlayback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": autoplayPlayback,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const ownerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(ownerVideo).not.toBeNull();
+    Object.defineProperty(ownerVideo!, "currentSrc", {
+      configurable: true,
+      value: new URL(autoplayPlayback.src, window.location.href).href,
+    });
+    ownerVideo!.currentTime = 12.5;
+    ownerVideo!.dispatchEvent(new Event("timeupdate"));
+
+    expect(positionEvents).toHaveLength(1);
+    expect(positionEvents[0]?.detail).toMatchObject({
+      attachmentId: "att-video-1",
+      position: {
+        src: autoplayPlayback.src,
+        currentTime: 12.5,
+      },
+    });
+
+    pane.remove();
+  });
+
   it("有 poster 的视频释放自动播 owner 后仍显示保存时间点的视频帧", async () => {
     const pane = 创建媒体消息窗();
     const playback = {
@@ -1551,6 +1621,176 @@ describe("房间消息窗媒体查看器", () => {
 
     preview!.dispatchEvent(new Event("loadedmetadata"));
     expect(preview!.currentTime).toBeCloseTo(19.75, 2);
+
+    pane.remove();
+  });
+
+  it("有保存位置时，自动播 owner 切换前后仍保持同一条 canonical swarm src，不在绝对/相对地址之间抖动", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "/webtorrent/demo-infohash/content-demo.mp4",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: new URL(playback.src, window.location.href).href,
+        currentTime: 19.75,
+        updatedAt: Date.now(),
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const ownerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(ownerVideo).not.toBeNull();
+    expect(ownerVideo?.autoplay).toBe(true);
+    expect(ownerVideo?.getAttribute("src")).toBe(playback.src);
+
+    pane.inlineAutoplayOwnerAttachmentId = null;
+    await pane.updateComplete;
+
+    const releasedVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(releasedVideo).toBe(ownerVideo);
+    expect(releasedVideo?.autoplay).toBe(false);
+    expect(releasedVideo?.getAttribute("src")).toBe(playback.src);
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    await pane.updateComplete;
+
+    const reacquiredVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(reacquiredVideo).toBe(ownerVideo);
+    expect(reacquiredVideo?.autoplay).toBe(true);
+    expect(reacquiredVideo?.getAttribute("src")).toBe(playback.src);
+
+    pane.remove();
+  });
+
+  it("双视频自动播 owner 交接时，两边都保持 canonical swarm src，不在绝对/相对地址之间互相抖动", async () => {
+    const pane = 创建媒体消息窗();
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "/webtorrent/demo-infohash-1/content-demo-1.mp4",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "/webtorrent/demo-infohash-2/content-demo-2.mp4",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: new URL(playback1.src, window.location.href).href,
+        currentTime: 11.25,
+        updatedAt: Date.now(),
+      },
+      "att-video-2": {
+        src: new URL(playback2.src, window.location.href).href,
+        currentTime: 22.5,
+        updatedAt: Date.now(),
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const firstOwnerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    const secondPreviewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]'
+    );
+    expect(firstOwnerVideo?.autoplay).toBe(true);
+    expect(firstOwnerVideo?.getAttribute("src")).toBe(playback1.src);
+    expect(secondPreviewVideo?.autoplay).toBe(false);
+    expect(secondPreviewVideo?.getAttribute("src")).toBe(playback2.src);
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-2": playback2,
+    };
+    await pane.updateComplete;
+
+    const firstReleasedVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    const secondOwnerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]'
+    );
+    expect(firstReleasedVideo).toBe(firstOwnerVideo);
+    expect(firstReleasedVideo?.autoplay).toBe(false);
+    expect(firstReleasedVideo?.getAttribute("src")).toBe(playback1.src);
+    expect(secondOwnerVideo).toBe(secondPreviewVideo);
+    expect(secondOwnerVideo?.autoplay).toBe(true);
+    expect(secondOwnerVideo?.getAttribute("src")).toBe(playback2.src);
 
     pane.remove();
   });
