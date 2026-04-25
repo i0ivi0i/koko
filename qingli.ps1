@@ -219,6 +219,32 @@ function Get-ListeningPortProcessRecords {
     return $records
 }
 
+function Test-CommandLineFlagValue {
+    param(
+        [string]$CommandLine,
+        [string[]]$Flags,
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($CommandLine) -or [string]::IsNullOrWhiteSpace($Value)) {
+        return $false
+    }
+
+    $escapedFlags = @(
+        $Flags |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object { [Regex]::Escape($_) }
+    )
+    if ($escapedFlags.Count -eq 0) {
+        return $false
+    }
+
+    $flagAlternation = $escapedFlags -join "|"
+    $valuePattern = [Regex]::Escape($Value)
+    $pattern = '(?:^|\s)"?(?:' + $flagAlternation + ')"?\s+"?' + $valuePattern + '"?(?:\s|$)'
+    return [Regex]::IsMatch($CommandLine, $pattern)
+}
+
 function Resolve-RecognizedProjectService {
     param(
         $PortRecord,
@@ -259,7 +285,7 @@ function Resolve-RecognizedProjectService {
             $PortRecord.CommandLine -match 'bittorrent-tracker' -or
             $PortRecord.CommandLine -match 'node_modules[\\/]+bittorrent-tracker[\\/]+bin[\\/]+cmd\.js'
         ) -and
-        $PortRecord.CommandLine -match ("(?:--port|-p)\s+$TrackerPort(\s|$)")
+        (Test-CommandLineFlagValue -CommandLine $PortRecord.CommandLine -Flags @("--port", "-p") -Value $TrackerPort)
     ) {
         return [pscustomobject]@{
             Role      = "tracker"
@@ -274,7 +300,7 @@ function Resolve-RecognizedProjectService {
         $PortRecord.Port -eq $SeederPort -and
         $PortRecord.Name -match '^node(?:\.exe)?$' -and
         $PortRecord.CommandLine -match 'dev-seeder\.mjs' -and
-        $PortRecord.CommandLine -match ("--port\s+$SeederPort(\s|$)")
+        (Test-CommandLineFlagValue -CommandLine $PortRecord.CommandLine -Flags @("--port") -Value $SeederPort)
     ) {
         return [pscustomobject]@{
             Role      = "webtorrent-seeder"
@@ -288,7 +314,7 @@ function Resolve-RecognizedProjectService {
     if (
         $PortRecord.Port -eq $TusPort -and
         $PortRecord.Name -match '^tusd(?:\.exe)?$' -and
-        $PortRecord.CommandLine -match ("-port\s+$TusPort(\s|$)") -and
+        (Test-CommandLineFlagValue -CommandLine $PortRecord.CommandLine -Flags @("-port") -Value $TusPort) -and
         (
             $PortRecord.CommandLine -match $tusHookUrlPattern -or
             $PortRecord.CommandLine -match $tusUploadDirPattern
