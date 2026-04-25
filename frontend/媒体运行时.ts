@@ -10,7 +10,7 @@ import { 选择消息视频自动播Owner } from "./媒体/index.js";
 
 const 长任务阈值毫秒 = 100;
 const 自动播空观测释放阈值 = 2;
-const 自动播播放位置表上限 = 256;
+const 自动播未知附件集合播放位置兜底上限 = 256;
 
 export interface 媒体运行时上下文 {
   currentViewerRequest: 媒体查看器打开请求 | null;
@@ -18,6 +18,11 @@ export interface 媒体运行时上下文 {
   inlineAutoplayOwnerAttachmentId: string | null;
   inlineAutoplayPendingAttachmentId: string | null;
   inlineAutoplayPlayback: 媒体播放结果 | null;
+  /**
+   * 当前房间已加载消息里的附件集合，是自动播续播位置的生命周期边界。
+   * null 代表还没收到过消息集合同步；空数组代表已经同步过，但当前房间没有附件。
+   */
+  inlineAutoplayActiveAttachmentIds: string[] | null;
   inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
   inlineAutoplayConsecutiveEmptyObservedCount: number;
   lastInlineAutoplayCandidates: 消息视频自动播候选[];
@@ -100,6 +105,7 @@ const 初始媒体运行时上下文: 媒体运行时上下文 = {
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
   inlineAutoplayPlayback: null,
+  inlineAutoplayActiveAttachmentIds: null,
   inlineAutoplayPositionByAttachmentId: {},
   inlineAutoplayConsecutiveEmptyObservedCount: 0,
   lastInlineAutoplayCandidates: [],
@@ -162,14 +168,50 @@ const 自动播播放位置表相同 = (
   );
 };
 
+const 归一化附件标识列表 = (attachmentIds: string[]): string[] =>
+  Array.from(new Set(attachmentIds.filter((attachmentId) => attachmentId.length > 0)));
+
+const 附件标识列表相同 = (
+  left: string[] | null,
+  right: string[]
+): boolean => {
+  if (!left || left.length !== right.length) {
+    return false;
+  }
+  const rightSet = new Set(right);
+  return left.every((attachmentId) => rightSet.has(attachmentId));
+};
+
+const 读取自动播位置保留附件集合 = (
+  activeAttachmentIds: string[] | null,
+  reportingAttachmentId?: string
+): Set<string> | undefined => {
+  if (!activeAttachmentIds) {
+    return undefined;
+  }
+  const retainedAttachmentIds = new Set(activeAttachmentIds);
+  if (reportingAttachmentId) {
+    retainedAttachmentIds.add(reportingAttachmentId);
+  }
+  return retainedAttachmentIds;
+};
+
 const 裁剪自动播播放位置表 = (
   positions: Record<string, 媒体播放位置>,
-  activeAttachmentIds?: Set<string>
+  retainedAttachmentIds?: Set<string>
 ): Record<string, 媒体播放位置> => {
-  const entries = Object.entries(positions)
-    .filter(([attachmentId]) => !activeAttachmentIds || activeAttachmentIds.has(attachmentId))
-    .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
-    .slice(0, 自动播播放位置表上限);
+  /**
+   * 当前房间消息集合是续播体验的真实生命周期边界：
+   * - 已知还属于当前房间的附件，哪怕超过 256 条也不能被固定上限裁掉；
+   * - 只有还没拿到消息集合同步时，才用小上限兜底异常事件，防止无界增长。
+   */
+  const entries = retainedAttachmentIds
+    ? Object.entries(positions).filter(([attachmentId]) =>
+        retainedAttachmentIds.has(attachmentId)
+      )
+    : Object.entries(positions)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
+        .slice(0, 自动播未知附件集合播放位置兜底上限);
   const nextPositions = Object.fromEntries(entries);
   return 自动播播放位置表相同(positions, nextPositions) ? positions : nextPositions;
 };
@@ -435,20 +477,30 @@ const 媒体运行时机 = createMachine(
         }
         /**
          * 自动播播放位置是浏览器壳本地体验态，不是 DOM 节点私有状态。
-         * 这里按附件保存，并裁剪到固定上限，避免万人群历史滚动时把时间戳表长成无界缓存。
+         * 这里按当前房间消息集合保留；记录事件本身也临时保留一次，避免消息同步与 timeupdate
+         * 的微小时序差把正在播放的视频时间戳提前裁掉。
          */
         return {
-          inlineAutoplayPositionByAttachmentId: 裁剪自动播播放位置表({
-            ...context.inlineAutoplayPositionByAttachmentId,
-            [event.attachmentId]: nextPosition,
-          }),
+          inlineAutoplayPositionByAttachmentId: 裁剪自动播播放位置表(
+            {
+              ...context.inlineAutoplayPositionByAttachmentId,
+              [event.attachmentId]: nextPosition,
+            },
+            读取自动播位置保留附件集合(
+              context.inlineAutoplayActiveAttachmentIds,
+              event.attachmentId
+            )
+          ),
         };
       }),
       同步存活附件集合: assign(({ event, context }) => {
         if (event.type !== "MESSAGE_ATTACHMENTS_SYNCED") {
           return {};
         }
-        const activeAttachmentIds = new Set(event.attachmentIds);
+        const nextInlineAutoplayActiveAttachmentIds = 归一化附件标识列表(
+          event.attachmentIds
+        );
+        const activeAttachmentIds = new Set(nextInlineAutoplayActiveAttachmentIds);
         const nextInlineAutoplayPositionByAttachmentId = 裁剪自动播播放位置表(
           context.inlineAutoplayPositionByAttachmentId,
           activeAttachmentIds
@@ -467,7 +519,17 @@ const 媒体运行时机 = createMachine(
         const positionsChanged =
           nextInlineAutoplayPositionByAttachmentId !==
           context.inlineAutoplayPositionByAttachmentId;
-        if (ownerAlive && pendingAlive && !candidatesChanged && !positionsChanged) {
+        const activeAttachmentIdsChanged = !附件标识列表相同(
+          context.inlineAutoplayActiveAttachmentIds,
+          nextInlineAutoplayActiveAttachmentIds
+        );
+        if (
+          ownerAlive &&
+          pendingAlive &&
+          !candidatesChanged &&
+          !positionsChanged &&
+          !activeAttachmentIdsChanged
+        ) {
           return {};
         }
         const nextContext = {
@@ -480,6 +542,7 @@ const 媒体运行时机 = createMachine(
             : null,
         };
         return {
+          inlineAutoplayActiveAttachmentIds: nextInlineAutoplayActiveAttachmentIds,
           lastInlineAutoplayCandidates: nextInlineAutoplayCandidates,
           ...(!ownerAlive || !pendingAlive
             ? 重算自动播候选补丁(nextContext, nextInlineAutoplayCandidates)

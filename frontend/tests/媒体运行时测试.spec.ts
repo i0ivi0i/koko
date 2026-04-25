@@ -232,8 +232,17 @@ describe("媒体运行时", () => {
     });
   });
 
-  it("自动播播放位置会随附件集合清理，并按更新时间裁剪避免万人群历史无限增长", () => {
+  it("自动播播放位置会保留当前消息集合内的全部附件，不能因为超过固定上限丢失续播时间戳", () => {
     const actor = 创建媒体运行时Actor();
+    const activeAttachmentIds = Array.from(
+      { length: 260 },
+      (_, index) => `att-video-inline-position-${index}`
+    );
+
+    actor.send({
+      type: "MESSAGE_ATTACHMENTS_SYNCED",
+      attachmentIds: activeAttachmentIds,
+    });
 
     for (let index = 0; index < 260; index += 1) {
       actor.send({
@@ -249,12 +258,14 @@ describe("媒体运行时", () => {
 
     expect(
       Object.keys(actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId)
-    ).toHaveLength(256);
+    ).toHaveLength(260);
     expect(
       actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
         "att-video-inline-position-0"
       ]
-    ).toBeUndefined();
+    ).toMatchObject({
+      currentTime: 0.5,
+    });
     expect(
       actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
         "att-video-inline-position-259"
@@ -273,6 +284,36 @@ describe("媒体运行时", () => {
         updatedAt: 259,
       },
     });
+  });
+
+  it("自动播播放位置在附件集合尚未同步时仍会兜底裁剪，避免异常事件把体验态撑成无界缓存", () => {
+    const actor = 创建媒体运行时Actor();
+
+    for (let index = 0; index < 260; index += 1) {
+      actor.send({
+        type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+        attachmentId: `att-video-inline-unsynced-position-${index}`,
+        position: {
+          src: `http://media.local/swarm-inline-unsynced-position-${index}`,
+          currentTime: index + 0.5,
+          updatedAt: index,
+        },
+      });
+    }
+
+    expect(
+      Object.keys(actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId)
+    ).toHaveLength(256);
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-unsynced-position-0"
+      ]
+    ).toBeUndefined();
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-unsynced-position-259"
+      ]?.currentTime
+    ).toBeCloseTo(259.5, 2);
   });
 
   it("hidden/background 释放自动播 owner 后，不会再通过旧路径重新把它补回来", () => {
