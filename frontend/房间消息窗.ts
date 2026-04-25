@@ -246,6 +246,22 @@ export class 房间消息窗 extends LitElement {
     return src.length > 0 ? src : null;
   }
 
+  private 归一化时间线视频播放源(src: string | null): string | null {
+    if (!src) {
+      return null;
+    }
+    try {
+      /**
+       * 浏览器事件上报常给 `currentSrc` 绝对地址，而 playback 快照常保留
+       * `/webtorrent/...` 相对地址。这里只做 URL 等价归一化，不放宽 source-aware
+       * 约束，避免把旧 session / 旧附件源误判成同一个续播帧。
+       */
+      return new URL(src, window.location.href).href;
+    } catch {
+      return src;
+    }
+  }
+
   private 读取自动播恢复位置(
     attachmentId: string,
     src: string | null
@@ -256,9 +272,16 @@ export class 房间消息窗 extends LitElement {
     const position = this.inlineAutoplayPositionByAttachmentId[attachmentId];
     if (
       !position ||
-      position.src !== src ||
       !Number.isFinite(position.currentTime) ||
       position.currentTime <= 0
+    ) {
+      return null;
+    }
+    const normalizedPositionSrc = this.归一化时间线视频播放源(position.src);
+    const normalizedCurrentSrc = this.归一化时间线视频播放源(src);
+    if (
+      position.src !== src &&
+      (!normalizedPositionSrc || normalizedPositionSrc !== normalizedCurrentSrc)
     ) {
       return null;
     }
@@ -267,9 +290,18 @@ export class 房间消息窗 extends LitElement {
 
   private 恢复时间线自动播播放位置(
     attachmentId: string,
-    video: HTMLVideoElement
+    video: HTMLVideoElement,
+    options: { allowPreviewFrame?: boolean } = {}
   ): void {
-    if (this.inlineAutoplayOwnerAttachmentId !== attachmentId) {
+    /**
+     * 默认只允许当前自动播 owner 恢复播放位置。
+     * `allowPreviewFrame` 是唯一例外：非 owner 的时间线视频已经确认 src 与保存位置同源时，
+     * 只允许它 seek 到暂停预览帧，不能借此进入自动播放链。
+     */
+    if (
+      !options.allowPreviewFrame &&
+      this.inlineAutoplayOwnerAttachmentId !== attachmentId
+    ) {
       return;
     }
     const position = this.读取自动播恢复位置(
@@ -377,6 +409,11 @@ export class 房间消息窗 extends LitElement {
           void video.play().catch(() => undefined);
         }
         continue;
+      }
+      if (this.读取自动播恢复位置(attachmentId, this.读取视频当前播放源(video))) {
+        this.恢复时间线自动播播放位置(attachmentId, video, {
+          allowPreviewFrame: true,
+        });
       }
       if (!video.paused) {
         this.广播自动播播放位置(
@@ -1001,14 +1038,31 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderInlineVideo =
               this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
               Boolean(inlineAutoplayPreviewSrc);
-            const timelinePreviewVideoSrc = !hasSourcePoster
-              ? this.读取时间线视频首帧预览源(attachment, playback)
-              : null;
+            const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(
+              attachment,
+              playback
+            );
+            const timelinePlayableVideoSrc =
+              inlineAutoplayPreviewSrc ?? playbackTimelineVideoSrc;
+            const restorableTimelineFrame = this.读取自动播恢复位置(
+              attachment.attachmentId,
+              timelinePlayableVideoSrc
+            );
+            const restorableTimelineVideoSrc =
+              restorableTimelineFrame && !shouldRenderInlineVideo
+                ? restorableTimelineFrame.src
+                : null;
+            const timelinePreviewVideoSrc =
+              restorableTimelineVideoSrc ??
+              (!hasSourcePoster ? playbackTimelineVideoSrc : null);
             const previewVideoSrc =
-              timelinePreviewVideoSrc ?? (shouldRenderInlineVideo ? inlineAutoplayPreviewSrc : null);
+              shouldRenderInlineVideo ? inlineAutoplayPreviewSrc : timelinePreviewVideoSrc;
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
-            const previewVideoPoster =
-              hasSourcePoster || hasRuntimePreview ? previewPosterSrc : undefined;
+            const previewVideoPoster = restorableTimelineFrame
+              ? undefined
+              : hasSourcePoster || hasRuntimePreview
+                ? previewPosterSrc
+                : undefined;
             const shouldGateVideoUntilFirstFrame =
               shouldRenderPreviewVideo && !hasSourcePoster && !hasRuntimePreview;
             const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
@@ -1022,7 +1076,8 @@ export class 房间消息窗 extends LitElement {
              * 2. runtime preview 作为该 `<video>` 的 poster，而不是另起一颗 `<img>` 与 autoplay 互切；
              * 3. 没有任何 poster 时，先用轻量 guard 遮挡，等 `loadeddata/canplay/playing` 任一事件到达再揭开像素；
              * 4. 这样从非 owner 切到 owner 只改 autoplay/loop，避免节点重建与首帧黑闪；
-             * 5. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
+             * 5. 有同源播放位置时，非 owner 也用视频自身暂停帧做预览，禁止退回开头 poster；
+             * 6. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
              */
             return html`
               <div
@@ -1069,7 +1124,9 @@ export class 房间消息窗 extends LitElement {
                             if (!(target instanceof HTMLVideoElement)) {
                               return;
                             }
-                            this.恢复时间线自动播播放位置(attachment.attachmentId, target);
+                            this.恢复时间线自动播播放位置(attachment.attachmentId, target, {
+                              allowPreviewFrame: Boolean(restorableTimelineVideoSrc),
+                            });
                           }}
                           @loadeddata=${(event: Event) => {
                             const target = event.currentTarget;
