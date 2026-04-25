@@ -276,11 +276,15 @@ const 重算自动播候选补丁 = (
      * IntersectionObserver 与虚拟列表重排会偶发一帧“候选暂时清空”。
      * 这里直接清 owner 会让时间线在 `<video>/<img poster>` 之间抖动闪烁，
      * 同时触发无意义的播放源重解析。连续空观测达到阈值才真正释放。
+     *
+     * 注意这里不能把“正在交接的新 pending owner”当成例外：
+     * - 旧 owner 还没正式退场，新 owner 也还没真正 settle；
+     * - 如果只因为 pending 存在就提前清空当前 owner，唯一播放器会立刻收到 `null` surface；
+     * - 后面哪怕新 owner 下一帧又回来了，也已经发生过一次 destroy/recreate，肉眼就会看到抽一下。
+     *
+     * 因此只要当前还有已裁决 owner，就继续沿用同一条“连续空观测达到阈值才释放”的规则。
      */
-    if (
-      context.inlineAutoplayOwnerAttachmentId &&
-      context.inlineAutoplayPendingAttachmentId === null
-    ) {
+    if (context.inlineAutoplayOwnerAttachmentId) {
       const nextEmptyObservedCount = context.inlineAutoplayConsecutiveEmptyObservedCount + 1;
       if (nextEmptyObservedCount < 自动播空观测释放阈值) {
         return {

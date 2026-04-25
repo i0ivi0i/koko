@@ -586,6 +586,33 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
+  it("重复挂载到同一个宿主时不会再次 append 同一颗 provider", async () => {
+    const shell = await 创建VideoJs播放器壳(
+      {
+        kind: "file",
+        src: "blob:http://media.local/videojs-inline-same-host-1",
+        posterSrc: "http://media.local/poster-inline-same-host-1.jpg",
+        width: 1280,
+        height: 720,
+      },
+      {
+        createPlayer: () => 创建假播放器根(),
+        registerVideoJsElements: async () => undefined,
+      }
+    );
+    const mountTarget = document.createElement("div");
+    const appendSpy = vi.spyOn(mountTarget, "append");
+    document.body.append(mountTarget);
+
+    shell.挂载到宿主(mountTarget);
+    shell.挂载到宿主(mountTarget);
+
+    expect(appendSpy).toHaveBeenCalledTimes(1);
+    expect(mountTarget.querySelectorAll("video-player")).toHaveLength(1);
+
+    shell.destroy();
+  });
+
   it("默认 Video.js 根节点在 RemotePlayback 只给出非 Promise cancel 接口时，销毁也不能炸掉整个播放器会话", async () => {
     const shell = await 创建VideoJs播放器壳({
       kind: "file",

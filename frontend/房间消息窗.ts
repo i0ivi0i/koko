@@ -1181,9 +1181,6 @@ export class 房间消息窗 extends LitElement {
               inlineAutoplayPlayback && inlineAutoplayPlayback.mode === "swarm"
                 ? inlineAutoplayPlayback.src
                 : null;
-            const shouldRenderInlineVideo =
-              this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
-              Boolean(inlineAutoplayPreviewSrc);
             const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(
               attachment,
               playback
@@ -1207,8 +1204,21 @@ export class 房间消息窗 extends LitElement {
              */
             const timelinePreviewVideoSrc =
               playbackTimelineVideoSrc ?? savedTimelineFrameSrc;
-            const previewVideoSrc =
-              shouldRenderInlineVideo ? inlineAutoplayPreviewSrc : timelinePreviewVideoSrc;
+            /**
+             * 自动播 owner 交接时，新的 swarm autoplay playback 结果不一定与 owner 切换同拍到达：
+             * 1. 如果这里硬等 `inlineAutoplayPlayback`，旧 host 会先撤掉，而新 host 要晚一拍才出现；
+             * 2. `同步时间线唯一播放器宿主()` 随后就会把这段空窗上抛成 `null`，唯一播放器被迫 destroy/recreate；
+             * 3. 正确做法是：当前 owner 只要已经有同文件预览源，就立刻暴露 canonical host；
+             * 4. 后续更正式的 autoplay swarm 源到达时，只允许同一颗壳继续 `同步(source)`，不允许再换主节点。
+             */
+            const ownerCanonicalVideoSrc =
+              inlineAutoplayPreviewSrc ?? timelinePreviewVideoSrc;
+            const shouldRenderInlineVideo =
+              this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
+              Boolean(ownerCanonicalVideoSrc);
+            const previewVideoSrc = shouldRenderInlineVideo
+              ? ownerCanonicalVideoSrc
+              : timelinePreviewVideoSrc;
             const restorableTimelineFrame = this.读取自动播恢复位置(
               attachment.attachmentId,
               previewVideoSrc

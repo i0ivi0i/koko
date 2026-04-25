@@ -744,6 +744,16 @@ const 创建VideoJs播放器壳核心 = (
       if (已销毁) {
         return;
       }
+      /**
+       * 时间线 owner 高频同步会重复命中“同一宿主、同一颗壳”：
+       * 1. 这里如果继续 append，同一个 `video-player` 也会被浏览器记成一次 remove/add；
+       * 2. 真正需要的只有“换宿主时迁移”，不是“同宿主时重复挂载”；
+       * 3. 因此同宿主直接 no-op，只保留布局同步，避免把无意义 DOM mutation 放大成可见抽搐。
+       */
+      if (root.provider.parentElement === mountTarget) {
+        同步播放器挂载布局(root, 当前源, mountTarget);
+        return;
+      }
       mountTarget.append(root.provider);
       同步播放器挂载布局(root, 当前源, mountTarget);
     },

@@ -2028,6 +2028,106 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("双视频自动播 owner 交接时，即便新 owner 的 autoplay playback 晚一拍回灌，也不会先上抛 null surface", async () => {
+    const pane = 创建媒体消息窗();
+    const 全局唯一播放器 = 读取默认全局唯一播放器();
+    const 同步时间线自动播Spy = vi.spyOn(全局唯一播放器, "同步时间线自动播");
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "http://media.local/swarm-video-2",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+    await 等待时间线唯一播放器挂载(pane);
+
+    同步时间线自动播Spy.mockClear();
+    /**
+     * 真实闪烁链就是这里：
+     * 1. 旧 owner 已经退场；
+     * 2. 新 owner 的 autoplay playback 结果还没回灌；
+     * 3. 但它其实已经有同文件 swarm 预览源，不该先把唯一播放器打成 null。
+     */
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {};
+    await pane.updateComplete;
+
+    const 交接调用序列 = 同步时间线自动播Spy.mock.calls.map(([input]) =>
+      input ? input.attachmentId : null
+    );
+    const 新Owner宿主 = pane.querySelector<HTMLElement>(
+      '.message-video-canonical-host[data-attachment-id="att-video-2"]'
+    );
+    const 新Owner视频 = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"][data-canonical-player="true"]'
+    );
+
+    expect(交接调用序列).not.toContain(null);
+    expect(交接调用序列.at(-1)).toBe("att-video-2");
+    expect(新Owner宿主).not.toBeNull();
+    expect(新Owner宿主?.dataset.videoSrc).toBe(playback2.src);
+    expect(新Owner视频).not.toBeNull();
+    expect(新Owner视频?.autoplay).toBe(true);
+    expect(新Owner视频?.getAttribute("src")).toBe(playback2.src);
+
+    pane.remove();
+  });
+
   it("有 poster 的 swarm 视频在未成为 owner 前也继续使用 video 预览壳", async () => {
     const pane = 创建媒体消息窗();
     const playback = {

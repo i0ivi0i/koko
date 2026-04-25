@@ -1032,6 +1032,85 @@ describe("媒体查看器适配器", () => {
     }
   });
 
+  it("时间线 owner 从旧卡片切到新卡片时，即便中间收到一次空 sync，也会直接迁移同一颗 canonical 壳", async () => {
+    const firstMount = document.createElement("div");
+    const secondMount = document.createElement("div");
+    document.body.append(firstMount, secondMount);
+    const destroySpy = vi.fn();
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn((source, deps = {}) =>
+        创建测试VideoJs播放器壳({
+          初始源: source,
+          mountTarget: deps.mountTarget ?? undefined,
+          destroy: destroySpy,
+        })
+      ),
+    });
+    const firstInput = {
+      attachmentId: "att-inline-owner-1",
+      mountTarget: firstMount,
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/inline-owner-1",
+        posterSrc: "http://media.local/poster-inline-owner-1",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置: () => undefined,
+        广播播放位置: () => undefined,
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+    const secondInput = {
+      attachmentId: "att-inline-owner-2",
+      mountTarget: secondMount,
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/inline-owner-2",
+        posterSrc: "http://media.local/poster-inline-owner-2",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置: () => undefined,
+        广播播放位置: () => undefined,
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+
+    try {
+      globalVideoPlayer.同步时间线自动播(firstInput);
+      await 等待查看器任务完成(6);
+
+      const 初始视频 = firstMount.querySelector<HTMLVideoElement>("video");
+      const 初始容器 = globalVideoPlayer.读取容器元素();
+      expect(初始视频).not.toBeNull();
+      expect(初始容器).not.toBeNull();
+
+      /**
+       * 这条链模拟的就是滚动交接时那一帧空窗：
+       * 1. 旧 host 先退场，上层先上抛一次 `null`；
+       * 2. 新 host 紧跟着可用；
+       * 3. 正确行为应该是同一颗壳直接迁到新宿主，而不是先 destroy 再新建。
+       */
+      globalVideoPlayer.同步时间线自动播(null);
+      globalVideoPlayer.同步时间线自动播(secondInput);
+      await 等待查看器任务完成(6);
+
+      const 迁移后视频 = secondMount.querySelector<HTMLVideoElement>("video");
+      expect(迁移后视频).toBe(初始视频);
+      expect(globalVideoPlayer.读取容器元素()).toBe(初始容器);
+      expect(globalVideoPlayer.读取视频元素()).toBe(初始视频);
+      expect(迁移后视频?.currentSrc || 迁移后视频?.src).toContain("inline-owner-2");
+      expect(destroySpy).not.toHaveBeenCalled();
+    } finally {
+      globalVideoPlayer.销毁();
+    }
+  });
+
   it("标准系统全屏请求挂起时，沉浸查看器不会提前亮起或暴露关闭按钮", async () => {
     vi.resetModules();
     const 创建VideoJs播放器壳 = vi.fn(

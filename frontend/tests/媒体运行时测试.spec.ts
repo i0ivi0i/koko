@@ -533,6 +533,113 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
   });
 
+  it("自动播 owner 正在切到新 pending 候选时，单帧空观测不会把旧 owner 提前清空", () => {
+    const actor = 创建媒体运行时Actor();
+    const playback: 媒体播放结果 = {
+      mode: "anchor",
+      attachmentId: "att-video-inline-handoff-old",
+      kind: "video",
+      src: "http://media.local/original-att-video-inline-handoff-old",
+      thumbnailUrl: "http://media.local/poster-att-video-inline-handoff-old",
+      hint: null,
+    };
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-handoff-old",
+          visibilityRatio: 0.93,
+          distanceToViewportCenter: 12,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_PLAYBACK_RESOLVED",
+      attachmentId: "att-video-inline-handoff-old",
+      playback,
+    });
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-handoff-new",
+          visibilityRatio: 0.94,
+          distanceToViewportCenter: 10,
+        },
+      ],
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-inline-handoff-old"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
+      "att-video-inline-handoff-new"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [],
+    });
+
+    /**
+     * owner 交接时最容易出现一帧观察器抖动：
+     * - 如果这里把 owner 立刻清成 null，消息窗就会收到“当前没有 canonical surface”；
+     * - 后面的唯一播放器随之 destroy/recreate，用户肉眼就会看到闪一下再接着播。
+     *
+     * 因此在 pending 还没真正 settle 之前，单帧空观测也必须继续保留旧 owner。
+     */
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBe(
+      "att-video-inline-handoff-old"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBe(
+      "att-video-inline-handoff-new"
+    );
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
+  });
+
+  it("自动播 owner 正在交接时，连续空观测达到阈值后仍会释放旧 owner 与 pending", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-handoff-release-old",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-handoff-release-new",
+          visibilityRatio: 0.95,
+          distanceToViewportCenter: 9,
+        },
+      ],
+    });
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [],
+    });
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [],
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPendingAttachmentId).toBeNull();
+    expect(actor.getSnapshot().context.inlineAutoplayPlayback).toBeNull();
+  });
+
   it("正式查看器关闭后，会根据最后一次可见候选重新挂起自动播 owner", () => {
     const actor = 创建媒体运行时Actor();
 

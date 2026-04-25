@@ -264,6 +264,7 @@ export function 创建全局唯一播放器(
   deps: 全局唯一播放器依赖 = {}
 ): 全局唯一播放器端口 {
   const 查看器归位等待毫秒 = 120;
+  const 时间线交接等待毫秒 = 16;
   let createVideoJsPlayerShell = deps.createVideoJsPlayerShell ?? 创建VideoJs播放器壳;
   let shell: VideoJs播放器壳实例 | null = null;
   let shellPromise: Promise<VideoJs播放器壳实例> | null = null;
@@ -299,14 +300,14 @@ export function 创建全局唯一播放器(
     待归位附件Id = null;
   };
 
-  const 启动待归位销毁等待 = (): void => {
+  const 启动待销毁等待 = (等待毫秒: number): void => {
     取消待归位销毁();
     const 当前归位代次 = ++待归位销毁代次;
     /**
-     * viewer 关闭和 inline owner 回来，并不保证发生在同一调用栈：
-     * 1. 真实链路里，viewer 先退场，runtime 才会在下一轮重新把 timeline owner 交回来；
-     * 2. 这里如果立刻 destroy，就会把“同一颗 canonical player 归位”退化成“旧壳销毁 + 新壳重建”；
-     * 3. 因此只给一个极短、可取消的归位窗口，窗口内不新增第二份真相，只是暂缓销毁那颗现有壳。
+     * 统一“短暂销毁观察窗”只解决一种问题：壳仍然有效，但下一条有效 inline 宿主/输入可能马上回来。
+     * 1. viewer 关闭归位时，这是等待消息流 owner 回灌的窗口；
+     * 2. inline owner 交接时，这是吸收一拍 `host 暂空 -> 下一拍新 host 到达` 的窗口；
+     * 3. 观察窗只暂缓 destroy，不额外制造第二颗 player，也不保存第二份业务真相。
      */
     待归位销毁定时器 = setTimeout(() => {
       if (当前归位代次 !== 待归位销毁代次) {
@@ -321,7 +322,7 @@ export function 创建全局唯一播放器(
         return;
       }
       销毁当前播放器();
-    }, 查看器归位等待毫秒);
+    }, 等待毫秒);
   };
 
   const 读取或创建播放器 = (
@@ -413,7 +414,7 @@ export function 创建全局唯一播放器(
       销毁当前播放器();
       return;
     }
-    启动待归位销毁等待();
+    启动待销毁等待(查看器归位等待毫秒);
   };
 
   return {
@@ -435,11 +436,15 @@ export function 创建全局唯一播放器(
         当前表面 === "inline"
       ) {
         flush时间线位置(旧输入, true);
-        if (input) {
-          const currentVideo = shell?.读取视频元素();
-          if (currentVideo && !currentVideo.paused) {
-            currentVideo.pause();
-          }
+        const currentVideo = shell?.读取视频元素();
+        if (currentVideo && !currentVideo.paused) {
+          /**
+           * 旧 owner 退场时要先停住当前像素，再决定是迁移还是释放：
+           * 1. 交给新 owner 时，暂停能避免旧卡片继续偷偷播；
+           * 2. 暂时收到一拍 `null` 时，暂停能保证“壳还在，但旧会话已经停住”；
+           * 3. 这样零闪烁不依赖第二表面，也不会把短暂保留误变成继续播放。
+           */
+          currentVideo.pause();
         }
       }
       if (当前查看器输入) {
@@ -472,7 +477,17 @@ export function 创建全局唯一播放器(
            * 这类 `null` 仍属于同一条归位链，不该把刚保下来的 canonical 壳立刻销毁；
            * 真正是否销毁，交给那条短暂归位窗口统一裁决。
            */
-          启动待归位销毁等待();
+          启动待销毁等待(查看器归位等待毫秒);
+          return;
+        }
+        if (shell && 当前表面 === "inline") {
+          /**
+           * 消息流滚动交接时，房间消息窗可能先给出一拍 `null`，下一拍马上补上新的 owner 宿主：
+           * 1. 这类 `null` 不是“会话真的结束”，而是 host 正在从旧卡片迁到新卡片；
+           * 2. 如果这里立刻 destroy，就会把同一颗 canonical player 退化成“旧壳销毁 + 新壳重建”；
+           * 3. 因此只给一个极短的一帧观察窗，等下一次有效 inline 输入；超时后仍无输入再释放。
+           */
+          启动待销毁等待(时间线交接等待毫秒);
           return;
         }
         销毁当前播放器();
