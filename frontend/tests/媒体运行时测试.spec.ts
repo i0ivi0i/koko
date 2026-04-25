@@ -202,7 +202,7 @@ describe("媒体运行时", () => {
     });
     actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
     actor.send({
-      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      type: "PLAYBACK_POSITION_CHANGED",
       attachmentId: "att-video-inline-position-1",
       position: {
         src: "http://media.local/swarm-inline-position-1",
@@ -247,7 +247,7 @@ describe("媒体运行时", () => {
     });
     actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
     actor.send({
-      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      type: "PLAYBACK_POSITION_CHANGED",
       attachmentId: "att-video-inline-resume-after-release-1",
       position: {
         src: "http://media.local/swarm-inline-resume-after-release-1",
@@ -286,7 +286,7 @@ describe("媒体运行时", () => {
     const actor = 创建媒体运行时Actor();
 
     actor.send({
-      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      type: "PLAYBACK_POSITION_CHANGED",
       attachmentId: "att-video-inline-loop-1",
       position: {
         src: "http://media.local/swarm-inline-loop-1",
@@ -295,7 +295,7 @@ describe("媒体运行时", () => {
       },
     });
     actor.send({
-      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      type: "PLAYBACK_POSITION_CHANGED",
       attachmentId: "att-video-inline-loop-1",
       position: {
         src: "http://media.local/swarm-inline-loop-1",
@@ -304,7 +304,7 @@ describe("媒体运行时", () => {
       },
     });
     actor.send({
-      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      type: "PLAYBACK_POSITION_CHANGED",
       attachmentId: "att-video-inline-loop-1",
       position: {
         src: "http://media.local/swarm-inline-loop-1",
@@ -338,7 +338,7 @@ describe("媒体运行时", () => {
     });
     actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
     actor.send({
-      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      type: "PLAYBACK_POSITION_CHANGED",
       attachmentId: "att-video-inline-viewer-resume-1",
       position: {
         src: "http://media.local/swarm-inline-viewer-resume-1",
@@ -381,7 +381,7 @@ describe("媒体运行时", () => {
 
     for (let index = 0; index < 260; index += 1) {
       actor.send({
-        type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+        type: "PLAYBACK_POSITION_CHANGED",
         attachmentId: `att-video-inline-position-${index}`,
         position: {
           src: `http://media.local/swarm-inline-position-${index}`,
@@ -426,7 +426,7 @@ describe("媒体运行时", () => {
 
     for (let index = 0; index < 260; index += 1) {
       actor.send({
-        type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+        type: "PLAYBACK_POSITION_CHANGED",
         attachmentId: `att-video-inline-unsynced-position-${index}`,
         position: {
           src: `http://media.local/swarm-inline-unsynced-position-${index}`,

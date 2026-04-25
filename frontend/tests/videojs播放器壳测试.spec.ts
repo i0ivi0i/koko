@@ -567,6 +567,25 @@ describe("Video.js 播放器壳", () => {
     shell.destroy();
   });
 
+  it("统一皮肤切到 inline 展示模式后，会提供隐藏消息流控件的显式规则", async () => {
+    const shell = await 创建VideoJs播放器壳({
+      kind: "file",
+      src: "blob:http://media.local/videojs-inline-presentation-1",
+      posterSrc: "http://media.local/poster-inline-presentation-1.jpg",
+      width: 1280,
+      height: 720,
+    });
+
+    const skin = document.body.querySelector<HTMLElement>("koko-video-skin");
+    const styleText = skin?.shadowRoot?.querySelector("style")?.textContent ?? "";
+
+    expect(skin).not.toBeNull();
+    expect(styleText).toContain(':host([data-presentation="inline"]) media-controls');
+    expect(styleText).toContain("display: none");
+
+    shell.destroy();
+  });
+
   it("默认 Video.js 根节点在 RemotePlayback 只给出非 Promise cancel 接口时，销毁也不能炸掉整个播放器会话", async () => {
     const shell = await 创建VideoJs播放器壳({
       kind: "file",

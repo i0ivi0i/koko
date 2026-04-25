@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { 媒体播放位置 } from "../媒体/媒体播放";
 import { 创建媒体查看器, type 媒体查看器依赖 } from "../媒体/媒体查看器";
-import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
+import { 创建全局唯一播放器, 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
 import type {
   VideoJs全屏进入结果,
   VideoJs播放器壳实例,
@@ -692,6 +693,92 @@ describe("媒体查看器适配器", () => {
       vi.doUnmock("../媒体/videojs播放器壳");
       vi.resetModules();
     }
+  });
+
+  it("当前自动播视频退出真全屏后，会沿用 viewer 关闭瞬间的最新时间回到消息流", async () => {
+    安装全屏DOM模拟();
+    const inlineMount = document.createElement("div");
+    document.body.append(inlineMount);
+    let 最新位置: 媒体播放位置 = {
+      src: "blob:http://media.local/viewer-return-inline-1",
+      currentTime: 32.866,
+      updatedAt: 1_000,
+    };
+    const 记录播放位置 = vi.fn((video: HTMLVideoElement) => {
+      最新位置 = {
+        src: video.currentSrc || video.src,
+        currentTime: video.currentTime,
+        updatedAt: 最新位置.updatedAt + 1,
+      };
+    });
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+
+    globalVideoPlayer.同步时间线自动播({
+      attachmentId: "att-video-viewer-return-inline-1",
+      mountTarget: inlineMount,
+      source: {
+        kind: "file",
+        src: "blob:http://media.local/viewer-return-inline-1",
+        posterSrc: "http://media.local/poster-viewer-return-inline-1",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置: (video) => {
+          video.currentTime = 最新位置.currentTime;
+        },
+        广播播放位置: (video) => {
+          记录播放位置(video);
+        },
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    });
+    await 等待查看器任务完成(6);
+
+    const viewer = 创建媒体查看器({
+      isMobileViewport: () => false,
+      globalVideoPlayer,
+      onPlaybackPositionChanged: (_attachmentId, position) => {
+        最新位置 = position;
+      },
+    });
+
+    viewer.打开({
+      startAttachmentId: "att-video-viewer-return-inline-1",
+      items: [
+        {
+          kind: "video",
+          attachmentId: "att-video-viewer-return-inline-1",
+          src: "blob:http://media.local/viewer-return-inline-1",
+          posterSrc: "http://media.local/poster-viewer-return-inline-1",
+          width: 1280,
+          height: 720,
+        },
+      ],
+    });
+    await 等待查看器任务完成(6);
+
+    const closeButton = await 等待查询元素<HTMLButtonElement>(
+      'button[aria-label="关闭视频查看器"]'
+    );
+    const viewerVideo = document.body.querySelector<HTMLVideoElement>("video");
+    expect(closeButton).not.toBeNull();
+    expect(viewerVideo).not.toBeNull();
+
+    viewerVideo!.currentTime = 36.854;
+    closeButton?.click();
+    await 等待查看器任务完成(6);
+
+    const returnedVideo = inlineMount.querySelector<HTMLVideoElement>("video");
+    expect(returnedVideo).not.toBeNull();
+    expect(最新位置.currentTime).toBeCloseTo(36.854, 2);
+    expect(returnedVideo!.currentTime).toBeCloseTo(36.854, 2);
+
+    viewer.销毁();
+    globalVideoPlayer.销毁();
   });
 
   it("标准系统全屏请求挂起时，沉浸查看器不会提前亮起或暴露关闭按钮", async () => {

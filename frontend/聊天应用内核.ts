@@ -420,7 +420,7 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         this.媒体编排.处理自动播候选(command.candidates);
         return;
       case "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED":
-        this.媒体编排.更新消息流自动播播放位置({
+        this.媒体编排.更新媒体播放位置({
           attachmentId: command.attachmentId,
           position: command.position,
         });

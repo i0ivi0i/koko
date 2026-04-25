@@ -247,6 +247,10 @@ const KokoVideoSkinTemplate = `
       opacity: var(--media-controls-opacity, 1);
       transition: opacity 160ms ease-out;
     }
+    :host([data-presentation="inline"]) media-controls {
+      display: none;
+      pointer-events: none;
+    }
     media-controls-group {
       display: flex;
       align-items: center;
@@ -452,6 +456,7 @@ const 创建默认播放器根 = (
   const video = document.createElement("video") as 可原生全屏视频元素;
 
   provider.dataset.playerShell = "videojs";
+  provider.dataset.presentation = "viewer";
   /**
    * 官方文档说 `slot="media"` 已不是必需，但显式声明能让当前测试环境和部分浏览器
    * 更稳定地把真实媒体元素投影进 skin 内的 container。
@@ -466,6 +471,11 @@ const 创建默认播放器根 = (
   video.loop = 媒体是否默认循环播放("video");
   video.playsInline = true;
   video.style.cssText = "display:block;width:100%;height:100%;background:#000;";
+  /**
+   * 统一皮肤默认先按 viewer 能力创建，再由唯一播放器 owner 在 inline/viewer 之间切展示模式。
+   * 这样消息流与查看器继续共享同一套 DOM/播放器壳，不会因为“无控件”再长第二模板。
+   */
+  skin.dataset.presentation = "viewer";
   skin.style.cssText = "display:block;width:100%;height:100%;background:#000;";
 
   provider.append(skin);

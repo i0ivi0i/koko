@@ -21,6 +21,7 @@ type 时间线自动播回调 = {
 
 type 查看器媒体回调 = {
   广播媒体会话信号(signal: 媒体会话信号): void;
+  广播播放位置(video: HTMLVideoElement, force?: boolean): void;
 };
 
 export type 全局唯一播放器时间线输入 = {
@@ -69,6 +70,21 @@ const 看起来像Promise = <T>(value: T | Promise<T>): value is Promise<T> =>
   "then" in value &&
   typeof value.then === "function";
 
+const 同步播放器展示模式 = (
+  video: HTMLVideoElement,
+  presentation: "inline" | "viewer"
+): void => {
+  /**
+   * 唯一播放器在消息流/查看器之间迁移时，允许切展示模式，但不允许切第二套壳：
+   * 1. `koko-video-skin` 继续是同一个宿主表面；
+   * 2. inline 只是在同一壳上声明“消息流无控件”；
+   * 3. provider 上同步一份 dataset，便于测试与调试直接读出当前表面语义。
+   */
+  const skin = video.closest<HTMLElement>("koko-video-skin, video-skin");
+  skin?.setAttribute("data-presentation", presentation);
+  skin?.parentElement?.setAttribute("data-presentation", presentation);
+};
+
 const 绑定查看器媒体信号 = (
   video: HTMLVideoElement,
   回调: 查看器媒体回调
@@ -96,6 +112,12 @@ const 绑定查看器媒体信号 = (
       "error",
       () => {
         回调.广播媒体会话信号({ type: "PLAYER_ERROR" });
+      },
+    ],
+    [
+      "pause",
+      () => {
+        回调.广播播放位置(video, true);
       },
     ],
   ];
@@ -207,6 +229,7 @@ const 配置时间线自动播视频 = (video: HTMLVideoElement, attachmentId: s
   video.style.display = "block";
   video.style.width = "100%";
   video.style.height = "100%";
+  同步播放器展示模式(video, "inline");
 };
 
 const 配置查看器视频 = (video: HTMLVideoElement): void => {
@@ -234,6 +257,7 @@ const 配置查看器视频 = (video: HTMLVideoElement): void => {
   video.style.display = "block";
   video.style.width = "100%";
   video.style.height = "100%";
+  同步播放器展示模式(video, "viewer");
 };
 
 export function 创建全局唯一播放器(
@@ -421,6 +445,11 @@ export function 创建全局唯一播放器(
           if (查看器会话代次 !== 会话代次 || !当前查看器输入) {
             return;
           }
+          /**
+           * 切 viewer 源前先把上一条视频的最新时间写回外层唯一位置真相。
+           * 否则同一会话在查看器内部切附件时，前一条视频只会留下进入 viewer 时的旧快照。
+           */
+          当前查看器输入.回调.广播播放位置(video, true);
           当前查看器输入 = {
             attachmentId: nextInput.attachmentId,
             mountTarget: input.mountTarget,
@@ -441,6 +470,11 @@ export function 创建全局唯一播放器(
           if (查看器会话代次 !== 会话代次) {
             return;
           }
+          /**
+           * viewer 退场前必须先把当前 canonical player 的最新位置回灌出去。
+           * 这一步缺失时，inline 归位只会拿到“进入 viewer 前那次 flush”的旧时间点。
+           */
+          当前查看器输入?.回调.广播播放位置(video, true);
           释放查看器并尝试归位时间线();
         },
       };

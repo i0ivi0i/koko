@@ -111,7 +111,7 @@ export interface 聊天媒体编排端口 {
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
   处理自动播候选(candidates: 消息视频自动播候选[]): void;
-  更新消息流自动播播放位置(input: {
+  更新媒体播放位置(input: {
     attachmentId: string;
     position: 媒体播放位置;
   }): void;
@@ -274,12 +274,21 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const after = 媒体运行时.getSnapshot();
     const beforeContext = before.context;
     const afterContext = after.context;
+    const 自动播位置已变化 =
+      beforeContext.inlineAutoplayPositionByAttachmentId !==
+      afterContext.inlineAutoplayPositionByAttachmentId;
     const 自动播消息流投影已变化 =
       beforeContext.inlineAutoplayOwnerAttachmentId !==
         afterContext.inlineAutoplayOwnerAttachmentId ||
       beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback ||
-      beforeContext.inlineAutoplayPositionByAttachmentId !==
-        afterContext.inlineAutoplayPositionByAttachmentId;
+      /**
+       * viewer 打开期间，最新播放位置需要继续写回唯一位置真相，
+       * 但消息流表面此时并不在屏幕上，不该因为每次位置变化就重渲染壳层。
+       *
+       * 只有当消息流重新成为有效表面时（例如 viewer 已关闭），
+       * 位置变化才需要驱动一次重渲染，让 inline 立刻按最新时间归位。
+       */
+      (!afterContext.currentViewerRequest && 自动播位置已变化);
 
     自动播协作.同步媒体运行时上下文变化({
       before: beforeContext,
@@ -316,6 +325,13 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       接收媒体运行时事实({ type: "VIEWER_CLOSED" });
     },
     onMediaSessionSignal: 转发媒体查看器会话信号,
+    onPlaybackPositionChanged: (attachmentId, position) => {
+      接收媒体运行时事实({
+        type: "PLAYBACK_POSITION_CHANGED",
+        attachmentId,
+        position,
+      });
+    },
   });
 
   const 写入草稿列表 = (
@@ -931,9 +947,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       });
     },
 
-    更新消息流自动播播放位置(input): void {
+    更新媒体播放位置(input): void {
       接收媒体运行时事实({
-        type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+        type: "PLAYBACK_POSITION_CHANGED",
         attachmentId: input.attachmentId,
         position: input.position,
       });

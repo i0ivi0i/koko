@@ -5,6 +5,7 @@ import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播
 import type { 媒体查看器打开请求 } from "../媒体/媒体查看器";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
 import { 读取默认全局唯一播放器 } from "../媒体/全局唯一播放器";
+import { 创建VideoJs播放器壳 } from "../媒体/videojs播放器壳.js";
 import type { 房间消息窗 } from "../房间消息窗";
 import type { 消息展示项 } from "../视图";
 import "../房间消息窗";
@@ -193,46 +194,72 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
   ],
 });
 
-const 创建媒体消息窗 = (): 房间消息窗 => {
+const 创建媒体消息窗 = (
+  options: {
+    createVideoJsPlayerShell?: typeof 创建VideoJs播放器壳;
+  } = {}
+): 房间消息窗 => {
   const 全局唯一播放器 = 读取默认全局唯一播放器();
   全局唯一播放器.销毁();
-  全局唯一播放器.配置壳工厂((initialSource, deps = {}) => {
-    const video = document.createElement("video");
-    const container = document.createElement("div");
-    const 挂载到宿主 = (mountTarget: HTMLElement): void => {
-      mountTarget.append(container);
-      if (!container.contains(video)) {
-        container.append(video);
+  if (options.createVideoJsPlayerShell) {
+    全局唯一播放器.配置壳工厂((initialSource, deps = {}) =>
+      options.createVideoJsPlayerShell!(initialSource, deps)
+    );
+  } else {
+    全局唯一播放器.配置壳工厂((initialSource, deps = {}) => {
+      const video = document.createElement("video");
+      const container = document.createElement("div");
+      const 挂载到宿主 = (mountTarget: HTMLElement): void => {
+        mountTarget.append(container);
+        if (!container.contains(video)) {
+          container.append(video);
+        }
+      };
+      const 同步源 = (source = initialSource): void => {
+        video.src = source.src;
+        if (source.posterSrc) {
+          video.poster = source.posterSrc;
+        } else {
+          video.removeAttribute("poster");
+        }
+      };
+      if (deps.mountTarget) {
+        挂载到宿主(deps.mountTarget);
       }
-    };
-    const 同步源 = (source = initialSource): void => {
-      video.src = source.src;
-      if (source.posterSrc) {
-        video.poster = source.posterSrc;
-      } else {
-        video.removeAttribute("poster");
-      }
-    };
-    if (deps.mountTarget) {
-      挂载到宿主(deps.mountTarget);
-    }
-    同步源(initialSource);
-    return {
-      destroy() {
-        video.pause();
-        container.remove();
-      },
-      同步: 同步源,
-      挂载到宿主,
-      进入全屏: async () => "standard",
-      读取视频元素: () => video,
-      读取容器元素: () => container,
-    };
-  });
+      同步源(initialSource);
+      return {
+        destroy() {
+          video.pause();
+          container.remove();
+        },
+        同步: 同步源,
+        挂载到宿主,
+        进入全屏: async () => "standard",
+        读取视频元素: () => video,
+        读取容器元素: () => container,
+      };
+    });
+  }
   // 阶段 0 的保护测试共用同一条“图片 + 视频”消息，防止两条入口的 fixture 漂移。
   const pane = document.createElement("koko-room-message-pane") as 房间消息窗;
   pane.items = [创建媒体消息项()];
   return pane;
+};
+
+const 等待时间线唯一播放器挂载 = async (
+  pane: 房间消息窗,
+  maxTurns = 40
+): Promise<void> => {
+  for (let turn = 0; turn < maxTurns; turn += 1) {
+    await pane.updateComplete;
+    if (
+      pane.querySelector("koko-video-skin") &&
+      pane.querySelector('video.message-video-preview[data-canonical-player="true"]')
+    ) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 };
 
 describe("房间消息窗媒体查看器", () => {
@@ -796,6 +823,65 @@ describe("房间消息窗媒体查看器", () => {
     expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
     expect(ownerVideo?.getAttribute("src")).toBe("http://media.local/swarm-video-1");
     expect(ownerVideo?.autoplay).toBe(true);
+
+    pane.remove();
+  });
+
+  it("时间线 owner 复用 canonical player 时，会把统一壳标记成 inline 消息流表面", async () => {
+    const pane = 创建媒体消息窗({
+      createVideoJsPlayerShell: 创建VideoJs播放器壳,
+    });
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "m-inline-skin-owner-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 1280,
+            height: 720,
+            displayWidth: 320,
+            displayHeight: 180,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/swarm-inline-skin-owner-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": {
+        mode: "swarm",
+        attachmentId: "att-video-1",
+        kind: "video",
+        src: "blob:http://media.local/swarm-inline-skin-owner-1",
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    document.body.appendChild(pane);
+    await 等待时间线唯一播放器挂载(pane);
+
+    const ownerVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    const skin = pane.querySelector<HTMLElement>("koko-video-skin");
+
+    expect(ownerVideo?.dataset.canonicalPlayer).toBe("true");
+    expect(ownerVideo?.controls).toBe(false);
+    expect(skin).not.toBeNull();
+    expect(skin?.dataset.presentation).toBe("inline");
 
     pane.remove();
   });

@@ -67,7 +67,7 @@ export type 媒体运行时事件 =
       attachmentId: string;
     }
   | {
-      type: "INLINE_AUTOPLAY_POSITION_CHANGED";
+      type: "PLAYBACK_POSITION_CHANGED";
       attachmentId: string;
       position: 媒体播放位置;
     }
@@ -365,7 +365,7 @@ const 媒体运行时机 = createMachine(
           INLINE_AUTOPLAY_PLAYBACK_FAILED: {
             actions: "清理自动播播放结果",
           },
-          INLINE_AUTOPLAY_POSITION_CHANGED: {
+          PLAYBACK_POSITION_CHANGED: {
             actions: "记录自动播播放位置",
           },
           MESSAGE_ATTACHMENTS_SYNCED: {
@@ -483,7 +483,7 @@ const 媒体运行时机 = createMachine(
         };
       }),
       记录自动播播放位置: assign(({ event, context }) => {
-        if (event.type !== "INLINE_AUTOPLAY_POSITION_CHANGED") {
+        if (event.type !== "PLAYBACK_POSITION_CHANGED") {
           return {};
         }
         const nextPosition = 读取有效自动播播放位置(event.position);

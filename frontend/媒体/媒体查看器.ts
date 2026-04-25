@@ -1,5 +1,6 @@
 import type { 媒体资产分发表面 } from "../契约.js";
 import type { 媒体会话信号 } from "./媒体会话.js";
+import type { 媒体播放位置 } from "./媒体播放.js";
 import type {
   VideoJs播放器源描述,
   VideoJs全屏进入结果,
@@ -74,6 +75,7 @@ type 媒体查看器实例 = {
 type 媒体查看器工厂结果 = 媒体查看器实例 | Promise<媒体查看器实例>;
 type 媒体查看器运行时钩子 = {
   发出媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
+  广播播放位置(attachmentId: string, position: 媒体播放位置): void;
   通知查看器已关闭?(): void;
 };
 type PhotoSwipe查看器工厂 = (options: PhotoSwipe查看器选项) => 媒体查看器工厂结果;
@@ -89,6 +91,7 @@ export type 媒体查看器依赖 = {
   globalVideoPlayer?: 全局唯一播放器端口;
   isMobileViewport?: () => boolean;
   onMediaSessionSignal?: (attachmentId: string, signal: 媒体会话信号) => void;
+  onPlaybackPositionChanged?: (attachmentId: string, position: 媒体播放位置) => void;
   onViewportCaptureStart?: () => void;
   onViewportCaptureEnd?: () => void;
 };
@@ -585,6 +588,29 @@ const 创建默认VideoJs播放器层 = async (
     请求关闭: () => undefined,
   };
   let 当前查看器会话: 全局唯一播放器查看器会话 | null = null;
+  const 广播当前播放位置 = (
+    attachmentId: string,
+    video: HTMLVideoElement,
+    force = false
+  ): void => {
+    const src = video.currentSrc || video.getAttribute("src") || 当前视频项目.src;
+    if (!src || !Number.isFinite(video.currentTime) || video.currentTime < 0) {
+      return;
+    }
+    /**
+     * viewer 与时间线虽然展示态不同，但都共享同一颗 canonical player 的时间轴真相。
+     * 因此这里直接把当前 video 的事实往外回灌，而不是在查看器里另存一份“退出前位置”私货。
+     *
+     * `force` 当前只作为语义文档：调用方在关闭/切源前会显式要求 flush；
+     * 实际去重与“更晚事实”判断仍交给外层运行时完成，避免这里再长第二套节流真相。
+     */
+    void force;
+    hooks.广播播放位置(attachmentId, {
+      src,
+      currentTime: video.currentTime,
+      updatedAt: Date.now(),
+    });
+  };
 
   try {
     同步Hls增强视频项目(item);
@@ -595,6 +621,9 @@ const 创建默认VideoJs播放器层 = async (
       回调: {
         广播媒体会话信号: (signal) => {
           hooks.发出媒体会话信号(item.attachmentId, signal);
+        },
+        广播播放位置: (video, force = false) => {
+          广播当前播放位置(item.attachmentId, video, force);
         },
       },
     });
@@ -681,6 +710,9 @@ const 创建默认VideoJs播放器层 = async (
           回调: {
             广播媒体会话信号: (signal) => {
               hooks.发出媒体会话信号(nextItem.attachmentId, signal);
+            },
+            广播播放位置: (video, force = false) => {
+              广播当前播放位置(nextItem.attachmentId, video, force);
             },
           },
         });
@@ -795,6 +827,9 @@ export function 创建媒体查看器(deps: 媒体查看器依赖 = {}) {
   const 创建运行时钩子 = (generation: number): 媒体查看器运行时钩子 => ({
     发出媒体会话信号: (attachmentId, signal) => {
       deps.onMediaSessionSignal?.(attachmentId, signal);
+    },
+    广播播放位置: (attachmentId, position) => {
+      deps.onPlaybackPositionChanged?.(attachmentId, position);
     },
     通知查看器已关闭: () => {
       /**
