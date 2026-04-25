@@ -737,6 +737,10 @@ describe("媒体查看器适配器", () => {
       },
     });
     await 等待查看器任务完成(6);
+    const 初始InlineVideo = inlineMount.querySelector<HTMLVideoElement>("video");
+    const 初始InlineContainer = globalVideoPlayer.读取容器元素();
+    expect(初始InlineVideo).not.toBeNull();
+    expect(初始InlineContainer).not.toBeNull();
 
     const viewer = 创建媒体查看器({
       isMobileViewport: () => false,
@@ -776,9 +780,256 @@ describe("媒体查看器适配器", () => {
     expect(returnedVideo).not.toBeNull();
     expect(最新位置.currentTime).toBeCloseTo(36.854, 2);
     expect(returnedVideo!.currentTime).toBeCloseTo(36.854, 2);
+    /**
+     * spec 这里要求的不是“时间点看起来对了就行”，而是同一颗 canonical player 真正迁回消息流：
+     * 1. 如果 viewer 关闭后 destroy 再重建，时间虽然能靠快照续上，但对象身份已经断了；
+     * 2. 断对象就意味着 owner 真相没有全程迁移，后面仍可能长出换壳、掉帧或生命周期缝隙；
+     * 3. 所以这里必须把 video/container 身份锁死，避免实现偷偷退化成“旧时间点 + 新壳”。
+     */
+    expect(returnedVideo).toBe(初始InlineVideo);
+    expect(globalVideoPlayer.读取容器元素()).toBe(初始InlineContainer);
 
     viewer.销毁();
     globalVideoPlayer.销毁();
+  });
+
+  it("viewer 关闭时即便时间线 owner 暂时为空，也会等待归位窗口并复用同一颗 canonical 壳", async () => {
+    vi.useFakeTimers();
+    const inlineMount = document.createElement("div");
+    const viewerMount = document.createElement("div");
+    document.body.append(inlineMount, viewerMount);
+    let 最新位置: 媒体播放位置 = {
+      src: "blob:http://media.local/bridge-return-inline-1",
+      currentTime: 12.345,
+      updatedAt: 1_000,
+    };
+    const 记录播放位置 = vi.fn((video: HTMLVideoElement) => {
+      最新位置 = {
+        src: video.currentSrc || video.src,
+        currentTime: video.currentTime,
+        updatedAt: 最新位置.updatedAt + 1,
+      };
+    });
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+    const 时间线输入 = {
+      attachmentId: "att-bridge-return-inline-1",
+      mountTarget: inlineMount,
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/bridge-return-inline-1",
+        posterSrc: "http://media.local/poster-bridge-return-inline-1",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置: (video: HTMLVideoElement) => {
+          video.currentTime = 最新位置.currentTime;
+        },
+        广播播放位置: (video: HTMLVideoElement) => {
+          记录播放位置(video);
+        },
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+
+    try {
+      globalVideoPlayer.同步时间线自动播(时间线输入);
+      await 等待查看器任务完成(6);
+
+      const 初始视频 = inlineMount.querySelector<HTMLVideoElement>("video");
+      const 初始容器 = globalVideoPlayer.读取容器元素();
+      expect(初始视频).not.toBeNull();
+      expect(初始容器).not.toBeNull();
+
+      const 查看器会话 = await globalVideoPlayer.接管查看器({
+        attachmentId: "att-bridge-return-inline-1",
+        mountTarget: viewerMount,
+        source: 时间线输入.source,
+        回调: {
+          广播播放位置: (video: HTMLVideoElement) => {
+            记录播放位置(video);
+          },
+          广播媒体会话信号: () => undefined,
+        },
+      });
+      await 等待查看器任务完成(6);
+
+      /**
+       * 这里故意按真实链路重放那条会把对象弄断的顺序：
+       * 1. viewer 打开后，runtime 会先把 inline owner 清空；
+       * 2. viewer 随后关闭，inline owner 会在下一轮重算里回来；
+       * 3. 如果唯一播放器在这个短窗口里立刻 destroy，就会退化成“旧壳销毁 + 新壳重建”。
+       */
+      globalVideoPlayer.同步时间线自动播(null);
+      查看器会话.关闭();
+      await Promise.resolve();
+
+      expect(globalVideoPlayer.读取视频元素()).toBe(初始视频);
+      expect(globalVideoPlayer.读取容器元素()).toBe(初始容器);
+
+      globalVideoPlayer.同步时间线自动播(时间线输入);
+      await 等待查看器任务完成(6);
+
+      expect(inlineMount.querySelector("video")).toBe(初始视频);
+      expect(globalVideoPlayer.读取视频元素()).toBe(初始视频);
+      expect(globalVideoPlayer.读取容器元素()).toBe(初始容器);
+      expect(最新位置.currentTime).toBeCloseTo(12.345, 2);
+    } finally {
+      globalVideoPlayer.销毁();
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("viewer 关闭前重复收到空的时间线 sync 时，不会把待归位桥错误清掉", async () => {
+    vi.useFakeTimers();
+    const inlineMount = document.createElement("div");
+    const viewerMount = document.createElement("div");
+    document.body.append(inlineMount, viewerMount);
+    let 最新位置: 媒体播放位置 = {
+      src: "blob:http://media.local/bridge-return-inline-repeat-null-1",
+      currentTime: 18.765,
+      updatedAt: 1_000,
+    };
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+    const 时间线输入 = {
+      attachmentId: "att-bridge-return-inline-repeat-null-1",
+      mountTarget: inlineMount,
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/bridge-return-inline-repeat-null-1",
+        posterSrc: "http://media.local/poster-bridge-return-inline-repeat-null-1",
+        width: 1080,
+        height: 1920,
+      },
+      回调: {
+        恢复播放位置: (video: HTMLVideoElement) => {
+          video.currentTime = 最新位置.currentTime;
+        },
+        广播播放位置: (video: HTMLVideoElement) => {
+          最新位置 = {
+            src: video.currentSrc || video.src,
+            currentTime: video.currentTime,
+            updatedAt: 最新位置.updatedAt + 1,
+          };
+        },
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+
+    try {
+      globalVideoPlayer.同步时间线自动播(时间线输入);
+      await 等待查看器任务完成(6);
+      const 初始视频 = inlineMount.querySelector<HTMLVideoElement>("video");
+      const 初始容器 = globalVideoPlayer.读取容器元素();
+      expect(初始视频).not.toBeNull();
+      expect(初始容器).not.toBeNull();
+
+      const 查看器会话 = await globalVideoPlayer.接管查看器({
+        attachmentId: "att-bridge-return-inline-repeat-null-1",
+        mountTarget: viewerMount,
+        source: 时间线输入.source,
+        回调: {
+          广播播放位置: (video: HTMLVideoElement) => {
+            最新位置 = {
+              src: video.currentSrc || video.src,
+              currentTime: video.currentTime,
+              updatedAt: 最新位置.updatedAt + 1,
+            };
+          },
+          广播媒体会话信号: () => undefined,
+        },
+      });
+      await 等待查看器任务完成(6);
+
+      globalVideoPlayer.同步时间线自动播(null);
+      globalVideoPlayer.同步时间线自动播(null);
+      查看器会话.关闭();
+      await Promise.resolve();
+
+      globalVideoPlayer.同步时间线自动播(时间线输入);
+      await 等待查看器任务完成(6);
+
+      expect(inlineMount.querySelector("video")).toBe(初始视频);
+      expect(globalVideoPlayer.读取视频元素()).toBe(初始视频);
+      expect(globalVideoPlayer.读取容器元素()).toBe(初始容器);
+      expect(最新位置.currentTime).toBeCloseTo(18.765, 2);
+    } finally {
+      globalVideoPlayer.销毁();
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("viewer 已关闭但消息流宿主晚一拍归来时，后续空 sync 不会把同一颗壳提前销毁", async () => {
+    vi.useFakeTimers();
+    const inlineMount = document.createElement("div");
+    const viewerMount = document.createElement("div");
+    document.body.append(inlineMount, viewerMount);
+    const globalVideoPlayer = 创建全局唯一播放器({
+      createVideoJsPlayerShell: vi.fn(() => 创建测试VideoJs播放器壳()),
+    });
+    const 时间线输入 = {
+      attachmentId: "att-bridge-return-inline-post-close-null-1",
+      mountTarget: inlineMount,
+      source: {
+        kind: "file" as const,
+        src: "blob:http://media.local/bridge-return-inline-post-close-null-1",
+        posterSrc: "http://media.local/poster-bridge-return-inline-post-close-null-1",
+        width: 1280,
+        height: 720,
+      },
+      回调: {
+        恢复播放位置: (video: HTMLVideoElement) => {
+          video.currentTime = 21.5;
+        },
+        广播播放位置: () => undefined,
+        标记首帧已就绪: () => undefined,
+        广播媒体会话信号: () => undefined,
+      },
+    };
+
+    try {
+      globalVideoPlayer.同步时间线自动播(时间线输入);
+      await 等待查看器任务完成(6);
+      const 初始视频 = inlineMount.querySelector<HTMLVideoElement>("video");
+      const 初始容器 = globalVideoPlayer.读取容器元素();
+      expect(初始视频).not.toBeNull();
+      expect(初始容器).not.toBeNull();
+
+      const 查看器会话 = await globalVideoPlayer.接管查看器({
+        attachmentId: "att-bridge-return-inline-post-close-null-1",
+        mountTarget: viewerMount,
+        source: 时间线输入.source,
+        回调: {
+          广播播放位置: () => undefined,
+          广播媒体会话信号: () => undefined,
+        },
+      });
+      await 等待查看器任务完成(6);
+
+      globalVideoPlayer.同步时间线自动播(null);
+      查看器会话.关闭();
+      globalVideoPlayer.同步时间线自动播(null);
+      await Promise.resolve();
+
+      globalVideoPlayer.同步时间线自动播(时间线输入);
+      await 等待查看器任务完成(6);
+
+      expect(inlineMount.querySelector("video")).toBe(初始视频);
+      expect(globalVideoPlayer.读取视频元素()).toBe(初始视频);
+      expect(globalVideoPlayer.读取容器元素()).toBe(初始容器);
+    } finally {
+      globalVideoPlayer.销毁();
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
   });
 
   it("标准系统全屏请求挂起时，沉浸查看器不会提前亮起或暴露关闭按钮", async () => {

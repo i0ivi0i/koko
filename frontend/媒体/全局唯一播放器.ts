@@ -263,6 +263,7 @@ const 配置查看器视频 = (video: HTMLVideoElement): void => {
 export function 创建全局唯一播放器(
   deps: 全局唯一播放器依赖 = {}
 ): 全局唯一播放器端口 {
+  const 查看器归位等待毫秒 = 120;
   let createVideoJsPlayerShell = deps.createVideoJsPlayerShell ?? 创建VideoJs播放器壳;
   let shell: VideoJs播放器壳实例 | null = null;
   let shellPromise: Promise<VideoJs播放器壳实例> | null = null;
@@ -272,18 +273,55 @@ export function 创建全局唯一播放器(
   let 当前表面: "inline" | "viewer" | null = null;
   let 操作代次 = 0;
   let 查看器会话代次 = 0;
+  let 待归位销毁定时器: ReturnType<typeof setTimeout> | null = null;
+  let 待归位销毁代次 = 0;
+  let 待归位附件Id: string | null = null;
 
   const 解绑当前绑定 = (): void => {
     当前绑定清理();
     当前绑定清理 = () => undefined;
   };
 
+  const 取消待归位销毁 = (): void => {
+    if (待归位销毁定时器 !== null) {
+      clearTimeout(待归位销毁定时器);
+      待归位销毁定时器 = null;
+    }
+  };
+
   const 销毁当前播放器 = (): void => {
+    取消待归位销毁();
     解绑当前绑定();
     shell?.destroy();
     shell = null;
     shellPromise = null;
     当前表面 = null;
+    待归位附件Id = null;
+  };
+
+  const 启动待归位销毁等待 = (): void => {
+    取消待归位销毁();
+    const 当前归位代次 = ++待归位销毁代次;
+    /**
+     * viewer 关闭和 inline owner 回来，并不保证发生在同一调用栈：
+     * 1. 真实链路里，viewer 先退场，runtime 才会在下一轮重新把 timeline owner 交回来；
+     * 2. 这里如果立刻 destroy，就会把“同一颗 canonical player 归位”退化成“旧壳销毁 + 新壳重建”；
+     * 3. 因此只给一个极短、可取消的归位窗口，窗口内不新增第二份真相，只是暂缓销毁那颗现有壳。
+     */
+    待归位销毁定时器 = setTimeout(() => {
+      if (当前归位代次 !== 待归位销毁代次) {
+        return;
+      }
+      待归位销毁定时器 = null;
+      if (当前查看器输入) {
+        return;
+      }
+      if (当前时间线输入?.mountTarget && 当前时间线输入.mountTarget.isConnected) {
+        应用时间线自动播表面();
+        return;
+      }
+      销毁当前播放器();
+    }, 查看器归位等待毫秒);
   };
 
   const 读取或创建播放器 = (
@@ -334,6 +372,7 @@ export function 创建全局唯一播放器(
       }
       return;
     }
+    取消待归位销毁();
     const 当前操作 = ++操作代次;
     const 应用已就绪壳 = (activeShell: VideoJs播放器壳实例): void => {
       if (当前操作 !== 操作代次 || 当前时间线输入 !== 当前输入 || 当前查看器输入) {
@@ -346,6 +385,7 @@ export function 创建全局唯一播放器(
       配置时间线自动播视频(video, 当前输入.attachmentId);
       当前绑定清理 = 绑定时间线自动播信号(video, 当前输入);
       当前表面 = "inline";
+      待归位附件Id = null;
       当前输入.回调.恢复播放位置(video);
       /**
        * 时间线 owner 接管后即便浏览器表面上已经把 `autoplay` 置真，也不能假设它一定会立刻恢复播放：
@@ -369,7 +409,11 @@ export function 创建全局唯一播放器(
       应用时间线自动播表面();
       return;
     }
-    销毁当前播放器();
+    if (!待归位附件Id) {
+      销毁当前播放器();
+      return;
+    }
+    启动待归位销毁等待();
   };
 
   return {
@@ -398,11 +442,39 @@ export function 创建全局唯一播放器(
           }
         }
       }
+      if (当前查看器输入) {
+        /**
+         * 只有“同一条时间线 owner 被 viewer 暂时接管”才允许进入归位桥：
+         * 1. viewer 打开后 runtime 会先把 inline owner 清空；
+         * 2. 如果被清空的正是当前 viewer 这条附件，就在关闭时给它一个短暂的回挂窗口；
+         * 3. viewer 真正退场前，消息窗可能会因为重渲染再次上报一轮 `null`；
+         *    这时旧输入已经被上一轮清空，但待归位桥不能因此被误擦掉；
+         * 4. 其他情况一律不保留桥，避免把完整关闭后的新会话误复用成旧壳续命。
+         */
+        待归位附件Id =
+          !input &&
+          (旧输入?.attachmentId === 当前查看器输入.attachmentId ||
+            待归位附件Id === 当前查看器输入.attachmentId)
+            ? 当前查看器输入.attachmentId
+            : null;
+      }
       当前时间线输入 = input;
+      if (input) {
+        取消待归位销毁();
+      }
       if (当前查看器输入) {
         return;
       }
       if (!input) {
+        if (待归位附件Id && shell) {
+          /**
+           * viewer 已退场但消息流宿主还没重新挂好时，房间消息窗会继续上报 `null`。
+           * 这类 `null` 仍属于同一条归位链，不该把刚保下来的 canonical 壳立刻销毁；
+           * 真正是否销毁，交给那条短暂归位窗口统一裁决。
+           */
+          启动待归位销毁等待();
+          return;
+        }
         销毁当前播放器();
         return;
       }
@@ -410,6 +482,15 @@ export function 创建全局唯一播放器(
     },
 
     async 接管查看器(input): Promise<全局唯一播放器查看器会话> {
+      if (待归位附件Id && !当前查看器输入) {
+        /**
+         * 这里代表上一条 viewer 已经完整关闭，只是还在等待 inline owner 是否回归。
+         * 如果此时用户直接打开一条新的 viewer，会话语义已经变成“新开一条正式查看链”，
+         * 不能把这次打开偷做成旧桥复用，否则关闭-重开会和现有测试/交互契约冲突。
+         */
+        销毁当前播放器();
+      }
+      取消待归位销毁();
       当前查看器输入 = input;
       const 会话代次 = ++查看器会话代次;
       const 当前时间线附件 = 当前时间线输入?.attachmentId ?? null;
