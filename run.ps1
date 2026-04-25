@@ -451,32 +451,6 @@ function Write-ManagedProcessLogs {
     Write-ManagedStreamLines -ManagedProcessName $ManagedProcess.Name -StreamState $ManagedProcess.Stderr -StdErr
 }
 
-function Stop-StaleLauncherBackend {
-    param(
-        [string]$BackendTargetDir
-    )
-
-    # run.ps1 只是开发态启动器，所以只收自己留下的 launcher-run 后端残进程，
-    # 不去替项目源码定义“真正的关机协议”，也不碰任何生产部署语义。
-    $launcherTargetPattern = [Regex]::Escape($BackendTargetDir)
-    $staleProcesses = Get-CimInstance Win32_Process | Where-Object {
-        $_.Name -in @("cargo.exe", "koko.exe") -and (
-            $_.ExecutablePath -like "*target\\launcher-run\\debug\\koko.exe" -or
-            $_.CommandLine -match $launcherTargetPattern
-        )
-    }
-
-    foreach ($staleProcess in $staleProcesses) {
-        try {
-            Write-Host "清理上一轮 launcher 残留后端进程: [$($staleProcess.ProcessId)] $($staleProcess.Name)"
-            & taskkill.exe /PID $staleProcess.ProcessId /T /F 2>$null | Out-Null
-        }
-        catch {
-            Write-Warning "清理残留后端进程失败 [$($staleProcess.ProcessId)]: $($_.Exception.Message)"
-        }
-    }
-}
-
 function Get-ListeningPortProcessRecords {
     param([int[]]$Ports)
 
@@ -649,26 +623,6 @@ function Stop-RecognizedLauncherServices {
     }
 
     return $recognizedServices
-}
-
-function Stop-StaleLauncherSidecars {
-    param(
-        [int]$AppPort,
-        [int]$TrackerPort,
-        [int]$SeederPort,
-        [int]$TusPort,
-        [string]$TusUploadDir
-    )
-
-    $null = Stop-RecognizedLauncherServices `
-        -Ports @($TrackerPort, $SeederPort, $TusPort) `
-        -BackendTargetDir "" `
-        -AppPort $AppPort `
-        -TrackerPort $TrackerPort `
-        -SeederPort $SeederPort `
-        -TusPort $TusPort `
-        -TusUploadDir $TusUploadDir `
-        -ReasonLabel "清理上一轮 launcher 残留 sidecar"
 }
 
 function Resolve-TusdBinaryPath {
