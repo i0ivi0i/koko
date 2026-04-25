@@ -5,6 +5,7 @@ import { 创建应用运行时 } from "../应用运行时";
 import type { 浏览器应用平台事件 } from "../平台";
 import type { 媒体查看器打开请求 } from "../媒体";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
+import type { 媒体播放位置 } from "../媒体/媒体播放";
 
 const 创建媒体打开请求 = (): 媒体查看器打开请求 => ({
   startAttachmentId: "att-1",
@@ -108,6 +109,28 @@ describe("应用运行时", () => {
     expect(deps.dispatch).toHaveBeenCalledWith({
       type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
       candidates,
+    });
+  });
+
+  it("自动播播放位置也必须先进入应用运行时，再翻成媒体 owner command", () => {
+    const deps = 创建运行时依赖();
+    const runtime = 创建应用运行时(deps);
+    const position: 媒体播放位置 = {
+      src: "http://media.local/swarm-video-1",
+      currentTime: 12.5,
+      updatedAt: 1_000,
+    };
+
+    runtime.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-1",
+      position,
+    } as never);
+
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-1",
+      position,
     });
   });
 

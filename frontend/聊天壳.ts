@@ -7,7 +7,11 @@ import {
   创建操作台附件入口编排,
   默认统一媒体文件选择配置,
 } from "./操作台/index.js";
-import { type 媒体会话信号, type 媒体查看器打开请求 } from "./媒体/index.js";
+import {
+  type 媒体会话信号,
+  type 媒体播放位置,
+  type 媒体查看器打开请求,
+} from "./媒体/index.js";
 import type { 前端传输端口 } from "./传输.js";
 import { 默认文本布局器 } from "./文本布局.js";
 import {
@@ -1574,6 +1578,7 @@ export class 聊天壳 extends LitElement {
              .mediaPreviewByAttachmentId=${聊天快照.media.previewByAttachmentId}
              .inlineAutoplayOwnerAttachmentId=${聊天快照.media.inlineAutoplayOwnerAttachmentId}
              .inlineAutoplayPlaybackByAttachmentId=${聊天快照.media.inlineAutoplayPlaybackByAttachmentId}
+             .inlineAutoplayPositionByAttachmentId=${聊天快照.media.inlineAutoplayPositionByAttachmentId}
              .historyHint=${historyHint}
              .jumpToLatestLabel=${jumpToLatestLabel}
             @room-scroll-intent=${() =>
@@ -1599,6 +1604,15 @@ export class 聊天壳 extends LitElement {
               this.应用运行时.dispatch({
                 type: "MEDIA_INLINE_AUTOPLAY_OBSERVED",
                 candidates: event.detail.candidates,
+              });
+            }}
+            @room-inline-autoplay-position-changed=${(
+              event: CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+            ) => {
+              this.应用运行时.dispatch({
+                type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED",
+                attachmentId: event.detail.attachmentId,
+                position: event.detail.position,
               });
             }}
             @jump-to-latest=${() =>

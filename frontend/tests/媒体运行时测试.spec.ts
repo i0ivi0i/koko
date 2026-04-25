@@ -187,6 +187,94 @@ describe("媒体运行时", () => {
     expect(actor.getSnapshot().context.inlineAutoplayPlayback).toEqual(playback);
   });
 
+  it("自动播播放位置由媒体运行时持有，owner 释放后仍保留同源续播时间戳", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-position-1",
+          visibilityRatio: 0.91,
+          distanceToViewportCenter: 14,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+    actor.send({
+      type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-inline-position-1",
+      position: {
+        src: "http://media.local/swarm-inline-position-1",
+        currentTime: 21.25,
+        updatedAt: 1_000,
+      },
+    });
+
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-position-1"
+      ]
+    ).toMatchObject({
+      src: "http://media.local/swarm-inline-position-1",
+      currentTime: 21.25,
+    });
+
+    actor.send({ type: "INLINE_AUTOPLAY_RELEASE_REQUESTED" });
+
+    expect(actor.getSnapshot().context.inlineAutoplayOwnerAttachmentId).toBeNull();
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-position-1"
+      ]
+    ).toMatchObject({
+      currentTime: 21.25,
+    });
+  });
+
+  it("自动播播放位置会随附件集合清理，并按更新时间裁剪避免万人群历史无限增长", () => {
+    const actor = 创建媒体运行时Actor();
+
+    for (let index = 0; index < 260; index += 1) {
+      actor.send({
+        type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+        attachmentId: `att-video-inline-position-${index}`,
+        position: {
+          src: `http://media.local/swarm-inline-position-${index}`,
+          currentTime: index + 0.5,
+          updatedAt: index,
+        },
+      });
+    }
+
+    expect(
+      Object.keys(actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId)
+    ).toHaveLength(256);
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-position-0"
+      ]
+    ).toBeUndefined();
+    expect(
+      actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId[
+        "att-video-inline-position-259"
+      ]?.currentTime
+    ).toBeCloseTo(259.5, 2);
+
+    actor.send({
+      type: "MESSAGE_ATTACHMENTS_SYNCED",
+      attachmentIds: ["att-video-inline-position-259"],
+    });
+
+    expect(actor.getSnapshot().context.inlineAutoplayPositionByAttachmentId).toEqual({
+      "att-video-inline-position-259": {
+        src: "http://media.local/swarm-inline-position-259",
+        currentTime: 259.5,
+        updatedAt: 259,
+      },
+    });
+  });
+
   it("hidden/background 释放自动播 owner 后，不会再通过旧路径重新把它补回来", () => {
     const actor = 创建媒体运行时Actor();
 

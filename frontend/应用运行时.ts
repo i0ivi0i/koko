@@ -6,6 +6,7 @@ type 应用运行时命令 = Extract<
   | { type: "ROOM_SCROLL_INTENT" }
   | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
   | { type: "MEDIA_INLINE_AUTOPLAY_OBSERVED" }
+  | { type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED" }
   | { type: "ROOM_JUMP_TO_LATEST_REQUESTED" }
   | { type: "MEDIA_OPEN_REQUESTED" }
   | { type: "MEDIA_SESSION_SIGNALLED"; attachmentId: string; signal: import("./媒体/媒体会话.js").媒体会话信号 }
@@ -87,6 +88,7 @@ export function 创建应用运行时(deps: 应用运行时依赖): 应用运行
       const command: 应用运行时命令 =
         event.type === "ROOM_SCROLL_OBSERVED" ||
         event.type === "MEDIA_INLINE_AUTOPLAY_OBSERVED" ||
+        event.type === "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED" ||
         event.type === "MEDIA_OPEN_REQUESTED" ||
         event.type === "MEDIA_SESSION_SIGNALLED"
           ? { ...event }
@@ -96,6 +98,7 @@ export function 创建应用运行时(deps: 应用运行时依赖): 应用运行
         case "ROOM_SCROLL_INTENT":
         case "ROOM_SCROLL_OBSERVED":
         case "MEDIA_INLINE_AUTOPLAY_OBSERVED":
+        case "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED":
         case "ROOM_JUMP_TO_LATEST_REQUESTED":
         case "MEDIA_OPEN_REQUESTED":
         case "MEDIA_SESSION_SIGNALLED":

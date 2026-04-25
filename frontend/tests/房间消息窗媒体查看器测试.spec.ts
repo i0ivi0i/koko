@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it, vi } from "vitest";
-import type { 媒体播放结果 } from "../媒体/媒体播放";
+import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放";
 import type { 媒体查看器打开请求 } from "../媒体/媒体查看器";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
 import type { 房间消息窗 } from "../房间消息窗";
@@ -1213,6 +1213,250 @@ describe("房间消息窗媒体查看器", () => {
     expect(playSpy).toHaveBeenCalledTimes(1);
 
     pane.remove();
+  });
+
+  it("自动播视频 DOM 重挂载后会从运行时回灌的时间戳续播，而不是从头播放", async () => {
+    const pane = 创建媒体消息窗();
+    const positionEvents: Array<
+      CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+    > = [];
+    const 创建单视频消息 = (id: string): 消息展示项 => ({
+      ...创建媒体消息项(),
+      id,
+      attachments: [
+        {
+          kind: "video",
+          attachmentId: "att-video-1",
+          width: 1280,
+          height: 720,
+          displayWidth: 320,
+          displayHeight: 180,
+          originalSrc: "http://media.local/original-video-1",
+          posterSrc: null,
+        },
+      ],
+    });
+    const autoplayPlayback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.addEventListener("room-inline-autoplay-position-changed", (event) => {
+      const positionEvent = event as CustomEvent<{
+        attachmentId: string;
+        position: 媒体播放位置;
+      }>;
+      positionEvents.push(positionEvent);
+      pane.inlineAutoplayPositionByAttachmentId = {
+        [positionEvent.detail.attachmentId]: positionEvent.detail.position,
+      };
+    });
+    pane.items = [创建单视频消息("m-video-before")];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": autoplayPlayback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": autoplayPlayback,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const beforeRemountVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(beforeRemountVideo).not.toBeNull();
+    beforeRemountVideo!.currentTime = 18.25;
+    beforeRemountVideo!.dispatchEvent(new Event("timeupdate"));
+    expect(positionEvents).toHaveLength(1);
+    const firstPositionEvent = positionEvents[0];
+    expect(firstPositionEvent).toBeDefined();
+    expect(firstPositionEvent!.detail).toMatchObject({
+      attachmentId: "att-video-1",
+      position: {
+        src: "http://media.local/swarm-video-1",
+        currentTime: 18.25,
+      },
+    });
+
+    pane.items = [创建单视频消息("m-video-after")];
+    await pane.updateComplete;
+
+    const afterRemountVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]'
+    );
+    expect(afterRemountVideo).not.toBeNull();
+    expect(afterRemountVideo).not.toBe(beforeRemountVideo);
+    afterRemountVideo!.dispatchEvent(new Event("loadedmetadata"));
+
+    expect(afterRemountVideo!.currentTime).toBeCloseTo(18.25, 2);
+
+    pane.remove();
+  });
+
+  it("自动播时间戳上报只允许当前 owner，并对高频 timeupdate 做节流", async () => {
+    const pane = 创建媒体消息窗();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const positionEvents: Array<
+      CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+    > = [];
+    const autoplayPlayback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    try {
+      pane.items = [
+        {
+          ...创建媒体消息项(),
+          attachments: [
+            {
+              kind: "video",
+              attachmentId: "att-video-1",
+              width: 1280,
+              height: 720,
+              displayWidth: 320,
+              displayHeight: 180,
+              originalSrc: "http://media.local/original-video-1",
+              posterSrc: null,
+            },
+          ],
+        },
+      ];
+      pane.addEventListener("room-inline-autoplay-position-changed", (event) => {
+        positionEvents.push(
+          event as CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+        );
+      });
+      pane.mediaPlaybackByAttachmentId = {
+        "att-video-1": autoplayPlayback,
+      };
+      pane.inlineAutoplayPlaybackByAttachmentId = {
+        "att-video-1": autoplayPlayback,
+      };
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const nonOwnerVideo = pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-1"]'
+      );
+      expect(nonOwnerVideo).not.toBeNull();
+      nonOwnerVideo!.currentTime = 8;
+      nonOwnerVideo!.dispatchEvent(new Event("timeupdate"));
+      expect(positionEvents).toHaveLength(0);
+
+      pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+      await pane.updateComplete;
+
+      const ownerVideo = pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-1"]'
+      );
+      expect(ownerVideo).not.toBeNull();
+      ownerVideo!.currentTime = 10;
+      ownerVideo!.dispatchEvent(new Event("timeupdate"));
+      expect(positionEvents).toHaveLength(1);
+
+      nowSpy.mockReturnValue(1_500);
+      ownerVideo!.currentTime = 10.5;
+      ownerVideo!.dispatchEvent(new Event("timeupdate"));
+      expect(positionEvents).toHaveLength(1);
+
+      nowSpy.mockReturnValue(2_000);
+      ownerVideo!.currentTime = 11;
+      ownerVideo!.dispatchEvent(new Event("timeupdate"));
+      expect(positionEvents).toHaveLength(2);
+
+      nowSpy.mockReturnValue(2_100);
+      ownerVideo!.currentTime = 11.1;
+      ownerVideo!.dispatchEvent(new Event("pause"));
+      expect(positionEvents).toHaveLength(3);
+      const flushedPositionEvent = positionEvents[2];
+      expect(flushedPositionEvent).toBeDefined();
+      expect(flushedPositionEvent!.detail.position.currentTime).toBeCloseTo(11.1, 2);
+    } finally {
+      nowSpy.mockRestore();
+      pane.remove();
+    }
+  });
+
+  it("自动播 owner 释放时会在暂停前强制 flush 最新时间戳", async () => {
+    const pane = 创建媒体消息窗();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(3_000);
+    const positionEvents: Array<
+      CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+    > = [];
+    const autoplayPlayback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: null,
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    try {
+      pane.addEventListener("room-inline-autoplay-position-changed", (event) => {
+        positionEvents.push(
+          event as CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>
+        );
+      });
+      pane.items = [
+        {
+          ...创建媒体消息项(),
+          attachments: [
+            {
+              kind: "video",
+              attachmentId: "att-video-1",
+              width: 1280,
+              height: 720,
+              displayWidth: 320,
+              displayHeight: 180,
+              originalSrc: "http://media.local/original-video-1",
+              posterSrc: null,
+            },
+          ],
+        },
+      ];
+      pane.mediaPlaybackByAttachmentId = {
+        "att-video-1": autoplayPlayback,
+      };
+      pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+      pane.inlineAutoplayPlaybackByAttachmentId = {
+        "att-video-1": autoplayPlayback,
+      };
+      document.body.appendChild(pane);
+      await pane.updateComplete;
+
+      const pauseSpy = vi
+        .spyOn(HTMLMediaElement.prototype, "pause")
+        .mockImplementation(() => undefined);
+      const ownerVideo = pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-video-1"]'
+      );
+      expect(ownerVideo).not.toBeNull();
+      ownerVideo!.currentTime = 42.5;
+
+      pane.inlineAutoplayOwnerAttachmentId = null;
+      await pane.updateComplete;
+
+      expect(pauseSpy).toHaveBeenCalledTimes(1);
+      expect(positionEvents).toHaveLength(1);
+      const releaseFlushEvent = positionEvents[0];
+      expect(releaseFlushEvent).toBeDefined();
+      expect(releaseFlushEvent!.detail.position.currentTime).toBeCloseTo(42.5, 2);
+      pauseSpy.mockRestore();
+    } finally {
+      nowSpy.mockRestore();
+      pane.remove();
+    }
   });
 
   it("时间线自动播 video 只承载查看器入口，不暴露原生媒体右键菜单", async () => {

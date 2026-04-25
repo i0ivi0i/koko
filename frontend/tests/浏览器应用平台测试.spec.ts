@@ -114,6 +114,10 @@ describe("浏览器端应用平台化基线", () => {
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"ROOM_JUMP_TO_LATEST_REQUESTED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_OPEN_REQUESTED"/);
     expect(source).toMatch(/this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_SESSION_SIGNALLED"/);
+    expect(source).toMatch(
+      /this\.应用运行时\.dispatch\(\{\s*type:\s*"MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED"/
+    );
+    expect(source).toContain(".inlineAutoplayPositionByAttachmentId=");
     expect(source).toContain("this.应用运行时.start()");
     expect(source).toContain("this._应用运行时?.dispose()");
     expect(source).not.toContain("this.kernel.处理选择媒体文件(");

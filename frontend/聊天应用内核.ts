@@ -80,6 +80,7 @@ import {
   type 媒体附件草稿,
   type 媒体草稿状态补丁,
   type 媒体会话信号,
+  type 媒体播放位置,
   type 媒体查看器打开请求,
 } from "./媒体/index.js";
 import {
@@ -157,6 +158,11 @@ export type 聊天应用命令 =
   | { type: "ROOM_SCROLL_INTENT" }
   | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
   | { type: "MEDIA_INLINE_AUTOPLAY_OBSERVED"; candidates: 消息视频自动播候选[] }
+  | {
+      type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED";
+      attachmentId: string;
+      position: 媒体播放位置;
+    }
   | { type: "ROOM_JUMP_TO_LATEST_REQUESTED" }
   | { type: "MEDIA_OPEN_REQUESTED"; request: 媒体查看器打开请求 }
   | { type: "MEDIA_SESSION_SIGNALLED"; attachmentId: string; signal: 媒体会话信号 }
@@ -412,6 +418,12 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         return;
       case "MEDIA_INLINE_AUTOPLAY_OBSERVED":
         this.媒体编排.处理自动播候选(command.candidates);
+        return;
+      case "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED":
+        this.媒体编排.更新消息流自动播播放位置({
+          attachmentId: command.attachmentId,
+          position: command.position,
+        });
         return;
       case "ROOM_JUMP_TO_LATEST_REQUESTED":
         await this.请求跳到最新();

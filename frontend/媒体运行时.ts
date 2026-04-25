@@ -4,11 +4,13 @@ import type {
   媒体查看器打开请求,
   消息视频自动播候选,
   媒体播放结果,
+  媒体播放位置,
 } from "./媒体/index.js";
 import { 选择消息视频自动播Owner } from "./媒体/index.js";
 
 const 长任务阈值毫秒 = 100;
 const 自动播空观测释放阈值 = 2;
+const 自动播播放位置表上限 = 256;
 
 export interface 媒体运行时上下文 {
   currentViewerRequest: 媒体查看器打开请求 | null;
@@ -16,6 +18,7 @@ export interface 媒体运行时上下文 {
   inlineAutoplayOwnerAttachmentId: string | null;
   inlineAutoplayPendingAttachmentId: string | null;
   inlineAutoplayPlayback: 媒体播放结果 | null;
+  inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
   inlineAutoplayConsecutiveEmptyObservedCount: number;
   lastInlineAutoplayCandidates: 消息视频自动播候选[];
   heavyWorkPolicy: "normal" | "reduced" | "suspended";
@@ -59,6 +62,11 @@ export type 媒体运行时事件 =
       attachmentId: string;
     }
   | {
+      type: "INLINE_AUTOPLAY_POSITION_CHANGED";
+      attachmentId: string;
+      position: 媒体播放位置;
+    }
+  | {
       type: "MESSAGE_ATTACHMENTS_SYNCED";
       attachmentIds: string[];
     }
@@ -92,6 +100,7 @@ const 初始媒体运行时上下文: 媒体运行时上下文 = {
   inlineAutoplayOwnerAttachmentId: null,
   inlineAutoplayPendingAttachmentId: null,
   inlineAutoplayPlayback: null,
+  inlineAutoplayPositionByAttachmentId: {},
   inlineAutoplayConsecutiveEmptyObservedCount: 0,
   lastInlineAutoplayCandidates: [],
   heavyWorkPolicy: "normal",
@@ -111,6 +120,59 @@ const 清空自动播Owner补丁 = () => ({
   inlineAutoplayPlayback: null,
   inlineAutoplayConsecutiveEmptyObservedCount: 0,
 });
+
+const 读取有效自动播播放位置 = (
+  position: 媒体播放位置
+): 媒体播放位置 | null => {
+  if (
+    typeof position.src !== "string" ||
+    position.src.length === 0 ||
+    !Number.isFinite(position.currentTime) ||
+    !Number.isFinite(position.updatedAt)
+  ) {
+    return null;
+  }
+  return {
+    src: position.src,
+    currentTime: Math.max(0, position.currentTime),
+    updatedAt: position.updatedAt,
+  };
+};
+
+const 自动播播放位置相同 = (
+  left: 媒体播放位置 | undefined,
+  right: 媒体播放位置 | undefined
+): boolean =>
+  left?.src === right?.src &&
+  left?.currentTime === right?.currentTime &&
+  left?.updatedAt === right?.updatedAt;
+
+const 自动播播放位置表相同 = (
+  left: Record<string, 媒体播放位置>,
+  right: Record<string, 媒体播放位置>
+): boolean => {
+  if (left === right) {
+    return true;
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) => 自动播播放位置相同(left[key], right[key]))
+  );
+};
+
+const 裁剪自动播播放位置表 = (
+  positions: Record<string, 媒体播放位置>,
+  activeAttachmentIds?: Set<string>
+): Record<string, 媒体播放位置> => {
+  const entries = Object.entries(positions)
+    .filter(([attachmentId]) => !activeAttachmentIds || activeAttachmentIds.has(attachmentId))
+    .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
+    .slice(0, 自动播播放位置表上限);
+  const nextPositions = Object.fromEntries(entries);
+  return 自动播播放位置表相同(positions, nextPositions) ? positions : nextPositions;
+};
 
 /**
  * 查看器打开或生命周期降载时，时间线不一定会立刻重新派发一次可见候选。
@@ -241,6 +303,9 @@ const 媒体运行时机 = createMachine(
           INLINE_AUTOPLAY_PLAYBACK_FAILED: {
             actions: "清理自动播播放结果",
           },
+          INLINE_AUTOPLAY_POSITION_CHANGED: {
+            actions: "记录自动播播放位置",
+          },
           MESSAGE_ATTACHMENTS_SYNCED: {
             actions: "同步存活附件集合",
           },
@@ -355,11 +420,39 @@ const 媒体运行时机 = createMachine(
           inlineAutoplayPlayback: null,
         };
       }),
+      记录自动播播放位置: assign(({ event, context }) => {
+        if (event.type !== "INLINE_AUTOPLAY_POSITION_CHANGED") {
+          return {};
+        }
+        const nextPosition = 读取有效自动播播放位置(event.position);
+        if (!event.attachmentId || !nextPosition) {
+          return {};
+        }
+        const currentPosition =
+          context.inlineAutoplayPositionByAttachmentId[event.attachmentId];
+        if (自动播播放位置相同(currentPosition, nextPosition)) {
+          return {};
+        }
+        /**
+         * 自动播播放位置是浏览器壳本地体验态，不是 DOM 节点私有状态。
+         * 这里按附件保存，并裁剪到固定上限，避免万人群历史滚动时把时间戳表长成无界缓存。
+         */
+        return {
+          inlineAutoplayPositionByAttachmentId: 裁剪自动播播放位置表({
+            ...context.inlineAutoplayPositionByAttachmentId,
+            [event.attachmentId]: nextPosition,
+          }),
+        };
+      }),
       同步存活附件集合: assign(({ event, context }) => {
         if (event.type !== "MESSAGE_ATTACHMENTS_SYNCED") {
           return {};
         }
         const activeAttachmentIds = new Set(event.attachmentIds);
+        const nextInlineAutoplayPositionByAttachmentId = 裁剪自动播播放位置表(
+          context.inlineAutoplayPositionByAttachmentId,
+          activeAttachmentIds
+        );
         const nextInlineAutoplayCandidates = context.lastInlineAutoplayCandidates.filter(
           (candidate) => activeAttachmentIds.has(candidate.attachmentId)
         );
@@ -371,7 +464,10 @@ const 媒体运行时机 = createMachine(
           activeAttachmentIds.has(context.inlineAutoplayPendingAttachmentId);
         const candidatesChanged =
           nextInlineAutoplayCandidates.length !== context.lastInlineAutoplayCandidates.length;
-        if (ownerAlive && pendingAlive && !candidatesChanged) {
+        const positionsChanged =
+          nextInlineAutoplayPositionByAttachmentId !==
+          context.inlineAutoplayPositionByAttachmentId;
+        if (ownerAlive && pendingAlive && !candidatesChanged && !positionsChanged) {
           return {};
         }
         const nextContext = {
@@ -393,6 +489,7 @@ const 媒体运行时机 = createMachine(
               }),
           inlineAutoplayPlayback:
             ownerAlive && pendingAlive ? context.inlineAutoplayPlayback : null,
+          inlineAutoplayPositionByAttachmentId: nextInlineAutoplayPositionByAttachmentId,
         };
       }),
       保留媒体信号占位: assign(() => {

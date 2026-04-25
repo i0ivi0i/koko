@@ -3,7 +3,11 @@ import { VirtualizerController } from "@tanstack/lit-virtual";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { createRef, ref, type Ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
-import { 媒体是否默认循环播放, type 媒体播放结果 } from "./媒体/媒体播放.js";
+import {
+  媒体是否默认循环播放,
+  type 媒体播放结果,
+  type 媒体播放位置,
+} from "./媒体/媒体播放.js";
 import type { 视频预览状态 } from "./媒体/视频预览.js";
 import type { 消息视频自动播候选 } from "./媒体/消息视频自动播编排.js";
 import type { 媒体会话信号 } from "./媒体/媒体会话.js";
@@ -38,6 +42,9 @@ const 默认视频清单占位Poster =
     </svg>
   `);
 
+const 自动播时间戳常规上报最小间隔毫秒 = 1_000;
+const 自动播时间戳常规上报最小变化秒 = 0.75;
+
 /**
  * 房间消息窗只承接消息视口内部的表达与交互转发：
  * 1. 它渲染消息列表、局部历史提示和“跳到最新”入口；
@@ -58,6 +65,7 @@ export class 房间消息窗 extends LitElement {
     mediaPreviewByAttachmentId: { attribute: false },
     inlineAutoplayOwnerAttachmentId: { type: String },
     inlineAutoplayPlaybackByAttachmentId: { attribute: false },
+    inlineAutoplayPositionByAttachmentId: { attribute: false },
   };
 
   declare items: 聊天列表展示项[];
@@ -67,6 +75,7 @@ export class 房间消息窗 extends LitElement {
   declare mediaPreviewByAttachmentId: Record<string, 视频预览状态>;
   declare inlineAutoplayOwnerAttachmentId: string | null;
   declare inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+  declare inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
 
   private readonly messageScrollRef: Ref<HTMLElement> = createRef();
   private 自动播候选调度句柄: number | null = null;
@@ -76,6 +85,10 @@ export class 房间消息窗 extends LitElement {
   private readonly 自动播候选观察目标 = new Map<HTMLButtonElement, string>();
   private readonly 自动播候选可见条目 = new Map<string, 消息视频自动播候选>();
   private readonly 失效视频封面地址 = new Map<string, string>();
+  private readonly 自动播位置上报记录 = new Map<
+    string,
+    { src: string; currentTime: number; reportedAt: number }
+  >();
   /**
    * 时间线视频首帧就绪缓存：
    * - key: attachmentId
@@ -110,6 +123,7 @@ export class 房间消息窗 extends LitElement {
     this.mediaPreviewByAttachmentId = {};
     this.inlineAutoplayOwnerAttachmentId = null;
     this.inlineAutoplayPlaybackByAttachmentId = {};
+    this.inlineAutoplayPositionByAttachmentId = {};
   }
 
   /**
@@ -126,6 +140,7 @@ export class 房间消息窗 extends LitElement {
     this.清理自动播候选观察();
     this.失效视频封面地址.clear();
     this.时间线视频首帧就绪源.clear();
+    this.自动播位置上报记录.clear();
     super.disconnectedCallback();
   }
 
@@ -226,12 +241,114 @@ export class 房间消息窗 extends LitElement {
     this.requestUpdate();
   }
 
+  private 读取视频当前播放源(video: HTMLVideoElement): string | null {
+    const src = video.currentSrc || video.getAttribute("src") || "";
+    return src.length > 0 ? src : null;
+  }
+
+  private 读取自动播恢复位置(
+    attachmentId: string,
+    src: string | null
+  ): 媒体播放位置 | null {
+    if (!src) {
+      return null;
+    }
+    const position = this.inlineAutoplayPositionByAttachmentId[attachmentId];
+    if (
+      !position ||
+      position.src !== src ||
+      !Number.isFinite(position.currentTime) ||
+      position.currentTime <= 0
+    ) {
+      return null;
+    }
+    return position;
+  }
+
+  private 恢复时间线自动播播放位置(
+    attachmentId: string,
+    video: HTMLVideoElement
+  ): void {
+    if (this.inlineAutoplayOwnerAttachmentId !== attachmentId) {
+      return;
+    }
+    const position = this.读取自动播恢复位置(
+      attachmentId,
+      this.读取视频当前播放源(video)
+    );
+    if (!position || Math.abs(video.currentTime - position.currentTime) < 0.25) {
+      return;
+    }
+    try {
+      video.currentTime = position.currentTime;
+    } catch {
+      // 某些浏览器/测试环境会在 metadata 尚未稳定时拒绝 seek。
+      // 恢复动作会在 loadedmetadata 与 play 前各尝试一次，这里不把它升级成播放失败。
+    }
+  }
+
+  private 广播自动播播放位置(
+    attachmentId: string,
+    video: HTMLVideoElement,
+    force = false,
+    allowReleasedOwner = false
+  ): void {
+    if (
+      !allowReleasedOwner &&
+      (this.inlineAutoplayOwnerAttachmentId !== attachmentId || !video.autoplay)
+    ) {
+      return;
+    }
+    const src = this.读取视频当前播放源(video);
+    if (!src || !Number.isFinite(video.currentTime) || video.currentTime < 0) {
+      return;
+    }
+    const now = Date.now();
+    const last = this.自动播位置上报记录.get(attachmentId);
+    if (
+      !force &&
+      last?.src === src &&
+      (now - last.reportedAt < 自动播时间戳常规上报最小间隔毫秒 ||
+        Math.abs(video.currentTime - last.currentTime) <
+          自动播时间戳常规上报最小变化秒)
+    ) {
+      return;
+    }
+    /**
+     * 消息窗只读取真实 video 的当前时间，并把事实上报给媒体运行时。
+     * 这里的 Map 只做高频事件节流，不作为续播真相；真正恢复来源仍是外层回灌的 snapshot。
+     */
+    this.自动播位置上报记录.set(attachmentId, {
+      src,
+      currentTime: video.currentTime,
+      reportedAt: now,
+    });
+    this.dispatchEvent(
+      new CustomEvent<{ attachmentId: string; position: 媒体播放位置 }>(
+        "room-inline-autoplay-position-changed",
+        {
+          detail: {
+            attachmentId,
+            position: {
+              src,
+              currentTime: video.currentTime,
+              updatedAt: now,
+            },
+          },
+          bubbles: true,
+          composed: true,
+        }
+      )
+    );
+  }
+
   private 同步时间线自动播播放状态(changedProperties: PropertyValues<this>): void {
     if (
       !changedProperties.has("items") &&
       !changedProperties.has("mediaPlaybackByAttachmentId") &&
       !changedProperties.has("inlineAutoplayOwnerAttachmentId") &&
-      !changedProperties.has("inlineAutoplayPlaybackByAttachmentId")
+      !changedProperties.has("inlineAutoplayPlaybackByAttachmentId") &&
+      !changedProperties.has("inlineAutoplayPositionByAttachmentId")
     ) {
       return;
     }
@@ -245,6 +362,8 @@ export class 房间消息窗 extends LitElement {
     const previewVideos = this.querySelectorAll<HTMLVideoElement>(
       "video.message-video-preview[data-attachment-id]"
     );
+    const previousAutoplayOwnerAttachmentId =
+      changedProperties.get("inlineAutoplayOwnerAttachmentId") ?? null;
     for (const video of previewVideos) {
       const attachmentId = video.getAttribute("data-attachment-id");
       if (!attachmentId) {
@@ -253,12 +372,19 @@ export class 房间消息窗 extends LitElement {
       const shouldAutoplay =
         this.inlineAutoplayOwnerAttachmentId === attachmentId && video.autoplay;
       if (shouldAutoplay) {
+        this.恢复时间线自动播播放位置(attachmentId, video);
         if (video.paused) {
           void video.play().catch(() => undefined);
         }
         continue;
       }
       if (!video.paused) {
+        this.广播自动播播放位置(
+          attachmentId,
+          video,
+          true,
+          previousAutoplayOwnerAttachmentId === attachmentId
+        );
         video.pause();
       }
     }
@@ -938,6 +1064,13 @@ export class 房间消息窗 extends LitElement {
                           tabindex="-1"
                           aria-hidden="true"
                           poster=${ifDefined(previewVideoPoster)}
+                          @loadedmetadata=${(event: Event) => {
+                            const target = event.currentTarget;
+                            if (!(target instanceof HTMLVideoElement)) {
+                              return;
+                            }
+                            this.恢复时间线自动播播放位置(attachment.attachmentId, target);
+                          }}
                           @loadeddata=${(event: Event) => {
                             const target = event.currentTarget;
                             if (!(target instanceof HTMLVideoElement)) {
@@ -972,6 +1105,20 @@ export class 房间消息窗 extends LitElement {
                             this.广播媒体会话信号(attachment.attachmentId, {
                               type: "PLAYER_PLAYING",
                             });
+                          }}
+                          @timeupdate=${(event: Event) => {
+                            const target = event.currentTarget;
+                            if (!(target instanceof HTMLVideoElement)) {
+                              return;
+                            }
+                            this.广播自动播播放位置(attachment.attachmentId, target);
+                          }}
+                          @pause=${(event: Event) => {
+                            const target = event.currentTarget;
+                            if (!(target instanceof HTMLVideoElement)) {
+                              return;
+                            }
+                            this.广播自动播播放位置(attachment.attachmentId, target, true);
                           }}
                           @waiting=${() => {
                             if (!shouldRenderInlineVideo) {

@@ -49,6 +49,7 @@ import {
   type 媒体会话快照,
   type 媒体会话端口,
   type 媒体播放结果,
+  type 媒体播放位置,
   type 预览缓存端口,
   type 视频预览状态,
 } from "./媒体/index.js";
@@ -67,6 +68,7 @@ export type 聊天媒体快照 = {
   contentUrlByAttachmentId: Record<string, 附件内容地址快照>;
   inlineAutoplayOwnerAttachmentId: string | null;
   inlineAutoplayPlaybackByAttachmentId: Record<string, 媒体播放结果>;
+  inlineAutoplayPositionByAttachmentId: Record<string, 媒体播放位置>;
 };
 
 type 聊天媒体预算快照 = Pick<
@@ -109,6 +111,10 @@ export interface 聊天媒体编排端口 {
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
   处理自动播候选(candidates: 消息视频自动播候选[]): void;
+  更新消息流自动播播放位置(input: {
+    attachmentId: string;
+    position: 媒体播放位置;
+  }): void;
   释放消息流自动播Owner(): void;
   处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void;
   处理应用生命周期(input: {
@@ -271,7 +277,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     const 自动播消息流投影已变化 =
       beforeContext.inlineAutoplayOwnerAttachmentId !==
         afterContext.inlineAutoplayOwnerAttachmentId ||
-      beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback;
+      beforeContext.inlineAutoplayPlayback !== afterContext.inlineAutoplayPlayback ||
+      beforeContext.inlineAutoplayPositionByAttachmentId !==
+        afterContext.inlineAutoplayPositionByAttachmentId;
 
     自动播协作.同步媒体运行时上下文变化({
       before: beforeContext,
@@ -294,7 +302,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
     if (自动播消息流投影已变化) {
       /**
-       * 自动播 owner / playback 真相已经改了，但它们不走聊天基础状态那条 patch 链；
+       * 自动播 owner / playback / position 真相已经改了，但它们不走聊天基础状态那条 patch 链；
        * 这里必须主动触发一次壳层刷新，避免视频要等下一次无关滚动/输入才从 poster 切进来。
        */
       deps.请求重渲染();
@@ -810,6 +818,9 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         inlineAutoplayOwnerAttachmentId:
           读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId,
         inlineAutoplayPlaybackByAttachmentId: 自动播协作.读取自动播播放结果表(),
+        inlineAutoplayPositionByAttachmentId: {
+          ...读取媒体运行时上下文().inlineAutoplayPositionByAttachmentId,
+        },
       };
     },
 
@@ -868,6 +879,14 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       接收媒体运行时事实({
         type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
         candidates,
+      });
+    },
+
+    更新消息流自动播播放位置(input): void {
+      接收媒体运行时事实({
+        type: "INLINE_AUTOPLAY_POSITION_CHANGED",
+        attachmentId: input.attachmentId,
+        position: input.position,
       });
     },
 

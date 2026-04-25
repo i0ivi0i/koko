@@ -59,6 +59,12 @@ type 媒体播放结果 =
         | "内容已删除";
     };
 
+type 媒体播放位置 = {
+  src: string;
+  currentTime: number;
+  updatedAt: number;
+};
+
 type 媒体播放器依赖 = {
   locate(attachmentId: string, options?: { forceRefresh?: boolean }): Promise<媒体定位结果>;
   resolveSwarmSource?(input: {
@@ -796,4 +802,4 @@ export function 创建媒体播放器(deps: 媒体播放器依赖) {
   };
 }
 
-export type { 媒体播放输入, 媒体播放结果 };
+export type { 媒体播放输入, 媒体播放结果, 媒体播放位置 };

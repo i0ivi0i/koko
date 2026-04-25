@@ -10,7 +10,7 @@ import type {
   浏览器应用平台命令,
   浏览器应用平台快照,
 } from "../平台/浏览器应用平台";
-import type { 媒体播放结果 } from "../媒体/媒体播放";
+import type { 媒体播放结果, 媒体播放位置 } from "../媒体/媒体播放";
 import type { 媒体会话信号 } from "../媒体/媒体会话";
 
 const 创建内核宿主 = () => ({
@@ -436,6 +436,30 @@ describe("聊天应用内核", () => {
     expect(kernel.snapshot().media.sessionByAttachmentId["att-video-1"]).toMatchObject({
       status: "recovering",
     });
+  });
+
+  it("消息流自动播播放位置必须通过内核进入媒体运行时 owner，而不是留在壳层私有状态", async () => {
+    const kernel = 创建聊天应用内核({
+      ...创建内核依赖(),
+      storage: 创建浏览器存储(createFakeStorage()),
+      查询滚动容器: () => null,
+      查询消息节点: () => [],
+    });
+    const position: 媒体播放位置 = {
+      src: "http://media.local/swarm-video-1",
+      currentTime: 33.75,
+      updatedAt: 1_000,
+    };
+
+    await kernel.dispatch({
+      type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED",
+      attachmentId: "att-video-1",
+      position,
+    } as never);
+
+    expect(
+      kernel.snapshot().media.inlineAutoplayPositionByAttachmentId["att-video-1"]
+    ).toEqual(position);
   });
 
   it("图片预览源加载失败后也会触发会话恢复，并切到新的播放源", async () => {
