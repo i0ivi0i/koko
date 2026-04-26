@@ -129,12 +129,22 @@ export function 创建视频预览协作(
       const currentPreview = 视频预览状态表.get(attachmentId) ?? { phase: "idle" as const };
       const 当前会话源版本 = deps.读取会话播放源版本(attachmentId);
       const 缺源阻断版本 = 视频预览缺源阻断版本表.get(attachmentId);
+      const 当前预览播放源 = deps.读取当前视频预览播放源(attachmentId);
       if (
         !attachment ||
         attachment.kind !== "video" ||
         currentPreview.phase === "loading" ||
         currentPreview.phase === "ready" ||
-        (currentPreview.phase === "missing_source" && 缺源阻断版本 === 当前会话源版本)
+        /**
+         * `missing_source` 只应该阻断“这一版会话里仍然完全没有可抓帧源”的重复空转：
+         * 1. 如果当前连 swarm playback 都还没出来，同一 sourceVersion 下继续重试只会重复打一轮 locator/空抓帧；
+         * 2. 但一旦当前会话已经握住正式 swarm 源，即使还是同一 sourceVersion，也必须允许重试；
+         * 3. 真实浏览器里，swarm URL 首轮经常只是“源地址到了，但块还没热到可抓帧”，这时把 `missing_source`
+         *    永久锁死，就会让 newcomer 一直没有视频预览，只能在首次 autoplay 时现场卡一下。
+         */
+        (currentPreview.phase === "missing_source" &&
+          缺源阻断版本 === 当前会话源版本 &&
+          !当前预览播放源)
       ) {
         return;
       }
@@ -145,7 +155,7 @@ export function 创建视频预览协作(
       void (async () => {
         let shouldReleasePreviewConsumer = false;
         try {
-          let contentHash = deps.读取当前视频预览播放源(attachmentId)?.contentHash ?? null;
+          let contentHash = 当前预览播放源?.contentHash ?? null;
           if (contentHash) {
             await deps.预览缓存.写入附件索引(attachmentId, contentHash);
             const cachedPreview = await deps.预览缓存.按内容读取(contentHash);
@@ -163,7 +173,7 @@ export function 创建视频预览协作(
             }
           }
 
-          let previewSource = deps.读取当前视频预览播放源(attachmentId)?.src ?? null;
+          let previewSource = 当前预览播放源?.src ?? null;
           if (!previewSource) {
             const startedAt = performance.now();
             deps.接收媒体运行时事实({ type: "LOCATOR_REQUEST_STARTED" });

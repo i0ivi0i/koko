@@ -125,6 +125,14 @@ export class 房间消息窗 extends LitElement {
    * 3. 因此 hidden stage 必须只在跨附件 handoff 期间生效，不能把所有 owner 获取都拖进隐藏预热。
    */
   private 时间线隐藏接管附件Id: string | null = null;
+  /**
+   * 只给“刚刚退场的那一条 owner”留一张本地续帧底板桥：
+   * 1. `inlineAutoplayPositionByAttachmentId` 是续播位置真相，不等于“所有卡片都获得了一张合法 preview”；
+   * 2. 旧 owner 退场时，确实需要把同一帧露给用户，避免 canonical host 拿走后闪一下；
+   * 3. 但如果把保存位置无差别回填给任何 `missing_source` 卡片，就会把历史播过一次的 swarm 源永久伪装成 preview；
+   * 4. 所以这里单独记“最近刚退场的 owner”，只允许这一条桥承接退场连续性，不泄漏成通用预览真相。
+   */
+  private 最近退场Owner附件Id: string | null = null;
   private readonly messageVirtualizer = new VirtualizerController<HTMLElement, HTMLElement>(
     this,
     {
@@ -227,6 +235,9 @@ export class 房间消息窗 extends LitElement {
         读取默认全局唯一播放器().冲刷当前时间线播放位置();
         this.同步即将退场Owner底板预览(previousOwnerAttachmentId);
         this.时间线唯一播放器可见接管就绪源.delete(previousOwnerAttachmentId);
+        this.最近退场Owner附件Id = previousOwnerAttachmentId;
+      } else if (!currentOwnerAttachmentId) {
+        this.最近退场Owner附件Id = null;
       }
       if (
         previousOwnerAttachmentId &&
@@ -1097,9 +1108,30 @@ export class 房间消息窗 extends LitElement {
 
   private 读取时间线视频首帧预览源(
     attachment: Extract<消息展示项["attachments"][number], { kind: "video" }>,
-    playback: 媒体播放结果 | null
+    playback: 媒体播放结果 | null,
+    input: {
+      有静态封面: boolean;
+      有运行时预览: boolean;
+    }
   ): string | null {
     if (playback?.src && playback.mode === "swarm") {
+      const previewState = this.mediaPreviewByAttachmentId[attachment.attachmentId] ?? null;
+      /**
+       * 这里必须把“正式播放源”和“可见预览底板源”拆开：
+       * 1. `swarm playback.src` 当然是真正的 canonical 播放源，但它不天然等于“已经有可见预览底板”；
+       * 2. 如果当前卡片已经拥有静态 poster / runtime preview，或 preview 协作仍在 loading，
+       *    继续把同一条 swarm 源挂给底板 `<video>` 没问题，因为用户看到的仍是同一条合法预览链；
+       * 3. 真正必须禁止的是 `missing_source`：预览协作已经明确说“当前没有可显示预览”，
+       *    这时再把 playback 源硬塞回去，就会长出一张冷 paused `<video>` 伪装成 preview；
+       * 4. 因此 `missing_source` 只能走两条路：要么直接显示 canonical owner，要么等后续保存续帧桥承接，
+       *    绝不再让 playback 源自己冒充 preview。
+       */
+      if (input.有静态封面 || input.有运行时预览) {
+        return playback.src;
+      }
+      if (previewState?.phase === "missing_source") {
+        return null;
+      }
       return playback.src;
     }
     /**
@@ -1116,6 +1148,22 @@ export class 房间消息窗 extends LitElement {
   ): Extract<视频预览状态, { phase: "ready" }> | null {
     const preview = this.mediaPreviewByAttachmentId[attachmentId] ?? null;
     return preview?.phase === "ready" ? preview : null;
+  }
+
+  private 读取保存续帧是否允许承接时间线预览底板(attachmentId: string): boolean {
+    /**
+     * 保存续帧只允许服务两种场景：
+     * 1. 当前 owner 已经播起来后，为后续退场提前保住同一张底板；
+     * 2. 刚刚退场的 owner 仍在可见区内时，继续用这一帧兜住像素连续性。
+     *
+     * 其余 `missing_source` 卡片即便有历史播放位置，也不代表它“天然就有 preview 真相”。
+     * 否则 newcomer 首次进房滚动时，旧的 swarm 源会被房间消息窗偷偷重新长成一张 preview video，
+     * 表面看像“有预览”，实际只是历史 playback 泄漏到了展示层。
+     */
+    return (
+      this.inlineAutoplayOwnerAttachmentId === attachmentId ||
+      this.最近退场Owner附件Id === attachmentId
+    );
   }
 
   private 同步时间线唯一播放器宿主(): void {
@@ -1430,7 +1478,11 @@ export class 房间消息窗 extends LitElement {
                 : null;
             const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(
               attachment,
-              playback
+              playback,
+              {
+                有静态封面: hasSourcePoster,
+                有运行时预览: hasRuntimePreview,
+              }
             );
             const savedTimelineFrame =
               this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
@@ -1441,6 +1493,20 @@ export class 房间消息窗 extends LitElement {
              * 不打开 original 冷源，也不产生第二条播放真相。
              */
             const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
+            const shouldReuseSavedTimelineFrameAsPreview =
+              Boolean(savedTimelineFrameSrc) &&
+              (
+                /**
+                 * 保存续帧有两种合法来源：
+                 * 1. 当前 attachment 的正式 playback 这一拍暂时还没回灌回来，此时它是唯一能兜住像素连续性的桥；
+                 * 2. 当前 / 刚退场 owner 需要保住底板连续性，避免 canonical host 挪走时直接退回 poster。
+                 *
+                 * 只要正式 playback 已经存在，就不能再把保存续帧无差别泄漏成通用 preview；
+                 * 否则 `missing_source` 卡片会靠“历史播过一次”伪装出一张并不合法的 preview video。
+                 */
+                !playback ||
+                this.读取保存续帧是否允许承接时间线预览底板(attachment.attachmentId)
+              );
             /**
              * 时间线视频一旦拿到正式 swarm 播放源，就继续复用同一颗 `<video>` 作为唯一视觉壳，
              * 且优先保留 playback 给出的 canonical src：
@@ -1450,7 +1516,10 @@ export class 房间消息窗 extends LitElement {
              * 4. 否则同一资源会在相对/绝对 URL 间来回赋值，Chrome 会把它当成一次新 load，自动播切换就会闪。
              */
             const timelinePreviewVideoSrc =
-              playbackTimelineVideoSrc ?? savedTimelineFrameSrc;
+              playbackTimelineVideoSrc ??
+              (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+            const playbackCanonicalVideoSrc =
+              playback?.mode === "swarm" ? playback.src : null;
             /**
              * 自动播 owner 交接时，新的 swarm autoplay playback 结果不一定与 owner 切换同拍到达：
              * 1. 如果这里硬等 `inlineAutoplayPlayback`，旧 host 会先撤掉，而新 host 要晚一拍才出现；
@@ -1459,7 +1528,9 @@ export class 房间消息窗 extends LitElement {
              * 4. 后续更正式的 autoplay swarm 源到达时，只允许同一颗壳继续 `同步(source)`，不允许再换主节点。
              */
             const ownerCanonicalVideoSrc =
-              inlineAutoplayPreviewSrc ?? timelinePreviewVideoSrc;
+              inlineAutoplayPreviewSrc ??
+              playbackCanonicalVideoSrc ??
+              timelinePreviewVideoSrc;
             const shouldRenderInlineVideo =
               this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
               Boolean(ownerCanonicalVideoSrc);
@@ -1469,9 +1540,13 @@ export class 房间消息窗 extends LitElement {
                 attachment.attachmentId,
                 ownerCanonicalVideoSrc
               );
-            const previewVideoSrc = shouldRenderInlineVideo
-              ? ownerCanonicalVideoSrc
-              : timelinePreviewVideoSrc;
+            /**
+             * preview 底板只认 preview 真相，不再因为当前变成 owner 就自动借用 canonical 播放源：
+             * 1. owner 自己是否可播，交给 `ownerCanonicalVideoSrc`；
+             * 2. 底板是否可见，只看真正允许的 preview 来源；
+             * 3. 这样 `missing_source` 场景就不会再把冷 paused `<video>` 冒充成可见 cover。
+             */
+            const previewVideoSrc = timelinePreviewVideoSrc;
             const restorableTimelineFrame = this.读取自动播恢复位置(
               attachment.attachmentId,
               previewVideoSrc
@@ -1590,8 +1665,8 @@ export class 房间消息窗 extends LitElement {
                     <div
                       class="message-video-canonical-host"
                       data-attachment-id=${attachment.attachmentId}
-                      data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
-                      data-video-src=${previewVideoSrc ?? ""}
+                      data-video-kind=${ownerCanonicalVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                      data-video-src=${ownerCanonicalVideoSrc ?? ""}
                       data-video-poster=${previewVideoPoster ?? ""}
                       data-video-width=${attachment.width}
                       data-video-height=${attachment.height}
@@ -1599,15 +1674,15 @@ export class 房间消息窗 extends LitElement {
                     ></div>
                   `
                 : null}
-              ${时间线预览底板视频}
+              ${shouldRenderPreviewVideo ? 时间线预览底板视频 : null}
               ${shouldRenderStageHost
                 ? html`
                     <div
                       class="message-video-canonical-stage-host"
                       data-stage-host="true"
                       data-attachment-id=${attachment.attachmentId}
-                      data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
-                      data-video-src=${previewVideoSrc ?? ""}
+                      data-video-kind=${ownerCanonicalVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                      data-video-src=${ownerCanonicalVideoSrc ?? ""}
                       data-video-poster=${previewVideoPoster ?? ""}
                       data-video-width=${attachment.width}
                       data-video-height=${attachment.height}
@@ -1645,10 +1720,10 @@ export class 房间消息窗 extends LitElement {
                   @click=${(event: Event) =>
                     this.打开媒体查看器(event, attachment.attachmentId)}
                 >
-                  ${shouldRenderPreviewVideo
+                  ${shouldRenderPreviewVideo || shouldRenderInlineVideo
                     ? html`
                         ${时间线视频预览内容}
-                        ${shouldShowFirstFrameGuard
+                        ${shouldRenderPreviewVideo && shouldShowFirstFrameGuard
                           ? html`
                               <img
                                 class="message-video-first-frame-guard"
