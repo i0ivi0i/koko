@@ -44,6 +44,9 @@ const 默认视频清单占位Poster =
 
 const 自动播时间戳常规上报最小间隔毫秒 = 1_000;
 const 自动播时间戳常规上报最小变化秒 = 0.75;
+const 近视口真实预览视频预算上限 = 6;
+const 近视口活媒体会话预算上限 = 24;
+const 近视口活视频会话预算上限 = 12;
 
 /**
  * 房间消息窗只承接消息视口内部的表达与交互转发：
@@ -274,6 +277,8 @@ export class 房间消息窗 extends LitElement {
     ) {
       return;
     }
+    const virtualItems = this.读取当前虚拟消息项();
+    this.dispatch媒体窗口观察(virtualItems);
     this.同步自动播候选观察(scrollContainer);
     /**
      * 房间首轮渲染 / playback 更新不是滚动风暴：
@@ -1071,6 +1076,116 @@ export class 房间消息窗 extends LitElement {
     }));
   }
 
+  private 读取当前虚拟消息项(): 消息虚拟项[] {
+    return this.补齐首帧消息虚拟项(this.读取消息虚拟器().getVirtualItems());
+  }
+
+  private 读取当前媒体窗口附件标识(virtualItems = this.读取当前虚拟消息项()): string[] {
+    const attachmentIds: string[] = [];
+    const seen = new Set<string>();
+    let mediaCount = 0;
+    let videoCount = 0;
+    const push = (
+      attachmentId: string | null | undefined,
+      kind: "image" | "video"
+    ): void => {
+      const normalized = attachmentId?.trim() ?? "";
+      if (!normalized || seen.has(normalized)) {
+        return;
+      }
+      if (mediaCount >= 近视口活媒体会话预算上限) {
+        return;
+      }
+      if (kind === "video" && videoCount >= 近视口活视频会话预算上限) {
+        return;
+      }
+      seen.add(normalized);
+      attachmentIds.push(normalized);
+      mediaCount += 1;
+      if (kind === "video") {
+        videoCount += 1;
+      }
+    };
+    /**
+     * 当前媒体窗口事件必须先做预算裁剪，再把附件集合回抛给编排层：
+     * 1. owner / 刚退场 owner / 可见自动播候选优先占据热会话名额；
+     * 2. 其余附件再按当前虚拟窗口里的消息顺序补齐；
+     * 3. 这样单屏多附件消息不会把“当前窗口”偷换成“整屏全部附件都算活会话”。
+     */
+    push(this.inlineAutoplayOwnerAttachmentId, "video");
+    push(this.最近退场Owner附件Id, "video");
+    for (const [attachmentId] of Array.from(this.自动播候选可见条目.entries()).sort(
+      (left, right) => left[1].distanceToViewportCenter - right[1].distanceToViewportCenter
+    )) {
+      push(attachmentId, "video");
+    }
+    for (const virtualItem of virtualItems) {
+      const item = this.items[virtualItem.index];
+      if (!item || item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        push(attachment.attachmentId, attachment.kind);
+      }
+    }
+    return attachmentIds;
+  }
+
+  private 读取允许渲染真实预览视频的附件集合(
+    virtualItems = this.读取当前虚拟消息项()
+  ): Set<string> {
+    const orderedAttachmentIds: string[] = [];
+    const seen = new Set<string>();
+    const push = (attachmentId: string | null | undefined): void => {
+      const normalized = attachmentId?.trim() ?? "";
+      if (!normalized || seen.has(normalized)) {
+        return;
+      }
+      seen.add(normalized);
+      orderedAttachmentIds.push(normalized);
+    };
+
+    /**
+     * 真实 preview `<video>` 的预算优先级固定为：
+     * 1. 当前 owner / 刚退场 owner 先保住连续性；
+     * 2. 已进入近视口候选的卡片优先；
+     * 3. 其余只允许当前虚拟窗口里最靠前的一小撮视频继续挂真实 `<video>`。
+     *
+     * 这样做的目的不是“所有历史视频都别显示”，而是让真正重的 DOM/解码表面收敛到稳定上限。
+     */
+    push(this.inlineAutoplayOwnerAttachmentId);
+    push(this.最近退场Owner附件Id);
+    for (const [attachmentId] of Array.from(this.自动播候选可见条目.entries()).sort(
+      (left, right) => left[1].distanceToViewportCenter - right[1].distanceToViewportCenter
+    )) {
+      push(attachmentId);
+    }
+    for (const virtualItem of virtualItems) {
+      const item = this.items[virtualItem.index];
+      if (!item || item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        if (attachment.kind === "video") {
+          push(attachment.attachmentId);
+        }
+      }
+    }
+    return new Set(orderedAttachmentIds.slice(0, 近视口真实预览视频预算上限));
+  }
+
+  private dispatch媒体窗口观察(virtualItems = this.读取当前虚拟消息项()): void {
+    this.dispatchEvent(
+      new CustomEvent<{ attachmentIds: string[] }>("room-media-window-observed", {
+        detail: {
+          attachmentIds: this.读取当前媒体窗口附件标识(virtualItems),
+        },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   private 读取附件播放源(attachment: 消息展示项["attachments"][number]): string {
     const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId];
     return playback?.mode === "swarm" ||
@@ -1351,7 +1466,10 @@ export class 房间消息窗 extends LitElement {
     )}</div>`;
   }
 
-  private renderMessageAttachments(item: 消息展示项) {
+  private renderMessageAttachments(
+    item: 消息展示项,
+    可渲染真实预览视频附件: Set<string>
+  ) {
     if (item.attachments.length === 0) {
       return null;
     }
@@ -1547,7 +1665,9 @@ export class 房间消息窗 extends LitElement {
               attachment.attachmentId,
               previewVideoSrc
             );
-            const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
+            const shouldRenderPreviewVideo =
+              Boolean(previewVideoSrc) &&
+              可渲染真实预览视频附件.has(attachment.attachmentId);
             const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
             const shouldRenderPreviewPosterSurface =
               hasStablePreviewPosterSurface &&
@@ -1839,7 +1959,8 @@ export class 房间消息窗 extends LitElement {
     item: 聊天列表展示项,
     index: number,
     start: number,
-    measureElement: (element: HTMLElement) => void
+    measureElement: (element: HTMLElement) => void,
+    可渲染真实预览视频附件: Set<string>
   ) {
     const rowStyle = `position: absolute; top: 0; left: 0; width: 100%; transform: translateY(${start}px);`;
     const measureRow = (element?: Element): void => {
@@ -1885,7 +2006,7 @@ export class 房间消息窗 extends LitElement {
             style=${`width: ${item.bubbleWidth}px;`}
           >
             ${item.hasText ? this.renderMessageBody(item) : null}
-            ${this.renderMessageAttachments(item)}
+            ${this.renderMessageAttachments(item, 可渲染真实预览视频附件)}
           </article>
         </div>
       </li>
@@ -1895,6 +2016,7 @@ export class 房间消息窗 extends LitElement {
   override render() {
     const virtualizer = this.读取消息虚拟器();
     const virtualItems = this.补齐首帧消息虚拟项(virtualizer.getVirtualItems());
+    const 可渲染真实预览视频附件 = this.读取允许渲染真实预览视频的附件集合(virtualItems);
     return html`
       <div
         id="messageScroll"
@@ -1922,7 +2044,8 @@ export class 房间消息窗 extends LitElement {
                 item,
                 virtualItem.index,
                 virtualItem.start,
-                (element) => virtualizer.measureElement(element)
+                (element) => virtualizer.measureElement(element),
+                可渲染真实预览视频附件
               );
             }
           )}

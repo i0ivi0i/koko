@@ -1611,6 +1611,14 @@ export class 聊天壳 extends LitElement {
                 scrollContainer: target,
               });
             }}
+            @room-media-window-observed=${(
+              event: CustomEvent<{ attachmentIds: string[] }>
+            ) => {
+              this.应用运行时.dispatch({
+                type: "ROOM_MEDIA_WINDOW_OBSERVED",
+                attachmentIds: event.detail.attachmentIds,
+              });
+            }}
             @room-inline-autoplay-observed=${(
               event: CustomEvent<{
                 candidates: Array<{

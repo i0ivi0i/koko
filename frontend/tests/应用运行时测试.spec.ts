@@ -57,6 +57,22 @@ describe("应用运行时", () => {
     });
   });
 
+  it("房间媒体窗口观察结果也必须先进入应用运行时，再翻成媒体窗口 command", () => {
+    const deps = 创建运行时依赖();
+    const runtime = 创建应用运行时(deps);
+    const attachmentIds = ["att-video-window-1", "att-video-window-2"];
+
+    runtime.dispatch({
+      type: "ROOM_MEDIA_WINDOW_OBSERVED",
+      attachmentIds,
+    });
+
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "ROOM_MEDIA_WINDOW_OBSERVED",
+      attachmentIds,
+    });
+  });
+
   it("用户滚动意图和跳到最新都只分派给既有 owner，不在运行时里重写业务规则", () => {
     const deps = 创建运行时依赖();
     const runtime = 创建应用运行时(deps);

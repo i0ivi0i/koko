@@ -74,11 +74,18 @@ export type 聊天媒体快照 = {
 type 聊天媒体预算快照 = Pick<
   聊天运行时预算状态,
   | "activeVideoCount"
+  | "activeFormalPlayerCount"
+  | "activeVideoSessionCount"
+  | "activeMediaSessionCount"
   | "autoplayOwnerCount"
   | "activeSwarmCount"
   | "inflightLocatorCount"
   | "inflightManifestOrRangeCount"
   | "hiddenHeavyTaskCount"
+  | "wholeFileHeavySessionCount"
+  | "zeroRefHeavySessionCount"
+  | "zeroRefLightHelpSessionCount"
+  | "zeroRefWholeFileReaderCount"
   | "longTaskCount"
 >;
 
@@ -110,6 +117,7 @@ export interface 聊天媒体编排端口 {
   清空草稿(): void;
   打开查看器(request: 媒体查看器打开请求): void;
   同步消息附件播放结果(): void;
+  同步媒体窗口附件(attachmentIds: string[]): void;
   处理自动播候选(candidates: 消息视频自动播候选[]): void;
   更新媒体播放位置(input: {
     attachmentId: string;
@@ -206,6 +214,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     releaseSwarmSource: (input) => 协作分发运行时.释放协作分发消费者(input),
   });
   const 媒体会话表 = new Map<string, 媒体会话端口>();
+  const 当前媒体窗口附件Id集合 = new Set<string>();
+  const 当前自动播候选附件Id集合 = new Set<string>();
   const 媒体缓存 = 创建媒体缓存({
     repo: deps.媒体缓存仓库 ?? 创建内存媒体缓存仓库(),
   });
@@ -422,19 +432,101 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return attachments;
   };
 
+  const 读取当前帮助窗口附件标识 = (
+    attachments = 读取当前房间媒体附件()
+  ): Set<string> => {
+    const attachmentIds = new Set<string>([
+      ...当前媒体窗口附件Id集合,
+      ...当前自动播候选附件Id集合,
+      ...attachments.map((attachment) => attachment.attachmentId),
+    ]);
+    const 当前媒体上下文 = 读取媒体运行时上下文();
+    const viewerAttachmentId = 当前媒体上下文.currentViewerRequest?.startAttachmentId?.trim() ?? "";
+    if (viewerAttachmentId) {
+      attachmentIds.add(viewerAttachmentId);
+    }
+    const autoplayOwnerAttachmentId =
+      当前媒体上下文.inlineAutoplayOwnerAttachmentId?.trim() ?? "";
+    if (autoplayOwnerAttachmentId) {
+      attachmentIds.add(autoplayOwnerAttachmentId);
+    }
+    return attachmentIds;
+  };
+
   const 读取当前房间帮助附件候选 = (
     attachments = 读取当前房间媒体附件()
   ): 媒体附件条目[] => {
+    const helpWindowAttachmentIds = 读取当前帮助窗口附件标识(attachments);
     const merged = new Map<string, 媒体附件条目>();
     for (const attachment of attachments) {
       merged.set(attachment.attachmentId, attachment);
     }
     for (const attachment of 读取当前房间缓存帮助附件()) {
+      if (!helpWindowAttachmentIds.has(attachment.attachmentId)) {
+        continue;
+      }
       if (!merged.has(attachment.attachmentId)) {
         merged.set(attachment.attachmentId, attachment);
       }
     }
     return Array.from(merged.values());
+  };
+
+  const 同步附件标识集合 = (
+    target: Set<string>,
+    attachmentIds: Iterable<string>
+  ): boolean => {
+    const normalizedIds: string[] = [];
+    for (const attachmentId of attachmentIds) {
+      const normalized = attachmentId.trim();
+      if (!normalized) {
+        continue;
+      }
+      normalizedIds.push(normalized);
+    }
+    if (
+      target.size === normalizedIds.length &&
+      normalizedIds.every((attachmentId) => target.has(attachmentId))
+    ) {
+      return false;
+    }
+    target.clear();
+    for (const attachmentId of normalizedIds) {
+      target.add(attachmentId);
+    }
+    return true;
+  };
+
+  const 读取当前活跃媒体窗口附件 = (
+    attachments = 读取当前房间媒体附件()
+  ): 媒体附件条目[] => {
+    /**
+     * 活媒体会话集合不再默认等于“当前房间全部附件”：
+     * 1. RoomPane 会回抛当前虚拟窗口里的附件集合；
+     * 2. 自动播候选会再补上一层“马上就要露头”的高价值视频窗口；
+     * 3. 如果两类窗口信号都还没到，再临时回退到旧行为，避免首拍把单消息房间直接清空。
+      */
+      const activeWindowIds = new Set<string>([
+        ...当前媒体窗口附件Id集合,
+        ...当前自动播候选附件Id集合,
+      ]);
+      const viewerAttachmentId =
+        读取媒体运行时上下文().currentViewerRequest?.startAttachmentId?.trim() ?? "";
+      if (viewerAttachmentId) {
+        activeWindowIds.add(viewerAttachmentId);
+      }
+      const autoplayOwnerAttachmentId =
+        读取媒体运行时上下文().inlineAutoplayOwnerAttachmentId?.trim() ?? "";
+      if (autoplayOwnerAttachmentId) {
+        activeWindowIds.add(autoplayOwnerAttachmentId);
+      }
+      if (activeWindowIds.size === 0) {
+        return attachments;
+      }
+    const activeAttachments = attachments.filter((attachment) =>
+      activeWindowIds.has(attachment.attachmentId)
+    );
+    return activeAttachments.length > 0 ? activeAttachments : attachments;
   };
 
   const 读取附件条目 = (attachmentId: string): 媒体附件条目 | null =>
@@ -824,6 +916,28 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     return hasSessionSetChanged;
   };
 
+  const 按当前窗口重同步消息附件播放结果 = (): void => {
+    const attachments = 读取当前房间媒体附件();
+    const activeWindowAttachments = 读取当前活跃媒体窗口附件(attachments);
+    const helpAttachments = 读取当前房间帮助附件候选(activeWindowAttachments);
+    协作补齐协作.同步当前帮助窗口附件(helpAttachments);
+    const activeAttachmentIds = new Set(
+      activeWindowAttachments.map((item) => item.attachmentId)
+    );
+    if (清理失活媒体会话(activeAttachmentIds)) {
+      deps.请求重渲染();
+    }
+    接收媒体运行时事实({
+      type: "MESSAGE_ATTACHMENTS_SYNCED",
+      attachmentIds: Array.from(activeAttachmentIds),
+    });
+    const hasSessionSetChanged = 补齐当前房间媒体会话(activeWindowAttachments);
+    协作补齐协作.恢复当前房间缓存帮助任务(helpAttachments);
+    if (hasSessionSetChanged) {
+      deps.请求重渲染();
+    }
+  };
+
   const 补齐当前房间媒体会话 = (attachments: 媒体附件条目[]): boolean => {
     let hasSessionSetChanged = false;
     for (const attachment of attachments) {
@@ -846,6 +960,8 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
   };
 
   const 清空播放状态 = (): void => {
+    当前媒体窗口附件Id集合.clear();
+    当前自动播候选附件Id集合.clear();
     for (const attachmentId of Array.from(媒体会话表.keys())) {
       释放媒体附件会话(attachmentId, {
         丢弃未完成预览补齐: true,
@@ -887,7 +1003,15 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
 
   void 媒体缓存.启动().then(() => {
     媒体缓存已启动 = true;
-    协作补齐协作.恢复当前房间缓存帮助任务(读取当前房间帮助附件候选());
+    const helpWindowAttachmentIds = 读取当前帮助窗口附件标识([]);
+    if (helpWindowAttachmentIds.size > 0) {
+      const helpWindowAttachments = 读取当前房间媒体附件().filter((attachment) =>
+        helpWindowAttachmentIds.has(attachment.attachmentId)
+      );
+      const helpAttachments = 读取当前房间帮助附件候选(helpWindowAttachments);
+      协作补齐协作.同步当前帮助窗口附件(helpAttachments);
+      协作补齐协作.恢复当前房间缓存帮助任务(helpAttachments);
+    }
     deps.请求重渲染();
   });
 
@@ -908,7 +1032,10 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     },
 
     读取预算(): 聊天媒体预算快照 {
+      const mediaSessions = Array.from(媒体会话表.values(), (session) => session.snapshot());
       return {
+        activeMediaSessionCount: mediaSessions.length,
+        activeVideoSessionCount: mediaSessions.filter((session) => session.kind === "video").length,
         ...投影媒体运行时预算(媒体运行时.getSnapshot()),
         ...协作分发运行时.读取预算(),
       };
@@ -960,7 +1087,21 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       });
     },
 
+    同步媒体窗口附件(attachmentIds: string[]): void {
+      if (!同步附件标识集合(当前媒体窗口附件Id集合, attachmentIds)) {
+        return;
+      }
+      按当前窗口重同步消息附件播放结果();
+    },
+
     处理自动播候选(candidates: 消息视频自动播候选[]): void {
+      const 自动播候选已变化 = 同步附件标识集合(
+        当前自动播候选附件Id集合,
+        candidates.map((candidate) => candidate.attachmentId)
+      );
+      if (自动播候选已变化) {
+        按当前窗口重同步消息附件播放结果();
+      }
       预热自动播候选媒体会话(candidates);
       接收媒体运行时事实({
         type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
@@ -988,20 +1129,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
      * 但已进入帮助链的附件不能因为暂时退出当前消息集合就被立刻释放。
      */
     同步消息附件播放结果(): void {
-      const attachments = 读取当前房间媒体附件();
-      const activeAttachmentIds = new Set(attachments.map((item) => item.attachmentId));
-      if (清理失活媒体会话(activeAttachmentIds)) {
-        deps.请求重渲染();
-      }
-      接收媒体运行时事实({
-        type: "MESSAGE_ATTACHMENTS_SYNCED",
-        attachmentIds: Array.from(activeAttachmentIds),
-      });
-      const hasSessionSetChanged = 补齐当前房间媒体会话(attachments);
-      协作补齐协作.恢复当前房间缓存帮助任务(读取当前房间帮助附件候选(attachments));
-      if (hasSessionSetChanged) {
-        deps.请求重渲染();
-      }
+      按当前窗口重同步消息附件播放结果();
     },
 
     处理媒体会话信号(attachmentId: string, signal: 媒体会话信号): void {

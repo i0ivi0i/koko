@@ -45,6 +45,12 @@ type 协作分发JoinTicket刷新器 = (input: {
 type 底层协作分发会话 = Omit<协作分发底层会话, "consumerBindings"> & {
   consumerBindings: Map<string, 协作分发消费者绑定>;
   previewPriorityApplied: boolean;
+  /**
+   * `eagerCompleting` 表示“这条会话具备继续补齐资格”，
+   * 但真正是否允许继续占 whole-file 重补齐预算，要看这条开关。
+   * 这样 zero-ref 会话就能保留 swarm 身份，同时把重下载链单独退掉。
+   */
+  wholeFileBackfillEnabled: boolean;
   wholeFileSelectApplied: boolean;
   joinTicketRef: 协作分发JoinTicketRef;
   joinTicketAttachmentId: string;
@@ -134,6 +140,10 @@ export interface 资产协作分发运行时端口 {
   ): {
     activeSwarmCount: number;
     hiddenHeavyTaskCount: number;
+    wholeFileHeavySessionCount: number;
+    zeroRefHeavySessionCount: number;
+    zeroRefLightHelpSessionCount: number;
+    zeroRefWholeFileReaderCount: number;
   };
   解析协作分发源(input: {
     attachmentId: string;
@@ -524,6 +534,28 @@ const 删除底层协作分发会话 = (
   清理协作分发底层会话(session);
 };
 
+const 退掉整附件重补齐 = (session: 底层协作分发会话): void => {
+  /**
+   * zero-ref 轻帮助态的关键点不是“把会话删掉”，而是把 whole-file 重补齐退掉：
+   * 1. swarm 身份、join ticket 续租、presence 仍可保留，群体协作收益不丢；
+   * 2. 但整附件 file.select 这条重下载链必须立即撤掉，避免后台继续拉整文件；
+   * 3. 后续如果用户重新进入 owner / viewer，再由显式 consumer 重新开启重补齐。
+   */
+  session.wholeFileBackfillEnabled = false;
+  if (!session.wholeFileSelectApplied) {
+    return;
+  }
+  session.wholeFileSelectApplied = false;
+  session.file?.deselect?.();
+};
+
+const 让零引用会话降到轻帮助态 = (session: 底层协作分发会话): void => {
+  if (!协作分发会话可在零引用后保留(session)) {
+    return;
+  }
+  退掉整附件重补齐(session);
+};
+
 const 按生命周期策略清理协作分发会话 = (
   runtime: 资产协作分发运行时内部,
   heavyWorkPolicy: 资产协作分发上下文["heavyWorkPolicy"]
@@ -532,6 +564,9 @@ const 按生命周期策略清理协作分发会话 = (
     return;
   }
   for (const [swarmId, session] of runtime.底层会话表) {
+    if (session.consumerBindings.size === 0) {
+      让零引用会话降到轻帮助态(session);
+    }
     if (!是否为零消费者冷协作分发会话(session)) {
       continue;
     }
@@ -625,6 +660,7 @@ function 绑定协作分发会话事件(
   torrent.on("done", () => {
     session.eagerCompleting = false;
     session.locallyComplete = true;
+    退掉整附件重补齐(session);
     session.hint = "正在协作分发";
     启动协作分发存活上报(session, distribution, "complete_peer");
     发送事件(runtime, {
@@ -647,6 +683,7 @@ function 激活整附件补齐(
   session: 底层协作分发会话
 ): void {
   const 首次进入整附件补齐 = !session.eagerCompleting;
+  session.wholeFileBackfillEnabled = true;
   if (首次进入整附件补齐) {
     session.eagerCompleting = true;
     发送事件(runtime, {
@@ -682,7 +719,7 @@ function 激活预览关键字节优先(session: 底层协作分发会话): void
 }
 
 function 恢复整附件补齐(session: 底层协作分发会话): void {
-  if (!session.eagerCompleting || session.wholeFileSelectApplied || !session.file) {
+  if (!session.wholeFileBackfillEnabled || session.wholeFileSelectApplied || !session.file) {
     return;
   }
   session.wholeFileSelectApplied = true;
@@ -844,13 +881,17 @@ async function 确保协作分发会话(
     return null;
   }
   /**
-   * 这轮策略默认“接入就尽量补齐”：
-   * 1. caller 不传 `eagerCompleting` 时，也默认把会话推进到 whole-file backfill；
-   * 2. 但 consumer mode 继续保留 viewer / autoplay / session 身份，不伪造成 backfill 专属入口；
-   * 3. 如果上层明确要求 `丢弃未完成补齐`，仍按那条显式意图执行。
+   * whole-file 重补齐的默认准入必须按 consumer 身份裁决：
+   * 1. `viewer / inline_autoplay / backfill` 默认允许进入重态，它们代表当前前台价值或显式帮助意图；
+   * 2. 普通 `session / preview` 只建立轻会话，不再一看到 swarm 就顺手补整文件；
+   * 3. 如果上层显式传了 `eagerCompleting`，仍以那条明确意图为准。
    */
-  const 应默认进入整附件补齐 = input.eagerCompleting ?? true;
   const consumerBinding = 归一化协作分发消费者(input);
+  const 应默认进入整附件补齐 =
+    input.eagerCompleting ??
+    (consumerBinding.mode === "viewer" ||
+      consumerBinding.mode === "inline_autoplay" ||
+      consumerBinding.mode === "backfill");
   let session = runtime.底层会话表.get(input.distribution.swarm_id);
   if (session) {
     更新协作分发会话票据刷新器(session, input.refreshJoinTicket);
@@ -886,6 +927,7 @@ async function 确保协作分发会话(
     sourcePromise: Promise.resolve(null),
     eagerCompleting: 应默认进入整附件补齐,
     previewPriorityApplied: false,
+    wholeFileBackfillEnabled: 应默认进入整附件补齐,
     wholeFileSelectApplied: false,
     locallyComplete: false,
     hint: null,
@@ -996,10 +1038,50 @@ const 读取资产协作分发预算 = (
   snapshot: 资产协作分发快照 = runtime.actor.getSnapshot()
 ) => {
   const sessions = Object.values(snapshot.context.sessions);
+  let wholeFileHeavySessionCount = 0;
+  let zeroRefHeavySessionCount = 0;
+  let zeroRefLightHelpSessionCount = 0;
+
+  for (const session of sessions) {
+    const isZeroRef = session.consumers.length === 0;
+    const internalSession = runtime.底层会话表.get(session.swarmId);
+    const wholeFileHeavyActive = internalSession?.wholeFileBackfillEnabled === true;
+    const canStayAsLightHelp =
+      isZeroRef && (session.eagerCompleting || session.locallyComplete);
+    /**
+     * 预算投影现在显式区分“会话还活着”和“它还剩多重”：
+     * 1. 零引用但仍有协作价值的会话，可以继续算作 light help；
+     * 2. 是否仍算 whole-file heavy，必须看底层 whole-file backfill 开关是否还开着；
+     * 3. 这样预算不会再被 `eagerCompleting` 这个“可保留资格”字段误导成“仍在重下载”。
+     */
+    if (wholeFileHeavyActive) {
+      wholeFileHeavySessionCount += 1;
+      if (isZeroRef) {
+        zeroRefHeavySessionCount += 1;
+      }
+    }
+    if (canStayAsLightHelp && !wholeFileHeavyActive) {
+      zeroRefLightHelpSessionCount += 1;
+    }
+  }
   return {
     activeSwarmCount: sessions.length,
     hiddenHeavyTaskCount:
-      snapshot.context.heavyWorkPolicy === "normal" ? 0 : sessions.length,
+      snapshot.context.heavyWorkPolicy === "normal" ? 0 : wholeFileHeavySessionCount,
+    wholeFileHeavySessionCount,
+    zeroRefHeavySessionCount,
+    zeroRefLightHelpSessionCount,
+    /**
+     * 当前 whole-file reader 仍由底层 WebTorrent runtime 管；预算阶段先把“后台零引用不再算重 reader”
+     * 写成显式真相。现在这里直接看底层 file.select 是否仍处于激活态，不再只靠猜测。
+     */
+    zeroRefWholeFileReaderCount: sessions.reduce((count, session) => {
+      if (session.consumers.length !== 0) {
+        return count;
+      }
+      const internalSession = runtime.底层会话表.get(session.swarmId);
+      return internalSession?.wholeFileSelectApplied ? count + 1 : count;
+    }, 0),
   };
 };
 
@@ -1099,6 +1181,7 @@ export function 创建资产协作分发运行时(): 资产协作分发运行时
         if (session.consumerBindings.size > 0) {
           continue;
         }
+        让零引用会话降到轻帮助态(session);
         // 只要会话仍被产品层保留，presence 也要跟着保留：
         // 1. locallyComplete 继续报 complete_peer；
         // 2. eagerCompleting 且已接入 swarm 的会话继续报 partial_peer；

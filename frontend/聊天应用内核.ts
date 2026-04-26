@@ -157,6 +157,7 @@ export type 聊天应用命令 =
   | { type: "SEND_MESSAGE_REQUESTED" }
   | { type: "ROOM_SCROLL_INTENT" }
   | { type: "ROOM_SCROLL_OBSERVED"; scrollContainer: HTMLElement }
+  | { type: "ROOM_MEDIA_WINDOW_OBSERVED"; attachmentIds: string[] }
   | { type: "MEDIA_INLINE_AUTOPLAY_OBSERVED"; candidates: 消息视频自动播候选[] }
   | {
       type: "MEDIA_INLINE_AUTOPLAY_POSITION_CHANGED";
@@ -415,6 +416,9 @@ class 聊天应用内核 implements 聊天应用内核端口 {
         return;
       case "ROOM_SCROLL_OBSERVED":
         this.处理聊天视口滚动(command.scrollContainer);
+        return;
+      case "ROOM_MEDIA_WINDOW_OBSERVED":
+        this.媒体编排.同步媒体窗口附件(command.attachmentIds);
         return;
       case "MEDIA_INLINE_AUTOPLAY_OBSERVED":
         this.媒体编排.处理自动播候选(command.candidates);

@@ -98,11 +98,18 @@ export interface 聊天流程状态 {
  */
 export interface 聊天运行时预算状态 {
   activeVideoCount: number;
+  activeFormalPlayerCount: number;
+  activeVideoSessionCount: number;
+  activeMediaSessionCount: number;
   autoplayOwnerCount: number;
   activeSwarmCount: number;
   inflightLocatorCount: number;
   inflightManifestOrRangeCount: number;
   hiddenHeavyTaskCount: number;
+  wholeFileHeavySessionCount: number;
+  zeroRefHeavySessionCount: number;
+  zeroRefLightHelpSessionCount: number;
+  zeroRefWholeFileReaderCount: number;
   longTaskCount: number;
   updatePendingDurationMs: number;
 }
@@ -180,11 +187,18 @@ export const 初始聊天流程状态: 聊天流程状态 = {
 
 export const 初始聊天运行时预算状态: 聊天运行时预算状态 = {
   activeVideoCount: 0,
+  activeFormalPlayerCount: 0,
+  activeVideoSessionCount: 0,
+  activeMediaSessionCount: 0,
   autoplayOwnerCount: 0,
   activeSwarmCount: 0,
   inflightLocatorCount: 0,
   inflightManifestOrRangeCount: 0,
   hiddenHeavyTaskCount: 0,
+  wholeFileHeavySessionCount: 0,
+  zeroRefHeavySessionCount: 0,
+  zeroRefLightHelpSessionCount: 0,
+  zeroRefWholeFileReaderCount: 0,
   longTaskCount: 0,
   updatePendingDurationMs: 0,
 };

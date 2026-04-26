@@ -37,6 +37,7 @@ type 协作补齐协作依赖 = {
 
 export interface 协作补齐协作端口 {
   创建协作分发事件转发器(attachment: 媒体附件条目): (event: 协作分发会话事件) => void;
+  同步当前帮助窗口附件(attachments: 媒体附件条目[]): void;
   恢复当前房间缓存帮助任务(attachments?: 媒体附件条目[]): void;
   处理媒体会话信号(input: {
     attachmentId: string;
@@ -63,6 +64,7 @@ export function 创建协作补齐协作(
 ): 协作补齐协作端口 {
   const 已进入帮助链附件 = new Set<string>();
   const 已恢复帮助任务附件 = new Set<string>();
+  const 当前帮助窗口附件 = new Set<string>();
 
   const 处理协作分发事件 = (
     attachment: 媒体附件条目,
@@ -123,6 +125,13 @@ export function 创建协作补齐协作(
       return (event: 协作分发会话事件) => {
         处理协作分发事件(attachment, event);
       };
+    },
+
+    同步当前帮助窗口附件(attachments: 媒体附件条目[]): void {
+      当前帮助窗口附件.clear();
+      for (const attachment of attachments) {
+        当前帮助窗口附件.add(attachment.attachmentId);
+      }
     },
 
     恢复当前房间缓存帮助任务(
@@ -189,6 +198,7 @@ export function 创建协作补齐协作(
     }): boolean {
       return (
         已进入帮助链附件.has(attachmentId) &&
+        当前帮助窗口附件.has(attachmentId) &&
         !(playback?.mode === "degraded" && playback.reason === "media_deleted")
       );
     },
@@ -201,6 +211,7 @@ export function 创建协作补齐协作(
     清空(): void {
       已进入帮助链附件.clear();
       已恢复帮助任务附件.clear();
+      当前帮助窗口附件.clear();
     },
   };
 }

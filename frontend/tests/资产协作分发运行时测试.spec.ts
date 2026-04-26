@@ -94,6 +94,7 @@ function 创建可观测假Torrent(streamURL: string) {
     done: [],
   };
   const select = vi.fn();
+  const deselect = vi.fn();
   const critical = vi.fn();
   const selectPieces = vi.fn();
   const destroy = vi.fn();
@@ -102,6 +103,7 @@ function 创建可观测假Torrent(streamURL: string) {
       {
         streamURL,
         select,
+        deselect,
       },
     ],
     critical,
@@ -116,6 +118,7 @@ function 创建可观测假Torrent(streamURL: string) {
   return {
     torrent,
     select,
+    deselect,
     critical,
     selectPieces,
     destroy,
@@ -193,6 +196,40 @@ describe("资产协作分发运行时", () => {
       refs: 1,
       consumers: ["inline_autoplay:att-inline-cold-1"],
       eagerCompleting: true,
+    });
+  });
+
+  it("普通 session consumer 只建立轻会话，不会默认推进 whole-file backfill", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const torrentHandle = 创建可观测假Torrent("blob:http://media.local/swarm-att-session-light-1");
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrentHandle.torrent);
+      return torrentHandle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    const source = await 解析协作分发源({
+      attachmentId: "att-session-light-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-session-light-1"),
+      consumerId: "session:att-session-light-1",
+    });
+
+    expect(source).toEqual({
+      src: "blob:http://media.local/swarm-att-session-light-1",
+      hint: "正在协作分发",
+      locallyComplete: false,
+    });
+    expect(读取协作分发会话状态("swarm-att-session-light-1")).toMatchObject({
+      refs: 1,
+      consumers: ["session:att-session-light-1"],
+      eagerCompleting: false,
+    });
+    expect(torrentHandle.select).not.toHaveBeenCalled();
+    expect(读取资产协作分发预算()).toMatchObject({
+      wholeFileHeavySessionCount: 0,
+      zeroRefWholeFileReaderCount: 0,
     });
   });
 
@@ -500,9 +537,9 @@ describe("资产协作分发运行时", () => {
     expect(预览选片顺序!).toBeLessThan(整附件补齐顺序!);
   });
 
-  it("最后一个 consumer 释放后，未补齐会话默认继续保留补齐，不会立刻从运行时摘除", async () => {
+  it("最后一个 consumer 释放后，未补齐会话会退到轻帮助态，而不是立刻从运行时摘除", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
-    const { torrent, destroy } = 创建可观测假Torrent(
+    const { torrent, destroy, deselect } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-release-1"
     );
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
@@ -517,6 +554,7 @@ describe("资产协作分发运行时", () => {
       kind: "video",
       locator: 准备好的定位结果("att-release-1"),
       consumerId: "session:att-release-1",
+      eagerCompleting: true,
     });
 
     expect(读取协作分发会话状态("swarm-att-release-1")).toMatchObject({
@@ -534,6 +572,13 @@ describe("资产协作分发运行时", () => {
       eagerCompleting: true,
       hint: "正在补块",
     });
+    expect(读取资产协作分发预算()).toMatchObject({
+      wholeFileHeavySessionCount: 0,
+      zeroRefHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 1,
+      zeroRefWholeFileReaderCount: 0,
+    });
+    expect(deselect).toHaveBeenCalledTimes(1);
     expect(remove).not.toHaveBeenCalled();
     expect(destroy).not.toHaveBeenCalled();
   });
@@ -609,7 +654,7 @@ describe("资产协作分发运行时", () => {
 
     expect(source).toEqual({
       src: "blob:http://media.local/swarm-att-ticket-invalid",
-      hint: "正在补块",
+      hint: "正在协作分发",
       locallyComplete: false,
     });
 
@@ -665,7 +710,9 @@ describe("资产协作分发运行时", () => {
 
   it("零消费者的 eagerCompleting 会话在后台策略变化时仍保留，不会被当成冷会话清掉", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
-    const { torrent } = 创建可观测假Torrent("blob:http://media.local/swarm-att-hidden-1");
+    const { torrent, deselect } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-hidden-1"
+    );
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
       onTorrent(torrent);
       return torrent;
@@ -701,7 +748,97 @@ describe("资产协作分发运行时", () => {
     });
     expect(读取资产协作分发预算()).toMatchObject({
       activeSwarmCount: 1,
-      hiddenHeavyTaskCount: 1,
+      hiddenHeavyTaskCount: 0,
+      wholeFileHeavySessionCount: 0,
+      zeroRefHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 1,
+      zeroRefWholeFileReaderCount: 0,
+    });
+    expect(deselect).toHaveBeenCalledTimes(1);
+  });
+
+  it("零引用 eagerCompleting 会话在后台只保留轻帮助态，不再继续占着 whole-file heavy 预算", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const { torrent, deselect } = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-light-help-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrent);
+      return torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-light-help-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-light-help-1"),
+      consumerId: "backfill:att-light-help-1",
+      eagerCompleting: true,
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-light-help-1",
+      consumerId: "backfill:att-light-help-1",
+    });
+    发送资产协作分发事件({
+      type: "LIFECYCLE_POLICY_CHANGED",
+      heavyWorkPolicy: "suspended",
+    });
+
+    expect(读取资产协作分发预算()).toMatchObject({
+      activeSwarmCount: 1,
+      wholeFileHeavySessionCount: 0,
+      zeroRefHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 1,
+      zeroRefWholeFileReaderCount: 0,
+    });
+    expect(deselect).toHaveBeenCalledTimes(1);
+  });
+
+  it("零引用轻帮助态重新被前台 consumer 接管时，会恢复 whole-file 重补齐而不是新建第二条 swarm", async () => {
+    const registration = 准备已激活媒体ServiceWorker注册();
+    const torrentHandle = 创建可观测假Torrent(
+      "blob:http://media.local/swarm-att-revive-heavy-1"
+    );
+    const add = vi.fn(((_torrentId, _options, onTorrent) => {
+      onTorrent(torrentHandle.torrent);
+      return torrentHandle.torrent;
+    }) as WebTorrent浏览器客户端["add"]);
+    const { ctor } = 创建假WebTorrent构造器(add);
+    await 获取或创建协作分发浏览器运行时(async () => ctor, async () => registration);
+
+    await 解析协作分发源({
+      attachmentId: "att-revive-heavy-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-revive-heavy-1"),
+      consumerId: "session:att-revive-heavy-1",
+      eagerCompleting: true,
+    });
+
+    释放协作分发消费者({
+      attachmentId: "att-revive-heavy-1",
+      consumerId: "session:att-revive-heavy-1",
+    });
+    expect(读取资产协作分发预算()).toMatchObject({
+      wholeFileHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 1,
+    });
+
+    await 解析协作分发源({
+      attachmentId: "att-revive-heavy-1",
+      kind: "video",
+      locator: 准备好的定位结果("att-revive-heavy-1"),
+      consumerId: "viewer:att-revive-heavy-1",
+      eagerCompleting: true,
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(torrentHandle.select).toHaveBeenCalledTimes(2);
+    expect(读取资产协作分发预算()).toMatchObject({
+      wholeFileHeavySessionCount: 1,
+      zeroRefHeavySessionCount: 0,
+      zeroRefLightHelpSessionCount: 0,
     });
   });
 

@@ -5,6 +5,7 @@ import type { 协作分发Torrent缓存快照 } from "./媒体协作分发缓存
 export interface WebTorrent文件 {
   readonly streamURL: string;
   select(priority?: number): void;
+  deselect?(): void;
 }
 
 export interface WebTorrent连接 {

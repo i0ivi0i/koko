@@ -677,9 +677,18 @@ const 当前查看器占用视频 = (context: 媒体运行时上下文): number 
 
 export function 投影媒体运行时预算(snapshot: 媒体运行时快照) {
   const { context } = snapshot;
+  /**
+   * 正式播放器预算只回答“当前有没有那颗 canonical formal player 在前台工作”：
+   * 1. 查看器与 inline autoplay 共享同一颗正式播放器；
+   * 2. 因此这里永远投影成 0/1，而不是把查看器和自动播各算一颗；
+   * 3. `activeVideoCount` 继续保留给旧调用方，但 owner 真相已经显式落成 `activeFormalPlayerCount`。
+   */
   const autoplayOwnerCount = context.inlineAutoplayOwnerAttachmentId ? 1 : 0;
+  const activeFormalPlayerCount =
+    当前查看器占用视频(context) > 0 || autoplayOwnerCount > 0 ? 1 : 0;
   return {
     activeVideoCount: 当前查看器占用视频(context) + autoplayOwnerCount,
+    activeFormalPlayerCount,
     autoplayOwnerCount,
     inflightLocatorCount: context.inflightLocatorCount,
     inflightManifestOrRangeCount: context.inflightManifestOrRangeCount,

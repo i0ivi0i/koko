@@ -46,7 +46,40 @@ describe("媒体运行时", () => {
 
     expect(投影媒体运行时预算(actor.getSnapshot())).toMatchObject({
       activeVideoCount: 1,
+      activeFormalPlayerCount: 1,
       autoplayOwnerCount: 1,
+    });
+  });
+
+  it("正式查看器与 inline autoplay 会统一投影成单 formal player 预算，而不是两套并行正式播放器", () => {
+    const actor = 创建媒体运行时Actor();
+
+    actor.send({
+      type: "INLINE_AUTOPLAY_CANDIDATES_OBSERVED",
+      candidates: [
+        {
+          attachmentId: "att-video-inline-owner-1",
+          visibilityRatio: 0.96,
+          distanceToViewportCenter: 10,
+        },
+      ],
+    });
+    actor.send({ type: "INLINE_AUTOPLAY_SETTLE_ELAPSED" });
+
+    expect(投影媒体运行时预算(actor.getSnapshot())).toMatchObject({
+      activeFormalPlayerCount: 1,
+      autoplayOwnerCount: 1,
+    });
+
+    actor.send({
+      type: "VIEWER_OPEN_REQUESTED",
+      request: 创建视频查看器请求("att-video-viewer-formal-1"),
+    });
+    actor.send({ type: "VIEWER_OPEN_CONFIRMED" });
+
+    expect(投影媒体运行时预算(actor.getSnapshot())).toMatchObject({
+      activeFormalPlayerCount: 1,
+      autoplayOwnerCount: 0,
     });
   });
 

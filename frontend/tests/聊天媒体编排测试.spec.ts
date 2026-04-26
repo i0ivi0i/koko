@@ -26,6 +26,11 @@ const 生成图片消息 = (attachmentId: string): 消息事件 =>
     ],
   }) as unknown as 消息事件;
 
+const 生成连续视频消息 = (count: number): 消息事件[] =>
+  Array.from({ length: count }, (_, index) =>
+    生成视频消息(`att-video-window-${index + 1}`)
+  );
+
 const 生成锚点视频播放结果 = (attachmentId: string): 媒体播放结果 => ({
   mode: "anchor",
   attachmentId,
@@ -1300,7 +1305,7 @@ describe("聊天媒体编排", () => {
     编排.销毁();
   });
 
-  it("缓存启动后会按当前 roomId 恢复本房间的完整附件帮助任务，不会误扫别的房间", async () => {
+  it("缓存启动后只恢复当前帮助窗口里的本房间完整附件，不会把隐藏历史和别房间扫进来", async () => {
     const 激活协作补齐 = vi.fn(async () => {});
     const transport: 前端传输端口 = {
       loadMediaLocator: vi.fn(async () => {
@@ -1396,19 +1401,13 @@ describe("聊天媒体编排", () => {
       激活协作补齐,
     });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件(["att-image-current-room-1"]);
     await 刷新异步队列();
 
-    expect(激活协作补齐).toHaveBeenCalledTimes(2);
-    expect(激活协作补齐).toHaveBeenNthCalledWith(1, {
+    expect(激活协作补齐).toHaveBeenCalledTimes(1);
+    expect(激活协作补齐).toHaveBeenCalledWith({
       attachmentId: "att-image-current-room-1",
       consumerId: "session:att-image-current-room-1",
-      kind: "image",
-      onSessionEvent: expect.any(Function),
-    });
-    expect(激活协作补齐).toHaveBeenNthCalledWith(2, {
-      attachmentId: "att-image-current-room-hidden-2",
-      consumerId: "session:att-image-current-room-hidden-2",
       kind: "image",
       onSessionEvent: expect.any(Function),
     });
@@ -1416,7 +1415,7 @@ describe("聊天媒体编排", () => {
     编排.销毁();
   });
 
-  it("附件进入帮助链后，即使暂时不在当前时间线集合里，也不会立刻释放帮助任务", async () => {
+  it("附件离开当前帮助窗口后，不能只因曾进入帮助链就继续长期占着活会话", async () => {
     vi.resetModules();
     const 释放协作分发消费者 = vi.fn();
     vi.doMock("../媒体/资产协作分发运行时.js", () => ({
@@ -1513,26 +1512,22 @@ describe("聊天媒体编排", () => {
       释放附件播放资源,
     });
 
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件(["att-image-help-chain-1"]);
     await 刷新异步队列();
 
     expect(激活协作补齐).toHaveBeenCalledTimes(1);
     expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toContain("att-image-help-chain-1");
 
     当前消息.value = [生成图片消息("att-image-current-only-2")];
-    编排.同步消息附件播放结果();
+    编排.同步媒体窗口附件(["att-image-current-only-2"]);
     await 刷新异步队列();
 
-    expect(释放附件播放资源).not.toHaveBeenCalledWith(
+    expect(释放附件播放资源).toHaveBeenCalledWith(
       expect.objectContaining({ attachmentId: "att-image-help-chain-1" })
     );
-    expect(释放协作分发消费者).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachmentId: "att-image-help-chain-1",
-        consumerId: "preview:att-image-help-chain-1",
-      })
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).not.toContain(
+      "att-image-help-chain-1"
     );
-    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toContain("att-image-help-chain-1");
 
     编排.销毁();
     vi.doUnmock("../媒体/资产协作分发运行时.js");
@@ -1869,5 +1864,108 @@ describe("聊天媒体编排", () => {
 
     vi.doUnmock("../媒体/资产协作分发运行时.js");
     vi.resetModules();
+  });
+
+  it("同步消息附件播放结果后，只保留近视口/当前交互窗口内的活媒体会话，而不是整房历史全养活", async () => {
+    const 消息列表 = 生成连续视频消息(20);
+    const 编排 = 创建聊天媒体编排({
+      transport: () =>
+        ({
+          loadMediaLocator: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+          buildAttachmentContentUrl: vi.fn(
+            (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+              `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+          ),
+          prepareMediaUpload: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+          abandonMediaUpload: vi.fn(async () => {}),
+          completeMediaUpload: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+        }) as unknown as 前端传输端口,
+      读取会话编号: () => "s-test",
+      读取消息: () => 消息列表,
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+      抓取视频预览: vi.fn(async () => ({
+        objectUrl: null,
+        source: "none" as const,
+        width: null,
+        height: null,
+      })),
+    });
+
+    编排.处理自动播候选([
+      {
+        attachmentId: "att-video-window-1",
+        visibilityRatio: 0.93,
+        distanceToViewportCenter: 0,
+      },
+      {
+        attachmentId: "att-video-window-2",
+        visibilityRatio: 0.88,
+        distanceToViewportCenter: 64,
+      },
+    ]);
+    编排.同步消息附件播放结果();
+    await 刷新异步队列();
+
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId).length).toBeLessThanOrEqual(12);
+    编排.销毁();
+  });
+
+  it("房间媒体窗口观察一更新，就会立刻把整房历史会话裁回当前窗口", async () => {
+    const 消息列表 = 生成连续视频消息(20);
+    const 编排 = 创建聊天媒体编排({
+      transport: () =>
+        ({
+          loadMediaLocator: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+          buildAttachmentContentUrl: vi.fn(
+            (id: string, sessionId: string, variant: "original" | "thumbnail" = "original") =>
+              `http://test.local/api/attachments/${id}/content?session_id=${sessionId}&variant=${variant}`
+          ),
+          prepareMediaUpload: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+          abandonMediaUpload: vi.fn(async () => {}),
+          completeMediaUpload: vi.fn(async () => {
+            throw new Error("unused");
+          }),
+        }) as unknown as 前端传输端口,
+      读取会话编号: () => "s-window-sync",
+      读取消息: () => 消息列表,
+      读取草稿: () => [],
+      写入草稿列表: () => {},
+      请求重渲染: () => {},
+      回收媒体草稿预览地址: () => {},
+      登记程序滚动来源: () => {},
+      清除程序滚动来源: () => {},
+      抓取视频预览: vi.fn(async () => ({
+        objectUrl: null,
+        source: "none" as const,
+        width: null,
+        height: null,
+      })),
+    });
+
+    编排.同步消息附件播放结果();
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId)).toHaveLength(20);
+
+    编排.同步媒体窗口附件(
+      Array.from({ length: 6 }, (_, index) => `att-video-window-${index + 1}`)
+    );
+    await 刷新异步队列();
+
+    expect(Object.keys(编排.snapshot().sessionByAttachmentId).length).toBeLessThanOrEqual(6);
+    编排.销毁();
   });
 });

@@ -194,6 +194,31 @@ const 创建五附件拼贴消息项 = (): 消息展示项 => ({
   ],
 });
 
+const 创建单视频消息项 = (attachmentId: string, eventPosition: number): 消息展示项 => ({
+  kind: "message",
+  id: `m-${attachmentId}`,
+  owner: "other",
+  body: "",
+  hasText: false,
+  layout: 空文本布局,
+  bubbleWidth: 320,
+  senderDisplayAlias: "冷静的水獭",
+  showAlias: true,
+  eventPosition,
+  attachments: [
+    {
+      kind: "video",
+      attachmentId,
+      width: 1280,
+      height: 720,
+      displayWidth: 320,
+      displayHeight: 180,
+      originalSrc: `http://media.local/original-${attachmentId}`,
+      posterSrc: `http://media.local/poster-${attachmentId}`,
+    },
+  ],
+});
+
 const 创建媒体消息窗 = (
   options: {
     createVideoJsPlayerShell?: typeof 创建VideoJs播放器壳;
@@ -4653,6 +4678,91 @@ describe("房间消息窗媒体查看器", () => {
       width: 1200,
       height: 800,
     });
+
+    pane.remove();
+  });
+
+  it("近视口预算收紧前，房间会把过多非 owner 历史视频一起挂成真实 preview video", async () => {
+    const pane = 创建媒体消息窗();
+    const attachmentIds = Array.from({ length: 8 }, (_, index) => `att-budget-${index + 1}`);
+    pane.items = attachmentIds.map((attachmentId, index) =>
+      创建单视频消息项(attachmentId, index + 1)
+    );
+    pane.mediaPlaybackByAttachmentId = Object.fromEntries(
+      attachmentIds.map((attachmentId) => [
+        attachmentId,
+        {
+          mode: "swarm",
+          attachmentId,
+          kind: "video",
+          src: `blob:http://media.local/swarm-${attachmentId}`,
+          thumbnailUrl: `http://media.local/poster-${attachmentId}`,
+          hint: null,
+        } satisfies 媒体播放结果,
+      ])
+    );
+    pane.mediaPreviewByAttachmentId = Object.fromEntries(
+      attachmentIds.map((attachmentId) => [
+        attachmentId,
+        {
+          phase: "ready",
+          src: `blob:http://media.local/preview-${attachmentId}`,
+          source: "cache" as const,
+        },
+      ])
+    );
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    expect(pane.querySelectorAll("video.message-video-preview").length).toBeLessThanOrEqual(6);
+
+    pane.remove();
+  });
+
+  it("房间媒体窗口观察事件会先做活媒体预算裁剪，再把附件集合回抛给外层", async () => {
+    const pane = 创建媒体消息窗();
+    const 观察记录: string[][] = [];
+    pane.addEventListener("room-media-window-observed", (event) => {
+      观察记录.push((event as CustomEvent<{ attachmentIds: string[] }>).detail.attachmentIds);
+    });
+    pane.items = Array.from({ length: 20 }, (_, index) => ({
+      ...创建媒体消息项(),
+      id: `m-window-budget-${index + 1}`,
+      eventPosition: index + 1,
+      attachments: [
+        {
+          kind: "image" as const,
+          attachmentId: `att-image-window-budget-${index + 1}`,
+          width: 1200,
+          height: 800,
+          displayWidth: 320,
+          displayHeight: 213,
+          thumbnailSrc: `http://media.local/thumb-image-window-budget-${index + 1}`,
+          originalSrc: `http://media.local/original-image-window-budget-${index + 1}`,
+        },
+        {
+          kind: "video" as const,
+          attachmentId: `att-video-window-budget-${index + 1}`,
+          width: 1280,
+          height: 720,
+          displayWidth: 320,
+          displayHeight: 180,
+          originalSrc: `http://media.local/original-video-window-budget-${index + 1}`,
+          posterSrc: `http://media.local/poster-video-window-budget-${index + 1}`,
+        },
+      ],
+    }));
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const 最新附件集合 = 观察记录.at(-1) ?? [];
+    const 视频附件前缀 = "att-video-window-budget-";
+    expect(最新附件集合.length).toBeLessThanOrEqual(24);
+    expect(
+      最新附件集合.filter((attachmentId) => attachmentId.startsWith(视频附件前缀)).length
+    ).toBeLessThanOrEqual(12);
 
     pane.remove();
   });
