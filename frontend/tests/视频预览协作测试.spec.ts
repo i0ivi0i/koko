@@ -158,4 +158,145 @@ describe("视频预览协作", () => {
       source: "early_frame",
     });
   });
+
+  it("同版 missing_source 视频进入可见候选后，也必须允许受控重试 locator/swarm 预览", async () => {
+    const attachmentId = "att-video-visible-retry";
+    const 构造定位结果 = (
+      distribution: {
+        content_id: string;
+        content_hash: string;
+        swarm_id: string;
+        web_seed_until: string;
+        torrent_url: string;
+        torrent_info_hash: string;
+        announce_urls: string[];
+        web_seed_url: string;
+        join_ticket: null;
+        ticket_expires_at: null;
+        media_state: {
+          code: "MEDIA_READY";
+          retry_after_ms: null;
+        };
+        survival_mode: "server_assisted";
+      } | null
+    ) =>
+      ({
+        attachment_id: attachmentId,
+        kind: "video" as const,
+        status: "ready" as const,
+        thumbnail_url: null,
+        distribution,
+        file_asset: {
+          asset_id: attachmentId,
+          content_hash: `hash-${attachmentId}`,
+          kind: "file_video" as const,
+          variants: {
+            canonical: {
+              id: "canonical",
+              mime_type: "video/mp4",
+              url: `http://media.local/canonical-${attachmentId}.mp4`,
+              width: 1280,
+              height: 720,
+            },
+          },
+          manifest: null,
+          lifecycle: null,
+          origin: {
+            original_url: `http://media.local/original-${attachmentId}`,
+            expires_at_epoch_seconds: 1775942400,
+            available: true,
+            role: "cold_backup_only" as const,
+          },
+          distribution: {
+            swarm_id: `swarm-${attachmentId}`,
+            announce_urls: ["ws://127.0.0.1:7072"],
+            web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+            join_ticket: null,
+            ticket_expires_at: null,
+            survival_mode: "server_assisted" as const,
+          },
+        },
+      }) as Awaited<ReturnType<视频预览协作依赖["获取媒体定位"]>>;
+    let locatorCallCount = 0;
+    const 获取媒体定位: 视频预览协作依赖["获取媒体定位"] = vi.fn(
+      async (_attachmentId: string, _options?: { forceRefresh?: boolean }) => {
+        locatorCallCount += 1;
+        return 构造定位结果(
+          locatorCallCount >= 2
+            ? {
+                content_id: `content_${attachmentId}`,
+                content_hash: `hash-${attachmentId}`,
+                swarm_id: `swarm-${attachmentId}`,
+                web_seed_until: "1775942400",
+                torrent_url: `http://media.local/torrent-${attachmentId}`,
+                torrent_info_hash: `torrent-info-hash-${attachmentId}`,
+                announce_urls: ["ws://127.0.0.1:7072"],
+                web_seed_url: `http://media.local/web-seed-${attachmentId}`,
+                join_ticket: null,
+                ticket_expires_at: null,
+                media_state: {
+                  code: "MEDIA_READY" as const,
+                  retry_after_ms: null,
+                },
+                survival_mode: "server_assisted" as const,
+              }
+            : null
+        );
+      }
+    );
+    const 解析协作分发预览源 = vi.fn(async () => ({
+      src: `blob:http://media.local/swarm-preview-${attachmentId}`,
+    }));
+    const 抓取视频预览 = vi.fn(async () => ({
+      objectUrl: `blob:preview-${attachmentId}`,
+      source: "embedded_hint" as const,
+      width: 1280,
+      height: 720,
+    }));
+    const deps: 视频预览协作依赖 = {
+      读取附件条目: (id) => ({ attachmentId: id, kind: "video" }),
+      读取会话播放源版本: () => 9,
+      读取当前视频预览播放源: () => null,
+      获取媒体定位,
+      解析协作分发预览源,
+      释放协作分发消费者: vi.fn(),
+      预览缓存: 创建预览缓存桩(),
+      抓取视频预览,
+      接收媒体运行时事实: vi.fn(),
+      请求重渲染: vi.fn(),
+      同步当前查看器请求: vi.fn(),
+      构造预览ConsumerId: (id) => `preview:${id}`,
+    };
+
+    const 协作 = 创建视频预览协作(deps);
+
+    协作.解析视频预览(attachmentId);
+    await 刷新异步队列();
+
+    expect(协作.读取视频预览状态(attachmentId)).toEqual({
+      phase: "missing_source",
+    });
+    expect(获取媒体定位).toHaveBeenCalledTimes(1);
+    expect(解析协作分发预览源).not.toHaveBeenCalled();
+
+    // 默认路径在同一 sourceVersion + 无当前 swarm 播放源时仍会阻断，避免空转风暴。
+    协作.解析视频预览(attachmentId);
+    await 刷新异步队列();
+    expect(获取媒体定位).toHaveBeenCalledTimes(1);
+
+    // 可见候选属于高价值信号：必须允许再试一次，而不是一直躺到 owner 真切过来。
+    协作.解析视频预览(attachmentId, { trigger: "visible_candidate" } as never);
+    await 刷新异步队列();
+
+    expect(获取媒体定位).toHaveBeenCalledTimes(2);
+    expect(解析协作分发预览源).toHaveBeenCalledTimes(1);
+    expect(抓取视频预览).toHaveBeenCalledWith({
+      src: `blob:http://media.local/swarm-preview-${attachmentId}`,
+    });
+    expect(协作.读取视频预览状态(attachmentId)).toEqual({
+      phase: "ready",
+      src: `blob:preview-${attachmentId}`,
+      source: "embedded_hint",
+    });
+  });
 });

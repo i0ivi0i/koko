@@ -20,7 +20,10 @@ type 视频预览协作依赖 = {
   读取附件条目(attachmentId: string): 媒体附件条目 | null;
   读取会话播放源版本(attachmentId: string): number;
   读取当前视频预览播放源(attachmentId: string): 当前视频预览播放源 | null;
-  获取媒体定位(attachmentId: string): Promise<媒体定位结果>;
+  获取媒体定位(
+    attachmentId: string,
+    options?: { forceRefresh?: boolean }
+  ): Promise<媒体定位结果>;
   解析协作分发预览源(input: {
     attachmentId: string;
     locator: 媒体定位结果;
@@ -38,7 +41,10 @@ type 视频预览协作依赖 = {
 export interface 视频预览协作端口 {
   读取视频预览状态表(): Record<string, 视频预览状态>;
   读取视频预览状态(attachmentId: string): 视频预览状态 | null;
-  解析视频预览(attachmentId: string): void;
+  解析视频预览(
+    attachmentId: string,
+    input?: { trigger?: "default" | "visible_candidate" }
+  ): void;
   删除视频预览状态(attachmentId: string): void;
   清空(): void;
 }
@@ -55,10 +61,18 @@ export function 创建视频预览协作(
   const 视频预览状态表 = new Map<string, 视频预览状态>();
   const 视频预览解析代次表 = new Map<string, number>();
   const 视频预览缺源阻断版本表 = new Map<string, number>();
+  const 视频预览缺源可见重试记录表 = new Map<
+    string,
+    {
+      sourceVersion: number;
+      attemptedAtMs: number;
+    }
+  >();
   const 视频预览抓帧任务表 = new Map<
     string,
     Promise<Awaited<ReturnType<typeof deps.抓取视频预览>>>
   >();
+  const 可见候选缺源重试最小间隔毫秒 = 600;
 
   const 构造视频预览抓帧任务键 = (
     contentHash: string | null,
@@ -104,6 +118,7 @@ export function 创建视频预览协作(
 
   const 清除视频预览缺源阻断 = (attachmentId: string): void => {
     视频预览缺源阻断版本表.delete(attachmentId);
+    视频预览缺源可见重试记录表.delete(attachmentId);
   };
 
   const 标记视频预览缺源 = (attachmentId: string): void => {
@@ -124,16 +139,40 @@ export function 创建视频预览协作(
       return 视频预览状态表.get(attachmentId) ?? null;
     },
 
-    解析视频预览(attachmentId: string): void {
+    解析视频预览(
+      attachmentId: string,
+      input: { trigger?: "default" | "visible_candidate" } = {}
+    ): void {
       const attachment = deps.读取附件条目(attachmentId);
       const currentPreview = 视频预览状态表.get(attachmentId) ?? { phase: "idle" as const };
       const 当前会话源版本 = deps.读取会话播放源版本(attachmentId);
       const 缺源阻断版本 = 视频预览缺源阻断版本表.get(attachmentId);
       const 当前预览播放源 = deps.读取当前视频预览播放源(attachmentId);
+      const trigger = input.trigger ?? "default";
+      const 当前缺源可见重试记录 = 视频预览缺源可见重试记录表.get(attachmentId) ?? null;
+      const 正在加载但已有更强播放源 =
+        currentPreview.phase === "loading" && Boolean(当前预览播放源);
+      const 允许可见候选突破同版缺源阻断 =
+        trigger === "visible_candidate" &&
+        currentPreview.phase === "missing_source" &&
+        缺源阻断版本 === 当前会话源版本 &&
+        !当前预览播放源 &&
+        (() => {
+          if (
+            !当前缺源可见重试记录 ||
+            当前缺源可见重试记录.sourceVersion !== 当前会话源版本
+          ) {
+            return true;
+          }
+          return (
+            Date.now() - 当前缺源可见重试记录.attemptedAtMs >=
+            可见候选缺源重试最小间隔毫秒
+          );
+        })();
       if (
         !attachment ||
         attachment.kind !== "video" ||
-        currentPreview.phase === "loading" ||
+        (currentPreview.phase === "loading" && !正在加载但已有更强播放源) ||
         currentPreview.phase === "ready" ||
         /**
          * `missing_source` 只应该阻断“这一版会话里仍然完全没有可抓帧源”的重复空转：
@@ -144,10 +183,23 @@ export function 创建视频预览协作(
          */
         (currentPreview.phase === "missing_source" &&
           缺源阻断版本 === 当前会话源版本 &&
-          !当前预览播放源)
+          !当前预览播放源 &&
+          !允许可见候选突破同版缺源阻断)
       ) {
         return;
       }
+      if (允许可见候选突破同版缺源阻断) {
+        视频预览缺源可见重试记录表.set(attachmentId, {
+          sourceVersion: 当前会话源版本,
+          attemptedAtMs: Date.now(),
+        });
+      }
+      /**
+       * 可见候选重试和正式 playback 到位可能前后脚抵达：
+       * 1. 前者会先把状态打到 `loading`，同时跑一轮 locator/swarm 预览探测；
+       * 2. 如果后者更快拿到了正式 swarm `playback.src`，这其实是更强、更接近可见真相的信号；
+       * 3. 因此只要当前已经出现更强播放源，就允许新一轮解析代次直接抢占旧 loading，避免预览真相继续卡在上一拍。
+       */
       const 当前代次 = (视频预览解析代次表.get(attachmentId) ?? 0) + 1;
       视频预览解析代次表.set(attachmentId, 当前代次);
       写入视频预览状态(attachmentId, { phase: "loading" });
@@ -177,9 +229,16 @@ export function 创建视频预览协作(
           if (!previewSource) {
             const startedAt = performance.now();
             deps.接收媒体运行时事实({ type: "LOCATOR_REQUEST_STARTED" });
+            const shouldForceRefreshLocator =
+              trigger === "visible_candidate" &&
+              currentPreview.phase === "missing_source" &&
+              缺源阻断版本 === 当前会话源版本 &&
+              !当前预览播放源;
             let locator: 媒体定位结果;
             try {
-              locator = await deps.获取媒体定位(attachmentId);
+              locator = await deps.获取媒体定位(attachmentId, {
+                forceRefresh: shouldForceRefreshLocator,
+              });
             } finally {
               deps.接收媒体运行时事实({
                 type: "LOCATOR_REQUEST_FINISHED",
@@ -291,6 +350,7 @@ export function 创建视频预览协作(
 
     删除视频预览状态(attachmentId: string): void {
       视频预览缺源阻断版本表.delete(attachmentId);
+      视频预览缺源可见重试记录表.delete(attachmentId);
       if (!视频预览状态表.delete(attachmentId)) {
         return;
       }
@@ -302,6 +362,7 @@ export function 创建视频预览协作(
       视频预览状态表.clear();
       视频预览解析代次表.clear();
       视频预览缺源阻断版本表.clear();
+      视频预览缺源可见重试记录表.clear();
       视频预览抓帧任务表.clear();
     },
   };

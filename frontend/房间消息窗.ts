@@ -1117,14 +1117,10 @@ export class 房间消息窗 extends LitElement {
     if (playback?.src && playback.mode === "swarm") {
       const previewState = this.mediaPreviewByAttachmentId[attachment.attachmentId] ?? null;
       /**
-       * 这里必须把“正式播放源”和“可见预览底板源”拆开：
-       * 1. `swarm playback.src` 当然是真正的 canonical 播放源，但它不天然等于“已经有可见预览底板”；
-       * 2. 如果当前卡片已经拥有静态 poster / runtime preview，或 preview 协作仍在 loading，
-       *    继续把同一条 swarm 源挂给底板 `<video>` 没问题，因为用户看到的仍是同一条合法预览链；
-       * 3. 真正必须禁止的是 `missing_source`：预览协作已经明确说“当前没有可显示预览”，
-       *    这时再把 playback 源硬塞回去，就会长出一张冷 paused `<video>` 伪装成 preview；
-       * 4. 因此 `missing_source` 只能走两条路：要么直接显示 canonical owner，要么等后续保存续帧桥承接，
-       *    绝不再让 playback 源自己冒充 preview。
+       * 时间线 preview video 继续复用同一条 `swarm playback.src`，但它只回答“底层热态与连续性桥”：
+       * 1. 这颗 `<video>` 仍然负责 preload / readyState / continuity bridge，避免 owner 接管时重新建壳；
+       * 2. 真正的“当前可见像素”不再默认等于这颗视频自己的 `0s` 冷帧，而由上层 overlay preview truth 决定；
+       * 3. 因此这里保留同源 `<video>` 壳，但 `missing_source` 仍要明确阻断，防止冷视频伪装成 preview。
        */
       if (input.有静态封面 || input.有运行时预览) {
         return playback.src;
@@ -1552,6 +1548,11 @@ export class 房间消息窗 extends LitElement {
               previewVideoSrc
             );
             const shouldRenderPreviewVideo = Boolean(previewVideoSrc);
+            const hasStablePreviewPosterSurface = hasSourcePoster || hasRuntimePreview;
+            const shouldRenderPreviewPosterSurface =
+              hasStablePreviewPosterSurface &&
+              !restorableTimelineFrame &&
+              (!shouldRenderInlineVideo || !shouldRevealCanonicalHost);
             const isFirstFrameReady = this.读取时间线视频首帧是否就绪(
               attachment.attachmentId,
               previewVideoSrc
@@ -1573,6 +1574,7 @@ export class 房间消息窗 extends LitElement {
             const shouldShowFirstFrameGuard = shouldGateVideoUntilFirstFrame && !isFirstFrameReady;
             const hasReadyPreviewSurface =
               Boolean(restorableTimelineFrame) ||
+              hasStablePreviewPosterSurface ||
               isFirstFrameReady ||
               this.读取时间线现有预览视频是否可继续显示(
                 attachment.attachmentId,
@@ -1675,6 +1677,22 @@ export class 房间消息窗 extends LitElement {
                   `
                 : null}
               ${shouldRenderPreviewVideo ? 时间线预览底板视频 : null}
+              ${shouldRenderPreviewPosterSurface
+                ? html`
+                    <img
+                      class="message-video-poster"
+                      data-attachment-id=${attachment.attachmentId}
+                      src=${previewPosterSrc}
+                      alt="视频封面"
+                      width=${attachment.displayWidth}
+                      height=${attachment.displayHeight}
+                      loading="lazy"
+                      aria-hidden="true"
+                      @error=${(event: Event) =>
+                        this.标记视频封面加载失败(attachment.attachmentId, event)}
+                    />
+                  `
+                : null}
               ${shouldRenderStageHost
                 ? html`
                     <div
@@ -1694,12 +1712,11 @@ export class 房间消息窗 extends LitElement {
             `;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
-             * 1. 只要拿到同文件可播源（swarm/blob），就保持同一颗 `<video>` 作为时间线预览容器；
-             * 2. runtime preview 作为该 `<video>` 的 poster，而不是另起一颗 `<img>` 与 autoplay 互切；
-             * 3. 没有任何 poster 时，先用轻量 guard 遮挡，等 `loadeddata/canplay/playing` 任一事件到达再揭开像素；
-             * 4. owner 交接前若目标卡片已经有暂停预览帧，就先保留它；canonical player 在隐藏宿主切源就绪后再揭帘；
-             * 5. 有同源播放位置时，非 owner 也用视频自身暂停帧做预览，禁止退回开头 poster；
-             * 6. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
+             * 1. steady-state 可见 preview 只认 preview truth：静态 poster/runtime preview，或 continuity bridge 保下来的暂停帧；
+             * 2. 正式 playback 源属于 canonical owner / hidden-stage，禁止再泄漏成非 owner 的冷 `<video>`；
+             * 3. 没有任何 preview surface 时，才允许直接暴露 canonical owner，并用轻量 guard 兜住首帧；
+             * 4. owner 交接前若目标卡片已经有稳定 preview，就先保留它；canonical player 在隐藏宿主切源就绪后再揭帘；
+             * 5. 没有 source bytes 时继续稳态占位，不偷走 original 直读链。
              */
             return html`
               <div
@@ -1720,7 +1737,9 @@ export class 房间消息窗 extends LitElement {
                   @click=${(event: Event) =>
                     this.打开媒体查看器(event, attachment.attachmentId)}
                 >
-                  ${shouldRenderPreviewVideo || shouldRenderInlineVideo
+                  ${shouldRenderPreviewVideo ||
+                  shouldRenderPreviewPosterSurface ||
+                  shouldRenderInlineVideo
                     ? html`
                         ${时间线视频预览内容}
                         ${shouldRenderPreviewVideo && shouldShowFirstFrameGuard

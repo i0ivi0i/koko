@@ -626,7 +626,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     读取附件条目,
     读取会话播放源版本,
     读取当前视频预览播放源: 读取视频预览候选播放源,
-    获取媒体定位: (attachmentId) => 媒体定位器.获取定位(attachmentId),
+    获取媒体定位: (attachmentId, options) => 媒体定位器.获取定位(attachmentId, options),
     解析协作分发预览源: ({ attachmentId, locator, consumerId }) =>
       解析协作分发源({
         attachmentId,
@@ -681,15 +681,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       onSnapshotChange: () => {
         deps.请求重渲染();
         查看器会话协作.同步当前查看器请求();
-        if (
-          attachment.kind === "video" &&
-          (() => {
-            const previewPhase = 视频预览协作.读取视频预览状态(attachment.attachmentId)?.phase;
-            return !previewPhase || previewPhase === "idle" || previewPhase === "missing_source";
-          })()
-        ) {
-          视频预览协作.解析视频预览(attachment.attachmentId);
-        }
+        触发视频预览收敛(attachment.attachmentId);
       },
     });
     应用缓存完整度到会话(attachment.attachmentId, session);
@@ -705,6 +697,19 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     媒体会话表.set(attachment.attachmentId, session);
     deps.请求重渲染();
     return session;
+  };
+
+  const 触发视频预览收敛 = (
+    attachmentId: string,
+    input: { trigger?: "default" | "visible_candidate" } = {}
+  ): void => {
+    /**
+     * “该不该重试 preview” 的门禁必须只保留在视频预览协作里：
+     * 1. 编排层只表达 trigger，不复制 `loading / missing_source / stronger src` 的细节判断；
+     * 2. 否则一旦外层 if 和协作内层 if 漂移，就会把“已有更强 swarm src 的 loading 抢占”这类关键修复挡死；
+     * 3. 因此这里宁可把重复调用交给协作层短路，也不在外层再长一份简化版真相。
+     */
+    视频预览协作.解析视频预览(attachmentId, input);
   };
 
   const 启动查看器起始附件会话 = (request: 媒体查看器打开请求): void => {
@@ -766,8 +771,27 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
        * 3. 这里仅对“还没 bootstrapping、也还没拿到 playback”的可见候选做一次预热，不额外造第二预览源状态机。
        */
       if (snapshot.playback || snapshot.lastSignal === "BOOTSTRAP_REQUESTED") {
+        触发视频预览收敛(attachment.attachmentId, {
+          trigger: "visible_candidate",
+        });
         continue;
       }
+      /**
+       * 可见/预热窗口的候选不允许继续躺在 `missing_source`：
+       * 1. 这里不是等它真的成为 owner，而是把“用户马上会看到它”上升成正式重试信号；
+       * 2. 预览协作内部仍保留同版缺源冷却，避免滚动时每帧 locator 风暴；
+       * 3. 因此外层只负责发出高价值信号，不复制缺源阻断细节。
+       */
+      触发视频预览收敛(attachment.attachmentId, {
+        trigger: "visible_candidate",
+      });
+      /**
+       * `session.启动()` 可能同步打出 `BOOTSTRAP_REQUESTED` 快照：
+       * - 如果把它放在 visible-candidate 重试前面，preview 会先被抢成 `loading`，
+       *   后面的高价值重试信号反而会被“当前正在 loading”短路掉；
+       * - 先发 preview 重试，再启动正式会话，才能保证 newcomer/旧用户可见卡片先争取预览 ready，
+       *   同时保留后续 playback 到位时的更强补位机会。
+       */
       void session.启动();
     }
   };
@@ -805,10 +829,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
     for (const attachment of attachments) {
       if (媒体会话表.has(attachment.attachmentId)) {
         if (attachment.kind === "video") {
-          const previewPhase = 视频预览协作.读取视频预览状态(attachment.attachmentId)?.phase;
-          if (!previewPhase || previewPhase === "idle") {
-            视频预览协作.解析视频预览(attachment.attachmentId);
-          }
+          触发视频预览收敛(attachment.attachmentId);
         }
         continue;
       }
@@ -819,7 +840,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
         void session.启动();
         continue;
       }
-      视频预览协作.解析视频预览(attachment.attachmentId);
+      触发视频预览收敛(attachment.attachmentId);
     }
     return hasSessionSetChanged;
   };
@@ -931,7 +952,7 @@ export function 创建聊天媒体编排(deps: 聊天媒体编排依赖): 聊天
       }
       const nextRequest = 查看器会话协作.投影查看器请求到当前播放真相(baseRequest);
       if (读取附件条目(request.startAttachmentId)?.kind === "video") {
-        视频预览协作.解析视频预览(request.startAttachmentId);
+        触发视频预览收敛(request.startAttachmentId);
       }
       接收媒体运行时事实({
         type: "VIEWER_OPEN_REQUESTED",
