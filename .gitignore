@@ -39,3 +39,7 @@ graphify-out/
 # Local Codex runtime noise
 .codex-*.log
 .codex-*.pid
+
+# Local Playwright crash/runtime folders should remain untracked.
+/.playwright-cli/
+/.tmp-playwright-crash/
