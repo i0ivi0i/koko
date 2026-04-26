@@ -1096,16 +1096,24 @@ describe("房间消息窗媒体查看器", () => {
     await pane.updateComplete;
 
     const inlineVideos = pane.querySelectorAll<HTMLVideoElement>("video.message-video-preview");
-    expect(inlineVideos).toHaveLength(1);
-    expect(inlineVideos[0]?.getAttribute("data-attachment-id")).toBe("att-video-2");
-    expect(inlineVideos[0]?.loop).toBe(true);
-    expect(inlineVideos[0]?.hasAttribute("disablepictureinpicture")).toBe(true);
-    expect(inlineVideos[0]?.hasAttribute("disableremoteplayback")).toBe(true);
-    expect(inlineVideos[0]?.getAttribute("controlslist")).toBe(
+    const canonicalVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"][data-canonical-player="true"]'
+    );
+    const previewSurface = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-2"]:not([data-canonical-player="true"])'
+    );
+    expect(inlineVideos).toHaveLength(2);
+    expect(canonicalVideo).not.toBeNull();
+    expect(previewSurface).not.toBeNull();
+    expect(canonicalVideo?.loop).toBe(true);
+    expect(canonicalVideo?.hasAttribute("disablepictureinpicture")).toBe(true);
+    expect(canonicalVideo?.hasAttribute("disableremoteplayback")).toBe(true);
+    expect(canonicalVideo?.getAttribute("controlslist")).toBe(
       "nodownload nofullscreen noremoteplayback"
     );
-    expect(inlineVideos[0]?.getAttribute("tabindex")).toBe("-1");
-    expect(inlineVideos[0]?.getAttribute("aria-hidden")).toBe("true");
+    expect(canonicalVideo?.getAttribute("tabindex")).toBe("-1");
+    expect(canonicalVideo?.getAttribute("aria-hidden")).toBe("true");
+    expect(previewSurface?.autoplay).toBe(false);
     expect(
       pane.querySelector('img.message-video-poster[data-attachment-id="att-video-1"]')
     ).not.toBeNull();
@@ -1701,9 +1709,9 @@ describe("房间消息窗媒体查看器", () => {
       pane.inlineAutoplayOwnerAttachmentId = null;
       await pane.updateComplete;
 
-      expect(pauseSpy).toHaveBeenCalledTimes(1);
-      expect(positionEvents).toHaveLength(1);
-      const releaseFlushEvent = positionEvents[0];
+      expect(pauseSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+      expect(positionEvents.length).toBeGreaterThan(0);
+      const releaseFlushEvent = positionEvents.at(-1);
       expect(releaseFlushEvent).toBeDefined();
       expect(releaseFlushEvent!.detail.position.currentTime).toBeCloseTo(42.5, 2);
       pauseSpy.mockRestore();
@@ -1837,6 +1845,346 @@ describe("房间消息窗媒体查看器", () => {
     expect(releasedVideo!.currentTime).toBeCloseTo(24.5, 2);
 
     pane.remove();
+  });
+
+  it("视频已经成为自动播 owner 且 canonical 就绪后，卡片仍保留同一张暂停 preview 底板", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: playback.src,
+        currentTime: 24.5,
+        updatedAt: Date.now(),
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const ownerPreviewBeforeCanonical = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+    expect(ownerPreviewBeforeCanonical).not.toBeNull();
+    ownerPreviewBeforeCanonical!.dispatchEvent(new Event("loadedmetadata"));
+    expect(ownerPreviewBeforeCanonical?.autoplay).toBe(false);
+    expect(ownerPreviewBeforeCanonical?.currentTime).toBeCloseTo(24.5, 2);
+
+    const canonicalVideo = await 驱动时间线Canonical就绪(pane, "att-video-1");
+    const ownerPreviewAfterCanonical = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+
+    /**
+     * 真实房间里旧 owner 退场的闪烁，根因就是 canonical 就绪后把底板 preview 整个删掉了。
+     * 这里必须先锁死：owner 期间 preview 底板也要继续活着，后续退场时才能直接露出来。
+     */
+    expect(canonicalVideo?.dataset.canonicalPlayer).toBe("true");
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+    ).not.toBeNull();
+    expect(ownerPreviewAfterCanonical).toBe(ownerPreviewBeforeCanonical);
+    expect(ownerPreviewAfterCanonical?.dataset.canonicalPlayer).toBeUndefined();
+    expect(ownerPreviewAfterCanonical?.autoplay).toBe(false);
+    expect(ownerPreviewAfterCanonical?.currentTime).toBeCloseTo(24.5, 2);
+
+    pane.remove();
+  });
+
+  it("双视频 owner 交接时，旧 owner 退场后会直接复用原底板 preview", async () => {
+    const pane = 创建媒体消息窗();
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "http://media.local/swarm-video-2",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 720,
+            height: 1280,
+            displayWidth: 180,
+            displayHeight: 320,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 720,
+            height: 1280,
+            displayWidth: 180,
+            displayHeight: 320,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: playback1.src,
+        currentTime: 31.25,
+        updatedAt: 100,
+      },
+      "att-video-2": {
+        src: playback2.src,
+        currentTime: 12.5,
+        updatedAt: 100,
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const oldOwnerPreview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+    expect(oldOwnerPreview).not.toBeNull();
+    oldOwnerPreview!.dispatchEvent(new Event("loadedmetadata"));
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-2": playback2,
+    };
+    await pane.updateComplete;
+
+    const releasedPreview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+
+    /**
+     * 这条回归直接锁真实 root cause：
+     * 1. 旧 owner 退场时不能重建 preview 节点；
+     * 2. runtime snapshot 晚一拍时，也必须优先拿到本地刚 flush 的更近时间；
+     * 3. 否则用户看到的就是“先闪一下新 preview，再跳回正确位置”。
+     */
+    expect(releasedPreview).toBe(oldOwnerPreview);
+    expect(releasedPreview?.dataset.canonicalPlayer).toBeUndefined();
+    expect(releasedPreview?.autoplay).toBe(false);
+    expect(
+      pane.querySelector('.message-video-canonical-host[data-attachment-id="att-video-1"]')
+    ).toBeNull();
+
+    pane.remove();
+  });
+
+  it("双视频 owner 交接时，会先向唯一播放器拿到最后一拍 flush，再对齐旧 owner 的 preview 底板", async () => {
+    const pane = 创建媒体消息窗();
+    const 全局唯一播放器 = 读取默认全局唯一播放器();
+    const playback1 = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+    const playback2 = {
+      mode: "swarm",
+      attachmentId: "att-video-2",
+      kind: "video",
+      src: "http://media.local/swarm-video-2",
+      thumbnailUrl: "http://media.local/poster-video-2",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [
+      {
+        ...创建媒体消息项(),
+        id: "message-video-1",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-1",
+            width: 720,
+            height: 1280,
+            displayWidth: 180,
+            displayHeight: 320,
+            originalSrc: "http://media.local/original-video-1",
+            posterSrc: "http://media.local/poster-video-1",
+          },
+        ],
+      },
+      {
+        ...创建媒体消息项(),
+        id: "message-video-2",
+        attachments: [
+          {
+            kind: "video",
+            attachmentId: "att-video-2",
+            width: 720,
+            height: 1280,
+            displayWidth: 180,
+            displayHeight: 320,
+            originalSrc: "http://media.local/original-video-2",
+            posterSrc: "http://media.local/poster-video-2",
+          },
+        ],
+      },
+    ];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+      "att-video-2": playback2,
+    };
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-1": playback1,
+    };
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-1";
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: playback1.src,
+        currentTime: 31.25,
+        updatedAt: 100,
+      },
+      "att-video-2": {
+        src: playback2.src,
+        currentTime: 12.5,
+        updatedAt: 100,
+      },
+    };
+
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const oldOwnerPreview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+    expect(oldOwnerPreview).not.toBeNull();
+    oldOwnerPreview!.dispatchEvent(new Event("loadedmetadata"));
+    await 驱动时间线Canonical就绪(pane, "att-video-1");
+
+    const pane内部探针 = pane as any as {
+      自动播位置上报记录: Map<
+        string,
+        { src: string; currentTime: number; reportedAt: number }
+      >;
+    };
+    const 冲刷时间线位置Spy = vi
+      .spyOn(全局唯一播放器, "冲刷当前时间线播放位置")
+      .mockImplementation(() => {
+        pane内部探针.自动播位置上报记录.set("att-video-1", {
+          src: playback1.src,
+          currentTime: 36.5,
+          reportedAt: 200,
+        });
+      });
+
+    pane.inlineAutoplayOwnerAttachmentId = "att-video-2";
+    pane.inlineAutoplayPlaybackByAttachmentId = {
+      "att-video-2": playback2,
+    };
+    await pane.updateComplete;
+
+    const releasedPreview = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+    );
+
+    /**
+     * 这条测试直接锁 sequecing root cause：
+     * 1. 如果不先 flush，旧 preview 会先按旧时间露出来；
+     * 2. 然后再吃到更近位置，用户就看到“退场时抽一下”；
+     * 3. 正确顺序必须是：先 flush -> 再对齐底板 -> 再撤可见 canonical host。
+     */
+    expect(冲刷时间线位置Spy).toHaveBeenCalledTimes(1);
+    expect(releasedPreview).toBe(oldOwnerPreview);
+
+    冲刷时间线位置Spy.mockRestore();
+    pane.remove();
+  });
+
+  it("读取自动播恢复位置时，同源本地位置桥会压过慢一拍的外层 snapshot", async () => {
+    const pane = 创建媒体消息窗();
+    const playback = {
+      mode: "swarm",
+      attachmentId: "att-video-1",
+      kind: "video",
+      src: "http://media.local/swarm-video-1",
+      thumbnailUrl: "http://media.local/poster-video-1",
+      hint: null,
+    } satisfies 媒体播放结果;
+
+    pane.items = [创建媒体消息项()];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-video-1": playback,
+    };
+    pane.inlineAutoplayPositionByAttachmentId = {
+      "att-video-1": {
+        src: playback.src,
+        currentTime: 31.25,
+        updatedAt: 100,
+      },
+    };
+
+    const pane内部探针 = pane as any as {
+      自动播位置上报记录: Map<
+        string,
+        { src: string; currentTime: number; reportedAt: number }
+      >;
+      读取自动播恢复位置(attachmentId: string, src: string | null): 媒体播放位置 | null;
+    };
+    pane内部探针.自动播位置上报记录.set("att-video-1", {
+      src: playback.src,
+      currentTime: 36.5,
+      reportedAt: 200,
+    });
+
+    /**
+     * 这条测试只锁位置桥裁决本身，不和 owner 交接副作用绑在一起：
+     * - 外层 snapshot 慢一拍时；
+     * - 本地刚 flush 的同源位置更近；
+     * - 读取恢复位置必须优先拿本地那条。
+     */
+    expect(
+      pane内部探针.读取自动播恢复位置("att-video-1", playback.src)?.currentTime
+    ).toBeCloseTo(36.5, 2);
   });
 
   it("有 poster 的视频保存位置为 currentSrc 绝对地址时，也能匹配相对 swarm 源显示保存帧", async () => {
@@ -2533,7 +2881,8 @@ describe("房间消息窗媒体查看器", () => {
     expect(揭帘后Canonical视频).toBe(隐藏预热视频);
     expect(揭帘后Canonical视频?.autoplay).toBe(true);
     expect(揭帘后Canonical视频?.currentTime).toBeCloseTo(22.5, 2);
-    expect(揭帘后预览视频).toBeNull();
+    expect(揭帘后预览视频).not.toBeNull();
+    expect(揭帘后预览视频?.autoplay).toBe(false);
 
     pane.remove();
   });
@@ -3649,7 +3998,17 @@ describe("房间消息窗媒体查看器", () => {
       expect(document.fullscreenElement).toBeNull();
       expect(
         pane.querySelectorAll('video.message-video-preview[data-attachment-id="att-video-1"]')
-      ).toHaveLength(1);
+      ).toHaveLength(2);
+      expect(
+        pane.querySelector(
+          'video.message-video-preview[data-attachment-id="att-video-1"][data-canonical-player="true"]'
+        )
+      ).not.toBeNull();
+      expect(
+        pane.querySelector(
+          'video.message-video-preview[data-attachment-id="att-video-1"]:not([data-canonical-player="true"])'
+        )
+      ).not.toBeNull();
       expect(preview?.controls).toBe(false);
       expect(preview?.muted).toBe(true);
       expect(preview?.loop).toBe(true);

@@ -58,6 +58,7 @@ export type 全局唯一播放器端口 = {
   配置壳工厂(
     factory: NonNullable<全局唯一播放器依赖["createVideoJsPlayerShell"]>
   ): void;
+  冲刷当前时间线播放位置(): void;
   同步时间线自动播(input: 全局唯一播放器时间线输入 | null): void;
   接管查看器(input: 全局唯一播放器查看器输入): Promise<全局唯一播放器查看器会话>;
   读取视频元素(): HTMLVideoElement | null;
@@ -471,6 +472,22 @@ export function 创建全局唯一播放器(
        * 3. 壳已经创建后不回头重建，避免为了切配置再制造第二颗 live player。
        */
       createVideoJsPlayerShell = factory;
+    },
+
+    冲刷当前时间线播放位置(): void {
+      /**
+       * 房间消息窗在 owner 退场前，需要拿到“这一拍 canonical player 的最终时间”：
+       * 1. 如果等到 host 已经撤掉后再 flush，旧卡片露出的 preview 底板还会再 seek 一下；
+       * 2. flush 之后还要立刻 pause，防止 canonical 在 host 拿走前继续往前跑一小段，
+       *    结果 preview 底板又在可见态补第二次 seek；
+       * 3. 这里只暴露一个极窄的提前 flush/freeze 口，不让房间消息窗接管播放真相；
+       * 4. 真正位置 owner 仍然在这颗全局唯一播放器里，消息窗只是在退场前借它对齐同一卡片的底板像素。
+       */
+      flush时间线位置(当前时间线输入, true);
+      const currentVideo = shell?.读取视频元素();
+      if (当前表面 === "inline" && currentVideo && !currentVideo.paused) {
+        currentVideo.pause();
+      }
     },
 
     同步时间线自动播(input): void {

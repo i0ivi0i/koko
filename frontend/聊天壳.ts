@@ -647,10 +647,29 @@ export class 聊天壳 extends LitElement {
       opacity: 0;
     }
 
-    .message-video-first-frame-guard {
+    /*
+     * canonical host 只是覆盖在 preview 底板上的唯一 live 表面：
+     * - preview 继续负责卡片自己的尺寸与退场像素连续性；
+     * - canonical 只负责 owner 期间的正式播放，不再充当唯一底板；
+     * - 绝对覆盖能保证 owner 退场时只移除覆盖层，不触发布局抖动。
+     */
+    .message-video-canonical-host {
       position: absolute;
       inset: 0;
       z-index: 1;
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      overflow: hidden;
+      pointer-events: none;
+      background: #000;
+    }
+
+    .message-video-first-frame-guard {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
       display: block;
       width: 100%;
       height: 100%;
@@ -662,7 +681,7 @@ export class 聊天壳 extends LitElement {
     .message-video-play-indicator {
       position: absolute;
       inset: 0;
-      z-index: 2;
+      z-index: 3;
       display: grid;
       place-items: center;
       color: rgba(255, 255, 255, 0.82);

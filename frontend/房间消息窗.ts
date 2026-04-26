@@ -90,6 +90,13 @@ export class 房间消息窗 extends LitElement {
     { src: string; currentTime: number; reportedAt: number }
   >();
   /**
+   * 退场连续性约束：
+   * 1. 这张表不是第二份业务真相，也不替代外层 runtime snapshot；
+   * 2. 它只记“当前组件刚刚从真实 `<video>` flush 出来的最新一拍位置”；
+   * 3. 当 owner 退场而外层 snapshot 还慢一拍时，允许它把底板 preview 补到更近的时间；
+   * 4. 一旦外层 snapshot 追平或更新更晚，仍然以外层回灌为准。
+   */
+  /**
    * 时间线视频首帧就绪缓存：
    * - key: attachmentId
    * - value: 已经确认拿到首帧的 video src
@@ -211,6 +218,14 @@ export class 房间消息窗 extends LitElement {
         changedProperties.get("inlineAutoplayOwnerAttachmentId") ?? null;
       const currentOwnerAttachmentId = this.inlineAutoplayOwnerAttachmentId;
       if (previousOwnerAttachmentId && previousOwnerAttachmentId !== currentOwnerAttachmentId) {
+        /**
+         * 旧 owner 退场前，先向唯一播放器要这一拍最终 flush：
+         * 1. 否则会先按旧 preview 时间撤掉 canonical host；
+         * 2. 紧接着外层再回灌一条更近位置，露出的 preview 就会在用户眼前 seek 一下；
+         * 3. 这里先把最后一拍位置灌回本地桥，再对齐底板 preview，用户看到的才是同一帧退场。
+         */
+        读取默认全局唯一播放器().冲刷当前时间线播放位置();
+        this.同步即将退场Owner底板预览(previousOwnerAttachmentId);
         this.时间线唯一播放器可见接管就绪源.delete(previousOwnerAttachmentId);
       }
       if (
@@ -279,6 +294,11 @@ export class 房间消息窗 extends LitElement {
     for (const attachmentId of this.时间线唯一播放器可见接管就绪源.keys()) {
       if (!当前视频附件.has(attachmentId)) {
         this.时间线唯一播放器可见接管就绪源.delete(attachmentId);
+      }
+    }
+    for (const attachmentId of this.自动播位置上报记录.keys()) {
+      if (!当前视频附件.has(attachmentId)) {
+        this.自动播位置上报记录.delete(attachmentId);
       }
     }
   }
@@ -434,7 +454,41 @@ export class 房间消息窗 extends LitElement {
     if (!src) {
       return null;
     }
-    const position = this.inlineAutoplayPositionByAttachmentId[attachmentId];
+    const runtimePosition = this.校验同源自动播恢复位置(
+      src,
+      this.inlineAutoplayPositionByAttachmentId[attachmentId] ?? null
+    );
+    const localPosition = this.校验同源自动播恢复位置(
+      src,
+      (() => {
+        const local = this.自动播位置上报记录.get(attachmentId);
+        if (!local) {
+          return null;
+        }
+        return {
+          src: local.src,
+          currentTime: local.currentTime,
+          updatedAt: local.reportedAt,
+        } satisfies 媒体播放位置;
+      })()
+    );
+    if (!runtimePosition) {
+      return localPosition;
+    }
+    if (!localPosition) {
+      return runtimePosition;
+    }
+    /**
+     * 这里不是给本地节流表升格，而是只在“它比外层 snapshot 更新更晚”时，
+     * 让同组件退场这一拍先吃到更近的位置。
+     */
+    return localPosition.updatedAt > runtimePosition.updatedAt ? localPosition : runtimePosition;
+  }
+
+  private 校验同源自动播恢复位置(
+    src: string,
+    position: 媒体播放位置 | null
+  ): 媒体播放位置 | null {
     if (
       !position ||
       !Number.isFinite(position.currentTime) ||
@@ -451,6 +505,53 @@ export class 房间消息窗 extends LitElement {
       return null;
     }
     return position;
+  }
+
+  private 同步即将退场Owner底板预览(attachmentId: string): void {
+    const previewVideo = this.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"]:not([data-canonical-player="true"])`
+    );
+    const canonicalVideo = this.querySelector<HTMLVideoElement>(
+      `video.message-video-preview[data-attachment-id="${attachmentId}"][data-canonical-player="true"]`
+    );
+    if (!previewVideo || !canonicalVideo) {
+      return;
+    }
+    const canonicalSrc = this.读取视频当前播放源(canonicalVideo);
+    const previewSrc = this.读取视频当前播放源(previewVideo);
+    const normalizedCanonicalSrc = this.归一化时间线视频播放源(canonicalSrc);
+    const normalizedPreviewSrc = this.归一化时间线视频播放源(previewSrc);
+    if (!normalizedCanonicalSrc || normalizedCanonicalSrc !== normalizedPreviewSrc) {
+      return;
+    }
+    const localBridge = this.自动播位置上报记录.get(attachmentId);
+    const normalizedLocalBridgeSrc = this.归一化时间线视频播放源(localBridge?.src ?? null);
+    const hasNewerLocalBridge =
+      Boolean(localBridge) &&
+      normalizedLocalBridgeSrc === normalizedCanonicalSrc &&
+      Number.isFinite(localBridge?.currentTime) &&
+      (localBridge?.currentTime ?? 0) > canonicalVideo.currentTime + 0.25;
+    const targetCurrentTime = hasNewerLocalBridge
+      ? (localBridge?.currentTime ?? canonicalVideo.currentTime)
+      : canonicalVideo.currentTime;
+    /**
+     * 旧 owner 退场前先把底板 preview 刷到当前 canonical 的最新帧：
+     * 1. 这样 DOM 一旦把覆盖层拿走，露出来的就是同一张已经对齐的预览帧；
+     * 2. 同时强制刷新一把本地位置桥，兜住 runtime snapshot 慢一拍的窗口；
+     * 3. 这不是第二条播放链，仍然只有同一 attachment 的暂停底板在承接像素。
+     */
+    this.标记时间线视频首帧已就绪(attachmentId, canonicalSrc);
+    if (!hasNewerLocalBridge) {
+      this.广播自动播播放位置(attachmentId, canonicalVideo, true, true);
+    }
+    if (Math.abs(previewVideo.currentTime - targetCurrentTime) < 0.25) {
+      return;
+    }
+    try {
+      previewVideo.currentTime = targetCurrentTime;
+    } catch {
+      // preview 底板自己还没完全稳定时，后续的恢复位置桥会再补一次，这里不升级成失败。
+    }
   }
 
   private 读取时间线现有预览视频是否可继续显示(
@@ -1416,103 +1517,106 @@ export class 房间消息窗 extends LitElement {
             const shouldRenderStageHost = shouldUseHiddenStageCover && !shouldRevealCanonicalHost;
             const shouldRenderVisibleCanonicalHost =
               shouldRenderInlineVideo && (!shouldUseHiddenStageCover || shouldRevealCanonicalHost);
-            const 时间线视频预览内容 = shouldRenderVisibleCanonicalHost
-              ? html`
-                  <div
-                    class="message-video-canonical-host"
-                    data-attachment-id=${attachment.attachmentId}
-                    data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
-                    data-video-src=${previewVideoSrc ?? ""}
-                    data-video-poster=${previewVideoPoster ?? ""}
-                    data-video-width=${attachment.width}
-                    data-video-height=${attachment.height}
-                    style="display:block;width:100%;height:100%;background:#000;"
-                    aria-hidden="true"
-                  ></div>
-                `
-              : html`
-                  <video
-                    class=${`message-video-preview${
-                      shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
-                    }`}
-                    data-attachment-id=${attachment.attachmentId}
-                    src=${previewVideoSrc ?? ""}
-                    width=${attachment.displayWidth}
-                    height=${attachment.displayHeight}
-                    muted
-                    playsinline
-                    preload="metadata"
-                    disablepictureinpicture
-                    disableremoteplayback
-                    controlslist="nodownload nofullscreen noremoteplayback"
-                    tabindex="-1"
-                    aria-hidden="true"
-                    poster=${ifDefined(previewVideoPoster)}
-                    @loadedmetadata=${(event: Event) => {
-                      const target = event.currentTarget;
-                      if (!(target instanceof HTMLVideoElement)) {
-                        return;
-                      }
-                      this.恢复时间线自动播播放位置(attachment.attachmentId, target, {
-                        allowPreviewFrame: Boolean(restorableTimelineFrame),
-                      });
-                    }}
-                    @loadeddata=${(event: Event) => {
-                      const target = event.currentTarget;
-                      if (!(target instanceof HTMLVideoElement)) {
-                        return;
-                      }
-                      this.标记时间线视频首帧已就绪(
-                        attachment.attachmentId,
-                        target.currentSrc || target.getAttribute("src")
-                      );
-                    }}
-                    @canplay=${(event: Event) => {
-                      const target = event.currentTarget;
-                      if (!(target instanceof HTMLVideoElement)) {
-                        return;
-                      }
-                      this.标记时间线视频首帧已就绪(
-                        attachment.attachmentId,
-                        target.currentSrc || target.getAttribute("src")
-                      );
-                    }}
-                    @playing=${(event: Event) => {
-                      const target = event.currentTarget;
-                      if (!(target instanceof HTMLVideoElement)) {
-                        return;
-                      }
-                      this.标记时间线视频首帧已就绪(
-                        attachment.attachmentId,
-                        target.currentSrc || target.getAttribute("src")
-                      );
-                    }}
-                    @error=${() => {
-                      /**
-                       * 时间线非 owner 的 `<video>` 只是首帧/静态预览壳：
-                       * - 它失败时不代表“当前活跃播放会话”失败；
-                       * - 若这里也广播 PLAYER_ERROR，会把 owner 侧恢复链路放大成抖动重试；
-                       * - 所以只允许 owner 那颗 canonical player 上抛错误，预览壳保持静默退避。
-                       */
-                    }}
-                  ></video>
-                  ${shouldRenderStageHost
-                    ? html`
-                        <div
-                          class="message-video-canonical-stage-host"
-                          data-stage-host="true"
-                          data-attachment-id=${attachment.attachmentId}
-                          data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
-                          data-video-src=${previewVideoSrc ?? ""}
-                          data-video-poster=${previewVideoPoster ?? ""}
-                          data-video-width=${attachment.width}
-                          data-video-height=${attachment.height}
-                          style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;"
-                          aria-hidden="true"
-                        ></div>
-                      `
-                    : null}
-                `;
+            const 时间线预览底板视频 = html`
+              <video
+                class=${`message-video-preview${
+                  shouldShowFirstFrameGuard ? " message-video-preview--gated" : ""
+                }`}
+                data-attachment-id=${attachment.attachmentId}
+                src=${previewVideoSrc ?? ""}
+                width=${attachment.displayWidth}
+                height=${attachment.displayHeight}
+                muted
+                playsinline
+                preload="metadata"
+                disablepictureinpicture
+                disableremoteplayback
+                controlslist="nodownload nofullscreen noremoteplayback"
+                tabindex="-1"
+                aria-hidden="true"
+                poster=${ifDefined(previewVideoPoster)}
+                @loadedmetadata=${(event: Event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLVideoElement)) {
+                    return;
+                  }
+                  this.恢复时间线自动播播放位置(attachment.attachmentId, target, {
+                    allowPreviewFrame: Boolean(restorableTimelineFrame),
+                  });
+                }}
+                @loadeddata=${(event: Event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLVideoElement)) {
+                    return;
+                  }
+                  this.标记时间线视频首帧已就绪(
+                    attachment.attachmentId,
+                    target.currentSrc || target.getAttribute("src")
+                  );
+                }}
+                @canplay=${(event: Event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLVideoElement)) {
+                    return;
+                  }
+                  this.标记时间线视频首帧已就绪(
+                    attachment.attachmentId,
+                    target.currentSrc || target.getAttribute("src")
+                  );
+                }}
+                @playing=${(event: Event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLVideoElement)) {
+                    return;
+                  }
+                  this.标记时间线视频首帧已就绪(
+                    attachment.attachmentId,
+                    target.currentSrc || target.getAttribute("src")
+                  );
+                }}
+                @error=${() => {
+                  /**
+                   * 时间线非 owner 的 `<video>` 只是首帧/静态预览壳：
+                   * - 它失败时不代表“当前活跃播放会话”失败；
+                   * - 若这里也广播 PLAYER_ERROR，会把 owner 侧恢复链路放大成抖动重试；
+                   * - 所以只允许 owner 那颗 canonical player 上抛错误，预览壳保持静默退避。
+                   */
+                }}
+              ></video>
+            `;
+            const 时间线视频预览内容 = html`
+              ${shouldRenderVisibleCanonicalHost
+                ? html`
+                    <div
+                      class="message-video-canonical-host"
+                      data-attachment-id=${attachment.attachmentId}
+                      data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                      data-video-src=${previewVideoSrc ?? ""}
+                      data-video-poster=${previewVideoPoster ?? ""}
+                      data-video-width=${attachment.width}
+                      data-video-height=${attachment.height}
+                      aria-hidden="true"
+                    ></div>
+                  `
+                : null}
+              ${时间线预览底板视频}
+              ${shouldRenderStageHost
+                ? html`
+                    <div
+                      class="message-video-canonical-stage-host"
+                      data-stage-host="true"
+                      data-attachment-id=${attachment.attachmentId}
+                      data-video-kind=${previewVideoSrc?.includes(".m3u8") ? "hls" : "file"}
+                      data-video-src=${previewVideoSrc ?? ""}
+                      data-video-poster=${previewVideoPoster ?? ""}
+                      data-video-width=${attachment.width}
+                      data-video-height=${attachment.height}
+                      style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;"
+                      aria-hidden="true"
+                    ></div>
+                  `
+                : null}
+            `;
             /**
              * 时间线视频卡片保持单入口（点击后统一进查看器）：
              * 1. 只要拿到同文件可播源（swarm/blob），就保持同一颗 `<video>` 作为时间线预览容器；
