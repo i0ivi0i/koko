@@ -8,21 +8,38 @@ export interface WebTorrent文件 {
   deselect?(): void;
 }
 
+type 可调监听器预算Emitter = {
+  getMaxListeners?(): number;
+  setMaxListeners?(count: number): void;
+};
+
+type WebTorrent跟踪连接池项 = {
+  socket?: 可调监听器预算Emitter | null;
+};
+
+type WebTorrent跟踪客户端 = {
+  _trackers?: WebTorrent跟踪连接池项[];
+};
+
+type WebTorrent发现运行时 = {
+  tracker?: WebTorrent跟踪客户端 | null;
+};
+
 export interface WebTorrent连接 {
   readonly type?: string;
 }
 
-export interface WebTorrent种子 {
+export interface WebTorrent种子 extends 可调监听器预算Emitter {
   files: WebTorrent文件[];
   critical?(start: number, end: number): void;
   select?(start: number, end: number, priority?: number): void;
-  getMaxListeners?(): number;
-  setMaxListeners?(count: number): void;
+  discovery?: WebTorrent发现运行时 | null;
   on(event: "error", handler: (error: unknown) => void): void;
   on(event: "warning", handler: (warning: unknown) => void): void;
   on(event: "wire", handler: (wire: WebTorrent连接) => void): void;
   on(event: "noPeers", handler: () => void): void;
   on(event: "done", handler: () => void): void;
+  once?(event: "metadata" | "ready", handler: () => void): void;
   destroy?(options?: { destroyStore?: boolean }): void;
 }
 
@@ -453,24 +470,80 @@ const 读取noPeers探测间隔毫秒 = (distribution: 媒体协作分发定位�
   return Math.floor(retryAfter);
 };
 
-const 调高协作分发Torrent监听器预算 = (torrent: WebTorrent种子): void => {
+const 调高协作分发监听器预算 = (
+  target: 可调监听器预算Emitter | null | undefined
+): void => {
   if (
-    typeof torrent.getMaxListeners !== "function" ||
-    typeof torrent.setMaxListeners !== "function"
+    !target ||
+    typeof target.getMaxListeners !== "function" ||
+    typeof target.setMaxListeners !== "function"
   ) {
     return;
   }
-  const current = torrent.getMaxListeners();
+  const current = target.getMaxListeners();
   if (!Number.isFinite(current) || current <= 0 || current >= 协作分发Torrent监听器预算) {
     return;
   }
+  target.setMaxListeners(协作分发Torrent监听器预算);
+};
+
+const 调高协作分发Torrent监听器预算 = (torrent: WebTorrent种子): void => {
   /**
    * `file.streamURL` 背后会为正式播放、seek、全屏和预览探针创建多个 Range reader。
    * WebTorrent 的默认 EventEmitter 阈值只有 10，适合发现泄漏，但不适合本项目
    * “多 peer + web seed + 多 surface 同 swarm” 的高活跃读流；这里提升有限预算，
    * 不降低协作分发强度，也不把 warning 全局关死。
    */
-  torrent.setMaxListeners(协作分发Torrent监听器预算);
+  调高协作分发监听器预算(torrent);
+};
+
+const 调高协作分发Tracker连接监听器预算 = (torrent: WebTorrent种子): void => {
+  const trackers = torrent.discovery?.tracker?._trackers;
+  if (!Array.isArray(trackers) || trackers.length === 0) {
+    return;
+  }
+  /**
+   * `bittorrent-tracker` 会通过 `socketPool` 复用同一条 tracker WebSocket。
+   * 同房多 swarm 冷启动时，多个 tracker client 会在 socket 真正连上前同时
+   * `once("connect")` 挂监听；默认阈值只有 10，足够提示普通泄漏，但会把
+   * 我们这个“共享 tracker 连接 + 合法并发 swarm 启动”误报成泄漏。
+   *
+   * 这里不去全局放开所有 EventEmitter，而是只对已知共享的 tracker socket
+   * 提升有限预算，让高并发入房仍保持单 socket 复用与零 warning。
+   */
+  const visited = new Set<可调监听器预算Emitter>();
+  for (const tracker of trackers) {
+    const socket = tracker?.socket;
+    if (!socket || visited.has(socket)) {
+      continue;
+    }
+    visited.add(socket);
+    调高协作分发监听器预算(socket);
+  }
+};
+
+const 安排调高协作分发Tracker连接监听器预算 = (torrent: WebTorrent种子): void => {
+  const 校准 = () => {
+    调高协作分发Tracker连接监听器预算(torrent);
+  };
+  校准();
+  if (typeof torrent.once !== "function") {
+    return;
+  }
+  /**
+   * discovery / tracker socket 创建发生在 metadata 之后、ready 之前。
+   * metadata 阶段排一个微任务，可以在 `_startDiscovery()` 同步建完 tracker 后，
+   * 尽快摸到共享 socket；ready / 外层 resolve 再兜底一次，确保复用 socket
+   * 也会被补齐预算。
+   */
+  torrent.once("metadata", () => {
+    if (typeof queueMicrotask === "function") {
+      queueMicrotask(校准);
+      return;
+    }
+    setTimeout(校准, 0);
+  });
+  torrent.once("ready", 校准);
 };
 
 async function 拉取受控Torrent字节(
@@ -599,6 +672,7 @@ export async function 接入协作分发种子(
       }
       已结束 = true;
       调高协作分发Torrent监听器预算(torrent);
+      调高协作分发Tracker连接监听器预算(torrent);
       resolve(torrent);
     };
     const 收口reject = (error: unknown) => {
@@ -629,6 +703,7 @@ export async function 接入协作分发种子(
       收口resolve
     );
     调高协作分发Torrent监听器预算(torrent);
+    安排调高协作分发Tracker连接监听器预算(torrent);
     torrent.on("error", (error) => {
       收口reject(error);
     });

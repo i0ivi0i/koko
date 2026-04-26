@@ -1537,6 +1537,85 @@ describe("房间消息窗媒体查看器", () => {
     pane.remove();
   });
 
+  it("同一消息行复用到新附件前，会先释放旧 preview video 源，避免退场 swarm 继续追旧请求", async () => {
+    const pane = 创建媒体消息窗();
+    const 创建复用单视频消息 = (messageId: string, attachmentId: string): 消息展示项 => ({
+      ...创建媒体消息项(),
+      id: messageId,
+      attachments: [
+        {
+          kind: "video",
+          attachmentId,
+          width: 1280,
+          height: 720,
+          displayWidth: 320,
+          displayHeight: 180,
+          originalSrc: `http://media.local/original-${attachmentId}`,
+          posterSrc: null,
+        },
+      ],
+    });
+    const oldPreviewSrc = "/webtorrent/hash-old/content-old.mp4";
+    const newPreviewSrc = "/webtorrent/hash-new/content-new.mp4";
+    pane.items = [创建复用单视频消息("m-reused", "att-old")];
+    pane.mediaPlaybackByAttachmentId = {
+      "att-old": {
+        mode: "swarm",
+        attachmentId: "att-old",
+        kind: "video",
+        src: oldPreviewSrc,
+        thumbnailUrl: null,
+        hint: null,
+      } satisfies 媒体播放结果,
+    };
+    document.body.appendChild(pane);
+    await pane.updateComplete;
+
+    const oldPreviewVideo = pane.querySelector<HTMLVideoElement>(
+      'video.message-video-preview[data-attachment-id="att-old"]:not([data-canonical-player="true"])'
+    );
+    expect(oldPreviewVideo).not.toBeNull();
+    expect(oldPreviewVideo?.getAttribute("src")).toBe(oldPreviewSrc);
+
+    const pauseSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(() => undefined);
+    const loadSpy = vi
+      .spyOn(HTMLMediaElement.prototype, "load")
+      .mockImplementation(() => undefined);
+
+    try {
+      pauseSpy.mockClear();
+      loadSpy.mockClear();
+
+      pane.items = [创建复用单视频消息("m-reused", "att-new")];
+      pane.mediaPlaybackByAttachmentId = {
+        "att-new": {
+          mode: "swarm",
+          attachmentId: "att-new",
+          kind: "video",
+          src: newPreviewSrc,
+          thumbnailUrl: null,
+          hint: null,
+        } satisfies 媒体播放结果,
+      };
+      await pane.updateComplete;
+
+      expect(pauseSpy).toHaveBeenCalled();
+      expect(loadSpy).toHaveBeenCalled();
+
+      const newPreviewVideo = pane.querySelector<HTMLVideoElement>(
+        'video.message-video-preview[data-attachment-id="att-new"]:not([data-canonical-player="true"])'
+      );
+      expect(newPreviewVideo).not.toBeNull();
+      expect(newPreviewVideo?.getAttribute("src")).toBe(newPreviewSrc);
+    } finally {
+      pauseSpy.mockRestore();
+      loadSpy.mockRestore();
+      pane.remove();
+    }
+  });
+
   it("自动播时间戳上报只允许当前 owner，并对高频 timeupdate 做节流", async () => {
     const pane = 创建媒体消息窗();
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);

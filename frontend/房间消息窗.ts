@@ -259,6 +259,16 @@ export class 房间消息窗 extends LitElement {
         this.时间线隐藏接管附件Id = null;
       }
     }
+    if (
+      changedProperties.has("items") ||
+      changedProperties.has("mediaPlaybackByAttachmentId") ||
+      changedProperties.has("mediaPreviewByAttachmentId") ||
+      changedProperties.has("inlineAutoplayOwnerAttachmentId") ||
+      changedProperties.has("inlineAutoplayPlaybackByAttachmentId") ||
+      changedProperties.has("inlineAutoplayPositionByAttachmentId")
+    ) {
+      this.清理即将退场时间线视频表面();
+    }
   }
 
   override updated(changedProperties: PropertyValues<this>): void {
@@ -316,6 +326,126 @@ export class 房间消息窗 extends LitElement {
       if (!当前视频附件.has(attachmentId)) {
         this.自动播位置上报记录.delete(attachmentId);
       }
+    }
+  }
+
+  private 读取即将渲染的时间线视频表面期望(virtualItems = this.读取当前虚拟消息项()): {
+    previewVideoSrcByAttachmentId: Map<string, string>;
+    canonicalVideoSrcByAttachmentId: Map<string, string>;
+  } {
+    const 可渲染真实预览视频附件 = this.读取允许渲染真实预览视频的附件集合(virtualItems);
+    const previewVideoSrcByAttachmentId = new Map<string, string>();
+    const canonicalVideoSrcByAttachmentId = new Map<string, string>();
+    for (const item of this.items) {
+      if (item.kind !== "message") {
+        continue;
+      }
+      for (const attachment of item.attachments) {
+        if (attachment.kind !== "video") {
+          continue;
+        }
+        const playback = this.mediaPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+        const runtimePreview = this.读取时间线视频运行时预览(attachment.attachmentId);
+        const hasSourcePoster = Boolean(playback?.thumbnailUrl ?? attachment.posterSrc);
+        const hasRuntimePreview = Boolean(runtimePreview);
+        const playbackTimelineVideoSrc = this.读取时间线视频首帧预览源(attachment, playback, {
+          有静态封面: hasSourcePoster,
+          有运行时预览: hasRuntimePreview,
+        });
+        const savedTimelineFrame =
+          this.inlineAutoplayPositionByAttachmentId[attachment.attachmentId] ?? null;
+        const savedTimelineFrameSrc = savedTimelineFrame?.src ?? null;
+        const shouldReuseSavedTimelineFrameAsPreview =
+          Boolean(savedTimelineFrameSrc) &&
+          (!playback || this.读取保存续帧是否允许承接时间线预览底板(attachment.attachmentId));
+        const timelinePreviewVideoSrc =
+          playbackTimelineVideoSrc ??
+          (shouldReuseSavedTimelineFrameAsPreview ? savedTimelineFrameSrc : null);
+        if (
+          timelinePreviewVideoSrc &&
+          可渲染真实预览视频附件.has(attachment.attachmentId)
+        ) {
+          previewVideoSrcByAttachmentId.set(attachment.attachmentId, timelinePreviewVideoSrc);
+        }
+        const inlineAutoplayPlayback =
+          this.inlineAutoplayPlaybackByAttachmentId[attachment.attachmentId] ?? null;
+        const inlineAutoplayPreviewSrc =
+          inlineAutoplayPlayback && inlineAutoplayPlayback.mode === "swarm"
+            ? inlineAutoplayPlayback.src
+            : null;
+        const playbackCanonicalVideoSrc = playback?.mode === "swarm" ? playback.src : null;
+        const ownerCanonicalVideoSrc =
+          inlineAutoplayPreviewSrc ?? playbackCanonicalVideoSrc ?? timelinePreviewVideoSrc;
+        if (
+          this.inlineAutoplayOwnerAttachmentId === attachment.attachmentId &&
+          ownerCanonicalVideoSrc
+        ) {
+          canonicalVideoSrcByAttachmentId.set(attachment.attachmentId, ownerCanonicalVideoSrc);
+        }
+      }
+    }
+    return {
+      previewVideoSrcByAttachmentId,
+      canonicalVideoSrcByAttachmentId,
+    };
+  }
+
+  private 释放时间线预览视频资源(video: HTMLVideoElement): void {
+    /**
+     * 退场 preview `<video>` 必须主动断掉旧媒体源：
+     * 1. 浏览器在节点复用/卸载瞬间，仍可能沿着旧 `src` 继续追 range；
+     * 2. 这时如果 swarm 会话已经被外层清理，后台就会开始打旧 `/webtorrent/...` 404；
+     * 3. 因此在 Lit 把 DOM 改写掉之前，先 pause + remove src + load，明确告诉浏览器放弃旧源。
+     */
+    try {
+      video.pause();
+    } catch {
+      // 某些测试宿主会在无效状态抛错；退场清理不能因此中断。
+    }
+    video.removeAttribute("src");
+    try {
+      video.load();
+    } catch {
+      // happy-dom / 个别浏览器实现可能拒绝无源 load；这里吞掉即可。
+    }
+  }
+
+  private 清理即将退场时间线视频表面(): void {
+    const { previewVideoSrcByAttachmentId, canonicalVideoSrcByAttachmentId } =
+      this.读取即将渲染的时间线视频表面期望();
+    const previewVideos = this.querySelectorAll<HTMLVideoElement>(
+      'video.message-video-preview:not([data-canonical-player="true"])'
+    );
+    for (const video of previewVideos) {
+      const attachmentId = video.dataset.attachmentId?.trim() ?? "";
+      if (!attachmentId) {
+        continue;
+      }
+      const expectedSrc = this.归一化时间线视频播放源(
+        previewVideoSrcByAttachmentId.get(attachmentId) ?? null
+      );
+      const currentSrc = this.归一化时间线视频播放源(this.读取视频当前播放源(video));
+      if (!currentSrc || currentSrc === expectedSrc) {
+        continue;
+      }
+      this.释放时间线预览视频资源(video);
+    }
+    const canonicalHosts = this.querySelectorAll<HTMLElement>(
+      ".message-video-canonical-host,.message-video-canonical-stage-host"
+    );
+    for (const host of canonicalHosts) {
+      const attachmentId = host.dataset.attachmentId?.trim() ?? "";
+      if (!attachmentId) {
+        continue;
+      }
+      const expectedSrc = this.归一化时间线视频播放源(
+        canonicalVideoSrcByAttachmentId.get(attachmentId) ?? null
+      );
+      const currentSrc = this.归一化时间线视频播放源(host.dataset.videoSrc ?? null);
+      if (!currentSrc || currentSrc === expectedSrc) {
+        continue;
+      }
+      host.dataset.videoSrc = "";
     }
   }
 

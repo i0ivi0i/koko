@@ -537,16 +537,30 @@ describe("媒体协作分发", () => {
     expect(getAnnounceOpts()).toEqual({ ticket: "ticket-new" });
   });
 
-  it("接入 WebTorrent 种子时会调高 torrent 监听器预算，避免高并发读流被默认阈值误报成泄漏", async () => {
+  it("接入 WebTorrent 种子时会同时调高 torrent 与共享 tracker socket 监听器预算，避免高并发 swarm 冷启动被误报成泄漏", async () => {
     const registration = 准备已激活媒体ServiceWorker注册();
     const { torrent } = 创建可观测假Torrent(
       "blob:http://media.local/swarm-att-listener-budget"
     );
     const getMaxListeners = vi.fn(() => 10);
     const setMaxListeners = vi.fn();
+    const trackerSocketGetMaxListeners = vi.fn(() => 10);
+    const trackerSocketSetMaxListeners = vi.fn();
     Object.assign(torrent, {
       getMaxListeners,
       setMaxListeners,
+      discovery: {
+        tracker: {
+          _trackers: [
+            {
+              socket: {
+                getMaxListeners: trackerSocketGetMaxListeners,
+                setMaxListeners: trackerSocketSetMaxListeners,
+              },
+            },
+          ],
+        },
+      },
     });
     const add = vi.fn(((_torrentId, _options, onTorrent) => {
       onTorrent(torrent);
@@ -569,6 +583,7 @@ describe("媒体协作分发", () => {
     expect(setMaxListeners).toHaveBeenCalledWith(expect.any(Number));
     const [listenerBudget] = setMaxListeners.mock.calls[0] ?? [];
     expect(listenerBudget).toBeGreaterThanOrEqual(64);
+    expect(trackerSocketSetMaxListeners).toHaveBeenCalledWith(listenerBudget);
   });
 
   it("locator 给出 media_state.retry_after_ms 时，会透传给 noPeersIntervalTime 统一探测节奏", async () => {
